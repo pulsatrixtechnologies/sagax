@@ -17,6 +17,7 @@ import {
   journalFile,
   journalMemoryDelete,
   journalMemoryWrite,
+  journalTurnWrite,
   readMemoryJournal,
   recordMemoryChange,
   resetMemoryJournalState,
@@ -24,7 +25,7 @@ import {
   unifiedDiff,
 } from "./memory-journal.ts";
 import { MEMORY_INDEX, hashMemoryText, readMemoryDoc } from "./memory-store.ts";
-import { WORKSPACES_DIR, ensureWorkspace, workspaceDir } from "./workspace.ts";
+import { WORKSPACES_DIR, appendMemoryLog, ensureWorkspace, memoryLogPath, workspaceDir } from "./workspace.ts";
 
 let counter = 0;
 const freshBot = () => `journal-bot-${process.pid}-${counter++}`;
@@ -300,6 +301,33 @@ describe("turn boundary", () => {
     writeFileSync(join(workspaceDir(b), "MEMORY.md"), "b learned\n");
     const rows = endMemoryTurn("room-1");
     expect(rows.map((r) => r.botId).sort()).toEqual([a, b].sort());
+  });
+
+  it("journals the daily-log line a settled turn leaves as that turn's, so the next turn never credits the person", async () => {
+    const bot = freshBot();
+    ensureWorkspace(bot);
+    const now = new Date(2026, 9, 13, 9, 30);
+    const path = memoryLogPath(now);
+    // the first line of the day creates the file, the room's line adds one
+    for (const threadId of ["chat-1", "room-1"]) {
+      beginMemoryTurn(bot, threadId);
+      endMemoryTurn(threadId);
+      const result = journalTurnWrite(bot, path, threadId, () => appendMemoryLog(bot, `turn on ${threadId}`, { now, source: threadId === "room-1" ? 'room "Launch"' : 'chat "Plan"' }));
+      expect(result).toMatchObject({ ok: true, file: path });
+    }
+    beginMemoryTurn(bot, "chat-2");
+    expect(endMemoryTurn("chat-2")).toEqual([]);
+    await flushMemoryJournal(bot);
+    const rows = readMemoryJournal(bot, 10).filter((row) => row.path === path);
+    expect(rows.map((row) => [row.actor, row.via, row.threadId, row.kind]).sort()).toEqual([
+      ["bot", "turn", "chat-1", "created"],
+      ["bot", "turn", "room-1", "edited"],
+    ]);
+    expect(readMemoryJournal(bot, 10).some((row) => row.actor === "person")).toBe(false);
+  });
+
+  it("hands back the write's own result when the journal cannot read the file", () => {
+    expect(journalTurnWrite("bad/id", "memory/log/2026-10-13.md", "t1", () => "written")).toBe("written");
   });
 
   it("never throws when a workspace vanished mid-turn", () => {

@@ -19,6 +19,7 @@ function replayStep(event: AssignmentEvent): Status | undefined {
     case "started": return "running";
     case "parked": return "needs_input";
     case "answered": return "queued";
+    case "continued": return "queued";
     case "waiting": return "waiting";
     case "resume_due": return "resume";
     case "refused": return "failed";
@@ -116,12 +117,13 @@ export function checkInvariants(store: RuntimeStore, live: { running: Set<string
       else if (parent.depth + 1 !== a.depth) problems.push(`tree ${label}: depth ${a.depth} under depth ${parent.depth}`);
     } else if (a.rootId !== a.id || a.depth !== 0) problems.push(`tree ${label}: a root must be its own root at depth 0`);
   }
-  // I3: no brief dispatched twice under one parent except by rework, and
-  // no result delivered twice (one inbox item per assignment).
+  // I3: no brief dispatched twice under one parent except by rework (the
+  // same words as a question or a notice are another request), and no
+  // result delivered twice (one inbox item per assignment).
   for (const [parentId, siblings] of childrenOf) {
     const seen = new Map<string, number>();
     for (const c of siblings) {
-      const key = JSON.stringify([c.brief, c.assignee.botId, c.assignee.destination.threadId, c.assignee.destination.groupId ?? ""]);
+      const key = JSON.stringify([c.brief, c.mode, c.assignee.botId, c.assignee.destination.threadId, c.assignee.destination.groupId ?? ""]);
       const count = seen.get(key) ?? 0;
       if (count > 0 && !c.rework) problems.push(`I3 ${c.id}: the same brief under ${parentId} without rework`);
       seen.set(key, count + 1);

@@ -41,7 +41,8 @@ import { isActiveTurnRefusal, isRemoteScreenshotContention } from "@/lib/remote-
 import { useDesktopCapabilities } from "./DesktopCapabilities";
 import { RoutinesSection } from "./bot-settings/RoutinesSection";
 import { AndroidDevicePanel, useAndroidUsbDevices } from "./AndroidDevicePanel";
-import { transitionComputerControlLease, type ComputerControlAction } from "@/lib/computer-control";
+import { parseComputerHelp, transitionComputerControlLease, type ComputerControlAction } from "@/lib/computer-control";
+import { SignInBanner } from "./SignInRequestCard";
 import { LocalScreenPreview } from "./LocalScreenPreview";
 import { LinuxLocalControl } from "./LinuxLocalControl";
 import { MacLocalControl } from "./MacLocalControl";
@@ -64,7 +65,7 @@ import type { LocaleKey } from "@/locales";
 import { requestSettingsCard } from "./SettingsPrimitives";
 import { SettingsText } from "./SettingsLink";
 import { BrowserScreen, OrgComputerTab, ScreenPicker } from "./computer/OrgComputerTab";
-import { BrowserPanel } from "./BrowserPanel";
+import { BrowserPanel, type BrowserSignIn } from "./BrowserPanel";
 import { browserAvailable, builtInBrowserEnabled } from "@/lib/feature-flags";
 import { browserTeachPending, onBrowserTeachRequest } from "@/lib/teach-request";
 
@@ -144,6 +145,7 @@ interface LocalVmStatus {
 const computerControlSnapshotSchema = z.object({
   held: z.boolean().optional().default(false),
   helpReason: z.string().nullable().optional().default(null),
+  help: z.unknown().optional().transform(parseComputerHelp),
 }).passthrough();
 
 const PANEL_WIDTH_KEY = "omb-settings-panel-width";
@@ -400,6 +402,19 @@ export function ComputerPanel({
   const selectedInstance = state.instances.find(
     (instance) => instance.instanceId === bot.modelSelection.instanceId,
   );
+  // A sign-in card's Open: the place the bot works. The built-in browser
+  // opens at its page with the person already in control; a computer opens
+  // on its screen, where the banner below offers Take control.
+  const requestedSignIn = state.signInFocus?.botId === bot.id ? state.signInFocus : undefined;
+  const [signInRequest, setSignInRequest] = useState<BrowserSignIn>();
+  useEffect(() => {
+    if (!requestedSignIn || requestedSignIn.consumed) return;
+    const browser = requestedSignIn.place === "browser";
+    setSoloView(browser ? "browser" : "screen");
+    if (browser) setSignInRequest({ url: requestedSignIn.url, site: requestedSignIn.site, nonce: requestedSignIn.requestId });
+    dispatch({ type: "signInFocusConsumed", requestId: requestedSignIn.requestId });
+  }, [bot.id, dispatch, requestedSignIn]);
+
   // Pause the screenshot poll while this bot's viewer is open; seed from the
   // live viewer so a remount/switch mid-session doesn't wrongly resume it.
   useEffect(() => {
@@ -892,6 +907,10 @@ export function ComputerPanel({
   // who-is-driving: SSE keeps this fresh; the mount fetch covers a panel
   // opened after the last frame (e.g. an app reload mid-hold)
   const control = state.computerControl[bot.id] ?? { held: false, helpReason: null };
+  // The bot's open sign-in request, from its plea: the panel's banner names
+  // the site and settles the card, as the card's own Done and Cancel do.
+  const signInHelp = control.help ?? null;
+  const signInAsker = signInHelp ? state.bots.find((candidate) => candidate.id === signInHelp.botId)?.name ?? bot.name : bot.name;
   useEffect(() => {
     let alive = true;
     api(`/api/bots/${bot.id}/computer/control`)
@@ -903,6 +922,7 @@ export function ComputerPanel({
           botId: bot.id,
           held: snap.held === true,
           helpReason: snap.helpReason,
+          help: snap.help,
         });
       })
       .catch(() => {});
@@ -921,6 +941,7 @@ export function ComputerPanel({
       botId: bot.id,
       held: snap.held === true,
       helpReason: snap.helpReason,
+      help: snap.help,
     });
     return snap;
   }, [bot.id, dispatch]);
@@ -955,6 +976,18 @@ export function ComputerPanel({
     }
   }, [transitionControl]);
 
+  // A computer's plea gets Take control in its banner; the built-in
+  // browser's own toolbar has one, and this computer is taken in person.
+  const bannerTakesControl = Boolean(signInHelp && signInHelp.place !== "browser" && signInHelp.place !== "local" &&
+    (cloudPreviewReady || phase === "vm" || currentTeamComputer));
+  const signInBanner = (takeControl?: () => void) => signInHelp && (
+    <SignInBanner
+      help={signInHelp}
+      askerName={signInAsker}
+      takeControl={takeControl && { onClick: takeControl, disabled: controlPending || pending === "join", pending: pending === "join" }}
+      onError={setError}
+    />
+  );
 
   const openDesktop = async () => {
     const controller = new AbortController();
@@ -1250,7 +1283,7 @@ export function ComputerPanel({
 
   // The main desktop action shows when no help request or hand-back card
   // already offers it: a ready Local VM, or a ready cloud computer.
-  const primaryDesktop = (phase === "vm" || cloudPreviewReady) && !control.helpReason;
+  const primaryDesktop = (phase === "vm" || cloudPreviewReady) && !(bannerTakesControl && !control.held);
   const moreItems: ComputerMoreItem[] = [];
   if (phase === "vm" && vmStatus?.mode === "per-bot" && window.ogb?.desktopWorkspace && onOpenVmWorkspace) {
     moreItems.push({ id: "two-desktops", icon: <Columns2 size={14} />, label: t("computer.twoDesktops"), title: t("computer.twoDesktopsTitle"), disabled: pending !== null, onSelect: () => onOpenVmWorkspace(bot.id) });
@@ -1495,33 +1528,10 @@ export function ComputerPanel({
           </div>
         )}
 
-        {/* Who is driving — take the wheel / hand it back */}
-        {(cloudPreviewReady || phase === "vm" || currentTeamComputer) && control.helpReason && !control.held && (
-          <div className="mt-3 rounded-xl border border-warning/25 bg-warning/10 p-4">
-            <div className="text-[13px] leading-relaxed text-warning">
-              <b>{bot.name}</b> {t("computer.askedHands")} {control.helpReason}
-            </div>
-            <div className="mt-2 flex gap-2">
-              <button
-                onClick={() =>
-                  phase === "vm" || cloudPreviewReady ? void openDesktop() : controlAction("take")
-                }
-                disabled={controlPending || pending === "join"}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent py-2 text-[13px] font-medium text-accent-ink hover:brightness-110 disabled:opacity-50"
-              >
-                {pending === "join" ? <Loader2 size={14} className="animate-spin" /> : <Hand size={14} />}
-                {t("computer.takeControl")}
-              </button>
-              <button
-                onClick={() => controlAction("dismiss-help")}
-                disabled={controlPending}
-                className="rounded-lg bg-control px-3 py-2 text-[13px] text-ink hover:bg-raised-hover disabled:opacity-50"
-              >
-                {t("computer.dismiss")}
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Who is driving — a sign-in the bot waits on, take the wheel / hand it back */}
+        {signInHelp && signInHelp.place !== "browser" && signInBanner(bannerTakesControl && !control.held
+          ? () => phase === "vm" || cloudPreviewReady ? void openDesktop() : void controlAction("take")
+          : undefined)}
         {(cloudPreviewReady || phase === "vm" || currentTeamComputer) && control.held && (
           <div className="mt-3 rounded-xl border border-accent/25 bg-accent/10 p-4">
             <div className="text-[13px] leading-relaxed text-ink">
@@ -1596,7 +1606,10 @@ export function ComputerPanel({
         computerOff={livePlace === "off"}
         botName={bot.name}
         botId={bot.id}
-        browser={browserOffered ? <BrowserPanel bot={bot} /> : null}
+        browser={browserOffered ? <>
+          {signInHelp?.place === "browser" && <div className="mb-3">{signInBanner()}</div>}
+          <BrowserPanel bot={bot} signIn={signInRequest} />
+        </> : null}
       />
       {!embedded && <div className="mt-6">
         <RoutinesSection key={bot.id} bot={bot} routines={botRoutines} runs={state.routineRuns} defaultRunOn={cloudRoutineReady ? "cloud" : "maus"} />
@@ -1606,7 +1619,8 @@ export function ComputerPanel({
     <div className={embedded ? "pb-5" : "flex-1 overflow-y-auto px-5 pb-5"}>
       {soloPicker}
       <div className="mt-3">
-        <BrowserScreen><BrowserPanel bot={bot} /></BrowserScreen>
+        {signInHelp?.place === "browser" && <div className="mb-3">{signInBanner()}</div>}
+        <BrowserScreen><BrowserPanel bot={bot} signIn={signInRequest} /></BrowserScreen>
       </div>
     </div>
   ) : deviceBody;

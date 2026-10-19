@@ -109,6 +109,7 @@
     "@hpke/core": "1.9.0",
     "@lezer/highlight": "1.2.5",
     "@lezer/markdown": "1.8.0",
+    "@muse-code/sdk": "1.4.6",
     "@novnc/novnc": "1.7.0",
     "@resvg/resvg-js": "2.6.2",
     "@simplewebauthn/server": "14.0.3",

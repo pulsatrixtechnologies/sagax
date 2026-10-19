@@ -2,7 +2,8 @@
 // unless switched off (BotRecord.memoryUpkeep === false). The main agent
 // keeps reading and writing its notes as before; this adds what happens
 // without it choosing:
-//   - capture: finished 1:1 turns are read after the chat goes quiet; core
+//   - capture: finished 1:1 turns (and, with Learn from group chats on, a
+//     member bot's room turns) are read after the chat goes quiet; core
 //     facts go to MEMORY.md, detail to a topic file per subject that upkeep
 //     creates and names, with other words for it (server/memory-capture.ts);
 //     turns still waiting at shutdown are saved as ids and captured after
@@ -16,7 +17,8 @@
 // Every memory write is a journal row with actor "upkeep", so the Memory
 // panel shows it and Undo works. The model steps need a one-shot text call
 // (`generateText`: Claude and the chat-completion engines, or
-// `generateMemoryText`: the ACP engines, server/drivers/acp/background-text.ts); on any other
+// `generateMemoryText`: the ACP engines, server/drivers/acp/background-text.ts,
+// and Codex, server/drivers/codex-background-text.ts); on any other
 // engine they are skipped and only the deterministic tidy steps run.
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -67,8 +69,13 @@ export interface UpkeepDeps {
   busy: (botId: string) => boolean;
   /** Append facts about the person to the shared About me; returns how many were added. */
   addToAboutMe: (from: { botId: string; botName: string }, texts: readonly string[]) => number;
-  /** `chat "Title"`, for the source of a captured entry. */
+  /** `chat "Title"` or `room "Name"`, for the source of a captured entry. */
   sourceLabel: (botId: string, threadId: string) => string;
+  /** Whether this thread may still feed this bot's memory, asked again
+   * when a batch is captured: a room turn queued before Learn from group
+   * chats was switched off, or before the room or the bot changed who can
+   * see them, is dropped instead. Absent: every queued turn may. */
+  mayCapture?: (botId: string, threadId: string) => boolean;
   /** The turn as capture reads it, rebuilt from the transcript, or null when
    * it is gone (thread deleted, rewound) or no longer capturable. Without it
    * turns still waiting at shutdown are dropped, as before. */
@@ -154,13 +161,15 @@ function pendingPath(): string {
 }
 
 function savePending(batches: readonly CaptureBatch[]): void {
+  // per bot and thread: a room's thread holds every member bot's turns
   const byThread = new Map<string, { botId: string; threadId: string; turnIds: string[] }>();
   for (const batch of batches) {
     const ids = batch.turns.map((turn) => turn.turnId).filter((id): id is string => typeof id === "string" && id.length > 0);
     if (!ids.length) continue;
-    const entry = byThread.get(batch.threadId) ?? { botId: batch.botId, threadId: batch.threadId, turnIds: [] };
+    const key = `${batch.botId}\n${batch.threadId}`;
+    const entry = byThread.get(key) ?? { botId: batch.botId, threadId: batch.threadId, turnIds: [] };
     entry.turnIds.push(...ids.filter((id) => !entry.turnIds.includes(id)));
-    byThread.set(batch.threadId, entry);
+    byThread.set(key, entry);
   }
   if (!byThread.size) return;
   const state: PendingCapture = {
@@ -221,7 +230,7 @@ async function askModel(engine: UpkeepEngine, prompt: string): Promise<string | 
 export const NO_TEXT_ENGINE = "This bot's engine cannot make the quick background model call upkeep uses, so only expired notes and exact duplicates are tidied.";
 
 export interface MemoryUpkeep {
-  /** A finished 1:1 turn of an upkeep bot, for capture. */
+  /** A finished turn of an upkeep bot, for capture: 1:1, or a room's. */
   noteTurn(botId: string, threadId: string, turn: CaptureTurn): void;
   /** Capture a thread's waiting turns now, without waiting for the quiet spell. */
   flushThread(threadId: string): void;
@@ -278,6 +287,9 @@ export function createMemoryUpkeep(deps: UpkeepDeps): MemoryUpkeep {
     const off: CaptureReport = { at, added: 0, topics: 0, aboutMe: 0, note: "upkeep is off" };
     if (!upkeepEnabled(bot)) return off;
     if (deps.capturable && !deps.capturable(batch.threadId)) return { ...off, note: "the conversation is confidential" };
+    const allowed = () => deps.mayCapture?.(bot.id, batch.threadId) ?? true;
+    const refused: CaptureReport = { at, added: 0, topics: 0, aboutMe: 0, note: "this conversation no longer feeds the bot's memory" };
+    if (!allowed()) return refused;
     const engine = deps.engine(bot.id);
     if (!engine?.generateText) {
       const report = { at, added: 0, topics: 0, aboutMe: 0, note: NO_TEXT_ENGINE };
@@ -308,6 +320,7 @@ export function createMemoryUpkeep(deps: UpkeepDeps): MemoryUpkeep {
     // Re-read after the await: the bot or the person may have written since.
     // From here to the journal rows there is no await, so no write interleaves.
     if (!upkeepEnabled(deps.bot(bot.id))) return off;
+    if (!allowed()) return refused;
     const { parsed, added, topics } = writing(bot.id, () => {
       const before = readRaw(bot.id, "MEMORY.md");
       const archiveBefore = readRaw(bot.id, ARCHIVE_PATH);

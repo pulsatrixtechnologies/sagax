@@ -21,7 +21,7 @@ export function supportsApprovalMode(driverKind: string | undefined, mode: Appro
   // engines could never stop asking — not by its own level, and not through
   // a Primary Bot's delegated Full access either.
   return ["codex", "claudeAgent", "antigravityAgent", "cursorAgent", "grokAgent", "opencodeGo", "qwenAgent", "geminiAgent",
-    "clineAgent", "openai-compat", "grok", "minimax", "mistral", "cerebras", "groq"].includes(driverKind ?? "");
+    "clineAgent", "openai-compat", "grok", "minimax", "mistral", "cerebras", "groq", "meta", "museCode"].includes(driverKind ?? "");
 }
 
 /** Whether switching engines must first drop this level to Ask. A Full or

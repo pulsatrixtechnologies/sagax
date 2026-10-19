@@ -4,19 +4,19 @@ import { callTool, type ToolCallContext } from "./agents-call.ts";
 import { availableTools, type CatalogProfile } from "./agents-catalog.ts";
 import type { HarnessClient } from "./agents-client.ts";
 
-const PROFILE: CatalogProfile = { externalRuntime: false, coordinating: false, ownThreadCreation: false, skillAuthoring: false, sharedComputers: false, voiceNotes: false, cloudHome: false, chief: false, botId: "bot-scout" };
+const PROFILE: CatalogProfile = { externalRuntime: false, skillAuthoring: false, sharedComputers: false, voiceNotes: false, cloudHome: false, chief: false, botId: "bot-scout" };
 const NAMES = ["save_artifact", "update_artifact", "list_artifacts", "delete_artifact"];
 
 function harness(answer: { ok: boolean; status: number; body: Record<string, unknown> }, externalRuntime = false) {
   const api = vi.fn<HarnessClient["api"]>(async () => ({}));
   const apiResponse = vi.fn<HarnessClient["apiResponse"]>(async () => answer);
-  const context: ToolCallContext = { botId: "bot-scout", threadId: "thread-scout", depth: 0, externalRuntime, coordinating: false, sharedComputers: false, client: { api, apiResponse } };
+  const context: ToolCallContext = { botId: "bot-scout", threadId: "thread-scout", depth: 0, externalRuntime, sharedComputers: false, client: { api, apiResponse } };
   return { apiResponse, context };
 }
 
 describe("the artifact tools", () => {
   it("are in the catalog of every agents bot, and only list_artifacts reads", () => {
-    for (const profile of [PROFILE, { ...PROFILE, chief: true }, { ...PROFILE, coordinating: true }]) {
+    for (const profile of [PROFILE, { ...PROFILE, chief: true }]) {
       const tools = availableTools(profile) as Array<{ name: string; annotations?: { readOnlyHint?: boolean } }>;
       for (const name of NAMES) expect(tools.map((tool) => tool.name)).toContain(name);
       expect(tools.filter((tool) => NAMES.includes(tool.name) && tool.annotations?.readOnlyHint).map((tool) => tool.name)).toEqual(["list_artifacts"]);

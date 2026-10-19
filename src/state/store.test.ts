@@ -486,7 +486,33 @@ describe("trusted approval-mode persistence", () => {
       new AbortController().signal,
       request,
     );
-    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({ approvalMode: "ask" });
+    // the all-threads scope rides along for Ask (the team dialog), never the confirmation
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({ approvalMode: "ask", applyToAllThreads: true });
+  });
+
+  it("sends the all-threads scope with Ask, Edits and Auto over the bot API", async () => {
+    const request = vi.fn(async (_path: string, _init?: RequestInit) => ({ bot: announcement("ask") }));
+    for (const approvalMode of ["ask", "edits", "auto"] as const) {
+      await persistBotUpdate("bot-1", { approvalMode, applyToAllThreads: true }, new AbortController().signal, request, undefined);
+    }
+    expect(request.mock.calls.map(([, init]) => JSON.parse(String(init?.body)))).toEqual(
+      ["ask", "edits", "auto"].map((approvalMode) => ({ approvalMode, applyToAllThreads: true })));
+  });
+
+  it("leaves a thread's Custom through the private bridge when the level goes to every thread", async () => {
+    const request = vi.fn(async (_path: string, _init?: RequestInit) => ({ bot: announcement("auto") }));
+    const setMode = vi.fn(async () => announcement("auto"));
+    const current = { ...announcement("ask"), tasks: [
+      { threadId: "main", title: "Main", createdAt: 1 },
+      { threadId: "codex-rules", title: "Rules", createdAt: 2, approvalMode: "custom" as const },
+    ] };
+    await persistBotUpdate("bot-1", { approvalMode: "auto", applyToAllThreads: true }, new AbortController().signal, request, { setMode }, current);
+    expect(setMode).toHaveBeenCalledWith("bot-1", "auto", { acknowledgeLocalAuto: false, allThreads: true });
+    expect(request).not.toHaveBeenCalled();
+    // The bot's own panel, default only, never needs that channel for it.
+    await persistBotUpdate("bot-1", { approvalMode: "auto" }, new AbortController().signal, request, { setMode }, current);
+    expect(setMode).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({ approvalMode: "auto" });
   });
 
   it("fails closed when trusted modes have no packaged desktop bridge", async () => {
@@ -2498,6 +2524,7 @@ describe("live config frames", () => {
       anthropic: { configured: true },
       mistral: { configured: true },
       groq: { configured: true },
+      meta: { configured: true },
       openaiCompat: { configured: true, url: "http://127.0.0.1:1/v1" },
       fleet: { available: true },
     };
@@ -2506,6 +2533,7 @@ describe("live config frames", () => {
       anthropic: { configured: true },
       mistral: { configured: true },
       groq: { configured: true },
+      meta: { configured: true },
       openaiCompat: { configured: true, url: "http://127.0.0.1:1/v1" },
       fleet: { available: true },
     });
@@ -2830,6 +2858,35 @@ describe("restoring the open conversation", () => {
       await settle();
       expect(seen.selectedId).toBe("bot-2");
       expect(stored.get(LAST_CONVERSATION_KEY)).toBe("bot-2");
+    });
+
+    it("a pressed Steer that stays queued for its pictures says why, and a plain queued answer stays quiet", async () => {
+      const { stream } = await boot();
+      stream.send(hello());
+      await settle();
+      const answers: Record<string, unknown> = {
+        "/api/bots/bot-1/queue/q-image/steer": { ok: true, queued: true, threadId: "bot-1-thread", blockedBy: "images" },
+        "/api/groups/room-1/queue/q-room/steer": { ok: true, queued: true, threadId: "room-thread", blockedBy: "images" },
+        "/api/bots/bot-1/queue/q-plain/steer": { ok: true, queued: true, threadId: "bot-1-thread" },
+      };
+      vi.stubGlobal("fetch", (path: string) => Promise.resolve(new Response(JSON.stringify(answers[path] ?? {}))));
+
+      const settled = vi.fn();
+      flushSync(() => dispatch({ type: "steerQueued", botId: "bot-1", queueId: "q-plain", onSettled: settled }));
+      await settle();
+      expect(settled).toHaveBeenCalledTimes(1);
+      expect(seen.notice).toBeNull();
+
+      flushSync(() => dispatch({ type: "steerQueued", botId: "bot-1", queueId: "q-image", onSettled: settled }));
+      await settle();
+      expect(settled).toHaveBeenCalledTimes(2);
+      expect(seen.notice).toEqual({ kind: "steer-images", botName: null });
+
+      flushSync(() => dispatch({ type: "notice", notice: null }));
+      flushSync(() => dispatch({ type: "steerGroupQueued", groupId: "room-1", queueId: "q-room", onSettled: settled }));
+      await settle();
+      expect(settled).toHaveBeenCalledTimes(3);
+      expect(seen.notice).toEqual({ kind: "steer-images", botName: null });
     });
 
     it("the provider restores the conversation remembered on this device", async () => {

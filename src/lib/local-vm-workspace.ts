@@ -23,6 +23,8 @@ export interface LocalVmWorkspaceStatus {
 export interface LocalVmWorkspaceControlSnapshot {
   held: boolean;
   helpReason: string | null;
+  /** The sign-in card an open plea stands for (src/lib/computer-control.ts). */
+  help?: import("../../shared/wire").ComputerHelpRef | null;
   /** Present only on lease-aware control mutations, never on public reads. */
   owned?: boolean;
   acquired?: boolean;

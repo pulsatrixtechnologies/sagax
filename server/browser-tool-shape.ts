@@ -161,3 +161,19 @@ export function shapeBrowserToolResult(result: unknown, options: { toolName?: st
   if (!textParts) return { ...result, content };
   return { ...Object.fromEntries(Object.entries(result).filter(([key]) => key !== "structuredContent")), content };
 }
+
+/** Replace held secrets (shared/redact.ts scrubHeldSecrets: saved login
+ * passwords, recent one-time codes) in every string of a tool result — its
+ * text, a structured copy, an error — so a snapshot, an eval, page text,
+ * console or network output never hands a filled password back to the
+ * model. Images and binary data are passed through: a screenshot cannot be
+ * scrubbed (docs: security/permissions-and-secrets). */
+export function scrubBrowserResult(result: unknown, scrub: (text: string) => string, depth = 0): unknown {
+  if (typeof result === "string") return scrub(result);
+  if (depth > 32 || result === null || typeof result !== "object") return result;
+  if (Array.isArray(result)) return result.map((item) => scrubBrowserResult(item, scrub, depth + 1));
+  const record = result as Record<string, unknown>;
+  const binary = record.type === "image" || record.type === "audio";
+  return Object.fromEntries(Object.entries(record).map(([key, value]) =>
+    [key, (binary && key === "data") || key === "blob" ? value : scrubBrowserResult(value, scrub, depth + 1)]));
+}

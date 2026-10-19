@@ -46,19 +46,23 @@ export interface TurnContext {
 export type Script =
   | { kind: "complete"; text: string; evidence?: TurnEvidence }
   | { kind: "fail"; outcome: FailOutcome; text: string; evidence?: TurnEvidence }
-  | { kind: "needsInput"; question: string }
+  | { kind: "needsInput"; question: string; cards?: string[] }
+  /** The turn stopped short (a step cap) and the same node continues in place. */
+  | { kind: "continue"; text: string; note: string; handoffPath?: string; evidence?: TurnEvidence }
   | { kind: "handOut"; children: ChildSpec[]; after: Script }
   | { kind: "hang" }
   | { kind: "custom"; fn: (ctx: TurnContext) => RunResult | Promise<RunResult> };
 
 export const complete = (text: string, evidence?: TurnEvidence): Script => ({ kind: "complete", text, evidence });
 export const fail = (outcome: FailOutcome, text: string, evidence?: TurnEvidence): Script => ({ kind: "fail", outcome, text, evidence });
-export const needsInput = (question: string): Script => ({ kind: "needsInput", question });
+export const needsInput = (question: string, cards?: string[]): Script => ({ kind: "needsInput", question, ...(cards ? { cards } : {}) });
+export const continueTurn = (text: string, note: string, handoffPath?: string, evidence?: TurnEvidence): Script =>
+  ({ kind: "continue", text, note, ...(handoffPath !== undefined ? { handoffPath } : {}), ...(evidence ? { evidence } : {}) });
 export const handOut = (children: ChildSpec[], after: Script): Script => ({ kind: "handOut", children, after });
 export const hang = (): Script => ({ kind: "hang" });
 export const custom = (fn: (ctx: TurnContext) => RunResult | Promise<RunResult>): Script => ({ kind: "custom", fn });
 
-export type RunnerMethod = "validate" | "canStart" | "run" | "park" | "report" | "changed" | "names";
+export type RunnerMethod = "validate" | "canStart" | "run" | "park" | "report" | "changed" | "names" | "outward";
 
 export interface RunnerCall {
   method: RunnerMethod;
@@ -117,10 +121,15 @@ export class FakeRunner implements TurnRunner {
   readonly canStartAnswers = new Map<string, true | false | string>();
   /** Reasons validate refuses with, keyed by assignment id or bot id. */
   readonly validateReasons = new Map<string, string>();
+  /** What outward() says a cut turn already did, keyed by assignment id (first) or bot id. */
+  readonly outwardAnswers = new Map<string, string[]>();
   readonly bots: Record<string, BotInfo>;
   personName = "Milind";
   /** Lets a scenario see the stored row at the moment run() is invoked. */
   lookup?: (id: string) => Assignment | undefined;
+  /** The optional port (types.ts TurnRunner.outward); a host without it is
+   * modelled by `new FakeRunner(bots, { outward: false })`. */
+  outward?: (a: Assignment) => string[];
 
   #port?: EnqueuePort;
   #scripts = new Map<string, Script[]>();
@@ -128,8 +137,9 @@ export class FakeRunner implements TurnRunner {
   #throwOnce = new Set<RunnerMethod>();
   #rejectRunOnce = false;
 
-  constructor(bots: Record<string, BotInfo> = {}) {
+  constructor(bots: Record<string, BotInfo> = {}, options: { outward?: boolean } = {}) {
     this.bots = bots;
+    if (options.outward !== false) this.outward = (a) => this.#outward(a);
   }
 
   // ── scripting ──────────────────────────────────────────────────────────
@@ -149,6 +159,11 @@ export class FakeRunner implements TurnRunner {
 
   setCanStart(key: string, answer: true | false | string): void {
     this.canStartAnswers.set(key, answer);
+  }
+
+  /** What the host saw a node's cut turn do outward (read at open()). */
+  setOutward(key: string, labels: string[]): void {
+    this.outwardAnswers.set(key, labels);
   }
 
   /** The next call of this method throws (a host bug the runtime must absorb). */
@@ -290,6 +305,13 @@ export class FakeRunner implements TurnRunner {
 
   // ── internals ──────────────────────────────────────────────────────────
 
+  #outward(a: Assignment): string[] {
+    this.#maybeThrow("outward");
+    const answer = this.outwardAnswers.get(a.id) ?? this.outwardAnswers.get(a.assignee.botId) ?? [];
+    this.calls.push({ method: "outward", id: a.id, a: clone(a), answer });
+    return answer;
+  }
+
   #maybeThrow(method: RunnerMethod): void {
     if (!this.#throwOnce.has(method)) return;
     this.#throwOnce.delete(method);
@@ -311,7 +333,10 @@ export class FakeRunner implements TurnRunner {
       case "fail":
         return { kind: "failed", outcome: script.outcome, text: script.text, evidence: script.evidence };
       case "needsInput":
-        return { kind: "needs_input", question: script.question };
+        return { kind: "needs_input", question: script.question, ...(script.cards ? { cards: script.cards } : {}) };
+      case "continue":
+        return { kind: "continue", text: script.text, note: script.note, ...(script.handoffPath !== undefined ? { handoffPath: script.handoffPath } : {}),
+          ...(script.evidence ? { evidence: script.evidence } : {}) };
       default:
         throw new Error(`fake runner: ${script.kind} cannot settle a released turn`);
     }
@@ -354,6 +379,7 @@ export class FakeRunner implements TurnRunner {
       case "complete":
       case "fail":
       case "needsInput":
+      case "continue":
         return this.#settle(script);
       case "handOut":
         for (const child of script.children) ctx.handOut(child);

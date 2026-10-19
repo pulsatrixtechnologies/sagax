@@ -17,16 +17,12 @@ export interface DriverCapabilities {
   agentsMcp: boolean;
 }
 
-/** The widest turn the harness can build: every optional integration on, a
- * Chief of Staff (the only role shown the Chief-only tools) and a
- * coordinating (room) turn, where the room-only coordination tools exist.
- * So the count is an upper bound, not one bot's catalog. Both sides of a
- * comparison get the same profile; only the driver's own capability can
- * differ. */
+/** The widest turn the harness can build: every optional integration on and
+ * a Chief of Staff (the only role shown the Chief-only tools); every turn
+ * gets the same teamwork tools. So the count is an upper bound, not one
+ * bot's catalog. Both sides of a comparison get the same profile; only the
+ * driver's own capability can differ. */
 const ENVELOPE: CatalogProfile = {
-  externalRuntime: false,
-  coordinating: true,
-  ownThreadCreation: true,
   skillAuthoring: true,
   sharedComputers: true,
   voiceNotes: true,
@@ -42,7 +38,7 @@ export function harnessCapabilityLines(from: DriverCapabilities | undefined, to:
   const lines: string[] = [];
   if (from.agentsMcp !== to.agentsMcp) {
     const names = availableTools(ENVELOPE).map((tool) => tool.name);
-    const coordination = ["coordinate_bots", "ask_bot", "delegate_bot"].filter((name) => names.includes(name));
+    const coordination = ["coordinate_bots", "assignment_status"].filter((name) => names.includes(name));
     lines.push(
       to.agentsMcp
         ? "Gains peer coordination and the other team tools: " + names.length + " tools including " + coordination.join(", ") + "."

@@ -502,6 +502,7 @@ function runImport(source: ImportSource, options: PackageImportOptions, deps: Pa
         ...(timeoutMinutes === undefined ? {} : { timeoutMinutes }),
         ...(routine.overlap ? { overlap: routine.overlap } : {}),
         ...(routine.continuity && routine.room === undefined ? { continuity: true } : {}),
+        ...(routine.runOnStartup ? { runOnStartup: true } : {}),
       };
       const created = deps.routines.create(input);
       createdRoutines.push(created);

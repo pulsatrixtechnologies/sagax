@@ -26,6 +26,7 @@ const KEY_PREFIXES: RegExp[] = [
   /\bxai-[A-Za-z0-9_-]{20,}/g, // xai (grok)
   /\bgsk_[A-Za-z0-9]{40,}/g, // groq
   /\bcsk-[A-Za-z0-9]{32,}/g, // cerebras
+  /\bLLM\|\d{6,}\|[A-Za-z0-9_-]{16,}/g, // meta model api
   /\bhf_[A-Za-z0-9]{30,}/g, // hugging face
   /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/g, // github classic
   /\bgithub_pat_[A-Za-z0-9_]{20,}/g, // github fine-grained
@@ -84,9 +85,38 @@ export function redactCutSecrets(text: string): string {
   return text && text.includes("…") ? text.replace(CUT_KEY, (m) => mask(m)) : text;
 }
 
-export function redactSecretsInText(text: string): string {
-  if (!text || text.length < 8) return text;
+// ── secrets this process holds ────────────────────────────────────────
+// The values above are recognized by their shape. A secret with no shape is
+// known by value: a server part may register a scrubber for the values it
+// holds, and every redaction below runs it first, so the stored
+// conversation, tool results and protocol logs lose them too. Nothing
+// registers one in a client, where this is a no-op.
+
+/** What a held secret becomes wherever it would have appeared. */
+export const HELD_SECRET_MASK = "••••••";
+
+const heldSecretScrubbers = new Set<(text: string) => string>();
+
+/** Register a scrubber for held secret values; returns its removal. */
+export function addHeldSecretScrubber(scrub: (text: string) => string): () => void {
+  heldSecretScrubbers.add(scrub);
+  return () => { heldSecretScrubbers.delete(scrub); };
+}
+
+/** Replace every held secret value in `text` with the mask. */
+export function scrubHeldSecrets(text: string): string {
+  if (!text || heldSecretScrubbers.size === 0) return text;
   let out = text;
+  for (const scrub of heldSecretScrubbers) out = scrub(out);
+  return out;
+}
+
+export function redactSecretsInText(text: string): string {
+  if (!text) return text;
+  // Held values first: a short one-time code is still a secret.
+  const held = scrubHeldSecrets(text);
+  if (held.length < 8) return held;
+  let out = held;
   out = maskPemBlocks(out);
   for (const re of KEY_PREFIXES) out = out.replace(re, (m) => mask(m));
   out = out.replace(BEARER, (_m, lead: string, tok: string) => `${lead}${mask(tok)}`);

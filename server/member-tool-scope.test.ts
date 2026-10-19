@@ -4,7 +4,7 @@ import { availableTools, catalogProfileFromEnv, type CatalogProfile } from "./dr
 import { builtinAgentToolName, HOST_LEVEL_AGENT_TOOLS, MEMBER_OWN_SCOPE_AGENT_TOOLS, memberOwnScopeTool } from "./member-tool-scope.ts";
 
 const everything: CatalogProfile = {
-  externalRuntime: false, coordinating: false, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true,
+  externalRuntime: false, skillAuthoring: true, sharedComputers: true,
   voiceNotes: true, cloudHome: false, memoryEnabled: true, groupMemory: true, chief: true, claims: true, botId: "bot-1",
 };
 
@@ -13,7 +13,6 @@ function catalogNames(): string[] {
   const names = new Set<string>();
   for (const profile of [
     everything,
-    { ...everything, coordinating: true },
     { ...everything, externalRuntime: true },
     { ...everything, voiceCall: true },
   ]) {

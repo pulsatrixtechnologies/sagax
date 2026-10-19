@@ -9,9 +9,9 @@ import { useMenuMotion } from "./MenuMotion";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 
-export type ConfigSection = "composio" | "box" | "opencodeGo" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "xai" | "mistral" | "cerebras" | "groq" | "elevenlabs" | "fishAudio" | "openaiImage" | "customImage";
+export type ConfigSection = "composio" | "box" | "opencodeGo" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "xai" | "mistral" | "cerebras" | "groq" | "meta" | "elevenlabs" | "fishAudio" | "openaiImage" | "customImage";
 /** Sections whose key can be tried against the provider from the server. */
-export type TestableProvider = "anthropic" | "openai" | "openrouter" | "openaiCompat" | "xai" | "mistral" | "cerebras" | "groq";
+export type TestableProvider = "anthropic" | "openai" | "openrouter" | "openaiCompat" | "xai" | "mistral" | "cerebras" | "groq" | "meta";
 
 const SECTIONS: Record<
   ConfigSection,
@@ -46,6 +46,7 @@ const SECTIONS: Record<
   mistral: { body: (v) => ({ mistral: { key: v } }), flag: (c) => c.mistral?.configured ?? false },
   cerebras: { body: (v) => ({ cerebras: { key: v } }), flag: (c) => c.cerebras?.configured ?? false },
   groq: { body: (v) => ({ groq: { key: v } }), flag: (c) => c.groq?.configured ?? false },
+  meta: { body: (v) => ({ meta: { key: v } }), flag: (c) => c.meta?.configured ?? false },
   xai: { body: (v) => ({ xai: { key: v } }), flag: (c) => c.xai?.configured ?? false },
   // Voice keys (2026-10-14): listed with the model keys, whatever the voice
   // engine. `tts.keys` says which are saved; an older server sends none.
@@ -172,6 +173,14 @@ const CREDENTIALS: Record<
     descriptionKey: "keys.groq.desc",
     href: "https://console.groq.com/docs/overview",
     linkLabelKey: "keys.groq.link",
+    optional: true,
+  },
+  meta: {
+    labelKey: "keys.meta.label",
+    placeholder: "LLM|…",
+    descriptionKey: "keys.meta.desc",
+    href: "https://dev.meta.ai/docs/authentication",
+    linkLabelKey: "keys.meta.link",
     optional: true,
   },
   xai: {

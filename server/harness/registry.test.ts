@@ -256,6 +256,17 @@ describe("ProviderRegistry", () => {
     expect((await registry.describe())[0].capabilities.withholdsHostTools).toBe(true);
   });
 
+  it("reports whether an instance can make the background steps' one-shot call", async () => {
+    const fake = makeFakeDriver();
+    const registry = new ProviderRegistry([fake.driver]);
+    await registry.load({ a: { driver: "fake" }, b: { driver: "fake" } });
+
+    expect((await registry.describe()).map((item) => item.capabilities.backgroundText)).toEqual([false, false]);
+    Object.assign(registry.get("a")!, { generateText: async () => "ok" });
+    Object.assign(registry.get("b")!, { generateMemoryText: async () => "ok" });
+    expect((await registry.describe()).map((item) => item.capabilities.backgroundText)).toEqual([true, true]);
+  });
+
   it("refreshes a live model catalog only on an explicit provider action", async () => {
     const fake = makeFakeDriver();
     const registry = new ProviderRegistry([fake.driver]);

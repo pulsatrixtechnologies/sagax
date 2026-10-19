@@ -708,6 +708,17 @@ export class BrowserLive {
     return new BrowserLiveError(this.runtime.interrupted(viewer.session) ? RESTART_NEEDED : otherwise, 409);
   }
 
+  /** Done on a sign-in card, from any window or device: whichever view holds
+   * this browser hands it back, exactly as its own Hand back would. */
+  handBack(session: string): void {
+    const holder = this.runtime.heldBy(session);
+    const viewer = holder ? this.viewers.get(holder) : undefined;
+    if (!viewer || viewer.session !== session) return;
+    this.abandonPressedInput(viewer);
+    this.runtime.release(session, viewer.id);
+    this.control(session);
+  }
+
   closeForSession(session: string): void { for (const viewer of this.viewers.values()) if (viewer.session === session) this.close(viewer); }
   closeForOwner(owner: string): void {
     this.teach.discardOwner(owner);

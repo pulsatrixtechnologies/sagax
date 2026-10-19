@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUILT_IN_BROWSER_SYSTEM_PROMPT } from "./browser-engine.ts";
-import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, HARNESS_OWNED_BROWSER_PARAMS, parsePageState, shapeBrowserToolResult, slimBrowserToolList, stripHarnessOwnedArguments, withoutLifecycle } from "./browser-tool-shape.ts";
+import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, HARNESS_OWNED_BROWSER_PARAMS, parsePageState, scrubBrowserResult, shapeBrowserToolResult, slimBrowserToolList, stripHarnessOwnedArguments, withoutLifecycle } from "./browser-tool-shape.ts";
 
 const snapshotTool = {
   name: "agent_browser_snapshot",
@@ -130,5 +130,32 @@ describe("browser tool shaping", () => {
     expect(summary).toContain('"Row 19"');
     expect(summary).not.toContain('"Row 20"');
     expect(summary).toContain("and 30 more lines");
+  });
+});
+
+describe("held secrets in browser results", () => {
+  const secret = "fake-pw-4242";
+  const scrub = (text: string) => text.split(secret).join("••••••");
+
+  it("are replaced in every string a result carries, structured copies and errors included", () => {
+    const result = {
+      isError: true,
+      content: [
+        { type: "text", text: `- textbox "Password" [ref=e3]: ${secret}` },
+        { type: "text", text: JSON.stringify({ success: true, data: { result: secret } }) },
+        { type: "resource", resource: { uri: `https://example.com/?p=${secret}`, text: `console: logged ${secret}` } },
+      ],
+      structuredContent: { requests: [{ url: `https://example.com/login?password=${secret}`, body: `password=${secret}` }] },
+    };
+    const scrubbed = scrubBrowserResult(result, scrub);
+    expect(JSON.stringify(scrubbed)).not.toContain(secret);
+    expect((scrubbed as typeof result).content[0]!.text).toBe('- textbox "Password" [ref=e3]: ••••••');
+    expect((scrubbed as typeof result).isError).toBe(true);
+  });
+
+  it("leave images and binary data as they are: a screenshot cannot be scrubbed", () => {
+    const image = { type: "image", data: `iVBORw0KGgo${secret}`, mimeType: "image/png" };
+    const blob = { type: "resource", resource: { uri: "file:///x", blob: secret } };
+    expect(scrubBrowserResult({ content: [image, blob] }, scrub)).toEqual({ content: [image, blob] });
   });
 });

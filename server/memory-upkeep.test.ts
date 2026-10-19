@@ -58,6 +58,38 @@ describe("capture parsing", () => {
     expect(prompt).toContain("(empty)");
   });
 
+  it("reads a room turn under room rules: the person's lines, other people's and other bots' marked apart", () => {
+    const room: CaptureTurn = {
+      person: "The launch moved to Friday",
+      bot: "Got it.",
+      owner: false,
+      room: [
+        { by: "person", name: "Person", text: "The launch moved to Friday" },
+        { by: "other", name: "Asha", text: "I'll own the press kit" },
+        { by: "peer", name: "Pixel", text: "I deployed the site and checked it loads" },
+      ],
+    };
+    const prompt = capturePrompt({ botName: "Scout", turns: [room], notebook: "", today: TODAY });
+    expect(prompt).toContain("Person: The launch moved to Friday\nAsha (another person): I'll own the press kit\nPixel (another bot): I deployed the site and checked it loads\nScout: Got it.");
+    expect(prompt).toContain('This is a group chat ("room") Scout is a member of.');
+    expect(prompt).toContain("never aboutUser");
+    expect(prompt).toContain("only an outcome that bot verified");
+    // a 1:1 batch keeps its prompt as it was
+    expect(capturePrompt({ botName: "Scout", turns: [{ person: "hi", bot: "hello" }], notebook: "", today: TODAY })).not.toContain("group chat");
+  });
+
+  it("keeps two bots' turns of one room thread in separate batches", () => {
+    const flushed: { botId: string; threadId: string; turns: number }[] = [];
+    const buffer = new CaptureBuffer({ quietMs: () => 60_000, maxTurns: 6, onFlush: (batch) => flushed.push({ botId: batch.botId, threadId: batch.threadId, turns: batch.turns.length }) });
+    buffer.add("lead", "room", { person: "a", bot: "b" });
+    buffer.add("helper", "room", { person: "a", bot: "c" });
+    buffer.add("lead", "room", { person: "d", bot: "e" });
+    expect(buffer.size()).toBe(2);
+    buffer.flush("room");
+    expect(flushed).toEqual([{ botId: "lead", threadId: "room", turns: 2 }, { botId: "helper", threadId: "room", turns: 1 }]);
+    expect(buffer.size()).toBe(0);
+  });
+
   it("buffers turns per thread and flushes at the count", () => {
     const flushed: number[] = [];
     const buffer = new CaptureBuffer({ quietMs: () => 60_000, maxTurns: 2, onFlush: (batch) => flushed.push(batch.turns.length) });
@@ -353,6 +385,37 @@ describe("the upkeep loop", () => {
     expect(report).toMatchObject({ added: 1, aboutMe: 0 });
   });
 
+  it("captures a room turn sourced to the room, and drops one the host no longer allows", async () => {
+    ensureWorkspace(BOT.id);
+    let allowed = true;
+    const roomUpkeep = createMemoryUpkeep({
+      bots: () => [BOT],
+      bot: (id) => (id === BOT.id ? BOT : undefined),
+      engine: () => engine,
+      busy: () => false,
+      addToAboutMe: (_from, texts) => {
+        aboutMeAdded.push(...texts);
+        return texts.length;
+      },
+      sourceLabel: () => 'room "Launch"',
+      mayCapture: () => allowed,
+      quietMs: () => 60_000,
+      tidyHour: () => 3,
+      now: () => clock,
+    });
+    const turn: CaptureTurn = { person: "", bot: "Noted.", owner: false, room: [{ by: "other", name: "Asha", text: "Launch moved to Friday" }] };
+    answers.push(JSON.stringify([{ text: "The launch moved to Friday", kind: "decision", confidence: 0.9 }, { text: "Asha is vegetarian", kind: "preference", aboutUser: true, confidence: 0.9 }]));
+    const report = await roomUpkeep.capture({ botId: BOT.id, threadId: "room-thread", turns: [turn] });
+    expect(report).toMatchObject({ added: 2, aboutMe: 0 });
+    expect(memory()).toContain('from room "Launch" (noticed) · The launch moved to Friday');
+    expect(aboutMeAdded).toEqual([]);
+    // switched off (or the room narrowed) after the turn was queued: no model call, nothing written
+    allowed = false;
+    const before = prompts.length;
+    expect((await roomUpkeep.capture({ botId: BOT.id, threadId: "room-thread", turns: [turn] })).note).toBe("this conversation no longer feeds the bot's memory");
+    expect(prompts).toHaveLength(before);
+  });
+
   it("is on by default, does nothing when switched off, and says so on an engine without a text call", async () => {
     BOT.memoryUpkeep = false;
     expect((await upkeep().capture({ botId: BOT.id, threadId: "t", turns: [{ person: "x", bot: "y" }] })).note).toBe("upkeep is off");
@@ -607,6 +670,31 @@ describe("the upkeep loop", () => {
     expect(memory()).toContain("Likes jazz");
     second.stop();
     expect(existsSync(pending)).toBe(false);
+  });
+
+  it("saves two bots' waiting turns of one room thread as two batches", () => {
+    const pending = join(DATA_DIR, "memory-capture-pending.json");
+    const OTHER: UpkeepBot = { id: "bot-upkeep-other", name: "Pixel" };
+    const two = createMemoryUpkeep({
+      bots: () => [BOT, OTHER],
+      bot: (id) => [BOT, OTHER].find((bot) => bot.id === id),
+      engine: () => engine,
+      busy: () => false,
+      addToAboutMe: () => 0,
+      sourceLabel: () => 'room "Launch"',
+      restoreTurn: () => null,
+      quietMs: () => 60_000,
+      tidyHour: () => 3,
+      now: () => clock,
+    });
+    two.noteTurn(BOT.id, "room-thread", { person: "a", bot: "b", turnId: "turn-a" });
+    two.noteTurn(OTHER.id, "room-thread", { person: "a", bot: "c", turnId: "turn-b" });
+    two.stop();
+    expect(JSON.parse(readFileSync(pending, "utf8"))).toEqual({ batches: [
+      { botId: BOT.id, threadId: "room-thread", turnIds: ["turn-a"] },
+      { botId: OTHER.id, threadId: "room-thread", turnIds: ["turn-b"] },
+    ] });
+    rmSync(pending);
   });
 
   it("saves a batch deferred by a backup, bounds what it keeps, and skips a bot switched off since", async () => {

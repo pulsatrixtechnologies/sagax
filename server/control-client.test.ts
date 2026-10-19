@@ -126,8 +126,6 @@ describe("computer control client", () => {
       const client = createControlClient({ ...configuration, fetchImpl });
       expect(client.configured).toBe(false);
       await expect(client.state(true)).resolves.toEqual({ held: false, helpOpen: false });
-      await expect(client.requestHelp("fixture request")).resolves.toBeNull();
-      await client.expireHelp("fixture-request");
       expect(fetchImpl).not.toHaveBeenCalled();
     },
   );

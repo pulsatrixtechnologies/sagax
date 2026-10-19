@@ -1,12 +1,17 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb, verificationServerEnvironment } from "../scripts/control-omb.ts";
 import { waitForExit } from "./testing/cleanup.ts";
+import { readHandoffs } from "./testing/handoff-rows.ts";
 
-it("preserves peer approval expiry through real HTTP responses and durable delegation receipts", async () => {
+// Every hand-off (coordinate_bots, a consultation or work) asks the person
+// first when the sender's peer comms need approval, and only
+// an allow sends work: a denial, an expiry or a peer gone private leaves no
+// assignment on the job runtime and never starts the teammate.
+it("preserves peer approval outcomes through real HTTP responses and sends no work without an allow", async () => {
   const fixture = await launchVerificationServer(process.env);
   const { url, dataDir, logPath } = fixture.info;
   const gate = join(dataDir, "finish-provider");
@@ -56,8 +61,8 @@ it("preserves peer approval expiry through real HTTP responses and durable deleg
     await expect.poll(async () => {
       try { return (await fetch(url + "/api/health")).ok; } catch { return false; }
     }, { timeout: 20_000 }).toBe(true);
-    // Routines retain the one-hop ask/delegate lifecycle. Ordinary chat uses
-    // coordinate_bots instead; do not bypass that production routing boundary.
+    // A routine turn drives the first half (coordinate_bots from a routine
+    // turn); the second half uses coordinate_bots from chat.
     const created = await api("POST", "/api/routines", {
       name: "Peer approval fixture", prompt: "Hold this fixture turn while approval is tested.",
       botId: from.id, enabled: false,
@@ -75,52 +80,61 @@ it("preserves peer approval expiry through real HTTP responses and durable deleg
       catch { return false; }
       return Boolean(token);
     }, { timeout: 15_000 }).toBe(true);
+    /** The runtime's assignment rows: nothing below may leave a child (the
+     * turn's own root row is written by its first hand-off attempt). */
+    const handoffs = () => readHandoffs(dataDir);
     for (const outcome of ["deny", "expired"] as const) {
-      const pending = api("POST", "/api/internal/ask-bot", { toBotId: target.id, message: "Do not dispatch without approval" }, token);
+      const pending = api("POST", "/api/internal/coordinate-bots", { botIds: [target.id], message: "Do not dispatch without approval", consult: true }, token, 403);
       void pending.catch(() => {}); // retain the rejection for the awaited assertion below
       const approval = await card(from.threadId);
+      expect(approval.card.tool).toBe("ask_bot");
       if (outcome === "deny") await api("POST", `/api/threads/${from.threadId}/respond`, { requestId: approval.card.requestId, behavior: "deny" });
       else writeFileSync(expiry, "expire");
       const result = await pending;
-      expect(result).toMatchObject({ approvalOutcome: outcome, approvalSource: outcome === "deny" ? "user" : "system" });
-      expect(result.error).toBe(outcome === "deny" ? "denied by user" : "the approval card expired without an answer");
+      // Only an allow sends work; the refusal names the outcome and whose decision it was.
+      const failure = outcome === "deny" ? "denied by user" : "the approval card expired without an answer";
+      expect(result.approvals).toEqual([{ botId: target.id, error: failure, approvalOutcome: outcome, approvalSource: outcome === "deny" ? "user" : "system" }]);
+      expect(result.error).toBe(outcome === "deny" ? "Denied by user; no work sent." : `${failure}; no work sent.`);
+      expect(result.receipts).toBeUndefined();
       const settled = (await messages(from.threadId)).find(m => m.id === approval.id);
       expect(settled.card).toMatchObject({ answered: "deny", dismissed: outcome !== "deny" });
-      evidence.push({ operation: "ask-bot", outcome, result, card: settled.card });
+      expect(handoffs().filter((node) => node.parentId)).toEqual([]);
+      evidence.push({ operation: "coordinate-bots consult", outcome, result, card: settled.card });
       rmSync(expiry, { force: true });
     }
     // A peer may become private while its approval is open. The failure
     // receipt may echo the addressed id, but must not disclose its new name.
-    const unavailableAsk = api("POST", "/api/internal/ask-bot", { toBotId: target.id, message: "Check access again after approval" }, token);
+    const unavailableAsk = api("POST", "/api/internal/coordinate-bots", { botIds: [target.id], message: "Check access again after approval", consult: true }, token, 409);
     void unavailableAsk.catch(() => {});
     const unavailableCard = await card(from.threadId);
     await api("PATCH", `/api/bots/${target.id}`, { hidden: true, name: "Private renamed teammate" });
     await api("POST", `/api/threads/${from.threadId}/respond`, { requestId: unavailableCard.card.requestId, behavior: "allow" });
     const unavailableResult = await unavailableAsk;
-    expect(unavailableResult.receipt).toMatchObject({ botId: target.id, outcome: "failed" });
-    expect(unavailableResult.receipt).not.toHaveProperty("botName");
+    expect(unavailableResult.receipts).toHaveLength(1);
+    expect(unavailableResult.receipts[0]).toMatchObject({ botId: target.id, outcome: "failed" });
+    expect(unavailableResult.receipts[0]).not.toHaveProperty("requestId");
     expect(JSON.stringify(unavailableResult)).not.toContain("Private renamed teammate");
     expect((await messages(target.threadId)).some(m => m.role === "user")).toBe(false);
-    evidence.push({ operation: "ask-bot-after-visibility-revocation", result: unavailableResult, targetDispatched: false });
+    expect(handoffs().filter((node) => node.parentId)).toEqual([]);
+    evidence.push({ operation: "consult-after-visibility-revocation", result: unavailableResult, targetDispatched: false });
     await api("PATCH", `/api/bots/${target.id}`, { hidden: false, name: target.name });
 
-    const queued = await api("POST", "/api/internal/delegate-bot", { toBotId: target.id, message: "Fixture delegation awaiting approval" }, token);
-    writeFileSync(gate, "finish");
+    // A delegation whose card nobody answers is refused the same way: no
+    // assignment is written for it, so nothing can dispatch it later.
+    const pendingDelegation = api("POST", "/api/internal/coordinate-bots", { botIds: [target.id], message: "Fixture delegation awaiting approval" }, token, 403);
+    void pendingDelegation.catch(() => {});
     const approval = await card(from.threadId);
+    expect(approval.card.tool).toBe("delegate_bot");
     writeFileSync(expiry, "expire");
-    let receipt: any;
-    await expect.poll(() => {
-      const path = join(dataDir, "delegation-receipts.json");
-      if (!existsSync(path)) return false;
-      receipt = JSON.parse(readFileSync(path, "utf8")).find((r: any) => r.id === queued.taskId);
-      return Boolean(receipt);
-    }, { timeout: 15_000 }).toBe(true);
-    expect(receipt).toMatchObject({ status: "expired", approvalOutcome: "expired", approvalSource: "system",
-      result: "the approval card expired without an answer" });
+    const expired = await pendingDelegation;
+    expect(expired.approvals).toEqual([{ botId: target.id, error: "the approval card expired without an answer", approvalOutcome: "expired", approvalSource: "system" }]);
+    expect(expired.error).toBe("the approval card expired without an answer; no work sent.");
     expect((await messages(from.threadId)).find(m => m.id === approval.id).card.dismissed).toBe(true);
     expect((await messages(target.threadId)).some(m => m.role === "user")).toBe(false);
     expect((await api("GET", "/api/bots?messages=0")).bots.find((bot: any) => bot.id === target.id).busy).toBe(false);
-    evidence.push({ operation: "delegate-bot", receipt, targetDispatched: false });
+    expect(handoffs().filter((node) => node.parentId)).toEqual([]);
+    evidence.push({ operation: "coordinate-bots", result: expired, targetDispatched: false });
+    writeFileSync(gate, "finish");
     expect((await cli("wait", "--bot", from.id, "--task", from.threadId, "--timeout", "25")).status).toBe("settled");
 
     // Ordinary chat's multi-target gate must retain each refusal's origin,
@@ -135,8 +149,9 @@ it("preserves peer approval expiry through real HTTP responses and durable deleg
       catch { return false; }
       return Boolean(token);
     }, { timeout: 15_000 }).toBe(true);
-    const readback = await api("GET", `/api/internal/delegations/${queued.taskId}?fromBotId=${from.id}&fromThreadId=${from.threadId}`, undefined, token);
-    expect(readback).toMatchObject({ status: "expired", approvalOutcome: "expired", approvalSource: "system" });
+    // Nothing above left an assignment to read back.
+    const outstanding = await api("GET", "/api/internal/assignment-status", undefined, token);
+    expect(outstanding).toEqual({ outstanding: [] });
     const pendingBatch = api("POST", "/api/internal/coordinate-bots", {
       botIds: [target.id, other.id], message: "Neither teammate should start", requestKey: "approval-fixture-batch",
     }, token, 403);
@@ -158,7 +173,8 @@ it("preserves peer approval expiry through real HTTP responses and durable deleg
     expect(batch.error).toContain("no work sent");
     expect((await messages(target.threadId)).some(m => m.role === "user")).toBe(false);
     expect((await messages(other.activeTaskId)).some(m => m.role === "user")).toBe(false);
-    evidence.push({ operation: "check-delegation", readback }, { operation: "coordinate-bots", result: batch });
+    expect(handoffs().filter((node) => node.parentId)).toEqual([]);
+    evidence.push({ operation: "assignment-status", outstanding }, { operation: "coordinate-bots", result: batch });
     writeFileSync(gate, "finish");
     expect((await cli("wait", "--bot", from.id, "--task", from.threadId, "--timeout", "25")).status).toBe("settled");
   } finally {

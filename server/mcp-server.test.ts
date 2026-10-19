@@ -725,6 +725,54 @@ describe("MCP tool execution", () => {
     expect(result).toMatchObject({ status: "settled", target: { working: false } });
   });
 
+  it("waits on, sends to, and guards a channel thread that runs beside the active one", async () => {
+    let fleetReads = 0;
+    const sent: unknown[] = [];
+    const fetcher = vi.fn(async (path: string, options?: RequestInit) => {
+      if (path === "/api/bots?messages=0") {
+        fleetReads += 1;
+        const backgroundWorking = fleetReads <= 2;
+        return {
+          bots: [{ id: "bot-1", threadId: "own", busy: backgroundWorking, activity: backgroundWorking ? "working" : "idle", tasks: [] }],
+          groups: [{
+            id: "channel-1",
+            name: "Launch",
+            memberIds: ["bot-1"],
+            threadId: "task-1",
+            working: backgroundWorking,
+            busyBotId: null,
+            tasks: [
+              { threadId: "task-1", title: "Open", createdAt: 1, working: false, busyBotId: null },
+              { threadId: "task-2", title: "Background", createdAt: 2, working: backgroundWorking, busyBotId: backgroundWorking ? "bot-1" : null },
+            ],
+          }],
+        };
+      }
+      if (path === "/api/threads/task-2/messages?limit=10") return {
+        messages: [{ id: "m2", at: 2, role: fleetReads <= 2 ? "user" : "bot", kind: "text", text: "Background work" }],
+      };
+      if (path === "/api/groups/channel-1/messages") {
+        sent.push(JSON.parse(String(options?.body)));
+        return { ok: true };
+      }
+      throw new Error(`unexpected path ${path}`);
+    });
+
+    // the bot speaks in a thread that is not the channel's open one
+    await expect(handleToolCall("send_bot_message", { bot_id: "bot-1", text: "hi" }, fetcher))
+      .rejects.toThrow("is working in channel 'channel-1'");
+    // a parallel-thread server takes a message for any of its threads
+    await handleToolCall("send_channel_message", { channel_id: "channel-1", task_id: "task-2", text: "More" }, fetcher);
+    expect(sent).toEqual([{ text: "More", threadId: "task-2" }]);
+
+    const waited: any = await handleToolCall("wait_for_conversation", {
+      target_type: "channel", target_id: "channel-1", task_id: "task-2", timeout_seconds: 3,
+    }, fetcher);
+    expect(fleetReads).toBeGreaterThanOrEqual(3);
+    expect(waited.status).toBe("settled");
+    expect(waited.target.tasks[1]).toMatchObject({ taskId: "task-2", working: false, busyBotId: null });
+  });
+
   it("does not expose executable paths from the model catalog", async () => {
     const fetcher = vi.fn(async () => ({ instances: [{
       instanceId: "codex", displayName: "Codex", snapshot: { state: "available" }, models: {}, capabilities: {},

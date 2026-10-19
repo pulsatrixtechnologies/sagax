@@ -218,7 +218,9 @@ posixOnly("who may answer an approval card on a shared workspace", () => {
     const opener = await makeBot("Opener");
     const helper = await makeBot("Helper");
     const source = await cardFrom(opener, opener.threadId, ADA);
-    // The opener, mid-way through Ada's request, hands work to a teammate in a fresh thread.
+    // The opener, mid-way through Ada's request, hands work to a teammate in
+    // a fresh thread (the threads route: coordinate_bots with thread "new",
+    // an assignment on the job runtime, opened for the same person).
     const minted = await fetch(`${BASE}/api/testing/internal-capability`, {
       method: "POST", headers: { "content-type": "application/json", "x-openmausbot-test-capability": CAPABILITY_KEY },
       body: JSON.stringify({ botId: opener.id, threadId: opener.threadId }),
@@ -229,20 +231,23 @@ posixOnly("who may answer an approval card on a shared workspace", () => {
       method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
       body: JSON.stringify({ toBotId: helper.id, title: "Helper job", message: "run it" }),
     });
-    const openedBody = await opened.json() as { threadId: string };
-    expect(opened.status, JSON.stringify(openedBody)).toBe(201);
-    // Ada may not approve her own request; the owner does, and the handoff runs.
+    const openedBody = await opened.json() as { receipts: Array<{ threadId: string; outcome: string }> };
+    expect(opened.status, JSON.stringify(openedBody)).toBe(200);
+    expect(openedBody.receipts[0]).toMatchObject({ outcome: "queued", threadId: expect.any(String) });
+    const helperThreadId = openedBody.receipts[0]!.threadId;
+    // Ada may not approve her own request; the owner does, and the handoff's
+    // turn runs in the thread opened for her.
     expect((await api("POST", `/api/threads/${opener.threadId}/respond`, { requestId: source, behavior: "allow" }, ADA)).status).toBe(403);
     expect((await api("POST", `/api/threads/${opener.threadId}/respond`, { requestId: source, behavior: "allow" }, BOSS)).status).toBe(200);
-    const delegated = await openCard(openedBody.threadId);
+    const delegated = await openCard(helperThreadId);
     expect(delegated, `the handoff never asked:\n${log.slice(-2_000)}`).not.toBeNull();
     const requestId = delegated.card.requestId as string;
     for (const as of [ADA, BOB]) {
-      const refused = await api("POST", `/api/threads/${openedBody.threadId}/respond`, { requestId, behavior: "allow" }, as);
+      const refused = await api("POST", `/api/threads/${helperThreadId}/respond`, { requestId, behavior: "allow" }, as);
       expect(refused.status, as).toBe(403);
       expect(refused.body.error).toMatch(refusal);
     }
-    expect((await api("POST", `/api/threads/${openedBody.threadId}/respond`, { requestId, behavior: "allow" }, BOSS)).status).toBe(200);
+    expect((await api("POST", `/api/threads/${helperThreadId}/respond`, { requestId, behavior: "allow" }, BOSS)).status).toBe(200);
     expect((await decision(requestId, "user-approved"))?.actor).toMatchObject({ kind: "session", email: BOSS });
   }, 90_000);
 

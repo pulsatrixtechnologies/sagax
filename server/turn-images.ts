@@ -143,3 +143,31 @@ export function extractTurnImages(
   }
   return { text: providerText, images: admitted.map((item) => item.image) };
 }
+
+/** The words of one steer — a queued burst, or a single live send — split
+ * into provider-facing texts and the native images they carry. Each text is
+ * resolved on its own, exactly as the turn it would have started; the images
+ * keep their order. Null when the attachments cannot ride one turn together
+ * (too many, too large): those words wait for real turns instead, so a steer
+ * is never where an admitted picture gets refused. */
+export function extractSteerImages(
+  texts: readonly string[],
+  options: ExtractTurnImagesOptions = {},
+): { texts: string[]; images: TurnImageInput[] } | null {
+  const maxCount = options.maxCount ?? TURN_IMAGE_MAX_COUNT;
+  const maxBytes = options.maxBytes ?? TURN_IMAGE_MAX_BYTES;
+  const resolved: string[] = [];
+  const images: TurnImageInput[] = [];
+  try {
+    for (const text of texts) {
+      const item = extractTurnImages(text, options);
+      resolved.push(item.text);
+      images.push(...item.images);
+    }
+  } catch {
+    return null;
+  }
+  if (images.length > maxCount) return null;
+  if (images.reduce((total, image) => total + image.bytes, 0) > maxBytes) return null;
+  return { texts: resolved, images };
+}

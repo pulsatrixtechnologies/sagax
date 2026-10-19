@@ -211,10 +211,22 @@ const variantValues = (entries: any[]): string[] => entries.flatMap((entry) => (
 ));
 const modes = (process.env.FAKE_ACP_MODES ?? "").split(",").filter(Boolean);
 let currentMode: string | null = modes[0] ?? null;
-// task id captured from the last delegate_bot reply, for a later
-// check_delegation call. Each turn is a fresh process, so the id is passed
+// assignment id captured from the last hand-off reply, for a later
+// assignment_status call. Each turn is a fresh process, so the id is passed
 // through a file (same state-passing pattern as FAKE_ACP_GATE_FILE).
 const taskIdFile = process.env.FAKE_ACP_TASKID_FILE ?? "";
+/** The teammate id as list_bots prints it ("[id: …]"). */
+const peerIdOf = (list: string): string => /id: ([\w-]+)/.exec(list)?.[1] ?? "";
+/** The hand-off a scripted mode makes to one peer. */
+function handoffCall(message: string, options: { consult?: boolean; reason?: string } = {}): { name: string; args: (list: string) => object } {
+  const reason = options.reason ? { reason: options.reason } : {};
+  return { name: "coordinate_bots", args: (list) => ({ bot_ids: [peerIdOf(list)], message, ...(options.consult ? { consult: true } : {}), ...reason }) };
+}
+/** The assignment id a hand-off reply names: coordinate_bots answers with
+ * JSON receipts (requestId). */
+const handoffIdOf = (reply: string): string => /"requestId":"([\w-]+)"/.exec(reply)?.[1] ?? "";
+/** The status read for a remembered assignment id. */
+const statusCall = (id: string): { name: string; args: () => object } => ({ name: "assignment_status", args: () => ({ id }) });
 const logFile = process.env.FAKE_ACP_LOG_FILE ?? "";
 const rejectLiveLoadFile = process.env.FAKE_ACP_REJECT_LIVE_LOAD_FILE ?? "";
 function fakeLog(line: string): void {
@@ -1138,22 +1150,25 @@ function handle(msg: any) {
         return;
       }
       const promptText = String(msg.params?.prompt?.[0]?.text ?? "");
-      // A delegated reply woke this bot (control-plane continuation): the
-      // harness revived it to fold the result in. Synthesize instead of
-      // driving the mode's usual delegate/ask flow, which would loop or
-      // re-ask for approval on a turn the user did not initiate.
+      // A hand-off's result woke this bot (the runtime's resume, or the
+      // legacy wake): the harness revived it to fold the result in.
+      // Synthesize instead of driving the mode's usual hand-off flow, which
+      // would loop or re-ask for approval on a turn the user did not initiate.
+      const runtimeReport = /\[Sagax report from @[^\]\n]*: ([a-z_]+)/.exec(promptText);
       const wokeFromDelegation = promptText.includes("[A delegated task just completed]")
-        || promptText.includes("[A delegated task failed]");
+        || promptText.includes("[A delegated task failed]")
+        || runtimeReport !== null;
       if (wokeFromDelegation) {
         fakeLog("branch: wokeFromDelegation");
-        const failed = promptText.includes("[A delegated task failed]");
-        const sawResult = promptText.includes("replied to the delegated task");
+        const failed = promptText.includes("[A delegated task failed]")
+          || (runtimeReport !== null && runtimeReport[1] !== "done" && runtimeReport[1] !== "completed");
+        const sawResult = promptText.includes("replied to the delegated task") || /\nWhat @\S+ said: "/.test(promptText);
         const redelegateFile = process.env.FAKE_ACP_REDELEGATE_FILE;
         if (mode === "delegate-peer" && agentsMcp && sawResult && redelegateFile && !existsSync(redelegateFile)) {
           writeFileSync(redelegateFile, "1");
           void driveMcp(agentsMcp, [
             { name: "list_bots", args: () => ({}) },
-            { name: "delegate_bot", args: (list) => ({ bot_id: /id: ([\w-]+)/.exec(list)?.[1] ?? "", message: "second delegated task" }) },
+            handoffCall("second delegated task"),
           ])
             .then((reply) => {
               out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: `delegated again: ${reply}` } } } });
@@ -1192,12 +1207,7 @@ function handle(msg: any) {
           complete();
           return;
         }
-        void driveMcp(agentsMcp, [
-          {
-            name: "check_delegation",
-            args: () => ({ task_id: savedTaskId }),
-          },
-        ])
+        void driveMcp(agentsMcp, [statusCall(savedTaskId)])
           .then((reply) => {
             out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: `status: ${reply}` } } } });
             complete();
@@ -1237,17 +1247,10 @@ function handle(msg: any) {
       ) {
         void driveMcp(agentsMcp, [
           { name: "list_bots", args: () => ({}) },
-          {
-            name: "delegate_bot",
-            args: (list) => ({
-              bot_id: /id: ([\w-]+)/.exec(list)?.[1] ?? "",
-              message: "long delegated task",
-              reason: "background assignment",
-            }),
-          },
+          handoffCall("long delegated task", { reason: "background assignment" }),
         ])
           .then((reply) => {
-            rememberDelegatedTaskId(/Task id: ([\w-]+)/.exec(reply)?.[1] ?? "");
+            rememberDelegatedTaskId(handoffIdOf(reply));
             out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: `assigned: ${reply}` } } } });
             complete();
           })
@@ -1306,15 +1309,13 @@ function handle(msg: any) {
         return;
       }
       if (mode === "ask-peer" && agentsMcp) {
-        // the comms e2e: reach a peer bot through the injected agents proxy
-        // and reply with whatever it said (the peer's fake runs plain happy
-        // — its depth-1 turn gets no agents server, so no recursion)
+        // the comms e2e: ask a peer bot a question through the injected
+        // agents proxy and reply with what the tool said (the peer's fake
+        // runs plain happy — its depth-1 turn gets no agents server, so no
+        // recursion; its answer resumes this bot in a later turn)
         void driveMcp(agentsMcp, [
           { name: "list_bots", args: () => ({}) },
-          {
-            name: "ask_bot",
-            args: (list) => ({ bot_id: /id: ([\w-]+)/.exec(list)?.[1] ?? "", message: "ping from fake" }),
-          },
+          handoffCall("ping from fake", { consult: true }),
         ])
           .then((reply) => {
             out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: `peer says: ${reply}` } } } });
@@ -1344,13 +1345,12 @@ function handle(msg: any) {
             },
           },
           {
-            // The routine turn has delegate_bot. The resumed turn after the
-            // card is a person's turn, which coordinates instead.
-            name: () => (listed.includes("coordinate_bots") ? "coordinate_bots" : "delegate_bot"),
+            // Every turn hands work on the same way, the routine's and the
+            // person's resumed one after the card alike.
+            name: "coordinate_bots",
             args: (created) => {
               const id = /id: ([\w-]+)/.exec(created)?.[1] ?? /^- Pixel\b.*?\[id: ([\w-]+)/m.exec(listed)?.[1] ?? "";
-              const message = "Review the new onboarding flow.";
-              return listed.includes("coordinate_bots") ? { bot_ids: [id], message } : { bot_id: id, message, reason: "design review" };
+              return handoffCall("Review the new onboarding flow.", { reason: "design review" }).args(`id: ${id}`);
             },
           },
         ])
@@ -1391,20 +1391,13 @@ function handle(msg: any) {
         return;
       }
       if (mode === "delegate-peer" && agentsMcp) {
-        // async peer-handoff e2e: queue the delegation and return
-        // immediately; the harness fires the peer's depth-1 turn after our
-        // turn settles. We don't need the peer's reply in our text — the
-        // comms e2e verifies the channel mirroring on its own.
+        // async peer-handoff e2e: hand the work on and return immediately;
+        // the harness fires the peer's depth-1 turn after our turn settles.
+        // We don't need the peer's reply in our text — the result resumes
+        // this bot in a later turn, which the wake branch above answers.
         void driveMcp(agentsMcp, [
           { name: "list_bots", args: () => ({}) },
-          {
-            name: "delegate_bot",
-            args: (list) => ({
-              bot_id: /id: ([\w-]+)/.exec(list)?.[1] ?? "",
-              message: "delegated task",
-              reason: "followup",
-            }),
-          },
+          handoffCall("delegated task", { reason: "followup" }),
         ])
           .then((reply) => {
             out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: `delegated: ${reply}` } } } });

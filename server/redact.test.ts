@@ -160,6 +160,7 @@ describe("redactSecretsInText", () => {
       [`npm ${"npm" + "_"}${alpha}`, /npm_[a-z]/],
       [`xai ${"xai-"}${alpha}`, /xai-/],
       [`groq ${"gsk_"}${alpha}ABCD`, /gsk_/],
+      [`meta ${"LLM|"}607358788850350|${alpha}`, /LLM\|6073/],
       [`huggingface ${"hf_"}${alpha}`, /hf_/],
     ];
     for (const [input, leak] of cases) {

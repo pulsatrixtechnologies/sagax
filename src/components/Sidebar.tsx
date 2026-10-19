@@ -27,6 +27,7 @@ import {
   Search,
   Puzzle,
   Share2,
+  SlidersHorizontal,
   Trash2,
   Users,
   X,
@@ -101,6 +102,7 @@ import { APP_NAME } from "@/lib/app-links";
 import { isBotFloating, subscribeFloatingBots, toggleFloatingBot } from "@/lib/floating-bots";
 import { isMacPlatform, SHORTCUT_GROUPS, shortcutKeysForPlatform } from "@/lib/keyboard-shortcuts";
 import { ShareTeamDialog } from "./ShareTeamDialog";
+import { TeamSettingsDialog } from "./TeamSettingsDialog";
 import { TeamDialog } from "./TeamDialog";
 import { RenameTitle } from "./RenameTitle";
 import { BotProjectDialog, FolderActions, FolderIcon, navigateThreadMenu } from "./BotProjects";
@@ -161,6 +163,7 @@ import { phoneSettingsAction, SidebarPhoneButton } from "./SidebarPhoneButton";
 import { SidebarPlaces } from "./SidebarPlaces";
 import { PulsatrixMark } from "./PulsatrixMark";
 import type { SidebarMenuItem } from "./SidebarPopoverMenu";
+import { roomSpeakerIds, roomThreadSpeakerId, roomThreadWorking } from "@/lib/room-threads";
 
 import { profileInitials, SidebarProfileMenu, SidebarRoutinesBadge } from "./SidebarProfileMenu";
 import { SidebarConnectApps } from "./ConnectAppsPill";
@@ -317,9 +320,11 @@ function openBotContextMenu(onMenu: (menu: MenuState) => void, botId: string, ev
  * a received direct message included. */
 export function groupPreview(group: Group, bots: Bot[], config: ConfigStatus | null, instances: InstanceInfo[]): string {
   const viewerId = viewerActorId(config);
-  if (group.busyBotId) {
+  // the open thread's speaker first, else one working in another thread
+  const speakerId = group.busyBotId ?? roomSpeakerIds(group)[0];
+  if (speakerId) {
     return t("sidebar.preview.botWorking", {
-      name: bots.find((b) => b.id === group.busyBotId)?.name ?? t("sidebar.preview.aBot"),
+      name: bots.find((b) => b.id === speakerId)?.name ?? t("sidebar.preview.aBot"),
     });
   }
   if (group.working) return t("sidebar.preview.teamWorking");
@@ -517,12 +522,15 @@ export function GroupThreadList({ group, selected, density = "comfortable", quer
   const { state, dispatch } = useStore();
   const now = useRelativeNow();
   const [showAll, setShowAll] = useState(false);
-  const busy = Boolean(group.working || group.busyBotId);
-  const waiting = state.bots.find((bot) => bot.id === group.busyBotId)?.activity === "waiting-on-you";
-  const tasks = (group.tasks ?? [{ threadId: group.threadId, title: group.name, createdAt: group.createdAt }]).map((task) => ({
-    ...task, busy: task.threadId === group.threadId && busy, unread: task.threadId === group.threadId && group.unread,
-    activity: task.threadId === group.threadId && waiting ? "waiting-on-you" as const : undefined,
-  }));
+  // Each thread reports its own work and speaker: threads run side by side.
+  const tasks = (group.tasks ?? [{ threadId: group.threadId, title: group.name, createdAt: group.createdAt }]).map((task) => {
+    const speakerId = roomThreadSpeakerId(group, task.threadId);
+    const waiting = Boolean(speakerId) && state.bots.find((bot) => bot.id === speakerId)?.activity === "waiting-on-you";
+    return {
+      ...task, busy: roomThreadWorking(group, task.threadId), unread: task.threadId === group.threadId && group.unread,
+      activity: waiting ? "waiting-on-you" as const : undefined,
+    };
+  });
   const visible = orderedThreadList(visibleSidebarThreads(tasks, group.threadId, query, [], showAll));
   useRevealedThreadRow(state.revealThread, selected ? group.threadId : null);
   // One set of row actions per room; they read the room as it is when used.
@@ -2378,16 +2386,19 @@ export function ArchivedBotsPanel({
 
 /** A named team's context menu: add bots, rename, share the whole team,
  * delete. Exported for a markup test. */
-export function TeamMenuItems({ onAddBots, onRename, onShare, onDelete }: {
+export function TeamMenuItems({ onAddBots, onRename, onShare, onDelete, onSetForAll }: {
   onAddBots: () => void;
   onRename: () => void;
   onShare: () => void;
   onDelete: () => void;
+  /** Owner/admin only: one approval level or model for every bot in the team. */
+  onSetForAll?: () => void;
 }) {
   const item = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover";
   return (
     <>
       <button type="button" role="menuitem" autoFocus className={item} onClick={onAddBots}><Users size={14} />{t("team.addBots")}</button>
+      {onSetForAll && <button type="button" role="menuitem" className={item} onClick={onSetForAll}><SlidersHorizontal size={14} />{t("teamSettings.menu")}</button>}
       <button type="button" role="menuitem" className={item} onClick={onRename}><Pencil size={14} />{t("team.rename")}</button>
       <button type="button" role="menuitem" className={item} onClick={onShare}><Share2 size={14} />{t("team.share")}</button>
       <button type="button" role="menuitem" className={cn(item, "text-danger")} onClick={onDelete}><Trash2 size={14} />{t("team.delete")}</button>
@@ -2478,6 +2489,9 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   const [sectionPicker, setSectionPicker] = useState<MenuState | null>(null);
 
   const [teamMenu, setTeamMenu] = useState<{ name: string; x: number; y: number } | null>(null);
+  const [teamSettings, setTeamSettings] = useState<string | null>(null);
+  // Approval levels and models are the owner's to set, as in each bot's panel.
+  const teamSettingsAllowed = useOwnerOrAdmin();
   const teamMotion = useHeldMenuMotion(teamMenu);
   const teamMenuReturn = useRef<HTMLElement | null>(null);
   const closeTeamMenu = () => {
@@ -3170,7 +3184,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
                     onContextMenu={orgMode && layoutInteractive && id !== BOT_CHATS_SECTION_ID ? (event) => openOrgMenu(event, team?.key || null, id) : !remoteClient && layoutInteractive && sectionName ? (event) => {
                       event.preventDefault();
                       teamMenuReturn.current = event.currentTarget.querySelector<HTMLElement>("button") ?? event.currentTarget;
-                      setTeamMenu({ name: sectionName, x: Math.max(8, Math.min(event.clientX, window.innerWidth - 230)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - 150)) });
+                      setTeamMenu({ name: sectionName, x: Math.max(8, Math.min(event.clientX, window.innerWidth - 266)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - 190)) });
                     } : undefined}
                     collapsed={collapsed}
                     attention={attention}
@@ -3430,7 +3444,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       </div>, document.body)}
       {teamMotion.shown && teamMotion.value && createPortal(<div className={cn("fixed inset-0 z-40", teamMotion.closing && "pointer-events-none")} onMouseDown={closeTeamMenu}>
         <div role="menu" aria-label={teamMotion.value.name} style={{ left: teamMotion.value.x, top: teamMotion.value.y }}
-          className={cn("absolute w-[220px] min-w-[200px] rounded-xl border-[0.5px] border-border bg-elevated p-1.5 flex flex-col gap-0.5 text-[13px] leading-[18px] text-ink", teamMotion.className)} {...teamMotion.exitProps}
+          className={cn("absolute w-[256px] min-w-[200px] rounded-xl border-[0.5px] border-border bg-elevated p-1.5 flex flex-col gap-0.5 text-[13px] leading-[18px] text-ink", teamMotion.className)} {...teamMotion.exitProps}
           onMouseDown={event => event.stopPropagation()} onKeyDown={event => {
             if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); closeTeamMenu(); return; }
             navigateThreadMenu(event);
@@ -3440,6 +3454,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
             onRename={() => { closeTeamMenu(); setRenameTeam(teamMotion.value!.name); }}
             onShare={() => { closeTeamMenu(); setShareTeam(teamMotion.value!.name); }}
             onDelete={() => { closeTeamMenu(); setDeletingTeam(teamMotion.value!.name); }}
+            onSetForAll={teamSettingsAllowed === true ? () => { closeTeamMenu(); setTeamSettings(teamMotion.value!.name); } : undefined}
           />
         </div>
       </div>, document.body)}
@@ -3465,6 +3480,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
         }} />
       {moveToTeam && <TeamDialog section={moveToTeam} onClose={() => setMoveToTeam(null)} />}
       {shareTeam !== null && <ShareTeamDialog team={shareTeam} onClose={() => setShareTeam(null)} />}
+      {teamSettings !== null && <TeamSettingsDialog team={teamSettings} onClose={() => setTeamSettings(null)} />}
       <SectionPicker
           current={sectionPicker ? layoutBots.find((b) => b.id === sectionPicker.botId)?.section : undefined}
           names={personal ? personalSectionNames(personal) : undefined}

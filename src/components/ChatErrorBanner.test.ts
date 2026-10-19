@@ -63,6 +63,12 @@ describe("ChatNotice", () => {
     expect(markup({ kind: "bot-gone", botName: null })).toContain('role="status"');
   });
 
+  it("says why a pressed Steer left pictures queued", () => {
+    const text = markup({ kind: "steer-images", botName: null });
+    expect(text).toContain("Pictures can&#x27;t be steered into this bot&#x27;s running turn. Your message will be sent as the next turn.");
+    expect(text).toContain('role="status"');
+  });
+
   it("shows in the room as well as the chat", () => {
     for (const file of ["components/ChatView.tsx", "components/GroupView.tsx"]) {
       expect(source(file)).toContain("<ChatNotice notice={state.notice} />");

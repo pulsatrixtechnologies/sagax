@@ -60,7 +60,7 @@ export interface RoutineContextAttachment {
   size: number;
 }
 
-export type RoutineRunTrigger = "schedule" | "manual" | "webhook";
+export type RoutineRunTrigger = "schedule" | "manual" | "webhook" | "startup";
 
 export type RoutineRunStatus =
   | "queued"
@@ -100,6 +100,8 @@ export interface Routine {
   overlap?: "skip" | "queue";
   /** Each run starts with the previous run's report. */
   continuity?: boolean;
+  /** Also run once each time Sagax starts. */
+  runOnStartup?: boolean;
   skippedRuns?: number;
   lastSkippedAt?: number;
   failureStreak?: number;
@@ -198,6 +200,7 @@ export interface RoutineInput {
   continuity?: boolean;
   /** 2026-10-16: runs only while its person is there (server/routine-away.ts). */
   onlyWhenPresent?: boolean;
+  runOnStartup?: boolean;
   attachments?: RoutineContextAttachment[];
   /** Omission preserves routing; null resets it to the bot's main thread. */
   resultsThreadId?: string | null;

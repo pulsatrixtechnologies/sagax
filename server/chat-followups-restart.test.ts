@@ -117,6 +117,14 @@ it("survives a real server crash: queued sends keep receipts, cancellation and u
     await api("POST", `/api/bots/${bot.id}/messages`, { text: "Working before restart", threadId: bot.threadId }, 202);
     await expect.poll(() => prompts(bot.threadId).length, { timeout: 15_000 }).toBe(1);
     const replyToId = (await messages(bot.threadId)).find((message) => message.role === "user").id;
+    // Claude takes pictures into a running turn, so words for this busy
+    // thread would be steered in. Let the turn finish and have a second task
+    // hold the bot's one slot: the attachment then waits in the durable queue.
+    writeFileSync(join(dataDir, `${bot.threadId}.gate`), "finish the first task");
+    expect(await runControlOmb(["wait", "--bot", bot.id, "--task", bot.threadId, "--url", url])).toMatchObject({ status: "settled" });
+    const holder = (await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Hold the slot" }, 201)).task;
+    await api("POST", `/api/bots/${bot.id}/messages`, { text: "Hold the slot", threadId: holder.threadId }, 202);
+    await expect.poll(() => prompts(holder.threadId).length, { timeout: 15_000 }).toBe(1);
     const attachments = join(dataDir, "attachments");
     mkdirSync(attachments, { recursive: true });
     const image = join(attachments, "123e4567-e89b-42d3-a456-426614174000.png");
@@ -124,7 +132,7 @@ it("survives a real server crash: queued sends keep receipts, cancellation and u
     const text = `Inspect screenshot after the first task\n\n<attached-image path="${image}" name="fixture.png" />`;
     const body = { text, threadId: bot.threadId, replyToId, sendId: "durable_bot_send_123456" };
     const queued = await asPairedPerson(`/api/bots/${bot.id}/messages`, body);
-    expect(queued).toMatchObject({ queued: true, queueId: expect.any(String) });
+    expect(queued).toMatchObject({ queued: true, queueId: expect.any(String), reason: "capacity" });
     const cancelledBody = { ...body, text: `${text}\n\nCancelled task`, sendId: "cancelled_bot_send_123456" };
     const cancelled = await api("POST", `/api/bots/${bot.id}/messages`, cancelledBody, 202);
     await api("DELETE", `/api/bots/${bot.id}/queue/${cancelled.queueId}`, { threadId: bot.threadId });
@@ -216,6 +224,10 @@ it("survives a real server crash: queued sends keep receipts, cancellation and u
       expect.objectContaining({ role: "user", text: "Reply to a message that disappears", sender: PAIRED }),
     ]);
     expect((await api("POST", `/api/bots/${bot.id}/messages`, cancelledBody, 409)).error).toContain("cancelled");
+    // The crash cut the bot's turn while the person's next words waited
+    // behind it: the restart policy ends that cut turn with the interrupted
+    // line instead of rerunning it (#2735: the pending words carry the
+    // conversation on), and the held line runs once.
     expect(prompts(bot.threadId)).toHaveLength(2);
     expect(prompts(bot.threadId)[1].message.content).toEqual(expect.arrayContaining([expect.objectContaining({ type: "image" })]));
 
@@ -233,6 +245,9 @@ it("survives a real server crash: queued sends keep receipts, cancellation and u
       expect.objectContaining({ kind: "activity", tool: { name: expect.stringContaining("Review the result"), ok: false } }),
     ]);
     expect((await api("POST", `/api/bots/${uncertain.id}/messages`, uncertainBody, 202)).message.queueId).toBe(claimed.queueId);
+    // The claim itself is never replayed (one user line, one notice) and
+    // neither is its cut turn: a dispatched follow-up was that turn, so the
+    // restart policy ends it silently (#2735) and nothing runs again.
     expect(prompts(later.threadId)).toHaveLength(1);
     // A second boot must not duplicate recovery notices or replay a claim.
     await waitForExit(restarted, { signal: "SIGTERM" });

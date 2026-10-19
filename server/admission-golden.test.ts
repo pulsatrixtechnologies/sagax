@@ -17,10 +17,21 @@ describe("admission golden tables", () => {
     const plain = { carriesImages: false, pendingComputerSelection: false, engineCanSteer: true };
     expect(admit("direct-busy", plain)).toEqual({ action: "steer" });
     // Each mechanical clamp alone forces the reasonless busy-thread park.
-    expect(admit("direct-busy", { ...plain, carriesImages: true })).toEqual({ action: "queue" });
+    // Attachments park only where the engine cannot take them mid-turn,
+    // and say so: the engine would otherwise have taken the words.
+    expect(admit("direct-busy", { ...plain, carriesImages: true })).toEqual({ action: "queue", blockedBy: "images" });
     expect(admit("direct-busy", { ...plain, pendingComputerSelection: true })).toEqual({ action: "queue" });
     expect(admit("direct-busy", { ...plain, engineCanSteer: false })).toEqual({ action: "queue" });
     expect(admit("direct-busy", {})).toEqual({ action: "queue" });
+  });
+
+  it("direct-busy: attachments steer into an engine that takes images mid-turn", () => {
+    const images = { carriesImages: true, engineCanSteerImages: true, pendingComputerSelection: false, engineCanSteer: true };
+    expect(admit("direct-busy", images)).toEqual({ action: "steer" });
+    // Image steering never lifts the other clamps, and text needs no image support.
+    expect(admit("direct-busy", { ...images, engineCanSteer: false })).toEqual({ action: "queue" });
+    expect(admit("direct-busy", { ...images, pendingComputerSelection: true })).toEqual({ action: "queue" });
+    expect(admit("direct-busy", { ...images, carriesImages: false, engineCanSteerImages: false })).toEqual({ action: "steer" });
   });
 
   it("direct: starts on a free bot, parks behind slots, room turns, and coordination", () => {
@@ -55,6 +66,18 @@ describe("admission golden tables", () => {
     // speaker could actually take the steer (capability is checked first).
     expect(admit("room-steer", { ...head, isQueueHead: false })).toEqual({ action: "refuse", code: "queue-head-only" });
     expect(admit("room-steer", { speakerPresent: false, engineCanSteer: false, isQueueHead: false })).toEqual({ action: "queue" });
+  });
+
+  it("room-steer: an attachment head steers only into a speaker that takes images mid-turn", () => {
+    const head = { speakerPresent: true, engineCanSteer: true, isQueueHead: true, carriesImages: true };
+    expect(admit("room-steer", { ...head, engineCanSteerImages: true })).toEqual({ action: "steer" });
+    // A speaker without image steering keeps the head queued and says why —
+    // before the head-only rule, as the route always answered.
+    expect(admit("room-steer", head)).toEqual({ action: "queue", blockedBy: "images" });
+    expect(admit("room-steer", { ...head, isQueueHead: false })).toEqual({ action: "queue", blockedBy: "images" });
+    expect(admit("room-steer", { ...head, engineCanSteerImages: true, isQueueHead: false })).toEqual({ action: "refuse", code: "queue-head-only" });
+    // An incapable room's plain queue stays reasonless.
+    expect(admit("room-steer", { ...head, engineCanSteer: false })).toEqual({ action: "queue" });
   });
 
   it("guarded: any busy shape refuses guarded_busy; it never queues or steers", () => {

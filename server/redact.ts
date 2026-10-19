@@ -31,7 +31,7 @@ import { mask, redactSecretsInText } from "../shared/redact.ts";
 // Text-shaped secret redaction lives in shared/redact.ts now, so the client
 // (task timeline) and the server scrub identically without the client
 // bundling server code; re-exported here so existing importers keep working.
-export { mask, redactSecretsInText } from "../shared/redact.ts";
+export { addHeldSecretScrubber, HELD_SECRET_MASK, mask, redactSecretsInText, scrubHeldSecrets } from "../shared/redact.ts";
 
 // ── content-shaped secrets ────────────────────────────────────────────
 // What a bot's own reply, a tool title, or a permission card can carry —

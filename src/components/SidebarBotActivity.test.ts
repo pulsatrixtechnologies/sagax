@@ -127,6 +127,22 @@ describe("group attention", () => {
     expect(tasks[0].unread).toBe(true);
   });
 
+  it("shows each thread's own work when a room's threads run side by side", () => {
+    // the open thread is idle; a side thread's member waits on the person
+    // while the room-level flag counts the whole room as working
+    const room = group("g", "Crew", "g0", {
+      working: true,
+      busyBotId: null,
+      tasks: [
+        { threadId: "g0", title: "Crew", createdAt: 0, working: false, busyBotId: null },
+        { threadId: "g1", title: "Side thread", createdAt: 0, working: true, busyBotId: "b" },
+      ],
+    });
+    const waitingBot = bot("b", "Beta", "b0", [], { activity: "waiting-on-you" });
+    const tasks = sidebarGroupActivityTasks(room, [waitingBot], {});
+    expect(tasks.map((task) => [task.threadId, task.busy, task.activity])).toEqual([["g1", true, "waiting-on-you"]]);
+  });
+
   it("keeps a queued side conversation even while the room itself is idle", () => {
     const room = group("g", "Crew", "g0", { tasks: [{ threadId: "g0", title: "Crew", createdAt: 0 }, { threadId: "g1", title: "Side thread", createdAt: 0 }] });
     const tasks = sidebarGroupActivityTasks(room, [], { g1: [{}] });

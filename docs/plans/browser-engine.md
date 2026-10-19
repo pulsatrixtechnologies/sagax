@@ -84,7 +84,8 @@ capability. Native session identity and encryption keys stay in the server.
   cleanup journal. Settings and the bot's Browser panel offer a one-click
   install of the engine (`POST /api/browser-engine/install`).
 - The app keeps browsers headless; the live panel is the visible surface.
-  Importing an operator's Chrome profile remains out of scope.
+  Importing an operator's Chrome profile remains out of scope; a profile can
+  use the person's running Chrome instead (step 5, My Chrome).
 
 ### 3. Watch and take over — implemented, pending release
 
@@ -120,6 +121,49 @@ recording controls are intentionally not added to the live browser chrome.
 
 The engine's `agent_browser_*` names are the vocabulary everywhere now; the
 system prompt teaches them. No adapter.
+
+### 5. Signed-in sites and My Chrome — implemented
+
+- **Signed-in sites.** Every built-in browser (a shared profile, or a bot's
+  own browser) lists the sites it holds cookies or storage for, with Sign out
+  per site and Sign out of all, in Settings → Browser profiles and the bot's
+  Browser panel. `server/browser-sites.ts` reads a running browser with the
+  engine's own `state save` and a stopped one from its restore file
+  (`<restore key>-<session>.json.enc`: AES-256-GCM under SHA-256 of the
+  `browser-engine-key` text, 12-byte nonce first, 16-byte tag last). Signing
+  out deletes the site's cookies and clears its origins' storage in the
+  running Chrome over its loopback DevTools socket, then rewrites every saved
+  copy, so the next launch restores neither. A site is the widest host the
+  browser itself stores records for (`.google.com` makes `google.com` the
+  site of `accounts.google.com`); no public-suffix list. The key never leaves
+  the server. Routes: `GET /api/browser-sites`, `POST
+  /api/browser-sites/sign-out` (admin, like the profiles).
+- **My Chrome.** A shared profile's Browser is Built-in or My Chrome. My
+  Chrome attaches agent-browser to the person's own running Chrome
+  (`AGENT_BROWSER_AUTO_CONNECT`: Chrome's `DevToolsActivePort`, then ports
+  9222/9229), so the bots act inside their real, signed-in browser. It never
+  restores OMB's saved state into that Chrome or saves its cookies out, never
+  closes it at shutdown, and has no signed-in sites list: its sign-ins are
+  Chrome's own. The person turns on remote debugging at
+  `chrome://inspect/#remote-debugging` (Chrome 144+); Chrome asks before it
+  accepts the connection. Switching a profile's browser closes its open one
+  (which saves a built-in browser's logins) and waits for its bots' turns.
+- **Where it applies.** Only where the bots run on the person's computer:
+  the desktop app. A server or Cloud has no Chrome of the person's, so the
+  option is shown as unavailable and every profile there stays built-in.
+  `browserEngine.attachCdpUrl` in config.json is now where My Chrome is when
+  it cannot be found by itself (another port or machine); setting it also
+  makes My Chrome available on a server. It no longer attaches every bot.
+- **Why My Chrome and not a headed built-in browser.** Measured Oct 12 with
+  agent-browser 0.37.0 and Chrome 154 on macOS, entering an account that
+  does not exist at accounts.google.com: the headless built-in browser and a
+  headed agent-browser launch of the installed Google Chrome both got
+  "Couldn't sign you in. This browser or app may not be secure"
+  (`navigator.webdriver` was true in both). The same Chrome started by a
+  person with remote debugging, then attached by agent-browser, passed the
+  check and reached "Couldn't find this account" (`navigator.webdriver`
+  false). LinkedIn can still refuse an attached browser (#894); My Chrome
+  avoids Google's refusal, not every site's bot detection.
 
 ## Not doing
 

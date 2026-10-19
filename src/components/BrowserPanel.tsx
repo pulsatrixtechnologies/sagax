@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Bot as BotIcon, EllipsisVertical, Globe, Hand, Loader2, Plus, RotateCw, Square, UserRound, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bot as BotIcon, EllipsisVertical, Globe, Hand, Loader2, LockKeyhole, Plus, RotateCw, Square, UserRound, X } from "lucide-react";
 import { BrowserUnavailableNote } from "./SettingsLink";
 import { t } from "@/lib/i18n";
 import { api, useStore, type Bot } from "@/state/store";
@@ -28,15 +28,21 @@ const NO_CONTROL = { held: false, controlling: false, owned: false };
  * launches a closed one there too: BROWSER_START_URL in server/browser-live.ts). */
 export const BROWSER_START_URL = "https://www.google.com/";
 
+/** A sign-in card's Open: take the browser for the person at once, and open
+ * the site when the bot left the page blank (src/state/store.tsx signInFocus). */
+export type BrowserSignIn = { url: string; site: string; nonce: number };
+
 /** Closing a panel releases its lease. A new connection never silently
  * restores permission to type, and never replays old browser frames.
  * Interacting takes the browser from the bot, and a few idle seconds hand it
  * back (see createBrowserControl). The bar under the address says who has
  * the browser, with Take control (kept until handed back) and Give back.
+ * An open sign-in request for this browser also keeps the person's hold,
+ * and `signIn` (a sign-in card's Open) takes the browser at once.
  * `control`: false hands the browser back at once and leaves the page
  * view-only. `placeholder`: the preview's last picture, shown dimmed while
  * the live view connects, so the window never opens on an empty square. */
-export function LiveBrowser({ bot, control: allowed = true, placeholder, teach = false }: { bot: Bot; control?: boolean; placeholder?: string | undefined; teach?: boolean }) {
+export function LiveBrowser({ bot, control: allowed = true, placeholder, teach = false, signIn }: { bot: Bot; control?: boolean; placeholder?: string | undefined; teach?: boolean; signIn?: BrowserSignIn | undefined }) {
   const { state } = useStore();
   const [attempt, setAttempt] = useState(0);
   const [frame, setFrame] = useState<ViewerFrame | null>(null);
@@ -64,6 +70,10 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
   const [recording, setRecording] = useState(false);
   const [taught, setTaught] = useState<{ steps: TeachStep[]; recordedAt: string } | undefined>(undefined);
   const [teachNote, setTeachNote] = useState("");
+  // Held on purpose: Take control, or a sign-in card's Open.
+  const [kept, setKept] = useState(false);
+  // The typing dialog is for a password or code: masked, never kept.
+  const [masked, setMasked] = useState(false);
   const viewer = useRef("");
   const generation = useRef(0);
   const pendingOperation = useRef<number | null>(null);
@@ -89,6 +99,18 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
   const recordingViewer = useRef("");
   const autoTeach = useRef(teach);
   const startRecordingNow = useRef<() => void>(() => {});
+  // Whether the hold must outlast idle time, for a control created later.
+  const keepNow = useRef(false);
+  // The last sign-in Open acted on, and its site to open once the page is known.
+  const signInHandled = useRef(0);
+  const signInPage = useRef<string | null>(null);
+  const signInNow = useRef(signIn);
+  signInNow.current = signIn;
+  // The page's address as the stream last said, or null before it said.
+  const pageNow = useRef<string | null>(null);
+  // An open sign-in request for this browser keeps the person's hold.
+  const signInOpen = state.computerControl?.[bot.id]?.help?.place === "browser";
+  keepNow.current = kept || signInOpen;
   const profileName = bot.browserProfile === "guest" ? t("browser.profile.temporary")
     : state.config?.browserProfiles?.find((profile) => profile.id === bot.browserProfile)?.name ?? t("browser.profile.own", { name: bot.name });
   useEffect(() => { if (showProfiles) profilesDialog.current?.showModal(); else profilesDialog.current?.close(); }, [showProfiles]);
@@ -136,7 +158,7 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
     let stopped = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     viewer.current = ""; pendingOperation.current = null; haltMessage.current = "";
-    urlEditing.current = false; startChecked.current = false;
+    urlEditing.current = false; startChecked.current = false; pageNow.current = null;
     setFrame(null); setTabs([]); setAddress(""); setConnected(false); setError(""); setReconnecting(false); setBusy(false);
     setControl({ held: false, controlling: false, owned: false }); setPending(false);
     controlNow.current = NO_CONTROL; setTakeStatus("");
@@ -171,6 +193,7 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
         onHalted: () => setError(haltMessage.current),
       });
       setReconnecting(false);
+      browserControl.current.keep(keepNow.current);
       setConnected(true);
       if (recordingNow.current) recordingViewer.current = expected;
       if (autoTeach.current && allowedNow.current) { autoTeach.current = false; startRecordingNow.current(); }
@@ -184,18 +207,27 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
       setTabs(data.tabs);
       const active = data.tabs.find((tab: BrowserTab) => tab.active);
       if (active && !urlEditing.current) setAddress(active.url === "about:blank" ? "" : active.url);
+      if (active) { pageNow.current = active.url; openSignInPage(); }
       // The person opened the window on a browser with nothing in it: start
       // where a browser starts, not on a white page. Never moves a real page.
       if (!startChecked.current && active) {
         startChecked.current = true;
-        if (allowedNow.current && isBlankPage(active.url)) browserControl.current?.interact({ command: { type: "navigate", url: BROWSER_START_URL } });
+        // A sign-in card's Open still to act on takes a blank page to its site instead.
+        const signInWaiting = signInPage.current !== null || (signInNow.current !== undefined && signInHandled.current !== signInNow.current.nonce);
+        if (allowedNow.current && !signInWaiting && isBlankPage(active.url)) browserControl.current?.interact({ command: { type: "navigate", url: BROWSER_START_URL } });
       }
     });
-    listen("url", (data) => { if (typeof data.url === "string" && !urlEditing.current) setAddress(data.url === "about:blank" ? "" : data.url); });
+    listen("url", (data) => {
+      if (typeof data.url !== "string") return;
+      if (!urlEditing.current) setAddress(data.url === "about:blank" ? "" : data.url);
+      pageNow.current = data.url; openSignInPage();
+    });
     listen("status", (data) => {
       if (data.viewportWidth > 0 && data.viewportHeight > 0) setViewport({ width: data.viewportWidth, height: data.viewportHeight });
     });
     listen("control", (data) => {
+      // Handed back from elsewhere (Done on the sign-in card): no longer held on purpose.
+      if (controlNow.current.owned && !data.owned) setKept(false);
       controlNow.current = data;
       setControl(data);
       // Only another window's hold hides the page; this viewer's own take
@@ -249,6 +281,29 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
       source.close();
     };
   }, [bot.id, bot.browserProfile, attempt, action]);
+
+  // Take control and an open sign-in keep the hold past idle time.
+  useEffect(() => { browserControl.current?.keep(kept || signInOpen); }, [kept, signInOpen]);
+  const takeControl = () => { setKept(true); browserControl.current?.takeNow(); };
+  const handBack = () => { setKept(false); browserControl.current?.handBack(); };
+  // A sign-in card's Open: the person has the browser at once, at the bot's
+  // page — or at the site, when the bot left the page blank.
+  useEffect(() => {
+    if (!signIn || !connected || !allowedNow.current || signInHandled.current === signIn.nonce) return;
+    signInHandled.current = signIn.nonce;
+    signInPage.current = signIn.url;
+    takeControl();
+    openSignInPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signIn, connected]);
+  function openSignInPage() {
+    const url = signInPage.current;
+    if (!url || pageNow.current === null) return;
+    signInPage.current = null;
+    // The site, not the start page, is where a blank browser goes now.
+    startChecked.current = true;
+    if (isBlankPage(pageNow.current)) interact({ command: { type: "navigate", url } });
+  }
 
   // Closing the window ends a recording: nothing of it is kept (the server
   // also drops one whose person has no view of the browser left).
@@ -348,7 +403,8 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
       <details className="relative shrink-0">
         <summary className={`${button} list-none cursor-pointer [&::-webkit-details-marker]:hidden`} aria-label={t("browser.menu.label")} title={t("browser.menu.label")}><EllipsisVertical size={17} /></summary>
         <div className="absolute right-0 top-full z-20 mt-2 flex w-44 flex-col rounded-xl border border-hairline/50 bg-card p-1.5 text-[12px] shadow-xl">
-          <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!typingReady} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setShowTyping(true); }}>{t("browser.menu.type")}</button>
+          <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!typingReady} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setMasked(false); setShowTyping(true); }}>{t("browser.menu.type")}</button>
+          <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!typingReady} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setMasked(true); setShowTyping(true); }}>{t("browser.typeSecret")}</button>
           <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!connected} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setShowNetwork(true); }}>{t("browser.menu.network")}</button>
           <button type="button" data-teach-record="" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!recording && !commandsReady} onClick={(e) => {
             e.currentTarget.closest("details")?.removeAttribute("open");
@@ -381,11 +437,11 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
         {pageTitle && <span className="min-w-0 truncate font-normal text-ink-secondary" title={pageTitle}>· {pageTitle}</span>}
       </span>
       {allowed && connected && !heldElsewhere && (mine
-        ? <button type="button" data-browser-give-back="" onClick={() => browserControl.current?.handBack()}
+        ? <button type="button" data-browser-give-back="" title={t(kept || signInOpen ? "browser.control.keptHint" : "browser.control.yoursHint", { name: bot.name })} onClick={handBack}
             className="flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-full bg-control px-3 py-1 font-medium text-ink hover:bg-raised-hover md:min-h-0">
             <BotIcon size={12} aria-hidden="true" />{t("browser.control.giveBack")}
           </button>
-        : <button type="button" data-browser-take="" disabled={taking || pending} onClick={() => browserControl.current?.takeNow()}
+        : <button type="button" data-browser-take="" disabled={taking || pending} onClick={takeControl}
             className="flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-full bg-accent px-3 py-1 font-medium text-accent-ink hover:brightness-110 disabled:opacity-50 md:min-h-0">
             <Hand size={12} aria-hidden="true" />{t("sandboxDesktop.takeControl")}
           </button>)}
@@ -422,12 +478,17 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
     </dialog>
     {showNetwork && <NetworkDebuggerDialog botId={bot.id} botName={bot.name} onClose={() => setShowNetwork(false)} />}
     {taught && <TeachStepsDialog botId={bot.id} botName={bot.name} steps={taught.steps} recordedAt={taught.recordedAt} onClose={() => setTaught(undefined)} />}
-    <dialog ref={typingDialog} onClose={() => setShowTyping(false)} className="m-auto w-[min(420px,calc(100%-32px))] rounded-2xl border border-hairline/50 bg-card p-5 text-ink shadow-2xl backdrop:bg-black/40">
-      <div className="mb-3 flex items-center justify-between"><h2 className="text-[14px] font-medium">{t("browser.typing.title")}</h2><button className={button} aria-label={t("browser.typing.close")} onClick={() => setShowTyping(false)}><X size={16} /></button></div>
+    {/* A password or code typed here goes to the page's focused field and
+        nowhere else: it is never held in state, logged or shown, and the
+        field is emptied when the dialog sends or closes. */}
+    <dialog ref={typingDialog} onClose={() => { const field = typingDialog.current?.querySelector("input"); if (field) field.value = ""; setShowTyping(false); }} className="m-auto w-[min(420px,calc(100%-32px))] rounded-2xl border border-hairline/50 bg-card p-5 text-ink shadow-2xl backdrop:bg-black/40">
+      <div className="mb-3 flex items-center justify-between"><h2 className="text-[14px] font-medium">{masked ? t("browser.typeSecret.title") : t("browser.typing.title")}</h2><button className={button} aria-label={t("browser.typing.close")} onClick={() => setShowTyping(false)}><X size={16} /></button></div>
       <form className="flex flex-col gap-3" onSubmit={(e) => {
       e.preventDefault(); const field = e.currentTarget.elements.namedItem("pageText") as HTMLInputElement;
       if (typingReady && field.value) { input({ type: "input_keyboard", eventType: "char", text: field.value }); field.value = ""; setShowTyping(false); }
-    }}><input name="pageText" aria-label={t("browser.typing.field")} autoComplete="off" maxLength={4096} placeholder={t("browser.typing.placeholder")} className="rounded-lg bg-inset px-3 py-2 text-[13px] outline-none focus:ring-1 focus:ring-accent" /><button disabled={!typingReady} className="self-end rounded-lg bg-accent px-4 py-2 text-[12px] text-accent-ink disabled:opacity-40">{t("browser.typing.send")}</button></form>
+    }}><input key={masked ? "secret" : "text"} name="pageText" type={masked ? "password" : "text"} aria-label={masked ? t("browser.typeSecret.field") : t("browser.typing.field")} autoComplete={masked ? "new-password" : "off"} spellCheck={false} maxLength={4096} placeholder={masked ? "••••••••" : t("browser.typing.placeholder")} className="rounded-lg bg-inset px-3 py-2 text-[13px] outline-none focus:ring-1 focus:ring-accent" />
+      {masked && <p className="flex items-center gap-1 text-[11.5px] text-ink-tertiary"><LockKeyhole size={11} aria-hidden="true" />{t("browser.typeSecret.note")}</p>}
+      <button disabled={!typingReady} className="self-end rounded-lg bg-accent px-4 py-2 text-[12px] text-accent-ink disabled:opacity-40">{t("browser.typing.send")}</button></form>
     </dialog>
   </div>;
 }
@@ -538,11 +599,14 @@ function PreviewImage({ frame, alt, acknowledge, onTakeControl, waiting }: { fra
   </button>;
 }
 
+/** Sign-in Opens already acted on, by nonce (src/state/store.tsx signInFocus). */
+const handledSignIns = new Set<number>();
+
 /** The bot's browser on the Computer tab, drawn as the VM's screen: a live
  * preview in the same frame, and Take control opens the same window as the
  * server environment's (SandboxDesktopModal), where LiveBrowser connects.
  * While that window is open the square shows no second stream. */
-export function BrowserComputerScreen({ bot }: { bot: Bot }) {
+export function BrowserComputerScreen({ bot, signIn }: { bot: Bot; signIn?: BrowserSignIn | undefined }) {
   const [takeover, setTakeover] = useState(() => takeBrowserTeach(bot.id));
   // Opened from the composer's Teach a task: the window starts recording.
   const [teach, setTeach] = useState(takeover);
@@ -550,6 +614,14 @@ export function BrowserComputerScreen({ bot }: { bot: Bot }) {
     if (botId !== bot.id || !takeBrowserTeach(bot.id)) return;
     setTeach(true); setTakeover(true);
   }), [bot.id]);
+  // A sign-in card's Open: the window opens and takes the browser there,
+  // once per Open (a screen drawn again later does not reopen it).
+  const [openSignIn, setOpenSignIn] = useState<BrowserSignIn | undefined>(undefined);
+  useEffect(() => {
+    if (!signIn || handledSignIns.has(signIn.nonce)) return;
+    handledSignIns.add(signIn.nonce);
+    setOpenSignIn(signIn); setTakeover(true);
+  }, [signIn]);
   const preview = useBrowserPreview(bot, !takeover);
   const caption = t("computer.browserOf", { name: bot.name });
   // The last picture, shown in the window while its live view connects.
@@ -586,8 +658,8 @@ export function BrowserComputerScreen({ bot }: { bot: Bot }) {
     : preview.frame ? <PreviewImage frame={preview.frame} alt={caption} acknowledge={preview.acknowledge} onTakeControl={open} waiting={waiting} /> : undefined;
   return <>
     <ComputerScreen source="browser" icon={Globe} state={state} caption={caption} message={message} actions={actions} live={live} />
-    {takeover && <SandboxDesktopModal kind="browser" title={caption} state="running" onClose={() => { setTakeover(false); setTeach(false); }}
-      screen={(control) => <LiveBrowser key={bot.id} bot={bot} control={control} placeholder={lastFrame.current} teach={teach} />} />}
+    {takeover && <SandboxDesktopModal kind="browser" title={caption} state="running" onClose={() => { setTakeover(false); setTeach(false); setOpenSignIn(undefined); }}
+      screen={(control) => <LiveBrowser key={bot.id} bot={bot} control={control} placeholder={lastFrame.current} teach={teach} signIn={openSignIn} />} />}
   </>;
 }
 
@@ -599,7 +671,7 @@ function BrowserNote({ caption, children }: { caption: string; children: ReactNo
   </figure>;
 }
 
-export function BrowserPanel({ bot }: { bot: Bot }) {
+export function BrowserPanel({ bot, signIn }: { bot: Bot; signIn?: BrowserSignIn | undefined }) {
   const { state } = useStore();
   const engine = state.config?.browserEngine;
   const [requested, setRequested] = useState(false);
@@ -618,7 +690,7 @@ export function BrowserPanel({ bot }: { bot: Bot }) {
   if (bot.browser === false) return <BrowserNote caption={caption}><p className="text-[13px] text-ink-secondary">{t("browser.panel.enable")}</p></BrowserNote>;
   if (engine?.kind === "engine" && !installing && !engine.installError) return admin === null
     ? <BrowserNote caption={caption}><p className="text-[13px] text-ink-secondary">{t("browser.panel.loading")}</p></BrowserNote>
-    : <BrowserComputerScreen key={bot.id} bot={bot} />;
+    : <BrowserComputerScreen key={bot.id} bot={bot} signIn={signIn} />;
   return <BrowserNote caption={caption}>
     <div className="text-[15px] font-medium text-ink">{engine?.kind === "engine" ? t("browser.panel.incomplete") : t("browser.panel.notInstalled")}</div>
     <p className="text-[13px] leading-relaxed text-ink-secondary">{engine?.kind === "engine" ? t("browser.panel.incompleteHint") : <BrowserUnavailableNote config={state.config} />}</p>

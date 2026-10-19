@@ -251,6 +251,11 @@ export function drainSteeredMessages(
       continue;
     }
     if (bot.busy || isBlocked?.(entry.botId, threadId, entry.items[0])) continue;
+    // isBlocked may re-enter this drain (its first coordinator read opens
+    // the job runtime, whose restart changes fire a drain): when that nested
+    // drain already took this entry, `entry` is stale, and draining it again
+    // would append and dispatch the same words twice.
+    if (queues.get(threadId) !== entry) continue;
     const group = drainCoalesceHead(entry.items, coalesceIdentity, (item) => item.queuedAt);
     // committed to draining: the entry leaves the map before anything runs,
     // so a settle racing another settle can never fire the same queue twice

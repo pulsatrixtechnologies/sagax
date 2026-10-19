@@ -2781,6 +2781,56 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     await expect(instance.adapter.steer!("t-steer", "late")).resolves.toBe("refused");
   });
 
+  it("steers images into the running turn as native blocks, and refuses a picture it cannot read", async () => {
+    const finishGate = join(scratch, "steer-images-finish.gate");
+    const received = join(scratch, "steer-images-received");
+    await create("slow", {
+      FAKE_CLAUDE_SLOW_FINISH_GATE: finishGate,
+      FAKE_CLAUDE_STEER_RECEIVED: received,
+    });
+    expect(instance.adapter.capabilities.steerImages).toBe(true);
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 9, 8, 7]);
+    const pngPath = join(scratch, "steered.png");
+    writeFileSync(pngPath, png);
+    const { turnId } = await instance.adapter.sendTurn({ threadId: "t-steer-images", text: "first" });
+    await recorder.until((e) => e.type === "item.completed" && e.itemType === "tool");
+
+    // a picture that vanished since admission: nothing is written, so the
+    // caller may queue the words for a real turn
+    await expect(instance.adapter.steer!("t-steer-images", "gone", { images: [
+      { path: join(scratch, "missing.png"), mime: "image/png", bytes: 4 },
+    ] })).resolves.toBe("refused");
+    await expect(instance.adapter.steer!("t-steer-images", "look at this", { images: [
+      { path: pngPath, mime: "image/png", bytes: png.length },
+    ] })).resolves.toBe("steered");
+    await expect.poll(() => existsSync(received)).toBe(true);
+    writeFileSync(finishGate, "finish");
+    await recorder.until((e) => e.type === "turn.completed");
+    expect(recorder.events.filter((e) => e.type === "turn.completed")).toHaveLength(1);
+    const reply = recorder.events.find(
+      (e) => e.type === "item.completed" && e.itemType === "assistant_text" && (e as { text: string }).text.startsWith("reply to:"),
+    ) as { text: string };
+    expect(reply.text).toContain("steered: [image] look at this");
+    expect(reply.text).not.toContain("gone");
+    expect(recorder.events.every((e) => e.turnId === turnId)).toBe(true);
+
+    // the steer went out as the same user message a new turn's images use,
+    // with the echo uuid, and its bytes never reached the native log
+    const nativeLog = readFileSync(join(NATIVE_DIR, "t-steer-images.ndjson"), "utf8");
+    expect(nativeLog).not.toContain(png.toString("base64"));
+    const steer = nativeLog
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .filter((row) => row.dir === "out" && row.source === "claude.sdk.message")
+      .at(-1)?.msg;
+    expect(steer.uuid).toEqual(expect.any(String));
+    expect(steer.message.content).toEqual([
+      { type: "image", source: { type: "base64", media_type: "image/png", data: `[image data: ${png.toString("base64").length} base64 chars]` } },
+      { type: "text", text: "look at this" },
+    ]);
+  });
+
   it("keeps the turn open while a steered message the CLI could not fold runs as its next native turn", async () => {
     // The CLI folds a mid-turn message only before a model call that has not
     // started yet. Words that land during the turn's LAST call are queued and

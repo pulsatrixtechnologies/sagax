@@ -184,8 +184,8 @@ if (process.env.FAKE_AGY_DUMP) {
   writeFileSync(process.env.FAKE_AGY_DUMP, JSON.stringify({ argv, env: process.env, prompt }, null, 2));
 }
 
-const toolName = mode === "ask-peer" ? "ask_bot" : "write_to_file";
-out({ event: "init", conversation_id: CONV, init: { cwd: process.cwd(), tools: ["run_command", "write_to_file", ...(mode === "ask-peer" ? ["list_bots", "ask_bot"] : [])], permission_mode: "accept-edits" } });
+const toolName = mode === "ask-peer" ? "coordinate_bots" : "write_to_file";
+out({ event: "init", conversation_id: CONV, init: { cwd: process.cwd(), tools: ["run_command", "write_to_file", ...(mode === "ask-peer" ? ["list_bots", "coordinate_bots"] : [])], permission_mode: "accept-edits" } });
 out({ event: "step_update", conversation_id: CONV, step_update: { conversation_id: CONV, step_index: 0, state: "ACTIVE", step_type: "tool", tool_name: toolName, tool_info: { name: toolName, parameters: {} } } });
 
 let response = "done from fake agy";
@@ -198,10 +198,11 @@ if (mode === "ask-peer") {
       const reply = await driveMcp(agents, [
         { name: "list_bots", args: () => ({}) },
         {
-          name: "ask_bot",
+          name: "coordinate_bots",
           args: (list) => ({
-            bot_id: /id: ([\w-]+)/.exec(list)?.[1] ?? "",
+            bot_ids: [/id: ([\w-]+)/.exec(list)?.[1] ?? ""],
             message: "ping from fake Gemini",
+            consult: true,
           }),
         },
       ]);

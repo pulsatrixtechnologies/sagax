@@ -4,7 +4,8 @@
 // provider's own permission mode passed straight through (Claude `auto`,
 // Grok `--permission-mode`, Codex `approvalsReviewer`, …), and a request that
 // reaches this process is one the provider left for a person. The grants the
-// app applies are Full access and the person's exact saved commands. Approve
+// app applies are Full access and the person's exact saved commands and
+// explicitly remembered MCP read tools. Approve
 // for me also allows a web search, and that is the one action the app itself
 // grants. Questions never come through here: a bot's question always reaches
 // a human.
@@ -136,6 +137,7 @@ function bareToolName(tool: string): string {
 export type AutoVerdictSource =
   | "full-access"
   | "command-allowlist"
+  | "tool-allowlist"
   | "web-search"
   | "native-approval"
   | "explicit-approval-block"
@@ -224,6 +226,8 @@ export function autoVerdict(
     /** The call is one of Sagax's own tools that must never answer itself:
      * a rule change (rules_update and the like, "rule-change" class). */
     ruleChange?: boolean;
+    /** Exact provider/server/tool/config match against a person's saved MCP read grant. */
+    toolAllowed?: boolean;
   },
 ): AutoVerdict {
   // A question is for a person, whatever channel it arrived on — and
@@ -277,6 +281,7 @@ export function autoVerdict(
   if (context?.requiresExplicitApproval) return { approve: null, source: "explicit-approval-block" };
   if (isOutboundTool(tool) || ((context?.sagaxInternal || context?.ownEnvironment) && sendsOut)) return { approve: null, source: "outbound-guard" };
   if (context?.commandAllowed) return { approve: `approved ${tool} (saved command)`, source: "command-allowlist" };
+  if (context?.toolAllowed) return { approve: `approved ${tool} (always allowed)`, source: "tool-allowlist" };
   // The one action the app itself grants. A fetch of an arbitrary URL is not
   // a search and stays a prompt, in this mode and every other.
   if (mode === "auto" && WEB_SEARCH.has(bareToolName(tool))) {

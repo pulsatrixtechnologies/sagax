@@ -63,6 +63,7 @@ import {
 import { appendNative } from "./native.ts";
 import { probeClaudeCommands } from "./harness-command-probe.ts";
 import { normalizeClaudeCommands, type HarnessCommand } from "../../shared/harness-commands.ts";
+import { runKeepWarmPing, type KeepWarmContract } from "./claude-keepwarm.ts";
 import { permissionCommand, permissionLaunchCwd, permissionPaths } from "./permission-command.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 import { extractMcpImages } from "../mcp-tool-images.ts";
@@ -445,6 +446,11 @@ export const CLAUDE_FLAG_FLOORS = {
   "--restricted": [2, 1, 257],
   // A bot's Claude Code plugins (server/bot-plugins.ts).
   "--plugin-dir": [2, 0, 0],
+  // Prompt-cache keep-warm pings (claude-keepwarm.ts) only. Not bisected:
+  // both are in every 2.1 build checked. A CLI that lacks one rejects the
+  // ping as an argument error, which ends the keep-warm window, nothing else.
+  "--fork-session": [2, 1, 0],
+  "--no-session-persistence": [2, 1, 0],
 } as const satisfies Record<string, ClaudeCliVersion>;
 
 /** The only built-in tools a guest's turn on a Cloud home gets
@@ -1551,6 +1557,13 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       closed: Promise<void>;
     }
     const sessions = new Map<string, Session>();
+    // Prompt-cache keep-warm (claude-keepwarm.ts): what each live process
+    // was launched with, so a ping can replay the exact request prefix, and
+    // how long a keep-warm window wants that process kept past its idle
+    // close (the next real turn must reuse it: a relaunch recomputes the
+    // volatile system prompt and would miss the cache anyway).
+    const warmContracts = new Map<string, KeepWarmContract>();
+    const warmHolds = new Map<string, number>();
     const { idleMs: SESSION_IDLE_MS } = sessionIdlePolicy("CLAUDE");
 
     const stopSession = (session: Session) => {
@@ -1562,6 +1575,8 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       const s = sessions.get(threadId);
       if (!s || s.closing) return;
       s.closing = true;
+      warmContracts.delete(threadId);
+      warmHolds.delete(threadId);
       if (s.idleTimer) clearTimeout(s.idleTimer);
       // Broker ownership belongs to this session. Detach and close it now,
       // before a replacement can bind the same per-thread socket; the old
@@ -1583,7 +1598,8 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       const s = sessions.get(threadId);
       if (!s) return;
       if (s.idleTimer) clearTimeout(s.idleTimer);
-      s.idleTimer = setTimeout(() => closeSession(threadId, "idle"), SESSION_IDLE_MS);
+      const held = (warmHolds.get(threadId) ?? 0) - Date.now();
+      s.idleTimer = setTimeout(() => closeSession(threadId, "idle"), Math.min(2_147_483_647, Math.max(SESSION_IDLE_MS, held)));
       s.idleTimer.unref?.();
     };
     /** Park a pooled process with no user turn. A later warm of the same
@@ -1819,7 +1835,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
         // Host tools always route through Sagax's permission broker.
         if (!controlsHost) allowed.push("mcp__computer");
       }
-      // peer-agent comms (list_bots/ask_bot) — the harness builds the whole
+      // peer-agent comms (list_bots/coordinate_bots) — the harness builds the whole
       // spawn contract (command/args/env incl. the boot token) in
       // agentsIntegration(); pre-allowing matters doubly here, or the CLI's
       // own ListAgents look-alike shadows it and "@Bot" asks go nowhere
@@ -1997,7 +2013,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       if (authSettingsPath) args.push("--settings", authSettingsPath);
       // Our approvals and browser credentials expire at the user-turn
       // boundary. Native background workers cannot outlive that boundary;
-      // parallel bot work must use the harness's durable delegate_bot path.
+      // parallel bot work must use the harness's durable coordinate_bots path.
       env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1";
       // Desktop bridge: this turn's own network traffic leaves through the
       // person's computer (never the model traffic: NO_PROXY).
@@ -2259,6 +2275,15 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       } catch (error) {
         cleanupUnownedLaunch();
         throw error;
+      }
+      // The contract a keep-warm ping replays. Never for a guest's turn.
+      if (turn.guestConfined) warmContracts.delete(threadId);
+      else {
+        warmContracts.set(threadId, {
+          args: [...args], env: { ...env }, cwd, system: turn.system ?? null,
+          mcpServers: mcpConfigPath ? JSON.parse(JSON.stringify(mcpServers)) : null,
+          settings: authSettingsPath ? JSON.parse(JSON.stringify(settings)) : null,
+        });
       }
       let markClosed!: () => void;
       const session: Session = {
@@ -3008,17 +3033,28 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
      * next model call, or — when no call is left in this turn — as its next
      * native turn, which this driver keeps inside the same logical turn.
      * "refused" when nothing is running here to steer or the stdin write
-     * provably failed; the caller queues those words. */
-    const steer = async (threadId: string, text: string, options?: { steerId?: string }): Promise<SteerOutcome> => {
+     * provably failed; the caller queues those words. Images ride as the
+     * same native blocks a new turn's do (claudeUserMessage). */
+    const steer = async (threadId: string, text: string, options?: { steerId?: string; images?: readonly ClaudeImage[] }): Promise<SteerOutcome> => {
+      const images = options?.images;
       const s = sessions.get(threadId);
       if (!s || !s.turn || s.turn.settled || s.closing || s.child.exitCode !== null) return "refused";
       const turn = s.turn;
+      // Materialize before counting or writing anything: an attachment that
+      // vanished since it was admitted refuses the steer, and nothing was
+      // sent, so the caller may queue the words for a real turn.
+      let message: ClaudeUserMessage;
+      try {
+        message = claudeUserMessage(text, images);
+      } catch {
+        return "refused";
+      }
       // Counted before the write: a `result` read while the words are still
       // on their way must hold for them too. A failed write takes it back.
       // The uuid is what the CLI's echo names when a model call takes it in.
       const id = options?.steerId && /^[\w-]{8,80}$/.test(options.steerId) ? options.steerId : randomUUID();
       turn.pendingSteers.add(id);
-      if (!(await writeUser(s, threadId, { ...claudeUserMessage(text, undefined), uuid: id }))) {
+      if (!(await writeUser(s, threadId, { ...message, uuid: id }))) {
         turn.pendingSteers.delete(id);
         return "refused";
       }
@@ -3186,6 +3222,8 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
           nativeImageInput: true,
           effortLevels: ["low", "medium", "high", "xhigh", "max"],
           queueing: true,
+          // stream-json takes image blocks on any user message, mid-turn too
+          steerImages: true,
           // Only while this CLI can be told to refresh a resumed session's
           // recorded system prompt (--system-prompt-snapshot). Keeping a
           // session across an update from outside it means the harness keeps
@@ -3222,6 +3260,29 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
           // including the process kept warm between call turns.
           if (!live || live.turn || live.closing) return;
           closeSession(threadId, "call ended");
+        },
+        cacheKeepWarm: {
+          ping: async (threadId, options) => {
+            const live = sessions.get(threadId);
+            const contract = warmContracts.get(threadId);
+            if (!live || live.closing || live.child.exitCode !== null || !contract || !live.sessionId) {
+              return { ok: false, reason: "the conversation's Claude session has closed" };
+            }
+            if (live.turn || active.has(threadId)) return { ok: false, reason: "a turn is running", busy: true };
+            if (cliVersion !== null && !(claudeCliSupports(cliVersion, "--fork-session") && claudeCliSupports(cliVersion, "--no-session-persistence"))) {
+              return { ok: false, reason: "this Claude Code is too old to fork a session; update Claude Code" };
+            }
+            return runKeepWarmPing({ cli: config.cli, contract, sessionId: live.sessionId, signal: options?.signal });
+          },
+          hold: (threadId, until) => {
+            if (until === null) warmHolds.delete(threadId);
+            else warmHolds.set(threadId, until);
+            const live = sessions.get(threadId);
+            if (!live || live.closing || live.child.exitCode !== null) return false;
+            // re-time an idle process's close; a busy one re-arms at settle
+            if (!live.turn) armIdle(threadId);
+            return true;
+          },
         },
         stopAll: async () => {
           for (const { stop } of active.values()) stop();

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, PlugZap, RefreshCw } from "lucide-react";
+import { Loader2, PlugZap, RefreshCw, X } from "lucide-react";
 
 import { api, type Message } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -124,12 +124,24 @@ export function ConnectorCard({ botId, threadId, message }: { botId: string; thr
   const connected = connector.status === "connected";
   const authorizing = connector.status === "authorizing";
   const error = localError ?? connector.error;
+  // Stop ended the turn this card paused: nothing resumes, whatever is
+  // connected afterwards (the connection is kept).
+  const stopped = connector.stopped === true;
+
+  if (stopped && !connected) {
+    return (
+      <AskSettledLine icon={<X size={13} />} ariaLabel={connector.label}>
+        <span className="text-ink-secondary">{connector.label}</span>
+        <span> · {t("chat.turnStopped")}</span>
+      </AskSettledLine>
+    );
+  }
 
   if (connected) {
     return (
       <AskSettledLine
         ariaLabel={connector.label}
-        action={!connector.resumed && (
+        action={!connector.resumed && !stopped && (
           <button type="button" onClick={() => void resume()} disabled={busy} className={cn(ASK_QUIET_BUTTON, "text-accent-text")}>
             {busy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             {t("connectors.card.continueTask")}
@@ -140,7 +152,7 @@ export function ConnectorCard({ botId, threadId, message }: { botId: string; thr
         <span className="text-ink-secondary" title={connector.resumed ? t("connectors.card.resumed") : t("connectors.card.paused")}>
           {connector.label}
         </span>
-        <span> · {t("connectors.card.connected")}{connector.resumed && ` · ${t("connectors.card.continuing")}`}</span>
+        <span> · {t("connectors.card.connected")}{connector.resumed ? ` · ${t("connectors.card.continuing")}` : stopped ? ` · ${t("chat.turnStopped")}` : ""}</span>
       </AskSettledLine>
     );
   }

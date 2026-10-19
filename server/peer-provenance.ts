@@ -38,6 +38,7 @@
 
 import { z } from "zod";
 import { redactSecretsInText } from "../shared/redact.ts";
+import type { RoutineRunTrigger } from "../shared/routines.ts";
 import type { WireMessage as Message } from "../shared/wire.ts";
 import { peerName } from "./peer-roster.ts";
 
@@ -82,7 +83,7 @@ export function workOrigin(line: RequestLine | undefined): WorkOrigin {
  * passes no line: nothing on a stored line says a routine or a webhook
  * wrote it, so one whose request record moved on proves nothing. */
 export function requestWorkOrigin({ trigger, guest, handed, continued, line }: {
-  trigger?: "schedule" | "manual" | "webhook";
+  trigger?: RoutineRunTrigger;
   guest?: boolean;
   handed?: WorkOrigin;
   continued?: WorkOrigin;
@@ -100,10 +101,13 @@ export const CONSENT_RULE =
 export interface PeerProvenance {
   /** The bot that wrote it. */
   botName: string;
-  /** ask_bot blocks on a reply; a room post expects none; the rest hand the
-   * reader work: coordinate_bots and start_thread report back to the
-   * sender, delegate_bot replies to it, send_to_bot leaves it with the
-   * reader. */
+  /** What the line is: a question (ask_bot: the reader answers it), a room
+   * post (expects nothing), or work handed on (coordinate_bots reports back
+   * to the sender). The runtime writes every new hand-off's opening itself
+   * (server/runtime/envelope.ts) and coordinate_bots is what the host still
+   * composes (peerReplayText); start_thread, send_to_bot and delegate_bot
+   * are the openings of lines stored before PR 3 and of the alias routes
+   * that still compose them, kept so those transcripts render the same. */
   delivery: "ask_bot" | "post_to_room" | "start_thread" | "send_to_bot" | "delegate_bot" | "coordinate_bots";
   /** Where the work handed over started. Absent is outside. */
   origin?: WorkOrigin;

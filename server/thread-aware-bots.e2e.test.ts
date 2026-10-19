@@ -297,19 +297,18 @@ describe("start_thread on yourself", () => {
       const opening = (await messages(first.body.threadId)).find((message) => message.role === "user");
       expect(opening.text).toContain("[Thread you opened yourself from #Plan the QA round.");
       expect(opening.text).toContain("Review the login fix.");
-
-      // Bot-origin work cannot recursively expand its own thread tree, either
-      // through the mounted MCP proxy or by calling the internal API directly.
-      const recursive = { title: "Recursive job", message: "Open another job." };
-      await expect(proxyCall(first.body.threadId, "start_thread", recursive)).rejects.toThrow("Unknown tool: start_thread");
-      expect((await api("POST", "/api/internal/threads", recursive, await liveToken(first.body.threadId))).status).toBe(409);
+      // A thread the bot opened on itself gets the same tools as any turn,
+      // start_thread on itself included (the one tool surface of
+      // docs/runtime-contract.md §9); the runtime's depth limit bounds the
+      // tree, not a per-thread switch.
+      await liveToken(first.body.threadId);
+      const self = dumpOf(first.body.threadId)!.mcpConfig.mcpServers.agents;
+      expect(self.env.SAGAX_THREAD_ID).toBe(first.body.threadId);
 
       // a slot frees: the line moves in order
       release(first.body.threadId);
       await expect.poll(async () => (await taskOf(pm.id, second.body.threadId))?.busy, { timeout: 15_000 }).toBe(true);
       expect((await taskOf(pm.id, third.body.threadId)).busy).toBe(false);
-      await expect(proxyCall(second.body.threadId, "start_thread", recursive)).rejects.toThrow("Unknown tool: start_thread");
-      expect((await api("POST", "/api/internal/threads", recursive, await liveToken(second.body.threadId))).status).toBe(409);
       release(second.body.threadId);
       await expect.poll(async () => (await taskOf(pm.id, third.body.threadId))?.busy, { timeout: 15_000 }).toBe(true);
       release(third.body.threadId);
@@ -444,7 +443,9 @@ describe("coordinate_bots on a teammate", () => {
         expect(request).toMatchObject({ from: { botId: pm.id } });
         expect(request.text).toContain(`Test pull request ${index + 1}.`);
         expect(dumpOf(gate(index + 1))?.systemPrompt).toContain("coordinate_bots");
-        expect((await api("POST", "/api/internal/threads", { title: "Recursive work", message: "go" }, live)).status).toBe(409);
+        // The coordinated turn holds a live capability of its own: every
+        // internal route it calls is this turn's, and this thread's.
+        expect((await api("GET", "/api/internal/assignment-status", undefined, live)).status).toBe(200);
         release(gate(index + 1));
         await expect.poll(() => handoffs().find(n => n.id === node.id)?.status, { timeout: 15_000 }).toBe("completed");
       }
@@ -471,7 +472,7 @@ describe("coordinate_bots on a teammate", () => {
     }
   }, 90_000);
 
-  it("rejects legacy peer starts, inaccessible peers, and oversized batches, and does not duplicate a retried request", async () => {
+  it("opens a peer thread through the threads route, refuses inaccessible peers and oversized batches, and does not duplicate a retried request", async () => {
     const pm = await createBot("Pam", "gated");
     const near = await createBot("Near", "gated");
     const far = await createBot("Far", "gated");
@@ -480,7 +481,18 @@ describe("coordinate_bots on a teammate", () => {
       expect((await api("PATCH", `/api/bots/${other.id}`, { section: "Elsewhere" })).status).toBe(200);
       expect((await api("PATCH", `/api/bots/${pm.id}`, { peers: [near.id] })).status).toBe(200);
       const token = await heldTurn(pm, "Coordinate only with my allowed teammate.");
-      expect((await api("POST", "/api/internal/threads", { toBotId: near.id, title: "Job", message: "go" }, token)).status).toBe(409);
+      // A thread on a teammate through the threads route is coordinate_bots
+      // with thread "new": a fresh thread on the peer, titled by the call,
+      // answered with the hand-off's receipts and no deprecation line.
+      const opened = await api("POST", "/api/internal/threads", { toBotId: near.id, title: "Job", message: "go" }, token);
+      expect(opened.status, JSON.stringify(opened.body)).toBe(200);
+      expect(opened.body.deprecation).toBeUndefined();
+      expect(opened.body.receipts).toEqual([expect.objectContaining({ botId: near.id, outcome: "queued", threadId: expect.any(String) })]);
+      const job = opened.body.receipts[0].threadId as string;
+      expect(job).not.toBe(near.threadId);
+      release(job);
+      expect((await botState(near.id)).tasks.find((task: any) => task.threadId === job)).toMatchObject({ title: "Job", openedBy: { botId: pm.id } });
+      expect(handoffs().find(node => node.threadId === job)).toMatchObject({ botId: near.id, mode: "work", reply: "resume", text: "go" });
       const send = (botIds: string[]) => api("POST", "/api/internal/coordinate-bots", { botIds, message: "Check it." }, token);
       const outside = await send([other.id]);
       expect(outside.status).toBe(403);
@@ -490,18 +502,20 @@ describe("coordinate_bots on a teammate", () => {
       expect(unlisted.body.error).toContain("allowed peer");
       expect((await send([near.id, far.id])).status).toBe(403);
       expect((await send([near.id, far.id, other.id, pm.id, "fifth"])).status).toBe(400);
-      for (const bot of [other, far, near]) expect((await botState(bot.id)).tasks).toHaveLength(1);
+      for (const bot of [other, far]) expect((await botState(bot.id)).tasks).toHaveLength(1);
+      expect((await botState(near.id)).tasks).toHaveLength(2);
       const first = await coordinated(token, near.id, "Check it.");
       const retry = await send([near.id]);
       expect(retry.body.receipts).toEqual([expect.objectContaining({ requestId: first.id, detail: expect.stringContaining("already sent") })]);
-      expect((await botState(near.id)).tasks).toHaveLength(2);
+      expect((await botState(near.id)).tasks).toHaveLength(3);
       // The person archives that thread; a repeat still lands on the request
       // in it, and the thread opened for the repeat is not left behind.
       expect((await api("PATCH", `/api/bots/${near.id}/tasks/${first.threadId}`, { archivedAt: Date.now() })).status).toBe(200);
       const afterArchive = await send([near.id]);
       expect(afterArchive.body.receipts).toEqual([expect.objectContaining({ requestId: first.id, threadId: first.threadId, detail: expect.stringContaining("already sent") })]);
-      expect((await botState(near.id)).tasks).toHaveLength(2);
+      expect((await botState(near.id)).tasks).toHaveLength(3);
       expect((await messages(pm.threadId)).filter(message => message.threadRef?.threadId === first.threadId)).toHaveLength(1);
+      await expect.poll(() => handoffs().find(node => node.threadId === job)?.status, { timeout: 15_000 }).toBe("completed");
     } finally {
       await cleanup([pm.id, near.id, far.id, other.id]);
     }

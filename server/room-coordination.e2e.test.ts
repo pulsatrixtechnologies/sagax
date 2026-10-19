@@ -40,13 +40,16 @@ async function withRooms(test: (f: any) => Promise<void>) {
     };
     const savePlan = () => writeFileSync(planPath, JSON.stringify(plan));
     // The coordinated tree as the runtime records it (DATA_DIR/runtime.db),
-    // in the node shape the server reads (coordinator.ts HandoffView).
+    // in the node shape the server reads (coordinator.ts HandoffView). Every
+    // room member's turn is a root there (docs/runtime-contract.md §10 PR 5);
+    // the hand-offs are the rows with a parent.
     const nodes = () => readHandoffs(session.info.dataDir);
+    const handoffs = () => nodes().filter((node: any) => node.parentId);
     const messages = async (threadId: string) => (await api(`/api/threads/${threadId}/messages`)).messages;
     const start = async () => { savePlan(); return cli("send-channel", "--channel", source.id, "--text", "@Director Start the assignment"); };
     const wait = async () => cli("wait", "--channel", source.id, "--timeout", "30");
     const provider = () => readFileSync(`${planPath}.evidence.jsonl`, "utf8").trim().split("\n").map(line => JSON.parse(line));
-    await test({ session, api, cli, tool, sender, target, source, destination, plan, savePlan, nodes, messages, start, wait, provider, restart });
+    await test({ session, api, cli, tool, sender, target, source, destination, plan, savePlan, nodes, handoffs, messages, start, wait, provider, restart });
   } finally {
     if (restarted) await waitForExit(restarted, { signal: "SIGTERM" });
     await session.close();
@@ -94,7 +97,7 @@ it.each(["unmanaged", "outsider", "disallowed-peer"])("refuses supervisor room c
   if (reason === "disallowed-peer") await f.api(`/api/bots/${f.sender.id}`, { peers: [] }, "PATCH");
   f.plan[f.sender.id].steps = [{ expectError: true, arguments: { bot_ids: [chief.id], message: "Do not bypass the room boundary" } }];
   await f.start(); expect((await f.wait()).status).toBe("settled");
-  expect(f.nodes()).toEqual([]);
+  expect(f.handoffs()).toEqual([]);
   const turn = f.provider().find((entry: any) => entry.botId === f.sender.id);
   expect(turn.evidence.find((entry: any) => entry.step).response.result.isError).toBe(true);
   if (reason === "disallowed-peer") expect(JSON.parse(turn.evidence[1].result.content[0].text).rooms).toEqual([]);
@@ -106,7 +109,7 @@ it("does not extend supervisor access to a different room", () => withRooms(asyn
   await f.tool("update_channel", { channel_id: f.destination.id, member_ids: [chief.id] });
   f.plan[f.sender.id].steps = [{ expectError: true, arguments: { group_id: f.destination.id, bot_ids: [chief.id], message: "Keep supervisor access in the shared conversation" } }];
   await f.start(); expect((await f.wait()).status).toBe("settled");
-  expect(f.nodes()).toEqual([]);
+  expect(f.handoffs()).toEqual([]);
   expect(await f.messages(f.destination.activeTaskId)).toEqual([]);
   const discovery = JSON.parse(f.provider().find((turn: any) => turn.botId === f.sender.id).evidence[1].result.content[0].text);
   expect(discovery.rooms.some((room: any) => room.id === f.destination.id)).toBe(false);
@@ -133,7 +136,7 @@ it("refuses a disallowed peer without starting the recipient", () => withRooms(a
   await f.api(`/api/bots/${f.sender.id}`, { peers: [] }, "PATCH");
   f.plan[f.sender.id].steps[0].expectError = true;
   await f.start(); expect((await f.wait()).status).toBe("settled");
-  expect(f.nodes()).toEqual([]);
+  expect(f.handoffs()).toEqual([]);
   expect(await f.messages(f.destination.activeTaskId)).toEqual([]);
 }), 45_000);
 
@@ -214,7 +217,7 @@ it("does not let a Chief's grant expose a foreign room transcript to its special
   await f.tool("update_channel", { channel_id: f.destination.id, member_ids: [f.target.id, finance.id] });
   f.plan[f.sender.id].steps[0].expectError = true;
   await f.start(); expect((await f.wait()).status).toBe("settled");
-  expect(f.nodes()).toEqual([]);
+  expect(f.handoffs()).toEqual([]);
   expect(await f.messages(f.destination.activeTaskId)).toEqual([]);
 }), 45_000);
 
@@ -274,7 +277,7 @@ it.each(["recipient", "source-reader", "destination-reader"])("refuses cross-sec
   }
   f.plan[f.sender.id].steps[0].expectError = true;
   await f.start(); expect((await f.wait()).status).toBe("settled");
-  expect(f.nodes()).toEqual([]);
+  expect(f.handoffs()).toEqual([]);
   expect(await f.messages(f.destination.activeTaskId)).toEqual([]);
   expect((await f.messages(f.source.activeTaskId)).some((m: any) => m.text === "Assigned")).toBe(true);
   const discovery = f.provider().find((turn: any) => turn.botId === f.sender.id).evidence[1];
@@ -287,7 +290,7 @@ it("refuses same-room coordination in a mixed section room", () => withRooms(asy
   await f.tool("update_channel", { channel_id: f.source.id, member_ids: [f.sender.id, f.target.id] });
   f.plan[f.sender.id].steps = [{ expectError: true, arguments: { bot_ids: [f.target.id], message: "Review CSV" } }];
   await f.start(); expect((await f.wait()).status).toBe("settled");
-  expect(f.nodes()).toEqual([]);
+  expect(f.handoffs()).toEqual([]);
 }), 45_000);
 
 it("rechecks section membership before queued work dispatch and withholds its result", () => withRooms(async f => {
@@ -311,7 +314,7 @@ it.each([4000, 4001])("enforces the %i-character request boundary on the real se
   f.plan[f.sender.id].steps[0].arguments.message = "x".repeat(length);
   f.plan[f.sender.id].steps[0].expectError = length > 4000;
   await f.start(); expect((await f.wait()).status).toBe("settled");
-  if (length > 4000) expect(f.nodes()).toEqual([]);
+  if (length > 4000) expect(f.handoffs()).toEqual([]);
   else expect(f.nodes().find((n: any) => n.parentId).status).toBe("completed");
 }), 45_000);
 
@@ -358,7 +361,7 @@ it("receipts a retried duplicate of a failed hand-off as failed, not queued behi
   const retry = retried.evidence.find((entry: any) => entry.step).response.result;
   expect(retry.isError).toBe(true);
   expect(retry.content[0].text).toContain("not sent again: it failed; send it with rework=true to retry");
-  expect(f.nodes().filter((n: any) => n.parentId)).toHaveLength(1);
+  expect(f.handoffs()).toHaveLength(1);
 }), 45_000);
 
 it("keeps a busy recipient queued and rejects revoked peer access before dispatch", () => withRooms(async f => {
@@ -374,7 +377,11 @@ it("keeps a busy recipient queued and rejects revoked peer access before dispatc
   await f.cli("wait", "--bot", f.target.id, "--timeout", "15");
 }), 45_000);
 
-it("stops an active downstream turn when the source group is interrupted", () => withRooms(async f => {
+// Stop in a room is the Stop a bot's thread gets (docs/runtime-contract.md
+// §2, "Stop awaiting"): the room's root is cancelled and nothing resumes it;
+// a downstream turn already running elsewhere keeps its process and still
+// reports, said once in the room with the pill that opens it.
+it("stops awaiting on Stop in the source room: the running downstream turn is left to finish, said once, and nothing resumes the room", () => withRooms(async f => {
   f.plan[f.target.id].delayMs = 10_000;
   await f.start();
   await expect.poll(() => f.nodes().find((n: any) => n.parentId)?.status, { timeout: 10_000 }).toBe("running");
@@ -386,10 +393,14 @@ it("stops an active downstream turn when the source group is interrupted", () =>
     return { senderBusy: bots.find((b: any) => b.id === f.sender.id)?.busy, taskWorking: task?.working };
   }, { timeout: 10_000 }).toEqual({ senderBusy: false, taskWorking: true });
   await f.cli("interrupt", "--channel", f.source.id);
+  await expect.poll(() => f.nodes().map((n: any) => [Boolean(n.parentId), n.status]), { timeout: 5_000 }).toEqual([[false, "cancelled"], [true, "running"]]);
+  expect((await f.messages(f.source.activeTaskId)).filter((m: any) => m.tool?.name === "Stopped here — Engineer is still working; open to stop it too")).toHaveLength(1);
+  await expect.poll(() => f.nodes().find((n: any) => n.parentId)?.status, { timeout: 20_000 }).toBe("completed");
   await expect.poll(async () => {
     const { bots } = await f.api("/api/bots"); return bots.find((b: any) => b.id === f.target.id)?.busy;
-  }, { timeout: 15_000 }).toBeFalsy();
-  expect(f.nodes().every((n: any) => n.status === "cancelled")).toBe(true);
+  }, { timeout: 10_000 }).toBeFalsy();
+  expect((await f.messages(f.destination.activeTaskId)).some((m: any) => m.text === "Built CSV")).toBe(true);
+  expect(f.provider().map((turn: any) => turn.botId)).toEqual([f.sender.id, f.target.id]);
   expect((await f.messages(f.source.activeTaskId)).some((m: any) => m.text === "Reviewed downstream outcome")).toBe(false);
 }), 45_000);
 
@@ -406,8 +417,8 @@ it.each(["allow", "deny"])("honors %s on the sender's peer-approval card", behav
   expect((await f.cli("wait", "--channel", f.source.id, "--timeout", "3")).status).toBe("needs-user");
   await f.api(`/api/threads/${f.source.activeTaskId}/respond`, { requestId: card.card.requestId, behavior });
   expect((await f.wait()).status).toBe("settled");
-  if (behavior === "deny") expect(f.nodes()).toEqual([]);
-  else expect(f.nodes().find((n: any) => n.parentId)).toMatchObject({ status: "completed", approvalGranted: true });
+  if (behavior === "deny") expect(f.handoffs()).toEqual([]);
+  else expect(f.handoffs()).toMatchObject([{ status: "completed", approvalGranted: true }]);
 }), 45_000);
 
 it.each(["allow", "deny"])("presents all peer approvals together and dispatches only if every recipient is allowed (%s)", behavior => withRooms(async f => {
@@ -423,16 +434,16 @@ it.each(["allow", "deny"])("presents all peer approvals together and dispatches 
     cards = (await f.messages(f.source.activeTaskId)).filter((m: any) => m.card?.tool === "delegate_bot");
     return cards.length;
   }, { timeout: 10_000 }).toBe(2);
-  expect(f.nodes()).toEqual([]);
+  expect(f.handoffs()).toEqual([]);
   expect(await f.messages(f.destination.activeTaskId)).toEqual([]);
   // Answer the second one first: approving one recipient cannot start
   // partial work or wait for another card to be created.
   await f.api(`/api/threads/${f.source.activeTaskId}/respond`, { requestId: cards[1].card.requestId, behavior });
-  expect(f.nodes()).toEqual([]);
+  expect(f.handoffs()).toEqual([]);
   await f.api(`/api/threads/${f.source.activeTaskId}/respond`, { requestId: cards[0].card.requestId, behavior: "allow" });
   expect((await f.wait()).status).toBe("settled");
-  if (behavior === "deny") expect(f.nodes()).toEqual([]);
-  else expect(f.nodes().filter((n: any) => n.parentId)).toMatchObject([
+  if (behavior === "deny") expect(f.handoffs()).toEqual([]);
+  else expect(f.handoffs()).toMatchObject([
     { status: "completed", approvalGranted: true }, { status: "completed", approvalGranted: true },
   ]);
   const posted = (await f.messages(f.destination.activeTaskId)).filter((m: any) => m.roomRequest?.phase === "request");
@@ -475,7 +486,11 @@ it("consults multiple existing members and returns once, with no discussion prer
   const tools = f.provider()[0].evidence[0].result.tools.map((t: any) => t.name);
   expect(tools).toContain("coordinate_bots");
   expect(tools).toContain("request_credential");
-  for (const old of ["discuss_room", "assign_room_member", "delegate_bot", "ask_bot", "start_thread"]) expect(tools).not.toContain(old);
+  // One surface: the room tools of old and the one-release aliases of the
+  // hand-off names are gone (docs/runtime-contract.md §9).
+  for (const old of ["discuss_room", "assign_room_member", "delegate_bot", "ask_bot", "send_to_bot", "check_delegation", "wait_delegation"]) {
+    expect(tools).not.toContain(old);
+  }
 }), 45_000);
 
 it.each([false, true])("retains reports behind compact receipts for later turns, unless access is revoked (%s)", revoked => withRooms(async f => {
@@ -497,7 +512,8 @@ it.each([false, true])("retains reports behind compact receipts for later turns,
   const followup = f.provider().filter((turn: any) => turn.botId === f.sender.id).at(-1);
   expect(followup.turnIndex).toBe(2);
   expect(JSON.stringify(followup.prompt).includes(report)).toBe(!revoked);
-  expect(f.nodes()).toHaveLength(2);
+  // The Director's two room turns are two roots; the one hand-off sits under the first.
+  expect(f.nodes().map((n: any) => [n.botId, Boolean(n.parentId)])).toEqual([[f.sender.id, false], [f.target.id, true], [f.sender.id, false]]);
 }), 45_000);
 
 it("waits for busy peers and then completes without the user relaying messages", () => withRooms(async f => {
@@ -522,7 +538,7 @@ it.each([
   const botId = hidden ? f.target.id : "Nobody";
   f.plan[f.sender.id].steps = [{ expectError: true, arguments: { group_id: f.destination.id, bot_ids: [botId], message: "Review CSV" } }];
   await f.start(); expect((await f.wait()).status).toBe("settled");
-  expect(f.nodes()).toEqual([]);
+  expect(f.handoffs()).toEqual([]);
   expect(await f.messages(f.destination.activeTaskId)).toEqual([]);
   const refused = f.provider().find((turn: any) => turn.botId === f.sender.id)
     .evidence.find((entry: any) => entry.step).response.result.content[0].text;
@@ -583,6 +599,8 @@ it("keeps genuinely different room briefs separate", () => withRooms(async f => 
 // A room turn's brief is not repeated while the room still shows it, so
 // what a restart did must ride on its own: the cut member hears it on the
 // run that continues its turn, and the sender on the resume that follows.
+// The sender's room turn is a root (docs/runtime-contract.md §10 PR 5) cut
+// while waiting on its hand-off: it is not run again, it resumes once.
 it("runs a room member's turn a restart cut again once, told so, and resumes the sender told so", () => withRooms(async f => {
   const gateFile = join(f.session.info.dataDir, "engineer.gate");
   f.plan[f.target.id] = { reply: "Built CSV", gateFile };
@@ -598,4 +616,14 @@ it("runs a room member's turn a restart cut again once, told so, and resumes the
   expect(review.resumed).toBe(true);
   expect(JSON.stringify(review.prompt)).toContain("A restart cut these teammates' turns: Engineer (resumed once in place");
   expect((await f.messages(f.source.activeTaskId)).filter((m: any) => m.text === "Reviewed downstream outcome")).toHaveLength(1);
+  // One root (the Director's room turn: assigned, then resumed once, never
+  // rerun) and one hand-off (the Engineer's, rerun once in place: the cut
+  // execution and the rerun, docs/runtime-contract.md §5).
+  expect(f.nodes().map((n: any) => [n.botId, n.groupId, n.threadId, Boolean(n.parentId), n.restarts, n.executions])).toEqual([
+    [f.sender.id, f.source.id, f.source.activeTaskId, false, 0, 2],
+    [f.target.id, f.destination.id, f.destination.activeTaskId, true, 1, 2],
+  ]);
+  // The runtime held the Director's root through the restart, so its room
+  // shows no interrupted line; the restart rides on the resume alone.
+  expect((await f.messages(f.source.activeTaskId)).filter((m: any) => /turn interrupted/.test(m.tool?.name ?? ""))).toEqual([]);
 }), 60_000);

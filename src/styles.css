@@ -537,6 +537,71 @@
     "Segoe UI", system-ui, sans-serif;
   --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
+  /* Room speaker names (.bot-identity): each bot color's tone that clears
+     4.5:1 on --color-app (toneForSurface, src/lib/color-contrast.ts). */
+  --identity-green: #009957;
+  --identity-blue: #377FE6;
+  --identity-red: #D94B52;
+  --identity-orange: #E78531;
+  --identity-purple: #8a65cc;
+  --identity-cyan: #0EA5C6;
+  --identity-pink: #D84F8B;
+  --identity-yellow: #D8A729;
+  --identity-teal: #01A492;
+  --identity-coral: #E5634E;
+  --identity-white: #F4F4F4;
+  --identity-black: #747889;
+  --identity-brown: #a16d45;
+  --identity-amber: #F2A51A;
+  --identity-grey: #8E949E;
+  --identity-blush: #F3A5B6;
+  --identity-peach: #F6B897;
+  --identity-butter: #F1D88B;
+  --identity-pistachio: #C5DE98;
+  --identity-mint: #98DDB9;
+  --identity-aqua: #92DCD8;
+  --identity-sky: #9CC8F2;
+  --identity-periwinkle: #AEB4F1;
+  --identity-lavender: #C3AAEE;
+  --identity-lilac: #DDA9E3;
+  --identity-wine: #d0476f;
+  --identity-rust: #cb532b;
+  --identity-olive: #7e7c29;
+  --identity-forest: #2d8959;
+  --identity-petrol: #178596;
+  --identity-navy: #4977ce;
+  --identity-midnight: #6074c4;
+  --identity-indigo: #776ccf;
+  --identity-plum: #a65abd;
+  --identity-berry: #ce3da0;
+  --identity-scarlet: #FF2D55;
+  --identity-blaze: #FF6A13;
+  --identity-citrus: #FFE81F;
+  --identity-lime: #B6FF2E;
+  --identity-volt: #2BFF88;
+  --identity-laser: #1FE5FF;
+  --identity-electric: #336eff;
+  --identity-ultraviolet: #954eff;
+  --identity-magenta: #F13BEB;
+  --identity-hotpink: #FF3FA4;
+  --identity-silver: #BFC5CD;
+  --identity-graphite: #727986;
+  --identity-sand: #D9C4A1;
+  --identity-taupe: #8C7B6E;
+  --identity-bronze: #A86F38;
+  --identity-copper: #C2643A;
+  --identity-brass: #C7A13D;
+  --identity-ink: #77778d;
+  --identity-tomato: #E8483F;
+  --identity-tangerine: #F08A24;
+  --identity-honey: #F0B429;
+  --identity-jade: #3ECF8E;
+  --identity-turquoise: #2FBFA0;
+  --identity-cobalt: #3B93F0;
+  --identity-violet: #8B5CF6;
+  --identity-rose: #E152B0;
+  --identity-ash: #A3A3A3;
+  --identity-cream: #F1EFE9;
 }
 
 /* ── Pulsatrix Light ──────────────────────────────────────────────────────
@@ -627,6 +692,71 @@
   --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
   --color-popover-border: #7b828e;   /* field and popover outline: 3:1 on both */
+  /* Room speaker names (.bot-identity): each bot color's tone that clears
+     4.5:1 on --color-app (toneForSurface, src/lib/color-contrast.ts). */
+  --identity-green: #007f48;
+  --identity-blue: #1b6adc;
+  --identity-red: #d22c35;
+  --identity-orange: #aa5914;
+  --identity-purple: #8057C8;
+  --identity-cyan: #0a7891;
+  --identity-pink: #ca2d72;
+  --identity-yellow: #896a19;
+  --identity-teal: #017c6f;
+  --identity-coral: #cd361e;
+  --identity-white: #6e6e6e;
+  --identity-black: #1D1E22;
+  --identity-brown: #8B5E3C;
+  --identity-amber: #976409;
+  --identity-grey: #686f7a;
+  --identity-blush: #d71d45;
+  --identity-peach: #bb4b10;
+  --identity-butter: #886a10;
+  --identity-pistachio: #5a7826;
+  --identity-mint: #297d52;
+  --identity-aqua: #277a76;
+  --identity-sky: #1a70c3;
+  --identity-periwinkle: #5460e1;
+  --identity-lavender: #8350dc;
+  --identity-lilac: #ad3dba;
+  --identity-wine: #7A1F3A;
+  --identity-rust: #8E3A1E;
+  --identity-olive: #5F5E1F;
+  --identity-forest: #1E5B3B;
+  --identity-petrol: #0F5560;
+  --identity-navy: #1E3A70;
+  --identity-midnight: #1B2448;
+  --identity-indigo: #3A2F8F;
+  --identity-plum: #5B2A6A;
+  --identity-berry: #7B1F5E;
+  --identity-scarlet: #de002a;
+  --identity-blaze: #c04700;
+  --identity-citrus: #7c6f00;
+  --identity-lime: #507a00;
+  --identity-volt: #008038;
+  --identity-laser: #007a8a;
+  --identity-electric: #1f5fff;
+  --identity-ultraviolet: #8A3BFF;
+  --identity-magenta: #c40ebe;
+  --identity-hotpink: #d70071;
+  --identity-silver: #646f7f;
+  --identity-graphite: #4B4F58;
+  --identity-sand: #886937;
+  --identity-taupe: #7a6c60;
+  --identity-bronze: #976332;
+  --identity-copper: #aa5833;
+  --identity-brass: #866b27;
+  --identity-ink: #0A0A0C;
+  --identity-tomato: #d6241a;
+  --identity-tangerine: #a85a0c;
+  --identity-honey: #90670a;
+  --identity-jade: #1f7d53;
+  --identity-turquoise: #1f7c68;
+  --identity-cobalt: #106dd0;
+  --identity-violet: #7d49f5;
+  --identity-rose: #c92390;
+  --identity-ash: #6e6e6e;
+  --identity-cream: #796e4d;
 }
 
 /* ── Midnight ──────────────────────────────────────────────────────────────
@@ -697,6 +827,71 @@
     "Segoe UI", system-ui, sans-serif;
   --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
+  /* Room speaker names (.bot-identity): each bot color's tone that clears
+     4.5:1 on --color-app (toneForSurface, src/lib/color-contrast.ts). */
+  --identity-green: #009957;
+  --identity-blue: #377FE6;
+  --identity-red: #D94B52;
+  --identity-orange: #E78531;
+  --identity-purple: #8d69ce;
+  --identity-cyan: #0EA5C6;
+  --identity-pink: #D84F8B;
+  --identity-yellow: #D8A729;
+  --identity-teal: #01A492;
+  --identity-coral: #E5634E;
+  --identity-white: #F4F4F4;
+  --identity-black: #787c8b;
+  --identity-brown: #a67148;
+  --identity-amber: #F2A51A;
+  --identity-grey: #8E949E;
+  --identity-blush: #F3A5B6;
+  --identity-peach: #F6B897;
+  --identity-butter: #F1D88B;
+  --identity-pistachio: #C5DE98;
+  --identity-mint: #98DDB9;
+  --identity-aqua: #92DCD8;
+  --identity-sky: #9CC8F2;
+  --identity-periwinkle: #AEB4F1;
+  --identity-lavender: #C3AAEE;
+  --identity-lilac: #DDA9E3;
+  --identity-wine: #d24d74;
+  --identity-rust: #d1552c;
+  --identity-olive: #81802a;
+  --identity-forest: #2e8d5b;
+  --identity-petrol: #18899a;
+  --identity-navy: #4e7bd0;
+  --identity-midnight: #6578c5;
+  --identity-indigo: #7b70d0;
+  --identity-plum: #a95fbf;
+  --identity-berry: #d044a4;
+  --identity-scarlet: #FF2D55;
+  --identity-blaze: #FF6A13;
+  --identity-citrus: #FFE81F;
+  --identity-lime: #B6FF2E;
+  --identity-volt: #2BFF88;
+  --identity-laser: #1FE5FF;
+  --identity-electric: #3a73ff;
+  --identity-ultraviolet: #9954ff;
+  --identity-magenta: #F13BEB;
+  --identity-hotpink: #FF3FA4;
+  --identity-silver: #BFC5CD;
+  --identity-graphite: #767d8a;
+  --identity-sand: #D9C4A1;
+  --identity-taupe: #8C7B6E;
+  --identity-bronze: #a97038;
+  --identity-copper: #C2643A;
+  --identity-brass: #C7A13D;
+  --identity-ink: #7b7b91;
+  --identity-tomato: #E8483F;
+  --identity-tangerine: #F08A24;
+  --identity-honey: #F0B429;
+  --identity-jade: #3ECF8E;
+  --identity-turquoise: #2FBFA0;
+  --identity-cobalt: #3B93F0;
+  --identity-violet: #8c5ef6;
+  --identity-rose: #E152B0;
+  --identity-ash: #A3A3A3;
+  --identity-cream: #F1EFE9;
 }
 
 /* ── Atelier ───────────────────────────────────────────────────────────────
@@ -764,6 +959,71 @@
     Roboto, sans-serif;
   --radius-lg: 6px;
   --radius-xl: 10px;
+  /* Room speaker names (.bot-identity): each bot color's tone that clears
+     4.5:1 on --color-app (toneForSurface, src/lib/color-contrast.ts). */
+  --identity-green: #007f48;
+  --identity-blue: #1b6adc;
+  --identity-red: #d12c34;
+  --identity-orange: #a95914;
+  --identity-purple: #8057C8;
+  --identity-cyan: #0a7891;
+  --identity-pink: #ca2d72;
+  --identity-yellow: #896a19;
+  --identity-teal: #017c6f;
+  --identity-coral: #cd361e;
+  --identity-white: #6e6e6e;
+  --identity-black: #1D1E22;
+  --identity-brown: #8B5E3C;
+  --identity-amber: #976409;
+  --identity-grey: #686f7a;
+  --identity-blush: #d61d45;
+  --identity-peach: #bb4b10;
+  --identity-butter: #886a10;
+  --identity-pistachio: #5a7726;
+  --identity-mint: #297d51;
+  --identity-aqua: #277a76;
+  --identity-sky: #1a70c2;
+  --identity-periwinkle: #5460e1;
+  --identity-lavender: #8350dc;
+  --identity-lilac: #ad3cba;
+  --identity-wine: #7A1F3A;
+  --identity-rust: #8E3A1E;
+  --identity-olive: #5F5E1F;
+  --identity-forest: #1E5B3B;
+  --identity-petrol: #0F5560;
+  --identity-navy: #1E3A70;
+  --identity-midnight: #1B2448;
+  --identity-indigo: #3A2F8F;
+  --identity-plum: #5B2A6A;
+  --identity-berry: #7B1F5E;
+  --identity-scarlet: #de002a;
+  --identity-blaze: #c04700;
+  --identity-citrus: #7c6f00;
+  --identity-lime: #507a00;
+  --identity-volt: #008038;
+  --identity-laser: #007a89;
+  --identity-electric: #1f5fff;
+  --identity-ultraviolet: #8a3aff;
+  --identity-magenta: #c30ebe;
+  --identity-hotpink: #d70071;
+  --identity-silver: #646f7f;
+  --identity-graphite: #4B4F58;
+  --identity-sand: #886937;
+  --identity-taupe: #7a6c60;
+  --identity-bronze: #976332;
+  --identity-copper: #aa5733;
+  --identity-brass: #866b27;
+  --identity-ink: #0A0A0C;
+  --identity-tomato: #d6241a;
+  --identity-tangerine: #a85a0c;
+  --identity-honey: #90670a;
+  --identity-jade: #1f7d53;
+  --identity-turquoise: #1f7c68;
+  --identity-cobalt: #106dd0;
+  --identity-violet: #7d49f5;
+  --identity-rose: #c92390;
+  --identity-ash: #6e6e6e;
+  --identity-cream: #786e4d;
 }
 
 /* ── Foundry ───────────────────────────────────────────────────────────────
@@ -833,6 +1093,71 @@
     "Segoe UI", system-ui, sans-serif;
   --radius-lg: 4px;
   --radius-xl: 8px;
+  /* Room speaker names (.bot-identity): each bot color's tone that clears
+     4.5:1 on --color-app (toneForSurface, src/lib/color-contrast.ts). */
+  --identity-green: #009957;
+  --identity-blue: #377FE6;
+  --identity-red: #D94B52;
+  --identity-orange: #E78531;
+  --identity-purple: #8c67cd;
+  --identity-cyan: #0EA5C6;
+  --identity-pink: #D84F8B;
+  --identity-yellow: #D8A729;
+  --identity-teal: #01A492;
+  --identity-coral: #E5634E;
+  --identity-white: #F4F4F4;
+  --identity-black: #757a8a;
+  --identity-brown: #a36f47;
+  --identity-amber: #F2A51A;
+  --identity-grey: #8E949E;
+  --identity-blush: #F3A5B6;
+  --identity-peach: #F6B897;
+  --identity-butter: #F1D88B;
+  --identity-pistachio: #C5DE98;
+  --identity-mint: #98DDB9;
+  --identity-aqua: #92DCD8;
+  --identity-sky: #9CC8F2;
+  --identity-periwinkle: #AEB4F1;
+  --identity-lavender: #C3AAEE;
+  --identity-lilac: #DDA9E3;
+  --identity-wine: #d14972;
+  --identity-rust: #ce542b;
+  --identity-olive: #7f7e29;
+  --identity-forest: #2e8b5a;
+  --identity-petrol: #188798;
+  --identity-navy: #4c79cf;
+  --identity-midnight: #6276c4;
+  --identity-indigo: #796ecf;
+  --identity-plum: #a75cbe;
+  --identity-berry: #cf40a2;
+  --identity-scarlet: #FF2D55;
+  --identity-blaze: #FF6A13;
+  --identity-citrus: #FFE81F;
+  --identity-lime: #B6FF2E;
+  --identity-volt: #2BFF88;
+  --identity-laser: #1FE5FF;
+  --identity-electric: #3570ff;
+  --identity-ultraviolet: #9750ff;
+  --identity-magenta: #F13BEB;
+  --identity-hotpink: #FF3FA4;
+  --identity-silver: #BFC5CD;
+  --identity-graphite: #747b88;
+  --identity-sand: #D9C4A1;
+  --identity-taupe: #8C7B6E;
+  --identity-bronze: #A86F38;
+  --identity-copper: #C2643A;
+  --identity-brass: #C7A13D;
+  --identity-ink: #79798f;
+  --identity-tomato: #E8483F;
+  --identity-tangerine: #F08A24;
+  --identity-honey: #F0B429;
+  --identity-jade: #3ECF8E;
+  --identity-turquoise: #2FBFA0;
+  --identity-cobalt: #3B93F0;
+  --identity-violet: #8B5CF6;
+  --identity-rose: #E152B0;
+  --identity-ash: #A3A3A3;
+  --identity-cream: #F1EFE9;
 }
 
 /* ── Lagoon ────────────────────────────────────────────────────────────────
@@ -912,6 +1237,71 @@
   --radius-lg: 8px;
   --radius-xl: 14px;
   --color-popover-border: #788281;   /* field and popover outline: 3:1 on both */
+  /* Room speaker names (.bot-identity): each bot color's tone that clears
+     4.5:1 on --color-app (toneForSurface, src/lib/color-contrast.ts). */
+  --identity-green: #007945;
+  --identity-blue: #1a65d1;
+  --identity-red: #c82a32;
+  --identity-orange: #a25513;
+  --identity-purple: #7c51c6;
+  --identity-cyan: #0a738b;
+  --identity-pink: #c12b6d;
+  --identity-yellow: #836518;
+  --identity-teal: #01776a;
+  --identity-coral: #c3341d;
+  --identity-white: #696969;
+  --identity-black: #1D1E22;
+  --identity-brown: #8B5E3C;
+  --identity-amber: #905f08;
+  --identity-grey: #636a74;
+  --identity-blush: #cd1b42;
+  --identity-peach: #b34810;
+  --identity-butter: #816610;
+  --identity-pistachio: #577225;
+  --identity-mint: #27774e;
+  --identity-aqua: #257470;
+  --identity-sky: #186bba;
+  --identity-periwinkle: #4c5ae0;
+  --identity-lavender: #7e48da;
+  --identity-lilac: #a53ab2;
+  --identity-wine: #7A1F3A;
+  --identity-rust: #8E3A1E;
+  --identity-olive: #5F5E1F;
+  --identity-forest: #1E5B3B;
+  --identity-petrol: #0F5560;
+  --identity-navy: #1E3A70;
+  --identity-midnight: #1B2448;
+  --identity-indigo: #3A2F8F;
+  --identity-plum: #5B2A6A;
+  --identity-berry: #7B1F5E;
+  --identity-scarlet: #d40028;
+  --identity-blaze: #b74400;
+  --identity-citrus: #776a00;
+  --identity-lime: #4c7500;
+  --identity-volt: #007a36;
+  --identity-laser: #007484;
+  --identity-electric: #1457ff;
+  --identity-ultraviolet: #8430ff;
+  --identity-magenta: #bb0db6;
+  --identity-hotpink: #ce006d;
+  --identity-silver: #5f6a7a;
+  --identity-graphite: #4B4F58;
+  --identity-sand: #816534;
+  --identity-taupe: #75675c;
+  --identity-bronze: #8f5f30;
+  --identity-copper: #a25431;
+  --identity-brass: #7f6625;
+  --identity-ink: #0A0A0C;
+  --identity-tomato: #cd2219;
+  --identity-tangerine: #a1560b;
+  --identity-honey: #89620a;
+  --identity-jade: #1e774f;
+  --identity-turquoise: #1d7663;
+  --identity-cobalt: #0f68c7;
+  --identity-violet: #7741f4;
+  --identity-rose: #c1218a;
+  --identity-ash: #696969;
+  --identity-cream: #736949;
 }
 
 /* ── Graphite ─────────────────────────────────────────────────────────────
@@ -968,6 +1358,71 @@
     "Segoe UI", system-ui, sans-serif;
   --radius-lg: 6px;
   --radius-xl: 10px;
+  /* Room speaker names (.bot-identity): each bot color's tone that clears
+     4.5:1 on --color-app (toneForSurface, src/lib/color-contrast.ts). */
+  --identity-green: #009957;
+  --identity-blue: #377FE6;
+  --identity-red: #D94B52;
+  --identity-orange: #E78531;
+  --identity-purple: #8d69ce;
+  --identity-cyan: #0EA5C6;
+  --identity-pink: #D84F8B;
+  --identity-yellow: #D8A729;
+  --identity-teal: #01A492;
+  --identity-coral: #E5634E;
+  --identity-white: #F4F4F4;
+  --identity-black: #787c8b;
+  --identity-brown: #a67148;
+  --identity-amber: #F2A51A;
+  --identity-grey: #8E949E;
+  --identity-blush: #F3A5B6;
+  --identity-peach: #F6B897;
+  --identity-butter: #F1D88B;
+  --identity-pistachio: #C5DE98;
+  --identity-mint: #98DDB9;
+  --identity-aqua: #92DCD8;
+  --identity-sky: #9CC8F2;
+  --identity-periwinkle: #AEB4F1;
+  --identity-lavender: #C3AAEE;
+  --identity-lilac: #DDA9E3;
+  --identity-wine: #d24d74;
+  --identity-rust: #d1552c;
+  --identity-olive: #81802a;
+  --identity-forest: #2e8d5b;
+  --identity-petrol: #18899a;
+  --identity-navy: #4e7bd0;
+  --identity-midnight: #6578c5;
+  --identity-indigo: #7b70d0;
+  --identity-plum: #a95fbf;
+  --identity-berry: #d044a4;
+  --identity-scarlet: #FF2D55;
+  --identity-blaze: #FF6A13;
+  --identity-citrus: #FFE81F;
+  --identity-lime: #B6FF2E;
+  --identity-volt: #2BFF88;
+  --identity-laser: #1FE5FF;
+  --identity-electric: #3a73ff;
+  --identity-ultraviolet: #9954ff;
+  --identity-magenta: #F13BEB;
+  --identity-hotpink: #FF3FA4;
+  --identity-silver: #BFC5CD;
+  --identity-graphite: #767d8a;
+  --identity-sand: #D9C4A1;
+  --identity-taupe: #8C7B6E;
+  --identity-bronze: #a97038;
+  --identity-copper: #C2643A;
+  --identity-brass: #C7A13D;
+  --identity-ink: #7b7b91;
+  --identity-tomato: #E8483F;
+  --identity-tangerine: #F08A24;
+  --identity-honey: #F0B429;
+  --identity-jade: #3ECF8E;
+  --identity-turquoise: #2FBFA0;
+  --identity-cobalt: #3B93F0;
+  --identity-violet: #8c5ef6;
+  --identity-rose: #E152B0;
+  --identity-ash: #A3A3A3;
+  --identity-cream: #F1EFE9;
 }
 
 /* ── Linen ────────────────────────────────────────────────────────────────
@@ -1027,6 +1482,71 @@
   --radius-lg: 8px;
   --radius-xl: 12px;
   --color-popover-border: #7e838c;   /* field and popover outline: 3:1 on both */
+  /* Room speaker names (.bot-identity): each bot color's tone that clears
+     4.5:1 on --color-app (toneForSurface, src/lib/color-contrast.ts). */
+  --identity-green: #007d47;
+  --identity-blue: #1b68d7;
+  --identity-red: #ce2c34;
+  --identity-orange: #a75713;
+  --identity-purple: #7f55c8;
+  --identity-cyan: #0a778e;
+  --identity-pink: #c72c70;
+  --identity-yellow: #886819;
+  --identity-teal: #017a6d;
+  --identity-coral: #c9361e;
+  --identity-white: #6c6c6c;
+  --identity-black: #1D1E22;
+  --identity-brown: #8B5E3C;
+  --identity-amber: #946208;
+  --identity-grey: #676d78;
+  --identity-blush: #d31c44;
+  --identity-peach: #b84a10;
+  --identity-butter: #866910;
+  --identity-pistachio: #597626;
+  --identity-mint: #297b50;
+  --identity-aqua: #277874;
+  --identity-sky: #196ec0;
+  --identity-periwinkle: #515ee1;
+  --identity-lavender: #824ddb;
+  --identity-lilac: #aa3cb7;
+  --identity-wine: #7A1F3A;
+  --identity-rust: #8E3A1E;
+  --identity-olive: #5F5E1F;
+  --identity-forest: #1E5B3B;
+  --identity-petrol: #0F5560;
+  --identity-navy: #1E3A70;
+  --identity-midnight: #1B2448;
+  --identity-indigo: #3A2F8F;
+  --identity-plum: #5B2A6A;
+  --identity-berry: #7B1F5E;
+  --identity-scarlet: #db002a;
+  --identity-blaze: #bd4600;
+  --identity-citrus: #7a6d00;
+  --identity-lime: #4e7800;
+  --identity-volt: #007e37;
+  --identity-laser: #007888;
+  --identity-electric: #1b5cff;
+  --identity-ultraviolet: #8837ff;
+  --identity-magenta: #c00ebb;
+  --identity-hotpink: #d40070;
+  --identity-silver: #626e7d;
+  --identity-graphite: #4B4F58;
+  --identity-sand: #856836;
+  --identity-taupe: #796a5f;
+  --identity-bronze: #946131;
+  --identity-copper: #a85632;
+  --identity-brass: #836926;
+  --identity-ink: #0A0A0C;
+  --identity-tomato: #d32319;
+  --identity-tangerine: #a6580b;
+  --identity-honey: #8d660a;
+  --identity-jade: #1f7b52;
+  --identity-turquoise: #1e7a67;
+  --identity-cobalt: #106bcd;
+  --identity-violet: #7b46f5;
+  --identity-rose: #c6228e;
+  --identity-ash: #6c6c6c;
+  --identity-cream: #776c4c;
 }
 
 /* ── Dusk ─────────────────────────────────────────────────────────────────
@@ -1082,6 +1602,71 @@
     "Segoe UI", system-ui, sans-serif;
   --radius-lg: 8px;
   --radius-xl: 12px;
+  /* Room speaker names (.bot-identity): each bot color's tone that clears
+     4.5:1 on --color-app (toneForSurface, src/lib/color-contrast.ts). */
+  --identity-green: #009957;
+  --identity-blue: #377FE6;
+  --identity-red: #D94B52;
+  --identity-orange: #E78531;
+  --identity-purple: #8d68ce;
+  --identity-cyan: #0EA5C6;
+  --identity-pink: #D84F8B;
+  --identity-yellow: #D8A729;
+  --identity-teal: #01A492;
+  --identity-coral: #E5634E;
+  --identity-white: #F4F4F4;
+  --identity-black: #787b8b;
+  --identity-brown: #a57047;
+  --identity-amber: #F2A51A;
+  --identity-grey: #8E949E;
+  --identity-blush: #F3A5B6;
+  --identity-peach: #F6B897;
+  --identity-butter: #F1D88B;
+  --identity-pistachio: #C5DE98;
+  --identity-mint: #98DDB9;
+  --identity-aqua: #92DCD8;
+  --identity-sky: #9CC8F2;
+  --identity-periwinkle: #AEB4F1;
+  --identity-lavender: #C3AAEE;
+  --identity-lilac: #DDA9E3;
+  --identity-wine: #d14c74;
+  --identity-rust: #d0552c;
+  --identity-olive: #817f2a;
+  --identity-forest: #2e8c5a;
+  --identity-petrol: #188899;
+  --identity-navy: #4d7acf;
+  --identity-midnight: #6478c5;
+  --identity-indigo: #7a6fd0;
+  --identity-plum: #a85ebf;
+  --identity-berry: #d043a3;
+  --identity-scarlet: #FF2D55;
+  --identity-blaze: #FF6A13;
+  --identity-citrus: #FFE81F;
+  --identity-lime: #B6FF2E;
+  --identity-volt: #2BFF88;
+  --identity-laser: #1FE5FF;
+  --identity-electric: #3872ff;
+  --identity-ultraviolet: #9853ff;
+  --identity-magenta: #F13BEB;
+  --identity-hotpink: #FF3FA4;
+  --identity-silver: #BFC5CD;
+  --identity-graphite: #757c8a;
+  --identity-sand: #D9C4A1;
+  --identity-taupe: #8C7B6E;
+  --identity-bronze: #A86F38;
+  --identity-copper: #C2643A;
+  --identity-brass: #C7A13D;
+  --identity-ink: #7a7a90;
+  --identity-tomato: #E8483F;
+  --identity-tangerine: #F08A24;
+  --identity-honey: #F0B429;
+  --identity-jade: #3ECF8E;
+  --identity-turquoise: #2FBFA0;
+  --identity-cobalt: #3B93F0;
+  --identity-violet: #8c5df6;
+  --identity-rose: #E152B0;
+  --identity-ash: #A3A3A3;
+  --identity-cream: #F1EFE9;
 }
 
 /* ── Daylight ─────────────────────────────────────────────────────────────
@@ -1157,6 +1742,71 @@
   --radius-lg: 8px;
   --radius-xl: 14px;
   --color-popover-border: #828282;   /* field and popover outline: 3:1 on both */
+  /* Room speaker names (.bot-identity): each bot color's tone that clears
+     4.5:1 on --color-app (toneForSurface, src/lib/color-contrast.ts). */
+  --identity-green: #00864c;
+  --identity-blue: #2271e3;
+  --identity-red: #d63a42;
+  --identity-orange: #b35e15;
+  --identity-purple: #8057C8;
+  --identity-cyan: #0b7f99;
+  --identity-pink: #d2357a;
+  --identity-yellow: #91701b;
+  --identity-teal: #018375;
+  --identity-coral: #d83920;
+  --identity-white: #747474;
+  --identity-black: #1D1E22;
+  --identity-brown: #8B5E3C;
+  --identity-amber: #9f6a09;
+  --identity-grey: #6f7581;
+  --identity-blush: #e1224c;
+  --identity-peach: #c55011;
+  --identity-butter: #8f7111;
+  --identity-pistachio: #607e29;
+  --identity-mint: #2c8456;
+  --identity-aqua: #2a817d;
+  --identity-sky: #1b76ce;
+  --identity-periwinkle: #5c68e3;
+  --identity-lavender: #8959de;
+  --identity-lilac: #b543c2;
+  --identity-wine: #7A1F3A;
+  --identity-rust: #8E3A1E;
+  --identity-olive: #5F5E1F;
+  --identity-forest: #1E5B3B;
+  --identity-petrol: #0F5560;
+  --identity-navy: #1E3A70;
+  --identity-midnight: #1B2448;
+  --identity-indigo: #3A2F8F;
+  --identity-plum: #5B2A6A;
+  --identity-berry: #7B1F5E;
+  --identity-scarlet: #ea002d;
+  --identity-blaze: #cb4b00;
+  --identity-citrus: #837500;
+  --identity-lime: #548100;
+  --identity-volt: #00873b;
+  --identity-laser: #008091;
+  --identity-electric: #2b68ff;
+  --identity-ultraviolet: #8A3BFF;
+  --identity-magenta: #ce0fc8;
+  --identity-hotpink: #e30078;
+  --identity-silver: #697687;
+  --identity-graphite: #4B4F58;
+  --identity-sand: #906f3a;
+  --identity-taupe: #827266;
+  --identity-bronze: #9f6935;
+  --identity-copper: #b35d36;
+  --identity-brass: #8d7129;
+  --identity-ink: #0A0A0C;
+  --identity-tomato: #e2261b;
+  --identity-tangerine: #b25f0c;
+  --identity-honey: #986d0b;
+  --identity-jade: #218458;
+  --identity-turquoise: #20836e;
+  --identity-cobalt: #1173dc;
+  --identity-violet: #8453f5;
+  --identity-rose: #d52598;
+  --identity-ash: #747474;
+  --identity-cream: #807452;
 }
 
 /* ── Hibou 98 (secret) ─────────────────────────────────────────────────────
@@ -1219,6 +1869,71 @@
   --radius-xl: 0px;
   color-scheme: light;
   --color-popover-border: #5a5a5a;   /* the dark half of a sunken field's bevel; 3:1 on the silver face */
+  /* Room speaker names (.bot-identity): each bot color's tone that clears
+     4.5:1 on --color-app (toneForSurface, src/lib/color-contrast.ts). */
+  --identity-green: #00884e;
+  --identity-blue: #2573e4;
+  --identity-red: #d63f47;
+  --identity-orange: #b65f15;
+  --identity-purple: #8057C8;
+  --identity-cyan: #0b819b;
+  --identity-pink: #d3397d;
+  --identity-yellow: #93721b;
+  --identity-teal: #018577;
+  --identity-coral: #db3a20;
+  --identity-white: #767676;
+  --identity-black: #1D1E22;
+  --identity-brown: #8B5E3C;
+  --identity-amber: #a26b09;
+  --identity-grey: #707783;
+  --identity-blush: #e22851;
+  --identity-peach: #c85111;
+  --identity-butter: #927212;
+  --identity-pistachio: #618029;
+  --identity-mint: #2c8657;
+  --identity-aqua: #2a837f;
+  --identity-sky: #1b78d1;
+  --identity-periwinkle: #5f6ae3;
+  --identity-lavender: #8c5bde;
+  --identity-lilac: #b646c3;
+  --identity-wine: #7A1F3A;
+  --identity-rust: #8E3A1E;
+  --identity-olive: #5F5E1F;
+  --identity-forest: #1E5B3B;
+  --identity-petrol: #0F5560;
+  --identity-navy: #1E3A70;
+  --identity-midnight: #1B2448;
+  --identity-indigo: #3A2F8F;
+  --identity-plum: #5B2A6A;
+  --identity-berry: #7B1F5E;
+  --identity-scarlet: #ed002d;
+  --identity-blaze: #ce4c00;
+  --identity-citrus: #857700;
+  --identity-lime: #568300;
+  --identity-volt: #00893c;
+  --identity-laser: #008294;
+  --identity-electric: #2e6bff;
+  --identity-ultraviolet: #8A3BFF;
+  --identity-magenta: #d10fcb;
+  --identity-hotpink: #e60079;
+  --identity-silver: #6b7789;
+  --identity-graphite: #4B4F58;
+  --identity-sand: #92713b;
+  --identity-taupe: #837467;
+  --identity-bronze: #a16a36;
+  --identity-copper: #b65e37;
+  --identity-brass: #8f7329;
+  --identity-ink: #0A0A0C;
+  --identity-tomato: #e42b21;
+  --identity-tangerine: #b5600c;
+  --identity-honey: #9a6f0b;
+  --identity-jade: #218659;
+  --identity-turquoise: #218570;
+  --identity-cobalt: #1175e0;
+  --identity-violet: #8655f6;
+  --identity-rose: #d8259b;
+  --identity-ash: #767676;
+  --identity-cream: #827653;
 }
 
 /* ── Meadow ───────────────────────────────────────────────────────────────
@@ -1281,6 +1996,71 @@
   --radius-lg: 10px;
   --radius-xl: 16px;
   --color-popover-border: #7f8882;   /* field and popover outline: 3:1 on both */
+  /* Room speaker names (.bot-identity): each bot color's tone that clears
+     4.5:1 on --color-app (toneForSurface, src/lib/color-contrast.ts). */
+  --identity-green: #00884e;
+  --identity-blue: #2573e4;
+  --identity-red: #d63f47;
+  --identity-orange: #b65f15;
+  --identity-purple: #8057C8;
+  --identity-cyan: #0b819b;
+  --identity-pink: #d3397d;
+  --identity-yellow: #93721b;
+  --identity-teal: #018577;
+  --identity-coral: #db3a20;
+  --identity-white: #767676;
+  --identity-black: #1D1E22;
+  --identity-brown: #8B5E3C;
+  --identity-amber: #a26b09;
+  --identity-grey: #707783;
+  --identity-blush: #e22851;
+  --identity-peach: #c85111;
+  --identity-butter: #927212;
+  --identity-pistachio: #618029;
+  --identity-mint: #2c8657;
+  --identity-aqua: #2a837f;
+  --identity-sky: #1b78d1;
+  --identity-periwinkle: #5f6ae3;
+  --identity-lavender: #8c5bde;
+  --identity-lilac: #b646c3;
+  --identity-wine: #7A1F3A;
+  --identity-rust: #8E3A1E;
+  --identity-olive: #5F5E1F;
+  --identity-forest: #1E5B3B;
+  --identity-petrol: #0F5560;
+  --identity-navy: #1E3A70;
+  --identity-midnight: #1B2448;
+  --identity-indigo: #3A2F8F;
+  --identity-plum: #5B2A6A;
+  --identity-berry: #7B1F5E;
+  --identity-scarlet: #ed002d;
+  --identity-blaze: #ce4c00;
+  --identity-citrus: #857700;
+  --identity-lime: #568300;
+  --identity-volt: #00893c;
+  --identity-laser: #008294;
+  --identity-electric: #2e6bff;
+  --identity-ultraviolet: #8A3BFF;
+  --identity-magenta: #d10fcb;
+  --identity-hotpink: #e60079;
+  --identity-silver: #6b7789;
+  --identity-graphite: #4B4F58;
+  --identity-sand: #92713b;
+  --identity-taupe: #837467;
+  --identity-bronze: #a16a36;
+  --identity-copper: #b65e37;
+  --identity-brass: #8f7329;
+  --identity-ink: #0A0A0C;
+  --identity-tomato: #e42b21;
+  --identity-tangerine: #b5600c;
+  --identity-honey: #9a6f0b;
+  --identity-jade: #218659;
+  --identity-turquoise: #218570;
+  --identity-cobalt: #1175e0;
+  --identity-violet: #8655f6;
+  --identity-rose: #d8259b;
+  --identity-ash: #767676;
+  --identity-cream: #827653;
 }
 
 /* Shiki emits both palettes so cached blocks follow the nearest skin without
@@ -1541,6 +2321,27 @@
 }
 :is([data-skin="pulsatrix-light"], [data-skin="atelier"], [data-skin="lagoon"], [data-skin="linen"], [data-skin="daylight"], [data-skin="retro98"], [data-skin="meadow"]) .pulsatrix-mark-app {
   color: #03153c;
+}
+
+/* Chat copy. 15px stays; the line box goes from Tailwind's leading-relaxed
+   (1.625) to 1.75 so Arabic and Latin both get a little more air without
+   moving the surrounding chrome. Arabic and Hebrew use a local face when
+   the machine has one. Inter and the UI stack do not carry those glyphs,
+   and a generic family listed later would otherwise win. */
+@font-face {
+  font-family: "omb-chat";
+  src: local("Noto Naskh Arabic"), local("Noto Sans Arabic"), local("Geeza Pro"), local("SF Arabic");
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+@font-face {
+  font-family: "omb-chat";
+  src: local("Noto Sans Hebrew"), local("Arial Hebrew"), local("SF Hebrew");
+  unicode-range: U+0590-05FF, U+FB1D-FB4F;
+}
+.chat-text,
+.chat-md {
+  line-height: 1.75;
+  font-family: "omb-chat", var(--font-sans);
 }
 
 html,
@@ -3268,4 +4069,84 @@ button:disabled.bg-danger {
 @keyframes connect-apps-tile-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
+}
+
+/* Room speaker names. Each skin sets a tone of the bot's palette that clears
+   4.5:1 on the thread (--color-app). The class below only picks the token. */
+.bot-identity[data-bot-color="green"] { color: var(--identity-green); }
+.bot-identity[data-bot-color="blue"] { color: var(--identity-blue); }
+.bot-identity[data-bot-color="red"] { color: var(--identity-red); }
+.bot-identity[data-bot-color="orange"] { color: var(--identity-orange); }
+.bot-identity[data-bot-color="purple"] { color: var(--identity-purple); }
+.bot-identity[data-bot-color="cyan"] { color: var(--identity-cyan); }
+.bot-identity[data-bot-color="pink"] { color: var(--identity-pink); }
+.bot-identity[data-bot-color="yellow"] { color: var(--identity-yellow); }
+.bot-identity[data-bot-color="teal"] { color: var(--identity-teal); }
+.bot-identity[data-bot-color="coral"] { color: var(--identity-coral); }
+.bot-identity[data-bot-color="white"] { color: var(--identity-white); }
+.bot-identity[data-bot-color="black"] { color: var(--identity-black); }
+.bot-identity[data-bot-color="brown"] { color: var(--identity-brown); }
+.bot-identity[data-bot-color="amber"] { color: var(--identity-amber); }
+.bot-identity[data-bot-color="grey"] { color: var(--identity-grey); }
+.bot-identity[data-bot-color="blush"] { color: var(--identity-blush); }
+.bot-identity[data-bot-color="peach"] { color: var(--identity-peach); }
+.bot-identity[data-bot-color="butter"] { color: var(--identity-butter); }
+.bot-identity[data-bot-color="pistachio"] { color: var(--identity-pistachio); }
+.bot-identity[data-bot-color="mint"] { color: var(--identity-mint); }
+.bot-identity[data-bot-color="aqua"] { color: var(--identity-aqua); }
+.bot-identity[data-bot-color="sky"] { color: var(--identity-sky); }
+.bot-identity[data-bot-color="periwinkle"] { color: var(--identity-periwinkle); }
+.bot-identity[data-bot-color="lavender"] { color: var(--identity-lavender); }
+.bot-identity[data-bot-color="lilac"] { color: var(--identity-lilac); }
+.bot-identity[data-bot-color="wine"] { color: var(--identity-wine); }
+.bot-identity[data-bot-color="rust"] { color: var(--identity-rust); }
+.bot-identity[data-bot-color="olive"] { color: var(--identity-olive); }
+.bot-identity[data-bot-color="forest"] { color: var(--identity-forest); }
+.bot-identity[data-bot-color="petrol"] { color: var(--identity-petrol); }
+.bot-identity[data-bot-color="navy"] { color: var(--identity-navy); }
+.bot-identity[data-bot-color="midnight"] { color: var(--identity-midnight); }
+.bot-identity[data-bot-color="indigo"] { color: var(--identity-indigo); }
+.bot-identity[data-bot-color="plum"] { color: var(--identity-plum); }
+.bot-identity[data-bot-color="berry"] { color: var(--identity-berry); }
+.bot-identity[data-bot-color="scarlet"] { color: var(--identity-scarlet); }
+.bot-identity[data-bot-color="blaze"] { color: var(--identity-blaze); }
+.bot-identity[data-bot-color="citrus"] { color: var(--identity-citrus); }
+.bot-identity[data-bot-color="lime"] { color: var(--identity-lime); }
+.bot-identity[data-bot-color="volt"] { color: var(--identity-volt); }
+.bot-identity[data-bot-color="laser"] { color: var(--identity-laser); }
+.bot-identity[data-bot-color="electric"] { color: var(--identity-electric); }
+.bot-identity[data-bot-color="ultraviolet"] { color: var(--identity-ultraviolet); }
+.bot-identity[data-bot-color="magenta"] { color: var(--identity-magenta); }
+.bot-identity[data-bot-color="hotpink"] { color: var(--identity-hotpink); }
+.bot-identity[data-bot-color="silver"] { color: var(--identity-silver); }
+.bot-identity[data-bot-color="graphite"] { color: var(--identity-graphite); }
+.bot-identity[data-bot-color="sand"] { color: var(--identity-sand); }
+.bot-identity[data-bot-color="taupe"] { color: var(--identity-taupe); }
+.bot-identity[data-bot-color="bronze"] { color: var(--identity-bronze); }
+.bot-identity[data-bot-color="copper"] { color: var(--identity-copper); }
+.bot-identity[data-bot-color="brass"] { color: var(--identity-brass); }
+.bot-identity[data-bot-color="ink"] { color: var(--identity-ink); }
+.bot-identity[data-bot-color="tomato"] { color: var(--identity-tomato); }
+.bot-identity[data-bot-color="tangerine"] { color: var(--identity-tangerine); }
+.bot-identity[data-bot-color="honey"] { color: var(--identity-honey); }
+.bot-identity[data-bot-color="jade"] { color: var(--identity-jade); }
+.bot-identity[data-bot-color="turquoise"] { color: var(--identity-turquoise); }
+.bot-identity[data-bot-color="cobalt"] { color: var(--identity-cobalt); }
+.bot-identity[data-bot-color="violet"] { color: var(--identity-violet); }
+.bot-identity[data-bot-color="rose"] { color: var(--identity-rose); }
+.bot-identity[data-bot-color="ash"] { color: var(--identity-ash); }
+.bot-identity[data-bot-color="cream"] { color: var(--identity-cream); }
+
+/* A colored user bubble sets its own tokens inline. Mentions and selection
+   still have to clear white text: the chip keeps a little of the named bot's
+   color, and selection darkens the fill instead of washing it out. */
+.user-bubble-colored .mention-highlight {
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--mention-color) 22%, var(--color-inset));
+  text-decoration-color: var(--color-ink);
+}
+.user-bubble-colored::selection,
+.user-bubble-colored *::selection {
+  background-color: color-mix(in srgb, #000000 35%, var(--color-bubble-user));
+  color: #ffffff;
 }

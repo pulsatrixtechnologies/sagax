@@ -69,7 +69,9 @@ use an appropriate event/webhook workflow instead of a fake weekly schedule.
 - Existing catch-up policy remains: up to 12 hours late, one missed occurrence
   can be dispatched; older work receives a missed-run receipt. The next date
   advances without replaying every missed minute. Queued/running/waiting work
-  for the same cron routine does not accumulate overlapping copies.
+  for the same cron routine does not accumulate overlapping copies (a run is
+  waiting while teammates still owe it results on the job runtime,
+  docs/runtime-contract.md §9).
 - Existing one-time, daily/weekday and interval schedules are not migrated or
   reinterpreted. Team exports retain cron expressions and zones; imports remain
   paused until enabled. Older phone apps safely treat cron as a newer schedule;

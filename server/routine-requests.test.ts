@@ -147,6 +147,7 @@ describe("RoutineRequestService", () => {
     it.each<Partial<RoutineInput>>([
       { enabled: false }, { botId: "bot-b" }, { target: "room-goal", groupId: "room-a" },
       { runOn: "cloud" }, { continuity: true }, { timeoutMinutes: 10 }, { durationMinutes: 60 }, { overlap: "queue" },
+      { runOnStartup: true },
       { schedule: { type: "daily", time: "10:00", weekdays: [1, 3] } },
       { attachments: [{ id: "context", name: "Context", path: "/fixture/context.txt", kind: "file", size: 20 }] },
     ])("does not confuse different execution settings with a duplicate: %j", async (patch) => {
@@ -414,6 +415,35 @@ describe("RoutineRequestService", () => {
     });
     expect(result.state).toBe("applied");
     expect(routines.listRoutines().find((routine) => routine.name === "Morning brief")?.continuity).toBe(true);
+  });
+
+  it("carries run on startup from the proposal through the card to the created routine", async () => {
+    const { service, store, routines } = harness();
+    const plain = await service.propose({ botId: "bot-a", threadId: "thread-plain", proposal: createProposal() });
+    expect(plain.detail).not.toContain("On startup:");
+
+    const proposed = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal({ runOnStartup: true }) });
+    expect(proposed.detail).toContain("On startup: Also runs once each time Sagax starts");
+    expect(store.messagesFor("thread-a")[0]!.card!.routineRequest?.operation).toMatchObject({ action: "create", routine: { runOnStartup: true } });
+    expect(service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: proposed.requestId, behavior: "allow" }).state).toBe("applied");
+    const routine = routines.listRoutines().find((candidate) => candidate.name === "Morning brief")!;
+    expect(routine.runOnStartup).toBe(true);
+
+    const off = await service.propose({ botId: "bot-a", threadId: "thread-b", proposal: { action: "update", routineId: routine.id, changes: { runOnStartup: false } } });
+    expect(off.detail).toContain("On startup: Runs only on its schedule");
+    expect(service.resolve({ botId: "bot-a", threadId: "thread-b", requestId: off.requestId, behavior: "allow" }).state).toBe("applied");
+    expect(routines.listRoutines().find((candidate) => candidate.id === routine.id)?.runOnStartup).toBeUndefined();
+  });
+
+  it("refuses run on startup for a one-time routine", async () => {
+    const { service, routines } = harness();
+    await expect(service.propose({
+      botId: "bot-a", threadId: "thread-a",
+      proposal: createProposal({ runOnStartup: true, schedule: { type: "once", at: "2026-08-29T09:00:00Z" } }),
+    })).rejects.toThrow("Only a repeating routine");
+    const once = routines.create({ botId: "bot-a", name: "Once", prompt: "Once.", schedule: { type: "once", at: Date.parse("2026-08-29T09:00:00Z") } });
+    await expect(service.propose({ botId: "bot-a", threadId: "thread-a", proposal: { action: "update", routineId: once.id, changes: { runOnStartup: true } } }))
+      .rejects.toThrow("Only a repeating routine");
   });
 
   it("reviews and persists queue policy changes without losing them in tool normalization", async () => {
@@ -1977,6 +2007,21 @@ describe("a bot's own routine changes", () => {
     vi.spyOn(store, "patchMessage").mockImplementation(() => { throw new Error("receipt write failed"); });
     const run = await service.submit({ botId: "bot-a", threadId: "ask-thread", proposal: { action: "run_now", routineId: created.result!.resultId } });
     expect(run).toMatchObject({ state: "applied", appliedBy: "self", result: { settlementPending: true } });
+  });
+
+  it("undoes run on startup: an update switches it back off, a delete restores it", async () => {
+    const { service, routines } = own();
+    const submit = (proposal: RoutineProposalInput) => service.submit({ botId: "bot-a", threadId: "ask-thread", proposal });
+    const routineId = (await submit(createProposal())).result!.resultId;
+    const switchedOn = await submit({ action: "update", routineId, changes: { runOnStartup: true } });
+    expect(routines.listRoutines()[0]?.runOnStartup).toBe(true);
+    expect(undo(service, switchedOn.requestId)).toMatchObject({ state: "undone", action: "update" });
+    expect(routines.listRoutines()[0]?.runOnStartup).toBeUndefined();
+
+    const marked = (await submit(createProposal({ instructions: "Start with the app.", runOnStartup: true }))).result!.resultId;
+    const deleted = await submit({ action: "delete", routineId: marked });
+    expect(undo(service, deleted.requestId)).toMatchObject({ state: "undone", action: "delete" });
+    expect(routines.listRoutines().find((routine) => routine.prompt === "Start with the app.")?.runOnStartup).toBe(true);
   });
 
   it("undoes each kind of change once, and refuses a run or a stale change", async () => {

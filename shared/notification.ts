@@ -12,7 +12,9 @@ export type NotifyKind =
   /** A run failed, stalled or could not start and no Primary Bot was
    * there to take it: the person is the one who has to look. */
   | "incident"
-  | "takeover"
+  /** A bot asked the person to sign in to a website themselves
+   * (request_sign_in): it waits on their hands, at the place it works. */
+  | "sign-in"
   /** A delegated room request settled and the coordinator auto-resumed with
    * the results. The delegated turn and the resume are both internal, so
    * without this frame the parent conversation can sit in silence for the

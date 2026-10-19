@@ -20,6 +20,7 @@ import {
   clearBrowserSessionState,
   closeBrowserSession,
   ensureChrome,
+  inRunningBrowser,
   installAgentBrowserBinary,
   isMusl,
   pinnedBinaryPath,
@@ -79,8 +80,46 @@ describe("sizing the page of a launched browser", () => {
 
   it("leaves an attached or headed browser alone", async () => {
     expect(await setBrowserViewport("/engine", { ...env, AGENT_BROWSER_CDP: "http://127.0.0.1:9222" })).toBe(true);
+    expect(await setBrowserViewport("/engine", { ...env, AGENT_BROWSER_AUTO_CONNECT: "1" })).toBe(true);
     expect(await setBrowserViewport("/engine", { ...env, AGENT_BROWSER_HEADLESS: undefined })).toBe(true);
     expect(spawn).not.toHaveBeenCalled();
+  });
+});
+
+describe("asking a running browser", () => {
+  function engine(running: string[][], answer: unknown = { success: true, data: { cdpUrl: "ws://127.0.0.1:9/devtools/browser/x" } }) {
+    const home = mkdtempSync(join(tmpdir(), "omb-browser-running-"));
+    scratch.push(home);
+    vi.mocked(spawn).mockImplementation((_binary, args) => {
+      const child = Object.assign(new EventEmitter(), { stdout: new EventEmitter(), kill: () => true });
+      queueMicrotask(() => {
+        const sessions = args[0] === "session" ? running.shift() ?? [] : null;
+        child.stdout.emit("data", JSON.stringify(sessions ? { success: true, data: { sessions } } : answer));
+        child.emit("close", 0);
+      });
+      return child as ReturnType<typeof spawn>;
+    });
+    return { HOME: home, USERPROFILE: home, PATH: "", AGENT_BROWSER_SESSION: "work", AGENT_BROWSER_RESTORE: "omb-key", AGENT_BROWSER_HEADLESS: "1" };
+  }
+
+  it("never launches a stopped browser just to ask it something", async () => {
+    const env = engine([["other"]]);
+    expect(await inRunningBrowser("/engine", env, ["get", "cdp-url"])).toBeNull();
+    expect(vi.mocked(spawn).mock.calls.map((call) => call[1])).toEqual([["session", "list", "--json"]]);
+    // The inventory runs without the session's launch flags.
+    expect(vi.mocked(spawn).mock.calls[0]?.[2]?.env).not.toHaveProperty("AGENT_BROWSER_HEADLESS");
+  });
+
+  it("asks a running one with the session's own launch environment", async () => {
+    const env = engine([["work"]]);
+    expect(await inRunningBrowser("/engine", env, ["get", "cdp-url"])).toEqual({ cdpUrl: "ws://127.0.0.1:9/devtools/browser/x" });
+    expect(vi.mocked(spawn).mock.calls[1]?.[1]).toEqual(["get", "cdp-url", "--json", "--no-webmcp"]);
+    expect(vi.mocked(spawn).mock.calls[1]?.[2]?.env).toMatchObject({ AGENT_BROWSER_SESSION: "work", AGENT_BROWSER_RESTORE: "omb-key", AGENT_BROWSER_HEADLESS: "1" });
+  });
+
+  it("treats a browser that closed while being asked as stopped, and any other failure as an error", async () => {
+    expect(await inRunningBrowser("/engine", engine([["work"], []], { success: false }), ["state", "save", "/x"])).toBeNull();
+    await expect(inRunningBrowser("/engine", engine([["work"], ["work"]], { success: false }), ["state", "save", "/x"])).rejects.toThrow("did not answer");
   });
 });
 
@@ -639,24 +678,38 @@ describe("what a bot gets", () => {
     }
   });
 
-  it("forwards AGENT_BROWSER_CDP only when the caller passes attachCdpUrl explicitly, never from the ambient process environment", () => {
-    // Unset: byte-identical to every other call in this file that omits attachCdpUrl.
+  it("attaches to Chrome only when the caller passes attach explicitly, never from the ambient process environment", () => {
+    // Unset: byte-identical to every other call in this file that omits attach.
     const withoutAttach = agentBrowserIntegration({ binaryPath: "/x/agent-browser", session: "bot-1", encryptionKey: "session-key", env: { PATH: "/usr/bin" } });
     expect(withoutAttach.env).not.toHaveProperty("AGENT_BROWSER_CDP");
+    expect(withoutAttach.env).not.toHaveProperty("AGENT_BROWSER_AUTO_CONNECT");
     // Ambient process env must not leak in either: the source env passed here plays
     // the same role vi.stubEnv plays in server/browser-live.test.ts's guarantee test.
     const ambientAttempt = agentBrowserIntegration({
       binaryPath: "/x/agent-browser", session: "bot-1", encryptionKey: "session-key",
-      env: { PATH: "/usr/bin", AGENT_BROWSER_CDP: "https://unrelated-browser.invalid" },
+      env: { PATH: "/usr/bin", AGENT_BROWSER_CDP: "https://unrelated-browser.invalid", AGENT_BROWSER_AUTO_CONNECT: "1" },
     });
     expect(ambientAttempt.env).not.toHaveProperty("AGENT_BROWSER_CDP");
+    expect(ambientAttempt.env).not.toHaveProperty("AGENT_BROWSER_AUTO_CONNECT");
     // Set: only the explicit, caller-supplied config value reaches the curated env.
     const attached = agentBrowserIntegration({
       binaryPath: "/x/agent-browser", session: "bot-1", encryptionKey: "session-key",
-      env: { PATH: "/usr/bin" }, attachCdpUrl: "http://127.0.0.1:9333",
+      env: { PATH: "/usr/bin" }, attach: { cdpUrl: "http://127.0.0.1:9333" },
     });
     expect(attached.env.AGENT_BROWSER_CDP).toBe("http://127.0.0.1:9333");
-    expect(attached.env).toMatchObject({ AGENT_BROWSER_SESSION: "bot-1", AGENT_BROWSER_HEADLESS: "1" });
+    expect(attached.env).not.toHaveProperty("AGENT_BROWSER_AUTO_CONNECT");
+  });
+
+  it("My Chrome finds the person's running Chrome, and never restores into it or saves its cookies", () => {
+    const spec = agentBrowserIntegration({ binaryPath: "/x/agent-browser", session: "work", encryptionKey: "session-key", env: { PATH: "/usr/bin" }, attach: {} });
+    expect(spec.args).toEqual(["mcp", "--tools", "core", "--no-webmcp"]);
+    expect(spec.env).toMatchObject({ AGENT_BROWSER_SESSION: "work", AGENT_BROWSER_AUTO_CONNECT: "1", AGENT_BROWSER_RESTORE_SAVE: "never", AGENT_BROWSER_NO_WEBMCP: "1" });
+    // Restoring would copy saved logins into the person's Chrome; a headless
+    // pin means nothing to a browser OMB did not launch.
+    for (const name of ["AGENT_BROWSER_RESTORE", "AGENT_BROWSER_CDP", "AGENT_BROWSER_HEADLESS", "AGENT_BROWSER_HEADED"]) expect(spec.env).not.toHaveProperty(name);
+    // The built-in browser of the same session restores and saves as before.
+    expect(agentBrowserIntegration({ binaryPath: "/x/agent-browser", session: "work", encryptionKey: "session-key", env: { PATH: "/usr/bin" } }).env)
+      .toMatchObject({ AGENT_BROWSER_RESTORE: browserRestoreKey("work"), AGENT_BROWSER_RESTORE_SAVE: "auto", AGENT_BROWSER_HEADLESS: "1" });
   });
 
   it("mounts agent-browser's MCP server with the core tools, an isolated auto-restored session, and WebMCP off", () => {

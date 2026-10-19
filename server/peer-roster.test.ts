@@ -251,8 +251,10 @@ describe("peerRosterSystemPrompt", () => {
 
     expect(prompt).toContain("- Quill — Writer [id: writer]");
     expect(prompt).toContain("- Patch — Engineer [id: coder]");
-    expect(prompt).toContain("delegate_bot with a teammate's bot id");
-    expect(prompt).toContain("ask_bot");
+    expect(prompt).toContain("coordinate_bots with a teammate's bot id");
+    expect(prompt).toContain("consult: true");
+    // one surface: the legacy tool names are not what a bot is taught
+    expect(prompt).not.toMatch(/\b(delegate_bot|ask_bot|send_to_bot|check_delegation|wait_delegation)\b/);
     // the authority the Chief has and an ordinary bot must not be handed
     expect(prompt).toContain("peers, not staff");
     expect(prompt).not.toContain("create_bot");
@@ -328,8 +330,9 @@ describe("roomPeerRosterSystemPrompt", () => {
     const prompt = roomPeerRosterSystemPrompt([fleet[1]!, fleet[2]!]);
     expect(prompt).toContain("An @mention only reaches the members of this room");
     expect(prompt).toContain("NOT in this room");
-    expect(prompt).toContain("ask_bot");
-    expect(prompt).toContain("delegate_bot");
+    expect(prompt).toContain("coordinate_bots");
+    expect(prompt).toContain("consult: true");
+    expect(prompt).not.toMatch(/\b(delegate_bot|ask_bot)\b/);
     expect(prompt).toContain("list_bots");
     expect(prompt).toContain("- Quill — Writer [id: writer]");
     expect(prompt).toContain("- Patch — Engineer [id: coder]");
@@ -384,8 +387,8 @@ describe("teammate availability stays out of the cached prompt half", () => {
       teamAvailabilityPart(members),
     ]);
     return {
-      peer: build(peerRosterSystemPrompt(peers, true), peers),
-      chief: build(chiefOfStaffSystemPrompt("chief", bots, true, true), chiefTeam),
+      peer: build(peerRosterSystemPrompt(peers), peers),
+      chief: build(chiefOfStaffSystemPrompt("chief", bots, true), chiefTeam),
     };
   };
 

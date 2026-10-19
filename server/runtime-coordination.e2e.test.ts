@@ -95,7 +95,9 @@ async function scenario(test: (f: any) => Promise<void>) {
       return sent.body;
     };
     const db = () => readRuntimeDb(dataDir);
-    const roots = () => db().assignments.filter((row) => !row.parentId);
+    // The Chief's own roots: every person's turn is a root now, a teammate's
+    // standing turn (S4's hold) included.
+    const roots = () => db().assignments.filter((row) => !row.parentId && row.assignee?.botId === clive.id);
     const children = () => db().assignments.filter((row) => row.parentId);
     const eventsOf = (id: string) => db().events.filter((event) => event.assignmentId === id);
     /** Every scripted turn a fake Claude bot ran, in order. */
@@ -261,6 +263,48 @@ it("S2 parks a teammate on NEEDS INPUT, carries the person's answer into her nex
   expect(f.eventsOf(parked.id).map((event: any) => event.kind)).toEqual(expect.arrayContaining(["parked", "answered", "settled", "reported"]));
   expect((await f.messages(job)).filter((message: any) => message.tool?.name === "Mira replied")).toHaveLength(1);
 }), hostTimeout(60_000));
+
+// S2b. A question parked across a restart is shown once: the restart parks
+// it again (contract §5) but posts no second chip and marks nothing unread
+// the person already read. While it waits, list_threads and close_thread
+// say the thread waits on the person, not that it is queued or running.
+it("S2b keeps one question chip across a restart and names the parked thread as waiting on the person", () => scenario(async (f) => {
+  const brief = "S2B-BRIEF: tag the release in the repository and report the tag.";
+  f.script(f.clive.id,
+    { key: "C0", match: ["S2B-JOB"], steps: [{ arguments: { bot_ids: [f.mira.id], message: brief } }], reply: "C0: Mira is tagging it." });
+  f.script(f.mira.id, { key: "M1", match: ["S2B-BRIEF"], reply: "I can tag it once I know where.\nNEEDS INPUT: which repository?" });
+  const job = f.clive.activeTaskId;
+  await f.say(f.clive.id, job, "S2B-JOB: have Mira tag the release and own the result.");
+  await expect.poll(() => f.children()[0]?.status, { timeout: 30_000 }).toBe("needs_input");
+  const parked = f.children()[0];
+  const work = parked.assignee.destination.threadId as string;
+  await expect.poll(async () => (await f.chips(job, "needs your input")).length, { timeout: 15_000 }).toBe(1);
+
+  // The person reads both conversations, then the app restarts.
+  const unread = async (botId: string, threadId: string) => ((await f.api("GET", "/api/bots?messages=0")).body.bots as any[])
+    .find((bot) => bot.id === botId)?.tasks.find((task: any) => task.threadId === threadId)?.unread === true;
+  expect((await f.api("POST", `/api/bots/${f.clive.id}/read`, { threadId: job })).status).toBe(200);
+  expect((await f.api("POST", `/api/bots/${f.mira.id}/read`, { threadId: work })).status).toBe(200);
+  await f.restart("SIGTERM");
+  await expect.poll(() => f.eventsOf(parked.id).some((event: any) => event.kind === "restart_reconciled"), { timeout: 15_000 }).toBe(true);
+  await f.settle(500);
+  expect(f.children()[0]).toMatchObject({ status: "needs_input", question: expect.stringContaining("which repository?") });
+  expect(await f.chips(job, "needs your input")).toHaveLength(1);
+  expect(await unread(f.clive.id, job)).toBe(false);
+  expect(await unread(f.mira.id, work)).toBe(false);
+
+  // Clive, asked in a conversation of its own, reads the parked thread's state.
+  const check = (await f.api("POST", `/api/bots/${f.clive.id}/tasks`, { title: "Check on Mira" })).body.task.threadId as string;
+  f.script(f.clive.id, { key: "C1", match: ["S2B-CHECK"], reply: "C1: checked.", steps: [
+    { tool: "list_threads", arguments: {} },
+    { tool: "close_thread", arguments: { thread_id: work }, expectError: true },
+  ] });
+  await f.say(f.clive.id, check, "S2B-CHECK: how is Mira's tagging going?");
+  await expect.poll(() => f.turn("C1")?.evidence?.length ?? 0, { timeout: 30_000 }).toBeGreaterThanOrEqual(4);
+  const [listed, refused] = f.turn("C1").evidence.slice(-2).map((entry: any) => entry.response.result.content[0].text as string);
+  expect(listed).toMatch(new RegExp(`\\(on @Mira, waiting on the person\\) \\[thread id: ${work}\\]`));
+  expect(refused).toContain("waiting on the person's answer");
+}), hostTimeout(90_000));
 
 // S3. A quit or update (SIGTERM) cuts Mira's turn. After the restart she
 // runs again exactly once, told to check what she already did; her record

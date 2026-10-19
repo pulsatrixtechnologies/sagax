@@ -283,83 +283,144 @@ posixOnly("mid-turn steering e2e", () => {
   }, 40_000);
 
   it("keeps two queued attachment messages as two native images in one follow-up turn", async () => {
-    // The opener runs on the gated slow instance and cannot settle until the
-    // test drops the gate below, after both sends are queued. On a timed turn
-    // the opener could end before the first send (which then rightly starts
-    // its own turn) or between the two (the first image then rightly runs
-    // alone, and the second waits for a turn of its own).
+    // Claude takes pictures mid-turn, so attachment words for its BUSY
+    // thread are steered in (next test). These wait for a free slot instead:
+    // the bot has one, held by the opener on its main task. The opener runs
+    // on the gated slow instance and cannot settle until the test drops the
+    // gate below, after both sends are queued. On a timed turn the opener
+    // could end before the first send (which then rightly starts its own
+    // turn) or between the two (the first image then rightly runs alone,
+    // and the second waits for a turn of its own).
+    rmSync(steerFinishGate, { force: true });
+    const previousLimit = (await api("GET", "/api/config")).body.threads.maxConcurrentPerBot as number;
+    await api("PATCH", "/api/config", { threads: { maxConcurrentPerBot: 1 } });
+    try {
+      const created = (await api("POST", "/api/bots")).body.bot;
+      await api("PATCH", `/api/bots/${created.id}`, {
+        modelSelection: { instanceId: "claudeSteer", model: "claude-fake" },
+      });
+      const waiting = (await api("POST", `/api/bots/${created.id}/tasks`, { title: "Images" })).body.task.threadId as string;
+      const waitingMessages = async () =>
+        (await api("GET", `/api/threads/${waiting}/messages?limit=20`)).body.messages as any[];
+      expect((await api("POST", `/api/bots/${created.id}/messages`, { threadId: created.threadId, text: "first image task" })).status)
+        .toBe(202);
+      const openerMessages = async () =>
+        (await api("GET", `/api/threads/${created.threadId}/messages?limit=20`)).body.messages as any[];
+      await waitFor(
+        async () => (await openerMessages()).some((message: any) => message.kind === "activity"),
+        "the image queue tool chip",
+      );
+
+      const attachments = join(home, ".sagax", "attachments");
+      mkdirSync(attachments, { recursive: true });
+      const firstImagePath = join(attachments, "123e4567-e89b-42d3-a456-426614174000.png");
+      const secondImagePath = join(attachments, "123e4567-e89b-42d3-a456-426614174001.png");
+      writeFileSync(firstImagePath, "first png");
+      writeFileSync(secondImagePath, "second png");
+      const firstAttachedText = `look at this\n\n<attached-image path="${firstImagePath}" name="first.png" />`;
+      const secondAttachedText = `and this\n\n<attached-image path="${secondImagePath}" name="second.png" />`;
+      try {
+        const firstReceipt = await api("POST", `/api/bots/${created.id}/messages`, { threadId: waiting, text: firstAttachedText });
+        const secondReceipt = await api("POST", `/api/bots/${created.id}/messages`, { threadId: waiting, text: secondAttachedText });
+
+        expect(firstReceipt.status).toBe(202);
+        expect(firstReceipt.body).toMatchObject({ ok: true, queued: true, reason: "capacity" });
+        expect(firstReceipt.body.steered).toBeUndefined();
+        expect(secondReceipt.status).toBe(202);
+        expect(secondReceipt.body).toMatchObject({ ok: true, queued: true, reason: "capacity" });
+        expect(secondReceipt.body.steered).toBeUndefined();
+        // still held off the transcript: the opener is still running
+        expect(
+          (await waitingMessages()).some(
+            (message: any) => message.text === firstAttachedText || message.text === secondAttachedText,
+          ),
+        ).toBe(false);
+      } finally {
+        writeFileSync(steerFinishGate, "finish");
+      }
+
+      await waitFor(
+        async () => {
+          const messages = await waitingMessages();
+          return [firstAttachedText, secondAttachedText].every((text) =>
+            messages.some((message: any) => message.text === text),
+          );
+        },
+        "both attached messages to drain",
+      );
+      await waitFor(
+        async () => (await getBot(created.id)).tasks.every((task: any) => !task.busy),
+        "the attached follow-up to settle",
+      );
+
+      const nativeRows = readFileSync(
+        join(home, ".sagax", "native", `${waiting}.ndjson`),
+        "utf8",
+      )
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      const followUp = nativeRows
+        .filter((row) => row.dir === "out" && row.source === "claude.sdk.message")
+        .at(-1)?.msg;
+      expect(followUp.message.content.map((block: any) => block.type === "text" ? { ...block, text: withoutTurnClock(block.text) } : block)).toEqual([
+        {
+          type: "image",
+          source: { type: "base64", media_type: "image/png", data: "[image data: 12 base64 chars]" },
+        },
+        {
+          type: "image",
+          source: { type: "base64", media_type: "image/png", data: "[image data: 16 base64 chars]" },
+        },
+        { type: "text", text: "look at this\n\n\n\nand this\n\n" },
+      ]);
+    } finally {
+      await api("PATCH", "/api/config", { threads: { maxConcurrentPerBot: previousLimit } });
+    }
+  }, 40_000);
+
+  it("an attachment sent during a Claude turn is steered into it as native images", async () => {
     rmSync(steerFinishGate, { force: true });
     const created = (await api("POST", "/api/bots")).body.bot;
-    await api("PATCH", `/api/bots/${created.id}`, {
-      modelSelection: { instanceId: "claudeSteer", model: "claude-fake" },
-    });
-    expect((await api("POST", `/api/bots/${created.id}/messages`, { text: "first image task" })).status)
-      .toBe(202);
-    await waitFor(async () => (await getBot(created.id)).busy === true, "the image queue turn to start");
-    await waitFor(
-      async () => (await getBot(created.id)).messages.some((message: any) => message.kind === "activity"),
-      "the image queue tool chip",
-    );
+    await api("PATCH", `/api/bots/${created.id}`, { modelSelection: { instanceId: "claudeSteer", model: "claude-fake" } });
+
+    expect((await api("POST", `/api/bots/${created.id}/messages`, { text: "first" })).status).toBe(202);
+    await waitFor(async () => (await getBot(created.id)).busy === true, "the turn to start");
+    await waitFor(async () => (await getBot(created.id)).messages.some((m: any) => m.kind === "activity"), "the tool chip");
 
     const attachments = join(home, ".sagax", "attachments");
     mkdirSync(attachments, { recursive: true });
-    const firstImagePath = join(attachments, "123e4567-e89b-42d3-a456-426614174000.png");
-    const secondImagePath = join(attachments, "123e4567-e89b-42d3-a456-426614174001.png");
-    writeFileSync(firstImagePath, "first png");
-    writeFileSync(secondImagePath, "second png");
-    const firstAttachedText = `look at this\n\n<attached-image path="${firstImagePath}" name="first.png" />`;
-    const secondAttachedText = `and this\n\n<attached-image path="${secondImagePath}" name="second.png" />`;
+    const imagePath = join(attachments, "123e4567-e89b-42d3-a456-426614174006.png");
+    writeFileSync(imagePath, "steered png");
+    const imageText = `and look at this\n\n<attached-image path="${imagePath}" name="shot.png" />`;
+    let second: Awaited<ReturnType<typeof api>>;
     try {
-      const firstReceipt = await api("POST", `/api/bots/${created.id}/messages`, { text: firstAttachedText });
-      const secondReceipt = await api("POST", `/api/bots/${created.id}/messages`, { text: secondAttachedText });
-
-      expect(firstReceipt.status).toBe(202);
-      expect(firstReceipt.body).toMatchObject({ ok: true, queued: true });
-      expect(firstReceipt.body.steered).toBeUndefined();
-      expect(secondReceipt.status).toBe(202);
-      expect(secondReceipt.body).toMatchObject({ ok: true, queued: true });
-      expect(secondReceipt.body.steered).toBeUndefined();
-      // still held off the transcript: the opener is still running
-      expect(
-        (await getBot(created.id)).messages.some(
-          (message: any) => message.text === firstAttachedText || message.text === secondAttachedText,
-        ),
-      ).toBe(false);
+      second = await api("POST", `/api/bots/${created.id}/messages`, { text: imageText });
     } finally {
       writeFileSync(steerFinishGate, "finish");
     }
+    expect(second.status).toBe(202);
+    expect(second.body.steered).toBe(true);
 
-    await waitFor(
-      async () => {
-        const messages = (await getBot(created.id)).messages;
-        return [firstAttachedText, secondAttachedText].every((text) =>
-          messages.some((message: any) => message.text === text),
-        );
-      },
-      "both attached messages to drain",
-    );
-    await waitFor(async () => (await getBot(created.id)).busy === false, "the attached follow-up to settle");
+    await waitFor(async () => (await getBot(created.id)).busy === false, "the turn to settle");
+    const bot = await getBot(created.id);
+    // the transcript keeps the attachment line as sent, marked steered
+    const steered = bot.messages.find((m: any) => m.text === imageText);
+    expect(steered.steered).toBe(true);
+    // one turn whose reply took the picture in with the words
+    const replies = bot.messages.filter((m: any) => m.role === "bot" && m.kind === "text" && m.text.startsWith("reply to:"));
+    expect(replies).toHaveLength(1);
+    expect(withoutTurnClock(replies[0].text)).toBe("reply to: first + steered: [image] and look at this");
 
-    const nativeRows = readFileSync(
-      join(home, ".sagax", "native", `${created.threadId}.ndjson`),
-      "utf8",
-    )
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line));
-    const followUp = nativeRows
-      .filter((row) => row.dir === "out" && row.source === "claude.sdk.message")
-      .at(-1)?.msg;
-    expect(followUp.message.content.map((block: any) => block.type === "text" ? { ...block, text: withoutTurnClock(block.text) } : block)).toEqual([
-      {
-        type: "image",
-        source: { type: "base64", media_type: "image/png", data: "[image data: 12 base64 chars]" },
-      },
-      {
-        type: "image",
-        source: { type: "base64", media_type: "image/png", data: "[image data: 16 base64 chars]" },
-      },
-      { type: "text", text: "look at this\n\n\n\nand this\n\n" },
+    const nativeRows = readFileSync(join(home, ".sagax", "native", `${created.threadId}.ndjson`), "utf8")
+      .trim().split("\n").map((line) => JSON.parse(line));
+    const steerRow = nativeRows.filter((row) =>
+      row.dir === "out" && row.source === "claude.sdk.message" && Array.isArray(row.msg?.message?.content),
+    ).at(-1)?.msg;
+    expect(steerRow.uuid).toEqual(expect.any(String));
+    expect(steerRow.message.content).toEqual([
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "[image data: 16 base64 chars]" } },
+      { type: "text", text: "and look at this\n\n" },
     ]);
   }, 40_000);
 
@@ -810,12 +871,13 @@ posixOnly("mid-turn steering e2e", () => {
     const queued = await person("POST", `/api/groups/${room.id}/messages`, { text: imageText });
     expect(queued.body).toMatchObject({ ok: true, queued: true });
 
-    // the fold has no image side channel: Steer leaves the words queued
+    // this engine takes no pictures mid-turn: Steer leaves the words queued
+    // and says why, so the client can tell the person
     const steered = await api("POST", `/api/groups/${room.id}/queue/${queued.body.queueId}/steer`, {
       threadId: room.threadId,
     });
     expect(steered.status).toBe(200);
-    expect(steered.body).toMatchObject({ ok: true, queued: true });
+    expect(steered.body).toMatchObject({ ok: true, queued: true, blockedBy: "images" });
     expect(steered.body.steered).toBeUndefined();
     expect((await getGroup())?.working).toBe(true);
     expect((await getGroup())?.messages.some((m: any) => m.text === imageText)).toBe(false);
@@ -832,5 +894,99 @@ posixOnly("mid-turn steering e2e", () => {
     const nativeRows = readFileSync(join(home, ".sagax", "native", `${room.threadId}.ndjson`), "utf8")
       .trim().split("\n").map((line) => JSON.parse(line));
     expect(nativeRows.filter((row) => row.dir === "out" && row.msg?.method === "turn/steer")).toHaveLength(0);
+  }, 40_000);
+
+  it("a room steer folds a queued attachment into the running Claude turn as native images", async () => {
+    rmSync(steerFinishGate, { force: true });
+    const created = (await api("POST", "/api/bots")).body.bot;
+    await api("PATCH", `/api/bots/${created.id}`, { modelSelection: { instanceId: "claudeSteer", model: "claude-fake" } });
+    const room = (await api("POST", "/api/groups", {
+      name: "Image steer room",
+      memberIds: [created.id],
+      setup: { bulletin: "", defaultResponder: { kind: "member", botId: created.id } },
+    })).body.group;
+    const getGroup = async () =>
+      (await api("GET", "/api/bots?messages=30")).body.groups.find((g: any) => g.id === room.id);
+
+    try {
+      expect((await api("POST", `/api/groups/${room.id}/messages`, { text: "start the room" })).status).toBe(202);
+      await waitFor(async () => (await getGroup())?.busyBotId === created.id, "the room turn to start");
+      await waitFor(async () => (await getGroup())?.messages.some((m: any) => m.kind === "activity"), "the room tool chip");
+
+      const attachments = join(home, ".sagax", "attachments");
+      mkdirSync(attachments, { recursive: true });
+      const imagePath = join(attachments, "123e4567-e89b-42d3-a456-426614174007.png");
+      writeFileSync(imagePath, "room steer png");
+      const imageText = `what about this one\n\n<attached-image path="${imagePath}" name="room.png" />`;
+      const person = await asPairedPerson();
+      const queued = await person("POST", `/api/groups/${room.id}/messages`, { text: imageText });
+      expect(queued.body).toMatchObject({ ok: true, queued: true });
+
+      const steered = await api("POST", `/api/groups/${room.id}/queue/${queued.body.queueId}/steer`, {
+        threadId: room.threadId,
+      });
+      expect(steered.status).toBe(200);
+      expect(steered.body).toMatchObject({ ok: true, steered: true });
+      expect(steered.body.queueIds).toEqual([queued.body.queueId]);
+      expect(steered.body.blockedBy).toBeUndefined();
+      const folded = (await getGroup())?.messages.find((m: any) => m.text === imageText);
+      expect(folded?.steered).toBe(true);
+      expect(folded?.sender).toEqual(PAIRED);
+    } finally {
+      writeFileSync(steerFinishGate, "finish");
+    }
+    await waitFor(async () => (await getGroup())?.working === false, "the steered room turn to settle");
+    const replies = (await getGroup())?.messages.filter((m: any) => m.role === "bot" && m.kind === "text" && m.text?.startsWith("reply to:"));
+    expect(replies).toHaveLength(1);
+    expect(replies[0].text).toContain("+ steered: [image] what about this one");
+
+    const nativeRows = readFileSync(join(home, ".sagax", "native", `${room.threadId}.ndjson`), "utf8")
+      .trim().split("\n").map((line) => JSON.parse(line));
+    const steerRow = nativeRows.filter((row) =>
+      row.dir === "out" && row.source === "claude.sdk.message" && Array.isArray(row.msg?.message?.content),
+    ).at(-1)?.msg;
+    expect(steerRow.uuid).toEqual(expect.any(String));
+    expect(steerRow.message.content).toEqual([
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "[image data: 20 base64 chars]" } },
+      { type: "text", text: "what about this one\n\n" },
+    ]);
+  }, 40_000);
+
+  it("the queue steer endpoint keeps a codex attachment queued and says why", async () => {
+    const created = (await api("POST", "/api/bots")).body.bot;
+    const instances = (await api("GET", "/api/instances")).body.instances;
+    const codexInstance = instances.find((i: any) => i.instanceId === "codex");
+    expect(codexInstance.capabilities.queueing).toBe(true);
+    await api("PATCH", `/api/bots/${created.id}`, { modelSelection: { instanceId: "codex", model: codexInstance.models.default } });
+
+    expect((await api("POST", `/api/bots/${created.id}/messages`, { text: "first codex turn" })).status).toBe(202);
+    await waitFor(async () => (await getBot(created.id)).busy === true, "the codex turn to start");
+    await waitFor(async () => (await getBot(created.id)).messages.some((m: any) => m.card), "the codex question card");
+
+    const attachments = join(home, ".sagax", "attachments");
+    mkdirSync(attachments, { recursive: true });
+    const imagePath = join(attachments, "123e4567-e89b-42d3-a456-426614174008.png");
+    writeFileSync(imagePath, "codex png");
+    const imageText = `see this\n\n<attached-image path="${imagePath}" name="codex.png" />`;
+    // a live send cannot carry the picture into this engine's turn: it queues
+    const queued = await api("POST", `/api/bots/${created.id}/messages`, { text: imageText });
+    expect(queued.status).toBe(202);
+    expect(queued.body).toMatchObject({ ok: true, queued: true });
+
+    const still = await api("POST", `/api/bots/${created.id}/queue/${queued.body.queueId}/steer`, {
+      threadId: created.threadId,
+    });
+    expect(still.status).toBe(200);
+    expect(still.body).toMatchObject({ ok: true, queued: true, blockedBy: "images" });
+    expect(still.body.steered).toBeUndefined();
+    expect((await getBot(created.id)).busy).toBe(true);
+    expect((await getBot(created.id)).messages.some((m: any) => m.text === imageText)).toBe(false);
+    const nativeRows = readFileSync(join(home, ".sagax", "native", `${created.threadId}.ndjson`), "utf8")
+      .trim().split("\n").map((line) => JSON.parse(line));
+    expect(nativeRows.filter((row) => row.dir === "out" && row.msg?.method === "turn/steer")).toHaveLength(0);
+
+    expect((await api("DELETE", `/api/bots/${created.id}/queue/${queued.body.queueId}`, { threadId: created.threadId })).status).toBe(200);
+    await api("POST", `/api/bots/${created.id}/interrupt`);
+    await waitFor(async () => (await getBot(created.id)).busy === false, "the codex turn to settle");
   }, 40_000);
 });

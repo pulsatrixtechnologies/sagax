@@ -498,6 +498,33 @@ export function endMemoryTurn(threadId: string): MemoryJournalEntry[] {
   return rows;
 }
 
+/** A memory write the harness makes for a bot right after one of its turns
+ * settled — the daily-log line a finished turn leaves (server/recent-work.ts).
+ * It lands after that turn's boundary diff, so without a row of its own the
+ * next turn's start would take it for an edit made outside the app and
+ * credit the person. It records what the turn did, so it is journaled as the
+ * turn's: actor "bot", via "turn", on the turn's thread (a room's line names
+ * the room). Never throws for the journal's sake: the write's own result or
+ * error is what the caller gets. */
+export function journalTurnWrite<T>(botId: string, path: string, threadId: string, write: () => T): T {
+  let before: string | null | undefined;
+  try {
+    const doc = readMemoryDoc(botId, path);
+    before = doc.exists ? doc.text : null;
+  } catch (error) {
+    console.error(`memory-journal: could not read ${path} for ${botId}:`, error instanceof Error ? error.message : error);
+  }
+  const result = write();
+  if (before === undefined) return result;
+  try {
+    const after = readMemoryDoc(botId, path);
+    if (after.exists) recordMemoryChange(botId, { path, actor: "bot", via: "turn", threadId, before, after: after.text });
+  } catch (error) {
+    console.error(`memory-journal: could not record ${path} for ${botId}:`, error instanceof Error ? error.message : error);
+  }
+  return result;
+}
+
 /** Test seam: forget every baseline and in-flight turn. */
 export function resetMemoryJournalState(): void {
   baselines.clear();

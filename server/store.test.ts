@@ -1279,6 +1279,34 @@ describe("Store", () => {
     );
   });
 
+  it("promotes task-only provider tool grants to the bot default", () => {
+    const store = new Store(selection);
+    const bot = store.createBot();
+    const first = store.activeTask(bot.id)!;
+    const second = store.createTask(bot.id)!;
+    store.patchTask(bot.id, first.threadId, {
+      alwaysAllow: ["provider-tool:claude:linear:list_issues:config-one", "Bash:git status"],
+    });
+    store.patchTask(bot.id, second.threadId, {
+      alwaysAllow: ["provider-tool:claude:linear:list_comments:config-one"],
+    });
+
+    const reloaded = new Store(selection);
+    expect(reloaded.bot(bot.id)?.alwaysAllow).toEqual([
+      "provider-tool:claude:linear:list_comments:config-one",
+      "provider-tool:claude:linear:list_issues:config-one",
+    ]);
+    expect(reloaded.createTask(bot.id)?.alwaysAllow).toEqual([
+      "provider-tool:claude:linear:list_comments:config-one",
+      "provider-tool:claude:linear:list_issues:config-one",
+    ]);
+
+    const persisted: BotRecord[] = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
+    expect(persisted.find((candidate) => candidate.id === bot.id)?.alwaysAllow).toEqual(
+      reloaded.bot(bot.id)?.alwaysAllow,
+    );
+  });
+
   it("persists a bot's effort level across a restart, defaulting to unset", () => {
     const store = new Store(selection);
     const bot = store.createBot();

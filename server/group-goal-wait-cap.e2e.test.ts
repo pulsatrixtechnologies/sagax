@@ -271,6 +271,4 @@ describe("goal wait cap and transient retry", () => {
     expect(state.bots.find((bot: { id: string }) => bot.id === stuck.id)?.busy).toBe(true);
     expect((await api("POST", `/api/bots/${stuck.id}/interrupt`)).status).toBe(200);
   });
-
-  it.todo("parks on a busy worker and leaves the room usable for chat while it waits (park-and-release)");
 });

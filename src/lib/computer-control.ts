@@ -1,8 +1,25 @@
-export type ComputerControlAction = "take" | "release" | "dismiss-help";
+import type { ComputerHelpRef } from "../../shared/wire";
+
+export type ComputerControlAction = "take" | "release";
 
 export interface ComputerControlSnapshot {
   held: boolean;
   helpReason: string | null;
+  /** The sign-in card the bot's open plea stands for. */
+  help?: ComputerHelpRef | null;
+}
+
+const HELP_PLACES = new Set(["browser", "local", "vm", "cloud"]);
+
+/** A plea's card reference from the wire, or null for anything malformed:
+ * the panel only ever settles a card it can name exactly. */
+export function parseComputerHelp(value: unknown): ComputerHelpRef | null {
+  const ref = value as Partial<Record<keyof ComputerHelpRef, unknown>> | null;
+  if (!ref || typeof ref !== "object") return null;
+  const { botId, threadId, messageId, site, place } = ref;
+  return typeof botId === "string" && typeof threadId === "string" && typeof messageId === "string" &&
+    typeof site === "string" && typeof place === "string" && HELP_PLACES.has(place)
+    ? { botId, threadId, messageId, site, place: place as ComputerHelpRef["place"] } : null;
 }
 
 export type BrowserControlTransitionFailure =
@@ -58,7 +75,6 @@ export async function transitionComputerControlLease<
   setNativeBrowserControl: (held: boolean) => Promise<boolean>;
 }): Promise<Snapshot> {
   const { action, syncNativeBrowser, requestControl, setNativeBrowserControl } = input;
-  if (action === "dismiss-help") return requestControl(action);
   if (action === "take" && syncNativeBrowser && !(await setNativeBrowserControl(true))) {
     throw new Error("Sagax could not pause this bot's browser safely");
   }

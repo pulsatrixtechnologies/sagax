@@ -40,6 +40,15 @@ describe("full-backup browser state", () => {
     expect(storage.getItem(SEND_KEY_KEY)).toBe("enter");
   });
 
+  it("carries the message color choice and leaves older backups opted out", () => {
+    const storage = memory({ "omb-color-user-bubbles": "1" });
+    expect(collectWorkspaceClientState(storage)).toEqual({ "omb-color-user-bubbles": "1" });
+    applyWorkspaceClientState({ "omb-color-user-bubbles": "0" }, storage);
+    expect(storage.getItem("omb-color-user-bubbles")).toBe("0");
+    applyWorkspaceClientState({}, storage);
+    expect(storage.getItem("omb-color-user-bubbles")).toBeNull();
+  });
+
   it.each([null, [], { "auth-token": "injected" }, { "omb-webhook-credentials": "source URL" }, { "omb-drafts": 1 }])("rejects invalid client state before clearing anything (%j)", (value) => {
     const storage = memory({ "omb-drafts": "old", "auth-token": "keep" });
     expect(() => applyWorkspaceClientState(value, storage)).toThrow("Invalid backup browser state");

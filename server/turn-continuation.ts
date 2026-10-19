@@ -2,22 +2,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { RuntimeEvent } from "./contracts.ts";
-import type { Store } from "./store.ts";
-
 /**
  * Automatic continuity: when a turn ends without a final answer and the work
- * is resumable (a budget cap), persist a structured handoff and
- * let the harness start a `Continue:` thread on the same bot — transparent to
- * the bot, which just sees a normal new thread seeded with the handoff.
- * Only work someone started on the bot itself is continued this way. Work a
- * teammate assigned returns to that requester with the stop and the handoff
- * (turn-outcome.ts), and the requester decides what to send next: a second,
- * unattended owner would redo the same steps beside the requester's own
- * re-send, and its result would never reach the requester.
- *
- * The handoff is written by the driver that has the full transcript in hand;
- * the continuation is driven by a bus subscriber in the harness (index.ts).
+ * is resumable (a budget cap), persist a structured handoff. The driver with
+ * the full transcript in hand writes it and raises `cap.exhausted`; the
+ * harness hands the path to the job runtime, which runs the same turn again
+ * in place (docs/runtime-contract.md §10 PR 4: `continue`), opening with the
+ * continuation note and this file, for a person's root and a teammate's
+ * assignment alike. No `Continue:` thread, no second owner of the work.
  */
 
 /** Resolve the handoff directory the same way the server resolves its data
@@ -115,75 +107,4 @@ const CAP_STOP = /^(?:stopped after \d+ [a-z ]+ without a final answer|model-cal
  * denial, and a new unattended thread would retry what was refused. */
 export function classifyContinuable(_stopReason: string | null | undefined, failure: string | undefined): "cap" | null {
   return failure && CAP_STOP.test(failure) ? "cap" : null;
-}
-
-export interface CapContinuationDeps {
-  store: Pick<Store, "botByThread" | "taskByThread" | "createTask" | "appendMessage">;
-  startTurn: (botId: string, text: string, opts?: { threadId?: string; unattended?: boolean }) => Promise<unknown>;
-  /** Whether the turn in flight on this thread owes its result to a
-   * requester (a coordinated assignment, a delegation that reports back). */
-  reportsToRequester: (threadId: string) => boolean;
-  now?: () => number;
-}
-
-const CONTINUE_TITLE = /^Continue: /;
-const MAX_PER_BOT_PER_HOUR = 5;
-const WINDOW_MS = 3600e3;
-
-/** Bus subscriber: on `cap.exhausted`, create a `Continue:` task on the same
- * bot and start a turn seeded with the handoff. Bounded — at most five
- * continuations per bot per hour, never a continuation of a continuation, and
- * never the same source thread twice. A failure escalates with an activity
- * message carrying the handoff path instead of silently recursing. A turn
- * that reports to a requester is never continued: read synchronously, while
- * that turn is still the thread's (cap.exhausted precedes turn.completed). */
-export function makeCapContinuationSubscriber(deps: CapContinuationDeps): (event: RuntimeEvent) => void {
-  const state = new Map<string, { last: number; count: number; continued: Set<string> }>();
-  return (event: RuntimeEvent) => {
-    if (event.type !== "cap.exhausted" || !event.handoffPath) return;
-    if (deps.reportsToRequester(event.threadId)) return;
-    void (async () => {
-      const bot = deps.store.botByThread(event.threadId);
-      if (!bot) return;
-      const now = deps.now ? deps.now() : Date.now();
-      let rec = state.get(bot.id);
-      if (!rec || now - rec.last > WINDOW_MS || rec.continued.size > 100) {
-        rec = { last: now, count: 0, continued: new Set() };
-        state.set(bot.id, rec);
-      }
-      if (rec.count >= MAX_PER_BOT_PER_HOUR || rec.continued.has(event.threadId)) return;
-      const deadTask = deps.store.taskByThread(bot.id, event.threadId);
-      if (!deadTask) return;
-      if (CONTINUE_TITLE.test(deadTask.title ?? "")) return;
-      const approvalMode = deadTask.approvalMode === "ask" || deadTask.approvalMode === "full" ? deadTask.approvalMode : undefined;
-      const contTask = deps.store.createTask(
-        // Not activated: the person's open thread stays theirs, and their next
-        // message goes where they were, not into the continuation.
-        bot.id, `Continue: ${(deadTask.title ?? "task").slice(0, 90)}`, false,
-        deadTask.projectId, undefined, approvalMode, deadTask.ownerPrincipalId, deadTask.modelSelection,
-      );
-      if (!contTask) return;
-      rec.count += 1;
-      rec.last = now;
-      rec.continued.add(event.threadId);
-      const prompt = `[Auto-continuation] The task "${deadTask.title}" stopped because its turn ended without a final answer (${event.reason}). A handoff file with the full state was written to ${event.handoffPath}. Read that file first, re-verify the current state of anything it mentions, then continue the task from where it stopped. Do not redo completed work. If you cannot finish, append your progress to the handoff file and say exactly what is blocking.`;
-      try {
-        await deps.startTurn(bot.id, prompt, { threadId: contTask.threadId, unattended: true });
-        deps.store.appendMessage(event.threadId, {
-          role: "bot", kind: "activity",
-          tool: { name: `Turn ended without a final answer — work continues in a new task (handoff: ${event.handoffPath})`, ok: true },
-          threadRef: { botId: bot.id, threadId: contTask.threadId, title: contTask.title },
-        });
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        console.error("[cap-continuation] failed:", msg);
-        try {
-          deps.store.appendMessage(event.threadId, {
-            role: "bot", kind: "activity",
-            tool: { name: `Turn ended without a final answer — auto-continuation failed (${String(msg).slice(0, 200)}). Handoff: ${event.handoffPath}. Start a new thread that reads it to continue.`, ok: false },
-          });
-        } catch { /* the escalation message itself failed; nothing else to do */ }
-      }
-    })();
-  };
 }

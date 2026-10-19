@@ -1,6 +1,6 @@
 import { boatCapableEngine } from "@/lib/remote-desktop";
 import { useEffect, useRef, useState } from "react";
-import { CalendarClock, CalendarDays, ImageOff, Loader2, Monitor, Plus, X } from "lucide-react";
+import { CalendarClock, CalendarDays, Globe, ImageOff, Loader2, Monitor, Plus, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { useCaptionChrome } from "@/components/DesktopCapabilities";
@@ -10,6 +10,8 @@ import type { Routine } from "@/lib/routines";
 import { scheduleLabel } from "@/lib/schedule-label";
 import { api, ApiError, useStore, type Bot } from "@/state/store";
 import { RoutineEditor } from "./RoutinesPage";
+import { BrowserPanel, type BrowserSignIn } from "./BrowserPanel";
+import { SignInBanner } from "./SignInRequestCard";
 
 function viewerAddress(raw: unknown): string {
   if (typeof raw !== "string" || !raw) throw new Error("The host did not return a live desktop link");
@@ -71,6 +73,19 @@ export function RemoteDesktopPanel({ bot }: { bot: Bot }) {
   const previewBusy = useRef(bot.busy);
   useEffect(() => { previewBusy.current = bot.busy; }, [bot.busy]);
   const [creatingRoutine, setCreatingRoutine] = useState(false);
+  // A desktop paired to another host watches the bot's desktop, or — to sign
+  // in where the bot works — its built-in browser, through the same relay.
+  const [view, setView] = useState<"desktop" | "browser">("desktop");
+  const [signIn, setSignIn] = useState<BrowserSignIn>();
+  const help = state.computerControl[bot.id]?.help ?? null;
+  const asker = help ? state.bots.find((candidate) => candidate.id === help.botId)?.name ?? bot.name : bot.name;
+  const requestedSignIn = state.signInFocus?.botId === bot.id ? state.signInFocus : undefined;
+  useEffect(() => {
+    if (!requestedSignIn || requestedSignIn.consumed) return;
+    setView(requestedSignIn.place === "browser" ? "browser" : "desktop");
+    if (requestedSignIn.place === "browser") setSignIn({ url: requestedSignIn.url, site: requestedSignIn.site, nonce: requestedSignIn.requestId });
+    dispatch({ type: "signInFocusConsumed", requestId: requestedSignIn.requestId });
+  }, [dispatch, requestedSignIn]);
   const botRoutines = state.routines
     .filter((routine) => routine.botId === bot.id)
     .sort((a, b) => Number(b.enabled) - Number(a.enabled) || (a.nextRunAt ?? Infinity) - (b.nextRunAt ?? Infinity));
@@ -105,7 +120,7 @@ export function RemoteDesktopPanel({ bot }: { bot: Bot }) {
   }, [bot.id]);
 
   useEffect(() => {
-    if (!pageVisible || viewerOpen || pending) return;
+    if (view !== "desktop" || !pageVisible || viewerOpen || pending) return;
     const controller = new AbortController();
     let requestRunning = false;
     let lastAttemptAt = -Infinity;
@@ -154,7 +169,7 @@ export function RemoteDesktopPanel({ bot }: { bot: Bot }) {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [bot.id, pageVisible, viewerOpen, pending]);
+  }, [bot.id, pageVisible, viewerOpen, pending, view]);
 
   const open = async () => {
     setPending(true);
@@ -203,17 +218,44 @@ export function RemoteDesktopPanel({ bot }: { bot: Bot }) {
             {bot.cloudBackend === "vps" ? "Self-hosted VPS" : "Cloud desktop"}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => dispatch({ type: "toggleComputer", open: false })}
-          className="rounded-md p-1 text-ink-secondary hover:bg-control hover:text-ink"
-          aria-label="Close computer panel"
-        >
-          <X size={18} />
-        </button>
+        <div className="flex items-center gap-1">
+          <div className="flex rounded-full bg-inset p-0.5" aria-label="Bot panel view">
+            {(["desktop", "browser"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setView(option)}
+                aria-pressed={view === option}
+                className={cn("flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px]", view === option ? "bg-card text-ink shadow-sm" : "text-ink-secondary hover:text-ink")}
+              >
+                {option === "desktop" ? <Monitor size={12} /> : <Globe size={12} />}
+                {option === "desktop" ? "Desktop" : "Browser"}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => dispatch({ type: "toggleComputer", open: false })}
+            className="rounded-md p-1 text-ink-secondary hover:bg-control hover:text-ink"
+            aria-label="Close computer panel"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
+      {view === "browser" ? (
+        <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-1">
+          {help?.place === "browser" && <div className="-mt-2 mb-3"><SignInBanner help={help} askerName={asker} onError={setError} /></div>}
+          <BrowserPanel bot={bot} signIn={signIn} />
+          {error && <div role="alert" className="mt-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">{error}</div>}
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-secondary">
+            Watching and driving this browser needs browser control for this paired device, in Settings → Remote access on the host computer.
+          </p>
+        </div>
+      ) : (
       <div className="flex flex-1 flex-col items-center gap-4 overflow-y-auto px-6 py-5 text-center">
+        {help && help.place !== "browser" && <div className="-mt-3 w-full"><SignInBanner help={help} askerName={asker} onError={setError} /></div>}
         <button
           type="button"
           onClick={() => void open()}
@@ -327,6 +369,7 @@ export function RemoteDesktopPanel({ bot }: { bot: Bot }) {
           </div>
         </div>
       </div>
+      )}
       {creatingRoutine && (
         <RoutineEditor
           bots={[bot]}

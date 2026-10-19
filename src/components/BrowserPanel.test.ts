@@ -13,6 +13,8 @@ const fixture = vi.hoisted(() => ({
   states: {} as Record<number, unknown>,
   queues: [] as Array<{ enqueue: ReturnType<typeof vi.fn>; clear: ReturnType<typeof vi.fn>; drain: ReturnType<typeof vi.fn>;
     settle: ReturnType<typeof vi.fn>; size: ReturnType<typeof vi.fn>; stopped: ReturnType<typeof vi.fn> }>,
+  // The store's who-is-driving record: an open sign-in plea keeps the hold.
+  computerControl: {} as Record<string, unknown>,
 }));
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof import("react")>();
@@ -26,7 +28,7 @@ vi.mock("react", async (importOriginal) => {
     },
   };
 });
-vi.mock("@/state/store", () => ({ api: vi.fn().mockResolvedValue({}), useStore: () => ({ state: { config: { browserProfiles: [] } } }) }));
+vi.mock("@/state/store", () => ({ api: vi.fn().mockResolvedValue({}), useStore: () => ({ state: { config: { browserProfiles: [] }, computerControl: fixture.computerControl } }) }));
 vi.mock("./BrowserProfilesManager", () => ({ BrowserProfilesManager: () => null }));
 vi.mock("@/lib/browser-input-queue", () => ({ createBrowserInputQueue: () => {
   const queue = { enqueue: vi.fn(), clear: vi.fn(), drain: vi.fn().mockResolvedValue(undefined),
@@ -92,7 +94,7 @@ const sentTypes = () => vi.mocked(api).mock.calls.map(([, init]) => JSON.parse(S
 beforeEach(() => {
   fixture.effects = []; fixture.refs = []; fixture.queues = []; fixture.setters = [];
   fixture.control = { held: false, controlling: false, owned: false };
-  fixture.frame = null; fixture.states = {};
+  fixture.frame = null; fixture.states = {}; fixture.computerControl = {};
   FixtureEventSource.instances = [];
   vi.stubGlobal("EventSource", FixtureEventSource);
   vi.stubGlobal("window", { confirm: vi.fn(() => true) });
@@ -680,6 +682,116 @@ describe("implicit browser control", () => {
     source.emit("control", { held: true, controlling: false, owned: false });
     input(press); await settleAll();
     expect(api).not.toHaveBeenCalled();
+    cleanup?.();
+  });
+});
+
+// useState call order: connected 4, showTyping 9, kept 18, masked 19; the
+// sign-in Open effect is the fifth useEffect (index 4).
+describe("explicit browser control and signing in", () => {
+  const press = { type: "input_mouse", eventType: "mousePressed", x: 4, y: 5, button: "left", clickCount: 1, modifiers: 0 };
+  const lift = { ...press, eventType: "mouseReleased" };
+  const plea = { held: false, helpReason: "sign in to example.com", help: { botId: "pepper", threadId: "t1", messageId: "card-1", site: "example.com", place: "browser" } };
+  const capture = (props: { bot: Bot; signIn?: { url: string; site: string; nonce: number } } = { bot }) => {
+    let tree!: ReturnType<typeof LiveBrowser>;
+    function Capture() { tree = LiveBrowser(props); return tree; }
+    renderToStaticMarkup(createElement(Capture));
+    return elements(tree);
+  };
+  const byText = (nodes: Node[], text: string) => nodes.find((node) => node.type === "button" && Children.toArray(node.props.children).includes(text))!;
+  const connect = (props?: Parameters<typeof capture>[0]) => {
+    fixture.frame = { seq: 1, data: "fixture", viewerId: "current-viewer", generation: 1 };
+    const nodes = capture(props);
+    const cleanup = fixture.effects[2]!();
+    const source = FixtureEventSource.instances[0]!;
+    source.emit("ready", { viewerId: "current-viewer" });
+    return { cleanup, source, nodes, input: nodes.find((node) => node.type === BrowserViewport)!.props.input! };
+  };
+
+  it("takes the browser on Take control and keeps it past idle time", async () => {
+    vi.useFakeTimers();
+    fixture.states = { 4: true };
+    const { cleanup, nodes } = connect();
+    byText(nodes, "Take control").props.onClick!({});
+    await settleAll();
+    expect(sentTypes()).toEqual(["take"]);
+    expect(fixture.setters[18]).toHaveBeenLastCalledWith(true);
+    vi.advanceTimersByTime(120_000); await settleAll();
+    expect(sentTypes()).toEqual(["take"]);
+    cleanup?.();
+  });
+
+  it("hands back at once on Give back control, even while held on purpose", async () => {
+    vi.useFakeTimers();
+    fixture.states = { 4: true, 18: true };
+    fixture.control = { held: true, controlling: true, owned: true };
+    const { cleanup, nodes, input } = connect();
+    input(press); input(lift); await settleAll();
+    vi.advanceTimersByTime(60_000); await settleAll();
+    expect(sentTypes()).toEqual(["take"]);
+    byText(nodes, "Give back control").props.onClick!({});
+    vi.advanceTimersByTime(0); await settleAll();
+    expect(sentTypes()).toEqual(["take", "release"]);
+    expect(fixture.setters[18]).toHaveBeenLastCalledWith(false);
+    cleanup?.();
+  });
+
+  it("does not hand back after idle seconds while a sign-in request is open", async () => {
+    vi.useFakeTimers();
+    fixture.computerControl = { pepper: plea };
+    const { cleanup, input } = connect();
+    input(press); input(lift); await settleAll();
+    vi.advanceTimersByTime(120_000); await settleAll();
+    expect(sentTypes()).toEqual(["take"]);
+    cleanup?.();
+  });
+
+  it("still hands back after idle seconds once nothing holds it on purpose", async () => {
+    vi.useFakeTimers();
+    fixture.computerControl = { pepper: { ...plea, help: { ...plea.help, place: "vm" } } };
+    const { cleanup, input } = connect();
+    input(press); input(lift); await settleAll();
+    vi.advanceTimersByTime(8_000); await settleAll();
+    expect(sentTypes()).toEqual(["take", "release"]);
+    cleanup?.();
+  });
+
+  it.each([
+    ["a blank page", "about:blank", ["take", "navigate"]],
+    ["the bot's own page", "https://accounts.example.com/login", ["take"]],
+  ])("a sign-in card's Open takes the browser and opens the site only on %s", async (_label, url, sent) => {
+    fixture.states = { 4: true };
+    const signIn = { url: "https://example.com/", site: "example.com", nonce: 1 };
+    const { cleanup, source } = connect({ bot, signIn });
+    source.emit("tabs", { tabs: [{ tabId: "t1", active: true, title: "", url }] });
+    fixture.effects[4]!(); await settleAll();
+    expect(sentTypes()).toEqual(sent);
+    if (sent.includes("navigate")) expect(JSON.parse(String(vi.mocked(api).mock.calls[1]![1]!.body)).url).toBe("https://example.com/");
+    // The same Open is acted on once.
+    fixture.effects[4]!(); await settleAll();
+    expect(sentTypes()).toEqual(sent);
+    cleanup?.();
+  });
+
+  it("types a password into the page and nowhere else", async () => {
+    const secret = "hunter2-correct-horse";
+    const logs = (["log", "info", "warn", "error", "debug"] as const).map((level) => vi.spyOn(console, level).mockImplementation(() => {}));
+    fixture.control = { held: true, controlling: true, owned: true };
+    fixture.states = { 4: true, 9: true, 19: true };
+    const { cleanup, nodes } = connect();
+    const field = nodes.find((node) => node.type === "input" && (node.props as { name?: string }).name === "pageText")!;
+    expect((field.props as { type?: string }).type).toBe("password");
+    expect(nodes.some((node) => Children.toArray(node.props.children).some((child) => typeof child === "string" && child.startsWith("It goes only to the page.")))).toBe(true);
+    const form = nodes.find((node) => node.type === "form" && elements(node).some((child) => (child.props as { name?: string }).name === "pageText"))!;
+    const value = { value: secret };
+    form.props.onSubmit!({ preventDefault: vi.fn(), currentTarget: { elements: { namedItem: () => value } } });
+    await settleAll();
+    // The page gets it, once, through the input queue; the field is emptied.
+    expect(fixture.queues[0]!.enqueue).toHaveBeenCalledExactlyOnceWith({ type: "input_keyboard", eventType: "char", text: secret });
+    expect(value.value).toBe("");
+    // Never held in React state, never logged.
+    for (const setter of fixture.setters) expect(JSON.stringify(setter.mock.calls)).not.toContain(secret);
+    for (const log of logs) expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
     cleanup?.();
   });
 });

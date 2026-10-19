@@ -15,6 +15,7 @@ import { withoutComputerEngine } from "./computer-engine-removal.ts";
 import { newBotDefaultsSchema, type NewBotDefaults } from "./new-bot-defaults.ts";
 import { EFFORT_LEVELS, type LiveSettings } from "../shared/wire.ts";
 import { isModelVariant, type InstanceConfigMap, type ModelSelection } from "./contracts.ts";
+import { DEFAULT_WINDOW_MINUTES, MAX_WINDOW_MINUTES } from "./cache-keepwarm.ts";
 import { PROVIDER_ICON_PRESETS, providerIconError } from "../shared/provider-icon.ts";
 import type { McpServerSpec } from "./contracts.ts";
 import type { MailSettings } from "./mail-config.ts";
@@ -98,9 +99,10 @@ const vpsConfigSchema = z.object({
     message: "must be a simple SSH config alias",
   }).optional(),
 });
-/** Attach a bot's browser to a Chrome the operator already has running,
- * instead of agent-browser spawning its own (#1396). Deliberately a
- * server-owned config field, not an env-var passthrough: the ambient
+/** Where "My Chrome" is when agent-browser cannot find it by itself: a
+ * Chrome the operator already has running, on another port or machine
+ * (#1396). Only browser profiles set to My Chrome attach to it. Deliberately
+ * a server-owned config field, not an env-var passthrough: the ambient
  * process environment must never redirect a bot's browser
  * (server/browser-live.test.ts pins this guarantee down). */
 const browserEngineConfigSchema = z.object({
@@ -154,6 +156,9 @@ const browserProfileSchema = z.object({
   // directories would otherwise collide on case-insensitive filesystems.
   id: z.string().regex(BROWSER_PROFILE_ID).refine((id) => id !== "guest", "guest is reserved"),
   name: z.string().trim().min(1).max(40),
+  /** "chrome": bots on this profile use the person's own running Chrome
+   * (My Chrome) instead of the built-in browser. Absent is built-in. */
+  browser: z.literal("chrome").optional(),
 }).strict();
 // #567 accepted mixed-case and duplicate ids. This schema exists only at the
 // persisted-data boundary so an existing config can be read and migrated;
@@ -164,6 +169,7 @@ const legacyBrowserProfileSchema = z.object({
   /** Exact #567 Electron partition identity. This is persisted only by the
    * migration boundary; config PATCH callers cannot choose or redirect it. */
   partitionId: z.string().regex(LEGACY_BROWSER_PROFILE_ID).refine((id) => id !== "guest", "guest is reserved").optional(),
+  browser: z.literal("chrome").optional(),
 }).strict();
 
 interface StoredBrowserProfileMigration {
@@ -267,6 +273,7 @@ function migrateStoredBrowserProfiles(
     const id = canonicalIds[index]!;
     const partitionId = effectivePartitions[index]!;
     const migrated: BrowserProfile = { id, name: profile.name };
+    if (profile.browser) migrated.browser = profile.browser;
     if (partitionId !== id) migrated.partitionId = partitionId;
     // Exact duplicates are inherently ambiguous. Preserve the first mapping;
     // later duplicate records get isolated ids but existing bot references
@@ -303,6 +310,13 @@ const featureConfigSchema = z.object({
    * /learn) for your review. On unless explicitly switched off in Settings;
    * every draft still waits for review. */
   skillAuthoring: z.boolean().optional(),
+  /** Learn skills automatically: after enough tool steps in a conversation
+   * the bot's own engine reviews it in the background and may create or
+   * update its learned skills, each shown with Undo (server/skill-review.ts).
+   * Off unless explicitly enabled, and only while skillAuthoring is on. */
+  skillReview: z.boolean().optional(),
+  /** Tool steps in one conversation between automatic reviews. */
+  skillReviewSteps: z.number().int().min(3).max(100).optional(),
   /** Show each tool run in the transcript. Off unless explicitly enabled. */
   showToolCalls: z.boolean().optional(),
   /** Run a routine inside the conversation it reports to, instead of a hidden
@@ -359,6 +373,9 @@ const featureConfigSchema = z.object({
    * read by assignment instead of per-workspace copies. Off until
    * explicitly enabled — see skillsLibraryEnabled. */
   skillsLibrary: z.boolean().optional(),
+  /** Learn from group chats: memory upkeep also reads a member bot's room
+   * turns. Off until explicitly enabled — see roomMemoryCaptureEnabled. */
+  roomMemoryCapture: z.boolean().optional(),
 });
 /** First-run progress. Kept in the workspace config rather than a browser so
  * it survives cleared site data and is shared by every paired client. Hint
@@ -406,6 +423,12 @@ const automaticRecoverySchema = z.object({
   backup: defaultModelSelectionSchema.optional(),
 }).strict().refine((recovery) => !recovery.enabled || recovery.backup !== undefined,
   { message: "Choose a backup model before enabling automatic recovery", path: ["backup"] });
+/** Prompt-cache keep-warm (server/cache-keepwarm.ts). Off unless switched
+ * on: it is new, recurring spend. A bot's own `cacheKeepWarm` overrides it. */
+const cacheKeepWarmSchema = z.object({
+  enabled: z.boolean(),
+  windowMinutes: z.number().int().min(15).max(MAX_WINDOW_MINUTES).optional(),
+}).strict();
 const threadsConfigSchema = z.object({
   maxConcurrentPerBot: z.number().int().min(1).max(MAX_CONCURRENT_BOT_THREADS),
   /** Parallel tasks (shared/parallel-tasks.ts) one person may have running on
@@ -519,6 +542,7 @@ const appConfigSchema = z.object({
   }).optional(),
   defaultModelSelection: defaultModelSelectionSchema.optional(),
   automaticRecovery: automaticRecoverySchema.optional(),
+  cacheKeepWarm: cacheKeepWarmSchema.optional(),
   newBotDefaults: newBotDefaultsSchema.optional(),
   /** CLI-only launch preferences. Never enable remote access implicitly. */
   cliStartup: z.object({
@@ -529,6 +553,7 @@ const appConfigSchema = z.object({
   mistral: z.object({ key: optionalText }).optional(),
   cerebras: z.object({ key: optionalText }).optional(),
   groq: z.object({ key: optionalText, url: optionalText }).optional(),
+  meta: z.object({ key: optionalText, url: optionalText }).optional(),
   xai: z.object({ key: optionalText, url: optionalText }).optional(),
   /** Anthropic API key for Claude Code billed per token, handed only to
    * Claude instances; `url` only for a proxy or a test double. Never a
@@ -675,6 +700,10 @@ const appConfigSchema = z.object({
      * fold on its own. Their engines then compact the way they would
      * without Sagax, and the person may notice it. */
     autoCompactOffBots: z.array(z.string().min(1).max(200)).max(1_000).optional(),
+    /** Before a bot's room turn, start a fresh provider session once its
+     * context in that room reaches this (fraction below 1, or a token
+     * count). Default 0.9; autoCompact: false turns it off too. */
+    roomCompactAt: z.number().positive().max(10_000_000).optional(),
   }).optional(),
   /** Memory upkeep timing, for bots with Memory upkeep switched on. */
   memory: z.object({
@@ -757,8 +786,9 @@ export interface AppConfig {
   defaultModelSelection?: ModelSelection;
   /** Off by default; one backup attempt only before any work starts. */
   automaticRecovery?: { enabled: boolean; backup?: ModelSelection };
-  /** UI creation template. Saving it never mutates a bot or grants access.
-   * Its model selection effort is the only new-bot effort. */
+  /** Keep idle Claude threads' prompt cache warm; off by default. */
+  cacheKeepWarm?: { enabled: boolean; windowMinutes?: number };
+  /** UI creation template. Saving it never mutates a bot or grants access. */
   newBotDefaults?: NewBotDefaults;
   cliStartup?: {
     access: "local" | "tunnel" | "tailscale" | "public-url";
@@ -773,6 +803,7 @@ export interface AppConfig {
   mistral?: { key?: string };
   cerebras?: { key?: string };
   groq?: { key?: string; url?: string };
+  meta?: { key?: string; url?: string };
   /** `everyClaudeBot`: the key runs every Claude bot instead of its login.
    * Unset means true, which is how a key behaved before it had its own
    * `claudeApi` instance; a key first saved from Settings sets false. */
@@ -803,21 +834,21 @@ export interface AppConfig {
   rooms?: { turnTimeoutMinutes: number };
   mcp?: { callTimeoutMinutes?: number };
   threads?: { maxConcurrentPerBot: number; maxParallelPerPerson?: number; eventLogMaxBytes?: number; eventLogRetentionDays?: number };
-  context?: { rebuildBytes?: number; compactAt?: number; autoCompact?: boolean; autoCompactOffBots?: string[] };
+  context?: { rebuildBytes?: number; compactAt?: number; autoCompact?: boolean; autoCompactOffBots?: string[]; roomCompactAt?: number };
   memory?: { captureQuietMs?: number; tidyHour?: number };
   /** Shared preserves the historical singleton. Per-bot gives every bot a
    * separate container, durable workspace, viewer and lease. Pool runs N
    * seats shared by all conversations, with per-thread affinity (#1654). */
   localVm?: { mode?: "shared" | "per-bot" | "pool"; maxInstances?: number; idleTimeoutMinutes?: number };
   /** Opt-in product experiments. Every flag defaults to disabled. */
-  features?: { skillAuthoring?: boolean; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; autoRecall?: boolean; routinesInConversation?: boolean; connectedApps?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean };
+  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; autoRecall?: boolean; routinesInConversation?: boolean; connectedApps?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; roomMemoryCapture?: boolean };
   /** First-run progress; see onboardingConfigSchema. */
   onboarding?: { completedAt?: string; version?: number; reelSeen?: boolean; hintsSeen?: string[]; launchMode?: "solo" | "server"; firstTurnAt?: string };
   /** Named browser sessions any bot can be pointed at. */
   browserProfiles?: BrowserProfile[];
   /** CDP target of a Chrome the operator already has running (a bare port,
-   * e.g. "9333", or an http(s)/ws(s) URL). When set, a bot's browser
-   * attaches to it instead of agent-browser spawning its own (#1396). */
+   * e.g. "9333", or an http(s)/ws(s) URL). Browser profiles set to My Chrome
+   * attach to it instead of looking for the person's Chrome (#1396). */
   browserEngine?: { attachCdpUrl?: string };
   instances?: InstanceConfigMap;
 }
@@ -991,6 +1022,11 @@ export function mcpCallTimeoutMinutes(cfg: AppConfig): number {
   return cfg.mcp?.callTimeoutMinutes ?? DEFAULT_MCP_CALL_TIMEOUT_MINUTES;
 }
 
+/** The workspace keep-warm setting with its defaults filled in. */
+export function cacheKeepWarmSettings(cfg: AppConfig): { enabled: boolean; windowMinutes: number } {
+  return { enabled: cfg.cacheKeepWarm?.enabled === true, windowMinutes: cfg.cacheKeepWarm?.windowMinutes ?? DEFAULT_WINDOW_MINUTES };
+}
+
 export const LIVE_IDLE_MINUTES_DEFAULT = 5;
 
 /** Non-secret Live settings. The key only shows up as `configured`. */
@@ -1067,9 +1103,38 @@ export function skillAuthoringEnabled(cfg: AppConfig): boolean {
   return cfg.features?.skillAuthoring !== false;
 }
 
+export const DEFAULT_SKILL_REVIEW_STEPS = 10;
+export const MIN_SKILL_REVIEW_STEPS = 3;
+export const MAX_SKILL_REVIEW_STEPS = 100;
+
+/** Learn skills automatically (server/skill-review.ts). Off unless switched
+ * on: each review sends the conversation to the bot's engine again, and it
+ * changes the bot's skills without being asked. Never on while skill
+ * authoring itself is off. */
+export function skillReviewEnabled(cfg: AppConfig): boolean {
+  return skillAuthoringEnabled(cfg) && cfg.features?.skillReview === true;
+}
+
+/** Tool steps between automatic reviews, clamped to the allowed range. */
+export function skillReviewSteps(cfg: AppConfig): number {
+  const raw = cfg.features?.skillReviewSteps;
+  const value = typeof raw === "number" && Number.isFinite(raw) ? Math.round(raw) : DEFAULT_SKILL_REVIEW_STEPS;
+  return Math.min(MAX_SKILL_REVIEW_STEPS, Math.max(MIN_SKILL_REVIEW_STEPS, value));
+}
+
 /** Automatic recall is read-only, so it is on unless switched off. */
 export function autoRecallEnabled(cfg: AppConfig): boolean {
   return cfg.features?.autoRecall !== false;
+}
+
+/** Learn from group chats: a member bot's room turns feed its memory
+ * upkeep's capture, the way its 1:1 turns do. Off until switched on in a
+ * bot's Memory settings, like every flag that spends model calls in the
+ * background or widens what is written: one capture call per member bot
+ * per quiet room, and a room fewer people can see than the bot never feeds
+ * it either way (roomFeedsBot in server/index.ts). */
+export function roomMemoryCaptureEnabled(cfg: AppConfig): boolean {
+  return cfg.features?.roomMemoryCapture === true;
 }
 
 export const DEFAULT_CAPTURE_QUIET_MS = 2 * 60_000;
@@ -1394,6 +1459,9 @@ export function loadConfig(): AppConfig {
   cfg.groq = { ...cfg.groq };
   // Keep the workspace key separate from an operator's OpenCode Groq key.
   if (process.env.SAGAX_GROQ_API_KEY !== undefined) cfg.groq.key = process.env.SAGAX_GROQ_API_KEY;
+  cfg.meta = { ...cfg.meta };
+  // Keep the workspace key separate from a Muse Code login's META_API_KEY.
+  if (process.env.SAGAX_META_API_KEY !== undefined) cfg.meta.key = process.env.SAGAX_META_API_KEY;
   cfg.xai = { ...cfg.xai };
   if (process.env.XAI_API_KEY !== undefined) cfg.xai.key = process.env.XAI_API_KEY;
   // Deliberately not ANTHROPIC_API_KEY: a key in the server's own env is
@@ -1488,6 +1556,7 @@ export function syncCredentialEnv(patch: Partial<Omit<AppConfig, "threads">>): v
     [patch.mistral?.key, "MISTRAL_API_KEY"],
     [patch.cerebras?.key, "CEREBRAS_API_KEY"],
     [patch.groq?.key, "SAGAX_GROQ_API_KEY"],
+    [patch.meta?.key, "SAGAX_META_API_KEY"],
     [patch.anthropic?.key, "SAGAX_ANTHROPIC_API_KEY"],
     [patch.openaiCompat?.key, "OPENAI_COMPAT_API_KEY"],
     [patch.openai?.key, "SAGAX_OPENAI_API_KEY"],
@@ -1532,6 +1601,7 @@ export const WORKSPACE_CREDENTIAL_ENV = [
   "MISTRAL_API_KEY",
   "CEREBRAS_API_KEY",
   "SAGAX_GROQ_API_KEY",
+  "SAGAX_META_API_KEY",
   "SAGAX_ANTHROPIC_API_KEY",
   "SAGAX_ANTHROPIC_API_URL",
   "SAGAX_HOSTED_MODEL_TOKEN",
@@ -1627,6 +1697,7 @@ export const PROVIDER_CREDENTIAL_ENV = [
   "MISTRAL_API_KEY",
   "CEREBRAS_API_KEY",
   "GROQ_API_KEY",
+  "META_API_KEY",
   "CURSOR_API_KEY",
   "CURSOR_AUTH_TOKEN",
 ] as const;
@@ -1756,7 +1827,7 @@ export function saveConfig(
   // back after we have successfully recognized the legacy list.
   const storedProfiles = storedBrowserProfilesSchema.safeParse(disk.browserProfiles);
   if (storedProfiles.success) disk.browserProfiles = storedProfiles.data;
-  for (const key of ["xai", "anthropic", "mistral", "cerebras", "groq", "openai", "openrouter", "openaiCompat", "composio", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "localVm", "features", "budgets", "billing", "decisions", "onboarding", "browserEngine"] as const) {
+  for (const key of ["xai", "anthropic", "mistral", "cerebras", "groq", "meta", "openai", "openrouter", "openaiCompat", "composio", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "localVm", "features", "budgets", "billing", "decisions", "onboarding", "browserEngine"] as const) {
     const section = checkedPatch[key];
     if (!section) continue;
     const current = jsonObjectSchema.safeParse(disk[key]);
@@ -1787,6 +1858,7 @@ export function saveConfig(
   if (checkedPatch.mail !== undefined) disk.mail = checkedPatch.mail;
   // Replace the section so clearing a backup cannot revive the old selection.
   if (checkedPatch.automaticRecovery !== undefined) disk.automaticRecovery = checkedPatch.automaticRecovery;
+  if (checkedPatch.cacheKeepWarm !== undefined) disk.cacheKeepWarm = checkedPatch.cacheKeepWarm;
   // A selection is replaced as one value, so changing engines also clears
   // an effort level omitted from the new selection.
   if (checkedPatch.defaultModelSelection !== undefined) {
@@ -2000,6 +2072,8 @@ export function instanceOwnsRouting(
       return own(entry.environment?.CEREBRAS_API_KEY) || ownUrl("https://api.cerebras.ai/v1");
     case "groq":
       return own(entry.environment?.GROQ_API_KEY) || ownUrl("https://api.groq.com/openai/v1", cfg.groq?.url);
+    case "meta":
+      return own(entry.environment?.META_API_KEY) || ownUrl("https://api.meta.ai/v1", cfg.meta?.url);
     case "grok":
       return own(entry.environment?.XAI_API_KEY) || (own(config.apiKeyEnv) && config.apiKeyEnv !== "XAI_API_KEY")
         || ownUrl("https://api.x.ai/v1", cfg.xai?.url);
@@ -2019,6 +2093,7 @@ function injectedEnvironment(cfg: AppConfig, instanceId: string, driver: string)
   if (driver === "mistral" && cfg.mistral?.key) environment.set("MISTRAL_API_KEY", cfg.mistral.key);
   if (driver === "cerebras" && cfg.cerebras?.key) environment.set("CEREBRAS_API_KEY", cfg.cerebras.key);
   if (driver === "groq" && cfg.groq?.key) environment.set("GROQ_API_KEY", cfg.groq.key);
+  if (driver === "meta" && cfg.meta?.key) environment.set("META_API_KEY", cfg.meta.key);
   if (driver === "grok" && cfg.xai?.key) environment.set("XAI_API_KEY", cfg.xai.key);
   // Grok Build never runs on it in solo mode (acp/grok.ts strips it); on an
   // organization server it is the organization's key for Grok Build, after
@@ -2137,6 +2212,8 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
     mistral: { driver: "mistral" },
     cerebras: { driver: "cerebras" },
     groq: { driver: "groq" },
+    meta: { driver: "meta" },
+    museCode: { driver: "museCode" },
     ...API_KEY_FLEET,
     qwen: { driver: "qwenAgent" },
     hermes: { driver: "hermesAgent" },
@@ -2159,6 +2236,8 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
     mistral: { driver: "mistral" },
     cerebras: { driver: "cerebras" },
     groq: { driver: "groq" },
+    meta: { driver: "meta" },
+    museCode: { driver: "museCode" },
     ...API_KEY_FLEET,
     ...CUSTOM_ONLY,
   } as const;
@@ -2227,6 +2306,9 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
     );
     if (entry.driver === "groq" && cfg.groq?.url && !ownsRouting) {
       entry.config = { ...entry.config as object, url: cfg.groq.url };
+    }
+    if (entry.driver === "meta" && cfg.meta?.url && !ownsRouting) {
+      entry.config = { ...entry.config as object, url: cfg.meta.url };
     }
     // The driver URL is configuration, not a credential. Environment is
     // intentionally not consulted by ProviderRegistry when it decodes a

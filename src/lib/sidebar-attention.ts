@@ -7,6 +7,8 @@ export type SidebarAttentionBot = {
 export type SidebarAttentionGroup = {
   unread?: boolean;
   busyBotId?: string | null;
+  /** A room's threads run side by side; one speaking off-screen counts too. */
+  tasks?: Array<{ busyBotId?: string | null }>;
 };
 
 export type SidebarSectionAttention = {
@@ -30,7 +32,7 @@ export function sidebarSectionAttention(
         (bot) =>
           bot.activity === "working" ||
           (Boolean(bot.busy) && bot.activity !== "waiting-on-you"),
-      ).length + groups.filter((group) => Boolean(group.busyBotId)).length,
+      ).length + groups.filter((group) => Boolean(group.busyBotId) || Boolean(group.tasks?.some((task) => task.busyBotId))).length,
   };
 }
 

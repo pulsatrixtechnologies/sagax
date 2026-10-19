@@ -308,6 +308,9 @@ export class ProviderRegistry {
             localComputerMcp: inst.adapter.capabilities.localComputerMcp === true,
             approvalReview: inst.reviewPermission !== undefined,
             withholdsHostTools: inst.adapter.capabilities.withholdsHostTools === true,
+            // the background steps' one-shot (memory upkeep, the skill
+            // review): either text call serves them
+            backgroundText: inst.generateText !== undefined || inst.generateMemoryText !== undefined,
           },
           access: driver?.metadata.access ?? "subscription",
           install: withServerInstall(driver?.install, npmPresent),

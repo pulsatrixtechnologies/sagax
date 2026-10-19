@@ -2,17 +2,18 @@
 
 Approval levels belong to a bot and apply to its next provider turn, including
 when that provider resumes an existing native thread. Each level is one of the
-provider's own permission modes, passed through. Sagax does not judge an
-action itself: there is no app-side allowlist, classifier, or pattern rule. A
-native tool request that reaches you is one the provider left for you. In Full
-Access, OMB also applies its own configuration tools without another approval.
+provider's own permission modes, passed through. A native tool request that
+reaches you is one the provider left for you. Sagax only answers from an
+explicit grant: Full Access, a saved exact command or MCP read-shaped tool, or
+the narrow built-in web-search allowance under Approve for me. In Full Access,
+OMB also applies its own configuration tools without another approval.
 
 | Level | Behavior |
 | --- | --- |
 | **Ask for approval** | Requests approval for commands and file changes, the way the provider's supervised mode does. |
 | **Auto-accept edits** | Approves file edits automatically; other actions can still require approval. Offered where the provider has such a mode (Claude, Grok, Antigravity). |
 | **Approve for me** | Uses the provider's automatic review on Codex, Claude, Cursor, and Grok to approve routine actions and ask about others. Providers without an equivalent fall back to asking. |
-| **Full access** | Enables the provider's permissive mode for commands, edits, and selected-computer actions, including potentially destructive or sensitive work. Residual native permission prompts are answered for you. OMB profile changes, routine actions, team setup, bot deletion, and enabled skill authoring apply without a second approval. Peer-review prompts are skipped within the bot's authorized scope. Delegation uses the receiving bot's setting, never the sender's — except from a Primary Bot, whose level flows down (below). Actual questions and missing credentials still need your input. |
+| **Full access** | Enables the provider's permissive mode for commands, edits, and selected-computer actions, including potentially destructive or sensitive work. Residual native permission prompts are answered for you. OMB profile changes, routine actions, team setup, bot deletion, and enabled skill authoring apply without a second approval. Peer-review prompts are skipped within the bot's authorized scope. Work handed on with `coordinate_bots` uses the receiving bot's setting, never the sender's — except from a Primary Bot, whose level flows down (below). Actual questions and missing credentials still need your input. |
 | **Custom (`config.toml`)** | Codex only. Sagax reads and reapplies the effective approval and sandbox settings from your Codex configuration. |
 
 The composer is the same in Simple and Advanced mode (Settings, Appearance,
@@ -29,11 +30,42 @@ time the version with this default started; a marker
 (`sagax.advancedModeMigratedAt.v1`, kept per person on an organization
 server) stops it from happening again, so Simple chosen afterwards stays.
 
-Full access is an elevated-risk standing approval. Full and Custom can only be
-enabled from a packaged local desktop app, where the choice crosses a private
-process channel rather than the bot-accessible HTTP API. They are hidden in
-development, standalone web, and remote pages. Full access does not bypass operating
-system privacy controls, authentication, CAPTCHA or MFA, service permissions,
+Full access applies the moment you pick it: no confirmation dialog, no
+second step. It can be turned on from any client that can reach the app's
+API: the desktop app, a browser, a paired phone or web client, or a bot or
+script calling the local API where local calls count as you (development, the
+CLI, a self-hosted server). Picked in bot settings, it applies to the bot
+and every one of its existing threads at once; picked in the composer, to that
+thread; Refresh permissions copies it onto one thread. An engine that cannot
+run Full access still cannot be set to it. On a hosted company workspace, Full
+access still comes only from the operator's dedicated policy
+([guarded messages](verification/guarded-messages.md)).
+
+Custom is different: it can only be entered or left from a packaged local
+desktop app, where the choice crosses a private process channel rather than the
+bot-accessible HTTP API, because it holds restrictions you wrote yourself. It
+is hidden in development, standalone web, and remote pages.
+
+A team's sidebar menu has **Set for all bots in this team…**, for the owner
+or an admin. It sets one approval level (Ask, Auto-accept edits, Approve for
+me or Full access), or one model and effort, on every bot in that team. It
+lists what each bot will get before anything changes, then saves the bots one
+at a time with the same request and checks as each bot's own settings. A bot
+that is working, or whose engine does not offer the level, model or effort,
+is skipped and the summary gives the reason. A skipped bot is not changed
+later: once its turn ends, run the team change again or set that bot in its
+own settings. A level reaches each bot and every one of its threads, the same
+way for every level, so a thread opened with New thread moves too; a bot is
+"already set" only when all of its threads are. Choosing Auto for a bot on
+this computer shows the same warning as its own settings. Model changes keep
+each bot on its own engine and move the threads that use the bot's model; a
+thread with a model of its own keeps it, including the one open on screen
+(the bot's own settings, by contrast, move that thread with the bot). Custom
+stays a per-bot setting: a bot or thread on Custom leaves it only in the
+desktop app.
+
+Full access does not bypass operating system privacy controls,
+authentication, CAPTCHA or MFA, service permissions,
 or workspace/team ownership and computer-sharing grants. Full Access controls
 approval prompts; it does not sign in for you, enable a feature you disabled,
 or grant another bot access to a different workspace.
@@ -226,24 +258,28 @@ such call go through Sagax.
 Approvals were where a team's owner spent their day: every teammate a Primary
 Bot brought in started at "Ask for approval", so the owner either answered a
 card every few minutes or switched each new thread by hand. So **a Primary
-Bot's level flows down**. Work it delegates (`coordinate_bots` into a
-teammate's thread, and `delegate_bot`) starts at the level of the Primary Bot
+Bot's level flows down**. Work it hands out with `coordinate_bots` (into the
+work thread the Primary Bot's conversation has with a teammate, or a fresh
+thread with `thread: "new"`) starts at the level of the Primary Bot
 conversation it came from: Auto-accept edits, Approve for me, or Full access.
-The delegated thread is switched to that level, keeps it, and opens with a
+The teammate's thread is switched to that level, keeps it, and opens with a
 line saying so ("Approve for me — delegated by Clive, a Primary Bot on Approve
 for me"); you can still change it in that thread. Work a Primary Bot hands out
-inside a room runs at its level for that turn.
+inside a room runs at its level for that turn. The level is computed once when
+the assignment is written and recorded on it (docs/runtime-contract.md §3);
+the turn runs with exactly that level.
 
 It only ever raises: a teammate already on a higher level keeps it, a teammate
-on Custom keeps its own configuration, and a Primary Bot delegating from an
-Ask conversation passes nothing on. A teammate's engine caps the level: one
+on Custom keeps its own configuration, and a Primary Bot handing work out from
+an Ask conversation passes nothing on. A teammate's engine caps the level: one
 without Full access gets Approve for me, and one without Auto-accept edits
 (Codex, whose Ask already writes the workspace) stays on its own level. On an
 organization server, a teammate inherits a Primary Bot's Full only when its
 own owner allowed Full for it and the organization allows Full; otherwise a
 Full Primary Bot's work reaches it as Approve for me. The teammate's own default
-and its other conversations do not change, and an ordinary bot's delegation
-still uses the recipient's setting. Questions and missing credentials still
+and its other conversations do not change, and an ordinary bot's hand-off
+still uses the recipient's setting. A consultation (`consult: true`) answers
+from what the teammate knows and acts on nothing, so no level travels with it. Questions and missing credentials still
 reach you.
 
 ## Answering a request
@@ -258,9 +294,20 @@ native session, so their driver keeps the allow for that bot, that exact tool
 and that exact server (as launched: a changed command, URL or credential is
 another server, and a bridge into a VM or a Boat is new each turn) for the
 rest of the conversation, in memory until the server restarts. Another bot in
-the same room asks again. Sagax keeps no standing grant for a provider's tool. It is not
-offered for computer control, for a sandbox change or on a guest's turn. The
-harness's own agents tools (coordinating teammates, threads, memory) never
+the same room asks again.
+
+For a read-shaped tool from a configured custom MCP server, the card also
+offers **Always allow**. This is an explicit standing grant for that exact bot,
+provider instance, MCP server, tool name, and current server configuration. A
+different tool still asks; editing the server command, URL, headers, or
+credentials invalidates the grant. It is not offered for create/update/delete
+tools, computer control, a sandbox change, an unconfigured server, or a guest's
+turn. A custom MCP server controls its own tool names, so only remember tools
+from a server you trust. The grant applies to the bot's current and future
+conversations, including newly delegated work. Saved entries are visible and
+revocable in the bot's Access settings.
+
+The harness's own agents tools (coordinating teammates, threads, memory) never
 ask on Claude, Codex or API models: Sagax authorizes each of those
 routes itself.
 
@@ -365,10 +412,11 @@ Claude Code accepts `--permission-mode auto` for every model and, when auto
 mode is unavailable to the session, starts in Manual without an error. On
 Claude Code 2.1.266 that is the case for Claude Haiku 4.5 and Sonnet 4.5,
 and for any organization that set `disableAutoMode`. In that session the bot
-asks before each action. The Claude driver reads the mode the session actually
-runs in from the CLI's `init` frame; when Approve for me was requested and the
-session runs Manual, the chat shows one notice per session naming the model.
-Choose a model the reviewer supports, Auto-accept edits, or Full access to
+asks before each action unless you have explicitly remembered that exact MCP
+read tool. The Claude driver reads the mode the session actually runs in from
+the CLI's `init` frame; when Approve for me was requested and the session runs
+Manual, the chat shows one notice per session naming the model. Choose a model
+the reviewer supports, remember the MCP reads you trust, or use Full access to
 stop the prompts.
 
 ### Changing a bot's engine
@@ -384,17 +432,18 @@ For Antigravity, the composer and bot settings offer **Ask for approval**,
 **Auto-accept edits** (its native `auto_edit` mode), and **Auto (full access)**.
 Auto enables native `yolo` mode and automatically approves remaining
 tool-permission requests for commands, edits, and computer actions, without an
-automatic reviewer. The composer chip reads **Auto**. This uses the existing
-Full access grant and confirmation, not a separate permission setting, and
-applies to every model in that Antigravity instance, including Gemini.
+automatic reviewer. The composer chip reads **Auto**. This is the Full access
+level under another name, not a separate permission setting, applies at once
+like Full access, and covers every model in that Antigravity instance,
+including Gemini.
 
-Choose Auto explicitly in the local packaged desktop app. Old Antigravity
+Choose Auto explicitly. Old Antigravity
 `auto` / `autoApprove` settings still behave as Ask and are displayed as Ask;
 they never become unrestricted access on upgrade. Switching back to Ask
 restores prompts on the next turn. Questions and missing-credential forms
 still require an answer. A Primary Bot or
-teammate can delegate work to this bot without downgrading its explicit Auto
-(full access) grant. It does not enable Auto on any other bot.
+teammate can hand work to this bot with `coordinate_bots` without downgrading
+its explicit Auto (full access) grant. It does not enable Auto on any other bot.
 
 ## Asking you questions
 
@@ -439,9 +488,9 @@ silently substitute unrestricted access when a mode is rejected.
 
 ### Read-only integration tools
 
-Sagax's built-in agents MCP server describes nine scoped reads with
+Sagax's built-in agents MCP server describes its scoped reads with
 explicit read-only, non-destructive, idempotent, closed-world metadata:
-`list_bots`, `list_rooms`, `list_threads`, `check_delegation`, `wait_delegation`,
+`list_bots`, `list_rooms`, `list_threads`, `assignment_status`,
 `session_search`, `session_read`, `list_routines`, and `skills_list`.
 Session recall still enforces own-bot access and records its existing room
 disclosure audit. These hints do not grant access to another bot's conversations.
@@ -455,8 +504,9 @@ The level set follows the provider-boundary approach in
 [T3 Code's permission modes](https://github.com/pingdotgg/t3code/blob/e16b8b059c9f5ff6dfed1addecffb831c6aee043/docs/user/permission-modes.md):
 Supervised, Auto-accept edits, Auto, and Full access, each a provider mode
 rather than an app rule, with a remembered approval that belongs to the
-provider's session. Its quieter default is Full access; Sagax keeps its
-own opt-in desktop confirmation and Ask as the default.
+provider's session. Its quieter default is Full access; Sagax keeps Ask
+as the default, and Full access is one pick away, applied without a
+confirmation.
 
 ## Verification for contributors
 
@@ -466,7 +516,7 @@ proxy. Its fixture also verifies that explicit Ask sibling threads still wait.
 
 Run `pnpm exec electron scripts/smoke-approval-modes.cjs` to exercise the real
 private desktop-to-server grant protocol in a disposable fixture. It verifies
-HTTP elevation rejection, Full → Auto → Ask on resumed Claude turns, and
+that Full access applies over HTTP while Custom is refused there, Full → Auto → Ask on resumed Claude turns, and
 Antigravity automatic tool approvals on new and resumed Full access turns across
 multiple model variants. It also checks that Ask and legacy Auto still prompt,
 peer-started Full turns auto-approve, switching the receiving bot back to Ask

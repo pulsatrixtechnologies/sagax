@@ -38,7 +38,9 @@ export function browserRestoreKey(session: string): string {
   return `omb-${createHash("sha256").update(session).digest("hex")}`;
 }
 
-function browserSessionsDirectory(env: NodeJS.ProcessEnv): string {
+/** Where agent-browser keeps saved session state (`--restore`) for this
+ * HOME and namespace: `~/.agent-browser[/namespaces/<name>/state]/sessions`. */
+export function browserSessionsDirectory(env: NodeJS.ProcessEnv): string {
   const namespace = env.AGENT_BROWSER_NAMESPACE;
   if (namespace && !/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(namespace)) throw new Error("Invalid browser namespace.");
   const home = (process.platform === "win32" ? env.USERPROFILE : env.HOME) || homedir();
@@ -61,24 +63,28 @@ function ensureManagedBrowserConfig(env: NodeJS.ProcessEnv): string {
   return path;
 }
 
-/** Close exactly one daemon without the CLI's implicit launch envelope. */
-export async function closeBrowserSession(binaryPath: string, env: NodeJS.ProcessEnv, timeoutMs = 15_000): Promise<boolean> {
-  if (!env.AGENT_BROWSER_SESSION || !/^[A-Za-z0-9_.-]{1,96}$/.test(env.AGENT_BROWSER_SESSION)) return false;
-  // Native CLI prepends a launch even to `close` when launch flags are set.
-  // Remove them, and bypass external project/user config, so closing a
-  // missing profile cannot launch and restore another legacy prefix match.
+/** The daemon-control environment: the session's own identity, never its
+ * launch flags, and OMB's empty config instead of a user's or project's. The
+ * native CLI prepends a launch even to `close` when launch flags are set, so
+ * this keeps a command from launching (and restoring) a missing profile. */
+function daemonControlEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv | null {
   let configPath: string;
   try { configPath = ensureManagedBrowserConfig(env); }
-  catch { return false; }
-  const closeEnv = Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith("AGENT_BROWSER_") || ["AGENT_BROWSER_SESSION", "AGENT_BROWSER_SOCKET_DIR", "AGENT_BROWSER_NAMESPACE", "AGENT_BROWSER_ENCRYPTION_KEY", "AGENT_BROWSER_RESTORE", "AGENT_BROWSER_RESTORE_SAVE"].includes(key)));
-  closeEnv.AGENT_BROWSER_CONFIG = configPath;
-  const deadline = Date.now() + timeoutMs;
-  const run = (args: string[], capture = false) => new Promise<{ ok: boolean; output: string }>((done) => {
+  catch { return null; }
+  const controlEnv = Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith("AGENT_BROWSER_") || ["AGENT_BROWSER_SESSION", "AGENT_BROWSER_SOCKET_DIR", "AGENT_BROWSER_NAMESPACE", "AGENT_BROWSER_ENCRYPTION_KEY", "AGENT_BROWSER_RESTORE", "AGENT_BROWSER_RESTORE_SAVE"].includes(key)));
+  controlEnv.AGENT_BROWSER_CONFIG = configPath;
+  return controlEnv;
+}
+
+/** One engine command, ended at `deadline`: whether it exited 0, and its
+ * stdout when asked for. */
+function runBrowserCommand(binaryPath: string, env: NodeJS.ProcessEnv, args: string[], deadline: number, capture = false): Promise<{ ok: boolean; output: string }> {
+  return new Promise((done) => {
     let settled = false;
     let output = "";
     const finish = (ok: boolean) => { if (!settled) { settled = true; done({ ok, output }); } };
     let child: ReturnType<typeof spawn>;
-    try { child = spawn(binaryPath, args, { env: closeEnv, stdio: capture ? ["ignore", "pipe", "ignore"] : "ignore", windowsHide: true }); }
+    try { child = spawn(binaryPath, args, { env, stdio: capture ? ["ignore", "pipe", "ignore"] : "ignore", windowsHide: true }); }
     catch { return finish(false); }
     let exited = false;
     let killTimer: NodeJS.Timeout | undefined;
@@ -98,23 +104,63 @@ export async function closeBrowserSession(binaryPath: string, env: NodeJS.Proces
     // exit can precede the last piped stdout chunk; close follows stdio.
     child.on("close", (code) => { exited = true; clearTimeout(timer); clearTimeout(killTimer); finish(code === 0); });
   });
+}
+
+/** The sessions whose daemons are running, from the launch-free inventory
+ * command; null when the engine could not say. */
+async function runningBrowserSessions(binaryPath: string, controlEnv: NodeJS.ProcessEnv, deadline: number): Promise<string[] | null> {
+  const status = await runBrowserCommand(binaryPath, controlEnv, ["session", "list", "--json"], deadline, true);
+  if (!status.ok) return null;
+  try {
+    const result = JSON.parse(status.output);
+    const sessions: unknown = result?.data?.sessions;
+    if (result?.success !== true || !Array.isArray(sessions) || !sessions.every((name) => typeof name === "string")) return null;
+    return sessions;
+  } catch { return null; }
+}
+
+/** Close exactly one daemon without the CLI's implicit launch envelope. */
+export async function closeBrowserSession(binaryPath: string, env: NodeJS.ProcessEnv, timeoutMs = 15_000): Promise<boolean> {
+  if (!env.AGENT_BROWSER_SESSION || !/^[A-Za-z0-9_.-]{1,96}$/.test(env.AGENT_BROWSER_SESSION)) return false;
+  const closeEnv = daemonControlEnv(env);
+  if (!closeEnv) return false;
+  const deadline = Date.now() + timeoutMs;
   // A daemon that does not answer `close` keeps running with its Chrome,
   // detached from us, and every later restart failed the same way (#2603).
-  if (!(await run(["close"])).ok) return killBrowserDaemon(binaryPath, env);
+  if (!(await runBrowserCommand(binaryPath, closeEnv, ["close"], deadline)).ok) return killBrowserDaemon(binaryPath, env);
   // Native close acknowledges before the daemon exits. Observe its actual
   // removal through the launch-free inventory command before reconnecting.
   while (Date.now() < deadline) {
-    const status = await run(["session", "list", "--json"], true);
-    if (!status.ok) return false;
-    try {
-      const result = JSON.parse(status.output);
-      const sessions: unknown = result?.data?.sessions;
-      if (result?.success !== true || !Array.isArray(sessions) || !sessions.every((name) => typeof name === "string")) return false;
-      if (!sessions.includes(env.AGENT_BROWSER_SESSION)) return true;
-    } catch { return false; }
+    const sessions = await runningBrowserSessions(binaryPath, closeEnv, deadline);
+    if (!sessions) return false;
+    if (!sessions.includes(env.AGENT_BROWSER_SESSION)) return true;
     await new Promise((resolve) => setTimeout(resolve, Math.min(25, Math.max(1, deadline - Date.now()))));
   }
   return killBrowserDaemon(binaryPath, env);
+}
+
+/** Run one engine command in a session's running browser and return its
+ * answer's `data`, or null when the session's daemon is not running. The
+ * launch-free inventory answers first, so a stopped session is never
+ * launched just to be asked; `env` is the session's own launch environment,
+ * so even a daemon that exits in between comes back exactly as the bot's. */
+export async function inRunningBrowser(binaryPath: string, env: NodeJS.ProcessEnv, args: string[], timeoutMs = 15_000): Promise<Record<string, unknown> | null> {
+  const session = env.AGENT_BROWSER_SESSION;
+  if (!session || !/^[A-Za-z0-9_.-]{1,96}$/.test(session)) return null;
+  const controlEnv = daemonControlEnv(env);
+  if (!controlEnv) throw new Error("The managed browser configuration was changed. Restore it to an empty JSON object.");
+  const deadline = Date.now() + timeoutMs;
+  const sessions = await runningBrowserSessions(binaryPath, controlEnv, deadline);
+  if (!sessions) throw new Error("The browser engine did not say which browsers are running.");
+  if (!sessions.includes(session)) return null;
+  const answer = await runBrowserCommand(binaryPath, env, [...args, "--json", "--no-webmcp"], deadline, true);
+  try {
+    const result = JSON.parse(answer.output);
+    if (answer.ok && result?.success === true && result.data && typeof result.data === "object") return result.data;
+  } catch { /* reported below */ }
+  // A daemon that was closing when the inventory listed it is stopped now.
+  if (!(await runningBrowserSessions(binaryPath, controlEnv, Date.now() + 5_000))?.includes(session)) return null;
+  throw new Error("The browser did not answer. Try again when the bot has finished.");
 }
 
 /** Where agent-browser 0.37 writes `<session>.pid`: AGENT_BROWSER_SOCKET_DIR,
@@ -560,7 +606,8 @@ export function browserEngineStatus(options: BrowserLookupOptions = {}): Browser
 
 /** The MCP server a turn mounts so the bot gets browser tools. One isolated,
  * auto-restored session per browser profile (or per bot), page-provided
- * WebMCP tools off, and only the core tool set. */
+ * WebMCP tools off, and only the core tool set. A profile set to My Chrome
+ * attaches to the person's own running Chrome instead (`attach`). */
 export function agentBrowserIntegration(input: {
   binaryPath: string;
   session: string;
@@ -571,11 +618,12 @@ export function agentBrowserIntegration(input: {
   env?: NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
   arch?: string;
-  /** CDP target of a Chrome already running elsewhere. Callers must source
-   * this only from this workspace's own config (browserEngineAttachCdpUrl),
-   * never from the ambient process environment — the curated env below
-   * otherwise never forwards AGENT_BROWSER_CDP at all (#1396). */
-  attachCdpUrl?: string;
+  /** Use the person's own running Chrome (a profile set to My Chrome):
+   * agent-browser's auto-connect finds it (Chrome's DevToolsActivePort, then
+   * ports 9222/9229), or `cdpUrl` names it. Callers source this only from
+   * this workspace's own config, never from the ambient process environment,
+   * which the curated env below never forwards (#1396). */
+  attach?: { cdpUrl?: string };
 }): { command: string; args: string[]; env: Record<string, string> } {
   const sourceEnv = input.env ?? process.env;
   const env: Record<string, string> = {
@@ -584,10 +632,6 @@ export function agentBrowserIntegration(input: {
     // global flags. The environment keeps page-provided tools disabled in
     // those commands too, and avoids changing browser launch settings later.
     AGENT_BROWSER_NO_WEBMCP: "1",
-    // This is a restore *name*, not a boolean. Use a fixed-length identity:
-    // upstream looks up name prefixes, not an exact daemon-session filename.
-    AGENT_BROWSER_RESTORE: browserRestoreKey(input.session),
-    AGENT_BROWSER_RESTORE_SAVE: input.persistent === false ? "never" : "auto",
     AGENT_BROWSER_ENCRYPTION_KEY: input.encryptionKey,
     // OMB owns launch settings. A user's unrelated native CLI config must not
     // inject a shared Chrome profile or a different saved-state path.
@@ -603,11 +647,23 @@ export function agentBrowserIntegration(input: {
   // kept a headed launch config still comes back headless instead of failing
   // every launch until it is killed by hand (#1383).
   const displayless = (input.platform ?? process.platform) === "linux" && !sourceEnv.DISPLAY && !sourceEnv.WAYLAND_DISPLAY;
-  if (input.headless !== false || displayless) {
-    env.AGENT_BROWSER_HEADLESS = "1";
-    env.AGENT_BROWSER_HEADED = "0";
+  if (input.attach) {
+    // The person's Chrome keeps its own sign-ins. Restoring would copy this
+    // session's saved cookies into it, and saving would copy every cookie of
+    // their real profile into OMB's store, so neither happens.
+    if (input.attach.cdpUrl) env.AGENT_BROWSER_CDP = input.attach.cdpUrl;
+    else env.AGENT_BROWSER_AUTO_CONNECT = "1";
+    env.AGENT_BROWSER_RESTORE_SAVE = "never";
+  } else {
+    // This is a restore *name*, not a boolean. Use a fixed-length identity:
+    // upstream looks up name prefixes, not an exact daemon-session filename.
+    env.AGENT_BROWSER_RESTORE = browserRestoreKey(input.session);
+    env.AGENT_BROWSER_RESTORE_SAVE = input.persistent === false ? "never" : "auto";
+    if (input.headless !== false || displayless) {
+      env.AGENT_BROWSER_HEADLESS = "1";
+      env.AGENT_BROWSER_HEADED = "0";
+    }
   }
-  if (input.attachCdpUrl) env.AGENT_BROWSER_CDP = input.attachCdpUrl;
   // MCP clients may filter the parent environment. Carry the configured
   // Chrome path explicitly without forwarding unrelated secrets or flags.
   for (const name of ["PATH", "AGENT_BROWSER_EXECUTABLE_PATH"] as const) {

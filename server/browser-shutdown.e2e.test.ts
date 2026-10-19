@@ -3,7 +3,7 @@
 // running after a quit, until the engine's one-hour idle timeout. Real server,
 // fake Claude CLI, and an agent-browser stub that logs each command it gets.
 import { spawn, type ChildProcess } from "node:child_process";
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,7 +26,8 @@ afterEach(async () => {
 /** Run one browser turn for a bot that works on the browser, then stop the
  * server the way quitting the app does. Returns the commands the stub got
  * during shutdown: preparing a session also closes it once, during the turn. */
-async function browserTurnThenQuit(config: Record<string, unknown> = {}) {
+async function browserTurnThenQuit(config: Record<string, unknown> = {}, browserProfile?: string,
+  beforeQuit?: (api: (method: string, path: string, body?: unknown) => Promise<{ status: number; body: any }>, log: string) => Promise<void>) {
   const home = mkdtempSync(join(tmpdir(), "omb-browser-shutdown-"));
   homes.push(home);
   mkdirSync(join(home, "tmp"), { recursive: true });
@@ -67,27 +68,60 @@ async function browserTurnThenQuit(config: Record<string, unknown> = {}) {
     return { status: response.status, body: await response.json() as any };
   };
   const bot = (await api("POST", "/api/bots", { name: "Shutdown probe" })).body.bot;
-  expect((await api("PATCH", `/api/bots/${bot.id}`, { computer: "browser", browser: true })).status).toBe(200);
+  expect((await api("PATCH", `/api/bots/${bot.id}`, { computer: "browser", browser: true, ...(browserProfile ? { browserProfile } : {}) })).status).toBe(200);
   expect((await api("POST", `/api/bots/${bot.id}/messages`, { text: "Check the website." })).status).toBe(202);
   await expect.poll(async () => (await api("GET", "/api/bots?messages=0")).body.bots
     .find((item: { id: string }) => item.id === bot.id)?.busy, { timeout: 20_000 }).toBe(false);
-  const turnCommands = readFileSync(log, "utf8").trim().split("\n");
-  expect(turnCommands.some((line) => line.startsWith(`bot-${bot.id} `))).toBe(true);
+  const session = browserProfile ?? `bot-${bot.id}`;
+  // The person's Chrome has no saved state of OMB's to prepare, so a turn on
+  // My Chrome runs no engine command of its own; every other browser does.
+  const turnCommands = existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : [];
+  await beforeQuit?.(api, log);
   appendFileSync(log, "--- shutdown\n");
   await waitForExit(child, { signal: "SIGTERM" });
-  return { session: `bot-${bot.id}`, commands: readFileSync(log, "utf8").split("--- shutdown\n")[1].trim().split("\n") };
+  return { session, turnCommands, commands: readFileSync(log, "utf8").split("--- shutdown\n")[1].trim().split("\n") };
 }
 
 // The stub is a POSIX shell script; Windows resolves engines through a
 // separate launch contract.
 describe.skipIf(process.platform === "win32")("closing the browsers at shutdown", () => {
   it("closes the browser a bot used when the server stops", async () => {
-    const { session, commands } = await browserTurnThenQuit();
+    const { session, turnCommands, commands } = await browserTurnThenQuit();
+    expect(turnCommands.some((line) => line.startsWith(`${session} `))).toBe(true);
     expect(commands).toContain(`${session} close`);
   }, 60_000);
 
-  it("leaves a Chrome attached over CDP running", async () => {
-    const { session, commands } = await browserTurnThenQuit({ browserEngine: { attachCdpUrl: "9222" } });
+  it("leaves the person's Chrome running for a profile set to My Chrome", async () => {
+    const { session, turnCommands, commands } = await browserTurnThenQuit({
+      browserEngine: { attachCdpUrl: "9222" },
+      browserProfiles: [{ id: "profile-mine", name: "Mine", browser: "chrome" }],
+    }, "profile-mine");
+    expect(turnCommands.filter((line) => line.startsWith(`${session} `))).toEqual([]);
     expect(commands).not.toContain(`${session} close`);
+  }, 60_000);
+
+  it("keeps a built-in profile on its own browser even when a Chrome address is configured", async () => {
+    const { session, turnCommands, commands } = await browserTurnThenQuit({ browserEngine: { attachCdpUrl: "9222" } });
+    expect(turnCommands.some((line) => line.startsWith(`${session} `))).toBe(true);
+    expect(commands).toContain(`${session} close`);
+  }, 60_000);
+
+  it("closes a profile's built-in browser, saving its logins, when the profile switches to My Chrome", async () => {
+    const work = { id: "profile-work", name: "Work" };
+    const { session } = await browserTurnThenQuit({ browserProfiles: [work] }, "profile-work", async (api, log) => {
+      appendFileSync(log, "--- switch\n");
+      const switched = await api("PATCH", "/api/config", { browserProfiles: [{ ...work, browser: "chrome" }], expectedBrowserProfiles: [work] });
+      expect(switched.status).toBe(200);
+      expect(switched.body.browserProfiles).toEqual([{ ...work, browser: "chrome" }]);
+      await expect.poll(() => readFileSync(log, "utf8").split("--- switch\n")[1]?.split("\n"), { timeout: 10_000 }).toContain("profile-work close");
+      // The list the person saw carries the choice, so switching back is not
+      // mistaken for another window's edit.
+      const back = await api("PATCH", "/api/config", { browserProfiles: [work], expectedBrowserProfiles: [{ ...work, browser: "chrome" }] });
+      expect(back.status).toBe(200);
+      expect(back.body.browserProfiles).toEqual([work]);
+      // Letting go of the person's Chrome is a close of that session too.
+      await expect.poll(() => readFileSync(log, "utf8").split("--- switch\n")[1]?.split("\n").filter((line) => line === "profile-work close").length, { timeout: 10_000 }).toBe(2);
+    });
+    expect(session).toBe("profile-work");
   }, 60_000);
 });

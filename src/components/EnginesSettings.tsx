@@ -34,6 +34,7 @@ import { ImageGenerationSettings } from "./settings/ImageGenerationSettings";
 import { LiveCallInstallationSettings } from "./LiveCallSettings";
 import { ApiKeyRow, VpsConnection } from "./ApiKeys";
 import { useOfferedInstances } from "@/lib/offered-instances";
+import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
 
 interface ProbeResult {
   ok: boolean;
@@ -469,6 +470,8 @@ export function EnginesSettings() {
         empty={Boolean(member && org && myEngines !== null && shown.length === 0)}
         memberIssuer={member && org ? org.org.identity.issuer : undefined}
       />
+      {/* Prompt-cache keep-warm for idle Claude threads: a server setting, off by default. */}
+      {installation && <div data-settings-card="engines.keepWarm"><CacheKeepWarmSettings /></div>}
       {keys && <KeysSection issuer={org?.org.identity.issuer} />}
       {/* this computer's microphone: everyone's, whoever edits the installation */}
       <div data-settings-card="connections.audio">

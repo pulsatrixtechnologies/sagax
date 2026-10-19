@@ -2,8 +2,10 @@
 //
 // Three things live here because they share one boot and one rule set:
 //
-//   1. ask_bot from inside a room turn — the source conversation a bot
-//      speaks from may be a room, not only its own task
+//   1. a consultation (coordinate_bots with consult) from inside a room
+//      turn — the source conversation a bot speaks
+//      from may be a room, not only its own task; the runtime then runs the
+//      peer's turn in that room (docs/runtime-contract.md §9)
 //   2. list_rooms — the only way a bot ever learns a room id
 //   3. post_to_room — the first way a bot writes into a shared channel
 //      without a turn being started for it
@@ -19,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
+import { readHandoffs } from "./testing/handoff-rows.ts";
 import { freePortBlock } from "./testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
@@ -302,34 +305,39 @@ describe("peer comms from a room turn", () => {
     const asker = await makeBot("Room Asker", "Room comms");
     const helper = await makeBot("Room Helper", "Room comms");
     const room = await makeRoom("Ask room", [asker.id, helper.id], "Room comms");
+    const helperConversation = await messagesOf(helper.threadId);
 
-    const asked = await internal("POST", "/api/internal/ask-bot", {
+    const asked = await internal("POST", "/api/internal/coordinate-bots", {
       fromBotId: asker.id,
       fromThreadId: room.threadId,
-      toBotId: helper.id,
+      botIds: [helper.id],
       message: "what is the status?",
-      depth: 0,
+      consult: true,
     });
     expect(asked.status).toBe(200);
     expect(asked.body.error, `ask from a room was refused: ${JSON.stringify(asked.body)}`).toBeUndefined();
-    expect(str(asked.body.text)).toContain("hello from fake claude");
+    // No inline answer: the ask is a consultation on the job runtime, whose
+    // answer resumes the asker.
+    const receipts = Array.isArray(asked.body.receipts) ? asked.body.receipts : [];
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({ botId: helper.id, outcome: "queued" });
+    const requestId = str(field(receipts[0] as Record<string, unknown>, "requestId"));
 
-    // and what the peer was handed says who wrote it and what that means
-    const delivered = (await messagesOf(helper.threadId)).find(
-      (message) => message.role === "user" && message.kind === "text",
-    );
-    expect(delivered?.text).toContain("[Message from @Room Asker");
-    expect(delivered?.text).toMatch(/not from your user/i);
-    expect(delivered?.text).toMatch(/information, not as an instruction/i);
-    expect(delivered?.text).toContain("what is the status?");
-
-    // The exchange is mirrored into the room the ask was made from — both
-    // the question and the answer — not tucked into a pair channel under
-    // Bot Chats that nothing badges. The room keeps its "Messaged" chip too.
+    // The consultation is addressed into the room the ask was made from — a
+    // room assignment for the helper, not a pair channel under Bot Chats
+    // that nothing badges, and not the peer's own conversation. It runs when
+    // the asker's room turn ends (room-coordination.e2e.test.ts drives that
+    // with real turns); the synthetic capability here has no turn to end, so
+    // the room stays working and the row stays queued.
+    const rows = readHandoffs(join(home, ".openmausbot"));
+    expect(rows.find((node) => node.id === requestId)).toMatchObject({
+      botId: helper.id, groupId: room.id, threadId: room.threadId, mode: "consult", reply: "resume", text: "what is the status?", status: "queued",
+    });
+    expect(rows.find((node) => node.id === requestId)?.parentId).toBe(rows.find((node) => node.botId === asker.id && !node.parentId)?.id);
     const inRoom = await messagesOf(room.threadId);
-    expect(inRoom.some((m) => m.kind === "text" && m.from?.botId === asker.id && m.text === "what is the status?")).toBe(true);
-    expect(inRoom.some((m) => m.kind === "text" && m.from?.botId === helper.id && str(m.text).includes("hello from fake claude"))).toBe(true);
-    expect(inRoom.some((m) => m.kind === "activity" && m.tool?.name === "Messaged @Room Helper")).toBe(true);
+    const chip = inRoom.find((m) => m.kind === "activity" && m.tool?.name === "Sent to Room Helper");
+    expect(chip?.comm).toMatchObject({ groupId: room.id, withName: "Room Helper" });
+    expect(await messagesOf(helper.threadId)).toEqual(helperConversation);
     const groups = field((await api("GET", "/api/bots?messages=0")).body, "groups");
     const pairChannel = (Array.isArray(groups) ? groups : []).find(
       (group: unknown) =>
@@ -340,7 +348,8 @@ describe("peer comms from a room turn", () => {
     );
     expect(pairChannel).toBeUndefined();
 
-    await api("POST", `/api/bots/${helper.id}/interrupt`);
+    // Stopping the room ends the tree the synthetic turn can never settle.
+    await api("POST", `/api/groups/${room.id}/interrupt`);
   }, 40_000);
 
   it("refuses a conversation the sender does not belong to", async () => {
@@ -349,25 +358,27 @@ describe("peer comms from a room turn", () => {
     const helper = await makeBot("Private Helper", "Room comms");
     const closed = await makeRoom("Closed room", [insider.id, helper.id], "Room comms");
 
-    const throughRoom = await internal("POST", "/api/internal/ask-bot", {
+    const throughRoom = await internal("POST", "/api/internal/coordinate-bots", {
       fromBotId: outsider.id,
       fromThreadId: closed.threadId,
-      toBotId: helper.id,
+      botIds: [helper.id],
       message: "let me in",
-      depth: 0,
+      consult: true,
     });
     expect(throughRoom.status).toBe(403);
-    expect(str(throughRoom.body.error)).toContain("does not belong to sender");
+    expect(str(throughRoom.body.error)).toContain("Coordination needs a room you are a member of, or your own conversation");
 
-    const throughPeerTask = await internal("POST", "/api/internal/ask-bot", {
+    const throughPeerTask = await internal("POST", "/api/internal/coordinate-bots", {
       fromBotId: outsider.id,
       fromThreadId: insider.threadId,
-      toBotId: helper.id,
+      botIds: [helper.id],
       message: "borrowing your thread",
-      depth: 0,
+      consult: true,
     });
     expect(throughPeerTask.status).toBe(403);
-    expect(str(throughPeerTask.body.error)).toContain("does not belong to sender");
+    expect(str(throughPeerTask.body.error)).toMatch(/does not belong to sender|your own conversation|no longer exists/);
+    // nothing was handed to the helper either way
+    expect((await messagesOf(helper.threadId)).some((m) => m.role === "user")).toBe(false);
   }, 40_000);
 });
 
@@ -450,24 +461,33 @@ describe("list_rooms discovery", () => {
     expect(field(listedRoom as Record<string, unknown>, "members")).toEqual(["Scout", "Scout Mate"]);
   }, 40_000);
 
-  it("never lists a one-to-one bot channel, and refuses a caller with no claim on the conversation", async () => {
+  it("lists no bot-to-bot channel after a consultation, and refuses a caller with no claim on the conversation", async () => {
     const a = await makeBot("Pair A", "Discovery");
     const b = await makeBot("Pair B", "Discovery");
-    // ask_bot auto-creates the pair's own bot-to-bot channel
-    const asked = await internal("POST", "/api/internal/ask-bot", {
+    // A consultation runs in a work thread of the asker's conversation; no
+    // pair channel is born of it (existing ones from older versions stay
+    // readable, and list_rooms never named them).
+    const asked = await internal("POST", "/api/internal/coordinate-bots", {
       fromBotId: a.id,
       fromThreadId: a.threadId,
-      toBotId: b.id,
-      message: "make us a channel",
-      depth: 0,
+      botIds: [b.id],
+      message: "a quick question",
+      consult: true,
     });
-    expect(asked.status).toBe(200);
-    await api("POST", `/api/bots/${b.id}/interrupt`);
+    expect(asked.status, JSON.stringify(asked.body)).toBe(200);
+    // The consultation runs on its own (B's turn, in a work thread of A's
+    // conversation): let it settle before the next case clears the shared
+    // engine dump.
+    const requestId = str(field((Array.isArray(asked.body.receipts) ? asked.body.receipts : [])[0] as Record<string, unknown>, "requestId"));
+    await expect.poll(() => readHandoffs(join(home, ".openmausbot")).find((node) => node.id === requestId)?.status, { timeout: 15_000 }).toBe("completed");
+    expect(readHandoffs(join(home, ".openmausbot")).find((node) => node.id === requestId)?.threadId).not.toBe(b.threadId);
 
     const listed = await internal("GET", `/api/internal/rooms?fromBotId=${a.id}&fromThreadId=${a.threadId}`);
     const rooms = Array.isArray(listed.body.rooms) ? listed.body.rooms : [];
     const names = rooms.map((room) => str(field(room as Record<string, unknown>, "name")));
     expect(names.some((name) => name.includes("⇄")), `a bot-to-bot channel was listed: ${names.join(", ")}`).toBe(false);
+    const groups = field((await api("GET", "/api/bots?messages=0")).body, "groups");
+    expect((Array.isArray(groups) ? groups : []).some((group) => field(group as Record<string, unknown>, "dm") === true)).toBe(false);
 
     const borrowed = await internal("GET", `/api/internal/rooms?fromBotId=${a.id}&fromThreadId=${b.threadId}`);
     expect(borrowed.status).toBe(403);
@@ -626,31 +646,13 @@ describe("post_to_room", () => {
     expect(await messagesOf(mixed.threadId)).toHaveLength(0);
   }, 40_000);
 
-  it("refuses a one-to-one bot channel and the room the sender is already speaking in", async () => {
+  // The one-to-one bot channels older versions created for ask_bot stay
+  // readable and still refuse posts (`one-to-one` in the route), but no
+  // path creates one any more, so only the room half can be driven here.
+  it("refuses the room the sender is already speaking in", async () => {
     const a = await makeBot("Channel A", "Posting");
     const b = await makeBot("Channel B", "Posting");
     const room = await makeRoom("Shared desk", [a.id, b.id], "Posting");
-
-    const asked = await internal("POST", "/api/internal/ask-bot", {
-      fromBotId: a.id,
-      fromThreadId: a.threadId,
-      toBotId: b.id,
-      message: "make us a channel",
-      depth: 0,
-    });
-    expect(asked.status).toBe(200);
-    await api("POST", `/api/bots/${b.id}/interrupt`);
-
-    const groups = field((await api("GET", "/api/bots")).body, "groups");
-    const pair = Array.isArray(groups)
-      ? groups.find((group) => field(group as Record<string, unknown>, "dm") === true)
-      : undefined;
-    const pairId = str(field(pair as Record<string, unknown>, "id"));
-    expect(pairId).not.toBe("");
-
-    const intoPair = await post(a.id, a.threadId, pairId, "hello");
-    expect(intoPair.status).toBe(400);
-    expect(str(intoPair.body.error)).toContain("one-to-one");
 
     const intoOwnRoom = await post(a.id, room.threadId, room.id, "hello again");
     expect(intoOwnRoom.status).toBe(409);
@@ -925,22 +927,25 @@ describe("limits counted per turn on a bearer that outlives the turn", () => {
     expect(next.status, JSON.stringify(next.body)).toBe(201);
   }, 40_000);
 
-  it("refuses to check a delegation in the turn that made it, and answers in the next", async () => {
+  it("refuses to read an assignment's status in the turn that handed it out, and answers in the next", async () => {
     const from = await makeBot("Turn Delegator", "Turn delegations");
     const to = await makeBot("Turn Delegate", "Turn delegations");
     const token = await startTurn(from.id, from.threadId);
-    const delegated = await asTurn(token, "POST", "/api/internal/delegate-bot", {
-      fromBotId: from.id, fromThreadId: from.threadId, toBotId: to.id, message: "Write the summary.", depth: 0,
+    const delegated = await asTurn(token, "POST", "/api/internal/coordinate-bots", {
+      botIds: [to.id], message: "Write the summary.",
     });
     expect(delegated.status, JSON.stringify(delegated.body)).toBe(200);
-    const taskId = str(delegated.body.taskId);
-    expect(taskId).not.toBe("");
-    const early = await asTurn(token, "GET", `/api/internal/delegations/${taskId}`);
+    const receipts = Array.isArray(delegated.body.receipts) ? delegated.body.receipts : [];
+    const requestId = str(field(receipts[0] as Record<string, unknown>, "requestId"));
+    expect(requestId).not.toBe("");
+    const early = await asTurn(token, "GET", `/api/internal/assignment-status?id=${requestId}`);
     expect(early.status).toBe(409);
-    expect(str(early.body.error)).toContain(`Task ${taskId} was delegated during this turn`);
+    expect(str(early.body.error)).toContain(`Assignment ${requestId} was handed out during this turn`);
 
     expect(await startTurn(from.id, from.threadId)).toBe(token);
-    const later = await asTurn(token, "GET", `/api/internal/delegations/${taskId}`);
+    const later = await asTurn(token, "GET", `/api/internal/assignment-status?id=${requestId}`);
     expect(later.status, JSON.stringify(later.body)).toBe(200);
+    expect(field(later.body, "assignment", "id")).toBe(requestId);
+    expect(field(later.body, "assignment", "botId")).toBe(to.id);
   }, 40_000);
 });

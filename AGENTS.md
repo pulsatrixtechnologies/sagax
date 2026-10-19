@@ -4189,8 +4189,13 @@ launcher is a separate artwork.
 
 ## Upstream sync
 
-Last sync: 2026-10-12, upstream `milind-soni/OpenMausBot` main at
-`295f947d` (0.1.107) merged into Sagax; `baseVersion` follows it. Upstream
+Last sync: 2026-10-19, upstream `milind-soni/OpenMausBot` main at
+`34cbd59b` (0.1.107, PR #2718, the last one before upstream split
+`server/index.ts` into route files) merged into Sagax; `baseVersion` follows
+it. The rest of upstream (the route split #2740 to #2759 and the repository
+wide comment deletion #2827, through 0.1.116) still has to be merged: do it
+as a planned merge, porting our organization rules into upstream's route
+files, never by keeping both handlers. Upstream
 removed `ios/` and `android/` in 0.1.97 (#2382); Sagax keeps its own native
 apps, so those paths stay ours on every later merge. To repeat:
 

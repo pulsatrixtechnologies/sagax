@@ -197,7 +197,7 @@ describe("requestWorkOrigin: settled once, when a request is admitted", () => {
   // written it (its own routines apply at any level), and nothing records
   // whether the person wrote it as it stands. A webhook's payload rides in
   // its run. Neither is the user's request, whatever the line looks like.
-  it.each(["schedule", "manual", "webhook"] as const)("never makes a %s run the user's, whatever it continues or was handed", trigger => {
+  it.each(["schedule", "manual", "webhook", "startup"] as const)("never makes a %s run the user's, whatever it continues or was handed", trigger => {
     expect(requestWorkOrigin({ trigger, line: person })).toEqual(OUTSIDE);
     expect(requestWorkOrigin({ trigger, handed: user, continued: user, line: person })).toEqual(OUTSIDE);
   });

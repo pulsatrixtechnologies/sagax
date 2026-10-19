@@ -15,12 +15,15 @@ const EXACT: Record<string, number> = {
   // +1 each from the 0.5.0 integration (2026-10-12) of PRs that kept a guard in index.ts:
   // GET /healthz (#372), /api/threads/:id/cw-actions (#364), /api/instances/:id/api-key (#383)
   // and the terminal session WebSocket upgrade (#353). Moving them to server/routes lowers these.
-  'path === "/': 188,
+  // 2026-10-19 upstream sync: + /api/internal/request-sign-in (#2707) and /api/internal/assignment-status,
+  // minus the one-release alias routes (ask-bot, delegate-bot, delegations/:id) the runtime move removed;
+  // upstream's /api/internal/fill-login (saved logins) was not taken.
+  'path === "/': 186,
   "path.match(": 98,
   "path.startsWith(": 14,
   ".exec(path)": 24,
-  ".test(path)": 9,
-  ".includes(path)": 4,
+  ".test(path)": 8,
+  ".includes(path)": 3,
 };
 
 const count = (needle: string) => INDEX.split(needle).length - 1;

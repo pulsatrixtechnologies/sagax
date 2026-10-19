@@ -185,6 +185,12 @@
       "reason": "Added upstream in 0.1.107+ (native ACP); it is not verified to withhold its own shell and file tools (scripts/verify-org-host-tools.ts), so organization turns are refused (409 host_tools) and the server image does not carry it yet."
     },
     {
+      "id": "muse-code",
+      "name": "Muse Code",
+      "drivers": ["museCode"],
+      "reason": "Added upstream in 0.1.107+ (Muse Code SDK); it is not verified to withhold its own shell and file tools (scripts/verify-org-host-tools.ts), so organization turns are refused (409 host_tools) and the server image does not carry it yet."
+    },
+    {
       "id": "antigravity",
       "name": "Antigravity",
       "drivers": ["antigravityAgent"],
@@ -203,6 +209,7 @@
     { "id": "mistral", "name": "Mistral", "drivers": ["mistral"], "reason": "Calls the Mistral API; needs a key only." },
     { "id": "cerebras", "name": "Cerebras", "drivers": ["cerebras"], "reason": "Calls the Cerebras API; needs a key only." },
     { "id": "groq", "name": "Groq", "drivers": ["groq"], "reason": "Calls the Groq API; needs a key only." },
+    { "id": "meta", "name": "Meta Model API", "drivers": ["meta"], "reason": "Calls the Meta Model API; needs a key only." },
     { "id": "minimax", "name": "MiniMax", "drivers": ["minimax"], "reason": "Calls the MiniMax API; needs a key only." },
     { "id": "custom", "name": "Custom ACP agent", "drivers": ["customAcp"], "reason": "Whatever command its owner configures (docs/custom-engines.md)." }
   ]

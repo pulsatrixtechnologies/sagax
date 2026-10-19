@@ -4,9 +4,11 @@ import { api, ApiError, useStore, type Bot, type BotAnnouncement, type BrowserPr
 import { browserProfileDeletionBlockReason, browserProfilesMutation, newBrowserProfileId } from "@/lib/browser-profiles";
 import { isOwnerOrAdmin, readSessionState } from "@/lib/session";
 import { t } from "@/lib/i18n";
+import { SignedInSites } from "./SignedInSites";
 
 /** Browser-panel and workspace settings share one editor. The server owns
- * session routing and erasure; this UI never handles cookies or partitions. */
+ * session routing and erasure; this UI never handles cookies or partitions.
+ * Each profile's browser is the built-in one or the person's own Chrome. */
 export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false }: {
   bot?: Bot;
   onProfileChanged?: () => void;
@@ -14,6 +16,8 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
 }) {
   const { state, dispatch, flushBotPatches } = useStore();
   const profiles = state.config?.browserProfiles ?? [];
+  // My Chrome needs the person's Chrome on the computer the bots run on.
+  const myChrome = state.config?.browserEngine?.myChrome === true;
   const bots = state.bots ?? [];
   const currentBot = bot ? bots.find((candidate) => candidate.id === bot.id) ?? bot : undefined;
   const [canManage, setCanManage] = useState<boolean | null>(null);
@@ -108,6 +112,18 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
     }
   };
 
+  // No confirm step: choosing My Chrome is the person's own decision.
+  const setBrowser = async (profile: BrowserProfile, browser: string) => {
+    if (locked || (profile.browser ?? "") === browser) return;
+    setBusy(true);
+    setError("");
+    try {
+      await save(profiles.map((candidate) => candidate.id === profile.id ? { ...candidate, browser: browser === "chrome" ? "chrome" : undefined } : candidate));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const select = async (profileId: string) => {
     if (locked || !currentBot || currentBot.busy || profileId === (currentBot.browserProfile ?? "")) return;
     setBusy(true);
@@ -134,6 +150,9 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
   const inputClass = "min-w-0 flex-1 rounded-md border border-hairline/40 bg-inset px-2.5 py-2 text-[13px] text-ink outline-none focus:border-accent disabled:opacity-50";
   const buttonClass = "shrink-0 rounded-md bg-control px-2.5 py-2 text-[12px] text-ink hover:bg-raised-hover disabled:opacity-50";
   const selected = currentBot?.browserProfile ?? "";
+  const selectedProfile = profiles.find((profile) => profile.id === selected);
+  const usersOf = (profileId: string) => bots.filter((candidate) => candidate.browserProfile === profileId).map((candidate) => candidate.name);
+  const chromeNote = <p className="text-[11px] leading-relaxed text-ink-secondary">{t("settings.profiles.myChromeHint")}</p>;
   return (
     <div className="flex min-w-0 flex-col gap-3" aria-busy={busy}>
       {currentBot && (
@@ -155,6 +174,10 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
           <p className="text-[11px] leading-relaxed text-ink-secondary">
             {currentBot.busy ? t("settings.profiles.stopToSwitch") : selected === "guest" ? t("settings.profiles.temporaryHint") : t("settings.profiles.sharedHint")}
           </p>
+          {selectedProfile?.browser === "chrome" && myChrome ? chromeNote
+            : (selected === "" || selectedProfile) && (
+              <SignedInSites key={`${currentBot.id}:${selected}`} target={{ bot: currentBot.id }} sharedBy={selected ? usersOf(selected) : [currentBot.name]} disabled={locked} />
+            )}
         </div>
       )}
       <details open={!currentBot} className="min-w-0">
@@ -166,11 +189,13 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
             <button type="submit" disabled={locked || !name.trim() || profiles.length >= 20} className={`${buttonClass} flex items-center gap-1`}><Plus size={13} />{t("settings.profiles.create")}</button>
           </form>
           {profiles.length >= 20 && <p className="text-[11px] text-ink-secondary">{t("settings.profiles.limit")}</p>}
+          {!myChrome && profiles.length > 0 && <p className="text-[11px] leading-relaxed text-ink-secondary">{t("settings.profiles.myChromeUnavailable")}</p>}
           {!profiles.length && <p className="text-[12px] text-ink-secondary">{t("settings.profiles.sharedEmpty")}</p>}
           <div className="divide-y divide-hairline/30">
             {profiles.map((profile) => {
-              const users = bots.filter((candidate) => candidate.browserProfile === profile.id).map((candidate) => candidate.name);
+              const users = usersOf(profile.id);
               const blocked = browserProfileDeletionBlockReason(bots, profile.id);
+              const chrome = profile.browser === "chrome" && myChrome;
               return (
                 <div key={profile.id} className="flex flex-col gap-1 py-2">
                   <div className="flex min-w-0 items-center gap-2">
@@ -189,6 +214,16 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
                     )}
                   </div>
                   <p className="break-words pl-6 text-[11px] text-ink-secondary">{users.length ? t("settings.profiles.usedBy", { names: users.join(", ") }) : t("settings.profiles.notInUse")}</p>
+                  <div className="flex min-w-0 flex-col gap-2 pl-6 pt-1">
+                    <label className="flex items-center gap-2 text-[12px] text-ink-secondary">
+                      {t("settings.profiles.browserLabel")}
+                      <select value={profile.browser ?? ""} disabled={locked} onChange={(event) => void setBrowser(profile, event.target.value)} className="rounded-md border border-hairline/40 bg-inset px-2 py-1 text-[12px] text-ink outline-none focus:border-accent disabled:opacity-50">
+                        <option value="">{t("settings.profiles.builtIn")}</option>
+                        <option value="chrome" disabled={!myChrome}>{t("settings.profiles.myChrome")}</option>
+                      </select>
+                    </label>
+                    {chrome ? chromeNote : <SignedInSites target={{ profile: profile.id }} sharedBy={users} disabled={locked} />}
+                  </div>
                 </div>
               );
             })}

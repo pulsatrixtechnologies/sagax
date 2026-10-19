@@ -5,7 +5,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { t } from "@/lib/i18n";
 import { useShowThreads } from "@/lib/thread-preferences";
-import { ArrowDown, ChevronDown, FolderOpen, Pin, X } from "lucide-react";
+import { ArrowDown, ChevronDown, FolderOpen, Pause, Pin, Square, X } from "lucide-react";
 import {
   api,
   useStore,
@@ -47,7 +47,7 @@ import { ReactionChips } from "./Reactions";
 import { myReactions, reactionSelfIds, useToggleReaction } from "@/lib/reactions";
 import type { OrgDirectoryPerson } from "@/lib/perspicax-org";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
-import { mausInk, normalizeState } from "@/lib/mascot";
+import { MAUS_COLOR_NAMES, mausInk, normalizeState } from "@/lib/mascot";
 import { defaultResponderName, effectiveDefaultResponder, groupResponseHint, jevRoomRoutingOn } from "@/lib/group-routing";
 import { openSettings } from "@/lib/settings-link";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -75,6 +75,7 @@ import { ExportTranscriptMenu } from "./ExportTranscriptMenu";
 import { ReplyQuote } from "./ReplyQuote";
 import { ConnectorCard } from "./ConnectorCard";
 import { SecretRequestCard } from "./SecretRequestCard";
+import { SignInRequestCard } from "./SignInRequestCard";
 import { hasRoutineExecutionTask, RoutineRunCard } from "./RoutineRunCard";
 import { GoalRunCard, GoalRunHeaderChip } from "./GoalRunCard";
 import { AccessCard } from "./AccessCard";
@@ -128,6 +129,7 @@ import { Switch } from "./SettingsPrimitives";
 import { groupMemberBots } from "@/lib/group-members";
 import { botPublicProfile } from "../../shared/bot-public-profile";
 import { personAvatarSrc } from "@/lib/profile-management";
+import { roomSpeakerIds, roomThreadSpeakerId, roomThreadWorking } from "@/lib/room-threads";
 
 type RoomItem =
   | ActivityTranscriptItem
@@ -183,10 +185,21 @@ export function RoomToolChip({ message, roomId }: { message: Message; roomId?: s
   );
 }
 
-/** 16px profile avatar + name in the bot's color, shown once per sender cluster. */
+/** A palette color: every skin carries its readable tone (--identity-<color>). */
+function isPaletteColor(color: string): boolean {
+  return (MAUS_COLOR_NAMES as readonly string[]).includes(color);
+}
+
+/** 16px profile avatar + name, shown once per sender cluster. The name uses
+ * that bot's color, deepened or lightened per skin so it stays readable. */
 function ClusterLabel({ bot, name, color }: { bot?: Bot; name: string; color: string }) {
   "use memo";
-  const tint = mausInk(bot?.color ?? color) ?? color;
+  const ownColor = bot?.color ?? color;
+  // A palette color wears the skin's identity tone (styles.css
+  // .bot-identity, 4.5:1 on the thread in every skin); anything else (an
+  // older stored value) keeps its readable ink.
+  const identity = isPaletteColor(ownColor);
+  const tint = identity ? undefined : mausInk(ownColor) ?? color;
   return (
     <div className="-mb-1.5 ms-1.5 mt-3 flex items-center gap-1.5 px-1.5">
       <BotAvatar
@@ -197,7 +210,11 @@ function ClusterLabel({ bot, name, color }: { bot?: Bot; name: string; color: st
         motionKey={0}
         animated={false}
       />
-      <span className="text-[12px] font-normal leading-4" style={{ color: tint }}>{name}</span>
+      <span
+        className={cn("text-[12px] font-normal leading-4", identity && "bot-identity")}
+        data-bot-color={identity ? ownColor : undefined}
+        style={tint ? { color: tint } : undefined}
+      >{name}</span>
     </div>
   );
 }
@@ -560,7 +577,9 @@ export const Transcript = memo(function Transcript({
   }, [items, transcript, reads, reader, people, members]);
   const newestMessageId = messages.at(-1)?.id;
   const newestUserMessageId = [...messages].reverse().find((message) => message.role === "user")?.id;
-  const roomBusy = Boolean(group.busyBotId || group.working);
+  // the open thread's own turn: another thread working beside it leaves
+  // this one free to retry
+  const roomBusy = roomThreadWorking(group, group.threadId);
   let retryableId: string | undefined;
   let retryableIndex = -1;
   for (let index = transcript.length - 1; index >= 0; index -= 1) {
@@ -771,6 +790,8 @@ export const Transcript = memo(function Transcript({
             </div>
           ) : m.kind === "secret" && m.secret && m.from?.botId ? (
             <SecretRequestCard botId={m.from.botId} threadId={group.threadId} message={m} />
+          ) : m.kind === "signin" && m.signIn && m.from?.botId ? (
+            <SignInRequestCard botId={m.from.botId} botName={m.from.name} threadId={group.threadId} message={m} />
           ) : m.kind === "connector" && m.connector && m.from?.botId ? (
             <ConnectorCard botId={m.from.botId} threadId={group.threadId} message={m} />
           ) : m.kind === "options" && m.card?.requestId && m.card.questionRequest ? (
@@ -882,6 +903,32 @@ export const Transcript = memo(function Transcript({
     </>
   );
 });
+
+/** The room's held members ("stop @Bot", or a member's own Stop): one line
+ * that says who is paused and how to bring each back. */
+export function RoomHoldsBanner({ group, members }: { group: Group; members: Bot[] }) {
+  const { dispatch } = useStore();
+  const held = members.filter((member) => group.holds?.[member.id]);
+  if (!held.length) return null;
+  return (
+    <div className="w-full px-5">
+      <div data-testid="room-holds" className="mb-1 flex flex-wrap items-center gap-1.5 px-2 text-[12px] text-ink-secondary">
+        <Pause size={12} aria-hidden="true" />
+        <span>{t("room.holds.banner", { names: held.map((member) => member.name).join(", ") })}</span>
+        {held.map((member) => (
+          <button
+            key={member.id}
+            type="button"
+            onClick={() => dispatch({ type: "setGroupHold", groupId: group.id, botId: member.id, held: false })}
+            className="cursor-pointer text-accent hover:underline"
+          >
+            {t("room.holds.resume", { name: member.name })}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /** Under a reply in an Auto room: the decision model chose this speaker. */
 export function RoutedByLine({ routedBy }: { routedBy: NonNullable<Message["routedBy"]> }) {
@@ -1201,6 +1248,13 @@ export function GroupView({ group: stored }: { group: Group }) {
   // and takes them out (server/group-ownership.ts).
   const ownBotIds = new Set(state.bots.filter((bot) => actorId !== "" && (bot.ownerUserId ?? "").trim().toLowerCase() === actorId).map((bot) => bot.id));
   const speaker = members.find((b) => b.id === group.busyBotId);
+  // The room's threads run side by side: what this view shows working is the
+  // open thread; members busy in another thread are marked apart below.
+  const threadWorking = roomThreadWorking(group, group.threadId);
+  const speakersElsewhere = new Set(roomSpeakerIds(group).filter((id) => id !== group.busyBotId));
+  // The member working in the open thread: the one its Stop holds.
+  const threadSpeakerId = roomThreadSpeakerId(group, group.threadId);
+  const threadSpeaker = threadSpeakerId ? members.find((b) => b.id === threadSpeakerId) : undefined;
 
   // Mascot stays while a member works; the finished reply pops in above it.
   const lastGroupMessage = group.messages.at(-1);
@@ -1209,7 +1263,7 @@ export function GroupView({ group: stored }: { group: Group }) {
   // A member busy elsewhere takes its turn when free; until then the room
   // works with no speaker, and the presence row names who it is waiting on.
   const awaited = members.find(
-    (b) => b.id === awaitedMemberId(group.working, group.busyBotId, lastGroupMessage),
+    (b) => b.id === awaitedMemberId(threadWorking, group.busyBotId, lastGroupMessage),
   );
   const waiting =
     Boolean(speaker && showWorkingDots(true, group.messages.at(-1), speaker.id)) || awaited !== undefined;
@@ -1251,14 +1305,14 @@ export function GroupView({ group: stored }: { group: Group }) {
   const announcement = useMemo((): TranscriptSnapshot => {
     const approval = pendingApprovals(group.messages)[0];
     return {
-      busy: Boolean(group.working || group.busyBotId),
+      busy: threadWorking,
       reply: latestReply(group.messages, (m) => m.from?.name ?? group.name),
       failure: latestFailure(group.messages, (m) => m.from?.name ?? group.name),
       approval: approval
         ? { id: approval.requestId, name: approval.message.from?.name ?? speaker?.name ?? group.name }
         : undefined,
     };
-  }, [group.messages, group.working, group.busyBotId, group.name, speaker?.name]);
+  }, [group.messages, threadWorking, group.name, speaker?.name]);
   const presenceSpeaker =
     speaker ?? awaited ?? members.find((member) => member.id === popping?.botId) ?? members[0];
 
@@ -1302,19 +1356,40 @@ export function GroupView({ group: stored }: { group: Group }) {
   // composer's PlaceChip live indicator.
   const memberMauses = members.map((b) => {
     const busy = group.busyBotId === b.id;
+    const busyElsewhere = !busy && speakersElsewhere.has(b.id);
+    const held = !group.dm && Boolean(group.holds?.[b.id]);
     const task = b.tasks?.find((candidate) => candidate.threadId === group.threadId);
     const effective = busy ? effectivePlace(b, task) : "off";
     const showPlace = busy && effective !== "off" && effective !== "auto";
     return (
       <span
         key={b.id}
-        title={`${b.name}${busy ? " — working…" : ""}`}
+        data-held={held || undefined}
+        title={
+          held
+            ? t("room.holds.avatarHeld", { name: b.name })
+            : busyElsewhere
+              ? t("room.memberWorkingElsewhere", { name: b.name })
+              : `${b.name}${busy ? " — working…" : ""}`
+        }
         className={cn(
           "relative inline-flex rounded-full",
           busy && "ring-2 ring-accent/50 ring-offset-1 ring-offset-app",
+          busyElsewhere && "ring-1 ring-hairline ring-offset-1 ring-offset-app",
         )}
       >
-        <BotAvatar bot={b} state={normalizeState(b.mascotExpression) ?? "happy"} size={24} animated={false} />
+        <span className={cn("inline-flex", held && "opacity-50 grayscale")}>
+          <BotAvatar bot={b} state={normalizeState(b.mascotExpression) ?? "happy"} size={24} animated={false} />
+        </span>
+        {held && !busy && (
+          <span
+            className="absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full border border-app bg-raised text-ink-secondary"
+            role="img"
+            aria-label={t("room.holds.avatarHeld", { name: b.name })}
+          >
+            <Pause size={8} strokeWidth={3} aria-hidden="true" />
+          </span>
+        )}
         {busy && (
           showPlace ? (
             <span
@@ -1431,6 +1506,9 @@ export function GroupView({ group: stored }: { group: Group }) {
           </p>
         </div>
       )}
+
+      {/* Members the person stopped: who is held, and how to bring them back. */}
+      {!group.dm && <RoomHoldsBanner group={group} members={members} />}
 
       {/* Bulletin: one pinned line; click to edit */}
       {!stored.peopleDm && <div className="w-full px-5">
@@ -1590,6 +1668,21 @@ export function GroupView({ group: stored }: { group: Group }) {
               answering={popping !== null}
               since={speaker ? group.turnStartedAt ?? null : null}
             />
+          )}
+          {/* Stop only the member that is working; the room carries on. */}
+          {threadSpeaker && !group.dm && members.length > 1 && !group.holds?.[threadSpeaker.id] && (
+            <div className="flex justify-start pl-12">
+              <button
+                type="button"
+                data-testid="room-stop-member"
+                onClick={() => dispatch({ type: "setGroupHold", groupId: group.id, botId: threadSpeaker.id, held: true })}
+                title={t("room.holds.stopTitle", { name: threadSpeaker.name })}
+                className="ui-pill"
+              >
+                <Square size={11} aria-hidden="true" />
+                <span>{t("room.holds.stop", { name: threadSpeaker.name })}</span>
+              </button>
+            </div>
           )}
           </ConversationGalleryProvider>
         </div>

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { extractTurnImages } from "./turn-images.ts";
+import { extractSteerImages, extractTurnImages } from "./turn-images.ts";
 
 const IDS = [
   "123e4567-e89b-42d3-a456-426614174000",
@@ -112,5 +112,36 @@ describe("turn image admission", () => {
     const source = `<attached-image path="${link}" />`;
 
     expect(extractTurnImages(source, { attachmentsDir: root })).toEqual({ text: source, images: [] });
+  });
+
+  it("resolves a steer's texts one by one and keeps its images in order", () => {
+    const root = store();
+    const first = image(root, 0, ".png", 5);
+    const second = image(root, 1, ".webp", 6);
+    const texts = [
+      `look\n\n<attached-image path="${first}" name="a.png" />`,
+      "plain words stay exactly as sent",
+      `and this\n\n<attached-image path="${second}" name="b.webp" />`,
+    ];
+
+    expect(extractSteerImages(texts, { attachmentsDir: root })).toEqual({
+      texts: ["look\n\n", "plain words stay exactly as sent", "and this\n\n"],
+      images: [
+        { path: first, mime: "image/png", bytes: 5 },
+        { path: second, mime: "image/webp", bytes: 6 },
+      ],
+    });
+    // text-only words come back untouched, with no images
+    expect(extractSteerImages(["just text"], { attachmentsDir: root })).toEqual({ texts: ["just text"], images: [] });
+  });
+
+  it("gives up on a steer whose images together would not fit one turn", () => {
+    const root = store();
+    const one = (index: number) => `<attached-image path="${image(root, index, ".png", 4)}" name="${index}.png" />`;
+    // each text alone is within limits; together they are not
+    expect(extractSteerImages([one(0), one(1), one(2)], { attachmentsDir: root, maxCount: 2 })).toBeNull();
+    expect(extractSteerImages([one(3), one(4)], { attachmentsDir: root, maxBytes: 7 })).toBeNull();
+    // a single text over the limit is refused too, rather than thrown
+    expect(extractSteerImages([`${one(0)}\n\n${one(1)}\n\n${one(2)}`], { attachmentsDir: root, maxCount: 2 })).toBeNull();
   });
 });

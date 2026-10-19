@@ -15,8 +15,8 @@ URLs. Open **only** the printed preview URL. Ctrl-C closes its native browsers,
 UI and harness, then removes its temporary data; the server log remains.
 
 1. The panel contains two browser-chrome rows and a live blank page. There is
-   no “coming next” card and no Take control button. While the bot has the
-   browser, nothing is sent until you interact; hovering never takes it.
+   no “coming next” card. While the bot has the browser, nothing is sent until
+   you interact or press **Take control**; hovering never takes it.
 2. Enter the printed test-page URL and press Enter. That first interaction
    takes the browser from the bot (a pill over the top of the page reads
    “You’re using the browser”, at every panel width), then navigates; it is
@@ -36,7 +36,11 @@ UI and harness, then removes its temporary data; the server log remains.
    only clicking or typing in the page sends Tab there.
 3. Stop for 8 seconds: control returns to the bot and the pill disappears.
    A Cmd shortcut such as Cmd+C must not delay that. Keep **Type or paste
-   text…** open past 8 seconds: control stays yours until it closes.
+   text…** open past 8 seconds: control stays yours until it closes. Press
+   **Take control**, then wait a minute: it stays yours until **Hand back**,
+   which returns it at once. **Type a password or code…** shows a masked
+   field; its text reaches the selected page field and appears in no log,
+   response or other view.
    Holding a mouse button or key down must never hand back. Reconnect the
    view, then leave it connected for at least 30 seconds on the same static
    image. It must not stall waiting for an ACK. The page remains intact and
@@ -60,6 +64,14 @@ UI and harness, then removes its temporary data; the server log remains.
 7. Reconnect while a restart is still finishing, or change profiles before an
    earlier command finishes. A late response must not disconnect the new view,
    change its error state, or acknowledge an old frame as the new viewer.
+8. Sign-in requests: script Pepper's turn to call `request_sign_in` for the
+   test page (the e2e below does this with the fake engine). One **Sign in
+   needed** card and one notification arrive. **Open** selects the Browser tab
+   already in your control; the page stays the bot's, or opens the site when
+   the bot left it blank, and the banner above it offers Done and Cancel. Idle
+   time never hands it back while the request is open. **Done** on the card
+   (or from a second window) hands the browser back and resumes Pepper with
+   “the person finished signing in”; **Cancel** resumes it with “declined”.
 
 Focused automated coverage:
 
@@ -69,7 +81,8 @@ pnpm exec vitest run server/browser-engine.test.ts server/browser-runtime.test.t
   server/browser-live-routes.test.ts server/browser-codex-path.integration.test.ts \
   src/lib/browser-input-queue.test.ts src/lib/browser-control.test.ts src/lib/browser-profiles.test.ts \
   src/components/BrowserProfilesManager.test.ts src/components/BrowserViewport.test.ts \
-  src/components/BrowserPanel.test.ts
+  src/components/BrowserPanel.test.ts src/components/SignInRequestCard.test.ts \
+  server/sign-in-request.e2e.test.ts
 ```
 
 Those tests cover native transport lifecycle, owner/session scoping, gate races,

@@ -576,10 +576,31 @@ function projectTask(task: Record<string, any>, activeThreadId: unknown) {
     ...(typeof task.busy === "boolean" ? { busy: task.busy } : {}),
     ...(typeof task.waitingForTeammates === "boolean" ? { waitingForTeammates: task.waitingForTeammates } : {}),
     ...(task.activity ? { activity: task.activity } : {}),
+    ...(typeof task.working === "boolean" ? { working: task.working } : {}),
+    ...(task.busyBotId !== undefined ? { busyBotId: task.busyBotId ?? null } : {}),
     ...(task.modelSelection ? { modelSelection: task.modelSelection } : {}),
     ...(typeof activeThreadId === "string" ? { active: task.threadId === activeThreadId } : {}),
     ...(task.usage ? { usage: task.usage } : {}),
   };
+}
+
+/** One room thread's own working state. Servers that run a room's threads in
+ * parallel report it per task; older ones only for the active thread, so a
+ * missing field means "not reported" rather than "idle". */
+function channelTaskState(channel: Record<string, any>, taskId: string): { working: boolean | undefined; busyBotId: string | null } | null {
+  const task = records(channel.tasks).find((candidate) => candidate.threadId === taskId);
+  if (task && typeof task.working === "boolean") {
+    return { working: task.working, busyBotId: typeof task.busyBotId === "string" ? task.busyBotId : null };
+  }
+  if (channel.threadId !== taskId) return null;
+  // `working` stays undefined from a server too old to report it.
+  return { working: typeof channel.working === "boolean" ? channel.working : undefined, busyBotId: typeof channel.busyBotId === "string" ? channel.busyBotId : null };
+}
+
+/** The channel a bot is speaking in, whichever of its threads that is. */
+function channelBusyWith(groups: unknown, botId: string) {
+  return records(groups).find((channel) =>
+    channel.busyBotId === botId || records(channel.tasks).some((task) => task.busyBotId === botId));
 }
 
 function botTaskState(bot: Record<string, any>, taskId: string) {
@@ -662,6 +683,18 @@ function projectMessage(message: Record<string, any>) {
         resumed: message.secret.resumed,
       }
     : undefined;
+  const signIn = isRecord(message.signIn)
+    ? {
+        site: message.signIn.site,
+        url: message.signIn.url,
+        place: message.signIn.place,
+        reason: message.signIn.reason,
+        done: message.signIn.done,
+        cancelled: message.signIn.cancelled,
+        superseded: message.signIn.superseded,
+        resumed: message.signIn.resumed,
+      }
+    : undefined;
   return {
     id: message.id,
     at: message.at,
@@ -678,6 +711,7 @@ function projectMessage(message: Record<string, any>) {
     ...(connector ? { connector } : {}),
     ...(secret ? { secret } : {}),
     ...(message.widget ? { widget: message.widget } : {}),
+    ...(signIn ? { signIn } : {}),
     ...(message.kind === "screen" ? { hasImage: Boolean(message.hasImage || message.png) } : {}),
   };
 }
@@ -697,7 +731,8 @@ function messageNeedsInput(message: Record<string, any>): boolean {
     !message.connector.resumed &&
     message.connector.status !== "connected";
   const secret = isRecord(message.secret) && !message.secret.provided && !message.secret.dismissed && !message.secret.superseded;
-  return Boolean(card || connector || secret);
+  const signIn = isRecord(message.signIn) && !message.signIn.done && !message.signIn.cancelled && !message.signIn.superseded;
+  return Boolean(card || connector || secret || signIn);
 }
 
 function dispatchFailedAfterLatestUser(messages: Array<Record<string, any>>): boolean {
@@ -839,7 +874,7 @@ export async function handleToolCall(
       if (!bot) throw new Error(`Bot not found: ${botId}`);
       const taskId = args.task_id === undefined ? String(bot.threadId) : idArg(args, "task_id");
       if (!taskBelongsTo(bot, taskId)) throw new Error(`Task '${taskId}' does not belong to bot '${botId}'`);
-      const busyChannel = records(state.groups).find((channel) => channel.busyBotId === botId);
+      const busyChannel = channelBusyWith(state.groups, botId);
       if (busyChannel) {
         throw new Error(`Bot '${botId}' is working in channel '${busyChannel.id}'; send to or interrupt that channel instead`);
       }
@@ -926,7 +961,9 @@ export async function handleToolCall(
       if (!taskBelongsTo(channel, taskId)) {
         throw new Error(`Task '${taskId}' does not belong to channel '${channelId}'`);
       }
-      if (channel.threadId !== taskId) {
+      // A server that reports each thread's own state runs them in parallel
+      // and takes a message for any of them; an older one only the active.
+      if (channel.threadId !== taskId && !records(channel.tasks).some((task) => typeof task.working === "boolean")) {
         throw new Error(`Task '${taskId}' is not active for channel '${channelId}'; switch to it before sending`);
       }
       await fetcher(`/api/groups/${encodeURIComponent(channelId)}/messages`, {
@@ -1093,7 +1130,7 @@ export async function handleToolCall(
 
         if (targetType === "bot") {
           const task = botTaskState(target, taskId);
-          const busyChannel = task === target && records(state.groups).find((channel) => channel.busyBotId === targetId);
+          const busyChannel = task === target && channelBusyWith(state.groups, targetId);
           if (busyChannel) {
             throw new Error(`Bot '${targetId}' is working in channel '${busyChannel.id}'; wait on that channel instead`);
           }
@@ -1103,15 +1140,16 @@ export async function handleToolCall(
           if (!task.busy && !task.waitingForTeammates) return terminal("settled");
           sawBusy = true;
         } else {
-          if (target.threadId !== taskId) return terminal("settled");
+          const thread = channelTaskState(target, taskId);
+          if (!thread) return terminal("settled");
           const tail = await conversationTail(fetcher, taskId);
           if (tail.raw.some(messageNeedsInput)) {
             return terminal("needs-user", tail);
           }
-          const channelWorking = target.working === true || Boolean(target.busyBotId);
+          const channelWorking = thread.working === true || Boolean(thread.busyBotId);
           if (channelWorking) {
             sawBusy = true;
-            const busyBotId = target.busyBotId;
+            const busyBotId = thread.busyBotId;
             if (busyBotId) {
               const speaker = records(state.bots).find((bot) => bot.id === busyBotId);
               if (!speaker) return terminal("stalled");
@@ -1125,7 +1163,7 @@ export async function handleToolCall(
             // channel send. The short grace remains only for older servers
             // that have no operation-level field and report a user message
             // just before their first speaker becomes busy.
-            if (sawBusy || target.working === false || latest?.role !== "user") {
+            if (sawBusy || thread.working === false || latest?.role !== "user") {
               return terminal("settled", tail);
             }
             if (Date.now() >= startupGraceDeadline) {
@@ -1219,7 +1257,7 @@ export async function handleToolCall(
       const taskId = args.task_id === undefined ? String(target.threadId) : idArg(args, "task_id");
       if (!taskBelongsTo(target, taskId)) throw new Error(`Task '${taskId}' does not belong to ${targetType} '${targetId}'`);
       if (targetType === "bot") {
-        const busyChannel = botTaskState(target, taskId) === target && records(current.groups).find((channel) => channel.busyBotId === targetId);
+        const busyChannel = botTaskState(target, taskId) === target && channelBusyWith(current.groups, targetId);
         if (busyChannel) {
           throw new Error(`Bot '${targetId}' is working in channel '${busyChannel.id}'; interrupt that channel instead`);
         }

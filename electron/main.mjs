@@ -747,6 +747,10 @@ const utilityServerExits = new WeakMap();
 const UTILITY_SERVER_STOP_TIMEOUT_MS = 6_500;
 const trustedApprovalMode = createTrustedApprovalModeCoordinator({ randomId: randomUUID });
 const desktopMutationToken = randomBytes(32).toString("base64url");
+// One id for this launch of the app, given to every server child it starts:
+// routines marked to run when the app starts run once per launch, not again
+// when the app restarts a crashed server or switches back to a workspace.
+const desktopLaunchId = randomUUID();
 const companionMutationToken = randomBytes(32).toString("base64url");
 // The owner's organization identity and avatar for the local server
 // (electron/owner-identity.mjs): read with this app's organization cookie,
@@ -1799,6 +1803,7 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
     // from the launching shell. It starts fail-closed until this exact main
     // process sends the private in-memory connection after spawn.
     SAGAX_DESKTOP_PARENT: "1",
+    SAGAX_DESKTOP_LAUNCH_ID: desktopLaunchId,
     SAGAX_STATIC_DIR: path.join(process.resourcesPath, "ui"),
     SAGAX_RESOURCES_PATH: process.resourcesPath,
     SAGAX_SKILLS_DIR: path.join(process.resourcesPath, "skills"),

@@ -262,20 +262,13 @@ export interface FollowupPayload {
    * tell a contiguous burst from hours-apart texts. Rows written before
    * this existed read as queued at restore time. */
   queuedAt?: number;
-  /** Aside-lane rows (kind "aside"): the peer whose words these are. The
-   * prompt carries the non-steering envelope; text stays the raw words. */
-  aside?: {
-    fromBotId: string;
-    fromBotName: string;
-    unattended?: boolean;
-    /** Comms depth captured when the aside was queued, so a degraded
-     * follow-up turn inherits the same one-hop chain limit. */
-    commsDepth: number;
-  };
 }
 export type FollowupStatus = "pending" | "dispatching" | "interrupted" | "cancelled";
 export interface ChatFollowup {
   id: string;
+  /** "aside" rows are what the aside lane wrote before every hand-off ran
+   * on the job runtime; nothing writes them now, and the server drops any
+   * it finds at start. */
   kind: "bot" | "channel" | "aside";
   ownerId: string;
   threadId: string;
@@ -630,7 +623,7 @@ export interface RecallHit {
   snippet: string;
   /** room messages: which member said it */
   from?: string;
-  /** a user-role line another bot delivered with ask_bot: that bot's name.
+  /** a user-role line another bot delivered as its request (coordinate_bots): that bot's name.
    * The stored text opens with a note saying so, but the snippet windows
    * around the match and drops it, so the reader learns it here. */
   peer?: string;
@@ -642,7 +635,7 @@ function peerAuthor(peerName: string | null, text: string): string | null {
   return peerName ?? peerProvenanceAuthor(text);
 }
 
-/** Enough of a line to see whether it opens with an ask_bot note — the
+/** Enough of a line to see whether it opens with a peer-request note — the
  * note's fixed wording plus a bot name — without reading the whole text. */
 const PEER_NOTE_HEAD_CHARS = 160;
 

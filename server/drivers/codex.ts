@@ -42,10 +42,12 @@ import type {
   SendTurnInput,
   StdioMcpSpec,
   SteerOutcome,
+  TextGenerationOptions,
 } from "../contracts.ts";
 import { newEventId, newId, type TurnAccessInput } from "../contracts.ts";
 import { decodeCodexSelection, OFFICIAL_CODEX_PROVIDER, readCodexModelCatalog, STATIC_CODEX_MODELS } from "./codex-catalog.ts";
 import { codexLocalProviderArgs } from "./local-inject.ts";
+import { codexBackgroundModel, runCodexOneShot } from "./codex-background-text.ts";
 import { augmentedPath, splitCliString } from "../env-path.ts";
 import { classifyError, computeBackoff, interruptibleDelay, RETRY_MAX_ATTEMPTS } from "./retry.ts";
 import { redactSecretsInText } from "../redact.ts";
@@ -2241,6 +2243,50 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
     };
   };
 
+  /** The background steps' one-shot call (memory upkeep, the skill review):
+   * `codex exec` with no tools and no session, in an empty folder, on this
+   * account's own sign-in and routing (./codex-background-text.ts). Offered
+   * as generateMemoryText, never generateText: titles and compaction would
+   * then start a whole Codex process for every new chat. */
+  const generateMemoryText = async (prompt: string, options: TextGenerationOptions = {}): Promise<string> => {
+    if (startupModelRefresh) await startupModelRefresh;
+    if (disposed) throw new Error("This provider was removed.");
+    if (planUnavailable) throw new Error(planUnavailable);
+    const env = childEnv();
+    let providerArgs: string[] = [];
+    if (planAuth) {
+      if (planSigningOut) throw new Error("This ChatGPT account is being disconnected.");
+      if (!models.options.length) await refreshModels();
+      env.SAGAX_CHATGPT_TOKEN = await planAuth.accessToken();
+      if (planSigningOut || disposed) throw new Error("This ChatGPT account is being disconnected.");
+      mkdirSync(join(planDirectory, "codex"), { recursive: true, mode: 0o700 });
+      providerArgs = chatgptPlanCodexArgs();
+    } else if (config.managed) {
+      if (!input.environment.SAGAX_COMPANY_API_KEY || !input.environment.CODEX_HOME) {
+        throw new Error("Company model access is unavailable. Reconnect your organization; personal billing will not be used.");
+      }
+      providerArgs = managedCodexArgs(config.managed);
+    }
+    const id = codexBackgroundModel(models);
+    if (!id) throw new Error("Codex lists no model for background calls. Refresh models in Settings → Model providers → Codex.");
+    // ChatGPT plan and Company routing name their own provider in
+    // providerArgs; an own login picks it from the model id, as a turn does.
+    const selection = planAuth || config.managed ? { model: id, modelProvider: null } : decodeCodexSelection(id);
+    if (!planAuth && !config.managed) providerArgs = codexLocalProviderArgs(env, id);
+    return runCodexOneShot({
+      spawn: spawnCli,
+      kill: killCliTree,
+      cli: config.cli,
+      env,
+      prompt,
+      model: selection.model ?? id,
+      modelProvider: selection.modelProvider,
+      providerArgs,
+      options,
+      describeError: (message) => codexUserError(message, plan),
+    });
+  };
+
   return {
     instanceId,
     driverKind: DRIVER_KIND,
@@ -2251,6 +2297,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
     },
     refreshModels,
     ...(startupModelRefresh ? { startupModelRefresh } : {}),
+    generateMemoryText,
     ...(plan ? { authenticationMethod: "browser-pkce" as const } : {}),
     startAuthentication: async () => {
       if (planUnavailable) throw new Error(planUnavailable);

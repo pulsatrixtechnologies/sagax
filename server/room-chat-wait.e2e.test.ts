@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,16 +11,17 @@ import { freePortBlock } from "./testing/ports.ts";
 
 // An ordinary room round never skips a member who is busy in another
 // conversation: the round parks on them with one neutral note and they take
-// their turn when they free — whether they were a direct responder, a
-// teammate summoned by a chained @mention, or the peer in a bot⇄bot channel
-// the user chipped into. The member's own 1:1 turn is never touched by the
-// wait. The bounded end of the wait (the cap) lives in the short-cap server
-// of group-goal-wait-cap.e2e.test.ts.
+// their turn when they free — whether they were a direct responder or a
+// teammate summoned by a chained @mention. The member's own 1:1 turn is
+// never touched by the wait. The bounded end of the wait (the cap) lives in
+// the short-cap server of group-goal-wait-cap.e2e.test.ts. (The bot⇄bot
+// channels ask_bot used to open are no longer created — a consultation is an
+// assignment on the job runtime — so the wait in one is no longer driven
+// here; an existing channel is a room like any other to this rule.)
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(SERVER_DIR, "..");
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
-const TEST_CAPABILITY_KEY = "room-chat-wait-fixture-capability";
 
 const WAIT_CHIP = (name: string) => `${name} is finishing another conversation — will reply here when free`;
 
@@ -28,7 +29,6 @@ let child: ChildProcess;
 let home = "";
 let base = "";
 let stderr = "";
-let penDump = "";
 let patientFinishGate = "";
 
 type StateMessage = {
@@ -69,7 +69,6 @@ beforeAll(async () => {
   mkdirSync(join(staticDir, "assets"), { recursive: true });
   writeFileSync(join(staticDir, "index.html"), "<!doctype html><title>Room chat wait test</title>");
   writeFileSync(join(staticDir, "assets", "smoke.css"), "body{}");
-  penDump = join(home, "pen-dump.json");
   patientFinishGate = join(home, "patient-finish");
   writeFileSync(patientFinishGate, "initial turns may finish");
   writeFileSync(join(data, "config.json"), JSON.stringify({
@@ -85,9 +84,6 @@ beforeAll(async () => {
         FAKE_CLAUDE_REPLIES: JSON.stringify(["Let me pull in @Bee for this."]),
         FAKE_CLAUDE_REPLY_STATE: join(home, "summoner-replies.txt"),
       }),
-      // The dump proves the real per-turn token is mounted. An exact synthetic
-      // capability below drives ask_bot after this quick fake turn settles.
-      pen: fixture("Dumping fixture", { FAKE_CLAUDE_MODE: "happy", FAKE_CLAUDE_DUMP: penDump }),
     },
   }));
   const port = await freePortBlock([0, 1]);
@@ -102,7 +98,6 @@ beforeAll(async () => {
       SAGAX_PORT: String(port),
       SAGAX_WEBHOOK_PORT: String(port + 1),
       SAGAX_STATIC_DIR: staticDir,
-      SAGAX_TEST_INTERNAL_CAPABILITY_KEY: TEST_CAPABILITY_KEY,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -272,82 +267,6 @@ describe("chat rooms wait for a member busy elsewhere", { timeout: 45_000 }, () 
       expect(await directReply(bee.id, "Bee, finish this first")).toBe(true);
     } finally {
       await cleanup(room?.id, [ace.id, bee.id]);
-    }
-  });
-
-  it("waits for the peer of a bot⇄bot channel when the user chips in while that peer is busy", async () => {
-    const pen = await createBot("Pen", "pen");
-    const ink = await createBot("Ink", "patient");
-    let channelId: string | undefined;
-
-    try {
-      // one direct turn hands the fake CLI its MCP config, which carries the
-      // comms token every internal endpoint is sealed behind
-      expect((await api("POST", `/api/bots/${pen.id}/messages`, { text: "Warm up" })).status).toBe(202);
-      const readToken = (): string | undefined => {
-        try {
-          const dump = JSON.parse(readFileSync(penDump, "utf8"));
-          const value: unknown = dump?.mcpConfig?.mcpServers?.agents?.env?.SAGAX_COMMS_TOKEN;
-          return typeof value === "string" && value ? value : undefined;
-        } catch {
-          // not written yet, or mid-write
-          return undefined;
-        }
-      };
-      await expect.poll(readToken, { timeout: 10_000 }).toBeTruthy();
-      expect(readToken()).toMatch(/^[a-f0-9]{48}$/);
-      await expect.poll(() => botBusy(pen.id)).toBe(false);
-      const minted = await api(
-        "POST",
-        "/api/testing/internal-capability",
-        { botId: pen.id, threadId: pen.threadId, kind: "agents" },
-        { "x-openmausbot-test-capability": TEST_CAPABILITY_KEY },
-      );
-      expect(minted.status).toBe(201);
-      const token = String(minted.body.token);
-
-      // ask_bot is what births the channel; the peer answers at once here
-      const asked = await api(
-        "POST",
-        "/api/internal/ask-bot",
-        { fromBotId: pen.id, toBotId: ink.id, message: "Ink, quick question" },
-        { authorization: `Bearer ${token}` },
-      );
-      expect(asked.status).toBe(200);
-      expect(asked.body.botName).toBe("Ink");
-      const channel = (await api("GET", "/api/bots?messages=0")).body.groups.find((group: {
-        dm?: boolean;
-        memberIds: string[];
-      }) => group.dm === true && group.memberIds.includes(pen.id) && group.memberIds.includes(ink.id));
-      expect(channel).toBeTruthy();
-      channelId = channel.id;
-      await expect.poll(() => botBusy(ink.id)).toBe(false);
-      await holdBusy(ink.id, "Ink, finish this first");
-      expect((await api("POST", `/api/groups/${channel.id}/messages`, { text: "@Ink one more thing" })).status).toBe(202);
-      await releaseAfterRoomWait(channel.id, ink.id, "Ink");
-
-      await expect.poll(async () => {
-        const { room: current, messages } = await snapshot(channel.id);
-        const { speakers: _speakers, ...summary } = roundSummary(messages, ink.id);
-        // Ink's earlier answer to Pen is already in the channel; the chip-in
-        // must have produced a fresh Ink reply AFTER the wait note
-        const waitAt = messages.findIndex((message) => message.tool?.name === WAIT_CHIP("Ink"));
-        const inkRepliedAfterWait = waitAt !== -1 && messages.slice(waitAt + 1).some((message) =>
-          message.kind === "text" && message.role === "bot" && message.from?.botId === ink.id
-        );
-        return { working: current?.working, ...summary, inkRepliedAfterWait };
-      }, { timeout: 15_000 }).toEqual({
-        working: false,
-        waitChip: WAIT_CHIP("Ink"),
-        waitChipOk: true,
-        waitChips: 1,
-        skipped: false,
-        inkRepliedAfterWait: true,
-      });
-
-      expect(await directReply(ink.id, "Ink, finish this first")).toBe(true);
-    } finally {
-      await cleanup(channelId, [pen.id, ink.id]);
     }
   });
 });

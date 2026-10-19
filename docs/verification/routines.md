@@ -135,8 +135,30 @@ conversation is silently deleted or filed.
 
 An unconfirmed proposal is not an active routine. A run marked **Waiting** is
 not necessarily asking the user for approval: its attention text can explain
-that delegated work is still running. Status, result and scheduled/manual
-trigger must agree with the saved server record.
+that work it handed to teammates is still outstanding — the job runtime has
+assignments open for the run's thread (docs/runtime-contract.md §9), and the
+run completes when their results have resumed it as a routine turn. Status,
+result and scheduled/manual trigger must agree with the saved server record.
+
+## Run on startup
+
+A repeating routine's **Advanced** section offers **Also run when Sagax
+starts**. In the isolated renderer, create a daily routine with it ticked, then
+reopen the editor: the box stays ticked. A one-time routine does not offer it.
+Startup needs a restart on the same data, which this launcher does not do;
+`server/routines-startup.test.ts` restarts a real fixture server on its own
+store and requires exactly one completed **On startup** run.
+
+The desktop gives every server child of one launch the same
+`SAGAX_DESKTOP_LAUNCH_ID`, and `routines.json` records the launch whose startup
+runs were queued. A crash recovery or switching back to a workspace within
+that launch queues none; the next launch does. A server without the variable,
+such as a standalone one, counts every process start.
+
+```sh
+pnpm exec vitest run server/routines.test.ts server/routines-startup.test.ts server/routine-requests.test.ts server/drivers/agents-proxy.test.ts shared/package-format.test.ts server/package-export.test.ts server/package-import.test.ts
+node --test electron/server-child-launch.node-test.mjs
+```
 
 ## Evidence and cleanup
 
@@ -161,10 +183,11 @@ never kill processes by name or delete a broad temporary root.
 
 In the editor's Advanced section, recurring routines offer **Skip this
 occurrence** (the default) or **Queue one run**. The queued scheduled run waits
-for the same routine to finish, including delegated work; extra occurrences
-are skipped, not accumulated. Manual runs and webhook deliveries remain
-independent. Pausing still cancels queued work. The cron renderer test changes
-this option, saves it, opens the editor again and switches it back.
+for the same routine to finish, including the assignments its run still has
+outstanding on the job runtime; extra occurrences are skipped, not
+accumulated. Manual runs and webhook deliveries remain independent. Pausing
+still cancels queued work. The cron renderer test changes this option, saves
+it, opens the editor again and switches it back.
 
 The List view and `list_routines` expose saved skipped-occurrence counts and
 recent consecutive failures. Skips count occurrences observed by the scheduler
@@ -195,13 +218,19 @@ pnpm exec vitest run server/routines.test.ts server/routines-startup.test.ts ser
 pnpm exec vitest run src/components/routines/RoutineViews.test.ts src/components/routines/ResultsDestination.test.ts src/components/bot-settings/RoutinesSection.test.ts src/components/RoutineRunCard.test.ts src/components/BotProjects.test.ts src/lib/folder-read.test.ts src/lib/computer-panel-view.test.ts src/state/store.test.ts
 ```
 
-The delegation integration tests launch their own shared-control fixtures.
-They verify a busy peer delaying completion until its result resumes the same
-routine, a denied handoff resuming the routine with that outcome, and a cancelled
-routine refusing a stale approved handoff. They print retained server-log and
-JSON evidence paths. These complement the scheduler, proposal and renderer
-tests; they do not prove real-provider tool selection, actual desktop work, or
-packaged Electron behavior.
+The hand-off integration tests (`server/routine-delegation.e2e.test.ts`,
+`server/runtime-paths.e2e.test.ts`) launch their own shared-control fixtures.
+A routine turn hands work on with `coordinate_bots`; the run's root on the
+job runtime names the run as its
+requester with routine lineage (docs/runtime-contract.md §9). They verify a
+busy peer delaying completion until its result resumes the same run as a
+routine turn, a denied hand-off refused with that outcome and no assignment
+written, a run that stays waiting through a restart while its cut teammate
+turn runs again once (§5), and the one-time import of a pre-runtime
+`delegations.json` at boot (`server/routines-startup.test.ts`). They print
+retained server-log and JSON evidence paths. These complement the scheduler,
+proposal and renderer tests; they do not prove real-provider tool selection,
+actual desktop work, or packaged Electron behavior.
 
 Webhook delivery IDs are committed atomically with their execution receipt.
 Retries keep the same run ID for seven days, independently of run-log pruning;

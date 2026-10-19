@@ -60,6 +60,8 @@ export interface RoutineRequestDefinition {
   continuity?: boolean;
   /** Skip by default, or keep at most one scheduled run waiting. */
   overlap?: "skip" | "queue";
+  /** Also run once each time Sagax starts. Repeating routines only. */
+  runOnStartup?: boolean;
 }
 
 export type RoutineRequestChanges =

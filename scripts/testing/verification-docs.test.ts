@@ -31,13 +31,21 @@ helpVerbs.add("help");
 // modules under server/routes (server/routes/README.md). Tests there quote
 // paths without registering them, so they do not count.
 const ROUTES_DIR = join(ROOT, "server", "routes");
-const routeModules = readdirSync(ROUTES_DIR).filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts")).sort();
-// Organization features register theirs from server/*-routes.ts and
-// server/org-export.ts, which server/index.ts mounts.
-const featureRouteModules = readdirSync(join(ROOT, "server"))
-  .filter((name) => name.endsWith("-routes.ts") || name === "org-export.ts").sort()
-  .map((name) => join(ROOT, "server", name));
-const serverSource = [join(ROOT, "server", "index.ts"), ...routeModules.map((name) => join(ROUTES_DIR, name)), ...featureRouteModules]
+// Every route module, including those in folders under server/routes, and the
+// factories that live beside their feature: organization features register
+// theirs from server/*-routes.ts and server/org-export.ts (which
+// server/index.ts mounts), plus data and workspace backup. A route moved out
+// of index.ts stays a registered route here.
+const routeModules = readdirSync(ROUTES_DIR, { recursive: true, encoding: "utf8" })
+  .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts")).sort()
+  .map((name) => join(ROUTES_DIR, name));
+const featureRouteModules = [
+  ...readdirSync(join(ROOT, "server"))
+    .filter((name) => name.endsWith("-routes.ts") || name === "org-export.ts").sort(),
+  "data/routes.ts",
+  "workspace-backup-http.ts",
+].map((name) => join(ROOT, "server", name)).filter((file) => existsSync(file));
+const serverSource = [join(ROOT, "server", "index.ts"), ...routeModules, ...featureRouteModules]
   .map((file) => readFileSync(file, "utf8")).join("\n");
 const hooksSource = readFileSync(join(ROOT, "server", "webhook-ingress.ts"), "utf8");
 // The hosted workspace adapter lives in the private enterprise layer, which

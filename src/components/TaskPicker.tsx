@@ -19,6 +19,7 @@ import { FullAccessWarning } from "./FullAccessWarning";
 import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
 import { cn } from "@/lib/cn";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
+import { roomThreadsWorkingElsewhere } from "@/lib/room-threads";
 import { useMenuMotion } from "./MenuMotion";
 import { t } from "@/lib/i18n";
 import { formatTaskTokens, headlineTokens, usageDetail } from "@/lib/usage";
@@ -164,6 +165,7 @@ function ConversationTaskPicker({
   threadActions,
   folderActions,
   initialOpen = false,
+  workingElsewhere = 0,
 }: {
   threadId: string;
   tasks: PickerTask[];
@@ -174,6 +176,9 @@ function ConversationTaskPicker({
   /** The owner's own New thread control (it opens in the current folder);
    * absent: a plain New thread row that calls onNew. */
   newButton?: (close: () => void) => ReactNode;
+  /** Threads other than the open one working right now (a room's run side
+   * by side); the switcher marks them so background work stays visible. */
+  workingElsewhere?: number;
   onNew: () => void;
   onSwitch: (threadId: string) => void;
   onRename: (threadId: string, title: string) => void;
@@ -323,9 +328,18 @@ function ConversationTaskPicker({
         title={switchTitle}
         aria-label={t("task.switch")}
         aria-expanded={open}
-        className={cn(CIRCLE_BUTTON, "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", open && "bg-elevated-hover")}
+        className={cn(CIRCLE_BUTTON, "relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", open && "bg-elevated-hover")}
       >
         <MessagesSquare size={18} strokeWidth={1.75} aria-hidden="true" />
+        {workingElsewhere > 0 && (
+          <span
+            role="img"
+            data-working-elsewhere={workingElsewhere}
+            aria-label={t("task.workingElsewhere", { count: workingElsewhere })}
+            title={t("task.workingElsewhere", { count: workingElsewhere })}
+            className="absolute right-0.5 top-0.5 size-1.5 animate-pulse rounded-full bg-accent"
+          />
+        )}
       </button>
 
       {motion.shown && (
@@ -718,6 +732,7 @@ export function GroupTaskPicker({ group }: { group: Group }) {
       threadId={group.threadId}
       tasks={orderedThreadList(tasks)}
       busy={false}
+      workingElsewhere={roomThreadsWorkingElsewhere(group)}
       onNew={() => dispatch({ type: "newGroupTask", groupId: group.id })}
       onSwitch={(threadId) => dispatch({ type: "switchGroupTask", groupId: group.id, threadId })}
       onRename={(threadId, title) => dispatch({ type: "renameGroupTask", groupId: group.id, threadId, title })}

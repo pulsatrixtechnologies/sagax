@@ -101,6 +101,15 @@ it("carries a bot's recent 1:1 work into a room turn, tells the room, logs the t
     expect(second).toContain('room "Standup" · you said: "');
     // the room turn was logged too, sourced to the room
     expect(dailyLogs(fixture.info.dataDir).find((log) => log.path.includes(lead.id))!.text).toContain('from room "Standup"');
+    // Each line is journaled as the turn that left it, on its own thread:
+    // never as an edit the person made outside the app (#2719's live test
+    // found the room's line credited to "person" at the next turn's start).
+    const journal = await api("GET", `/api/bots/${lead.id}/memory/journal`) as { entries: Array<{ path: string; actor: string; via: string; threadId?: string }> };
+    const logRows = journal.entries.filter((entry) => entry.path.startsWith("memory/log/"));
+    expect(logRows.map((row) => `${row.actor}/${row.via}`)).toEqual(["bot/turn", "bot/turn", "bot/turn"]);
+    // SAFETY: /api/bots lists every bot with its main thread
+    const leadThread = ((await api("GET", "/api/bots")) as { bots: Array<{ id: string; threadId: string }> }).bots.find((bot) => bot.id === lead.id)!.threadId;
+    expect(logRows.map((row) => row.threadId).sort()).toEqual([leadThread, leadThread, group.threadId].sort());
   } finally {
     await fixture.close();
   }

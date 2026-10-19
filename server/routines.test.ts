@@ -2974,6 +2974,235 @@ describe("RoutineManager", () => {
   });
 });
 
+// #325: a computer that is off at the scheduled time can still run a routine
+// as soon as Sagax starts.
+describe("run on startup", () => {
+  const start = Date.parse("2026-09-13T08:00:00Z");
+  const daily = (patch: Record<string, unknown> = {}) => ({
+    name: "Morning check", prompt: "Check the fixture", botId: "maus-1",
+    schedule: { type: "daily" as const, time: "23:00", weekdays: [0, 1, 2, 3, 4, 5, 6] }, ...patch,
+  });
+
+  it("runs a marked routine once when the scheduler starts, between scheduled times", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(daily({ runOnStartup: true }));
+    expect(routine.runOnStartup).toBe(true);
+    const booted = new RoutineManager(h.options);
+    booted.start();
+    try {
+      await expect.poll(() => h.started.length).toBe(1);
+      expect(h.triggerSources).toEqual(["startup"]);
+      expect(booted.listRuns()[0]).toMatchObject({ routineId: routine.id, triggerSource: "startup", manual: false, status: "running" });
+      // The schedule itself is untouched: the next 23:00 still runs.
+      expect(booted.listRoutines()[0].nextRunAt).toBe(routine.nextRunAt);
+    } finally {
+      booted.stop();
+    }
+  });
+
+  it("leaves unmarked and paused routines alone", async () => {
+    const h = harness(start);
+    h.manager.create(daily());
+    h.manager.create(daily({ name: "Paused", runOnStartup: true, enabled: false }));
+    const booted = new RoutineManager(h.options);
+    booted.start();
+    await booted.tick();
+    booted.stop();
+    expect(h.started).toHaveLength(0);
+    expect(booted.listRuns()).toHaveLength(0);
+  });
+
+  it("runs once per start, not again when a paused scheduler resumes", async () => {
+    const h = harness(start);
+    h.manager.create(daily({ runOnStartup: true }));
+    const booted = new RoutineManager(h.options);
+    booted.start();
+    await expect.poll(() => h.started.length).toBe(1);
+    booted.stop();
+    booted.start();
+    await booted.tick();
+    booted.stop();
+    expect(booted.listRuns()).toHaveLength(1);
+  });
+
+  it("does not double a routine the scheduler is already catching up", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(daily({ runOnStartup: true }));
+    h.setNow(routine.nextRunAt! + 60_000);
+    const booted = new RoutineManager(h.options);
+    booted.start();
+    await expect.poll(() => h.started.length).toBe(1);
+    booted.stop();
+    expect(booted.listRuns()).toHaveLength(1);
+    expect(h.triggerSources).toEqual(["schedule"]);
+  });
+
+  it("counts a run already started before the scheduler, rather than starting a second", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(daily({ runOnStartup: true }));
+    const booted = new RoutineManager(h.options);
+    booted.runNow(routine.id);
+    await expect.poll(() => booted.listRuns()[0]?.status).toBe("running");
+    booted.start();
+    await booted.tick();
+    booted.stop();
+    expect(booted.listRuns().map((run) => run.triggerSource)).toEqual(["manual"]);
+  });
+
+  it("replaces an occurrence too late to catch up, instead of also reporting it missed", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(daily({ runOnStartup: true, overlap: "queue" }));
+    h.setNow(routine.nextRunAt! + 13 * 60 * 60_000);
+    const booted = new RoutineManager(h.options);
+    booted.start();
+    await expect.poll(() => h.started.length).toBe(1);
+    await booted.tick();
+    booted.stop();
+    expect(booted.listRuns().map((run) => [run.triggerSource, run.status])).toEqual([["startup", "running"]]);
+    expect(h.failed).toHaveLength(0);
+    expect(booted.listRoutines()[0].nextRunAt).toBeGreaterThan(routine.nextRunAt! + 13 * 60 * 60_000);
+  });
+
+  it.each([2, 14])("does not start an interval that ended offline after %s hours", async (hours) => {
+    const h = harness(start);
+    const endsAt = start + hours * 60 * 60_000;
+    const routine = h.manager.create(daily({ runOnStartup: true,
+      schedule: { type: "interval", everyMinutes: 60, anchorAt: start, endsAt } }));
+    h.setNow(endsAt + 1);
+    const booted = new RoutineManager(h.options);
+    booted.start();
+    try {
+      await expect.poll(() => booted.isTicking).toBe(false);
+      expect(h.started).toHaveLength(0);
+      expect(booted.listRuns()).toHaveLength(1);
+      expect(booted.listRuns()[0]).toMatchObject({ routineId: routine.id, triggerSource: "schedule", status: "missed" });
+      expect(booted.listRoutines()[0]).toMatchObject({ enabled: false, nextRunAt: null });
+      expect(new RoutineManager(h.options).listRoutines()[0]).toMatchObject({ enabled: false, nextRunAt: null });
+    } finally {
+      booted.stop();
+    }
+  });
+
+  it.each([-1, 0])("still allows startup just before or at the inclusive interval end (%s ms)", async (offset) => {
+    const h = harness(start);
+    const endsAt = start + 14 * 60 * 60_000;
+    h.manager.create(daily({ runOnStartup: true,
+      schedule: { type: "interval", everyMinutes: 60, anchorAt: start, endsAt } }));
+    h.setNow(endsAt + offset);
+    const booted = new RoutineManager(h.options);
+    booted.start();
+    try {
+      await expect.poll(() => h.started.length).toBe(1);
+      expect(booted.listRuns()).toHaveLength(1);
+      expect(booted.listRuns()[0]).toMatchObject({ triggerSource: "startup", status: "running", scheduledFor: endsAt + offset });
+    } finally {
+      booted.stop();
+    }
+  });
+
+  it("runs once per desktop launch, not again when that launch restarts its server", async () => {
+    const h = harness(start);
+    h.manager.create(daily({ runOnStartup: true }));
+    const launched = new RoutineManager({ ...h.options, launchId: "launch-a" });
+    launched.start();
+    await expect.poll(() => h.started.length).toBe(1);
+    launched.stop();
+    // The desktop restarts a crashed server, or switches back to this
+    // workspace, within the same launch.
+    const restarted = new RoutineManager({ ...h.options, launchId: "launch-a" });
+    restarted.start();
+    await restarted.tick();
+    restarted.stop();
+    expect(restarted.listRuns()).toHaveLength(1);
+    // The next time the app opens is a new launch.
+    const relaunched = new RoutineManager({ ...h.options, launchId: "launch-b" });
+    relaunched.start();
+    await expect.poll(() => h.started.length).toBe(2);
+    relaunched.stop();
+    expect(relaunched.listRuns().map((run) => run.triggerSource)).toEqual(["startup", "startup"]);
+  });
+
+  it("counts a launch whose startup was covered by a catch-up run", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(daily({ runOnStartup: true }));
+    h.setNow(routine.nextRunAt! + 60_000);
+    const launched = new RoutineManager({ ...h.options, launchId: "launch-a" });
+    launched.start();
+    await expect.poll(() => h.started.length).toBe(1);
+    launched.stop();
+    const restarted = new RoutineManager({ ...h.options, launchId: "launch-a" });
+    restarted.start();
+    await restarted.tick();
+    restarted.stop();
+    expect(restarted.listRuns().map((run) => run.triggerSource)).toEqual(["schedule"]);
+  });
+
+  it("records an empty desktop launch before a startup routine is later created", async () => {
+    const h = harness(start);
+    const launched = new RoutineManager({ ...h.options, launchId: "launch-a" });
+    launched.start();
+    await launched.tick();
+    launched.stop();
+    launched.create(daily({ runOnStartup: true }));
+    const restarted = new RoutineManager({ ...h.options, launchId: "launch-a" });
+    restarted.start();
+    await restarted.tick();
+    restarted.stop();
+    expect(restarted.listRuns()).toHaveLength(0);
+    const relaunched = new RoutineManager({ ...h.options, launchId: "launch-b" });
+    relaunched.start();
+    await expect.poll(() => h.started.length).toBe(1);
+    relaunched.stop();
+    expect(relaunched.listRuns()[0]).toMatchObject({ triggerSource: "startup" });
+  });
+
+  it("never marks a one-time routine, and never starts one that a file marked", async () => {
+    const h = harness(start);
+    const once = h.manager.create(daily({ runOnStartup: true, schedule: { type: "once", at: start + 24 * 60 * 60_000 } }));
+    expect(once.runOnStartup).toBeUndefined();
+    const disk = JSON.parse(readFileSync(h.options.file!, "utf8"));
+    disk.routines[0].runOnStartup = true;
+    writeFileSync(h.options.file!, JSON.stringify(disk));
+    const booted = new RoutineManager(h.options);
+    booted.start();
+    await booted.tick();
+    booted.stop();
+    expect(booted.listRuns()).toHaveLength(0);
+    const repeating = h.manager.create(daily({ runOnStartup: true }));
+    expect(h.manager.update(repeating.id, { schedule: { type: "once", at: start + 24 * 60 * 60_000 } })?.runOnStartup).toBeUndefined();
+  });
+
+  it("tries again on the next start when the startup runs could not be saved", async () => {
+    const h = harness(start);
+    h.manager.create(daily({ runOnStartup: true }));
+    // With a launch id, the failed start must not count as this launch's.
+    const booted = new RoutineManager({ ...h.options, launchId: "launch-a" });
+    // A directory where the store goes fails the atomic rename on every OS.
+    const file = h.options.file!;
+    rmSync(file);
+    mkdirSync(file);
+    writeFileSync(join(file, "blocker"), "");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    booted.start();
+    booted.stop();
+    rmSync(file, { recursive: true });
+    expect(booted.listRuns()).toHaveLength(0);
+    booted.start();
+    await expect.poll(() => h.started.length).toBe(1);
+    booted.stop();
+    expect(booted.listRuns()[0].triggerSource).toBe("startup");
+  });
+
+  it("saves the choice, keeps it across edits, and clears it when switched off", () => {
+    const h = harness(start);
+    const routine = h.manager.create(daily({ runOnStartup: true }));
+    expect(h.manager.update(routine.id, { name: "Renamed" })?.runOnStartup).toBe(true);
+    expect(new RoutineManager(h.options).listRoutines()[0].runOnStartup).toBe(true);
+    expect(h.manager.update(routine.id, { runOnStartup: false })?.runOnStartup).toBeUndefined();
+    expect(new RoutineManager(h.options).listRoutines()[0].runOnStartup).toBeUndefined();
+  });
+});
+
 describe("routine continuity", () => {
   /** Drive one interval run to completion and return the prompt it was sent. */
   async function runOnce(

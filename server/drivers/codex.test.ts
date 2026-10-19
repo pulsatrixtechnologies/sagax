@@ -1742,7 +1742,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
           args: ["/tmp/harness-mcp-proxy.js"],
           env: {
             SAGAX_HARNESS_URL: "http://127.0.0.1:8799",
-            SAGAX_MCP_TOKEN: "browser-capability-secret",
+            SAGAX_MCP_TOKEN_BROWSER: "browser-capability-secret",
           },
         },
       },
@@ -1761,7 +1761,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(seen.argv).not.toContain('mcp_servers.browser.default_tools_approval_mode="approve"');
     expect(seen.argv.join(" ")).toContain("/tmp/harness-mcp-proxy.js");
     expect(seen.argv.join(" ")).not.toContain("browser-capability-secret");
-    expect(seen.env.SAGAX_MCP_TOKEN).toBe("browser-capability-secret");
+    expect(seen.env.SAGAX_MCP_TOKEN_BROWSER).toBe("browser-capability-secret");
     for (const method of ["thread/start", "turn/start"]) {
       expect(seen.calls.find((call: { method: string }) => call.method === method)?.params).toMatchObject({
         approvalPolicy: "on-request",

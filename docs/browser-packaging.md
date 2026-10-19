@@ -25,6 +25,17 @@ Profiles, cookies and downloads are user data, never packaged resources.
 The npm/self-hosted distribution stays small and retains its explicit browser
 installation flow. Desktop packaging does not silently enlarge the npm tarball.
 
+## Signed-in sites and My Chrome
+
+Each built-in browser lists its signed-in sites (Settings → Browser profiles,
+or a bot's Browser panel) with Sign out per site and Sign out of all. It works
+the same on desktop, a server and Cloud, for an open or a closed browser. A
+shared profile can instead use **My Chrome**, the person's own running Chrome,
+for sites that refuse the automated one, such as Google sign-in. That needs
+the desktop app and Chrome 144+ with remote debugging on at
+`chrome://inspect/#remote-debugging`; on Cloud and servers profiles stay
+built-in. Details: [the browser engine plan, step 5](plans/browser-engine.md).
+
 ## Video recording
 
 The macOS and Linux engine is pinned to agent-browser 0.38.2. Its

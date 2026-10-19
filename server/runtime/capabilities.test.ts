@@ -22,6 +22,7 @@ const EXPECTED: Record<string, EngineCapabilities> = {
   kimiAgent: bare,
   droidAgent: bare,
   cursorAgent: { resume: true, nativeReviewer: true, full: true, edits: false, subagents: false },
+  museCode: { resume: true, nativeReviewer: false, full: true, edits: false, subagents: false },
   opencodeGo: { resume: true, nativeReviewer: false, full: true, edits: false, subagents: false },
   qwenAgent: { resume: true, nativeReviewer: true, full: true, edits: true, subagents: false },
   hermesAgent: bare,
@@ -33,6 +34,7 @@ const EXPECTED: Record<string, EngineCapabilities> = {
   mistral: chat,
   cerebras: chat,
   groq: chat,
+  meta: chat,
 };
 
 describe("engineCapabilities", () => {

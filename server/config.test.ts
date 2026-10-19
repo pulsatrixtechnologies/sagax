@@ -547,6 +547,18 @@ describe("configuration boundaries", () => {
     expect(browserEngineAttachCdpUrl({ browserEngine: { attachCdpUrl: "" } })).toBeNull();
   });
 
+  it("keeps a browser profile's My Chrome choice through saving, loading and migration, and nothing else", () => {
+    const mine = { id: "profile-mine", name: "Mine", browser: "chrome" };
+    expect(parseConfigPatch({ browserProfiles: [mine, { id: "profile-work", name: "Work" }] })).toEqual({ browserProfiles: [mine, { id: "profile-work", name: "Work" }] });
+    expect(parseStoredConfig({ browserProfiles: [mine] }).browserProfiles).toEqual([mine]);
+    // A legacy profile migrated to its canonical id keeps the choice too.
+    expect(parseStoredConfig({ browserProfiles: [{ id: "Mine", name: "Mine", browser: "chrome" }] }).browserProfiles)
+      .toEqual([{ id: "mine", name: "Mine", browser: "chrome", partitionId: "Mine" }]);
+    for (const browser of ["edge", "firefox", "", true]) {
+      expect(() => parseConfigPatch({ browserProfiles: [{ ...mine, browser }] })).toThrow("browserProfiles.0.browser");
+    }
+  });
+
   it("accepts a persisted global room turn timeout and supplies the legacy default", () => {
     expect(parseStoredConfig({ rooms: { turnTimeoutMinutes: 20 } })).toEqual({
       rooms: { turnTimeoutMinutes: 20 },
@@ -861,6 +873,28 @@ describe("default fleet", () => {
     const env = { SAGAX_GROQ_API_KEY: "groq-fixture", KEEP: "yes" };
     stripWorkspaceCredentialEnv(env);
     expect(env).toEqual({ KEEP: "yes" });
+  });
+
+  it("adds Meta to product fleets and keeps its workspace key away from other accounts", () => {
+    const cfg: AppConfig = { meta: { key: "meta-workspace", url: "https://proxy.example.test/v1" }, instances: {
+      codex: { driver: "codex" },
+      metaProxy: { driver: "meta", config: { url: "https://another.example.test/v1" } },
+      metaOwn: { driver: "meta", environment: { META_API_KEY: "meta-own" } },
+    } };
+    const map = instanceConfigs(cfg);
+    expect(map.meta).toEqual({ driver: "meta", config: { url: cfg.meta!.url }, environment: { META_API_KEY: "meta-workspace" } });
+    expect(map.codex.environment).toEqual({});
+    expect(map.metaProxy.environment).toEqual({});
+    expect(map.metaOwn.environment).toEqual({ META_API_KEY: "meta-own" });
+    expect(cfg.instances).not.toHaveProperty("meta");
+    expect(instanceConfigs({ instances: { standalone: { driver: "fake" } } })).not.toHaveProperty("meta");
+  });
+
+  it("accepts clearing a Meta key and removes it from child environments", () => {
+    expect(parseConfigPatch({ meta: { key: "" } })).toEqual({ meta: { key: "" } });
+    const env = { SAGAX_META_API_KEY: "meta-fixture", META_API_KEY: "muse-code-login", KEEP: "yes" };
+    stripWorkspaceCredentialEnv(env);
+    expect(env).toEqual({ META_API_KEY: "muse-code-login", KEEP: "yes" });
   });
 
   it("keeps OpenCode's existing Groq key separate from the built-in Groq key", () => {
@@ -1528,6 +1562,7 @@ describe("credential env preference", () => {
   const VARS = [
     "XAI_API_KEY",
     "SAGAX_GROQ_API_KEY",
+    "SAGAX_META_API_KEY",
     "OPENAI_COMPAT_API_KEY",
     "OPENAI_COMPAT_URL",
     "OPENAI_COMPAT_MODEL",
@@ -1905,6 +1940,17 @@ describe("credential env preference", () => {
       syncCredentialEnv({ groq: { key: "" } });
       expect(loadConfig().groq?.key).toBeUndefined();
       expect(process.env.GROQ_API_KEY).toBe("groq-operator");
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("saves and clears the built-in Meta key without changing a Muse Code META_API_KEY", () => {
+    vi.stubEnv("META_API_KEY", "meta-operator");
+    try {
+      syncCredentialEnv({ meta: { key: "meta-workspace" } });
+      expect(loadConfig().meta?.key).toBe("meta-workspace");
+      syncCredentialEnv({ meta: { key: "" } });
+      expect(loadConfig().meta?.key).toBeUndefined();
+      expect(process.env.META_API_KEY).toBe("meta-operator");
     } finally { vi.unstubAllEnvs(); }
   });
 

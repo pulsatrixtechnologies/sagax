@@ -114,6 +114,12 @@ export function spokenSecretPrompt(label: string): string {
   return `Tell the user, in your own words, that you need ${brief(label || "a credential", 80)} entered in the chat on screen before you can go on. Never ask them to say it aloud.`;
 }
 
+/** The bot waits for the person to sign in to a site themselves (a sign-in
+ * card). The password goes into the page only, never through the call. */
+export function spokenSignInPrompt(site: string): string {
+  return `Tell the user, in your own words, that you need them to sign in to ${brief(site || "a website", 80)} themselves on screen, then press Done in the chat, before you can go on. Never ask them to say a password or code aloud.`;
+}
+
 export function spokenQuestionPrompt(card: OptionCardData): string {
   const detail = brief(card.subtitle || card.title);
   const choices = card.options.length ? ` The options are ${card.options.join(", ")}.` : "";

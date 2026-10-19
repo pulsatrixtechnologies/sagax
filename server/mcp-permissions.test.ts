@@ -24,7 +24,7 @@ import {
 const SAMPLE: Record<string, string> = { query: "cw_psa__query", write: "cw_psa__write", action: "cw_psa__action", read_action: "sentinelone__read_action", operation: "cw_psa__find_tickets" };
 const toolOf = (x: (typeof MCP_PERMISSIONS)[number]) => (x.profileKind ? SAMPLE[x.profileKind]! : x.tool);
 
-const FULL = { externalRuntime: false, coordinating: true, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true, voiceNotes: true, voiceCall: true, cloudHome: false, memoryEnabled: true, groupMemory: true, chief: true, botId: "b", agentApi: true };
+const FULL = { externalRuntime: false, skillAuthoring: true, sharedComputers: true, voiceNotes: true, voiceCall: true, cloudHome: false, memoryEnabled: true, groupMemory: true, chief: true, botId: "b", agentApi: true };
 
 describe("mcp permission registry", () => {
   it("names every permission resource:verb, once", () => {
@@ -34,7 +34,7 @@ describe("mcp permission registry", () => {
   });
 
   it("covers every tool the catalog can show, so nothing is denied by omission", () => {
-    const shown = new Set([...availableTools(FULL), ...availableTools({ ...FULL, externalRuntime: true, coordinating: false })].map((t) => t.name));
+    const shown = new Set([...availableTools(FULL), ...availableTools({ ...FULL, externalRuntime: true })].map((t) => t.name));
     for (const name of shown) expect(permissionForTool(name), name).toBeDefined();
   });
 

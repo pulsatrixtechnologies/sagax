@@ -454,3 +454,67 @@ describe("taking browser control with the button", () => {
     expect(h.options.release).toHaveBeenCalledOnce();
   });
 });
+
+describe("holding the browser on purpose", () => {
+  it("takes control on Take control without sending anything but the take", async () => {
+    const h = harness();
+    h.control.takeControl();
+    await settle();
+    expect(h.options.take).toHaveBeenCalledOnce();
+    expect(h.sent).toEqual([]);
+    // A second press while held changes nothing.
+    h.control.takeControl();
+    await settle();
+    expect(h.options.take).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a hold past idle time until it is let go, then the idle wait starts again", async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    h.control.keep(true);
+    h.interact({ input: press }, { input: lift });
+    await settle();
+    h.server.owned = true;
+    vi.advanceTimersByTime(10 * BROWSER_HAND_BACK_MS); await settle();
+    expect(h.options.release).not.toHaveBeenCalled();
+    h.control.keep(false);
+    vi.advanceTimersByTime(BROWSER_HAND_BACK_MS); await settle();
+    expect(h.options.release).toHaveBeenCalledOnce();
+  });
+
+  it("hands back at once on an explicit hand back, even while kept", async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    h.control.keep(true);
+    h.control.takeControl();
+    await settle();
+    h.control.handBack();
+    vi.advanceTimersByTime(0); await settle();
+    expect(h.options.release).toHaveBeenCalledOnce();
+  });
+
+  it("after a hand-back from elsewhere, the next interaction takes control again", async () => {
+    const h = harness();
+    h.interact({ input: press }, { input: lift });
+    await settle();
+    h.server.owned = true;
+    h.control.observe();
+    // Done on the sign-in card released this viewer's hold on the server.
+    h.server.owned = false;
+    h.control.observe();
+    h.interact({ input: press });
+    await settle();
+    expect(h.options.take).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not mistake an event older than its own take for a hand-back", async () => {
+    const h = harness();
+    h.interact({ input: press }, { input: lift });
+    await settle();
+    // An owned:false sent before the take arrives after its reply.
+    h.control.observe();
+    h.interact({ input: press });
+    expect(h.queue.enqueue).toHaveBeenLastCalledWith(press);
+    expect(h.options.take).toHaveBeenCalledOnce();
+  });
+});

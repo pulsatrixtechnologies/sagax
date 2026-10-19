@@ -389,6 +389,8 @@ const routineSchema = z.object({
   timeoutMinutes: z.number().int().min(1).max(1_440).optional(),
   overlap: z.enum(["skip", "queue"]).optional(),
   continuity: z.boolean().optional(),
+  /** Also run once each time Sagax starts. Repeating routines only. */
+  runOnStartup: z.boolean().optional(),
   /** The publisher's intent. File imports always arrive paused. */
   enabledAfterInstall: z.boolean(),
 });
@@ -844,8 +846,9 @@ export function downgradeToV1(document: PackageDocument):
       dropped.push(`routines[${routine.key}]`);
       return [];
     }
-    const { room: _room, continuity, ...kept } = routine;
+    const { room: _room, continuity, runOnStartup, ...kept } = routine;
     if (continuity !== undefined) dropped.push(`routines[${routine.key}].continuity`);
+    if (runOnStartup !== undefined) dropped.push(`routines[${routine.key}].runOnStartup`);
     return [{ ...kept, enabledAfterInstall: false as const }];
   });
   const {

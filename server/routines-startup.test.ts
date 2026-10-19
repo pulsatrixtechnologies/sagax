@@ -1,5 +1,11 @@
+// Routine recovery across a restart, with the legacy delegation ledger
+// (delegations.json) imported once into the job runtime at boot
+// (server/runtime/import-legacy.ts, docs/runtime-contract.md §5): due and
+// queued runs recover, a run that was waiting on a hand-off stays waiting
+// because the runtime still carries its tree, the imported hand-offs
+// dispatch and resume their requesters, and the file is renamed .migrated.
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
@@ -7,8 +13,9 @@ import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
 import { RoutineManager, type RoutineRun } from "./routines.ts";
 import { waitForExit } from "./testing/cleanup.ts";
+import { readHandoffs } from "./testing/handoff-rows.ts";
 
-it("recovers queued/due work without resurrecting an interrupted routine after restart", async () => {
+it("recovers queued/due work and a waiting routine's imported hand-off after restart", async () => {
   const fixture = await launchVerificationServer();
   const { url, dataDir, logPath } = fixture.info;
   let restarted: ChildProcess | undefined;
@@ -31,8 +38,8 @@ it("recovers queued/due work without resurrecting an interrupted routine after r
     const scheduledBot = (await api("POST", "/api/bots", { name: "Restart scheduled" })).bot;
     const cronBot = (await api("POST", "/api/bots", { name: "Restart cron" })).bot;
     const queuedBot = (await api("POST", "/api/bots", { name: "Restart queued" })).bot;
-    const interruptedBot = (await api("POST", "/api/bots", { name: "Interrupted routine" })).bot;
-    const orphanPeer = (await api("POST", "/api/bots", { name: "Orphan peer" })).bot;
+    const interruptedBot = (await api("POST", "/api/bots", { name: "Waiting routine" })).bot;
+    const orphanPeer = (await api("POST", "/api/bots", { name: "Waiting routine's peer" })).bot;
     const reusedBot = (await api("POST", "/api/bots", { name: "Reused routine conversation" })).bot;
     const reusedPeer = (await api("POST", "/api/bots", { name: "New user handoff peer" })).bot;
     await api("POST", `/api/bots/${reusedBot.id}/messages`, { text: "A later user request that owns its own pending handoff." });
@@ -51,9 +58,17 @@ it("recovers queued/due work without resurrecting an interrupted routine after r
       enabled: false, schedule: { type: "daily", time: "09:00", weekdays: [1] },
     })).routine;
     const interrupted = (await api("POST", "/api/routines", {
-      name: "Interrupted peer work", prompt: "Do not resume after recovery", botId: interruptedBot.id,
+      name: "Waiting on peer work", prompt: "Resume once the peer reports", botId: interruptedBot.id,
       enabled: false, schedule: { type: "daily", time: "09:00", weekdays: [1] },
     })).routine;
+    // #325: not due for days, but marked to run whenever the app starts.
+    const startupBot = (await api("POST", "/api/bots", { name: "Restart on startup" })).bot;
+    const onStartup = (await api("POST", "/api/routines", {
+      name: "Runs when the app starts", prompt: "Report once at startup", botId: startupBot.id,
+      runOnStartup: true, schedule: { type: "interval", everyMinutes: 1440, anchorAt: Date.now() + 2 * 24 * 60 * 60_000 },
+    })).routine;
+    expect(onStartup.runOnStartup).toBe(true);
+    expect((await api("GET", "/api/routines")).runs.some((run: RoutineRun) => run.routineId === onStartup.id)).toBe(false);
     await waitForExit(fixture.child, { signal: "SIGTERM" });
 
     // The original child is gone; only its owned temporary store is edited.
@@ -65,6 +80,8 @@ it("recovers queued/due work without resurrecting an interrupted routine after r
     await scheduler.tick();
     expect(scheduler.listRuns().find((run) => run.id === queued.id)?.status).toBe("queued");
     const disk = JSON.parse(readFileSync(file, "utf8"));
+    // A standalone process ignores a desktop launch id left in its environment.
+    disk.startupLaunchId = "previous-desktop-launch";
     const dueAt = Date.now() - 1_000;
     const cronDueAt = Math.floor(Date.now() / 60_000) * 60_000 - 5 * 60_000;
     disk.routines.find((routine: { id: string }) => routine.id === cron.id).enabled = true;
@@ -84,10 +101,12 @@ it("recovers queued/due work without resurrecting an interrupted routine after r
       finishedAt: dueAt - 60_000, manual: true, status: "completed", threadId: reusedBot.threadId,
     });
     writeFileSync(file, JSON.stringify(disk));
+    // The legacy ledger, as the last process left it: one queued hand-off
+    // per source thread. The restart imports both into the runtime.
     writeFileSync(join(dataDir, "delegations.json"), JSON.stringify({
       [interruptedBot.threadId]: [{
         id: "orphan-handoff", sourceBotId: interruptedBot.id, toBotId: orphanPeer.id,
-        message: "This stopped routine must not launch peer work", depth: 0, attempts: 0,
+        message: "This waiting routine's hand-off survives the restart", depth: 0, attempts: 0,
       }],
       [reusedBot.threadId]: [{
         id: "later-user-handoff", sourceBotId: reusedBot.id, toBotId: reusedPeer.id,
@@ -108,46 +127,64 @@ it("recovers queued/due work without resurrecting an interrupted routine after r
       TEMP: join(dataDir, "tmp"), TMP: join(dataDir, "tmp"), TMPDIR: join(dataDir, "tmp"),
       SAGAX_PORT: new URL(url).port, SAGAX_WEBHOOK_PORT: String(Number(new URL(url).port) + 1),
       PATH: dirname(process.execPath), FAKE_CLAUDE_MODE: "happy",
+      SAGAX_DESKTOP_LAUNCH_ID: "previous-desktop-launch",
     });
     const log = openSync(logPath, "a", 0o600);
     restarted = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("./index.ts", import.meta.url))], {
       cwd: fileURLToPath(new URL("..", import.meta.url)), env, stdio: ["ignore", log, log],
     });
     closeSync(log);
-    const deadline = Date.now() + 20_000;
+    const deadline = Date.now() + 30_000;
     let runs: RoutineRun[] = [];
     while (Date.now() < deadline) {
       expect(restarted.exitCode, `restarted server exited; see ${logPath}`).toBeNull();
       try {
         runs = (await api("GET", "/api/routines")).runs;
-        if ([scheduled.id, manual.id, cron.id].every((id) => runs.some((run) => run.routineId === id && run.status === "completed"))) break;
+        if ([scheduled.id, manual.id, cron.id, interrupted.id, onStartup.id].every((id) => runs.some((run) => run.routineId === id && run.status === "completed"))) break;
       } catch {
         // The exact replacement child is still starting its listener.
       }
       await new Promise((resolve) => setTimeout(resolve, 150));
     }
+    // The waiting run was kept waiting (never failed as restarted): the
+    // imported hand-off ran and its report resumed the run, which completed.
     expect(runs, readFileSync(logPath, "utf8").slice(-4_000)).toEqual(expect.arrayContaining([
       expect.objectContaining({ routineId: scheduled.id, scheduledFor: dueAt, status: "completed" }),
       expect.objectContaining({ routineId: cron.id, scheduledFor: cronDueAt, status: "completed" }),
       expect.objectContaining({ id: queued.id, routineId: manual.id, status: "completed" }),
-      expect.objectContaining({ id: "interrupted-run", status: "failed", error: expect.stringContaining("restarted") }),
+      expect.objectContaining({ routineId: onStartup.id, triggerSource: "startup", status: "completed" }),
+      expect.objectContaining({ id: "interrupted-run", status: "completed" }),
     ]));
+    expect(runs.filter(run => run.routineId === onStartup.id)).toHaveLength(1);
+    const resumedRun = runs.find((run) => run.id === "interrupted-run")!;
+    expect(resumedRun.error).toBeUndefined();
+    expect(resumedRun.finishedAt).toBeGreaterThan(dueAt);
+    // The fake answers every turn with the same words, so the resume shows
+    // in the run's conversation: the peer's report chip, then the resume chip.
+    const resumedThread = (await api("GET", `/api/threads/${interruptedBot.threadId}/messages?limit=100`)).messages as Array<{ tool?: { name?: string }; from?: { botId?: string } }>;
+    expect(resumedThread.some((message) => message.tool?.name === "Waiting routine's peer replied" && message.from?.botId === orphanPeer.id)).toBe(true);
+    expect(resumedThread.some((message) => message.tool?.name?.startsWith("Resumed with Waiting routine's peer results"))).toBe(true);
     expect(runs.filter(run => run.routineId === cron.id && run.scheduledFor < Math.floor(Date.now() / 60_000) * 60_000)).toHaveLength(1);
     const restoredCron = (await api("GET", "/api/routines")).routines.find((routine: { id: string }) => routine.id === cron.id);
     expect(restoredCron.schedule).toEqual(cron.schedule);
     expect(restoredCron.nextRunAt).toBeGreaterThan(Date.now());
+    // Both imported hand-offs ran, each on its peer's standing thread, with
+    // the legacy task ids kept; the ledger file is renamed, never deleted.
     const recoveredPeer = (await api("GET", "/api/bots")).bots.find((bot: { id: string }) => bot.id === orphanPeer.id);
-    expect(recoveredPeer.messages.some((message: { role: string }) => message.role === "user")).toBe(false);
-    expect(Boolean(recoveredPeer.busy)).toBe(false);
+    expect(recoveredPeer.messages.some((message: { text?: string }) => message.text?.includes("This waiting routine's hand-off survives the restart"))).toBe(true);
+    await expect.poll(async () => Boolean((await api("GET", "/api/bots?messages=0")).bots.find((bot: { id: string }) => bot.id === orphanPeer.id).busy), { timeout: 15_000 }).toBe(false);
     await expect.poll(async () => {
       const current = (await api("GET", "/api/bots")).bots.find((bot: { id: string }) => bot.id === reusedPeer.id);
-      return current.messages.some((message: { role: string; text?: string }) =>
-        message.role === "user" && message.text?.includes("This later user request must survive the restart"));
+      return current.messages.some((message: { text?: string }) => message.text?.includes("This later user request must survive the restart"));
     }, { timeout: 15_000 }).toBe(true);
-    await expect.poll(
-      () => JSON.parse(readFileSync(join(dataDir, "delegations.json"), "utf8")),
-      { timeout: 10_000 },
-    ).toEqual({});
+    expect(existsSync(join(dataDir, "delegations.json"))).toBe(false);
+    expect(Object.keys(JSON.parse(readFileSync(join(dataDir, "delegations.json.migrated"), "utf8"))).sort())
+      .toEqual([interruptedBot.threadId, reusedBot.threadId].sort());
+    await expect.poll(() => readHandoffs(dataDir).find((node) => node.id === "orphan-handoff")?.status, { timeout: 15_000 }).toBe("completed");
+    await expect.poll(() => readHandoffs(dataDir).find((node) => node.id === "later-user-handoff")?.status, { timeout: 15_000 }).toBe("completed");
+    expect(readHandoffs(dataDir).find((node) => node.id === "orphan-handoff")).toMatchObject({ botId: orphanPeer.id, threadId: orphanPeer.threadId, mode: "work", reply: "resume" });
+    await expect.poll(() => readHandoffs(dataDir).find((node) => node.id === `legacy-${interruptedBot.threadId}`)?.status, { timeout: 15_000 }).toBe("completed");
+    await expect.poll(() => readHandoffs(dataDir).find((node) => node.id === `legacy-${reusedBot.threadId}`)?.status, { timeout: 15_000 }).toBe("completed");
     const scheduledRun = runs.find((run) => run.routineId === scheduled.id)!;
     const wait = await runControlOmb(["wait", "--bot", scheduledBot.id, "--task", scheduledRun.threadId!, "--url", url]);
     const messages = await runControlOmb(["messages", "--bot", scheduledBot.id, "--task", scheduledRun.threadId!, "--url", url]);
@@ -164,4 +201,4 @@ it("recovers queued/due work without resurrecting an interrupted routine after r
     await waitForExit(restarted, { signal: "SIGTERM" });
     await fixture.close();
   }
-}, 45_000);
+}, 60_000);

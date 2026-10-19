@@ -52,6 +52,15 @@
 //                         MCP server and replies with its text
 //   FAKE_CODEX_COMPLETE_BEFORE_ACK  with FAKE_CODEX_ROOM_PLAN: stream the whole
 //                         turn, completion included, before acknowledging turn/start
+//   FAKE_CODEX_TEXT_*  `codex exec` (the background one-shot, server/drivers/codex-background-text.ts):
+//     FAKE_CODEX_TEXT_ROUTES  JSON file {"marker": "reply"}, re-read each run; the first
+//                             marker the stdin prompt contains picks the reply
+//     FAKE_CODEX_TEXT_REPLY   the reply when no route matches (default "fake background answer")
+//     FAKE_CODEX_TEXT_LOG     append {argv, cwd, prompt, env} per call, one JSON object per line
+//     FAKE_CODEX_TEXT_MODE    ok (default) | fail (turn.failed) | exit (exit 1, stderr only) |
+//                             hang (never answer) | tool (a command_execution item first) |
+//                             noisy (a non-JSON line, a non-fatal error item, reasoning)
+//   FAKE_CODEX_LUNA   "1": model/list also offers gpt-6-luna (the background calls' model)
 //   FAKE_CODEX_MCP_START  "1": on thread/start, start every `-c mcp_servers.*` mount
 //                         the way codex-cli 0.160.1 does (a command with only PATH,
 //                         HOME, its env_vars and its env table; a url with its
@@ -62,7 +71,7 @@
 //
 // Keep this file dependency-free — it runs as a bare `node` subprocess.
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 
 
 const mode = process.env.FAKE_CODEX_MODE ?? "happy";
@@ -111,6 +120,59 @@ if (process.argv[2] === "login" && process.argv[3] === "status") {
   // older versions that wrote the same status on stdout.
   const statusStream = mode === "logged-in-stdout" ? process.stdout : process.stderr;
   statusStream.write("Logged in using ChatGPT\n");
+  process.exit(0);
+}
+if (process.argv[2] === "exec") {
+  // `codex exec --json … -`: the prompt arrives on stdin, the answer as
+  // exec's JSONL events (codex-cli 0.160.1), then the process exits.
+  const prompt = await new Promise<string>((resolve) => {
+    let input = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => { input += chunk; });
+    process.stdin.on("end", () => resolve(input));
+  });
+  const textMode = process.env.FAKE_CODEX_TEXT_MODE ?? "ok";
+  if (process.env.FAKE_CODEX_TEXT_LOG) {
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(?:HOME|CODEX_HOME|OPENAI_API_KEY|SAGAX_.*)$/.test(key)));
+    appendFileSync(process.env.FAKE_CODEX_TEXT_LOG, `${JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd(), prompt, env })}\n`);
+  }
+  const event = (value: unknown) => process.stdout.write(`${JSON.stringify(value)}\n`);
+  if (textMode === "hang") {
+    // a repeating timer keeps the loop alive without settling the
+    // top-level await, which Node would otherwise treat as fatal
+    await new Promise(() => setInterval(() => {}, 1 << 30));
+  }
+  if (textMode === "exit") {
+    process.stderr.write("Error: stream disconnected before completion\n");
+    process.exit(1);
+  }
+  event({ type: "thread.started", thread_id: "fake-exec-thread" });
+  event({ type: "turn.started" });
+  if (textMode === "fail") {
+    event({ type: "error", message: "unexpected status 401 Unauthorized" });
+    event({ type: "turn.failed", error: { message: "unexpected status 401 Unauthorized" } });
+    process.exit(1);
+  }
+  if (textMode === "tool") {
+    event({ type: "item.started", item: { id: "item_0", type: "command_execution", command: "ls", aggregated_output: "", status: "in_progress" } });
+  }
+  if (textMode === "noisy") {
+    process.stdout.write("Reading prompt from stdin...\n");
+    event({ type: "item.completed", item: { id: "item_0", type: "error", message: "a non-fatal notice" } });
+    event({ type: "item.completed", item: { id: "item_1", type: "reasoning", text: "thinking" } });
+  }
+  let reply = process.env.FAKE_CODEX_TEXT_REPLY ?? "fake background answer";
+  if (process.env.FAKE_CODEX_TEXT_ROUTES && existsSync(process.env.FAKE_CODEX_TEXT_ROUTES)) {
+    try {
+      const routes = JSON.parse(readFileSync(process.env.FAKE_CODEX_TEXT_ROUTES, "utf8")) as Record<string, string>;
+      const hit = Object.entries(routes).find(([marker]) => prompt.includes(marker));
+      if (hit) reply = hit[1];
+    } catch {
+      // a malformed routes file falls back to the plain reply
+    }
+  }
+  event({ type: "item.completed", item: { id: "item_2", type: "agent_message", text: reply } });
+  event({ type: "turn.completed", usage: { input_tokens: 120, cached_input_tokens: 20, output_tokens: 7 } });
   process.exit(0);
 }
 const calls: Array<{ method: string; params: unknown }> = [];
@@ -451,6 +513,9 @@ process.stdin.on("data", (chunk) => {
                   ? [{ id: "gpt-6-astra", displayName: "GPT-6 Astra", hidden: false, isDefault: true }]
                   : []),
                 { id: "gpt-fake-default", displayName: "GPT Fake Default", hidden: false, isDefault: !hasAstra },
+                ...(process.env.FAKE_CODEX_LUNA === "1"
+                  ? [{ id: "gpt-6-luna", displayName: "GPT-6 Luna", hidden: false, isDefault: false }]
+                  : []),
               ],
               nextCursor: "page-2",
             },

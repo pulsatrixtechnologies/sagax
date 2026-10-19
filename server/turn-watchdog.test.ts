@@ -148,8 +148,10 @@ describe("the stall handler", () => {
     const { context, settled, delegations } = load();
     context.watchdog.options.onStall({ threadId: "t1", botId: "eli" });
     const told = 'No activity for 20 minutes — the turn was stopped. Before it stopped it made 1 tool call: Bash ×1.\nIts last message, quoted: "Exporting the second half now."';
+    // delegate_bot rides the job runtime now (#2702): its requester hears a
+    // stall through the same settle as every assignment, no separate watch.
     expect(settled).toEqual([{ generation: "gen-1", text: told }]);
-    expect(delegations).toEqual([`Delegated turn did not finish — ${told}`]);
+    expect(delegations).toEqual([]);
   });
 
   // A harness stop that leaves its engine attached (a Company change) notes

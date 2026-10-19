@@ -110,7 +110,10 @@ described above; it is not a generic reverse-proxy secret.
 | Run work | `send_bot_message`, `send_channel_message`, `wait_for_conversation`, `interrupt_conversation`, `set_bot_model` |
 
 `wait_for_conversation` returns `settled`, `needs-user`, `failed`, `stalled`, or `timed-out`, along with a
-small redacted transcript tail. MCP cancellation is honored while a tool is waiting.
+small redacted transcript tail. A conversation whose bot handed work to teammates (`coordinate_bots`, an
+assignment on the job runtime: docs/runtime-contract.md §9) is not settled while those assignments are
+outstanding; it settles once their results have resumed it and that turn has ended. MCP cancellation is
+honored while a tool is waiting.
 
 ## Safety and data scope
 

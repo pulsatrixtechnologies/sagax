@@ -5,8 +5,12 @@ import { t } from "@/lib/i18n";
 import { replySnippet } from "@/lib/replies";
 import { splitTranscriptCitations } from "@/lib/citations";
 
+// A queued message with a picture or file carries its <attached-…> tag
+// (path included) in its text; the row names the attachment instead.
+const ATTACHMENT_TAG = /<attached-(?:image|file)\s/;
+
 function queuedMessageLabel(text: string): string {
-  return splitTranscriptCitations(text).citations.length ? replySnippet(text, 500) : text;
+  return splitTranscriptCitations(text).citations.length || ATTACHMENT_TAG.test(text) ? replySnippet(text, 500) : text;
 }
 
 export function composerCanSteerQueuedMessages(

@@ -1229,8 +1229,8 @@ and only when the card can be traced to a person:
 
 - a card for a request a user sent, or in a thread a user opened, is
   theirs to answer (admins and the owner may answer any card);
-- a thread a bot opened while working on someone's request (a delegated or
-  coordinated job) is traced back to that person, so the cards of work done
+- a thread a bot opened while working on someone's request (a job it handed
+  a teammate with `coordinate_bots`) is traced back to that person, so the cards of work done
   for them are theirs too;
 - a card that names nobody — sent by the owner on this machine, by a
   routine or webhook, from Slack (until Slack passes the asker through), or
@@ -1288,7 +1288,7 @@ alone.
   recorded in the admin activity log.
 - **Teams.** A team (sidebar section) is listed to a user only when it
   holds a bot or room they can see.
-- **Bots working together.** A bot reaches a teammate (asks, delegations,
+- **Bots working together.** A bot reaches a teammate (`coordinate_bots`,
   its roster and `list_bots`, @mentions, a Chief's team) only when exactly
   the same people can see both: otherwise one bot's thread could carry the
   other's answers to people who cannot see it. Bots nobody restricted all
@@ -1304,7 +1304,7 @@ alone.
   a message in a thread, a bot's picture — is hidden from that user. A
   file nothing uses yet (someone's own upload) is served; its name is random.
 - **Not covered.** Words already quoted into a conversation a user can
-  see (an earlier delegation, a message copied by hand, or something a bot
+  see (an earlier hand-off, a message copied by hand, or something a bot
   wrote into its own memory files with its file tools while it shared a room
   with a restricted bot) stay there. A bot's
   shell can still read files on the server, as it always could. Slack is
@@ -1566,8 +1566,8 @@ the list does not know. Both are plain settings in `config.json` (`budgets`,
 Some engines have their own long-running front door — a Hermes Agent Telegram
 gateway, a Slack bot, an OpenClaw session. That process is the same bot with
 the same workspace and memory, but the server did not spawn it, so it holds
-none of the turn-scoped capabilities the peer-comms tools need and cannot ask
-or delegate to its teammates.
+none of the turn-scoped capabilities the peer-comms tools need and cannot hand
+work to its teammates.
 
 Give it a standing one with `external-runtimes.json` in the data directory,
 mapping the bot's id to a secret of at least 32 characters and one existing
@@ -1605,16 +1605,24 @@ SAGAX_HARNESS_URL=http://127.0.0.1:8799 SAGAX_BOT_ID=$BOT_ID SAGAX_THREAD_ID=$TH
 ```
 
 Scope is deliberately narrow: the token is an *agents* capability for that
-bot's pinned thread only, and the server accepts just four routes with it — list
-peers, ask, delegate, and read the status of its own delegations. Opening
-threads, creating bots or rooms, skills, memory and every other internal route
-answer 403. External mode advertises only `list_bots`, `ask_bot`, `delegate_bot`,
-`check_delegation` and `wait_delegation`. It can check a delegation from the
-same long-running process without inventing a turn end, and a settled handoff
-never wakes the bot's own engine on that thread to answer it again. The server
-still enforces peer access and approval settings. An idle source starts dispatch
-immediately; a busy teammate is queued until available. Regular in-app turns
-keep their existing dispatch timing.
+bot's pinned thread only, and the server accepts just three kinds of route
+with it — list peers (`GET /api/internal/agents`), hand work on
+(`POST /api/internal/coordinate-bots`) and read how it went
+(`GET /api/internal/assignment-status`). Opening threads, creating bots or
+rooms, skills, memory and every other internal route answer 403. The bridge
+offers the one tool surface every turn gets (docs/runtime-contract.md §9):
+`coordinate_bots` (work; a question with `consult: true`; a one-way notice
+with `reply: "none"`) and the read-only `assignment_status`. Every call from
+the standing capability is its own root on the job
+runtime with `reply: poll`: it completes without a turn once the teammates'
+work settles, and the runtime reads the results with `assignment_status`,
+long-polling `wait_ms` (at most 240 s) on the root's `rootId` or a receipt's
+`requestId` from the same long-running process, without inventing a turn end.
+A settled hand-off never wakes the bot's own engine on that thread. The
+server still enforces peer access and approval settings. A free teammate
+starts at once; a busy one is queued on the runtime until a slot frees
+(docs/runtime-contract.md §2). Regular in-app turns keep their existing
+dispatch timing.
 
 The credentials stay on this server and are excluded from workspace backups;
 restoring a backup preserves destination registrations. Never put this token

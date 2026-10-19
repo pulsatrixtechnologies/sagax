@@ -19,6 +19,11 @@ directory was removed and none of its source or license check is included;
 files across the tree were modified. These changes are licensed under the
 PolyForm Noncommercial License 1.0.0, not the Apache License 2.0.
 
+Prompt-cache keep-warm (server/cache-keepwarm.ts and
+server/drivers/claude-keepwarm.ts) ports the design of Cache Tax,
+https://github.com/karanb192/claude-code-mods, Copyright (c) 2026 Karan
+Bansal, used under the MIT License (third_party/cache-tax/LICENSE).
+
 The Android companion app bundles a prebuilt WebRTC library for Live calls
 (io.github.webrtc-sdk:android), built from the WebRTC project, Copyright (c)
 2011, The WebRTC project authors, used under the BSD 3-Clause License. WebRTC

@@ -97,6 +97,23 @@ describe("steer-queue module", () => {
     expect(store.messages[0].text).toBe(prompt);
   });
 
+  // After a crash the first coordinator read in the block check opens the
+  // job runtime, whose restart changes drain the queue from inside it.
+  it("drains a send once when the block check re-enters the drain", () => {
+    const bot = fakeBot("bot-reentrant-drain", "thread-reentrant-drain", false);
+    const store = fakeStore([bot]);
+    const run = vi.fn();
+    queueSteeredMessage(bot.id, bot.threadId, "Run me exactly once");
+    let nested = false;
+    const isBlocked = (): boolean => {
+      if (!nested) { nested = true; drainSteeredMessages(store, run, isBlocked); }
+      return false;
+    };
+    drainSteeredMessages(store, run, isBlocked);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(store.messages.filter((message) => message.role === "user")).toHaveLength(1);
+  });
+
   it.each([undefined, "capacity", "group-turn"] as const)("detects an exact owner's queued correction with reason %s", (reason) => {
     const botId = `correction-${reason ?? "busy"}`;
     const threadId = `${botId}-thread`;

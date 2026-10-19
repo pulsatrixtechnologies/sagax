@@ -85,10 +85,14 @@ export function drainCoalesceHead<T>(
 
 /** Facts about the message and the engine it would run on. */
 export interface AdmissionMessage {
-  /** extractTurnImages() found attachments: a live text steer has no image
-   * side channel, so the words wait for a real turn where central image
-   * admission can hand them to the provider natively. */
+  /** extractTurnImages() found attachments. They steer only into an engine
+   * that takes images mid-turn (engineCanSteerImages); otherwise the words
+   * wait for a real turn where central image admission can hand them to the
+   * provider natively. */
   carriesImages?: boolean;
+  /** The running engine delivers images with a steer
+   * (capabilities.steerImages), and the attachments fit one turn. */
+  engineCanSteerImages?: boolean;
   /** A computer-selection is pending on the target thread: steering new
    * words into a turn that is waiting on a person's surface choice would
    * race the choice. */
@@ -130,11 +134,21 @@ export interface AdmissionState {
   threadWorking?: boolean;
 }
 
+/** Why a steer the engine could otherwise take was parked instead: the
+ * words carry pictures this engine cannot take mid-turn. Clients say so
+ * rather than leave a pressed Steer looking ignored. */
+export type AdmissionSteerBlock = "images";
+
 export type AdmissionDecision =
   | { action: "steer" }
-  | { action: "queue"; reason?: AdmissionQueueReason }
+  | { action: "queue"; reason?: AdmissionQueueReason; blockedBy?: AdmissionSteerBlock }
   | { action: "start" }
   | { action: "refuse"; code: AdmissionRefusalCode };
+
+/** Attachments steer only into an engine that takes them mid-turn. */
+function imagesBlockSteer(message: AdmissionMessage): boolean {
+  return message.carriesImages === true && message.engineCanSteerImages !== true;
+}
 
 /** The shared admission decision. Pure: same surface, message, and state
  * always return the same decision, with no side effects. */
@@ -145,11 +159,13 @@ export function admit(
 ): AdmissionDecision {
   switch (surface) {
     case "direct-busy": {
-      // Steer-first for plain text into a capable engine; every mechanical
-      // clamp (attachments, a pending surface choice, an incapable engine)
-      // parks the words for the next ordinary turn instead.
-      const steerable = !message.carriesImages && !message.pendingComputerSelection && message.engineCanSteer === true;
-      return steerable ? { action: "steer" } : { action: "queue" };
+      // Steer-first into a capable engine; every mechanical clamp
+      // (attachments the engine cannot take mid-turn, a pending surface
+      // choice, an incapable engine) parks the words for the next ordinary
+      // turn instead.
+      if (message.engineCanSteer !== true || message.pendingComputerSelection) return { action: "queue" };
+      if (imagesBlockSteer(message)) return { action: "queue", blockedBy: "images" };
+      return { action: "steer" };
     }
     case "direct": {
       if (state.atCapacity || state.threadBusy || state.groupTurn || state.parksBehindCoordination) {
@@ -170,6 +186,10 @@ export function admit(
         // engine; the request succeeds without delivering.
         return { action: "queue" };
       }
+      // Attachments the speaker cannot take mid-turn keep the head queued
+      // for the room's own drain — checked before the head rule, as the
+      // route always did.
+      if (imagesBlockSteer(message)) return { action: "queue", blockedBy: "images" };
       if (!message.isQueueHead) {
         return { action: "refuse", code: "queue-head-only" };
       }

@@ -26,6 +26,10 @@ Without a chosen thread, each run reports into the bot's main thread as it is wh
 
 Each run starts fresh by default. For work that builds on last time, such as a QA pass, monitoring or follow-ups, turn on **Remember the last run** under the routine's instructions. Each run then starts with the previous run's report (up to 2,000 characters), so the bot knows what it found before. It is available for repeating routines that one bot runs; team goals don't carry it yet. You can also ask the bot in chat to turn it on.
 
+### Run when the app starts
+
+If your computer is often off when a routine is due, open the routine's **Advanced** options and turn on **Also run when Sagax starts**. The routine then runs once each time Sagax opens, as well as on its schedule. Its run logs show these runs as **On startup**. A routine that Sagax is already catching up on at startup runs once, not twice, and an occurrence missed by more than 12 hours is covered by the startup run instead of being reported as missed. Switching to another workspace and back, or Sagax recovering from a crash, doesn't count as opening the app again. Pausing a routine stops its startup runs too. It's available for repeating routines, and you can also ask the bot in chat to turn it on.
+
 ### Clear a folder's unread dots
 
 Right-click a folder or open its **…** menu, then choose **Mark folder as read**. This clears unread dots without opening each thread. It does not answer approvals, dismiss questions, or stop any running work.

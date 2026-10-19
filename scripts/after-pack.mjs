@@ -85,7 +85,7 @@ async function validateDuckdb(resources, platform, arch, required) {
   if (!present && !required) return;
   if (!arch) throw new Error(`Unsupported DuckDB package architecture: ${arch}`);
   await requireRealDirectory(duckdb, platform === "win32" ? undefined : 0o755);
-  await verifyDuckdbTree(duckdb, platform, arch, pinnedDuckdbVersion(root), pinnedResvgVersion(root));
+  await verifyDuckdbTree(duckdb, platform, arch, pinnedDuckdbVersion(root), pinnedResvgVersion(root), pinnedOnePasswordVersion(root));
 }
 
 // Google ships macOS Platform Tools universal, and the shared top-level

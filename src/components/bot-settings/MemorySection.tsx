@@ -41,7 +41,9 @@ import {
   type LendingReview,
   markMemoryReviewed,
 } from "@/lib/memory";
-import { ApiError, useStore, type Bot } from "@/state/store";
+import { roomMemoryCaptureEnabled } from "@/lib/feature-flags";
+import { canEditConfig } from "@/lib/viewer";
+import { api, ApiError, useStore, type Bot, type ConfigStatus } from "@/state/store";
 import { HelpTip, PILL, SwitchRow } from "../SettingsPrimitives";
 import { AdvancedFold } from "./AdvancedFold";
 import { MarkdownEditor } from "../markdown/MarkdownEditor";
@@ -292,7 +294,10 @@ export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; acti
   const [lendingReview, setLendingReview] = useState<LendingReview | null>(null);
   const [lendingReviewStale, setLendingReviewStale] = useState(false);
   const [reviewing, setReviewing] = useState(false);
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
+  const learnFromRooms = roomMemoryCaptureEnabled(state.config);
+  const [roomsSaving, setRoomsSaving] = useState(false);
+  const [roomsError, setRoomsError] = useState("");
 
   const refresh = async (openPath?: string) => {
     const [nextOverview, nextJournal, nextUpkeep] = await Promise.all([
@@ -427,6 +432,25 @@ export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; acti
     setUpkeep((current) => (current ? { ...current, enabled } : current));
   };
 
+  // Learn from group chats is one switch for every bot on this server, shown
+  // here beside the upkeep it feeds.
+  const toggleRooms = async () => {
+    if (roomsSaving) return;
+    setRoomsSaving(true);
+    setRoomsError("");
+    try {
+      const config: ConfigStatus = await api("/api/config", {
+        method: "PATCH",
+        body: JSON.stringify({ features: { roomMemoryCapture: !learnFromRooms } }),
+      });
+      dispatch({ type: "configStatus", config });
+    } catch (cause) {
+      setRoomsError(cause instanceof Error ? cause.message : t("memory.learnFromRooms.error"));
+    } finally {
+      setRoomsSaving(false);
+    }
+  };
+
   const tidyNow = async () => {
     setTidying(true);
     setError(null);
@@ -544,6 +568,7 @@ export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; acti
           tidying={tidying}
           onToggle={toggleUpkeep}
           onTidy={() => void tidyNow()}
+          rooms={canEditConfig(state.config) ? { enabled: learnFromRooms, saving: roomsSaving, error: roomsError, onToggle: () => void toggleRooms() } : undefined}
         />}
         {overview && overview.logs.length > 0 && (
           <PaneSection title={t("botPanel.memory.logs")} help={t("botPanel.memory.logsHint")}>
@@ -583,12 +608,15 @@ export function MemoryUpkeepCard({
   tidying,
   onToggle,
   onTidy,
+  rooms,
 }: {
   enabled: boolean;
   status: UpkeepStatus | null;
   tidying: boolean;
   onToggle: () => void;
   onTidy: () => void;
+  /** The Learn from group chats switch (for every bot on this server). */
+  rooms?: { enabled: boolean; saving: boolean; error: string; onToggle: () => void };
 }) {
   const limited = enabled && status !== null && !status.modelSteps;
   const last = status?.lastTidy
@@ -607,6 +635,21 @@ export function MemoryUpkeepCard({
         <div className="mt-2 flex items-center gap-1.5 text-[12.5px] text-ink-secondary">
           <span>{t("botPanel.memory.limited")}</span>
           <HelpTip label={t("botPanel.memory.limited")}>{t("botPanel.memory.noSteps")}</HelpTip>
+        </div>
+      )}
+      {/* Learn from group chats (off by default): one switch for every bot
+          on this server, so only whoever edits the installation sees it. */}
+      {enabled && rooms && (
+        <div className="mt-3 border-t border-hairline/40 pt-3">
+          <SwitchRow
+            label={t("memory.learnFromRooms.title")}
+            description={t("memory.learnFromRooms.subtitle")}
+            checked={rooms.enabled}
+            disabled={rooms.saving}
+            onChange={rooms.onToggle}
+          />
+          {limited && <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">{t("memory.learnFromRooms.noModelSteps")}</p>}
+          {rooms.error && <p role="alert" className="mt-1 text-[12.5px] text-danger">{rooms.error}</p>}
         </div>
       )}
       {enabled && (

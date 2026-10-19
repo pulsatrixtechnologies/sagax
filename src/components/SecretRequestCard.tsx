@@ -41,16 +41,23 @@ function ApiKeyRequestCard({
   const provided = outcome === "provided";
   const declined = outcome === "dismissed";
   const superseded = secret.superseded === true;
+  // Stop ended the turn this card paused: nothing resumes, whatever is
+  // saved afterwards (the key is kept, as it says).
+  const stopped = secret.stopped === true;
   const description = superseded
     ? "This request was replaced by a newer one for the same key. Use the newest card to provide it."
     : provided
-    ? secret.resumed
+    ? stopped
+      ? "Saved securely."
+      : secret.resumed
       ? "Saved securely. Your bot is continuing the task."
       : "Saved securely. Your bot will continue when its current turn settles."
     : declined
       ? "You chose not to provide this credential. Sagax could not resume the bot yet."
       : secret.description;
-  const footerLabel = declined
+  const footerLabel = stopped
+    ? "Stopped"
+    : declined
     ? "Continuing without this credential failed"
     : secret.resumed
       ? "Bot resumed without seeing the key"
@@ -128,8 +135,17 @@ function ApiKeyRequestCard({
     );
   }
 
+  if (stopped && !provided) {
+    return (
+      <AskSettledLine icon={<X size={13} />} ariaLabel={secret.label}>
+        <span className="text-ink-secondary" title={secret.description}>{secret.label}</span>
+        <span> · Stopped</span>
+      </AskSettledLine>
+    );
+  }
+
   if (provided || declined) {
-    const retry = !secret.resumed && error ? (
+    const retry = !secret.resumed && !stopped && error ? (
       <button type="button" onClick={() => void retryResume()} disabled={saving} className={cn(ASK_QUIET_BUTTON, "text-accent-text")}>
         {saving ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
         Try again
@@ -138,7 +154,7 @@ function ApiKeyRequestCard({
     return (
       <AskSettledLine
         ariaLabel={secret.label}
-        icon={secret.resumed
+        icon={secret.resumed || stopped
           ? undefined
           : declined
             ? <X size={13} className="text-danger" />

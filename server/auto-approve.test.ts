@@ -54,6 +54,17 @@ describe("autoVerdict", () => {
     }
     expect(autoVerdict("full", "Bash", { commandAllowed: true, requiresExplicitApproval: true }).source).toBe("full-access");
   });
+  it("applies an exact saved MCP read grant without bypassing outbound or sandbox guards", () => {
+    for (const mode of ["ask", "edits", "auto", "custom"] as const) {
+      expect(autoVerdict(mode, "mcp__linear__list_issues", { toolAllowed: true })).toEqual({
+        approve: "approved mcp__linear__list_issues (always allowed)",
+        source: "tool-allowlist",
+      });
+      expect(autoVerdict(mode, "mcp__linear__list_issues", { toolAllowed: true, requiresExplicitApproval: true }).approve).toBeNull();
+      expect(autoVerdict(mode, "mcp__linear__create_comment", { toolAllowed: true }).approve).toBeNull();
+      expect(autoVerdict(mode, "AskUserQuestion", { toolAllowed: true }).approve).toBeNull();
+    }
+  });
   it("answers only for Full access, and then answers everything", () => {
     expect(autoVerdict("full", "Bash")).toEqual({ approve: "approved Bash (full access)", source: "full-access" });
     expect(autoVerdict("full", "Bash", { requiresExplicitApproval: true })).toEqual({

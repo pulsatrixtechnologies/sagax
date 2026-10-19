@@ -386,6 +386,8 @@ function EventEditor({
   const [continuity, setContinuity] = useState(Boolean(existingRoutine?.continuity));
   // Only when I'm here (server/routine-away.ts): off unless chosen.
   const [onlyWhenPresent, setOnlyWhenPresent] = useState(existingRoutine?.onlyWhenPresent === true);
+  // Run once when the server starts (upstream #2700): off unless chosen.
+  const [runOnStartup, setRunOnStartup] = useState(Boolean(existingRoutine?.runOnStartup));
   const [recurrence, setRecurrence] = useState<RecurrenceChoice>(recurrenceFor(schedule, initialAt));
   const [cronDraft, setCronDraft] = useState(() => cronDraftFor(schedule.type === "cron" ? schedule : undefined, initialAt));
   const [cronChanged, setCronChanged] = useState(false);
@@ -573,6 +575,7 @@ function EventEditor({
           // Room goals can't carry a report yet, and a one-time run has no next run.
           continuity: routineTarget === "bot" && recurrence !== "none" && continuity,
           onlyWhenPresent,
+          runOnStartup: recurrence !== "none" && runOnStartup,
           attachments: routineTarget === "room-goal" ? [] : attachments as RoutineContextAttachment[],
           ...(routineTarget === "bot" ? { resultsThreadId } : {}),
           // Sent only when the person was changed in the dropdown.
@@ -871,6 +874,13 @@ function EventEditor({
                       </label>
                       <p className="mt-1.5 text-[10.5px] leading-relaxed text-ink-secondary">{t(overlap === "queue" ? "routines.overlapQueueHelp" : "routines.overlapSkipHelp")}</p>
                     </div>}
+                    {recurrence !== "none" && <label className="mt-3 flex items-start gap-2 text-[12px] text-ink">
+                      <input type="checkbox" aria-label={t("routines.runOnStartupLabel")} checked={runOnStartup} onChange={(event) => setRunOnStartup(event.target.checked)} className="mt-0.5 accent-accent" />
+                      <span>
+                        <span className="block">{t("routines.runOnStartupLabel")}</span>
+                        <span className="mt-1 block text-[10.5px] leading-relaxed text-ink-secondary">{t("routines.runOnStartupHelp")}</span>
+                      </span>
+                    </label>}
                   </div>
                 </details>
               )}

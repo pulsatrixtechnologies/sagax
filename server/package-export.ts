@@ -719,6 +719,7 @@ export function createTeamPackageExport(input: TeamExportInput): TeamExportResul
       ...(routine.timeoutMinutes === undefined ? {} : { timeoutMinutes: routine.timeoutMinutes }),
       ...(routine.overlap === "queue" ? { overlap: "queue" as const } : {}),
       ...(!goal && routine.continuity ? { continuity: true } : {}),
+      ...(routine.runOnStartup ? { runOnStartup: true } : {}),
       enabledAfterInstall: routine.enabled,
     }];
   });

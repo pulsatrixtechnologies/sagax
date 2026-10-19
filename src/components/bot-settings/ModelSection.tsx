@@ -78,7 +78,38 @@ export function ModelSection({ bot }: { bot: Bot }) {
           General > Advanced for every bot), then its ordered backups. */}
       {advanced && !draft && canEditBotField(state.config, bot, "automaticRecovery") && <BotRecoverySettings key={`recovery:${bot.id}`} bot={bot} />}
       {advanced && !draft && botRecovery(bot, state.config).enabled && canEditBotField(state.config, bot, "fallback") && <FallbackChain bot={bot} onChange={(fallback) => dispatch({ type: "updateBot", botId: bot.id, patch: { fallback } })} />}
+      {advanced && !draft && state.config?.cacheKeepWarm && canEditBotField(state.config, bot, "cacheKeepWarm") && (
+        <KeepWarmSettings bot={bot} workspaceOn={state.config.cacheKeepWarm.enabled}
+          onChange={(cacheKeepWarm) => dispatch({ type: "updateBot", botId: bot.id, patch: { cacheKeepWarm } })} />
+      )}
     </div>
+  );
+}
+
+/** Prompt-cache keep-warm for this bot: follow the workspace, or override it.
+ * One group with one pill menu, like the backups below it (one card level). */
+function KeepWarmSettings({ bot, workspaceOn, onChange }: { bot: Bot; workspaceOn: boolean; onChange: (value: boolean | null) => void }) {
+  const value = bot.cacheKeepWarm === true ? "on" : bot.cacheKeepWarm === false ? "off" : "follow";
+  const title = t("bot.keepWarm.title");
+  return (
+    <SettingsGroup
+      title={title}
+      groupId="botKeepWarm"
+      accessory={<HelpTip label={t("settings.moreAbout", { title })}>{t("bot.keepWarm.help")}</HelpTip>}
+    >
+      <CompactRow label={title}>
+        <PillSelect
+          value={value}
+          ariaLabel={title}
+          onChange={(next) => onChange(next === "on" ? true : next === "off" ? false : null)}
+          options={[
+            { value: "follow", label: t("bot.keepWarm.follow", { state: t(workspaceOn ? "bot.keepWarm.on" : "bot.keepWarm.off") }) },
+            { value: "on", label: t("bot.keepWarm.on") },
+            { value: "off", label: t("bot.keepWarm.off") },
+          ]}
+        />
+      </CompactRow>
+    </SettingsGroup>
   );
 }
 

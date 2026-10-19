@@ -361,7 +361,7 @@ describe("per-bot thread capacity through an isolated HTTP fixture", () => {
     }
   }, 120_000);
 
-  it("dispatches delegated handoffs into the standing thread without waiting for whole-bot idle", async () => {
+  it("dispatches a hand-off into a free slot without waiting for whole-bot idle, and holds the next at capacity", async () => {
     await limit(2);
     const target = await botWithThreads(2);
     const source = await botWithThreads(1);
@@ -397,43 +397,43 @@ describe("per-bot thread capacity through an isolated HTTP fixture", () => {
       return { runId: run.id as string, threadId: started.threadId as string, token: launched.mcpConfig.mcpServers.agents.env.SAGAX_COMMS_TOKEN as string };
     };
     const delegate = async (turn: { threadId: string; token: string }) => {
-      const response = await fetch(`${fixture.info.url}/api/internal/delegate-bot`, {
+      const response = await fetch(`${fixture.info.url}/api/internal/coordinate-bots`, {
         method: "POST",
         headers: {
           authorization: `Bearer ${turn.token}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ toBotId: target.botId, message: "Delegated slot probe" }),
+        body: JSON.stringify({ botIds: [target.botId], message: "Delegated slot probe" }),
       });
       const result = { status: response.status, body: await response.json() as any };
       // The evidence records the authorization result, never the bearer.
-      evidence.push({ authority: "existing provider capability", path: "/api/internal/delegate-bot", threadId: turn.threadId, result });
-      return result;
+      evidence.push({ authority: "existing provider capability", path: "/api/internal/coordinate-bots", threadId: turn.threadId, result });
+      expect(result.status, JSON.stringify(result.body)).toBe(200);
+      expect(result.body.receipts).toEqual([expect.objectContaining({ botId: target.botId, outcome: "queued", threadId: expect.any(String), requestId: expect.any(String) })]);
+      return { workThread: result.body.receipts[0].threadId as string, requestId: result.body.receipts[0].requestId as string };
     };
-    // The woken delegator's reply echoes the prompt its provider received.
+    // The resumed delegator's reply echoes the prompt its provider received.
     // Read it from the conversation, not the run record: a run keeps only
     // the first 2,000 characters of its output, and the replayed history
-    // ahead of the notice (the teammate's echoed reply now includes its
-    // in-turn context note) runs past that. The notice must be the latest
-    // thing the delegator was told, after the teammate's reply.
+    // ahead of the resume runs past that. The resume opens with the
+    // runtime's settle line and carries the teammate's report
+    // (docs/runtime-contract.md §4).
     const expectWokenByCompletion = async (turn: { runId: string; threadId: string }) => {
       const replies = (await messages(turn.threadId)).filter((message) => message.role === "bot" && message.kind === "text");
       const reply = String(replies.at(-1)?.text ?? "");
-      // the run recorded this same wake reply
+      // the run recorded this same resume reply
       expect(reply.startsWith((await runState(turn.runId)).output)).toBe(true);
-      const peerReply = reply.indexOf("@Capacity fixture replied to the delegated task");
-      const notice = reply.lastIndexOf("[A delegated task just completed]");
-      expect(peerReply).toBeGreaterThan(-1);
-      expect(notice).toBeGreaterThan(peerReply);
-      expect(reply.slice(notice)).toMatch(/^\[A delegated task just completed\]\n\nThe task you delegated to @Capacity fixture has finished, and their reply is now in this conversation\.\n\n[^]*Do not re-delegate the same task\.$/);
+      expect(reply).toContain("Your downstream room requests have settled.");
+      expect(reply).toContain("[Sagax report from @Capacity fixture on assignment");
+      expect(reply).toContain("What @Capacity fixture said:");
+      expect((await messages(turn.threadId)).some((message) => message.tool?.name === "Capacity fixture replied")).toBe(true);
     };
     try {
-      // One busy thread, one free slot: when the delegator's turn settles
-      // and the handoff drains, it must land in the target's standing
-      // thread — its newest task thread — instead of waiting for the whole
-      // bot to go idle. Every turn here, including the agentless delegated
-      // one, runs from its thread's task folder, so the fixture's shared
-      // cwd-keyed gates cover them all.
+      // One busy thread, one free slot: the hand-off must land in its own
+      // work thread on the target at once, instead of waiting for the whole
+      // bot to go idle or for the delegator's turn to end. Every turn here
+      // runs from its thread's task folder, so the fixture's cwd-keyed gates
+      // cover the work threads too.
       expect((await send(target.botId, target.threads[0], "HOLD_ONE_SLOT")).body.queued).toBeUndefined();
       await dump(target.threads[0]);
       expect(await busyThreads(target.botId)).toEqual([target.threads[0]]);
@@ -441,34 +441,37 @@ describe("per-bot thread capacity through an isolated HTTP fixture", () => {
 
       const first = await delegatorTurn();
       const queued = await delegate(first);
-      expect(queued.status).toBe(200);
-      expect(queued.body).toMatchObject({ queued: true, taskId: expect.any(String) });
-      finish(first.threadId);
-      await dump(target.threads[1]);
-      // The busy list orders by recent activity, not thread creation.
-      expect((await busyThreads(target.botId)).sort()).toEqual([...target.threads].sort());
+      expect(target.threads).not.toContain(queued.workThread);
+      await dump(queued.workThread);
+      expect((await busyThreads(target.botId)).sort()).toEqual([target.threads[0], queued.workThread].sort());
       expect((await botState(target.botId)).busy).toBe(true);
+      finish(first.threadId);
+      await expect.poll(async () => (await runState(first.runId))?.status, { timeout: 15_000 }).toBe("waiting");
 
-      // Standing thread busy and capacity full: the next handoff holds with
-      // a visible wait instead of dispatching.
+      // Capacity full: the next hand-off (a second run's own work thread)
+      // holds, queued on the runtime, instead of dispatching.
       const second = await delegatorTurn();
       const held = await delegate(second);
-      expect(held.body).toMatchObject({ queued: true, taskId: expect.any(String) });
+      expect(held.workThread).not.toBe(queued.workThread);
       finish(second.threadId);
       await expect.poll(async () => (await runState(second.runId))?.status, { timeout: 15_000 }).toBe("waiting");
-      expect((await messages(second.threadId)).some((message) => message.kind === "activity" && message.tool?.name?.includes("waiting — they're busy"))).toBe(true);
-      expect((await busyThreads(target.botId)).sort()).toEqual([...target.threads].sort());
+      expect((await runState(second.runId)).attention).toContain("delegated");
+      expect((await busyThreads(target.botId)).sort()).toEqual([target.threads[0], queued.workThread].sort());
+      expect(existsSync(threadFile(held.workThread, "json"))).toBe(false);
 
-      // The standing thread frees while the other stays busy: the held
-      // handoff re-tests its own admission and moves — the whole-bot busy
-      // flag is never the gate. Its turn lands in the just-freed thread,
-      // whose gate is already down, so it settles and wakes the delegator.
-      finish(target.threads[1]);
-      await expect.poll(async () => (await runState(second.runId))?.status, { timeout: 20_000 }).toBe("completed");
-      expect(await busyThreads(target.botId)).toEqual([target.threads[0]]);
-      await expectWokenByCompletion(second);
-      await expect.poll(async () => (await runState(first.runId))?.status, { timeout: 15_000 }).toBe("completed");
+      // The first work thread frees while the standing thread stays busy:
+      // the held hand-off re-tests its own admission and moves — the
+      // whole-bot busy flag is never the gate. Its turn lands in its work
+      // thread; letting it finish settles it and resumes its delegator.
+      finish(queued.workThread);
+      await expect.poll(async () => (await runState(first.runId))?.status, { timeout: 20_000 }).toBe("completed");
       await expectWokenByCompletion(first);
+      await dump(held.workThread);
+      expect((await busyThreads(target.botId)).sort()).toEqual([target.threads[0], held.workThread].sort());
+      finish(held.workThread);
+      await expect.poll(async () => (await runState(second.runId))?.status, { timeout: 20_000 }).toBe("completed");
+      await expectWokenByCompletion(second);
+      expect(await busyThreads(target.botId)).toEqual([target.threads[0]]);
     } finally {
       for (const bot of [target, source]) {
         for (const threadId of await busyThreads(bot.botId)) finish(threadId);

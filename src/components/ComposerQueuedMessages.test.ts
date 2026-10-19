@@ -61,6 +61,19 @@ describe("QueuedComposerMessages", () => {
     expect(markup).toContain('aria-label="Delete queued message 1 of 1"');
     expect(markup).not.toContain("Steer");
   });
+  it("names a queued picture instead of showing its attachment tag and path", () => {
+    const markup = renderToStaticMarkup(
+      createElement(QueuedComposerMessages, {
+        items: [{ queueId: "q1", text: 'Use this mockup\n\n<attached-image path="/tmp/uploads/mockup.png" name="mockup.png" />' }],
+        onSteer: () => undefined,
+        onCancel: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Use this mockup [image]");
+    expect(markup).not.toContain("attached-image");
+    expect(markup).not.toContain("/tmp/uploads");
+  });
   it("shows the full queued text in an attached, truncated row with real actions", () => {
     const markup = renderToStaticMarkup(
       createElement(QueuedComposerMessages, {

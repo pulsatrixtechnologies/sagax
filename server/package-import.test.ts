@@ -114,6 +114,18 @@ describe("importing a whole team", () => {
     expect(app.events.filter((kind) => kind === "bot")).toHaveLength(3);
   });
 
+  it("keeps a routine's run on startup, still arriving paused", async () => {
+    const app = await installation();
+    const document: PackageDocument = app.parsePackageDocument(fixture("full-team.v2.json"));
+    document.package.routines!.find((routine) => routine.key === "daily-digest")!.runOnStartup = true;
+    const result = app.importer.importPackageDocument(document, { trust: "file", mode: "add" }, app.deps);
+    if (result.alreadyAdded) throw new Error("unexpected");
+    expect(result.routines).toEqual([
+      expect.objectContaining({ name: "Daily digest", enabled: false, runOnStartup: true }),
+      expect.not.objectContaining({ runOnStartup: true }),
+    ]);
+  });
+
   it("imports the same file twice as two independent copies", async () => {
     const app = await installation();
     const document = app.parsePackageDocument(fixture("full-team.v2.json"));

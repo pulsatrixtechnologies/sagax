@@ -134,7 +134,16 @@ function evidenceLine(evidence: TurnEvidence | undefined): string {
     const more = files.length > FILES_SHOWN ? `, +${files.length - FILES_SHOWN} more` : "";
     parts.push(files.length ? `${count(files.length, "file")} changed (${shown.join(", ")}${more})` : "no files changed");
   }
-  if (evidence.toolCalls !== undefined) parts.push(count(evidence.toolCalls, "tool call"));
+  if (evidence.toolCalls !== undefined) parts.push(`${count(evidence.toolCalls, "tool call")}${evidence.okToolCalls !== undefined ? ` (${evidence.okToolCalls} ok)` : ""}`);
+  else if (evidence.okToolCalls !== undefined) parts.push(`${count(evidence.okToolCalls, "tool call")} ok`);
+  if (evidence.errors?.length) parts.push(count(evidence.errors.length, "tool error"));
+  // What already went out (sent, posted, pushed, paid) is exactly what a
+  // requester must not redo: it is named, not counted.
+  if (evidence.outward?.length) {
+    const shown = evidence.outward.slice(0, FILES_SHOWN).map((label) => quote(label, NAME_MAX)).filter(Boolean);
+    const more = evidence.outward.length > FILES_SHOWN ? `, +${evidence.outward.length - FILES_SHOWN} more` : "";
+    if (shown.length) parts.push(`outward actions done (${shown.join(", ")}${more})`);
+  }
   const summary = quote(evidence.summary, QUOTE_MAX);
   if (!parts.length && !summary) return "The harness observed nothing of this turn.";
   return `Observed by the harness: ${parts.join(", ")}${summary ? `${parts.length ? "; " : ""}${summary}` : ""}.`;
@@ -195,4 +204,28 @@ export function envelopeNote(envelope: string): string {
   const rest = envelope.slice(at);
   const answer = /\n\n((?:Your question was: |The person answered: )[^\n]*)$/.exec(rest);
   return envelope.slice(0, at) + (answer ? `\n\n${answer[1]}` : "");
+}
+
+/** Why a turn continues one that stopped short (a step cap, a seat the
+ * host could not hold) and, after a cap, where the steps so far are listed.
+ * Harness-written: the note comes from the driver's classification, the
+ * path from the handoff the harness wrote. */
+export function continuationLine(continuation: { note: string; handoffPath?: string }): string {
+  return continuation.note.trim() + (continuation.handoffPath
+    ? ` Every step so far is listed in ${continuation.handoffPath}; read it before going on.` : "");
+}
+
+/** The text a root's later execution opens with: its own turn run again
+ * after a restart, the turn after the person acted on its cards, or a turn
+ * that continues one that stopped short. A root is the person's own
+ * conversation, so there is no envelope: only what the harness knows. */
+export function composeRootTurn(a: Assignment, input: { turn: "rerun" | "answered" | "continued" | "first"; restartNote: string; answer?: string;
+  continuation?: { note: string; handoffPath?: string } }): string {
+  const brief = quote(a.brief, QUOTE_MAX);
+  const lines: string[] = [];
+  if (input.restartNote) lines.push(input.restartNote.trim());
+  if (input.answer !== undefined) lines.push(input.answer);
+  else if (input.continuation) lines.push(continuationLine(input.continuation));
+  else if (brief) lines.push(`Continue the request you were working on: "${brief}".`);
+  return lines.join("\n\n");
 }

@@ -56,6 +56,7 @@ const ENGINES: Readonly<Record<string, EngineRow>> = {
   kimiAgent: { resume: true }, // acp/kimi.ts:500 (loadSession:true, :6)
   droidAgent: { resume: true }, // acp/droid.ts:217 (loadSession:true, :5)
   cursorAgent: { resume: true }, // acp/cursor.ts:387
+  museCode: { resume: true }, // muse-code.ts session/resume with the Muse session id
   opencodeGo: { resume: true }, // acp/opencode-go.ts:838
   qwenAgent: { resume: true }, // acp/qwen.ts:219
   hermesAgent: { resume: true }, // acp/hermes.ts:418
@@ -70,6 +71,7 @@ const ENGINES: Readonly<Record<string, EngineRow>> = {
   mistral: { resume: false, stepCap: CHAT_STEP_CAP }, // mistral.ts:48
   cerebras: { resume: false, stepCap: CHAT_STEP_CAP }, // cerebras.ts:41
   groq: { resume: false, stepCap: CHAT_STEP_CAP }, // groq.ts:41
+  meta: { resume: false, stepCap: CHAT_STEP_CAP }, // meta.ts:54
 };
 
 /** The engines with a row, for the table test. */

@@ -72,7 +72,7 @@ export function renameWithRetry(
   }
 }
 
-export function writeFileAtomic(path: string, data: string, options: AtomicWriteOptions = {}): void {
+export function writeFileAtomic(path: string, data: string | Uint8Array, options: AtomicWriteOptions = {}): void {
   const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`;
   let fd: number | null = null;
   try {

@@ -57,6 +57,17 @@ test("main forks what the helper picks and hands only the server the cache direc
   assert.doesNotMatch(body, /path\.join\(process\.resourcesPath, "server", "index\.js"\)/);
 });
 
+test("every server child of one launch gets that launch's id, never one from the shell", () => {
+  const main = readFileSync(new URL("./main.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  // Top level: one id for the whole launch, shared by restarts and switches.
+  assert.match(main, /\nconst desktopLaunchId = randomUUID\(\);\n/);
+  const start = main.indexOf("async function startServerOn(port,");
+  const body = main.slice(start, main.indexOf("utilityProcess.fork(entry", start));
+  const spread = body.indexOf("...process.env,");
+  const launch = body.indexOf("SAGAX_DESKTOP_LAUNCH_ID: desktopLaunchId,");
+  assert.ok(spread > 0 && launch > spread, "the launch id is set after, so over, the inherited environment");
+});
+
 // A staged copy of the bootstrap beside a stand-in index.js, run on this
 // Node. The stand-in reports what the server would see.
 function stage(t, indexSource = REPORTING_INDEX) {

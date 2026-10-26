@@ -170,6 +170,13 @@ public struct ComputerStatus: Decodable, Equatable, Sendable {
     public var limitBytes: Double?
     public var version: String?
     public var problem: String?
+    /// The cluster is waking. Absent on an older computer.
+    public var waking: Waking?
+
+    public struct Waking: Decodable, Equatable, Sendable {
+        public var since: Double
+        public var elapsedMs: Double
+    }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -181,9 +188,10 @@ public struct ComputerStatus: Decodable, Equatable, Sendable {
         limitBytes = try? values.decodeIfPresent(Double.self, forKey: .limitBytes)
         version = try? values.decodeIfPresent(String.self, forKey: .version)
         problem = try? values.decodeIfPresent(String.self, forKey: .problem)
+        waking = try? values.decodeIfPresent(Waking.self, forKey: .waking)
     }
 
-    private enum CodingKeys: String, CodingKey { case kind, configured, state, diskState, workspaceBytes, limitBytes, version, problem }
+    private enum CodingKeys: String, CodingKey { case kind, configured, state, diskState, workspaceBytes, limitBytes, version, problem, waking }
 }
 
 struct ConfirmBody: Encodable {
@@ -251,36 +259,31 @@ public struct PluginSearchPage: Decodable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey { case featured, results, nextCursor, registryAvailable }
 }
 
-/// An installed plugin: an MCP server or a connected Composio app.
+/// An installed plugin: an MCP server.
 public enum InstalledPlugin: Decodable, Hashable, Identifiable, Sendable {
     case mcp(name: String, url: String, domain: String, enabled: Bool, auth: String, icon: String?, catalogId: String?)
-    case composio(slug: String, name: String, connected: Bool, logo: String?, domain: String?)
 
     public var id: String {
         switch self {
         case let .mcp(name, _, _, _, _, _, _): "mcp:\(name)"
-        case let .composio(slug, _, _, _, _): "composio:\(slug)"
         }
     }
 
     public var name: String {
         switch self {
         case let .mcp(name, _, _, _, _, _, _): name
-        case let .composio(_, name, _, _, _): name
         }
     }
 
     public var domain: String? {
         switch self {
         case let .mcp(_, _, domain, _, _, _, _): domain
-        case let .composio(_, _, _, _, domain): domain
         }
     }
 
     public var iconKey: String? {
         switch self {
         case let .mcp(_, _, _, _, _, icon, _): icon
-        case .composio: nil
         }
     }
 
@@ -294,11 +297,10 @@ public enum InstalledPlugin: Decodable, Hashable, Identifiable, Sendable {
         return nil
     }
 
-    /// Ready to use: connected, or an MCP server that needs no sign-in now.
+    /// Ready to use: an MCP server that needs no sign-in now.
     public var isReady: Bool {
         switch self {
         case let .mcp(_, _, _, enabled, auth, _, _): enabled && auth != "required" && auth != "expired"
-        case let .composio(_, _, connected, _, _): connected
         }
     }
 
@@ -308,31 +310,20 @@ public enum InstalledPlugin: Decodable, Hashable, Identifiable, Sendable {
         return false
     }
 
-    private enum CodingKeys: String, CodingKey { case kind, name, url, domain, enabled, auth, icon, catalogId, slug, connected, logo }
+    private enum CodingKeys: String, CodingKey { case kind, name, url, domain, enabled, auth, icon, catalogId }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        let kind = try values.decodeIfPresent(String.self, forKey: .kind) ?? "mcp"
-        if kind == "composio" {
-            self = .composio(
-                slug: try values.decode(String.self, forKey: .slug),
-                name: try values.decodeIfPresent(String.self, forKey: .name) ?? "",
-                connected: try values.decodeIfPresent(Bool.self, forKey: .connected) ?? false,
-                logo: try values.decodeIfPresent(String.self, forKey: .logo),
-                domain: try values.decodeIfPresent(String.self, forKey: .domain)
-            )
-        } else {
-            let url = try values.decodeIfPresent(String.self, forKey: .url) ?? ""
-            self = .mcp(
-                name: try values.decode(String.self, forKey: .name),
-                url: url,
-                domain: try values.decodeIfPresent(String.self, forKey: .domain) ?? (URL(string: url)?.host ?? ""),
-                enabled: try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? true,
-                auth: try values.decodeIfPresent(String.self, forKey: .auth) ?? "none",
-                icon: try values.decodeIfPresent(String.self, forKey: .icon),
-                catalogId: try values.decodeIfPresent(String.self, forKey: .catalogId)
-            )
-        }
+        let url = try values.decodeIfPresent(String.self, forKey: .url) ?? ""
+        self = .mcp(
+            name: try values.decode(String.self, forKey: .name),
+            url: url,
+            domain: try values.decodeIfPresent(String.self, forKey: .domain) ?? (URL(string: url)?.host ?? ""),
+            enabled: try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? true,
+            auth: try values.decodeIfPresent(String.self, forKey: .auth) ?? "none",
+            icon: try values.decodeIfPresent(String.self, forKey: .icon),
+            catalogId: try values.decodeIfPresent(String.self, forKey: .catalogId)
+        )
     }
 }
 

@@ -10,7 +10,6 @@ import { stateForBot } from "@/lib/mascot";
 import { placeOffered } from "@/lib/place";
 import { useStore, type Bot } from "@/state/store";
 import { approvalModeFor } from "../../../shared/approval-mode";
-import { connectorGrantsState, type ConnectorGrantsState } from "@/lib/connector-grants";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { t } from "@/lib/i18n";
 import { useBotEditor } from "./BotEditorContext";
@@ -38,15 +37,16 @@ export type BotPatch = Partial<
     | "alwaysAllow"
     | "autoApprove"
     | "approvalMode"
+    | "proactiveMode"
     | "outbound"
     | "fallback"
     | "speakReplies"
     | "memoryEnabled"
     | "voice"
+    | "emailDrafts"
     | "chiefOfStaff"
     | "managedSections"
     | "approvePeerComms"
-    | "composio"
     | "browser"
     | "mcpServers"
     | "mcpAccounts"
@@ -54,10 +54,6 @@ export type BotPatch = Partial<
   >
 > & {
   computer?: Bot["computer"] | null;
-  /** null drops the explicit record and returns the bot to the legacy
-   * all-tools boolean. */
-  connectorTools?: Bot["connectorTools"] | null;
-  connectorScopes?: Bot["connectorScopes"] | null;
   acknowledgeLocalAuto?: boolean;
   confirmFullAccess?: boolean;
   acknowledgePeerScope?: boolean;
@@ -82,12 +78,8 @@ export function useBotSettingsDerived(bot: Bot) {
   const approvalMode = approvalModeFor(bot);
   const trustedModesAvailable = Boolean(window.ogb?.approvals && capabilities.host.packaged);
   const canCoordinate = engine?.capabilities?.agentsMcp === true;
-  const canUseConnectedApps = engine?.capabilities?.composioMcp === true;
   // An engine with computer tools can use a cloud computer, on Boat or a VPS.
   const canUseVps = engine?.capabilities?.computerMcp === true;
-  const connectedAppsConfigured = state.config?.composio?.configured === true;
-  const connectedAppsEnabled = bot.composio !== false;
-  const connectorGrantState: ConnectorGrantsState = connectorGrantsState(bot);
   const canUseBrowser = engine?.capabilities?.browserMcp === true;
   const desktopBrowser = browserAvailable(state.config);
   const browserBlockedOnWindows = window.ogb?.platform === "win32" && !desktopBrowser;
@@ -122,11 +114,7 @@ export function useBotSettingsDerived(bot: Bot) {
     approvalMode,
     trustedModesAvailable,
     canCoordinate,
-    canUseConnectedApps,
     canUseVps,
-    connectedAppsConfigured,
-    connectedAppsEnabled,
-    connectorGrantState,
     canUseBrowser,
     desktopBrowser,
     browserBlockedOnWindows,

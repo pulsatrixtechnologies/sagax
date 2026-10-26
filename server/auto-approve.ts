@@ -1,8 +1,10 @@
 // What the harness does with a provider's permission request.
 //
 // Nothing here decides whether an action is safe. Each approval level is a
-// provider's own permission mode passed straight through (Claude `auto`,
-// Grok `--permission-mode`, Codex `approvalsReviewer`, …), and a request that
+// provider's own permission mode passed straight through (Grok
+// `--permission-mode`, Codex `approvalsReviewer`, …; Claude's Auto since
+// 2026-10-19 is Auto-accept edits plus a fixed allowlist, never the CLI's
+// silent classifier: drivers/claude.ts claudeAutoAllowedTools), and a request that
 // reaches this process is one the provider left for a person. The grants the
 // app applies are Full access and the person's exact saved commands and
 // explicitly remembered MCP read tools. Approve
@@ -13,6 +15,7 @@
 import { supportsApprovalMode, type ApprovalMode } from "../shared/approval-mode.ts";
 import { isOutboundTool } from "../shared/outbound.ts";
 import type { ProviderAdapter, RequestOutcome } from "./contracts.ts";
+import { standingGrantsAllowed } from "./custom-rules-org.ts";
 
 /** A failed delivery is a runtime error, not another permission decision.
  * An expired ask must never become a fresh Allow/Deny card. */
@@ -152,6 +155,10 @@ export type AutoVerdictSource =
   | "owner-auto"
   | "owner-bypass"
   | "owner-rule-deny"
+  /** 2026-10-19 (JC: "Toujours permettre" on every card): an allow rule an
+   * organization admin (or a holder of host.commands, for their own bot)
+   * saved on an admin card of a member's bot; checked again at each use. */
+  | "admin-rule"
   /** 2026-10-16 (custom auto-review rules, shared/custom-rules.ts): the
    * person's own words allowed it, held it for a card, or refused it. */
   | "custom-rule"
@@ -167,6 +174,17 @@ export type AutoVerdictSource =
   /** 2026-10-16: a tool of the bot owner's own isolated environment (their
    * server environment, their Local VM), server/member-environment.ts. */
   | "own-environment"
+  | "own-attachment"
+  | "own-computer-choice"
+  /** 2026-10-19 (owner setup, server/owner-autonomy.ts): a Perspicax read
+   * on Sagax's own mount at a level that runs work unasked, and a
+   * coordination lease (claim, claim_renew, claim_release) at any level. */
+  | "perspicax-read"
+  | "perspicax-lease"
+  | "own-read-only"
+  /** 2026-10-21 (parité 1C): a message send whose every recipient is on the
+   * bot's allowed recipients (shared/allowed-recipients.ts). */
+  | "allowed-recipient"
   | "no-grant";
 
 export interface AutoVerdict {
@@ -214,6 +232,29 @@ export function autoVerdict(
      * (server/member-environment.ts ownEnvironmentAutonomy). Answered only
      * at Auto or Auto-accept edits, never at Ask. */
     ownEnvironment?: boolean;
+    /** 2026-10-19: a read of the person's own attachments in their own
+     * destination, from the owner's own turn
+     * (member-environment.ts ownAttachmentRead). Answered at any level,
+     * after the safety hold and the person's own rules, never when a
+     * security key protects it. */
+    ownAttachmentRead?: boolean;
+    /** 2026-10-19 (#810 follow-up): Sagax's own computer_select choosing
+     * among the places of the person this turn is for
+     * (member-environment.ts ownComputerChoiceCall). The bot decides where it
+     * works: answered at any level, after the safety hold and the person's
+     * own rules, never when a security key protects it. */
+    ownComputerChoice?: boolean;
+    /** 2026-10-20 (JC): a command that only reads (shared/read-only-command.ts)
+     * on the person's own computer (their PC, its Local VM, their cloud
+     * computer). Answered at any level and from any turn, after the safety
+     * hold and the person's own rules, never when a security key protects it. */
+    ownReadOnlyCommand?: boolean;
+    /** 2026-10-19 (owner setup, server/owner-autonomy.ts): a Perspicax read
+     * or lease on Sagax's own mount that the caller found applies at this
+     * level (perspicaxSelfAnswerAt). Answered after the safety hold and the
+     * person's own rules, never for a send, a sandbox widening or a call a
+     * security key protects. */
+    perspicaxSelf?: "read" | "lease";
     /** The engine's own `<server>__<tool>` name when `tool` is a kind (ACP
      * "other") or a bare name: what the outbound guard reads for Sagax's own
      * tools and the owner's environment. */
@@ -223,6 +264,16 @@ export function autoVerdict(
      * no automatic answer from Sagax's own tools or the owner's environment,
      * the card shows and its Allow needs the key (#648). */
     stepUpRequired?: readonly string[];
+    /** 2026-10-21 (parité 1C): a message send (an email, a text) whose
+     * every recipient is on the bot's allowed recipients
+     * (sendRecipientsAllowed). Answered at any level after the safety hold
+     * and the person's own rules, never for a sandbox widening, a call a
+     * security key protects, or while standing grants are off. */
+    recipientsAllowed?: boolean;
+    /** The engine's driver read the ask as outward-facing (an engine
+     * connector call that is not plainly a read, review of #943): held by
+     * the outbound guard like a send, never answered as read-only. */
+    outbound?: boolean;
     /** The call is one of Sagax's own tools that must never answer itself:
      * a rule change (rules_update and the like, "rule-change" class). */
     ruleChange?: boolean;
@@ -239,6 +290,22 @@ export function autoVerdict(
   // A safety hold is an explicit accept. It is checked before Full, before a
   // saved Allow rule, and before a gate, so none of those answer it.
   if (context?.safetyHold) return { approve: null, source: "safety-hold" };
+  // 2026-10-21 (server/custom-rules-org.ts): while the organization turned
+  // "Toujours permettre" off, no standing grant answers (a saved Allow rule
+  // of a gate, a saved command, an allow rule in the person's words); each
+  // call is approved on its card.
+  if (!standingGrantsAllowed() && context && (context.ruleAllowed || context.commandAllowed || context.customRule?.behavior === "allow" || context.recipientsAllowed)) {
+    context = {
+      ...context,
+      ruleAllowed: false,
+      commandAllowed: false,
+      recipientsAllowed: false,
+      ...(context.customRule?.behavior === "allow" ? { customRule: undefined } : {}),
+    };
+  }
+  // An organization admin's Refuse rule (server/custom-rules-org.ts) is
+  // mandatory: even a draft the person approved is refused.
+  if (context?.customRule?.behavior === "deny" && context.customRule.id.startsWith("orule_")) return { approve: null, source: "custom-rule-deny" };
   // A send the person approved on the draft's own card is that person's
   // answer, not a rule: it is not held again by an "ask me" rule.
   if (context?.emailDraftApproved) return { approve: `approved ${tool} (your approved email draft)`, source: "email-draft-approval" };
@@ -246,12 +313,20 @@ export function autoVerdict(
   // keeps the card even under Full access or a saved command.
   if (context?.customRule?.behavior === "deny") return { approve: null, source: "custom-rule-deny" };
   if (context?.customRule?.behavior === "ask") return { approve: null, source: "custom-rule-ask" };
-  if (context?.safetyAllow) return { approve: `approved ${tool} (read-only)`, source: "safety-read" };
+  const outward = isOutboundTool(tool) || context?.outbound === true || (context?.toolName !== undefined && isOutboundTool(context.toolName));
+  if (context?.safetyAllow && !outward) return { approve: `approved ${tool} (read-only)`, source: "safety-read" };
   if (context?.widgetApproved) return { approve: `approved ${tool} (approved in the ConnectWise widget)`, source: "widget-approval" };
   // An allow rule never answers a sandbox widening (only Full may), and its
   // risk scope was checked against the call before it got here.
   if (context?.customRule?.behavior === "allow" && !context.requiresExplicitApproval) {
     return { approve: `approved ${tool} (your rule)`, source: "custom-rule" };
+  }
+  // The bot's allowed recipients (JC 2026-10-21: « dans la liste = part sans
+  // carte »): the send is to people the person named ahead of time. It
+  // answers the outbound guard and a gate card alike, never a widening or a
+  // class the person protects with a security key.
+  if (context?.recipientsAllowed && !context.requiresExplicitApproval && !(context.stepUpRequired?.length)) {
+    return { approve: `approved ${tool} (allowed recipients)`, source: "allowed-recipient" };
   }
   // Sagax's own person-scoped tools (sagax-internal-tools.ts, a reviewed
   // list of exact names) and the owner's own environment answer only after
@@ -261,10 +336,25 @@ export function autoVerdict(
   // protects with a security key (the card then needs the key), or a rule
   // change. A Grok gate card is answered too: the gate holds these calls and
   // routes them here (grok-approval-gate.ts), so the same rules apply.
-  const sendsOut = isOutboundTool(tool) || (context?.toolName !== undefined && isOutboundTool(context.toolName));
+  const sendsOut = outward;
   const selfAnswerable = !context?.requiresExplicitApproval && !sendsOut && !(context?.stepUpRequired?.length);
   if (context?.sagaxInternal && selfAnswerable && !context.ruleChange) {
     return { approve: `approved ${tool} (Sagax tool)`, source: "sagax-internal" };
+  }
+  if (context?.ownAttachmentRead && selfAnswerable) {
+    return { approve: `approved ${tool} (your own attachment)`, source: "own-attachment" };
+  }
+  if (context?.ownReadOnlyCommand && selfAnswerable) {
+    return { approve: `approved ${tool} (read-only command on your own computer)`, source: "own-read-only" };
+  }
+  if (context?.ownComputerChoice && selfAnswerable) {
+    return { approve: `approved ${tool} (choosing among your own computers)`, source: "own-computer-choice" };
+  }
+  if (context?.perspicaxSelf === "lease" && selfAnswerable) {
+    return { approve: `approved ${tool} (coordination lease)`, source: "perspicax-lease" };
+  }
+  if (context?.perspicaxSelf === "read" && selfAnswerable) {
+    return { approve: `approved ${tool} (read-only)`, source: "perspicax-read" };
   }
   // The owner's own environment: only at a level that already runs work
   // unasked (Auto, Auto-accept edits). At Ask the person asked to see every
@@ -279,7 +369,7 @@ export function autoVerdict(
   if (context?.sagaxGate) return { approve: null, source: mode === "auto" || mode === "custom" ? "native-approval" : "no-grant" };
   if (mode === "full") return { approve: `approved ${tool} (full access)`, source: "full-access" };
   if (context?.requiresExplicitApproval) return { approve: null, source: "explicit-approval-block" };
-  if (isOutboundTool(tool) || ((context?.sagaxInternal || context?.ownEnvironment) && sendsOut)) return { approve: null, source: "outbound-guard" };
+  if (isOutboundTool(tool) || context?.outbound === true || ((context?.sagaxInternal || context?.ownEnvironment) && sendsOut)) return { approve: null, source: "outbound-guard" };
   if (context?.commandAllowed) return { approve: `approved ${tool} (saved command)`, source: "command-allowlist" };
   if (context?.toolAllowed) return { approve: `approved ${tool} (always allowed)`, source: "tool-allowlist" };
   // The one action the app itself grants. A fetch of an arbitrary URL is not
@@ -306,6 +396,7 @@ export const HELD_NOTE = {
   "approval.held.undeliveredFull": "Full access couldn't deliver this approval.",
   "approval.held.undelivered": "Approve for me couldn't answer this one.",
   "approval.held.customRule": "Your rule asks you first for this.",
+  "approval.held.connectorNoDetails": "Grok did not share this call's details. Allow it only if you asked for it.",
 } as const;
 
 export type HeldNoteKey = keyof typeof HELD_NOTE;

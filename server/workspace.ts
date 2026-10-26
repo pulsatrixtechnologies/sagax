@@ -125,7 +125,7 @@ function memoryEntryStat(path: string) {
 /** File locations, not file contents or wider tool permissions. Threads keep
  * independent working directories; the same bot can find its earlier output
  * without assuming that a file absent from the current directory was lost. */
-export function workspaceLocationsPrompt(botId: string, cwd: string | undefined, botCwd?: string, opts: { attachFile?: boolean; confidential?: boolean } = {}): string {
+export function workspaceLocationsPrompt(botId: string, cwd: string | undefined, botCwd?: string, opts: { attachFile?: boolean; confidential?: boolean; relativePaths?: boolean } = {}): string {
   // A confidential thread (server/confidential-threads.ts) keeps its work in
   // its own folder: no shared or project folder to write to, no other
   // thread's files to reach for.
@@ -141,16 +141,27 @@ export function workspaceLocationsPrompt(botId: string, cwd: string | undefined,
     sharedBotFolder: workspaceDir(botId),
     otherThreadFiles: join(TASK_WORKSPACES_DIR, botId),
     ...(botCwd ? { configuredProjectFolder: botCwd } : {}),
-  }) + ". Different conversations can have different working folders. For an existing file, use the exact path from the conversation; if missing here, check this bot's listed folders before saying it is gone or recreating it." +
-    " Follow an explicitly requested destination. Otherwise put new task output in the current working folder and report its absolute path so another thread or room can use it." +
-    " Do not move old files, edit another active thread's work, or read another bot's private folders without authorization. These paths do not grant additional access." +
+  }) + ". Each conversation has its own working folder" +
+    // 2026-10-20 perf parity: a Claude tool call that spells a working-folder
+    // path (two UUIDs) streams for seconds; relative names cost a few tokens.
+    // Claude's Read, Write, Edit, Glob, Grep and Bash resolve them from the
+    // spawn cwd (currentWorkingFolder).
+    (opts.relativePaths && cwd
+      ? "; your own file and shell tools (not a computer's tools) start there: name a file in it by its relative path (notes.txt), any other by its absolute path."
+      : ".") +
+    " For an existing file, use the exact path from the conversation; if it is not here, check the listed folders before saying it is gone or recreating it." +
+    " Put new output where the person asked, else in currentWorkingFolder; when you say where a file is, give its full absolute path (never a relative one) so another thread or room can use it." +
+    " Never move old files, edit another active thread's work, or read another bot's private folders without authorization; these paths grant no extra access." +
+    // 2026-10-19: a bot started a local web server "only to display the
+    // images" of a document, minutes lost (server/office-media.ts).
+    " To see a picture, read the image file; never start a web server or a browser only to view one." +
     // Chat links and inline images open only inside the conversation's
     // folders; attach_file copies one file the turn saved elsewhere
     // (server/message-file.ts), and the reply's image of it shows that copy.
-    " Chat links and inline images open only files in currentWorkingFolder and sharedBotFolder." +
+    " Chat links and inline images open only files in currentWorkingFolder and sharedBotFolder" +
     (opts.attachFile
-      ? " When you save a file or picture for the person somewhere else, also attach it with attach_file in the same turn so it opens from chat. For many files, attach the few that matter most, such as a preview."
-      : " Save a file or picture you want to show in chat there.");
+      ? "; when you save a file or picture for the person elsewhere, also attach it with attach_file in the same turn (for many files, the few that matter most, such as a preview)."
+      : "; save a file or picture you want to show in chat there.");
 }
 
 /** Lines as a person counts them: a file that ends in a newline has no

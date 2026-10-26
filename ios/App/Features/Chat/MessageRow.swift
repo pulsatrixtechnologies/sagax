@@ -221,20 +221,26 @@ struct MessageRow: View {
             // model's questions, not an allow/deny a tap could stand for.
             if message.card?.questions.isEmpty == false {
                 QuestionCardView(chat: chat, message: message)
+            } else if let card = message.card, FlatQuestionCardView.draws(card) {
+                // a bot's flat ask: the same question card (QuestionSheet)
+                FlatQuestionCardView(chat: chat, message: message)
             } else {
                 CardView(chat: chat, message: message)
             }
         case .secret:
             if let secret = message.secret {
                 // A decline that resumed leaves nothing to show (SecretRequestCard.tsx).
-                if !SecretCardRules.isHidden(secret) {
+                if VaultLoginCard.isVaultLogin(secret) {
+                    // a bot's sign-in request: saved logins and 1Password (parité R10)
+                    VaultLoginCardView(chat: chat, message: message, secret: secret)
+                } else if !SecretCardRules.isHidden(secret) {
                     CredentialRequestCardView(chat: chat, message: message, secret: secret)
                 }
             } else if let text = message.text, !text.isEmpty {
                 TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
             }
         case .activity:
-            if let widget = message.tool?.widget, widget.isKnown {
+            if let widget = message.tool?.widget, widget.isKnown, CwWidgets.isViewTool(message.tool?.name) {
                 CwWidgetCard(widget: widget, threadId: chat.threadId, botId: message.from?.botId) { action in
                     Task { await session.requestCwAction(action, threadId: chat.threadId, botId: message.from?.botId) }
                 }
@@ -265,9 +271,12 @@ struct MessageRow: View {
                 selecting = SelectableText(text: message.compaction?.summary ?? message.text ?? "")
             }
         case .screen:
-            ScreenShot(threadId: chat.threadId, message: message)
+            // Views on request only (shared/requested-views.ts).
+            if message.requested == true {
+                ScreenShot(threadId: chat.threadId, message: message)
+            }
         case .video:
-            if let video = message.video {
+            if let video = message.video, message.requested == true {
                 VideoWidgetView(video: video)
             }
         case .widget:
@@ -306,9 +315,9 @@ struct MessageRow: View {
                 TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
             }
         case .connector:
-            if let connector = message.connector, session.surfaceGate.allows(.connectorCard) {
-                ConnectorCardView(chat: chat, message: message, connector: connector)
-            } else if let text = message.text, !text.isEmpty {
+            // The connect-an-app card is gone; a message of this kind still
+            // carries text written for this reader, so show it.
+            if let text = message.text, !text.isEmpty {
                 TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
             }
         case .access:

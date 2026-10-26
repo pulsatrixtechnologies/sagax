@@ -64,10 +64,16 @@ function lastUserId(messages: readonly { id: string; role: string; parallelTask?
 }
 
 /** The language the call's own lines are said in: the call's, else the
- * person's last words (French or not) on an English or French page. */
-function callLocale(messages: readonly { role: string; text?: string; parallelTask?: unknown }[]) {
+ * person's last words (French or not) on an English or French page. `sticky`
+ * is the locale already settled on this call, kept on auto so the spoken
+ * lines do not flip French and English turn to turn. */
+function callLocale(
+  messages: readonly { role: string; text?: string; parallelTask?: unknown }[],
+  callLanguage: string,
+  sticky: string | undefined,
+) {
   const lastUserText = [...messages].reverse().find((message) => message.role === "user" && !message.parallelTask)?.text;
-  return progressLocale({ callLanguage: readVoiceModeSettings().language, lastUserText, pageLocale: activeLocale(), looksFrench });
+  return progressLocale({ callLanguage, lastUserText, pageLocale: activeLocale(), looksFrench, sticky });
 }
 
 /** Runs the call with this bot and publishes it; draws nothing. */
@@ -133,6 +139,13 @@ export function LiveCallEngine({ bot }: { bot: Bot }) {
     const own = timers.current;
     return () => own.clear();
   }, []);
+  /** the locale the call's own spoken lines settled on (auto: kept stable) */
+  const callLineLocale = useRef<string | undefined>(undefined);
+  const localeForCallLines = useCallback(() => {
+    const resolved = callLocale(messagesRef.current, call?.language ?? readVoiceModeSettings().language, callLineLocale.current);
+    if (resolved === "fr" || resolved === "en") callLineLocale.current = resolved;
+    return resolved;
+  }, [call]);
   const drainSpeak = useCallback(() => {
     const live = call;
     if (!live) return;
@@ -152,7 +165,7 @@ export function LiveCallEngine({ bot }: { bot: Bot }) {
     // (barge-in) or one that stopped at its question says nothing more
     const words = lastUserId(messagesRef.current);
     const restInChat = item.kind === "done" && spokenAnswer(item.text).cut === "length" && restSaidFor.current !== words
-      ? tIn(callLocale(messagesRef.current), "voiceMode.restInChat")
+      ? tIn(localeForCallLines(), "voiceMode.restInChat")
       : null;
     void Promise.resolve(played)
       .then((heard) => {
@@ -161,7 +174,7 @@ export function LiveCallEngine({ bot }: { bot: Bot }) {
         pendingSpeak.current.push({ id: `rest-${item.id}`, text: restInChat, priority: "user-reply", at: Date.now(), kind: "say" });
       })
       .finally(() => drainSpeak());
-  }, [call]);
+  }, [call, localeForCallLines]);
 
   // ── the call itself (one per mount; StrictMode's probe gets its own) ──
   useEffect(() => {
@@ -485,8 +498,7 @@ export function LiveCallEngine({ bot }: { bot: Bot }) {
         awaitingAnswer: Boolean((asked && !asked.submitted) || askedQuestion.current),
       });
       if (failed) {
-        const lastUserText = [...messagesRef.current].reverse().find((message) => message.role === "user" && !message.parallelTask)?.text;
-        const locale = progressLocale({ callLanguage: readVoiceModeSettings().language, lastUserText, pageLocale: activeLocale(), looksFrench });
+        const locale = localeForCallLines();
         void call.say(tIn(locale, callFailureKey(failed)) ?? t(callFailureKey(failed)));
         return;
       }
@@ -502,14 +514,14 @@ export function LiveCallEngine({ bot }: { bot: Bot }) {
         tools: turnTools(messagesRef.current),
       });
       if (!line) return;
-      const locale = callLocale(messagesRef.current);
+      const locale = localeForCallLines();
       const text = progressText(line, (key, params) => tIn(locale, key, params));
       // a filler: its own short clip, never the answer's utterance, never
       // its first audio, and a barge-in cuts it like any speech
       if (text) void call.sayFiller(text);
     }, PROGRESS_TICK_MS);
     return () => clearInterval(timer);
-  }, [call]);
+  }, [call, localeForCallLines]);
 
   useEffect(() => {
     if (state && !state.botAudible) drainSpeak();

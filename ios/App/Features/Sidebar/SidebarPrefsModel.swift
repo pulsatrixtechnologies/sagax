@@ -40,7 +40,13 @@ final class SidebarPrefsModel: ObservableObject {
     /// The thread lists and controls (Settings > Appearance > Threads). The
     /// desktop's default is off; a phone that never stored the switch keeps
     /// showing them, as it always did.
-    var showThreads: Bool { prefs.showThreads ?? true }
+    var showThreads: Bool {
+#if DEBUG
+        // UI tests: the desktop's default (threads hidden) on a fixture
+        if ProcessInfo.processInfo.arguments.contains("-threads-hidden") { return false }
+#endif
+        return prefs.showThreads ?? true
+    }
 
     /// Settings > Appearance > Threads location (#210): per device, never
     /// synced, the desktop's own key.

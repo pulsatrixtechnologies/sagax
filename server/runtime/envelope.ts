@@ -81,7 +81,7 @@ function askLine(a: Assignment, person: string): string {
 }
 
 function replyLine(a: Assignment, requester: string): string {
-  const close = a.mode === "consult" ? "" : "; end it with what you did and what stays unverified";
+  const close = a.mode === "consult" ? "" : "; first check what one call can check, then end it with what you did and what stays unverified";
   if (a.reply === "resume") return `${requester} is resumed with your reply when your turn ends${close}.`;
   if (a.reply === "poll") return `${requester} reads your reply from its inbox when it asks${close}.`;
   return `Ownership is yours: results, failures and questions stay in this thread; ${requester} is not waiting and will not be resumed.`;

@@ -161,6 +161,22 @@ describe("MemoryUpkeepCard", () => {
     expect(markup).toContain("can't make the quick background model call");
     const noticed = render(createElement(MemoryUpkeepCard, { enabled: true, status: { enabled: true, modelSteps: true, lastCapture: { at: Date.now() - 60_000, added: 1, topics: 2, aboutMe: 1 } }, tidying: false, onToggle: noop, onTidy: noop }));
     expect(noticed).toContain("Last noticed 3 facts");
+    expect(noticed).not.toContain("already known");
+  });
+
+  it("shows a receipt of what the last capture added and what was already known (M3)", () => {
+    const status = (lastCapture: { added: number; topics?: number; known?: number }) => render(createElement(MemoryUpkeepCard, {
+      enabled: true, status: { enabled: true, modelSteps: true, lastCapture: { at: Date.now() - 60_000, aboutMe: 0, ...lastCapture } }, tidying: false, onToggle: noop, onTidy: noop,
+    }));
+    const both = status({ added: 2, topics: 1, known: 2 });
+    expect(both).toContain("Last noticed 3 facts");
+    expect(both).toContain("2 were already known.");
+    expect(status({ added: 1, known: 1 })).toContain("1 was already known.");
+    const none = status({ added: 0, known: 4 });
+    expect(none).toContain("nothing new");
+    expect(none).toContain("4 were already known.");
+    // an older report without the count reads as before
+    expect(status({ added: 0 })).not.toContain("nothing new");
   });
 
   it("shows Learn from group chats beside upkeep, only while upkeep is on", () => {

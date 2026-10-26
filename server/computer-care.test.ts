@@ -206,3 +206,22 @@ describe("disk saver", () => {
     expect(await oldCheckpointRepos(join(root, "missing"), now)).toEqual([]);
   });
 });
+
+describe("maintenance scheduler lock (parity R7 review)", () => {
+  it("lets one update hold a computer, the scheduler included", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "care-lock-"));
+    const store = new MaintenanceStore(join(dir, "m.json"));
+    let busy = true;
+    const scheduler = new MaintenanceScheduler({ store, computer: () => ({ busy: async () => busy, update: async () => {} }) });
+    expect(scheduler.claim("local")).toBe(true);
+    expect(scheduler.isRunning("local")).toBe(true);
+    expect(scheduler.claim("local")).toBe(false);
+    scheduler.release("local");
+    expect(scheduler.claim("local")).toBe(true);
+    scheduler.release("local");
+    expect(await scheduler.busy("local")).toBe(true);
+    busy = false;
+    expect(await scheduler.busy("local")).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});

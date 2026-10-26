@@ -299,7 +299,7 @@ struct OrganizationSettingsPage: View {
                     ForEach(Array(approvals.enumerated()), id: \.element.id) { index, approval in
                         if index > 0 { CardHairline(leadingInset: SettingsMetrics.rowInset) }
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(verbatim: approval.botName ?? approval.botId).font(Theme.Font.bodyMedium).foregroundStyle(Theme.textPrimary)
+                            Text(verbatim: HumanID.readable(approval.botName, approval.botId, or: String(localized: "Deleted bot"))).font(Theme.Font.bodyMedium).foregroundStyle(Theme.textPrimary)
                             if let tool = approval.tool { Text(verbatim: tool).font(Theme.Font.code).foregroundStyle(Theme.textSecondary) }
                             if let summary = approval.summary {
                                 Text(verbatim: summary).font(Theme.Font.code).foregroundStyle(Theme.textPrimary).lineLimit(6)

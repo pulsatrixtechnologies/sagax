@@ -18,6 +18,59 @@ export function routineToggleActionLabel(action: RoutineToggleEvent["action"]): 
   return action === "disabled" ? t("chat.routineToggle.disabled") : t("chat.routineToggle.enabled");
 }
 
+/** Whether this line is a definition change (one named routine) rather than a
+ * count of routines turned on or off. */
+export function isRoutineChangeAction(action: RoutineToggleEvent["action"]): boolean {
+  return action === "created" || action === "updated" || action === "deleted";
+}
+
+/** "Created routine", "Updated routine" or "Deleted routine". */
+export function routineChangeActionLabel(action: "created" | "updated" | "deleted"): string {
+  return t(`chat.routineChange.${action}`);
+}
+
+/** The "Updated routine · <name>" chip a bot's routine change leaves in the
+ * conversation. One routine, named (never its id); it opens the routine when
+ * it still exists in the person's list and was not the one deleted. */
+export function RoutineChangeLine({ event, canOpen, onOpen }: {
+  event: RoutineToggleEvent;
+  canOpen: (routineId: string) => boolean;
+  onOpen: (routine: RoutineToggleEvent["routines"][number]) => void;
+}) {
+  const routine = event.routines[0];
+  if (!routine || !isRoutineChangeAction(event.action)) return null;
+  const action = routineChangeActionLabel(event.action as "created" | "updated" | "deleted");
+  const opens = event.action !== "deleted" && canOpen(routine.id);
+  const inner = (
+    <>
+      <span>{action}</span>
+      <span aria-hidden="true">·</span>
+      <Clock size={12} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+      <span dir="auto" className="max-w-[220px] truncate">{routine.name}</span>
+    </>
+  );
+  const classes = "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[12px] leading-4 text-ink-tertiary";
+  return (
+    <div className="flex justify-center py-0.5" data-routine-change={event.action}>
+      {opens ? (
+        <button
+          type="button"
+          title={routine.name}
+          aria-label={t("chat.routineChange.aria", { action, name: routine.name })}
+          onClick={() => onOpen(routine)}
+          className={cn(classes, "transition-colors hover:bg-hover hover:text-ink-secondary")}
+        >
+          {inner}
+        </button>
+      ) : (
+        <span className={classes} title={routine.name} aria-label={`${action}: ${routine.name}`}>
+          {inner}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** "1 routine", "5 routines". */
 export function routineToggleCountLabel(count: number): string {
   return count === 1 ? t("chat.routineToggle.countOne", { count }) : t("chat.routineToggle.countMany", { count });
@@ -116,17 +169,16 @@ export function ConversationRoutineToggle({ message }: { message: Message }) {
   const event = message.routineToggle;
   if (!event) return null;
   const live = (routineId: string) => state.routines.find((routine) => routine.id === routineId);
-  return (
-    <RoutineToggleLine
-      event={event}
-      canOpen={(routineId) => {
-        const routine = live(routineId);
-        return Boolean(routine?.botId && state.bots.some((bot) => bot.id === routine.botId && !bot.hidden));
-      }}
-      onOpen={(item) => {
-        const routine = live(item.id);
-        if (routine?.botId) dispatch({ type: "openRoutine", botId: routine.botId, routineId: routine.id });
-      }}
-    />
-  );
+  const canOpen = (routineId: string) => {
+    const routine = live(routineId);
+    return Boolean(routine?.botId && state.bots.some((bot) => bot.id === routine.botId && !bot.hidden));
+  };
+  const onOpen = (item: RoutineToggleEvent["routines"][number]) => {
+    const routine = live(item.id);
+    if (routine?.botId) dispatch({ type: "openRoutine", botId: routine.botId, routineId: routine.id });
+  };
+  if (isRoutineChangeAction(event.action)) {
+    return <RoutineChangeLine event={event} canOpen={canOpen} onOpen={onOpen} />;
+  }
+  return <RoutineToggleLine event={event} canOpen={canOpen} onOpen={onOpen} />;
 }

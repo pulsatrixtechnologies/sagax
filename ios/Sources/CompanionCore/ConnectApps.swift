@@ -1,18 +1,17 @@
 // Connect apps (#203, #206, #207, #218; matrix DC35 to DC39): the desktop
-// Plugins panel's one list of connected apps (Composio), MCP servers the
-// person added, the reviewed plugin catalog, library skills and marketplace
-// plugins, read as rows of one kind. A port of src/lib/plugins-model.ts:
-// pure functions, so the phone's main view, Manage and the detail page sort,
-// search and section exactly as the desktop does.
+// Plugins panel's one list of MCP servers the person added, the reviewed
+// plugin catalog, library skills and marketplace plugins, read as rows of
+// one kind. A port of src/lib/plugins-model.ts: pure functions, so the
+// phone's main view, Manage and the detail page sort, search and section
+// exactly as the desktop does.
 //
-// Routes (the desktop's own): GET /api/connectors/catalog, GET
-// /api/connectors/connected, GET/PATCH /api/mcp/servers ({ disabledTools }),
+// Routes (the desktop's own): GET/PATCH /api/mcp/servers ({ disabledTools }),
 // POST /api/mcp/servers/:name/test, GET /api/plugins/search (featured), GET
 // /api/skills-library (and :name), GET /api/marketplaces.
 import Foundation
 
 public enum ConnectAppKind: String, Hashable, Sendable {
-    case app, mcp, featured, skill, plugin
+    case mcp, featured, skill, plugin
 }
 
 /// The chips: All, then the main categories in the reference order, then
@@ -62,7 +61,7 @@ public enum ConnectAppFilter: Hashable, Sendable {
 
 /// The small type filter at the end of the chip row.
 public enum ConnectAppTypeFilter: Hashable, Sendable {
-    case any, apps, mcp, skills
+    case any, mcp, skills
     case source(String)
 }
 
@@ -91,7 +90,7 @@ public struct ConnectAppItem: Hashable, Sendable, Identifiable {
     public var status: ConnectAppStatus
     /// Add, Connect, or nothing (installed: the row opens the detail page).
     public var action: ConnectAppAction?
-    /// "manual", "catalog", "composio", "local" or a marketplace name.
+    /// "manual", "catalog", "local" or a marketplace name.
     public var source: String
     /// The row this one shows under (the marketplace plugin that brought it).
     public var parent: String?
@@ -225,21 +224,14 @@ public struct Marketplace: Decodable, Hashable, Sendable, Identifiable {
 }
 
 public struct ConnectAppSources: Sendable {
-    public var cards: [ConnectorCard]
-    /// Categories per card slug (the catalog card's `categories`).
-    public var cardCategories: [String: [String]]
-    public var status: [String: ConnectorStatus]
     public var servers: [ConnectAppServer]
     public var featured: [ConnectAppFeatured]
     public var skills: [LibrarySkill]
     public var marketplaces: [Marketplace]
-    /// False when apps cannot be connected here (no Composio key nor managed
-    /// service): an app that is also an MCP server is offered as the server.
-    public var composioUsable: Bool
 
-    public init(cards: [ConnectorCard] = [], cardCategories: [String: [String]] = [:], status: [String: ConnectorStatus] = [:], servers: [ConnectAppServer] = [], featured: [ConnectAppFeatured] = [], skills: [LibrarySkill] = [], marketplaces: [Marketplace] = [], composioUsable: Bool = true) {
-        self.cards = cards; self.cardCategories = cardCategories; self.status = status; self.servers = servers
-        self.featured = featured; self.skills = skills; self.marketplaces = marketplaces; self.composioUsable = composioUsable
+    public init(servers: [ConnectAppServer] = [], featured: [ConnectAppFeatured] = [], skills: [LibrarySkill] = [], marketplaces: [Marketplace] = []) {
+        self.servers = servers
+        self.featured = featured; self.skills = skills; self.marketplaces = marketplaces
     }
 }
 
@@ -265,32 +257,6 @@ public enum ConnectApps {
     /// `buildPluginItems`: every row, deduplicated.
     public static func items(_ sources: ConnectAppSources) -> [ConnectAppItem] {
         var items: [ConnectAppItem] = []
-        let slugs = Set(sources.cards.map(\.slug))
-        // a connected app the catalog does not list still gets a row
-        let uncatalogued = sources.status
-            .filter { slug, state in !slugs.contains(slug) && (state.connected || !(state.accounts ?? []).isEmpty) }
-            .keys.sorted()
-            .map { slug in
-                ConnectorCard(
-                    slug: slug,
-                    label: slug.replacingOccurrences(of: "[-_]+", with: " ", options: .regularExpression).capitalized,
-                    blurb: "", logo: nil, domain: nil
-                )
-            }
-        for card in sources.cards + uncatalogued {
-            let state = sources.status[card.slug]
-            let accounts = state?.accounts ?? []
-            let failed = state?.status.map { $0.range(of: "^(expired|failed)$", options: [.regularExpression, .caseInsensitive]) != nil } ?? false
-            let connected = card.noAuth == true || state?.connected == true || !accounts.isEmpty
-            let status: ConnectAppStatus = state?.pending == true ? .pending : (failed && accounts.isEmpty ? .needsAuth : (connected ? .connected : .available))
-            items.append(ConnectAppItem(
-                key: "app:\(card.slug)", kind: .app, id: card.slug, name: card.label, description: card.blurb,
-                logo: card.logo, domain: card.domain,
-                category: ConnectAppCategory.fromTags(sources.cardCategories[card.slug]),
-                installed: connected, status: status,
-                action: connected ? nil : (card.noAuth == true ? .add : .connect), source: "composio"
-            ))
-        }
         var serverParent: [String: String] = [:]
         var skillParent: [String: String] = [:]
         for market in sources.marketplaces {
@@ -342,16 +308,16 @@ public enum ConnectApps {
                 ))
             }
         }
-        return mergeSameApps(items, composioUsable: sources.composioUsable)
+        return mergeSameApps(items)
     }
 
     private static func mergeable(_ item: ConnectAppItem) -> Bool {
-        item.parent == nil && (item.kind == .app || item.kind == .featured || item.kind == .mcp)
+        item.parent == nil && (item.kind == .featured || item.kind == .mcp)
     }
 
     /// `mergeSameApps`: one row per app; what is installed always shows,
     /// otherwise the best way to connect it here.
-    public static func mergeSameApps(_ items: [ConnectAppItem], composioUsable: Bool = true) -> [ConnectAppItem] {
+    public static func mergeSameApps(_ items: [ConnectAppItem]) -> [ConnectAppItem] {
         var groups: [String: [ConnectAppItem]] = [:]
         var order: [String] = []
         for item in items where mergeable(item) {
@@ -370,7 +336,6 @@ public enum ConnectApps {
             let installed = group.filter(\.installed)
             func rank(_ item: ConnectAppItem) -> Int {
                 switch item.kind {
-                case .app: composioUsable ? 0 : 2
                 case .featured: 1
                 default: 3
                 }
@@ -419,7 +384,6 @@ public enum ConnectApps {
     public static func matches(_ item: ConnectAppItem, type: ConnectAppTypeFilter) -> Bool {
         switch type {
         case .any: true
-        case .apps: item.kind == .app
         case .mcp: item.kind == .mcp || item.kind == .featured
         case .skills: item.kind == .skill
         case let .source(source): item.source == source && item.parent == nil
@@ -434,7 +398,7 @@ public enum ConnectApps {
     /// A server the person added that is one of the catalog's apps counts
     /// with the apps.
     private static func catalogued(_ item: ConnectAppItem) -> Bool {
-        item.kind == .app || item.kind == .featured || (item.kind == .mcp && !item.merged.isEmpty)
+        item.kind == .featured || (item.kind == .mcp && !item.merged.isEmpty)
     }
 
     public enum SectionID: Hashable, Sendable {
@@ -554,10 +518,6 @@ public enum MCPToolSwitch {
 private struct SkillsLibraryList: Decodable { var skills: [Lossy<LibrarySkill>]? }
 private struct MarketplaceList: Decodable { var marketplaces: [Lossy<Marketplace>]? }
 private struct LibrarySkillTextBody: Decodable { var text: String? }
-private struct CatalogCategories: Decodable {
-    struct Card: Decodable { var slug: String; var categories: [String]? }
-    var cards: [Lossy<Card>]?
-}
 private struct ServerTools: Decodable {
     struct Server: Decodable { var name: String; var disabledTools: [String]? }
     var servers: [Lossy<Server>]?
@@ -650,14 +610,6 @@ public extension CompanionClient {
         let list = try await send(makeRequest("GET", "/api/mcp/servers"), as: ServerTools.self)
         var out: [String: [String]] = [:]
         for server in (list.servers ?? []).compactMap(\.value) { out[server.name] = server.disabledTools ?? [] }
-        return out
-    }
-
-    /// The catalog cards' categories (`categories`), by slug.
-    func connectorCategories() async throws -> [String: [String]] {
-        let list = try await send(makeRequest("GET", "/api/connectors/catalog"), as: CatalogCategories.self)
-        var out: [String: [String]] = [:]
-        for card in (list.cards ?? []).compactMap(\.value) { out[card.slug] = card.categories ?? [] }
         return out
     }
 }

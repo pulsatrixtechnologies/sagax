@@ -53,4 +53,29 @@ describe("plainPreviewText", () => {
     expect(plainPreviewText("a <sp<b>an>bold</sp</b>an> word")).toBe("a bold word");
     expect(plainPreviewText("x <br<i>/> y")).not.toContain("<br");
   });
+
+  describe("rich fences", () => {
+    const widget = '```widget\n<div class="card"><style>.card{color:red}</style><script>run()</script></div>\n```';
+    it("keeps the sentence before a widget and drops its HTML", () => {
+      expect(plainPreviewText(`Here is your day.\n\n${widget}`)).toBe("Here is your day.");
+    });
+    it("keeps the sentence after a widget", () => {
+      expect(plainPreviewText(`${widget}\nTell me if you want changes.`)).toBe("Tell me if you want changes.");
+    });
+    it("drops a widget cut off mid-stream", () => {
+      expect(plainPreviewText('Agenda\n```widget\n<div class = "card"> <div class=')).toBe("Agenda");
+    });
+    it.each(["cw", "chart", "csv", "tsv", "email", "artifact", "mermaid", "widget-imperfect", "html-widget"])("drops a %s block", (lang) => {
+      const out = plainPreviewText(`Result\n\`\`\`${lang}\n<b>raw</b> {"a":1}\n\`\`\``);
+      expect(out).toBe("Result");
+    });
+    it("names the view when the reply is only a widget, never its source", () => {
+      const out = plainPreviewText(widget);
+      expect(out).not.toMatch(/[<>{}]|div|script|style/);
+      expect(out.length).toBeGreaterThan(0);
+    });
+    it("still reads an ordinary code fence as its code", () => {
+      expect(plainPreviewText("```html\n<p>x</p>\n```")).not.toBe("");
+    });
+  });
 });

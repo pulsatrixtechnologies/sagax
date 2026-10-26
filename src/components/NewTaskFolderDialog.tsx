@@ -5,6 +5,7 @@ import { useStore, type Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { useModalDialog } from "@/hooks/use-modal-dialog";
+import { RemoteFolderField } from "./remote-session/RemoteFolderField";
 import { FIELD, FieldRow, PILL, PRIMARY_PILL, DIALOG, GROUP_CARD } from "./SettingsPrimitives";
 
 /** An explicit pin is chosen while creating a thread, never by moving the
@@ -52,9 +53,9 @@ export function NewTaskFolderDialog({ bot, onClose, onReturnFocus }: { bot: Bot;
         <div className={DIALOG.body}>
           <div className={GROUP_CARD}>
             <FieldRow label={t("task.folder.path")} hint={t("task.folder.detail")} hintId="new-task-folder-description">
-              <input ref={input} value={cwd} disabled={saving} aria-describedby="new-task-folder-description" autoComplete="off" spellCheck={false}
-                onChange={(event) => { setCwd(event.target.value); setError(null); }} placeholder={t("task.folder.placeholder")}
-                className={`${FIELD} font-mono`} />
+              <RemoteFolderField botId={bot.id} inputRef={input} value={cwd} disabled={saving} aria-describedby="new-task-folder-description" autoComplete="off" spellCheck={false}
+                onChange={(path) => { setCwd(path); setError(null); }} placeholder={t("task.folder.placeholder")}
+                inputClassName={`${FIELD} font-mono`} />
             </FieldRow>
           </div>
           {error && <p role="alert" className="px-1 text-[12.5px] text-danger">{error}</p>}

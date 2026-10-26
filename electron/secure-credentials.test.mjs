@@ -13,7 +13,7 @@ const deps = (over = {}) => ({
   exists: () => true,
   isAvailable: async () => true,
   readFile: () => Buffer.from("cipher"),
-  decrypt: async () => JSON.stringify({ composioApiKey: "ak_live" }),
+  decrypt: async () => JSON.stringify({ xaiApiKey: "ak_live" }),
   sleep: async () => {},
   ...over,
 });
@@ -27,7 +27,7 @@ describe("readSecureCredentials", () => {
   it("returns the stored credentials when the store opens", async () => {
     const result = await readSecureCredentials(deps());
     expect(result.status).toBe("ok");
-    expect(result.credentials).toEqual({ composioApiKey: "ak_live" });
+    expect(result.credentials).toEqual({ xaiApiKey: "ak_live" });
   });
 
   it("tries again when the OS says the store is temporarily unavailable", async () => {
@@ -35,11 +35,11 @@ describe("readSecureCredentials", () => {
       .fn()
       .mockRejectedValueOnce(transient())
       .mockRejectedValueOnce(transient())
-      .mockResolvedValue(JSON.stringify({ composioApiKey: "ak_live" }));
+      .mockResolvedValue(JSON.stringify({ xaiApiKey: "ak_live" }));
     const result = await readSecureCredentials(deps({ decrypt }));
     expect(decrypt).toHaveBeenCalledTimes(3);
     expect(result.status).toBe("ok");
-    expect(result.credentials).toEqual({ composioApiKey: "ak_live" });
+    expect(result.credentials).toEqual({ xaiApiKey: "ak_live" });
   });
 
   it("waits between attempts instead of hammering the keychain", async () => {

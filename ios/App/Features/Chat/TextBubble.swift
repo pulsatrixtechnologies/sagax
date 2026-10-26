@@ -73,7 +73,11 @@ struct TextBubble: View {
                     .accessibilityIdentifier("reply-quote-\(message.id)")
                 }
                 ForEach(message.voiceNotes) { note in
-                    VoiceNoteBubble(note: note, tint: MausPalette.color(chat.color))
+                    VoiceNoteBubble(
+                        note: note,
+                        tint: MausPalette.color(chat.color),
+                        transcript: message.voiceNotes.count == 1 ? message.text : nil
+                    )
                 }
                 if desktop != nil {
                     if !mine, !message.generatedImages.isEmpty || !message.fileAttachments.isEmpty {
@@ -108,7 +112,8 @@ struct TextBubble: View {
                         VoiceNoteBubble(
                             note: MessageVoiceNote(path: attachment.path, mime: VoiceNoteRecording.mime, durationMs: nil),
                             tint: MausPalette.color(chat.color),
-                            recordedIn: (chat.threadId, message.id)
+                            recordedIn: (chat.threadId, message.id),
+                            transcript: recorded.count == 1 ? cited.display : nil
                         )
                     }
                     if desktop != nil {

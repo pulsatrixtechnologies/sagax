@@ -52,11 +52,14 @@ function oidcLoginStartUrl(url, state) {
 }
 
 /** The desktop sign-in's start address for the system browser, with the
- * loopback return when there is one. */
-function desktopStartUrl(origin, returnTo) {
+ * loopback return when there is one. `fresh` is "Sign in again" (the page's
+ * `?fresh=1`, src/lib/sign-in-again.ts): Perspicax asks for the factors
+ * again (server/oidc-login.ts). */
+function desktopStartUrl(origin, returnTo, fresh = false) {
   const url = new URL(OIDC_START_PATH, origin);
   url.searchParams.set("client", "desktop");
   if (returnTo) url.searchParams.set("return", returnTo);
+  if (fresh) url.searchParams.set("fresh", "1");
   return url.href;
 }
 

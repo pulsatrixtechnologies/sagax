@@ -9,8 +9,8 @@ import Foundation
 public enum SettingsDestination: String, CaseIterable, Hashable, Sendable {
     // The Settings list, in the desktop's order (NavigationMenus.settings),
     // then the pages one level in.
-    case general, organization, appearance, notifications, privacy, achievements, experimental, plugins, account, botComputer, usage
-    case rules, timeZone, language, haptics, quickReplies, walkieVoice, about
+    case general, organization, appearance, notifications, privacy, achievements, experimental, plugins, account, botComputer, pages, usage
+    case rules, approvalGrants, timeZone, language, haptics, quickReplies, walkieVoice, about, credentials, securityKeys
 
     /// The desktop's section keywords for the same page (SettingsModal.tsx
     /// `SECTIONS`), and words for the phone's own pages.
@@ -26,8 +26,10 @@ public enum SettingsDestination: String, CaseIterable, Hashable, Sendable {
         case .usage: return ["tokens", "cost", "billing", "usage", "budget", "spent", "history", "csv", "export"]
         case .plugins: return ["plugins", "tools", "skills", "mcp", "install"]
         case .rules: return ["auto-review", "rules", "approvals", "always allow", "commands"]
+        case .approvalGrants: return ["approval", "approvals", "custom rules", "rules", "allow", "ask", "refuse", "recipients", "allowed recipients", "destinataires", "règles", "approbation", "always allowed"]
         case .timeZone: return ["time zone", "timezone", "clock"]
-        case .botComputer: return ["computer", "local vm", "vm", "virtual", "desktop", "ordinateur", "update", "reset", "disk"]
+        case .botComputer: return ["computer", "local vm", "vm", "virtual", "desktop", "ordinateur", "update", "reset", "recover", "disk", "rename", "other computers"]
+        case .pages: return ["pages", "published", "publish", "share", "revoke", "pages publiées"]
         case .appearance: return ["skin", "theme", "appearance", "font", "threads", "show threads", "hide threads", "sidebar", "hidden", "hide", "show", "dark", "light", "app icon", "icon",
                                      "activity", "tools", "tool calls", "run", "density", "compact", "comfortable", "list", "logo", "search", "recherche", "plus", "top", "haut"]
         case .language: return ["language", "langue", "français", "english", "português"]
@@ -37,6 +39,8 @@ public enum SettingsDestination: String, CaseIterable, Hashable, Sendable {
         case .achievements: return ["achievements", "trophies", "trophy", "points", "gamerscore", "level", "unlock", "succès", "trophées"]
         case .organization: return ["company", "organization", "organisation", "perspicax", "sharing", "full access", "approvals", "routines in my name", "delegation"]
         case .about: return ["about", "version", "build", "license", "à propos"]
+        case .credentials: return ["vault", "credentials", "coffre", "card", "carte", "password", "mot de passe", "address", "adresse"]
+        case .securityKeys: return ["security", "sécurité", "passkey", "face id", "security key", "clé"]
         case .notifications: return ["notifications", "notification", "sound", "sounds", "mute", "silent", "chime", "alert", "banner", "badge", "unread", "nudge", "wizz", "buzz", "persistent"]
         case .privacy: return ["privacy", "presence", "online", "away", "offline", "last seen", "status", "en ligne", "confidentialité"]
         }

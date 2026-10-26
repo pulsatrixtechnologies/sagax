@@ -1,14 +1,19 @@
 import type { TerminalResource, TerminalProviderKind } from "../../shared/terminal-resources.ts";
 import type { TerminalAccess, TerminalListContext, TerminalOpenContext, TerminalResourceAdapter } from "./types.ts";
 
-/** Whether this person may open this resource for this bot (2026-10-15):
- * a server host is an organization admin's (or a solo operator's); a
- * personal environment is the person's own, for their own bot (an admin may
- * open their own environment from any bot). No access known: nothing. */
+/** Whether this person may open this resource for this bot (2026-10-15,
+ * 2026-10-19 JC): a server host is an organization admin's, a solo
+ * operator's, or a person's an admin gave `host.commands` to in Perspicax.
+ * A personal environment (their cloud computer, their Local VM, their own
+ * computer) is always the person's own: they open it for their own bot, and
+ * on an organization server from any conversation of theirs, whoever owns
+ * the bot (the shell is theirs; a bot types in it only when they turn bot
+ * input on). Answering someone else's card never opens one. No access
+ * known: nothing. */
 export function terminalResourceAllowed(resource: Pick<TerminalResource, "scope">, access: TerminalAccess | undefined): boolean {
   if (!access) return false;
-  if ((resource.scope ?? "server") === "server") return access.admin;
-  return access.ownsBot || access.admin;
+  if ((resource.scope ?? "server") === "server") return access.admin || access.serverHosts === true;
+  return access.ownsBot || access.admin || (access.organization && access.ownsConversation === true);
 }
 
 export class TerminalResourceRegistry {

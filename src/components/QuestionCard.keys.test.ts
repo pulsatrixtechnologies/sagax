@@ -52,31 +52,34 @@ describe("QuestionCard keys", () => {
     expect(host.textContent).toContain("1 of 2 answered");
     expect(host.textContent).toContain("Which region?");
     press(radios()[0]!, "C");
-    expect(checked()).toEqual(["false", "false", "true"]);
+    // the fourth row is "Other"
+    expect(checked()).toEqual(["false", "false", "true", "false"]);
     expect(host.textContent).toContain("2 of 2 answered");
   });
 
   it("leaves letters alone while typing, or with a modifier held", () => {
     mount([plan, { ...plan, question: "Which region?" }]);
+    press(radios()[3]!, "d"); // D is "Other": it opens the field
     const field = host.querySelector("textarea")!;
     press(field, "a");
     press(radios()[0]!, "a", { metaKey: true });
-    expect(checked()).toEqual(["false", "false", "false"]);
+    expect(checked()).toEqual(["false", "false", "false", "true"]);
   });
 
   it("toggles checkmarks on a multi-select", () => {
     mount([{ ...plan, multiSelect: true }]);
     press(radios()[0]!, "a");
     press(radios()[0]!, "c");
-    expect(checked()).toEqual(["true", "false", "true"]);
-    expect(host.querySelectorAll("svg.text-accent-text").length).toBe(2);
+    expect(checked()).toEqual(["true", "false", "true", "false"]);
+    // a box, not a letter, on a choose-several question
+    expect(host.querySelectorAll('[aria-checked="true"] svg').length).toBe(2);
   });
 
   it("ignores letters pressed on another control, such as a tab", () => {
     mount([plan, { ...plan, question: "Which region?" }]);
     const tab = host.querySelector('[role="tab"]')!;
     press(tab, "b");
-    expect(checked()).toEqual(["false", "false", "false"]);
+    expect(checked()).toEqual(["false", "false", "false", "false"]);
     expect(host.textContent).toContain("0 of 2 answered");
   });
 

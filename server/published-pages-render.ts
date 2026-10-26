@@ -11,7 +11,7 @@
 // with a permanent banner (no script, nothing to dismiss) that embeds the
 // page in a frame sandboxed to scripts only, whose navigation the wrapper's
 // `frame-src` limits to the page's own frame path.
-import { PAGE_BANNER_NAME_MAX, pageCsp, type PageKind } from "../shared/published-pages.ts";
+import { PAGE_ANNOTATION_MESSAGE, PAGE_BANNER_NAME_MAX, PAGE_LIMITS, pageCsp, pageFrameSandbox, type PageKind, type ReaderComment } from "../shared/published-pages.ts";
 
 /** Server side, before every HTML version is served: no element that can
  * reach the network outside CSP. `<link>` (hints such as prerender, which
@@ -84,6 +84,60 @@ setter(W.HTMLIFrameElement&&HTMLIFrameElement.prototype,"src",function(){return 
 })();`;
 
 export const FRAME_PRELUDE = `<meta http-equiv="x-dns-prefetch-control" content="off"><script>${PRELUDE_SOURCE}</script>`;
+
+/** The annotation mode of the app's preview (Grok Bot's « Annoter la page »;
+ * the page's person only, never a reader's link). A click on any element is
+ * caught before the page sees it: the element gets a numbered badge and its
+ * tag, a short piece of its text and a CSS-like path are posted to the app's
+ * window (window.top: the preview wrapper is framed by the app only). The
+ * app checks the sender is this frame and shows the list; nothing is sent to
+ * a bot until the person presses Send. No network: it only posts a message.
+ * The page's own scripts could post the same message; the app treats every
+ * field as plain text and caps it (parseAnnotationMessage). */
+export const ANNOTATE_SOURCE = String.raw`(function(){"use strict";
+var n=0,D=document,hover=null;
+var st=D.createElement("style");st.textContent="[data-sagax-hover]{outline:2px dashed #2f6feb!important;outline-offset:2px!important;cursor:crosshair!important}[data-sagax-note]{outline:2px solid #2f6feb!important;outline-offset:2px!important}.sagax-note-badge{position:absolute;z-index:2147483647;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:#2f6feb;color:#fff;font:600 12px/20px system-ui,sans-serif;text-align:center;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.35)}";
+(D.head||D.documentElement).appendChild(st);
+function line(s,m){s=String(s||"").replace(/\s+/g," ").trim();return s.length>m?s.slice(0,m-1)+"…":s}
+function path(el){var p=[],e=el;while(e&&e.nodeType===1&&p.length<6){var t=e.localName,i=1,s=e;while((s=s.previousElementSibling))if(s.localName===t)i++;p.unshift(i>1?t+":nth-of-type("+i+")":t);if(t==="body")break;e=e.parentElement}return p.join(" > ")}
+function badge(el,k){var r=el.getBoundingClientRect(),b=D.createElement("div");b.className="sagax-note-badge";b.textContent=String(k);b.style.left=Math.max(0,r.left+window.scrollX-8)+"px";b.style.top=Math.max(0,r.top+window.scrollY-8)+"px";D.body.appendChild(b)}
+D.addEventListener("mouseover",function(e){var el=e.target;if(!el||el.nodeType!==1||el===D.body||el===D.documentElement)return;if(hover)hover.removeAttribute("data-sagax-hover");hover=el;el.setAttribute("data-sagax-hover","")},true);
+D.addEventListener("click",function(e){var el=e.target;if(!el||el.nodeType!==1)return;e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();if(el.className==="sagax-note-badge")return;n+=1;el.setAttribute("data-sagax-note",String(n));badge(el,n);
+window.top.postMessage({type:"${PAGE_ANNOTATION_MESSAGE}",v:1,n:n,tag:el.localName,text:line(el.innerText||el.textContent,160),path:line(path(el),240)},"*")},true);
+["submit","auxclick","dblclick"].forEach(function(k){D.addEventListener(k,function(e){e.preventDefault();e.stopPropagation()},true)});
+})();`;
+
+/** Slides of a presentation: Markdown separated by a line of three dashes
+ * or more; empty slides at the end are dropped. Pure. */
+export function splitSlides(markdown: string): string[] {
+  const slides = markdown.replace(/\r\n?/g, "\n").split(/\n[ \t]*-{3,}[ \t]*(?:\n|$)/).map((slide) => slide.trim());
+  while (slides.length > 1 && !slides.at(-1)) slides.pop();
+  return slides;
+}
+
+/** A presentation's body: one full-height section per slide, its number,
+ * and Previous / Next as in-page anchors (fragment navigation needs no
+ * script). The slides are our own escaped Markdown. Pure. */
+export function presentationToHtml(markdown: string): string {
+  const slides = splitSlides(markdown);
+  const total = slides.length;
+  return slides.map((slide, index) => {
+    const n = index + 1;
+    const previous = n > 1 ? `<a class="nav prev" href="#slide-${n - 1}" aria-label="Previous">\u2039</a>` : "";
+    const next = n < total ? `<a class="nav next" href="#slide-${n + 1}" aria-label="Next">\u203a</a>` : "";
+    return `<section class="slide" id="slide-${n}"><div class="content">${markdownToHtml(slide)}</div>`
+      + `<footer>${previous}<span class="count">${n} / ${total}</span>${next}</footer></section>`;
+  }).join("\n");
+}
+
+const PRESENTATION_STYLE = "html{scroll-snap-type:y mandatory;scroll-behavior:smooth}body{margin:0;font:clamp(16px,2.4vw,30px)/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:#1f2328;background:#fff}"
+  + ".slide{position:relative;box-sizing:border-box;height:100vh;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:center;padding:6vh 8vw;border-bottom:1px solid #eaeef2;overflow:hidden}"
+  + ".slide h1{font-size:2.2em;line-height:1.15;margin:0 0 .4em}.slide h2{font-size:1.6em;margin:0 0 .4em}.slide ul,.slide ol{margin:.3em 0}"
+  + "pre{background:#f6f8fa;padding:.6em;border-radius:6px;overflow:auto;font-size:.7em}code{font:.9em ui-monospace,Menlo,monospace}"
+  + "blockquote{margin:0;padding-left:1rem;border-left:3px solid #d0d7de;color:#57606a}.url{color:#57606a;word-break:break-all}"
+  + "footer{position:absolute;right:3vw;bottom:2.5vh;display:flex;align-items:center;gap:.6em;font-size:14px;color:#57606a}"
+  + ".nav{display:inline-block;min-width:32px;height:32px;border-radius:16px;text-align:center;line-height:30px;font-size:22px;text-decoration:none;color:inherit;border:1px solid #d0d7de}"
+  + "@media (prefers-color-scheme:dark){body{background:#0d1117;color:#e6edf3}.slide{border-color:#21262d}pre{background:#161b22}.url,footer{color:#9198a1}.nav{border-color:#30363d}}";
 
 /** A name for the banner: one line, at most PAGE_BANNER_NAME_MAX characters. Pure. */
 export function bannerName(name: string): string {
@@ -197,19 +251,26 @@ const MARKDOWN_STYLE = "body{font:16px/1.6 system-ui,-apple-system,Segoe UI,sans
 
 /** The full document a version is read as. `meta` adds the CSP as a meta tag
  * (the app's sandboxed preview, which has no response headers). Pure. */
-export function pageDocument(input: { kind: PageKind; title: string; content: string; lang?: string }, options: { meta?: boolean } = {}): string {
+export function pageDocument(input: { kind: PageKind; title: string; content: string; lang?: string }, options: { meta?: boolean; annotateNonce?: string } = {}): string {
   const meta = options.meta ? `<meta http-equiv="Content-Security-Policy" content="${escapeHtml(pageCsp(input.kind, { meta: true }))}">` : "";
-  if (input.kind === "markdown") {
+  // The annotation script (the app's preview only): by its nonce on a page
+  // that otherwise runs no script, inline after the prelude on an HTML page.
+  const annotate = options.annotateNonce === undefined ? ""
+    : input.kind === "html" ? `<script>${ANNOTATE_SOURCE}</script>` : `<script nonce="${escapeHtml(options.annotateNonce)}">${ANNOTATE_SOURCE}</script>`;
+  if (input.kind === "markdown" || input.kind === "presentation") {
+    const presentation = input.kind === "presentation";
     return `<!doctype html><html lang="${escapeHtml(input.lang ?? "fr")}"><head><meta charset="utf-8">${meta}`
       + `<meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(input.title)}</title>`
-      + `<style>${MARKDOWN_STYLE}</style></head><body>${markdownToHtml(input.content)}</body></html>`;
+      + `<style>${presentation ? PRESENTATION_STYLE : MARKDOWN_STYLE}</style></head>`
+      + `<body>${presentation ? presentationToHtml(input.content) : markdownToHtml(input.content)}${annotate}</body></html>`;
   }
   const head = `${meta}${FRAME_PRELUDE}`;
   const content = neuterPageHtml(input.content);
   const doctype = /^\s*<!doctype[^>]*>/i.exec(content);
-  return doctype
+  const page = doctype
     ? `${doctype[0]}${head}${content.slice(doctype[0].length)}`
     : `${head}${content}`;
+  return `${page}${annotate}`;
 }
 
 export interface WrapperInput {
@@ -223,6 +284,12 @@ export interface WrapperInput {
   lang: "fr" | "en";
   /** The app's preview of a version not yet (or no longer) published. */
   preview?: boolean;
+  /** The preview's annotation mode: the frame runs the annotation script. */
+  annotate?: boolean;
+  /** Reader comments (a reading link with them on): the approved ones and
+   * the form's action. A plain form, no script; the wrapper's CSP pins
+   * form-action to that path. */
+  comments?: { action: string; approved: ReaderComment[] };
 }
 
 /** The banner's words. Pure. */
@@ -242,13 +309,50 @@ export function wrapperBanner(input: Pick<WrapperInput, "botName" | "personName"
 /** The reader's document: banner, then the page in its sandboxed frame. No
  * script of its own. Pure. */
 export function wrapperDocument(input: WrapperInput): string {
-  const sandbox = input.kind === "html" ? "allow-scripts" : "";
+  const sandbox = pageFrameSandbox(input.kind, { annotate: input.annotate === true });
   return `<!doctype html><html lang="${input.lang}"><head><meta charset="utf-8">`
     + `<meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(input.title)}</title>`
     + "<style>html,body{margin:0;height:100%}body{display:flex;flex-direction:column;font:14px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}"
     + ".sagax-banner{flex:none;padding:8px 14px;background:#fff4ce;color:#3d2e00;border-bottom:2px solid #d4a600;font-weight:600}"
-    + "iframe{flex:1;border:0;width:100%;background:#fff}</style></head><body>"
+    + "iframe{flex:1;border:0;width:100%;background:#fff}"
+    + (input.comments ? COMMENTS_STYLE : "")
+    + "</style></head><body>"
     + `<div class="sagax-banner" role="note">${escapeHtml(wrapperBanner(input))}</div>`
     + `<iframe src="${escapeHtml(input.frameUrl)}" sandbox="${sandbox}" referrerpolicy="no-referrer" allow="" title="${escapeHtml(input.title)}"></iframe>`
+    + (input.comments ? commentsSection(input.comments, input.lang, input.personName) : "")
     + "</body></html>";
+}
+
+const COMMENTS_STYLE = ".sagax-comments{flex:none;max-height:40vh;overflow:auto;border-top:1px solid #d0d7de;padding:8px 14px;background:#f6f8fa;color:#1f2328}"
+  + ".sagax-comments summary{cursor:pointer;font-weight:600}.sagax-comments li{margin:6px 0}.sagax-comments .who{font-weight:600}"
+  + ".sagax-comments form{display:flex;flex-direction:column;gap:6px;max-width:40rem;margin-top:8px}"
+  + ".sagax-comments input,.sagax-comments textarea{font:inherit;padding:4px 6px;border:1px solid #d0d7de;border-radius:6px}"
+  + ".sagax-comments .trap{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}"
+  + ".sagax-comments button{align-self:flex-start;font:inherit;padding:4px 12px;border-radius:6px;border:1px solid #1f6feb;background:#1f6feb;color:#fff}"
+  + "@media (prefers-color-scheme:dark){.sagax-comments{background:#161b22;color:#e6edf3;border-color:#30363d}.sagax-comments input,.sagax-comments textarea{background:#0d1117;color:#e6edf3;border-color:#30363d}}";
+
+/** The comments under a shared page: the approved ones (escaped text), then
+ * a plain form. A hidden "website" field is the honeypot. Pure. */
+function commentsSection(comments: { action: string; approved: ReaderComment[] }, lang: "fr" | "en", personName: string): string {
+  const fr = lang === "fr";
+  const items = comments.approved.map((entry) => `<li><span class="who">${escapeHtml(entry.name)}</span> : ${escapeHtml(entry.text)}</li>`).join("");
+  return `<details class="sagax-comments"${comments.approved.length ? " open" : ""}><summary>${fr ? "Commentaires" : "Comments"} (${comments.approved.length})</summary>`
+    + (items ? `<ul>${items}</ul>` : "")
+    + `<form method="post" action="${escapeHtml(comments.action)}">`
+    + `<label>${fr ? "Votre nom" : "Your name"} <input name="name" required maxlength="${PAGE_LIMITS.readerNameChars}" autocomplete="name"></label>`
+    + `<label>${fr ? "Commentaire" : "Comment"} <textarea name="text" required rows="3" maxlength="${PAGE_LIMITS.readerCommentChars}"></textarea></label>`
+    + `<label class="trap" aria-hidden="true">Website <input name="website" tabindex="-1" autocomplete="off"></label>`
+    + `<small>${escapeHtml(fr ? `Votre commentaire sera visible après l'approbation de ${bannerName(personName)}. N'y mettez aucun renseignement personnel ni mot de passe.` : `Your comment shows once ${bannerName(personName)} approves it. Never put personal information or a password in it.`)}</small>`
+    + `<button type="submit">${fr ? "Envoyer" : "Send"}</button></form></details>`;
+}
+
+/** The answer to a reader's comment: a plain page, no script, a link back. Pure. */
+export function commentAnswerDocument(input: { lang: "fr" | "en"; back: string; ok: boolean; message?: string }): string {
+  const fr = input.lang === "fr";
+  const text = input.message ?? (input.ok
+    ? (fr ? "Merci. Votre commentaire attend l'approbation de la personne qui a publié la page." : "Thank you. Your comment waits for the approval of the person who published the page.")
+    : (fr ? "Ce commentaire n'a pas pu être envoyé." : "This comment could not be sent."));
+  return `<!doctype html><html lang="${input.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`
+    + `<title>${fr ? "Commentaire" : "Comment"}</title><style>body{font:15px/1.5 system-ui,sans-serif;max-width:36rem;margin:3rem auto;padding:0 1rem}</style></head>`
+    + `<body><p>${escapeHtml(text)}</p><p><a href="${escapeHtml(input.back)}">${fr ? "Revenir à la page" : "Back to the page"}</a></p></body></html>`;
 }

@@ -31,6 +31,15 @@ extension Session {
         guard case let .bot(bot) = chat else { return }
         // a notification or a link being opened shows what it names
         if force, notificationChat != nil || pendingChat != nil { return }
+        // The same bot picked again while its fresh draft is on screen (the
+        // iPad's sidebar: the person never left it), or while the draft's
+        // first message is on its way: the draft stays. Clearing it here
+        // drew the topic under it for a moment, before the new topic came.
+        // A draft whose topic was already made (its first message failed or
+        // is still on its way) stays too, so a retry never lands in the
+        // topic under it.
+        if !force, freshTopics[bot.id] == bot.threadId, !SidebarPrefsModel.shared.showThreads,
+           freshTopicLeftAt(bot.id) == nil || createdFreshTopics[bot.id] != nil { return }
         guard !SidebarPrefsModel.shared.showThreads,
               let task = (state.bot(bot.id) ?? bot).tasks?.first(where: { $0.threadId == bot.threadId }),
               FreshTopic.isSegment(task)

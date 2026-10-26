@@ -1,0 +1,262 @@
+@@begin
+@@os
+Darwin
+@@host
+MAC-DEMO.local
+macOS 27.0.1
+@@ncpu
+16
+@@boottime
+{ sec = 1791971422, usec = 954193 } Wed Oct 14 05:50:22 2026
+1792639229
+@@cpu
+CPU usage: 60.72% user, 24.85% sys, 14.41% idle 
+@@vmstat
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                  1749412.
+Pages active:                                2881399.
+Pages inactive:                              2740372.
+Pages speculative:                            141279.
+Pages throttled:                                   0.
+Pages wired down:                             612760.
+Pages purgeable:                               65174.
+"Translation faults":                    40910816703.
+Pages copy-on-write:                      1979697168.
+Pages zero filled:                       23074226045.
+Pages reactivated:                        2252184774.
+Pages purged:                              620996167.
+File-backed pages:                           2053704.
+Anonymous pages:                             3709346.
+Pages stored in compressor:                   439342.
+Pages occupied by compressor:                 190095.
+Decompressions:                           3605881923.
+Compressions:                             4079978252.
+Pageins:                                  1100684320.
+Pageouts:                                    1093776.
+Swapins:                                    55197792.
+Swapouts:                                   64642674.
+@@memsize
+137438953472
+@@swap
+total = 9216.00M  used = 7619.31M  free = 1596.69M  (encrypted)
+@@ioreg
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=0,"Errors (Write)"=0,"Total Time (Read)"=0,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=0,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=904304627,"Latency Time (Write)"=0,"Bytes (Read)"=19189869572096,"Errors (Write)"=0,"Total Time (Read)"=228490294070558,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=27891964908999,"Bytes (Write)"=16846986817536,"Operations (Read)"=641721175,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=63309618176,"Errors (Write)"=0,"Total Time (Read)"=201964376150146,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=4133239,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=712264704,"Errors (Write)"=0,"Total Time (Read)"=13990398284,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=168667,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=8395779072,"Errors (Write)"=0,"Total Time (Read)"=124462405967,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=999027,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=7674829824,"Errors (Write)"=0,"Total Time (Read)"=96183238543,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=785967,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=17812872192,"Errors (Write)"=0,"Total Time (Read)"=8336141630834,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=1560361,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=72740219904,"Errors (Write)"=0,"Total Time (Read)"=819081568972,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=234089,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=29077498880,"Errors (Write)"=0,"Total Time (Read)"=9949505507852,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=2487543,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=1388809216,"Errors (Write)"=0,"Total Time (Read)"=46147742779,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=333990,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=30451497984,"Errors (Write)"=0,"Total Time (Read)"=23351345706055,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=3017157,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=4676402176,"Errors (Write)"=0,"Total Time (Read)"=54107499597,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=437829,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=290936200192,"Errors (Write)"=0,"Total Time (Read)"=1003039500753553,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=12129111,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=169995264,"Errors (Write)"=0,"Total Time (Read)"=2523432765,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=36304,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=6858300416,"Errors (Write)"=0,"Total Time (Read)"=82953424160,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=683664,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=858671616,"Errors (Write)"=0,"Total Time (Read)"=3543890121,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=11109,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=261386752,"Errors (Write)"=0,"Total Time (Read)"=344600583,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=1769,"Retries (Write)"=0}
+@@netstat
+Name       Mtu   Network       Address            Ipkts Ierrs     Ibytes    Opkts Oerrs     Obytes  Coll
+lo0        16384 <Link#1>                      112236854     0 340150124484 112236854     0 340150124484     0
+lo0        16384 127           192.0.2.10       112236854     - 340150124484 112236854     - 340150124484     -
+lo0        16384 ::1/128     ::1               112236854     - 340150124484 112236854     - 340150124484     -
+lo0        16384 fe80::1 fe80:1::1         112236854     - 340150124484 112236854     - 340150124484     -
+gif0*      1280  <Link#2>                             0     0          0        0     0          0     0
+stf0*      1280  <Link#3>                             0     0          0        0     0          0     0
+anpi2      1500  <Link#4>    aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+anpi0      1500  <Link#5>    aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+anpi1      1500  <Link#6>    aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en4        1500  <Link#7>    aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en5        1500  <Link#8>    aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en6        1500  <Link#9>    aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en1        1500  <Link#10>   aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en2        1500  <Link#11>   aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en3        1500  <Link#12>   aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+bridge0    1500  <Link#16>   aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+ap1        1500  <Link#14>   aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en0        1500  <Link#15>   aa:bb:cc:dd:ee:ff  9001953     0 5449205552  2685046     0  965872508     0
+en0        1500  fe80::1 fe80:f::406:3780:  9001953     - 5449205552  2685046     -  965872508     -
+en0        1500  fd36:69b8:5 fd36:69b8:5e4d:41  9001953     - 5449205552  2685046     -  965872508     -
+en0        1500  10.33/16      192.0.2.10       9001953     - 5449205552  2685046     -  965872508     -
+awdl0      1500  <Link#17>   aa:bb:cc:dd:ee:ff   184788     0  107627230   123687     0   26489523     0
+awdl0      1500  fe80::1 fe80:11::d417:1ef   184788     -  107627230   123687     -   26489523     -
+llw0       1500  <Link#18>   aa:bb:cc:dd:ee:ff   192679     0  230498784    61759     0    6972190     0
+llw0       1500  fe80::1 fe80:12::d417:1ef   192679     -  230498784    61759     -    6972190     -
+utun0      1500  <Link#19>                            0     0          0        1     0        100     0
+utun0      1500  fe80::1 fe80:13::119:c3d7        0     -          0        1     -        100     -
+utun1      1380  <Link#20>                            0     0          0       30     0       2440     0
+utun1      1380  fe80::1 fe80:14::226:d6c:        0     -          0       30     -       2440     -
+utun2      2000  <Link#21>                            0     0          0       30     0       2440     0
+utun2      2000  fe80::1 fe80:15::ff83:bd8        0     -          0       30     -       2440     -
+utun3      1000  <Link#22>                            0     0          0       32     0       2600     0
+utun3      1000  fe80::1 fe80:16::ce81:b1c        0     -          0       32     -       2600     -
+nan0*      1500  <Link#23>   aa:bb:cc:dd:ee:ff        0     0          0      781     0     151560     0
+nan0*      1500  fe80::1 fe80:17::c8a:59ff        0     -          0      781     -     151560     -
+utun4      1280  <Link#24>                     32822386     0 33295002392 16412990     0 2484057897     0
+utun4      1280  fe80::1 fe80:18::2e0:4cff 32822386     - 33295002392 16412990     - 2484057897     -
+utun4      1280  192.0.2.10/ 192.0.2.10    32822386     - 33295002392 16412990     - 2484057897     -
+utun4      1280  fd7a:115c:a fd7a:115c:a1e0::5 32822386     - 33295002392 16412990     - 2484057897     -
+en10       1500  <Link#13>   aa:bb:cc:dd:ee:ff  8571277     0 9499412641  5888112     0 5959660880     0
+en10       1500  fe80::1 fe80:d::14fe:c78:  8571277     - 9499412641  5888112     - 5959660880     -
+en10       1500  fd36:69b8:5 fd36:69b8:5e4d:41  8571277     - 9499412641  5888112     - 5959660880     -
+en10       1500  10.33/16      192.0.2.10      8571277     - 9499412641  5888112     - 5959660880     -
+@@df
+Filesystem     1024-blocks       Used  Available Capacity  Mounted on
+/dev/disk3s1s1  3902665360   13335056 1977395688     1%    /
+/dev/disk3s6    3902665360   13631596 1977395688     1%    /System/Volumes/VM
+/dev/disk3s2    3902665360   10680824 1977395688     1%    /System/Volumes/Preboot
+/dev/disk3s4    3902665360      27160 1977395688     1%    /System/Volumes/Update
+/dev/disk1s2        512000       6164     491668     2%    /System/Volumes/xarts
+/dev/disk1s1        512000       5948     491668     2%    /System/Volumes/iSCPreboot
+/dev/disk1s3        512000       3360     491668     1%    /System/Volumes/Hardware
+/dev/disk3s5    3902665360 1885619916 1977395688    49%    /System/Volumes/Data
+/dev/disk5s1      17659904   17159516     455144    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk7s1      14798848   14364200     394848    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk9s1      18423808   17893648     482780    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk11s1     17231872   16741356     446332    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk13s1     17160192   16666636     449384    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk15s1      8916992    8631196     257900    98%    /Library/Developer/CoreSimulator/Cryptex/Images/bundle/SimRuntimeBundle-2F08C7DA-B933-4DFD-B2A1-48140EB4D9A7
+/dev/disk17s1     20254720   19697484     506584    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk19s1      9023488    8720208     275384    97%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk21s1     16769024   16289844     436084    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk23s1      8898560    8601444     270272    97%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk25s1     17915904   17395764     473832    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk27s1      8892416    8598160     267412    97%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk29s1     17635328   17135744     454340    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk3s3    3902665360    1501640 1977395688     1%    /Volumes/Recovery
+/dev/disk32s1       786532     784292       2240   100%    /Volumes/Sagax 0.5.2-arm64
+/dev/disk30s1       248172     245036       3136    99%    /Volumes/Recall
+@@end
+@@begin
+@@os
+Darwin
+@@host
+MAC-DEMO.local
+macOS 27.0.1
+@@ncpu
+16
+@@boottime
+{ sec = 1791971422, usec = 954193 } Wed Oct 14 05:50:22 2026
+1792639232
+@@cpu
+CPU usage: 38.12% user, 25.82% sys, 36.5% idle 
+@@vmstat
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                  1755249.
+Pages active:                                2847939.
+Pages inactive:                              2705219.
+Pages speculative:                            143626.
+Pages throttled:                                   0.
+Pages wired down:                             673195.
+Pages purgeable:                               75435.
+"Translation faults":                    40911307102.
+Pages copy-on-write:                      1979731965.
+Pages zero filled:                       23074518054.
+Pages reactivated:                        2252184777.
+Pages purged:                              620996169.
+File-backed pages:                           2096004.
+Anonymous pages:                             3600780.
+Pages stored in compressor:                   439283.
+Pages occupied by compressor:                 190090.
+Decompressions:                           3605882836.
+Compressions:                             4079978252.
+Pageins:                                  1100774648.
+Pageouts:                                    1093776.
+Swapins:                                    55197792.
+Swapouts:                                   64642674.
+@@memsize
+137438953472
+@@swap
+total = 9216.00M  used = 7619.31M  free = 1596.69M  (encrypted)
+@@ioreg
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=0,"Errors (Write)"=0,"Total Time (Read)"=0,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=0,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=904341362,"Latency Time (Write)"=0,"Bytes (Read)"=19191130144768,"Errors (Write)"=0,"Total Time (Read)"=228514111339856,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=27892796655951,"Bytes (Write)"=16847149584384,"Operations (Read)"=641731268,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=63309618176,"Errors (Write)"=0,"Total Time (Read)"=201964376150146,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=4133239,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=712264704,"Errors (Write)"=0,"Total Time (Read)"=13990398284,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=168667,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=8395779072,"Errors (Write)"=0,"Total Time (Read)"=124462405967,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=999027,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=7674829824,"Errors (Write)"=0,"Total Time (Read)"=96183238543,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=785967,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=17812872192,"Errors (Write)"=0,"Total Time (Read)"=8336141630834,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=1560361,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=72740219904,"Errors (Write)"=0,"Total Time (Read)"=819081568972,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=234089,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=29077498880,"Errors (Write)"=0,"Total Time (Read)"=9949505507852,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=2487543,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=1388809216,"Errors (Write)"=0,"Total Time (Read)"=46147742779,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=333990,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=30451497984,"Errors (Write)"=0,"Total Time (Read)"=23351345706055,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=3017157,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=4676402176,"Errors (Write)"=0,"Total Time (Read)"=54107499597,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=437829,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=290936200192,"Errors (Write)"=0,"Total Time (Read)"=1003039500753553,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=12129111,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=169995264,"Errors (Write)"=0,"Total Time (Read)"=2523432765,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=36304,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=6858300416,"Errors (Write)"=0,"Total Time (Read)"=82953424160,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=683664,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=858671616,"Errors (Write)"=0,"Total Time (Read)"=3543890121,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=11109,"Retries (Write)"=0}
+      "Statistics" = {"Operations (Write)"=0,"Latency Time (Write)"=0,"Bytes (Read)"=261386752,"Errors (Write)"=0,"Total Time (Read)"=344600583,"Latency Time (Read)"=0,"Retries (Read)"=0,"Errors (Read)"=0,"Total Time (Write)"=0,"Bytes (Write)"=0,"Operations (Read)"=1769,"Retries (Write)"=0}
+@@netstat
+Name       Mtu   Network       Address            Ipkts Ierrs     Ibytes    Opkts Oerrs     Obytes  Coll
+lo0        16384 <Link#1>                      112237025     0 340150141648 112237025     0 340150141648     0
+lo0        16384 127           192.0.2.10       112237025     - 340150141648 112237025     - 340150141648     -
+lo0        16384 ::1/128     ::1               112237025     - 340150141648 112237025     - 340150141648     -
+lo0        16384 fe80::1 fe80:1::1         112237025     - 340150141648 112237025     - 340150141648     -
+gif0*      1280  <Link#2>                             0     0          0        0     0          0     0
+stf0*      1280  <Link#3>                             0     0          0        0     0          0     0
+anpi2      1500  <Link#4>    aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+anpi0      1500  <Link#5>    aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+anpi1      1500  <Link#6>    aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en4        1500  <Link#7>    aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en5        1500  <Link#8>    aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en6        1500  <Link#9>    aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en1        1500  <Link#10>   aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en2        1500  <Link#11>   aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en3        1500  <Link#12>   aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+bridge0    1500  <Link#16>   aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+ap1        1500  <Link#14>   aa:bb:cc:dd:ee:ff        0     0          0        0     0          0     0
+en0        1500  <Link#15>   aa:bb:cc:dd:ee:ff  9003545     0 5449899957  2687244     0  966586353     0
+en0        1500  fe80::1 fe80:f::406:3780:  9003545     - 5449899957  2687244     -  966586353     -
+en0        1500  fd36:69b8:5 fd36:69b8:5e4d:41  9003545     - 5449899957  2687244     -  966586353     -
+en0        1500  10.33/16      192.0.2.10       9003545     - 5449899957  2687244     -  966586353     -
+awdl0      1500  <Link#17>   aa:bb:cc:dd:ee:ff   184788     0  107627230   123687     0   26489523     0
+awdl0      1500  fe80::1 fe80:11::d417:1ef   184788     -  107627230   123687     -   26489523     -
+llw0       1500  <Link#18>   aa:bb:cc:dd:ee:ff   192679     0  230498784    61759     0    6972190     0
+llw0       1500  fe80::1 fe80:12::d417:1ef   192679     -  230498784    61759     -    6972190     -
+utun0      1500  <Link#19>                            0     0          0        1     0        100     0
+utun0      1500  fe80::1 fe80:13::119:c3d7        0     -          0        1     -        100     -
+utun1      1380  <Link#20>                            0     0          0       30     0       2440     0
+utun1      1380  fe80::1 fe80:14::226:d6c:        0     -          0       30     -       2440     -
+utun2      2000  <Link#21>                            0     0          0       30     0       2440     0
+utun2      2000  fe80::1 fe80:15::ff83:bd8        0     -          0       30     -       2440     -
+utun3      1000  <Link#22>                            0     0          0       32     0       2600     0
+utun3      1000  fe80::1 fe80:16::ce81:b1c        0     -          0       32     -       2600     -
+nan0*      1500  <Link#23>   aa:bb:cc:dd:ee:ff        0     0          0      781     0     151560     0
+nan0*      1500  fe80::1 fe80:17::c8a:59ff        0     -          0      781     -     151560     -
+utun4      1280  <Link#24>                     32823725     0 33295467390 16414654     0 2484467537     0
+utun4      1280  fe80::1 fe80:18::2e0:4cff 32823725     - 33295467390 16414654     - 2484467537     -
+utun4      1280  192.0.2.10/ 192.0.2.10    32823725     - 33295467390 16414654     - 2484467537     -
+utun4      1280  fd7a:115c:a fd7a:115c:a1e0::5 32823725     - 33295467390 16414654     - 2484467537     -
+en10       1500  <Link#13>   aa:bb:cc:dd:ee:ff  8571744     0 9499755816  5888386     0 5959701740     0
+en10       1500  fe80::1 fe80:d::14fe:c78:  8571744     - 9499755816  5888386     - 5959701740     -
+en10       1500  fd36:69b8:5 fd36:69b8:5e4d:41  8571744     - 9499755816  5888386     - 5959701740     -
+en10       1500  10.33/16      192.0.2.10      8571744     - 9499755816  5888386     - 5959701740     -
+@@df
+Filesystem     1024-blocks       Used  Available Capacity  Mounted on
+/dev/disk3s1s1  3902665360   13335056 1977404212     1%    /
+/dev/disk3s6    3902665360   13631596 1977404208     1%    /System/Volumes/VM
+/dev/disk3s2    3902665360   10680824 1977404208     1%    /System/Volumes/Preboot
+/dev/disk3s4    3902665360      27160 1977404204     1%    /System/Volumes/Update
+/dev/disk1s2        512000       6164     491668     2%    /System/Volumes/xarts
+/dev/disk1s1        512000       5948     491668     2%    /System/Volumes/iSCPreboot
+/dev/disk1s3        512000       3360     491668     1%    /System/Volumes/Hardware
+/dev/disk3s5    3902665360 1885611536 1977404216    49%    /System/Volumes/Data
+/dev/disk5s1      17659904   17159516     455144    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk7s1      14798848   14364200     394848    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk9s1      18423808   17893648     482780    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk11s1     17231872   16741356     446332    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk13s1     17160192   16666636     449384    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk15s1      8916992    8631196     257900    98%    /Library/Developer/CoreSimulator/Cryptex/Images/bundle/SimRuntimeBundle-2F08C7DA-B933-4DFD-B2A1-48140EB4D9A7
+/dev/disk17s1     20254720   19697484     506584    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk19s1      9023488    8720208     275384    97%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk21s1     16769024   16289844     436084    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk23s1      8898560    8601444     270272    97%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk25s1     17915904   17395764     473832    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk27s1      8892416    8598160     267412    97%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk29s1     17635328   17135744     454340    98%    /Library/Developer/CoreSimulator/Volumes/iOS_SIM
+/dev/disk3s3    3902665360    1501640 1977404216     1%    /Volumes/Recovery
+/dev/disk32s1       786532     784292       2240   100%    /Volumes/Sagax 0.5.2-arm64
+/dev/disk30s1       248172     245036       3136    99%    /Volumes/Recall
+@@end

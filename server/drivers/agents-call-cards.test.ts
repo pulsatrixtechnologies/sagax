@@ -24,7 +24,7 @@ describe("the widget tools in the catalog", () => {
     ];
     for (const profile of profiles) {
       const names = availableTools(profile).map((tool) => tool.name);
-      expect(names.slice(names.indexOf("attach_file"), names.indexOf("attach_file") + 3)).toEqual(["attach_file", "show_widget", "update_widget"]);
+      expect(names.slice(names.indexOf("attach_file"), names.indexOf("attach_file") + 4)).toEqual(["attach_file", "check_widget", "show_widget", "update_widget"]);
     }
   });
 
@@ -145,5 +145,55 @@ describe("update_widget", () => {
       .toEqual({ text: "The person already answered that widget. Show a new one.", isError: true });
     const silent = harness({ ok: false, status: 500, body: {} });
     expect(await callTool("update_widget", { widget_id: "m7", widget: WIDGET_SAMPLES.buildStatus }, silent.context)).toEqual({ text: "Could not update that widget.", isError: true });
+  });
+});
+
+describe("show_html", () => {
+  it("posts the page to the card route and tells the model it runs sandboxed", async () => {
+    const { api, apiResponse, context } = harness();
+    const result = await callTool("show_html", { html: "<h1>Rapport</h1>", title: "Rapport" }, context);
+    expect(apiResponse).toHaveBeenCalledWith("/api/internal/options-card", {
+      method: "POST",
+      body: JSON.stringify({ tool: "show_html", html: "<h1>Rapport</h1>", title: "Rapport" }),
+    });
+    expect(api).not.toHaveBeenCalled();
+    expect(result.isError).toBeUndefined();
+    expect(result.text).toMatch(/^Shown as a live app, id m42\. It runs sandboxed with no network/);
+    expect(result.text).toContain('call update_html with app_id "m42"');
+  });
+
+  it("omits an absent title and refuses empty html without a round trip", async () => {
+    const { apiResponse, context } = harness();
+    await callTool("show_html", { html: "<p>x</p>" }, context);
+    expect(JSON.parse(String(apiResponse.mock.calls[0][1]?.body))).toEqual({ tool: "show_html", html: "<p>x</p>" });
+    apiResponse.mockClear();
+    expect(await callTool("show_html", { html: "" }, context)).toMatchObject({ isError: true });
+    expect(await callTool("show_html", {}, context)).toMatchObject({ isError: true });
+    expect(apiResponse).not.toHaveBeenCalled();
+  });
+
+  it("says so when the harness masked a secret, and hands a refusal to the model", async () => {
+    const masked = harness({ ok: true, status: 201, body: { messageId: "m42", masked: true } });
+    expect((await callTool("show_html", { html: "<p>x</p>" }, masked.context)).text).toMatch(/Never put a password, token or key in an app\.$/);
+    const room = harness({ ok: false, status: 409, body: { error: "Live apps are not available in rooms. Show it in a direct conversation." } });
+    expect(await callTool("show_html", { html: "<p>x</p>" }, room.context))
+      .toEqual({ text: "Live apps are not available in rooms. Show it in a direct conversation.", isError: true });
+    const silent = harness({ ok: false, status: 500, body: {} });
+    expect(await callTool("show_html", { html: "<p>x</p>" }, silent.context)).toEqual({ text: "Could not show that app.", isError: true });
+  });
+});
+
+describe("update_html", () => {
+  it("names the app it replaces and requires an app_id", async () => {
+    const { apiResponse, context } = harness({ ok: true, status: 201, body: { messageId: "m7" } });
+    const result = await callTool("update_html", { app_id: "m7", html: "<p>50%</p>" }, context);
+    expect(apiResponse).toHaveBeenCalledWith("/api/internal/options-card", {
+      method: "POST",
+      body: JSON.stringify({ tool: "update_html", app_id: "m7", html: "<p>50%</p>" }),
+    });
+    expect(result).toEqual({ text: "Updated live app m7." });
+    apiResponse.mockClear();
+    expect(await callTool("update_html", { html: "<p>x</p>" }, context)).toMatchObject({ isError: true });
+    expect(apiResponse).not.toHaveBeenCalled();
   });
 });

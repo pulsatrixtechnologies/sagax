@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { openRuntimeStore, type RuntimeStore } from "./store.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
-import type { Assignment } from "./types.ts";
+import { TERMINAL, type Assignment } from "./types.ts";
 
 function assignment(id: string, patch: Partial<Assignment> = {}): Assignment {
   return {
@@ -189,6 +189,32 @@ describe("runtime store", () => {
     store.insert(broken, { kind: "enqueued" });
     expect(() => store.get("bad")).toThrow(/record schema/);
     expect(store.get("ok")?.id).toBe("ok");
+  });
+
+  it("reads the live rows from their own index, never walking the ended ones, in a file an earlier build wrote too", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "runtime-store-"));
+    try {
+      const path = join(dir, "runtime.db");
+      const store = openRuntimeStore(path);
+      store.insert(assignment("ended", { status: "completed", outcome: "done", finishedAt: 2_000 }), { kind: "enqueued" });
+      store.insert(assignment("live", { createdAt: 3_000 }), { kind: "enqueued" });
+      store.close();
+      // A file from before the index: the next open adds it.
+      const earlier = new DatabaseSync(path);
+      earlier.exec("DROP INDEX assignments_live");
+      earlier.close();
+      const again = openRuntimeStore(path);
+      expect(again.all({ nonTerminal: true }).map(x => x.id)).toEqual(["live"]);
+      again.close();
+      // all({ nonTerminal: true }) as SQLite plans it: the index, in created order, no sort.
+      const probe = new DatabaseSync(path, { readOnly: true });
+      const terminal = TERMINAL.map(s => `'${s}'`).join(", ");
+      const plan = probe.prepare(`EXPLAIN QUERY PLAN SELECT id, json FROM assignments WHERE status NOT IN (${terminal}) ORDER BY created_at, rowid`).all() as Array<{ detail: string }>;
+      probe.close();
+      expect(plan.map(step => step.detail)).toEqual(["SCAN assignments USING INDEX assignments_live"]);
+    } finally {
+      await removeTempDir(dir);
+    }
   });
 
   it("creates the file owner-only in WAL mode and reopens the same data", async () => {

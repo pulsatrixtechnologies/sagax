@@ -109,4 +109,14 @@ describe("MessageBar", () => {
     await act(async () => document.querySelector<HTMLButtonElement>('[data-reaction-bar] [data-quick-reaction="🎉"]')!.click());
     expect(onPick).toHaveBeenCalledWith("🎉");
   });
+
+  // Dragging right to left across one's own message reaches the bar that
+  // sits before its text in the DOM: the hidden time must not be copied.
+  it("keeps the time out of a text selection", async () => {
+    await render("user");
+    const time = bar().querySelector<HTMLElement>("[data-message-time]")!;
+    expect(time.textContent).toBe("1:54 PM");
+    expect(bar().className).toContain("select-none");
+    expect(time.className).toContain("select-none");
+  });
 });

@@ -131,6 +131,17 @@ describe("message-db", () => {
     expect(commandReceipt("digest.append", "t50:turn-1")?.result).toEqual({ text: "other thread" });
   });
 
+  it("names an outside app as the author of a webhook line in recall and in a read (port of OpenMausBot #3160)", () => {
+    insertMessage("hook-a", { ...msg("w1", "Deploy finished on prod", { role: "bot" }), webhookPost: true } as never);
+    insertMessage("hook-a", msg("w2", "Deploy finished, I checked it", { role: "bot" }));
+    const hits = recallMessages("deploy finished", ["hook-a"]);
+    expect(hits.find((hit) => hit.messageId === "w1")?.from).toMatch(/outside app, through a webhook/);
+    expect(hits.find((hit) => hit.messageId === "w2")?.from).toBeUndefined();
+    expect(recentMessages(["hook-a"], {}).find((hit) => hit.messageId === "w1")?.from).toMatch(/outside app/);
+    expect(readMessageText("hook-a", "w1")).toMatchObject({ webhook: true, from: expect.stringMatching(/outside app/) });
+    expect(readMessageText("hook-a", "w2")?.webhook).toBeUndefined();
+  });
+
   it("recall ranks by relevance, scopes to the given threads, and survives updates and deletes", () => {
     insertMessage("own-a", msg("m1", "The site audit found three broken links on the pricing page", { role: "bot" }));
     insertMessage("own-a", msg("m2", "audit", { role: "user" }));

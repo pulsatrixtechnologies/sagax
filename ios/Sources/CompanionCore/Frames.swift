@@ -18,6 +18,13 @@ public struct NotificationFrame: Codable, Hashable, Sendable {
     public var body: String
     /// A person's message or a tag in a room: the conversation (#262, #274).
     public var groupId: String? = nil
+    /// The approval this banner can answer. Absent on older servers.
+    public var requestId: String? = nil
+    /// Allow from the banner must open Sagax for the person's security key.
+    public var needsKey: Bool? = nil
+    /// A finished routine, so the banner can name it.
+    public var routineRunId: String? = nil
+    public var routineName: String? = nil
 
     /// A bot blocked on you, as opposed to one reporting in.
     public var isBlocking: Bool { kind == "approval" || kind == "question" }

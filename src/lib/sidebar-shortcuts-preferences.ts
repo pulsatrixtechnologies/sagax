@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-import { browseBotsEnabled, connectedAppsEnabled, type FeatureFlagConfig } from "@/lib/feature-flags";
+import { browseBotsEnabled, type FeatureFlagConfig } from "@/lib/feature-flags";
 
 export const SIDEBAR_SHORTCUTS_KEY = "sagax-sidebar-shortcuts";
 
@@ -9,11 +9,11 @@ export const SIDEBAR_SHORTCUTS_KEY = "sagax-sidebar-shortcuts";
 // stored per person on this device ("1" on, "0" off). While it is on, the
 // account row below drops the title and points line, for lack of room.
 //
-// Before this setting the rows followed two installation switches in
-// Settings > Experimental features (`features.connectedApps`, and Browse Bots
-// under `features.templates`). A person with no stored choice keeps what they
-// saw: on when either switch was on (`legacySidebarShortcuts`), and
-// `migrateSidebarShortcuts` writes that value once, so it stays theirs.
+// Before this setting the Browse Bots row followed an installation switch in
+// Settings > Experimental features (Browse Bots under `features.templates`). A
+// person with no stored choice keeps what they saw: on when that switch was on
+// (`legacySidebarShortcuts`), and `migrateSidebarShortcuts` writes that value
+// once, so it stays theirs.
 let sessionChoice: boolean | undefined;
 const listeners = new Set<() => void>();
 
@@ -36,10 +36,10 @@ export function storedSidebarShortcuts(): boolean | undefined {
   }
 }
 
-/** What the sidebar showed before the setting: the rows were there when
- * either experimental switch was on. */
+/** What the sidebar showed before the setting: the rows were there when the
+ * Browse Bots experimental switch was on. */
 export function legacySidebarShortcuts(config: FeatureFlagConfig | null | undefined): boolean {
-  return connectedAppsEnabled(config) || browseBotsEnabled(config);
+  return browseBotsEnabled(config);
 }
 
 /** The setting's value: the stored choice, else the legacy one. */

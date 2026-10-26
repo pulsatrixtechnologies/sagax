@@ -1,5 +1,5 @@
 import { boatCapableEngine } from "@/lib/remote-desktop";
-import { boatComputerEnabled } from "@/lib/feature-flags";
+import { boatComputerEnabled, routinesInConversationEnabled } from "@/lib/feature-flags";
 import {
   useCallback,
   useEffect,
@@ -23,6 +23,7 @@ import {
   CircleAlert,
   Clock3,
   Cloud,
+  Copy,
   ExternalLink,
   FileText,
   Laptop,
@@ -74,6 +75,7 @@ import {
   type Attachment,
 } from "@/lib/composer-attachments";
 import { mausInk, type MausState } from "@/lib/mascot";
+import { personLabel } from "@/lib/human-label";
 import {
   addDays,
   atLocalTime,
@@ -84,7 +86,8 @@ import {
   intervalAnchorForSave,
   nextIntervalForSave,
   packCalendarCollisions,
-  projectedRoutineItems,
+  scheduledRoutineItems,
+  groupCalendarSlots,
   scheduleAt,
   slotAt,
   startOfDay,
@@ -93,7 +96,7 @@ import {
   toLocalTimeInput,
   type RoutineCalendarItem,
 } from "@/lib/routine-calendar";
-import { DAY_NAMES, durationLabel, intervalLabel, niceDate, niceTime, scheduleLabel } from "@/lib/schedule-label";
+import { DAY_NAMES, durationLabel, intervalLabel, niceDate, niceTime, scheduleLabel, scheduleRawCron } from "@/lib/schedule-label";
 import { Switch } from "./SettingsPrimitives";
 import { MarkdownEditor } from "./markdown/MarkdownEditor";
 import {
@@ -112,6 +115,7 @@ import {
 import { api, openBotThread, openNotificationTarget, useStore, type Bot, type Group } from "@/state/store";
 import { viewerCanCreateBots } from "@/lib/viewer";
 import { RoutineScheduleNote } from "./RoutineScheduleNote";
+import { readTiming, RoutineTimingFields, withRoutineTiming } from "./routines/RoutineTimingFields";
 import { BOT_CALENDAR_DRAG_TYPE } from "@/lib/bot-drag";
 
 const HOUR_HEIGHT = 64;
@@ -388,7 +392,14 @@ function EventEditor({
   const [onlyWhenPresent, setOnlyWhenPresent] = useState(existingRoutine?.onlyWhenPresent === true);
   // Run once when the server starts (upstream #2700): off unless chosen.
   const [runOnStartup, setRunOnStartup] = useState(Boolean(existingRoutine?.runOnStartup));
+  // Post results in the conversation (JC 2026-10-22): the routine's own
+  // choice, else the installation default. Off keeps a run in the background.
+  const [postResults, setPostResults] = useState(existingRoutine?.postResults ?? routinesInConversationEnabled(state.config));
   const [recurrence, setRecurrence] = useState<RecurrenceChoice>(recurrenceFor(schedule, initialAt));
+  const initialTiming = readTiming(schedule);
+  const [timingMode, setTimingMode] = useState<"exact" | "flexible">(initialTiming.mode);
+  const [earlyMinutes, setEarlyMinutes] = useState(initialTiming.early);
+  const [lateMinutes, setLateMinutes] = useState(initialTiming.late);
   const [cronDraft, setCronDraft] = useState(() => cronDraftFor(schedule.type === "cron" ? schedule : undefined, initialAt));
   const [cronChanged, setCronChanged] = useState(false);
   const [weekdays, setWeekdays] = useState(schedule.type === "daily" ? schedule.weekdays : [new Date(initialAt).getDay()]);
@@ -552,13 +563,14 @@ function EventEditor({
         if (recurrence === "interval" && intervalEndsAt != null && intervalEndsAt < nextIntervalForSave(savedAt, intervalMinutes, existingIntervalSchedule)) {
           throw new Error("Choose an end date after the first run.");
         }
-        const nextSchedule = isCronChoice(recurrence) ? cron?.schedule : makeRoutineSchedule(recurrence, at, weekdays, intervalMinutes, {
+        const built = isCronChoice(recurrence) ? cron?.schedule : makeRoutineSchedule(recurrence, at, weekdays, intervalMinutes, {
           anchorAt: intervalAnchorAt,
           weekdays: selectedIntervalWeekdays ? [...selectedIntervalWeekdays].sort() : null,
           window: selectedIntervalWindow ?? null,
           endsAt: intervalEndsAt,
         });
-        if (!nextSchedule) throw new Error(cron?.error || "Choose a valid schedule.");
+        if (!built) throw new Error(cron?.error || "Choose a valid schedule.");
+        const nextSchedule = withRoutineTiming(built, recurrence !== "none", timingMode, earlyMinutes, lateMinutes);
         // `runAs` (organization server): the person chosen in the modal.
         const input: RoutineInput & { runAs?: string } = {
           name,
@@ -576,6 +588,7 @@ function EventEditor({
           continuity: routineTarget === "bot" && recurrence !== "none" && continuity,
           onlyWhenPresent,
           runOnStartup: recurrence !== "none" && runOnStartup,
+          postResults: routineTarget === "bot" ? postResults : undefined,
           attachments: routineTarget === "room-goal" ? [] : attachments as RoutineContextAttachment[],
           ...(routineTarget === "bot" ? { resultsThreadId } : {}),
           // Sent only when the person was changed in the dropdown.
@@ -705,6 +718,16 @@ function EventEditor({
                   {kind === "routine" && <><option value="monthly">Monthly</option><option value="yearly">Yearly</option><option value="cron">Custom cron (advanced)</option></>}
                 </select>
               </div>
+              {kind === "routine" && recurrence !== "none" && (
+                <RoutineTimingFields
+                  mode={timingMode}
+                  earlyMinutes={earlyMinutes}
+                  lateMinutes={lateMinutes}
+                  onMode={setTimingMode}
+                  onEarly={setEarlyMinutes}
+                  onLate={setLateMinutes}
+                />
+              )}
               {kind === "routine" && <RoutineScheduleNote />}
               {isCronChoice(recurrence) && kind === "routine" && cron && <CronScheduleFields choice={recurrence} value={cronDraft} onChange={(draft) => { setCronDraft(draft); setCronChanged(true); }} runs={cron.runs} error={cron.error} />}
               {recurrence === "custom" && (
@@ -964,6 +987,15 @@ function EventEditor({
               </span>
             </label>
           )}
+          {kind === "routine" && !isRoomGoal && (
+            <label data-routine-post-results className="ml-8 flex items-start gap-3 rounded-xl border border-hairline/40 bg-inset/40 px-3.5 py-3">
+              <input type="checkbox" aria-label={t("routines.postResults.label")} checked={postResults} onChange={(event) => setPostResults(event.target.checked)} className="mt-0.5 accent-accent" />
+              <span>
+                <span className="block text-[12.5px] font-medium text-ink">{t("routines.postResults.label")}</span>
+                <span className="mt-1 block text-[11px] leading-relaxed text-ink-secondary">{t("routines.postResults.help")}</span>
+              </span>
+            </label>
+          )}
 
           <div className="flex items-start gap-4">
             <Paperclip size={18} className="mt-2.5 shrink-0 text-ink-secondary" />
@@ -1174,6 +1206,7 @@ function CalendarEventCard({
   groups,
   compact,
   layout,
+  reserveRight = 0,
   onOpen,
   onResize,
 }: {
@@ -1182,6 +1215,8 @@ function CalendarEventCard({
   groups: Group[];
   compact: boolean;
   layout: { column: number; columns: number };
+  /** Room kept free for the "+N" marker of a crowded half hour. */
+  reserveRight?: number;
   onOpen: () => void;
   onResize: (minutes: number) => void;
 }) {
@@ -1206,7 +1241,7 @@ function CalendarEventCard({
   useEffect(() => setPreviewDuration(item.durationMinutes), [item.durationMinutes]);
   const status = run?.status;
   const statusLabel = run ? routineRunLabel(run) : undefined;
-  const canMove = isCall || Boolean(routine && !run && routine.schedule.type !== "cron" && routine.canEdit !== false);
+  const canMove = isCall || Boolean(routine && !run && item.at >= Date.now() && routine.schedule.type !== "cron" && routine.canEdit !== false);
   const schedule = isCall ? item.call.schedule : routine?.schedule;
   const recurring = Boolean(schedule && schedule.type !== "once");
   const intervalCadence = schedule?.type === "interval" ? intervalLabel(schedule.everyMinutes) : null;
@@ -1250,7 +1285,7 @@ function CalendarEventCard({
       className={cn("group absolute z-10 overflow-hidden rounded-md border text-left shadow-sm transition hover:z-20 hover:brightness-110 focus:z-20 focus:outline-none focus:ring-2 focus:ring-accent", previewDuration < 30 ? "px-1.5 py-0" : "px-2 py-1.5", status === "cancelled" && "opacity-55", (status === "failed" || status === "missed") && "border-danger/60")}
       style={{
         left: `calc(${(layout.column / layout.columns) * 100}% + 2px)`,
-        width: `calc(${100 / layout.columns}% - 4px)`,
+        width: `calc(${100 / layout.columns}% - ${4 + reserveRight}px)`,
         top: `${((new Date(item.at).getHours() * 60 + new Date(item.at).getMinutes()) / 60) * HOUR_HEIGHT}px`,
         height: `${Math.max(16, (previewDuration / 60) * HOUR_HEIGHT)}px`,
         background: `linear-gradient(110deg, color-mix(in srgb, ${color} 58%, #242424), color-mix(in srgb, ${color} 28%, #181818))`,
@@ -1298,6 +1333,16 @@ function CalendarGrid({
   // A bot dragged from anywhere (the left sidebar): the whole grid shows it
   // takes the drop before the pointer reaches it.
   const [botDrag, setBotDrag] = useState<{ name: string } | null>(null);
+  // The "+N" marker of a crowded half hour: which one is open.
+  const [moreOpen, setMoreOpen] = useState<string | null>(null);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setMoreOpen(null); };
+    document.addEventListener("keydown", onKey);
+    const close = (event: PointerEvent) => { if (!(event.target as HTMLElement | null)?.closest?.("[data-slot-more]")) setMoreOpen(null); };
+    document.addEventListener("pointerdown", close);
+    return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", onKey); };
+  }, [moreOpen]);
   const today = startOfDay(Date.now());
   const starts = Array.from({ length: days }, (_, index) => addDays(anchor, index));
   const minDayWidth = days === 7 ? 88 : days === 3 ? 180 : 340;
@@ -1402,8 +1447,9 @@ function CalendarGrid({
         {starts.map((start) => {
           const now = new Date();
           const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * HOUR_HEIGHT;
-          const dayItems = items.filter((item) => startOfDay(item.at) === start);
+          const { shown: dayItems, overflow } = groupCalendarSlots(items.filter((item) => startOfDay(item.at) === start));
           const collisionLayouts = packCalendarCollisions(dayItems);
+          const crowded = new Set(overflow.map((group) => group.id.slice("more-".length)));
           const selected = selection?.day === start ? selection : null;
           const preview = dragPreview?.day === start ? dragPreview : null;
           return (
@@ -1412,7 +1458,25 @@ function CalendarGrid({
               {start === today && <div className="pointer-events-none absolute inset-x-0 z-20 flex items-center" style={{ top: nowTop }}><span className="-ml-1 size-2 rounded-full bg-danger" /><span className="h-px flex-1 bg-danger/80" /></div>}
               {selected && <div className="pointer-events-none absolute inset-x-1 z-10 rounded-md border border-accent/70 bg-accent/20" style={{ top: ((new Date(selected.start).getHours() * 60 + new Date(selected.start).getMinutes()) / 60) * HOUR_HEIGHT, height: Math.max(16, ((selected.end - selected.start) / 3_600_000) * HOUR_HEIGHT) }} />}
               {preview && <div className="pointer-events-none absolute inset-x-1 z-20 rounded-md border border-accent/80 bg-accent/25 shadow-sm" style={{ top: ((new Date(preview.at).getHours() * 60 + new Date(preview.at).getMinutes()) / 60) * HOUR_HEIGHT, height: HOUR_HEIGHT / 2 }}><div className="px-2 py-1 text-[9.5px] font-medium text-accent">{niceTime(preview.at)}</div></div>}
-              {dayItems.map((item) => <CalendarEventCard key={item.id} item={item} bots={bots} groups={groups} compact={days === 7} layout={collisionLayouts.get(item.id) ?? { column: 0, columns: 1 }} onOpen={() => onOpen(item)} onResize={(minutes) => onResize(item, minutes)} />)}
+              {dayItems.map((item) => <CalendarEventCard key={item.id} item={item} bots={bots} groups={groups} compact={days === 7} layout={collisionLayouts.get(item.id) ?? { column: 0, columns: 1 }} reserveRight={crowded.has(item.id) ? 34 : 0} onOpen={() => onOpen(item)} onResize={(minutes) => onResize(item, minutes)} />)}
+              {overflow.map((group) => {
+                const layout = collisionLayouts.get(group.id.slice("more-".length)) ?? { column: 0, columns: 1 };
+                const top = ((new Date(group.at).getHours() * 60 + new Date(group.at).getMinutes()) / 60) * HOUR_HEIGHT;
+                return (
+                  <div key={group.id} data-slot-more className={cn("absolute", moreOpen === group.id ? "z-40" : "z-20")} style={{ left: `calc(${((layout.column + 1) / layout.columns) * 100}% - 34px)`, width: 30, top, height: Math.max(16, HOUR_HEIGHT / 2) }}>
+                    <button type="button" aria-expanded={moreOpen === group.id} aria-label={`${group.items.length} more at ${niceTime(group.at)}`} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setMoreOpen((current) => current === group.id ? null : group.id); }} className="h-full w-full rounded-md border border-hairline/60 bg-raised px-0.5 text-center text-[11px] font-semibold text-ink-secondary hover:text-ink focus:outline-none focus:ring-2 focus:ring-accent">+{group.items.length}</button>
+                    {moreOpen === group.id && (
+                      <div role="menu" onPointerDown={(event) => event.stopPropagation()} className="absolute left-0 top-full z-40 mt-1 max-h-64 w-56 overflow-y-auto rounded-lg border border-border bg-elevated p-1 shadow-lg">
+                        {group.items.map((entry) => (
+                          <button key={entry.id} type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); setMoreOpen(null); onOpen(entry); }} className="block w-full truncate rounded-md px-2 py-1.5 text-left text-[12px] text-ink hover:bg-raised">
+                            <span className="text-ink-secondary">{niceTime(entry.at)}</span> {entry.kind === "call" ? entry.call.name : entry.routine?.name ?? "Routine"}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           );
         })}
@@ -1580,7 +1644,10 @@ export function EventDetails({
             <div className="text-[12.5px] text-ink-secondary">
               {niceDate(item.at)} · {niceTime(item.at)}{isCall ? ` - ${niceTime(item.at + item.durationMinutes * 60_000)}` : ""}
             </div>
-            {(routine || call) && <div className="mt-1 text-[11.5px] text-ink-secondary">{scheduleLabel((routine ?? call)!.schedule)}</div>}
+            {(routine || call) && <div className="mt-1 flex items-start gap-1.5">
+              <div data-schedule-label title={scheduleRawCron((routine ?? call)!.schedule) ?? undefined} className="min-w-0 flex-1 text-[11.5px] text-ink-secondary">{scheduleLabel((routine ?? call)!.schedule)}</div>
+              {routine?.schedule.type === "cron" && <button type="button" data-copy-cron title={t("routines.copyCron")} aria-label={t("routines.copyCron")} onClick={() => { void navigator.clipboard?.writeText(routine.schedule.type === "cron" ? routine.schedule.expression : "").catch(() => {}); }} className="shrink-0 rounded-md p-1 text-ink-secondary hover:bg-raised hover:text-ink"><Copy size={13} /></button>}
+            </div>}
             {routine?.schedule.type === "cron" && <div className="mt-3"><CronSchedulePreview schedule={routine.schedule} paused={!routine.enabled} /></div>}
           </div>
           <div className="flex items-start gap-3">
@@ -1594,7 +1661,7 @@ export function EventDetails({
             </div>
           </div>
           {otherOwner && <div data-event-details-owner className="flex items-start gap-3"><UserRound size={17} className="mt-1 shrink-0 text-ink-secondary" /><div className="min-w-0 flex-1"><div className="text-[11px] font-medium uppercase tracking-wider text-ink-secondary">{t("routines.scope.owner")}</div><RoutineOwnerBadge owner={otherOwner} size={18} className="mt-1 text-[12.5px] text-ink" />{(!editable || routine?.redacted) && <div className="mt-1 text-[11.5px] text-ink-secondary">{routine?.redacted ? t("routines.scope.redacted") : t("routines.scope.readOnly")}</div>}</div></div>}
-          {routine?.runAs && <div data-event-details-run-as className="flex items-start gap-3"><UserRound size={17} className="mt-1 shrink-0 text-ink-secondary" /><div className="min-w-0 flex-1"><div className="text-[11px] font-medium uppercase tracking-wider text-ink-secondary">{t("routines.runAsField.label")}</div><div className="mt-1 truncate text-[12.5px] text-ink">{routine.runAs.name || routine.runAs.principalId}</div></div></div>}
+          {routine?.runAs && <div data-event-details-run-as className="flex items-start gap-3"><UserRound size={17} className="mt-1 shrink-0 text-ink-secondary" /><div className="min-w-0 flex-1"><div className="text-[11px] font-medium uppercase tracking-wider text-ink-secondary">{t("routines.runAsField.label")}</div><div className="mt-1 truncate text-[12.5px] text-ink">{personLabel(routine.runAs.name, routine.runAs.principalId)}</div></div></div>}
           {isRoomGoal && (
             <div className="flex items-start gap-3">
               <UsersRound size={17} className="mt-1 shrink-0 text-ink-secondary" />
@@ -1607,6 +1674,7 @@ export function EventDetails({
           {!wide && descriptionBlock}
           {attachments.length > 0 && <div className="flex items-start gap-3"><Paperclip size={17} className="mt-1 shrink-0 text-ink-secondary" /><div className="min-w-0 flex-1 space-y-2"><AttachmentChips attachments={attachments} />{call && <div className="text-[11px] leading-relaxed text-ink-secondary">{call.botIds.length > 1 ? "These references will be shared in the group when the event starts." : "These references stay with the event and are available when you join the group."}</div>}</div></div>}
           {!isCall && <div className="flex items-start gap-3"><Clock3 size={17} className="mt-1 shrink-0 text-ink-secondary" /><div><div className="text-[11px] font-medium uppercase tracking-wider text-ink-secondary">Run limit</div><div className="mt-1 text-[12.5px] text-ink">{safetyLimit == null ? "No time limit" : `Stops if still running after ${durationLabel(safetyLimit)}`}</div></div></div>}
+          {routine?.weekRuns && <div data-routine-week-runs className="text-[11.5px] text-ink-secondary">{t("routines.weekRuns", routine.weekRuns)}</div>}
           {run && <div role="status" aria-live="polite" className="rounded-xl border border-hairline/40 bg-inset p-3"><div className="flex items-center gap-2 text-[12px] font-medium text-ink">{run.status === "running" && <Loader2 size={13} className="animate-spin text-accent" />}{routineRunLabel(run)}</div>{run.output && <div className="mt-2 whitespace-pre-wrap text-[11.5px] leading-relaxed text-ink-secondary">{run.output}</div>}{run.error && <div className="mt-2 text-[11.5px] text-danger">{routineRunError(run.error)}</div>}</div>}
           {run?.attention && <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5 text-warning"><CircleAlert size={15} className="mt-0.5 shrink-0" /><div className="min-w-0 whitespace-pre-wrap text-[11.5px] leading-relaxed">{run.attention}</div></div>}
           {run?.status === "waiting" && !run.attention && <div className="rounded-xl border border-accent/30 bg-accent/10 px-3 py-2.5 text-[11.5px] text-accent-text">This run is waiting. Open its execution thread for more context.</div>}
@@ -1711,13 +1779,13 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
   const { state, dispatch } = useStore();
   const { capabilities } = useDesktopCapabilities();
   const advanced = useAdvancedMode();
-  // Mine, My teams or Everyone and the filters (src/lib/use-routine-scope.ts).
-  const scoped = useRoutineScope({ config: state.config, routines: state.routines, runs: state.routineRuns });
   const routinesOnly = window.ogb?.remoteClient?.active === true;
   const newMenuRef = useRef<HTMLDetailsElement>(null);
   const navMenuRef = useRef<HTMLDetailsElement>(null);
   const [section, setSection] = useState<"calendar" | "logs" | "webhooks">(state.routinesFocus?.section === "logs" ? "logs" : "calendar");
   const [scheduleView, setScheduleView] = useState<"calendar" | "list">(state.routinesFocus?.view ?? "calendar");
+  // Mine, My teams or Everyone and the filters (src/lib/use-routine-scope.ts).
+  const scoped = useRoutineScope({ config: state.config, routines: state.routines, runs: state.routineRuns, ignoreStatus: section === "calendar" && scheduleView === "calendar" });
   const [viewDays, setViewDays] = useState<1 | 3 | 7>(7);
   const [anchor, setAnchor] = useState(() => startOfDay(Date.now()));
   const [botFilter, setBotFilterState] = useState(state.routinesFocus?.botId ?? scoped.prefs.botId ?? "all");
@@ -1775,7 +1843,7 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
   }, []);
 
   const items = useMemo<CalendarEventItem[]>(() => {
-    const routineItems = projectedRoutineItems(scopedRoutines, scopedRuns, rangeStart, rangeEnd).map((item) => ({ ...item, kind: "routine" as const }));
+    const routineItems = scheduledRoutineItems(scopedRoutines, scopedRuns, rangeStart, rangeEnd).map((item) => ({ ...item, kind: "routine" as const }));
     const callItems = projectCalls(calls, rangeStart, rangeEnd).map((item) => ({ ...item, kind: "call" as const }));
     return [...routineItems, ...callItems]
       .filter((item) => botFilter === "all" || (item.kind === "call" ? item.call.botIds.includes(botFilter) : (item.routine?.botId ?? item.run?.botId) === botFilter))
@@ -1966,7 +2034,7 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
           </div>
         </div>
         {section !== "webhooks" && scoped.available && <div className="mt-2" style={windowNoDragStyle}>
-          <RoutineScopeBar prefs={scoped.prefs} allowed={scoped.allowed} teams={scoped.facets.teams} owners={scoped.facets.owners} advanced={advanced} onChange={(next) => { scoped.setPrefs(next); setRoutineFilter(undefined); }} />
+          <RoutineScopeBar prefs={scoped.prefs} allowed={scoped.allowed} teams={scoped.facets.teams} owners={scoped.facets.owners} advanced={advanced} hideStatus={section === "calendar" && scheduleView === "calendar"} onChange={(next) => { scoped.setPrefs(next); setRoutineFilter(undefined); }} />
           {scoped.error && <p role="alert" className="mt-1 text-[11.5px] text-danger">{t("routines.scope.loadError")}</p>}
         </div>}
         {section !== "webhooks" && <div className="mt-2 flex flex-wrap items-center gap-2" style={windowNoDragStyle}>

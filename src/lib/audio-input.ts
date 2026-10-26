@@ -69,25 +69,42 @@ function defaultGetUserMedia(): GetUserMedia {
   return (constraints) => navigator.mediaDevices.getUserMedia(constraints);
 }
 
+/** How long the system's permission prompt may stay unanswered before the
+ * person is told the microphone is waiting for them (it can sit behind
+ * another window). The request itself is never abandoned: a slow answer
+ * still opens the microphone. */
+export const MICROPHONE_PROMPT_MS = 30_000;
+
+/** Runs `onWaiting` once if the request is still pending after `ms`. */
+function watchPrompt(open: Promise<MediaStream>, ms: number, onWaiting?: () => void): Promise<MediaStream> {
+  if (!onWaiting) return open;
+  const timer = setTimeout(onWaiting, ms);
+  const done = () => clearTimeout(timer);
+  open.then(done, done);
+  return open;
+}
+
 /** getUserMedia that retries once without the device when the saved one is
  * gone (unplugged, renamed by the system). Permission errors are not retried. */
 export async function getUserMediaWithFallback(
   constraints: MediaStreamConstraints,
   getUserMedia: GetUserMedia = defaultGetUserMedia(),
+  promptMs = MICROPHONE_PROMPT_MS,
+  onWaiting?: () => void,
 ): Promise<MediaStream> {
   try {
-    return await getUserMedia(constraints);
+    return await watchPrompt(getUserMedia(constraints), promptMs, onWaiting);
   } catch (error) {
     const audio = constraints.audio;
     if (!deviceMissing(error) || !audio || typeof audio !== "object" || !audio.deviceId) throw error;
     const { deviceId: _dropped, ...rest } = audio;
-    return getUserMedia({ ...constraints, audio: rest });
+    return watchPrompt(getUserMedia({ ...constraints, audio: rest }), promptMs, onWaiting);
   }
 }
 
 /** Opens the saved microphone (or the default) with these audio settings. */
-export function openPreferredMicrophone(audio: MediaTrackConstraints, getUserMedia?: GetUserMedia): Promise<MediaStream> {
-  return getUserMediaWithFallback({ audio: withPreferredInput(audio), video: false }, getUserMedia);
+export function openPreferredMicrophone(audio: MediaTrackConstraints, getUserMedia?: GetUserMedia, onWaiting?: () => void): Promise<MediaStream> {
+  return getUserMediaWithFallback({ audio: withPreferredInput(audio), video: false }, getUserMedia, MICROPHONE_PROMPT_MS, onWaiting);
 }
 
 /** The audio inputs, without the browser's "default" and "communications"

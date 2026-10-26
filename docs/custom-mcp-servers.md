@@ -21,7 +21,7 @@ Tokens for URL servers go in headers, never in the address.
 
 In Plugins, find **Whop** alongside Gmail, Slack and the other apps and click **Connect**. The built-in card
 uses Whop's official hosted MCP endpoint and opens Whop's browser sign-in;
-no API key, local CLI or Composio connection is needed. After successful
+no API key or local CLI is needed. After successful
 sign-in and tool discovery it enables the connection. A cancelled or failed
 first setup remains off and can be retried without adding another server.
 
@@ -286,10 +286,17 @@ servers gets the enabled tools on its next task.
   cards; on Codex they keep the on-request approval policy; ACP engines
   relay the agent's own permission asks. Built-ins stay pre-quieted — only
   *your* servers ask.
-- **Reserved names are refused** (`computer`, `agents`, `composio`,
+- **Reserved names are refused** (`computer`, `agents`,
   `browser`, `phone`, `dweb`, `ogb`, …) so a custom entry can never shadow
   a built-in tool surface. Names are lowercase letters/digits/`_`/`-`, max
   32 chars, starting with a letter.
+- **Environment names are checked.** `SAGAX_*` and `OGB_*` are refused:
+  Codex hands MCP children their variables from one shared environment,
+  and those names carry Sagax's own routing and bearers.
+  `ELECTRON_RUN_AS_NODE` is accepted as `1` only, the value Sagax's own
+  proxies use, so a server bundled inside an Electron app (its binary as the
+  command) can run as node; any other value is refused (port de
+  OpenMausBot #2865).
 - **One bad entry never takes the fleet down.** Invalid entries are skipped
   with a logged reason; the rest still mount.
 - **Credentials are write-only in the UI.** The API returns environment and

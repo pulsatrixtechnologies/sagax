@@ -241,12 +241,7 @@ class Runner {
     this.author = b.author ?? { name: AGENT_NAME, email: this.deps.agentEmail ?? AGENT_EMAIL_DEFAULT };
     this.setState("setup");
     this.poller = this.pollCommands();
-    const maxMs = b.limits.max_duration_sec * 1000;
-    this.expiryTimer = setTimeout(() => {
-      this.warn("Durée maximale du run atteinte : le runner s'arrête.");
-      this.halt("expired");
-    }, Math.min(maxMs, 2 ** 31 - 1));
-    this.expiryTimer.unref?.();
+    this.armExpiry(b.limits.max_duration_sec);
 
     // Secrets first, so their values are masked in anything that follows.
     const secretsRaw = await this.deps.client.secrets();
@@ -433,10 +428,27 @@ class Runner {
     }
   }
 
+  /** The run's own deadline, from now (the bootstrap, then each duration an
+   * admin extended). Perspicax enforces it too; the Pod's hard deadline is
+   * the 12 h cap. */
+  private armExpiry(seconds: number): void {
+    if (this.expiryTimer) clearTimeout(this.expiryTimer);
+    this.expiryTimer = setTimeout(() => {
+      this.warn("Durée maximale du run atteinte : le runner s'arrête.");
+      this.halt("expired");
+    }, Math.min(seconds * 1000, 2 ** 31 - 1));
+    this.expiryTimer.unref?.();
+  }
+
   private async dispatch(command: RunnerCommand): Promise<void> {
     this.afterSeq = Math.max(this.afterSeq, command.seq);
     if (command.kind === "stop") {
       this.halt("stop");
+      return;
+    }
+    if (command.kind === "limits") {
+      this.armExpiry(command.data.max_duration_sec);
+      this.log(`sagax-runner: durée du run prolongée (${Math.round(command.data.max_duration_sec / 60)} min restantes)`);
       return;
     }
     if (command.kind === "approve") {

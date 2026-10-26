@@ -6,6 +6,8 @@
 // answering a card, or calling a /respond route is refused in every mode.
 // This module decides. It does not perform.
 
+import { DEVICE_PREFERENCE_KEYS } from "./settings-actions.ts";
+
 const PATH_MAX = 512;
 const QUERY_KEYS_MAX = 20;
 const QUERY_VALUE_MAX = 200;
@@ -171,6 +173,9 @@ const COMMANDS: Record<string, CommandSpec> = {
   setModel: { write: true, fields: { botId: "s", selection: "o", threadId: "s?", updateBotDefault: "b?" } },
   interrupt: { write: true, fields: { botId: "s", threadId: "s?" } },
   updateBot: { write: true, fields: { botId: "s", patch: "o" } },
+  // a preference kept on the person's device (sagax_settings): only the
+  // keys the settings registry names (DEVICE_PREFERENCE_KEYS)
+  setPreference: { write: true, fields: { key: "s", value: "S" } },
 };
 
 /** Screen or button the desktop app already dispatches. Unknown names and
@@ -198,6 +203,7 @@ export function uiCommandToAction(ui: string, input: unknown): { action: Record<
     kept[key] = value;
   }
   if (ui === "playMascotMotion" && !MOTIONS.has(String(action.kind))) return null;
+  if (ui === "setPreference" && !DEVICE_PREFERENCE_KEYS.has(String(action.key))) return null;
   let encoded: string;
   try {
     encoded = JSON.stringify(action);
@@ -278,19 +284,45 @@ export function decideBotAct(input: {
   } else if (!input.scopes.includes("admin") && !input.scopes.includes("client")) {
     return { ok: false, status: 403, error: "This person cannot call that route." };
   }
+  // a device preference is set by sagax_settings only, with its own classes
+  if (target.kind === "ui" && target.command === "setPreference") {
+    return { ok: false, status: 403, error: "Use sagax_settings to change a preference." };
+  }
   if (escalatesApproval(target)) {
-    return { ok: false, status: 403, error: "A bot cannot change an approval mode or answer a card through act." };
+    return { ok: false, status: 403, error: "act does not change approval levels, rules or grants, nor answer a card: use sagax_settings (bot.approvalMode, bot.permissionMode, rules.*), which asks the person when it must." };
   }
   const write = target.kind === "route" ? target.method !== "GET" && target.method !== "HEAD" : target.write;
   // Full still runs an ordinary write. Auto does not: it is "Approve for me"
-  // for the bot's own tools, not a pass for act to skip the card.
-  const unattended = input.mode === "full";
+  // for the bot's own tools, not a pass for act to skip the card. A write
+  // that widens who gets a bot's team-memory cards waits at every level, as
+  // sagax_settings' bot.teamMemorySharing does.
+  const unattended = input.mode === "full" && !widensTeamMemorySharing(target);
   return {
     ok: true,
     effect: write && !unattended ? "hold" : "run",
     summary: summaryOf(target),
     target,
   };
+}
+
+/** A write that sets a bot's team memory sharing to anything but "private"
+ * (back to "shared" reaches other people). Narrowing to "private" is an
+ * ordinary write. */
+function widensTeamMemorySharing(target: ActTarget): boolean {
+  const records = target.kind === "ui" ? [target.input] : [target.query, target.body];
+  return records.some((record) => setsWiderSharing(record));
+}
+
+function setsWiderSharing(value: unknown, depth = 0): boolean {
+  if (value === null || typeof value !== "object") return false;
+  // deeper than the check reads: held, never assumed clean
+  if (depth > 8) return true;
+  if (Array.isArray(value)) return value.some((item) => setsWiderSharing(item, depth + 1));
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (key === "teamMemorySharing" && child !== "private") return true;
+    if (setsWiderSharing(child, depth + 1)) return true;
+  }
+  return false;
 }
 
 const ESCALATION_KEYS = new Set(["approvalMode", "confirmFullAccess", "autoApprove", "alwaysAllow", "stepUp", "refreshPermissions"]);
@@ -313,6 +345,8 @@ function escalatesApproval(target: ActTarget): boolean {
     return recordHasEscalation(target.input);
   }
   if (target.path.endsWith("/respond")) return true;
+  // the Approvals screen's bulk answer is a person's tap, never a bot's
+  if (/^\/api\/approvals\/bulk(?:[?/]|$)/.test(target.path)) return true;
   if (ESCALATION_PATH.test(target.path.split("?")[0] ?? target.path)) return true;
   return recordHasEscalation(target.query) || recordHasEscalation(target.body);
 }
@@ -449,7 +483,8 @@ function parseActTarget(raw: unknown): { ok: true; target: ActTarget } | { ok: f
   return { ok: true, target: { kind: "route", method, path: record.path, ...(query ? { query } : {}), ...(body !== undefined ? { body } : {}) } };
 }
 
-function acceptablePath(path: string): boolean {
+/** The same path the server routes, under /api, never internal or testing. */
+export function acceptablePath(path: string): boolean {
   if (path.length < 5 || path.length > PATH_MAX) return false;
   if (path.includes("%") || path.includes("?") || path.includes("#") || path.includes("\\") || path.includes("..") || path.includes("//")) return false;
   // 2026-10-16 (security review): the server reads the path through the URL

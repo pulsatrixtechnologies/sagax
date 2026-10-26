@@ -203,21 +203,26 @@ process.stdout.write(typeof result === 'string' ? result : JSON.stringify(result
       SAGAX_CONTROL_PORT: String(controlPort),
       SAGAX_COMPANION_DIR: join(companionHome, "companion"),
     },
-    stdio: ["ignore", "inherit", "inherit"],
+    stdio: ["ignore", "pipe", "inherit"],
   });
-  await waitFor(`http://127.0.0.1:${controlPort}/state`, sidecar);
-  const { code } = await (await fetch(`http://127.0.0.1:${controlPort}/pairing`, { method: "POST" })).json() as { code: string };
+  // A standalone companion prints its control link with the per-launch token (OpenMausBot #2930 port).
+  let sidecarOut = "";
+  sidecar.stdout?.on("data", (chunk) => { sidecarOut += chunk; process.stdout.write(chunk); });
+  await waitFor(`http://127.0.0.1:${controlPort}/`, sidecar);
+  for (let attempt = 0; attempt < 50 && !/#token=[\w-]{43}/.test(sidecarOut); attempt++) await new Promise((resolve) => setTimeout(resolve, 100));
+  const controlToken = /#token=([\w-]{43})/.exec(sidecarOut)?.[1] ?? "";
+  const { code } = await (await fetch(`http://127.0.0.1:${controlPort}/pairing`, { method: "POST", headers: { "x-openmausbot-control-token": controlToken } })).json() as { code: string };
 
   console.log(JSON.stringify({
     harness: fixture.info.url,
     companion: `127.0.0.1:${companionPort}`,
-    control: `http://127.0.0.1:${controlPort}`,
+    control: `http://127.0.0.1:${controlPort}/#token=${controlToken}`,
     pairingCode: code,
     bot: { id: bot.id, threadId: bot.threadId },
     log: fixture.info.logPath,
   }, null, 2));
   console.log("Pair the Simulator with the address and code above. Allow computer view with:");
-  console.log(`  curl -X POST http://127.0.0.1:${controlPort}/devices/<device-id>/cloud-desktop`);
+  console.log(`  curl -X POST -H "x-openmausbot-control-token: ${controlToken}" http://127.0.0.1:${controlPort}/devices/<device-id>/cloud-desktop`);
   // What the phone has done to the desktop, and who holds the computer.
   const eventsPort = await freePort();
   createHttpServer(async (_req, res) => {

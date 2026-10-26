@@ -16,7 +16,7 @@ import { procSecretPath, resolvedReadRefusal, type ResolvedEnvironmentPath } fro
 export const USER_SANDBOX_TOOLS = [
   {
     name: "run_command",
-    description: "Run a bash command in your server environment (an isolated Linux machine of your own on the server; /workspace persists). Not your computer and not the Sagax server.",
+    description: "Run a bash command in your server environment (an isolated Linux machine of your own on the server; /workspace persists). Not your computer and not the Sagax server. Your bot's installed plugins are in /workspace/sagax-plugins/<plugin> (run their scripts there), and git and gh use the person's own GitHub connection when they connected one; when git or gh is not signed in, the fix is that connection (Connect apps > GitHub in Sagax): say so, never ask for gh auth login or a token. A sign-in the person made there themselves (gh auth login) is theirs and Sagax leaves it as is. When gh or git answers 404 or 403 for a repository of an organization, the GitHub token in use does not cover that organization: tell the person so in their language (your GitHub token does not cover the organization <name>: reconnect GitHub with access to organizations, Connect apps > GitHub), never a bare 404 or 403. Run commands yourself; never ask the person to run them.",
     inputSchema: {
       type: "object",
       properties: {

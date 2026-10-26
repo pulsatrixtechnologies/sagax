@@ -20,7 +20,7 @@ vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
   api: vi.fn(),
   useStore: () => ({
-    state: { appSettingsSection: fixture.section, instances: [], bots: [], groups: [], config: { features: fixture.features, viewer: fixture.viewer, rooms: { turnTimeoutMinutes: 5 }, composio: { mode: "self", configured: false }, ...Object.fromEntries(["openai", "anthropic", "xai", "openrouter", "mistral", "openaiCompat", "box", "vps", "opencodeGo"].map((key) => [key, { configured: false }])) } },
+    state: { appSettingsSection: fixture.section, instances: [], bots: [], groups: [], config: { features: fixture.features, viewer: fixture.viewer, rooms: { turnTimeoutMinutes: 5 }, ...Object.fromEntries(["openai", "anthropic", "xai", "openrouter", "mistral", "openaiCompat", "box", "vps", "opencodeGo"].map((key) => [key, { configured: false }])) } },
     dispatch: vi.fn(),
   }),
 }));
@@ -123,7 +123,6 @@ describe("an organization member", () => {
     const { memberHidesSection } = await import("./SettingsModal");
     const hidden = { editConfig: false, manageComputers: false, manageBackups: false, organization: true };
     expect(memberHidesSection("experimental", hidden)).toBe(true);
-    expect(memberHidesSection("connectedApps", hidden)).toBe(true);
     expect(memberHidesSection("decisionModel", hidden)).toBe(true);
     // 2026-10-15: Usage is the person's own (GET /api/me/usage): every member sees it
     expect(memberHidesSection("usage", hidden)).toBe(false);
@@ -202,31 +201,3 @@ describe("People and Installations are hidden in the app", () => {
   });
 });
 
-describe("Connected apps is experimental", () => {
-  // 2026-10-14: Connected apps is a card of Models and voice, shown with the experiment.
-  it("hides the Connected apps card until the experiment is on", async () => {
-    fixture.section = "connectedApps";
-    const off = await render();
-    expect(off).not.toContain("platform.composio.dev");
-    expect(off).not.toContain('<option value="connectedApps"');
-    fixture.features = { connectedApps: true };
-    const on = await render();
-    expect(on).toContain("platform.composio.dev");
-    expect(on).toContain('data-settings-card="connections.apps"');
-    expect(on).not.toContain('<option value="connectedApps"');
-    // never a bare "Not set": it says what is true
-    expect(on).toContain("data-connected-apps-state");
-    expect(on).not.toContain(">Not set<");
-    // an old link to the Composio card in Integrations lands on the same page
-    fixture.section = "connections";
-    expect(await render()).toContain("platform.composio.dev");
-  });
-
-  it("offers the switch under Experimental features, off by default", async () => {
-    fixture.section = "experimental";
-    const html = await render();
-    expect(html).toContain("data-experimental-connected-apps");
-    expect(html).toContain('aria-label="Turn on Connected apps"');
-    expect(html).toMatch(/aria-label="Turn on Connected apps"[^>]*aria-checked="false"|aria-checked="false"[^>]*aria-label="Turn on Connected apps"/);
-  });
-});

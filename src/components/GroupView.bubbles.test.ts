@@ -45,11 +45,13 @@ function rows(markup: string) {
   return [...markup.matchAll(/<div data-author="(\w+)" class="([^"]*)"/g)].map((match) => ({ author: match[1], cls: match[2] }));
 }
 
-/** The classes of the bubble that holds `text`. */
+/** The classes of the bubble that holds `text`. Anchored on data-chat-bubble
+ * (not rounded-[18px]) so it finds a flat bot line, which has no bubble shape. */
 function bubble(markup: string, text: string): string {
   const end = markup.indexOf(`>${text}<`);
-  const start = markup.lastIndexOf("rounded-[18px]", end);
-  return markup.slice(markup.lastIndexOf('class="', start), markup.indexOf('"', start));
+  const marker = markup.lastIndexOf('data-chat-bubble="true"', end);
+  const start = markup.indexOf('class="', marker) + 'class="'.length;
+  return markup.slice(start, markup.indexOf('"', start));
 }
 
 const memberConfig = { viewer: { operator: false, principalId: JC, email: "jc@example.com", name: "JC", role: "member", canCreateBots: true, operatorName: "JC" } } as ConfigStatus;
@@ -75,11 +77,14 @@ describe("group chat bubbles", () => {
     for (const row of rows(markup)) {
       expect(row.cls).toContain(row.author === "self" ? "items-end" : "items-start");
     }
-    // Your bubble is yours; another person's is the neutral one; a bot's is its card.
+    // Your bubble is yours; another person's is the neutral one; a bot reads
+    // flat like Grok Bot: no card, no bubble shape.
     expect(bubble(markup, "adawdawdawd")).toContain("bg-bubble-user");
     expect(bubble(markup, "Test zack")).toContain("bg-raised");
     expect(bubble(markup, "Test zack")).not.toContain("bg-bubble-user");
-    expect(bubble(markup, "Hi")).toContain("bg-card");
+    expect(bubble(markup, "Hi")).not.toContain("bg-card");
+    expect(bubble(markup, "Hi")).not.toContain("rounded-[18px]");
+    expect(bubble(markup, "Hi")).toContain("text-ink");
   });
 
   it("names each other person once per run, from the directory, with an avatar", () => {

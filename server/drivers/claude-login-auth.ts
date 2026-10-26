@@ -195,13 +195,23 @@ export class ClaudeLoginController {
     this.disposed = true;
     await this.cancel();
     this.flow = null;
+    // A sign-out cut short by this is still unwinding: return once it has released the credential home.
+    await this.signingOut?.catch(() => {});
   }
 
   /** Remove the sign-in Claude Code stores for this server account (its
    * configuration directory) so a different subscription can sign in. A
    * sign-in in progress is never pulled away underneath the browser
    * completing it, and the CLI's own status is the verdict, as for sign-in. */
+  private signingOut: Promise<void> | null = null;
+
   async signOut(): Promise<void> {
+    const run = this.runSignOut();
+    this.signingOut = run;
+    try { await run; } finally { if (this.signingOut === run) this.signingOut = null; }
+  }
+
+  private async runSignOut(): Promise<void> {
     if (this.disposed) throw new Error("This provider was removed. Refresh Settings before signing out.");
     if (this.flow?.status.phase === "waiting") throw new Error("Finish or cancel the Claude sign-in in progress before signing out.");
     await this.flow?.stopping;

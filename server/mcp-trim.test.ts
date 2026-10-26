@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_RESULT_BUDGET, trimResultText } from "./mcp-trim.ts";
 
+/** The kept body between the two banners. */
+const bodyOf = (text: string) => text.split("\n\n")[1]!;
+
 const product = (i: number) => ({
   id: `p${i}`,
   name: `Protein Bar ${i}`,
@@ -28,7 +31,7 @@ describe("trimResultText", () => {
     expect(out.text.length).toBeLessThan(DEFAULT_RESULT_BUDGET);
     expect(out.originalChars).toBe(text.length);
 
-    const kept = JSON.parse(out.text.slice(0, out.text.indexOf("\n\n[Sagax")));
+    const kept = JSON.parse(bodyOf(out.text));
     // whole records, not a severed one
     expect(kept.products.length).toBeGreaterThan(0);
     expect(kept.products.length).toBeLessThan(200);
@@ -49,7 +52,7 @@ describe("trimResultText", () => {
       dishes: Array.from({ length: 60 }, (_, i) => product(i)),
     });
     const out = trimResultText({ text });
-    const kept = JSON.parse(out.text.slice(0, out.text.indexOf("\n\n[Sagax")));
+    const kept = JSON.parse(bodyOf(out.text));
     expect(kept.restaurants.length).toBeGreaterThan(0);
     expect(kept.dishes.length).toBeGreaterThan(0);
   });
@@ -57,7 +60,7 @@ describe("trimResultText", () => {
   it("trims a bare array root", () => {
     const text = JSON.stringify(Array.from({ length: 200 }, (_, i) => product(i)));
     const out = trimResultText({ text });
-    const kept = JSON.parse(out.text.slice(0, out.text.indexOf("\n\n[Sagax")));
+    const kept = JSON.parse(bodyOf(out.text));
     expect(Array.isArray(kept)).toBe(true);
     expect(kept.length).toBeLessThan(200);
     expect(kept[0]).toEqual(product(0));
@@ -92,7 +95,7 @@ describe("trimResultText", () => {
   it("never cuts a surrogate pair in half", () => {
     const text = `${"🍵".repeat(20_000)}`;
     const out = trimResultText({ text, budget: 4_000 });
-    const body = out.text.slice(0, out.text.indexOf("\n\n[Sagax"));
+    const body = bodyOf(out.text);
     expect([...body].every((ch) => ch === "🍵")).toBe(true);
   });
 
@@ -108,5 +111,35 @@ describe("trimResultText", () => {
   it("survives a result whose text is empty or tiny", () => {
     expect(trimResultText({ text: "" }).trimmed).toBe(false);
     expect(trimResultText({ text: "ok" }).text).toBe("ok");
+  });
+
+  it("puts the same truncation banner at the start and at the end", () => {
+    const layers = Array.from({ length: 110 }, (_, i) => ({ id: i, name: `Layer ${i}`, blob: "x".repeat(500) }));
+    const out = trimResultText({ text: JSON.stringify({ layers }) });
+    const [first, body, last] = out.text.split("\n\n");
+    expect(first).toBe(last);
+    expect(first).toMatch(/^⚠️ TRUNCATED by Sagax: kept layers \d+ of 110 \(/);
+    expect(first).toContain("The rest was NOT shown");
+    expect(first).toContain("never assume you saw everything");
+    expect(out.text).not.toContain("OpenMausBot");
+    expect(JSON.parse(body!).layers.length).toBeLessThan(110);
+    expect(out.text.length).toBeLessThanOrEqual(DEFAULT_RESULT_BUDGET);
+    // the kept payload comes back parsed, for a structuredContent twin
+    expect((out.value as { layers: unknown[] }).layers.length).toBe(JSON.parse(body!).layers.length);
+  });
+
+  it("says a mid-text cut is mid-way, at both ends", () => {
+    const out = trimResultText({ text: "y".repeat(50_000) });
+    const banner = out.text.split("\n\n")[0]!;
+    expect(banner).toContain("cut mid-way");
+    expect(out.text.endsWith(banner)).toBe(true);
+    expect(out.value).toBeUndefined();
+    expect(out.text.length).toBeLessThanOrEqual(DEFAULT_RESULT_BUDGET);
+  });
+
+  it("uses the short banner when the budget is too small for two full ones", () => {
+    const out = trimResultText({ text: "z".repeat(5_000), budget: 600 });
+    expect(out.text.split("\n\n")[0]).toContain("Narrow the call or page.");
+    expect(out.text.length).toBeLessThanOrEqual(600);
   });
 });

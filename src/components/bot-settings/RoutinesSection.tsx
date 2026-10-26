@@ -2,10 +2,11 @@
 // (New schedule); a row opens the routine's page, which holds Run now, Pause
 // or Resume, Edit, the run logs and Delete.
 import { CalendarClock, ChevronLeft, FileText, PanelRight, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useStore, type Bot } from "@/state/store";
+import { useEffect, useRef, useState } from "react";
+import { api, useStore, type Bot } from "@/state/store";
 import type { Routine, RoutineRun, RoutineRunOn } from "@/lib/routines";
 import { t } from "@/lib/i18n";
+import { flipRoutine } from "@/lib/routine-toggle";
 import { cn } from "@/lib/cn";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { useCaptionChrome, useMacInsetChrome } from "../DesktopCapabilities";
@@ -37,6 +38,10 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
   const [detailId, setDetailId] = useState<string | null>(null);
   const detail = routines.find((routine) => routine.id === detailId) ?? null;
   const toggle = (routine: Routine) => dispatch({ type: "updateRoutine", routineId: routine.id, patch: { enabled: !routine.enabled } });
+  // List switch: shown at once, put back with a readable message when the
+  // server refuses. One request per routine at a time.
+  const pending = useRef(new Set<string>());
+  const flip = (routine: Routine) => flipRoutine(routine, pending.current, api, dispatch);
   // A routine line in the conversation asked for this routine's page.
   const focus = state.routineFocus;
   useEffect(() => {
@@ -73,7 +78,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
       <h2 className="min-w-0 flex-1 text-[13px] font-normal leading-[18px] text-ink-secondary">{t("computer.tab.routines")}</h2>
       <button type="button" onClick={() => setEditing("new")} aria-label={t("computer.routines.create")} title={t("computer.routines.create")} className="ui-icon-button"><Plus size={15} /></button>
     </div>
-    <RoutineList routines={routines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={runs} loading={state.routinesLoadState === "loading" && routines.length === 0} error={state.routinesLoadState === "error"} onOpen={(routine) => setDetailId(routine.id)} grouped={grouped} toggle={false} />
+    <RoutineList routines={routines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={runs} loading={state.routinesLoadState === "loading" && routines.length === 0} error={state.routinesLoadState === "error"} onOpen={(routine) => setDetailId(routine.id)} grouped={grouped} onToggle={(routine) => void flip(routine)} />
     {editing === "new" && <RoutineEditor key={`${bot.id}-new`} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} onClose={() => setEditing(null)} />}
   </div>;
 }

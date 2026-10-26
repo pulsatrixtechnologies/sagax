@@ -43,8 +43,10 @@ import {
 } from "@/lib/memory";
 import { roomMemoryCaptureEnabled } from "@/lib/feature-flags";
 import { canEditConfig } from "@/lib/viewer";
+import { canEditBotField } from "@/lib/bot-capabilities";
+import { teamMemorySharingOf } from "../../../shared/team-memory-sharing";
 import { api, ApiError, useStore, type Bot, type ConfigStatus } from "@/state/store";
-import { HelpTip, PILL, SwitchRow } from "../SettingsPrimitives";
+import { HelpTip, PILL, PillSelect, SettingRow, SwitchRow } from "../SettingsPrimitives";
 import { AdvancedFold } from "./AdvancedFold";
 import { MarkdownEditor } from "../markdown/MarkdownEditor";
 import { inputCls } from "./field";
@@ -83,6 +85,29 @@ export function MemoryToggleCard({ enabled, busy, onToggle }: { enabled: boolean
         disabled={busy}
         onChange={onToggle}
       />
+    </PaneSection>
+  );
+}
+
+/** Team memory, apart from this bot's own memory and anyone's personal
+ * memory: who gets the "Remember this for the team?" cards this bot
+ * proposes. Shared (the default): every member of its section. Private:
+ * only the people who see this bot and the conversation. */
+export function TeamMemorySharingCard({ value, disabled, onChange }: { value: "shared" | "private"; disabled?: boolean; onChange: (next: "shared" | "private") => void }) {
+  return (
+    <PaneSection>
+      <SettingRow title={t("botPanel.teamMemorySharing")} subtitle={t("botPanel.teamMemorySharing.help")} className="px-0 py-0">
+        <PillSelect<"shared" | "private">
+          ariaLabel={t("botPanel.teamMemorySharing")}
+          value={value}
+          disabled={disabled}
+          onChange={onChange}
+          options={[
+            { value: "shared", label: t("botPanel.teamMemorySharing.shared") },
+            { value: "private", label: t("botPanel.teamMemorySharing.private") },
+          ]}
+        />
+      </SettingRow>
     </PaneSection>
   );
 }
@@ -472,6 +497,11 @@ export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; acti
   return (
     <div className="flex flex-col gap-5">
       <MemoryToggleCard enabled={bot.memoryEnabled !== false} busy={Boolean(bot.busy)} onToggle={onToggle} />
+      <TeamMemorySharingCard
+        value={teamMemorySharingOf(bot)}
+        disabled={!canEditBotField(state.config, bot, "teamMemorySharing")}
+        onChange={(next) => dispatch({ type: "updateBot", botId: bot.id, patch: { teamMemorySharing: next } })}
+      />
 
       {lendingReview && (
         <LendingReviewNotice
@@ -623,6 +653,9 @@ export function MemoryUpkeepCard({
     ? t("botPanel.memory.lastTidy", { when: relativeTime(status.lastTidy.at), summary: tidySummary(status.lastTidy).toLowerCase() })
     : t("botPanel.memory.notTidied");
   const noticed = status?.lastCapture ? noticedCount(status.lastCapture) : 0;
+  // the receipt's other half (parity M3): what the capture found already there
+  const known = status?.lastCapture?.known ?? 0;
+  const knownText = known ? t(known === 1 ? "botPanel.memory.knownOne" : "botPanel.memory.knownMany", { count: String(known) }) : "";
   return (
     <PaneSection title={t("botPanel.memory.upkeep")}>
       <SwitchRow
@@ -663,8 +696,10 @@ export function MemoryUpkeepCard({
               ? t(noticed === 1 ? "botPanel.memory.noticedOne" : "botPanel.memory.noticedMany", {
                 count: String(noticed),
                 when: relativeTime(status.lastCapture.at),
-              })
-              : ""}
+              }) + knownText
+              : status?.lastCapture && known
+                ? t("botPanel.memory.nothingNew", { when: relativeTime(status.lastCapture.at) }) + knownText
+                : ""}
           </span>
         </div>
       )}

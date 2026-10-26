@@ -57,5 +57,11 @@ export interface Notification {
    * and the click opens this run in the bot's Coding activity, which shows
    * the same card to its audience only (server/routes/bot-activity.ts). */
   routineRunId?: string;
+  /** A finished routine: the phone's banner can name it. */
+  routineName?: string;
+  /** Allow from the phone notification must open Sagax. This class needs
+   * the person's security key. Absent means the lock-screen Allow may
+   * answer in the background, after the phone itself has unlocked. */
+  needsKey?: boolean;
 }
 

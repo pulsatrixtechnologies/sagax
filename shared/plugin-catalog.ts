@@ -9,6 +9,16 @@ import catalog from "./plugin-catalog.json" with { type: "json" };
 
 export const PLUGIN_AUTH = ["oauth", "api-key", "none"] as const;
 
+/** A provider that serves each region at its own address (2026-10-21, parity
+ * with "Choose your data center"): the person picks one before connecting.
+ * `url` above stays the default region's address. */
+export const pluginRegionSchema = z.object({
+  id: z.string().regex(/^[a-z0-9-]{1,32}$/),
+  label: z.string().min(1).max(40),
+  url: z.string().url().refine((value) => value.startsWith("https://"), { error: "url must be https" }),
+}).strict();
+export type PluginRegion = z.infer<typeof pluginRegionSchema>;
+
 export const pluginCatalogEntrySchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/),
   name: z.string().min(1).max(60),
@@ -25,6 +35,8 @@ export const pluginCatalogEntrySchema = z.object({
   clientId: z.string().min(1).max(512).optional(),
   /** For auth "api-key": the header the key goes in. */
   apiKeyHeader: z.string().regex(/^[A-Za-z0-9-]{1,64}$/).optional(),
+  /** Regional addresses, the default (`url`) among them. */
+  regions: z.array(pluginRegionSchema).min(2).max(8).optional(),
 }).strict();
 
 export type PluginCatalogEntry = z.infer<typeof pluginCatalogEntrySchema>;
@@ -39,6 +51,8 @@ export const pluginCatalogSchema = z.object({
     if (ids.has(plugin.id)) ctx.addIssue({ code: "custom", path: ["plugins", index, "id"], message: `duplicate id ${plugin.id}` });
     if (urls.has(plugin.url)) ctx.addIssue({ code: "custom", path: ["plugins", index, "url"], message: `duplicate url ${plugin.url}` });
     if (plugin.auth === "api-key" && !plugin.apiKeyHeader) ctx.addIssue({ code: "custom", path: ["plugins", index], message: "api-key needs apiKeyHeader" });
+    if (plugin.regions && !plugin.regions.some((region) => region.url === plugin.url)) ctx.addIssue({ code: "custom", path: ["plugins", index, "regions"], message: "regions must include the default url" });
+    if (plugin.regions && new Set(plugin.regions.map((region) => region.id)).size !== plugin.regions.length) ctx.addIssue({ code: "custom", path: ["plugins", index, "regions"], message: "duplicate region id" });
     ids.add(plugin.id);
     urls.add(plugin.url);
   }

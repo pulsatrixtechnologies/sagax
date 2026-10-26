@@ -20,6 +20,7 @@ describe("an artifact's document", () => {
     const bridge = artifactBridge(null, null);
     expect(bridge).toContain("if(event.source!==parent)return;");
     expect(bridge).toContain('m.type!=="sagax-artifact-data"');
+    expect(bridge).toContain('parent.postMessage({type:"sagax-artifact-error"}');
     expect(bridge).toContain("data:null,updatedAt:null");
   });
 

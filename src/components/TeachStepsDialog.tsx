@@ -35,10 +35,30 @@ function download(name: string, text: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
+/** A screen step's window title: recorded from the computer, the person
+ * may change it or take it out before saving (parity R7 review). */
+function WindowField({ step, onChange }: { step: TeachStep; onChange: (next: TeachStep) => void }) {
+  if (!step.window) return <span className="truncate text-[11px] text-ink-secondary">{t("teach.field.screen")}{step.point ? ` · ${Math.round(step.point.x * 100)}%, ${Math.round(step.point.y * 100)}%` : ""}</span>;
+  return <span className="flex min-w-0 items-center gap-1" data-teach-window="">
+    <input className={`${input} text-[11px]`} aria-label={t("teach.field.window")} value={step.window} maxLength={120} onChange={(e) => onChange({ ...step, window: e.target.value })} />
+    {step.point && <span className="shrink-0 text-[11px] tabular-nums text-ink-secondary">{Math.round(step.point.x * 100)}%, {Math.round(step.point.y * 100)}%</span>}
+    <button type="button" className={iconButton} aria-label={t("teach.field.removeWindow")} title={t("teach.field.removeWindow")} data-teach-window-remove=""
+      onClick={() => { const next = { ...step }; delete next.window; onChange(next); }}><X size={12} /></button>
+  </span>;
+}
+
 /** One step's editable fields: what the bot will do there. */
 function StepFields({ step, onChange }: { step: TeachStep; onChange: (next: TeachStep) => void }) {
   if (step.kind === "open" || step.kind === "tab") {
     return <input className={input} aria-label={t("teach.field.url")} value={step.url ?? ""} spellCheck={false} onChange={(e) => onChange({ ...step, url: e.target.value })} />;
+  }
+  if (step.kind === "click" && step.screen) {
+    // a click on the computer's screen: name what is there, the window and position stay
+    return <span className="flex min-w-0 flex-1 flex-col gap-1">
+      <WindowField step={step} onChange={onChange} />
+      <input className={input} aria-label={t("teach.field.element")} value={step.target?.name ?? ""} placeholder={t("teach.field.screenSpot")}
+        onChange={(e) => onChange({ ...step, target: { role: step.target?.role ?? "", tag: step.target?.tag ?? "", name: e.target.value } })} />
+    </span>;
   }
   if (step.kind === "click") {
     return <input className={input} aria-label={t("teach.field.element")} value={step.target?.name ?? ""} placeholder={step.target?.role || t("teach.field.element")}
@@ -46,9 +66,9 @@ function StepFields({ step, onChange }: { step: TeachStep; onChange: (next: Teac
   }
   if (step.kind === "type") {
     return <span className="flex min-w-0 flex-1 flex-col gap-1">
-      <span className="truncate text-[11px] text-ink-secondary">{step.target?.name || step.target?.role || t("teach.field.field")}</span>
+      {step.screen ? <WindowField step={step} onChange={onChange} /> : <span className="truncate text-[11px] text-ink-secondary">{step.target?.name || step.target?.role || t("teach.field.field")}</span>}
       {step.secret
-        ? <span data-teach-secret="" className="text-[12px] text-ink-secondary">{t("teach.secret")}</span>
+        ? <span data-teach-secret="" className="text-[12px] text-ink-secondary">{t(step.screen ? "teach.screenTyped" : "teach.secret")}</span>
         : <input className={input} aria-label={t("teach.field.text")} value={step.text ?? ""} maxLength={TEACH_TEXT_MAX} onChange={(e) => onChange({ ...step, text: e.target.value })} />}
     </span>;
   }
@@ -116,7 +136,7 @@ export function TeachStepsDialog({ botId, botName, steps: recorded, recordedAt, 
       <button type="button" className="self-end rounded-lg bg-accent px-4 py-2 text-[12px] font-medium text-accent-ink" onClick={() => dialog.current?.close()}>{t("teach.done")}</button>
     </div> : <>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
-        <p className="text-[12px] leading-relaxed text-ink-secondary">{t("teach.intro", { bot: botName })}</p>
+        <p className="text-[12px] leading-relaxed text-ink-secondary">{t(steps.some((step) => step.screen) ? "teach.introScreen" : "teach.intro", { bot: botName })}</p>
         <label className="flex flex-col gap-1 text-[12px]"><span className="font-medium">{t("teach.name")}</span>
           <input className={input} value={title} maxLength={80} placeholder={t("teach.namePlaceholder")} onChange={(e) => setTitle(e.target.value)} /></label>
         <label className="flex flex-col gap-1 text-[12px]"><span className="font-medium">{t("teach.description")}</span>

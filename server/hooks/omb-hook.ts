@@ -1,5 +1,5 @@
 // omb-hook — the one command Sagax registers for Claude Code hooks
-// (PostToolUse, PreCompact, SessionStart, Stop). Claude Code runs it with the
+// (PostToolUse, PostToolUseFailure, PreCompact, SessionStart). Claude Code runs it with the
 // hook's JSON on stdin and waits for it, so it obeys three rules learned
 // the hard way by other harnesses:
 //

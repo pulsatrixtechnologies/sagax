@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildApnsRequest, collapseId, NUDGE_SOUND, type PushMessage } from "./payload.ts";
+import { APPROVAL_SOUND, buildApnsRequest, collapseId, NUDGE_SOUND, pushCategory, type PushMessage } from "./payload.ts";
 
 const message = (patch: Partial<PushMessage> = {}): PushMessage => ({
   kind: "message",
@@ -153,13 +153,54 @@ describe("APNs payload", () => {
 describe("an approval push", () => {
   it("shows the bot as sender and, under it, what it would allow; the tap carries the request", () => {
     const request = buildApnsRequest({
-      message: message({ kind: "approval", title: "Allow Cryptic to run a command?", body: "Run echo hi.", senderName: "Cryptic", botId: "b1", requestId: "req-1" }),
+      message: message({ kind: "approval", prompt: "approval", title: "Allow Cryptic to run a command?", body: "Run echo hi.", senderName: "Cryptic", botId: "b1", requestId: "req-1" }),
       bundleId: "ca.pulsatrix.sagax", nowMs: 2_000_000,
     });
     const body = JSON.parse(request.body);
     expect(body.aps.alert).toEqual({ title: "Cryptic", subtitle: "Allow Cryptic to run a command?", body: "Run echo hi." });
     expect(body.aps.category).toBe("SAGAX_APPROVAL");
+    expect(body.aps.sound).toBe(APPROVAL_SOUND);
     expect(body.requestId).toBe("req-1");
+    expect(body.prompt).toBe("approval");
+  });
+  it("a key-protected approval opens the app, and a question has no actions", () => {
+    const keyed = JSON.parse(buildApnsRequest({
+      message: message({ kind: "approval", prompt: "approval", needsKey: true, requestId: "req-2", title: "Allow?" }),
+      bundleId: "x", nowMs: 0,
+    }).body);
+    expect(keyed.aps.category).toBe("SAGAX_APPROVAL_KEY");
+    expect(keyed.needsKey).toBe(true);
+    expect(pushCategory({ kind: "approval", prompt: "question" })).toBe("SAGAX_UPDATE");
+    const question = JSON.parse(buildApnsRequest({
+      message: message({ kind: "approval", prompt: "question", requestId: "q1", title: "Which?" }),
+      bundleId: "x", nowMs: 0,
+    }).body);
+    expect(question.aps.category).toBe("SAGAX_UPDATE");
+    expect(question.aps.sound).toBe("default");
+    expect(question.needsKey).toBeUndefined();
+  });
+  it("the approval chime follows the phone's switch, and silence wins", () => {
+    const plain = JSON.parse(buildApnsRequest({
+      message: message({ kind: "approval", prompt: "approval" }),
+      bundleId: "x", settings: { approvalChime: false }, nowMs: 0,
+    }).body);
+    expect(plain.aps.sound).toBe("default");
+    const quiet = JSON.parse(buildApnsRequest({
+      message: message({ kind: "approval", prompt: "approval" }),
+      bundleId: "x", settings: { sound: false }, nowMs: 0,
+    }).body);
+    expect(quiet.aps.sound).toBeUndefined();
+  });
+  it("a finished routine names itself under the bot", () => {
+    const body = JSON.parse(buildApnsRequest({
+      message: message({ kind: "message", routineName: "Morning brief", routineRunId: "run-1", senderName: "Scout", botId: "b1" }),
+      bundleId: "x", nowMs: 0,
+    }).body);
+    expect(body.aps.alert.subtitle).toBe("Open routine Morning brief");
+    expect(body.aps.alert["subtitle-loc-key"]).toBe("Open routine %@");
+    expect(body.aps.alert["subtitle-loc-args"]).toEqual(["Morning brief"]);
+    expect(body.routineRunId).toBe("run-1");
+    expect(body.aps.category).toBe("SAGAX_UPDATE");
   });
   it("adds no subtitle to other pushes", () => {
     const body = JSON.parse(buildApnsRequest({ message: message({ senderName: "Alice" }), bundleId: "ca.pulsatrix.sagax", nowMs: 2_000_000 }).body);

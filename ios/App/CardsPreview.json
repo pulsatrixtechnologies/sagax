@@ -16,7 +16,7 @@
     "model": "preview"
    },
    "createdAt": 1787000000000,
-   "activeLeafId": "c-approval",
+   "activeLeafId": "c-q-done",
    "tasks": [
     {
      "threadId": "preview-thread-scout",
@@ -178,6 +178,112 @@
      "id": "c-approval",
      "at": 1787028800000,
      "parentId": "c-question"
+    },
+    {
+     "kind": "text",
+     "text": "J'ai trouvé deux webhooks actifs sur ce compte : « Billets entrants » et « Facturation ».\n\nIls envoient encore des appels toutes les cinq minutes.",
+     "role": "bot",
+     "id": "c-q-text",
+     "at": 1787028830000,
+     "parentId": "c-approval"
+    },
+    {
+     "kind": "options",
+     "card": {
+      "title": "Je mets en pause mes deux webhooks ?",
+      "subtitle": "",
+      "options": [
+       "Oui, mets-les en pause",
+       "Non, garde-les actifs"
+      ],
+      "requestId": "preview-flat"
+     },
+     "role": "bot",
+     "id": "c-q-flat",
+     "at": 1787028860000,
+     "parentId": "c-q-text"
+    },
+    {
+     "kind": "options",
+     "card": {
+      "title": "Je préviens Melonie ?",
+      "subtitle": "",
+      "options": [
+       "Oui",
+       "Non"
+      ],
+      "requestId": "preview-flat-done",
+      "answered": "Non",
+      "answeredText": "Non"
+     },
+     "role": "bot",
+     "id": "c-q-flat-done",
+     "at": 1787028890000,
+     "parentId": "c-q-flat"
+    },
+    {
+     "kind": "options",
+     "card": {
+      "title": "Your bot has a question",
+      "subtitle": "",
+      "options": [],
+      "requestId": "preview-multi",
+      "questionRequest": {
+       "version": 1,
+       "questions": [
+        {
+         "question": "Quels webhooks je mets en pause ?",
+         "multiSelect": true,
+         "options": [
+          {
+           "label": "Billets entrants"
+          },
+          {
+           "label": "Facturation"
+          },
+          {
+           "label": "Alertes RMM"
+          }
+         ]
+        }
+       ]
+      }
+     },
+     "role": "bot",
+     "id": "c-q-multi",
+     "at": 1787028920000,
+     "parentId": "c-q-flat-done"
+    },
+    {
+     "kind": "options",
+     "card": {
+      "title": "Your bot has a question",
+      "subtitle": "",
+      "options": [],
+      "requestId": "preview-q-done",
+      "answered": "answer",
+      "answeredText": "The user answered your questions.\n\nQ: Je mets en pause mes deux webhooks ?\nA: Oui, mets-les en pause",
+      "questionRequest": {
+       "version": 1,
+       "questions": [
+        {
+         "question": "Je mets en pause mes deux webhooks ?",
+         "options": [
+          {
+           "label": "Oui, mets-les en pause"
+          },
+          {
+           "label": "Non, garde-les actifs"
+          }
+         ]
+        }
+       ]
+      }
+     },
+     "role": "bot",
+     "id": "c-q-done",
+     "at": 1787028950000,
+     "parentId": "c-q-multi"
     }
    ],
    "pinned": true

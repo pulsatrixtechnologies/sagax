@@ -4,19 +4,21 @@
 // tabs), full screen over the chat.
 //
 //   header   the mascot (a tap opens the avatar editor, a long press the
-//            owl's moves and style), the name and label, each edited where
-//            it shows and saved on leaving the field. Description lives
-//            in Edit persona.
-//   top bar  Close, and the bot's one "..." menu (`BotActionsMenu.tsx`,
+//            owl's moves and style), the name (edited where it shows) and
+//            an "Edit" pill. Title and description live in Edit bot.
+//   top bar  Back, Share (a link that opens the bot in Sagax on a
+//            computer), and the bot's one "..." menu (`BotActionsMenu.tsx`,
 //            #518): Edit bot, Rename, Primary Bot; Export the conversation
 //            (copy, download) and the bot (.zip); Archive
-//   tabs     Details (Coding, Activity, Routines) | Library (Files: the
-//            conversation's files by kind and the bot's links; Skills;
-//            Plugins) | Computer (the live computer, embedded), the
-//            desktop's three (no More tab)
-//   Edit bot under "..." and as a pencil on the mascot (the desktop
-//            has no labeled button under the tabs). The editor lists its six
-//            groups (`DesktopPanelGroup`); a group shows its sections.
+//   overview one grouped list (the reference design): Coding (n working,
+//            the Coding and Activity card), Routines (n on), Library
+//            (Files: the conversation's files by kind and the bot's links;
+//            Skills; Plugins) and Computer (its state), each its own page:
+//            the desktop's three tabs, Details split in two. Then the
+//            Notifications switch with its caption.
+//   Edit bot under "..." and as the "Edit" pill. The editor starts with
+//            the avatar, Name, Title, Description, Appearance and Voice calls, then lists
+//            its groups (`PhoneBotEditGroup`, the desktop's order); a row opens its page.
 //
 // Which tabs and sections a pairing shows is `DesktopPanelTab` /
 // `DesktopPanelSection` / `DesktopPersonaEditor` (CompanionCore, from
@@ -49,9 +51,10 @@ private struct PhoneBotPanelContent: View {
 
     let bot: Bot
 
-    @State private var tab: DesktopPanelTab
     @State private var path = NavigationPath()
     @State private var slackURL: URL?
+    /// B21 / CO5 (2026-10-21): the bot's own address from the Perspicax relay.
+    @State private var mailRow: BotInboundMailRow?
     @State private var viewerId = "local-owner"
     @State private var menuOpen = false
     @State private var toast: String?
@@ -63,8 +66,6 @@ private struct PhoneBotPanelContent: View {
     @State private var pickingPrimary = false
     @State private var primaryWorking = false
     @State private var sharedFile: IdentifiedURL?
-    @State private var query = ""
-    @State private var scrollToRoutines = 0
     @StateObject private var owlHandle = OwlMascotHandle()
     @State private var draft: CharacterDraft
     @State private var libraryStart: BotLibraryChip = .files(.all)
@@ -80,13 +81,20 @@ private struct PhoneBotPanelContent: View {
 
     init(bot: Bot, startTab: DesktopPanelTab, startSection: DesktopPanelSection? = nil) {
         self.bot = bot
-        _tab = State(initialValue: startTab)
         // a deep link lands on the section with Edit persona under it (Back
         // returns to the persona list, as a tap through it would)
         var start = NavigationPath()
         if let startSection {
             start.append(PanelPersonaRoute())
             start.append(startSection)
+        } else {
+            // a door that names Library or Computer opens that page over
+            // the overview, so Back lands on the overview list
+            switch startTab {
+            case .library: start.append(PanelOverviewPage.library)
+            case .computer: start.append(PanelComputerRoute())
+            case .details: break
+            }
         }
         _path = State(initialValue: start)
         _draft = State(initialValue: CharacterDraft(bot: bot))
@@ -111,6 +119,7 @@ private struct PhoneBotPanelContent: View {
                     }
                 }
                 .navigationDestination(for: PanelComputerRoute.self) { _ in ComputerView(bot: current) }
+                .navigationDestination(for: PanelOverviewPage.self) { page in AnyView(overviewPage(page)) }
                 .navigationDestination(for: PanelPersonaRoute.self) { _ in AnyView(personaPage) }
         }
         .tint(Theme.accentText)
@@ -176,6 +185,7 @@ private struct PhoneBotPanelContent: View {
             await loadRoutines()
             viewerId = PrimaryBotRules.viewerId(config: await config)
             if gate.allows(.botSlack) { slackURL = await session.profileClient?.slackManagementURL(botId: bot.id) }
+            mailRow = await session.profileClient?.botInboundMail(botId: bot.id)
             #if DEBUG
             await applyParityScreen()
             #endif
@@ -187,30 +197,27 @@ private struct PhoneBotPanelContent: View {
     private var root: some View {
         ZStack(alignment: .top) {
             Theme.bg.ignoresSafeArea()
-            GeometryReader { proxy in
-                ScrollViewReader { reader in
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            AnyView(identity)
-                            AnyView(tabBar)
-                                .padding(.top, 24)
-                            AnyView(tabBody(width: proxy.size.width))
-                                .padding(.top, 20)
-                            Color.clear.frame(height: 1).id("panel-end")
-                        }
-                        .padding(.top, 64)
-                        .padding(.bottom, 48)
+            ScrollView {
+                VStack(spacing: 0) {
+                    AnyView(identity)
+                    BotPanelNoticesView(bot: current)
+                        .padding(.top, 20)
+                    AnyView(overviewCard)
+                        .padding(.top, 8)
+                    if let mailRow {
+                        AnyView(emailCard(mailRow))
+                            .padding(.top, Theme.Profile.cardGap + 12)
                     }
-                    .scrollIndicators(.visible)
-                    .scrollDismissesKeyboard(.interactively)
-                    // the embedded computer is a trackpad: it takes the drags
-                    .scrollDisabled(tab == .computer)
-                    .accessibilityIdentifier("profile-scroll")
-                    .onValueChange(of: scrollToRoutines) { _ in
-                        reader.scrollTo("profile-routines-anchor", anchor: .top)
-                    }
+                    AnyView(notificationsCard)
+                        .padding(.top, Theme.Profile.cardGap + 12)
+                    Color.clear.frame(height: 1).id("panel-end")
                 }
+                .padding(.top, 64)
+                .padding(.bottom, 48)
             }
+            .scrollIndicators(.visible)
+            .scrollDismissesKeyboard(.interactively)
+            .accessibilityIdentifier("profile-scroll")
             ProfileTopFade().ignoresSafeArea()
             AnyView(topBar)
             if menuOpen {
@@ -244,12 +251,20 @@ private struct PhoneBotPanelContent: View {
 
     // MARK: Top bar
 
+    /// Back, then share and "...", each a round glass button (the
+    /// reference design's bot detail).
     private var topBar: some View {
         HStack(spacing: Theme.Metric.controlGap) {
-            GlassCircleButton(systemImage: "xmark", accessibilityLabel: "Close", glyphSize: 16) { dismiss() }
+            GlassCircleButton(
+                systemImage: "chevron.left", accessibilityLabel: "Back",
+                glyphSize: 18, glyphOffset: CGSize(width: 0.85, height: -0.25)
+            ) { dismiss() }
                 .chatGlassRim(Circle())
                 .accessibilityIdentifier("panel-close")
             Spacer()
+            ShareGlassButton { shareBot() }
+                .accessibilityLabel(Text("Share"))
+                .accessibilityIdentifier("panel-share")
             GlassCircleButton(systemImage: "ellipsis", accessibilityLabel: "Bot menu", glyphSize: 15, weight: .semibold) {
                 withAnimation(.snappy(duration: 0.22)) { menuOpen.toggle() }
             }
@@ -321,110 +336,205 @@ private struct PhoneBotPanelContent: View {
 
     // MARK: Identity
 
+    /// The big mascot (a tap opens the avatar editor), the name (edited in
+    /// place) and the "Edit" pill that opens the bot's editor.
     private var identity: some View {
         VStack(spacing: 0) {
-            ZStack(alignment: .topTrailing) {
-                BotMascotView(bot: current, size: Theme.Profile.mascot, state: MausState.forChat(.bot(current), in: session.state),
-                              animated: true, owlHandle: owlHandle)
-                    .contentShape(Rectangle())
-                    // a tap opens the character editor, as the desktop's mascot does
-                    .onTapGesture {
-                        Haptics.selection()
-                        editingAvatar = true
-                    }
-                    .contextMenu {
-                        CharacterMovesMenu(
-                            look: draft.complete,
-                            onMove: { owlHandle.flourish($0) },
-                            onShapeMove: { owlHandle.shape($0) }
-                        )
-                    }
-                    .accessibilityLabel(Text("Edit avatar"))
-                    .accessibilityIdentifier("profile-mascot")
-                    .accessibilityAddTraits(.isButton)
-                if !sections.isEmpty {
-                    Button(action: openPersona) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                            .frame(width: 28, height: 28)
-                            .background(Theme.card, in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .offset(x: 6, y: -4)
-                    .accessibilityLabel(Text("Edit bot"))
-                    .accessibilityIdentifier("panel-edit-persona")
-                }
-            }
-            ProfileCard {
-                PhoneInlineText(value: current.name, placeholder: nil, label: "Edit name", font: Theme.Font.profileName,
-                                required: true, limit: 100, id: "profile-name") { save(name: $0) }
-                    .frame(minHeight: Theme.Profile.nameRow)
-                ProfileDivider(leading: Theme.Profile.textInset)
-                PhoneInlineText(value: current.title, placeholder: "Add a label", label: "Edit label",
-                                font: .system(size: 13), muted: true, limit: 200, id: "profile-role") { save(title: $0) }
-                    .frame(minHeight: Theme.Profile.roleRow)
-            }
-            .padding(.top, 20)
-        }
-    }
-
-    // MARK: Tabs
-
-    private var tabBar: some View {
-        HStack(spacing: 4) {
-            ForEach(tabs) { item in
-                let selected = tab == item
-                Button {
+            BotMascotView(bot: current, size: 112, state: MausState.forChat(.bot(current), in: session.state),
+                          animated: true, owlHandle: owlHandle)
+                .contentShape(Rectangle())
+                // a tap opens the character editor, as the desktop's mascot does
+                .onTapGesture {
                     Haptics.selection()
-                    tab = item
-                } label: {
-                    Text(item.title)
-                        .font(Theme.Font.tab)
-                        .foregroundStyle(selected ? Theme.textPrimary : Theme.textTertiary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 34)
-                        .background(selected ? Theme.cardRaised : Color.clear, in: Capsule())
+                    editingAvatar = true
+                }
+                .contextMenu {
+                    CharacterMovesMenu(
+                        look: draft.complete,
+                        onMove: { owlHandle.flourish($0) },
+                        onShapeMove: { owlHandle.shape($0) }
+                    )
+                }
+                .accessibilityLabel(Text("Edit avatar"))
+                .accessibilityIdentifier("profile-mascot")
+                .accessibilityAddTraits(.isButton)
+            PhoneInlineText(value: current.name, placeholder: nil, label: "Edit name", font: Theme.Font.profileName,
+                            required: true, limit: 100, id: "profile-name") { save(name: $0) }
+                .padding(.top, 6)
+            if !sections.isEmpty {
+                Button(action: openPersona) {
+                    Text("Edit")
+                        .font(Theme.Font.bodyMedium)
+                        .foregroundStyle(Theme.textPrimary)
+                        .padding(.horizontal, 16)
+                        .frame(height: 36)
+                        .background(Theme.cardRaised, in: Capsule())
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .accessibilityIdentifier("panel-tab.\(item.rawValue)")
-                .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+                .padding(.top, 4)
+                .accessibilityLabel(Text("Edit bot"))
+                .accessibilityIdentifier("panel-edit-persona")
             }
         }
-        .padding(4)
-        .background(Theme.card, in: Capsule())
-        .padding(.horizontal, Theme.Profile.cardMargin)
+    }
+
+    // MARK: Overview
+
+    private var codingWorking: Int { (activity.coding ?? []).filter { $0.status.isActive }.count }
+    private var routinesOn: Int { botRoutines.filter(\.enabled).count }
+
+    /// Idle, Working or Off, from what the bot does now and where it works.
+    private var computerStatus: String {
+        if current.computer == "off" { return String(localized: "Off") }
+        return current.busy == true ? String(localized: "Working") : String(localized: "Idle")
+    }
+
+    /// Coding, Routines, Library and Computer as one grouped list, each a
+    /// page of its own (the reference design's bot detail). The Library and
+    /// Computer rows keep the identifiers the tabs had.
+    private var overviewCard: some View {
+        ProfileCard {
+            ForEach(Array(overviewRows.enumerated()), id: \.element.id) { index, row in
+                if index > 0 { ProfileDivider() }
+                Button {
+                    Haptics.selection()
+                    switch row.page {
+                    case .computer: path.append(PanelComputerRoute())
+                    case let .page(page): path.append(page)
+                    }
+                } label: {
+                    ProfileRow(icon: ProfileRowIcon(systemImage: row.symbol, size: 16), title: row.title,
+                               height: Theme.Profile.singleRow) {
+                        HStack(spacing: 10) {
+                            if let value = row.value {
+                                Text(verbatim: value)
+                                    .font(Theme.Font.body)
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .lineLimit(1)
+                            }
+                            ProfileChevronTrailing()
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(row.id)
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Bot panel"))
     }
 
-    private func tabBody(width: CGFloat) -> some View {
-        switch tabs.contains(tab) ? tab : .details {
-        case .details: AnyView(details)
-        case .library:
-            AnyView(PhoneBotLibrary(bot: current, start: libraryStart, onShowInChat: { file in showInChat(file) }, onShowLink: { link in showInChat(link) }))
-        case .computer:
-            AnyView(ComputerView(bot: current, embeddedWidth: width - Theme.Profile.cardMargin * 2) {
-                path.append(PanelComputerRoute())
+    private var overviewRows: [OverviewRow] {
+        var rows: [OverviewRow] = []
+        if gate.allows(.botActivity) {
+            rows.append(OverviewRow(id: "panel-overview.coding", symbol: "chevron.left.forwardslash.chevron.right", title: Text("Coding"),
+                                    value: String(localized: "\(codingWorking) working"), page: .page(.coding)))
+        }
+        rows.append(OverviewRow(id: "panel-overview.routines", symbol: "clock", title: Text("Routines"),
+                                value: routinesLoaded ? String(localized: "\(routinesOn) on") : nil, page: .page(.routines)))
+        if tabs.contains(.library) {
+            rows.append(OverviewRow(id: "panel-tab.library", symbol: "folder", title: Text("Library"), value: nil, page: .page(.library)))
+        }
+        if tabs.contains(.computer) {
+            rows.append(OverviewRow(id: "panel-tab.computer", symbol: "desktopcomputer", title: Text("Computer"), value: computerStatus, page: .computer))
+        }
+        return rows
+    }
+
+    /// The bot's own email address (B21 / CO5): the address with a copy
+    /// button, then the one rule, or the wait for the administrator (off by
+    /// default). Changing it is on the desktop (the owner's PUT). Absent
+    /// when there is none (solo server, older Perspicax, inbound mail off).
+    private func emailCard(_ row: BotInboundMailRow) -> some View {
+        VStack(spacing: 0) {
+            ProfileCard {
+                ProfileRow(icon: ProfileRowIcon(systemImage: "envelope", size: 16), title: Text("Email address"),
+                           // greyed while the administrator has not turned it on
+                           subtitle: Text(verbatim: row.address).foregroundColor(row.waitingForAdmin ? Theme.textTertiary : Theme.textSecondary),
+                           height: Theme.Profile.routineRow) {
+                    Button {
+                        UIPasteboard.general.string = row.address
+                        Haptics.selection()
+                        show(String(localized: "Email address copied"))
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Copy email address"))
+                    .accessibilityIdentifier("panel-email-copy")
+                }
             }
-            .frame(maxWidth: .infinity))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("panel-email")
+            ProfileFooter(text: row.waitingForAdmin
+                ? "Waiting for the administrator to turn it on"
+                : "Mail received at this address only wakes a routine (Bot email trigger).")
+        }
+    }
+
+    /// The bot's notifications switch, under the list, with its caption.
+    private var notificationsCard: some View {
+        VStack(spacing: 0) {
+            ProfileCard {
+                Toggle(isOn: Binding(get: { current.notifications }, set: { on in
+                    var patch = BotProfilePatch()
+                    patch.notifications = on
+                    let target = current
+                    Task { _ = await session.updateProfile(patch, for: target) }
+                })) {
+                    Text("Notifications").font(Theme.Font.body).foregroundStyle(Theme.textPrimary)
+                }
+                .tint(Theme.toggleOn)
+                .padding(.horizontal, Theme.Profile.textInset)
+                .frame(minHeight: Theme.Profile.singleRow)
+                .accessibilityIdentifier("panel-notifications")
+            }
+            ProfileFooter(text: "Get notified when this Bot finishes or needs input")
         }
     }
 
     private func openPersona() {
         Haptics.selection()
-        query = ""
         path.append(PanelPersonaRoute())
     }
 
-    // MARK: Details
+    /// The system share sheet with a link that opens this bot in Sagax on
+    /// a computer (the desktop's Copy link to this bot).
+    private func shareBot() {
+        guard let url = URL(string: "sagax://bot/\(current.id)") else { return }
+        sharedFile = IdentifiedURL(url: url)
+    }
 
-    private var details: some View {
+    // MARK: Overview pages
+
+    private func overviewPage(_ page: PanelOverviewPage) -> some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                switch page {
+                case .coding: AnyView(codingPage)
+                case .routines: AnyView(routinesPage)
+                case .library:
+                    AnyView(PhoneBotLibrary(bot: current, start: libraryStart, onShowInChat: { file in showInChat(file) }, onShowLink: { link in showInChat(link) }))
+                }
+            }
+            .padding(.top, 16)
+            .padding(.bottom, 48)
+        }
+        .scrollIndicators(.visible)
+        .scrollDismissesKeyboard(.interactively)
+        .accessibilityIdentifier("profile-scroll")
+        .background(Theme.bg.ignoresSafeArea())
+        .navigationTitle(page.title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var codingPage: some View {
         VStack(spacing: 0) {
-            BotPanelNoticesView(bot: current)
             if gate.allows(.botActivity) {
                 BotActivityCard(
                     bot: current,
@@ -432,9 +542,12 @@ private struct PhoneBotPanelContent: View {
                     onOpen: { activityRoute = .detail($0) },
                     onHistory: { activityRoute = .history($0) }
                 )
-                .padding(.bottom, Theme.Profile.cardGap + 8)
             }
-            ProfileSectionLabel(text: "Routines")
+        }
+    }
+
+    private var routinesPage: some View {
+        VStack(spacing: 0) {
             Color.clear.frame(height: 0).id("profile-routines-anchor")
             AnyView(routinesCard)
         }
@@ -466,6 +579,9 @@ private struct PhoneBotPanelContent: View {
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
+                    if let expression = routine.schedule.expression, routine.schedule.type == .cron {
+                        Button(String(localized: "Copy cron expression"), systemImage: "doc.on.doc") { PlatformBridge.copyToPasteboard(expression) }
+                    }
                     if gate.allows(.routineDelete) {
                         Button(String(localized: "Delete routine"), systemImage: "trash", role: .destructive) { deletingRoutine = routine }
                     }
@@ -499,42 +615,44 @@ private struct PhoneBotPanelContent: View {
 
     private var personaPage: some View {
         ScrollView {
-            AnyView(personaList)
-                .padding(.top, 16)
-                .padding(.bottom, 48)
+            VStack(spacing: 0) {
+                // the reference design's Edit bot: avatar, Name, Title,
+                // Appearance and Voice calls, then every other setting
+                AnyView(PhoneBotEditHeader(bot: current) { editingAvatar = true })
+                    .padding(.bottom, Theme.Profile.cardGap + 8)
+                AnyView(personaList)
+            }
+            .padding(.top, 16)
+            .padding(.bottom, 48)
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Theme.bg.ignoresSafeArea())
         .navigationTitle(Text("Edit bot"))
         .navigationBarTitleDisplayMode(.inline)
+        // one way out, as Grok Bot's editor: Done (everything is saved as
+        // it is left, so there is no Cancel)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") {
+                    if !path.isEmpty { path.removeLast() }
+                }
+                .fontWeight(.semibold)
+                .accessibilityIdentifier("panel-persona-done")
+            }
+        }
         .accessibilityIdentifier("panel-persona")
     }
 
     private var personaList: some View {
-        // a group's own name finds all its sections
-        let matchedGroups = Set(DesktopPanelGroup.allCases.filter { $0.localizedTitle.lowercased().contains(query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) && !query.trimmingCharacters(in: .whitespaces).isEmpty })
-        let shown = sections.filter { $0.matches(query, label: $0.localizedTitle) || matchedGroups.contains(DesktopPanelGroup.of($0)) }
-        return VStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundStyle(Theme.textSecondary)
-                TextField(String(localized: "Search"), text: $query)
-                    .font(Theme.Font.body)
-                    .foregroundStyle(Theme.textPrimary)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .accessibilityLabel(Text("Search settings"))
-                    .accessibilityIdentifier("panel-persona-search")
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 40)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .padding(.horizontal, Theme.Profile.cardMargin)
-            // the editor's six groups (#518), each with its sections
-            ForEach(DesktopPanelGroup.visible(shown), id: \.self) { group in
+        // Grok Bot's phone editor: the identity block above, then the
+        // desktop editor's groups in order, no search and no Profile list
+        VStack(spacing: 12) {
+            ForEach(PhoneBotEditGroup.visible(sections), id: \.self) { group in
                 VStack(spacing: 0) {
                     ProfileSectionLabel(text: group.title)
                     ProfileCard {
-                        ForEach(Array(group.sections(in: shown).enumerated()), id: \.element) { index, section in
+                        ForEach(Array(group.sections(in: sections).enumerated()), id: \.element) { index, section in
                             if index > 0 { ProfileDivider() }
                             NavigationLink(value: section) {
                                 ProfileRow(icon: ProfileRowIcon(systemImage: section.symbol, size: 16), title: Text(section.title),
@@ -548,15 +666,6 @@ private struct PhoneBotPanelContent: View {
                 .padding(.top, 8)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("panel-group.\(group.rawValue)")
-            }
-            if shown.isEmpty {
-                ProfileCard {
-                    Text("Nothing matches “\(query.trimmingCharacters(in: .whitespacesAndNewlines))”")
-                        .font(Theme.Font.body)
-                        .foregroundStyle(Theme.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(Theme.Profile.textInset)
-                }
             }
         }
         .accessibilityElement(children: .contain)
@@ -648,20 +757,16 @@ private struct PhoneBotPanelContent: View {
         }
     }
 
-    /// Go to message on a link: its own conversation of this bot, which
-    /// opens first when it is not the one on screen.
+    /// Go to message on a link: its own conversation of this bot, which the
+    /// chat under the panel switches to in place when it is another one.
     private func showInChat(_ link: BotLink) {
         guard let messageId = link.messageId else { return }
         let botId = bot.id
         let threadId = link.threadId ?? bot.threadId
-        let onScreen = bot.threadId
         dismiss()
         Task {
             try? await Task.sleep(nanoseconds: 600_000_000)
-            if threadId != onScreen {
-                _ = await session.openThread(ThreadRef(botId: botId, threadId: threadId, title: ""), shownBotId: nil)
-            }
-            await session.jump(to: messageId, inThread: threadId)
+            await session.showLinkMessage(messageId, botId: botId, threadId: threadId)
         }
     }
 
@@ -671,17 +776,16 @@ private struct PhoneBotPanelContent: View {
     private func applyParityScreen() async {
         guard let screen = ParityLaunch.current?.screen else { return }
         switch screen {
-        case .profileLinks: libraryStart = .links; tab = .library
-        case .profileMedia: libraryStart = .files(.image); tab = .library
-        case .profileFiles: tab = .library
-        case .profileComputer: tab = .computer
-        case .profileInfoScrolled, .profileMoreMenu:
+        case .profileLinks: libraryStart = .links; path.append(PanelOverviewPage.library)
+        case .profileMedia: libraryStart = .files(.image); path.append(PanelOverviewPage.library)
+        case .profileFiles: path.append(PanelOverviewPage.library)
+        case .profileComputer: path.append(PanelComputerRoute())
+        case .profileInfoScrolled:
             try? await Task.sleep(nanoseconds: 600_000_000)
-            scrollToRoutines += 1
-            if screen == .profileMoreMenu {
-                try? await Task.sleep(nanoseconds: 400_000_000)
-                menuOpen = true
-            }
+            path.append(PanelOverviewPage.routines)
+        case .profileMoreMenu:
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            menuOpen = true
         case .routineDetail, .routineInstruction:
             try? await Task.sleep(nanoseconds: 1_000_000_000)
             if let first = botRoutines.first(where: { $0.schedule.type == .cron }) ?? botRoutines.first {
@@ -699,6 +803,34 @@ private struct PanelRoutineRoute: Hashable {
 }
 
 private struct PanelComputerRoute: Hashable {}
+
+/// A page of the overview list (Computer has its own route).
+private enum PanelOverviewPage: String, Hashable {
+    case coding, routines, library
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .coding: "Coding"
+        case .routines: "Routines"
+        case .library: "Library"
+        }
+    }
+}
+
+/// One row of the overview list: its identifier, icon, title, the value at
+/// its end and where it goes.
+private struct OverviewRow {
+    enum Target {
+        case page(PanelOverviewPage)
+        case computer
+    }
+
+    let id: String
+    let symbol: String
+    let title: Text
+    let value: String?
+    let page: Target
+}
 
 /// The persona editor's page (the sections list).
 private struct PanelPersonaRoute: Hashable {}

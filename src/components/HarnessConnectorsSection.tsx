@@ -11,6 +11,9 @@ import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { openExternalLink } from "@/lib/app-links";
 import { HelpTip } from "./SettingsPrimitives";
+import { ConnectFromEngine } from "./ConnectFromEngine";
+import { CapabilityTags } from "./plugins/EngineCapabilities";
+import { claudeAiConnectorCapabilities } from "../../shared/engine-connectors";
 
 type ConnectorStatus = "connected" | "needs_auth" | "failed" | "unknown";
 type Unavailable = "disabled" | "managed_policy" | "no_engine" | "not_signed_in" | "not_operator" | "key" | "unknown";
@@ -48,7 +51,12 @@ export function harnessUnavailableKey(reason: Unavailable | undefined): LocaleKe
 /** `provider`: inside Plugins > Manage > Providers, under the Claude
  * accounts, which already carry the title and the Manage link: only the
  * connectors and Check again. */
-export function HarnessConnectorsSection({ placement = "panel" }: { placement?: "panel" | "settings" | "provider" } = {}) {
+export function HarnessConnectorsSection({ placement = "panel", onAnswer }: {
+  placement?: "panel" | "settings" | "provider";
+  /** The answer once it loads: Providers reads which connectors reach mail,
+   * calendar, Teams and SharePoint from it (no second request). */
+  onAnswer?: (answer: HarnessConnectorsAnswer) => void;
+} = {}) {
   const [answer, setAnswer] = useState<HarnessConnectorsAnswer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,13 +65,15 @@ export function HarnessConnectorsSection({ placement = "panel" }: { placement?: 
     setLoading(true);
     setError(null);
     try {
-      setAnswer(await api<HarnessConnectorsAnswer>(`/api/me/harness-connectors${refresh ? "?refresh=1" : ""}`, { timeoutMs: 90_000 }));
+      const next = await api<HarnessConnectorsAnswer>(`/api/me/harness-connectors${refresh ? "?refresh=1" : ""}`, { timeoutMs: 90_000 });
+      setAnswer(next);
+      onAnswer?.(next);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onAnswer]);
 
   useEffect(() => {
     void load();
@@ -138,10 +148,10 @@ export function HarnessConnectorsSection({ placement = "panel" }: { placement?: 
       ) : claude && placement === "settings" ? (
         <details className="mt-1">
           <summary className="cursor-pointer text-[12px] text-ink-secondary hover:text-ink">{t("harnessConnectors.show")}</summary>
-          <ConnectorList connectors={claude.connectors} />
+          <ConnectorList connectors={claude.connectors} manageUrl={answer?.manageUrl} />
         </details>
       ) : claude ? (
-        <ConnectorList connectors={claude.connectors} />
+        <ConnectorList connectors={claude.connectors} manageUrl={answer?.manageUrl} />
       ) : null}
 
       {answer && !answer.codex.available && placement === "panel" && (
@@ -153,27 +163,36 @@ export function HarnessConnectorsSection({ placement = "panel" }: { placement?: 
   );
 }
 
-function ConnectorList({ connectors }: { connectors: HarnessConnectorsAnswer["claude"]["connectors"] }) {
+function ConnectorList({ connectors, manageUrl }: { connectors: HarnessConnectorsAnswer["claude"]["connectors"]; manageUrl?: string }) {
   return (
         <ul className="mt-2 flex flex-col gap-1.5">
-          {connectors.map((connector) => (
+          {connectors.map((connector) => {
+            // A connector that needs sign-in or failed is not usable: offer the
+            // one-click path to the engine's own page instead of a dead badge.
+            const missing = connector.status === "needs_auth" || connector.status === "failed";
+            return (
             <li key={connector.name} className="flex items-center justify-between gap-3 rounded-lg bg-elevated px-3 py-2">
               <span className="flex min-w-0 items-center gap-2 text-[13px] text-ink">
                 <Plug size={14} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
                 <span className="truncate">{connector.name}</span>
+                <CapabilityTags capabilities={claudeAiConnectorCapabilities(connector.name)} name={connector.name} />
               </span>
-              <span
-                className={cn(
-                  "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                  connector.status === "connected" ? "bg-accent/15 text-accent-text"
-                    : connector.status === "needs_auth" ? "bg-warning/10 text-warning"
-                      : "bg-hover text-ink-secondary",
-                )}
-              >
-                {t(STATUS_KEY[connector.status] ?? STATUS_KEY.unknown)}
+              <span className="flex shrink-0 items-center gap-2">
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                    connector.status === "connected" ? "bg-accent/15 text-accent-text"
+                      : connector.status === "needs_auth" ? "bg-warning/10 text-warning"
+                        : "bg-hover text-ink-secondary",
+                  )}
+                >
+                  {t(STATUS_KEY[connector.status] ?? STATUS_KEY.unknown)}
+                </span>
+                {missing && manageUrl && <ConnectFromEngine missing manageUrl={manageUrl} />}
               </span>
             </li>
-          ))}
+            );
+          })}
         </ul>
   );
 }

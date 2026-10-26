@@ -51,6 +51,8 @@ final class ThemeStore: ObservableObject {
 
     @Published private(set) var selection: ThemeSelection
     @Published private(set) var retroUnlocked: Bool
+    /// The computer's skin follows its system (`omb-skin-mode`), as last read.
+    private var computerAuto = false
     /// Where the computer keeps its look, once read; nil before or when it has none.
     @Published private(set) var computerSource: ComputerAppearanceSource?
     @Published private(set) var computerError: String?
@@ -133,6 +135,8 @@ final class ThemeStore: ObservableObject {
         case .system: update { skin.isDark ? ($0.darkSkin = skin) : ($0.lightSkin = skin) }
         case .computer:
             update { $0.computerSkin = skin }
+            // a skin picked here is a fixed choice on the computer: its Auto ends
+            computerAuto = false
             writeBack(client: client)
         }
     }
@@ -140,6 +144,7 @@ final class ThemeStore: ObservableObject {
     func chooseFont(_ font: SkinFontChoice, client: CompanionClient?) {
         if selection.mode == .computer {
             update { $0.computerFont = font }
+            // a font change keeps the computer's Auto
             writeBack(client: client)
         } else {
             update { $0.font = font }
@@ -181,6 +186,7 @@ final class ThemeStore: ObservableObject {
             computerSource = record.source
             computerError = nil
             if record.appearance.retroUnlocked { unlockRetro() }
+            computerAuto = record.appearance.auto
             if selection.mode == .computer {
                 update {
                     $0.computerSkin = record.appearance.skin
@@ -194,7 +200,7 @@ final class ThemeStore: ObservableObject {
 
     private func writeBack(client: CompanionClient?) {
         guard let client, let source = computerSource, let skin = selection.computerSkin else { return }
-        let values = ComputerAppearance.preferences(skin: skin, font: selection.computerFont ?? .skin, retroUnlocked: retroUnlocked)
+        let values = ComputerAppearance.preferences(skin: skin, font: selection.computerFont ?? .skin, retroUnlocked: retroUnlocked, auto: computerAuto)
         Task {
             do { try await client.saveComputerAppearance(values, to: source) } catch {
                 computerError = String(localized: "Could not save the appearance on the computer.")

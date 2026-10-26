@@ -75,6 +75,22 @@ describe("GrokDriver turns (fake fetch)", () => {
     await instance?.dispose();
   });
 
+  it("reviews a permission with a tool-free completion on the cheap model (lot A1b)", async () => {
+    await create();
+    let body: { model?: string; tools?: unknown; messages?: Array<{ content?: string }> } | undefined;
+    globalThis.fetch = (async (_url, init) => {
+      body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"decision":"none"}' } }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    await expect(instance.reviewPermission!("judge this card")).resolves.toBe('{"decision":"none"}');
+    expect(body?.model).toBe("grok-3-mini");
+    expect(body?.tools).toBeUndefined();
+    expect(body?.messages?.[0]?.content).toBe("judge this card");
+  });
+
   it("normalizes a full turn into the canonical event sequence", async () => {
     script = [];
     await create();

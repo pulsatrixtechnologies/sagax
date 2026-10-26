@@ -29,11 +29,11 @@ export interface ContextMessage {
 }
 
 /** Active-branch messages a provider reads as conversation context: text,
- * widgets (by their text fallback), digests, compaction records and room
- * results. A Live call's row (kind "call") is a record for people, never
- * context. */
+ * widgets and live apps (by their text fallback), digests, compaction records
+ * and room results. A Live call's row (kind "call") is a record for people,
+ * never context. */
 export function isContextMessage(m: Pick<Message, "kind" | "text" | "digest" | "roomRequest">): boolean {
-  return Boolean(((m.kind === "text" || m.kind === "widget") && m.text) || (m.kind === "digest" && m.digest) || m.kind === "compaction" || m.roomRequest?.phase === "result");
+  return Boolean(((m.kind === "text" || m.kind === "widget" || m.kind === "app") && m.text) || (m.kind === "digest" && m.digest) || m.kind === "compaction" || m.roomRequest?.phase === "result");
 }
 
 /** What one native session has been handed on a task. */

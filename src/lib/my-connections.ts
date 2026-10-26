@@ -8,7 +8,7 @@ import { api } from "@/state/store";
 export type GithubStatus =
   | { state: "none"; deviceFlow: boolean }
   | { state: "pending"; deviceFlow: true; userCode: string; verificationUri: string; expiresAt: number }
-  | { state: "connected"; deviceFlow: boolean; login: string; name?: string; scopes?: string[]; via: "device" | "token"; connectedAt: number }
+  | { state: "connected"; deviceFlow: boolean; login: string; name?: string; scopes?: string[]; via: "device" | "token"; connectedAt: number; fineGrained?: boolean; orgAccessUrl?: string }
   | { state: "error"; deviceFlow: boolean; error: string };
 
 export type PersonalAuthState = "connected" | "ready" | "needs_sign_in" | "needs_github" | "needs_token" | "expired" | "error" | "no_environment";
@@ -91,11 +91,17 @@ export interface PluginContents {
 }
 
 /** A marketplace of the installation's one list, with this bot's installs. */
+export type MarketplaceVisibility = "private" | "org";
+
 export interface MarketplaceListing {
   name: string;
   source: string;
   /** A token is saved for it on this bot (never the token itself). */
   hasToken?: boolean;
+  /** "private" (the person who added it) or "org" (shared with everyone) */
+  visibility?: MarketplaceVisibility;
+  /** this viewer added it, so may change its visibility */
+  mine?: boolean;
   description?: string;
   addedAt: number;
   updatedAt: number;
@@ -117,7 +123,20 @@ export interface InstalledPlugin {
   enabled: boolean;
   removed: string[];
   declaredMcpServers: string[];
+  /** the fields the plugin declares and this bot's values (server/plugin-config.ts) */
+  config?: PluginConfigView;
 }
+
+export interface PluginConfigField {
+  key: string;
+  type: "string" | "number" | "boolean" | "directory" | "file";
+  title: string;
+  description?: string;
+  sensitive: boolean;
+  required: boolean;
+  default?: string | number | boolean;
+}
+export interface PluginConfigView { fields: PluginConfigField[]; values: Record<string, string | number | boolean> }
 
 export interface BotPluginsView {
   marketplaces: MarketplaceListing[];
@@ -134,9 +153,9 @@ export interface BotPluginsView {
 
 const pluginsPath = (botId: string) => `/api/bots/${encodeURIComponent(botId)}/plugins`;
 export const loadBotPlugins = (botId: string) => api<BotPluginsView>(pluginsPath(botId));
-export const addMarketplace = (botId: string, source: string, options: { ref?: string; token?: string } = {}) =>
+export const addMarketplace = (botId: string, source: string, options: { ref?: string; token?: string; visibility?: MarketplaceVisibility } = {}) =>
   api<BotPluginsView>(`${pluginsPath(botId)}/marketplaces`, {
-    method: "POST", body: JSON.stringify({ source, ...(options.ref ? { ref: options.ref } : {}), ...(options.token ? { token: options.token } : {}) }), timeoutMs: 180_000,
+    method: "POST", body: JSON.stringify({ source, ...(options.ref ? { ref: options.ref } : {}), ...(options.token ? { token: options.token } : {}), ...(options.visibility ? { visibility: options.visibility } : {}) }), timeoutMs: 180_000,
   });
 /** This bot's token for a marketplace of the one list (kept per bot and source). */
 export const setMarketplaceToken = (botId: string, name: string, token: string) =>
@@ -145,11 +164,13 @@ export const removeMarketplaceToken = (botId: string, name: string) =>
   api<BotPluginsView>(`${pluginsPath(botId)}/marketplaces/${encodeURIComponent(name)}/token`, { method: "DELETE" });
 
 /** Refusals of a private repository that a token (or a GitHub connection) fixes. */
-export const MARKETPLACE_ACCESS_CODES = new Set(["private_needs_token", "not_found_or_no_access", "bad_token", "forbidden", "sso_required", "repository_unreadable"]);
+export const MARKETPLACE_ACCESS_CODES = new Set(["private_needs_token", "not_found_or_no_access", "bad_token", "forbidden", "sso_required", "repository_unreadable", "org_not_covered"]);
 export const updateMarketplace = (botId: string, name: string) => api<BotPluginsView>(`${pluginsPath(botId)}/marketplaces/${encodeURIComponent(name)}/update`, { method: "POST", timeoutMs: 180_000 });
 export const removeMarketplace = (botId: string, name: string) => api<BotPluginsView>(`${pluginsPath(botId)}/marketplaces/${encodeURIComponent(name)}`, { method: "DELETE" });
 export const installPlugin = (botId: string, marketplace: string, plugin: string) =>
   api<BotPluginsView>(`${pluginsPath(botId)}/install`, { method: "POST", body: JSON.stringify({ marketplace, plugin }), timeoutMs: 180_000 });
 export const setPluginEnabled = (botId: string, key: string, enabled: boolean) =>
   api<BotPluginsView>(`${pluginsPath(botId)}/${encodeURIComponent(key)}`, { method: "PATCH", body: JSON.stringify({ enabled }) });
+export const setPluginConfig = (botId: string, key: string, values: Record<string, string | number | boolean>) =>
+  api<BotPluginsView>(`${pluginsPath(botId)}/${encodeURIComponent(key)}/config`, { method: "PUT", body: JSON.stringify({ values }) });
 export const uninstallPlugin = (botId: string, key: string) => api<BotPluginsView>(`${pluginsPath(botId)}/${encodeURIComponent(key)}`, { method: "DELETE" });

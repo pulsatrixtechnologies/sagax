@@ -31,6 +31,7 @@ const SECTION_LABEL = {
   mail: "settings.section.general",
   activity: "settings.section.general",
   backups: "settings.section.backups",
+  import: "settings.section.import",
   workspaces: "settings.section.general",
   privacy: "settings.section.notifications",
   notifications: "settings.section.notifications",

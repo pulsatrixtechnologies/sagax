@@ -240,8 +240,11 @@ export function ComposerModelRow({ chip, onOpen }: {
 export const ATTACH_ICON = <Paperclip size={16} aria-hidden="true" />;
 
 /** The grey mic: dictation into the field. Without an engine it says so and opens the Keys card. */
-export function ComposerMicButton({ onClick, hidden = false, needsSetup = false, shortcut }: {
+export function ComposerMicButton({ onClick, onPress, onRelease, hidden = false, needsSetup = false, shortcut }: {
   onClick: () => void;
+  /** Pointer down / up: hold to dictate (the composer decides tap or hold). */
+  onPress?: () => void;
+  onRelease?: () => void;
   /** Folded away (width 0) while the dictation pill shows. */
   hidden?: boolean;
   needsSetup?: boolean;
@@ -256,6 +259,9 @@ export function ComposerMicButton({ onClick, hidden = false, needsSetup = false,
       <button
         type="button"
         onClick={onClick}
+        onPointerDown={(event) => { if (event.button === 0) onPress?.(); }}
+        onPointerUp={onRelease}
+        onPointerCancel={onRelease}
         aria-label={label}
         title={needsSetup ? label : t("composer.dictation.holdHint", { shortcut })}
         data-composer-mic={needsSetup ? "setup" : ""}

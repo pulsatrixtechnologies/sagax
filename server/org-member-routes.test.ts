@@ -3,7 +3,7 @@
 // org-member-api.e2e.test.ts.
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ConsoleAssertion } from "./oidc-rp.ts";
 import { createOrgMemberRoutes, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
@@ -146,6 +146,27 @@ async function call(method: string, path: string, bearer?: string, body?: unknow
 }
 
 describe("the member API gate", () => {
+  it("keeps the marker and logs when a lookup throws before the route", async () => {
+    const original = deps.personFor;
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((line: unknown) => {
+      logged.push(String(line));
+    });
+    deps.personFor = () => {
+      throw new Error("directory exploded");
+    };
+    try {
+      const got = await call("GET", "capabilities", token("bob"));
+      expect(got.status).toBe(500);
+      expect(got.headers.get("x-sagax-member-api")).toBe("1");
+      expect(got.body.code).toBe("server_error");
+      expect(logged.some((line) => line.includes("[org-member] GET capabilities") && line.includes("directory exploded"))).toBe(true);
+    } finally {
+      deps.personFor = original;
+      spy.mockRestore();
+    }
+  });
+
   it("answers only with a fresh assertion for an active person, never twice the same", async () => {
     expect((await call("GET", "capabilities")).body.code).toBe("assertion_missing");
     expect((await call("GET", "capabilities", "nope")).body.code).toBe("assertion_invalid");

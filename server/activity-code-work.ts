@@ -295,6 +295,7 @@ export class CodeWorkCollector {
         ...(Number.isFinite(number) ? { number } : {}),
         ...(!found && repo && Number.isFinite(number) ? { url: `https://github.com/${repo}/pull/${number}` } : {}),
         ...(str(input.title) ? { title: str(input.title) } : {}),
+        ...(kind === "create_pull_request" && str(input.head) && branchName(str(input.head)!.replace(/^[\w.-]+:/, "")) ? { branch: branchName(str(input.head)!.replace(/^[\w.-]+:/, "")) } : {}),
         action,
       }, at);
       const head = str(input.head);
@@ -379,13 +380,15 @@ export class CodeWorkCollector {
     const cleanTitle = title && !title.includes("$(") ? title.slice(0, 200) : undefined;
     if (verb === "create") {
       const found = [...output.matchAll(PR_URL)].at(-1);
+      const head = flagValue(args, ["-H", "--head"]) ?? this.current;
+      const headName = head ? branchName(head.replace(/^[\w.-]+:/, "")) : undefined;
       this.pull({
         ...(found ? { repo: found[2], number: Number(found[3]), url: found[0] } : remote ? { repo: remote.repo } : {}),
         ...(cleanTitle ? { title: cleanTitle } : {}),
+        ...(headName ? { branch: headName } : {}),
         action,
       }, at);
-      const head = flagValue(args, ["-H", "--head"]) ?? this.current;
-      if (head && branchName(head)) this.branch(branchName(head)!, true, at, found ? remoteRepo(found[0].replace(/\/pull\/\d+$/, "")) ?? remote : remote);
+      if (headName) this.branch(headName, true, at, found ? remoteRepo(found[0].replace(/\/pull\/\d+$/, "")) ?? remote : remote);
       return;
     }
     const target = positionals(args, GH_VALUE_FLAGS)[0];

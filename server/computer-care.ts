@@ -233,6 +233,24 @@ export class MaintenanceScheduler {
     return this.running.has(key);
   }
 
+  /** Hold a computer for an update asked by hand (Update now, Recover):
+   * false while the scheduled one or another hand update holds it. */
+  claim(key: string): boolean {
+    if (this.running.has(key)) return false;
+    this.running.add(key);
+    return true;
+  }
+
+  release(key: string): void {
+    this.running.delete(key);
+  }
+
+  /** A bot works on this computer (the same check the scheduled update uses). */
+  async busy(key: string): Promise<boolean> {
+    const computer = this.options.computer(key);
+    return computer ? await computer.busy() : false;
+  }
+
   async tick(): Promise<void> {
     const now = this.now();
     await Promise.all(this.options.store.entries().map(([key, entry]) => this.consider(key, entry, now)));

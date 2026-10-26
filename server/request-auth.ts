@@ -48,6 +48,13 @@ export interface RequestAuthResult {
   /** 2026-10-09: the permission that would have opened this route
    * (PERMISSION_ROUTES), when a session without admin scope was refused. */
   permission?: PermissionKey;
+  /** 2026-10-20: why a presented session credential was refused (the 401
+   * body's `code`), and the session it named when the server remembers it
+   * (for the log line only; never the token or its hash). */
+  code?: string;
+  sessionId?: string;
+  /** How the refused credential came: bearer, cookie or stream ticket. */
+  via?: "bearer" | "cookie" | "ticket";
 }
 
 const LOOPBACK_SCOPES: readonly Scope[] = ["admin", "client"];
@@ -126,7 +133,10 @@ export function workerRelayAllowed(method: string, path: string): boolean {
  * workspace (any SAGAX_ADMIN_* setting, even an incomplete one) defaults to
  * `service` — shared-workspace Full access is only honoured there, so it needs
  * no rule of its own — and a headless self-hosted server keeps `owner`. A
- * value that is neither fails closed. */
+ * value that is neither fails closed. `localBrowsers`: see localBrowserTrust.
+ *
+ * Port of OpenMausBot #2930: a browser on this machine (a web page, or the
+ * Chrome a bot drives) never gets loopback trust; see fromBrowser. */
 export function resolveLoopbackTrust(input: {
   env?: NodeJS.ProcessEnv;
   desktopManaged: boolean;
@@ -135,7 +145,16 @@ export function resolveLoopbackTrust(input: {
    * edge proxy, so a bare loopback request is only ever a process on the
    * machine (a bot's shell). Always `service`, whatever the setting. */
   cloudHome?: boolean;
-}): { trust: LoopbackTrust; reason: string; warning?: string } {
+  /** This server runs from TypeScript source rather than a build. */
+  fromSource?: boolean;
+}): { trust: LoopbackTrust; reason: string; warning?: string; localBrowsers: boolean } {
+  const resolved = loopbackTrust(input);
+  const browsers = localBrowserTrust(input.env ?? process.env, input.fromSource === true && !input.desktopManaged, resolved.trust);
+  const warning = [resolved.warning, browsers.warning].filter(Boolean).join("; ");
+  return { trust: resolved.trust, reason: resolved.reason, ...(warning ? { warning } : {}), localBrowsers: browsers.trusted };
+}
+
+function loopbackTrust(input: Parameters<typeof resolveLoopbackTrust>[0]): { trust: LoopbackTrust; reason: string; warning?: string } {
   const raw = (input.env ?? process.env).SAGAX_LOOPBACK_TRUST;
   const requested = raw?.trim().toLowerCase();
   if (input.cloudHome) {
@@ -183,6 +202,33 @@ export function isLoopbackHost(host: string | undefined): boolean {
   if (isIP(hostname) === 4) return hostname.startsWith("127.");
   return hostname === "::1" || hostname === "0:0:0:0:0:0:0:1";
 }
+
+/** Browsers send Sec-Fetch-Site and Sec-Fetch-Dest on every request to a
+ * loopback address and Origin on every WebSocket handshake (Chrome sends no
+ * Sec-Fetch-* there); a page can remove none of them. Node's fetch (undici)
+ * sends Sec-Fetch-Mode alone, so it does not count; curl, the companion and
+ * the desktop app's main process send none. Port of OpenMausBot #2930. */
+export function fromBrowser(req: IncomingMessage): boolean {
+  const headers = req.headers;
+  if (headers["sec-fetch-site"] !== undefined || headers["sec-fetch-dest"] !== undefined) return true;
+  return headerValue(headers.upgrade)?.toLowerCase() === "websocket" && headers.origin !== undefined;
+}
+
+export const LOCAL_BROWSER_TRUST = "SAGAX_DEV_TRUST_LOCAL_BROWSER";
+
+/** Development only: a server run from a source checkout (`pnpm dev:server`,
+ * test fixtures) lets this machine's browsers in as before, because Vite's
+ * dev proxy forwards them; a packaged, bundled, desktop or service-trust
+ * server ignores it. */
+function localBrowserTrust(env: NodeJS.ProcessEnv, fromSource: boolean, trust: LoopbackTrust): { trusted: boolean; warning?: string } {
+  if (env[LOCAL_BROWSER_TRUST] !== "1") return { trusted: false };
+  if (!fromSource || trust !== "owner") {
+    return { trusted: false, warning: `${LOCAL_BROWSER_TRUST} is ignored: it applies only to a development server run from source with owner trust` };
+  }
+  return { trusted: true, warning: `${LOCAL_BROWSER_TRUST}=1: browsers on this machine act as the owner (development only)` };
+}
+
+export const BROWSER_SIGN_IN = "unauthorized: this browser is not signed in. Open the sign-in link that openmausbot serve or openmausbot pair prints on this computer, or pair it with a code from Settings → Remote access";
 
 export function isAllowedOrigin(origin: string | undefined | null): boolean {
   if (!origin) return true; // non-browser clients (CLIs, curl, tests) send none
@@ -344,6 +390,16 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/me\/achievements\/events$/ },
   { methods: ["PUT"], path: /^\/api\/me\/achievements\/settings$/ },
   { methods: ["GET"], path: /^\/api\/achievements\/public$/ },
+  // own phone tools (server/routes/phone-tools.ts: the session's person and
+  // this device only; a bot's session is refused by the handler)
+  { methods: ["POST"], path: /^\/api\/me\/phone-tools\/device$/ },
+  { methods: ["GET"], path: /^\/api\/me\/phone-tools\/requests$/ },
+  { methods: ["POST"], path: /^\/api\/me\/phone-tools\/requests\/[\w-]+$/ },
+  { methods: ["GET", "DELETE"], path: /^\/api\/me\/phone-tools\/grants$/ },
+  // "Scanner avec l'iPhone" from the person's own computer (the handler refuses a bot or a phone)
+  { methods: ["GET", "POST"], path: /^\/api\/me\/phone-tools\/card-scan$/ },
+  { methods: ["POST"], path: /^\/api\/me\/phone-tools\/card-scan\/[\w-]+\/wait$/ },
+  { methods: ["DELETE"], path: /^\/api\/me\/phone-tools\/card-scan\/[\w-]+$/ },
   // People's custom labels (server/routes/person-labels.ts): everyone reads
   // them; the handler lets a person change their own, an organization admin
   // anyone's and a team manager their team's people.
@@ -364,9 +420,19 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // which the handler keeps to the owner).
   { methods: ["GET"], path: /^\/api\/computer\/status$/ },
   { methods: ["POST"], path: /^\/api\/computer\/(?:update|reset)$/ },
+  // Its scheduled update, read and set from the phone (parity R7, O2). The
+  // handler (routes/computer-care.ts) keys it to the person's own computer.
+  // The disk saver stays admin.
+  { methods: ["GET", "PUT"], path: /^\/api\/computer\/maintenance$/ },
   // In-chat terminal: list shell-capable resources and manage the person's own sessions.
   { methods: ["GET"], path: /^\/api\/terminal\/resources$/ },
   { methods: ["GET", "POST"], path: /^\/api\/terminal\/sessions\/[\w-]+(?:\/(?:bot-input|close))?$/ },
+  // The usage card the person asked for (server/routes/resource-usage.ts): the
+  // handler answers the person who asked only.
+  { methods: ["GET", "POST"], path: /^\/api\/resource-usage\/ru_[a-f0-9]{18}(?:\/(?:live|resume|pause))?$/ },
+  // "Connect Microsoft Teams" card (server/routes/connector-setup.ts): the
+  // handler answers the person the card is for only.
+  { methods: ["POST"], path: /^\/api\/connector-setup\/cs_[a-f0-9]{18}\/check$/ },
   // Plugin catalog (reads: names, descriptions, icons; no secrets). Installing
   // one changes the server's MCP servers: the handler lets through an admin
   // or this computer's own person (clientSessionIsComputerOwner), nobody else.
@@ -386,6 +452,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/desktop-bridge\/(?:connect|[0-9a-f-]{36}\/(?:poll|lease|result|disconnect|system|local-models))$/ },
   { methods: ["GET"], path: /^\/api\/me\/desktop-bridge$/ },
   { methods: ["POST"], path: /^\/api\/me\/desktop-bridge\/local-vm$/ },
+  { methods: ["POST"], path: /^\/api\/me\/desktop-bridge\/computers\/(?:rename|remove)$/ },
   { methods: ["GET", "PUT"], path: /^\/api\/me\/local-models$/ },
   // Organization server (SAGAX_IDENTITY=perspicax): a member pairs their own
   // phone or computer. The handler binds the code to the member's person and
@@ -414,24 +481,38 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET"], path: /^\/api\/instances$/, feature: "serverCatalogue" },
   // a link into the organisation's Admin: identifiers only, and Admin authorizes its own visitor
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/slack-management$/ },
+  // the bot's own email address from the Perspicax relay (an address, no id, no secret)
+  // and its owner's change of it (PUT: the handler checks the owner)
+  { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/inbound-mail$/ },
   { methods: ["GET"], path: /^\/api\/search$/ },
   { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/messages$/ },
   { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/messages\/[\w-]+\/image$/ },
   { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/export$/ },
-  { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/messages\/[\w-]+\/file$/ },
+  // POST downloads a file a message shares; GET ?preview=1&ref=N streams the
+  // image a bot's Markdown renders at that offset (MarkdownImagePreview). The
+  // handler grants both from the message itself, the same check for both.
+  { methods: ["POST", "GET"], path: /^\/api\/threads\/[\w-]+\/messages\/[\w-]+\/file$/ },
   // a conversation's files (the bot panel's Files tab): the list and one file by id
   { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/files$/ },
   { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/files\/[a-f0-9]{24}$/ },
   // what a bot is doing (the bot panel's Coding list): narrowed to the
   // viewer's own threads and the routines they may see (routes/bot-activity.ts)
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/activity(?:\/item)?$/ },
+  // The Coding branches in the bot panel (server/routes/bot-code-branches.ts):
+  // the person's own threads only (thread.post), their own credentials.
+  { methods: ["GET", "POST"], path: /^\/api\/bots\/[\w-]+\/code\/(?:branch(?:\/(?:diff|pull|commit|push|pr|delete))?|branches\/archived)$/ },
   // Cloud coding agents (server/routes/cloud-agents.ts): reads for any bot
   // the viewer may see; writes use the session person's encrypted provider keys.
   { methods: ["GET", "POST"], path: /^\/api\/bots\/[\w-]+\/cloud-agents(?:\/[\w-]+(?:\/(?:follow-up|cancel|archive|artifacts|transcript))?)?$/ },
   { methods: ["GET", "PUT", "DELETE", "POST"], path: /^\/api\/me\/cloud-agent-providers(?:\/(?:cursor|claude|codex)(?:\/test)?)?$/ },
+  // The Code section (server/routes/code.ts): the person's own Perspicax
+  // runs, called with their own sign-in token; Perspicax decides the rest.
+  { methods: ["GET", "POST"], path: /^\/api\/code\/(?:status|environments|runs(?:\/[A-Za-z0-9_-]{1,80}(?:\/(?:events|stream|read|followup|approve|stop|archive|diff|commits|files))?)?)$/ },
   // chat, one to one
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/messages$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/messages\/[\w-]+\/edit$/ },
+  // pre-warm the engine of a conversation the person opened (server/thread-prewarm.ts)
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/warm$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/active-branch$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/compact$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/interrupt$/ },
@@ -508,6 +589,10 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/respond$/ },
   { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/respond$/ },
   { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/undo$/ }, // whoever may answer the card: see the handler
+  // the Approvals screen (server/routes/approvals-inbox.ts): the person's own
+  // cards, answered with the same refusals as /respond, once, never remembered
+  { methods: ["GET"], path: /^\/api\/approvals$/ },
+  { methods: ["POST"], path: /^\/api\/approvals\/bulk$/ },
   // a ConnectWise widget's change: an approval card for whoever may answer it (server/cw-widget-actions.ts)
   { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/cw-actions$/ },
   // an email draft's Send: an approval card for the bot's owner, then the send
@@ -614,8 +699,18 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/routine-runs\/[\w-]+\/(?:cancel|seen)$/ },
   { methods: ["POST"], path: /^\/api\/routine-runs\/seen-all$/ },
   { methods: ["DELETE"], path: /^\/api\/routine-runs$/ },
-  // webhook list is secret-free; creating or rotating one is not
+  // Webhooks are a bot feature its owner uses: a webhook runs a task on the
+  // bot's own computer (This computer or its cloud computer), never on the
+  // shared organization server, so creating or managing one is client scope
+  // like a routine. Server-side, webhookDelegateRefusal keeps a member off an
+  // admin's bot and off a Microsoft trigger, and the create handler refuses a
+  // non-admin a run target on the shared server (server/exec-target.ts
+  // webhookExecTargetAdminOnly). 2026-10-22 (JC): a normal user must be able
+  // to use this basic bot feature without the server-settings right.
   { methods: ["GET"], path: /^\/api\/webhooks$/ },
+  { methods: ["POST"], path: /^\/api\/webhooks$/ },
+  { methods: ["POST"], path: /^\/api\/webhooks\/[\w-]+\/(?:rotate|test|reveal)$/ },
+  { methods: ["PATCH", "DELETE"], path: /^\/api\/webhooks\/[\w-]+$/ },
   // configured-or-not booleans; the handler strips the few identifying fields for clients
   { methods: ["GET"], path: /^\/api\/config$/ },
   // Accepting an invite is how a person who is not yet a member joins a
@@ -645,10 +740,15 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // desktop capability); no answer carries a value.
   { methods: ["POST"], path: /^\/api\/me\/credentials(?:\/(?:list|import|export|onepassword\/(?:items|import)))?$/ },
   { methods: ["PATCH", "DELETE"], path: /^\/api\/me\/credentials\/[a-z0-9]{8,40}$/ },
-  { methods: ["POST"], path: /^\/api\/me\/credentials\/[a-z0-9]{8,40}\/(?:notes|grants)$/ },
+  { methods: ["POST"], path: /^\/api\/me\/credentials\/[a-z0-9]{8,40}\/(?:notes|grants|reveal)$/ },
+  { methods: ["POST"], path: /^\/api\/me\/credentials\/purchases$/ },
+  { methods: ["POST"], path: /^\/api\/me\/credentials\/purchases\/pay_[a-f0-9]{16}\/answer$/ },
+  // a phone call card (server/routes/outbound-calls.ts): the person's own answer
+  { methods: ["POST"], path: /^\/api\/me\/phone-calls$/ },
+  { methods: ["POST"], path: /^\/api\/me\/phone-calls\/call_[a-f0-9]{16}\/answer$/ },
   { methods: ["DELETE"], path: /^\/api\/me\/credentials\/[a-z0-9]{8,40}\/grants\/[\w-]{1,128}$/ },
   // A bot's login request card: the handler checks the card is the caller's.
-  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/vault-cards\/[\w-]+\/(?:grant|dismiss)$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/vault-cards\/[\w-]+\/(?:grant|dismiss|onepassword)$/ },
   // The person's own memory sync token for the desktop's Settings > Memory
   // (server/perspicax-memory-sync-token.ts): the session's own sub only.
   { methods: ["GET", "POST"], path: /^\/api\/me\/memory-sync-token$/, feature: "orgDirectory" },
@@ -671,6 +771,8 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["PUT", "DELETE"], path: /^\/api\/bots\/[\w-]+\/plugins\/marketplaces\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/token$/, feature: "orgDirectory" },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/plugins\/install$/, feature: "orgDirectory" },
   { methods: ["PATCH", "DELETE"], path: /^\/api\/bots\/[\w-]+\/plugins\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:@|%40)[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/, feature: "orgDirectory" },
+  // a plugin's configuration values (server/plugin-config.ts)
+  { methods: ["PUT"], path: /^\/api\/bots\/[\w-]+\/plugins\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:@|%40)[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/config$/, feature: "orgDirectory" },
   // Slice 5: the Perspicax MCP profiles a bot mounts. server/bot-perspicax.ts
   // decides (use reads, edit changes, adding needs holding the profile).
   { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/perspicax$/, feature: "orgDirectory" },
@@ -683,10 +785,14 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // A person's own engines: what their own turns run on, and their own
   // subscription sign-in (server/principal-engine-logins.ts).
   { methods: ["GET"], path: /^\/api\/me\/engines$/, feature: "orgDirectory" },
-  // A person's own usage ledger (server/routes/usage.ts, 2026-10-15): the
-  // handler keeps the caller's own turns only, never another person's; the
-  // whole ledger (/api/usage) stays admin or usage.view.
-  { methods: ["GET"], path: /^\/api\/me\/usage$/ },
+  // A person's own usage ledger and their own per-job traces
+  // (server/routes/usage.ts, 2026-10-15 / 2026-10-23): the handler keeps the
+  // caller's own turns only, never another person's; the whole ledger and the
+  // whole-ledger traces (/api/usage, /api/usage/traces) stay admin or usage.view.
+  { methods: ["GET"], path: /^\/api\/me\/usage(?:\/traces)?$/ },
+  // The person's own monthly spend limit: anyone signed in reads it; changing
+  // it stays admin scope (server/routes/usage.ts).
+  { methods: ["GET"], path: /^\/api\/me\/spend-cap$/ },
   // A person's own plan windows (5-hour, weekly) read from their own
   // subscription logins only (server/plan-usage.ts orgPlanAccounts). On a
   // solo server this path stays admin.
@@ -743,9 +849,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
  * (an engine's program path stays admin, see server/index.ts). A route not
  * listed here stays admin scope, which the catalogue names server.settings
  * or another admin-only key. */
-export const PERMISSION_ROUTES: ReadonlyArray<{ methods: readonly string[]; path: RegExp; permission: PermissionKey }> = [
-  // the usage ledger and its export (server/routes/usage.ts)
-  { methods: ["GET"], path: /^\/api\/usage(?:\.csv)?$/, permission: "usage.view" },
+export const PERMISSION_ROUTES: ReadonlyArray<{ methods: readonly string[]; path: RegExp; permission: PermissionKey | readonly PermissionKey[] }> = [
+  // the usage ledger, its export and the per-job traces (server/routes/usage.ts)
+  { methods: ["GET"], path: /^\/api\/usage(?:\.csv|\/traces)?$/, permission: "usage.view" },
   // the admin activity log and its export
   { methods: ["GET"], path: /^\/api\/admin-activity(?:\.csv)?$/, permission: "people.activityLog" },
   // plugin marketplaces (server/routes/marketplaces.ts)
@@ -759,16 +865,75 @@ export const PERMISSION_ROUTES: ReadonlyArray<{ methods: readonly string[]; path
   { methods: ["GET", "POST"], path: /^\/api\/instances\/[\w.-]+\/api-key$/, permission: "engines.manage" },
   { methods: ["POST"], path: /^\/api\/instances\/[\w.-]+\/(?:refresh-models|install|auth\/start|auth\/complete|auth\/cancel|auth\/sign-out|claude-update)$/, permission: "engines.manage" },
   { methods: ["POST"], path: /^\/api\/instances\/(?:claude|chatgpt)-accounts$/, permission: "engines.manage" },
+  // 2026-10-19 (JC): the four admin keys an admin may now give in Perspicax.
+  // What changes admin rights stays admin scope (no row here): a backup
+  // restore, the tool grants, the sign-in lists, attaching an interim
+  // person. Handlers still refuse a delegate who acts on an admin
+  // (people.manage) or on the fields that make admins (server.settings).
+  // host.shell: the server's own setup
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/command-allowlist$/, permission: "host.shell" },
+  { methods: ["GET", "DELETE"], path: /^\/api\/auto-review\/rules(?:\/[^/]{1,300})?$/, permission: "host.shell" },
+  { methods: ["GET"], path: /^\/api\/org\/approvals$/, permission: "host.shell" },
+  { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], path: /^\/api\/mcp\/servers(?:\/import|\/[^/]{1,128}(?:\/(?:test|rename|oauth\/(?:start|disconnect|probe|status)))?)?$/, permission: "host.shell" },
+  { methods: ["GET"], path: /^\/api\/mcp\/tool-names$/, permission: "host.shell" },
+  { methods: ["GET"], path: /^\/api\/cli-candidates$/, permission: "host.shell" },
+  { methods: ["POST"], path: /^\/api\/cli-test$/, permission: "host.shell" },
+  { methods: ["GET", "POST", "PATCH"], path: /^\/api\/team-computers(?:\/[\w.-]+(?:\/(?:provision|join|sleep|control))?)?$/, permission: "host.shell" },
+  { methods: ["GET", "POST"], path: /^\/api\/computers\/(?:boxes|vps)(?:\/[\w.-]+\/(?:sleep|delete|remove))?$/, permission: "host.shell" },
+  { methods: ["GET", "POST"], path: /^\/api\/local-computer(?:\/(?:instances|pull|run|start|stop|remove|screenshot|interrupt|ensure|reset))?$/, permission: "host.shell" },
+  { methods: ["GET", "PUT", "POST"], path: /^\/api\/computer\/(?:maintenance|disk-saver)$/, permission: "host.shell" },
+  { methods: ["POST"], path: /^\/api\/browser-engine\/install$/, permission: "host.shell" },
+  // backup.workspace: the export, never the restore
+  { methods: ["GET", "POST"], path: /^\/api\/workspace-backup\/(?:status|client-state|export|download\/[\w.-]{1,200})$/, permission: "backup.workspace" },
+  // server.settings
+  // 2026-10-22 (JC): the config write opens to EITHER server.settings (the
+  // whole installation) OR server.experimental (the switches of Settings >
+  // Experimental only). The two are separate rights; any one admits the
+  // request at the gate. The handler then holds a caller who lacks
+  // server.settings to the experiments alone (shared/permissions.ts
+  // experimentalOnlyConfigViolation). A refusal names server.settings, the
+  // primary key.
+  { methods: ["PUT", "PATCH"], path: /^\/api\/config$/, permission: ["server.settings", "server.experimental"] },
+  { methods: ["POST"], path: /^\/api\/keys\/test$/, permission: "server.settings" },
+  // Webhooks are client scope (CLIENT_ALLOW): a webhook runs on the bot's own
+  // computer, so its owner creates and manages it without server.settings.
+  // webhookDelegateRefusal and webhookExecTargetAdminOnly keep the limits.
+  { methods: ["PATCH"], path: /^\/api\/org\/settings$/, permission: "server.settings" },
+  { methods: ["PUT", "DELETE"], path: /^\/api\/marketplaces\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/token$/, permission: "server.settings" },
+  { methods: ["PUT"], path: /^\/api\/tts\/provider$/, permission: "server.settings" },
+  { methods: ["PUT"], path: /^\/api\/harness-connectors\/settings$/, permission: "server.settings" },
+  { methods: ["POST"], path: /^\/api\/decider\/test$/, permission: "server.settings" },
+  { methods: ["GET", "POST", "PUT", "DELETE"], path: /^\/api\/connectors(?:\/[\w.-]{1,128}(?:\/[\w.-]{1,128}){0,3})?$/, permission: "server.settings" },
+  { methods: ["GET", "POST"], path: /^\/api\/bot-defaults(?:\/(?:skills\/preview|avatar))?$/, permission: "server.settings" },
+  // (the custom domain stays an admin's: pairing and invite links use it)
+  { methods: ["PATCH"], path: /^\/api\/live\/settings$/, permission: "server.settings" },
+  // people.manage: never on an admin (checked in each handler)
+  { methods: ["GET"], path: /^\/api\/auth\/sessions$/, permission: "people.manage" },
+  { methods: ["DELETE"], path: /^\/api\/auth\/sessions\/[\w-]+$/, permission: "people.manage" },
+  { methods: ["GET"], path: /^\/api\/auth\/pairing$/, permission: "people.manage" },
+  { methods: ["DELETE"], path: /^\/api\/auth\/pairing\/[\w-]+$/, permission: "people.manage" },
+  { methods: ["GET", "POST"], path: /^\/api\/org\/people\/[\w-]+\/connections(?:\/revoke)?$/, permission: "people.manage" },
+  { methods: ["POST"], path: /^\/api\/org\/bots\/[\w-]+\/force-(?:stop|delete)$/, permission: "people.manage" },
+  { methods: ["GET", "POST"], path: /^\/api\/admin\/pages(?:\/[\w-]+\/revoke)?$/, permission: "people.manage" },
 ];
 
-/** The permission that opens this admin-scope route to a person, or null. */
-export function routePermission(method: string, path: string, features: ClientFeatures = {}): PermissionKey | null {
+/** Every permission that opens this admin-scope route to a person (holding any
+ * one of them suffices), or null when no rule matches. */
+export function routePermissions(method: string, path: string, features: ClientFeatures = {}): readonly PermissionKey[] | null {
   if (features.orgDirectory !== true) return null;
   const upper = method.toUpperCase();
   for (const rule of PERMISSION_ROUTES) {
-    if (rule.path.test(path) && rule.methods.includes(upper)) return rule.permission;
+    if (rule.path.test(path) && rule.methods.includes(upper)) {
+      return Array.isArray(rule.permission) ? rule.permission : [rule.permission as PermissionKey];
+    }
   }
   return null;
+}
+
+/** The primary permission that opens this route, i.e. the one a refusal names
+ * when the client holds none of the route's keys, or null. */
+export function routePermission(method: string, path: string, features: ClientFeatures = {}): PermissionKey | null {
+  return routePermissions(method, path, features)?.[0] ?? null;
 }
 
 export function requiredScope(method: string, path: string, features: ClientFeatures = {}): Scope {
@@ -796,9 +961,12 @@ export const memberBotFieldViolation = sharedMemberBotFieldViolation;
 /** The capabilities block GET /api/config puts on `viewer`. An admin scope
  * may edit the installation. Pairing is also open to an organization member
  * when org pairing is on (the route itself stays the gate). */
-export function capabilitiesForAuth(auth: { scopes: readonly string[] }, options: { orgPairing: boolean; viewUsage?: boolean }): ViewerCapabilities {
+export function capabilitiesForAuth(auth: { scopes: readonly string[] }, options: { orgPairing: boolean; viewUsage?: boolean; editConfig?: boolean; manageComputers?: boolean; manageBackups?: boolean }): ViewerCapabilities {
   const admin = auth.scopes.includes("admin");
-  return viewerCapabilities({ admin, pairDevices: admin || options.orgPairing, viewUsage: options.viewUsage });
+  return viewerCapabilities({
+    admin, pairDevices: admin || options.orgPairing, viewUsage: options.viewUsage,
+    editConfig: options.editConfig, manageComputers: options.manageComputers, manageBackups: options.manageBackups,
+  });
 }
 
 /** What the computer owner's paired phone (through the companion sidecar)
@@ -890,6 +1058,9 @@ export interface ResolveOptions {
    * environment, which the server's other children could read). It lets that
    * CLI, and nothing else, mint and list pairing codes. */
   cliOwnerToken?: string;
+  /** resolveLoopbackTrust's `localBrowsers`: a development server lets this
+   * machine's browsers use loopback trust. */
+  trustLocalBrowser?: boolean;
   /** Under `service`: the worker relay token. It opens WORKER_RELAY_ALLOW
    * and nothing else. A bot's shell does not have it. Absent means those
    * routes stay closed. */
@@ -929,6 +1100,15 @@ function mutatingPublicRoute(method: string, path: string): boolean {
     path !== "/api/pair";
 }
 
+/** Whether a session-less loopback request is a browser that must sign in
+ * (resolveRequestAuth's rule, for the few readers that decide on loopback
+ * themselves, such as published pages). */
+export function loopbackBrowserRefused(req: IncomingMessage, options: { loopbackMutationToken?: string; trustLocalBrowser?: boolean }): boolean {
+  if (!fromBrowser(req) || options.trustLocalBrowser) return false;
+  return !(options.loopbackMutationToken !== undefined &&
+    secureTokenMatch(headerValue(req.headers[DESKTOP_OWNER_HEADER]), options.loopbackMutationToken));
+}
+
 /** Constant-time compare of a header value with a secret; never throws. */
 export function secureTokenMatch(actual: string | undefined, expected: string): boolean {
   if (!actual || !expected) return false;
@@ -966,15 +1146,15 @@ export function resolveRequestAuth(req: IncomingMessage, options: ResolveOptions
     if (via === "cookie" && !isSameOrigin(req)) return deny(403, "forbidden: cross-origin request");
     // A browser sign-in's session is its browser's cookie, never a bearer token, and
     // its changes come from this origin's own page, which a browser says so.
-    if (via === "bearer" && session.cookieOnly) return deny(401, "unauthorized: this session belongs to a browser; sign in with a pairing code");
+    if (via === "bearer" && session.cookieOnly) return { auth: null, status: 401, error: "unauthorized: this session belongs to a browser; sign in with a pairing code", code: "session_cookie_only", sessionId: session.id, via };
     if (via === "cookie" && session.cookieOnly && !["GET", "HEAD", "OPTIONS"].includes(method) && !provesSameOrigin(req)) {
       return deny(403, "forbidden: this browser's session makes changes only from its own page");
     }
     const needed = requiredScope(method, path, options.features ?? {});
     if (!session.scopes.includes(needed)) {
-      const permission = needed === "admin" && session.scopes.includes("client") ? routePermission(method, path, options.features ?? {}) : null;
-      if (!permission) return deny(403, `forbidden: this session lacks the ${needed} scope`);
-      if (!options.permits?.(session, permission)) return { auth: null, status: 403, error: "forbidden", permission };
+      const grants = needed === "admin" && session.scopes.includes("client") ? routePermissions(method, path, options.features ?? {}) : null;
+      if (!grants) return deny(403, `forbidden: this session lacks the ${needed} scope`);
+      if (!grants.some((key) => options.permits?.(session, key))) return { auth: null, status: 403, error: "forbidden", permission: grants[0] };
     }
     // Only a request that passed both checks counts as use of the session,
     // and only a request the client made itself: redeeming a stream ticket
@@ -987,7 +1167,19 @@ export function resolveRequestAuth(req: IncomingMessage, options: ResolveOptions
   // A removed email member must not become the loopback owner merely because
   // their now-invalid cookie or bearer was presented to a local address.
   if (via) {
-    return deny(401, "unauthorized: this session has expired or was revoked; pair this device again");
+    // 2026-10-20: say why, so a client can tell an ended session (sign in
+    // again) from one this server does not know (retry: a restart from an
+    // older copy, a request that raced a deploy). A ticket is single use and
+    // short: an unknown one is just that.
+    const why = via === "ticket" ? { code: "stream_ticket_invalid" as const } : options.sessions.explainRefusal(via === "bearer" ? bearer : cookie);
+    return {
+      auth: null,
+      status: 401,
+      error: "unauthorized: this session has expired or was revoked; pair this device again",
+      code: why.code,
+      ...("sessionId" in why && why.sessionId ? { sessionId: why.sessionId } : {}),
+      via,
+    };
   }
 
   const proxied = isProxied(req);
@@ -1004,11 +1196,12 @@ export function resolveRequestAuth(req: IncomingMessage, options: ResolveOptions
       ) return deny(403, "forbidden: invalid companion request");
       return { auth: { kind: "loopback", scopes: LOOPBACK_SCOPES }, status: 401, error: "" };
     }
-    if (
-      options.loopbackMutationToken !== undefined &&
-      mutatingPublicRoute(method, path) &&
-      !secureTokenMatch(headerValue(req.headers[DESKTOP_OWNER_HEADER]), options.loopbackMutationToken)
-    ) {
+    const desktopOwner = options.loopbackMutationToken !== undefined &&
+      secureTokenMatch(headerValue(req.headers[DESKTOP_OWNER_HEADER]), options.loopbackMutationToken);
+    // A browser is never the owner by being here: a web page, or the Chrome a
+    // bot drives, is a browser on this machine too (OpenMausBot #2930).
+    if (fromBrowser(req) && !desktopOwner && !options.trustLocalBrowser) return { auth: null, status: 401, error: BROWSER_SIGN_IN, code: "sign_in_required" };
+    if (options.loopbackMutationToken !== undefined && mutatingPublicRoute(method, path) && !desktopOwner) {
       return deny(403, "forbidden: this change must come from the desktop app or a paired device");
     }
     if (options.loopbackMutationToken === undefined && options.loopbackTrust === "service") {

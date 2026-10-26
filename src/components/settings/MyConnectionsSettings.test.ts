@@ -44,6 +44,9 @@ describe("Mes connexions", () => {
     expect(pending).toContain("WDJB-MJHT");
     expect(pending).toContain("Open GitHub");
     const connected = renderToStaticMarkup(createElement(MyConnectionsSettings, { initial: { ...base, github: { state: "connected", deviceFlow: true, login: "octo", via: "device", connectedAt: 1 } } }));
+    expect(connected).not.toContain("data-github-fine-grained");
+    const fine = renderToStaticMarkup(createElement(MyConnectionsSettings, { initial: { ...base, github: { state: "connected", deviceFlow: true, login: "octo", via: "token", connectedAt: 1, fineGrained: true } } }));
+    expect(fine).toContain("data-github-fine-grained");
     expect(connected).toContain("Connected as @octo");
     expect(connected).toContain("Disconnect");
   });

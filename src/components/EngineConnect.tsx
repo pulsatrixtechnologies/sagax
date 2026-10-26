@@ -14,29 +14,35 @@ import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { perspicaxKeysUrl, type MyEngine } from "@/lib/perspicax-org";
-import { keyProviderDriver } from "@/lib/model-payers";
+import { engineUnavailable, keyProviderDriver } from "@/lib/model-payers";
 import { ClaudeSignIn } from "./ClaudeSignIn";
 import { DeviceSignIn } from "./DeviceSignIn";
-import { MyEngineAccess } from "./settings/MyEngines";
+import { MyEngineAccess, connectName } from "./settings/MyEngines";
 
-/** The name on the Connect button: the account people sign in with. */
-export function connectName(engine: Pick<MyEngine, "driver" | "displayName">): string {
-  switch (engine.driver) {
-    case "codex": return "ChatGPT";
-    case "claudeAgent": return "Claude";
-    case "grokAgent": return "Grok";
-    case "kimiAgent": return "Kimi";
-    case "geminiAgent": return "Gemini";
-    default: return engine.displayName;
-  }
+export { connectName };
+
+/** The engine can still be connected from this card (a subscription sign-in or
+ * a key in Perspicax), so a bare `installed: false` is a signed-out state, not
+ * missing software. */
+function engineConnectable(engine: Partial<Pick<MyEngine, "subscription" | "driver">>): boolean {
+  return engine.subscription?.supported === true || (engine.driver ? keyProviderDriver(engine.driver) : false);
 }
 
 /** The one status line: what pays for the person's turns today. */
-export function paysWithText(engine: Pick<MyEngine, "myTurns" | "installed" | "notAvailable">): string {
-  if (!engine.installed) return engine.notAvailable ? t("myEngines.notAvailable") : t("myEngines.notInstalled");
-  if (engine.myTurns === "subscription") return t("engineConnect.paysWith.subscription");
-  if (engine.myTurns === "key") return t("engineConnect.paysWith.key");
-  if (engine.myTurns === "org-key") return t("engineConnect.paysWith.orgKey");
+export function paysWithText(
+  engine: Pick<MyEngine, "myTurns" | "installed" | "notAvailable"> & Partial<Pick<MyEngine, "subscription" | "driver">>,
+): string {
+  // Only the image deliberately not carrying the engine is "not available".
+  if (engineUnavailable(engine)) return t("myEngines.notAvailable");
+  // A bare `installed: false` reads as "not installed" only when there is no
+  // way to connect it here; a signed-out subscription or key engine is simply
+  // "not connected" (the Grok lockout: a logout must not say "not installed").
+  if (!engine.installed && !engineConnectable(engine)) return t("myEngines.notInstalled");
+  if (engine.installed) {
+    if (engine.myTurns === "subscription") return t("engineConnect.paysWith.subscription");
+    if (engine.myTurns === "key") return t("engineConnect.paysWith.key");
+    if (engine.myTurns === "org-key") return t("engineConnect.paysWith.orgKey");
+  }
   return t("engineConnect.notConnected");
 }
 
@@ -50,14 +56,22 @@ export async function signOutMyEngine(instanceId: string): Promise<void> {
  * a Connect button, or the link to the person's keys in Perspicax. */
 export function engineConnectHasAction(engine: MyEngine): boolean {
   const { supported, signedIn } = engine.subscription;
-  return engine.installed && !signedIn && (supported || keyProviderDriver(engine.driver));
+  if (engineUnavailable(engine)) return false;
+  return !signedIn && (supported || keyProviderDriver(engine.driver));
+}
+
+/** The `data-pays-with` marker for the status line. */
+function paysWithState(engine: MyEngine): string {
+  if (engineUnavailable(engine)) return "not-available";
+  if (!engine.installed && !(engine.subscription.supported || keyProviderDriver(engine.driver))) return "not-installed";
+  return engine.installed ? engine.myTurns : "none";
 }
 
 /** The one status line, as a paragraph. */
 export function PaysWithLine({ engine, className = "text-[12px]" }: { engine: MyEngine; className?: string }) {
   return (
-    <p data-pays-with={engine.installed ? engine.myTurns : engine.notAvailable ? "not-available" : "not-installed"}
-      title={engine.installed ? undefined : engine.notAvailable}
+    <p data-pays-with={paysWithState(engine)}
+      title={engineUnavailable(engine) ? engine.notAvailable : undefined}
       className={cn("text-ink-secondary", className)}>{paysWithText(engine)}</p>
   );
 }
@@ -80,7 +94,7 @@ export function EngineConnect({ engine, issuer, onChanged, className, statusLine
   const loginBase = `/api/me/engines/${encodeURIComponent(engine.instanceId)}/login`;
   const name = connectName(engine);
   const { supported, signedIn } = engine.subscription;
-  const keysApply = engine.installed && !signedIn && keyProviderDriver(engine.driver);
+  const keysApply = !engineUnavailable(engine) && !signedIn && keyProviderDriver(engine.driver);
 
   const disconnect = async () => {
     setBusy(true);
@@ -98,7 +112,11 @@ export function EngineConnect({ engine, issuer, onChanged, className, statusLine
   return (
     <section data-engine-connect={engine.instanceId} className={cn("flex min-w-0 flex-col gap-2", className)}>
       {statusLine && <PaysWithLine engine={engine} />}
-      {engine.installed && supported && (signedIn ? showDisconnect && (
+      {/* Connect/Disconnect is gated on the engine being connectable here, not
+          on the bare `installed` probe: a signed-out subscription engine must
+          always offer an enabled Connect (the Grok lockout, where a logout read
+          as "not installed" and disabled the only way back in). */}
+      {!engineUnavailable(engine) && supported && (signedIn ? showDisconnect && (
         <div data-engine-connected className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <span className="flex items-center gap-1.5 text-[12.5px] text-success"><Check size={13} aria-hidden="true" />{t("engineConnect.connected")}</span>
           <button type="button" disabled={busy} onClick={() => void disconnect()}

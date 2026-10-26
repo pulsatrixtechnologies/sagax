@@ -43,6 +43,7 @@ import { canEditPersonLabel, savePersonLabel, usePersonLabel } from "@/lib/perso
 import { PERSON_LABEL_MAX } from "../../shared/person-label";
 import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
 import { DescribedRow, FoldRow, PILL, SettingsGroup } from "./SettingsPrimitives";
+import { personLabel } from "@/lib/human-label";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -74,7 +75,7 @@ export function PersonPanel({ personId, directory: given }: { personId: string; 
   const hidden = useSidebarHidden();
   const viewerId = viewerActorId(state.config);
   const person = findPanelPerson(directory, personId);
-  const name = person?.name || person?.login || personId;
+  const name = personLabel(person?.name, person?.login, personId);
   const avatarUrl = personAvatarSrc(person?.avatarUrl);
   const teams = personTeams(person, directory);
   const groups = sharedGroups(state.groups, personId);

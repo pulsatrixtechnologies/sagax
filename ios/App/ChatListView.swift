@@ -81,6 +81,11 @@ struct ChatListView: View {
     @StateObject private var sectionActions = SidebarSectionActions()
     /// WP11: the room row menu's prompts (rename, move, delete, copy).
     @StateObject private var roomActions = RoomActions()
+    /// Bulk selection of bot rows and the "more unread" pills (Features/Sidebar).
+    @StateObject private var selection = HomeSelectionModel()
+    @State private var offscreenUnread = OffscreenUnread(above: 0, below: 0, nearestAbove: nil, nearestBelow: nil)
+    @State private var rowFrames: [String: CGRect] = [:]
+    @State private var rosterViewport: (top: CGFloat, bottom: CGFloat) = (0, 0)
     @FocusState private var searchFocused: Bool
 
     /// Space between the header's glass buttons and whatever the list
@@ -197,6 +202,7 @@ struct ChatListView: View {
             .threadActionsPresenter(threadActions)
             .environmentObject(sectionActions)
             .environmentObject(botActions)
+            .environmentObject(selection)
             .botRowActionsPresenter(botActions)
             // its own host: alerts chained on one view after the thread
             // presenter's would never show
@@ -1317,6 +1323,15 @@ extension ChatListView {
         }
 #if DEBUG
         .task {
+            // capture only: bulk selection started on the first two bots
+            guard ProcessInfo.processInfo.arguments.contains("-parity-select") else { return }
+            for _ in 0..<40 where session.state.bots.count < 2 { try? await Task.sleep(nanoseconds: 250_000_000) }
+            let ids = ["Aurora", "Liora"].compactMap { name in session.state.bots.first { $0.name == name }?.id }
+            guard let first = ids.first else { return }
+            selection.begin(first)
+            ids.dropFirst().forEach { selection.toggle($0) }
+        }
+        .task {
             switch ParityLaunch.current?.screen {
             case .homePlusMenu?: showingPlusMenu = true
             case .search?: showingSearch = true
@@ -1393,6 +1408,7 @@ extension ChatListView {
     private func standardHomeScroll(headerClearance: CGFloat) -> some View {
         ZStack(alignment: .top) {
             Theme.bg.ignoresSafeArea()
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     Color.clear.frame(height: headerClearance)
@@ -1419,6 +1435,35 @@ extension ChatListView {
                 await AccountRowModel.shared.refresh(session)
             }
             .accessibilityIdentifier("roster-list")
+            .coordinateSpace(name: Self.rosterSpace)
+            .background {
+                GeometryReader { box in
+                    Color.clear.onPreferenceChange(HomeRowFramesKey.self) { frames in
+                        rowFrames = frames
+                        rosterViewport = (headerClearance, box.size.height)
+                        updateOffscreenUnread()
+                    }
+                }
+            }
+            .overlay(alignment: .top) {
+                if offscreenUnread.above > 0, let target = offscreenUnread.nearestAbove {
+                    HomeUnreadPill(count: offscreenUnread.above, above: true) {
+                        withAnimation { proxy.scrollTo(target, anchor: .center) }
+                    }
+                    .padding(.top, headerClearance + 4)
+                    .transition(.opacity)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if offscreenUnread.below > 0, let target = offscreenUnread.nearestBelow {
+                    HomeUnreadPill(count: offscreenUnread.below, above: false) {
+                        withAnimation { proxy.scrollTo(target, anchor: .center) }
+                    }
+                    .padding(.bottom, 12)
+                    .transition(.opacity)
+                }
+            }
+            .onValueChange(of: unreadRowIds) { _ in updateOffscreenUnread() }
             .topScrollEdgeFade(height: headerClearance)
             .overlay {
                 if rosterIsEmpty {
@@ -1428,6 +1473,7 @@ extension ChatListView {
                         description: Text("Bots you create on your computer show up here.")
                     )
                 }
+            }
             }
             AnyView(standardHeader)
         }
@@ -1474,7 +1520,9 @@ extension ChatListView {
     /// here, alone, at the bottom.
     @ViewBuilder
     private var standardBottomBar: some View {
-        if showUpdatesButton || !rosterChromeAtTop {
+        if selection.active {
+            HomeSelectionBar(model: selection)
+        } else if showUpdatesButton || !rosterChromeAtTop {
             HStack(spacing: Theme.Metric.controlGap) {
                 if showUpdatesButton {
                     updatesButton
@@ -1645,17 +1693,32 @@ extension ChatListView {
         let queued = session.state.queuedThreadIds
         return ForEach(ordered, id: \.id) { chat in
             let messages = session.state.visibleTranscript(forThread: chat.threadId)
-            Button { openChat(chat) } label: {
+            let status = rowStatus(chat, waiting: waiting.contains(chat.id), queued: queued)
+            let botId: String? = { if case let .bot(bot) = chat { return bot.id }; return nil }()
+            Button {
+                if selection.active { if let botId { selection.toggle(botId) } } else { openChat(chat) }
+            } label: {
                 HomeChatRow(
                     chat: chat,
                     preview: rosterPreviewLine(messages, detail: activity),
                     stamp: RelativeStamp.list(messages.last?.at ?? 0),
-                    status: rowStatus(chat, waiting: waiting.contains(chat.id), queued: queued),
-                    state: MausState.forChat(chat, in: session.state)
+                    status: status,
+                    state: MausState.forChat(chat, in: session.state),
+                    selection: selection.active && botId != nil ? .init(selected: botId.map(selection.contains) ?? false) : nil
                 )
             }
             .buttonStyle(.plain)
-            .contextMenu { chatMenu(chat) }
+            .id(chat.id)
+            .reportsHomeRow(chat.id, space: Self.rosterSpace)
+            .contextMenu {
+                chatMenu(chat)
+                if let botId, !selection.active {
+                    Divider()
+                    Button { selection.begin(botId) } label: {
+                        Label(String(localized: "Select"), systemImage: "checkmark.circle")
+                    }
+                }
+            }
             .sidebarBotPinSwipe(chat, session: session)
             .accessibilityIdentifier("chat-row.\(chat.id)")
         }
@@ -1670,6 +1733,24 @@ extension ChatListView {
             let busy = room.busyBotId != nil
             return HomeRowStatus(waiting: waiting, working: busy, threadCount: 0, unread: room.unread && !busy)
         }
+    }
+
+    static let rosterSpace = "roster-scroll"
+
+    private var unreadRowIds: Set<String> {
+        let waiting = waitingChats
+        let queued = session.state.queuedThreadIds
+        let chats = session.state.chatSummaries(activity: activity).map(\.chat)
+        return Set(chats.filter { rowStatus($0, waiting: waiting.contains($0.id), queued: queued).unread }.map(\.id))
+    }
+
+    /// Rows scrolled out of the visible window that still wait on a read.
+    private func updateOffscreenUnread() {
+        let unread = unreadRowIds
+        let (top, bottom) = rosterViewport
+        let boxes = rowFrames.map { UnreadRowBox(id: $0.key, top: $0.value.minY, bottom: $0.value.maxY, unread: unread.contains($0.key)) }
+        let next = OffscreenUnread.compute(rows: boxes, viewportTop: top, viewportBottom: bottom)
+        if next != offscreenUnread { offscreenUnread = next }
     }
 
     /// The parity capture of a typed search.

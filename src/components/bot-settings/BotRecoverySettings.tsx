@@ -6,6 +6,7 @@
 import { useState } from "react";
 
 import { t } from "@/lib/i18n";
+import { engineLabel } from "@/lib/human-label";
 import { botRecovery, type BotRecovery } from "@/lib/bot-runtime-settings";
 import { useStore, type Bot } from "@/state/store";
 import { useOfferedInstances } from "@/lib/offered-instances";
@@ -51,7 +52,7 @@ export function BotRecoverySettings({ bot }: { bot: Bot }) {
             onChange={(next) => setDraft({ enabled: value.enabled, ...(next ? { backup: { instanceId: next, model: "" } } : {}) })}
             options={[
               { value: "", label: t("settings.recovery.chooseEngine") },
-              ...(value.backup && !engine ? [{ value: value.backup.instanceId, label: t("settings.recovery.unavailable", { name: value.backup.instanceId }), disabled: true }] : []),
+              ...(value.backup && !engine ? [{ value: value.backup.instanceId, label: t("settings.recovery.unavailable", { name: engineLabel(null, value.backup.instanceId) }), disabled: true }] : []),
               ...engines.map((instance) => ({
                 value: instance.instanceId,
                 label: instance.displayName,

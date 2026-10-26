@@ -2,7 +2,9 @@
 // (server/perspicax-mcp-bridge.ts), against a fake harness.
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type RequestListener, type Server } from "node:http";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -72,6 +74,34 @@ describe("Perspicax MCP bridge", () => {
       authorization: "Bearer turn-capability",
       body: { jsonrpc: "2.0", id: 7, method: "tools/list" },
     });
+  });
+
+  it("reads the current turn's capability from its file on every frame (a kept process)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "px-bridge-"));
+    const file = join(dir, "cap");
+    writeFileSync(file, "warm-cap", { mode: 0o600 });
+    const seen: string[] = [];
+    const harness = await listen((request, response) => {
+      let body = "";
+      request.on("data", (chunk) => { body += chunk; });
+      request.on("end", () => {
+        seen.push(request.headers.authorization ?? "");
+        const frame = JSON.parse(body);
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ jsonrpc: "2.0", id: frame.id, result: {} }));
+      });
+    });
+    const lines = start({ SAGAX_HARNESS_URL: harness, SAGAX_PERSPICAX_TOKEN: "launch-cap", SAGAX_PERSPICAX_TOKEN_FILE: file, SAGAX_PERSPICAX_PROFILE: "P1" });
+    child!.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })}\n`);
+    await nextJson(lines);
+    writeFileSync(file, "turn-cap");
+    child!.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" })}\n`);
+    await nextJson(lines);
+    rmSync(file);
+    child!.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/list" })}\n`);
+    await nextJson(lines);
+    expect(seen).toEqual(["Bearer warm-cap", "Bearer turn-cap", "Bearer launch-cap"]);
+    rmSync(dir, { recursive: true, force: true });
   });
 
   it("answers Perspicax is unavailable when the harness refuses or cannot be reached", async () => {

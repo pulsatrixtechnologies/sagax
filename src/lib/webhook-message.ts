@@ -7,8 +7,11 @@ export interface WebhookMessageView {
  * The stored message stays untouched, preserving the trust boundary for model
  * context and follow-up turns. */
 export function webhookMessageView(text: string): WebhookMessageView | null {
-  const eventStart = text.indexOf("[UNTRUSTED WEBHOOK EVENT DATA]\n");
-  if (eventStart < 0) return null;
+  // Newer prompts carry a random boundary on both markers; older ones none.
+  const open = /\[UNTRUSTED WEBHOOK EVENT DATA(?: ([0-9a-f]{12,64}))?\]\n/.exec(text);
+  if (!open) return null;
+  const eventStart = open.index;
+  const boundary = open[1];
   const trustedPrefix = text.slice(0, eventStart);
   const markers = [
     "AUTHENTICATED WEBHOOK TASK",
@@ -25,7 +28,10 @@ export function webhookMessageView(text: string): WebhookMessageView | null {
     }
   }
 
-  const eventData = text.match(/\[UNTRUSTED WEBHOOK EVENT DATA\]\n([\s\S]*?)\n\[\/UNTRUSTED WEBHOOK EVENT DATA\]/)?.[1];
+  const bodyStart = eventStart + open[0].length;
+  const closing = `\n[/UNTRUSTED WEBHOOK EVENT DATA${boundary ? ` ${boundary}` : ""}]`;
+  const bodyEnd = text.indexOf(closing, bodyStart);
+  const eventData = bodyEnd >= 0 ? text.slice(bodyStart, bodyEnd) : undefined;
   if (!task || !eventData) return null;
 
   const splitAt = eventData.indexOf("\n\n");

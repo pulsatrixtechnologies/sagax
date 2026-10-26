@@ -2135,39 +2135,6 @@ class Session(
         }
     }
 
-    suspend fun loadConnectorCatalog(): ConnectorCatalog? {
-        val activeClient = client ?: return null
-        return try {
-            activeClient.connectorCatalog()
-        } catch (error: Throwable) {
-            if (error is kotlinx.coroutines.CancellationException) throw error
-            _actionError.value = error.message
-            null
-        }
-    }
-
-    suspend fun loadAllConnectorStatuses(): ConnectorStatuses? {
-        val activeClient = client ?: return null
-        return try {
-            activeClient.allConnectorStatuses()
-        } catch (error: Throwable) {
-            if (error is kotlinx.coroutines.CancellationException) throw error
-            _actionError.value = error.message
-            null
-        }
-    }
-
-    suspend fun authorizeConnector(slug: String, alias: String?): URI? {
-        val activeClient = client ?: return null
-        return try {
-            activeClient.authorizeConnector(slug, alias)
-        } catch (error: Throwable) {
-            if (error is kotlinx.coroutines.CancellationException) throw error
-            _actionError.value = error.message
-            null
-        }
-    }
-
     suspend fun loadRoutines(): RoutinesResponse {
         val activeClient = client ?: return RoutinesResponse(emptyList(), emptyList())
         return try {
@@ -2181,8 +2148,8 @@ class Session(
 
     /**
      * The overview read. [quiet] suppresses the global action error for
-     * supplementary callers — the profile sheet's grants fetch — where a
-     * failed read should leave one section absent, not error the profile.
+     * supplementary callers where a failed read should leave one section
+     * absent, not error the profile.
      */
     suspend fun loadOverview(botId: String, quiet: Boolean = false): BotOverview? {
         val activeClient = client ?: return null

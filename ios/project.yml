@@ -62,8 +62,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.pulsatrix.sagax
-        MARKETING_VERSION: "0.5.23"
-        CURRENT_PROJECT_VERSION: "52"
+        MARKETING_VERSION: "0.7.7"
+        CURRENT_PROJECT_VERSION: "75"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1,2"
         # The catalog lives in App/, which is already a source path.
@@ -181,9 +181,28 @@ targets:
         # Required for communication notifications (INSendMessageIntent).
         NSUserActivityTypes:
           - INSendMessageIntent
+        NSFaceIDUsageDescription: >-
+          Sagax uses Face ID to show a card number or another secret you
+          saved. The bot never sees it.
         NSSpeechRecognitionUsageDescription: >-
           Sagax converts your speech into text so you can send it
           to a bot. Recognition runs on this phone when it can.
+        # Phone tools (Features/PhoneTools): asked the first time a bot's
+        # request is approved on this phone. French in App/InfoPlist.xcstrings.
+        NSLocationWhenInUseUsageDescription: >-
+          When you allow it on your phone, Sagax sends your position once to the bot that asked. Never in the background.
+        NSContactsUsageDescription: >-
+          When you allow it on your phone, Sagax searches your contacts for the name a bot asked about and sends only the details it asked for.
+        NSRemindersFullAccessUsageDescription: >-
+          When you allow it on your phone, Sagax reads or adds the reminders a bot asked for.
+        NSRemindersUsageDescription: >-
+          When you allow it on your phone, Sagax reads or adds the reminders a bot asked for.
+        NSCalendarsFullAccessUsageDescription: >-
+          When you allow it on your phone, Sagax reads your calendar for the days a bot asked about, or adds the event it asked for.
+        NSCalendarsUsageDescription: >-
+          When you allow it on your phone, Sagax reads your calendar for the days a bot asked about, or adds the event it asked for.
+        NSFocusStatusUsageDescription: >-
+          When you allow it on your phone, Sagax tells the bot that asked whether a Focus is on, so it can wait before disturbing you.
         NSBonjourServices:
           - _openmausbot._tcp
         # The companion listener is plain HTTP on a local address. ATS has
@@ -240,8 +259,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.pulsatrix.sagax.share
-        MARKETING_VERSION: "0.5.23"
-        CURRENT_PROJECT_VERSION: "52"
+        MARKETING_VERSION: "0.7.7"
+        CURRENT_PROJECT_VERSION: "75"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1,2"
         APPLICATION_EXTENSION_API_ONLY: YES
@@ -298,8 +317,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.pulsatrix.sagax.notification
-        MARKETING_VERSION: "0.5.23"
-        CURRENT_PROJECT_VERSION: "52"
+        MARKETING_VERSION: "0.7.7"
+        CURRENT_PROJECT_VERSION: "75"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1,2"
         APPLICATION_EXTENSION_API_ONLY: YES
@@ -376,8 +395,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.pulsatrix.sagax.widgets
-        MARKETING_VERSION: "0.5.23"
-        CURRENT_PROJECT_VERSION: "52"
+        MARKETING_VERSION: "0.7.7"
+        CURRENT_PROJECT_VERSION: "75"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1,2"
         APPLICATION_EXTENSION_API_ONLY: YES

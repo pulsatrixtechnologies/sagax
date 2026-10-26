@@ -48,6 +48,22 @@ describe("peer approval card lifecycle", () => {
     rmSync(DATA_DIR, { recursive: true, force: true });
   });
 
+  it("reaches a bot on the sender's allowed recipients with no card (parité 1C)", async () => {
+    from = store.patchBot(from.id, { allowedRecipients: [`bot:${target.id}`] })!;
+    expect(await requestPeerApproval(bus, from, target, "ping", "ask_bot")).toBe("allow");
+    expect(await requestPeerApproval(bus, from, target, "ping", "delegate_bot")).toBe("allow");
+    expect(pendingCard(store, from)).toBeUndefined();
+  });
+
+  it("keeps the card for a bot that is not on the list", async () => {
+    from = store.patchBot(from.id, { allowedRecipients: ["bot:someone-else", "email:a@b.co"] })!;
+    const verdict = requestPeerApproval(bus, from, target, "ping", "ask_bot");
+    const card = pendingCard(store, from);
+    expect(card).toBeTruthy();
+    resolvePeerComms(bus, card!.card!.requestId!, "deny");
+    expect(await verdict).toBe("deny");
+  });
+
   it("settles the card when the user allows, so the composer unblocks", async () => {
     const verdict = requestPeerApproval(bus, from, target, "ping", "ask_bot");
     const card = pendingCard(store, from);
@@ -102,6 +118,7 @@ describe("peer approval card lifecycle", () => {
       threadId: from.threadId,
       title: "Asker needs approval",
     });
+    expect(frames[0]?.requestId).toBe(card.card!.requestId);
     expect(frames[0]?.body).toContain("@Asker wants to contact @Helper");
     expect(frames[0]?.body).toContain("Helper, can you take the deploy?");
 

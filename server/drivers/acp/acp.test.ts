@@ -11,7 +11,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSy
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { DATA_DIR, ensureDirs, NATIVE_DIR } from "../../config.ts";
 import { BUILT_IN_DATA_SYSTEM_PROMPT } from "../../data/instructions.ts";
@@ -21,7 +21,7 @@ import { recordEvents, type EventRecorder } from "../../testing/events.ts";
 import { promptSplitFingerprints, writePromptSplitReceipt } from "../prompt-split.ts";
 import { GROK_TOOL_REUSE_HINT as HINT } from "./grok.ts";
 import { createAcpDriver, DEFAULT_ACP_PROMPT_IDLE_MS, skipSubscriptionAuthForLocalInject, type AcpSupport } from "./core.ts";
-import { GrokAgentDriver, grokAcceptsUnadvertisedImages } from "./grok.ts";
+import { GrokAgentDriver, grokAcceptsUnadvertisedImages, grokCloudConnectorEnv, grokConfigDeclaresMcp, grokConnectableConnectors } from "./grok.ts";
 import { READ_ONLY_AGENT_TOOL_NAMES } from "../../agent-tool-policy.ts";
 import { GeminiAgentDriver } from "./gemini.ts";
 import { KimiAgentDriver } from "./kimi.ts";
@@ -260,6 +260,9 @@ describe("ACP turns (fake CLI)", () => {
     delete process.env.FAKE_ACP_RPC_FAILURE_FILE;
     delete process.env.FAKE_ACP_RPC_FAILURE_METHOD;
     delete process.env.FAKE_ACP_RPC_FAILURE_AFTER_OUTPUT;
+    delete process.env.FAKE_ACP_REASONING_FAIL_TIMES;
+    delete process.env.FAKE_ACP_REASONING_COUNT_FILE;
+    delete process.env.SAGAX_ACP_REASONING_CONTINUE_MAX;
     delete process.env.FAKE_ACP_RPC_FAILURE_AFTER_USAGE;
     delete process.env.FAKE_ACP_LOAD_ERROR;
     delete process.env.FAKE_ACP_ALLOW_ALWAYS;
@@ -662,7 +665,11 @@ describe("ACP turns (fake CLI)", () => {
     expect(readFileSync(join(NATIVE_DIR, "t-grok-image.ndjson"), "utf8")).not.toContain(bytes.toString("base64"));
   });
 
-  it.each([null, {}, { _meta: { grokShell: true, agentVersion: "1.0.24" } },
+  it.each(["1.0.25", "1.0.62", "1.1.0", "1.12.3"])("keeps image support on later Grok 1.x releases (%s, engine parity: Grok 4.5 images)", (agentVersion) => {
+    expect(grokAcceptsUnadvertisedImages({ _meta: { grokShell: true, agentVersion } })).toBe(true);
+  });
+
+  it.each([null, {}, { _meta: { grokShell: true, agentVersion: "1.0.24" } }, { _meta: { grokShell: true, agentVersion: "0.9.99" } }, { _meta: { grokShell: true, agentVersion: "2.0.3" } },
     { _meta: { grokShell: true, agentVersion: "1.0.25-preview" } },
     { _meta: { grokShell: false, agentVersion: "1.0.25" } }])("does not assume image support for unknown Grok runtime %j", (init) => {
     expect(grokAcceptsUnadvertisedImages(init)).toBe(false);
@@ -840,33 +847,6 @@ describe("ACP turns (fake CLI)", () => {
     expect(seen.env.BOX_TOKEN).toBeUndefined();
     expect(seen.env.SAGAX_TTS_KEY).toBeUndefined();
     for (const name of Object.keys(CONTROL_PLANE_FIXTURE)) expect(seen.env[name]).toBeUndefined();
-  });
-
-  // ACP session/new accepts stdio MCP entries, so connected apps use the
-  // same harness-owned bridge as Claude and Codex.
-  it("mounts connected apps as a stdio MCP server", async () => {
-    await create();
-    const dump = join(scratch, "composio.json");
-    process.env.FAKE_ACP_DUMP = dump;
-    expect(instance.adapter.capabilities.composioMcp).toBe(true);
-    await instance.adapter.sendTurn({
-      threadId: "t-composio",
-      text: "go",
-      integrations: {
-        composio: {
-          command: process.execPath,
-          args: ["/tmp/connector-proxy.js"],
-          env: { SAGAX_CONNECTOR_UPSTREAM_URL: "http://127.0.0.1:8799/api/internal/connectors/mcp" },
-        },
-      },
-    });
-    await recorder.until((event) => event.type === "turn.completed");
-    expect(JSON.parse(readFileSync(`${dump}.mcp.json`, "utf8"))).toContainEqual({
-      name: "composio",
-      command: process.execPath,
-      args: ["/tmp/connector-proxy.js"],
-      env: [{ name: "SAGAX_CONNECTOR_UPSTREAM_URL", value: "http://127.0.0.1:8799/api/internal/connectors/mcp" }],
-    });
   });
 
   it.each([false, true])("mounts Data through the existing stdio transport unless excluded (excluded=%s)", async (excluded) => {
@@ -1413,8 +1393,11 @@ describe("ACP turns (fake CLI)", () => {
   });
 
   it.each(["grok-4.7", "grok-4.6", "grok-4.5", "local-model"])(
-    "keeps native Grok Auto when selecting and resuming %s",
+    "keeps native Grok Auto (bots opted out of the gate) when selecting and resuming %s",
     async (model) => {
+      // Auto is gated by default (grok-approval-gate.ts); this is the opt-out path
+      writeFileSync(join(DATA_DIR, "grok-approval-gate.json"), JSON.stringify({ bots: "none" }));
+      onTestFinished(() => rmSync(join(DATA_DIR, "grok-approval-gate.json"), { force: true }));
       await create(GrokAgentDriver);
       const agents = { command: "node", args: ["/fixture/agents-proxy.mjs"], env: {} };
       for (const resumeCursor of [undefined, "fake-acp-session"]) {
@@ -1522,8 +1505,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       expect(lines[2]).toContain("Not approved: third__anything did not run");
     });
 
-    it("keeps Grok's use_tool ask as a card for a bot without the flag", async () => {
-      writeFileSync(flagFile, JSON.stringify({ bots: ["bot-gated"] }));
+    it("keeps Grok's use_tool ask as a card for a bot that opted out", async () => {
+      writeFileSync(flagFile, JSON.stringify({ off: ["other-bot"] }));
       process.env.FAKE_ACP_ASK_BEFORE_MCP = "use_tool";
       process.env.FAKE_ACP_MCP_CALLS = "agents:list_bots";
       await create(GrokAgentDriver, "mcp-call");
@@ -1604,8 +1587,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       expect(await instance.adapter.respondToRequest("t-gate-stop", card.requestId, { behavior: "allow" })).toBe("unavailable");
     });
 
-    it("leaves bots without the flag, and Ask, Edits and Full access, on their current modes", async () => {
-      writeFileSync(flagFile, JSON.stringify({ bots: ["bot-gated"] }));
+    it("leaves an opted-out bot, and Ask, Edits and Full access, on their current modes", async () => {
+      writeFileSync(flagFile, JSON.stringify({ off: ["other-bot"] }));
       await create(GrokAgentDriver);
       const cases: Array<{ botId: string; approvalMode: "auto" | "ask" | "edits" | "full"; mode: string }> = [
         { botId: "other-bot", approvalMode: "auto", mode: "auto" },
@@ -1629,9 +1612,9 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       }
     });
 
-    it("treats a missing or corrupt flag file as off", async () => {
+    it("gates Auto by default: a missing, corrupt or legacy opt-in flag file is on (engine parity)", async () => {
       await create(GrokAgentDriver);
-      for (const [index, content] of [undefined, "not json", JSON.stringify({ bots: "some" })].entries()) {
+      for (const [index, content] of [undefined, "not json", JSON.stringify({ bots: "some" }), JSON.stringify({ bots: ["someone-else"] })].entries()) {
         if (content === undefined) rmSync(flagFile, { force: true }); else writeFileSync(flagFile, content);
         const dump = join(scratch, `gate-flag-${index}.json`);
         process.env.FAKE_ACP_DUMP = dump;
@@ -1641,8 +1624,47 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         });
         await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
         const seen = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[] };
-        expect(seen.argv.slice(0, 2)).toEqual(["--permission-mode", "auto"]);
+        expect(seen.argv.slice(0, 2)).toEqual(["--permission-mode", "default"]);
+        expect(seen.argv).not.toContain("--allow");
+        // a solo Auto turn can call account connectors with no prompt: they stay off
+        expect((seen as unknown as { env: Record<string, string> }).env.GROK_MANAGED_MCPS_ENABLED).toBe("false");
+        expect((seen as unknown as { env: Record<string, string> }).env.GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED).toBe("false");
       }
+    });
+
+    it("keeps Grok's own auto mode on a solo turn whose Grok config declares MCP servers Sagax cannot gate", async () => {
+      await create(GrokAgentDriver);
+      const project = mkdtempSync(join(tmpdir(), "grok-project-"));
+      onTestFinished(() => removeTempDir(project));
+      mkdirSync(join(project, ".grok"));
+      writeFileSync(join(project, ".grok", "config.toml"), "[mcp_servers.mine]\ncommand = \"node\"\n");
+      for (const [index, withholdHostTools] of [false, true].entries()) {
+        const dump = join(scratch, `gate-config-mcp-${index}.json`);
+        process.env.FAKE_ACP_DUMP = dump;
+        const { turnId } = await instance.adapter.sendTurn({
+          threadId: `t-gate-config-mcp-${index}`, botId: "bot-gated", text: "go", model: "grok-4.5", approvalMode: "auto", cwd: project,
+          withholdHostTools, integrations: { agents: server("agents") },
+        });
+        await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+        const seen = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[] };
+        const mode = seen.argv[seen.argv.indexOf("--permission-mode") + 1];
+        // an organization turn reaches those servers through use_tool only: still gated
+        expect(mode).toBe(withholdHostTools ? "default" : "auto");
+      }
+    });
+
+    it("runs Grok's own auto mode only for an explicit opt-out ({bots: \"none\"})", async () => {
+      writeFileSync(flagFile, JSON.stringify({ bots: "none" }));
+      await create(GrokAgentDriver);
+      const dump = join(scratch, "gate-none.json");
+      process.env.FAKE_ACP_DUMP = dump;
+      const { turnId } = await instance.adapter.sendTurn({
+        threadId: "t-gate-none", botId: "bot-gated", text: "go", model: "grok-4.5", approvalMode: "auto",
+        integrations: { agents: server("agents") },
+      });
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+      const seen = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[] };
+      expect(seen.argv.slice(0, 2)).toEqual(["--permission-mode", "auto"]);
     });
   });
 
@@ -1677,6 +1699,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       effort: "high",
       approvalMode: "auto",
       withholdHostTools: true,
+      grokCloudConnectors: true,
       access: { via: "subscription", identity: "subscription:a", engineHome: homeA },
       integrations: { agents },
     });
@@ -1685,7 +1708,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(seen.argv).toEqual([
       "--no-subagents", "--disable-web-search",
       "--deny", "Bash", "--deny", "Read", "--deny", "Edit", "--deny", "Write", "--deny", "Grep", "--deny", "WebFetch", "--deny", "WebSearch",
-      "--permission-mode", "auto", ...AGENTS_READ_ONLY_ALLOW,
+      // Auto decides through Sagax (the gate, on by default): no classifier, no allow rules
+      "--permission-mode", "default",
       "agent", "--no-leader", "-m", "grok-4.7", "--reasoning-effort", "high", "stdio",
     ]);
     expect(seen.argv).not.toContain("--sandbox");
@@ -1695,7 +1719,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(seen.env.GROK_HOME).toBe(join(homeA, ".grok"));
     expect(seen.env.XAI_API_KEY).toBeUndefined();
     expect(seen.env.GROK_AGENT).toBe("grok-build");
-    expect(seen.env.GROK_MANAGED_MCPS_ENABLED).toBe("false");
+    expect(seen.env.GROK_MANAGED_MCPS_ENABLED).toBeUndefined();
     expect(seen.env.GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED).toBe("false");
     const profile = JSON.parse(readFileSync(`${dump}.session.json`, "utf8"))._meta.agentProfile;
     expect(profile).toMatchObject({
@@ -1735,6 +1759,59 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(JSON.stringify(seenB)).not.toContain(homeA);
   });
 
+  it("surfaces the connect card for an unconnected cloud connector on an own-account org turn, instead of a dead end", async () => {
+    // The fake CLI answers _x.ai/mcp/list with no servers (like a grok.com
+    // account that never connected Outlook): the Connect-apps card still
+    // shows the connector, so the turn must point the model at the one-step
+    // connect card rather than let it say it has no tool.
+    const dump = join(scratch, "grok-connectable.json");
+    process.env.FAKE_ACP_DUMP = dump;
+    process.env.FAKE_ACP_DUMP_PROMPT = "1";
+    await create(GrokAgentDriver);
+    // A unique stable half so the fake CLI's shared session id never dedups
+    // this turn's first delivery (the volatile catalog section rides it).
+    const rules = "Standing rules. " + randomUUID();
+    const { turnId } = await instance.adapter.sendTurn({
+      threadId: "t-grok-connectable-" + randomUUID(),
+      text: "peux-tu lire mes courriels?",
+      model: "grok-4.7",
+      system: rules,
+      systemStable: rules,
+      systemVolatile: "",
+      withholdHostTools: true,
+      grokCloudConnectors: true,
+      access: { via: "subscription", identity: "subscription:a", engineHome: join(scratch, "person-connectable") },
+      integrations: { agents: { command: "node", args: ["/fixture/agents-proxy.mjs"], env: {} } },
+    });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+    const prompt = (JSON.parse(readFileSync(`${dump}.prompt.json`, "utf8")) as Array<{ type: string; text: string }>)
+      .map((part) => part.text ?? "").join("\n");
+    expect(prompt).toContain("Connectable but not connected yet");
+    expect(prompt).toContain("Outlook (Exchange)");
+    expect(prompt).toContain("agents__open_connector_setup");
+    expect(prompt).not.toContain("This list is complete");
+  });
+
+  it("offers no connectable connectors on a solo turn (cloud connectors never load there)", async () => {
+    const dump = join(scratch, "grok-solo-no-connectable.json");
+    process.env.FAKE_ACP_DUMP = dump;
+    process.env.FAKE_ACP_DUMP_PROMPT = "1";
+    await create(GrokAgentDriver);
+    const rules = "Standing rules. " + randomUUID();
+    const { turnId } = await instance.adapter.sendTurn({
+      threadId: "t-grok-solo-no-connectable-" + randomUUID(),
+      text: "peux-tu lire mes courriels?",
+      model: "grok-4.7",
+      system: rules,
+      systemStable: rules,
+      systemVolatile: "",
+    });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+    const prompt = (JSON.parse(readFileSync(`${dump}.prompt.json`, "utf8")) as Array<{ type: string; text: string }>)
+      .map((part) => part.text ?? "").join("\n");
+    expect(prompt).not.toContain("Connectable but not connected yet");
+  });
+
   // Gemini and Kimi withhold their tools since 2026-10-08 (verified with
   // their real CLIs, org-host-tools.test.ts); Droid and Cursor still cannot.
   it("does not claim Droid or Cursor withhold their own tools", async () => {
@@ -1749,7 +1826,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     ["ask", true, "default"],
     ["full", true, "bypassPermissions"],
     ["custom", true, "default"],
-    ["auto", false, "auto"],
+    // Auto is gated by default: Grok runs `default`, Sagax decides
+    ["auto", false, "default"],
   ] as const)("Grok %s with agents mounted=%s overrides a legacy full-auto setting", async (approvalMode, mounted, nativeMode) => {
     instance = await GrokAgentDriver.create({
       instanceId: "grok-mode-override",
@@ -2031,6 +2109,59 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(recorder.events.some(e => e.type === "runtime.error")).toBe(false);
   });
 
+  it("preserves a streamed partial reply before disposal removes its listeners", async () => {
+    await create(GrokAgentDriver, "stall-after-text");
+    await instance.adapter.sendTurn({ threadId: "t-dispose-partial", text: "go" });
+    await recorder.until((event) => event.type === "content.delta" && event.streamKind === "assistant_text");
+
+    await instance.dispose();
+
+    expect(recorder.events.filter((event) => event.type === "item.completed" && event.itemType === "assistant_text"))
+      .toEqual([expect.objectContaining({ text: "half an answer, then silence" })]);
+    expect(recorder.events.filter((event) => event.type === "turn.completed"))
+      .toEqual([expect.objectContaining({ threadId: "t-dispose-partial", stopReason: "cancelled" })]);
+  });
+
+  it("rejects turns started by completion listeners during disposal", async () => {
+    await create(GrokAgentDriver, "stall-after-text");
+    await instance.adapter.sendTurn({ threadId: "t-dispose-listener", text: "go" });
+    await recorder.until((event) => event.type === "content.delta" && event.streamKind === "assistant_text");
+    let followup: Promise<unknown> | undefined;
+    instance.adapter.onEvent((event) => {
+      if (event.type === "turn.completed" && event.threadId === "t-dispose-listener") {
+        followup = instance.adapter.sendTurn({ threadId: "t-dispose-followup", text: "next" });
+        void followup.catch(() => {});
+      }
+    });
+
+    await instance.dispose();
+
+    expect(followup).toBeDefined();
+    await expect(followup).rejects.toThrow(/shutting down/);
+    expect(instance.adapter.hasSession("t-dispose-followup")).toBe(false);
+    await expect(instance.adapter.sendTurn({ threadId: "t-after-dispose", text: "late" })).rejects.toThrow(/shutting down/);
+  });
+
+  it("rejects a turn whose command resolution finishes after disposal", async () => {
+    let markResolving!: () => void;
+    const resolving = new Promise<void>((resolve) => { markResolving = resolve; });
+    let finishCommand!: (command: { command: string }) => void;
+    const command = new Promise<{ command: string }>((resolve) => { finishCommand = resolve; });
+    await create(createAcpDriver({
+      ...SELECT_MODEL_SUPPORT,
+      resolveCommand: () => { markResolving(); return command; },
+    }));
+    const sending = instance.adapter.sendTurn({ threadId: "t-dispose-resolving", text: "go" });
+    void sending.catch(() => {});
+    await resolving;
+    await instance.dispose();
+    finishCommand({ command: FAKE_CLI });
+
+    await expect(sending).rejects.toThrow(/shutting down/);
+    expect(instance.adapter.hasSession("t-dispose-resolving")).toBe(false);
+    expect(recorder.events).toEqual([]);
+  });
+
   // Qwen Code goes quiet for minutes while it compresses history, backs off
   // a rate limit (up to 5 min a wait) or waits on one model request (its SDK
   // allows 600 s). At 180 s the guard cut those turns off mid-work.
@@ -2048,6 +2179,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     const err = recorder.events.find((e) => e.type === "runtime.error");
     expect(err?.message).toMatch(/no tool running/i);
     expect(err?.message).toContain("SAGAX_ACP_PROMPT_IDLE_TIMEOUT_MS");
+    expect(err).toMatchObject({ stalled: true });
     // the streamed chunk reached the UI before the child went silent
     expect(recorder.events.some((e) => e.type === "content.delta")).toBe(true);
     expect(instance.adapter.hasSession("t-stall")).toBe(false);
@@ -2074,6 +2206,56 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(recorder.events.some((e) => e.type === "item.completed")).toBe(false);
     expect(recorder.events.find((e) => e.type === "runtime.error")?.message)
       .toMatch(/no reply, image, or tool result/);
+  });
+
+  it("a reasoning_only empty response is nudged on the live session and recovers", async () => {
+    // Grok/xAI reporting "empty response from model (reasoning_only)" over
+    // session/prompt (rpc -32603): the model spent the turn on reasoning and
+    // committed no content. The driver must nudge the same session once more
+    // and surface the answer, not break the bot with a hard internal error.
+    process.env.FAKE_ACP_REASONING_FAIL_TIMES = "1";
+    await create(GrokAgentDriver, "reasoning-only-error");
+    await instance.adapter.sendTurn({ threadId: "t-reason-recover", text: "go" });
+    const done = await recorder.until((e) => e.type === "turn.completed");
+    expect(done).toMatchObject({ ok: true, stopReason: null });
+    // the nudge produced a real answer
+    expect(recorder.events.some((e) => e.type === "item.completed" && (e as any).itemType === "assistant_text")).toBe(true);
+    // the reasoning still streamed to the UI
+    expect(recorder.events.some((e) => e.type === "content.delta" && (e as any).streamKind === "reasoning_text")).toBe(true);
+    // the person was told Sagax asked it to finish, and no hard error surfaced
+    expect(recorder.events.some((e) => e.type === "runtime.notice" && /reasoning/i.test((e as any).message))).toBe(true);
+    expect(recorder.events.some((e) => e.type === "runtime.error")).toBe(false);
+  });
+
+  it("a model that only ever reasons gives up gracefully after a bounded retry, never a hard internal error", async () => {
+    const countFile = join(scratch, "reasoning-count");
+    process.env.FAKE_ACP_REASONING_FAIL_TIMES = "99";
+    process.env.FAKE_ACP_REASONING_COUNT_FILE = countFile;
+    process.env.SAGAX_ACP_REASONING_CONTINUE_MAX = "2";
+    await create(GrokAgentDriver, "reasoning-only-error");
+    await instance.adapter.sendTurn({ threadId: "t-reason-giveup", text: "go" });
+    const done = await recorder.until((e) => e.type === "turn.completed");
+    expect(done).toMatchObject({ ok: false, stopReason: "reasoning_only" });
+    const err = recorder.events.find((e) => e.type === "runtime.error") as { message?: string } | undefined;
+    expect(err?.message).toMatch(/reasoning without a final answer/i);
+    // never the raw internal-error string the bot saw in production
+    expect(err?.message).not.toMatch(/Internal error|session\/prompt|reasoning_only/);
+    // bounded: the first prompt plus exactly the two nudges, and no more
+    expect(Number(readFileSync(countFile, "utf8"))).toBe(3);
+    // the session was evicted so the next turn starts clean
+    expect(instance.adapter.hasSession("t-reason-giveup")).toBe(false);
+  });
+
+  it("a genuine internal error without reasoning_only still surfaces (no swallowing)", async () => {
+    const failureFile = join(scratch, "rpc-failure.json");
+    writeFileSync(failureFile, JSON.stringify({ code: -32603, message: "Internal error", data: { details: "database connection lost", service: "session", errorName: "APIError" } }));
+    process.env.FAKE_ACP_RPC_FAILURE_FILE = failureFile;
+    await create(GrokAgentDriver);
+    await instance.adapter.sendTurn({ threadId: "t-real-error", text: "go" });
+    const done = await recorder.until((e) => e.type === "turn.completed");
+    expect(done).toMatchObject({ ok: false, stopReason: "rpc_error" });
+    const err = recorder.events.find((e) => e.type === "runtime.error") as { message?: string } | undefined;
+    expect(err?.message).toContain("database connection lost");
   });
 
   it("preserves ACP error codes for provider setup classification", async () => {
@@ -2463,6 +2645,61 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       await failStartup();
       const ack = await instance.adapter.sendTurn({ threadId: "startup-activity", text: "go", startupRecovery: true });
       expect(await recorder.until((event) => event.type === "turn.completed" && event.turnId === ack.turnId)).toMatchObject({ ok: false });
+    });
+  });
+
+  describe("an engine's account and HTTP failures", () => {
+    /** The provider's refusal as the CLI answers session/prompt: JSON-RPC's internal error around its own line. */
+    const refuse = (details: string) => {
+      const failureFile = join(scratch, "prompt-failure.json");
+      process.env.FAKE_ACP_RPC_FAILURE_FILE = failureFile;
+      writeFileSync(failureFile, JSON.stringify({ code: -32603, message: "Internal error", data: { details, service: "session", errorName: "APIError" } }));
+    };
+    const failed = async (threadId: string) => {
+      const ack = await instance.adapter.sendTurn({ threadId, text: "Run the morning report" });
+      const completed = await recorder.until((e) => e.type === "turn.completed" && e.turnId === ack.turnId);
+      const errors = recorder.events.filter((e) => e.type === "runtime.error" && e.turnId === ack.turnId);
+      return { completed, errors };
+    };
+
+    it("names a Grok account out of credits as the account failure it is, in Grok's own account wording", async () => {
+      // what Cloud routine runs recorded, as far as the aggregate kept it
+      refuse("API error (status 402 Payment Required): Grok Build us…");
+      await create(GrokAgentDriver);
+      const { completed, errors } = await failed("t-grok-402");
+      // Grok's driver words its own 402 (describeAccountError); the shared wording covers the other engines.
+      expect(errors).toEqual([expect.objectContaining({
+        message: expect.stringContaining("the usage balance of the Grok account it runs on is used up"),
+        setup: true,
+      })]);
+      expect(completed).toMatchObject({ ok: false, stopReason: "auth_required" });
+    });
+
+    it("names any other ACP engine out of credits the same way", async () => {
+      refuse("API error (status 402 Payment Required): Your plan has no credits left. Ask an admin to add more.");
+      await create(GeminiAgentDriver);
+      const { errors } = await failed("t-gemini-402");
+      expect(errors).toEqual([expect.objectContaining({
+        message: 'Your Gemini account is out of credits (Gemini says: "Your plan has no credits left"). Add credits with Gemini, then run it again.',
+      })]);
+    });
+
+    it("puts another HTTP failure in plain words that keep its class, and leaves an unknown one as it was", async () => {
+      refuse("API error (status 503 Service Unavailable): upstream connect error");
+      await create(GrokAgentDriver);
+      const outage = await failed("t-grok-503");
+      expect(outage.errors).toEqual([expect.objectContaining({
+        message: 'Grok had a temporary server problem (HTTP 503; Grok says: "upstream connect error"). Try again in a few minutes.',
+      })]);
+      expect(outage.errors[0]).not.toHaveProperty("setup");
+      expect(outage.completed).toMatchObject({ ok: false, stopReason: "rpc_error" });
+
+      refuse("Grok could not finish the session");
+      await create(GrokAgentDriver);
+      const unknown = await failed("t-grok-unknown");
+      expect(unknown.errors).toEqual([expect.objectContaining({
+        message: "Internal error: Grok could not finish the session (session/prompt, service: session, APIError)",
+      })]);
     });
   });
 
@@ -3243,6 +3480,90 @@ describe("ACP snapshot", () => {
       expect((await instance.snapshot()).authenticated).toBe(true);
     } finally {
       await instance.dispose();
+    }
+  });
+});
+
+describe("grokCloudConnectorEnv", () => {
+  it("keeps cloud connectors off on a solo turn, where default mode can call them unasked", () => {
+    expect(grokCloudConnectorEnv(undefined)).toEqual({
+      GROK_MANAGED_MCPS_ENABLED: "false",
+      GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED: "false",
+    });
+  });
+
+  it("lets an organization turn on the person's own xAI sign-in fetch the account connectors", () => {
+    expect(grokCloudConnectorEnv(undefined, true, true)).toEqual({ GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED: "false" });
+  });
+
+  it("keeps them off when the account is not the person's own (review of #943: payer is not the speaker)", () => {
+    for (const own of [undefined, false]) {
+      expect(grokCloudConnectorEnv(undefined, true, own)).toEqual({
+        GROK_MANAGED_MCPS_ENABLED: "false",
+        GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED: "false",
+      });
+    }
+  });
+
+  it("turns cloud connectors off when a tool selection cannot list them", () => {
+    expect(grokCloudConnectorEnv({ allow: ["native:read_file"] })).toEqual({
+      GROK_MANAGED_MCPS_ENABLED: "false",
+      GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED: "false",
+    });
+  });
+});
+
+describe("grokConnectableConnectors", () => {
+  it("names the xAI cloud connectors on an own-account organization turn so an unconnected one is actionable", () => {
+    const connectable = grokConnectableConnectors(true);
+    const ids = connectable.map((connector) => connector.id);
+    expect(ids).toContain("outlook");
+    expect(ids).toContain("microsoft-teams");
+    expect(ids).toContain("gmail");
+    expect(connectable.find((connector) => connector.id === "outlook")?.label).toBe("Outlook (Exchange)");
+  });
+
+  it("offers nothing on any turn that does not load the account connectors (solo, foreign, member on another's bot)", () => {
+    expect(grokConnectableConnectors(false)).toEqual([]);
+  });
+});
+
+describe("grokConfigDeclaresMcp", () => {
+  it("finds an MCP server table in GROK_HOME's config or the project's, and nothing else", () => {
+    const home = mkdtempSync(join(tmpdir(), "grok-home-"));
+    const project = mkdtempSync(join(tmpdir(), "grok-cwd-"));
+    try {
+      const env = { GROK_HOME: home };
+      expect(grokConfigDeclaresMcp(env, project)).toBe(false);
+      writeFileSync(join(home, "config.toml"), "[models]\ndefault = \"grok-4.5\"\n[model.local]\nmodel = \"x\"\n# [mcp_servers.commented]\n");
+      expect(grokConfigDeclaresMcp(env, project)).toBe(false);
+      writeFileSync(join(home, "config.toml"), "[models]\n  [mcp_servers.pulsatrix_dispatch]\nurl = \"https://x\"\n");
+      expect(grokConfigDeclaresMcp(env, project)).toBe(true);
+      writeFileSync(join(home, "config.toml"), "[ \"mcp_servers\" . a ]\n");
+      expect(grokConfigDeclaresMcp(env, project)).toBe(true);
+      writeFileSync(join(home, "config.toml"), "");
+      mkdirSync(join(project, ".grok"));
+      writeFileSync(join(project, ".grok", "config.toml"), "[mcp_servers]\na = { command = \"node\" }\n");
+      expect(grokConfigDeclaresMcp(env, project)).toBe(true);
+      expect(grokConfigDeclaresMcp(env, undefined)).toBe(false);
+      // a parent folder's config counts, as Grok reads it
+      const sub = join(project, "a", "b");
+      mkdirSync(sub, { recursive: true });
+      expect(grokConfigDeclaresMcp(env, sub)).toBe(true);
+      // a dotted key or an assignment counts too
+      writeFileSync(join(project, ".grok", "config.toml"), "");
+      expect(grokConfigDeclaresMcp(env, sub)).toBe(false);
+      for (const text of ["mcp_servers.x.command = \"node\"\n", "mcp_servers = { x = { command = \"node\" } }\n"]) {
+        writeFileSync(join(project, ".grok", "config.toml"), text);
+        expect(grokConfigDeclaresMcp(env, sub)).toBe(true);
+      }
+      // a config override is never read here: it counts as declaring
+      writeFileSync(join(project, ".grok", "config.toml"), "");
+      expect(grokConfigDeclaresMcp({ ...env, GROK_CONFIG: "/elsewhere.toml" }, sub)).toBe(true);
+      expect(grokConfigDeclaresMcp({ ...env, GROK_CONFIG_PATH: "/elsewhere.toml" }, sub)).toBe(true);
+    } finally {
+      removeTempDir(home);
+      removeTempDir(project);
     }
   });
 });

@@ -9,6 +9,21 @@ import type { ToolScope } from "../../shared/tool-scope.ts";
 import { startFakeHttpMcp } from "../testing/fake-http-mcp-server.ts";
 import { whopLikeCatalog } from "../testing/whop-like-catalog.ts";
 
+// Port de OpenMausBot #3150 : the real kill always runs (cleanup); the probe
+// can only force its verdict and records the budget it was given.
+const killProbe = vi.hoisted(() => ({ override: false, stopped: false, budgets: [] as number[] }));
+vi.mock("../procs.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../procs.ts")>();
+  return {
+    ...actual,
+    killCliTree: (child: Parameters<typeof actual.killCliTree>[0], budget = 5_000) => {
+      killProbe.budgets.push(budget);
+      const run = actual.killCliTree(child, budget);
+      return killProbe.override ? run.then(() => killProbe.stopped) : run;
+    },
+  };
+});
+
 const dirs: string[] = [];
 const sessions: ChatToolSession[] = [];
 const controllers: AbortController[] = [];
@@ -57,6 +72,18 @@ function fixture(body = "", toolSchema: Record<string, unknown> = schema) {
       return session;
     },
   };
+}
+
+/** A configured server that cannot mount is left out of the turn, closed,
+ * and reported, rather than failing every other server with it. */
+async function expectSkipped(f: ReturnType<typeof fixture>, reason: RegExp) {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const session = await f.mount();
+    expect(session.definitions).toEqual([]);
+    expect(session.skipped).toEqual([{ server: "audit", reason: expect.stringMatching(reason) }]);
+    expect(alive(f.read().pid)).toBe(false);
+  } finally { warn.mockRestore(); }
 }
 
 function alive(pid: number): boolean {
@@ -230,9 +257,16 @@ describe("Chat MCP session", () => {
     ["oversized complete frame", `process.stdout.write("x".repeat(2*1024*1024+1) + "\\n");`],
     ["too many response frames", `process.stdout.write("\\n".repeat(10001));`],
     ["oversized tool catalog", `reply(message, {tools:[{name:"write",inputSchema:schema,description:"x".repeat(1024*1024)}]});`],
-  ])("fails startup and awaits child cleanup for %s", async (_label, response) => {
+  ])("skips a configured server that fails startup and awaits child cleanup for %s", async (_label, response) => {
     const f = fixture(`if (message.method === "tools/list") { ${response} continue; }`);
-    await expect(f.mount()).rejects.toThrow(/MCP/);
+    await expectSkipped(f, /MCP/);
+  });
+
+  it.each([
+    ["invalid RPC", `process.stdout.write('{"result":1}\\n');`],
+  ])("still fails startup for a harness mount and awaits child cleanup for %s", async (_label, response) => {
+    const f = fixture(`if (message.method === "tools/list") { ${response} continue; }`);
+    await expect(f.mount(true, true)).rejects.toThrow(/MCP/);
     expect(alive(f.read().pid)).toBe(false);
   });
 
@@ -283,12 +317,58 @@ describe("Chat MCP session", () => {
     if (hasText) expect(result.text).toContain("partial result");
   });
 
-  it("closes already mounted peers when another server fails startup", async () => {
+  it("skips a configured server that fails startup, closes it, and keeps its healthy peers", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const ready = fixture();
     const failed = fixture(`if(message.method === "tools/list") { reply(message,{tools:"invalid"}); continue; }`);
-    await expect(mountChatTools({custom:{ready:ready.server,failed:failed.server}},ready.controller.signal)).rejects.toThrow("invalid result");
+    const session = await mountChatTools({custom:{ready:ready.server,failed:failed.server}},ready.controller.signal);
+    sessions.push(session);
+    expect(session.definitions.map((definition) => definition.function.name)).toEqual(["ready_write"]);
+    expect(session.skipped).toEqual([{ server: "failed", reason: expect.stringContaining("invalid result") }]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(`"failed"`));
+    await vi.waitFor(() => expect(alive(failed.read().pid)).toBe(false));
+    expect(alive(ready.read().pid)).toBe(true);
+    await expect(session.execute("ready_write", { value: "still works" }, ready.controller.signal)).resolves.toMatchObject({ ok: true, text: "recorded:still works" });
+    warn.mockRestore();
+  });
+
+  it("skips servers that refuse sign-in or fail to start, and mounts the rest", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ready = fixture();
+    const unauthorized = fixture(`if(message.method === "initialize") { send({jsonrpc:"2.0",id:message.id,error:{code:-32001,message:"401 Unauthorized"}}); continue; }`);
+    const badTools = fixture(`if(message.method === "tools/list") { reply(message,{tools:[{name:"x",inputSchema:{type:"string"}}]}); continue; }`);
+    const session = await mountChatTools({ custom: {
+      slack: unauthorized.server, jira: ready.server, kissflow: badTools.server,
+      missing: { command: join(ready.dir, "does-not-exist"), args: [], env: {} },
+    } }, ready.controller.signal);
+    sessions.push(session);
+    expect(session.definitions.map((definition) => definition.function.name)).toEqual(["jira_write"]);
+    expect(session.skipped.map((entry) => entry.server).sort()).toEqual(["kissflow", "missing", "slack"]);
+    expect(warn).toHaveBeenCalledTimes(3);
+    warn.mockRestore();
+  });
+
+  it("still fails setup when a harness mount (not a configured server) fails", async () => {
+    const ready = fixture();
+    const failed = fixture(`if(message.method === "tools/list") { reply(message,{tools:"invalid"}); continue; }`);
+    await expect(mountChatTools({ agents: failed.server, custom: { ready: ready.server } }, ready.controller.signal)).rejects.toThrow("invalid result");
     expect(alive(ready.read().pid)).toBe(false);
     expect(alive(failed.read().pid)).toBe(false);
+  });
+
+  it("fails setup when the Local VM lists no tools, but not when the owner's selection leaves none (port of OpenMausBot #3111)", async () => {
+    const empty = fixture(`if(message.method === "tools/list") { reply(message,{tools:[]}); continue; }`);
+    await expect(empty.mount(true, true)).rejects.toThrow("The Local VM listed no tools");
+    expect(alive(empty.read().pid)).toBe(false);
+    expect((await empty.mount(false)).definitions).toEqual([]);
+    expect((await fixture().mount(true, true, { allow: ["mcp:computer:screenshot"] })).definitions).toEqual([]);
+  });
+
+  it("advertises only name, description and parameters, never outputSchema or other MCP tool fields", async () => {
+    const f = fixture(`if(message.method === "tools/list") { reply(message,{tools:[{name:"write",title:"W",description:"d",inputSchema:${JSON.stringify(schema)},outputSchema:{type:"object"},annotations:{readOnlyHint:true}}]}); continue; }`);
+    const session = await f.mount();
+    expect(session.definitions).toEqual([{ type: "function", function: { name: "audit_write", description: "d", parameters: schema } }]);
+    expect(session.skipped).toEqual([]);
   });
 
   it("returns declared tool errors and bounds aggregate text without splitting UTF-8", async () => {
@@ -325,6 +405,59 @@ describe("Chat MCP session", () => {
 
 /** "Always allow this session" names the tool on its server as launched. */
 const grantFor = (server: string, tool: string) => expect.stringMatching(new RegExp(`^\\["${server}","[0-9a-f]{64}","${tool}"\\]$`));
+
+describe("Chat MCP shutdown verdict (port de OpenMausBot #3150)", () => {
+  afterEach(() => {
+    killProbe.override = false;
+    killProbe.stopped = false;
+    killProbe.budgets.length = 0;
+  });
+
+  it("a slow shutdown with no call in flight closes with a warning, not an error", async () => {
+    const f = fixture();
+    const session = await f.mount();
+    killProbe.override = true;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await expect(session.close()).resolves.toBeUndefined();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("no call was in flight"));
+    } finally { warn.mockRestore(); }
+  });
+
+  it("an unconfirmed shutdown still fails when a call was in flight", async () => {
+    const f = fixture(`if (message.method === "tools/call") continue;`);
+    const session = await mountChatTools({ custom: { audit: f.server } }, f.controller.signal);
+    const executing = session.execute("audit_write", { value: "in flight" }, f.controller.signal).catch(() => {});
+    await vi.waitFor(() => { expect(f.read().calls.some((call) => call.method === "tools/call")).toBe(true); });
+    killProbe.override = true;
+    await expect(session.close()).rejects.toThrow("MCP server shutdown could not be confirmed; execution outcome may be uncertain");
+    await executing;
+  });
+
+  it("gives Windows 15 seconds to reap the tree and every other system 5", async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(process, "platform")!;
+    for (const [platform, budget] of [["win32", 15_000], ["darwin", 5_000], ["linux", 5_000]] as const) {
+      const f = fixture();
+      const session = await f.mount();
+      killProbe.budgets.length = 0;
+      Object.defineProperty(process, "platform", { ...descriptor, value: platform });
+      try { await session.close(); }
+      finally { Object.defineProperty(process, "platform", descriptor); }
+      expect(killProbe.budgets.at(-1), platform).toBe(budget);
+    }
+  });
+});
+
+describe("Chat MCP x-mcp-header (port de OpenMausBot #3169)", () => {
+  it("mounts a GitHub MCP style schema that tags header-routed arguments", async () => {
+    const f = fixture("", { type: "object", properties: { value: { type: "string", "x-mcp-header": "X-MCP-Toolsets" } }, required: ["value"], additionalProperties: false });
+    const session = await f.mount();
+    expect(session.skipped).toEqual([]);
+    expect(session.definitions.map((d) => d.function.name)).toEqual(["audit_write"]);
+    expect(() => session.validate("audit_write", { value: "repos" })).not.toThrow();
+    expect(() => session.validate("audit_write", {})).toThrow("input schema");
+  });
+});
 
 describe("Chat MCP approvals by server", () => {
   it("asks nothing for Sagax's agents server, and grants no session-wide allow on the person's computer", async () => {
@@ -509,7 +642,8 @@ describe("Chat MCP startup budgets", () => {
       await vi.advanceTimersByTimeAsync(200);
       // stopped at 8 seconds: well short of the 30 a URL server gets
       await settleWithin(1_000, () => mounting.done);
-      expect(String(mounting.error)).toMatch(/timed out/);
+      expect(mounting.error).toBeUndefined();
+      expect(mounting.value?.skipped).toEqual([{ server: "audit", reason: expect.stringMatching(/timed out/) }]);
     } finally { vi.useRealTimers(); }
   });
 });
@@ -601,8 +735,7 @@ describe("Chat MCP schema validation", () => {
     { type: "object", properties: {value:{type:"string",unrecognizedAssertion: true}} },
   ])("refuses schemas it cannot validate instead of silently weakening them %#", async (toolSchema) => {
     const f = fixture("", toolSchema);
-    await expect(f.mount()).rejects.toThrow("schema could not be validated");
-    expect(alive(f.read().pid)).toBe(false);
+    await expectSkipped(f, /schema could not be validated/);
   });
 
   it("honors the configured per-call timeout instead of the fixed default", async () => {

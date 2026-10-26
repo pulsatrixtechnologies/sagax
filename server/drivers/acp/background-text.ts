@@ -33,6 +33,8 @@ export interface AcpOneShotInput {
   loginNote: string;
   /** Per-session settings (mode, model) between session/new and the prompt. */
   configure?: (ctx: { request: (method: string, params: unknown, timeoutMs?: number) => Promise<any>; sessionId: string; session: any }) => Promise<unknown>;
+  /** Who this one-shot says it is. Memory upkeep and permission review differ. */
+  clientName?: string;
   options?: TextGenerationOptions;
   timeoutMs?: number;
 }
@@ -157,7 +159,7 @@ export function runAcpOneShot(input: AcpOneShotInput): Promise<string> {
     (async () => {
       const init = await request("initialize", {
         protocolVersion: 1,
-        clientInfo: { name: "openmausbot_memory", version: "1" },
+        clientInfo: { name: input.clientName ?? "openmausbot_memory", version: "1" },
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
       });
       const methods: Array<{ id?: string }> = Array.isArray(init?.authMethods) ? init.authMethods : [];

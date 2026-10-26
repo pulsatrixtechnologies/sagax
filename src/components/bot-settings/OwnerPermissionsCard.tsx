@@ -28,6 +28,16 @@ export interface OwnerRuleRow {
   behavior: RuleBehavior;
   description: string;
   legacy?: true;
+  /** 2026-10-19: the situation the rule also answers (an admin's card, a
+   * held card, a turn that is not the person's own) and the bot's name. */
+  from?: "admin" | "hold" | "origin";
+  botName?: string;
+  /** 2026-10-21 (JC): an Always allow someone else saved on an admin's card
+   * of this bot (an admin, or its owner holding host.commands): shown to
+   * the owner and an admin, removed but never edited here. */
+  byOther?: true;
+  /** That person's name, never an id. */
+  savedBy?: string;
 }
 
 const MODES: ReadonlyArray<{ id: BotPermissionMode; label: LocaleKey; help: LocaleKey }> = [
@@ -53,6 +63,14 @@ export function rulesForBot(rules: readonly OwnerRuleRow[], botId: string): Owne
   return rules
     .filter((rule) => rule.botId === botId || rule.botId === null)
     .sort((a, b) => Number(a.botId === null) - Number(b.botId === null) || a.description.localeCompare(b.description));
+}
+
+/** 2026-10-21: who saved a rule someone else kept on an admin's card of
+ * this bot, by name (never an id), or null for the person's own rule. */
+export function savedByLabel(rule: Pick<OwnerRuleRow, "byOther" | "savedBy">): string | null {
+  if (!rule.byOther) return null;
+  const name = rule.savedBy?.trim();
+  return name ? t("botPanel.rules.savedBy", { name }) : t("botPanel.rules.savedBySomeone");
 }
 
 const LONG_TEXT = 110;
@@ -216,16 +234,18 @@ export function OwnerPermissionsCard({ bot, leading }: { bot: Pick<Bot, "id" | "
   };
 
   const groupTitle = t("botPanel.permissions.approvals");
-  if (mode === null) return leading ? <SettingsGroup title={groupTitle} groupId="approvals">{leading}</SettingsGroup> : null;
+  // 2026-10-21: an admin on a member's bot has no mode to choose (only the
+  // owner does) but sees the rules kept on its admin's cards, to remove
+  if (mode === null && rules.length === 0) return leading ? <SettingsGroup title={groupTitle} groupId="approvals">{leading}</SettingsGroup> : null;
 
   return (
     <>
       {/* 2026-10-16 (JC): drawn like Settings: the mode in a pill menu
           with its one grey line, the rules as rows folded under their
           count once the list is long. */}
-      <SettingsGroup title={groupTitle} groupId="approvals">
+      {(leading || mode !== null) && <SettingsGroup title={groupTitle} groupId="approvals">
         {leading}
-        <div data-permission-mode={mode}>
+        {mode !== null && <div data-permission-mode={mode}>
           <DescribedRow
             label={t("botPanel.permissionMode.title")}
             help={t("botPanel.permissionMode.help")}
@@ -247,8 +267,8 @@ export function OwnerPermissionsCard({ bot, leading }: { bot: Pick<Bot, "id" | "
               }))}
             />
           </DescribedRow>
-        </div>
-      </SettingsGroup>
+        </div>}
+      </SettingsGroup>}
 
       <SettingsGroup title={t("botPanel.rules.title")} groupId="ownerRules"
         accessory={<HelpTip label={t("settings.moreAbout", { title: t("botPanel.rules.title") })}>{t("botPanel.rules.help")}</HelpTip>}>
@@ -275,13 +295,14 @@ export function OwnerPermissionsCard({ bot, leading }: { bot: Pick<Bot, "id" | "
                             {rule.botId === null && <span>{t("botPanel.rules.allBots")}</span>}
                             {rule.destructive && <span className="text-warning">{t(KIND_LABEL[rule.destructive])}</span>}
                             {rule.legacy && <span>{t("botPanel.rules.migrated")}</span>}
+                            {rule.byOther && <span data-rule-saved-by="">{savedByLabel(rule)}</span>}
                           </div>
                         </div>
                         <span className={cn("whitespace-nowrap text-[12.5px]", rule.behavior === "deny" ? "text-danger" : rule.behavior === "allow" ? "text-success" : "text-ink-secondary")}>
                           {t(BEHAVIOR_LABEL[rule.behavior])}
                         </span>
                         <div className="flex items-center gap-0.5">
-                          <button
+                          {!rule.byOther && <button
                             type="button"
                             aria-label={t("botPanel.rules.edit")}
                             title={t("botPanel.rules.edit")}
@@ -289,7 +310,7 @@ export function OwnerPermissionsCard({ bot, leading }: { bot: Pick<Bot, "id" | "
                             className="ui-icon-button"
                           >
                             <Pencil size={14} aria-hidden="true" />
-                          </button>
+                          </button>}
                           <button
                             type="button"
                             aria-label={t("botPanel.rules.remove")}

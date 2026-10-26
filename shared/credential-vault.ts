@@ -13,11 +13,17 @@
 export const VAULT_LOGIN_TARGET = "vaultLogin" as const;
 export type VaultLoginTarget = typeof VAULT_LOGIN_TARGET;
 
-export const VAULT_ITEM_KINDS = ["login", "apiKey", "note"] as const;
+export const VAULT_ITEM_KINDS = ["login", "apiKey", "note", "card", "address", "contact"] as const;
 export type VaultItemKind = (typeof VAULT_ITEM_KINDS)[number];
 
-/** A field the browser runtime can fill. */
-export const VAULT_FILL_FIELDS = ["username", "password", "totp", "apiKey"] as const;
+/** A field the browser runtime can fill. Card, address and contact fields
+ * are typed only after a purchase approval (shared/payment-vault.ts). */
+export const VAULT_FILL_FIELDS = [
+  "username", "password", "totp", "apiKey",
+  "cardNumber", "cardExpiry", "cardCvc", "cardholder",
+  "addressLine1", "addressLine2", "addressCity", "addressRegion", "addressPostal", "addressCountry", "addressRecipient", "addressPhone",
+  "contactName", "contactEmail", "contactPhone", "contactCompany",
+] as const;
 export type VaultFillField = (typeof VAULT_FILL_FIELDS)[number];
 
 /** once: this conversation, for a short while. always: this bot, until revoked. */
@@ -26,6 +32,9 @@ export type VaultGrantMode = (typeof VAULT_GRANT_MODES)[number];
 
 /** How long a "once" grant lasts in the conversation that asked. */
 export const VAULT_ONCE_GRANT_MS = 15 * 60_000;
+/** 2026-10-21 (review of #954): a 1Password item allowed once is one
+ * sign-in: its grant ends this long after its first fill. */
+export const VAULT_SINGLE_USE_MS = 60_000;
 
 export const MAX_VAULT_ITEMS = 500;
 export const MAX_VAULT_DOMAINS = 10;
@@ -52,6 +61,12 @@ export interface VaultItemListing {
   hasTotp: boolean;
   hasApiKey: boolean;
   hasNotes: boolean;
+  /** A card, as the owner sees it: brand and last four, never the number. */
+  card?: { brand: string; last4: string; expMonth: number; expYear: number; holder: string };
+  /** An address the owner saved. The bot does not receive it; a fill does. */
+  address?: { recipient: string; line1: string; line2?: string; city: string; region?: string; postal: string; country: string; phone?: string };
+  /** A contact the owner saved. The bot does not receive the fields; a fill does. */
+  contact?: { fullName: string; email?: string; phone?: string; company?: string };
   /** "1password": a read-only reference resolved at fill time. */
   source: "local" | "1password";
   grants: VaultGrantListing[];
@@ -73,6 +88,11 @@ export interface VaultRequestCardData {
   mode?: VaultGrantMode;
   /** The person whose vault answers (organization server). */
   principalId: string;
+  /** The person signed in themselves in the bot's browser instead. */
+  signedInSelf?: boolean;
+  /** 2026-10-21 (parité R10, ligne 82): the login chosen is a 1Password
+   * item, read from 1Password at fill time. */
+  onePassword?: boolean;
 }
 
 const HOST_LABEL = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
@@ -167,3 +187,58 @@ export function itemIdFromHandle(handle: unknown): string | null {
   const match = /^cred_([a-z0-9]{8,40})$/.exec(handle.trim());
   return match ? match[1]! : null;
 }
+
+/** Hosting names under which every customer gets their own subdomain
+ * (alice.github.io and bob.github.io are strangers). A short list, not the
+ * public suffix list: it only keeps them out of the card's suggestions. */
+const SHARED_HOSTING = new Set([
+  "github.io", "gitlab.io", "herokuapp.com", "vercel.app", "netlify.app", "pages.dev", "workers.dev", "web.app", "firebaseapp.com",
+  "appspot.com", "azurewebsites.net", "cloudfront.net", "blogspot.com", "wordpress.com", "onrender.com", "fly.dev", "myshopify.com",
+  "okta.com", "oktapreview.com", "atlassian.net", "sharepoint.com", "s3.amazonaws.com", "amplifyapp.com", "glitch.me", "repl.co",
+]);
+
+/** Whether a host sits under a shared hosting name (alice.github.io), where
+ * neighbours are strangers: never added to a login from a bot's request. */
+export function onSharedHosting(domain: string): boolean {
+  const normalized = normalizeVaultDomain(domain);
+  if (!normalized || normalized.startsWith("http://")) return false;
+  const labels = normalized.replace(/^\*\./, "").replace(/:\d+$/, "").split(".");
+  for (let size = 2; size <= Math.min(3, labels.length); size++) if (SHARED_HOSTING.has(labels.slice(-size).join("."))) return true;
+  return false;
+}
+
+/** Whether a site a bot asked for may be added to this login from its card
+ * ("Also fill it on ..."): an exact host (never a wildcard), not under a
+ * shared hosting name, not already covered, and of the same site as one of
+ * the login's own bindings. A look-alike (examp1e.com) never is. */
+export function siteAddable(domains: readonly string[], site: string | undefined): boolean {
+  if (!site || site.startsWith("*.") || site.startsWith("http://") || onSharedHosting(site)) return false;
+  if (normalizeVaultDomain(site) !== site || vaultDomainMatches(domains, bindingUrl(site))) return false;
+  const own = vaultSiteOf(site);
+  return Boolean(own) && domains.some((domain) => !onSharedHosting(domain) && vaultSiteOf(domain) === own);
+}
+
+/** The site a binding belongs to, for suggesting a saved login on a
+ * request for another address of the same site (accounts.example.com and
+ * example.com): its last two labels, three under a country's shared second
+ * level (example.co.uk) or a shared hosting name (alice.github.io). Never
+ * used to fill: a fill matches the item's own bindings only. */
+export function vaultSiteOf(domain: string): string | null {
+  const normalized = normalizeVaultDomain(domain);
+  if (!normalized) return null;
+  if (normalized.startsWith("http://")) return normalized;
+  const host = normalized.replace(/^\*\./, "").replace(/:\d+$/, "");
+  if (host === "localhost") return host;
+  const labels = host.split(".");
+  const two = labels.slice(-2).join(".");
+  const three = labels.slice(-3).join(".");
+  const shared = SHARED_SECOND_LEVEL.test(two) || SHARED_HOSTING.has(two) || SHARED_HOSTING.has(three);
+  if (!shared) return two;
+  if (SHARED_HOSTING.has(three)) return labels.length >= 4 ? labels.slice(-4).join(".") : null;
+  return labels.length >= 3 ? three : null;
+}
+
+/** 2026-10-21 (parité R10, ligne 82): the status row a fill writes while it
+ * reads 1Password (1Password may ask the person to approve first). The app
+ * draws it in the reader's language (src/lib/activity-runs.ts). */
+export const ONE_PASSWORD_WAITING = "notice: Waiting for 1Password: approve the request in 1Password on your computer.";

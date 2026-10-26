@@ -23,13 +23,21 @@
 //                        call: the api-error frame and result 2.1.295 sends,
 //                        code usage_limit_reached, carrying the refused window)
 //   A prompt carrying [fake:api-error] plays that one turn as api-error.
+//   FAKE_CLAUDE_API_ERROR_KIND the api-error frame's `error` (default: unknown); FAKE_CLAUDE_API_ERROR_STATUS its
+//                      result's api_error_status; FAKE_CLAUDE_NO_TERMINAL_REASON=1: the result has no terminal_reason,
+//                      only stop_reason "stop_sequence".
 //   FAKE_CLAUDE_API_ERROR text for the api-error frame (default: overloaded;
 //                      for usage-limit, the weekly limit's words).
+//   FAKE_CLAUDE_LIMITED_FILE path: while it exists, every turn plays
+//                      usage-limit with the file's JSON rate_limit_info
+//                      (port of OpenMausBot #3074's fixture).
 //   FAKE_CLAUDE_RATE_LIMIT JSON rate_limit_info: each turn reports it in a
 //                      `rate_limit_event` after init, as the CLI does from the
 //                      API's headers ({status, rateLimitType, resetsAt, …}).
 //   FAKE_CLAUDE_GATE_DIR with slow: a prompt carrying [gate:NAME] holds its
 //                      reply until <dir>/NAME exists (its last marker).
+//   FAKE_CLAUDE_AUTH_AFTER_TURN  1: from the second turn, answer as not-logged-in; FAKE_CLAUDE_AUTH_AFTER_WORK  1: not-logged-in
+//     calls a tool first
 //   FAKE_CLAUDE_RELEASE with hang: the turn ends normally once this file exists.
 //   FAKE_CLAUDE_DUMP   path to write {argv, env, cwd, prompt, systemPrompt,
 //                      mcpConfig} as JSON at each turn this process is given
@@ -102,12 +110,6 @@
 //                      through them, over stdio, the way a model's first
 //                      computer call does; the call and its result are
 //                      reported like any tool call before the reply.
-//   FAKE_CLAUDE_CONNECT_APPS comma-separated toolkits (gmail,slack): a turn
-//                      launched with the connected-apps tools (the `composio`
-//                      server in --mcp-config) first starts a connection to
-//                      them with COMPOSIO_MANAGE_CONNECTIONS through that
-//                      server, over stdio, the way a model asks for a Connect
-//                      card; reported like any tool call before the reply.
 //   FAKE_CLAUDE_HOOKS  1: honour the `hooks` block of the --settings file the
 //                      way the real CLI does — after each tool_result run
 //                      every PostToolUse command with the event JSON on
@@ -125,8 +127,11 @@
 //                      survives a respawn between turns.
 //   FAKE_CLAUDE_CONTEXT_TOKENS report this latest-prompt size in a scripted
 //                      room-plan reply, for automatic compaction fixtures.
+//   FAKE_CLAUDE_MCP_LIST what `claude mcp list` prints (claude.ai connectors).
 //   FAKE_CLAUDE_AUTH   in (default) | out | unsupported | malformed |
-//                      inherited-api-key — what `auth status` reports
+//                      inherited-api-key | file (signed in while fake-auth.json
+//                      exists in the Claude config dir; `auth logout` removes it)
+//                      - what `auth status` reports
 //   FAKE_CLAUDE_AUTO_UNAVAILABLE_MODELS comma-separated --model values for
 //                      which `--permission-mode auto` starts in "default",
 //                      the way the real CLI (2.1.266) does for Haiku 4.5 and
@@ -224,9 +229,11 @@
 //
 // Keep this file dependency-free — it runs as a bare `node` subprocess.
 import { spawn, spawnSync } from "node:child_process";
-import { appendFileSync, closeSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { runRoomHandoffAgent } from "./room-handoff-agent.ts";
+import { splitLaunchNote, volatileNoteIn } from "./launch-note.ts";
 
 const mode = process.env.FAKE_CLAUDE_MODE ?? "happy";
 
@@ -390,6 +397,14 @@ if (argv[0] === "--help") {
   process.exit(0);
 }
 
+// `claude mcp list` (the claude.ai connectors inventory,
+// server/harness-connectors.ts): FAKE_CLAUDE_MCP_LIST is printed as is,
+// e.g. "claude.ai Gmail: https://example.invalid/mcp - ✓ Connected".
+if (argv[0] === "mcp" && argv[1] === "list") {
+  process.stdout.write(process.env.FAKE_CLAUDE_MCP_LIST ?? "No MCP servers configured.\n", () => process.exit(0));
+  await new Promise(() => {});
+}
+
 if (argv[0] === "update") {
   if (process.env.FAKE_CLAUDE_UPDATE === "fail") {
     process.stderr.write("fake-claude: simulated update failure\n");
@@ -399,8 +414,25 @@ if (argv[0] === "update") {
   process.exit(0);
 }
 
+const fakeAuthFile = () => join(process.env.CLAUDE_CONFIG_DIR || join(process.env.HOME || homedir(), ".claude"), "fake-auth.json");
+
+if (argv[0] === "auth" && argv[1] === "logout" && process.env.FAKE_CLAUDE_AUTH === "file") {
+  rmSync(fakeAuthFile(), { force: true });
+  process.stdout.write("Successfully logged out from your Anthropic account.\n", () => process.exit(0));
+  await new Promise(() => {});
+}
+
 if (argv[0] === "auth" && argv[1] === "status") {
   const auth = process.env.FAKE_CLAUDE_AUTH ?? "in";
+  if (auth === "file") {
+    let email: string | undefined;
+    try { email = (JSON.parse(readFileSync(fakeAuthFile(), "utf8")) as { email?: string }).email; } catch {}
+    process.stdout.write(
+      JSON.stringify(email ? { loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", email } : { loggedIn: false, authMethod: "none", apiProvider: "firstParty" }) + "\n",
+      () => process.exit(email ? 0 : 1),
+    );
+    await new Promise(() => {});
+  }
   if (auth === "unsupported") {
     process.stderr.write("error: unknown command 'auth'\n");
     process.exit(1);
@@ -457,7 +489,7 @@ if (["text", "json"].includes(argAfter("--output-format") ?? "")) {
   if (oneShotDump) {
     writeDumpAtomic(
       oneShotDump,
-      JSON.stringify({ pid: process.pid, argv, env: process.env, prompt, mcpConfig: null }, null, 2),
+      JSON.stringify({ pid: process.pid, argv, env: process.env, cwd: process.cwd(), prompt, mcpConfig: null }, null, 2),
     );
   }
   if (process.env.FAKE_CLAUDE_TEXT_LOG) appendFileSync(process.env.FAKE_CLAUDE_TEXT_LOG, `${JSON.stringify({ prompt })}\n`);
@@ -597,7 +629,8 @@ const armSteerGate = () => {
   }, 10);
 };
 
-const promptText = (prompt: JsonValue): string => {
+const promptText = (raw: JsonValue): string => {
+  const prompt = splitLaunchNote(raw).prompt;
   const m = prompt && typeof prompt === "object" && !Array.isArray(prompt) ? (prompt as { message?: { content?: unknown } }).message : undefined;
   return typeof m?.content === "string" ? m.content : "";
 };
@@ -684,20 +717,37 @@ const readLaunchFiles = (): Record<string, unknown> => {
   return { systemPrompt, mcpConfig, settings, settingsMode };
 };
 
+type FakeMcpServer = { command?: string; args?: string[]; env?: Record<string, string>; type?: string; url?: string; headers?: Record<string, string> };
+/** The harness's own HTTP servers (server/harness-mcp-http.ts), which the
+ * real CLI connects to itself. Other URL servers stay unreached here. */
+function harnessHttpServer(server: FakeMcpServer | undefined): { url: string; headers?: Record<string, string> } | null {
+  return server?.type === "http" && typeof server.url === "string" && /\/api\/internal\/(browser|computer|data)\/mcp-http$/.test(server.url)
+    ? { url: server.url, ...(server.headers ? { headers: server.headers } : {}) } : null;
+}
+const HTTP_POST_SCRIPT = `let b="";process.stdin.on("data",(c)=>b+=c).on("end",async()=>{try{const r=await fetch(process.env.FAKE_MCP_URL,{method:"POST",headers:{"content-type":"application/json",accept:"application/json, text/event-stream",...JSON.parse(process.env.FAKE_MCP_HEADERS||"{}")},body:b.trim()});const t=await r.text();process.stdout.write((t.includes("data: ")?t.trim().split("data: ").at(-1):t)+"\\n")}catch(e){process.stderr.write(String(e))}})`;
+
 /** One screenshot through the launched cloud computer server, if this turn
  * has one: the server answers once the harness has created or woken the
  * computer (or refused to). Synchronous, like the turn loop around it. */
 const useCloudComputer = () => {
   launchFiles ??= readLaunchFiles();
-  const server = (launchFiles.mcpConfig as { mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }> } | null)
+  const server = (launchFiles.mcpConfig as { mcpServers?: Record<string, FakeMcpServer> } | null)
     ?.mcpServers?.computer;
-  if (!server?.command || server.args?.at(-1) !== "computer" || !/harness-mcp-proxy/.test(server.args[0] ?? "")) return;
+  const http = harnessHttpServer(server);
+  if (!http && (!server?.command || server.args?.at(-1) !== "computer" || !/harness-mcp-proxy/.test(server.args[0] ?? ""))) return;
+  if (http && !http.url.endsWith("/api/internal/computer/mcp-http")) return;
   const id = `tu-${process.pid}-${++toolUseCount}`;
   out({ type: "assistant", message: { content: [{ type: "tool_use", id, name: "mcp__computer__screenshot", input: {} }] } });
-  const ran = spawnSync(server.command, server.args, {
-    input: `${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "screenshot", arguments: {} } })}\n`,
-    env: { ...process.env, ...server.env }, encoding: "utf8", timeout: 150_000,
-  });
+  const input = `${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "screenshot", arguments: {} } })}\n`;
+  // The real CLI posts to an HTTP server itself; this loop is synchronous,
+  // so one short Node child does the POST.
+  const ran = http
+    ? spawnSync(process.execPath, ["-e", HTTP_POST_SCRIPT], {
+      input, env: { ...process.env, FAKE_MCP_URL: http.url, FAKE_MCP_HEADERS: JSON.stringify(http.headers ?? {}) }, encoding: "utf8", timeout: 150_000,
+    })
+    : spawnSync(server!.command!, server!.args ?? [], {
+      input, env: { ...process.env, ...server!.env }, encoding: "utf8", timeout: 150_000,
+    });
   let reply: { result?: { isError?: boolean; content?: unknown }; error?: { message?: string } } = {};
   try { reply = JSON.parse(ran.stdout.trim().split("\n")[0] ?? ""); } catch { reply = { error: { message: ran.stderr || "no answer" } }; }
   out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id,
@@ -721,51 +771,8 @@ function recordTranscript(prompt: JsonValue): void {
   appendFileSync(join(claudeConfigDir(), "history.jsonl"), `${JSON.stringify({ display: text.slice(0, 20_000), project: process.cwd(), sessionId })}\n`);
 }
 
-// Runs in a child of this process: launch the MCP server, send one request,
-// print the reply that answers it, then close. The connected-apps bridge
-// exits as soon as its stdin closes, before an answer that needs a round trip
-// to the harness, so this keeps stdin open until the reply arrives; spawnSync
-// around it keeps the turn loop synchronous.
-const MCP_CALL_PROGRAM = `
-const { spawn } = require("node:child_process");
-const { command, args, env, request } = JSON.parse(process.argv[1]);
-const child = spawn(command, args, { env: { ...process.env, ...env }, stdio: ["pipe", "pipe", "inherit"] });
-let buffer = "";
-child.stdout.on("data", (chunk) => {
-  buffer += chunk;
-  for (const line of buffer.split("\\n").slice(0, -1)) {
-    let reply;
-    try { reply = JSON.parse(line); } catch { continue; }
-    if (reply.id !== request.id) continue;
-    process.stdout.write(JSON.stringify(reply) + "\\n");
-    child.kill();
-    process.exit(0);
-  }
-  buffer = buffer.slice(buffer.lastIndexOf("\\n") + 1);
-});
-child.on("exit", () => process.exit(1));
-child.stdin.write(JSON.stringify(request) + "\\n");
-`;
-
-/** COMPOSIO_MANAGE_CONNECTIONS through the launched connected-apps server, if
- * this turn has one: the bridge turns it into a Connect card in the chat. */
-const connectApps = (toolkits: string[]) => {
-  launchFiles ??= readLaunchFiles();
-  const server = (launchFiles.mcpConfig as { mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }> } | null)
-    ?.mcpServers?.composio;
-  if (!server?.command) return;
-  const id = `tu-${process.pid}-${++toolUseCount}`;
-  const input = { toolkits };
-  out({ type: "assistant", message: { content: [{ type: "tool_use", id, name: "mcp__composio__COMPOSIO_MANAGE_CONNECTIONS", input }] } });
-  const request = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "COMPOSIO_MANAGE_CONNECTIONS", arguments: input } };
-  const ran = spawnSync(process.execPath, ["-e", MCP_CALL_PROGRAM, JSON.stringify({ command: server.command, args: server.args ?? [], env: server.env ?? {}, request })], {
-    encoding: "utf8", timeout: 60_000,
-  });
-  let reply: { result?: { isError?: boolean; content?: unknown }; error?: { message?: string } } = {};
-  try { reply = JSON.parse(ran.stdout.trim().split("\n")[0] ?? ""); } catch { reply = { error: { message: ran.stderr || "no answer" } }; }
-  out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id,
-    is_error: Boolean(reply.error || reply.result?.isError), content: reply.result?.content ?? reply.error?.message ?? "" }] } });
-};
+/** The volatile half of the instructions this process last received. */
+let volatileNote: string | null = null;
 
 const playTurn = (prompt: JsonValue, late = false) => {
   recordTranscript(prompt);
@@ -776,11 +783,17 @@ const playTurn = (prompt: JsonValue, late = false) => {
   // Every prompt this process receives, one JSON object per line.
   // FAKE_CLAUDE_DUMP keeps only the latest turn's.
   if (process.env.FAKE_CLAUDE_PROMPTS) appendFileSync(process.env.FAKE_CLAUDE_PROMPTS, `${JSON.stringify(prompt)}\n`);
+  volatileNote = volatileNoteIn(prompt) ?? volatileNote;
   if (!late && process.env.FAKE_CLAUDE_DUMP) {
     launchFiles ??= readLaunchFiles();
+    // systemPrompt: what the model is instructed with, the prompt file plus
+    // the volatile half a user message carried (claude.ts keeps the file
+    // stable for the cache); systemPromptFile: the file alone.
+    const file = launchFiles.systemPrompt;
+    const systemPrompt = volatileNote && typeof file === "string" ? `${file}\n\n${volatileNote}` : volatileNote && !file ? volatileNote : file;
     writeDumpAtomic(
       process.env.FAKE_CLAUDE_DUMP,
-      JSON.stringify({ pid: process.pid, argv, env: process.env, cwd: process.cwd(), prompt, ...launchFiles }, null, 2),
+      JSON.stringify({ pid: process.pid, argv, env: process.env, cwd: process.cwd(), prompt, ...launchFiles, systemPrompt, systemPromptFile: file }, null, 2),
     );
   }
 
@@ -853,7 +866,9 @@ const playTurn = (prompt: JsonValue, late = false) => {
 
   // the real CLI re-announces init on every turn of a live process
   out({ type: "system", subtype: "init", session_id: sessionId, model, permissionMode, tools });
-  const rateLimit = process.env.FAKE_CLAUDE_RATE_LIMIT ? JSON.parse(process.env.FAKE_CLAUDE_RATE_LIMIT) : null;
+  const limitedFile = process.env.FAKE_CLAUDE_LIMITED_FILE;
+  const limited = limitedFile && existsSync(limitedFile) ? readFileSync(limitedFile, "utf8") : null;
+  const rateLimit = limited !== null ? JSON.parse(limited) : process.env.FAKE_CLAUDE_RATE_LIMIT ? JSON.parse(process.env.FAKE_CLAUDE_RATE_LIMIT) : null;
   if (rateLimit) out({ type: "rate_limit_event", rate_limit_info: rateLimit, session_id: sessionId });
 
   // a continuation that announces itself and then never speaks again
@@ -873,7 +888,7 @@ const playTurn = (prompt: JsonValue, late = false) => {
 
   const resumedError = process.env.FAKE_CLAUDE_RESUMED_API_ERROR === "1" && argv.includes("--resume") && !resumedErrorPlayed;
   if (resumedError) resumedErrorPlayed = true;
-  if (mode === "usage-limit") {
+  if (mode === "usage-limit" || limited !== null) {
     // captured from 2.1.295 for an account past its weekly limit
     const text = process.env.FAKE_CLAUDE_API_ERROR ?? "You've hit your weekly limit \u00b7 resets Oct 12 at 2:30pm (Asia/Calcutta)";
     out({
@@ -889,8 +904,9 @@ const playTurn = (prompt: JsonValue, late = false) => {
   // a prompt carrying [fake:api-error] fails like api-error, whatever the mode
   if (mode === "api-error" || resumedError || promptText(prompt).includes("[fake:api-error]")) {
     const text = process.env.FAKE_CLAUDE_API_ERROR ?? "API Error: 529 Overloaded. This is a server-side issue, usually temporary.";
-    out({ type: "assistant", message: { model: "<synthetic>", content: [{ type: "text", text }] }, error: "unknown", is_api_error_message: true });
-    out({ type: "result", is_error: true, stop_reason: "stop_sequence", terminal_reason: "api_error", result: text });
+    out({ type: "assistant", message: { model: "<synthetic>", stop_reason: "stop_sequence", content: [{ type: "text", text }] }, error: process.env.FAKE_CLAUDE_API_ERROR_KIND ?? "unknown", is_api_error_message: true });
+    const status = Number(process.env.FAKE_CLAUDE_API_ERROR_STATUS) || undefined;
+    out({ type: "result", subtype: "success", is_error: true, stop_reason: "stop_sequence", ...(process.env.FAKE_CLAUDE_NO_TERMINAL_REASON === "1" ? {} : { terminal_reason: "api_error" }), ...(status ? { api_error_status: status } : {}), result: text });
     turnRunning = false;
     finishIfDone();
     return;
@@ -941,7 +957,11 @@ const playTurn = (prompt: JsonValue, late = false) => {
   // A signed-out CLI answers every prompt with this, verbatim: the login
   // instruction arrives as assistant text, and only the frame's own error
   // fields say it is a failure at all.
-  if (mode === "not-logged-in") {
+  if (mode === "not-logged-in" || process.env.FAKE_CLAUDE_AUTH_AFTER_TURN === "1" && turnsPlayed > 0) {
+    if (process.env.FAKE_CLAUDE_AUTH_AFTER_WORK === "1") out({
+      type: "assistant", message: { model: "claude-fixture", content: [{ type: "tool_use", id: "before-sign-out", name: "Bash", input: { command: "pwd" } }] },
+    });
+    out({ type: "system", subtype: "status", status: "requesting" });
     out({
       type: "assistant",
       message: { model: "<synthetic>", content: [{ type: "text", text: "Not logged in \u00b7 Please run /login" }] },
@@ -954,6 +974,7 @@ const playTurn = (prompt: JsonValue, late = false) => {
       stop_reason: "stop_sequence",
       terminal_reason: "api_error",
       result: "Not logged in \u00b7 Please run /login",
+      total_cost_usd: runningCost.total,
     });
     turnRunning = false;
     finishIfDone();
@@ -974,7 +995,6 @@ const playTurn = (prompt: JsonValue, late = false) => {
   }
 
   if (process.env.FAKE_CLAUDE_USES_CLOUD_COMPUTER === "1") useCloudComputer();
-  if (process.env.FAKE_CLAUDE_CONNECT_APPS) connectApps(process.env.FAKE_CLAUDE_CONNECT_APPS.split(",").filter(Boolean));
 
   if (fakeMcpCalls) {
     const promptText = JSON.stringify(prompt);
@@ -1053,6 +1073,28 @@ const fakeMcpCalls: FakeMcpCall[] | null = (() => {
   }
 })();
 
+/** One MCP client session over streamable HTTP, JSON answers only. */
+function fakeHttpMcpSession(server: { url: string; headers?: Record<string, string> }) {
+  let next = 0;
+  const post = async (frame: Record<string, unknown>) => fetch(server.url, {
+    method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...server.headers },
+    body: JSON.stringify(frame), signal: AbortSignal.timeout(20_000),
+  });
+  const request = async (method: string, params: Record<string, unknown>) => {
+    const id = ++next;
+    try {
+      const response = await post({ jsonrpc: "2.0", id, method, params });
+      const text = await response.text();
+      // a tool call answers as an event stream: the result is the last event
+      return JSON.parse(text.includes("data: ") ? text.trim().split("data: ").at(-1)! : text) as Record<string, unknown>;
+    } catch (error) {
+      return { id, error: { code: -1, message: error instanceof Error ? error.message : "error" } };
+    }
+  };
+  const notify = (method: string) => { void post({ jsonrpc: "2.0", method }).catch(() => {}); };
+  return { request, notify, close: () => {} };
+}
+
 /** One stdio MCP client session: newline-delimited JSON-RPC. */
 function fakeMcpSession(server: { command: string; args?: string[]; env?: Record<string, string> }) {
   const child = spawn(server.command, server.args ?? [], { env: { ...process.env, ...server.env }, stdio: ["pipe", "pipe", "ignore"] });
@@ -1105,9 +1147,9 @@ async function proxyFetch(target: string): Promise<string> {
 
 // The real CLI reads --mcp-config once, at launch, and keeps its servers
 // for every turn of the process; the harness may remove the file after.
-let launchServers: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }> | null = null;
+let launchServers: Record<string, FakeMcpServer> | null = null;
 async function runFakeMcpCalls(calls: FakeMcpCall[], configPath: string | null): Promise<string> {
-  let servers: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }> = launchServers ?? {};
+  let servers: Record<string, FakeMcpServer> = launchServers ?? {};
   if (configPath && !launchServers) {
     try {
       const config = JSON.parse(readFileSync(configPath, "utf8")) as { mcpServers?: typeof servers };
@@ -1124,7 +1166,7 @@ async function runFakeMcpCalls(calls: FakeMcpCall[], configPath: string | null):
   // as a tool's own HTTP call would; the reply carries proxy:<status>:<body>.
   if (process.env.FAKE_CLAUDE_PROXY_FETCH) notes.push(await proxyFetch(process.env.FAKE_CLAUDE_PROXY_FETCH));
   for (const call of calls) {
-    const names = Object.keys(servers).filter((name) => matches(call.server, name) && typeof servers[name]?.command === "string");
+    const names = Object.keys(servers).filter((name) => matches(call.server, name) && (typeof servers[name]?.command === "string" || harnessHttpServer(servers[name]) !== null));
     if (!names.length) {
       notes.push("mcp:absent");
       continue;
@@ -1132,7 +1174,8 @@ async function runFakeMcpCalls(calls: FakeMcpCall[], configPath: string | null):
     for (const name of names) {
       if (!first && pauseMs > 0) await new Promise((resolve) => setTimeout(resolve, pauseMs));
       first = false;
-      const session = fakeMcpSession(servers[name] as { command: string; args?: string[]; env?: Record<string, string> });
+      const http = harnessHttpServer(servers[name]);
+      const session = http ? fakeHttpMcpSession(http) : fakeMcpSession(servers[name] as { command: string; args?: string[]; env?: Record<string, string> });
       try {
         await session.request("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake-claude", version: "0" } });
         session.notify("notifications/initialized");
@@ -1190,10 +1233,20 @@ const playReply = (prompt: JsonValue, mcpNote: string) => {
     // parent's own result waits until its sub-agent's calls are done, the
     // way an Agent call settles after the work it started.
     let compactPending = compactMidTool;
+    const failureContext: string[] = [];
     const settle = (call: ScriptedToolCall, id: string) => {
       if (compactPending) { compactPending = false; compactNow(); }
       out({ type: "user", ...(call.parent ? { parent_tool_use_id: call.parent } : {}), message: { content: [{ type: "tool_result", tool_use_id: id, is_error: !call.ok, content: call.output }] } });
-      runHooks("PostToolUse", { tool_name: call.name, tool_input: call.input, tool_response: call.output, tool_use_id: id });
+      if (!call.ok) {
+        // Claude Code 2.1.296 runs only PostToolUseFailure for a failed call, with the result text as `error`.
+        const printed = runHooks("PostToolUseFailure", { tool_name: call.name, tool_input: call.input, error: call.output, tool_use_id: id });
+        try {
+          const context = JSON.parse(printed)?.hookSpecificOutput?.additionalContext;
+          if (typeof context === "string" && context) failureContext.push(context);
+        } catch {}
+      } else {
+        runHooks("PostToolUse", { tool_name: call.name, tool_input: call.input, tool_response: call.output, tool_use_id: id });
+      }
     };
     const waiting = new Map<string, ScriptedToolCall>();
     scriptedToolCalls.forEach((call, index) => {
@@ -1208,6 +1261,7 @@ const playReply = (prompt: JsonValue, mcpNote: string) => {
         }
       }
     });
+    if (failureContext.length) replyParts = [`${failureContext.join("\n")}\n\n${replyParts[0] ?? ""}`, ...replyParts.slice(1)];
     for (const text of replyParts) out({ type: "assistant", message: { content: [{ type: "text", text }], usage } });
   } else {
     replyParts.forEach((text, index) => {

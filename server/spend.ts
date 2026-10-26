@@ -11,6 +11,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConfig } from "./config.ts";
 import { entitled } from "./enterprise.ts";
+import { assertWithinPersonalCap } from "./personal-spend-cap.ts";
 import { readUsage, usageRowKey } from "./usage-ledger.ts";
 
 export interface SpendState {
@@ -128,7 +129,8 @@ export function assertWithinBudget(
   isEntitled: (feature: string) => boolean = entitled,
 ): void {
   const state = spendState(cfg, dataDir, now, isEntitled);
-  if (!state?.exceeded) return;
+  // The person's own limit (server/personal-spend-cap.ts) stops a turn the same way.
+  if (!state?.exceeded) return assertWithinPersonalCap(dataDir, now);
   throw Object.assign(
     new Error(`this workspace has reached its monthly spend limit of $${usd(state.monthlyUsd)} — an admin can raise it under Settings → Usage`),
     { status: 409, code: "spend_cap" },

@@ -1,7 +1,7 @@
 // The content nodes that hold no nodes of their own: an image, a badge, a
 // progress bar. (An Icon is a WidgetGlyph and a Chart is WidgetChart.)
-import type { CSSProperties } from "react";
-import { ImageOff } from "lucide-react";
+import { useState, type CSSProperties } from "react";
+import { ImageOff, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { widgetNumber, widgetString, type WidgetNode } from "../../../shared/widget";
@@ -15,7 +15,13 @@ import { progressClip } from "@/lib/motion";
  * request to whatever address the bot wrote. One click loads the card's images. */
 export function WidgetImage({ node, where }: { node: WidgetNode; where: WidgetWhere }) {
   const form = useWidgetForm();
+  // A picture that does not arrive (address gone, refused, blocked, offline)
+  // says so and offers another try, never an empty framed box.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const src = widgetString(node, "src");
+  // A new address (a widget that streams or is regenerated) gets its own try.
+  const failed = failedSrc !== null && failedSrc === src;
   if (!src || !/^https:\/\//i.test(src)) return null;
   const box = boxStyle(node);
   const thumb = where.item === true && where.lead === true && box.width === undefined && box.height === undefined;
@@ -47,10 +53,42 @@ export function WidgetImage({ node, where }: { node: WidgetNode; where: WidgetWh
       </button>
     );
   }
+  if (failed) {
+    const retry = () => {
+      setFailedSrc(null);
+      setAttempt((value) => value + 1);
+    };
+    return (
+      <span
+        role="status"
+        data-widget-image-failed=""
+        className={cn("flex max-w-full flex-col items-center justify-center bg-inset text-center text-[12px] leading-4 text-ink-secondary", thumb ? "p-0" : "min-h-[88px] gap-1.5 px-3 py-3", frame)}
+        style={style}
+      >
+        {!thumb && <ImageOff aria-hidden="true" size={18} className="shrink-0" />}
+        {!thumb && <span>{t("attach.imageUnavailable")}</span>}
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            retry();
+          }}
+          aria-label={t("attach.retryAria", { name: alt || t("attach.imageUnavailable") })}
+          title={t("chat.retry")}
+          className={cn("flex items-center gap-1 text-[11px] text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus", thumb ? "size-full justify-center rounded-[inherit]" : "rounded-md border border-hairline/50 bg-panel px-2 py-1")}
+        >
+          <RotateCcw aria-hidden="true" size={thumb ? 14 : 11} />
+          {!thumb && t("chat.retry")}
+        </button>
+      </span>
+    );
+  }
   return (
     <img
+      key={attempt}
       src={src}
       alt={alt ?? ""}
+      onError={() => setFailedSrc(src)}
       loading="lazy"
       decoding="async"
       referrerPolicy="no-referrer"

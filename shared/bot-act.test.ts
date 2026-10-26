@@ -61,12 +61,23 @@ describe("decideBotAct", () => {
     expect(decideBotAct({ raw: { method: "POST", path: "/api/bots" }, mode: "edits", scopes: ["client"], neededScope: client })).toMatchObject({ effect: "hold" });
   });
 
+  it("holds a write that widens team memory sharing even in full; narrowing to private runs", () => {
+    const full = { mode: "full" as const, scopes: ["admin", "client"] as const, neededScope: client };
+    for (const value of ["shared", "everyone", null, ""]) {
+      expect(decideBotAct({ raw: { method: "PATCH", path: "/api/bots/b1", body: { teamMemorySharing: value } }, ...full }), String(value)).toMatchObject({ ok: true, effect: "hold" });
+    }
+    expect(decideBotAct({ raw: { ui: "updateBot", input: { botId: "b1", patch: { teamMemorySharing: "shared" } } }, ...full })).toMatchObject({ ok: true, effect: "hold" });
+    expect(decideBotAct({ raw: { method: "PATCH", path: "/api/bots/b1", body: { teamMemorySharing: "private" } }, ...full })).toMatchObject({ ok: true, effect: "run" });
+    expect(decideBotAct({ raw: { method: "PATCH", path: "/api/bots/b1", body: { teamMemorySharing: "shared" } }, mode: "auto", scopes: ["admin", "client"], neededScope: client })).toMatchObject({ effect: "hold" });
+  });
+
   it("refuses a mode change or a card answer in every mode, including full", () => {
-    const error = "A bot cannot change an approval mode or answer a card through act.";
+    const error = "act does not change approval levels, rules or grants, nor answer a card: use sagax_settings (bot.approvalMode, bot.permissionMode, rules.*), which asks the person when it must.";
     const full = { mode: "full" as const, scopes: ["admin", "client"] as const, neededScope: client };
     expect(decideBotAct({ raw: { ui: "decideRequest", input: { threadId: "t2", requestId: "r1", behavior: "allow" } }, ...full })).toMatchObject({ ok: false, status: 403, error });
     expect(decideBotAct({ raw: { ui: "answerCard", input: { botId: "b1", messageId: "m1", answer: "yes" } }, ...full })).toMatchObject({ ok: false, status: 403, error });
     expect(decideBotAct({ raw: { method: "POST", path: "/api/threads/t2/respond", body: { behavior: "allow" } }, ...full })).toMatchObject({ ok: false, status: 403, error });
+    expect(decideBotAct({ raw: { method: "POST", path: "/api/approvals/bulk", body: { decision: "allow", items: [{ threadId: "t2", requestId: "r1" }] } }, ...full })).toMatchObject({ ok: false, status: 403, error });
     expect(decideBotAct({ raw: { method: "PATCH", path: "/api/bots/b1/tasks/t2", body: { approvalMode: "full", confirmFullAccess: true } }, ...full })).toMatchObject({ ok: false, status: 403, error });
     expect(decideBotAct({ raw: { ui: "updateBot", input: { botId: "b1", patch: { approvalMode: "full" } } }, ...full })).toMatchObject({ ok: false, status: 403, error });
     expect(decideBotAct({ raw: { ui: "updateTask", input: { botId: "b1", threadId: "t2", patch: { confirmFullAccess: true } } }, ...full })).toMatchObject({ ok: false, status: 403, error });

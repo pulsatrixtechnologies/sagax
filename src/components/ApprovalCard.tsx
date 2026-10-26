@@ -15,8 +15,8 @@ import { ApprovalHeading, TechnicalDetails } from "@/components/ApprovalParts";
 import { StepRow } from "@/components/StepRow";
 import { CustomRuleNoticeLine, CustomRuleSavedInset } from "@/components/CustomRuleNotice";
 import { approvalPlain, describeAllowRule, describeApproval, isTechnicalText, parseToolId, type ApprovalRisk, type ToolHints } from "@/lib/approval-describe";
-import { composioActionPhrase, outboundSummary } from "@/lib/approval-summary";
-import { niceDate, niceTime, scheduleLabel } from "@/lib/schedule-label";
+import { outboundSummary } from "@/lib/approval-summary";
+import { cronLocale, niceDate, niceTime, scheduleLabel } from "@/lib/schedule-label";
 import { cronScheduleLabel } from "../../shared/cron-label";
 import { PROFILE_REQUEST_FIELDS, type ProfileRequestField } from "../../shared/profile-request";
 import type { RoutineRequestSchedule } from "../../shared/routine-request";
@@ -195,16 +195,12 @@ export function toolLabel(tool?: string, input?: string, hints?: ToolHints): str
   const key = nice[tool];
   if (key) return t(key);
   const { server, name } = parseToolId(tool);
-  // A Composio slug reads as a verb phrase: LINEAR_CREATE_LINEAR_COMMENT is
-  // "create linear comment".
-  const composio = composioActionPhrase(name);
-  if (!server) return composio ?? name.replace(/_/g, " ");
-  // Composio's own slug already names the app ("create linear comment"):
-  // "in Composio" would name the broker, not where the action lands.
-  if (server === "composio" && composio) return composio;
+  if (!server) return name.replace(/_/g, " ");
   const described = describeApproval(tool, input, hints);
-  const action = described.action ?? composio ?? name.replace(/_+/g, " ");
-  return described.product ? t("approval.phrase.inProduct", { action, product: described.product }) : action;
+  const action = described.action ?? name.replace(/_+/g, " ");
+  // Sagax's own built-in servers (sagax-environment, sagax-computer) are the
+  // bot itself: never "... in Sagax Computer" (shared approvalAction).
+  return described.product && !server.startsWith("sagax-") ? t("approval.phrase.inProduct", { action, product: described.product }) : action;
 }
 
 /** What the card shows for a plain tool approval (not a proposal): a
@@ -236,7 +232,11 @@ export function toolApprovalView(card: OptionCardData, botName?: string): ToolAp
   // phones show it, not as the slug the bot happened to call.
   const outbound = outboundSummary(card);
   return {
-    title: outbound ? outbound.headline : words.title,
+    // 2026-10-20 (JC, after Grok Bot): one plain line, "Katarina wants to
+    // run a command on your cloud computer", never a question to parse
+    title: outbound ? outbound.headline : botName?.trim()
+      ? t("approval.card.namedWantsTo", { name: botName.trim(), action: words.action })
+      : t("approval.card.wantsTo", { action: words.action }),
     summary: outbound?.summary || described.summary || (words.line !== shown ? words.line : undefined),
     risk: described.risk,
     plain: shown,
@@ -254,7 +254,7 @@ function plainWhen(schedule: RoutineRequestSchedule): string {
       : `${niceDate(schedule.at)}, ${niceTime(schedule.at)}`;
   }
   if (schedule.type === "cron") {
-    const label = cronScheduleLabel(schedule);
+    const label = cronScheduleLabel(schedule, cronLocale());
     return label.startsWith("Cron ") ? "" : label;
   }
   if (schedule.type === "interval") return scheduleLabel({ ...schedule, anchorAt: schedule.anchorAt ?? 0 });
@@ -280,7 +280,10 @@ export function appliedChange(card: OptionCardData, name: string): { line: strin
         : operation.action === "pause" || operation.action === "resume" ? undo?.appliedUpdatedAt !== undefined
           : operation.action === "delete" ? Boolean(undo?.before)
             : false;
-    return { line: t(ROUTINE_APPLIED_LINE[operation.action], { name, title }), canUndo };
+    const lineKey = operation.action === "create" && operation.paused === true
+      ? "approval.applied.routine.createPaused"
+      : ROUTINE_APPLIED_LINE[operation.action];
+    return { line: t(lineKey, { name, title }), canUndo };
   }
   const skill = card.skillRequest;
   if (skill) {
@@ -403,7 +406,11 @@ export function ApprovalCard({
   // decided by voice on a Live call rather than tapped
   // or answered from an AI client attached to Perspicax (lot C.3)
   const byVoice = card.answeredBy?.via === "call" ? <span className="text-ink-tertiary">· {t("approval.status.byVoice")}</span>
-    : card.answeredBy?.via === "ai-client" ? <span className="text-ink-tertiary">· {t("approval.status.byAiClient")}</span> : null;
+    : card.answeredBy?.via === "ai-client" ? <span className="text-ink-tertiary">· {t("approval.status.byAiClient")}</span>
+      // decided by the model reviewer under the person's rule (lot A1)
+      : card.answeredBy?.via === "auto-review" ? <span className="text-ink-tertiary" data-answered-via="auto-review">· {t("approval.status.byAutoReview")}</span>
+      // answered by the person's Primary Bot at their request (sagax_approvals)
+      : card.answeredBy?.via === "primary-bot" ? <span className="text-ink-tertiary" data-answered-via="primary-bot">· {t("approval.status.viaBot", { name: card.answeredBy.bot ?? t("approval.someone") })}</span> : null;
   const isRoutineRequest = Boolean(card.routineRequest);
   const isSkillRequest = Boolean(card.skillRequest);
   const isProfileRequest = Boolean(card.profileRequest);
@@ -449,9 +456,9 @@ export function ApprovalCard({
     return (
       <StepRow
         testId="approval-waiting"
-        data={{ "data-tour": "approval", "data-approval-waiting": card.requestId }}
+        data={{ "data-tour": "approval", "data-approval-waiting": card.requestId, ...(card.reviewing ? { "data-auto-review": "pending" } : {}) }}
         icon={<ShieldCheck size={13} aria-hidden="true" className="text-accent" />}
-        label={card.adminApproval ? t("approval.waitingForAdmin") : t("approval.status.waitingApproval")}
+        label={card.reviewing ? t("customRules.notice.reviewing") : card.adminApproval ? t("approval.waitingForAdmin") : t("approval.status.waitingApproval")}
         target={card.adminApproval ? adminWillAnswerLine(card.adminNames) : undefined}
       />
     );
@@ -548,6 +555,11 @@ export function ApprovalCard({
           <>
             {settled === "allow" && !expired ? <Check size={14} className="text-success" /> : <X size={14} />} {outcome}
             {byVoice}
+          </>
+        ) : card.reviewing ? (
+          <>
+            <ShieldCheck size={14} className="text-accent" />
+            <span data-auto-review="pending">{t("customRules.notice.reviewing")}</span>
           </>
         ) : (
           <>

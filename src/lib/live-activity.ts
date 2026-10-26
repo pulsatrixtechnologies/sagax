@@ -42,16 +42,8 @@ export function liveActivityLabel(message?: Message): string {
 // is the plain label above, so the sidebar and the opening seconds of a
 // phase read exactly as before. Keys, not labels, for the same reason.
 const ALTERNATES: Partial<Record<LocaleKey, LocaleKey[]>> = {
-  "chat.activity.thinking": [
-    "chat.activity.alt.mullingItOver",
-    "chat.activity.alt.piecingItTogether",
-    "chat.activity.alt.workingItOut",
-    "chat.activity.alt.weighingOptions",
-    "chat.activity.alt.chippingAway",
-    "chat.activity.alt.diggingIn",
-    "chat.activity.alt.liningThingsUp",
-    "chat.activity.alt.makingProgress",
-  ],
+  // the plain thinking step has no alternates here: the presence line
+  // rotates its own list (BotActivityIndicator's THINKING_PHRASE_KEYS)
   "chat.activity.working": [
     "chat.activity.alt.chippingAway",
     "chat.activity.alt.makingProgress",
@@ -139,9 +131,4 @@ export function phraseAt(phrases: readonly string[], seed: string, step: number)
   // after the alternates run out, come back to the plain label and go again
   const cycle = [...order, phrases[0]];
   return cycle[(step - 1) % cycle.length];
-}
-
-/** How long `step` stays up: 4 to 6 seconds, fixed by the seed. */
-export function phraseHoldMs(seed: string, step: number): number {
-  return 4000 + (hash(`${seed}#${step}`) % 2001);
 }

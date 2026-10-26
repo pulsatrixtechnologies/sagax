@@ -13,6 +13,7 @@ production VM) therefore sends real APNs pushes.
 | A person writes to you directly, a bot finishes a turn in your thread | `message` | Nobody saw it (below) |
 | Someone nudges you | `nudge` | Always, at once, priority 10, the nudge sound |
 | An approval, or a bot waiting on your answer | `approval` | Nobody saw it |
+| A routine of yours finished | `message` | Nobody saw it. The banner names the routine (`Open routine %@`) and opens its report. A bot-to-bot turn stays quiet: the chip in both threads is the notice. |
 | A routine of yours failed | `routine` | Nobody saw it |
 | An achievement unlocked | `achievement` | No client of yours is connected, and you turned on system notifications for achievements |
 
@@ -42,8 +43,8 @@ bot conversations that are no longer unread or waiting on the person
 
 Each push follows:
 
-- the phone's Settings > Notifications (notification sounds, nudge sound),
-  sent with each registration;
+- the phone's Settings > Notifications (notification sounds, the approval
+  chime, nudge sound), sent with each registration;
 - the person's synced "Notification sounds";
 - a bot's notifications muted for that person (Settings of the bot);
 - a rate limit of 20 pushes per person in 5 minutes;
@@ -53,6 +54,19 @@ Each push follows:
 
 The alert text of a message is the message itself (clipped to 240
 characters): it travels through Apple to the phone like any messaging app.
+
+An approval banner has two actions, **Allow once** and **Deny**. Neither
+is "Always allow": the lock screen does not show the whole card, so a
+standing grant is not offered there. iOS asks the person to unlock the
+phone (Face ID or the passcode) before either action is delivered, and
+the app answers `POST /api/threads/:id/respond` in the background. Allow
+sends `behavior: "allow"` once. Deny sends `behavior: "deny"`. If the
+person protects that class with a security key, the push uses the
+category `SAGAX_APPROVAL_KEY`: Allow opens Sagax and the existing
+ceremony runs (a passkey with Face ID, or a key). Until that ceremony
+answers, nothing is approved. A question uses `SAGAX_UPDATE` and has no
+actions. The approval chime (`approval.caf`) is the sound of an approval
+banner when notification sounds and the chime are on.
 
 A push from a bot or a person is an iOS **communication notification**. The
 banner names the bot (or the person) as the sender and shows their avatar as

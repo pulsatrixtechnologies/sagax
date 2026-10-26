@@ -72,6 +72,8 @@ import { ROUTINE_LAB, seedRoutineLab, seedRoutineLabRuns } from "./routine-lab.m
 import { RICH_LAB, seedRichLabBot, seedRichLabTranscript } from "./rich-lab.mjs";
 // PARITY_WIDGETS=1: every chat widget sample for the widget UI tests (widget-lab.mjs).
 import { WIDGET_LAB, seedWidgetLabBot, seedWidgetLabTranscript } from "./widget-lab.mjs";
+// PARITY_LINKS=1: a second Ara conversation with the newest link, for Go to message (links-lab.mjs).
+import { LINKS_LAB, seedLinksLab, seedLinksLabTranscript } from "./links-lab.mjs";
 // PARITY_PLUGINS=1: connected apps, MCP sign-in and a bot without apps for the WP9 UI tests (plugin-lab.mjs).
 import {
   PLUGIN_LAB, closePluginLab, pluginLabHook, pluginLabServerEnv, seedPluginLab, startPluginLabBroker,
@@ -635,6 +637,13 @@ function startComputerDouble(upstreamPort) {
     if (await cardLabHook(req, res, url, `http://127.0.0.1:${upstreamPort}`, api)) return;
     if (await composerLabHook(req, res, url)) return;
     if (await pluginLabHook(req, res, url)) return;
+    // PARITY_BOT_MAIL=1 (B21 / CO5): the bot's own address as an
+    // organization server linked to Perspicax answers it (this fixture is a
+    // personal server, which answers available:false).
+    // PARITY_BOT_MAIL=pending: the address waits for the administrator.
+    if ((process.env.PARITY_BOT_MAIL === "1" || process.env.PARITY_BOT_MAIL === "pending") && /^\/api\/bots\/[\w-]+\/inbound-mail$/.test(url.pathname) && req.method === "GET") {
+      return sendJson(res, 200, { available: true, address: "ara@bots.acme.example", enabled: process.env.PARITY_BOT_MAIL === "1", canChange: true });
+    }
     if (url.pathname === "/__parity/computer") {
       if (req.method === "DELETE") {
         computerRecord.batches = [];
@@ -761,6 +770,7 @@ async function main() {
   if (PLUGIN_LAB) await seedPluginLab(base, api, ROOT, seeded.ids);
   if (RICH_LAB) await seedRichLabBot(base, api);
   if (WIDGET_LAB) await seedWidgetLabBot(base, api);
+  if (LINKS_LAB) await seedLinksLab(base, api, seeded.ids);
   await stopServer(child);
 
   seedTranscripts(dataDir, seeded);
@@ -768,6 +778,7 @@ async function main() {
   if (ROUTINE_LAB) seedRoutineLabRuns(dataDir);
   if (RICH_LAB) seedRichLabTranscript(dataDir, png);
   if (WIDGET_LAB) seedWidgetLabTranscript(dataDir);
+  if (LINKS_LAB) seedLinksLabTranscript(dataDir);
   seedCommandRules(dataDir, seeded);
   const ownerMode = process.env.PARITY_OWNER === "1";
   if (ownerMode) {

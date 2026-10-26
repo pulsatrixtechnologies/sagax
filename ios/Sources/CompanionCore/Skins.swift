@@ -594,6 +594,9 @@ public struct ThemeSelection: Equatable, Sendable {
 public enum DesktopAppearanceKeys {
     public static let skin = "omb-skin"
     public static let font = "omb-font"
+    /// "auto": the computer follows its system between a variant's light
+    /// and dark skins (src/lib/skin-families.ts); `skin` is the one worn now.
+    public static let skinMode = "omb-skin-mode"
     public static let retroOn = "omb.retro98.on"
     public static let retroUnlocked = "omb.retro98.unlocked"
 }
@@ -604,11 +607,14 @@ public struct ComputerAppearance: Equatable, Sendable {
     public var skin: SkinID?
     public var font: SkinFontChoice?
     public var retroUnlocked: Bool
+    /// The computer's skin follows its system (Auto).
+    public var auto: Bool
 
-    public init(skin: SkinID?, font: SkinFontChoice?, retroUnlocked: Bool) {
+    public init(skin: SkinID?, font: SkinFontChoice?, retroUnlocked: Bool, auto: Bool = false) {
         self.skin = skin
         self.font = font
         self.retroUnlocked = retroUnlocked
+        self.auto = auto
     }
 
     /// From the desktop's string preferences. An unknown or absent skin is
@@ -619,14 +625,18 @@ public struct ComputerAppearance: Equatable, Sendable {
         self.skin = skin
         self.font = preferences[DesktopAppearanceKeys.font].flatMap(SkinFontChoice.init(rawValue:)) ?? .skin
         self.retroUnlocked = preferences[DesktopAppearanceKeys.retroUnlocked] == "1" || preferences[DesktopAppearanceKeys.retroOn] == "1"
+        self.auto = preferences[DesktopAppearanceKeys.skinMode] == "auto"
     }
 
     /// The keys the phone writes back when it changes the computer's look.
     /// A phone-only skin (Black, Dim) has no desktop twin: it writes Midnight
     /// for Black and Graphite for Dim, the nearest the desktop has.
-    public static func preferences(skin: SkinID, font: SkinFontChoice, retroUnlocked: Bool) -> [String: String] {
+    /// `auto` keeps the computer's Auto (a font change); a skin picked on the
+    /// phone is a fixed choice, so it is written without it.
+    public static func preferences(skin: SkinID, font: SkinFontChoice, retroUnlocked: Bool, auto: Bool = false) -> [String: String] {
         let desktop: SkinID = skin == .black ? .midnight : skin == .dim ? .graphite : skin
         var out = [DesktopAppearanceKeys.skin: desktop.rawValue, DesktopAppearanceKeys.font: font.rawValue]
+        if auto { out[DesktopAppearanceKeys.skinMode] = "auto" }
         if retroUnlocked { out[DesktopAppearanceKeys.retroUnlocked] = "1" }
         out[DesktopAppearanceKeys.retroOn] = skin == .retro98 ? "1" : nil
         return out

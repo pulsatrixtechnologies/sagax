@@ -14,7 +14,7 @@ function cronCalculator(value: unknown): { schedule: RoutineCronSchedule; cron: 
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Choose a valid cron schedule");
   const input = value as Partial<RoutineCronSchedule>;
   if (input.type !== "cron" || typeof input.expression !== "string") throw new Error("Choose a valid cron schedule");
-  if (Object.keys(input).some(key => !["type", "expression", "timeZone"].includes(key))) {
+  if (Object.keys(input).some(key => !["type", "expression", "timeZone", "timing", "windowEarlyMinutes", "windowLateMinutes"].includes(key))) {
     throw new Error("Cron schedules accept only type, expression and timeZone; start/end dates and other restrictions are not supported");
   }
   const expression = input.expression.trim().replace(/\s+/g, " ");

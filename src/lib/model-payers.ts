@@ -33,6 +33,25 @@ export function keyProviderDriver(driver: string): boolean {
   return PERSONAL_KEY_DRIVERS.includes(driver);
 }
 
+/** The server image deliberately does not carry this engine
+ * (engines.lock.json notPreinstalled, surfaced as `notAvailable`): a real,
+ * unactionable state, never a mere signed-out login. This is the ONLY case
+ * that withholds Connect and reads as "not installed / not available". A bare
+ * `installed: false` with no reason is not proof the binary is gone (a stale
+ * probe, or a managed engine between sign-ins), so it never locks Connect out. */
+export function engineUnavailable(engine: Pick<MyEngine, "installed" | "notAvailable">): boolean {
+  return !engine.installed && Boolean(engine.notAvailable);
+}
+
+/** Connecting is the right action now: a subscription engine that is signed
+ * out, on a server that is not deliberately missing it. Independent of the
+ * `installed` probe on purpose: a sign-out (or a transient probe miss) must
+ * never remove the way back in (fix/engine-connect-not-blocked-by-installed,
+ * the Grok lockout: a logout read as "not installed" with Connect disabled). */
+export function engineCanConnect(engine: Pick<MyEngine, "installed" | "notAvailable" | "subscription">): boolean {
+  return engine.subscription.supported && !engine.subscription.signedIn && !engineUnavailable(engine);
+}
+
 export function payerOrder(engine: EngineFacts): PayerOrder {
   const ready: Record<PayerId, boolean> = { subscription: engine.subscription.signedIn, key: engine.myKey, "org-key": engine.orgKey };
   const rows = PAYER_ORDER
@@ -45,7 +64,15 @@ export type OrgEngineState = "connected" | "signInRequired" | "noAccess" | "notI
 
 /** One word for the provider column: connected, or what is missing. */
 export function orgEngineState(engine: EngineFacts): OrgEngineState {
-  if (!engine.installed) return engine.notAvailable ? "notAvailable" : "notInstalled";
+  // The server image deliberately does not carry it (engines.lock.json): a
+  // real, unactionable state.
+  if (engineUnavailable(engine)) return "notAvailable";
   if (engine.myTurns !== "none") return "connected";
-  return engine.subscription.supported ? "signInRequired" : "noAccess";
+  // A subscription engine that is signed out needs a sign-in, even if the CLI
+  // probe is momentarily unsure: a logout must never read as missing software
+  // (the Grok lockout). Only a non-connectable engine whose binary is genuinely
+  // absent is "not installed".
+  if (engine.subscription.supported) return "signInRequired";
+  if (!engine.installed) return "notInstalled";
+  return "noAccess";
 }

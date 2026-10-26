@@ -144,3 +144,168 @@ describe("GET /api/me/usage", () => {
     expect((await api(`/api/me/usage?${RANGE}&groupBy=nope`, ADA)).status).toBe(400);
   });
 });
+
+describe("GET /api/usage/traces", () => {
+  let dataDir: string;
+  const servers: Server[] = [];
+  beforeEach(async () => {
+    dataDir = mkdtempSync(join(tmpdir(), "sagax-traces-"));
+    const turn = (botId: string, threadId: string, at: string, over: Partial<{ costUsd: number | null; durationMs: number; trigger: UsageTrigger }>) =>
+      appendUsage(dataDir, {
+        at, botId, botName: botId, threadId, instanceId: "claude", driverKind: "claudeAgent",
+        model: "claude-test", input: 10, output: 5, cachedInput: 4,
+        costUsd: over.costUsd ?? 0.01, durationMs: over.durationMs ?? 1000,
+        trigger: over.trigger ?? { kind: "owner" },
+        ...(over.costUsd !== null ? { costSource: "reported" as const } : {}),
+      });
+    // One job: two turns on the same thread, same trigger.
+    await turn("scout", "t-a", "2026-10-14T12:00:00.000Z", { costUsd: 0.01, durationMs: 2000 });
+    await turn("scout", "t-a", "2026-10-14T12:01:00.000Z", { costUsd: 0.02, durationMs: 3000 });
+    // A routine run on another thread (a distinct, newer job).
+    await turn("scout", "t-b", "2026-10-14T13:00:00.000Z", { costUsd: 0.05, durationMs: 4000, trigger: { kind: "routine", routineId: "r1", label: "Morning digest" } });
+  });
+  afterEach(async () => {
+    await Promise.all(servers.splice(0).map((server) => new Promise((done) => server.close(done))));
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+  async function serve() {
+    const routes = [createUsageRoutes({ dataDir, prices: () => null, budget: () => null, currency: () => "USD", organization: () => true })];
+    const server = createServer(async (req, res) => {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      const auth = { kind: "loopback", scopes: ["admin", "client"] } as unknown as RequestAuth;
+      const handled = await dispatchRoutes(routes, { req, res, url, path: url.pathname, method: req.method ?? "GET", auth, json, readBody });
+      if (!handled) json(res, 404, { from: "inline" });
+    });
+    servers.push(server);
+    await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    return async (path: string) => {
+      const response = await fetch(`${base}${path}`);
+      return { status: response.status, body: await response.json() as any };
+    };
+  }
+
+  it("stays owner/usage.view scope, never a client read", () => {
+    expect(requiredScope("GET", "/api/usage/traces")).toBe("admin");
+    expect(requiredScope("GET", "/api/usage/traces", { orgDirectory: true })).toBe("admin");
+  });
+
+  it("returns per-job traces newest first with time and cost rolled up", async () => {
+    const api = await serve();
+    const res = await api("/api/usage/traces?from=2026-10-14&to=2026-10-14");
+    expect(res.status).toBe(200);
+    expect(res.body.jobs).toHaveLength(2);
+    // newest job (the routine run) first
+    expect(res.body.jobs[0].triggerKind).toBe("routine");
+    expect(res.body.jobs[0].routineId).toBe("r1");
+    const conversation = res.body.jobs[1];
+    expect(conversation.turns).toBe(2);
+    expect(conversation.durationMs).toBe(5000);
+    expect(conversation.costUsd).toBeCloseTo(0.03, 6);
+    // human label, no raw thread id in the label
+    expect(conversation.botName).toBe("scout");
+    expect(conversation.threadId).toBe("t-a");
+  });
+
+  it("checks its dates", async () => {
+    const api = await serve();
+    expect((await api("/api/usage/traces?from=2026-10-15&to=2026-10-01")).status).toBe(400);
+  });
+});
+
+describe("GET /api/me/usage/traces", () => {
+  let dataDir: string;
+  const servers: Server[] = [];
+  beforeEach(async () => {
+    dataDir = mkdtempSync(join(tmpdir(), "sagax-me-traces-"));
+    const turn = (botId: string, threadId: string, at: string, costUsd: number, durationMs: number, trigger: UsageTrigger) =>
+      appendUsage(dataDir, {
+        at, botId, botName: botId, threadId, instanceId: "claude", driverKind: "claudeAgent",
+        model: "claude-test", input: 10, output: 5, cachedInput: 4, costUsd, costSource: "reported", durationMs, trigger,
+      });
+    // Ada's own conversation (two turns, one job) and a routine run as Ada.
+    await turn("ada-bot", "t-ada", "2026-10-14T12:00:00.000Z", 1, 2000, { kind: "user", principalId: ADA, email: "ada@example.test" });
+    await turn("ada-bot", "t-ada", "2026-10-14T12:01:00.000Z", 2, 3000, { kind: "user", principalId: ADA, email: "ada@example.test" });
+    await turn("ada-routine", "t-ada-r", "2026-10-14T13:00:00.000Z", 0.5, 1000, { kind: "routine", routineId: "r1", label: "Morning digest", runAsPrincipalId: ADA });
+    // Bob's turns and the machine's own turn: never Ada's.
+    await turn("bob-bot", "t-bob", "2026-10-14T12:00:00.000Z", 40, 9000, { kind: "user", principalId: BOB, email: "bob@example.test" });
+    await turn("server-bot", "t-owner", "2026-10-14T12:00:00.000Z", 100, 5000, { kind: "owner" });
+  });
+  afterEach(async () => {
+    await Promise.all(servers.splice(0).map((server) => new Promise((done) => server.close(done))));
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+  async function serve(organization = true) {
+    const routes = [createUsageRoutes({ dataDir, prices: () => null, budget: () => null, currency: () => "USD", organization: () => organization })];
+    const server = createServer(async (req, res) => {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      const who = req.headers["x-who"] as string | undefined;
+      const auth = (who === "loopback"
+        ? { kind: "loopback", scopes: ["admin", "client"] }
+        : { kind: "session", via: "cookie", scopes: ["client"], session: who ? { principalId: who } : {} }) as unknown as RequestAuth;
+      const handled = await dispatchRoutes(routes, { req, res, url, path: url.pathname, method: req.method ?? "GET", auth, json, readBody });
+      if (!handled) json(res, 404, { from: "inline" });
+    });
+    servers.push(server);
+    await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    return async (path: string, who?: string) => {
+      const response = await fetch(`${base}${path}`, { headers: who ? { "x-who": who } : {} });
+      return { status: response.status, body: await response.json() as any };
+    };
+  }
+
+  it("is open to a member's client session; the whole-ledger traces stay admin", () => {
+    expect(requiredScope("GET", "/api/me/usage/traces")).toBe("client");
+    expect(requiredScope("GET", "/api/me/usage/traces", { orgDirectory: true })).toBe("client");
+    expect(requiredScope("GET", "/api/usage/traces")).toBe("admin");
+  });
+
+  it("gives a member their own job traces only, newest first", async () => {
+    const api = await serve();
+    const res = await api("/api/me/usage/traces?from=2026-10-14&to=2026-10-14", ADA);
+    expect(res.status).toBe(200);
+    expect(res.body.jobs).toHaveLength(2);
+    // newest job (the routine run as Ada) first
+    expect(res.body.jobs[0].triggerKind).toBe("routine");
+    expect(res.body.jobs[0].routineId).toBe("r1");
+    const conversation = res.body.jobs[1];
+    expect(conversation.turns).toBe(2);
+    expect(conversation.durationMs).toBe(5000);
+    expect(conversation.costUsd).toBeCloseTo(3, 6);
+    // no other person's job, whatever it cost
+    const text = JSON.stringify(res.body);
+    expect(text).not.toContain("bob");
+    expect(text).not.toContain(BOB);
+    expect(text).not.toContain("server-bot");
+    expect(res.body.total.costUsd).toBeCloseTo(3.5, 6);
+  });
+
+  it("gives Bob his own, never Ada's", async () => {
+    const api = await serve();
+    const res = await api("/api/me/usage/traces?from=2026-10-14&to=2026-10-14", BOB);
+    expect(res.status).toBe(200);
+    expect(res.body.jobs).toHaveLength(1);
+    expect(JSON.stringify(res.body)).not.toContain("ada");
+  });
+
+  it("refuses a session that names nobody on an organization server", async () => {
+    const api = await serve(true);
+    const refused = await api("/api/me/usage/traces?from=2026-10-14&to=2026-10-14", undefined);
+    expect(refused.status).toBe(403);
+    expect(refused.body.jobs).toBeUndefined();
+  });
+
+  it("gives the solo owner's paired device the owner's traces", async () => {
+    const api = await serve(false);
+    const owner = await api("/api/me/usage/traces?from=2026-10-14&to=2026-10-14", undefined);
+    expect(owner.status).toBe(200);
+    expect(owner.body.jobs).toHaveLength(1);
+    expect(owner.body.jobs[0].botName).toBe("server-bot");
+  });
+
+  it("checks its dates", async () => {
+    const api = await serve();
+    expect((await api("/api/me/usage/traces?from=2026-10-15&to=2026-10-01", ADA)).status).toBe(400);
+  });
+});

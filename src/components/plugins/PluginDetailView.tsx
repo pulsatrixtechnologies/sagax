@@ -2,9 +2,10 @@
 // switch for an MCP server: off means no bot sees it) and where it comes
 // from. Update, Test, Edit and Uninstall sit in one "..." menu by the name.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CheckCircle2, ChevronDown, ChevronRight, FlaskConical, KeyRound, Loader2, LogOut, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, FlaskConical, KeyRound, Link2, Loader2, LogOut, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
 import type { PluginItem } from "@/lib/plugins-model";
 import { Switch } from "../SettingsPrimitives";
@@ -61,12 +62,15 @@ export interface PluginDetailProps {
     onLoad?: () => void;
   };
   details: Array<{ label: string; value: string; mono?: boolean }>;
+  /** Copy link to this plugin (src/lib/plugin-link.ts), when it has a page */
+  link?: string | null;
   /** the editor, a skill's text, messages */
   children?: ReactNode;
 }
 
 export function PluginDetailView(props: PluginDetailProps) {
-  const { item, subtitle, onBack, trail, busy, onUninstall, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, children } = props;
+  const { item, subtitle, onBack, trail, busy, onUninstall, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children } = props;
+  const [linkCopied, setLinkCopied] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolList = tools?.list ?? null;
   const enabledCount = toolList?.filter((tool) => tool.enabled).length ?? 0;
@@ -101,10 +105,12 @@ export function PluginDetailView(props: PluginDetailProps) {
                 onUpdate && { id: "update", icon: updating ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />, label: t("connectApps.plugin.update"), onSelect: onUpdate },
                 onTest && { id: "test", icon: testing ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />, label: t("mcp.test"), onSelect: onTest },
                 onEdit && { id: "edit", icon: <Pencil size={13} />, label: t("connectApps.detail.edit"), onSelect: onEdit },
+                Boolean(link) && { id: "copy-link", icon: <Link2 size={13} />, label: t("connectApps.detail.copyLink"), onSelect: () => { void copyText(link!).then((result) => setLinkCopied(result === "copied")); } },
                 onUninstall && { id: "uninstall", icon: <Trash2 size={13} />, label: t("connectApps.detail.uninstall"), onSelect: onUninstall, danger: true },
               ]}
             />
           </div>
+          {linkCopied && <p role="status" data-plugin-link-copied className="basis-full text-right text-[11.5px] text-success">{t("connectApps.detail.linkCopied")}</p>}
         </div>
 
         {children}
@@ -255,7 +261,7 @@ export function PluginActionsMenu({ name, busy, actions, updateAvailable }: {
         {updateAvailable && <span data-plugin-update-dot className="absolute right-1 top-1 size-2 rounded-full bg-accent" aria-hidden="true" />}
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 top-9 z-10 min-w-[180px] rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1">
+        <div role="menu" className="absolute right-0 top-9 z-10 min-w-[220px] rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1">
           {shown.map((action) => (
             <button
               key={action.id}

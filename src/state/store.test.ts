@@ -39,7 +39,6 @@ import { LAST_BOT_SECTION_KEY } from "@/lib/last-bot-section";
 import { transcriptLookups } from "@/lib/transcript-derivations";
 import { openLiveEvents, type LiveEventSourceLike, type LiveEventsPlatform } from "../lib/live-events";
 import type { ModelVariantState, RuntimeEvent } from "../../shared/runtime-events";
-import type { ConnectorToolGrant } from "../../shared/wire";
 import type { RoutineRun } from "../lib/routines";
 
 
@@ -398,39 +397,6 @@ describe("Settings opened on the phone pairing", () => {
   });
 });
 
-describe("connector grants persistence", () => {
-  const announcement = () => ({
-    id: "bot-1",
-    threadId: "thread-1",
-    name: "Maus",
-    title: "Helper",
-    description: "",
-    notifications: true,
-    color: "green" as const,
-    unread: false,
-    modelSelection: { instanceId: "codex", model: "gpt-5.6-sol" },
-    approvalMode: "ask" as const,
-  });
-
-  it("PATCHes the exact explicit tool set the editor saved", async () => {
-    const request = vi.fn(async (_path: string, _init?: RequestInit) => ({ bot: announcement() }));
-    const grants: Record<string, ConnectorToolGrant> = {
-      gmail: { tools: ["GMAIL_FETCH_EMAILS", "GMAIL_SEND_EMAIL"] },
-      slack: { tools: "*" },
-    };
-    await persistBotUpdate("bot-1", { connectorTools: grants }, new AbortController().signal, request);
-    // Exact-set semantics: the wire body is the record verbatim, so a
-    // reload of what the server stored equals what the person picked.
-    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({ connectorTools: grants });
-  });
-
-  it("sends null to drop the record and return to the legacy boolean", async () => {
-    const request = vi.fn(async (_path: string, _init?: RequestInit) => ({ bot: announcement() }));
-    await persistBotUpdate("bot-1", { connectorTools: null }, new AbortController().signal, request);
-    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({ connectorTools: null });
-  });
-});
-
 describe("trusted approval-mode persistence", () => {
   const announcement = (approvalMode: Bot["approvalMode"] = "ask") => ({
     id: "bot-1",
@@ -476,6 +442,48 @@ describe("trusted approval-mode persistence", () => {
       new AbortController().signal, request, { setMode });
     expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({ title: "Chief" });
     expect(setMode).toHaveBeenCalledWith("bot-1", "full", { acknowledgeLocalAuto: false, allThreads: true });
+  });
+
+  it("names the open conversation on an organization Full grant and keeps it off the ordinary patch", async () => {
+    const request = vi.fn(async (_path: string, _init?: RequestInit) => ({ bot: announcement("full") }));
+    await persistBotUpdate(
+      "bot-1",
+      { approvalMode: "full", confirmFullAccess: true, organizationFullAccess: true, threadId: "talk", title: "Ops" },
+      new AbortController().signal,
+      request,
+    );
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({ title: "Ops" });
+    expect(request.mock.calls[1]?.[0]).toBe("/api/bots/bot-1");
+    expect(JSON.parse(String(request.mock.calls[1]?.[1]?.body))).toEqual({
+      approvalMode: "full", confirmFullAccess: true, threadId: "talk",
+    });
+  });
+
+  it("keeps the shown thread on a model switch, which the server needs to pick the conversation", async () => {
+    const request = vi.fn(async (_path: string, _init?: RequestInit) => ({ bot: announcement("ask") }));
+    const modelSelection = { instanceId: "codex", model: "gpt-5.6-sol" };
+    await persistBotUpdate("bot-1", { modelSelection, threadId: "talk" }, new AbortController().signal, request);
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({ modelSelection, threadId: "talk" });
+  });
+
+  it("keeps the thread with a model switch coalesced into an organization Full grant", async () => {
+    const request = vi.fn(async (_path: string, _init?: RequestInit) => ({ bot: announcement("full") }));
+    const modelSelection = { instanceId: "codex", model: "gpt-5.6-sol" };
+    await persistBotUpdate(
+      "bot-1",
+      { approvalMode: "full", organizationFullAccess: true, modelSelection, threadId: "talk" },
+      new AbortController().signal,
+      request,
+    );
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({ modelSelection, threadId: "talk" });
+    expect(JSON.parse(String(request.mock.calls[1]?.[1]?.body))).toEqual({ approvalMode: "full", threadId: "talk" });
+  });
+
+  it("drops a Full grant's thread when the queue switched back to an ordinary level", async () => {
+    const request = vi.fn(async (_path: string, _init?: RequestInit) => ({ bot: announcement("ask") }));
+    await persistBotUpdate("bot-1", { approvalMode: "ask", organizationFullAccess: true, threadId: "talk" },
+      new AbortController().signal, request);
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({ approvalMode: "ask" });
   });
 
   it("never sends a Full confirmation over HTTP after a rapid switch back to Ask", async () => {
@@ -1120,7 +1128,6 @@ describe("config status frames", () => {
     expect(
       configStatusFromFrame({
         xai: { configured: true },
-        composio: { configured: true, mode: "managed" },
         box: { configured: false },
         vps: { configured: true, sshAlias: "homelab" },
         rooms: { turnTimeoutMinutes: 20 },
@@ -1134,7 +1141,6 @@ describe("config status frames", () => {
       }),
     ).toEqual({
       xai: { configured: true },
-      composio: { configured: true, mode: "managed" },
       box: { configured: false },
       vps: { configured: true, sshAlias: "homelab" },
       rooms: { turnTimeoutMinutes: 20 },
@@ -1202,7 +1208,6 @@ describe("task rename", () => {
 
 describe("config status", () => {
   const config = configStatusFromFrame({
-    composio: { configured: false },
     box: { configured: false },
     vps: { configured: false, sshAlias: "" },
     rooms: { turnTimeoutMinutes: 5 },
@@ -1778,6 +1783,25 @@ describe("sections and the Primary Bot", () => {
     });
 
     expect(next.bots[0]?.computer).toBeUndefined();
+  });
+
+  it("shows a Full grant on the open conversation immediately", () => {
+    const current = {
+      ...bot("juniper", "Dispatch"),
+      messages: [],
+      approvalMode: "auto" as const,
+      threadId: "talk",
+      tasks: [{ threadId: "talk", title: "Talk", createdAt: 1, approvalMode: "auto" as const, autoApprove: true }],
+    };
+    const next = reducer({ ...initialState, bots: [current] }, {
+      type: "updateBot",
+      botId: current.id,
+      patch: { approvalMode: "full", organizationFullAccess: true, confirmFullAccess: true, threadId: "talk" },
+    });
+    const saved = next.bots[0]!;
+    expect(saved.approvalMode).toBe("full");
+    expect(saved.tasks?.[0]).toMatchObject({ threadId: "talk", approvalMode: "full", autoApprove: false });
+    expect(saved.tasks?.find((task) => task.threadId !== "talk")).toBeUndefined();
   });
 });
 
@@ -2482,7 +2506,6 @@ describe("activity panel", () => {
 
 describe("live config frames", () => {
   const baseFrame: ConfigStatusFrame = {
-    composio: { configured: false },
     box: { configured: false },
     vps: { configured: false, sshAlias: "" },
     rooms: { turnTimeoutMinutes: 10 },

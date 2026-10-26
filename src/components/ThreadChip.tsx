@@ -18,6 +18,10 @@ export function ThreadChip({ message }: { message: Message }) {
   const ref = message.threadRef;
   const tool = message.tool;
   if (!ref || !tool) return null;
+  // Threads off (Settings > Appearance): the single stream shows no thread
+  // row or receipt in the chat (JC 2026-10-22). The thread stays reachable
+  // from the bot panel and the sidebar's activity list, never a chip here.
+  if (!showThreads) return null;
   if (navigationTargetGone(message, state)) return null;
   const bot = state.bots.find((candidate) => candidate.id === ref.botId);
   const group = bot ? undefined : state.groups.find((candidate) => candidate.id === ref.botId);

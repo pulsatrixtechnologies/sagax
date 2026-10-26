@@ -9,6 +9,12 @@
    other skins never load these files. Licence: third_party/geist/OFL.txt. */
 @import "@fontsource-variable/geist/wght.css";
 @import "@fontsource-variable/geist/wght-italic.css";
+/* The richer variants over the colour tints (2026-10-19): full-surface colours,
+   duo-tone gradients, themed moods and ground textures, each in its own file. */
+@import "./styles/skin-depth.css";
+@import "./styles/skin-duo.css";
+@import "./styles/skin-ambiance.css";
+@import "./styles/skin-texture.css";
 
 /* Phones and tablets have no hover, and Tailwind only applies `hover:` and
    `group-hover:` under `@media (hover: hover)`. A control revealed on hover
@@ -486,6 +492,7 @@
    including raised-hover, the tightest of the lot at 5.62:1.
    ───────────────────────────────────────────────────────────────────────── */
 [data-skin="pulsatrix"] {
+  --skin-swatch: #3c76f4;   /* the variant swatch in Settings > Appearance > Skin (decorative) */
   --code-color-scheme: dark;
   --color-app: #030b17;
   --color-panel: #060f20;
@@ -637,6 +644,7 @@
    over that navy the way v3's card sits inside its shell.
    ───────────────────────────────────────────────────────────────────────── */
 [data-skin="pulsatrix-light"] {
+  --skin-swatch: #2f62dd;   /* the variant swatch in Settings > Appearance > Skin (decorative) */
   --code-color-scheme: light;
   --mascot-shadow-color: rgba(20,24,40,0.35);
   --mascot-shadow-wide: rgba(20,24,40,0.18);
@@ -780,6 +788,7 @@
    pnpm check:contrast and src/lib/midnight-skin.test.ts.
    ───────────────────────────────────────────────────────────────────────── */
 [data-skin="midnight"] {
+  --skin-swatch: #9a9a9a;   /* the variant swatch in Settings > Appearance > Skin (decorative) */
   --code-color-scheme: dark;
   --glyph-ripple-tint: #4d8dff;  /* Midnight's accent is grey: the glyph ring takes a blue */
   --color-app: #121212;          /* Sand Dark chrome: window, chat, bot panel */
@@ -904,6 +913,7 @@
    value is named next to each, so the drift stays auditable.
    ───────────────────────────────────────────────────────────────────────── */
 [data-skin="atelier"] {
+  --skin-swatch: #a05f25;   /* the variant swatch in Settings > Appearance > Skin (decorative) */
   --color-primary-badge: #c2410c;   /* the reference orange is 2.2:1 on this light rail */
   --code-color-scheme: light;
   --mascot-shadow-color: rgba(40,30,16,0.35);
@@ -1044,6 +1054,7 @@
    8px — because sheet metal doesn't round the way paper does.
    ───────────────────────────────────────────────────────────────────────── */
 [data-skin="foundry"] {
+  --skin-swatch: #d99a3e;   /* the variant swatch in Settings > Appearance > Skin (decorative) */
   --code-color-scheme: dark;
   --color-app: #100e0b;           /* deepest ground, warm black */
   --color-panel: #171410;         /* sidebar */
@@ -1175,6 +1186,7 @@
    round more than paper does, and far more than sheet metal.
    ───────────────────────────────────────────────────────────────────────── */
 [data-skin="lagoon"] {
+  --skin-swatch: #11736d;   /* the variant swatch in Settings > Appearance > Skin (decorative) */
   --color-primary-badge: #c2410c;   /* the reference orange is 2.2:1 on this light rail */
   --code-color-scheme: light;
   --mascot-shadow-color: rgba(12,36,34,0.35);
@@ -1310,6 +1322,7 @@
    desaturated: it marks actions and focus without making the chrome glow.
    ───────────────────────────────────────────────────────────────────────── */
 [data-skin="graphite"] {
+  --skin-swatch: #8a9bb3;   /* the variant swatch in Settings > Appearance > Skin (decorative) */
   --code-color-scheme: dark;
   --color-app: #111214;
   --color-panel: #181a1d;
@@ -1431,6 +1444,7 @@
    crisp and familiar instead of colourful.
    ───────────────────────────────────────────────────────────────────────── */
 [data-skin="linen"] {
+  --skin-swatch: #50627a;   /* the variant swatch in Settings > Appearance > Skin (decorative) */
   --color-primary-badge: #c2410c;   /* the reference orange is 2.2:1 on this light rail */
   --code-color-scheme: light;
   --mascot-shadow-color: rgba(20,24,36,0.35);
@@ -1554,6 +1568,7 @@
    much as the accent, so the skin feels cohesive rather than neon or themed.
    ───────────────────────────────────────────────────────────────────────── */
 [data-skin="dusk"] {
+  --skin-swatch: #9474a3;   /* the variant swatch in Settings > Appearance > Skin (decorative) */
   --code-color-scheme: dark;
   --color-app: #121014;
   --color-panel: #19161c;
@@ -1681,6 +1696,7 @@
    #f7f7f7, selected row #e1e1e1.
    ───────────────────────────────────────────────────────────────────────── */
 [data-skin="daylight"] {
+  --skin-swatch: #3a3a3a;   /* the variant swatch in Settings > Appearance > Skin (decorative) */
   --color-primary-badge: #c2410c;   /* the reference orange is 2.2:1 on this light rail */
   --code-color-scheme: light;
   --mascot-shadow-color: rgba(20,20,20,0.35);
@@ -1818,6 +1834,7 @@
    is loaded only while this skin is worn. A light skin on every OS setting.
    ───────────────────────────────────────────────────────────────────────── */
 [data-skin="retro98"] {
+  --skin-swatch: #008080;   /* the variant swatch in Settings > Appearance > Skin (decorative) */
   --color-primary-badge: #9a3412;   /* the reference orange is 2.2:1 on this light rail */
   --code-color-scheme: light;
   --mascot-shadow-color: rgba(0,0,0,0.35);
@@ -1945,6 +1962,7 @@
    as the accent border.
    ───────────────────────────────────────────────────────────────────────── */
 [data-skin="meadow"] {
+  --skin-swatch: #1a7a48;   /* the variant swatch in Settings > Appearance > Skin (decorative) */
   --color-primary-badge: #c2410c;   /* the reference orange is 2.2:1 on this light rail */
   --app-glow: none;
   --code-color-scheme: light;
@@ -2709,6 +2727,24 @@ body {
   outline: none;
 }
 
+/* The footer buttons (the account menu, Connect apps) follow the same rule:
+   a click leaves them focused, and the next key would draw the ring. Tab
+   clears the mark and draws it. The account button's own pill carries the
+   ring, so the square outline around it is always off. */
+[data-pointer-focus]:focus-visible,
+button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
+  outline: none;
+}
+[data-sidebar-connect-apps][data-pointer-focus]:focus-visible {
+  box-shadow: none;
+}
+
+/* A question card takes focus only so A, B, C answer it once clicked
+   (src/components/QuestionSheet.tsx); its rows keep their own ring. */
+[data-question-sheet]:focus-visible {
+  outline: none;
+}
+
 /* Text fields already sit in a bordered card (the composer pill especially).
    Chromium treats a pointer click as :focus-visible on inputs, so the
    global ring above becomes a sharp blue rectangle inside the rounded
@@ -2897,11 +2933,11 @@ body {
   }
 }
 .turn-mascot-in {
-  transform-origin: 18px 18px;
+  transform-origin: 10px 50%;
   animation: turn-mascot-in 0.38s var(--ease-emphasized) both;
 }
 .turn-mascot-out {
-  transform-origin: 18px 18px;
+  transform-origin: 10px 50%;
   animation: turn-mascot-out 0.28s var(--ease-emphasized) both;
 }
 .turn-answer {
@@ -3027,28 +3063,48 @@ body {
   background: var(--color-ultracode);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-ultracode) 25%, var(--color-sidebar));
 }
-.turn-presence.ultracode-active .turn-mascot-in > :first-child {
-  filter: drop-shadow(0 0 10px var(--color-ultracode-glow));
+.turn-presence.ultracode-active .bot-activity-dots,
+.turn-presence.ultracode-active [data-presence-mascot] {
+  filter: drop-shadow(0 0 6px var(--color-ultracode-glow));
 }
-/* rotating presence phrase: the old phrase fades out where the new one
-   fades in, in the same grid cell */
-@keyframes turn-phrase-in {
-  from { opacity: 0; }
+/* The bot's activity line (BotActivityIndicator): three dots in the bot's
+   colour, one brighter and larger at a time, a wave left to right. Only
+   transform and opacity move, so the compositor draws it. */
+@keyframes bot-activity-wave {
+  0%, 60%, 100% { transform: scale(0.75); opacity: 0.35; }
+  25% { transform: scale(1.15); opacity: 1; }
 }
-@keyframes turn-phrase-out {
-  to { opacity: 0; }
+.bot-activity-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
-.turn-phrase-in { animation: shimmer 2s linear infinite, turn-phrase-in 0.32s ease-out both; }
-.turn-phrase-out { animation: shimmer 2s linear infinite, turn-phrase-out 0.32s ease-in both; pointer-events: none; }
+.bot-activity-dots > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--bot-activity-color, var(--color-accent));
+  transform: scale(0.75);
+  opacity: 0.55;
+}
+.bot-activity-wave > span {
+  animation: bot-activity-wave 1.2s ease-in-out infinite;
+}
+.bot-activity-wave > span:nth-child(2) { animation-delay: 0.2s; }
+.bot-activity-wave > span:nth-child(3) { animation-delay: 0.4s; }
+:root[data-reduced-motion="true"] .bot-activity-wave > span { animation: none; }
+:root[data-reduced-motion="true"] .bot-activity .thinking-shimmer { animation: none; background: none; color: var(--color-ink-secondary); }
+@media (prefers-reduced-motion: reduce) {
+  .bot-activity-wave > span { animation: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   .animate-caret, .animate-msg-in, .animate-shimmer, .animate-pop-in, .animate-pop-out, .animate-call-dock-in, .animate-card-fade-in, .animate-card-fade-out { animation: none; }
   .animate-status-pulse { animation: none; opacity: 0.6; }
   .thinking-shimmer { background: none; color: var(--color-ink-secondary); }
   .ultracode-shimmer { background: none; color: var(--color-ultracode-ink); }
   .ultracode-sidebar-dot { animation: none; opacity: 0.85; }
-  .turn-presence.ultracode-active .turn-mascot-in > :first-child { filter: none; }
-  .turn-phrase-in { animation: none; }
-  .turn-phrase-out { display: none; }
+  .turn-presence.ultracode-active .bot-activity-dots,
+  .turn-presence.ultracode-active [data-presence-mascot] { filter: none; }
   .turn-mascot-in, .turn-mascot-out, .turn-answer { animation: none; }
   .animate-rise, .animate-spot-in { animation: none; }
   .animate-ripple, .animate-bolt { animation: none; }
@@ -3986,57 +4042,18 @@ button:disabled.bg-danger {
   -webkit-app-region: no-drag;
 }
 
-/* The Connect apps pill (Grok Bot's measurements, JC 2026-10-15). Its tiles
-   sit in a 1px ring the pill's own colour, so each one stands out from the
-   tile it overlaps; the ring follows the pill's hover colour. */
-.connect-apps-pill {
-  transition: background-color var(--transition-duration-moderate) var(--ease-out-quint), padding var(--transition-duration-moderate) var(--ease-out-quint);
+/* The foot's two tiles (the account pill and the Connect apps button) share one height:
+   36px, or 44px while the account pill carries a second line (the title and
+   points under the name). One property on the row, so they cannot differ. */
+[data-sidebar-account-row] {
+  --foot-tile-h: 2.25rem;
 }
-.connect-apps-pill [data-pill-tiles] {
-  background-color: inherit;
-  margin-inline-start: 6px;
-  max-width: 60px;
-  opacity: 1;
-  overflow: clip;
-  overflow-clip-margin: 5px;
-  transition: max-width var(--transition-duration-moderate) var(--ease-out-quint), opacity var(--transition-duration-moderate) var(--ease-out-quint), margin-inline-start var(--transition-duration-moderate) var(--ease-out-quint);
-}
-.connect-apps-pill [data-pill-tiles][data-hidden] {
-  margin-inline-start: 0;
-  max-width: 0;
-  opacity: 0;
-}
-.connect-apps-pill [data-pill-tile] {
-  background-color: inherit;
-}
-@media (prefers-reduced-motion: no-preference) {
-  :root:not([data-reduced-motion="true"]) .connect-apps-pill [data-pill-tile] {
-    transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1);
-    animation: connect-apps-tile-in 0.3s cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
-  }
-  :root:not([data-reduced-motion="true"]) .connect-apps-pill:is(:hover, :focus-visible) [data-pill-tile="start"] {
-    transform: translateX(-3px) rotate(-8deg);
-  }
-  :root:not([data-reduced-motion="true"]) .connect-apps-pill:is(:hover, :focus-visible) [data-pill-tile="middle"] {
-    transform: translateY(-1px);
-  }
-  :root:not([data-reduced-motion="true"]) .connect-apps-pill:is(:hover, :focus-visible) [data-pill-tile="end"] {
-    transform: translateX(3px) rotate(8deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .connect-apps-pill,
-  .connect-apps-pill [data-pill-tiles] {
-    transition-property: background-color;
-  }
-}
-:root[data-reduced-motion="true"] .connect-apps-pill,
-:root[data-reduced-motion="true"] .connect-apps-pill [data-pill-tiles] {
-  transition-property: background-color;
+[data-sidebar-account-row]:has([data-account-pill-line]) {
+  --foot-tile-h: 2.75rem;
 }
 /* The foot's update button (SidebarUpdatePill): round, the avatar's size;
    hovered, focused or just landed, it widens to show its word and the
-   Connect apps pill beside it gives way. Reduced motion: no animation, the
+   Connect apps button beside it gives way. Reduced motion: no animation, the
    word simply shows. */
 .sidebar-update-pill [data-update-text] {
   max-width: 0;
@@ -4044,6 +4061,11 @@ button:disabled.bg-danger {
   padding-inline-end: 0;
   margin-inline-start: -4px;
   overflow: hidden;
+}
+.sidebar-update-pill:is(:hover, :focus-visible, [data-wide]) {
+  /* the word needs the icon plus its text; the pill grows in the row, so
+     Connect apps shifts left rather than disappearing under it */
+  width: auto;
 }
 .sidebar-update-pill:is(:hover, :focus-visible, [data-wide]) [data-update-text] {
   max-width: 11rem;
@@ -4055,7 +4077,7 @@ button:disabled.bg-danger {
     transition: max-width 240ms var(--ease-out-quint), opacity 200ms var(--ease-out-quint), padding-inline-end 240ms var(--ease-out-quint);
   }
   :root:not([data-reduced-motion="true"]) .sidebar-update-pill {
-    transition: filter 150ms ease-out;
+    transition: width 240ms var(--ease-out-quint), filter 150ms ease-out;
   }
   :root:not([data-reduced-motion="true"]) .sidebar-update-pill[data-sidebar-update-pill="ready"]:is(:hover, :focus-visible) [data-update-icon] svg {
     animation: sidebar-update-nudge 0.6s cubic-bezier(0.34, 1.4, 0.64, 1);
@@ -4066,9 +4088,15 @@ button:disabled.bg-danger {
   40% { transform: translateY(2px); }
   100% { transform: none; }
 }
-@keyframes connect-apps-tile-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
+
+/* The Approvals screen (src/components/approvals/): a new card slides in
+   from the left edge of the list, an answered one slides out to the right
+   and its row folds away; the answer's mark settles with a small pop.
+   Reduced motion (the system setting or :root[data-reduced-motion]) shows
+   each end state at once. */
+@keyframes approval-row-in {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 /* Room speaker names. Each skin sets a tone of the bot's palette that clears
@@ -4150,3 +4178,378 @@ button:disabled.bg-danger {
   background-color: color-mix(in srgb, #000000 35%, var(--color-bubble-user));
   color: #ffffff;
 }
+@keyframes approval-row-out {
+  0% { opacity: 1; transform: translateX(0); max-height: 96px; }
+  60% { opacity: 0; transform: translateX(28px); max-height: 96px; }
+  100% { opacity: 0; transform: translateX(28px); max-height: 0; padding-top: 0; padding-bottom: 0; }
+}
+@keyframes approval-mark-in {
+  0% { opacity: 0; transform: scale(0.6); }
+  70% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.approval-row-enter { animation: approval-row-in 220ms var(--ease-emphasized) both; }
+.approval-row-leave { animation: approval-row-out 320ms var(--ease-exit) both; overflow: hidden; pointer-events: none; }
+.approval-mark-in { animation: approval-mark-in 320ms var(--ease-emphasized) both; }
+@media (prefers-reduced-motion: reduce) {
+  .approval-row-enter, .approval-mark-in { animation: none; }
+  .approval-row-leave { animation: none; display: none; }
+}
+:root[data-reduced-motion="true"] .approval-row-enter,
+:root[data-reduced-motion="true"] .approval-mark-in { animation: none; }
+:root[data-reduced-motion="true"] .approval-row-leave { animation: none; display: none; }
+
+/* ── Colour tints (2026-10-19) ─────────────────────────────────────────────
+   JC: « des variantes pour chacun : la couleur de base, rouge, rose, bleu,
+   vert, jaune ». A colour variant is its family's light or dark skin with
+   `data-skin-tint` laid over it (src/lib/skin-families.ts): only the accent
+   family of tokens moves, so the family keeps its type, radii, surfaces and
+   bubbles. One explicit block per base skin and colour, so pnpm
+   check:contrast measures every pair as worn (it merges each block over its
+   base). Two attributes outrank the base block's one.
+
+   Dark grounds carry a bright fill with a dark mark (Foundry's inversion);
+   light grounds carry a deep fill with white and a darker step for text.
+   No true yellow clears 3:1 on a light ground, so light Yellow is a deep
+   gold (#a16207); its swatch keeps the bright yellow.
+   ───────────────────────────────────────────────────────────────────────── */
+
+[data-skin="pulsatrix"][data-skin-tint="red"] {
+  --skin-swatch: #ef4444;
+  --color-accent: #f87171;
+  --color-accent-border: #ef4444;
+  --color-accent-text: #fca5a5;
+  --color-accent-ink: #1a0707;
+  --color-focus: #ef4444;
+  --color-unread: #f87171;
+  --glyph-ripple-tint: #f87171;
+  --color-bubble-user: #3d1a22;
+  --color-sidebar-selected: #f8717129;
+}
+
+[data-skin="pulsatrix"][data-skin-tint="pink"] {
+  --skin-swatch: #ec4899;
+  --color-accent: #f472b6;
+  --color-accent-border: #ec4899;
+  --color-accent-text: #f9a8d4;
+  --color-accent-ink: #1f0714;
+  --color-focus: #ec4899;
+  --color-unread: #f472b6;
+  --glyph-ripple-tint: #f472b6;
+  --color-bubble-user: #3d1a33;
+  --color-sidebar-selected: #f472b629;
+}
+
+[data-skin="pulsatrix"][data-skin-tint="green"] {
+  --skin-swatch: #22c55e;
+  --color-accent: #4ade80;
+  --color-accent-border: #22c55e;
+  --color-accent-text: #86efac;
+  --color-accent-ink: #05160b;
+  --color-focus: #22c55e;
+  --color-unread: #4ade80;
+  --glyph-ripple-tint: #4ade80;
+  --color-bubble-user: #14382a;
+  --color-sidebar-selected: #4ade8029;
+}
+
+[data-skin="pulsatrix"][data-skin-tint="yellow"] {
+  --skin-swatch: #eab308;
+  --color-accent: #facc15;
+  --color-accent-border: #eab308;
+  --color-accent-text: #fde047;
+  --color-accent-ink: #1a1400;
+  --color-focus: #eab308;
+  --color-unread: #facc15;
+  --glyph-ripple-tint: #facc15;
+  --color-bubble-user: #383114;
+  --color-sidebar-selected: #facc1529;
+}
+
+[data-skin="midnight"][data-skin-tint="red"] {
+  --skin-swatch: #ef4444;
+  --color-accent: #f87171;
+  --color-accent-border: #ef4444;
+  --color-accent-text: #fca5a5;
+  --color-accent-ink: #1a0707;
+  --color-focus: #ef4444;
+  --color-unread: #f87171;
+  --glyph-ripple-tint: #f87171;
+}
+
+[data-skin="midnight"][data-skin-tint="pink"] {
+  --skin-swatch: #ec4899;
+  --color-accent: #f472b6;
+  --color-accent-border: #ec4899;
+  --color-accent-text: #f9a8d4;
+  --color-accent-ink: #1f0714;
+  --color-focus: #ec4899;
+  --color-unread: #f472b6;
+  --glyph-ripple-tint: #f472b6;
+}
+
+[data-skin="midnight"][data-skin-tint="blue"] {
+  --skin-swatch: #3b82f6;
+  --color-accent: #60a5fa;
+  --color-accent-border: #3b82f6;
+  --color-accent-text: #93c5fd;
+  --color-accent-ink: #06111f;
+  --color-focus: #3b82f6;
+  --color-unread: #60a5fa;
+  --glyph-ripple-tint: #60a5fa;
+}
+
+[data-skin="midnight"][data-skin-tint="green"] {
+  --skin-swatch: #22c55e;
+  --color-accent: #4ade80;
+  --color-accent-border: #22c55e;
+  --color-accent-text: #86efac;
+  --color-accent-ink: #05160b;
+  --color-focus: #22c55e;
+  --color-unread: #4ade80;
+  --glyph-ripple-tint: #4ade80;
+}
+
+[data-skin="midnight"][data-skin-tint="yellow"] {
+  --skin-swatch: #eab308;
+  --color-accent: #facc15;
+  --color-accent-border: #eab308;
+  --color-accent-text: #fde047;
+  --color-accent-ink: #1a1400;
+  --color-focus: #eab308;
+  --color-unread: #facc15;
+  --glyph-ripple-tint: #facc15;
+}
+
+[data-skin="foundry"][data-skin-tint="red"] {
+  --skin-swatch: #ef4444;
+  --color-accent: #f87171;
+  --color-accent-border: #ef4444;
+  --color-accent-text: #fca5a5;
+  --color-accent-ink: #1a0707;
+  --color-focus: #ef4444;
+  --color-unread: #f87171;
+  --glyph-ripple-tint: #f87171;
+}
+
+[data-skin="foundry"][data-skin-tint="pink"] {
+  --skin-swatch: #ec4899;
+  --color-accent: #f472b6;
+  --color-accent-border: #ec4899;
+  --color-accent-text: #f9a8d4;
+  --color-accent-ink: #1f0714;
+  --color-focus: #ec4899;
+  --color-unread: #f472b6;
+  --glyph-ripple-tint: #f472b6;
+}
+
+[data-skin="foundry"][data-skin-tint="blue"] {
+  --skin-swatch: #3b82f6;
+  --color-accent: #60a5fa;
+  --color-accent-border: #3b82f6;
+  --color-accent-text: #93c5fd;
+  --color-accent-ink: #06111f;
+  --color-focus: #3b82f6;
+  --color-unread: #60a5fa;
+  --glyph-ripple-tint: #60a5fa;
+}
+
+[data-skin="foundry"][data-skin-tint="green"] {
+  --skin-swatch: #22c55e;
+  --color-accent: #4ade80;
+  --color-accent-border: #22c55e;
+  --color-accent-text: #86efac;
+  --color-accent-ink: #05160b;
+  --color-focus: #22c55e;
+  --color-unread: #4ade80;
+  --glyph-ripple-tint: #4ade80;
+}
+
+[data-skin="foundry"][data-skin-tint="yellow"] {
+  --skin-swatch: #eab308;
+  --color-accent: #facc15;
+  --color-accent-border: #eab308;
+  --color-accent-text: #fde047;
+  --color-accent-ink: #1a1400;
+  --color-focus: #eab308;
+  --color-unread: #facc15;
+  --glyph-ripple-tint: #facc15;
+}
+
+[data-skin="pulsatrix-light"][data-skin-tint="red"] {
+  --skin-swatch: #ef4444;
+  --color-accent: #b91c1c;
+  --color-accent-border: #b91c1c;
+  --color-accent-text: #991b1b;
+  --color-accent-ink: #ffffff;
+  --color-focus: #991b1b;
+  --color-unread: #b91c1c;
+  --glyph-ripple-tint: #b91c1c;
+  --color-bubble-user: #fde2e2;
+  --color-sidebar-selected: #f8717138;
+}
+
+[data-skin="pulsatrix-light"][data-skin-tint="pink"] {
+  --skin-swatch: #ec4899;
+  --color-accent: #be185d;
+  --color-accent-border: #be185d;
+  --color-accent-text: #9d174d;
+  --color-accent-ink: #ffffff;
+  --color-focus: #9d174d;
+  --color-unread: #be185d;
+  --glyph-ripple-tint: #be185d;
+  --color-bubble-user: #fce7f3;
+  --color-sidebar-selected: #f472b638;
+}
+
+[data-skin="pulsatrix-light"][data-skin-tint="green"] {
+  --skin-swatch: #22c55e;
+  --color-accent: #15803d;
+  --color-accent-border: #15803d;
+  --color-accent-text: #166534;
+  --color-accent-ink: #ffffff;
+  --color-focus: #166534;
+  --color-unread: #15803d;
+  --glyph-ripple-tint: #15803d;
+  --color-bubble-user: #dcfce7;
+  --color-sidebar-selected: #4ade8038;
+}
+
+[data-skin="pulsatrix-light"][data-skin-tint="yellow"] {
+  --skin-swatch: #eab308;
+  --color-accent: #a16207;
+  --color-accent-border: #a16207;
+  --color-accent-text: #713f12;
+  --color-accent-ink: #ffffff;
+  --color-focus: #713f12;
+  --color-unread: #a16207;
+  --glyph-ripple-tint: #a16207;
+  --color-bubble-user: #fef9c3;
+  --color-sidebar-selected: #facc1538;
+}
+
+[data-skin="daylight"][data-skin-tint="red"] {
+  --skin-swatch: #ef4444;
+  --color-accent: #b91c1c;
+  --color-accent-border: #b91c1c;
+  --color-accent-text: #991b1b;
+  --color-accent-ink: #ffffff;
+  --color-focus: #991b1b;
+  --color-unread: #b91c1c;
+  --glyph-ripple-tint: #b91c1c;
+}
+
+[data-skin="daylight"][data-skin-tint="pink"] {
+  --skin-swatch: #ec4899;
+  --color-accent: #be185d;
+  --color-accent-border: #be185d;
+  --color-accent-text: #9d174d;
+  --color-accent-ink: #ffffff;
+  --color-focus: #9d174d;
+  --color-unread: #be185d;
+  --glyph-ripple-tint: #be185d;
+}
+
+[data-skin="daylight"][data-skin-tint="blue"] {
+  --skin-swatch: #3b82f6;
+  --color-accent: #1d4ed8;
+  --color-accent-border: #2563eb;
+  --color-accent-text: #1d4ed8;
+  --color-accent-ink: #ffffff;
+  --color-focus: #1d4ed8;
+  --color-unread: #1d4ed8;
+  --glyph-ripple-tint: #1d4ed8;
+}
+
+[data-skin="daylight"][data-skin-tint="green"] {
+  --skin-swatch: #22c55e;
+  --color-accent: #15803d;
+  --color-accent-border: #15803d;
+  --color-accent-text: #166534;
+  --color-accent-ink: #ffffff;
+  --color-focus: #166534;
+  --color-unread: #15803d;
+  --glyph-ripple-tint: #15803d;
+}
+
+[data-skin="daylight"][data-skin-tint="yellow"] {
+  --skin-swatch: #eab308;
+  --color-accent: #a16207;
+  --color-accent-border: #a16207;
+  --color-accent-text: #713f12;
+  --color-accent-ink: #ffffff;
+  --color-focus: #713f12;
+  --color-unread: #a16207;
+  --glyph-ripple-tint: #a16207;
+}
+
+[data-skin="atelier"][data-skin-tint="red"] {
+  --skin-swatch: #ef4444;
+  --color-accent: #b91c1c;
+  --color-accent-border: #b91c1c;
+  --color-accent-text: #991b1b;
+  --color-accent-ink: #ffffff;
+  --color-focus: #991b1b;
+  --color-unread: #b91c1c;
+  --glyph-ripple-tint: #b91c1c;
+}
+
+[data-skin="atelier"][data-skin-tint="pink"] {
+  --skin-swatch: #ec4899;
+  --color-accent: #be185d;
+  --color-accent-border: #be185d;
+  --color-accent-text: #9d174d;
+  --color-accent-ink: #ffffff;
+  --color-focus: #9d174d;
+  --color-unread: #be185d;
+  --glyph-ripple-tint: #be185d;
+}
+
+[data-skin="atelier"][data-skin-tint="blue"] {
+  --skin-swatch: #3b82f6;
+  --color-accent: #1d4ed8;
+  --color-accent-border: #2563eb;
+  --color-accent-text: #1d4ed8;
+  --color-accent-ink: #ffffff;
+  --color-focus: #1d4ed8;
+  --color-unread: #1d4ed8;
+  --glyph-ripple-tint: #1d4ed8;
+}
+
+[data-skin="atelier"][data-skin-tint="green"] {
+  --skin-swatch: #22c55e;
+  --color-accent: #15803d;
+  --color-accent-border: #15803d;
+  --color-accent-text: #166534;
+  --color-accent-ink: #ffffff;
+  --color-focus: #166534;
+  --color-unread: #15803d;
+  --glyph-ripple-tint: #15803d;
+}
+
+[data-skin="atelier"][data-skin-tint="yellow"] {
+  --skin-swatch: #eab308;
+  --color-accent: #a16207;
+  --color-accent-border: #a16207;
+  --color-accent-text: #713f12;
+  --color-accent-ink: #ffffff;
+  --color-focus: #713f12;
+  --color-unread: #a16207;
+  --glyph-ripple-tint: #a16207;
+}
+
+/* Settings > Appearance > Accessibility (parity 2E; src/lib/accessibility-preferences.ts).
+   The selector outweighs every skin's own, so the choice wins in each one. */
+/* High contrast: secondary text reads as primary, borders get a visible edge. */
+:root[data-contrast="high"]:not(#a11y) {
+  --color-ink-secondary: var(--color-ink);
+  --color-ink-tertiary: var(--color-ink);
+  --color-hairline: color-mix(in srgb, var(--color-ink) 55%, transparent);
+  --color-hairline-weak: color-mix(in srgb, var(--color-ink) 30%, transparent);
+}
+:root[data-contrast="high"] :focus-visible { outline: 2px solid var(--color-ink); outline-offset: 2px; }
+/* Text size: the whole interface scales, so fixed pixel sizes follow. The
+   desktop app zooms the window itself (data-zoom-native); this is the
+   browser's fallback. */
+:root[data-text-size="large"]:not([data-zoom-native]) { zoom: 1.1; }
+:root[data-text-size="xlarge"]:not([data-zoom-native]) { zoom: 1.25; }

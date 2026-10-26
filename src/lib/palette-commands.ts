@@ -63,6 +63,7 @@ export type PaletteAction =
   | { kind: "connectApps" }
   | { kind: "settings"; section?: AppSettingsSection }
   | { kind: "botSettings"; botId: string }
+  | { kind: "botHistory"; botId: string }
   | { kind: "goalStart"; groupId: string; threadId: string }
   | { kind: "goalStatus"; threadId: string; messageId: string }
   | { kind: "goalStop"; groupId: string; threadId: string }
@@ -229,6 +230,13 @@ export function paletteCommands(context: PaletteContext): PaletteItem[] {
       label: t("palette.cmd.botSettings", { name: currentBot.name }),
       words: [settings, "bot", "persona", "instructions"],
       action: { kind: "botSettings", botId: currentBot.id },
+    });
+    items.push({
+      id: "cmd:botHistory",
+      group: "navigation",
+      label: t("palette.cmd.botHistory", { name: currentBot.name }),
+      words: [nav, "history", "historique", "activity", "activité", "coding", "runs"],
+      action: { kind: "botHistory", botId: currentBot.id },
     });
   }
 

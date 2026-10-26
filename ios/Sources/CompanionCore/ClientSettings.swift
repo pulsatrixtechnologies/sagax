@@ -173,4 +173,123 @@ public extension CompanionClient {
             returnTo: PluginSignIn.returnTo, callbackOrigin: PluginSignIn.callbackOrigin(for: connection)
         ))
     }
+
+    // MARK: Approval rules and allowed recipients
+
+    /// `GET /api/custom-rules?botId=`.
+    func customRules(botId: String) async throws -> CustomRuleList {
+        let (data, response) = try await perform(try customRulesRequest(botId: botId))
+        try Self.finishGrant(response, data, recipients: false)
+        return try JSONDecoder().decode(CustomRuleList.self, from: data)
+    }
+
+    /// `POST /api/custom-rules`. `botId` nil is every bot this person owns.
+    func createCustomRule(when: String, behavior: CustomRuleBehavior, botId: String?, riskScope: [CustomRuleRisk], stepUp: String? = nil) async throws {
+        let (data, response) = try await perform(try createCustomRuleRequest(when: when, behavior: behavior, botId: botId, riskScope: riskScope, stepUp: stepUp))
+        try Self.finishGrant(response, data, recipients: false)
+    }
+
+    /// `PATCH /api/custom-rules/:id` with the fields the form saves.
+    func saveCustomRule(id: String, when: String, behavior: CustomRuleBehavior, allBots: Bool, botId: String, riskScope: [CustomRuleRisk], stepUp: String? = nil) async throws {
+        let (data, response) = try await perform(try saveCustomRuleRequest(id: id, when: when, behavior: behavior, allBots: allBots, botId: botId, riskScope: riskScope, stepUp: stepUp))
+        try Self.finishGrant(response, data, recipients: false)
+    }
+
+    /// `PATCH /api/custom-rules/:id` `{enabled}`.
+    func setCustomRuleEnabled(id: String, enabled: Bool, stepUp: String? = nil) async throws {
+        let (data, response) = try await perform(try setCustomRuleEnabledRequest(id: id, enabled: enabled, stepUp: stepUp))
+        try Self.finishGrant(response, data, recipients: false)
+    }
+
+    /// `DELETE /api/custom-rules/:id`.
+    func deleteCustomRule(id: String, stepUp: String? = nil) async throws {
+        let (data, response) = try await perform(try deleteCustomRuleRequest(id: id, stepUp: stepUp))
+        try Self.finishGrant(response, data, recipients: false)
+    }
+
+    /// `PATCH /api/bots/:id` `{allowedRecipients}`. Adding someone is a
+    /// standing grant: the server may ask for the person's key.
+    func patchAllowedRecipients(botId: String, recipients: [String], stepUp: String? = nil) async throws -> Bot {
+        let (data, response) = try await perform(try patchAllowedRecipientsRequest(botId: botId, recipients: recipients, stepUp: stepUp))
+        try Self.finishGrant(response, data, recipients: true)
+        do {
+            return try JSONDecoder().decode(BotResponse.self, from: data).bot
+        } catch {
+            throw APIError.transport("The computer sent something this app couldn't read.")
+        }
+    }
+
+    func customRulesRequest(botId: String) throws -> URLRequest {
+        guard Self.validRouteID(botId) else { throw APIError.badURL }
+        return try makeRequest("GET", "/api/custom-rules", query: [URLQueryItem(name: "botId", value: botId)])
+    }
+
+    func createCustomRuleRequest(when: String, behavior: CustomRuleBehavior, botId: String?, riskScope: [CustomRuleRisk], stepUp: String?) throws -> URLRequest {
+        let trimmed = when.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count <= CustomRuleEditor.maximumText else { throw APIError.badURL }
+        if let botId { guard Self.validRouteID(botId) else { throw APIError.badURL } }
+        var body: [String: Any] = [
+            "when": trimmed,
+            "behavior": behavior.rawValue,
+            "botId": botId ?? NSNull(),
+            "riskScope": (behavior == .allow ? riskScope : []).map(\.rawValue),
+        ]
+        if let stepUp, !stepUp.isEmpty { body["stepUp"] = stepUp }
+        return try makeRequest("POST", "/api/custom-rules", body: body)
+    }
+
+    func saveCustomRuleRequest(id: String, when: String, behavior: CustomRuleBehavior, allBots: Bool, botId: String, riskScope: [CustomRuleRisk], stepUp: String?) throws -> URLRequest {
+        guard Self.validRouteID(id), Self.validRouteID(botId) else { throw APIError.badURL }
+        let trimmed = when.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count <= CustomRuleEditor.maximumText else { throw APIError.badURL }
+        var body: [String: Any] = [
+            "when": trimmed,
+            "behavior": behavior.rawValue,
+            "botId": allBots ? NSNull() : botId,
+            "riskScope": (behavior == .allow ? riskScope : []).map(\.rawValue),
+        ]
+        if let stepUp, !stepUp.isEmpty { body["stepUp"] = stepUp }
+        return try makeRequest("PATCH", "/api/custom-rules/\(id)", body: body)
+    }
+
+    func setCustomRuleEnabledRequest(id: String, enabled: Bool, stepUp: String?) throws -> URLRequest {
+        guard Self.validRouteID(id) else { throw APIError.badURL }
+        var body: [String: Any] = ["enabled": enabled]
+        if let stepUp, !stepUp.isEmpty { body["stepUp"] = stepUp }
+        return try makeRequest("PATCH", "/api/custom-rules/\(id)", body: body)
+    }
+
+    func deleteCustomRuleRequest(id: String, stepUp: String?) throws -> URLRequest {
+        guard Self.validRouteID(id) else { throw APIError.badURL }
+        if let stepUp, !stepUp.isEmpty {
+            return try makeRequest("DELETE", "/api/custom-rules/\(id)", body: ["stepUp": stepUp])
+        }
+        return try makeRequest("DELETE", "/api/custom-rules/\(id)")
+    }
+
+    func patchAllowedRecipientsRequest(botId: String, recipients: [String], stepUp: String?) throws -> URLRequest {
+        guard Self.validRouteID(botId), let normalized = AllowedRecipients.normalize(recipients) else { throw APIError.badURL }
+        var body: [String: Any] = ["allowedRecipients": normalized]
+        if let stepUp, !stepUp.isEmpty { body["stepUp"] = stepUp }
+        return try makeRequest("PATCH", "/api/bots/\(botId)", body: body)
+    }
+
+    /// A step-up refusal stays `StepUpRequired`. Any other refusal keeps the
+    /// server's `code`, so the screen can say the desktop's sentence.
+    static func finishGrant(_ response: URLResponse, _ data: Data, recipients: Bool) throws {
+        do {
+            try checkStepUp(response, data)
+        } catch let refusal as StepUpRequired {
+            throw refusal
+        } catch {
+            let body = try? JSONDecoder().decode(GrantErrorBody.self, from: data)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw ApprovalGrantError.status(code: status, apiCode: body?.code, message: body?.error, recipients: recipients)
+        }
+    }
+}
+
+private struct GrantErrorBody: Decodable {
+    var code: String?
+    var error: String?
 }

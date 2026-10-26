@@ -4,10 +4,8 @@ Run from the repository root:
 
 ```sh
 node --experimental-strip-types scripts/verify-connected-apps.ts
-pnpm exec vitest run server/composio.test.ts server/composio-availability.test.ts src/lib/connector-oauth.test.ts src/components/PluginsPanel.layout.test.ts src/components/PluginsPanel.i18n.test.ts
+pnpm exec vitest run src/lib/connector-oauth.test.ts src/components/PluginsPanel.layout.test.ts src/components/PluginsPanel.i18n.test.ts
 pnpm exec vitest run server/index.test.ts -t 'second-account cards|retries abandoned connector OAuth'
-pnpm broker:test
-pnpm broker:check
 ```
 
 The renderer recipe launches a disposable fake-engine workspace and mounts the
@@ -21,7 +19,7 @@ failed-request cleanup/retry, and cancellation after modal/card removal or card
 replacement. Screenshots and `result.json` are written to
 `.omb-scratch/connected-apps-evidence` (override with `SAGAX_UI_EVIDENCE_DIR`).
 
-The real HTTP route cases start their own isolated server and loopback Composio
+The real HTTP route cases start their own isolated server and loopback connector
 stub. They check abandoned-account retries from Settings and connector cards,
 distinct aliases, active-account protection, wrong-thread refusal, and existing
 second-account identity handling. Direct-server and broker unit checks also

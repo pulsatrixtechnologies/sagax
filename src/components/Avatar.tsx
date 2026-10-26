@@ -25,6 +25,8 @@ import type { TrombiPose } from "./retro-assistant/Trombi";
 import { SkinnedTrombi } from "./skin-fx/SkinnedTrombi";
 import { BunbuMascot, type BunbuMood } from "./BunbuMascot";
 import { ShibaMascot } from "./ShibaMascot";
+import { HdOrVector } from "./hd-mascots/HdMascot";
+import { hdKeyForState } from "./hd-mascots/manifest";
 import type { ShibaExpression } from "./shiba-art";
 import { GrumpMascot } from "./GrumpMascot";
 import { OgreMascot } from "./OgreMascot";
@@ -195,6 +197,8 @@ export type BotAvatarProps = Omit<MausAvatarProps, "color"> & {
   primary?: boolean;
   /** The ring around the star, in the colour of what the avatar sits on. */
   primaryRingClassName?: string;
+  /** Draw the mascot as large as its box, as Grok Bot's sidebar does (avatarFillScale). */
+  fillBox?: boolean;
 };
 
 /** The Primary Bot mark: orange circle, white star, bottom-right. */
@@ -227,19 +231,22 @@ export function PrimaryBotBadge({ size, ringClassName = "ring-panel", label }: {
 export function shapeMoodFor(state: MausState | undefined): ShapeMood {
   if (!state) return "idle";
   if (["thinking", "searching", "loading", "curious", "confused"].includes(state)) return "thinking";
-  if (["working", "progress", "orbit", "radar", "writing", "uploading", "sending", "receiving", "dictating", "humming"].includes(state)) return "working";
-  if (["happy", "celebrate", "proud", "laughing", "excited", "playful"].includes(state)) return "happy";
+  if (state === "alerting") return "blocked";
+  if (["writing", "sending", "receiving", "dictating"].includes(state)) return "streaming";
+  if (["working", "progress", "orbit", "radar", "uploading", "humming"].includes(state)) return "working";
+  if (["happy", "celebrate", "proud", "laughing", "excited", "playful", "notifying"].includes(state)) return "happy";
   if (["sleeping", "drowsy", "powering-down"].includes(state)) return "sleeping";
   return "idle";
 }
 
 /** Trombi's pose for the app's mascot states. */
 export function trombiPoseFor(state: MausState | undefined): TrombiPose {
+  // Trombi keeps his own poses: the shapes' newer moods fold back onto them
+  if (state === "listening" || state === "notifying") return "speak";
   const mood = shapeMoodFor(state);
-  if (mood === "thinking" || mood === "working") return "think";
+  if (mood === "thinking" || mood === "working" || mood === "streaming") return "think";
   if (mood === "happy") return "celebrate";
   if (mood === "sleeping") return "sleep";
-  if (state === "listening" || state === "notifying") return "speak";
   return "idle";
 }
 
@@ -247,7 +254,9 @@ export function trombiPoseFor(state: MausState | undefined): TrombiPose {
 export function bunbuMoodFor(state: MausState | undefined): BunbuMood {
   if (state === "listening" || state === "dictating") return "listening";
   if (state === "notifying") return "speaking";
-  return shapeMoodFor(state);
+  // Bunbu keeps its own five moods: the shapes' newer ones fold back onto them
+  const mood = shapeMoodFor(state);
+  return mood === "streaming" ? "working" : mood === "blocked" ? "idle" : mood;
 }
 
 /** Shiba's face for the app's mascot states: most states name one of its sixteen faces. */
@@ -352,7 +361,12 @@ function CharacterAvatar({
     );
   }
   if (full.character === "shiba") {
-    return <ShibaMascot skin={full.skins.shiba} color={color} size={size} mood={bunbuMoodFor(state)} expression={shibaExpressionFor(state)} animated={animated} move={move} moveBody label={label ?? null} />;
+    // HD art while "HD mascots" is on (src/components/hd-mascots); the vector Shiba otherwise, and while the art loads
+    return (
+      <HdOrVector character="shiba" hdKey={hdKeyForState(state)} size={size} animated={animated} label={label ?? null}>
+        <ShibaMascot skin={full.skins.shiba} color={color} size={size} mood={bunbuMoodFor(state)} expression={shibaExpressionFor(state)} animated={animated} move={move} moveBody label={label ?? null} />
+      </HdOrVector>
+    );
   }
   if (full.character === "grump") {
     // Grump's sixteen faces carry the Shapes ids, so the Shiba's state map serves both
@@ -404,13 +418,34 @@ export function resolveBotAvatarOutcome(params: {
  * values and images that fail to load both fall back to the animated mascot,
  * so an old/corrupt profile can never leave a broken-image icon in the app.
  */
-export function BotAvatar({ primary, primaryRingClassName, ...props }: BotAvatarProps) {
-  if (!primary) return <BotAvatarImage {...props} />;
+/**
+ * Grok Bot's sidebar portrait fills its box (36px in a row, 60px on a pinned
+ * tile). A shape mascot's body only uses about 62% of its frame, the rest is
+ * room for its moves, so in the sidebar it is drawn 1.6 times larger to fill
+ * the same box. Scaled about the point that puts the bodies' centre in the
+ * box's centre; the box, its layout and the Primary Bot star do not change.
+ */
+export const SHAPE_FILL_SCALE = 1.6;
+const SHAPE_FILL_ORIGIN = "50% 38%";
+
+/** How much larger a bot's avatar is drawn when it must fill its box. */
+export function avatarFillScale(bot: BotAvatarProps["bot"]): number {
+  if (botAvatarProfile(bot).avatarUrl) return 1;
+  return botMascotLook(bot.mascotLook).character === "shape" ? SHAPE_FILL_SCALE : 1;
+}
+
+export function BotAvatar({ primary, primaryRingClassName, fillBox, ...props }: BotAvatarProps) {
+  const scale = fillBox ? avatarFillScale(props.bot) : 1;
+  if (!primary && scale === 1) return <BotAvatarImage {...props} />;
   const size = props.size ?? 44;
   return (
-    <span className="relative inline-flex shrink-0" style={{ width: size, height: size }} data-primary-bot="">
-      <BotAvatarImage {...props} />
-      <PrimaryBotBadge size={size} ringClassName={primaryRingClassName} label={t("primaryBot.badge")} />
+    <span className="relative inline-flex shrink-0" style={{ width: size, height: size }} data-primary-bot={primary ? "" : undefined}>
+      {scale === 1 ? <BotAvatarImage {...props} /> : (
+        <span data-avatar-fill="" className="inline-flex" style={{ transform: `scale(${scale})`, transformOrigin: SHAPE_FILL_ORIGIN }}>
+          <BotAvatarImage {...props} />
+        </span>
+      )}
+      {primary && <PrimaryBotBadge size={size} ringClassName={primaryRingClassName} label={t("primaryBot.badge")} />}
     </span>
   );
 }

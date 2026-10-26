@@ -111,6 +111,18 @@ describe("channel draft delivery mode", () => {
     expect(failedComposerSends(draftId)[0]?.requestText).toBe(requestText);
   });
 
+  it("queues a send that failed offline, labelled, even with an untouched draft", () => {
+    const draftId = "bot:offline-queue:task";
+    vi.stubGlobal("navigator", { onLine: false });
+    try {
+      const sent = { draftId, revision: draftRevision(draftId), sendId: "offline-send", threadId: "task", text: "Hello", requestText: "Hello", attachments: [] };
+      expect(recoverFailedComposerSend(sent)).toBe("outbox");
+      expect(failedComposerSends(draftId)[0]?.offline).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("restores goal intent on remount and from persisted storage after restart", () => {
     const store = memoryStorage();
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: store });

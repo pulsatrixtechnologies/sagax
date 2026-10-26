@@ -162,7 +162,33 @@ bot working in its owner's environment without a card,
 the server (shell, files, fetch: `docs/user-sandbox.md`), so what reaches
 Sagax is a Sagax tool, routed per tool: a card that would act on the shared
 server or beyond the owner's own rights still goes to an organization admin
-(an admin card, answered once and never remembered, whatever the level).
+(an admin card, whatever the level; since 2026-10-21 its Always allow keeps
+the program of a shell line for that bot only, which the bot's owner or an
+admin removes in the bot's Approval rules: `docs/member-admin-audit.md`).
+
+### Organization rules and "Always allow" off (2026-10-21)
+
+An organization admin can, in the Perspicax console (`org-approvals`,
+`docs/org-admin-api.md`), write rules in plain words for every person and
+bot of the server, and turn "Always allow" off for everyone
+(`server/custom-rules-org.ts`). An organization rule asks first or refuses,
+never allows; it wins over a person's own rule of the same behavior, shows
+in each bot's Rules card and on the card it decides as "Required by your
+administrator", and nobody else can change or remove it. With "Always
+allow" off, every card offers Deny and Allow once only and says that the
+organization requires an approval each time; every answer path refuses an
+answer that would save a standing grant (403 `org_always_allow_off`, in
+`server/step-up-gate.ts`), and the grants people saved before (allow rules
+in their words, saved commands, a gate's Always allow key, owner allow
+rules) stop answering (`autoVerdict`, `matchOwnerRule`, the custom rule
+store) until it is on again. An organization Refuse rule refuses even an email
+draft the person approved on its card. Not yet covered (read in
+`server/index.ts`): a My Chrome site grant and a published page's tool
+grant saved before; a bot's Always allow keys added through its settings
+while off (saved, unused until it is on again); and organization rules
+apply to the engines' tool calls only, not to a bot act, a proposal or a
+kept send. Approval levels are not grants: Auto and Full keep their meaning
+(`memberAutoApproval` and `allowFullAccess` govern them).
 
 ### The owner's own environment
 
@@ -252,6 +278,17 @@ reach Sagax's approval path, so neither the limits above, nor the security
 keys, nor the person's own rules apply to them; only what that reviewer
 leaves to Sagax does. Use **Ask** or **Auto-accept edits** to have every
 such call go through Sagax.
+
+The same holds for Codex (`approvalsReviewer: auto_review`), Qwen
+(`--approval-mode auto`) and Cursor (`--auto-review`) on **Approve for me**:
+their own reviewer decides first. Grok Bot has a single reviewer, so a bot
+can be switched to one reviewer (Grok Bot parity A13,
+`server/drivers/sagax-reviewer.ts`): with `DATA_DIR/sagax-reviewer.json`
+`{"bots": ["<botId>"]}` (or `{"bots": "all"}`), Approve for me on those
+engines starts Qwen at `auto-edit` and Codex and Cursor with the person as
+reviewer, so every other call reaches Sagax's approval path, where the
+person's rules and saved commands still answer without a card. Off by
+default until each engine is benched; read at each turn, no deploy needed.
 
 ### A Primary Bot's level covers the work it delegates
 

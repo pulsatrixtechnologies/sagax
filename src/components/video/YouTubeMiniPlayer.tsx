@@ -1,9 +1,9 @@
 import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
-import { FileText } from "lucide-react";
+import { ExternalLink, FileText } from "lucide-react";
 
 import { api, ApiError } from "@/state/store";
 import { t } from "@/lib/i18n";
-import { createYoutubePlayer, type YoutubePlayerHandle } from "@/lib/youtube-embed";
+import { createYoutubePlayer, youtubeWatchUrl, type YoutubePlayerHandle } from "@/lib/youtube-embed";
 import type { MessageAttachmentContext } from "../AttachmentPreview";
 import { MediaPlayerChrome } from "./MediaPlayerChrome";
 import { TranscriptDrawer, type TranscriptCue } from "./TranscriptDrawer";
@@ -43,6 +43,9 @@ export const YouTubeMiniPlayer = memo(function YouTubeMiniPlayer({
   const [filter, setFilter] = useState("");
   const [activeCueMs, setActiveCueMs] = useState<number | null>(null);
   const [embedGrace, setEmbedGrace] = useState(false);
+  // The player refused this video here (YouTube's onError code): the stage
+  // offers it on YouTube instead of YouTube's own error screen.
+  const [embedError, setEmbedError] = useState<number | null>(null);
   const titleId = useId();
 
   useEffect(() => {
@@ -72,14 +75,22 @@ export const YouTubeMiniPlayer = memo(function YouTubeMiniPlayer({
     const mount = mountRef.current;
     if (!mount) return;
     let cancelled = false;
+    let failed = false;
     setPlayerReady(false);
+    setEmbedError(null);
     // A fresh element per player: the IFrame API replaces the element it is
     // given with its iframe, and a player that was mounted then torn down
     // (React's StrictMode, a remount) must not take the next one's element.
     const host = document.createElement("div");
     mount.replaceChildren(host);
-    void createYoutubePlayer(host, videoId).then((handle) => {
-      if (cancelled) {
+    void createYoutubePlayer(host, videoId, {
+      onError: (code) => {
+        if (cancelled) return;
+        failed = true;
+        setEmbedError(code);
+      },
+    }).then((handle) => {
+      if (cancelled || failed) {
         handle?.destroy();
         return;
       }
@@ -93,6 +104,13 @@ export const YouTubeMiniPlayer = memo(function YouTubeMiniPlayer({
       mount.replaceChildren();
     };
   }, [videoId, posterOnly]);
+
+  useEffect(() => {
+    if (embedError == null) return;
+    playerRef.current?.destroy();
+    playerRef.current = null;
+    mountRef.current?.replaceChildren();
+  }, [embedError]);
 
   useEffect(() => {
     if (!drawerOpen || !cues.length) return;
@@ -155,7 +173,7 @@ export const YouTubeMiniPlayer = memo(function YouTubeMiniPlayer({
       }}
       stageRef={shellRef}
       labelId={titleId}
-      loading={!playerReady && !embedGrace}
+      loading={!playerReady && !embedGrace && embedError == null}
       embedControls
       footerActions={footerActions}
       drawerOpen={drawerOpen}
@@ -181,7 +199,15 @@ export const YouTubeMiniPlayer = memo(function YouTubeMiniPlayer({
         }}
       />
       {!posterOnly && (
-        <div ref={mountRef} title={metaTitle || t("youtube.playerTitle")} />
+        <div ref={mountRef} title={metaTitle || t("youtube.playerTitle")} hidden={embedError != null} />
+      )}
+      {embedError != null && (
+        <div className="vpc-embed-fallback" data-youtube-error={embedError}>
+          <a href={youtubeWatchUrl(videoId)} target="_blank" rel="noreferrer" className="vpc-chip">
+            <ExternalLink size={14} />
+            {t("youtube.watchOnYoutube")}
+          </a>
+        </div>
       )}
     </MediaPlayerChrome>
   );

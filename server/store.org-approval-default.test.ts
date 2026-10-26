@@ -21,6 +21,9 @@ describe("the level a new bot starts on", () => {
     const created = new Store(selection).createBot({}, { seedMessages: false });
     expect(created).toMatchObject({ approvalMode: "auto", autoApprove: true });
     expect(created.tasks?.[0]).toMatchObject({ approvalMode: "auto", autoApprove: true });
+    // The zero-choice default is the safe level, never Full access: making the
+    // engine/model Auto must never weaken the approval safeguard.
+    expect(created.approvalMode).not.toBe("full");
   });
 
   it("follows the server's level, read at each creation", () => {

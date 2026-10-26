@@ -16,6 +16,13 @@ describe("EmailCard", () => {
     expect(html).toContain("data-email-edit");
     expect(html).toContain("Open in mail app");
     expect(html).toContain("Sends only after you approve it on the approval card");
+    expect(html).toContain("Draft created for marie@example.com");
+  });
+
+  it("keeps the card and hides Send when drafts are off for the bot", () => {
+    const html = renderToStaticMarkup(createElement(EmailCard, { draft, threadId: "t1", botId: "b1", draftsEnabled: false }));
+    expect(html).toContain("data-email-drafts-off");
+    expect(html).not.toContain("data-email-send");
   });
 
   it("offers no Send outside a conversation, while the bot is still writing, or without a recipient", () => {

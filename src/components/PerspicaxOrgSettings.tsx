@@ -32,6 +32,8 @@ import { OrgMemberAutoApprovalPolicy } from "./settings/OrgMemberAutoApprovalPol
 import { OrgVaultExportPolicy } from "./settings/OrgVaultExportPolicy";
 import { OrgMemberEnvironmentPolicy } from "./settings/OrgMemberEnvironmentPolicy";
 import { OrgConfidentialThreadsDefault } from "./settings/OrgConfidentialThreadsDefault";
+import { OrgTeamSecrets } from "./settings/OrgTeamSecrets";
+import { OrgPhoneCalls } from "./settings/OrgPhoneCalls";
 
 interface PendingAdminApproval {
   botId: string;
@@ -183,6 +185,8 @@ export function PerspicaxOrgSettings({ org, onChanged, botRows = null, after = n
         {admin && <OrgConfidentialThreadsDefault initial={org.settings.confidentialThreadsByDefault === true} onChanged={onChanged} />}
         {admin && <OrgMemberAutoApprovalPolicy initial={org.settings.memberAutoApproval !== false} onChanged={onChanged} />}
         {admin && <OrgVaultExportPolicy initial={org.settings.allowVaultExport !== false} onChanged={onChanged} />}
+        {admin && <OrgTeamSecrets />}
+        {admin && <OrgPhoneCalls />}
         {botRows}
       </SettingsGroup>
       {after}

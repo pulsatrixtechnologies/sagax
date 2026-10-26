@@ -211,6 +211,14 @@ describe("sign in with your email on a hosted server", () => {
     const listed = await call("/api/auth/sessions", { headers: { cookie, origin: `https://${HOST}` } });
     expect(listed.status).toBe(200);
     expect(listed.body.sessions.some((s: { email?: string }) => s.email === "her@example.test")).toBe(true);
+    // 2026-10-19: a valid sign-in, never a recent one (a bot reading her
+    // mailbox could type the code): no first key, no vault export in clear.
+    const keys = await call("/api/security-keys", { headers: { cookie, origin: `https://${HOST}` } });
+    expect(keys.status).toBe(200);
+    expect(keys.body.needsSignIn).toBe(true);
+    const exported = await call("/api/me/credentials/export", { body: { format: "bitwarden-json", acknowledge: "plaintext" }, headers: { cookie, origin: `https://${HOST}` } });
+    expect(exported.status).toBe(403);
+    expect(exported.body).toMatchObject({ code: "reauth_required" });
   });
 
   it("a member address gets a chat-only session; a domain entry welcomes the whole company", async () => {

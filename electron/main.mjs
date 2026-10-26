@@ -24,9 +24,10 @@ import {
 } from "./diagnostics.mjs";
 import { buildLogBundle, logBundleFileName, sanitizeRendererLines } from "./log-bundle.mjs";
 import { foldGrokVoiceCredential, grokVoiceFoldLog, migrateWorkspaceCredentials, workspaceCredentialEnv } from "./workspace-credentials.mjs";
+import { flushSessionCookies } from "./session-persistence.mjs";
 import { evictStartupCacheOnce } from "./startup-cache-eviction.mjs";
 import { activateExistingWindow, releaseSingleInstanceLock } from "./single-instance.mjs";
-import { pollServerIdentity } from "./server-boot-probe.mjs";
+import { bootFailureMessage, listeningSignal, pollServerIdentity, SERVER_BOOT_TIMEOUT_MS, SERVER_LISTENING_GRACE_MS } from "./server-boot-probe.mjs";
 import { createServerSupervisor } from "./server-supervisor.mjs";
 import { createBootUiHandler } from "./boot-ui.mjs";
 import { serverChildLaunch } from "./server-child-launch.mjs";
@@ -41,20 +42,16 @@ import { createWindowNudger } from "./window-nudge.mjs";
 import { createDesktopAttention } from "./desktop-attention.mjs";
 import { createAllWindowsClosedQuit } from "./window-all-closed.mjs";
 import { createStartupScreen } from "./startup-screen.mjs";
-import { createSystemTray } from "./system-tray.mjs";
+import { createLoadRecovery, isAppPage, loadErrorPage, loadingPage, loadOutcome, recoveryStrings, uiBundleState, waitForUiBundle } from "./load-recovery.mjs";
+import { confirmLanguage } from "./update-confirm.mjs";
+import { createSystemTray, normalizeBotHotkeyConfig, normalizeRoster, slotAccelerator } from "./system-tray.mjs";
 let startupScreen = null;
 let desktopTray = null;
 import { collisionFreeDownloadPath, defaultSaveName, revealDownloadWhenDone, revealInFolder, withSavableFile } from "./save-file.mjs";
 import { openPdfInDefaultApp } from "./open-pdf.mjs";
 import { desktopViewerPermissionAllowed } from "./desktop-viewer-permissions.mjs";
-import { appPermissionHandlers, externalOpenUrl, externalWebUrl } from "./app-permissions.mjs";
+import { appPermissionHandlers, connectorSetupUrl, externalOpenUrl, externalWebUrl } from "./app-permissions.mjs";
 import { writeClipboardText } from "./clipboard-write.mjs";
-import {
-  ensureManagedComposioCredentials,
-  managedComposioAccess,
-  managedComposioChildEnvironment,
-  normalizeManagedComposioBrokerUrl,
-} from "./managed-composio.mjs";
 import {
   createManagedCompanionTunnel,
   managedCompanionTunnelAccess,
@@ -84,7 +81,8 @@ import { isKnownSkin, skinChrome } from "./skin-overlay.cjs";
 import { createRetroAssistantWindow, DETACHED_QUERY } from "./retro-assistant-window.mjs";
 import { createFloatingBotWindows, FLOATING_QUERY, waitForPage as waitForFloatingPage } from "./floating-bot-window.mjs";
 import { createDataWindows } from "./data-window.mjs";
-import { createMascotHotkey, createModifierProbe } from "./mascot-hotkey.mjs";
+import { createBotHotkeys, createMascotHotkey, createModifierProbe } from "./mascot-hotkey.mjs";
+import { captureAccelerator, capturePermission, captureThumbnailSize, createCaptureHotkey, pickCaptureSource } from "./screen-capture-hotkey.mjs";
 import { readSecureCredentials } from "./secure-credentials.mjs";
 import { createControlPlaneClient } from "./control-plane-client.mjs";
 import {
@@ -100,8 +98,9 @@ import localOriginModule from "./local-origin.cjs";
 import { buildApplicationMenu } from "./menu.mjs";
 import { createComputerSharing, validateSharedFolders } from "./computer-sharing.mjs";
 import { createDesktopBridge } from "./desktop-bridge.mjs";
-import { applyAppIcon, createAppIconStore, parseAppIconRequest, windowIconPath } from "./app-icon.mjs";
+import { applyAppIcon, createAppIconStore, parseAppIconRequest, windowIconImage } from "./app-icon.mjs";
 import { createProxyCredentialStore, createProxyCredentials, proxyPasswordAnswerScript, proxyPasswordPage } from "./proxy-credentials.mjs";
+import { createLocalModelKeyStore } from "./local-model-keys.mjs";
 import { createLocalVm } from "./local-vm.mjs";
 import { acquireDataDirLease } from "./data-dir-lease.mjs";
 import { defaultDataDir, fetchEnvironmentDescriptor, URL_SCHEMES } from "./legacy-names.mjs";
@@ -167,7 +166,7 @@ function savedAppIcon() {
 /** The icon a new window opens with: the person's custom one on Windows
  * and Linux (the taskbar shows the window's icon), else the app's. */
 function currentWindowIcon() {
-  return process.platform === "darwin" ? APP_ICON : windowIconPath(savedAppIcon(), process.platform, APP_ICON);
+  return process.platform === "darwin" ? APP_ICON : windowIconImage(savedAppIcon(), process.platform, nativeImage, APP_ICON);
 }
 function showAppIcon(saved) {
   return applyAppIcon(saved, {
@@ -176,6 +175,7 @@ function showAppIcon(saved) {
     windows: BrowserWindow.getAllWindows(),
     nativeImage,
     defaultIconPath: APP_ICON,
+    tray: desktopTray,
     // A runtime Dock image drops the Liquid Glass rendering of the bundle
     // icon, so the default is the bundle's own (null), except in an
     // unpackaged run without a compiled icon, which shows the flat PNG.
@@ -280,6 +280,13 @@ if (process.platform === "linux") {
   app.disableHardwareAcceleration();
   app.setDesktopName("com.openmausbot.app.desktop");
 }
+// Settings > Appearance > Desktop: "Use hardware acceleration" (on by
+// default). It can only be decided before ready, so a change made in the app
+// is kept in userData (desktop-shell-preferences.mjs) and applies at the
+// next launch.
+try {
+  if (!readShellPreferences(app.getPath("userData")).hardwareAcceleration) app.disableHardwareAcceleration();
+} catch { /* the default stays */ }
 
 // One instance per user: without this lock a second launch forks a second
 // harness server on a fallback port and splits data dirs in two. The loser
@@ -303,6 +310,8 @@ let quittingForUpdate = false;
 nativeAutoUpdater.on("before-quit-for-update", () => {
   quittingForUpdate = true;
   releaseSingleInstanceLock(app);
+  // The organization sign-in cookie survives the update (2026-10-20).
+  if (app.isReady()) void flushSessionCookies(session.defaultSession, { log: slog });
 });
 
 /** Hand a pending link to THIS computer's UI. False while it has to wait: the
@@ -578,7 +587,8 @@ async function startPulsatrixSignIn(_win, loginStart) {
     loopback = null;
     pendingSystemSignIn.begin(origin);
   }
-  const url = oidcSignInModule.desktopStartUrl(origin, loopback?.returnTo ?? (ownsSagax ? oidcSignInModule.sagaxReturnLink(origin) : undefined));
+  const fresh = new URL(start).searchParams.get("fresh") === "1";
+  const url = oidcSignInModule.desktopStartUrl(origin, loopback?.returnTo ?? (ownsSagax ? oidcSignInModule.sagaxReturnLink(origin) : undefined), fresh);
   const current = { origin, url, loopback };
   currentSignIn = current;
   setSignInState({ status: "waiting", origin });
@@ -670,7 +680,7 @@ function openStartupScreen() {
   startupScreen = createStartupScreen({
     BrowserWindow, iconPath: APP_ICON, isQuitting: () => desktopShutdownStarted,
     onQuit: () => app.quit(),
-    onHide: desktopTray ? (win) => desktopTray.hide(win) : undefined,
+    onHide: desktopTray && process.platform === "win32" ? (win) => desktopTray.hide(win) : undefined,
     isHidden: () => desktopTray?.isHidden() ?? false,
     onShow: (win) => desktopTray?.windowShown(win),
     onFinished: () => { startupScreen = null; },
@@ -778,9 +788,7 @@ const serverSupervisor = createServerSupervisor({
     serverReady = true;
     serverStartConflictOnly = false;
     slog(`server ready pid=${proc.pid} port=${SERVER_PORT}`);
-    // Re-read the latest account credentials; registration may have completed
-    // while the replacement child's health probe was pending.
-    syncManagedComposioCredentials();
+    reportOwnListeners(proc);
     // Who owns this computer in their organization (name, address, avatar).
     void ownerIdentitySync.serverReady();
     ownerIdentitySync.start();
@@ -897,47 +905,10 @@ async function saveSecureCredentials(credentials) {
   fs.renameSync(temporary, CREDENTIALS_FILE);
 }
 
-async function secureComposioConfig() {
-  const dataDir = desktopDataDir();
-  const configPath = path.join(dataDir, "config.json");
-  try {
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    if (!config?.composio || typeof config.composio !== "object") return;
-    let changed = false;
-    const apiKey = config?.composio?.apiKey;
-    if (typeof apiKey === "string" && apiKey.trim().startsWith("ak_")) {
-      if (!secureCredentials.composioApiKey) {
-        secureCredentials.composioApiKey = apiKey.trim();
-        await saveSecureCredentials(secureCredentials);
-      }
-      config.composio.apiKey = "";
-      changed = true;
-    } else if (typeof apiKey === "string" && apiKey.trim()) {
-      config.composio.apiKey = "";
-      changed = true;
-    }
-    // These were the old Connect credential and endpoint. They are no longer
-    // read; remove them during the upgrade so an unused secret is not left in
-    // plaintext indefinitely.
-    for (const field of ["key", "url"]) {
-      if (Object.hasOwn(config.composio, field)) {
-        delete config.composio[field];
-        changed = true;
-      }
-    }
-    if (!changed) return;
-    const temporary = `${configPath}.${process.pid}.tmp`;
-    fs.writeFileSync(temporary, JSON.stringify(config, null, 2), { mode: 0o600 });
-    fs.renameSync(temporary, configPath);
-  } catch (error) {
-    if (error?.code !== "ENOENT") slog(`credential migration failed: ${error?.message ?? error}`);
-  }
-}
-
-// The remaining workspace credentials (xai/box/voice/OpenCode keys) get
-// the same at-rest treatment as the Composio key above. New packaged-app
-// saves go straight through credential:set below; this boot-time sweep also
-// migrates plaintext left by older versions or direct development clients.
+// The workspace credentials (xai/box/voice/OpenCode keys) get an at-rest
+// treatment in the OS credential store. New packaged-app saves go straight
+// through credential:set below; this boot-time sweep also migrates plaintext
+// left by older versions or direct development clients.
 // See workspace-credentials.mjs for the exact rules.
 async function secureWorkspaceConfig() {
   const dataDir = desktopDataDir();
@@ -961,14 +932,6 @@ async function secureWorkspaceConfig() {
   } catch (error) {
     if (error?.code !== "ENOENT") slog(`credential migration failed: ${error?.message ?? error}`);
   }
-}
-
-// Managed connected apps run only through a broker the operator names
-// explicitly. There is no built-in default: the fork never routes users'
-// connections through a third party's service. Without the variable, the
-// app uses the workspace's own Composio project key (self-hosted mode).
-function composioBrokerUrl() {
-  return normalizeManagedComposioBrokerUrl(process.env.SAGAX_COMPOSIO_BROKER_URL?.trim() || "");
 }
 
 // The interaction bench (docs/perf/interaction-bench.md) runs a copy of the
@@ -1011,15 +974,22 @@ import {
 } from "./companion.mjs";
 import { createRoutineWakeHold, rememberRoutineWake, routineWakeSettings } from "./routine-wake.mjs";
 import { readDesktopLanguage, writeDesktopLanguage } from "./desktop-language.mjs";
+import { readShellPreferences, writeShellPreferences } from "./desktop-shell-preferences.mjs";
 import { systemIdleSnapshot } from "./system-idle.mjs";
 import { installFetchGuard, installSessionBlock } from "./upstream-hosts.mjs";
+import { reportOwnListeners, serverRequestRefusal } from "./server-session.mjs";
+import { isYoutubeEmbedUrl, withYoutubeEmbedReferer } from "./youtube-referer.mjs";
 
 // No request from this app reaches the original OpenMausBot services, the
 // upstream author's repositories or an analytics host: main's own fetch is
 // guarded here, every Electron session (windows, webviews, the updater's net
 // session) on creation and once ready (electron/upstream-hosts.mjs).
 installFetchGuard(globalThis);
-app.on("session-created", (created) => installSessionBlock(created, (line) => slog(`network: ${line}`)));
+// No session but the app window's reaches the local server (OpenMausBot #2930
+// port): a desktop viewer, a bridge browser or a Local VM pane is never the
+// owner. Set once the default session exists (whenReady), before any window.
+let serverSessionGuard = null;
+app.on("session-created", (created) => installSessionBlock(created, (line) => slog(`network: ${line}`), serverRequestRefusal(created, () => serverSessionGuard)));
 
 /** IPC that controls this computer, its files, its logins or its updater is
  * answered only for the local server's UI (electron/local-origin.cjs). A
@@ -1745,12 +1715,36 @@ function syncDesktopMutationToken(proc) {
   }
 }
 
-function installDesktopMutationHeader() {
+/** The page that embeds a YouTube player whose request carries no referrer:
+ * the window that sent it, else the main window (a request passed on by
+ * bundled-ui.cjs on an organization server; every window of the default
+ * session shows that same server's origin, so the main window names it). */
+function youtubeEmbedderPage(details) {
+  try {
+    const own = details.webContents?.getURL?.();
+    if (own) return own;
+  } catch {}
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) return mainWindow.webContents.getURL();
+  } catch {}
+  return null;
+}
+
+// A session holds one onBeforeSendHeaders listener, so both rules live in
+// it: the mutation capability (packaged builds only) and the Referer of the
+// YouTube player in the chat (electron/youtube-referer.mjs, every build).
+function installRequestHeaderRules({ mutationHeader }) {
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    if (isYoutubeEmbedUrl(details.url)) {
+      callback({ requestHeaders: withYoutubeEmbedReferer(details, () => youtubeEmbedderPage(details)) });
+      return;
+    }
     let ownsTarget = false;
     try {
       const target = new URL(details.url);
-      ownsTarget = serverReady && target.protocol === "http:" &&
+      // http: and ws: alike: a browser's WebSocket handshake needs the header
+      // too, since the server refuses browsers without it (OpenMausBot #2930).
+      ownsTarget = mutationHeader && serverReady && (target.protocol === "http:" || target.protocol === "ws:") &&
         target.hostname === "127.0.0.1" &&
         Number(target.port || 80) === SERVER_PORT;
     } catch {}
@@ -1792,7 +1786,7 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
     resourcesPath: process.resourcesPath,
     userData: app.getPath("userData"),
   });
-  const childEnv = managedComposioChildEnvironment(composioBrokerUrl(), secureCredentials, {
+  const childEnv = {
     ...process.env,
     // The desktop parent owns the durable data-directory lease. Each utility
     // server gets only a private capability that validates that same live
@@ -1811,9 +1805,6 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
     // the server advertises this to remote clients so version skew is visible
     SAGAX_APP_VERSION: app.getVersion(),
     SAGAX_USER_DATA: app.getPath("userData"),
-    ...(secureCredentials.composioApiKey
-      ? { COMPOSIO_API_KEY: secureCredentials.composioApiKey }
-      : {}),
     // "we could not read your keys" must not reach the UI as "you have none"
     SAGAX_CREDENTIAL_STORE: credentialStoreUnavailable ? "unavailable" : "ok",
     // one env var per stored workspace secret (xai/box/voice/OpenCode Go);
@@ -1825,7 +1816,7 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
     ...(typeof secureCredentials.mcpOAuthKey === "string" && /^[0-9a-f]{64}$/.test(secureCredentials.mcpOAuthKey)
       ? { SAGAX_MCP_OAUTH_KEY: secureCredentials.mcpOAuthKey }
       : {}),
-  });
+  };
   delete childEnv.SAGAX_BROWSER_CONNECTION;
   // Set here or not at all, never inherited from the launching shell. The
   // bootstrap removes it before the server runs, so nothing the server
@@ -1842,7 +1833,11 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
   utilityServerExits.set(proc, new Promise((resolve) => {
     resolveServerExit = resolve;
   }));
-  proc.stdout?.on("data", (d) => slog(`[out] ${String(d).trimEnd()}`));
+  const listening = listeningSignal();
+  proc.stdout?.on("data", (d) => {
+    listening.hear(String(d));
+    slog(`[out] ${String(d).trimEnd()}`);
+  });
   proc.stderr?.on("data", (d) => slog(`[err] ${String(d).trimEnd()}`));
   // The packaged server opens its port before it loads (desktop-entry.mjs,
   // server/early-listener.ts) and says so on its private parent port: that
@@ -1906,21 +1901,17 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
     pid: () => proc.pid,
     bootTimeoutMs: SERVER_BOOT_TIMEOUT_MS,
     isExited: () => exited || desktopShutdownStarted,
+    // A child that printed its listening line is alive and only slow to answer
+    // /api/health: give it a grace instead of reaping it at the 60 s deadline.
+    isListening: listening.heard,
+    listeningGraceMs: SERVER_LISTENING_GRACE_MS,
   });
   // Main's own time-boxed calls to the server (refreshSharedComputersAllowed)
   // wait for this, not for the open port.
   localServerAnswering = probe.then(() => undefined, () => undefined);
   const identity = await Promise.race([portOpened, probe]);
   if (identity.outcome === "ready" && serverSupervisor.isCurrent(proc)) return { proc };
-  if (identity.outcome === "exited") {
-    slog(`child on port ${port} exited before answering /api/health`);
-  } else {
-    slog(
-      identity.outcome === "foreign-owner"
-        ? `port ${port} answered health checks from another process`
-        : `child on port ${port} did not answer /api/health within ${SERVER_BOOT_TIMEOUT_MS / 1000}s`,
-    );
-  }
+  slog(bootFailureMessage(port, identity));
   const stopped = await stopUtilityServer(proc);
   if (!stopped) {
     slog(`child on port ${port} did not exit after termination; refusing to start a sibling server`);
@@ -1964,18 +1955,6 @@ async function startServerPackagedOnce() {
   return false;
 }
 
-function syncManagedComposioCredentials() {
-  if (!serverProc) return;
-  try {
-    serverProc.postMessage({
-      type: "openmausbot:managed-composio",
-      access: managedComposioAccess(composioBrokerUrl(), secureCredentials),
-    });
-  } catch (error) {
-    slog(`connected-apps credential sync failed: ${error?.message ?? error}`);
-  }
-}
-
 // The page is built at failure time (not import time): the message depends on
 // how the boot failed, and the log path comes from LOG_DIR so Windows and
 // Linux users see their real location instead of a macOS guess. The link
@@ -2001,15 +1980,93 @@ function buildErrorPage({ allPortsOccupied }) {
 
 // How long one packaged-server child gets to answer /api/health before the
 // parent reaps it and tries the next port. Wall-clock, deliberately generous:
-// first boots write data dirs and pre-listen network calls (managed composio,
-// workspace credentials) can stall a healthy child far past 20s on some
-// machines, which used to surface as the misleading "ports are busy" page.
-const SERVER_BOOT_TIMEOUT_MS = 60_000;
-
+// first boots write data dirs and pre-listen network calls (workspace
+// credentials) can stall a healthy child far past 20s on some machines,
+// which used to surface as the misleading "ports are busy" page.
 let cuaReady = Promise.resolve({ mode: "unavailable", reason: "not-started" });
 const androidDevice = createAndroidDeviceController({ resourcesPath: process.resourcesPath });
 const displayMediaGuard = createDisplayMediaGuard();
 let displayMediaRequestCount = 0;
+
+/** "fr" or "en" for the pages main draws itself. */
+function recoveryLanguage() {
+  try {
+    return confirmLanguage(readDesktopLanguage(app.getPath("userData")), app.getLocale?.() ?? "");
+  } catch {
+    return "en";
+  }
+}
+
+/** The app icon as a data URL for main's own pages, or null. */
+let recoveryIcon;
+function recoveryIconDataUrl() {
+  if (recoveryIcon !== undefined) return recoveryIcon;
+  try {
+    recoveryIcon = `data:image/png;base64,${fs.readFileSync(APP_ICON).toString("base64")}`;
+  } catch {
+    recoveryIcon = null;
+  }
+  return recoveryIcon;
+}
+
+/**
+ * The main window's own page never stays on a raw error (2026-10-19: a
+ * black window with "Not Found" after a Windows update). A main-frame load
+ * of this app's page (the local server, or an organization server's page
+ * drawn from this app's bundle) that answers an HTTP error, or that cannot
+ * connect, is retried behind a loading page with a growing delay, then
+ * replaced by an error page whose "Try again" loads it again
+ * (electron/load-recovery.mjs). A remote server that cannot be reached at
+ * all keeps its own handling (back to Local, did-fail-load below).
+ */
+function installLoadRecovery(win) {
+  const recovery = createLoadRecovery();
+  let timer = null;
+  const origins = () => {
+    const list = [rendererOrigin()];
+    const remote = activeRemote(environmentsState);
+    if (remote?.origin) list.push(remote.origin);
+    return list;
+  };
+  const handle = (url, result, { network = false } = {}) => {
+    if (win.isDestroyed()) return;
+    if (!isAppPage(url, origins())) return;
+    const outcome = loadOutcome(result);
+    if (outcome === "ok") {
+      // A good load (or the server's own reload) ends any pending retry.
+      clearTimeout(timer);
+      recovery.reset();
+      return;
+    }
+    if (outcome !== "retry") return;
+    // A remote server nobody answers for is did-fail-load's (back to Local).
+    if (network && new URL(url).origin !== rendererOrigin()) return;
+    const step = recovery.next();
+    const language = recoveryLanguage();
+    clearTimeout(timer);
+    if (step.kind === "give-up") {
+      slog(`main window: ${new URL(url).origin} still failing after ${step.attempts} attempts (${result.httpStatus ?? result.errorCode}); showing the error page`);
+      recovery.reset();
+      // The local server may come back later: its onReady reloads this window.
+      if (new URL(url).origin === rendererOrigin() && !serverReady) serverUnavailableWindows.add(win);
+      void win.loadURL(loadErrorPage({ language, iconDataUrl: recoveryIconDataUrl(), retryUrl: url })).catch(() => {});
+      return;
+    }
+    slog(`main window: ${new URL(url).origin} answered ${result.httpStatus ?? result.errorCode}; retry ${step.attempt} in ${step.delayMs} ms`);
+    void win.loadURL(loadingPage({ language, iconDataUrl: recoveryIconDataUrl() })).catch(() => {});
+    timer = setTimeout(() => {
+      // Never back to a workspace the person switched away from meanwhile.
+      if (win.isDestroyed() || !origins().includes(new URL(url).origin)) return;
+      void win.loadURL(url).catch(() => {});
+    }, step.delayMs);
+    timer.unref?.();
+  };
+  win.webContents.on("did-navigate", (_event, url, httpResponseCode) => handle(url, { httpStatus: httpResponseCode }));
+  win.webContents.on("did-fail-load", (_event, errorCode, _description, validatedURL, isMainFrame) => {
+    if (isMainFrame) handle(validatedURL, { errorCode }, { network: true });
+  });
+  win.on("closed", () => clearTimeout(timer));
+}
 
 function rendererOrigin() {
   return new URL(app.isPackaged || desktopRemoteAccess ? `http://127.0.0.1:${SERVER_PORT}` : DEV_URL).origin;
@@ -2481,6 +2538,22 @@ function desktopBridgeProxyCredentials() {
   return bridgeProxyCredentials;
 }
 
+let bridgeLocalModelKeys = null;
+/** The per-loopback-server API keys the person set on this computer, kept
+ * encrypted by the OS and never sent to the organization server. */
+function desktopBridgeLocalModelKeys() {
+  bridgeLocalModelKeys ??= createLocalModelKeyStore({
+    file: path.join(app.getPath("userData"), "local-model-keys.bin"), fs, log: (message) => slog(message),
+    encryption: {
+      available: async () => (await safeStorage.isAsyncEncryptionAvailable()) &&
+        (process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text"),
+      encrypt: (value) => safeStorage.encryptStringAsync(value),
+      decrypt: (buffer) => safeStorage.decryptStringAsync(buffer),
+    },
+  });
+  return bridgeLocalModelKeys;
+}
+
 function desktopBridge() {
   desktopBridgeConnector ??= createDesktopBridge({
     environment: () => serverModeEnvironment(environmentsState),
@@ -2499,6 +2572,10 @@ function desktopBridge() {
     // the person typed once here (kept encrypted by the OS).
     resolveProxy: (url) => session.defaultSession.resolveProxy(url),
     proxyCredentials: desktopBridgeProxyCredentials(),
+    // The per-loopback-server API key for a key-protected local server
+    // (oMLX/Ornith), by base URL. Desktop-side only; used to authenticate the
+    // probe and the model-serving calls to 127.0.0.1.
+    localModelKeyFor: (base) => desktopBridgeLocalModelKeys().get(base),
     browse: bridgeBrowse,
     cuaConnection: async () => {
       const connection = await cuaReady.catch(() => null);
@@ -3295,6 +3372,9 @@ function createWindow({ deferNavigation = false } = {}) {
       // from the second launch on (Grok Bot does the same).
       v8CacheOptions: "bypassHeatCheck",
       preload: path.join(__dirname, "preload.cjs"),
+      // Settings > Appearance > Desktop: the spell checker (on by default);
+      // macOS reads this when the window opens, the others also change live.
+      spellcheck: readShellPreferences(app.getPath("userData")).spellcheck,
       // The preload exposes the full bridge only to this origin (see preload.cjs).
       // Companion client mode still serves the bundled UI from its own
       // loopback relay, so it is a trusted local page while also needing the
@@ -3357,11 +3437,13 @@ function createWindow({ deferNavigation = false } = {}) {
     retroAssistantWindow.mainWindowGone();
     floatingBotWindows.mainWindowGone();
     mascotHotkey.disable();
+    clearTrayRoster();
   });
   win.webContents.on("render-process-gone", () => {
     retroAssistantWindow.mainWindowGone();
     floatingBotWindows.mainWindowGone();
     mascotHotkey.disable();
+    clearTrayRoster();
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -3420,6 +3502,7 @@ function createWindow({ deferNavigation = false } = {}) {
       slog(`blocked subframe navigation to ${details.url}`);
     }
   });
+  if (app.isPackaged) installLoadRecovery(win);
   win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (!isMainFrame || errorCode === -3) return; // -3: aborted by a newer navigation
     const remote = activeRemote(environmentsState);
@@ -3660,6 +3743,23 @@ ipcMain.handle("engine:open-terminal", localOnly("engine:open-terminal", async (
 // (unfocused page, denied permission). Plain text only; resolves false on failure.
 ipcMain.handle("clipboard:write-text", localOnly("clipboard:write-text", (_event, text) => writeClipboardText(clipboard, text)));
 
+// Per-loopback-server API keys for local models (Settings > Computer). These
+// run through the local shell only: a key is kept encrypted on THIS computer
+// and never leaves it. The renderer only ever learns WHICH bases have a key,
+// never the key value. Setting or clearing a key re-probes at once, so a
+// server that was "needs an API key" turns into a listed one without waiting.
+ipcMain.handle("local-models:key-bases", localOnly("local-models:key-bases", () => desktopBridgeLocalModelKeys().bases()));
+ipcMain.handle("local-models:set-key", localOnly("local-models:set-key", async (_event, base, key) => {
+  const ok = await desktopBridgeLocalModelKeys().set(base, key);
+  if (ok) await desktopBridge().refreshLocalModels({ force: true }).catch(() => {});
+  return ok;
+}));
+ipcMain.handle("local-models:clear-key", localOnly("local-models:clear-key", async (_event, base) => {
+  await desktopBridgeLocalModelKeys().clear(base);
+  await desktopBridge().refreshLocalModels({ force: true }).catch(() => {});
+  return true;
+}));
+
 // OAuth/connect links are returned asynchronously, after Chromium's direct
 // click gesture has ended. Opening them through window.open can therefore be
 // rejected as a popup before setWindowOpenHandler ever sees the URL. Keep the
@@ -3897,6 +3997,25 @@ ipcMain.on("desktop-language:get", (event) => {
 });
 ipcMain.handle("desktop-language:set", desktopUiOnly("desktop-language:set", (_event, language) =>
   writeDesktopLanguage(app.getPath("userData"), language)));
+// Hardware acceleration (next launch) and the spell checker (now, where the
+// platform lets it change live), from Settings > Appearance > Desktop.
+ipcMain.on("desktop-shell-preferences:get", (event) => {
+  let value = null;
+  try {
+    if (isDesktopUiSender(event)) value = readShellPreferences(app.getPath("userData"));
+  } catch {
+    value = null;
+  }
+  event.returnValue = value;
+});
+ipcMain.handle("desktop-shell-preferences:set", desktopUiOnly("desktop-shell-preferences:set", (_event, patch) => {
+  const saved = writeShellPreferences(app.getPath("userData"), patch);
+  if (saved) {
+    try { session.defaultSession.setSpellCheckerEnabled(saved.spellcheck); } catch { /* no spell checker here */ }
+    if (patch && ("botHotkeys" in patch || "botHotkeyModifier" in patch)) applyBotHotkeyConfig();
+  }
+  return saved;
+}));
 ipcMain.handle("app-icon:get", desktopUiOnly("app-icon:get", () => {
   const saved = savedAppIcon();
   return { platform: process.platform, id: saved?.id ?? null, updatedAt: saved?.updatedAt ?? null };
@@ -4047,6 +4166,98 @@ const mascotHotkey = createMascotHotkey({
   },
   log: (line) => slog(line),
 });
+// The menu bar's bot list and the Cmd+Shift+N shortcuts (electron/system-tray.mjs,
+// createBotHotkeys in mascot-hotkey.mjs). The main page is the brain: it sends
+// the roster; a click or a shortcut brings the window up and tells it which
+// bot to open.
+let trayRoster = [];
+function openBotFromShell(botId) {
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  win.webContents.send("desktop:open-bot", { botId: String(botId) });
+}
+// Settings > Appearance > Desktop: the bots' global shortcuts on or off, and
+// which chord (kept with the other shell choices, desktop-shell-preferences.mjs).
+function botHotkeyConfig() {
+  try {
+    const kept = readShellPreferences(app.getPath("userData"));
+    return normalizeBotHotkeyConfig({ enabled: kept.botHotkeys, modifier: kept.botHotkeyModifier });
+  } catch {
+    return normalizeBotHotkeyConfig(null);
+  }
+}
+function applyBotHotkeyConfig() {
+  const config = botHotkeyConfig();
+  desktopTray?.setHotkeys(config);
+  botHotkeys.dispose();
+  if (process.platform === "darwin") botHotkeys.sync(trayRoster.length, config.enabled);
+  applyCaptureHotkey();
+}
+// The bots' chord with 0: one picture of the screen under the pointer, put
+// in the open bot's composer by the page, never sent by itself
+// (electron/screen-capture-hotkey.mjs). The picture goes to the main window
+// only, is never logged and never written to disk here.
+const captureHotkey = createCaptureHotkey({
+  globalShortcut,
+  onPress: () => captureScreenToBot(),
+  log: (line) => slog(line),
+});
+function applyCaptureHotkey() {
+  const config = botHotkeyConfig();
+  captureHotkey.sync(captureAccelerator(process.platform, config.modifier), config.enabled);
+}
+async function captureScreenToBot() {
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (!win) return;
+  let png = null;
+  // macOS hands back the wallpaper alone when Screen Recording is refused: say so instead
+  const refused = capturePermission(process.platform, () => systemPreferences.getMediaAccessStatus("screen")) === "denied";
+  if (!refused) {
+    try {
+      const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+      const sources = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: captureThumbnailSize(display) });
+      const image = pickCaptureSource(sources, display.id)?.thumbnail;
+      if (image && !image.isEmpty()) png = image.toPNG();
+    } catch (error) {
+      slog(`capture hotkey: the screen could not be captured (${error?.name ?? "error"})`);
+    }
+  }
+  if (win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  win.webContents.send("desktop:screen-capture", png
+    ? { png: png.toString("base64") }
+    : { error: refused ? "permission" : "unavailable", platform: process.platform });
+}
+const botHotkeys = createBotHotkeys({
+  globalShortcut,
+  slotFor: (slot) => slotAccelerator(slot, process.platform, botHotkeyConfig().modifier),
+  onSlot: (slot) => {
+    const bot = trayRoster[slot - 1];
+    if (bot) openBotFromShell(bot.id);
+  },
+  log: (line) => slog(line),
+});
+function clearTrayRoster() {
+  trayRoster = [];
+  desktopTray?.setRoster([]);
+  botHotkeys.sync(0);
+}
+ipcMain.on("desktop:tray-roster", (event, value, labels) => {
+  if (!isDesktopUiSender(event)) return;
+  const sender = BrowserWindow.fromWebContents(event.sender);
+  if (!sender || sender !== mainWindow || sender.isDestroyed()) return;
+  trayRoster = normalizeRoster(value);
+  if (labels) desktopTray?.setLabels(labels);
+  desktopTray?.setRoster(trayRoster);
+  // the shortcuts exist only where a menu bar list exists
+  if (process.platform === "darwin") botHotkeys.sync(trayRoster.length, botHotkeyConfig().enabled);
+});
+
 ipcMain.handle("floating-bots:hotkey", (event, config) => {
   if (!isDesktopUiSender(event)) return null;
   return mascotHotkey.configure(config);
@@ -4054,7 +4265,8 @@ ipcMain.handle("floating-bots:hotkey", (event, config) => {
 
 // Caption controls for the overlay-less frameless window. The renderer's
 // buttons are the only way to act on the window, so the channels stay
-// open for the local page; a remote server's page never has them.
+// open; they act only on the sender's own window, so a remote server's page
+// has them too (port of OpenMausBot #3151).
 for (const [channel, act] of [
   ["window:minimize", (win) => win.minimize()],
   ["window:toggle-maximize", (win) => (win.isMaximized() ? win.unmaximize() : win.maximize())],
@@ -4074,6 +4286,11 @@ ipcMain.handle("window:state", (event) => {
 
 ipcMain.handle("desktop:open-external", desktopUiOnly("desktop:open-external", async (_event, rawUrl) => {
   await shell.openExternal(externalWebUrl(rawUrl));
+  return true;
+}));
+// A Connect card's button: grok.com or claude.ai only (app-permissions.mjs).
+ipcMain.handle("desktop:open-connector-setup", desktopUiOnly("desktop:open-connector-setup", async (_event, rawUrl) => {
+  await shell.openExternal(connectorSetupUrl(rawUrl));
   return true;
 }));
 
@@ -4593,7 +4810,6 @@ ipcMain.handle("desktop:capabilities", async (event) =>
 );
 
 const CREDENTIAL_PATCH = {
-  composioApiKey: (value) => ({ composio: { apiKey: value } }),
   xaiApiKey: (value) => ({ xai: { key: value } }),
   boxToken: (value) => ({ box: { token: value } }),
   opencodeGoApiKey: (value) => ({ opencodeGo: { apiKey: value } }),
@@ -4687,6 +4903,8 @@ setCuaStateListener((connection) => {
 });
 
 app.whenReady().then(async () => {
+  // First thing once ready: no session but the app window's reaches the server.
+  serverSessionGuard = { defaultSession: session.defaultSession, serverPort: () => SERVER_PORT };
   installSessionBlock(session.defaultSession, (line) => slog(`network: ${line}`));
   // Cached-before-the-fix attachment responses outlive `no-store`: entries
   // stored under the old one-year immutable policy can replay to a second
@@ -4699,18 +4917,22 @@ app.whenReady().then(async () => {
     clearCache: () => session.defaultSession.clearCache(),
     log: slog,
   });
-  if (process.platform === "win32") {
+  if (process.platform === "win32" || process.platform === "darwin") {
     try {
       desktopTray = createSystemTray({
         Tray, Menu, nativeImage, iconPath: APP_ICON,
         getWindow: () => startupScreen?.window ?? mainWindow,
         onQuit: () => app.quit(),
+        onOpenBot: openBotFromShell,
+        templatePath: path.join(__dirname, "resources/trayTemplate.png"),
       });
+      desktopTray.setHotkeys(botHotkeyConfig());
     } catch (error) {
       // A missing tray must leave a working close/quit path.
       slog(`system tray unavailable: ${error?.message ?? error}`);
     }
   }
+  applyCaptureHotkey();
   // The loading screen opens just after the local server is forked
   // (startServerOn): building its window takes the main thread for about a
   // tenth of a second, and the server's start no longer waits behind it.
@@ -4718,6 +4940,28 @@ app.whenReady().then(async () => {
   // a moment later, unless the workspace is already up.
   setTimeout(openStartupScreen, 150).unref?.();
   if (desktopShutdownStarted) return;
+  // Opened while an update was still copying its files (a silent Windows
+  // install, 2026-10-19): the window used to come up on a bare "Not Found".
+  // Wait on the loading screen until the bundle is whole, else say so.
+  if (app.isPackaged) {
+    const strings = recoveryStrings(recoveryLanguage());
+    const bundle = await waitForUiBundle({
+      check: () => uiBundleState({ resourcesPath: process.resourcesPath }),
+      onWaiting: (state) => {
+        slog(`startup: the app's files are not all in place (${state.missing.slice(0, 5).join(", ")}); waiting, an update may still be installing`);
+        openStartupScreen();
+        startupScreen?.setStatus(strings.installing);
+      },
+    });
+    if (!bundle.complete) {
+      slog(`startup: files still missing after the wait (${bundle.missing.slice(0, 5).join(", ")})`);
+      openStartupScreen();
+      startupScreen?.fail(`${strings.bundleTitle}. ${strings.bundleBody}`);
+      return;
+    }
+    if (bundle.waited) slog("startup: the app's files are in place; starting");
+    if (desktopShutdownStarted) return;
+  }
   session.defaultSession.on("will-download", (_event, item) => {
     item.setSavePath(collisionFreeDownloadPath(app.getPath("downloads"), item.getFilename()));
     revealDownloadWhenDone(item, (filePath) => shell.showItemInFolder(filePath));
@@ -4769,11 +5013,12 @@ app.whenReady().then(async () => {
     // sagax:// is primary; openmausbot:// stays for one release (legacy-names.mjs).
     // A packaged launch smoke must not take sagax:// away from the installed app.
     if (process.env.SAGAX_SMOKE_TEST !== "1" && !PERF_BENCH) for (const scheme of URL_SCHEMES) app.setAsDefaultProtocolClient(scheme);
-    // Chromium adds this capability below JavaScript, so renderer requests
-    // can mutate the local harness while a Full-access shell using curl
-    // cannot impersonate the person operating the desktop app.
-    installDesktopMutationHeader();
   }
+  // Chromium adds the mutation capability below JavaScript (packaged
+  // builds), so renderer requests can mutate the local harness while a
+  // Full-access shell using curl cannot impersonate the person operating
+  // the desktop app. The YouTube player's Referer rule runs in every build.
+  installRequestHeaderRules({ mutationHeader: app.isPackaged });
   // A runtime Dock image overrides the bundle icon with a flat PNG, which
   // on macOS 26 discards the Liquid Glass rendering (build/icon.icon) and
   // drops the icon into the gray "squircle jail". Packaged builds keep the
@@ -4800,7 +5045,6 @@ app.whenReady().then(async () => {
     }
   }
   if (app.isPackaged) {
-    await secureComposioConfig();
     await secureWorkspaceConfig();
   }
   // Boot migrations above are deliberately sequential. From this point on,
@@ -4998,28 +5242,6 @@ app.whenReady().then(async () => {
   // local app is usable. This background network work never gates LAN pairing
   // or the first window.
   if (hostedAccount) void hostedAccount.restore().catch(() => {});
-  // Registration is optional network work. Start it only after the local
-  // server and first window are usable, then update the server child over its
-  // private parent port so Connected Apps becomes available without restart.
-  // Registering while the store is unreadable would mint a SECOND installation
-  // identity for a user who already has one — the first thing they would
-  // notice is every connected app gone, permanently.
-  if (credentialStoreUnavailable) {
-    slog("skipping connected-apps registration: the credential store was unreadable this launch");
-  }
-  if (!desktopRemoteAccess && app.isPackaged && composioBrokerUrl() && !credentialStoreUnavailable) {
-    void updateSecureCredentialDocument(async (credentials) => {
-      await ensureManagedComposioCredentials({
-        brokerUrl: composioBrokerUrl(),
-        credentials,
-        // The shared credential state performs the one atomic encrypted
-        // write after this registration has derived its complete document.
-        saveCredentials: async () => {},
-        log: slog,
-      });
-      return credentials;
-    }).finally(syncManagedComposioCredentials);
-  }
   // in-app auto-update (packaged only) — checks GitHub releases and downloads
   // by itself; only "Restart to update", the person's click, installs
   if (!PERF_BENCH) startUpdater();
@@ -5076,6 +5298,8 @@ app.on("before-quit", (e) => {
   floatingBotWindows.closeAll();
   dataWindows.closeAll();
   mascotHotkey.dispose();
+  botHotkeys.dispose();
+  captureHotkey.dispose();
   startupScreen?.dispose();
   companyBackupSchedule?.close();
   orgLibrary?.close();
@@ -5109,6 +5333,8 @@ app.on("before-quit", (e) => {
   ]);
   const cleanup = Promise.all([
     ownedHelperCleanup,
+    // The organization sign-in cookie is on disk before the process ends.
+    flushSessionCookies(session.defaultSession, { log: slog }),
     stoppingServer.then((stopped) => {
       if (!stopped) slog("server child did not stop before desktop exit; retaining the data-directory lease");
     }),
@@ -5137,5 +5363,5 @@ function releaseDesktopDataDirLease() {
 app.on("will-quit", releaseDesktopDataDirLease);
 app.on("will-quit", () => desktopTray?.destroy());
 // the global key goes with the app, whatever path the quit took
-app.on("will-quit", () => mascotHotkey.dispose());
+app.on("will-quit", () => { mascotHotkey.dispose(); botHotkeys.dispose(); captureHotkey.dispose(); });
 process.once("exit", releaseDesktopDataDirLease);

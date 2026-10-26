@@ -42,7 +42,6 @@ export interface PersonFacts {
 export interface PersonConnections {
   engines: Array<{ id: string; via: EngineVia; signedIn: boolean; key: boolean }>;
   mcpServers: Array<{ id: string; name: string; transport: "remote" | "stdio"; state: "enabled" | "disabled" | "paused" }>;
-  composioApps: Array<{ slug: string; name: string }>;
 }
 
 export interface PeopleDeps {

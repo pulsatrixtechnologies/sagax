@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { gateServer, mcpStdioServer } from "./mcp-gate-config.ts";
+import { customServerGate, gateServer, hasOwnResultBudget, mcpStdioServer, resultBudget, serverResultBudget } from "./mcp-gate-config.ts";
 
 const server = { command: "example-mcp", args: ["--stdio"], env: { TOKEN: "disposable-test-token" } };
 const input = { name: "notes", server, threadId: "disposable-thread", budget: 0 };
@@ -124,5 +124,35 @@ describe("tool directory configuration", () => {
     expect(gateServer({ ...input, toolScope: { allow: [] }, directory: true })!.env).not.toHaveProperty("SAGAX_GATE_DIRECTORY");
     // an unselected URL server is not gated at all; its caller mounts the proxy
     expect(gateServer({ name: "whop", server: remote, threadId: "disposable-thread", budget: 8_000, directory: true })).toBeNull();
+  });
+});
+
+describe("per-server result budget", () => {
+  const env = { SAGAX_MCP_RESULT_BUDGET: "12000" } as NodeJS.ProcessEnv;
+
+  it("orders server, then env, then default", () => {
+    expect(serverResultBudget("fx", { fx: 40_000 }, env)).toBe(40_000);
+    expect(serverResultBudget("fx", { other: 1 }, env)).toBe(12_000);
+    expect(serverResultBudget("fx", undefined, env)).toBe(12_000);
+    expect(serverResultBudget("fx", undefined, {} as NodeJS.ProcessEnv)).toBe(8_000);
+    expect(resultBudget({} as NodeJS.ProcessEnv)).toBe(8_000);
+  });
+
+  it("honours 0 as never trim, even over the env", () => {
+    expect(serverResultBudget("fx", { fx: 0 }, env)).toBe(0);
+    expect(gateServer({ ...input, budget: 0 })).toBeNull();
+  });
+
+  it("gates a URL server unselected only for a positive limit of its own", () => {
+    expect(hasOwnResultBudget("fx", { fx: 5 })).toBe(true);
+    expect(hasOwnResultBudget("fx", { fx: 0 })).toBe(false);
+    expect(hasOwnResultBudget("fx", {})).toBe(false);
+    expect(customServerGate("fx", true, { fx: 40_000 }, env)).toEqual({ budget: 40_000, gateRemote: true });
+    expect(customServerGate("fx", true, undefined, env)).toEqual({ budget: 12_000, gateRemote: false });
+    expect(customServerGate("fx", false, { fx: 40_000 }, env)).toEqual({ budget: 0, gateRemote: false });
+    // without a limit of its own a URL server keeps its native transport
+    expect(gateServer({ ...input, server: remote, budget: 12_000 })).toBeNull();
+    const gated = gateServer({ ...input, server: remote, ...customServerGate("fx", true, { fx: 40_000 }, env) });
+    expect(gated?.env.SAGAX_GATE_BUDGET).toBe("40000");
   });
 });

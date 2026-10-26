@@ -364,6 +364,25 @@
   pointer-events: none;
 }
 
+/* A video YouTube will not play here: its poster, and a way to YouTube. */
+.vpc-embed-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.vpc-embed-fallback .vpc-chip {
+  padding: 9px 16px;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.vpc-embed-fallback .vpc-chip svg {
+  width: 15px;
+  height: 15px;
+}
+
 /* The YouTube embed keeps its own controls: no Sagax overlay on the stage. */
 .vpc-card[data-embed-controls="true"] .vpc-top,
 .vpc-card[data-embed-controls="true"] .vpc-bottom,

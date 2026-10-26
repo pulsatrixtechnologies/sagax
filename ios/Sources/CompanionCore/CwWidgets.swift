@@ -203,6 +203,15 @@ public struct CwActionReceipt: Decodable, Sendable {
 }
 
 public enum CwWidgets {
+    /// A Perspicax view tool (`cw_psa__show_<view>`), the one ConnectWise call
+    /// whose tool row draws its widget (shared/cw-widgets/tool-call.ts
+    /// `isCwViewTool`). Rows stored before 2026-10-20 carry a widget on every
+    /// read; they stay ordinary rows.
+    public static func isViewTool(_ name: String?) -> Bool {
+        guard let name = name?.lowercased() else { return false }
+        return name.range(of: "(^|_)cw_psa_+show_", options: .regularExpression) != nil
+    }
+
     /// The Manage record router, https only. Anything else is not opened. */
     public static func recordLink(_ value: String?) -> String? {
         guard let value, value.count <= 600, let url = URL(string: value), url.scheme == "https",

@@ -5,7 +5,7 @@
 // roots the message file route uses. Nothing in this tab turns a host path
 // into a request.
 import { copyText } from "@/lib/copy-text";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Check,
@@ -49,7 +49,10 @@ import {
   type FileSort,
   type ThreadFile,
 } from "@/lib/chat-files";
+import { filePreviewKind, loadTextPreview } from "@/lib/file-preview";
 import { AttachmentPreviewDialog, canonicalDownloadFilename, type PreviewImage } from "../AttachmentPreview";
+import { HoverCard, type AnchorProps } from "../LinkHoverCard";
+import { AnchoredPopover } from "@/components/AnchoredPopover";
 
 const KIND_ICON: Record<FileKind, LucideIcon> = {
   image: ImageIcon,
@@ -218,6 +221,49 @@ function Thumbnail({ threadId, file, kind, className, iconSize = 20 }: { threadI
       )}
     </span>
   );
+}
+
+/** The hover card of a library file (reference design): a fixed-size card,
+ * so nothing moves while its text loads. Text is read only once it opens. */
+export function FilePreviewCard({ threadId, file }: { threadId: string; file: ThreadFile }) {
+  const kind = classifyFile(file);
+  const preview = filePreviewKind(file);
+  const Icon = KIND_ICON[kind];
+  const [text, setText] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (preview !== "text") return;
+    const controller = new AbortController();
+    loadTextPreview(threadFileUrl(threadId, file.id), controller.signal)
+      .then((value) => { if (!controller.signal.aborted) setText(value); })
+      .catch(() => { if (!controller.signal.aborted) setFailed(true); });
+    return () => controller.abort();
+  }, [preview, threadId, file.id]);
+  return (
+    <div data-file-preview-card={preview} className="w-72 overflow-hidden rounded-2xl bg-composer text-ink shadow-lg ring-1 ring-hairline/40">
+      <div className="flex h-40 items-center justify-center overflow-hidden bg-inset text-ink-secondary">
+        {preview === "image" && !failed ? (
+          <img src={threadFileUrl(threadId, file.id, true)} alt="" decoding="async" onError={() => setFailed(true)} className="size-full object-cover" />
+        ) : preview === "text" && text !== null && !failed ? (
+          <pre dir="auto" className="size-full overflow-hidden whitespace-pre-wrap break-words px-3 py-2 text-left font-mono text-[11px] leading-[13px] text-ink-secondary">{text || " "}</pre>
+        ) : preview === "text" && !failed ? (
+          <LoaderCircle size={18} aria-label={t("botPanel.files.previewLoading")} className="animate-spin motion-reduce:animate-none" />
+        ) : (
+          <Icon size={32} aria-hidden="true" />
+        )}
+      </div>
+      <div className="min-w-0 px-3 py-2.5">
+        <div className="truncate text-[13px] font-semibold leading-5">{file.name}</div>
+        <div className="truncate text-[11.5px] leading-4 text-ink-secondary">{file.available ? meta(file) : t("botPanel.files.unavailable")}</div>
+      </div>
+    </div>
+  );
+}
+
+/** A file's open button with its hover card. */
+function FileHover({ threadId, file, children }: { threadId: string; file: ThreadFile; children: (anchor: AnchorProps | null) => ReactNode }) {
+  if (!file.available) return <>{children(null)}</>;
+  return <HoverCard kind="file-preview" card={() => <FilePreviewCard threadId={threadId} file={file} />}>{(anchor) => children(anchor)}</HoverCard>;
 }
 
 function meta(file: ThreadFile): string {
@@ -501,16 +547,17 @@ export function FilesBrowser({ threadId, files, error, onRetry, onJump, initialF
             const kind = classifyFile(file);
             return (
               <li key={file.id} className={cn("group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-hairline-weak", !file.available && "opacity-60")}>
-                <button
+                <FileHover threadId={threadId} file={file}>{(anchor) => <button
                   type="button"
-                  onClick={() => open(file)}
+                  {...(anchor ?? {})}
+                  onClick={(event) => { anchor?.onClick(event); if (!event.defaultPrevented) open(file); }}
                   disabled={!file.available}
                   aria-label={t("botPanel.files.openAria", { name: file.name })}
-                  title={file.available ? file.name : t("botPanel.files.unavailableHint")}
+                  title={file.available ? undefined : t("botPanel.files.unavailableHint")}
                   className="block aspect-square w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60 disabled:cursor-default"
                 >
                   <Thumbnail threadId={threadId} file={file} kind={kind} className="size-full" iconSize={24} />
-                </button>
+                </button>}</FileHover>
                 <div className="min-w-0 px-2 py-1.5">
                   <div className="truncate text-[12px] text-ink" title={file.name}>{file.name}</div>
                   <div className="truncate text-[10.5px] text-ink-secondary">
@@ -528,12 +575,13 @@ export function FilesBrowser({ threadId, files, error, onRetry, onJump, initialF
             const kind = classifyFile(file);
             return (
               <li key={file.id} className="flex min-w-0 items-center gap-2.5 border-b border-hairline-weak py-2 last:border-b-0">
-                <button
+                <FileHover threadId={threadId} file={file}>{(anchor) => <button
                   type="button"
-                  onClick={() => open(file)}
+                  {...(anchor ?? {})}
+                  onClick={(event) => { anchor?.onClick(event); if (!event.defaultPrevented) open(file); }}
                   disabled={!file.available}
                   aria-label={t("botPanel.files.openAria", { name: file.name })}
-                  title={file.available ? file.name : t("botPanel.files.unavailableHint")}
+                  title={file.available ? undefined : t("botPanel.files.unavailableHint")}
                   className={cn("flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-default", !file.available && "opacity-60")}
                 >
                   <Thumbnail threadId={threadId} file={file} kind={kind} className="size-10 shrink-0 rounded-lg" iconSize={17} />
@@ -543,7 +591,7 @@ export function FilesBrowser({ threadId, files, error, onRetry, onJump, initialF
                       {file.available ? meta(file) : `${t("botPanel.files.unavailable")} · ${formatWhen(file.at)}`}
                     </span>
                   </span>
-                </button>
+                </button>}</FileHover>
                 {actions(file)}
               </li>
             );
@@ -573,10 +621,12 @@ function PopoverMenu({ label, icon, buttonClass, menuLabel, children, className,
 } & Record<`data-${string}`, string>) {
   const [open, setOpen] = useState(defaultOpen);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuElRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!open) return;
     const onPointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && !ref.current?.contains(event.target)) setOpen(false);
+      if (event.target instanceof Node && !ref.current?.contains(event.target) && !menuElRef.current?.contains(event.target)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -593,13 +643,13 @@ function PopoverMenu({ label, icon, buttonClass, menuLabel, children, className,
   const close = () => setOpen(false);
   return (
     <div ref={ref} className={cn("relative", className)} {...data}>
-      <button type="button" aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={buttonClass}>
+      <button ref={buttonRef} type="button" aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={buttonClass}>
         {icon}
       </button>
       {open && (
-        <div role="menu" aria-label={menuLabel} className={cn("absolute right-0 top-full z-30 mt-1 flex flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] shadow-lg popover-surface", wide ? "w-[220px]" : "w-[200px]")}>
+        <AnchoredPopover anchorRef={buttonRef} popoverRef={menuElRef} role="menu" aria-label={menuLabel} align="end" className={cn("flex flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] shadow-lg popover-surface", wide ? "w-[220px]" : "w-[200px]")}>
           {children(close)}
-        </div>
+        </AnchoredPopover>
       )}
     </div>
   );

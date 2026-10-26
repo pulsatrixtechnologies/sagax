@@ -133,6 +133,8 @@ export interface CaptureReport {
   topics?: number;
   /** Facts added to About me. */
   aboutMe?: number;
+  /** Facts memory already held: the "N already known" of the receipt. */
+  known?: number;
   note?: string;
 }
 

@@ -284,8 +284,7 @@ The row above, plus:
   "shared": [{ "botId": "5e38...", "botName": "Atlas", "level": "use", "via": "team" }],
   "connections": {
     "engines": [{ "id": "claude", "via": "subscription", "signedIn": true, "key": false }],
-    "mcpServers": [{ "id": "github", "name": "github", "transport": "remote", "state": "enabled" }],
-    "composioApps": []
+    "mcpServers": [{ "id": "github", "name": "github", "transport": "remote", "state": "enabled" }]
   },
   "routinesAsRunner": [{ "id": "r_1", "name": "Daily digest", "botId": "5e38..." }],
   "permissions": {
@@ -302,9 +301,8 @@ unknown and admin-only keys dropped) or `defaults` (Perspicax sent none: the
 member defaults). `narrowedBy` names the person sheet settings applied on top
 (`sagax_bots` when it says use only, `sagax_integrations` when off).
 
-Connected apps (Composio) belong to the workspace in Sagax, not to a person:
-`composioApps` is always empty. `mcpServers[].state` is `paused` while
-Perspicax `sagax_integrations` is off for the person.
+`mcpServers[].state` is `paused` while Perspicax `sagax_integrations` is off
+for the person.
 
 ### `POST people/{principal}/disable`
 
@@ -773,11 +771,40 @@ their own timeout (`decision: "expired"`, `by` null), newest first. `by`
 names the person when Sagax knows them, else the device label. A card that
 expired before that day has no row.
 
+### Organization approval rules (2026-10-21)
+
+| Method and path | Role | What |
+|---|---|---|
+| `GET org-approvals` | admin | `{ alwaysAllow, rules }` |
+| `POST org-approvals` | admin | `{ alwaysAllow: true \| false }` |
+| `POST org-approvals/rules` | admin | `{ when, behavior: "ask" \| "deny" }`, 201 `{ rule }` |
+| `POST org-approvals/rules/{id}` | admin | `{ when?, behavior?, enabled? }` |
+| `POST org-approvals/rules/{id}/remove` | admin | remove one rule |
+
+An organization rule is a custom rule in plain words
+(`shared/custom-rules.ts`) that an admin writes for every person and every
+bot of the server. It only restricts: Ask first or Refuse, never Allow
+(400). It wins over a person's own rule of the same behavior, and members
+see it in their bot's Rules card, marked "Required by your administrator",
+without a way to change or remove it (`/api/custom-rules/:id` answers 403
+`org_rule_locked`). A rule view is `{ id, when, behavior, enabled,
+recognized, createdAt, updatedAt }`; `recognized` false means the words name
+nothing the reviewer can test, so the rule holds nothing. At most 100.
+
+`alwaysAllow` false (on by default) turns "Always allow" off for everyone:
+an Allow answers that one card. Every answer that would save a standing
+grant (a session allow, a saved command, an Always allow rule or key) is
+refused with 403 `org_always_allow_off`, no allow rule is saved or turned
+on, and the standing grants people already saved stop answering while it is
+off (they answer again when it is back on). Each change is an `approval`
+row of the admin activity (`org.approvals.*`). Kept in
+`custom-approval-rules.json` under `org`; `server/custom-rules-org.ts`.
+
 ## Connections
 
 | Method and path | Role | What |
 |---|---|---|
-| `GET connections` | admin | engines, people's connections, MCP servers, Composio, marketplaces, skills library |
+| `GET connections` | admin | engines, people's connections, MCP servers, marketplaces, skills library |
 | `POST connections/test` | admin | test one line |
 
 ### `GET connections`
@@ -788,13 +815,12 @@ expired before that day has no row.
   "people": [{
     "person": { "principalId": "pr_7c1e...", "sub": "01J9...", "name": "Bob" },
     "engines": [{ "id": "claude", "via": "subscription", "ok": null, "checkedAt": null }],
-    "mcpServers": 1, "composioApps": 0
+    "mcpServers": 1
   }],
   "mcpServers": [
     { "id": "docs", "name": "docs", "scope": "org", "owner": null, "transport": "remote", "state": "enabled" },
     { "id": "github", "name": "github", "scope": "person", "owner": { "principalId": "pr_7c1e...", "sub": "01J9...", "name": "Bob" }, "transport": "remote", "state": "enabled" }
   ],
-  "composio": { "configured": true, "apps": [{ "slug": "gmail", "name": "gmail", "people": 3 }] },
   "marketplaces": [{ "id": "acme", "name": "acme", "url": "acme/plugins", "allowed": true, "plugins": 12 }],
   "skills": [{ "id": "digest", "name": "digest", "source": "https://github.com/acme/skills", "version": "3f2a9c1b7d4e", "bots": 2 }]
 }
@@ -806,10 +832,6 @@ expired before that day has no row.
 - `people[].engines[].ok` and `checkedAt` stay null: Sagax does not check a
   person's engine in the background; `POST connections/test` with
   `principalId` does it on demand.
-- `composio.apps`: the workspace's connected apps (read from Composio, at
-  most 5 s, empty on a timeout); `people` counts the owners of bots granted
-  the app. `composioApps` per person is 0: connected apps belong to the
-  workspace in Sagax.
 - `skills`: the organization's skills library (empty while the library is
   off); `version` is the first 12 hex of the skill's SHA-256.
 
@@ -836,7 +858,6 @@ Answers `{ok, latencyMs, reason, label}`, for example
   `timeout`, `environment_refused` or `no_environment`. No variable value,
   argument or stderr line is ever in the answer or the log.
 - `marketplace`: its address (or `https://github.com/<owner/repo>`) answers.
-- `composio`: Composio answers with the connected apps.
 
 Each test has 10 s. Audited `connections.test`.
 

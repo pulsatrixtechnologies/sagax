@@ -642,3 +642,13 @@ describe("shared files", () => {
     expect(readdirSync(ATTACHMENTS_DIR)).toEqual([`${UPLOAD_A}.pdf`]);
   });
 });
+
+describe("image size limit shared with the iOS app", () => {
+  it("keeps AttachmentPolicy.maximumImageBytes equal to IMAGE_MAX_BYTES", async () => {
+    const { readFileSync } = await import("node:fs");
+    const swift = readFileSync(new URL("../ios/Sources/CompanionCore/MessageAttachments.swift", import.meta.url), "utf8");
+    const match = /maximumImageBytes = (\d+) \* 1_024 \* 1_024/.exec(swift);
+    expect(match).not.toBeNull();
+    expect(Number(match![1]) * 1024 * 1024).toBe(IMAGE_MAX_BYTES);
+  });
+});

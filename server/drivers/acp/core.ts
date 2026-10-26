@@ -98,11 +98,13 @@ import { recoveryPromptFor } from "../../resume-recovery.ts";
 import { sessionIdlePolicy } from "../session-idle.ts";
 import { newTurnLatency, noteTurnActivity, turnLatencyLine, type TurnLatency } from "./turn-latency.ts";
 import { classifyError } from "../retry.ts";
+import { engineFailureKind, engineFailureMessage } from "../engine-errors.ts";
 import { canUseMcpServer, narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
 import { gateServer, mcpStdioServer } from "../../mcp-gate-config.ts";
 import type { GateAnswer, GateAsk } from "../../mcp-gate-approval.ts";
 import { takeSafetyNote } from "../../safety-review.ts";
 import { gatedMcpAsk } from "./gated-mcp-ask.ts";
+import { connectorAsk } from "./connector-ask.ts";
 import { TURN_TOKEN_ENV, warmCommsEnv } from "../spawn-contract.ts";
 import { acpHostToolRequest } from "../host-tools.ts";
 import { readUseToolCall } from "../../../shared/mcp-gateway-call.ts";
@@ -143,6 +145,34 @@ function acpRpcError(value: any, method: string): Error {
   });
 }
 
+/** A continuation nudge sent after a reasoning-only empty response: the live
+ * session kept its reasoning but committed no content, so ask it to finish. */
+const REASONING_CONTINUE_NUDGE =
+  "You returned your reasoning but no answer. Give your final answer now, or make your next tool call.";
+
+/** How many times a reasoning-only empty response is nudged before the turn
+ * ends gracefully. One by default; SAGAX_ACP_REASONING_CONTINUE_MAX overrides
+ * it (0 turns the continuation off and surfaces the failure as before). */
+function reasoningContinueMax(): number {
+  const raw = Number(process.env.SAGAX_ACP_REASONING_CONTINUE_MAX);
+  return Number.isInteger(raw) && raw >= 0 ? raw : 1;
+}
+
+/** Grok/xAI (and any ACP engine that mirrors it) reporting that the model
+ * spent the turn on reasoning and committed no content or tool call: a
+ * JSON-RPC -32603 whose text carries the `reasoning_only` finish reason
+ * ("empty response from model (reasoning_only)"). Specific on purpose, so a
+ * genuine internal error still surfaces untouched. */
+function isReasoningOnlyEmpty(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { code?: unknown; message?: unknown; data?: any };
+  if (value.code !== -32603) return false;
+  const text = [value.message, value.data?.details, value.data?.message, value.data?.error?.message]
+    .filter((part): part is string => typeof part === "string")
+    .join(" ");
+  return /\breasoning_only\b/i.test(text);
+}
+
 export interface AcpConfig {
   cli: string;
   fullAuto: boolean;
@@ -172,6 +202,9 @@ interface AcpTurn {
    * turn mounted through the gate. The agent's own ask about a call to one
    * of them is answered allow-once; the gate decides (gated-mcp-ask.ts). */
   gatedServers?: ReadonlySet<string>;
+  /** Every MCP server Sagax mounted for this turn: a use_tool call to any
+   * other is an engine's own connector (connector-ask.ts). */
+  mountedServers?: ReadonlySet<string>;
   /** this turn's stage timestamps, logged once when it settles */
   latency?: TurnLatency;
   state: {
@@ -347,7 +380,7 @@ export interface AcpSupport {
    * MCP server is mounted through the gate with an approval socket, and
    * only `approvalReadOnly` tools run unasked. Decided once per turn; the
    * same decision reaches spawnArgs as `launch.approvalGate`. */
-  approvalGate?(config: AcpConfig, turn: SendTurnInput): boolean;
+  approvalGate?(config: AcpConfig, turn: SendTurnInput, context?: { env: Record<string, string | undefined>; cwd: string }): boolean;
   /** The reviewed read-only tools of one mounted server (upstream names). */
   approvalReadOnly?(server: { name: string; builtin: boolean; spec?: McpServerSpec }, botId?: string): string[];
   /** Provider credential variables this ACP child is allowed to inherit. */
@@ -443,7 +476,7 @@ export interface AcpSupport {
    *  snapshot share `transformEnv` and must not see a per-turn overlay. */
   applyTurnEnv?(
     env: Record<string, string | undefined>,
-    ctx: { model?: string; requestedModel?: string; fullAuto: boolean; botId?: string; cwd: string; toolScope?: SendTurnInput["toolScope"]; withholdHostTools?: boolean; localKeyPrincipal?: string; threadId: string; mcpServers: Array<{ name: string; command: string; args: string[]; env: Array<{ name: string; value: string }> }> },
+    ctx: { model?: string; requestedModel?: string; fullAuto: boolean; botId?: string; cwd: string; toolScope?: SendTurnInput["toolScope"]; withholdHostTools?: boolean; accountConnectors?: boolean; approvalGated?: boolean; localKeyPrincipal?: string; threadId: string; mcpServers: Array<{ name: string; command: string; args: string[]; env: Array<{ name: string; value: string }> }> },
   ): void;
   /** Organization server (SendTurnInput.access): point this one turn's child
    *  at the payer's own home and key, never the server's own login.
@@ -490,7 +523,7 @@ export interface AcpSupport {
   mcpToolNames?: "grok";
   /** A context section added to the volatile half each turn. The section
    * split (prompt-split.ts) re-sends it only when its text changes. */
-  volatileSection?(input: { botId?: string; serverNames: string[] }): { id: string; text: string } | null;
+  volatileSection?(input: { botId?: string; serverNames: string[]; sessionId?: string; threadId?: string; accountConnectors?: boolean }): { id: string; text: string } | null;
   /** A tool call finished successfully, with the input it was started with. */
   onToolCompleted?(input: { botId?: string; rawInput: unknown }): void;
   /** Ask once more when the agent sends nothing at all (no text, thought or
@@ -843,6 +876,10 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         ? new LinkSignInController(support.linkSignIn, { cli: config.cli, environment: () => childEnv(), onAuthenticated: refreshModels })
         : null;
       const listeners = new Set<RuntimeEventListener>();
+      let disposing = false;
+      const requireRunning = () => {
+        if (disposing) throw new Error(`${support.displayName} is shutting down`);
+      };
       interface Turn {
         stop: () => void;
         interrupt: () => void;
@@ -1099,15 +1136,6 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         if (agents) {
           servers.push({ name: "agents", command: agents.command, args: agents.args, env: acpEnv(agents.env) });
         }
-        const composio = turn.integrations?.composio;
-        if (composio) {
-          servers.push({
-            name: "composio",
-            command: composio.command,
-            args: composio.args,
-            env: acpEnv(composio.env),
-          });
-        }
         const browser = turn.integrations?.browser;
         if (browser) {
           servers.push({ name: "browser", command: browser.command, args: browser.args, env: acpEnv(browser.env) });
@@ -1155,7 +1183,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             ...(custom.has(server.name) ? { spec: customSpecs[server.name] } : {}),
           }, turn.botId) ?? [],
         });
-        // Sagax's own servers (agents, composio, browser, computer) name their
+        // Sagax's own servers (agents, browser, computer) name their
         // tools admissibly; connectors (Perspicax profiles, URL and stdio
         // servers) can name them anything, so those ride the gate.
         const toolNames = support.mcpToolNames;
@@ -1324,7 +1352,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           cwd,
           env,
           stdio: ["pipe", "pipe", "pipe"],
-        });
+        }, "bot");
         let nextId = 1;
         const privateResponses = new Set<number>();
         const rpcPending = new Map<
@@ -1567,6 +1595,10 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           const mcpTool = !isQuestion && !["execute", "edit", "delete", "move"].includes(kind) && /^(?:mcp__)?[a-z][\w-]{0,63}__[a-z][a-z0-9_]{0,63}$/i.test(mcpTitle)
             ? mcpTitle
             : undefined;
+          // An engine's own connector (Grok's use_tool to the xAI account's
+          // cloud connectors): its arguments for the card, and whether it
+          // acts outside the app, fail closed (connector-ask.ts).
+          const connector = isQuestion || isShellCommand ? { engineConnector: false, outward: false } : connectorAsk(toolCall, current.mountedServers);
           const rawSummary = String(toolCall.rawInput?.command ?? toolCall.title ?? tool);
           const summary = rawSummary.slice(0, isQuestion ? MAX_QUESTION_TEXT : 200);
           // One structured question beside the flat choices: the richer card
@@ -1591,7 +1623,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             if (!current.asks.delete(requestId)) return "unavailable";
             clearTimeout(timer);
             const want = behavior === "allow" ? "allow" : "reject";
-            const forSession = want === "allow" && always === true && !isQuestion && !current.controlsHost;
+            const forSession = want === "allow" && always === true && !isQuestion && !current.controlsHost && !connector.outward;
             // A structured card replies in the Q:/A: block format; recover the
             // picked label from it so exact-match keeps working. Flat clients
             // send the bare label, which the single-question fallback inside
@@ -1608,7 +1640,10 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 ? named.length === 1 && typeof named[0].optionId === "string" ? named[0].optionId : null
                 : forSession
                   ? optionAlways ?? optionFor("allow")
-                  : optionFor(want);
+                  // an outward call is allowed once, never Grok's allow_always
+                  : connector.outward && want === "allow"
+                    ? options.find((o) => o.kind === "allow_once" && typeof o.optionId === "string")?.optionId ?? null
+                    : optionFor(want);
             // the agent keeps its own allow_always; when it offered none, the
             // driver keeps the operation for the session instead
             if (forSession && !optionAlways && optionId && operationKey) {
@@ -1666,8 +1701,12 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             choices: askQuestions?.[0]?.options.map(option => option.label) ?? (isQuestion ? questionChoices : undefined),
             ...(askQuestions ? { questions: askQuestions } : {}),
             approvalScope: current.controlsHost ? "local-computer" : undefined,
-            // the driver can honor a session-wide allow either way
-            allowSession: !isQuestion && !current.controlsHost ? true : undefined,
+            // the driver can honor a session-wide allow either way, except
+            // for an outward call (review of #943): once each time
+            allowSession: !isQuestion && !current.controlsHost && !connector.outward ? true : undefined,
+            ...(connector.input ? { input: connector.input } : {}),
+            ...(connector.engineConnector ? { engineConnector: true } : {}),
+            ...(connector.outward ? { outbound: true } : {}),
           });
         };
 
@@ -1749,7 +1788,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 (current.toolInputs ??= new Map()).set(u.toolCallId, u.rawInput);
               }
               // Grok's use_tool reads as the MCP tool it runs, not "Use Tool"
-              const useTool = readUseToolCall(u.rawInput);
+              const useTool = readUseToolCall(u.rawInput, { title: u.title, meta: u._meta });
               const toolTitle = useTool?.id ?? (typeof u.title === "string" ? u.title : undefined);
               if (typeof u.toolCallId === "string" && toolTitle && isCwTool(toolTitle)) {
                 (current.cwToolNames ??= new Map()).set(u.toolCallId, toolTitle);
@@ -1905,8 +1944,10 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
       };
 
       const sendTurn = async (turn: SendTurnInput) => {
+        requireRunning();
         const latency = newTurnLatency(Date.now(), turn.receivedAt);
         if (startupModelRefresh) await startupModelRefresh;
+        requireRunning();
         const parsedScope = parseToolScope(turn.toolScope);
         if (!parsedScope.ok) throw new Error(parsedScope.error);
         turn = { ...turn, toolScope: parsedScope.scope };
@@ -1950,13 +1991,16 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         if (
           support.requireAuthenticationBeforeSpawn
           && !skipSubscriptionAuthForLocalInject(turn.model)
-          && !(await support.isAuthenticated(env, turnConfig, instanceId))
         ) {
-          if (turn.warmOnly === true) throw new Error(support.loginNote);
-          emit({ ...base(threadId, turnId), type: "turn.started" });
-          emit({ ...base(threadId, turnId), type: "runtime.error", message: support.loginNote, setup: true });
-          emit({ ...base(threadId, turnId), type: "turn.completed", ok: false, stopReason: "auth_required", cost: null });
-          return { turnId };
+          const authenticated = await support.isAuthenticated(env, turnConfig, instanceId);
+          requireRunning();
+          if (!authenticated) {
+            if (turn.warmOnly === true) throw new Error(support.loginNote);
+            emit({ ...base(threadId, turnId), type: "turn.started" });
+            emit({ ...base(threadId, turnId), type: "runtime.error", message: support.loginNote, setup: true });
+            emit({ ...base(threadId, turnId), type: "turn.completed", ok: false, stopReason: "auth_required", cost: null });
+            return { turnId };
+          }
         }
         const resolvedModel = support.resolveTurnModel?.(turn.model, env);
         // On a call (keepWarm) the pooled process keeps one native session
@@ -1978,9 +2022,11 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             : turn;
         // One decision per turn, shared by the MCP mounts and spawnArgs: a
         // turn can never get the ungated mode with ungated servers.
-        const approvalGated = support.approvalGate?.(turnConfig, cliTurn) === true;
+        const approvalGated = support.approvalGate?.(turnConfig, cliTurn, { env, cwd }) === true;
         const mcpServers = acpMcpServers(callAgentsEnv ? withAgentsEnv(callAgentsEnv) : turn, approvalGated);
-        const sessionServersKey = callAgentsEnv
+        // Masked only when the turn files were written (warmCommsEnv falls
+        // back to the env on a write failure, which must re-establish).
+        const sessionServersKey = callAgentsEnv?.SAGAX_COMMS_TOKEN_FILE
           ? acpMcpServers(withAgentsEnv({
             ...callAgentsEnv,
             ...Object.fromEntries(TURN_TOKEN_ENV.filter((key) => key in callAgentsEnv).map((key) => [key, "(turn token)"])),
@@ -1989,6 +2035,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         support.applyTurnEnv?.(env, {
           model: resolvedModel, requestedModel: turn.model, fullAuto: turnConfig.fullAuto === true, botId: turn.botId, cwd, toolScope: turn.toolScope,
           withholdHostTools: turn.withholdHostTools === true,
+          accountConnectors: turn.grokCloudConnectors === true,
+          approvalGated,
           localKeyPrincipal: turn.access?.localKeyPrincipal,
           threadId, mcpServers,
         });
@@ -1998,6 +2046,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             ? await support.resolveCommand(env, turnConfig, instanceId)
             : { command: turnConfig.cli };
         } catch (error) {
+          requireRunning();
           // a warm shows nothing in the thread: the call's first turn reports it
           if (turn.warmOnly === true) throw error;
           emit({ ...base(threadId, turnId), type: "turn.started" });
@@ -2010,6 +2059,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           emit({ ...base(threadId, turnId), type: "turn.completed", ok: false, stopReason: "setup_required", cost: null });
           return { turnId };
         }
+        requireRunning();
 
         // The spawn contract: everything that changes what process a turn
         // gets. The model rides argv where a support passes -m, and a
@@ -2300,6 +2350,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           turnConfig,
           controlsHost,
           ...(approvalGated ? { gatedServers: new Set(mcpServers.map((server) => server.name)) } : {}),
+          mountedServers: new Set(mcpServers.map((server) => server.name)),
           state,
           latency,
           acknowledge,
@@ -2614,7 +2665,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             // a change re-sends that section alone.
             let volatileSections = turn.systemVolatileSections;
             const extraSection = halves.stable !== null
-              ? support.volatileSection?.({ botId: turn.botId, serverNames: mcpServers.map((server) => server.name) }) ?? null
+              ? support.volatileSection?.({ botId: turn.botId, serverNames: mcpServers.map((server) => server.name), sessionId, threadId, accountConnectors: turn.grokCloudConnectors === true }) ?? null
               : null;
             if (extraSection && extraSection.text.trim()) {
               halves = { ...halves, volatile: halves.volatile ? `${halves.volatile}\n\n${extraSection.text}` : extraSection.text };
@@ -2672,9 +2723,9 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             acknowledge();
             const promptIdleMs = promptIdleTimeoutMs();
             const quiet = startQuietWatch(threadId, session, current);
-            const sendPrompt = () => request(
+            const sendPrompt = (promptText: string = text) => request(
               "session/prompt",
-              { sessionId, prompt: [{ type: "text", text }, ...imageBlocks] },
+              { sessionId, prompt: [{ type: "text", text: promptText }, ...imageBlocks] },
               undefined,
               undefined,
               promptIdleMs,
@@ -2702,32 +2753,81 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             }) ?? 0;
             if (stallMs > 0) latency.stallMs = stallMs;
             let result: any;
-            if (stallMs > 0) {
-              state.promptActivity = false;
-              let stalled = false;
-              const stallTimer = setTimeout(() => {
-                if (state.promptActivity || state.settled || state.stopped || session.closing || session.current !== current
-                    || current.asks.size || current.runningTools.size) return;
-                stalled = true;
-                latency.stallRetried = true;
-                emit({
-                  ...base(threadId, turnId),
-                  type: "runtime.notice",
-                  message: `${support.displayName} sent nothing for ${Math.round(stallMs / 1000)} s, so Sagax asked again.`,
-                });
-                session.acp.send({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId } });
-              }, stallMs);
-              stallTimer.unref?.();
+            // A reasoning-capable engine (Grok/xAI-managed, and any other ACP
+            // engine that mirrors it) can spend a turn's whole output budget on
+            // reasoning and commit no content and no tool call. Grok reports
+            // exactly that over session/prompt as an rpc -32603 whose detail is
+            // "empty response from model (reasoning_only)". Nothing streamed,
+            // nothing ran and nothing was approved, so the live session is
+            // healthy: nudge it to finish on the same session instead of
+            // breaking the bot with a hard internal error. Bounded, so a model
+            // that only ever reasons ends gracefully rather than looping.
+            const reasoningMax = reasoningContinueMax();
+            let reasoningRetries = 0;
+            for (;;) {
               try {
-                result = await sendPrompt();
-              } finally {
-                clearTimeout(stallTimer);
+                if (reasoningRetries === 0 && stallMs > 0) {
+                  state.promptActivity = false;
+                  let stalled = false;
+                  const stallTimer = setTimeout(() => {
+                    if (state.promptActivity || state.settled || state.stopped || session.closing || session.current !== current
+                        || current.asks.size || current.runningTools.size) return;
+                    stalled = true;
+                    latency.stallRetried = true;
+                    emit({
+                      ...base(threadId, turnId),
+                      type: "runtime.notice",
+                      message: `${support.displayName} sent nothing for ${Math.round(stallMs / 1000)} s, so Sagax asked again.`,
+                    });
+                    session.acp.send({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId } });
+                  }, stallMs);
+                  stallTimer.unref?.();
+                  try {
+                    result = await sendPrompt();
+                  } finally {
+                    clearTimeout(stallTimer);
+                  }
+                  if (stalled && result?.stopReason === "cancelled" && !state.promptActivity && !state.stopped && !state.settled && !session.closing) {
+                    result = await sendPrompt();
+                  }
+                } else {
+                  result = await sendPrompt(reasoningRetries === 0 ? text : REASONING_CONTINUE_NUDGE);
+                }
+              } catch (promptError) {
+                // Only a reasoning-only empty response that produced nothing is
+                // safe to re-prompt: with content buffered or an item emitted,
+                // a nudge could duplicate work, so fall through to surface it.
+                const reasoningOnly = isReasoningOnlyEmpty(promptError) && !state.producedItem && !state.text.trim();
+                if (reasoningOnly && reasoningRetries < reasoningMax
+                    && !state.stopped && !state.settled && !session.closing
+                    && session.current === current && session.sessionId === sessionId
+                    && session.child.exitCode === null) {
+                  reasoningRetries += 1;
+                  emit({
+                    ...base(threadId, turnId),
+                    type: "runtime.notice",
+                    message: `${support.displayName} returned its reasoning without an answer, so Sagax asked it to finish.`,
+                  });
+                  continue;
+                }
+                if (reasoningOnly) {
+                  // Bound reached: end the turn with a plain, non-alarming line
+                  // the bot can act on, never the raw "Internal error …
+                  // (session/prompt)". Evict the session so the next turn
+                  // resumes clean, exactly as the generic rpc-failure path does.
+                  console.log(`[acp] ${support.displayName} returned reasoning only after ${reasoningRetries} continuation(s); turn ended gracefully (${threadId})`);
+                  emit({
+                    ...base(threadId, turnId),
+                    type: "runtime.error",
+                    message: `${support.displayName} kept returning its reasoning without a final answer. Nothing was changed. Send the message again, or lower this bot's reasoning effort.`,
+                  });
+                  if (session.child.exitCode === null && !session.closing) closeSession(threadId, "reasoning-only");
+                  settle(threadId, session, false, "reasoning_only");
+                  return;
+                }
+                throw promptError;
               }
-              if (stalled && result?.stopReason === "cancelled" && !state.promptActivity && !state.stopped && !state.settled && !session.closing) {
-                result = await sendPrompt();
-              }
-            } else {
-              result = await sendPrompt();
+              break;
             }
             if (pendingSplitReceipt) {
               // session/prompt resolving is the acceptance boundary: a
@@ -2802,7 +2902,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               emit({
                 ...base(threadId, turnId),
                 type: "runtime.error",
-                message: errorMessage,
+                message: engineFailureMessage(support.displayName, errorMessage) ?? errorMessage,
               });
               settle(threadId, session, false, reason ?? "failed");
             }
@@ -2822,7 +2922,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 settle(threadId, session, true, "cancelled");
                 return;
               }
-              const code = support.classifyError?.(e);
+              const code = support.classifyError?.(e) ?? (engineFailureKind(message) === "credits" ? "insufficient_funds" : undefined);
               // Authentication setup is a user action, not a retry. The
               // classifier is preferred; loginNote remains a compatibility
               // fallback for existing ACP supports.
@@ -2862,7 +2962,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                   return;
                 }
                 acknowledge();
-                if (!state.stopped) emit({ ...base(threadId, turnId), type: "runtime.error", message });
+                if (!state.stopped) emit({ ...base(threadId, turnId), type: "runtime.error", message: engineFailureMessage(support.displayName, message) ?? message });
                 emit({ ...base(threadId, turnId), type: "turn.completed", ok: state.stopped,
                   stopReason: state.stopped ? "cancelled" : "rpc_error", cost: null });
                 return;
@@ -2870,8 +2970,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               emit({
                 ...base(threadId, turnId),
                 type: "runtime.error",
-                message: accountError ? support.describeAccountError?.(code, cliTurn.model) ?? message : message,
-                ...(needsAuth ? { setup: true } : {}),
+                message: (accountError ? support.describeAccountError?.(code, cliTurn.model) : undefined) ?? engineFailureMessage(support.displayName, message) ?? message,
+                ...(needsAuth ? { setup: true } : {}), ...((e as any)?.acpPromptStall === true ? { stalled: true } : {}),
               });
               // Internal RPC failures can leave a live child poisoned just
               // like a silent prompt. Evict before completion listeners can
@@ -2929,14 +3029,14 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
        * an empty folder, in the interactive approval mode, refusing any
        * tool, file or permission request. Off the turn path: upkeep calls
        * it after a chat goes quiet and at the nightly tidy-up. */
-      const generateMemoryText = async (prompt: string, options: TextGenerationOptions = {}): Promise<string> => {
+      const isolatedText = async (prompt: string, options: TextGenerationOptions, folder: string, clientName: string): Promise<string> => {
         if (startupModelRefresh) await startupModelRefresh;
         const turnConfig: AcpConfig = { ...config, fullAuto: false };
         const env = childEnv(turnConfig);
         if (support.requireAuthenticationBeforeSpawn && !(await support.isAuthenticated(env, turnConfig, instanceId))) {
           throw new Error(support.loginNote);
         }
-        const cwd = mkdtempSync(join(tmpdir(), "omb-acp-memory-"));
+        const cwd = mkdtempSync(join(tmpdir(), folder));
         try {
           const turn = { threadId: `memory-text-${newId()}`, text: prompt, approvalMode: "ask", cwd } as SendTurnInput;
           support.applyTurnEnv?.(env, { fullAuto: false, cwd, threadId: turn.threadId, mcpServers: [] });
@@ -2955,6 +3055,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             pickAuthMethod: (methods) => support.pickAuthMethod(methods, spawnEnv),
             authRequired: support.authFailure === "fail-request" ? "if-requested" : support.authFailure === "fail",
             loginNote: support.loginNote,
+            clientName,
             ...(support.configureSession ? {
               configure: ({ request, sessionId, session }) => support.configureSession!({
                 request,
@@ -2976,12 +3077,16 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           try { rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* left for the OS */ }
         }
       };
+      const generateMemoryText = (prompt: string, options: TextGenerationOptions = {}) =>
+        isolatedText(prompt, options, "omb-acp-memory-", "openmausbot_memory");
+      const reviewPermission = (prompt: string, signal?: AbortSignal) =>
+        isolatedText(prompt, { signal }, "omb-acp-review-", "openmausbot_review");
 
       return {
         instanceId,
         driverKind: DRIVER_KIND,
         displayName: input.displayName,
-        ...(support.backgroundText === false ? {} : { generateMemoryText }),
+        ...(support.backgroundText === false ? {} : { generateMemoryText, reviewPermission }),
         enabled: input.enabled,
         get models() {
           return models;
@@ -3006,7 +3111,6 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             agentsMcp: true,
         customMcp: true,
             computerMcp: true,
-            composioMcp: true,
             browserMcp: true,
             dataMcp: true,
             images: support.images !== false,
@@ -3050,10 +3154,16 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           },
         },
         dispose: async () => {
+          disposing = true;
           await deviceSignIn?.dispose();
           await linkSignIn?.dispose();
+          const disposingSessions = Array.from(sessions);
           for (const { stop } of active.values()) stop();
-          for (const threadId of Array.from(sessions.keys())) closeSession(threadId, "dispose");
+          // Settle each running turn before the listeners go: its streamed partial reply is kept, and the turn ends as cancelled.
+          for (const [threadId, session] of disposingSessions) {
+            closeSession(threadId, "dispose");
+            settle(threadId, session, true, "cancelled");
+          }
           for (const [threadId, children] of retiring) {
             for (const child of children) void retireChild(threadId, child);
           }

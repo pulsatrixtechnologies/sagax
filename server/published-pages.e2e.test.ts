@@ -59,3 +59,40 @@ it("serves a published page in its wrapper and sandboxed frame, and stops at onc
     await fixture.close();
   }
 }, 120_000);
+
+it("lot R8 through the real server: rename, the person's edit (secrets out), comments, annotation preview and the public-link switch", async () => {
+  const fixture = await launchVerificationServer();
+  try {
+    const url = fixture.info.url;
+    const pages = new PublishedPages(fixture.info.dataDir);
+    const made = pages.propose({ botId: "b1", threadId: "t1", title: "Rapport", kind: "markdown", content: "# Titre" });
+    if (!made.ok) throw new Error(made.error);
+    const id = made.page.id;
+    const api = async (path: string, method = "GET", body?: unknown) => {
+      const init: RequestInit = body === undefined ? { method } : { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
+      const response = await fetch(`${url}${path}`, init);
+      return { status: response.status, body: await response.json() as any };
+    };
+    expect((await api(`/api/pages/${id}`, "PATCH", { title: "Bilan" })).body.page.title).toBe("Bilan");
+    const edited = await api(`/api/pages/${id}/versions`, "POST", { kind: "presentation", content: "# Un\n\nghp_abcdefghijklmnopqrstuvwxyz0123456789\n\n---\n\n# Deux" });
+    expect(edited.status).toBe(201);
+    const source = await api(`/api/pages/${id}/versions/${edited.body.version}/source`);
+    expect(source.body.version.kind).toBe("presentation");
+    expect(source.body.content).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123456789");
+    expect((await api(`/api/pages/${id}/comments`, "POST", { text: "Plus court" })).status).toBe(201);
+    expect((await api(`/api/pages/${id}/comments`)).body.comments).toHaveLength(1);
+    // the annotation preview: the frame runs only the nonce'd annotation script
+    const preview = await fetch(`${url}/pages/preview/${id}/${edited.body.version}?annotate=1`);
+    const frameSrc = /<iframe src="([^"]+)"/.exec(await preview.text())![1]!.replace(/&amp;/g, "&");
+    expect(frameSrc).toContain("&a=1");
+    const frame = await fetch(`${url}${frameSrc}`, { headers: { "sec-fetch-dest": "iframe" } });
+    expect(frame.headers.get("content-security-policy")).toMatch(/script-src 'nonce-[^']+'/);
+    expect(await frame.text()).toContain("sagax-page-annotation");
+    // the switch: this computer's owner is its admin
+    expect((await api("/api/admin/pages/policy", "PUT", { linkSharing: false })).body).toEqual({ linkSharing: false, readerComments: true });
+    expect((await api(`/api/pages/${id}/publish`, "POST", { version: edited.body.version, access: "link", expiresAt: null })).status).toBe(403);
+    expect((await api(`/api/pages/${id}/publish`, "POST", { version: edited.body.version, access: "org", expiresAt: null })).status).toBe(200);
+  } finally {
+    await fixture.close();
+  }
+}, 120_000);

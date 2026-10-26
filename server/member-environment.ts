@@ -48,6 +48,7 @@
 // (Claude), `<server>__<tool>` (ACP titles, Codex, chat engines' mcpTool).
 import type { ApprovalMode } from "../shared/approval-mode.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../shared/bot-workplace.ts";
+import { sagaxFolder } from "../shared/human-id.ts";
 import type { TurnSpeaker } from "./engine-access.ts";
 import { sensitiveEnvironmentPath } from "./sensitive-path.ts";
 import { USER_SANDBOX_MCP_NAME } from "./user-sandbox-routing.ts";
@@ -107,6 +108,17 @@ export function ownEnvironmentSensitiveRead(input: string | undefined): boolean 
   const path = (args as Record<string, unknown>).path;
   if (path === undefined) return false;
   if (typeof path !== "string") return true;
+  // 2026-10-22 (#875, read-only never a card): the bot's own Sagax-made
+  // workspace (workspaces/<bot>, task-workspaces/<bot>/<thread>,
+  // parallel-worktrees/<bot>/<thread>) sits under the server data dir
+  // (~/.sagax, the legacy ~/.openmausbot), so its own name begins with a dot.
+  // That data-dir dotfile is not a user credential: a read of the bot's own
+  // work area is a plain read, so a turn that is not the owner's own runs it
+  // unasked and it never surfaces a card. Only a credential path BELOW the
+  // workspace root still cards; .ssh, .env, .aws and every real secret
+  // elsewhere stay sensitive (sensitiveEnvironmentPath, unchanged).
+  const made = sagaxFolder(path);
+  if (made) return made.rest.length > 0 && sensitiveEnvironmentPath(made.rest.join("/"));
   return sensitiveEnvironmentPath(path);
 }
 
@@ -187,4 +199,133 @@ export function ownEnvironmentCall(input: {
   if (!input.mountedServers.has(parts.server)) return false;
   const environment = input.environmentPrincipalId?.trim().toLowerCase();
   return Boolean(environment) && environment === input.ownerPrincipalId.trim().toLowerCase();
+}
+
+// 2026-10-19 (JC): a person's own destinations are theirs. A tool of their
+// server environment or of their own computer (the desktop bridge, every
+// tool: This computer and its Local VM), mounted by Sagax for this turn as
+// the environment of the bot's owner, is that owner's own work: its card is
+// theirs at their own approval level, never an organization admin's. Unlike
+// ownEnvironmentCall this does not depend on the organization's autonomy
+// policy (memberEnvironmentAutonomy decides whether a card shows, not who
+// answers it), and it covers the owner's own computer, which is not an
+// isolated environment and so never runs unasked by this rule.
+
+/** Whether a call acts on the bot owner's own destination (their server
+ * environment, their own computer or its Local VM) mounted for this turn. */
+export function ownDestinationCall(input: {
+  identity: "solo" | "perspicax";
+  tool: string | undefined;
+  environmentPrincipalId: string | null | undefined;
+  ownerPrincipalId: string;
+  guestDriven: boolean;
+  mountedServers: ReadonlySet<string>;
+}): boolean {
+  if (input.identity !== "perspicax" || input.guestDriven) return false;
+  const match = /^(?:mcp__)?([a-z][a-z-]{0,63})__([a-z][a-z0-9_]{0,63})$/.exec(input.tool?.trim() ?? "");
+  if (!match) return false;
+  const server = match[1]!;
+  if (server !== USER_SANDBOX_MCP_NAME && server !== DESKTOP_BRIDGE_MCP_NAME) return false;
+  if (!input.mountedServers.has(server)) return false;
+  const environment = input.environmentPrincipalId?.trim().toLowerCase();
+  return Boolean(environment) && environment === input.ownerPrincipalId.trim().toLowerCase();
+}
+
+// 2026-10-19 (JC, prod 0.5.27, then #810 follow-up): computer_select
+// ("sagax-computer", server/auto-computer.ts) only chooses among the places
+// Sagax already mounted for this turn as one person's own: their cloud
+// computer, their own computer, its Local VM, the built-in browser. There is
+// no menu for the person any more: the bot decides where it works. So when
+// those places belong to the person this turn is for (who speaks, or who
+// answers its cards), the choice needs no card at all, at any approval
+// level, on every engine (Claude already pre-allows it). It never reaches a
+// computer the organization shares (`agents` shared_computer keeps its
+// card). Each call on the place it picks keeps its own rules: on their real
+// computer, always a card. Recognized by Sagax's own mount for this turn,
+// never by a name alone.
+
+/** The one tool of Sagax's computer choice, as a provider spells it. */
+const COMPUTER_CHOICE_TOOL = /^(?:mcp__)?sagax-computer__computer_select$/;
+
+/** Whether a call is Sagax's own computer_select, mounted for this turn,
+ * choosing among the places of the person this turn is for. */
+export function ownComputerChoiceCall(input: {
+  identity: "solo" | "perspicax";
+  tool: string | undefined;
+  /** Sagax mounted its computer_select server for this turn. */
+  mounted: boolean;
+  /** Whose places the turn may reach (the workplace decision's person). */
+  choicePrincipalId: string | null | undefined;
+  /** The person this turn is for: who answers its cards, and the speaker
+   * when they wrote it themselves in their own conversation. */
+  personPrincipalIds: readonly string[];
+  guestDriven: boolean;
+}): boolean {
+  if (input.identity !== "perspicax" || input.guestDriven || !input.mounted) return false;
+  if (!COMPUTER_CHOICE_TOOL.test(input.tool?.trim() ?? "")) return false;
+  const places = input.choicePrincipalId?.trim().toLowerCase();
+  return Boolean(places) && input.personPrincipalIds.some((person) => person.trim().toLowerCase() === places);
+}
+
+/** The read-only tools of a person's own destination that may read their
+ * own attachments without a card. */
+const ATTACHMENT_READ_TOOLS: ReadonlySet<string> = new Set(["read_file", "list_files", "search_files"]);
+
+/** A path, normalized for a prefix test on the platform it belongs to:
+ * forward slashes, no trailing slash, case folded on Windows and macOS
+ * (case-insensitive file systems). Null when it is not absolute or has a
+ * `.` or `..` segment (a traversal never counts as inside). */
+export function normalizedDestinationPath(path: string, platform: "darwin" | "win32" | "linux"): string | null {
+  if (typeof path !== "string" || !path.trim() || /[\0\r\n]/.test(path)) return null;
+  let value = path.trim();
+  if (platform === "win32") {
+    value = value.replace(/\\/g, "/");
+    if (/^\/\/[?.]\//.test(value)) value = value.slice(4);
+    if (!/^[a-zA-Z]:\//.test(value)) return null;
+  } else if (!value.startsWith("/")) return null;
+  const segments = value.split("/");
+  const head = segments.shift()!;
+  const kept: string[] = [];
+  for (const segment of segments) {
+    if (segment === "") continue;
+    if (segment === "." || segment === "..") return null;
+    kept.push(segment);
+  }
+  const joined = `${head}/${kept.join("/")}`;
+  return platform === "linux" ? joined : joined.toLowerCase();
+}
+
+/** Whether a call only reads the person's own attachments on their own
+ * destination: a read tool (read_file, list_files, search_files) whose path
+ * is inside one of `roots` (the attachments folder Sagax staged their files
+ * in: the desktop app's own folder on their computer, /workspace/attachments
+ * in their server environment). A Windows short name (BOBSMI~1) is compared
+ * as written: the root is the folder the app itself reported, and the bot
+ * sees the path Sagax staged under it. Arguments that cannot be read, a
+ * missing path, a relative path or a traversal are not a read of the
+ * attachments (fail closed: the card shows). */
+export function ownAttachmentRead(input: {
+  tool: string | undefined;
+  input: string | undefined;
+  /** Each root with the server whose tools reach it: a folder of the
+   * person's computer is never a path of their server environment. */
+  roots: ReadonlyArray<{ server: string; path: string; platform: "darwin" | "win32" | "linux" }>;
+}): boolean {
+  const match = /^(?:mcp__)?([a-z][a-z-]{0,63})__([a-z][a-z0-9_]{0,63})$/.exec(input.tool?.trim() ?? "");
+  if (!match || !ATTACHMENT_READ_TOOLS.has(match[2]!)) return false;
+  if (match[1] !== USER_SANDBOX_MCP_NAME && match[1] !== DESKTOP_BRIDGE_MCP_NAME) return false;
+  if (match[1] === USER_SANDBOX_MCP_NAME && match[2] === "search_files") return false;
+  let args: unknown;
+  try { args = JSON.parse(input.input ?? ""); } catch { return false; }
+  if (!args || typeof args !== "object" || Array.isArray(args)) return false;
+  const path = (args as Record<string, unknown>).path;
+  if (typeof path !== "string") return false;
+  const server = match[1]!;
+  return input.roots.some((root) => {
+    if (root.server !== server) return false;
+    const base = normalizedDestinationPath(root.path, root.platform);
+    const target = normalizedDestinationPath(path, root.platform);
+    if (!base || !target) return false;
+    return target === base || target.startsWith(base.endsWith("/") ? base : `${base}/`);
+  });
 }

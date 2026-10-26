@@ -3,21 +3,8 @@ import XCTest
 final class VoiceNoteUITests: XCTestCase {
     @MainActor
     func testVoiceNotePlaysPausesAndReplays() {
-        let app = XCUIApplication()
-        app.terminate()
-        app.launchArguments = ["-store-preview", "-threads-preview", "-voice-preview",
-            "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
-            "-companion.onboarding.welcomeSeen", "YES",
-            "-companion.onboarding.notificationsSeen", "YES",
-            // The compact list carries the threads toggle (the default is the standard home).
-            "-companion.prefs.rosterDensity", "compact"]
-        // threads under each bot row (#210: the default is the chat header)
-        app.launchArguments += ["-omb-threads-location", "sidebar"]
-        app.launch()
-        let toggle = app.buttons["threads-toggle.preview-pepper"]
-        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
-        toggle.tap()
-        app.buttons["thread.preview-gmail"].tap()
+        let app = ThreadPreview.launch(["-voice-preview"])
+        ThreadPreview.openGmail(in: app)
 
         let time = app.staticTexts["voice-note-time"]
         XCTAssertTrue(scrollTo(time, app: app), "voice note clock never appeared")

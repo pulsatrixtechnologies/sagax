@@ -38,6 +38,7 @@ describe("fence kinds", () => {
     expect(richFenceKind("email")).toBe("email");
     expect(richFenceKind("Mail")).toBe("email");
     expect(richFenceKind("widget")).toBe("widget");
+    expect(richFenceKind("widget-imperfect")).toBe("widget");
     expect(richFenceKind("artifact")).toBe("widget");
     expect(richFenceKind("chart")).toBe("chart");
     expect(richFenceKind("TSV")).toBe("csv");

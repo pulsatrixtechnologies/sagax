@@ -173,6 +173,17 @@ describe("bot draft dialog", () => {
     expect(fixture.setDraft.mock.calls[0]![0].bot.modelSelection).toEqual(available);
   });
 
+  it("defaults a new bot to Auto when the server offers Auto and no template pins a model", async () => {
+    // The server resolves the default on Auto (autoNewBotSelection); a fresh
+    // user with no pinned template gets a bot on Auto, zero choices.
+    const auto = { instanceId: "openrouter", model: "fixture-model", auto: true };
+    fixture.api.mockResolvedValue({ defaults: { profile: {}, memory: {}, skills: [], routines: [] }, modelSelection: auto, suggestedName: "Fixture" });
+    render();
+    fixture.effects[0]();
+    await vi.waitFor(() => expect(fixture.setDraft).toHaveBeenCalledOnce());
+    expect(fixture.setDraft.mock.calls[0]![0].bot.modelSelection).toEqual(auto);
+  });
+
   it.each([
     { instanceId: "claude", model: "chosen-model" },
     { instanceId: "claude", model: "" },

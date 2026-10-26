@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { accountDetail, providerGroups } from "./providers-model";
+import { accountDetail, grokProviderConfigured, providerGroups } from "./providers-model";
 
 const instance = (instanceId: string, driverKind: string, displayName: string, snapshot: Record<string, unknown> = {}, access?: "subscription" | "api") => ({
   instanceId, driverKind, displayName, ...(access ? { access } : {}),
@@ -23,7 +23,14 @@ describe("providers on this installation", () => {
     ]);
     expect(groups.filter((group) => group.bringsConnectors).map((group) => group.id)).toEqual(["claude"]);
     expect(groups.find((group) => group.id === "openai")!.manageUrl).toBe("https://chatgpt.com/#settings/Connectors");
-    expect(groups.find((group) => group.id === "xai")!.manageUrl).toBeUndefined();
+    expect(groups.find((group) => group.id === "xai")!.manageUrl).toBe("https://grok.com/connectors");
+  });
+
+  it("counts Grok as set up only with an available Grok engine", () => {
+    expect(grokProviderConfigured([instance("claude", "claudeAgent", "Claude")])).toBe(false);
+    expect(grokProviderConfigured([{ ...instance("grok", "grokAgent", "Grok"), snapshot: { state: "unavailable" as const } }])).toBe(false);
+    expect(grokProviderConfigured([instance("grok", "grokAgent", "Grok")])).toBe(true);
+    expect(grokProviderConfigured([instance("grok-api", "grok", "Grok (API)")])).toBe(true);
   });
 
   it("says how each account is reached", () => {

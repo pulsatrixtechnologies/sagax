@@ -38,14 +38,19 @@ const PREFS_FILE = "update-preferences.json";
 export function readUpdatePrefs(directory) {
   try {
     const parsed = JSON.parse(readFileSync(join(directory, PREFS_FILE), "utf8"));
-    return { allowPrerelease: parsed?.allowPrerelease === true };
+    return { allowPrerelease: parsed?.allowPrerelease === true, autoInstallWhenAway: parsed?.autoInstallWhenAway === true };
   } catch {
-    return { allowPrerelease: false };
+    return { allowPrerelease: false, autoInstallWhenAway: false };
   }
 }
 
+/** The named update channel: Stable, or Nightly (pre-releases). */
+export function updateChannel(prefs) {
+  return prefs?.allowPrerelease === true ? "nightly" : "stable";
+}
+
 export function writeUpdatePrefs(directory, prefs) {
-  const next = { allowPrerelease: prefs?.allowPrerelease === true };
+  const next = { allowPrerelease: prefs?.allowPrerelease === true, autoInstallWhenAway: prefs?.autoInstallWhenAway === true };
   mkdirSync(directory, { recursive: true });
   writeFileSync(join(directory, PREFS_FILE), `${JSON.stringify(next)}\n`, { mode: 0o600 });
   return next;

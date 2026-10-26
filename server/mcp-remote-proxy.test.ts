@@ -22,6 +22,7 @@ type Frame = { id?: string | number; method?: string; params?: Record<string, un
 
 async function remoteFixture(mode: "http" | "event-stream" | "sse") {
   const calls: string[] = [];
+  let flaky = 0;
   const frames: Frame[] = [];
   const events = new EventEmitter();
   const streams = new Set<ServerResponse>();
@@ -57,6 +58,9 @@ async function remoteFixture(mode: "http" | "event-stream" | "sse") {
           if (mode === "sse") res.writeHead(202).end();
           return;
         }
+        const refusedWith = (frame.params?.arguments as Record<string, unknown>)?.status;
+        if (typeof refusedWith === "number") return res.writeHead(refusedWith, refusedWith === 429 ? { "retry-after": "1" } : {}).end(TOKEN);
+        if ((frame.params?.arguments as Record<string, unknown>)?.flaky && flaky++ === 0) return res.writeHead(429, { "retry-after": "1" }).end();
         if ((frame.params?.arguments as Record<string, unknown>)?.error) error = { code: -32000, message: TOKEN };
         else result = { content: [{ type: "text", text: (frame.params?.arguments as Record<string, unknown>)?.large ? "x".repeat(2_000_000) : "read completed" }] };
       } else {
@@ -175,6 +179,55 @@ describe("scoped remote MCP subprocess", () => {
     expect(reply.error).toBeDefined();
     expect(JSON.stringify(reply)).not.toContain(TOKEN);
     expect(stderr).not.toContain(TOKEN);
+  });
+
+  it.each([
+    [403, "HTTP 403", "permission (scope)"],
+    [404, "HTTP 404", "Check its URL"],
+    [503, "HTTP 503", "Try again later"],
+    [418, "Remote MCP request failed (HTTP 418)", "HTTP 418"],
+  ])("names HTTP %i from the remote server without its body", async (status, said, hint) => {
+    fixture = await remoteFixture("http");
+    start(gateServer({ name: "notes", server: fixture.spec, budget: 0, threadId: "fixture", toolScope: { allow: ["mcp:notes:read"] } })!);
+    await initialize();
+    send({ id: 2, method: "tools/call", params: { name: "read", arguments: { status } } });
+    const reply = await answer();
+    expect(reply.error.code).toBe(-32603);
+    expect(reply.error.message).toContain(said);
+    expect(reply.error.message).toContain(hint);
+    expect(JSON.stringify(reply)).not.toContain(TOKEN);
+    expect(JSON.stringify(reply)).not.toContain(fixture.spec.url);
+  });
+
+  it("waits out a 429 with a visible notice and then goes through (R1)", async () => {
+    fixture = await remoteFixture("http");
+    start(gateServer({ name: "notes", server: fixture.spec, budget: 0, threadId: "fixture", toolScope: { allow: ["mcp:notes:read"] } })!);
+    await initialize();
+    send({ id: 2, method: "tools/call", params: { name: "read", arguments: { flaky: true } } });
+    const notice = await answer();
+    expect(notice).toMatchObject({ method: "notifications/message", params: { level: "warning" } });
+    expect(notice.params.data).toContain("trying again in 1 s");
+    expect(await answer()).toMatchObject({ id: 2, result: { content: [{ text: "read completed" }] } });
+  });
+
+  it("gives up on a 429 that keeps coming and says nothing was sent (R1)", async () => {
+    fixture = await remoteFixture("http");
+    start(gateServer({ name: "notes", server: fixture.spec, budget: 0, threadId: "fixture", toolScope: { allow: ["mcp:notes:read"] } })!);
+    await initialize();
+    send({ id: 2, method: "tools/call", params: { name: "read", arguments: { status: 429 } } });
+    const reply = await (async () => { for (;;) { const line = await answer(); if (line.id === 2) return line; } })();
+    expect(reply.error.message).toContain("nothing was sent");
+  });
+
+  it("says when the remote server cannot be reached", async () => {
+    fixture = await remoteFixture("http");
+    start(gateServer({ name: "notes", server: fixture.spec, budget: 0, threadId: "fixture", toolScope: { allow: ["mcp:notes:read"] } })!);
+    await initialize();
+    await fixture.close();
+    send({ id: 2, method: "tools/call", params: { name: "read", arguments: {} } });
+    const reply = await answer();
+    expect(reply.error).toEqual({ code: -32603, message: "Could not reach this MCP server. Check its URL and that it is online." });
+    expect(JSON.stringify(reply)).not.toContain(fixture.spec.url);
   });
 
   it("runs the shipped helpers without a TypeScript source tree", async () => {
@@ -429,7 +482,7 @@ describe("remote MCP tool directory", () => {
     expect(described.result.content[0].text.length).toBeGreaterThan(600);
     expect(JSON.parse(described.result.content[0].text).inputSchema).toEqual(padded.find((tool) => tool.name === "payments_list")!.inputSchema);
     const ran = (await call(CALL_TOOL, { name: "payments_list", arguments: { company_id: "biz_1" } })).result.content[0].text;
-    expect(ran).toContain("[Sagax trimmed this tool result");
+    expect(ran).toContain("TRUNCATED by Sagax");
     expect(fake.calls).toEqual([{ name: "payments_list", arguments: { company_id: "biz_1" } }]);
   });
 

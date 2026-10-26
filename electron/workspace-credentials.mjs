@@ -1,6 +1,5 @@
 // Workspace credentials the desktop shell keeps OS-encrypted (credentials.bin
-// via safeStorage) instead of leaving in plaintext config.json — the same
-// treatment the Composio project key already gets in main.mjs. Pure functions:
+// via safeStorage) instead of leaving in plaintext config.json. Pure functions:
 // main.mjs owns the fs and safeStorage plumbing, so the migration decisions
 // stay testable without an Electron runtime.
 //

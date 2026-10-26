@@ -33,6 +33,19 @@ describe("frames to pushes", () => {
     expect(kinds).toEqual(["approval", "approval", "routine", null, null, null]);
   });
 
+  it("an approval carries its request and, when the key is required, says so; a question does not", () => {
+    const approval = pushesForFrame({ kind: "notify", notification: { kind: "approval", botId: "b1", threadId: "t", title: "Allow?", body: "rm", requestId: "r1", needsKey: true } }, deps())[0];
+    expect(approval).toMatchObject({ kind: "approval", requestId: "r1", prompt: "approval", needsKey: true });
+    const question = pushesForFrame({ kind: "notify", notification: { kind: "question", botId: "b1", threadId: "t", title: "Q", body: "which?", requestId: "q1", needsKey: true } }, deps())[0];
+    expect(question).toMatchObject({ kind: "approval", requestId: "q1", prompt: "question" });
+    expect(question?.needsKey).toBeUndefined();
+  });
+
+  it("a finished routine keeps the result and names the routine", () => {
+    const done = pushesForFrame({ kind: "notify", notification: { kind: "done", botId: "b1", botName: "Scout", threadId: "t", title: "Scout finished", body: "report ready", routineRunId: "run-1", routineName: "Morning brief" } }, deps())[0];
+    expect(done).toMatchObject({ kind: "message", routineRunId: "run-1", routineName: "Morning brief", body: "report ready" });
+  });
+
   it("a nudge carries its conversation, its id and the phone's own strings", () => {
     const out = pushesForFrame({ kind: "nudge", audience: "pr_bob", id: "n1", fromId: "pr_alice", fromName: "Alice", at: 7, open: { groupId: "g1", threadId: "t1" } }, deps());
     expect(out).toEqual([{

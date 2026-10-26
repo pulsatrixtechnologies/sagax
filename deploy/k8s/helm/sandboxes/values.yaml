@@ -137,6 +137,8 @@ warmNode:
   scaleDown: "0 19 * * *"
   pauseImage: registry.k8s.io/pause@sha256:ee6521f290b2168b6e0935a181d4cff9be1ac3f505666ef0e3c98fae8199917a
   kubectlImage: registry.k8s.io/kubectl@sha256:b48ea9c7a5306ad509987009af385561476e4a4c4c75de99bd4b4efbe4d66332
+  # Sandbox images pre-pulled on the warm node (digest-pinned, also in admission.allowedImages).
+  prepullImages: []
   nodeSelector:
     sagax.io/pool: sandboxes
   tolerationKey: sagax.io/sandboxes

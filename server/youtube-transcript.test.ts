@@ -57,6 +57,17 @@ describe("fetchYoutubeTranscript", () => {
     expect(cues).toEqual([{ startMs: 2000, text: "Bonjour & salut" }]);
   });
 
+  // CodeQL js/incomplete-multi-character-sanitization (alerte #112) : le retrait
+  // des balises boucle jusqu'a stabilite, donc une balise reconstruite par un
+  // premier passage (<scr<script>ipt>) ne survit pas.
+  it("retire une balise reconstruite par le retrait, sans en laisser", async () => {
+    const [cue] = await captionsOf('<text start="0">avant <scr<script>ipt>alert(1)</script>ipt> apres</text>');
+    expect(cue?.text).not.toMatch(/<\s*\/?\s*script/i);
+    expect(cue?.text).not.toMatch(/<[a-z!/]/i);
+    expect(cue?.text).toContain("avant");
+    expect(cue?.text).toContain("apres");
+  });
+
   it("refuses when no caption tracks exist", async () => {
     const fetchImpl = async () => ({ ok: true, text: async () => "<html></html>" });
     await expect(fetchYoutubeTranscript("abc12345678", fetchImpl as unknown as typeof fetch)).rejects.toMatchObject({ code: "no_captions" });

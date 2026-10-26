@@ -45,6 +45,15 @@ export function isTimeZone(value: unknown): value is string {
   }
 }
 
+/** The zone organization routines read their wall clocks in when neither the
+ * person nor the server chose one. A server host usually runs in UTC, which
+ * made "every day at 12:00" fire at 08:00 for people in Eastern time: use
+ * SAGAX_DEFAULT_TIME_ZONE, else America/Toronto when the host is UTC. */
+export const ORG_DEFAULT_TIME_ZONE = "America/Toronto";
+export function defaultOrgTimeZone(host: string, env: string | undefined): string | null {
+  if (env && isTimeZone(env)) return env;
+  return ["UTC", "Etc/UTC", "GMT", "Etc/GMT"].includes(host) ? ORG_DEFAULT_TIME_ZONE : null;
+}
 export const hostTimeZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
 export const botSettingsPatchSchema = z.object({

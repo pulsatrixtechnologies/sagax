@@ -21,6 +21,7 @@ import { build } from "esbuild";
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { markModuleScope } from "./mark-module-scope.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const server = join(root, "server");
@@ -52,6 +53,8 @@ const ENTRY_POINTS = [
   // the packaged desktop's early port (desktop-entry.mjs imports it first)
   "early-listener.ts",
   "message-search.worker.ts",
+  // WebP decode/scale off the main thread (server/webp-scale-worker.ts)
+  "webp-scale.worker.ts",
   // the `openmausbot` command (serve/pair/sessions/status) for the npm
   // package, the container image and checkouts; pair-cli.ts stays as an alias
   "openmausbot.ts",
@@ -73,7 +76,6 @@ const ENTRY_POINTS = [
   "container-mcp.ts",
   "vps-container-mcp.ts",
   "permission-proxy.ts",
-  "connector-proxy.ts",
   "perspicax-mcp-bridge.ts",
   "mcp-gate.ts",
   "mcp-remote-proxy.ts",
@@ -87,6 +89,7 @@ const ENTRY_POINTS = [
   "drivers/agents-proxy.ts",
   "drivers/dweb-proxy.ts",
   "drivers/phone-proxy.ts",
+  "drivers/imessage-proxy.ts",
 ];
 
 await build({
@@ -171,6 +174,13 @@ const catalogSnapshot = join(root, "dist-server", "model-catalog", "models-dev.s
 mkdirSync(dirname(catalogSnapshot), { recursive: true });
 copyFileSync(join(server, "model-catalog", "models-dev.snapshot.json"), catalogSnapshot);
 
+// The sagax_help knowledge base (server/self-knowledge.ts), read from disk
+// on the first question, like the catalog snapshot: never inlined.
+// `pnpm build:server` regenerates it first (scripts/self-knowledge/generate.ts).
+const knowledge = join(root, "dist-server", "self-knowledge", "knowledge.generated.json");
+mkdirSync(dirname(knowledge), { recursive: true });
+copyFileSync(join(server, "self-knowledge", "knowledge.generated.json"), knowledge);
+
 // Pi loads this through its own jiti and supplies TypeBox. Inline our local
 // policy module so the extension also works without the source checkout;
 // keep the Pi-owned dependency external and retain the .ts loading contract.
@@ -179,3 +189,7 @@ const piMcpExtDest = join(root, "dist-server", "drivers", "pi-mcp-extension.ts")
 mkdirSync(dirname(piMcpExtDest), { recursive: true });
 await build({ entryPoints: [piMcpExtSrc], outfile: piMcpExtDest, bundle: true,
   platform: "node", target: "node24", format: "esm", external: ["typebox"], });
+
+// Port of OpenMausBot #2800: the packaged server must run as ES modules even
+// when a package.json above the install folder says "commonjs".
+markModuleScope(join(root, "dist-server"));

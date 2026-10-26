@@ -56,6 +56,9 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("teamsetup:list", "read", "list_team_setup"),
   p("computers:list", "read", "list_shared_computers"),
   p("terminal:list", "read", "list_terminal_resources"),
+  p("resources:usage", "read", "resource_usage"),
+  // a sign-in card for the speaker's own connector (shared/connector-setup.ts)
+  p("connectors:setup", "read", "open_connector_setup"),
   p("delegation:check", "read", "check_delegation"),
   p("delegation:wait", "read", "wait_delegation"),
   p("sessions:search", "read", "session_search"),
@@ -85,13 +88,18 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("memory:log", "own", "memory_log"),
   p("groupmemory:save", "own", "group_memory_update"),
   p("files:attach", "own", "attach_file"),
+  p("widgets:check", "read", "check_widget"),
+  p("help:read", "read", "sagax_help"),
   p("widgets:show", "own", "show_widget"),
   p("widgets:update", "own", "update_widget"),
+  p("apps:show", "own", "show_html"),
+  p("apps:update", "own", "update_html"),
   p("artifacts:save", "own", "save_artifact"),
   p("artifacts:update", "own", "update_artifact"),
   p("artifacts:list", "read", "list_artifacts"),
   p("artifacts:delete", "own", "delete_artifact"),
   p("pages:propose", "own", "propose_page"),
+  p("phone:call", "own", "place_phone_call"),
   p("cards:options", "own", "create_options_card"),
   p("rooms:react", "own", "react_to_message"),
   p("rooms:unreact", "own", "remove_reaction"),
@@ -105,7 +113,19 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("routines:propose", "own", "propose_routine"),
   p("routines:propose.action", "own", "propose_routine_action"),
   p("terminal:offer", "own", "offer_shell_terminal"),
+  p("remote:publish", "own", "publish_remote_session"),
+  // the person's own connected Tailcat session (owner and bot checked by the service)
+  p("remote:snapshot", "own", "remote_session_snapshot"),
+  p("remote:exec", "own", "remote_session_exec"),
   p("meetings:join", "own", "join_meeting"),
+  // 2026-10-19 (member admin audit, docs/member-admin-audit.md): the
+  // person's own data or destinations, never an admin's.
+  p("teamsetup:propose", "own", "propose_team_setup"),
+  p("rules:update", "own", "rules_update"),
+  p("docs:update", "own", "docs_update"),
+  p("credentials:login", "own", "request_login"),
+  p("computers:select", "own", "select_computer"),
+  p("pairing:manage", "own", "manage_pairing"),
   // Dispatch
   p("bots:ask", "dispatch", "ask_bot"),
   p("bots:delegate", "dispatch", "delegate_bot"),
@@ -122,18 +142,14 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // Admin
   p("bots:create", "admin", "create_bot"),
   p("bots:delete.propose", "admin", "propose_bot_deletion"),
+  p("bots:archive", "admin", "archive_bot"),
   p("agents:create", "admin", "create_agent"),
   p("agents:delete", "admin", "delete_agent"),
   p("rooms:create", "admin", "create_room"),
   p("rooms:manage", "admin", "manage_room"),
-  p("teamsetup:propose", "admin", "propose_team_setup"),
   p("teammemory:propose", "admin", "propose_team_memory"),
-  p("rules:update", "admin", "rules_update"),
-  p("docs:update", "admin", "docs_update"),
   p("mcp:add", "admin", "add_mcp_server"),
   p("credentials:request", "admin", "request_credential"),
-  p("credentials:login", "admin", "request_login"),
-  p("computers:select", "admin", "select_computer"),
   p("computers:use", "admin", "shared_computer"),
   p("vm:exec", "admin", "vm_exec"),
   p("actions:invoke", "admin", "act"),
@@ -173,6 +189,13 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("flow:read", "read", "flow", "perspicax"),
   p("flow:action", "dispatch", "flow_action", "perspicax"),
   p("review:write", "admin", "review_write", "perspicax"),
+  // Remote support (Perspicax 1.8.43, connector mcp/remote_support_tools.rs):
+  // Perspicax serves them only to a person holding its permission. Opening
+  // one reaches an end user, as a dispatch does; status and close stay on
+  // the caller's own session.
+  p("remotesupport:open", "dispatch", "remote_support_open", "perspicax"),
+  p("remotesupport:status", "own", "remote_support_status", "perspicax"),
+  p("remotesupport:close", "own", "remote_support_close", "perspicax"),
   // Per-profile Perspicax tools, matched by name (profileToolCall). An
   // operation's own tool is not known to be a read, so it needs dispatch.
   profileTool("api:query", "read", "query", "<profile>__query"),
@@ -180,8 +203,13 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   profileTool("api:action", "dispatch", "action", "<profile>__action"),
   profileTool("api:action.read", "read", "read_action", "<profile>__read_action"),
   profileTool("api:operation", "dispatch", "operation", "<profile>__<operation>"),
-  p("pairing:manage", "admin", "manage_pairing"),
   p("settings:manage", "admin", "manage_settings"),
+  // every setting as the person (server/settings-actions.ts): the person's
+  // own rights decide on the route, like act
+  p("settings:change", "own", "sagax_settings"),
+  // a Primary Bot answers its person's cards at their request
+  // (server/primary-approvals.ts): the click's own checks decide
+  p("approvals:primary", "own", "sagax_approvals"),
 ];
 
 const BY_TOOL = new Map<string, McpPermission>(MCP_PERMISSIONS.filter((x) => x.tool && !x.profileKind).flatMap((x) => [x.tool as string, ...(x.aliases ?? [])].map((name) => [name, x] as const)));
@@ -228,7 +256,14 @@ export const ROLE_OVERRIDES: Partial<Record<McpRole, Record<string, McpScope | n
   // A member may start a bot of their own, nothing wider.
   member: { "bots:create": "self", "bots:delete.propose": "self", "rooms:create": "self", "rooms:manage": "self" },
   // Automation never creates bots, widens access or runs host commands.
-  service: { "vm:exec": null, "actions:invoke": null },
+  // 2026-10-19: no person speaks in a service turn (a routine, a webhook):
+  // pairing a device or asking a person for a login needs that person, a
+  // team setup could create bots under Full access, and a bot's rules and
+  // docs are lasting instructions untrusted text must not write.
+  service: {
+    "vm:exec": null, "actions:invoke": null, "pairing:manage": null, "credentials:login": null,
+    "teamsetup:propose": null, "rules:update": null, "docs:update": null,
+  },
 };
 
 const rank = (scope: McpScope) => MCP_SCOPES.indexOf(scope);

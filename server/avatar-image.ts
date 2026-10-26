@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shared/image-generation.ts";
 import { decodeGeneratedImage } from "./generated-image.ts";
+import { BOT_AVATAR_MAX_BYTES } from "./org-admin-look.ts";
 import type { BotRecord } from "./store.ts";
 
 export const AVATAR_DIRECTION_MAX_CHARS = 400;
@@ -216,7 +217,7 @@ export async function generateAvatarImage(
     throw Object.assign(new Error(`${providerName} returned invalid image data`), { status: 502 });
   }
   try {
-    const image = decodeGeneratedImage(encoded);
+    const image = decodeGeneratedImage(encoded, BOT_AVATAR_MAX_BYTES);
     if (image.mime === "image/gif") throw new Error("unsupported avatar format");
     return { bytes: image.bytes, mime: image.mime };
   } catch {

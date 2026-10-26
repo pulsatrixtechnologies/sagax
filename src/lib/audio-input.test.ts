@@ -70,3 +70,36 @@ describe("microphone choice", () => {
     expect(inputs).toEqual([{ id: "built-in", label: "MacBook Microphone" }, { id: "usb-mic", label: "" }]);
   });
 });
+
+describe("a permission prompt that takes a while", () => {
+  it("tells the person it is waiting, then still opens the microphone when allowed late", async () => {
+    vi.useFakeTimers();
+    try {
+      let grant: (value: MediaStream) => void = () => undefined;
+      const pending = new Promise<MediaStream>((resolve) => { grant = resolve; });
+      const waiting = vi.fn();
+      const opened = getUserMediaWithFallback({ audio: true }, () => pending, 1_000, waiting);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(waiting).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(waiting).toHaveBeenCalledTimes(1);
+      grant(stream);
+      await expect(opened).resolves.toBe(stream);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says nothing when the answer comes in time, or when it is a refusal", async () => {
+    vi.useFakeTimers();
+    try {
+      const waiting = vi.fn();
+      await expect(getUserMediaWithFallback({ audio: true }, async () => stream, 1_000, waiting)).resolves.toBe(stream);
+      await expect(getUserMediaWithFallback({ audio: true }, async () => { throw failure("NotAllowedError"); }, 1_000, waiting)).rejects.toThrow("NotAllowedError");
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(waiting).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

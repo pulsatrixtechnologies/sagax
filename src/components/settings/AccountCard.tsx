@@ -31,6 +31,8 @@ import type { ServerModeState } from "../ServerModeSettings";
 import { profileInitials, profileLabel } from "../SidebarProfileMenu";
 import { MyLabelField } from "./MyLabelField";
 import { OwnAvatarField, OwnAvatarStatusLine, type OwnAvatarStatus } from "./OwnAvatarField";
+import { AnchoredPopover, useAnchoredDismissRoot } from "@/components/AnchoredPopover";
+import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 
 type LockedServer = Extract<ServerModeState, { active: true }>;
 
@@ -257,6 +259,10 @@ function OperatorIdentity({ action }: { action: React.ReactNode }) {
   const [email, setEmail] = useState(state.config?.profile?.email ?? "");
   const [avatarUrl, setAvatarUrl] = useState(state.config?.profile?.avatarUrl ?? "");
   const [menuOpen, setMenuOpen] = useState(false);
+  const avatarRootRef = useRef<HTMLDivElement>(null);
+  const avatarButtonRef = useRef<HTMLButtonElement>(null);
+  const avatarMenuRef = useRef<HTMLElement | null>(null);
+  usePopoverDismiss(menuOpen, useAnchoredDismissRoot(avatarRootRef, avatarMenuRef), () => setMenuOpen(false));
   useEffect(() => {
     setName(state.config?.profile?.name ?? "");
     setEmail(state.config?.profile?.email ?? "");
@@ -292,8 +298,9 @@ function OperatorIdentity({ action }: { action: React.ReactNode }) {
   const initials = (name.trim() || email.trim() || "?").slice(0, 1).toUpperCase();
   return (
     <div className="flex items-center gap-3" data-testid="account-identity">
-      <div className="relative shrink-0">
+      <div ref={avatarRootRef} className="relative shrink-0">
         <button
+          ref={avatarButtonRef}
           type="button"
           aria-label={t("settings.profile.changeAvatar")}
           aria-expanded={menuOpen}
@@ -303,10 +310,10 @@ function OperatorIdentity({ action }: { action: React.ReactNode }) {
           {avatarUrl ? <img src={avatarUrl} alt="" className="size-full object-cover" /> : initials}
         </button>
         {menuOpen && (
-          <div className="absolute left-0 top-full z-10 mt-2 flex min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px]">
+          <AnchoredPopover anchorRef={avatarButtonRef} popoverRef={avatarMenuRef} gap={8} className="flex min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px]">
             <button type="button" onClick={() => { setMenuOpen(false); fileRef.current?.click(); }} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover">{t("settings.profile.uploadPhoto")}</button>
             {avatarUrl && <button type="button" onClick={() => { setAvatarUrl(""); setMenuOpen(false); save({ avatarUrl: "" }); }} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover">{t("settings.profile.removePhoto")}</button>}
-          </div>
+          </AnchoredPopover>
         )}
         <input ref={fileRef} type="file" accept="image/*" className="hidden" aria-label={t("settings.profile.uploadAvatar")} onChange={(event) => { choosePhoto(event.target.files?.[0]); event.target.value = ""; }} />
       </div>

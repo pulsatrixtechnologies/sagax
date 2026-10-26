@@ -48,7 +48,13 @@ export function botThreads(store: RecentWorkStore, bot: Pick<BotRecord, "id" | "
   };
   const direct = `1:1 with ${userName}`;
   add({ threadId: bot.threadId, where: direct, title: store.taskByThread(bot.id, bot.threadId)?.title ?? null, private: true });
-  for (const task of bot.tasks ?? []) add({ threadId: task.threadId, where: direct, title: task.title, private: true });
+  // A routine run's isolated execution task, and the automatic results thread
+  // it once used, are not conversations the bot had: leaving them in would
+  // pull one routine run's report into the next run's prompt (2026-10-22).
+  for (const task of bot.tasks ?? []) {
+    if (task.routineRunId || task.routineResults) continue;
+    add({ threadId: task.threadId, where: direct, title: task.title, private: true });
+  }
   for (const group of store.groups) {
     if (!group.memberIds.includes(bot.id)) continue;
     const where = `room ${JSON.stringify(group.name)}`;

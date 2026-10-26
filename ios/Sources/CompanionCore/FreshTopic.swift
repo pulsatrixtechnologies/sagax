@@ -79,9 +79,9 @@ public enum FreshTopic {
     }
 
     /// Only a conversation a person had with the bot can be covered: never
-    /// a routine run, a hidden, confidential, bot-opened or parallel thread
+    /// a routine run or its results thread, a hidden, confidential, bot-opened or parallel thread
     /// (shared/single-stream.ts `isStreamSegment`).
     public static func isSegment(_ task: BotTask) -> Bool {
-        task.routineRunId == nil && task.hidden != true && task.confidential != true && task.openedBy == nil && task.parallelOf == nil
+        task.routineRunId == nil && task.routineResults != true && task.hidden != true && task.confidential != true && task.openedBy == nil && task.parallelOf == nil
     }
 }

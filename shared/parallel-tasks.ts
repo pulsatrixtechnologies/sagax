@@ -107,6 +107,59 @@ export function suggestBusySendMode(text: string): BusySendMode {
   return "parallel";
 }
 
+/** Openers that mark an interrogative turn. A turn that opens with one of
+ * these, or ends with a question mark, is a question about the work, not a
+ * new piece of work to run on its own. Includes a few request-to-explain
+ * verbs ("explique", "explain", "dis-moi") that read the same way, and the
+ * spoken-Québec elision "ques" for "qu'est-ce". */
+const QUESTION_OPENERS = [
+  // fr
+  "pourquoi", "comment", "qu'est-ce", "qu est-ce", "quest-ce", "ques ", "ques-ce", "c'est quoi", "cest quoi",
+  "c quoi", "quoi ", "qui ", "quand ", "où ", "ou est", "ou sont", "combien", "lequel", "laquelle",
+  "est-ce", "est ce", "peux-tu", "peux tu", "peut-on", "pourrais-tu", "pourrais tu", "as-tu", "es-tu",
+  "veux-tu", "explique", "dis-moi", "dis moi", "montre-moi", "montre moi",
+  // en
+  "why", "how", "what", "who ", "whom", "when ", "where ", "which", "whose", "is ", "are ", "do ", "does ",
+  "did ", "can you", "could you", "can ", "should ", "would ", "was ", "were ", "explain", "tell me", "show me",
+];
+
+/** References that point a short follow-up back at the current work rather
+ * than at new, independent work: demonstratives and second-person forms. A
+ * few consecutive messages ("et ça?", "tu as fait quoi") read this way. */
+const FOLLOWUP_REFS = [
+  // fr
+  "ça", "ca", "ceci", "cela", "ce ", "cette ", "tu ", "t'", "vous ", "ton ", "ta ", "tes ",
+  // en
+  "you ", "your ", "that ", "this ",
+];
+
+/** The person asked for the work to run off the main thread (in parallel /
+ * in the background): a genuine parallel task even when phrased as a
+ * question. */
+const BACKGROUND_HINTS = [
+  // fr
+  "arrière-plan", "arriere-plan", "en parallèle", "en parallele", "en tâche de fond", "en tache de fond",
+  "pendant ce temps", "pendant que tu", "tâche parallèle", "tache parallele",
+  // en
+  "in parallel", "in the background", "in background", "on the side", "meanwhile", "as a task", "a separate task",
+];
+
+function wantsBackground(words: string): boolean {
+  return BACKGROUND_HINTS.some((hint) => words.includes(hint));
+}
+
+/** A question, a request to explain, or a short follow-up that points back
+ * at the current work. Such a turn is answered inline (in the conversation),
+ * never spun off as its own parallel task. */
+function isInlineFollowUp(text: string): boolean {
+  const words = text.trim().toLowerCase();
+  if (!words) return false;
+  if (/[?？]\s*$/.test(text.trim())) return true;
+  if (QUESTION_OPENERS.some((opener) => words.startsWith(opener))) return true;
+  if (words.length <= 80 && FOLLOWUP_REFS.some((ref) => words.startsWith(ref) || words.includes(` ${ref}`))) return true;
+  return false;
+}
+
 /** Words that say the request needs the running work's result first. */
 const AFTER_HINTS = [
   // fr
@@ -139,14 +192,19 @@ export function resourcesOverlap(a: readonly string[] | undefined, b: readonly s
 
 /** Where an auto send goes while the bot works, without asking the model:
  * a short correction joins the running work, a request that needs its
- * result or names a resource the running work names waits for it, anything
- * else runs in parallel. `sure` is false when only the default picked it
- * (the server may then ask the bot's model). */
-export function classifyBusySend(input: { text: string; running?: string }): { mode: BusySendMode; sure: boolean; why: "correction" | "depends" | "same-resource" | "independent" } {
+ * result or names a resource the running work names waits for it, a question
+ * or short follow-up about the current work is answered inline (as a steer,
+ * so it never becomes its own task), and anything else runs in parallel.
+ * `sure` is false when only the default picked it (the server may then ask
+ * the bot's model). A turn that explicitly asks to run in the background
+ * (`wantsBackground`) keeps its parallel default even when phrased as a
+ * question, so a real backgroundable job still goes parallel. */
+export function classifyBusySend(input: { text: string; running?: string }): { mode: BusySendMode; sure: boolean; why: "correction" | "depends" | "same-resource" | "question" | "independent" } {
   const words = input.text.trim().toLowerCase();
   if (suggestBusySendMode(input.text) === "steer") return { mode: "steer", sure: true, why: "correction" };
   if (AFTER_HINTS.some((hint) => words.startsWith(hint.trimEnd()) || words.includes(` ${hint}`) || words.includes(`, ${hint}`))) return { mode: "after", sure: true, why: "depends" };
   if (input.running && resourcesOverlap(namedResources(input.text), namedResources(input.running))) return { mode: "after", sure: true, why: "same-resource" };
+  if (!wantsBackground(words) && isInlineFollowUp(input.text)) return { mode: "steer", sure: true, why: "question" };
   return { mode: "parallel", sure: false, why: "independent" };
 }
 

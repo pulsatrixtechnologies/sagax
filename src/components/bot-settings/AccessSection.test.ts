@@ -1,4 +1,4 @@
-import { Children, createElement, isValidElement, type ReactElement, type ReactNode } from "react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -55,10 +55,7 @@ function makeDerived(overrides: Partial<ReturnType<typeof useBotSettingsDerived>
     patch: vi.fn(),
     engine: undefined,
     canCoordinate: false,
-    canUseConnectedApps: true,
     canUseVps: false,
-    connectedAppsConfigured: true,
-    connectedAppsEnabled: true,
     canUseBrowser: false,
     desktopBrowser: false,
     browserBlockedOnWindows: false,
@@ -136,42 +133,6 @@ describe("AccessSection always-allowed list", () => {
     expect(idle).not.toContain('disabled="" aria-label="Let this bot use notes"');
     expect(idle).toContain('disabled="" aria-label="Let this bot use offline"');
     expect(idle).not.toContain("finishes all active tasks");
-  });
-
-  it("hides the bot's Connected apps switch while the experimental feature is off", () => {
-    const off = render(makeBot());
-    expect(off).not.toContain('aria-label="Allow this bot to use connected apps"');
-    expect(off).not.toContain('data-manage-in-connect-apps="apps"');
-    fixture.config = { features: { connectedApps: false } };
-    expect(render(makeBot())).not.toContain('aria-label="Allow this bot to use connected apps"');
-    fixture.config = { features: { connectedApps: true }, composio: { configured: true } };
-    const on = render(makeBot());
-    expect(on).toContain('aria-label="Allow this bot to use connected apps"');
-    // servers and apps are set up in Connect apps only: here, a link there
-    expect(on).toContain('data-manage-in-connect-apps="apps"');
-    expect(on).toContain('data-manage-in-connect-apps="mcp"');
-    expect(on).not.toContain("Connect an app");
-    expect(on).not.toContain("Add an MCP server");
-  });
-
-  it("Manage in Connect apps opens the panel without authorizing a second way", () => {
-    fixture.config = { features: { connectedApps: true }, composio: { configured: true } };
-    let tree!: ReturnType<typeof AccessSection>;
-    function Capture() { tree = AccessSection({ bot: makeBot(), derived: makeDerived() }); return tree; }
-    renderToStaticMarkup(createElement(StoreProvider, null, createElement(Capture)));
-    type Node = ReactElement<{ children?: ReactNode; onClick?: () => void; surface?: string }>;
-    const nodes = (value: ReactNode): Node[] => {
-      if (!isValidElement(value)) return [];
-      const node = value as Node;
-      return [node, ...Children.toArray(node.props.children).flatMap(nodes)];
-    };
-    const link = nodes(tree).find((node) => node.props.surface === "apps")!;
-    const connect = (link.type as (props: unknown) => Node)(link.props);
-    connect.props.onClick!();
-    expect(fixture.dispatch.mock.calls).toEqual([
-      [{ type: "toggleSettings", open: false }],
-      [{ type: "togglePlugins", open: true, surface: "apps" }],
-    ]);
   });
 
   it("offers a retry instead of a permanent MCP loading state after a read failure", () => {

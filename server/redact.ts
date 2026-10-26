@@ -3,8 +3,8 @@
 // The native tee writes every provider message verbatim, which is what makes
 // protocol drift diagnosable — but the messages that set a session up carry
 // the credentials the agent is handed: the boat token and the comms token
-// travel inside `session/new`'s mcpServers env, and a Composio consumer key
-// travels in an MCP header. Those logs sit in ~/.sagax/native as
+// travel inside `session/new`'s mcpServers env, and a provider key can
+// travel in an MCP header. Those logs sit in ~/.sagax/native as
 // ordinary files, are read by anyone debugging, and get pasted into issues.
 //
 // So the log keeps the SHAPE and loses the VALUES: a redacted entry still

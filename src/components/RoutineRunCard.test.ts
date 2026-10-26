@@ -35,31 +35,39 @@ describe("RoutineRunCard", () => {
     const legacy = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("completed") }));
     expect(legacy).toContain('dateTime="1970-01-01T00:00:00.001Z"');
   });
-  it("shows a compact completion receipt and a path to the isolated run", () => {
+  // 2026-10-22 (JC): one concise message, the bot's report only, with a
+  // small "Routine: <name> · View run" line under it.
+  it("reads as the bot's report with the routine named under it and a link to the run", () => {
     const markup = renderToStaticMarkup(createElement(RoutineRunCard, {
-      message: message("completed", { summary: "The brief is ready with three follow-ups." }),
+      message: message("completed", { summary: "The brief is ready with **three** follow-ups." }),
       onOpen: vi.fn(),
     }));
 
-    expect(markup).toContain("Morning brief");
-    expect(markup).toContain("Completed");
-    expect(markup).toContain("The brief is ready with three follow-ups.");
-    expect(markup).toContain("Open run");
+    expect(markup).toContain("<strong>three</strong>");
+    expect(markup).toContain("Routine: Morning brief");
+    expect(markup).toContain("View run");
+    expect(markup).toContain('aria-label="View run for Morning brief"');
     expect(markup).toContain('aria-label="Morning brief routine run: Completed"');
+    // a report is the message: no status chip, no card chrome
+    expect(markup).not.toContain(">Completed<");
+    expect(markup).not.toContain("border-hairline");
   });
 
-  it("keeps a long dated report available behind a collapsed disclosure", () => {
-    const summary = `The brief is ready. ${"Detailed result. ".repeat(25)}\nFinal follow-up.`;
+  it("shows a long report whole, as the bot wrote it", () => {
+    const summary = `The brief is ready. ${"Detailed result. ".repeat(25)}\n\nFinal follow-up.`;
     const markup = renderToStaticMarkup(createElement(RoutineRunCard, {
       message: message("completed", { summary }),
       onOpen: vi.fn(),
     }));
 
-    expect(markup).toContain("Show report");
-    expect(markup).toContain(summary);
-    expect(markup).toContain("<details ");
-    expect(markup).not.toContain("<details open");
-    expect(markup).toContain('aria-label="Open run for Morning brief"');
+    expect(markup).toContain("Final follow-up.");
+    expect(markup).not.toContain("<details");
+  });
+
+  it("names a run that ended with nothing to report after it waited on the person", () => {
+    const markup = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("nothing_to_report"), onOpen: vi.fn() }));
+    expect(markup).toContain("Nothing to report");
+    expect(markup).toContain("Routine: Morning brief");
   });
 
   it("keeps a terminal team-goal outcome distinct from scheduler completion", () => {
@@ -97,7 +105,7 @@ describe("RoutineRunCard", () => {
     }));
 
     expect(markup).toContain("Waiting for delegated work to finish.");
-    expect(markup).toContain("Open run");
+    expect(markup).toContain("View run");
     expect(markup).not.toContain("Needs your input");
     expect(markup).not.toContain("Review");
   });
@@ -144,7 +152,7 @@ describe("RoutineRunCard", () => {
     }));
 
     expect(markup).toContain("Missed");
-    expect(markup).not.toContain("Open run");
+    expect(markup).not.toContain("View run");
   });
 
   it("recognizes only an execution thread still present in the owning bot's tasks", () => {

@@ -26,7 +26,7 @@ final class PushTests: XCTestCase {
         XCTAssertEqual(json["environment"] as? String, "production")
         XCTAssertEqual(json["appVersion"] as? String, "0.4.15 (15)")
         XCTAssertEqual(json["deviceName"] as? String, "Phone")
-        XCTAssertEqual(json["settings"] as? [String: Bool], ["sound": false, "badge": true, "nudgeSound": false])
+        XCTAssertEqual(json["settings"] as? [String: Bool], ["sound": false, "badge": true, "nudgeSound": false, "approvalChime": true])
         XCTAssertEqual(Set(json.keys), ["token", "platform", "environment", "appVersion", "deviceName", "settings"])
 
         let removal = try client.unregisterPushDeviceRequest(token: "abcd")
@@ -56,6 +56,21 @@ final class PushTests: XCTestCase {
         XCTAssertEqual(payload.target, NotificationTarget(botId: "g_people_1", threadId: "t_people_1"))
         XCTAssertNil(payload.nudgeKey)
         XCTAssertNil(payload.senderIdentity)
+        XCTAssertFalse(payload.needsKey)
+    }
+
+    func testAnApprovalPushCarriesTheRequestAndTheKeyFlag() throws {
+        let userInfo: [AnyHashable: Any] = [
+            "aps": ["alert": ["title": "Scout"], "category": "SAGAX_APPROVAL_KEY", "sound": "approval.caf"],
+            "kind": "approval", "threadId": "t1", "botId": "b1", "requestId": "r1",
+            "prompt": "approval", "needsKey": true,
+        ]
+        let payload = try XCTUnwrap(PushPayload(userInfo: userInfo))
+        XCTAssertEqual(payload.kind, .approval)
+        XCTAssertEqual(payload.requestId, "r1")
+        XCTAssertEqual(payload.prompt, "approval")
+        XCTAssertTrue(payload.needsKey)
+        XCTAssertEqual(payload.target, NotificationTarget(botId: "b1", threadId: "t1"))
     }
 
     func testABotPushCarriesTheSenderTheExtensionShows() throws {

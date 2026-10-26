@@ -377,6 +377,10 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
     // an "available" engine that CI never has (#2035).
     SAGAX_TEST_SEALED_PATH: "1",
   });
+  // The UI checks drive this fixture from a real browser, as `pnpm dev` does;
+  // SAGAX_DEV_TRUST_LOCAL_BROWSER=0 tests the sign-in a browser now needs
+  // (port of OpenMausBot #2930, server/request-auth.ts fromBrowser).
+  if (parentEnv.SAGAX_DEV_TRUST_LOCAL_BROWSER !== "0") childEnv.SAGAX_DEV_TRUST_LOCAL_BROWSER = "1";
   // A suite that drives a fixed Works on or a conversation pin through the
   // HTTP API (Workspace is always Auto otherwise, JC 2026-10-18) opts in
   // with this test seam; nothing else turns it on.
@@ -391,6 +395,17 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // A test's key for relaying an organization library into the fixture
   // (POST /api/testing/org-library); the route does not exist without it.
   if (parentEnv.SAGAX_TEST_ORG_LIBRARY_KEY) childEnv.SAGAX_TEST_ORG_LIBRARY_KEY = parentEnv.SAGAX_TEST_ORG_LIBRARY_KEY;
+  // A pre-warm window short enough for a test to see the idle engine closed
+  // (server/thread-prewarm.ts).
+  if (parentEnv.SAGAX_PREWARM_WINDOW_MS) childEnv.SAGAX_PREWARM_WINDOW_MS = parentEnv.SAGAX_PREWARM_WINDOW_MS;
+  // The Code section's fake Perspicax (server/testing/fake-perspicax-agents.ts),
+  // started inside the fixture; a solo server only, never real Perspicax.
+  if (parentEnv.SAGAX_CODE_FIXTURE === "1") childEnv.SAGAX_CODE_FIXTURE = "1";
+  // A test's key for minting a turn capability (POST /api/testing/internal-capability),
+  // so a recipe can call a bot's own tools (launch_cloud_agent) the way a turn does.
+  if (parentEnv.SAGAX_TEST_INTERNAL_CAPABILITY_KEY && parentEnv.SAGAX_TEST_INTERNAL_CAPABILITY_KEY.length >= 32) {
+    childEnv.SAGAX_TEST_INTERNAL_CAPABILITY_KEY = parentEnv.SAGAX_TEST_INTERNAL_CAPABILITY_KEY;
+  }
   // The credential vault answers loopback on a headless server only when
   // the operator opts in (server/routes/credential-vault.ts vaultPrincipalFor).
   if (parentEnv.SAGAX_CREDENTIAL_VAULT_LOOPBACK === "1") childEnv.SAGAX_CREDENTIAL_VAULT_LOOPBACK = "1";

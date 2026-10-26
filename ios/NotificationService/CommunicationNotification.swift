@@ -59,7 +59,30 @@ enum CommunicationNotification {
         interaction.direction = .incoming
         interaction.donate(completion: nil)
         do {
-            return try content.updating(from: intent)
+            let updated = try content.updating(from: intent)
+            // updating(from:) has dropped the category or requestId on some
+            // iOS versions. Allow and Deny read both.
+            guard let mutable = updated.mutableCopy() as? UNMutableNotificationContent else { return updated }
+            if mutable.categoryIdentifier.isEmpty {
+                mutable.categoryIdentifier = content.categoryIdentifier
+            }
+            var info = mutable.userInfo
+            var filled = false
+            for (key, value) in content.userInfo where info[key] == nil {
+                info[key] = value
+                filled = true
+            }
+            if filled { mutable.userInfo = info }
+            if mutable.threadIdentifier.isEmpty {
+                mutable.threadIdentifier = content.threadIdentifier
+            }
+            if mutable.subtitle.isEmpty, !content.subtitle.isEmpty {
+                mutable.subtitle = content.subtitle
+            }
+            if mutable.sound == nil {
+                mutable.sound = content.sound
+            }
+            return mutable
         } catch {
             return content
         }

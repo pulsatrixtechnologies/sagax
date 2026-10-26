@@ -75,12 +75,25 @@ export function readMcpGatewayCall(name: string | undefined, input: unknown, ser
   return { kind: "admin", action: "status", server };
 }
 
+/** Whether an ACP tool call's title or `_meta["x.ai/tool"]` names Grok's
+ * use_tool meta tool. */
+function namesUseTool(hint: { title?: unknown; meta?: unknown } | undefined): boolean {
+  if (!hint) return false;
+  const title = typeof hint.title === "string" ? hint.title.trim().toLowerCase().replace(/\s+/g, "_") : "";
+  if (title === "use_tool") return true;
+  const tool = record(record(hint.meta)?.["x.ai/tool"]);
+  return tool?.kind === "use_tool" || tool?.name === "use_tool";
+}
+
 /** Grok's `use_tool` meta tool (rawInput `{ variant: "UseTool", tool_name:
  * "<server>__<tool>", tool_input }`): the tool it runs and that tool's own
- * arguments; undefined for any other call. Its title reads "Use Tool". */
-export function readUseToolCall(rawInput: unknown): { id: string; args: unknown } | undefined {
+ * arguments; undefined for any other call. Its title reads "Use Tool".
+ * grok 1.0.62 sends the first `tool_call` without `variant` (only the later
+ * update has it) and titles it `use_tool`: `hint` (the call's title and
+ * `_meta`) identifies it then, so the row names the tool, not "use tool". */
+export function readUseToolCall(rawInput: unknown, hint?: { title?: unknown; meta?: unknown }): { id: string; args: unknown } | undefined {
   const raw = record(rawInput);
-  if (!raw || raw.variant !== "UseTool") return undefined;
+  if (!raw || (raw.variant !== "UseTool" && !namesUseTool(hint))) return undefined;
   const name = text(raw.tool_name);
   if (!name || !/^(?:mcp__)?[A-Za-z0-9][A-Za-z0-9_.-]*__[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name)) return undefined;
   return { id: name.startsWith("mcp__") ? name : `mcp__${name}`, args: innerArgs(raw.tool_input) };

@@ -18,7 +18,7 @@ describe("code work of a conversation", () => {
       bash("git push -u origin fix/lexer 2>&1", "To https://x-access-token:ghs_secret@github.com/acme/parser.git\n * [new branch]      fix/lexer -> fix/lexer\nbranch 'fix/lexer' set up to track 'origin/fix/lexer'."),
       bash("gh pr create --title \"Split the lexer\" --body \"...\" --base main", "https://github.com/acme/parser/pull/42\n"),
     ]));
-    expect(work.pullRequests).toEqual([{ repo: "acme/parser", number: 42, url: "https://github.com/acme/parser/pull/42", title: "Split the lexer", action: "opened", at: 1_003 }]);
+    expect(work.pullRequests).toEqual([{ repo: "acme/parser", number: 42, url: "https://github.com/acme/parser/pull/42", title: "Split the lexer", action: "opened", branch: "fix/lexer", at: 1_003 }]);
     expect(work.branches).toEqual([{ name: "fix/lexer", repo: "acme/parser", pushed: true, url: "https://github.com/acme/parser/tree/fix/lexer", at: 1_003 }]);
     expect(work.commits).toEqual([{ sha: "1a2b3c4", message: "fix: split the lexer", branch: "fix/lexer", pushed: true, repo: "acme/parser", url: "https://github.com/acme/parser/commit/1a2b3c4", at: 1_001 }]);
     // the push's credentials never reach the panel
@@ -43,8 +43,16 @@ describe("code work of a conversation", () => {
       { name: "mcp__github__merge_pull_request", ok: true, input: JSON.stringify({ owner: "acme", repo: "web", pull_number: 9 }), output: "{\"merged\":true}" },
       { name: "mcp__github__push_files", ok: true, input: JSON.stringify({ owner: "acme", repo: "web", branch: "docs", files: [] }), output: "{}" },
     ]));
-    expect(work.pullRequests).toEqual([{ repo: "acme/web", number: 9, url: "https://github.com/acme/web/pull/9", title: "Dark mode", action: "merged", at: 1_001 }]);
+    expect(work.pullRequests).toEqual([{ repo: "acme/web", number: 9, url: "https://github.com/acme/web/pull/9", title: "Dark mode", action: "merged", branch: "dark-mode", at: 1_001 }]);
     expect(work.branches.map((branch) => [branch.name, branch.pushed])).toEqual([["docs", true], ["dark-mode", true]]);
+  });
+
+  it("names a pull request's head branch, without the owner of a fork", () => {
+    const work = codeWork(at([
+      bash("gh pr create --head octo:feat/x --title X", "https://github.com/acme/parser/pull/5\n"),
+    ]));
+    expect(work.pullRequests[0]).toMatchObject({ number: 5, branch: "feat/x" });
+    expect(work.branches.map((branch) => branch.name)).toEqual(["feat/x"]);
   });
 
   it("counts only work that was done: no failed, refused or running call, no reads, no quoted text", () => {

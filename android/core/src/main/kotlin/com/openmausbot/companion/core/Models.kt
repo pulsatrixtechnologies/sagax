@@ -922,7 +922,6 @@ sealed interface LiveCallStart {
 
 @Serializable
 data class ConfigStatus(
-    val composio: ConfigFlag? = null,
     val box: ConfigFlag? = null,
     val tts: ConfigFlag? = null,
     val imageGen: ConfigFlag? = null,
@@ -952,91 +951,6 @@ data class ConfigStatus(
      */
     val voiceProvider: VoiceProvider
         get() = VoiceProvider.fromWire(tts?.provider)
-}
-
-object ConnectedAppsRules {
-    const val MAX_ACCOUNT_ALIAS_LENGTH = 64
-    const val MAX_ACCOUNTS_PER_CONNECTOR = 5
-    const val PRIMARY_ACCOUNT_LABEL = "Primary account"
-
-    val firstAccountAlias: String? = null
-
-    fun additionalAccountAlias(input: String): String? =
-        trimmedAlias(input)?.take(MAX_ACCOUNT_ALIAS_LENGTH)
-
-    fun canAddAnotherAccount(accounts: List<ConnectorAccount>): Boolean =
-        accounts.size < MAX_ACCOUNTS_PER_CONNECTOR
-
-    internal fun trimmedAlias(input: String?): String? =
-        input?.trim { it.isWhitespace() }?.takeIf { it.isNotEmpty() }
-}
-
-@Serializable
-data class ConnectorCard(
-    val slug: String,
-    val label: String,
-    val blurb: String,
-    val logo: String? = null,
-    val domain: String? = null,
-) {
-    val id: String get() = slug
-}
-
-@Serializable
-data class ConnectorAccount(
-    val id: String,
-    val alias: String? = null,
-    val status: String,
-) {
-    val displayName: String
-        get() = ConnectedAppsRules.trimmedAlias(alias) ?: ConnectedAppsRules.PRIMARY_ACCOUNT_LABEL
-
-    val isActive: Boolean
-        get() = status.trim { it.isWhitespace() }.uppercase() == "ACTIVE"
-}
-
-@Serializable
-data class ConnectorStatus(
-    val connected: Boolean,
-    val pending: Boolean? = null,
-    val status: String? = null,
-    val accounts: List<ConnectorAccount>? = null,
-)
-
-@Serializable
-data class ConnectorCatalog(
-    val configured: Boolean,
-    val mode: String? = null,
-    val source: String? = null,
-    val cards: List<ConnectorCard>,
-)
-
-@Serializable
-data class ConnectorStatuses(
-    val configured: Boolean,
-    val services: Map<String, ConnectorStatus>,
-    /**
-     * "ok", "unavailable", or absent on a desktop that predates the field.
-     * Read it through `isAuthoritative`; nothing should compare it directly.
-     */
-    val credentialStore: String? = null,
-) {
-    /**
-     * Whether `services` is an inventory or an admission of ignorance.
-     *
-     * `server/index.ts` answers an unreadable Composio credential store with
-     * an empty map *and* `credentialStore: "unavailable"`, because not being
-     * able to read the store means we do not know what is connected — which
-     * is not the same as knowing nothing is. An empty map that arrives this
-     * way must never be shown as "nothing is connected"; every account may
-     * still be live on the computer.
-     *
-     * Only that exact string withdraws the claim. "ok" is authoritative, and
-     * so is a missing field: a desktop old enough not to send it would
-     * otherwise have every answer treated as unknowable.
-     */
-    val isAuthoritative: Boolean
-        get() = credentialStore != "unavailable"
 }
 
 @Serializable(with = BotProfilePatchSerializer::class)
@@ -1378,76 +1292,11 @@ internal data class RoutineResponse(val routine: Routine)
 internal data class RoutineRunResponse(val run: RoutineRun)
 
 @Serializable
-internal data class ConnectorAuthorizationResponse(val url: String)
-
-@Serializable
 data class BotOverviewWho(val name: String, val title: String, val blurb: String, val soulLead: String)
 
 @Serializable
 data class BotOverviewRecent(val at: Double, val summary: String)
 
-/**
- * One service's grant level, the same three the web grant editor and both
- * phones render. A level string this build does not know falls back to
- * [Partial] — the row stays honest ("some tools") without costing the
- * reader the whole overview, matching the iOS decode.
- */
-@Serializable(with = BotOverviewGrantLevelSerializer::class)
-sealed interface BotOverviewGrantLevel {
-    /** `tools: "*"` on the computer: the whole service is granted. */
-    data object All : BotOverviewGrantLevel
-
-    /** An exact tool allowlist; the overview carries only its size. */
-    data object Partial : BotOverviewGrantLevel
-
-    /** The service is granted nothing. */
-    data object None : BotOverviewGrantLevel
-}
-
-object BotOverviewGrantLevelSerializer : KSerializer<BotOverviewGrantLevel> {
-    override val descriptor: SerialDescriptor =
-        PrimitiveSerialDescriptor("BotOverviewGrantLevel", PrimitiveKind.STRING)
-
-    override fun deserialize(decoder: Decoder): BotOverviewGrantLevel {
-        val input = decoder as? JsonDecoder
-            ?: throw SerializationException("BotOverviewGrantLevel can only be decoded from JSON")
-        val level = (input.decodeJsonElement() as? JsonPrimitive)?.takeIf { it.isString }
-            ?: throw SerializationException("BotOverviewGrantLevel must be a string")
-        return when (level.content) {
-            "all" -> BotOverviewGrantLevel.All
-            "none" -> BotOverviewGrantLevel.None
-            // "partial", plus any level a newer computer adds.
-            else -> BotOverviewGrantLevel.Partial
-        }
-    }
-
-    override fun serialize(encoder: Encoder, value: BotOverviewGrantLevel) {
-        val output = encoder as? JsonEncoder
-            ?: throw SerializationException("BotOverviewGrantLevel can only be encoded as JSON")
-        output.encodeString(
-            when (value) {
-                BotOverviewGrantLevel.All -> "all"
-                BotOverviewGrantLevel.Partial -> "partial"
-                BotOverviewGrantLevel.None -> "none"
-            },
-        )
-    }
-}
-
-/** One connected-app service's tool grants, as the overview summarizes them. */
-@Serializable
-data class BotOverviewGrant(
-    val slug: String,
-    val level: BotOverviewGrantLevel,
-    /** Granted tool count; 0 unless the level is [BotOverviewGrantLevel.Partial]. */
-    val toolCount: Int,
-)
-
-/**
- * Grants ride the overview lossily: one malformed entry — or a whole
- * malformed container — is dropped rather than costing the overview, the
- * same policy pairing endpoints already follow.
- */
 @Serializable(with = BotOverviewSerializer::class)
 data class BotOverview(
     val who: BotOverviewWho,
@@ -1455,13 +1304,6 @@ data class BotOverview(
     val reaches: List<String> = emptyList(),
     val wont: List<String> = emptyList(),
     val recent: List<BotOverviewRecent> = emptyList(),
-    /**
-     * Per-service connector tool grants, sorted by slug. Absent on
-     * computers older than per-bot grants — the legacy all-or-nothing
-     * `composio` behavior stands and nothing new is drawn. An empty list
-     * is an explicit no-tools record and does draw.
-     */
-    val grants: List<BotOverviewGrant>? = null,
 )
 
 object BotOverviewSerializer : KSerializer<BotOverview> {
@@ -1490,15 +1332,6 @@ object BotOverviewSerializer : KSerializer<BotOverview> {
                     runCatching { json.decodeFromJsonElement<BotOverviewRecent>(entry) }.getOrNull()
                 } ?: emptyList()
             }.getOrDefault(emptyList()),
-            grants = when (val element = value["grants"]) {
-                null, is JsonNull -> null
-                is JsonArray -> element.mapNotNull { entry ->
-                    runCatching { json.decodeFromJsonElement<BotOverviewGrant>(entry) }.getOrNull()
-                }
-                // A malformed container reads as absent — an explicit
-                // no-tools record is an empty array, never this.
-                else -> null
-            },
         )
     }
 
@@ -1514,12 +1347,6 @@ object BotOverviewSerializer : KSerializer<BotOverview> {
                 "recent",
                 JsonArray(value.recent.map { output.json.encodeToJsonElement(BotOverviewRecent.serializer(), it) }),
             )
-            value.grants?.let { grants ->
-                put(
-                    "grants",
-                    JsonArray(grants.map { output.json.encodeToJsonElement(BotOverviewGrant.serializer(), it) }),
-                )
-            }
         })
     }
 }

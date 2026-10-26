@@ -1,29 +1,29 @@
 // @vitest-environment happy-dom
-// The presence line rotates gently through a phase's phrases, starts over
-// when the bot moves to a new step, and crossfades in place.
+// The presence tail: the bot's activity line while it works, typing once the
+// thread's answer text streams, gone once the reply settles.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { phraseAt, phraseHoldMs } from "@/lib/live-activity";
+import { PHRASE_HOLD_MS } from "./BotActivityIndicator";
 import { TurnPresence } from "./TurnPresence";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const thinking = ["Thinking", "Mulling it over", "Piecing it together", "Chipping away"];
+const bot = { name: "Pepper", color: "blue" as const };
 const seed = "bot:thread:1";
 
 let host: HTMLDivElement;
 let root: Root;
 
 function render(props: Record<string, unknown>) {
-  act(() => root.render(createElement(TurnPresence, { avatar: null, visible: true, seed, since: null, ...props })));
+  act(() => root.render(createElement(TurnPresence, { bot, visible: true, seed, ...props })));
 }
 
-const visibleText = () =>
-  Array.from(host.querySelectorAll(".thinking-shimmer:not([aria-hidden])")).map((node) => node.textContent);
+const phrase = () => host.querySelector("[data-presence-phrase]")?.textContent;
+const mode = () => host.querySelector("[data-bot-activity]")?.getAttribute("data-bot-activity");
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -38,61 +38,38 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("TurnPresence phrases", () => {
-  it("holds each phrase for its seeded 4 to 6 seconds, then moves on", () => {
-    render({ phrases: thinking, phase: "think" });
-    expect(visibleText()).toEqual(["Thinking"]);
-    const hold = phraseHoldMs(`${seed}|think`, 0);
-    act(() => void vi.advanceTimersByTime(hold - 1));
-    expect(visibleText()).toEqual(["Thinking"]);
-    act(() => void vi.advanceTimersByTime(1));
-    expect(visibleText()).toEqual([phraseAt(thinking, `${seed}|think`, 1)]);
+describe("TurnPresence", () => {
+  it("thinks with its own phrases on a plain thinking step", () => {
+    render({ phrases: ["Thinking"], phase: "chat.activity.thinking" });
+    expect(mode()).toBe("thinking");
+    expect(phrase()).toBe("Thinking it over");
   });
 
-  it("crossfades the outgoing phrase in the same cell, then drops it", () => {
-    render({ phrases: thinking, phase: "think" });
-    act(() => void vi.advanceTimersByTime(phraseHoldMs(`${seed}|think`, 0)));
-    const outgoing = host.querySelector(".turn-phrase-out");
-    expect(outgoing?.textContent).toBe("Thinking");
-    expect(outgoing?.getAttribute("aria-hidden")).toBe("true");
-    expect(host.querySelector(".turn-phrase-in")).not.toBeNull();
-    act(() => void vi.advanceTimersByTime(320));
-    expect(host.querySelector(".turn-phrase-out")).toBeNull();
-  });
-
-  it("starts a new step at its plain label", () => {
-    render({ phrases: thinking, phase: "think" });
-    act(() => void vi.advanceTimersByTime(phraseHoldMs(`${seed}|think`, 0)));
-    render({ phrases: ["Searching the web", "Looking it up"], phase: "web" });
-    expect(visibleText()).toEqual(["Searching the web"]);
-  });
-
-  it("starts a returning phase over, even after a step too short to swap", () => {
-    render({ phrases: thinking, phase: "think" });
-    act(() => void vi.advanceTimersByTime(phraseHoldMs(`${seed}|think`, 0)));
-    expect(visibleText()).not.toEqual(["Thinking"]);
-    render({ phrases: ["Reading a file", "Reading through"], phase: "read" });
-    act(() => void vi.advanceTimersByTime(1000));
-    render({ phrases: thinking, phase: "think" });
-    expect(visibleText()).toEqual(["Thinking"]);
-  });
-
-  it("floats the outgoing phrase out of flow, so only the shown phrase sets the width", () => {
-    render({ phrases: thinking, phase: "think" });
-    act(() => void vi.advanceTimersByTime(phraseHoldMs(`${seed}|think`, 0)));
-    expect(host.querySelector(".turn-phrase-out")?.className).toContain("absolute");
-    expect(host.querySelector(".turn-phrase-in")?.className).not.toContain("absolute");
-  });
-
-  it("keeps a single phrase steady", () => {
+  it("starts a tool step at its plain label and keeps a single phrase steady", () => {
     render({ phrases: ["Running the test suite"], phase: "spoken" });
-    act(() => void vi.advanceTimersByTime(60_000));
-    expect(visibleText()).toEqual(["Running the test suite"]);
-    expect(host.querySelector(".turn-phrase-out")).toBeNull();
+    act(() => void vi.advanceTimersByTime(PHRASE_HOLD_MS * 10));
+    expect(phrase()).toBe("Running the test suite");
+  });
+
+  it("types while answer text streams", () => {
+    render({ typing: true });
+    expect(mode()).toBe("typing");
+    expect(phrase()).toBe("Typing…");
+  });
+
+  it("leaves at once when the reply hands over, after a fade otherwise", () => {
+    render({ answering: true });
+    render({ visible: false, answering: true });
+    expect(host.querySelector(".turn-presence")).toBeNull();
+    render({ visible: true, answering: false });
+    render({ visible: false });
+    expect(host.querySelector(".turn-mascot-out")).not.toBeNull();
+    act(() => void vi.advanceTimersByTime(280));
+    expect(host.querySelector(".turn-presence")).toBeNull();
   });
 
   it("still takes a plain label, as the sidebar-era callers pass", () => {
-    const markup = renderToStaticMarkup(createElement(TurnPresence, { avatar: null, visible: true, label: "Running a command", since: 1 }));
+    const markup = renderToStaticMarkup(createElement(TurnPresence, { bot, visible: true, label: "Running a command" }));
     expect(markup).toContain("Running a command");
     expect(markup).toContain("thinking-shimmer");
   });
@@ -105,5 +82,11 @@ describe("thinking shimmer box", () => {
     expect(rule).toContain("background-clip: text");
     expect(rule).toMatch(/padding: 0\.35em 0\.12em/);
     expect(rule).toMatch(/margin: -0\.35em -0\.12em/);
+  });
+
+  it("stills the wave and the sheen under both reduced-motion switches", () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    expect(css).toContain(':root[data-reduced-motion="true"] .bot-activity-wave > span { animation: none; }');
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.bot-activity-wave > span \{ animation: none; \}/);
   });
 });

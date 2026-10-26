@@ -5,38 +5,30 @@
 // VPS, Working folder, Connected apps, and Browser are moved verbatim from
 // SettingsPanel.tsx; the connected-service list, webhooks list, and
 // always-allowed list (the first read-only view of standing grants) are new.
-import { useEffect, useState } from "react";
-import { boatComputerEnabled, connectedAppsEnabled as connectedAppsFeatureEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
-import { ArrowUpRight, ChevronDown, ChevronRight, FolderOpen } from "lucide-react";
+import { useState } from "react";
+import { boatComputerEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
+import { ArrowUpRight, FolderOpen } from "lucide-react";
 
-import { api, useStore, type Bot } from "@/state/store";
+import { useStore, type Bot } from "@/state/store";
 import { AdvancedFold } from "./AdvancedFold";
 import { useBotEditor } from "./BotEditorContext";
 import { cn } from "@/lib/cn";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { t } from "@/lib/i18n";
-import type { LocaleKey } from "@/locales";
+import { readableOr } from "../../../shared/human-id";
 import { mcpAccountFor, mcpServersForBot, useMcpServers, withMcpAccount } from "@/lib/mcp-servers";
 import { cloudComputersOffered } from "@/lib/place";
 import { shortPath } from "@/lib/short-path";
 import { useDesktopCapabilities } from "../DesktopCapabilities";
 import { BrowserUnavailableNote, SettingsText } from "../SettingsLink";
 import { CloudBackendPicker } from "../CloudBackendPicker";
-import { ConfirmDialog } from "../ConfirmDialog";
+import { RemoteFolderField } from "../remote-session/RemoteFolderField";
 import { PILL, PillSelect, Switch } from "../SettingsPrimitives";
 import { ProposalStatus } from "./ProposalStatus";
 import { ToolSelectionCard } from "./ToolSelectionCard";
-import { preloadConnectedApps, type ConnectorInventory } from "../PluginsPanel";
-import {
-  classifyConnectorTool,
-  connectorServiceAccess,
-  withServiceGrant,
-  type ConnectorVerb,
-} from "@/lib/connector-grants";
 import { inputCls } from "./field";
 import { PaneEmpty, PaneSection } from "./PaneSection";
 import { BotWebhooks } from "./BotWebhooks";
-import type { ConnectorScope, ConnectorScopes } from "../../../shared/connector-scopes";
 import type { useBotSettingsDerived } from "./useBotSettingsDerived";
 
 /** Where a bot's shell tools run. Set per bot; each task pins its own copy
@@ -98,11 +90,12 @@ function WorkingFolder({ bot }: { bot: Bot }) {
             void save((draft ?? bot.cwd ?? "").trim() || null);
           }}
         >
-          <input
-            className={cn(inputCls, "font-mono text-[12.5px]")}
+          <RemoteFolderField
+            botId={bot.id}
+            inputClassName={cn(inputCls, "font-mono text-[12.5px]")}
             placeholder={t("botPanel.access.placeholder")}
             value={draft ?? bot.cwd ?? ""}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={setDraft}
           />
           <button type="submit" disabled={saving || draft === null} className={cn(PILL, "shrink-0")}>
             {t("common.save")}
@@ -181,9 +174,9 @@ function McpServersCard({ bot, patch }: {
                     disabled={!!error}
                     onChange={(account) => patch({ mcpAccounts: withMcpAccount(bot.mcpAccounts, server.name, account) })}
                     ariaLabel={t("botAccess.mcpAccountAria", { name: server.name })}
-                    options={server.accounts.map((account) => ({
+                    options={server.accounts.map((account, index) => ({
                       value: account.id,
-                      label: (account.id === "default" ? t("botAccess.mcpAccountFirst") : account.label ?? account.id)
+                      label: (account.id === "default" ? t("botAccess.mcpAccountFirst") : readableOr(account.label ?? account.id, t("ids.accountN", { n: index + 1 })))
                         + (account.connected ? "" : ` (${t("mcp.accounts.notSignedIn")})`),
                     }))}
                   />
@@ -213,323 +206,6 @@ function McpServersCard({ bot, patch }: {
   );
 }
 
-interface ToolListing {
-  name: string;
-  description?: string;
-}
-
-/** Lazy, module-cached inventory of every grantable tool per service, read
- * from the same endpoint the bots' bridge relays through. Recent data
- * survives dialog reopens; a failed load degrades the per-tool editor to a
- * retry row while All-tools and remove keep working. */
-let connectorToolsCache: { at: number; services: Record<string, ToolListing[]> } | null = null;
-let connectorToolsRequest: Promise<Record<string, ToolListing[]>> | null = null;
-const CONNECTOR_TOOLS_CACHE_MS = 60_000;
-
-function preloadConnectorTools(force = false): Promise<Record<string, ToolListing[]>> {
-  if (!force && connectorToolsCache && Date.now() - connectorToolsCache.at < CONNECTOR_TOOLS_CACHE_MS) {
-    return Promise.resolve(connectorToolsCache.services);
-  }
-  if (connectorToolsRequest) return connectorToolsRequest;
-  connectorToolsRequest = api<{ configured?: boolean; services?: Record<string, ToolListing[]> }>("/api/connectors/tools")
-    .then((response) => {
-      const services = response.services ?? {};
-      if (response.configured) connectorToolsCache = { at: Date.now(), services };
-      return services;
-    })
-    .finally(() => {
-      connectorToolsRequest = null;
-    });
-  return connectorToolsRequest;
-}
-
-const VERB_ORDER: ConnectorVerb[] = ["read", "draft", "send", "modify", "delete"];
-const VERB_LABELS: Record<ConnectorVerb, LocaleKey> = {
-  read: "botAccess.grants.verb.read",
-  draft: "botAccess.grants.verb.draft",
-  send: "botAccess.grants.verb.send",
-  modify: "botAccess.grants.verb.modify",
-  delete: "botAccess.grants.verb.delete",
-};
-
-/** Per-service tool grants under the Connected apps switch (issue #1738).
- * Each connected service row expands into the exact-name editor: search,
- * verb-class preset chips that expand to explicit names, and one-click All
- * tools per service or globally. A grants record this build cannot parse
- * renders as a read-only summary: never a guess that could destroy fields
- * a newer server understands. */
-function ConnectorToolsGrants({
-  bot,
-  patch,
-  slugs,
-}: {
-  bot: Bot;
-  patch: ReturnType<typeof useBotSettingsDerived>["patch"];
-  slugs: string[];
-}) {
-  const [openSlug, setOpenSlug] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [tools, setTools] = useState<Record<string, ToolListing[]> | null>(null);
-  const [toolsError, setToolsError] = useState<string | null>(null);
-  /** The explicit list a service had before "All tools", so the switch can
-   * toggle back and forth within one visit. */
-  const [lastExplicit, setLastExplicit] = useState<Record<string, string[]>>({});
-  /** The first grant pending confirmation: saving it creates the grants
-   * record, which limits every other connected app to no tools, so the
-   * person confirms that transition before it lands. */
-  const [confirmFirstGrant, setConfirmFirstGrant] = useState<{ slug: string; tools: "*" | string[] } | null>(null);
-
-  useEffect(() => {
-    if (!openSlug || tools || toolsError) return;
-    let cancelled = false;
-    preloadConnectorTools()
-      .then((services) => {
-        if (!cancelled) setTools(services);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setToolsError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [openSlug, tools, toolsError]);
-
-  const record = bot.connectorTools;
-  const recordExists = record !== undefined && record !== null;
-  const selectedFor = (slug: string): string[] => {
-    const grant = record?.[slug];
-    return grant && grant.tools !== "*" ? grant.tools : [];
-  };
-
-  const apply = (slug: string, next: { tools: "*" | string[] } | null) => {
-    const value = withServiceGrant(record, slug, next);
-    if (value === undefined) return;
-    patch({ connectorTools: value });
-  };
-
-  const toggleTool = (slug: string, name: string) => {
-    const selected = selectedFor(slug);
-    const next = selected.includes(name) ? selected.filter((entry) => entry !== name) : [...selected, name];
-    if (!next.length) {
-      apply(slug, null);
-      return;
-    }
-    setLastExplicit((prev) => ({ ...prev, [slug]: next }));
-    if (!recordExists) {
-      setConfirmFirstGrant({ slug, tools: next });
-      return;
-    }
-    apply(slug, { tools: next });
-  };
-
-  const allForService = (slug: string) => {
-    if (!recordExists) {
-      setConfirmFirstGrant({ slug, tools: "*" });
-      return;
-    }
-    const selected = selectedFor(slug);
-    if (selected.length) setLastExplicit((prev) => ({ ...prev, [slug]: selected }));
-    apply(slug, { tools: "*" });
-  };
-
-  const leaveAllForService = (slug: string) => {
-    const remembered = lastExplicit[slug];
-    if (remembered && remembered.length) apply(slug, { tools: remembered });
-    else apply(slug, null);
-  };
-
-  if (!slugs.length) {
-    return <div className="mt-3 text-[11.5px] text-ink-secondary">{t("botAccess.grants.noApps")}</div>;
-  }
-
-  return (
-    <div className="mt-3">
-      <div className="text-[12px] font-medium text-ink">{t("botAccess.grants.header")}</div>
-      <div className="mt-0.5 text-[11.5px] text-ink-secondary">{t("botAccess.grants.hint")}</div>
-      <div className="mt-2 divide-y divide-hairline/40 overflow-hidden rounded-lg border border-hairline/40">
-        {slugs.map((slug) => {
-          const access = connectorServiceAccess(record, slug);
-          const open = openSlug === slug;
-          const grant = record?.[slug];
-          const isAll = access.level === "all" && recordExists && grant?.tools === "*";
-          const serviceTools = tools?.[slug] ?? [];
-          const selected = selectedFor(slug);
-          const query = search.trim().toLowerCase();
-          const matches = query
-            ? serviceTools.filter((tool) => tool.name.toLowerCase().includes(query)
-              || (tool.description ?? "").toLowerCase().includes(query))
-            : serviceTools;
-          const verbCounts = new Map<ConnectorVerb, string[]>();
-          for (const tool of serviceTools) {
-            const verb = classifyConnectorTool(tool.name);
-            if (!verb) continue;
-            const bucket = verbCounts.get(verb) ?? [];
-            bucket.push(tool.name);
-            verbCounts.set(verb, bucket);
-          }
-          return (
-            <div key={slug}>
-              <button
-                type="button"
-                aria-expanded={open}
-                onClick={() => {
-                  setOpenSlug(open ? null : slug);
-                  setSearch("");
-                }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-control/60"
-              >
-                {open ? <ChevronDown size={14} className="shrink-0 text-ink-secondary" /> : <ChevronRight size={14} className="shrink-0 text-ink-secondary" />}
-                <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink">{slug}</span>
-                <span className="shrink-0 text-[11.5px] text-ink-secondary">
-                  {!access.editable
-                    ? t("botAccess.grants.custom")
-                    : access.level === "all"
-                      ? t("botAccess.grants.allTools")
-                      : access.level === "none"
-                        ? t("botAccess.grants.noTools")
-                        : t("botAccess.grants.toolCount", { count: access.count })}
-                </span>
-              </button>
-              {open && (
-                <div className="border-t border-hairline/40 bg-inset/40 px-3 py-3">
-                  {!access.editable ? (
-                    <div className="text-[11.5px] leading-relaxed text-ink-secondary">
-                      {t("botAccess.grants.uneditable")}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => (isAll ? leaveAllForService(slug) : allForService(slug))}
-                          className={cn(
-                            "rounded-full px-2.5 py-1 text-[11.5px] font-medium",
-                            isAll ? "bg-accent/15 text-accent-text" : "bg-control text-ink hover:bg-raised-hover",
-                          )}
-                        >
-                          {t("botAccess.grants.allTools")}
-                        </button>
-                        {recordExists && (
-                          <button
-                            type="button"
-                            onClick={() => patch({ connectorTools: null })}
-                            className="rounded-full bg-control px-2.5 py-1 text-[11.5px] font-medium text-ink hover:bg-raised-hover"
-                          >
-                            {t("botAccess.grants.allApps")}
-                          </button>
-                        )}
-                      </div>
-                      {!recordExists && (
-                        <div className="mt-2 text-[11px] leading-relaxed text-ink-secondary">
-                          {t("botAccess.grants.firstGrantWarning")}
-                        </div>
-                      )}
-                      {toolsError ? (
-                        <div className="mt-2 text-[11.5px] text-ink-secondary">
-                          {t("botAccess.grants.loadError")}{" "}
-                          <button
-                            type="button"
-                            className="underline"
-                            onClick={() => {
-                              setToolsError(null);
-                              setTools(null);
-                              void preloadConnectorTools(true).then(() => undefined).catch(() => undefined);
-                            }}
-                          >
-                            {t("botAccess.grants.retry")}
-                          </button>
-                        </div>
-                      ) : tools === null ? (
-                        <div className="mt-2 text-[11.5px] text-ink-secondary">{t("botAccess.grants.loading")}</div>
-                      ) : serviceTools.length === 0 ? (
-                        <div className="mt-2 text-[11.5px] text-ink-secondary">{t("botAccess.grants.noListing")}</div>
-                      ) : (
-                        <>
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {VERB_ORDER.filter((verb) => verbCounts.has(verb)).map((verb) => {
-                              const names = verbCounts.get(verb) ?? [];
-                              return (
-                                <button
-                                  key={verb}
-                                  type="button"
-                                  title={t("botAccess.grants.verbHint")}
-                                  onClick={() => {
-                                    const next = [...new Set([...selected, ...names])];
-                                    setLastExplicit((prev) => ({ ...prev, [slug]: next }));
-                                    if (!recordExists) {
-                                      setConfirmFirstGrant({ slug, tools: next });
-                                      return;
-                                    }
-                                    apply(slug, { tools: next });
-                                  }}
-                                  className="rounded-full bg-control px-2.5 py-1 text-[11px] text-ink hover:bg-raised-hover"
-                                >
-                                  {t(VERB_LABELS[verb])} · {names.length}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <input
-                            className={cn(inputCls, "mt-2")}
-                            placeholder={t("botAccess.grants.search")}
-                            aria-label={t("botAccess.grants.search")}
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                          />
-                          <div className="mt-2 max-h-64 space-y-0.5 overflow-y-auto">
-                            {matches.map((tool) => {
-                              const checked = isAll || selected.includes(tool.name);
-                              return (
-                                <label key={tool.name} className="flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 hover:bg-control/60">
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    disabled={isAll}
-                                    onChange={() => toggleTool(slug, tool.name)}
-                                    className="mt-0.5"
-                                  />
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block truncate font-mono text-[11.5px] text-ink" title={tool.name}>{tool.name}</span>
-                                    {tool.description && (
-                                      <span className="block truncate text-[11px] text-ink-secondary" title={tool.description}>
-                                        {tool.description}
-                                      </span>
-                                    )}
-                                  </span>
-                                </label>
-                              );
-                            })}
-                            {matches.length === 0 && (
-                              <div className="px-1.5 py-2 text-[11.5px] text-ink-secondary">{t("botAccess.grants.noMatches")}</div>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <ConfirmDialog
-        open={confirmFirstGrant !== null}
-        title={t("botAccess.grants.firstGrantTitle", { service: confirmFirstGrant?.slug ?? "" })}
-        body={t("botAccess.grants.firstGrantBody", { service: confirmFirstGrant?.slug ?? "" })}
-        confirmLabel={t("botAccess.grants.saveGrant")}
-        onCancel={() => setConfirmFirstGrant(null)}
-        onConfirm={() => {
-          const pending = confirmFirstGrant;
-          setConfirmFirstGrant(null);
-          if (!pending) return;
-          apply(pending.slug, { tools: pending.tools });
-        }}
-      />
-    </div>
-  );
-}
-
 export function AccessSection({
   bot,
   derived,
@@ -544,10 +220,6 @@ export function AccessSection({
   const {
     patch,
     canUseVps,
-    canUseConnectedApps,
-    connectedAppsConfigured,
-    connectedAppsEnabled,
-    connectorGrantState,
     canUseBrowser,
     desktopBrowser,
     browserBlockedOnWindows,
@@ -556,34 +228,13 @@ export function AccessSection({
     browserEnabled,
   } = derived;
   const browserInstallable = state.config?.browserEngine?.installable === true;
-  // Connected apps (Composio) is experimental: while Settings > Experimental
-  // features leaves it off, the bot's own switch hides too, like the sidebar
-  // entry and the Settings card.
-  const connectedAppsFeature = connectedAppsFeatureEnabled(state.config);
-  const [inventory, setInventory] = useState<ConnectorInventory | null>(null);
-
-  useEffect(() => {
-    if (!connectedAppsFeature) return;
-    let cancelled = false;
-    void preloadConnectedApps().then((result) => {
-      if (!cancelled) setInventory(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [connectedAppsFeature]);
 
   const alwaysAllow = bot.alwaysAllow ?? [];
-  const connectedSlugs = inventory?.authoritative
-    ? Object.entries(inventory.services)
-        .filter(([, status]) => status.connected)
-        .map(([slug]) => slug)
-    : [];
 
   // Where the bot runs, what it may reach, and which tools it may use are
   // not member fields. Hide the whole section when none of them can be saved.
   const canEdit = derived.canEdit ?? (() => true);
-  if (!canEdit("computer") && !canEdit("cwd") && !canEdit("mcpServers") && !canEdit("browser") && !canEdit("composio")) return null;
+  if (!canEdit("computer") && !canEdit("cwd") && !canEdit("mcpServers") && !canEdit("browser")) return null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -622,49 +273,6 @@ export function AccessSection({
           )}
         </PaneSection>
       )}
-
-      {connectedAppsFeature && <PaneSection title={<>{t("botPanel.access.apps")}<ProposalStatus bot={bot} /></>}>
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="text-[13px] text-ink-secondary">
-              {!connectedAppsConfigured
-                ? t("botPanel.access.appsConnect")
-                : !canUseConnectedApps
-                  ? t("botPanel.access.appsModel")
-                  : connectedAppsEnabled
-                    ? connectorGrantState === "partial"
-                      ? t("botPanel.access.appsPartial")
-                      : connectorGrantState === "none"
-                        ? t("botPanel.access.appsNone")
-                        : t("botPanel.access.appsOn")
-                    : t("botPanel.access.appsOff")}
-            </div>
-          </div>
-          <Switch
-            checked={connectedAppsEnabled}
-            aria-label={t("botPanel.access.appsAllow")}
-            disabled={
-              !connectedAppsEnabled && (!connectedAppsConfigured || !canUseConnectedApps)
-            }
-            onClick={() => patch({ composio: !connectedAppsEnabled })}
-            title={
-              !connectedAppsEnabled && !connectedAppsConfigured
-                ? t("botPanel.access.appsConnectFirst")
-                : !connectedAppsEnabled && !canUseConnectedApps
-                  ? t("botPanel.access.appsModelShort")
-                  : undefined
-            }
-            className="disabled:cursor-not-allowed"
-          />
-        </div>
-        {connectedAppsEnabled && inventory?.authoritative && (
-          <>
-            {!draft && <ConnectorScopesControl connectedSlugs={connectedSlugs} scopes={bot.connectorScopes} onChange={(connectorScopes) => patch({ connectorScopes })} />}
-            <ConnectorToolsGrants bot={bot} patch={patch} slugs={connectedSlugs} />
-          </>
-        )}
-        {connectedAppsEnabled && connectedAppsConfigured && <div className="mt-2"><ManageInConnectApps surface="apps" /></div>}
-      </PaneSection>}
 
       <McpServersCard bot={bot} patch={patch} />
 
@@ -731,39 +339,4 @@ export function AccessSection({
       </AdvancedFold>
     </div>
   );
-}
-
-/** App-level limits intersect with the existing exact tool grants. */
-function ConnectorScopesControl({ connectedSlugs, scopes, onChange }: {
-  connectedSlugs: string[];
-  scopes: ConnectorScopes | undefined;
-  onChange: (scopes: ConnectorScopes | null) => void;
-}) {
-  const limited = scopes !== undefined;
-  const slugs = [...new Set([...connectedSlugs, ...Object.keys(scopes?.apps ?? {})])].sort();
-  const setScope = (slug: string, scope: ConnectorScope | null) => {
-    const apps = { ...scopes?.apps };
-    if (scope) apps[slug] = scope;
-    else delete apps[slug];
-    onChange({ apps });
-  };
-  return <div className="mt-3">
-    <div className="flex items-center justify-between gap-4">
-      <div className="text-[13px] text-ink-secondary">
-        {limited ? t("botPanel.access.limitApps") : t("botPanel.access.noLimits")}
-      </div>
-      <Switch checked={limited} aria-label={t("botPanel.access.limitSwitch")} onClick={() => onChange(limited ? null : { apps: {} })} />
-    </div>
-    {limited && <div className="mt-2 flex flex-col divide-y divide-hairline/20 rounded-lg bg-inset">
-      {!slugs.length && <div className="px-3 py-2 text-[11.5px] text-ink-secondary">{t("botPanel.access.noApps")}</div>}
-      {slugs.map((slug) => <div key={slug} className="flex flex-wrap items-center justify-between gap-3 px-3 py-1.5">
-        <span className="min-w-0 text-[13px] text-ink">{slug}{!connectedSlugs.includes(slug) && <span className="ml-2 text-[10.5px] text-ink-secondary">{t("botPanel.access.notConnected")}</span>}</span>
-        <div className="flex shrink-0 gap-0.5 rounded-md bg-card p-0.5" role="group" aria-label={t("botPanel.access.slugAccess", { slug })}>
-          {([[null, "botPanel.access.scopeOff", "botPanel.access.scopeOffHint"], ["read", "botPanel.access.scopeRead", "botPanel.access.scopeReadHint"], ["write", "botPanel.access.scopeWrite", "botPanel.access.scopeWriteHint"]] as const).map(([value, label, hint]) =>
-            <button key={label} type="button" title={t(hint)} aria-pressed={(scopes?.apps[slug] ?? null) === value} onClick={() => setScope(slug, value)}
-              className={cn("rounded px-2 py-0.5 text-[11.5px] font-medium", (scopes?.apps[slug] ?? null) === value ? "bg-raised text-ink" : "text-ink-secondary hover:text-ink")}>{t(label)}</button>)}
-        </div>
-      </div>)}
-    </div>}
-  </div>;
 }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { autoVerdict } from "./auto-approve.ts";
-import { CW_ACTION_PASS_MS, cwActionCard, cwActionLanguage, cwToolWidget, createCwActionPasses } from "./cw-widget-actions.ts";
+import { CW_ACTION_PASS_MS, cwActionCard, cwActionLanguage, cwToolRowWidget, cwToolWidget, createCwActionPasses } from "./cw-widget-actions.ts";
+import { isCwViewTool, shownCwWidget } from "../shared/cw-widgets/tool-call.ts";
 import { withoutPrivateFields } from "./harness/bus.ts";
 import { FIXTURE_TICKETS, fixtureMcpContent, fixtureQueryResult } from "../shared/cw-widgets/fixtures.ts";
 import type { CwAction } from "../shared/cw-widgets/actions.ts";
@@ -78,6 +79,27 @@ describe("ConnectWise widget cards", () => {
 });
 
 describe("ConnectWise tool results", () => {
+  it("draws a widget on a tool row only for a Perspicax view tool (views on demand, 2026-10-20)", () => {
+    const resultText = fixtureMcpContent(JSON.parse(fixtureQueryResult(FIXTURE_TICKETS.slice(0, 2))));
+    const input = JSON.stringify({ resource: "service/tickets" });
+    // an ordinary read or find answers in text: no view the person did not ask for
+    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa__query", input, resultText)).toBeNull();
+    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa__find_schedule_entries", input, resultText)).toBeNull();
+    // a view tool draws only when the person's message asked for a view
+    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa__show_tickets", input, resultText, "can you list me the ticket I have for today in connectwise?")).toBeNull();
+    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa__show_tickets", input, resultText, "montre-moi mes billets en tableau interactif")).toMatchObject({ family: "ticket" });
+    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa__query", input, resultText, "montre-moi mes billets en tableau interactif")).toBeNull();
+    expect(isCwViewTool("cw_psa__show_schedule")).toBe(true);
+    expect(isCwViewTool("mcp__perspicax_x__cw_psa__show_time_entries")).toBe(true);
+    expect(isCwViewTool("mcp__perspicax_x__cw_psa__find_schedule_entries")).toBe(false);
+    expect(isCwViewTool("show_widget")).toBe(false);
+    expect(isCwViewTool(undefined)).toBe(false);
+    // a row stored before the fix keeps its widget field but draws as a row
+    const widget = cwToolWidget("mcp__perspicax_x__cw_psa__query", input, resultText)!;
+    expect(shownCwWidget({ name: "mcp__perspicax_x__cw_psa__query", widget })).toBeUndefined();
+    expect(shownCwWidget({ name: "mcp__perspicax_x__cw_psa__show_tickets", widget })).toBe(widget);
+  });
+
   it("maps a completed query to a widget and keeps the raw result out of logs", () => {
     const resultText = fixtureMcpContent(JSON.parse(fixtureQueryResult(FIXTURE_TICKETS.slice(0, 2))));
     const widget = cwToolWidget("mcp__perspicax_x__cw_psa__query", JSON.stringify({ resource: "service/tickets" }), resultText);

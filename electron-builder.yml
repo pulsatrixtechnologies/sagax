@@ -78,10 +78,22 @@ extraResources:
     to: licenses/cloudflared-LICENSE.txt
   - from: third_party/cloudflared/README.md
     to: licenses/cloudflared-README.md
+  # Tailcat is a separate executable (BSD 3-Clause). Ship its notice with the app.
+  - from: third_party/tailcat/LICENSE
+    to: licenses/tailcat-LICENSE.txt
   - from: third_party/hpke-js/core-LICENSE.txt
     to: licenses/hpke-core-LICENSE.txt
   - from: third_party/hpke-js/common-LICENSE.txt
     to: licenses/hpke-common-LICENSE.txt
+  - from: third_party/jsquash-webp/jsquash-webp-LICENSE.txt
+    to: licenses/jsquash-webp-LICENSE.txt
+  - from: third_party/jsquash-webp/libwebp-LICENSE.txt
+    to: licenses/libwebp-LICENSE.txt
+  - from: third_party/jsquash-webp/libwebp-PATENTS.txt
+    to: licenses/libwebp-PATENTS.txt
+  # Code adapted from T3 Code (MIT): the bots' browser egress gate, the Antigravity runtime, citations.
+  - from: third_party/t3-code/LICENSE
+    to: licenses/t3-code-LICENSE.txt
   - from: third_party/98.css/LICENSE
     to: licenses/98css-LICENSE.txt
   - from: third_party/geist/OFL.txt
@@ -137,6 +149,8 @@ mac:
       to: cua-sdk
     - from: dist-native/cloudflared/darwin-${arch}/cloudflared
       to: cloudflared/cloudflared
+    - from: dist-native/tailcat/darwin-${arch}/tailcat
+      to: tailcat/tailcat
     - from: dist-native/browser/darwin-${arch}
       to: browser-engine
     # The Data engine's native modules (DuckDB, resvg; server/data/engine.ts)
@@ -183,6 +197,8 @@ win:
     # the pinned amd64 executable as win32-arm64 too (x64 emulation).
     - from: dist-native/cloudflared/win32-${arch}/cloudflared.exe
       to: cloudflared/cloudflared.exe
+    - from: dist-native/tailcat/win32-${arch}/tailcat.exe
+      to: tailcat/tailcat.exe
     # No Windows arm64 browser bundle exists (Chrome for Testing, agent-browser
     # vendor build): both packages ship the x64 one, which Windows on Arm runs
     # under x64 emulation (server/browser-engine.ts packagedBrowser).
@@ -212,12 +228,33 @@ win:
   # untrusted; and once signed, keep the cert subject stable (or list both old
   # and new in publisherName) or you strand already-installed users.
 
+# The Windows install's identity: an update must find the install it
+# replaces, or its shortcuts and taskbar pins are lost. Never change these
+# without a migration (electron/packaging-windows.node-test.mjs pins them):
+# appId com.openmausbot.app (the AppUserModelId the shortcuts and pins
+# carry), productName Sagax (Sagax.exe), the per-user folder
+# %LOCALAPPDATA%\Programs\openmausbot (package.json "name"), shortcutName.
 nsis:
   oneClick: true
+  # Per-user: no admin prompt, and every update lands in the same folder.
   perMachine: false
+  # One-click has no directory page; an update reuses the folder it finds.
+  allowToChangeInstallationDirectory: false
+  # Created once, then kept as the person left them: an update passes
+  # --keep-shortcuts to the old uninstaller and never recreates a shortcut
+  # the person deleted ("always" would).
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
   # Start menu and desktop shortcut: the long name fits there.
   shortcutName: Pulsatrix Sagax
   uninstallDisplayName: Pulsatrix Sagax ${version}
+  # Sagax opens again when the installer is done (an in-app update also
+  # passes --force-run). The in-app update runs this installer with its
+  # progress window, never silently (electron/updater.mjs).
+  runAfterFinish: true
+  # Refreshes the shell's icons after an update, so shortcuts and taskbar
+  # pins that pointed at the replaced Sagax.exe draw its icon again.
+  include: build/installer.nsh
   # Versioned, like the .dmg; one installer for x64 and arm64.
   artifactName: Sagax-${version}-setup.${ext}
 
@@ -244,6 +281,8 @@ linux:
       to: cua-linux-x64
     - from: dist-native/cloudflared/linux-x64/cloudflared
       to: cloudflared/cloudflared
+    - from: dist-native/tailcat/linux-x64/tailcat
+      to: tailcat/tailcat
     - from: dist-native/browser/linux-x64
       to: browser-engine
     - from: dist-native/duckdb/linux-x64/node_modules

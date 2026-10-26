@@ -22,7 +22,7 @@
 //   conversations/**, attachments/**   threads, messages, files (optional)
 //
 // What never travels: tokens and secrets of any kind (marketplace tokens,
-// webhook bearer tokens, MCP header values, Composio credentials), session
+// webhook bearer tokens, MCP header values), session
 // handles, and this server's own bookkeeping (BOT_FIELD_POLICY says why for
 // each field). Text files pass the redactor on the way out.
 //
@@ -31,6 +31,7 @@
 // copy without host settings (memberImportReset), and a rollback that
 // removes everything the import wrote when any step fails.
 import { botRuntimeSettingsShape } from "./bot-runtime-settings.ts";
+import { exportedSecretFile, registrySettingsPath, withoutRegistrySecrets } from "./workspace-backup-policy.ts";
 import { randomUUID } from "node:crypto";
 import { closeSync, createWriteStream, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
 import type { IncomingMessage } from "node:http";
@@ -70,9 +71,10 @@ import { autoOnlyDestination } from "./surface.ts";
 import { memberImportReset } from "./routes/bot-catalog.ts";
 import type { Routine, RoutineManager } from "./routines.ts";
 import { restoreSkillManifest, setSkillEnabled, skillManifestForExport } from "./skills.ts";
-import { cleanBotGrants, cleanBotPerspicax, parseConnectorTools, type BotRecord, type Message, type Store, type TaskRecord } from "./store.ts";
+import { cleanBotGrants, cleanBotPerspicax, type BotRecord, type Message, type Store, type TaskRecord } from "./store.ts";
 import type { WebhookTrigger } from "./webhooks.ts";
 import { TRIGGER_SOURCES, type TriggerSourceConfig } from "../shared/trigger-sources.ts";
+import { storedTeamMemorySharing } from "../shared/team-memory-sharing.ts";
 import { syncMemoryIndex, workspaceDir } from "./workspace.ts";
 import { ZipError, ZipReader, ZipWriter } from "./zip.ts";
 
@@ -126,19 +128,20 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   automaticRecovery: "settings",
   autoApprove: "settings",
   approvalMode: "settings",
+  proactiveMode: "settings",
   alwaysAllow: "host",
+  allowedRecipients: { drop: "the owner's contacts and bot ids of this server: they never travel in a package" },
   toolScope: "settings",
   speakReplies: "settings",
   voice: "settings",
   voiceNotes: "settings",
+  emailDrafts: "settings",
   memoryEnabled: "settings",
+  teamMemorySharing: "settings",
   memoryUpkeep: "settings",
   parkDirectMessages: "settings",
   approvePeerComms: "settings",
   peers: "settings",
-  composio: "settings",
-  connectorTools: "settings",
-  connectorScopes: "settings",
   outbound: "settings",
   assignedSkills: "settings",
   perspicax: "settings",
@@ -168,6 +171,8 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   busy: { drop: "live state" },
   activity: { drop: "live state" },
   waitingForTeammates: { drop: "live state" },
+  waitingApprovals: { drop: "derived from the bot's threads" },
+  botConversations: { drop: "derived from the bot's threads and its peers' threads" },
   rewound: { drop: "live state" },
   resumeCursors: { drop: "engine session handles of this server" },
   approvalGrant: { drop: "an approval change in flight" },
@@ -209,7 +214,22 @@ interface PlanFile {
   scrub: boolean;
 }
 
-/** Files under `root`, never following a link, skipping `node_modules`. */
+/** A `.npmrc` or `.yarnrc.yml` with a registry token in it (or unreadable). */
+function registryHoldsSecret(rel: string, path: string): boolean {
+  try { return withoutRegistrySecrets(rel, readFileSync(path, "utf8")) !== null; } catch { return true; }
+}
+
+function startsLikeZip(path: string): boolean {
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, "r");
+    const head = Buffer.alloc(4);
+    return readSync(fd, head, 0, 4, 0) === 4 && head.readUInt32LE(0) === 0x04034b50;
+  } catch { return false; } finally { if (fd !== undefined) closeSync(fd); }
+}
+
+/** Files under `root`, never following a link, skipping `node_modules` and
+ * every sign-in or key file (exportedSecretFile). */
 function walkFiles(root: string, options: { skip?: (rel: string) => boolean } = {}): Array<{ rel: string; path: string; size: number }> {
   const out: Array<{ rel: string; path: string; size: number }> = [];
   let rootStat;
@@ -230,6 +250,9 @@ function walkFiles(root: string, options: { skip?: (rel: string) => boolean } = 
       if (stat.isDirectory()) {
         if (!SKIPPED_DIRS.has(name)) stack.push(path);
       } else if (stat.isFile() && stat.size <= MAX_FILE_BYTES) {
+        // no sign-in or key leaves in a bot export (JC 2026-10-18 « Exclure tout »)
+        if (exportedSecretFile(rel, () => startsLikeZip(path))) continue;
+        if (registrySettingsPath(rel) && registryHoldsSecret(rel, path)) continue;
         out.push({ rel, path, size: stat.size });
       }
     }
@@ -297,7 +320,7 @@ function portableTask(task: TaskRecord): Record<string, unknown> {
 }
 
 const LIVE_MESSAGE_FIELDS = ["queued", "queueId", "requestPending", "roomRequest", "sendId", "outboundRequest", "teamMemoryRequest", "parallelTask"] as const;
-const CARD_KINDS = new Set(["options", "connector", "secret", "access", "routine.run", "goal.run"]);
+const CARD_KINDS = new Set(["options", "secret", "access", "routine.run", "goal.run"]);
 
 /** A message as it travels: live fields out; a card (an approval, a
  * connection, a secret request, a routine run) becomes its text, so an
@@ -308,7 +331,6 @@ function portableMessage(message: Message): Message {
   if (CARD_KINDS.has(message.kind)) {
     const parts = [message.text ?? ""];
     if (message.card) parts.push(message.card.title, message.card.subtitle, ...message.card.options, message.card.answered ? `Answer: ${message.card.answered}` : "");
-    if (message.kind === "connector") parts.push("[Connection card: reconnect in Settings]");
     if (message.kind === "secret") parts.push("[Secret request: not included]");
     if (message.routineRun) parts.push(`[Routine: ${message.routineRun.routineName}: ${message.routineRun.status}]`, message.routineRun.summary ?? "");
     if (message.goalRun) parts.push(`[Room goal: ${message.goalRun.status}]`, message.goalRun.goal);
@@ -356,7 +378,9 @@ export function planBotZip(host: BotZipHost, botId: string, options: BotZipExpor
   const host_: Record<string, unknown> = {};
   const record = bot as unknown as Record<string, unknown>;
   for (const [key, policy] of Object.entries(BOT_FIELD_POLICY)) {
-    const value = record[key];
+    // team memory sharing leaves in its stored form only ("private" or
+    // nothing), so a corrupted value cannot break the import or the clone
+    const value = key === "teamMemorySharing" ? storedTeamMemorySharing(bot) : record[key];
     if (value === undefined) continue;
     if (policy === "identity") identity[key] = structuredClone(value);
     else if (policy === "settings") settings[key] = structuredClone(value);
@@ -424,11 +448,9 @@ export function planBotZip(host: BotZipHost, botId: string, options: BotZipExpor
   includes.marketplaces = marketplaces.length;
   if (includes.plugins || includes.marketplaces) add("plugins/state.json", `${JSON.stringify(pluginState, null, 2)}\n`);
 
-  // MCP servers and connected apps, by name
+  // MCP servers, by name
   const mcpServers = (bot.mcpServers ?? []).map((name) => ({ name, ...(host.mcpServer(name) ?? { valueNames: [] }) }));
   includes.mcpServers = mcpServers.length;
-  const connectedApps = [...new Set([...Object.keys(bot.connectorTools ?? {}), ...Object.keys(bot.connectorScopes?.apps ?? {})])].sort();
-  includes.connectedApps = connectedApps.length;
   includes.perspicaxProfiles = bot.perspicax?.profiles.length ?? 0;
 
   // routines and webhooks owned by the bot
@@ -499,7 +521,7 @@ export function planBotZip(host: BotZipHost, botId: string, options: BotZipExpor
 
   const manifest: BotZipManifest = {
     format: BOT_ZIP_FORMAT, version: BOT_ZIP_VERSION, appVersion: host.appVersion, exportedAt: Date.now(),
-    bot: { id: bot.id, name: bot.name }, includes, redacted: 0, marketplaces, mcpServers, connectedApps, excluded: BOT_ZIP_EXCLUDED,
+    bot: { id: bot.id, name: bot.name }, includes, redacted: 0, marketplaces, mcpServers, excluded: BOT_ZIP_EXCLUDED,
   };
   const bytes = files.reduce((sum, file) => sum + file.size, 0);
   return { filename: botZipFilename(bot.name), manifest, files, bytes };
@@ -695,7 +717,6 @@ export async function previewBotZip(host: BotZipHost, inspected: InspectedBotZip
       if (!host.mcpServer(server.name)) needsAction.push(line("mcp", `MCP server ${server.name} is not installed here${server.url ? ` (${server.url})` : ""}: add it in Connect apps.`, "mcpMissing", { name: server.name }));
     }
   }
-  for (const app of manifest.connectedApps) needsAction.push(line("app", `${app}: check its sign-in in Connect apps.`, "app", { name: app }));
   const profiles = (settings.perspicax as { profiles?: string[] } | undefined)?.profiles ?? [];
   if (profiles.length) {
     if (host.organization) created.push(line("perspicax", `${profiles.length} Perspicax profile(s)`, "perspicax", { count: profiles.length }));
@@ -740,13 +761,15 @@ const settingsSchema = z.object({
   speakReplies: z.boolean().optional(),
   voice: z.string().max(200).optional(),
   voiceNotes: z.boolean().optional(),
+  emailDrafts: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),
+  // read as the bot reads it (shared/team-memory-sharing.ts): an archive
+  // written before export normalized it still imports, unknown as private
+  teamMemorySharing: z.unknown().optional(),
   memoryUpkeep: z.boolean().optional(),
   parkDirectMessages: z.boolean().optional(),
   approvePeerComms: z.boolean().optional(),
   peers: z.array(z.string().max(128)).max(500).optional(),
-  composio: z.boolean().optional(),
-  connectorScopes: z.object({ apps: z.record(z.string().max(80), z.enum(["read", "write"])) }).optional(),
   outbound: z.object({ policy: z.enum(["ask", "allow"]), dailyCap: z.number().int().min(0).max(100_000) }).optional(),
   assignedSkills: z.array(z.string().max(64)).max(200).optional(),
   section: z.string().max(60).optional(),
@@ -785,7 +808,8 @@ const webhookSchema = z.object({
  * source), and not the user name or connector account either, which belong
  * to this server's people. */
 function exportedSource(source: TriggerSourceConfig): Record<string, unknown> {
-  const out: Record<string, unknown> = { type: source.type, events: source.events, filters: source.filters };
+  const out: Record<string, unknown> = { type: source.type, events: source.events, filters: source.filters, catalog: source.catalog ?? 1 };
+  if (source.includeBotComments) out.includeBotComments = true;
   if (source.rateLimitPerMinute !== undefined) out.rateLimitPerMinute = source.rateLimitPerMinute;
   if (source.tenantId) out.tenantId = source.tenantId;
   if (source.graph) out.graph = { connector: source.graph.connector, ...(source.graph.resource ? { resource: source.graph.resource } : {}) };
@@ -840,8 +864,6 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
   const hostSettings = hostParsed.success ? hostParsed.data : {};
   if (!hostParsed.success) warnings.push("Host settings were not valid and were left out.");
   const toolScope = parseToolScope(document.settings.toolScope);
-  const connectorTools = document.settings.connectorTools === undefined ? undefined : parseConnectorTools(document.settings.connectorTools);
-  if (connectorTools && !connectorTools.ok) warnings.push("Connected app grants were not valid and were left out.");
 
   const soulText = reader.has(SOUL_FILE) ? reader.text(SOUL_FILE) : "";
   if (Buffer.byteLength(soulText) > 24_000) throw new BotZipError("SOUL.md is larger than 24000 bytes.", "invalid_zip");
@@ -899,14 +921,13 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
       ...(identity.voice !== undefined ? { voice: identity.voice } : settings.voice !== undefined ? { voice: settings.voice } : {}),
       ...(settings.speakReplies !== undefined ? { speakReplies: settings.speakReplies } : {}),
       ...(settings.voiceNotes !== undefined ? { voiceNotes: settings.voiceNotes } : {}),
+      ...(settings.emailDrafts !== undefined ? { emailDrafts: settings.emailDrafts } : {}),
       ...(settings.memoryEnabled !== undefined ? { memoryEnabled: settings.memoryEnabled } : {}),
+      ...(storedTeamMemorySharing(settings) ? { teamMemorySharing: "private" as const } : {}),
       ...(settings.memoryUpkeep !== undefined ? { memoryUpkeep: settings.memoryUpkeep } : {}),
       ...(settings.parkDirectMessages !== undefined ? { parkDirectMessages: settings.parkDirectMessages } : {}),
       ...(settings.approvePeerComms !== undefined ? { approvePeerComms: settings.approvePeerComms } : {}),
       ...(settings.peers ? { peers: settings.peers.filter((peer) => peer !== id && store.bot(peer)) } : {}),
-      ...(settings.composio !== undefined ? { composio: settings.composio } : {}),
-      ...(connectorTools?.ok ? { connectorTools: connectorTools.grants } : {}),
-      ...(settings.connectorScopes ? { connectorScopes: settings.connectorScopes } : {}),
       ...(settings.outbound ? { outbound: settings.outbound } : {}),
       ...(settings.fallback ? { fallback: settings.fallback.filter((entry) => host.engineUsable(entry as ModelSelection)) } : {}),
       ...(settings.maxConcurrentThreads !== undefined ? { maxConcurrentThreads: settings.maxConcurrentThreads } : {}),
@@ -1085,7 +1106,8 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
       const list = z.array(webhookSchema).max(100).safeParse(reader.json("webhooks.json"));
       for (const hook of list.success ? list.data : []) {
         try {
-          const created = webhookManager.create({ ...hook, botId: id, enabled: false });
+          // An export without a catalog predates it: keep its “every event” as it was.
+          const created = webhookManager.create({ ...hook, ...(hook.source ? { source: { catalog: 1, ...hook.source } } : {}), botId: id, enabled: false });
           createdWebhooks.push(created.webhook.id);
           const source = created.webhook.source;
           if (source) {

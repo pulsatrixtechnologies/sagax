@@ -12,6 +12,9 @@ import { signSandboxdRequest, SANDBOXD_AUTH_HEADER } from "./sandboxd-auth.ts";
 import type { SandboxExecInput, SandboxExecOutput, SandboxStats, SandboxStatus, SandboxStdioSpec } from "./sandboxd-core.ts";
 import { SANDBOX_KEY_RE } from "./user-sandbox-spec.ts";
 
+/** Kubernetes: the pod-ready wait of the provisioner (90 s) plus a margin. */
+export const EXEC_POD_START_ALLOWANCE_MS = 120_000;
+
 export interface SandboxdInfo {
   instance: string;
   egress: "enforced" | "missing" | "not-required";
@@ -203,7 +206,10 @@ export function sandboxdClient(baseUrl: string, key: () => string, fetchImpl: ty
     markUsed: (sandboxKey) => call<SandboxStatus>("POST", keyPath(sandboxKey, "/used"), {}, 10_000),
     stats: (sandboxKey) => call<SandboxStats>("GET", keyPath(sandboxKey, "/stats"), undefined, 30_000),
     remove: (sandboxKey, options = {}) => call<SandboxStatus>("DELETE", keyPath(sandboxKey, options.keepWorkspace ? "?keepWorkspace=1" : "")),
-    exec: (sandboxKey, input) => call<SandboxExecOutput>("POST", keyPath(sandboxKey, "/exec"), input, ((input.timeoutSec ?? 120) + 60) * 1000),
+    // The provisioner may first wait up to 90 s for the pod to run: the
+    // client waits longer than that, so a slow start answers `starting`
+    // instead of being cut and taken for a provisioner that is gone.
+    exec: (sandboxKey, input) => call<SandboxExecOutput>("POST", keyPath(sandboxKey, "/exec"), input, ((input.timeoutSec ?? 120) + 60) * 1000 + EXEC_POD_START_ALLOWANCE_MS),
     desktopStream: (sandboxKey, options) => {
       const path = keyPath(sandboxKey, `/desktop${options.control ? "?control=1" : ""}`);
       return upgrade(path, "sagax-rfb");

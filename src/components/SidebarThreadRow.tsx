@@ -140,7 +140,8 @@ const demandsAttention = (task: ThreadRowTask, activeId: string) =>
  * that opened ten helper threads and closed them must not leave ten rows
  * behind — but it is never gone: "show all" and search still list it, a
  * closed thread that becomes busy or unread is back at once, and a pin
- * keeps a closed or archived thread in the list. */
+ * keeps a closed or archived thread in the list. An archived thread is folded
+ * away whatever happens in it, unless it is the open one. */
 export function visibleSidebarThreads<T extends ThreadRowTask>(tasks: T[], activeId: string, query = "", folders: BotProject[] = [], showAll = false): T[] {
   const needle = query.trim().toLowerCase();
   if (needle) {
@@ -150,7 +151,10 @@ export function visibleSidebarThreads<T extends ThreadRowTask>(tasks: T[], activ
   let open = 0;
   return orderedThreadList(tasks).filter((task) => {
     if (task.pinned === true) return true;
-    return task.closedBy || isArchived(task) || isSnoozed(task)
+    // An archived thread stays archived until the person unarchives it, even
+    // when something new lands in it; only the open one is shown.
+    if (isArchived(task)) return task.threadId === activeId;
+    return task.closedBy || isSnoozed(task)
       ? demandsAttention(task, activeId)
       : open++ < 6 || demandsAttention(task, activeId);
   });

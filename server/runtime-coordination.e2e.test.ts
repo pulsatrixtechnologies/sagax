@@ -265,10 +265,11 @@ it("S2 parks a teammate on NEEDS INPUT, carries the person's answer into her nex
 }), hostTimeout(60_000));
 
 // S2b. A question parked across a restart is shown once: the restart parks
-// it again (contract §5) but posts no second chip and marks nothing unread
-// the person already read. While it waits, list_threads and close_thread
-// say the thread waits on the person, not that it is queued or running.
-it("S2b keeps one question chip across a restart and names the parked thread as waiting on the person", () => scenario(async (f) => {
+// it again (contract section 5) but posts no second card and marks nothing
+// unread the person already read. While it waits, list_threads and
+// close_thread say the thread waits on the person, not that it is queued or
+// running.
+it("S2b keeps one question card across a restart and names the parked thread as waiting on the person", () => scenario(async (f) => {
   const brief = "S2B-BRIEF: tag the release in the repository and report the tag.";
   f.script(f.clive.id,
     { key: "C0", match: ["S2B-JOB"], steps: [{ arguments: { bot_ids: [f.mira.id], message: brief } }], reply: "C0: Mira is tagging it." });

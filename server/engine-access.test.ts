@@ -119,6 +119,15 @@ describe("the admin gate on a member's bot", () => {
     // one path out is enough
     expect(gate("Edit", [join(root, "thread-1", "a.ts"), "/etc/passwd"])).toBe(true);
   });
+  it("lets the owner answer a read of the bot's own skill revisions, never a write there nor any other dot folder (2026-10-19)", () => {
+    expect(gate("Read", [join(root, "thread-1", "skills", ".revisions", "r1", "SKILL.md")])).toBe(false);
+    expect(gate("Glob", [join(root, "thread-1", "plugin", ".claude-plugin")])).toBe(false);
+    expect(gate("Write", [join(root, "thread-1", "skills", ".revisions", "r1", "SKILL.md")])).toBe(true);
+    expect(gate("Edit", [join(root, "thread-1", ".claude-plugin", "plugin.json")])).toBe(true);
+    for (const hidden of [".claude", ".git", ".env", ".ssh", ".mcp.json"]) {
+      expect(gate("Read", [join(root, "thread-1", hidden, "x")]), hidden).toBe(true);
+    }
+  });
   it("lets the owner answer a built-in Sagax tool that stays in the member's own scope (2026-10-08)", () => {
     // the reported case: a member's bot listing the bots it sees
     expect(gate("agents__list_bots")).toBe(false);

@@ -59,8 +59,7 @@ export type DecisionKind =
  * `profile` a bot proposed a profile change, `model` a bot proposed a default-model
  * switch, `user` the human's answer, and
  * auto-review sources the isolated model reviewer. connector-scope rows
- * come from the connected-app grants verdict: the person pre-decided them
- * by editing a bot's connectorTools, so the call itself needed no card. */
+ * are kept for reading historical logs from older releases. */
 export type DecisionSource =
   | AutoVerdictSource
   /** nobody answered an AI client's hidden-thread approval in time */
@@ -68,6 +67,8 @@ export type DecisionSource =
   /** an approval left open when Sagax restarted: its request died with the process */
   | "restart"
   | "self"
+  /** the person asked their own Primary Bot for this change now (2026-10-20) */
+  | "primary-bot"
   | "question"
   | "auto-fallback"
   | "routine"
@@ -84,7 +85,11 @@ export type DecisionSource =
   | "timeout"
   /** refused in a confidential thread: only its owner may answer, and could not
    * (server/confidential-threads.ts) */
-  | "confidential";
+  | "confidential"
+  /** a member bot's command would run on the shared organization server, which
+   * only an admin may use: it runs on the bot's own computer instead, or is
+   * refused when it has none (server/exec-target.ts, 2026-10-22) */
+  | "exec-target";
 
 /** Who answered a card, for `source: "user"` rows: a signed-in session (its
  * id, device label, and account email or id when it has one; a portal
@@ -108,6 +113,8 @@ export interface DecisionRow {
   source: DecisionSource;
   /** which rule decided: a guard's regex source, or the granted key */
   rule?: string;
+  /** `auto-review` rows: the model reviewer's reason, one short sentence */
+  reason?: string;
   /** the turn ran with nobody at the keyboard when this was decided */
   unattended?: boolean;
   /** who answered, on rows a person's answer produced */
@@ -142,7 +149,7 @@ export function bindConfidentialDecisions(isConfidential: (threadId: string) => 
 /** A row without anything a person or a bot wrote: the summary of the call,
  * the rule that matched it, how the ask reached the fold. */
 export function metadataOnly<T extends Partial<DecisionRow>>(row: T): T {
-  const { summary: _summary, rule: _rule, origin: _origin, ...rest } = row;
+  const { summary: _summary, rule: _rule, reason: _reason, origin: _origin, ...rest } = row;
   return rest as T;
 }
 

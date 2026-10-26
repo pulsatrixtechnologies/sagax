@@ -1,4 +1,4 @@
-import { Reply, X } from "lucide-react";
+import { MessageSquareQuote, Reply, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { peerLine } from "@/lib/peer-message";
@@ -7,7 +7,8 @@ import { t } from "@/lib/i18n";
 import type { Message } from "@/state/store";
 
 /** The message a sent message answers, in the same soft strip family as the
- * composer's reply strip: arrow, who, a one-line excerpt. A click jumps to it. */
+ * composer's reply strip: a speech-bubble quote, who, a one-line excerpt. A
+ * click jumps to it. */
 export function ReplyQuote({
   message,
   fallbackName,
@@ -24,7 +25,7 @@ export function ReplyQuote({
   const name = replyAuthor(message, fallbackName);
   const body = (
     <>
-      <Reply size={compact ? 14 : 15} strokeWidth={1.5} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
+      <MessageSquareQuote size={compact ? 14 : 15} strokeWidth={1.5} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
       <span className="sr-only">{t("chat.reply.replyingTo", { name })}: </span>
       <span aria-hidden="true" className="shrink-0 font-medium text-ink">{name}</span>
       <span dir="auto" className="min-w-0 flex-1 truncate">{replySnippet(peerLine(message)?.body ?? message.text ?? "")}</span>

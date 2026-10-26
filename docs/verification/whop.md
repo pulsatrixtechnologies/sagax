@@ -2,7 +2,7 @@
 
 The first-party Whop card uses the existing MCP registry and OAuth flow. It
 connects to `https://mcp.whop.com/mcp`, with browser sign-in and no pasted API
-key or Composio dependency. The bundled logo is attributed in
+key. The bundled logo is attributed in
 `src/assets/whop/README.md`.
 
 ## Isolated browser verification
@@ -25,8 +25,8 @@ has no alternate endpoint or test switch. It checks:
 - A pre-existing unrelated server named `whop` is never overwritten.
 - Cancellation and denied consent leave the connection disabled.
 - Repeated sign-ins reuse the configured server.
-- Whop connects directly in the same grid as the Composio apps, without a
-  Composio key or a detour to the MCP settings. Connected filtering and its
+- Whop connects directly in the same grid as the other apps, without a
+  pasted key or a detour to the MCP settings. Connected filtering and its
   count include Whop; disconnect removes it from that filter.
 - Successful consent plus tool discovery enables the connection; an OAuth
   token reaches the synthetic provider without appearing in the renderer list.

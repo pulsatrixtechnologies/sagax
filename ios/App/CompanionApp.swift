@@ -72,6 +72,8 @@ struct CompanionApp: App {
                 .themeRoot()
                 // Settings > Achievements: reads, reports and unlock banners (ST9).
                 .achievementsHost(session)
+                // a bot asks this phone for a tool: the card (Features/PhoneTools)
+                .phoneToolsHost(session)
                 .onAppear {
                     SagaxSharedInbox.removeDirectories(olderThan: 60 * 60)
                     session.connect()
@@ -149,9 +151,13 @@ struct RootView: View {
                     }
             case .revoked:
                 UnpairedView(
+                    server: session.connection?.pairedWithServer == true,
+                    endCode: session.sessionEndCode,
                     onPairAgain: {
-                        session.signOut()
-                        startPairing()
+                        // Keep the record: the new sign-in replaces its
+                        // token. No sign-out, no push unregistration here.
+                        hasSeenWelcome = true
+                        session.signInAgain()
                     },
                     onChooseAnother: session.connections.first(where: {
                         $0.id != session.connection?.id
@@ -270,17 +276,19 @@ struct RootView: View {
 /// honest thing is to say so and offer to pair again.
 struct UnpairedView: View {
     @Environment(\.themePalette) var themePalette
+    var server = false
+    var endCode: String?
     let onPairAgain: () -> Void
     let onChooseAnother: (() -> Void)?
 
     var body: some View {
         NavigationStack {
             EmptyStateView(
-                title: String(localized: "This device was unpaired"),
+                title: server ? String(localized: "Your session has ended") : String(localized: "This device was unpaired"),
                 systemImage: "lock.slash",
-                description: Text("The connection was removed on your computer. Pair again to keep using your chats here.")
+                description: description
             ) {
-                Button("Pair again", action: onPairAgain)
+                Button(server ? "Sign in again" : "Pair again", action: onPairAgain)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                 if let onChooseAnother {
@@ -289,6 +297,27 @@ struct UnpairedView: View {
                         .controlSize(.large)
                 }
             }
+        }
+    }
+
+    /// What the server said, in words a person can act on.
+    private var description: Text {
+        guard server else {
+            return Text("The connection was removed on your computer. Pair again to keep using your chats here.")
+        }
+        switch endCode {
+        case "principal_disabled":
+            return Text("Your account is disabled in Pulsatrix or on this Sagax server. Ask an administrator.")
+        case "idp_session_ended":
+            return Text("Your Pulsatrix sign-in has ended. Sign in again to keep using your chats here.")
+        case "session_revoked":
+            return Text("This session was signed out from another device or by an administrator. Sign in again to keep using your chats here.")
+        case "session_expired":
+            return Text("This session expired after a long time without use. Sign in again to keep using your chats here.")
+        case SessionEndReason.serverChanged:
+            return Text("This address now answers as another Sagax server. Sign in again to use it.")
+        default:
+            return Text("This server no longer recognizes this session. Sign in again to keep using your chats here.")
         }
     }
 }

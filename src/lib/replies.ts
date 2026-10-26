@@ -3,6 +3,16 @@ import { t } from "./i18n";
 import { peerLine } from "./peer-message";
 import { citationPreviewText } from "./citations";
 
+/** The site of a text that is one bare web address and nothing else. */
+function linkOnlyHost(text: string): string | null {
+  if (!/^https?:\/\/\S+$/i.test(text)) return null;
+  try {
+    return new URL(text).hostname.replace(/^www\./i, "") || null;
+  } catch {
+    return null;
+  }
+}
+
 export function replySnippet(text: string, limit = 160): string {
   const clean = citationPreviewText(text)
     .replace(
@@ -16,6 +26,9 @@ export function replySnippet(text: string, limit = 160): string {
     .replace(/^\s{0,3}(?:#{1,6}|>)\s+/gm, "")
     .replace(/\s+/g, " ")
     .trim();
+  // a message that is only an address reads as the site it points to
+  const host = linkOnlyHost(clean);
+  if (host) return t("chat.reply.link", { host });
   if (clean.length <= limit) return clean;
   return `${clean.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
 }

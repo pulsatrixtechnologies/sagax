@@ -388,19 +388,14 @@ struct BotPanelFiles: View {
         Task { await session.jump(to: file.messageId, inThread: threadId) }
     }
 
-    /// Go to message on a link: its conversation first when it is not this one.
+    /// Go to message on a link: the chat beside the panel switches to the
+    /// link's conversation in place when it is another one.
     private func jump(_ link: BotLink) {
         guard let messageId = link.messageId else { return }
         let target = link.threadId ?? threadId
         let botId = bot.id
-        let onScreen = threadId
         if !docked { model.togglePanel() }
-        Task {
-            if target != onScreen {
-                _ = await session.openThread(ThreadRef(botId: botId, threadId: target, title: ""), shownBotId: nil)
-            }
-            await session.jump(to: messageId, inThread: target)
-        }
+        Task { await session.showLinkMessage(messageId, botId: botId, threadId: target) }
     }
 
     private func open(_ file: ThreadFile) {

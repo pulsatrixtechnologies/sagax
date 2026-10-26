@@ -147,6 +147,11 @@ public enum CompanionOnboardingRouter {
     public static func route(for context: CompanionOnboardingContext) -> CompanionOnboardingRoute {
         switch context.pairingState {
         case .revoked:
+            // "Sign in again" opens sign-in over the ended session, which is
+            // kept until the new sign-in replaces its token.
+            if context.pairingRequested || context.hasPendingPairingInvite {
+                return .pairing
+            }
             return .revoked
         case .paired:
             if context.pairingRequested || context.hasPendingPairingInvite {

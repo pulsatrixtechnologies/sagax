@@ -123,19 +123,6 @@ function toSegment(px: number, py: number, ax: number, ay: number, bx: number, b
   return Math.hypot(px - (ax + vx * t), py - (ay + vy * t));
 }
 
-/** Whether a point lies inside a closed polygon (even-odd, any winding). */
-function inPolygon(points: Point[], x: number, y: number): boolean {
-  let inside = false;
-  for (let i = 0, j = points.length - 1; i < points.length; j = i, i += 1) {
-    const [xi, yi] = points[i];
-    const [xj, yj] = points[j];
-    if ((yi > y) === (yj > y)) continue;
-    const at = ((xj - xi) * (y - yi)) / (yj - yi || 1) + xi;
-    if (x < at) inside = !inside;
-  }
-  return inside;
-}
-
 /** Whether a point lies inside a convex polygon (any winding). */
 function inConvex(points: Point[], x: number, y: number): boolean {
   let sign = 0;
@@ -192,29 +179,17 @@ function circleHull(a: { x: number; y: number; r: number }, b: { x: number; y: n
 
 const circle = (r: number): number[] => Array.from({ length: RADII_COUNT }, () => r);
 
-/** A heart: the usual cubic parametric curve, grown so the lobes and the
- *  point stay round. Stored id `bean` (older builds called it a pebble). */
+/** A soft, chubby heart (2026-10-18): two equal round lobes, each joined to
+ *  one small round point at the bottom by its tangents (the hull of two
+ *  circles), so the sides run straight and smooth into a blunt, centred point.
+ *  Symmetric by construction. Stored id `bean` (older builds called it a pebble). */
 function heart(): number[] {
-  const n = 64;
-  const scale = 0.05;
-  const shiftY = 0.18;
-  const grow = 0.09;
-  const points: Point[] = Array.from({ length: n }, (_, i) => {
-    const t = (i / n) * Math.PI * 2;
-    const s = Math.sin(t);
-    const x = 16 * s * s * s;
-    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
-    return [x * scale, -y * scale + shiftY] as Point;
-  });
-  return radiiOf((x, y) => {
-    if (inPolygon(points, x, y)) return true;
-    for (let i = 0; i < points.length; i += 1) {
-      const [ax, ay] = points[i];
-      const [bx, by] = points[(i + 1) % points.length];
-      if (toSegment(x, y, ax, ay, bx, by) <= grow) return true;
-    }
-    return false;
-  });
+  // plump: bigger lobes set closer, so they melt into each other, and a rounder point
+  const point = { x: 0, y: 0.7, r: 0.3 };
+  const left = { x: -0.38, y: -0.11, r: 0.56 };
+  const right = { x: 0.38, y: -0.11, r: 0.56 };
+  const sides = [circleHull(left, point), circleHull(right, point)];
+  return radiiOf((x, y) => sides.some((inside) => inside(x, y)));
 }
 
 /** A rounded square: the superellipse |x|^4 + |y|^4 = s^4. */
@@ -239,8 +214,8 @@ const CLOUD_PUFFS = [
 ];
 const cloud = () => radiiOf((x, y) => CLOUD_PUFFS.some((puff) => Math.hypot(x - puff.x, y - puff.y) <= puff.r));
 
-/** A teardrop: a round belly low, a small rounded tip on top. Stored id `drop`. */
-const droplet = () => radiiOf(circleHull({ x: 0, y: 0.28, r: 0.7 }, { x: 0, y: -1.08, r: 0.04 }));
+/** A teardrop: a round belly low, a soft rounded tip on top (2026-10-18: round, never pointed). Stored id `drop`. */
+const droplet = () => radiiOf(circleHull({ x: 0, y: 0.22, r: 0.74 }, { x: 0, y: -0.82, r: 0.2 }));
 
 /** An egg: an ellipse, narrower at the top. */
 const egg = () => radiiOf((x, y) => (x / (0.8 * (1 + 0.13 * y))) ** 2 + ((y - 0.02) / 1.04) ** 2 <= 1);

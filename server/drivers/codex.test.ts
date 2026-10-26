@@ -21,14 +21,14 @@ import { DATA_DIR, NATIVE_DIR } from "../config.ts";
 import { ChatGptPlanAuthController } from "./chatgpt-plan-auth.ts";
 import { recordEvents, type EventRecorder } from "../testing/events.ts";
 import {
-  CODEX_SIGN_IN_EXPIRED,
   CodexDriver,
   codexNativeIncomingLogMessage,
-  codexSignInRefused,
   codexUpdateCommand,
   ownerKeyCodexArgs,
-  codexUserError,
 } from "./codex.ts";
+import { codexCliOverrides } from "./codex-process.ts";
+import { CODEX_SIGN_IN_EXPIRED, codexNotSignedIn, codexSignInRefused, codexUserError } from "./codex-errors.ts";
+import { CODEX_USAGE_LIMIT_REACHED } from "../../shared/codex-usage-limit.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
 import { rebuiltSessionNotice } from "../resume-recovery.ts";
 import { startFakeHttpMcp, type FakeHttpMcp } from "../testing/fake-http-mcp-server.ts";
@@ -59,9 +59,9 @@ const CONTROL_PLANE_FIXTURE = {
 
 describe("CodexDriver.decodeConfig", () => {
   it("makes plan/provider failures actionable without changing billing", () => {
-    expect(codexUserError("provider_not_configured", false)).toContain("Continue with ChatGPT");
-    expect(codexUserError("provider_not_configured", true)).toContain("API billing will not be used");
-    expect(codexUserError("x".repeat(500) + "subscription_sharing_usage_limit_exceeded", true)).toMatch(/^subscription_sharing_usage_limit_exceeded:/);
+    expect(codexUserError("provider_not_configured", "own")).toContain("Continue with ChatGPT");
+    expect(codexUserError("provider_not_configured", "plan")).toContain("API billing will not be used");
+    expect(codexUserError("x".repeat(500) + "subscription_sharing_usage_limit_exceeded", "plan")).toMatch(/^subscription_sharing_usage_limit_exceeded:/);
     expect(() => CodexDriver.decodeConfig({ authMode: "chatgpt-plan", managed: {} })).toThrow("cannot be combined");
   });
   it("defaults to the codex binary with fullAuto off", () => {
@@ -140,7 +140,7 @@ describe("CodexDriver turns (fake app-server)", () => {
   let scratch: string;
 
   const create = async (
-    opts: { mode?: string; fullAuto?: boolean; environment?: Record<string, string>; managed?: boolean; authMode?: "chatgpt-plan" } = {},
+    opts: { mode?: string; fullAuto?: boolean; environment?: Record<string, string>; managed?: boolean; authMode?: "chatgpt-plan"; cli?: string } = {},
   ) => {
     if (opts.mode) process.env.FAKE_CODEX_MODE = opts.mode;
     instance = await CodexDriver.create({
@@ -152,7 +152,7 @@ describe("CodexDriver turns (fake app-server)", () => {
       },
       enabled: true,
       config: {
-        cli: FAKE_CLI,
+        cli: opts.cli ?? FAKE_CLI,
         fullAuto: opts.fullAuto ?? false,
         ...(opts.authMode ? { authMode: opts.authMode } : {}),
         ...(opts.managed ? { managed: { url: "http://127.0.0.1:1/v1", models: ["company-codex-model"] } } : {}),
@@ -1155,6 +1155,18 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(JSON.stringify(seen.argv)).not.toContain("sk-test-openai-owner");
   });
 
+  it("an owner key needs no Codex sign-in: the signed-out check does not stop its turn", async () => {
+    const codexHome = join(scratch, ".codex");
+    mkdirSync(codexHome, { recursive: true });
+    await create({ mode: "logged-out", environment: { HOME: scratch, USERPROFILE: scratch, CODEX_HOME: codexHome } });
+    await instance.adapter.sendTurn({
+      threadId: "t-owner-key-signed-out", text: "hi",
+      access: { via: "owner-key", identity: "owner-key:pr_a:fp", environment: { SAGAX_OWNER_OPENAI_API_KEY: "sk-test-openai-owner-00000001" }, codexHome: join(scratch, "principals", "pr_a", "codex-key"), codexOwnerKey: true },
+    });
+    await expect(recorder.until((event) => event.type === "turn.completed")).resolves.toMatchObject({ ok: true });
+    expect(recorder.events.some((e) => e.type === "runtime.error")).toBe(false);
+  });
+
   it("slice 4: a person's subscription sets CODEX_HOME to their login directory", async () => {
     await create();
     const dump = join(scratch, "subscription.json");
@@ -1181,40 +1193,6 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     ]);
   });
 
-  it("mounts connected apps without placing credential values in argv", async () => {
-    await create();
-    const dump = join(scratch, "composio.json");
-    process.env.FAKE_CODEX_DUMP = dump;
-    expect(instance.adapter.capabilities.composioMcp).toBe(true);
-
-    await instance.adapter.sendTurn({
-      threadId: "t-composio",
-      text: "check mail",
-      integrations: {
-        composio: {
-          command: process.execPath,
-          args: ["/tmp/connector-proxy.js"],
-          env: {
-            SAGAX_CONNECTOR_UPSTREAM_URL: "http://127.0.0.1:8799/api/internal/connectors/mcp",
-            SAGAX_CONNECTOR_TOKEN: "per-turn-connector-token",
-          },
-        },
-        agents: {
-          command: process.execPath,
-          args: ["/tmp/agents-proxy.js"],
-          env: { SAGAX_COMMS_TOKEN: "peer-comms-secret" },
-        },
-      },
-    });
-    await recorder.until((event) => event.type === "turn.completed");
-    const seen = JSON.parse(readFileSync(dump, "utf8"));
-    expect(seen.argv.join(" ")).toContain("mcp_servers.openmausbot_connectors.command");
-    expect(seen.argv.join(" ")).toContain("SAGAX_CONNECTOR_TOKEN");
-    expect(seen.argv.join(" ")).not.toContain("per-turn-connector-token");
-    expect(seen.env.SAGAX_CONNECTOR_TOKEN).toBe("per-turn-connector-token");
-    expect(seen.env.SAGAX_COMMS_TOKEN).toBe("peer-comms-secret");
-  });
-
   it("mounts custom MCP servers on-request while built-ins stay pre-quieted", async () => {
     await create();
     const dump = join(scratch, "custom-mcp.json");
@@ -1228,9 +1206,9 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
         custom: {
           notes: { command: "npx", args: ["-y", "@x/notes-mcp"], env: { NOTES_TOKEN: "tok-notes" } },
         },
-        composio: {
+        agents: {
           command: process.execPath,
-          args: ["/tmp/connector-proxy.js"],
+          args: ["/tmp/agents-proxy.js"],
           env: { SAGAX_COMMS_TOKEN: "per-boot-token" },
         },
       },
@@ -1243,10 +1221,6 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(argv).toContain("NOTES_TOKEN");
     expect(argv).not.toContain("tok-notes");
     expect(seen.env.NOTES_TOKEN).toBe("tok-notes");
-    // the built-in keeps codex's pre-quieted approval mode; the custom
-    // server does NOT — its tool calls arrive as approval cards
-    expect(argv).toContain('mcp_servers.openmausbot_connectors.default_tools_approval_mode');
-    expect(argv).not.toContain('mcp_servers.notes.default_tools_approval_mode');
   });
 
   it("mounts a custom server under its own name when the user's config.toml already has one by that name", async () => {
@@ -1407,7 +1381,6 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       SHARED_SETTING: "same", OVERRIDDEN: "person", ELECTRON_RUN_AS_NODE: "1" } });
     await instance.adapter.sendTurn({ threadId: "mount-env-shell", text: "go", integrations: {
       agents: { command: process.execPath, args: ["/tmp/agents-proxy.js"], env: { ELECTRON_RUN_AS_NODE: "1", SAGAX_COMMS_TOKEN: "agents-capability" } },
-      composio: { command: process.execPath, args: ["/tmp/connector-proxy.js"], env: { SAGAX_CONNECTORS_TOKEN: "connector-capability" } },
       phone: { command: process.execPath, args: ["/tmp/phone-proxy.js"], env: { SAGAX_PHONE_TOKEN: "phone-capability" } },
       custom: {
         // TZ is a variable no shell should lose, whoever set it
@@ -1421,7 +1394,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(seen.calls.find((call: { method: string }) => call.method === "thread/start").params.config["shell_environment_policy.exclude"]).toEqual([
       "USER_SECRET_*", "SAGAX_REMOTE_MCP_CONFIG_*",
       // sorted: the Sagax names sort after OVERRIDDEN (upstream's SAGAX_ names sorted before it)
-      "ELECTRON_RUN_AS_NODE", "GITHUB_PERSONAL_ACCESS_TOKEN", "OVERRIDDEN", "SAGAX_COMMS_TOKEN", "SAGAX_CONNECTORS_TOKEN", "SAGAX_PHONE_TOKEN",
+      "ELECTRON_RUN_AS_NODE", "GITHUB_PERSONAL_ACCESS_TOKEN", "OVERRIDDEN", "SAGAX_COMMS_TOKEN", "SAGAX_PHONE_TOKEN",
     ]);
   });
 
@@ -2072,6 +2045,107 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(recorder.events.filter((e) => e.type === "session.started")).toMatchObject([{ rebuilt: true }]);
     expect(recorder.events.filter((e) => e.type === "runtime.notice")).toEqual([expect.objectContaining({ message: rebuiltSessionNotice("Codex") })]);
   });
+
+  it("unarchives an archived native thread and resumes it instead of failing every retry", async () => {
+    await create();
+    const dump = join(scratch, "archived-thread.json");
+    process.env.FAKE_CODEX_DUMP = dump;
+    vi.stubEnv("FAKE_CODEX_ARCHIVED", "1");
+    await instance.adapter.sendTurn({ threadId: "t-archived", text: "go on", resumeCursor: "archived-thread", recoveryText: "History\nUser: go on" });
+    await expect(recorder.until((e) => e.type === "turn.completed")).resolves.toMatchObject({ ok: true });
+    const calls = JSON.parse(readFileSync(dump, "utf8")).calls;
+    expect(calls.map((call: { method: string }) => call.method)).toEqual(["initialize", "initialized", "config/read", "thread/resume", "thread/unarchive", "thread/resume", "thread/inject_items", "turn/start"]);
+    expect(calls.find((call: { method: string }) => call.method === "thread/unarchive").params).toEqual({ threadId: "archived-thread" });
+    expect(calls.find((call: { method: string }) => call.method === "turn/start").params.input).toEqual([{ type: "text", text: "go on" }]);
+    expect(recorder.events.filter((e) => e.type === "session.started")).toMatchObject([{ sessionId: "archived-thread" }]);
+  });
+
+  it("rebuilds an archived thread Codex will not unarchive, so the stale cursor is replaced", async () => {
+    await create();
+    const dump = join(scratch, "archived-refused.json");
+    process.env.FAKE_CODEX_DUMP = dump;
+    vi.stubEnv("FAKE_CODEX_ARCHIVED", "unarchive-fails");
+    const recoveryText = "History\nUser: go on";
+    await instance.adapter.sendTurn({ threadId: "t-archived-refused", text: "go on", resumeCursor: "archived-thread", recoveryText });
+    await expect(recorder.until((e) => e.type === "turn.completed")).resolves.toMatchObject({ ok: true });
+    const calls = JSON.parse(readFileSync(dump, "utf8")).calls;
+    expect(calls.map((call: { method: string }) => call.method)).toEqual(["initialize", "initialized", "config/read", "thread/resume", "thread/unarchive", "thread/start", "turn/start"]);
+    expect(calls.find((call: { method: string }) => call.method === "turn/start").params.input).toEqual([{ type: "text", text: recoveryText }]);
+    expect(recorder.events.filter((e) => e.type === "session.started")).toMatchObject([{ sessionId: "codex-thread-1", rebuilt: true }]);
+  });
+
+  it("completes a turn whose process exit could not be confirmed without waiting for the stall watchdog", async () => {
+    await create();
+    vi.stubEnv("FAKE_CODEX_STOP_RETRY_MS", "50");
+    const stopping = vi.spyOn(procs, "killCliTree").mockResolvedValueOnce(false);
+    await instance.adapter.sendTurn({ threadId: "t-stop-unconfirmed", text: "hi" });
+    await expect(recorder.until((e) => e.type === "turn.completed", 10_000)).resolves.toMatchObject({ ok: true, stopReason: null });
+    expect(recorder.events.some((e) => e.type === "runtime.error" && e.message.includes("did not shut down"))).toBe(true);
+    expect(stopping.mock.calls.length).toBeGreaterThan(1);
+    expect(instance.adapter.hasSession("t-stop-unconfirmed")).toBe(false);
+
+    recorder.events.length = 0;
+    stopping.mockResolvedValue(false);
+    await instance.adapter.sendTurn({ threadId: "t-stop-never", text: "hi" });
+    await expect(recorder.until((e) => e.type === "turn.completed", 10_000)).resolves.toMatchObject({ ok: true });
+    expect(instance.adapter.hasSession("t-stop-never")).toBe(false);
+  });
+
+  it("relaunches after a transient startup failure even when the old process's stop is unconfirmed", async () => {
+    process.env.FAKE_CODEX_TRANSIENTS = "1";
+    process.env.FAKE_CODEX_STATE = join(scratch, "relaunch-unconfirmed");
+    process.env.FAKE_CODEX_RETRY_SCALE = "0.001";
+    await create();
+    const stopping = vi.spyOn(procs, "killCliTree").mockImplementationOnce(async (child) => {
+      child.kill("SIGKILL");
+      return false;
+    });
+    await instance.adapter.sendTurn({ threadId: "t-relaunch-unconfirmed", text: "hi" });
+    await expect(recorder.until((e) => e.type === "turn.completed", 15_000)).resolves.toMatchObject({ ok: true });
+    expect(recorder.events.filter((e) => e.type === "turn.retrying")).toHaveLength(1);
+    expect(readFileSync(join(scratch, "relaunch-unconfirmed"), "utf8")).toBe("2");
+    expect(stopping).toHaveBeenCalled();
+    expect(recorder.events.some((e) => e.type === "turn.completed" && e.stopReason === "shutdown_timeout")).toBe(false);
+  }, 20_000);
+
+  it("starts at most the host's launch slots at once and runs the rest as slots free", async () => {
+    await create();
+    const log = join(scratch, "startups.ndjson");
+    vi.stubEnv("SAGAX_CODEX_LAUNCH_SLOTS", "2");
+    vi.stubEnv("FAKE_CODEX_STARTUP_DELAY_MS", "150");
+    vi.stubEnv("FAKE_CODEX_STARTUP_LOG", log);
+    const threads = Array.from({ length: 10 }, (_, index) => `t-slot-${index}`);
+    const turns = await Promise.all(threads.map((threadId) => instance.adapter.sendTurn({ threadId, text: "hi" })));
+    await expect.poll(() => recorder.events.filter((e) => e.type === "turn.completed").length, { timeout: 30_000 }).toBe(10);
+    for (const { turnId } of turns) expect(recorder.events.find((e) => e.type === "turn.completed" && e.turnId === turnId)).toMatchObject({ ok: true });
+    expect(recorder.events.filter((e) => e.type === "turn.started")).toHaveLength(10);
+    expect(recorder.events.filter((e) => e.type === "runtime.notice" && e.message.startsWith("Waiting for a free Codex slot")).length).toBeGreaterThanOrEqual(8);
+    const entries = readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line) as { pid: number; at: number; event: string });
+    const spans = [...new Set(entries.map((entry) => entry.pid))].flatMap((pid) => {
+      const start = entries.find((entry) => entry.pid === pid && entry.event === "initialize");
+      const ready = entries.find((entry) => entry.pid === pid && entry.event === "turn/start");
+      return start && ready ? [[start.at, ready.at] as const] : [];
+    });
+    expect(spans).toHaveLength(10);
+    const overlap = Math.max(...spans.map(([at]) => spans.filter(([start, end]) => start <= at && at < end).length));
+    expect(overlap).toBeLessThanOrEqual(2);
+  }, 40_000);
+
+  it("frees a launch slot once the turn is running, and a stop while waiting ends the waiting turn", async () => {
+    await create({ mode: "approval" });
+    vi.stubEnv("SAGAX_CODEX_LAUNCH_SLOTS", "1");
+    vi.stubEnv("FAKE_CODEX_STARTUP_DELAY_MS", "300");
+    await Promise.all(["t-slot-held-1", "t-slot-held-2"].map((threadId) => instance.adapter.sendTurn({ threadId, text: "one" })));
+    await expect.poll(() => recorder.events.filter((e) => e.type === "request.opened").length, { timeout: 15_000 }).toBe(2);
+    await instance.adapter.sendTurn({ threadId: "t-slot-held-3", text: "one" });
+    await instance.adapter.sendTurn({ threadId: "t-slot-held-4", text: "one" });
+    await recorder.until((e) => e.type === "runtime.notice" && e.threadId === "t-slot-held-4");
+    expect(instance.adapter.hasSession("t-slot-held-4")).toBe(true);
+    await instance.adapter.interruptTurn("t-slot-held-4");
+    await expect(recorder.until((e) => e.type === "turn.completed" && e.threadId === "t-slot-held-4")).resolves.toMatchObject({ ok: false, stopReason: "interrupted" });
+    await Promise.all(["t-slot-held-1", "t-slot-held-2", "t-slot-held-3"].map((threadId) => instance.adapter.interruptTurn(threadId)));
+    await expect.poll(() => recorder.events.filter((e) => e.type === "turn.completed").length, { timeout: 15_000 }).toBe(4);
+  }, 40_000);
 
   it("names the missing Company model prerequisites instead of one blanket refusal", async () => {
     await create({ managed: true });
@@ -2977,6 +3051,44 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect((await instance.snapshot()).update?.title).toBe("Update Codex to 0.156.1");
   });
 
+  it("reads the model list again when the Codex CLI is updated in place", async () => {
+    const updatedFile = join(scratch, "updated");
+    await create({ environment: { FAKE_CODEX_VERSION: "codex-cli 0.155.1", FAKE_CODEX_UPDATED_FILE: updatedFile } });
+    expect((await instance.snapshot()).version).toBe("codex-cli 0.155.1");
+    expect(instance.models.options.map((model) => model.id)).not.toContain("gpt-6.1-sol");
+
+    writeFileSync(updatedFile, "");
+    expect((await instance.snapshot()).version).toBe("codex-cli 0.162.1");
+    expect(instance.models.options.map((model) => model.id)).toContain("gpt-6.1-sol");
+  });
+
+  it("passes -c overrides from the CLI setting after app-server, before its own", async () => {
+    const dump = join(scratch, "cli-overrides.json"); process.env.FAKE_CODEX_DUMP = dump;
+    await create({
+      cli: `${FAKE_CLI} -c 'skills.config=[{name="docs",enabled=false}]' --config=model_verbosity=low`,
+      environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex") },
+    });
+    await instance.adapter.sendTurn({ threadId: "cli-overrides", text: "Fixture" });
+    await recorder.until((event) => event.type === "turn.completed");
+    const { argv } = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[] };
+    expect(argv.slice(0, 5)).toEqual(["app-server", "-c", 'skills.config=[{name="docs",enabled=false}]', "-c", "model_verbosity=low"]);
+    // The driver's own overrides still come later, so they keep the last word.
+    expect(argv.indexOf("features.computer_use=false")).toBeGreaterThan(4);
+  });
+
+  it("splits Codex config overrides from the rest of the CLI setting", () => {
+    expect(codexCliOverrides("codex")).toEqual({ cli: "codex", overrides: [] });
+    expect(codexCliOverrides("npx -y @openai/codex")).toEqual({ cli: "npx -y @openai/codex", overrides: [] });
+    expect(codexCliOverrides("codex -c a.b=1 --config c=2 --config=d=x -p work")).toEqual({
+      cli: "codex -p work", overrides: ["-c", "a.b=1", "-c", "c=2", "-c", "d=x"],
+    });
+    expect(codexCliOverrides("'/Applications/My Codex/codex' -c a=1")).toEqual({
+      cli: '"/Applications/My Codex/codex"', overrides: ["-c", "a=1"],
+    });
+    // Not a key=value override (npx's own -c), so it stays with the launcher.
+    expect(codexCliOverrides("npx -c 'codex'")).toEqual({ cli: "npx -c 'codex'", overrides: [] });
+  });
+
   it("updates the selected Codex executable instead of installing a second copy", () => {
     expect(codexUpdateCommand("codex", "darwin")).toBe("codex update");
     expect(codexUpdateCommand("'/Applications/My Codex/codex'", "darwin")).toBe(
@@ -3048,6 +3160,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       expect(message).not.toContain("Reconnecting");
       // what a peer bot asking this one is told
       expect(done).toMatchObject({ ok: false, stopReason: message });
+      expect(recorder.events.some((e) => e.type === "turn.retrying")).toBe(false);
       const refused = await instance.snapshot();
       expect(refused).toMatchObject({ state: "available", authenticated: false, reason: CODEX_SIGN_IN_EXPIRED });
       expect(refused).not.toHaveProperty("account");
@@ -3133,6 +3246,90 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       expect(codexSignInRefused({ message: "unexpected status 401 Unauthorized", codexErrorInfo: null })).toBe(false);
       expect(codexSignInRefused({ message: "Reconnecting... 1/5", codexErrorInfo: "serverOverloaded" })).toBe(false);
     });
+
+    it("ends the turn at once, without starting Codex, when Codex has no login", async () => {
+      const codexHome = join(scratch, ".codex");
+      mkdirSync(codexHome, { recursive: true });
+      await create({ mode: "logged-out", environment: { HOME: scratch, USERPROFILE: scratch, CODEX_HOME: codexHome } });
+      await expect(instance.snapshot()).resolves.toMatchObject({ authenticated: false });
+      const spawn = vi.spyOn(procs, "spawnCli");
+      const { done, errors } = await runTurn("t-no-login");
+      expect(errors).toEqual([expect.objectContaining({ message: codexNotSignedIn(), setup: true })]);
+      expect(done).toMatchObject({ ok: false, stopReason: "auth_required" });
+      expect(spawn).not.toHaveBeenCalled();
+    });
+
+    it("says Codex isn't signed in when Codex ran a turn holding no login", async () => {
+      const codexHome = join(scratch, ".codex");
+      mkdirSync(codexHome, { recursive: true });
+      await create({ environment: { HOME: scratch, USERPROFILE: scratch, CODEX_HOME: codexHome, FAKE_CODEX_MISSING_BEARER: "1", FAKE_CODEX_STATE: join(scratch, "launches") } });
+      const { done, errors } = await runTurn("t-no-bearer");
+      expect(errors).toEqual([expect.objectContaining({ message: codexNotSignedIn(), setup: true })]);
+      expect(done).toMatchObject({ ok: false });
+      expect(recorder.events.some((e) => e.type === "turn.retrying")).toBe(false);
+    });
+
+    it("runs the turn again once when Codex started without the login it has now", async () => {
+      vi.stubEnv("FAKE_CODEX_RETRY_SCALE", "0.001");
+      await create({ environment: { ...signedIn(), FAKE_CODEX_MISSING_BEARER: "1", FAKE_CODEX_STATE: join(scratch, "launches") } });
+      const { done, errors } = await runTurn("t-login-race");
+      expect(done).toMatchObject({ ok: true });
+      expect(errors).toEqual([]);
+      expect(recorder.events.filter((e) => e.type === "turn.retrying")).toEqual([expect.objectContaining({ attempt: 1, reason: "auth" })]);
+      await expect(instance.snapshot()).resolves.toMatchObject({ authenticated: true });
+    });
+
+    it("runs a turn again only once for a login race", async () => {
+      vi.stubEnv("FAKE_CODEX_RETRY_SCALE", "0.001");
+      await create({ environment: { ...signedIn(), FAKE_CODEX_MISSING_BEARER: "2", FAKE_CODEX_STATE: join(scratch, "launches") } });
+      const { done, errors } = await runTurn("t-login-race-twice");
+      expect(recorder.events.filter((e) => e.type === "turn.retrying")).toHaveLength(1);
+      expect(errors).toEqual([expect.objectContaining({ setup: true })]);
+      expect(done).toMatchObject({ ok: false });
+    });
+
+    it.each(["signin-refused", "auth-recovery"])("runs a refused turn (%s) again once when another Codex stored a new login meanwhile", async (mode) => {
+      vi.stubEnv("FAKE_CODEX_RETRY_SCALE", "0.001");
+      const environment = signedIn();
+      await create({ mode, environment });
+      const { turnId } = await instance.adapter.sendTurn({ threadId: "t-rotated", text: "hi" });
+      writeFileSync(join(environment.CODEX_HOME, "auth.json"), JSON.stringify({ tokens: { refresh_token: "rotated-fixture" } }));
+      process.env.FAKE_CODEX_MODE = "happy";
+      await expect(recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId)).resolves.toMatchObject({ ok: true });
+      expect(recorder.events.filter((e) => e.type === "runtime.error")).toEqual([]);
+      expect(recorder.events.filter((e) => e.type === "turn.retrying")).toHaveLength(1);
+      await expect(instance.snapshot()).resolves.toMatchObject({ authenticated: true });
+    });
+
+    it("says a ChatGPT account's Codex usage limit is OpenAI's, not Sagax's, and leaves a custom provider's words alone", async () => {
+      await create({ mode: "usage-limit" });
+      const { done, errors } = await runTurn("t-limit");
+      expect(errors).toHaveLength(1);
+      const message = (errors[0] as { message: string }).message;
+      expect(message.startsWith(CODEX_USAGE_LIMIT_REACHED)).toBe(true);
+      expect(message).toContain("resets at 5:23 PM");
+      expect(errors[0]).not.toHaveProperty("setup");
+      expect(done).toMatchObject({ ok: false, stopReason: message });
+      const custom = await runTurn("t-limit-custom", "badprov::badmodel");
+      expect((custom.errors[0] as { message: string }).message).toMatch(/^You've hit your usage limit\. Upgrade to Pro/);
+    });
+  });
+
+  it("words Codex's own usage limit and missing login plainly, only for Codex's own sign-in", () => {
+    const plus = "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 5:23 PM.";
+    const said = codexUserError(plus, "own");
+    expect(said).toContain("ChatGPT");
+    expect(said).toContain("not your Sagax plan");
+    expect(said).toMatch(/It resets at 5:23 PM \([^)]+\)\./);
+    expect(said).not.toContain("Pro");
+    expect(codexUserError("You've hit your usage limit for gpt-6.1-sol. Switch to another model now, or try again at Oct 17th, 2026 5:23 PM.", "own"))
+      .toContain("resets at Oct 17th, 2026 5:23 PM (");
+    expect(codexUserError("You've hit your usage limit.", "own")).not.toContain("resets at");
+    expect(codexUserError("Quota reached.", "own", "usageLimitExceeded")).toContain(CODEX_USAGE_LIMIT_REACHED);
+    expect(codexUserError(plus, "other")).toBe(plus);
+    const noBearer = "unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses";
+    expect(codexUserError(noBearer, "own")).toBe(codexNotSignedIn());
+    expect(codexUserError(noBearer, "other")).toBe(noBearer);
   });
 
   it("auto-retries a transient turn/start failure, then completes with one final message", async () => {

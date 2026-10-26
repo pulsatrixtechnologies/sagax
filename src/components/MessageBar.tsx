@@ -51,7 +51,7 @@ export function MessageBar({
       data-message-bar
       data-open={open ? "true" : undefined}
       className={cn(
-        "relative flex shrink-0 flex-col gap-0.5 self-end pb-0.5",
+        "relative flex shrink-0 select-none flex-col gap-0.5 self-end pb-0.5",
         mirrored ? "items-end" : "items-start",
         open || visible
           ? "opacity-100"
@@ -61,7 +61,7 @@ export function MessageBar({
       <MessageHoverActions side={side} onReply={onReply} copy={copy} requestId={requestId} react={react} persistent={persistent} onOpenChange={setOpen} view={view}>
         {children}
       </MessageHoverActions>
-      <span data-message-time className="px-1 text-[11px] tabular-nums leading-4 whitespace-nowrap text-ink-tertiary">
+      <span data-message-time className="select-none px-1 text-[11px] tabular-nums leading-4 whitespace-nowrap text-ink-tertiary">
         {time}
       </span>
     </div>

@@ -25,6 +25,9 @@ vi.mock("@/state/store", async (importOriginal) => {
   return { ...original, useStore: () => ({
     state: {
       ...original.initialState,
+      // a comm chip is verbose detail: shown with tool calls (the details
+      // toggle) on, so this layout case can see the quiet receipt
+      config: { features: { showToolCalls: true } },
       instances: [{ instanceId: "test", driverKind: "codex", displayName: "Test" } as InstanceInfo],
       groups: [dm],
       bots: [

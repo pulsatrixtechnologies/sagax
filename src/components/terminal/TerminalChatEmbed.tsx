@@ -45,7 +45,8 @@ export function TerminalChatEmbed({ embed }: { embed: TerminalEmbed }) {
   const windowId = terminalWindowId(embed.sessionId);
   const detached = useFloatingOpen(windowId);
   const status = !session ? "ended" : state.status === "connecting" ? embed.status : state.status;
-  const title = `${embed.label} · ${embed.hostLabel}`;
+  const label = embed.provider === "tailcat" ? t("remoteSession.terminal") : embed.label;
+  const title = `${label} · ${embed.hostLabel}`;
 
   // the chat row holds the session while it is mounted, even detached
   useEffect(() => session?.retain(), [session]);
@@ -78,7 +79,7 @@ export function TerminalChatEmbed({ embed }: { embed: TerminalEmbed }) {
   return (
     <div className="mt-2 overflow-hidden rounded-xl border border-hairline/40 bg-[#0d1117] text-ink" data-terminal-embed="">
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2 text-[12px] text-[#e6edf3]/90">
-        <span className="font-medium">{embed.label}</span>
+        <span className="font-medium">{label}</span>
         <span className="text-white/50">·</span>
         <span className="truncate text-white/70">{embed.hostLabel}</span>
         <span className={cn("ml-auto rounded-full px-2 py-0.5 text-[11px]", status === "live" ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-white/60")}>

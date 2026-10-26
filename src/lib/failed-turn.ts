@@ -5,6 +5,7 @@
 // the sidebar preview both ask signedOutEngine, so they never disagree.
 import { offersSignIn } from "@/components/EngineSetup";
 import { t } from "@/lib/i18n";
+import { limitFailoverLineText } from "@/lib/limit-failover";
 import { plainErrorLine } from "@/lib/plain-error";
 import { stepLabel } from "@/lib/step-label";
 import type { Bot, InstanceInfo, Message } from "@/state/store";
@@ -55,6 +56,7 @@ function reactionPreview(tool: ActivityTool): string | undefined {
 export function activityPreview(tool: ActivityTool, engine: InstanceInfo | undefined, dataResult?: Message["dataResult"]): string {
   if (dataResult) return dataResult.title;
   if (tool.engineMove) return t("model.org.engineMoved", { from: tool.engineMove.from, to: tool.engineMove.to });
+  if (tool.limitFailover) return limitFailoverLineText(tool.limitFailover);
   if (isStoppedTurnName(tool.name)) return t("chat.turnStopped");
   const cause = failedTurnCause(tool.name);
   if (cause !== null && isClientCancellation(cause)) return t("chat.turnStopped");

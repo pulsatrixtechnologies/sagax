@@ -1,0 +1,94 @@
+@@begin
+@@os
+Linux
+@@host
+srv01
+Ubuntu 24.04.1 LTS
+@@uptime
+356400.52 1400000.00
+@@stat
+cpu  100000 500 50000 800000 2000 0 1000 0 0 0
+cpu0 25000 100 12500 200000 500 0 250 0 0 0
+cpu1 25000 100 12500 200000 500 0 250 0 0 0
+cpu2 25000 100 12500 200000 500 0 250 0 0 0
+cpu3 25000 200 12500 200000 500 0 250 0 0 0
+@@meminfo
+MemTotal:       16303716 kB
+MemFree:         1203456 kB
+MemAvailable:    9876544 kB
+Buffers:          204800 kB
+Cached:          7340032 kB
+SwapCached:            0 kB
+SwapTotal:       4194300 kB
+SwapFree:        3145724 kB
+@@diskstats
+   7       0 loop0 52 0 2132 10 0 0 0 0 0 20 10 0 0 0 0 0 0
+   8       0 sda 90000 1000 3000000 50000 120000 9000 9000000 400000 0 300000 450000 0 0 0 0 0 0
+   8       1 sda1 89000 1000 2990000 49000 119000 9000 8990000 390000 0 290000 440000 0 0 0 0 0 0
+ 259       0 nvme0n1 10000 0 400000 2000 20000 0 800000 3000 0 4000 5000 0 0 0 0 0 0
+ 253       0 dm-0 9000 0 390000 2000 19000 0 790000 3000 0 4000 5000 0 0 0 0 0 0
+@@netdev
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo: 5000000 40000    0    0    0     0          0         0 5000000 40000    0    0    0     0       0          0
+  eth0: 900000000 800000    0    0    0     0          0         0 300000000 500000    0    0    0     0       0          0
+docker0: 1000 10    0    0    0     0          0         0 2000 20    0    0    0     0       0          0
+veth12ab: 1000 10    0    0    0     0          0         0 2000 20    0    0    0     0       0          0
+@@df
+Filesystem     1024-blocks      Used Available Capacity Mounted on
+tmpfs              1630372      1840   1628532       1% /run
+/dev/sda1        102626232  61575740  35785228      64% /
+tmpfs              8151856         0   8151856       0% /dev/shm
+/dev/sda1        102626232  61575740  35785228      64% /var/lib/docker/overlay2
+/dev/nvme0n1p1   976284672 488142336 488142336      50% /srv/data
+/dev/sda15          106858      6186    100673       6% /boot/efi
+/dev/loop0           65536     65536         0     100% /snap/core/1
+overlay          102626232  61575740  35785228      64% /var/lib/docker/overlay2/abc/merged
+@@end
+@@begin
+@@os
+Linux
+@@host
+srv01
+Ubuntu 24.04.1 LTS
+@@uptime
+356402.52 1400000.00
+@@stat
+cpu  100300 500 50100 801200 2000 0 1000 0 0 0
+cpu0 25150 100 12550 200200 500 0 250 0 0 0
+cpu1 25050 100 12520 200330 500 0 250 0 0 0
+cpu2 25050 100 12520 200330 500 0 250 0 0 0
+cpu3 25050 200 12510 200340 500 0 250 0 0 0
+@@meminfo
+MemTotal:       16303716 kB
+MemFree:         1203456 kB
+MemAvailable:    9876544 kB
+Buffers:          204800 kB
+Cached:          7340032 kB
+SwapCached:            0 kB
+SwapTotal:       4194300 kB
+SwapFree:        3145724 kB
+@@diskstats
+   7       0 loop0 52 0 2132 10 0 0 0 0 0 20 10 0 0 0 0 0 0
+   8       0 sda 90010 1000 3008192 50000 120040 9000 9020480 400000 0 300000 450000 0 0 0 0 0 0
+   8       1 sda1 89010 1000 2998192 49000 119040 9000 9010480 390000 0 290000 440000 0 0 0 0 0 0
+ 259       0 nvme0n1 10000 0 400000 2000 20000 0 804096 3000 0 4000 5000 0 0 0 0 0 0
+ 253       0 dm-0 9010 0 398192 2000 19000 0 810480 3000 0 4000 5000 0 0 0 0 0 0
+@@netdev
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo: 5999999 40000    0    0    0     0          0         0 5999999 40000    0    0    0     0       0          0
+  eth0: 902097152 800000    0    0    0     0          0         0 300524288 500000    0    0    0     0       0          0
+docker0: 51000 10    0    0    0     0          0         0 52000 20    0    0    0     0       0          0
+veth12ab: 51000 10    0    0    0     0          0         0 52000 20    0    0    0     0       0          0
+@@df
+Filesystem     1024-blocks      Used Available Capacity Mounted on
+tmpfs              1630372      1840   1628532       1% /run
+/dev/sda1        102626232  61575740  35785228      64% /
+tmpfs              8151856         0   8151856       0% /dev/shm
+/dev/sda1        102626232  61575740  35785228      64% /var/lib/docker/overlay2
+/dev/nvme0n1p1   976284672 488142336 488142336      50% /srv/data
+/dev/sda15          106858      6186    100673       6% /boot/efi
+/dev/loop0           65536     65536         0     100% /snap/core/1
+overlay          102626232  61575740  35785228      64% /var/lib/docker/overlay2/abc/merged
+@@end

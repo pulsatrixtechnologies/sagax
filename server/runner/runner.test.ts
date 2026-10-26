@@ -336,6 +336,18 @@ describe("sagax-runner cycle", () => {
     expect(existsSync(dirs.secrets)).toBe(false);
   }, 60_000);
 
+  it("re-arms its deadline from a limits command (a duration an admin extended)", async () => {
+    await setup({ setup: "", verify: [], limits: { max_duration_sec: 3 } });
+    engine.scripts.push(async (_turn, eng) => { await eng.hang(); });
+    const { result } = start();
+    await fake.waitFor((e) => e.kind === "state" && e.data.state === "running");
+    fake.push("limits", { max_duration_sec: 3600 });
+    await new Promise((resolve) => setTimeout(resolve, 4500));
+    fake.push("stop");
+    const done = await result;
+    expect(done.exit).toBe("stopped");
+  }, 60_000);
+
   it("stops cleanly on a 401: no further event, engine disposed, secrets wiped", async () => {
     await setup({ setup: "", verify: [] });
     engine.scripts.push(writeHello);

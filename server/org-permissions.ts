@@ -50,6 +50,11 @@ export function effectivePermissions(input: {
 }): EffectivePermissions {
   if (input.admin) return { admin: true, permissions: new Set(PERMISSION_KEYS), source: "admin", narrowedBy: [] };
   const held = new Set<PermissionKey>(input.fromDirectory ?? MEMBER_DEFAULT_PERMISSIONS);
+  // 2026-10-22 (JC): server.experimental is a separate, explicit right. It is
+  // NOT implied by server.settings: a settings delegate who should also manage
+  // the experiments is given both keys in Perspicax. (The config write accepts
+  // either key, so a settings-only delegate still edits the full installation;
+  // request-auth.ts PERMISSION_ROUTES, shared/permissions.ts.)
   const narrowedBy: EffectivePermissions["narrowedBy"] = [];
   if (input.botsUseOnly) {
     for (const key of BOT_OWNER_PERMISSIONS) held.delete(key);

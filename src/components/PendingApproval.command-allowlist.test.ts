@@ -9,6 +9,7 @@ vi.mock("@/state/store", async (original) => ({
   useStore: () => ({ dispatch: fixture.dispatch }),
 }));
 vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => fixture.admin }));
+vi.mock("@/lib/org-approval-policy", () => ({ useOrgApprovalPolicy: () => ({ alwaysAllow: true, orgRules: 0 }), noteOrgAlwaysAllowOff: () => {} }));
 
 import { pendingApprovals, PendingApprovalActions, PendingApprovalPanel } from "./PendingApproval";
 
@@ -60,10 +61,11 @@ describe("remembering exact command approvals", () => {
 
   it("answers and remembers in one action without a separate preference update", () => {
     const result = view();
-    expect(result.html).toContain("Always allow this command");
+    // 2026-10-20 (JC): one "Always allow"; its hint names what it keeps
+    expect(result.html).toContain(">Always allow<");
     expect(result.html).toContain("/work/project");
-    expect(result.html).not.toContain("Always allow this session");
-    result.buttons.find((button) => button.props.children === "Always allow this command")!.props.onClick!();
+    expect(result.buttons.filter((button) => button.props.children === "Always allow")).toHaveLength(1);
+    result.buttons.find((button) => button.props.children === "Always allow")!.props.onClick!();
     expect(fixture.dispatch).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
       type: "decideRequest", threadId: "thread-1", requestId: "request-1", behavior: "allow", rememberCommand: true,
       alwaysAllow: undefined, always: undefined,
@@ -83,13 +85,14 @@ describe("remembering exact command approvals", () => {
   it.each([false, null])("keeps bot-wide grants unavailable without owner/admin authority (%s)", (admin) => {
     fixture.admin = admin;
     const result = view();
-    expect(result.html).not.toContain("Always allow this command");
-    expect(result.html).toContain("Always allow this session");
+    expect(result.html).not.toContain("/work/project");
+    result.buttons.find((button) => button.props.children === "Always allow")!.props.onClick!();
+    expect(fixture.dispatch).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ always: true, rememberCommand: undefined }));
     expect(result.html).toContain("Allow once");
   });
 
   it("preserves session approval for requests without an exact command", () => {
-    view({ commandAllowlist: undefined }).buttons.find((button) => button.props.children === "Always allow this session")!.props.onClick!();
+    view({ commandAllowlist: undefined }).buttons.find((button) => button.props.children === "Always allow")!.props.onClick!();
     expect(fixture.dispatch).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
       behavior: "allow", always: true, rememberCommand: undefined,
     }));

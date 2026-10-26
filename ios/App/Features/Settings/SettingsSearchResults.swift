@@ -48,7 +48,7 @@ struct SettingsSearchResults: View {
             case .achievements: return sections.contains(.achievements)
             case .privacy: return NavigationMenus.showsPrivacy(gate: gate, connected: connected)
             case .experimental: return sections.contains(.experimental)
-            case .plugins, .botComputer, .usage, .rules, .timeZone: return connected
+            case .plugins, .botComputer, .pages, .usage, .rules, .approvalGrants, .timeZone, .credentials, .securityKeys: return connected
             default: return true
             }
         }
@@ -66,14 +66,18 @@ struct SettingsSearchResults: View {
         case .plugins: String(localized: "Connect apps")
         case .account: String(localized: "Account")
         case .botComputer: String(localized: "Bot Computer")
+        case .pages: String(localized: "Published pages")
         case .usage: String(localized: "Usage")
         case .rules: String(localized: "Auto-review Rules")
+        case .approvalGrants: String(localized: "Approval rules")
         case .timeZone: String(localized: "Time Zone")
         case .language: String(localized: "Language")
         case .haptics: String(localized: "Haptics")
         case .quickReplies: String(localized: "Quick Replies")
         case .walkieVoice: String(localized: "Call voice")
         case .about: String(localized: "About")
+        case .credentials: String(localized: "Vault")
+        case .securityKeys: String(localized: "Security keys")
         }
     }
 
@@ -89,14 +93,18 @@ struct SettingsSearchResults: View {
         case .plugins: "puzzlepiece.extension"
         case .account: "person.crop.circle"
         case .botComputer: "desktopcomputer"
+        case .pages: "doc.richtext"
         case .usage: "chart.bar"
         case .rules: "checklist"
+        case .approvalGrants: "checkmark.shield"
         case .timeZone: "clock"
         case .language: "globe"
         case .haptics: "speaker.wave.2"
         case .quickReplies: "bolt"
         case .walkieVoice: "waveform"
         case .about: "info.circle"
+        case .credentials: "key"
+        case .securityKeys: "lock"
         }
     }
 }

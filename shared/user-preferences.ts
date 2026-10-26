@@ -15,8 +15,19 @@
 export const USER_PREFERENCE_KEYS = [
   // appearance (the Hibou 98 switch goes with the skin it swaps)
   "omb-skin",
+  // Auto (follow the system) and the last variant per skin family (src/lib/skin-families.ts)
+  "omb-skin-mode",
+  "omb-skin-tint",
+  "omb-skin-depth",
+  "omb-skin-texture",
+  "omb-skin-variants",
+  // the open bot's colour as the accent (src/lib/bot-accent.ts)
+  "sagax.botAccent.v1",
   "omb-font",
   "omb-show-threads",
+  // the bot panel's Suggestions card and All history row (src/lib/panel-visibility.ts)
+  "sagax.showSuggestions.v1",
+  "sagax.showAllHistory.v1",
   "omb.retro98.on",
   "omb.retro98.unlocked",
   "omb.retro98.previousSkin",
@@ -24,6 +35,14 @@ export const USER_PREFERENCE_KEYS = [
   "omb-language",
   // notifications
   "omb-notification-sounds",
+  // which sound a notification plays (src/lib/notification-sound.ts)
+  "sagax.notificationSound.v1",
+  // Settings > Appearance > Accessibility (src/lib/accessibility-preferences.ts)
+  "sagax.a11y.motion.v1",
+  "sagax.a11y.contrast.v1",
+  "sagax.a11y.textSize.v1",
+  // Settings > Appearance > Mascots: painted HD art or the classic vector look (src/lib/hd-mascots-preference.ts). "on" | "off"; absent is on.
+  "sagax.hdMascots.v1",
   // the desktop mascot's behavior (fly away during tasks, activity level)
   "omb.floatingBots.prefs.v1",
   // sidebar layout

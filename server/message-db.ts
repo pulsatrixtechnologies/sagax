@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { DATA_DIR } from "./config.ts";
-import { peerProvenanceAuthor, type WorkOrigin } from "./peer-provenance.ts";
+import { peerProvenanceAuthor, WEBHOOK_AUTHOR, type WorkOrigin } from "./peer-provenance.ts";
 import type { ResolvedSender, SteerQueueReason } from "../shared/wire.ts";
 import type { Message } from "./store.ts";
 import type { UsageTrigger } from "./usage-ledger.ts";
@@ -557,7 +557,8 @@ function newestAts(threadIds: readonly string[], where: string): Map<string, num
   return out;
 }
 
-export function deleteThread(threadId: string): void {
+/** One transaction; `beforeCommit` throwing keeps the thread's rows. */
+export function deleteThread(threadId: string, beforeCommit?: () => void): void {
   writeFollowups((connection) => {
     connection.prepare("DELETE FROM chat_followups WHERE thread_id = ?").run(threadId);
     connection.prepare("DELETE FROM messages WHERE thread_id = ?").run(threadId);
@@ -567,6 +568,7 @@ export function deleteThread(threadId: string): void {
     // compaction.append), keyed "<thread>:<turn>...": copies of its digest
     // and compaction rows. A key range, so no other thread's id matches.
     connection.prepare("DELETE FROM command_receipts WHERE key >= ? AND key < ?").run(`${threadId}:`, `${threadId};`);
+    beforeCommit?.();
   });
 }
 
@@ -713,15 +715,15 @@ const SNIPPET_TOKENS = 48;
 export function readMessageText(
   threadId: string,
   messageId: string,
-): { threadId: string; messageId: string; at: number; role: string; text: string; from?: string; peer?: string } | null {
+): { threadId: string; messageId: string; at: number; role: string; text: string; from?: string; peer?: string; webhook?: true } | null {
   const row = db()
     .prepare(
       "SELECT at, role, text, json_extract(json, '$.from.name') AS from_name, " +
-        "json_extract(json, '$.peerAsk.name') AS peer_name FROM messages " +
+        "json_extract(json, '$.peerAsk.name') AS peer_name, json_extract(json, '$.webhookPost') AS webhook_post FROM messages " +
         "WHERE thread_id = ? AND id = ? AND kind = 'text' AND text IS NOT NULL",
     )
     .get(threadId, messageId) as
-    | { at: number; role: string; text: string; from_name: string | null; peer_name: string | null }
+    | { at: number; role: string; text: string; from_name: string | null; peer_name: string | null; webhook_post: number | null }
     | undefined;
   if (!row) return null;
   const peer = peerAuthor(row.peer_name, row.text);
@@ -731,7 +733,7 @@ export function readMessageText(
     at: row.at,
     role: row.role,
     text: row.text,
-    ...(row.from_name ? { from: row.from_name } : {}),
+    ...(row.webhook_post ? { from: WEBHOOK_AUTHOR, webhook: true as const } : row.from_name ? { from: row.from_name } : {}),
     ...(peer ? { peer } : {}),
   };
 }
@@ -769,7 +771,7 @@ export function recallMessages(query: string, threadIds: readonly string[], limi
   const rows = db()
     .prepare(
       "SELECT m.thread_id, m.id, m.at, m.role, m.kind, json_extract(m.json, '$.from.name') AS from_name, " +
-        `json_extract(m.json, '$.peerAsk.name') AS peer_name, substr(m.text, 1, ${PEER_NOTE_HEAD_CHARS}) AS head, ` +
+        `json_extract(m.json, '$.peerAsk.name') AS peer_name, json_extract(m.json, '$.webhookPost') AS webhook_post, substr(m.text, 1, ${PEER_NOTE_HEAD_CHARS}) AS head, ` +
         `snippet(messages_fts, 0, '[', ']', '…', ${SNIPPET_TOKENS}) AS snippet ` +
         "FROM messages_fts JOIN messages m ON m.rowid = messages_fts.rowid " +
         `WHERE messages_fts MATCH ? AND m.kind IN ('text', 'digest') AND m.thread_id IN (${placeholders})${window.sql} ` +
@@ -785,6 +787,7 @@ export function recallMessages(query: string, threadIds: readonly string[], limi
     kind: string;
     from_name: string | null;
     peer_name: string | null;
+    webhook_post: number | null;
     head: string;
     snippet: string;
   }>;
@@ -797,7 +800,7 @@ export function recallMessages(query: string, threadIds: readonly string[], limi
       role: row.role,
       ...(row.kind === "digest" ? { kind: "digest" as const } : {}),
       snippet: row.snippet.replace(/\s+/g, " ").trim(),
-      ...(row.from_name ? { from: row.from_name } : {}),
+      ...(row.webhook_post ? { from: WEBHOOK_AUTHOR } : row.from_name ? { from: row.from_name } : {}),
       ...(peer ? { peer } : {}),
     };
   });
@@ -818,7 +821,7 @@ export function recentMessages(threadIds: readonly string[], range: RecallRange,
   const rows = db()
     .prepare(
       "SELECT m.thread_id, m.id, m.at, m.role, json_extract(m.json, '$.from.name') AS from_name, " +
-        `json_extract(m.json, '$.peerAsk.name') AS peer_name, substr(m.text, 1, ${Math.max(PEER_NOTE_HEAD_CHARS, RECENT_HEAD_CHARS)}) AS head ` +
+        `json_extract(m.json, '$.peerAsk.name') AS peer_name, json_extract(m.json, '$.webhookPost') AS webhook_post, substr(m.text, 1, ${Math.max(PEER_NOTE_HEAD_CHARS, RECENT_HEAD_CHARS)}) AS head ` +
         `FROM messages m WHERE m.kind = 'text' AND m.text IS NOT NULL AND m.thread_id IN (${placeholders})${window.sql} ` +
         "ORDER BY m.at DESC LIMIT ?",
     )
@@ -829,6 +832,7 @@ export function recentMessages(threadIds: readonly string[], range: RecallRange,
     role: string;
     from_name: string | null;
     peer_name: string | null;
+    webhook_post: number | null;
     head: string;
   }>;
   return rows.map((row) => {
@@ -840,7 +844,7 @@ export function recentMessages(threadIds: readonly string[], range: RecallRange,
       at: row.at,
       role: row.role,
       snippet: folded.length > RECENT_HEAD_CHARS ? `${folded.slice(0, RECENT_HEAD_CHARS)}…` : folded,
-      ...(row.from_name ? { from: row.from_name } : {}),
+      ...(row.webhook_post ? { from: WEBHOOK_AUTHOR } : row.from_name ? { from: row.from_name } : {}),
       ...(peer ? { peer } : {}),
     };
   });

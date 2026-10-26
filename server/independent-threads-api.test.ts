@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { claudeLaunchLevel } from "./testing/claude-level.ts";
 
 import { launchVerificationServer, runControlOmb, type VerificationServer } from "../scripts/control-omb.ts";
 import { handleToolCall, request } from "../scripts/mcp-server.ts";
@@ -553,7 +554,7 @@ describe("independent bot tasks through the isolated control surface", () => {
     expect(launchedA.argv[launchedA.argv.indexOf("--model") + 1]).toBe(models[0]);
     expect(launchedB.argv[launchedB.argv.indexOf("--model") + 1]).toBe(models[1]);
     expect(launchedA.argv[launchedA.argv.indexOf("--permission-mode") + 1]).toBe("default");
-    expect(launchedB.argv[launchedB.argv.indexOf("--permission-mode") + 1]).toBe("auto");
+    expect(claudeLaunchLevel(launchedB.argv)).toBe("auto");
     evidence.push({ providerSelections: [models[0], models[1]], distinctProcesses: true });
     expect(launchedA.env.SAGAX_FIXTURE_CWD).toBe(realpathSync(join(session.info.dataDir, "task-workspaces", botId, taskA)));
     expect(launchedB.env.SAGAX_FIXTURE_CWD).toBe(realpathSync(join(session.info.dataDir, "task-workspaces", botId, taskB)));
@@ -775,8 +776,8 @@ describe("independent bot tasks through the isolated control surface", () => {
     // Approval levels are the provider's own modes, passed through: a turn a
     // webhook started runs in the bot's level like any other, and a request
     // Claude's reviewer leaves for a person is carded, not answered.
-    expect(unattendedLaunch.argv[unattendedLaunch.argv.indexOf("--permission-mode") + 1]).toBe("auto");
-    expect(attendedLaunch.argv[attendedLaunch.argv.indexOf("--permission-mode") + 1]).toBe("auto");
+    expect(claudeLaunchLevel(unattendedLaunch.argv)).toBe("auto");
+    expect(claudeLaunchLevel(attendedLaunch.argv)).toBe("auto");
 
     const unattendedAnswers = await permission(models[0], "unattended-permission");
     expect((await control(["wait", "--bot", botId, "--task", unattendedTask, "--timeout", "5"])).status).toBe("needs-user");

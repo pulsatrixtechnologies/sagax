@@ -26,7 +26,6 @@ export const botZipIncludesSchema = z.object({
   plugins: z.number().int().nonnegative(),
   marketplaces: z.number().int().nonnegative(),
   mcpServers: z.number().int().nonnegative(),
-  connectedApps: z.number().int().nonnegative(),
   perspicaxProfiles: z.number().int().nonnegative(),
   routines: z.number().int().nonnegative(),
   webhooks: z.number().int().nonnegative(),
@@ -63,8 +62,6 @@ export const botZipManifestSchema = z.object({
     /** Header or environment value names; never their values. */
     valueNames: z.array(z.string().max(200)).max(50).default([]),
   })).max(100).default([]),
-  /** Connected app services the bot may use (Composio slugs), by name only. */
-  connectedApps: z.array(z.string().max(80)).max(100).default([]),
   excluded: z.array(z.string().max(300)).max(50).default([]),
 });
 export type BotZipManifest = z.infer<typeof botZipManifestSchema>;

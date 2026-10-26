@@ -24,6 +24,7 @@ import {
 import { api, useStore } from "@/state/store";
 import { FIELD, FieldRow, FoldRow, HelpTip, PILL, PRIMARY_PILL, SettingsGroup, SwitchRow, DIALOG } from "./SettingsPrimitives";
 import type { NewBotDefaults } from "../../shared/new-bot-defaults";
+import { botLabel } from "@/lib/human-label";
 
 /** What the file will hold, counted from the server's own dry run, so the
  * numbers are exactly what Save file writes. Pure, for tests. */
@@ -170,7 +171,7 @@ export function ShareTeamDialog({ team, onClose }: { team: string; onClose: () =
       setPictures({
         avatars: result.avatars,
         skipped: result.skipped.map((skip) =>
-          `${botNames.get(skip.botId) ?? skip.botId} · ${t("teamShare.field.picture")} — ${tFromServer(`teamShare.skip.${skip.reason}`, skip.reason)}`),
+          `${botLabel(botNames.get(skip.botId), skip.botId)} · ${t("teamShare.field.picture")} — ${tFromServer(`teamShare.skip.${skip.reason}`, skip.reason)}`),
       });
     }).catch(() => {
       if (!cancelled) setPictures({ avatars: {}, skipped: [] });

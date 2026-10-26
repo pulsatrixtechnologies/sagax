@@ -16,11 +16,17 @@ const community: PluginListing = {
   domain: "mcp.example.test", auth: "unknown", source: "registry", reviewed: false,
 };
 
+const regional: PluginListing = {
+  ...community, id: "registry:io.example/crm", url: "https://us.crm.example.test/mcp", domain: "us.crm.example.test",
+  regions: [{ id: "us", label: "US", url: "https://us.crm.example.test/mcp" }, { id: "eu", label: "EU", url: "https://eu.crm.example.test/mcp" }],
+};
+
 async function serve(auth: RequestAuth, deps: Partial<PluginRouteDeps> = {}) {
   const installs: Array<{ id: string; returnTo?: unknown }> = [];
+  const urls: string[] = [];
   const registry: RegistrySearch = {
     search: async () => ({ results: [community, { ...community, id: "registry:io.notion/dup", url: "https://mcp.notion.com/mcp" }], nextCursor: "next", available: true }),
-    lookup: async (name) => (name === "io.example/notes" ? community : null),
+    lookup: async (name) => (name === "io.example/notes" ? community : name === "io.example/crm" ? regional : null),
   };
   const routes = [createPluginRoutes({
     registry,
@@ -28,6 +34,7 @@ async function serve(auth: RequestAuth, deps: Partial<PluginRouteDeps> = {}) {
     mayInstall: (caller) => caller.kind === "loopback" ? caller.trust !== "service" : caller.scopes.includes("admin"),
     install: async (listing, request) => {
       installs.push({ id: listing.id, returnTo: request.returnTo });
+      urls.push(listing.url);
       return { status: 201, body: { name: listing.id, auth: "required", authorizationUrl: "https://auth.example.test/authorize" } };
     },
     ...deps,
@@ -40,10 +47,22 @@ async function serve(auth: RequestAuth, deps: Partial<PluginRouteDeps> = {}) {
   await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/plugins`;
   const install = (body: unknown) => fetch(`${base}/install`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  return { base, install, installs };
+  return { base, install, installs, urls };
 }
 
 describe("plugin routes", () => {
+  it("connects to the data center the person chose, and refuses one the plugin does not offer", async () => {
+    const { install, installs, urls } = await serve(OWNER);
+    expect((await install({ id: "registry:io.example/crm", trust: true, region: "eu" })).status).toBe(201);
+    expect(installs.at(-1)?.id).toBe("registry:io.example/crm");
+    expect(urls.at(-1)).toBe("https://eu.crm.example.test/mcp");
+    expect((await install({ id: "registry:io.example/crm", trust: true })).status).toBe(201);
+    expect(urls.at(-1)).toBe("https://us.crm.example.test/mcp");
+    const refused = await install({ id: "registry:io.example/crm", trust: true, region: "apac" });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ code: "unknown_region" });
+  });
+
   it("read as a member; install reaches the handler, which decides (mayInstall)", () => {
     expect(requiredScope("GET", "/api/plugins/search")).toBe("client");
     expect(requiredScope("GET", "/api/plugins/installed")).toBe("client");

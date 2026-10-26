@@ -1,0 +1,146 @@
+/* Skin texture variants (src/lib/skin-families.ts, SKIN_TEXTURES).
+
+   `data-skin-texture` on the document root (grain, grid, dots, lines; absent
+   or "none" = no texture) lays a very light pattern over the GROUND of the
+   window, never over what sits on it:
+
+   - the chat and group shell (`main.app-glow`, or the side chat's
+     `section.app-glow`, ChatView.tsx / GroupView.tsx), which does not scroll
+     itself: the transcript scrolls in a transparent child, so the pattern
+     stays put under the moving thread;
+   - the empty and connecting states (`.app-content-frame > main.bg-app`,
+     App.tsx);
+   - the sidebar (`aside[data-sidebar]`, Sidebar.tsx), in the sidebar's own
+     ink so it reads on a navy rail as well as a light one;
+   - Pulsatrix Light's inset card (`.app-glow > .content-card-body`), which
+     repaints the ground opaque over its main.
+
+   Bubbles, fields, menus, popovers and dialogs keep their own opaque
+   backgrounds and are never targeted. The pattern is drawn with gradients
+   only (no image, no filter, nothing animated), in the palette's ink mixed
+   at a few percent, so one rule fits every base, tint, light and dark.
+   Hibou 98 (`retro98`) is excluded by every rule: it keeps its flat teal
+   desktop and grey windows. */
+
+/* The ink the pattern is drawn in and how much of it shows, per surface. */
+:root:not([data-skin="retro98"])[data-skin-texture] :is(
+  main.app-glow,
+  section.app-glow,
+  .app-content-frame > main.bg-app,
+  .app-glow > .content-card-body
+) {
+  --tx-ink: var(--color-ink);
+}
+:root:not([data-skin="retro98"])[data-skin-texture] aside[data-sidebar] {
+  --tx-ink: var(--color-sidebar-ink, var(--color-ink));
+}
+/* Pulsatrix Light: the main behind the card turns navy (styles.css); its
+   visible top band is drawn in the sidebar's ink like the rail beside it. */
+:root[data-skin="pulsatrix-light"][data-skin-texture] main.app-glow:has(> .content-card-body),
+:root[data-skin="pulsatrix-light"][data-skin-texture] section.app-glow:has(> .content-card-body) {
+  --tx-ink: var(--color-sidebar-ink, var(--color-ink));
+}
+
+/* Each texture: its layers (--tx-img), their tile sizes (--tx-size) and as
+   many "repeat" as layers (--tx-rep), all set on the target itself so the
+   colour resolves against that surface's ink. */
+
+/* Fine paper grain: four speckle layers on prime-sized tiles (5, 7, 11, 13
+   px...), so the combined pattern only repeats every few thousand pixels
+   and reads as random, not as a grid. */
+:root:not([data-skin="retro98"])[data-skin-texture="grain"] :is(
+  main.app-glow,
+  section.app-glow,
+  .app-content-frame > main.bg-app,
+  .app-glow > .content-card-body,
+  aside[data-sidebar]
+) {
+  --tx-c: color-mix(in oklch, var(--tx-ink) 9%, transparent);
+  --tx-c2: color-mix(in oklch, var(--tx-ink) 6%, transparent);
+  --tx-img:
+    radial-gradient(circle at 1px 2px, var(--tx-c) 0 0.6px, transparent 0.9px),
+    radial-gradient(circle at 4px 1px, var(--tx-c2) 0 0.6px, transparent 0.9px),
+    radial-gradient(circle at 6px 9px, var(--tx-c) 0 0.5px, transparent 0.8px),
+    radial-gradient(circle at 2px 5px, var(--tx-c2) 0 0.7px, transparent 1px);
+  --tx-size: 5px 7px, 7px 11px, 11px 13px, 13px 17px;
+  --tx-rep: repeat, repeat, repeat, repeat;
+}
+
+/* Fine grid: hairlines every 24 px. */
+:root:not([data-skin="retro98"])[data-skin-texture="grid"] :is(
+  main.app-glow,
+  section.app-glow,
+  .app-content-frame > main.bg-app,
+  .app-glow > .content-card-body,
+  aside[data-sidebar]
+) {
+  --tx-c: color-mix(in oklch, var(--tx-ink) 5%, transparent);
+  --tx-img:
+    linear-gradient(to right, var(--tx-c) 0 1px, transparent 1px),
+    linear-gradient(to bottom, var(--tx-c) 0 1px, transparent 1px);
+  --tx-size: 24px 24px, 24px 24px;
+  --tx-rep: repeat, repeat;
+}
+
+/* Dots: a round dot every 18 px. */
+:root:not([data-skin="retro98"])[data-skin-texture="dots"] :is(
+  main.app-glow,
+  section.app-glow,
+  .app-content-frame > main.bg-app,
+  .app-glow > .content-card-body,
+  aside[data-sidebar]
+) {
+  --tx-c: color-mix(in oklch, var(--tx-ink) 11%, transparent);
+  --tx-img: radial-gradient(circle at 9px 9px, var(--tx-c) 0 1px, transparent 1.6px);
+  --tx-size: 18px 18px;
+  --tx-rep: repeat;
+}
+
+/* Diagonal lines: a hairline every 8 px, rising to the right. */
+:root:not([data-skin="retro98"])[data-skin-texture="lines"] :is(
+  main.app-glow,
+  section.app-glow,
+  .app-content-frame > main.bg-app,
+  .app-glow > .content-card-body,
+  aside[data-sidebar]
+) {
+  --tx-c: color-mix(in oklch, var(--tx-ink) 4%, transparent);
+  --tx-img: repeating-linear-gradient(-45deg, var(--tx-c) 0 1px, transparent 1px 8px);
+  --tx-size: auto;
+  --tx-rep: repeat;
+}
+
+/* Painting. The chat/group shell keeps Pulsatrix's top-of-window glow
+   (`.app-glow`, styles.css) as the bottom layer under the pattern. */
+:root:not([data-skin="retro98"]):is(
+  [data-skin-texture="grain"],
+  [data-skin-texture="grid"],
+  [data-skin-texture="dots"],
+  [data-skin-texture="lines"]
+) :is(main.app-glow, section.app-glow) {
+  background-image: var(--tx-img), var(--app-glow, none);
+  background-size: var(--tx-size), auto;
+  background-repeat: var(--tx-rep), no-repeat;
+  background-position: 0 0;
+  background-attachment: scroll;
+}
+:root:not([data-skin="retro98"]):is(
+  [data-skin-texture="grain"],
+  [data-skin-texture="grid"],
+  [data-skin-texture="dots"],
+  [data-skin-texture="lines"]
+) :is(.app-content-frame > main.bg-app:not(.app-glow), aside[data-sidebar]),
+:root[data-skin="pulsatrix-light"]:is(
+  [data-skin-texture="grain"],
+  [data-skin-texture="grid"],
+  [data-skin-texture="dots"],
+  [data-skin-texture="lines"]
+) .app-glow > .content-card-body {
+  /* Pulsatrix Light's card only: in every other skin `.content-card-body`
+     is transparent and the main behind it already carries the pattern. */
+  background-image: var(--tx-img);
+  background-size: var(--tx-size);
+  background-repeat: var(--tx-rep);
+  background-position: 0 0;
+  background-attachment: scroll;
+}

@@ -78,14 +78,16 @@ describe("answersInOneTap", () => {
 });
 
 describe("QuestionCard answered in one step", () => {
-  it("sends a single pick right away and folds into one line", () => {
+  it("sends a single pick right away and keeps the card with the pick marked", () => {
     mount([plan]);
     expect(button("Submit answer")).toBeUndefined();
     act(() => button("Pro").click());
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(dispatch.mock.calls[0]![0]).toMatchObject({ type: "decideRequest", requestId: "req-1", behavior: "answer" });
     expect(dispatch.mock.calls[0]![0].message).toContain("A: Pro");
-    expect(host.querySelector('[data-ask-card="settled"]')?.textContent).toContain("Choose a plan · Pro");
+    const settled = host.querySelector('[data-ask-card="settled"]')!;
+    expect(settled.querySelector('[aria-checked="true"]')?.textContent).toContain("Pro");
+    expect(settled.querySelectorAll(".opacity-45").length).toBe(1);
   });
 
   it("sends a single pick from its letter key too", () => {
@@ -95,12 +97,14 @@ describe("QuestionCard answered in one step", () => {
     expect(dispatch.mock.calls[0]![0].message).toContain("A: Pro");
   });
 
-  it("waits for Submit or Enter when they type their own answer", () => {
+  it("opens a field from the Other row and waits for Enter or its arrow", () => {
     mount([plan]);
+    expect(host.querySelector("textarea")).toBeNull();
+    act(() => button("Other").click());
     const field = host.querySelector("textarea")!;
     type(field, "Enterprise");
     expect(dispatch).not.toHaveBeenCalled();
-    act(() => button("Submit answer").click());
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="Submit answer"]')!.click());
     expect(dispatch.mock.calls[0]![0].message).toContain("A: Enterprise");
   });
 

@@ -38,6 +38,17 @@ describe("Full access delivery", () => {
 });
 
 describe("autoVerdict", () => {
+  it("answers a read-only command on the person's own computer at every level (JC 2026-10-20)", () => {
+    const tool = "mcp__sagax-environment__run_command";
+    for (const mode of ["ask", "edits", "auto", "custom"] as const) {
+      expect(autoVerdict(mode, tool, { ownReadOnlyCommand: true }).source).toBe("own-read-only");
+      // the person's own words, a safety hold and a security key come first
+      expect(autoVerdict(mode, tool, { ownReadOnlyCommand: true, customRule: { behavior: "ask", id: "r" } }).approve).toBeNull();
+      expect(autoVerdict(mode, tool, { ownReadOnlyCommand: true, safetyHold: true }).approve).toBeNull();
+      expect(autoVerdict(mode, tool, { ownReadOnlyCommand: true, stepUpRequired: ["shell"] }).approve).toBeNull();
+      expect(autoVerdict(mode, tool, { ownReadOnlyCommand: true, requiresExplicitApproval: true }).approve).toBeNull();
+    }
+  });
   it("never uses a saved command grant to silently send on the person's behalf", () => {
     for (const mode of ["ask", "edits", "auto", "custom"] as const) {
       expect(autoVerdict(mode, "mcp__composio__GMAIL_SEND_DRAFT", { commandAllowed: true })).toEqual({ approve: null, source: "outbound-guard" });
@@ -139,6 +150,26 @@ describe("autoVerdict", () => {
       approve: "approved WebSearch (saved command)",
       source: "command-allowlist",
     });
+  });
+});
+
+describe("allowed recipients (parité 1C)", () => {
+  it("sends with no card when every recipient is listed, at any level", () => {
+    for (const mode of ["ask", "edits", "auto"] as const) {
+      expect(autoVerdict(mode, "mcp__composio__GMAIL_SEND_EMAIL", { recipientsAllowed: true })).toEqual({
+        approve: "approved mcp__composio__GMAIL_SEND_EMAIL (allowed recipients)",
+        source: "allowed-recipient",
+      });
+    }
+  });
+
+  it("keeps the card for a gate's sandbox widening, a security key, a safety hold or the person's ask rule", () => {
+    const tool = "mcp__composio__GMAIL_SEND_EMAIL";
+    expect(autoVerdict("auto", tool, { recipientsAllowed: true, requiresExplicitApproval: true }).approve).toBeNull();
+    expect(autoVerdict("auto", tool, { recipientsAllowed: true, stepUpRequired: ["external-send"] }).approve).toBeNull();
+    expect(autoVerdict("auto", tool, { recipientsAllowed: true, safetyHold: true }).approve).toBeNull();
+    expect(autoVerdict("auto", tool, { recipientsAllowed: true, customRule: { behavior: "ask", id: "r1" } }).approve).toBeNull();
+    expect(autoVerdict("auto", tool, { recipientsAllowed: false })).toEqual({ approve: null, source: "outbound-guard" });
   });
 });
 
@@ -252,5 +283,20 @@ describe("delegatedApprovalMode", () => {
       expect(autoVerdict(mode, "other", { sagaxGate: true, ruleAllowed: true }).source).toBe("allow-rule");
       expect(autoVerdict(mode, "other", { sagaxGate: true, ruleAllowed: false }).approve).toBeNull();
     }
+  });
+});
+
+describe("an engine connector's outward call (review of #943)", () => {
+  it("the driver's outward reading holds the card like a send, at Auto and Ask", () => {
+    for (const mode of ["auto", "ask"] as const) {
+      expect(autoVerdict(mode, "other", { outbound: true, toolName: "outlook__whatever" })).toEqual({ approve: null, source: "outbound-guard" });
+    }
+  });
+  it("a safety review's read-only verdict never answers an outward call", () => {
+    expect(autoVerdict("auto", "other", { outbound: true, safetyAllow: true }).approve).toBeNull();
+    expect(autoVerdict("auto", "mcp__claude_ai_Microsoft_365__outlook_create_event", { safetyAllow: true }).approve).toBeNull();
+  });
+  it("Full access is unchanged (no new exception)", () => {
+    expect(autoVerdict("full", "other", { outbound: true }).source).toBe("full-access");
   });
 });

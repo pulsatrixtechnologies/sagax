@@ -14,7 +14,7 @@
 //   ```cw     a ConnectWise widget (application/vnd.sagax.cw+json)
 // Claude harness <antArtifact> tags are rewritten by liftClaudeChatBlocks.
 
-import { WIDGET_KIT_CSS, WIDGET_THEME_LISTENER, widgetThemeFromTokens, type WidgetTheme } from "./widget-kit";
+import { WIDGET_KIT_CSS, WIDGET_THEME_LISTENER, widgetThemeFromTokens, type WidgetTheme } from "./widget-kit.ts";
 
 export type RichFenceKind = "email" | "widget" | "chart" | "csv" | "cw";
 
@@ -32,6 +32,9 @@ const FENCE_KINDS: Readonly<Record<string, RichFenceKind>> = {
   eml: "email",
   widget: "widget",
   "html-widget": "widget",
+  // a widget that still failed check_widget after its last attempt
+  // (server/widget-check.ts): drawn as usual, with a discreet note
+  "widget-imperfect": "widget",
   artifact: "widget",
   chart: "chart",
   csv: "csv",

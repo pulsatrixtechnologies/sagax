@@ -82,10 +82,10 @@ function profiles(): Record<string, Profile> {
 
 const PROFILES = profiles();
 /** Refused by the server to every bot that is not a Primary Bot. */
-const CHIEF_ONLY_TOOLS = ["create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "create_room", "manage_room", "retry_thread"];
+const CHIEF_ONLY_TOOLS = ["create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "archive_bot", "create_room", "manage_room", "retry_thread", "sagax_approvals"];
 /** Their for_bot_id, changing another bot, is a Primary Bot's alone. */
 const CHIEF_TARGET_TOOLS = ["propose_profile", "propose_model"];
-const CHIEF_PROFILE_TARGET = " A Primary Bot may pass for_bot_id (from list_bots) for a requested change to another bot in its section.";
+const CHIEF_PROFILE_TARGET = " A Primary Bot may pass for_bot_id (from list_bots) for a requested change to any bot of its person.";
 /** The one surface's teamwork tools (docs/runtime-contract.md §9). Every
  * profile mounts all of them. */
 const TEAMWORK_TOOLS = ["list_room_targets", "coordinate_bots", "assignment_status", "list_bots", "list_rooms", "list_threads", "close_thread", "start_thread", "post_to_room"];
@@ -106,27 +106,47 @@ const FULL = "skills+shared+voice";
 // Artifacts (save_artifact, update_artifact, list_artifacts, delete_artifact,
 // agents-artifact-tools.ts, 2026-10-16) add about 3.3 KB to every
 // non-external profile; the baselines were moved to the measured bytes.
+// check_widget (the ```widget self-check, server/widget-check.ts, 2026-10-19)
+// is added to every profile; the baselines were moved to the measured bytes.
+// sagax_settings (every setting as an action, server/settings-actions.ts,
+// 2026-10-19) adds 1744 B to every non-external profile, on purpose: one
+// tool for every family instead of one per setting.
+// Flexible routine timing adds 1,076 B to every non-external profile: the
+// schedule schema is written out twice (propose_routine and
+// propose_routine_action). The baselines moved by that amount.
+// propose_routine's optional enabled field adds 300 B to every
+// non-external profile, so a creator can start a routine live or paused.
+// publish_remote_session (the Tailcat card) adds 983 B to every
+// non-external profile. Chief profiles stayed inside 2%. The non-chief
+// budgets were already close, so those baselines move to the measured bytes.
+// resource_usage (the usage card, server/resource-usage/, 2026-10-21) is
+// added to every non-external profile; the baselines moved to the measured bytes.
+// +861 bytes (2026-10-22): remote_session_snapshot and remote_session_exec,
+// loaded directly so "check this computer" is one call (Tailcat 8F2NZU).
 const BUDGET_BASELINE: Record<string, number> = {
   // 2026-10-19 upstream sync (the job runtime's one teamwork surface): these
   // are Sagax's previous baselines moved by upstream's measured change per
   // profile, less upstream's fill_login (670 B, not taken). Re-measure once the merge settles and set the real bytes.
-  "default": 75183,
-  "voice": 75924,
-  "shared": 76928,
-  "shared+voice": 77669,
-  "skills": 77363,
-  "skills+voice": 78104,
-  "skills+shared": 79108,
-  "skills+shared+voice": 79849,
-  "non-chief": 65334,
-  "voice+non-chief": 66075,
-  "shared+non-chief": 67079,
-  "shared+voice+non-chief": 67820,
-  "skills+non-chief": 67514,
-  "skills+voice+non-chief": 68255,
-  "skills+shared+non-chief": 69259,
-  "skills+shared+voice+non-chief": 70000,
-  "default+legacy-switches": 75183,
+  // 2026-10-26 sync of main: each moved by main's own measured growth since
+  // 2026-10-19 (+12,861 B a Primary Bot's profile, +11,321 B the others).
+  // Estimates: re-measure and set the real bytes.
+  "default": 88044,
+  "voice": 88785,
+  "shared": 89789,
+  "shared+voice": 90530,
+  "skills": 90224,
+  "skills+voice": 90965,
+  "skills+shared": 91969,
+  "skills+shared+voice": 92710,
+  "non-chief": 76655,
+  "voice+non-chief": 77396,
+  "shared+non-chief": 78400,
+  "shared+voice+non-chief": 79141,
+  "skills+non-chief": 78835,
+  "skills+voice+non-chief": 79576,
+  "skills+shared+non-chief": 80580,
+  "skills+shared+voice+non-chief": 81321,
+  "default+legacy-switches": 88044,
 };
 
 const RPC_PREFIX = '{"jsonrpc":"2.0","id":1,"result":';

@@ -3,6 +3,8 @@
 // stream from the harness server into local state. The reducer stays
 // pure; everything async lives in the wrapped dispatch + SSE fold.
 import { devPodsTurnField } from "@/components/dev-pods/prefs";
+import { restoreComposerDraft } from "@/lib/drafts";
+import { beginLocalSend, claimInFlightSend, finishSend } from "@/lib/send-cancel";
 import { receiveThreadReadFrame } from "@/lib/read-receipts-feed";
 import { personaCategoryForSection } from "@/lib/persona-sections";
 import { withPrimaryBot } from "@/lib/primary-bot";
@@ -21,7 +23,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { ROUTINE_CONVERSATION_HEADER } from "../../shared/wire";
-import type { BotVisibility, CardAnswerer, CloudBackend, ConnectorToolGrant, EffortLevel, InstalledPackageMetadata, LiveCallState, LiveSettings, ServerFrame, GroupThreadUsage, SteerQueueReason, VoiceCallMark } from "../../shared/wire";
+import type { BotVisibility, CardAnswerer, CloudBackend, EffortLevel, InstalledPackageMetadata, LiveCallState, LiveSettings, ServerFrame, GroupThreadUsage, SteerQueueReason, VoiceCallMark, WireBotConversation, WireWaitingApproval } from "../../shared/wire";
 import { DATA_ROUTES, dataSheetKey, withDataThread, type DataSheet, type DataTable } from "../../shared/data-surface";
 import type { TurnDigest } from "../../shared/digest";
 import type { MessageReaction } from "../../shared/reactions";
@@ -34,6 +36,7 @@ import type { MausColor, MausMotion } from "@/lib/mascot";
 import type { BotAvatarCrop } from "../../shared/bot-avatar";
 import type { BotPublicProfile } from "../../shared/bot-public-profile";
 import { approvalModeFor, type ApprovalMode } from "../../shared/approval-mode";
+import type { ProactiveMode } from "../../shared/proactive-mode";
 import { uiCommandToAction } from "../../shared/bot-act";
 import { onNudgeReceived, onNudgeSent, onNudgeSentEcho } from "@/lib/desktop-nudge";
 import { sameModelSelection } from "../../shared/thread-model";
@@ -76,6 +79,7 @@ import { freshTopicLanding, noteBackAtBot, noteLeftBot, onScreenBot, setOnScreen
 import { speaker } from "@/lib/tts";
 import { roleProfilePatch, type BotRole } from "@/lib/bot-roles";
 import { t } from "@/lib/i18n";
+import { teamMemorySettled } from "@/lib/team-memory-settled";
 import { forgetStepUp, recentStepUp, stepUp, stepUpApprovals } from "@/lib/step-up-client";
 import type { StepUpTarget } from "../../shared/step-up";
 import { permissionMissingMessage } from "@/lib/permissions";
@@ -84,7 +88,7 @@ import { useChatErrorClear } from "./chat-error";
 import type { OnboardingStatus } from "@/lib/onboarding";
 import { openLiveEvents, publishLiveFrame, publishMissedFrames } from "@/lib/live-events";
 import { receiveAchievementsFrame } from "@/lib/achievements";
-import { announceServerPreferences } from "@/lib/user-preferences-sync";
+import { announceServerPreferences, applyBotPreference } from "@/lib/user-preferences-sync";
 import { applyPersonLabel } from "@/lib/person-labels";
 import { announcePersonAvatar, withViewerAvatar } from "@/lib/person-avatars";
 import { StoreSourceContext, usePublishedStoreSource } from "./store-source";
@@ -166,7 +170,7 @@ export interface OptionCardData {
   /** 2026-10-14 (bot owner permissions): the rule "Always allow" or
    * "Always deny" would save for the bot's owner: the tool, its target
    * read from the arguments, the destructive kind and plain words. */
-  ownerRule?: { tool: string; scope: Record<string, string>; destructive?: "delete" | "bulk" | "external-message"; description: string };
+  ownerRule?: { tool: string; scope: Record<string, string>; destructive?: "delete" | "bulk" | "external-message"; description: string; from?: "admin" | "hold" | "origin" };
   /** The owner's rule saved when answering this card. */
   ruleSaved?: { id: string; behavior: "allow" | "ask" | "deny"; description: string };
   /** the Allow rule saved when this card was answered (server/index.ts) */
@@ -211,23 +215,11 @@ export interface OptionCardData {
   cwActionRequest?: import("../../shared/wire").OptionCardData["cwActionRequest"];
   /** 2026-10-16: custom rules (shared/custom-rules.ts) and email draft sends. */
   customRule?: import("../../shared/wire").OptionCardData["customRule"];
+  /** The model reviewer is still judging this card (lot A1b). */
+  reviewing?: boolean;
   customRuleCandidate?: import("../../shared/wire").OptionCardData["customRuleCandidate"];
   customRuleSaved?: import("../../shared/wire").OptionCardData["customRuleSaved"];
   emailSendRequest?: import("../../shared/wire").OptionCardData["emailSendRequest"];
-}
-
-export interface ConnectorCardData {
-  slug: string;
-  label: string;
-  description: string;
-  status: "required" | "authorizing" | "connected" | "failed";
-  resumeKey: string;
-  alias?: string;
-  error?: string;
-  dismissed?: boolean;
-  resumed?: boolean;
-  /** Stop ended the turn this card paused: no action, nothing resumes (shared/wire.ts). */
-  stopped?: boolean;
 }
 
 export interface SecretRequestCardData {
@@ -255,10 +247,10 @@ export interface SecretRequestCardData {
  * the person to take over, and help = the sign-in card it stands for. */
 export type ComputerControlState = { held: boolean; helpReason: string | null; help?: import("../../shared/wire").ComputerHelpRef | null };
 
-export interface Message extends Pick<import("../../shared/wire").WireMessage, "widget" | "routineToggle" | "pagePublish"> {
+export interface Message extends Pick<import("../../shared/wire").WireMessage, "widget" | "app" | "routineToggle" | "pagePublish" | "requested" | "outbound"> {
   id: string;
   role: "bot" | "user";
-  kind: "text" | "options" | "activity" | "screen" | "video" | "connector" | "secret" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "routines";
+  kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines";
   text?: string;
   /** An accepted nudge. Drawn per viewer from these names, not as a bubble.
    * `groupId` is set when the line belongs to that group chat. */
@@ -274,7 +266,12 @@ export interface Message extends Pick<import("../../shared/wire").WireMessage, "
   card?: OptionCardData;
   /** Inline xterm session after a terminal request was allowed. */
   terminalEmbed?: import("../../shared/terminal-resources").TerminalEmbed;
-  connector?: ConnectorCardData;
+  /** Tailcat remote-support card. The tunnel address is never on this object. */
+  remoteSession?: import("../../shared/remote-session").RemoteSessionView;
+  /** Live usage card (shared/resource-usage.ts), shown only when asked. */
+  resourceUsage?: import("../../shared/resource-usage").ResourceUsageView;
+  /** "Connect Microsoft Teams" card (shared/connector-setup.ts). */
+  connectorSetup?: import("../../shared/connector-setup").ConnectorSetupView;
   secret?: SecretRequestCardData;
   signIn?: import("../../shared/wire").SignInRequestCardData;
   /** Lifecycle mirror for a routine whose real work lives in a fresh task. */
@@ -290,7 +287,7 @@ export interface Message extends Pick<import("../../shared/wire").WireMessage, "
    * narration of the same chip ("reading a file"), used by call mode. */
   /** `setup` marks an error fixed by installing something, not by retrying.
    * `summary` is the call's input on one redacted line (the shell command). */
-  tool?: { name: string; ok?: boolean; spoken?: string; setup?: boolean; claudeUpdate?: boolean; place?: PlaceRow; summary?: string; input?: string; output?: string ; durationMs?: number; itemId?: string; outputPath?: string; fullResult?: boolean; /** Files the call wrote (shared/wire.ts). */ files?: string[]; widget?: import("../../shared/cw-widgets/types").CwWidget; ruleNotice?: import("../../shared/custom-rules").CustomRuleNotice; engineMove?: import("../../shared/offered-engines").OrgEngineMove };
+  tool?: { name: string; ok?: boolean; spoken?: string; setup?: boolean; claudeUpdate?: boolean; place?: PlaceRow; summary?: string; input?: string; output?: string ; durationMs?: number; itemId?: string; outputPath?: string; fullResult?: boolean; /** Files the call wrote (shared/wire.ts). */ files?: string[]; widget?: import("../../shared/cw-widgets/types").CwWidget; ruleNotice?: import("../../shared/custom-rules").CustomRuleNotice; engineMove?: import("../../shared/offered-engines").OrgEngineMove; limitFailover?: import("../../shared/limit-failover").LimitFailoverLine; connectorSwitch?: { engine: string; connector: string } };
   /** user messages sent into a running turn — the model saw it mid-turn */
   steered?: boolean;
   /** a user message that did not come from typing here: through the
@@ -346,9 +343,11 @@ export interface Message extends Pick<import("../../shared/wire").WireMessage, "
    * (shared/reactions.ts; read through normalizeReactions). */
   reactions?: MessageReaction[];
   /** comm chips: "Messaged @X" linking to the bot⇄bot channel. */
-  comm?: { groupId: string; threadId?: string; withBotId: string; withName: string; withColor: MausColor; gone?: boolean };
+  comm?: { groupId: string; threadId?: string; withBotId: string; withName: string; withColor: MausColor; gone?: boolean; direction?: "sent" | "received"; text?: string };
   /** thread chips: "Opened thread #Title on Bot" linking to that thread */
   threadRef?: { botId: string; threadId: string; title: string; gone?: boolean };
+  /** A teammate parked on a question for the person (WireMessage.inputRequest). */
+  inputRequest?: import("../../shared/wire").WireMessage["inputRequest"];
   /** A parallel task this line belongs to (shared/parallel-tasks.ts). */
   parallelTask?: ParallelTaskRef;
   dataResult?: import("../../shared/wire").WireMessage["dataResult"];
@@ -488,6 +487,9 @@ export interface Task {
   threadId: string;
   /** Internal routine execution; reachable through its run receipt, not history menus. */
   routineRunId?: string;
+  /** An automatic "<routine> · Results" thread: listed with threads shown,
+   * never a stream segment, a row under the bot or a dot (2026-10-22). */
+  routineResults?: true;
   /** An AI client's hidden conversation (#291): the server lists it only
    * while it is the open thread; never a dot, a preview or typing dots. */
   hidden?: true;
@@ -596,6 +598,12 @@ export interface Bot {
   /** Owner selection, independent of engine approval mode. */
   toolScope?: ToolScope;
   waitingForTeammates?: boolean;
+  /** Bot-to-bot conversations waiting on the viewer's approval
+   * (WireBot.waitingApprovals): never listed, their cards join the open
+   * conversation's approval box (parallel-approvals.ts). */
+  waitingApprovals?: WireWaitingApproval[];
+  /** Conversations with another bot, both ends (WireBot.botConversations). */
+  botConversations?: WireBotConversation[];
   id: string;
   threadId: string;
   /** The bot's main thread, worked out by the server (WireBot.mainThreadId). */
@@ -650,6 +658,8 @@ export interface Bot {
   autoApprove?: boolean;
   /** Explicit approval level; absent records use the legacy autoApprove bit. */
   approvalMode?: ApprovalMode;
+  /** how autonomously this bot may act on its own (shared/proactive-mode.ts); absent/"off" = never */
+  proactiveMode?: ProactiveMode;
   /** tools this bot may always use without asking */
   alwaysAllow?: string[];
   /** speak this bot's replies aloud as they settle */
@@ -658,8 +668,12 @@ export interface Bot {
   voice?: string;
   /** whether this bot may send voice notes (on unless switched off) */
   voiceNotes?: boolean;
+  /** whether this bot may write email draft cards (on unless switched off) */
+  emailDrafts?: boolean;
   /** whether this bot uses native memory (on unless switched off) */
   memoryEnabled?: boolean;
+  /** who gets this bot's team-memory cards: its section (absent, "shared") or only those who see the bot and the conversation ("private") */
+  teamMemorySharing?: "shared" | "private";
   pinned?: boolean;
   hidden?: boolean;
   /** Sidebar section this bot renders under; absent = unsectioned. */
@@ -678,14 +692,9 @@ export interface Bot {
    * `[]` = none. Read-only on the web today; here so the settings dialog can
    * refetch the overview when the server changes it. */
   peers?: string[];
-  /** Whether this bot may use the workspace's connected apps. Unset means
-   * allowed for existing bots; imported bots start with this disabled. */
-  composio?: boolean;
-  /** Which connected-app tools this bot may call, by service slug. Absent
-   * defers to the composio boolean (unset/true = every tool, false = none);
-   * an explicit {} grants no tools. Edited from bot settings → Access. */
-  connectorTools?: Record<string, ConnectorToolGrant>;
-  connectorScopes?: { apps: Record<string, "read" | "write"> };
+  /** 2026-10-21 (parité 1C): who it writes to without a card
+   * (shared/allowed-recipients.ts). */
+  allowedRecipients?: string[];
   outbound?: { policy: "ask" | "allow"; dailyCap: number };
   fallback?: Array<{ instanceId: string; model: string }>;
   /** Per bot since 2026-10-15 (server/bot-runtime-settings.ts), edited in
@@ -912,7 +921,6 @@ export interface ConfigStatus {
   fleet?: { available: boolean };
   budgets?: { monthlyUsd?: number; warnAtPercent?: number };
   billing?: { currency?: string; prices?: Record<string, { inputPerMillion: number; outputPerMillion: number; cachedInputPerMillion?: number }> };
-  composio: { configured: boolean; mode?: "managed" | "self-hosted" | "unavailable" };
   /** `included`: cloud computers come with Cloud Pro, no key is saved. */
   box: { configured: boolean; included?: boolean };
   vps: { configured: boolean; sshAlias: string };
@@ -1074,9 +1082,6 @@ export interface BrowserEngineSummary {
 export interface BrowserProfile {
   id: string;
   name: string;
-  /** "chrome": the profile's bots use the person's own Chrome (My Chrome).
-   * Absent is the built-in browser. */
-  browser?: "chrome";
   /** Read-only durable Electron routing inherited from legacy profiles.
    * Config PATCH payloads must omit it. */
   partitionId?: string;
@@ -1088,7 +1093,7 @@ export interface BrowserProfile {
 // Settings shows (a saved key's Test button used to vanish that way).
 export type ConfigStatusFrame = Pick<
   ConfigStatus,
-  "xai" | "mistral" | "cerebras" | "groq" | "meta" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "fleet" | "composio" | "box" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "imageGen" | "live" | "profile" | "language" | "features" | "onboarding" | "browserEngine" | "browserProfiles" | "edition" | "budgets" | "billing" | "managedPolicy" | "viewer" | "allowedEngines" | "confidentialThreadsByDefault"
+  "xai" | "mistral" | "cerebras" | "groq" | "meta" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "fleet" | "box" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "imageGen" | "live" | "profile" | "language" | "features" | "onboarding" | "browserEngine" | "browserProfiles" | "edition" | "budgets" | "billing" | "managedPolicy" | "viewer" | "allowedEngines" | "confidentialThreadsByDefault"
 >;
 
 export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
@@ -1103,7 +1108,6 @@ export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
     openrouter: frame.openrouter,
     openaiCompat: frame.openaiCompat,
     fleet: frame.fleet,
-    composio: frame.composio,
     box: frame.box,
     vps: frame.vps,
     rooms: frame.rooms,
@@ -1195,7 +1199,6 @@ export interface InstanceInfo {
   capabilities?: {
     computerMcp?: boolean;
     agentsMcp?: boolean;
-    composioMcp?: boolean;
     browserMcp?: boolean;
     images?: boolean;
     effortLevels?: readonly EffortLevel[];
@@ -1257,6 +1260,8 @@ export type AppSettingsSection =
   | "mail"
   | "activity"
   | "backups"
+  /** Bring a shared Grok Bot in (port of OpenMausBot #3073). */
+  | "import"
   | "workspaces"
   /** This app's updates and the pre-release channel (0.5.6; were in General). */
   | "updates"
@@ -1326,11 +1331,14 @@ export interface AppState {
   /** The person's sidebar hidden keys (src/lib/sidebar-hidden.ts): a
    * restored or fallback selection never lands on one of them. */
   sidebarHiddenKeys: ReadonlySet<string>;
-  activeView: "chat" | "team-map" | "routines";
+  activeView: "chat" | "team-map" | "routines" | "code" | "approvals" | "remote-sessions";
   routines: Routine[];
   routineRuns: RoutineRun[];
   routinesLoadState: "loading" | "ready" | "error";
   routinesFocus: { section?: "schedule" | "logs"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; nonce: number };
+  /** The Code section (src/components/code/CodePage.tsx): the run it opens,
+   * or the list when none. */
+  codeFocus: { runId?: string; nonce: number };
   webhooks: WebhookTrigger[];
   webhookAttempts: WebhookAttempt[];
   webhookIngress: WebhookIngressStatus | null;
@@ -1582,6 +1590,11 @@ export type Action =
   | { type: "sectionDeleted"; section: string; sections: string[] }
   | { type: "showRoutines"; section?: "schedule" | "logs"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter }
   | { type: "showTeamMap" }
+  /** The Code section: the list, or one run when `runId` is set. */
+  | { type: "showCode"; runId?: string }
+  /** The Approvals screen (src/components/approvals/ApprovalsPage.tsx). */
+  | { type: "showApprovals" }
+  | { type: "showRemoteSessions" }
   | { type: "showChat" }
   | { type: "routinesHydrated"; routines: Routine[]; runs: RoutineRun[] }
   | { type: "routinesLoadFailed" }
@@ -1747,6 +1760,9 @@ export type Action =
   | { type: "botPatched"; bot: BotAnnouncement }
   | { type: "messageAdded"; threadId: string; message: Message }
   | { type: "messagePatched"; threadId: string; message: Message }
+  /** A card the server already settled elsewhere (a late answer's 409):
+   * show its real outcome, found by its request on that conversation. */
+  | { type: "cardSettled"; threadId: string; requestId: string; patch: Partial<OptionCardData> }
   /** `restoreLeafId` puts back the branch an optimistic edit replaced; a
    * plain send falls back to the removed row's parent. */
   | { type: "optimisticMessageRemoved"; threadId: string; sendId: string; restoreLeafId?: string | null }
@@ -1831,7 +1847,7 @@ interface NotificationThreadOwner {
   mainThreadId?: string;
   /** The fields the single stream reads (src/lib/single-stream.ts) ride along
    * when the caller has them; a room's tasks need only their ids. */
-  tasks?: Array<{ threadId: string; createdAt?: number; routineRunId?: unknown; hidden?: unknown; confidential?: unknown; openedBy?: unknown; parallelOf?: unknown;
+  tasks?: Array<{ threadId: string; createdAt?: number; routineRunId?: unknown; routineResults?: unknown; hidden?: unknown; confidential?: unknown; openedBy?: unknown; parallelOf?: unknown;
     /** What a return reads (src/lib/fresh-topic.ts). */
     updatedAt?: number; busy?: boolean; activity?: string; unread?: boolean; waitingForTeammates?: boolean }>;
 }
@@ -2356,6 +2372,46 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     case "showChat":
       return state.activeView === "chat" ? state : { ...state, activeView: "chat" };
+    case "showCode":
+      return {
+        ...state,
+        activeView: "code",
+        codeFocus: { ...(action.runId ? { runId: action.runId } : {}), nonce: state.codeFocus.nonce + 1 },
+        settingsOpen: false,
+        computerOpen: false,
+        inspectorOpen: false,
+        activityOpen: false,
+        appSettingsOpen: false,
+        achievementsOpen: false,
+        pluginsOpen: false,
+        triggersOpen: false,
+      };
+    case "showApprovals":
+      return {
+        ...state,
+        activeView: "approvals",
+        settingsOpen: false,
+        computerOpen: false,
+        inspectorOpen: false,
+        activityOpen: false,
+        appSettingsOpen: false,
+        achievementsOpen: false,
+        pluginsOpen: false,
+        triggersOpen: false,
+      };
+    case "showRemoteSessions":
+      return {
+        ...state,
+        activeView: "remote-sessions",
+        settingsOpen: false,
+        computerOpen: false,
+        inspectorOpen: false,
+        activityOpen: false,
+        appSettingsOpen: false,
+        achievementsOpen: false,
+        pluginsOpen: false,
+        triggersOpen: false,
+      };
     case "showTeamMap":
       return {
         ...state,
@@ -2600,7 +2656,7 @@ export function reducer(state: AppState, action: Action): AppState {
         // The slim deletion broadcast can arrive before the full snapshot.
         // Finish that switch once, replaying any events received in between.
         // Later duplicate HTTP snapshots must not overwrite newer messages.
-        return reducer(switching, { type: "taskSwitched", bot: { ...before, ...action.bot, computer: action.bot.computer, section: action.bot.section, toolScope: action.bot.toolScope, messages: action.bot.messages, browserProfile: action.bot.browserProfile } });
+        return reducer(switching, { type: "taskSwitched", bot: { ...before, ...action.bot, computer: action.bot.computer, section: action.bot.section, toolScope: action.bot.toolScope, waitingApprovals: action.bot.waitingApprovals, botConversations: action.bot.botConversations, messages: action.bot.messages, browserProfile: action.bot.browserProfile } });
       }
       const patched = updateBot(switching, action.bot.id, (b) => ({
         ...b,
@@ -2619,6 +2675,9 @@ export function reducer(state: AppState, action: Action): AppState {
         // A complete frame omits section after another client moves the bot
         // into General. Retaining the old label strands an empty team in UI.
         section: action.bot.section,
+        // A complete frame omits it once no bot-to-bot card waits.
+        waitingApprovals: action.bot.waitingApprovals,
+        botConversations: action.bot.botConversations,
         tasks: action.bot.tasks ? mergeTaskStamps(b.tasks, action.bot.tasks) : b.tasks,
         // Clear immediately on deletion: old approvals must never be sent
         // to the replacement thread while waiting for its transcript.
@@ -2739,6 +2798,14 @@ export function reducer(state: AppState, action: Action): AppState {
       const task = group.tasks?.find((candidate) => candidate.threadId === action.threadId);
       const kept = cleared.groups.find((candidate) => candidate.id === group.id)?.messages ?? [];
       return rewindThreadUpdatedAt(cleared, action.threadId, kept, task?.createdAt ?? group.createdAt);
+    }
+    case "cardSettled": {
+      const settle = (messages: Message[]) => messages.map((m) =>
+        m.card?.requestId === action.requestId ? { ...m, card: { ...m.card, ...action.patch } } : m);
+      const group = state.groups.find((g) => g.threadId === action.threadId);
+      if (group) return { ...state, groups: state.groups.map((g) => (g.id === group.id ? { ...g, messages: settle(g.messages) } : g)) };
+      const bot = state.bots.find((b) => b.threadId === action.threadId);
+      return bot ? updateBot(state, bot.id, (b) => ({ ...b, messages: settle(b.messages) })) : state;
     }
     case "messagePatched": {
       const bot = state.bots.find((b) => b.threadId === action.threadId);
@@ -3114,21 +3181,24 @@ export function reducer(state: AppState, action: Action): AppState {
         applyToAllThreads: _allThreads,
         organizationFullAccess: _orgFull,
         keepThreadModels: _keepThreadModels,
+        threadId: _threadId,
         computer,
-        connectorTools,
-        connectorScopes,
         ...rest
       } = action.patch;
       const botPatch: Partial<Bot> = { ...rest };
+      const followThread = typeof action.patch.threadId === "string" ? action.patch.threadId : undefined;
+      const followMode = action.patch.approvalMode;
       if (computer === null) botPatch.computer = undefined;
       else if (computer !== undefined) botPatch.computer = computer;
-      // A dropped grants record returns the bot to the absent legacy field,
-      // exactly like a cleared computer destination.
-      if (connectorTools === null) botPatch.connectorTools = undefined;
-      else if (connectorTools !== undefined) botPatch.connectorTools = connectorTools;
-      if (connectorScopes === null) botPatch.connectorScopes = undefined;
-      else if (connectorScopes !== undefined) botPatch.connectorScopes = connectorScopes;
-      return updateBot(next, action.botId, (b) => ({ ...b, ...botPatch }));
+      return updateBot(next, action.botId, (b) => {
+        const updated: Bot = { ...b, ...botPatch };
+        if (followThread && followMode && updated.tasks) {
+          updated.tasks = updated.tasks.map((task) => task.threadId === followThread
+            ? { ...task, approvalMode: followMode, autoApprove: followMode === "auto" }
+            : task);
+        }
+        return updated;
+      });
     }
     case "threadActive": {
       const bot = state.bots.find((b) => b.threadId === action.threadId);
@@ -3507,6 +3577,7 @@ export const initialState: AppState = {
   routineRuns: [],
   routinesLoadState: "loading",
   routinesFocus: { nonce: 0 },
+  codeFocus: { nonce: 0 },
   webhooks: [],
   webhookAttempts: [],
   webhookIngress: null,
@@ -3729,16 +3800,26 @@ export async function persistBotUpdate(
     confirmFullAccess,
     applyToAllThreads,
     organizationFullAccess,
-    ...ordinaryPatch
+    ...withThread
   } = patch;
+  // threadId rides the body with modelSelection only (the server pins the
+  // shown conversation for a model switch). The organization Full grant also
+  // names it, on its own request. Anywhere else it would be refused.
+  const { threadId: openThreadId, ...withoutThread } = withThread;
+  const ordinaryPatch: typeof withThread = withThread.modelSelection !== undefined ? withThread : withoutThread;
   if (approvalMode === "full" && organizationFullAccess === true) {
     // Organization server: ordinary fields first, then the Full grant alone
-    // (the server refuses anything riding along with it).
+    // (the server refuses anything riding along with it). The open
+    // conversation is named so the level on screen is the one just saved.
     if (Object.keys(ordinaryPatch).length) {
       await request(`/api/bots/${botId}`, { method: "PATCH", body: JSON.stringify(ordinaryPatch), signal });
     }
     const result = await request(`/api/bots/${botId}`, { method: "PATCH", signal,
-      body: JSON.stringify({ approvalMode: "full", ...(confirmFullAccess === true ? { confirmFullAccess: true } : {}) }) });
+      body: JSON.stringify({
+        approvalMode: "full",
+        ...(confirmFullAccess === true ? { confirmFullAccess: true } : {}),
+        ...(typeof openThreadId === "string" ? { threadId: openThreadId } : {}),
+      }) });
     return result.bot;
   }
   const trustedMode = approvalMode === "full" || approvalMode === "custom"
@@ -4213,7 +4294,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const wrapped: React.Dispatch<Action> = (action) => {
       // Deferred folder creation may select its bot only while it is still
       // the latest navigation intent, even if the person went away and back.
-      if (["select", "newTask", "switchTask", "newGroupTask", "switchGroupTask", "showChat", "showRoutines", "showTeamMap"].includes(action.type)) selectionRevision++;
+      if (["select", "newTask", "switchTask", "newGroupTask", "switchGroupTask", "showChat", "showRoutines", "showTeamMap", "showCode", "showApprovals", "showRemoteSessions"].includes(action.type)) selectionRevision++;
       // Pin before any await or optimistic state change, including legacy
       // callers such as keyboard shortcuts and voice controls.
       action = pinBotThreadAction(action, stateRef.current.bots);
@@ -4491,6 +4572,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const threadId =
             action.threadId ?? stateRef.current.bots.find((bot) => bot.id === action.botId)?.threadId;
           const sendId = action.sendId ?? crypto.randomUUID();
+          beginLocalSend(sendId);
           // words typed to a bot that is on a voice call are a call turn too:
           // its answer is read aloud like the rest of the call
           const liveCallId = voiceCallId(action.botId);
@@ -4498,11 +4580,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // on a call, words said or typed while the bot works join its turn
           const busyMode = voiceCall ? undefined : action.busyMode;
           void waitForExecutionSettings(botBeforeSend ? [botBeforeSend] : [], threadId)
-            .then(() => api(`/api/bots/${action.botId}/messages`, {
+            .then(() => {
+              if (!claimInFlightSend(sendId)) {
+                if (threadId) rawDispatch({ type: "optimisticMessageRemoved", threadId, sendId });
+                restoreComposerDraft(`bot:${action.botId}:${threadId ?? ""}`, { text: action.text, attachments: [] });
+                return null;
+              }
+              return api(`/api/bots/${action.botId}/messages`, {
                 method: "POST",
                 body: JSON.stringify({ text: action.text, replyToId: action.replyToId, threadId, sendId, ...(voiceCall ? { voiceCall } : {}), ...(busyMode === "auto" ? { routeWhileBusy: true } : busyMode ? { busyMode } : {}), ...(action.dataContext ? { dataContext: action.dataContext } : {}), ...devPodsTurnField(), ...singleStreamTurnField() }),
-              }))
+              });
+            })
             .then((body) => {
+              if (body === null) return;
               action.onSent?.();
               if (body?.message && typeof body.threadId === "string") {
                 rawDispatch({ type: "messageAdded", threadId: body.threadId, message: body.message });
@@ -4532,7 +4622,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               }
               showError(error);
               action.onError?.();
-            });
+            })
+            .finally(() => finishSend(sendId));
           break;
         }
         case "stopParallelTask":
@@ -4585,7 +4676,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             .then(async () => {
               if (action.alwaysAllow) {
                 const bot = stateRef.current.bots.find((candidate) => candidate.id === action.alwaysAllow?.botId);
-                const owner = bot?.tasks?.some((task) => task.threadId === action.threadId);
+                // a bot-to-bot conversation (even one left out of tasks) keeps
+                // its grant on that thread, never the whole bot
+                const owner = bot?.tasks?.some((task) => task.threadId === action.threadId)
+                  || bot?.waitingApprovals?.some((row) => row.threadId === action.threadId);
                 const next = [...new Set([...(bot ? currentTaskBot(bot, action.threadId).alwaysAllow ?? [] : []), action.alwaysAllow.key])];
                 // Save the grant BEFORE releasing the bot: it may ask again
                 // within milliseconds. A failed preference save must still
@@ -4605,6 +4699,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               }
             })
             .catch((error) => {
+              // settled already, elsewhere: the card shows the real outcome
+              const settled = teamMemorySettled(error);
+              if (settled) {
+                rawDispatch({ type: "cardSettled", threadId: action.threadId, requestId: action.requestId, patch: settled.card });
+                showError(settled.text);
+                action.onError?.(settled.text);
+                return;
+              }
               // A settings flush failure deliberately stops the response;
               // otherwise it could resume work under a stale approval level.
               showError(error);
@@ -4649,7 +4751,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 body: JSON.stringify({ text: action.answer, threadId: action.threadId }),
               });
             })
-            .catch(showError);
+            .catch((error) => {
+              // settled already, elsewhere: the card shows the real outcome
+              const settled = teamMemorySettled(error);
+              const threadId = action.threadId ?? host?.threadId;
+              if (settled && card?.requestId && threadId) {
+                rawDispatch({ type: "cardSettled", threadId, requestId: card.requestId, patch: settled.card });
+                showError(settled.text);
+                return;
+              }
+              showError(error);
+            });
           break;
         }
         case "dismissCard": {
@@ -4708,6 +4820,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             avatarZoom: source.avatarZoom,
             avatarFocusX: source.avatarFocusX,
             avatarFocusY: source.avatarFocusY,
+            // a private bot's copy stays private; anything else is the default
+            ...(source.teamMemorySharing !== undefined && source.teamMemorySharing !== "shared" ? { teamMemorySharing: "private" as const } : {}),
           };
           // A copy of a restricted bot is restricted from its first moment.
           api("/api/bots", {
@@ -4872,7 +4986,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (botBeforeUpdate) {
             botPatchQueue.enqueue(
               action.botId,
-              { modelSelection: action.selection },
+              { modelSelection: action.selection, threadId: botBeforeUpdate.switchingTo ?? botBeforeUpdate.threadId },
               botBeforeUpdate,
             );
           }
@@ -5556,6 +5670,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         case "bot-act": {
           const command = uiCommandToAction(frame.action, frame.input);
+          // a preference on this device (sagax_settings): written where its
+          // module reads it, then announced like another tab's change
+          if (command && command.action.type === "setPreference") {
+            applyBotPreference(String(command.action.key), String(command.action.value));
+            break;
+          }
           if (command) dispatch(command.action as Action);
           break;
         }
@@ -5728,6 +5848,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       </StoreContext.Provider>
     </StoreSourceContext.Provider>
   );
+}
+
+/** The store when there is one; null outside a provider (static renders, tests). */
+export function useStoreOptional() {
+  return useContext(StoreContext);
 }
 
 export function useStore() {

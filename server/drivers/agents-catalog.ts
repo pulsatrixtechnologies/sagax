@@ -16,7 +16,14 @@ import { OPTIONS_CARD_LIMITS, WATCHER_OPTIONS_CARD_BOT_ID } from "../../shared/o
 import { agentToolAnnotations } from "../agent-tool-policy.ts";
 import { PAGE_TOOL_DEFINITIONS } from "./agents-page-tools.ts";
 import { WIDGET_TOOL_DEFINITIONS } from "./agents-widget-tools.ts";
+import { APP_TOOL_DEFINITIONS } from "./agents-app-tools.ts";
+import { PLACE_PHONE_CALL_TOOL_SPEC } from "../../shared/outbound-call.ts";
 import { ARTIFACT_TOOL_DEFINITIONS } from "./agents-artifact-tools.ts";
+import { HELP_TOOL_DEFINITIONS } from "./agents-help-tools.ts";
+import { SETTINGS_TOOL_DEFINITIONS } from "./agents-settings-tools.ts";
+import { APPROVALS_TOOL_DEFINITIONS } from "./agents-approvals-tools.ts";
+import { phoneToolDefinition, phoneToolsFromEnv } from "./agents-phone-tools.ts";
+import type { PhoneToolId } from "../../shared/phone-tools.ts";
 import { CLAIM_TOOL_NAMES } from "../perspicax-claims.ts";
 
 /** Which tools a turn is shown. The harness decides each of these when it
@@ -50,12 +57,18 @@ export interface CatalogProfile {
   /** This turn's thread is on a live phone call. `end_call` is shown only
    * then. Absent is off, so the wire goldens stay as they are. */
   voiceCall?: boolean;
+  /** A person's 1:1 turn on a server with a GitHub OAuth App (device flow):
+   * connect_github is offered. Absent is off, so the wire goldens stay. */
+  githubConnect?: boolean;
   /** The server is a Cloud home (server/cloud-home.ts): no "this computer"
    * of the person's and no Local VM to offer. */
   cloudHome: boolean;
   memoryEnabled?: boolean;
   /** A room turn in a group whose shared memory is on (server/group-memory.ts). */
   groupMemory?: boolean;
+  /** A room turn (SAGAX_ROOM_TURN): it changes no teamwork tool (one tool
+   * surface), only keeps place_phone_call out of rooms. Absent is off. */
+  room?: boolean;
   /** The bot is its person's Primary Bot (bot.chiefOfStaff). Only then
    * are the Primary-Bot-only tools and parameters shown; the server refuses them
    * to every other bot. */
@@ -74,11 +87,15 @@ export interface CatalogProfile {
   /** The claim tools (server/perspicax-claims.ts): a Perspicax profile is
    * mounted for the person speaking in this turn. Absent is off. */
   claims?: boolean;
+  /** The tools a phone of the person speaking offers right now (phone_tool,
+   * agents-phone-tools.ts). Absent or empty is off, so the wire goldens stay. */
+  phoneTools?: PhoneToolId[];
 }
 
 /** The profile a spawned proxy was given. Everything is off unless the
  * harness says "1". SAGAX_ROOM_TURN and SAGAX_OWN_THREAD_CREATION no longer
- * change the catalog: one tool surface. SAGAX_EXTERNAL_RUNTIME narrows it to
+ * change the teamwork tools: one tool surface (SAGAX_ROOM_TURN only keeps
+ * place_phone_call out of a room). SAGAX_EXTERNAL_RUNTIME narrows it to
  * the peer tools. */
 export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
   const externalRuntime = env.SAGAX_EXTERNAL_RUNTIME === "1";
@@ -91,16 +108,19 @@ export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
     singleStream: !externalRuntime && env.SAGAX_SINGLE_STREAM === "1",
     routeMessages: !externalRuntime && env.SAGAX_ROUTE_MESSAGES === "1",
     voiceCall: !externalRuntime && env.SAGAX_VOICE_CALL === "1",
+    githubConnect: !externalRuntime && env.SAGAX_GITHUB_CONNECT === "1",
     // Sagax is never an OMB Cloud home, so the env switch is ignored.
     cloudHome: false,
     memoryEnabled: env.SAGAX_MEMORY_ENABLED !== "0",
     groupMemory: env.SAGAX_GROUP_MEMORY === "1",
+    ...(env.SAGAX_ROOM_TURN === "1" ? { room: true } : {}),
     chief: env.SAGAX_CHIEF_OF_STAFF === "1",
     createBots: env.SAGAX_CREATE_BOTS === "1",
     botId: env.SAGAX_BOT_ID ?? "",
     agentApi: env.SAGAX_AGENT_API === "1",
     perspicax: !externalRuntime && env.SAGAX_PERSPICAX_TOOLS === "1",
     claims: env.SAGAX_CLAIMS === "1",
+    phoneTools: externalRuntime ? [] : phoneToolsFromEnv(env.SAGAX_PHONE_TOOLS),
   };
 }
 
@@ -194,6 +214,21 @@ const ROUTINE_SCHEDULE_SCHEMA = {
       type: "boolean",
       description: "Only for an interval update: true removes an existing end cutoff.",
     },
+    timing: {
+      type: "string",
+      enum: ["exact", "flexible"],
+      description: "Optional. exact starts on time. flexible starts inside the early and late windows. Omit for exact.",
+    },
+    window_early_minutes: {
+      type: "integer",
+      minimum: 0,
+      description: "Flexible only: minutes before the scheduled time. Default 15. Capped with the late window at half the gap between runs.",
+    },
+    window_late_minutes: {
+      type: "integer",
+      minimum: 0,
+      description: "Flexible only: minutes after the scheduled time. Default 15. 0 means the run is ready by the scheduled time.",
+    },
   },
   required: ["type"],
 } as const;
@@ -246,7 +281,13 @@ const ROUTINE_FIELDS_SCHEMA = {
 
 // propose_profile's one sentence about for_bot_id, which a bot that is not a
 // Primary Bot is not shown (catalogTools), along with the parameter itself.
-const CHIEF_PROFILE_TARGET = " A Primary Bot may pass for_bot_id (from list_bots) for a requested change to another bot in its section.";
+const CHIEF_PROFILE_TARGET = " A Primary Bot may pass for_bot_id (from list_bots) for a requested change to any bot of its person.";
+// 2026-10-20 (JC: "le bot principal fait tout"): the person's own words,
+// for a Primary Bot the person asked now; the change then applies at once.
+const PERSON_QUOTE = {
+  type: "string", maxLength: 600,
+  description: "Primary Bot: the person's own words asking this now (bot named); applies at once.",
+} as const;
 const PROPOSAL_OUTCOME = " Read the result: granted Full Access may apply the change immediately. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success from the permission mode alone; report failed or cancelled results honestly. This does not elevate another bot's execution permissions.";
 /** Routines, skills, profile and model: a bot's change to itself applies at
  * any level (server/direct-apply.ts). */
@@ -316,13 +357,14 @@ const TOOL_DEFINITIONS = [
     description: "The one way to hand work on: ask existing Sagax teammates a question or assign them concrete work. In a room it defaults to this room; use group_id from list_room_targets for a specific room. Outside a room, everything you send a teammate from this conversation goes to one standing work thread with them and runs after anything still running there; thread \"new\" opens a fresh thread on them instead. Give 1-4 bot_ids — teammate ids as list_bots or your roster prints them; a unique teammate name also resolves: they see only what you send them and use their own model, tools and permissions. They can consult their own specialists; every result returns here and resumes you automatically, so after sending all assignments END your turn: do not poll or wait, and never call assignment_status in the same turn. consult true asks a question the teammate answers from what it knows, acting on nothing; reply \"none\" is a one-way notice nothing comes back from. Include exact file paths, constraints and what must be verified (done_when). On return, resolve tradeoffs, verify the requested outcome and request concrete corrections with rework true if necessary before giving one final answer. Do not send acknowledgements as new work.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       group_id: { type: "string", description: "Optional destination room; omit for this room or, outside a room, your thread with each teammate." },
-      bot_ids: { type: "array", items: { type: "string", description: "A teammate's id exactly as list_bots or your roster prints it ([id: …]). A teammate's unique display name also resolves; a name shared by two reachable teammates is refused." }, minItems: 1, maxItems: 4, uniqueItems: true },
+      bot_ids: { type: "array", items: { type: "string", description: "A teammate's name as your roster prints it, or its id ([id: …]) when the roster or list_bots shows one. A name shared by two reachable teammates is refused: use the id." }, minItems: 1, maxItems: 4, uniqueItems: true },
       message: { type: "string", minLength: 1, maxLength: 4000, description: "Question or task for these teammates; later requests in the same conversation can build on earlier ones. Send separate requests when responsibilities differ." },
       reason: { type: "string", maxLength: 200, description: "Optional one line for the person about why this goes to them (shown as a chip)." },
       rework: { type: "boolean", description: "True only to send concrete work again to someone whose request already finished or failed: a correction, a re-check or a retry." },
       thread: { type: "string", enum: ["standing", "new"], description: "standing (default): the one work thread this conversation has with each teammate. new: open a new thread on the teammate for this, its own history and run; its result still returns here." },
       reply: { type: "string", enum: ["resume", "none"], description: "resume (default): the result resumes you. none: a one-way notice that is never awaited; nothing comes back and nothing resumes you." },
-      consult: { type: "boolean", description: "True for a question: the teammate answers from what it knows, acting on nothing, and you are resumed with the answer. Leave out for work." },
+      consult: { type: "boolean", description: "True for a question: the teammate answers from what it knows, acting on nothing, and you are resumed with the answer; allowed even to the bot that sent you this work. Leave out for work (a question to the bot that sent you this work is a consultation anyway)." },
+      relay: { type: "boolean", description: "True when the person only wants this one teammate's own answer passed back (ask it something, give its reply): the reply goes to the person directly, right after the line naming the teammate, and you are not resumed. Leave out when you must combine replies, check the work, decide or continue after it." },
       done_when: { type: "string", maxLength: 1000, description: "Optional: what must be true for this to count as done, in one or two sentences; the teammate is held to it." },
     }, required: ["bot_ids", "message"] },
   },
@@ -387,6 +429,8 @@ const TOOL_DEFINITIONS = [
         folder: { type: "string", description: "Optional: the name of one of your existing folders to file the thread under. Leave out unless the person named one." },
         report_back: { type: "boolean", description: "Optional: true runs it as a parallel task of this conversation. The person sees its live card here and its result is posted back here as a reply when it finishes. Use it when the person asks for something unrelated while you are busy, so both run at once." },
         workspace: { type: "string", enum: ["this_computer", "browser", "cloud", "local_vm"], description: "Optional, when your Workspace is Auto: where that thread works (this_computer = their files and apps, browser = web only, cloud = keeps running while they are away, local_vm = isolated). A place not allowed or offline falls back." },
+        read_only: { type: "boolean", description: "Optional: read-only (the thread starts in Ask)." },
+        thread_id: { type: "string", description: "Optional: resume your earlier thread by id instead of opening a new one." },
       },
       required: ["title", "message"],
     },
@@ -420,8 +464,12 @@ const TOOL_DEFINITIONS = [
     },
   },
   ...WIDGET_TOOL_DEFINITIONS,
+  ...APP_TOOL_DEFINITIONS,
   ...ARTIFACT_TOOL_DEFINITIONS,
   ...PAGE_TOOL_DEFINITIONS,
+  ...HELP_TOOL_DEFINITIONS,
+  ...SETTINGS_TOOL_DEFINITIONS,
+  ...APPROVALS_TOOL_DEFINITIONS,
   {
     name: "post_to_room",
     description:
@@ -490,12 +538,12 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: "list_team_setup",
-    description: "Primary Bot only: list authorized teams, teammate IDs, and exact engine/model choices for team setup. Call before proposing configuration; never invent model IDs. Existing thread models are independent of bot defaults.",
+    description: "Primary Bot only: list every bot of the person (whatever its team), their teams, and exact engine/model choices for team setup. Call before proposing configuration; never invent model IDs. A new default model: threads following the bot (main, routines) move at their next turn.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
   {
     name: "propose_team_setup",
-    description: "Primary Bot only: submit all requested specialist creation, profile/model configuration, and authorized team moves in ONE combined plan. Use exact catalog engine/model IDs from list_team_setup. Combine all fields for each bot; use the same create key or botId to coalesce repeated entries. New teams must be named explicitly in newTeams and have a specialist in this plan; access is granted only to those new teams. Existing unauthorized teams cannot be included. Models change bot defaults for groups/new threads; existing threads and execution permissions stay unchanged. If review is pending, the decision and structured result automatically resume you once; do not ask again, poll, or repeat the proposal." + PROPOSAL_OUTCOME,
+    description: "Primary Bot only: submit all requested specialist creation, profile/model configuration, and authorized team moves in ONE combined plan. Use exact catalog engine/model IDs from list_team_setup. Combine all fields for each bot; use the same create key or botId to coalesce repeated entries. New teams must be named explicitly in newTeams and have a specialist in this plan; access is granted only to those new teams. Another person's teams cannot be included. Models change bot defaults: threads following the bot (main, routines) move at their next turn; execution permissions stay unchanged. If review is pending, the decision and structured result automatically resume you once; do not ask again, poll, or repeat the proposal." + PROPOSAL_OUTCOME,
     inputSchema: {
       type: "object", additionalProperties: false,
       properties: {
@@ -526,8 +574,15 @@ const TOOL_DEFINITIONS = [
     name: "propose_bot_deletion",
     description: "Primary Bot only: when the user explicitly asks to delete a named teammate, submit a separate deletion request for that exact bot. Deletion removes its conversations, memory, instructions, skills, and any computer owned only by it; generated project files and shared team computers remain. Running work or an unavailable computer provider can block deletion safely. Never delete yourself, substitute an archive, or put deletion into a setup batch. If review is pending, the decision and result resume you once." + PROPOSAL_OUTCOME,
     inputSchema: { type: "object", additionalProperties: false, properties: {
-      bot_id: { type: "string", minLength: 1 }, reason: { type: "string", minLength: 1, maxLength: 500 },
+      bot_id: { type: "string", minLength: 1 }, reason: { type: "string", minLength: 1, maxLength: 500 }, quote: PERSON_QUOTE,
     }, required: ["bot_id", "reason"] },
+  },
+  {
+    name: "archive_bot",
+    description: "Primary Bot only: archive one of the person's bots (kept, restorable) or restore it. Already archived: nothing changes, said so. A temporary agent (create_agent) archived is gone for good. With quote it applies at once, else a card.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {
+      bot_id: { type: "string", minLength: 1 }, restore: { type: "boolean" }, quote: PERSON_QUOTE,
+    }, required: ["bot_id"] },
   },
   {
     name: "create_room",
@@ -600,9 +655,20 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "connect_github",
+    description:
+      "Connect the person's GitHub account to Sagax the way gh auth login does (GitHub's device flow), with access to their organizations. Returns a short code and a github.com link to show them; they type the code there and authorize. One GitHub connection per person, used by gh and git in their cloud computer, Coding, cloud agents and integrations. Call it when gh or git is not signed in, or a repository of an organization answers 404 or 403. Never ask for a token or for gh auth login. With reconnect true it starts over even when connected (to add organizations).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reconnect: { type: "boolean", description: "Start a new sign-in even when GitHub is connected (a token that misses an organization)." },
+      },
+    },
+  },
+  {
     name: "request_login",
     description:
-      "Ask to use a login saved in the person's Sagax vault for a site you must sign in to. Returns its handle at once if already allowed; otherwise the person gets a card to allow it, and you end the turn (Sagax resumes you with the handle). Fill it with the browser's fill_credential; you never see the value. Never ask for a password or code in chat.",
+      "Ask to use a login saved in the person's Sagax vault for a site you must sign in to. When a sign-in page appears while you work, call it with that page's host (accounts.example.com, not only example.com). Returns its handle at once if already allowed; otherwise the person gets a card to allow it or to sign in themselves, and you end the turn (Sagax resumes you). Sign in with the browser's fill_credential, field login; you never see the value. Never ask for a password or code in chat.",
     inputSchema: {
       type: "object",
       properties: {
@@ -624,6 +690,21 @@ const TOOL_DEFINITIONS = [
         reason: { type: "string", maxLength: 240, description: "One short sentence, in your words, on what the sign-in is for." },
       },
       required: ["site"],
+    },
+  },
+  {
+    name: "open_connector_setup",
+    description:
+      "When the person asks to connect a connector (Microsoft Teams, Outlook, Gmail, Google Drive, OneDrive, SharePoint, Salesforce, X, ...): one call posts a card whose button opens the right sign-in page in their browser (grok.com or claude.ai for this engine's own connectors, else Sagax's Connect apps). Sagax detects the connection. Then answer in one short sentence in their language; no steps, no settings tour.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        connector: { type: "string", maxLength: 120, description: "The app, as the person named it." },
+        via: { type: "string", enum: ["grok", "claude"], description: "Only when the person named where." },
+        language: { type: "string", enum: ["fr", "en"], description: "The person's language." },
+      },
+      required: ["connector"],
     },
   },
   {
@@ -667,7 +748,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "offer_shell_terminal",
     description:
-      "Offer an in-chat terminal card when the person wants to connect to a machine, debug live, or a step needs their typing (password prompt, installer, TUI); not for what your own tools can run. Default destination: where you work; set provider (and resource_id) only to pick another. They can change it on the card. Nothing opens until they approve; you type only if they allow bot input.",
+      "Offer an in-chat terminal. When a Tailcat remote session is connected in this conversation and you name no destination, the shell opens on that computer at once. Otherwise this posts a card; nothing opens until the person approves, and you type only if they allow bot input. Never ask them to paste a password or a tunnel address.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -681,6 +762,65 @@ const TOOL_DEFINITIONS = [
         },
       },
       required: ["reason"],
+    },
+  },
+  {
+    name: "resource_usage",
+    description:
+      "Live usage card (CPU, memory, disks, network; last minute) for a computer the person reaches, with its first sample. Only when they ask to see usage. Read-only, no approval.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        target: { type: "string", enum: ["this_computer", "sagax_server", "host", "remote_session", "bot_computer"] },
+        host: { type: "string", maxLength: 200, description: "A server host's name (list_terminal_resources)." },
+        session: { type: "string", maxLength: 200, description: "Tailcat session code or computer name; default: this conversation's." },
+      },
+      required: ["target"],
+    },
+  },
+  {
+    name: "publish_remote_session",
+    description:
+      "Post the connected Tailcat remote-support session into this chat. A session you opened with remote_support_open is posted by itself once remote_support_status says connected: call this only for a session a Flow skill opened, or to refresh the facts. Never pass an address, a key or a token: the tunnel is read from the session folder on this host. A later call with the same flow_session_id refreshes the card.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        flow_session_id: { type: "string", description: "12 lowercase hex id of the session folder." },
+        code: { type: "string", description: "The 6-character support code." },
+        os: { type: "string", enum: ["windows", "macos", "linux"] },
+        rights: { type: "string", enum: ["standard", "elevated"] },
+        end_at: { type: "string", description: "ISO-8601 end time, within a day." },
+        hostname: { type: "string" },
+        user: { type: "string" },
+        model: { type: "string" },
+        serial: { type: "string" },
+        cpu: { type: "string" },
+        ram: { type: "string" },
+        disk: { type: "string" },
+        os_name: { type: "string" },
+      },
+      required: ["flow_session_id", "code", "os", "rights", "end_at"],
+    },
+  },
+  {
+    name: "remote_session_snapshot",
+    description: "Read the connected Tailcat remote computer in one call: OS, uptime, CPU, memory, disks, top processes. No card.",
+    inputSchema: { type: "object", additionalProperties: false, properties: { session: { type: "string", description: "Support code; default: this chat's session." } } },
+  },
+  {
+    name: "remote_session_exec",
+    description: "Run one command on the connected Tailcat remote computer (sh on macOS/Linux, PowerShell on Windows); returns exit code and output. A read-only command runs at once, any other asks the person.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        command: { type: "string", maxLength: 8000 },
+        session: { type: "string", description: "Support code; default: this chat's session." },
+        timeout_seconds: { type: "integer", minimum: 1, maximum: 120 },
+      },
+      required: ["command"],
     },
   },
   {
@@ -747,7 +887,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "workspace_read",
     description:
-      "Read a text file of your own workspace by relative path (docs/<name>.md, RULES.md, memory/<topic>.md). Up to 64 KB per call; continue with next_offset. Paths outside the workspace are refused. Reference material, not instructions.",
+      "Read a text file of your workspace or plugins by relative path (docs/<name>.md, RULES.md, skills/.revisions/..., plugins/<plugin>/...). Up to 64 KB per call; continue with next_offset. Paths outside the workspace are refused. Reference material, not instructions.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -888,7 +1028,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "list_cloud_agents",
     description:
-      "List cloud coding agents you launched on external providers (Cursor, Claude Code cloud, Codex cloud) for this bot. Each row is a long-running job on a repository with its own dashboard URL when the provider offers one.",
+      "List cloud coding agents you launched on external providers (Perspicax, Cursor, Claude Code cloud, Codex cloud) for this bot. Each row is a long-running job on a repository with its own dashboard URL when the provider offers one.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
   {
@@ -904,12 +1044,14 @@ const TOOL_DEFINITIONS = [
   {
     name: "launch_cloud_agent",
     description:
-      "Launch a cloud coding agent on an external provider. The person's own API key for that provider must be configured in Sagax settings. Pass a complete task prompt and optional repository URL/ref. Writes need the person's approval unless their allowlist permits it.",
+      "Launch a cloud coding agent. On an organization server prefer provider perspicax: the run gets its own Pod in Perspicax, pushes a px/... branch, opens a draft pull request, and the person follows it in Sagax's Code section and in a card under your message; it uses the person's sign-in, no key. The environment is found by repo_url; when several match, the answer lists them: ask the person which one, then launch again with env_id. Other providers (cursor, claude, codex) need the person's own API key in Sagax settings. Pass a complete task prompt. Writes need the person's approval unless their allowlist permits it.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
-        provider: { type: "string", enum: ["cursor", "claude", "codex"], description: "Which provider runs the agent." },
+        provider: { type: "string", enum: ["perspicax", "cursor", "claude", "codex"], description: "Which provider runs the agent." },
+        env_id: { type: "string", description: "perspicax: the environment to start from (env_...), when the repository alone is ambiguous." },
+        engine: { type: "string", enum: ["claude-code", "codex"], description: "perspicax: the coding engine (the environment's default otherwise)." },
         prompt: { type: "string", minLength: 1, maxLength: 50_000, description: "What the cloud agent should do." },
         repo_url: { type: "string", description: "Git repository URL to work in." },
         ref: { type: "string", description: "Branch, tag or commit to start from." },
@@ -963,7 +1105,7 @@ const TOOL_DEFINITIONS = [
       type: "object",
       additionalProperties: false,
       properties: {
-        provider: { type: "string", enum: ["cursor", "claude", "codex"] },
+        provider: { type: "string", enum: ["perspicax", "cursor", "claude", "codex"] },
         pr_url: { type: "string" },
       },
       required: ["provider", "pr_url"],
@@ -998,7 +1140,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "run_routine",
     description:
-      "Run one of this bot's own routines now, once. Get the routine id from list_routines. The schedule and the Active switch stay as they are; a paused routine runs and stays paused. Refused while a run of that routine is already in progress.",
+      "Run one of this bot's own routines now, once. Get the routine id from list_routines. The schedule and the Active switch stay as they are; a paused routine runs and stays paused. It waits while busy, then starts; a run already in progress is returned, never doubled.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -1009,17 +1151,23 @@ const TOOL_DEFINITIONS = [
   {
     name: "propose_routine",
     description:
-      "Prepare a new routine after the user explicitly asks to schedule recurring or future work. Call list_routines first for relative dates or times so you use its authoritative current time and timezone. Convert calendar requests (monthly dates, last days, nth weekdays) into a validated five-field cron schedule with an explicit IANA timeZone; keep elapsed every-N-minutes work as interval. Never approximate unsupported requests with a different weekly schedule or an AI date-check routine; explain the limitation instead. Resolve ambiguous dates, times, timezone, destination, or instructions with the user first, and always give one-time schedules an explicit RFC3339 offset. If the user asks for the routine to run as ANOTHER bot in your section, call list_bots and pass that bot's id as for_bot_id; each run retains that bot's own permissions." + SELF_CHANGE_OUTCOME,
+      "Prepare a new routine after the user explicitly asks to schedule recurring or future work. A new routine is created paused unless enabled is true. Call list_routines first for relative dates or times so you use its authoritative current time and timezone. Convert calendar requests (monthly dates, last days, nth weekdays) into a validated five-field cron schedule with an explicit IANA timeZone; keep elapsed every-N-minutes work as interval. Never approximate unsupported requests with a different weekly schedule or an AI date-check routine; explain the limitation instead. Resolve ambiguous dates, times, timezone, destination, or instructions with the user first, and always give one-time schedules an explicit RFC3339 offset. If the user asks for the routine to run as ANOTHER bot in your section, call list_bots and pass that bot's id as for_bot_id; each run retains that bot's own permissions." + SELF_CHANGE_OUTCOME,
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
         ...ROUTINE_FIELDS_SCHEMA,
+        enabled: {
+          type: "boolean",
+          description:
+            "true starts it on its schedule. false creates it paused. Omit for the server default, which creates it paused until it is resumed. Pause and resume of an existing routine are propose_routine_action.",
+        },
         for_bot_id: {
           type: "string",
           description:
             "Only when the user asks to schedule this routine for ANOTHER bot in your section: that bot's id from list_bots. Omit to schedule it for yourself. The routine then belongs to that bot and each run uses its engine and permissions.",
         },
+        quote: PERSON_QUOTE,
       },
       required: ["name", "instructions", "schedule"],
     },
@@ -1049,6 +1197,7 @@ const TOOL_DEFINITIONS = [
           properties: ROUTINE_FIELDS_SCHEMA,
           description: "Fields to change when action is update. Omit for every other action.",
         },
+        quote: PERSON_QUOTE,
       },
       required: ["routine_id", "action"],
     },
@@ -1081,8 +1230,9 @@ const TOOL_DEFINITIONS = [
         reason: { type: "string", minLength: 1, maxLength: 500, description: "One sentence the user will see explaining why." },
         for_bot_id: {
           type: "string",
-          description: "Primary Bot only: the id of another bot in your section whose profile this changes. Omit to change your own.",
+          description: "Primary Bot only: the id of another bot of the person whose profile this changes. Omit to change your own.",
         },
+        quote: PERSON_QUOTE,
       },
       required: ["reason"],
     },
@@ -1090,7 +1240,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "propose_model",
     description:
-      "Submit a user-requested switch of this bot's default engine and model. Use the exact instance and model ids the person named, or for a Primary Bot the ids from the team-setup catalog. The result warns about capabilities the switch gains or loses; existing threads keep their current models." + SELF_CHANGE_OUTCOME,
+      "Submit a user-requested switch of this bot's default engine and model. Use the exact instance and model ids the person named, or for a Primary Bot the ids from the team-setup catalog. The result warns about capabilities the switch gains or loses; threads following the bot (main, routines) move at their next turn." + SELF_CHANGE_OUTCOME,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -1110,8 +1260,9 @@ const TOOL_DEFINITIONS = [
         reason: { type: "string", minLength: 1, maxLength: 500, description: "One sentence the user will see explaining why." },
         for_bot_id: {
           type: "string",
-          description: "Primary Bot only: the id of another bot in your section whose default model this changes. Omit to change your own.",
+          description: "Primary Bot only: the id of another bot of the person whose default model this changes. Omit to change your own.",
         },
+        quote: PERSON_QUOTE,
       },
       required: ["model_selection", "reason"],
     },
@@ -1119,7 +1270,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "propose_team_memory",
     description:
-      "Propose something every bot on the team should know: who a person is (person), where something lives (place), what was decided (decision), or what a name means (term). Every addition or replacement waits for a workspace admin to confirm its card before entering shared prompts. End the turn and do not claim it is remembered before confirmation; accepted facts stay unchanged until then.",
+      "Propose something every bot on the team should know: who a person is (person), where something lives (place), what was decided (decision), or what a name means (term). Every addition or replacement waits for a member of this team, or an organization admin, to confirm its card before entering shared prompts. End the turn and do not claim it is remembered before confirmation; accepted facts stay unchanged until then.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -1503,12 +1654,15 @@ const STREAM_TOOL_NAMES = new Set(["recall_topic"]);
 // shown only in a person's 1:1 turn (SAGAX_ROUTE_MESSAGES); its route refuses
 // otherwise.
 const ROUTE_TOOL_NAMES = new Set(["route_message"]);
+const GITHUB_CONNECT_TOOL_NAMES = new Set(["connect_github"]);
 // And for a role: every route behind these refuses a bot that is not its
 // section's Primary Bot, as it does a for_bot_id naming another bot on
 // propose_profile or propose_model. (A routine's for_bot_id is open to any
 // bot that can reach that peer, so it stays.)
 const CHIEF_ONLY_TOOL_NAMES = new Set([
-  "create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "create_room", "manage_room", "retry_thread",
+  "create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "archive_bot", "create_room", "manage_room", "retry_thread",
+  // 2026-10-20: the person's approval cards, answered at their request
+  "sagax_approvals",
 ]);
 const CHIEF_TARGET_TOOL_NAMES = new Set(["propose_profile", "propose_model"]);
 /** create_bot as a bot that is not a Primary Bot sees it (server/bot-creation.ts):
@@ -1532,6 +1686,53 @@ const CLOUD_HOME_SURFACE = {
   type: "string", enum: ["auto", "cloud", "browser"],
   description: "auto = suitable configured computer, cloud = the bot's cloud computer, browser = built-in browser. Omit to list. This server runs in the cloud: the user's own computer and a Local VM are not places here.",
 };
+
+/** Agents tools a Claude Code turn loads only when the model asks for them
+ * (tool search), 2026-10-19 perf parity. They are long or rarely needed in
+ * an ordinary chat turn: routines, team and profile setup, cloud agents,
+ * artifacts, settings, transcripts, separate jobs and room posts from a 1:1
+ * chat. Every name stays callable and listed by name to the model; only its
+ * description and schema wait for a ToolSearch step. Coordination,
+ * reactions, widgets, memory, files, computer choice, approvals and results
+ * paging stay loaded, and so does any tool not named here. */
+export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "propose_routine", "propose_routine_action", "list_routines", "run_routine",
+  "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_bot_deletion", "archive_bot",
+  "propose_team_memory", "propose_page", "create_room", "manage_room", "create_bot",
+  "add_mcp_server", "skill_manage", "skills_list", "rules_update", "docs_update",
+  "launch_cloud_agent", "list_cloud_agents", "get_cloud_agent", "cancel_cloud_agent", "archive_cloud_agent",
+  "cloud_agent_follow_up", "cloud_agent_transcript", "find_cloud_agent_by_pr", "list_cloud_agent_artifacts",
+  "save_artifact", "update_artifact", "delete_artifact", "list_artifacts",
+  "manage_settings", "sagax_settings", "manage_pairing", "offer_shell_terminal", "list_terminal_resources", "resource_usage", "vm_exec",
+  "shared_computer", "list_shared_computers", "nudge_person", "remove_reaction", "retry_thread",
+  "read_transcript", "read_transcript_cold", "read_transcript_page", "read_latest_page", "read_latest_page_with_threads",
+  "find_agents", "get_agent", "list_agents", "send_prompt", "await_turn", "create_agent", "delete_agent",
+  "workspace_read", "workspace_search", "session_read", "close_thread", "list_threads",
+  "request_login", "place_phone_call",
+  // The person's iPhone (agents-phone-tools.ts): rare, and long.
+  "phone_tool",
+  // A post into a room from a 1:1 chat: rare.
+  "list_rooms", "post_to_room",
+]);
+
+/** Deferred only in a coordinating turn, where it opens a separate job on
+ * the bot itself and only when the person asked for one; elsewhere the
+ * threads prompt presents it as the way to hand a teammate a job. The one
+ * tool surface sets no `coordinating` on the catalog profile, so the agents
+ * proxy defers it nowhere unless a caller says so. */
+const DEFERRED_WHEN_COORDINATING: ReadonlySet<string> = new Set(["start_thread"]);
+
+/** The tools/list a Claude Code engine is served: the same tools, with the
+ * rare ones marked `_meta["anthropic/alwaysLoad"] = false` so the CLI defers
+ * them behind tool search although the server is always loaded (the CLI's
+ * per-tool override of a server's alwaysLoad). Other engines never get the
+ * marker (SAGAX_DEFER_RARE_TOOLS is set by the Claude driver only). */
+export function withDeferredRareTools<T extends { name: string }>(tools: readonly T[], profile: { coordinating?: boolean } | CatalogProfile): Array<T & { _meta?: Record<string, unknown> }> {
+  const coordinating = "coordinating" in profile && profile.coordinating === true;
+  return tools.map((tool) => DEFERRED_AGENT_TOOL_NAMES.has(tool.name) || (coordinating && DEFERRED_WHEN_COORDINATING.has(tool.name))
+    ? { ...tool, _meta: { ...(tool as { _meta?: Record<string, unknown> })._meta, "anthropic/alwaysLoad": false } }
+    : tool);
+}
 
 /** The tools one turn is shown, exactly as tools/list serializes them. */
 export function availableTools(profile: CatalogProfile) {
@@ -1577,6 +1778,18 @@ export const PERSPICAX_TOOLS = [
   pxTool("identity", "Find records by a name or an identifier across the served APIs.", { query: { type: "string", minLength: 2 }, apis: { type: "array", items: { type: "string" } }, limit: { type: "integer", minimum: 1, maximum: 100 } }, ["query"]),
   pxTool("flow", "Pulsatrix Flow, read only: command catalog lists the actions of the active pack; command describe with args.name gives one action's params and bounds.", { command: { type: "string", enum: ["catalog", "describe"] }, args: { type: "object", properties: { name: { type: "string" } }, additionalProperties: false } }, ["command"]),
   pxTool("flow_action", "Run one Pulsatrix Flow action (see flow catalog). A write batch answers needs_confirmation with a preview first: ask the user, then call again with confirm: true. _dry_run previews every write; resume continues a run paused at choice_needed.", { name: { type: "string" }, params: { type: "object" }, _dry_run: { type: "boolean" }, confirm: { type: "boolean" }, resume: { type: "object", properties: { run_id: { type: "string" }, choice: {} }, required: ["run_id"], additionalProperties: false } }),
+  // Remote support (Perspicax 1.8.43, Tailcat). The bot does not supply a
+  // nodekey: server/remote-support-local.ts creates the technician key once
+  // on this computer and forwards only the public half.
+  pxTool("remote_support_open", "Remote support (Tailcat, assistance a distance). When the person asks for a link for their client, a remote session, or assistance a distance, call this with no key: it is the first of at most three calls (open, one status when the person says it is launched, then the status that connects). No schema search, no cloud fallback. Sagax creates the technician key once on this computer (the desktop PC or the bot's cloud computer) and never sends the private key. Do not ask for a nodekey, a template or a session id, and do not run tailcat serve, an exit node or file sharing: never expose the person's own computer. Sagax ships tailcat 0.7.0 beside the app. Do not download tailcat and do not copy it into a system directory. Defaults, unless the person says otherwise: the technician is their name and organization, the session ends in 2 hours (24 hours at most), the page detects the OS, and rights stay standard, a session without administrator rights (pass rights elevated only when they ask). Answers a code, a page link and the script lines, already in code fences: put them in your first reply exactly as given, and never pass a line through a shell on this computer (a Mac shell eats its $ variables). Then call remote_support_status when the person says it is launched, and always end with remote_support_close. Refused with remote_support_disabled while an admin has not turned it on, and absent without the remote support permission.", {
+    rights: { type: "string", enum: ["standard", "elevated"], description: "standard unless the person asks for elevated (one administrator consent on the end user's computer)" },
+    technician: { type: "string", maxLength: 80, description: "optional override. Omit it: Sagax uses the person's name and the organization" },
+    os: { type: ["string", "null"], enum: ["windows", "macos", "linux", null], description: "omit it. The support page detects the OS. Pass one only when the person named it" },
+    end_at: { type: "string", description: "optional RFC 3339 end. Omit it for 2 hours from now. Never later than 24 hours" },
+    start_minutes: { type: "integer", minimum: 5, maximum: 30, description: "minutes allowed before the first script fetch (default 15)" },
+  }),
+  pxTool("remote_support_status", "The state of a remote support session you opened: waiting, fetched, started, connected, ended or expired. Call it when the person says the script is launched, not in a loop. fetch_ip_count must be exactly 1 (one address took the script): above 1 someone else read the code, do not connect, close it (cancelled) and open a new one. When the end user has started, this same call connects this computer with the local technician key and marks the session connected; if it still says started, call it once more. Once connected, Sagax posts the session card and the live screen in the chat by itself: never write a screenshot to the Desktop or open Preview. Then use remote_session_snapshot. The address stays on this computer: it is not in this result, and you do not repeat it or run tailcat yourself. Pass the code remote_support_open answered.", { code: { type: "string", description: "the code remote_support_open answered" }, mark_connected: { type: "boolean", description: "omit it. Sagax marks the session connected after the local key reaches the computer" } }, ["code"]),
+  pxTool("remote_support_close", "Close a remote support session you opened: outcome ended for a session that ran, cancelled for one that never connected. The end user's script stops the tunnel within 10 s. Always call it at the end.", { code: { type: "string", description: "the code remote_support_open answered" }, outcome: { type: "string", enum: ["ended", "cancelled"] } }, ["code", "outcome"]),
   pxTool("review_write", "Approve or refuse a write waiting for an approver: the review id from the pending answer and decision approve or refuse. Only the named approver can decide it.", { id: { type: "string" }, decision: { type: "string", enum: ["approve", "refuse"] } }, ["id", "decision"]),
 ];
 export const PERSPICAX_TOOL_NAMES: ReadonlySet<string> = new Set(PERSPICAX_TOOLS.map((tool) => tool.name));
@@ -1589,7 +1802,11 @@ function catalogTools(profile: CatalogProfile) {
   const base = [
     ...core,
     ...(profile.perspicax ? PERSPICAX_TOOLS : []),
+    // a call through the speaker's Twilio profile on Perspicax, on a card
+    // (server/outbound-calls.ts); never in a room
+    ...(profile.perspicax && !profile.room ? [PLACE_PHONE_CALL_TOOL_SPEC] : []),
     ...(profile.claims ? CLAIM_TOOLS : []),
+    ...(profile.phoneTools?.length ? [phoneToolDefinition(profile.phoneTools)] : []),
   ];
   if (!profile.agentApi) return base;
   return [...base, ...AGENT_API_TOOLS.filter((tool) => profile.chief || (tool.name !== "create_agent" && tool.name !== "delete_agent"))];
@@ -1614,7 +1831,8 @@ function coreCatalogTools(profile: CatalogProfile) {
     : VOICE_READY_TOOLS.filter((tool) => !CALL_TOOL_NAMES.has(tool.name)))
     .filter((tool) => profile.meetings === true || !MEETING_TOOL_NAMES.has(tool.name))
     .filter((tool) => profile.singleStream === true || !STREAM_TOOL_NAMES.has(tool.name))
-    .filter((tool) => profile.routeMessages === true || !ROUTE_TOOL_NAMES.has(tool.name));
+    .filter((tool) => profile.routeMessages === true || !ROUTE_TOOL_NAMES.has(tool.name))
+    .filter((tool) => profile.githubConnect === true || !GITHUB_CONNECT_TOOL_NAMES.has(tool.name));
   const ROLE_TOOLS = profile.chief
     ? CALL_TOOLS
     : CALL_TOOLS.filter((tool) => !CHIEF_ONLY_TOOL_NAMES.has(tool.name) || (tool.name === "create_bot" && profile.createBots === true)).map((tool) => {

@@ -140,7 +140,8 @@ function sameOutcome(a: PlanRow, b: PlanRow): boolean {
  * plan", which read the same login), and the subscription rows come before
  * the API-key rows. */
 export function planRows(report: PlanUsageReport | null): PlanRow[] {
-  if (!report) return [];
+  // a report the server did not shape (an empty answer) draws nothing
+  if (!report || !Array.isArray(report.providers)) return [];
   const rows: PlanRow[] = [];
   for (const provider of report.providers) {
     const row = rowOf(provider);

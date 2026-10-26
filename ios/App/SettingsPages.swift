@@ -202,22 +202,34 @@ struct BotComputerSettingsView: View {
     @State private var failure: String?
 
     enum Action: String, Identifiable {
-        case update, reset
+        case update, reset, recover
         var id: String { rawValue }
     }
 
     var body: some View {
         SettingsPage(title: "Bot Computer") {
             SettingsCard {
-                SettingsRow(
-                    title: "Update Computer",
-                    subtitle: "Moves your Bots' shared computer to the latest version. Files and logins stay, but installed apps and packages are removed.",
-                    accessory: running == .update ? .progress : .none,
-                    style: .action,
-                    height: 89.33,
-                    identifier: "computer-update"
-                ) { if running == nil { confirming = .update } }
-                CardHairline(leadingInset: SettingsMetrics.rowInset)
+                if showsRecover {
+                    SettingsRow(
+                        title: "Recover computer",
+                        subtitle: recoverDescription,
+                        accessory: running == .recover ? .progress : .none,
+                        style: .action,
+                        height: 89.33,
+                        identifier: "computer-recover"
+                    ) { if running == nil { confirming = .recover } }
+                    CardHairline(leadingInset: SettingsMetrics.rowInset)
+                } else {
+                    SettingsRow(
+                        title: "Update Computer",
+                        subtitle: "Moves your Bots' shared computer to the latest version. Files and logins stay, but installed apps and packages are removed.",
+                        accessory: running == .update ? .progress : .none,
+                        style: .action,
+                        height: 89.33,
+                        identifier: "computer-update"
+                    ) { if running == nil { confirming = .update } }
+                    CardHairline(leadingInset: SettingsMetrics.rowInset)
+                }
                 SettingsRow(
                     title: "Reset Computer",
                     subtitle: resetDescription,
@@ -233,6 +245,8 @@ struct BotComputerSettingsView: View {
             SettingsCard {
                 SettingsRow(title: "Disk space", accessory: .value(diskText), height: 45, identifier: "computer-disk")
             }
+            ComputerMaintenanceSection()
+            OtherComputersSection()
             // What the computer says is wrong ("Start docker first") comes
             // with the refusal when an action is tried; the status row
             // itself stays as in the reference.
@@ -240,14 +254,14 @@ struct BotComputerSettingsView: View {
         .task { await load() }
         .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }), titleVisibility: .visible) {
             if let action = confirming {
-                Button(action == .update ? "Update Computer" : "Reset Computer", role: action == .reset ? .destructive : nil) {
+                Button(confirmLabel(action), role: action == .reset ? .destructive : nil) {
                     Task { await run(action) }
                 }
                 .accessibilityIdentifier("computer-confirm")
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(confirming == .reset ? LocalizedStringKey(resetDescription) : "Installed apps and packages are removed. Files and logins stay.")
+            Text(confirmMessage)
         }
         .alert("Bot Computer", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
             Button("OK", role: .cancel) {}
@@ -257,7 +271,42 @@ struct BotComputerSettingsView: View {
     }
 
     private var confirmTitle: LocalizedStringKey {
-        confirming == .reset ? "Reset your Bots' computer?" : "Update your Bots' computer?"
+        switch confirming {
+        case .reset: "Reset your Bots' computer?"
+        case .recover: "Recover your Bots' computer?"
+        default: "Update your Bots' computer?"
+        }
+    }
+
+    private var confirmMessage: LocalizedStringKey {
+        switch confirming {
+        case .reset: LocalizedStringKey(resetDescription)
+        case .recover: LocalizedStringKey(recoverDescription)
+        default: "Installed apps and packages are removed. Files and logins stay."
+        }
+    }
+
+    private func confirmLabel(_ action: Action) -> LocalizedStringKey {
+        switch action {
+        case .update: "Update Computer"
+        case .reset: "Reset Computer"
+        case .recover: "Recover computer"
+        }
+    }
+
+    /// Shown instead of Update while the computer is stuck. Same route as
+    /// Update: rebuild from the current image and keep files. There is no snapshot.
+    private var showsRecover: Bool {
+        guard let status else { return false }
+        return ComputerCare.needsRecover(
+            configured: status.configured, state: status.state, problem: status.problem, waking: status.waking != nil
+        )
+    }
+
+    private var recoverDescription: String {
+        status?.waking != nil
+            ? String(localized: "Your computer is waking. If it does not come back on its own, recover it. Files stay.")
+            : String(localized: "If it does not come back on its own, recover it. Files stay. Installed apps and packages are removed.")
     }
 
     private var resetDescription: String {
@@ -268,6 +317,7 @@ struct BotComputerSettingsView: View {
 
     private var footerText: LocalizedStringKey {
         if running == .update { return "Updating… This can take a few minutes." }
+        if running == .recover { return "Recovering… This can take a few minutes." }
         if running == .reset { return "Resetting… This can take a few minutes." }
         return "The one computer your Bots share."
     }
@@ -305,7 +355,10 @@ struct BotComputerSettingsView: View {
         running = action
         Haptics.impact(.light)
         do {
-            status = action == .update ? try await client.updateComputer() : try await client.resetComputer()
+            switch action {
+            case .update, .recover: status = try await client.updateComputer()
+            case .reset: status = try await client.resetComputer()
+            }
         } catch {
             failure = error.localizedDescription
         }

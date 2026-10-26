@@ -73,6 +73,8 @@ export interface BotCodePullRequest {
   /** The pull request's web page, when known. */
   url?: string;
   action: BotCodePullAction;
+  /** Its head branch, when the call named it (or it was the current one). */
+  branch?: string;
   at: number;
 }
 

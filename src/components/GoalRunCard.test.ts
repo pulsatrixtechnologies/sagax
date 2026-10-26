@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GroupGoalRunCardData } from "../../shared/group-goal-run";
 import type { Message } from "@/state/store";
-import { GoalRunCard, GoalRunHeaderChip } from "./GoalRunCard";
+import { GoalRunCard, GoalRunHeaderChip, goalRunPlace } from "./GoalRunCard";
 
 function message(status: GroupGoalRunCardData["status"], detail?: string): Message {
   return {
@@ -25,6 +25,28 @@ function message(status: GroupGoalRunCardData["status"], detail?: string): Messa
     },
   };
 }
+
+describe("goal history", () => {
+  it("numbers a goal among the room's goals and lists the earlier ones", () => {
+    const earlier = message("completed");
+    earlier.id = "goal-old";
+    earlier.goalRun = { ...earlier.goalRun!, goal: "Ship the notes" };
+    const current = message("working");
+    const place = goalRunPlace([earlier, current], current.id);
+    expect(place).toMatchObject({ position: 2, total: 2 });
+    const markup = renderToStaticMarkup(createElement(GoalRunCard, { message: current, history: place }));
+    expect(markup).toContain("Goal 2 of 2");
+    expect(markup).toContain("Goal history");
+    expect(markup).toContain("Ship the notes");
+  });
+
+  it("offers the full goal when the line is cut", () => {
+    const long = message("working");
+    long.goalRun = { ...long.goalRun!, goal: "A".repeat(200) };
+    const markup = renderToStaticMarkup(createElement(GoalRunCard, { message: long }));
+    expect(markup).toContain("Show the full goal");
+  });
+});
 
 describe("GoalRunCard", () => {
   it("shows live goal progress without expanding into a run log", () => {

@@ -183,52 +183,6 @@ struct PluginsSegmented<Value: Hashable>: View {
     }
 }
 
-/// An app's mark: its logo, else the favicon of its domain, else its
-/// initial (`ServiceIcon` in PluginsPanel.tsx).
-struct ConnectorMark: View {
-    @Environment(\.themePalette) var themePalette
-    let card: ConnectorCard
-    var size: CGFloat = 38.5
-
-    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: size * 11.5 / 38.5, style: .continuous) }
-
-    private var source: URL? {
-        if let logo = card.logo, let url = URL(string: logo), url.scheme == "https" { return url }
-        if let domain = card.domain, !domain.isEmpty {
-            return URL(string: "https://www.google.com/s2/favicons?domain=\(domain)&sz=64")
-        }
-        return nil
-    }
-
-    var body: some View {
-        Group {
-            if let source {
-                AsyncImage(url: source) { phase in
-                    if let image = phase.image {
-                        ZStack { Color.white; image.resizable().scaledToFit().padding(size * 0.14) }
-                    } else {
-                        monogram
-                    }
-                }
-            } else {
-                monogram
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(shape)
-        .accessibilityHidden(true)
-    }
-
-    private var monogram: some View {
-        ZStack {
-            Theme.pill
-            Text(verbatim: String(card.label.prefix(1)).uppercased())
-                .font(Theme.font(15, .semibold))
-                .foregroundStyle(Theme.textSecondary)
-        }
-    }
-}
-
 /// A glyph on a tinted tile (MCP rows, Claude connectors).
 struct PluginsGlyphTile: View {
     @Environment(\.themePalette) var themePalette

@@ -50,6 +50,16 @@ afterEach(() => {
 });
 
 describe("BotListItem", () => {
+  it("keeps a routine run out of the row: the mascot dot stays, the status line does not say working", () => {
+    const run = bot({ busy: true, tasks: [{ threadId: "thread-atlas", title: "Run", createdAt: 1, routineRunId: "run-1", busy: true }] });
+    const markup = renderRow(run);
+    expect(markup).toContain('data-testid="working-dot"');
+    expect(markup).not.toContain("Working");
+    // an ordinary working conversation still shows its typing dots and text
+    const normal = renderRow(bot({ busy: true, tasks: [{ threadId: "thread-atlas", title: "Chat", createdAt: 1, busy: true }] }));
+    expect(normal).toContain("Working");
+  });
+
   it("has a New thread button beside a keyboard-accessible bot menu, and no New folder", () => {
     const markup = renderRow(bot());
     // New thread is back on the row (JC, 2026-10-15)

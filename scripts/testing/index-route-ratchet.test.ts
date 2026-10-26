@@ -11,14 +11,16 @@ const EXACT: Record<string, number> = {
   // plus the fork routes merged on main after the 2026-10-08 sync branch was cut (the PRs after #176, Auto model #153 among them).
   // 190: DELETE /api/routine-runs ("Clear logs", #238), then the routes of the PRs merged on 2026-10-09 that kept
   // them in index.ts (people threads, reactions and Seen by, bot zip #271, persona Rules and Files, plugin updates #272).
-  // 188 after the 2026-10-11 upstream sync, which moved two routes out of index.ts.
+  // 192 after #931 (Messages on the bot's Mac): POST /api/internal/messages/mcp, one guard in the route chain and one in the handler
+  // (covered by the /api/internal/ policy row). 188 after the 2026-10-11 upstream sync, which moved two routes out of index.ts.
   // +1 each from the 0.5.0 integration (2026-10-12) of PRs that kept a guard in index.ts:
   // GET /healthz (#372), /api/threads/:id/cw-actions (#364), /api/instances/:id/api-key (#383)
   // and the terminal session WebSocket upgrade (#353). Moving them to server/routes lowers these.
   // 2026-10-19 upstream sync: + /api/internal/request-sign-in (#2707) and /api/internal/assignment-status,
   // minus the one-release alias routes (ask-bot, delegate-bot, delegations/:id) the runtime move removed;
   // upstream's /api/internal/fill-login (saved logins) was not taken.
-  'path === "/': 186,
+  // 2026-10-26 sync of main: main's 188 -> 192 plus the sync's net -2; recount before committing.
+  'path === "/': 190,
   "path.match(": 98,
   "path.startsWith(": 14,
   ".exec(path)": 24,

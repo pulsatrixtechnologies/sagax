@@ -57,7 +57,9 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   api_list: "read", api_search: "read", api_describe: "read", api_lookup: "read",
   api_plan: "read", api_result_query: "read", identity: "read", flow: "read",
   api_upload: "conversation", flow_action: "conversation",
+  remote_support_open: "conversation", remote_support_status: "conversation", remote_support_close: "conversation",
   // chat widgets (agents-widget-tools.ts): a card in the member's own conversation
+  check_widget: "read",
   show_widget: "conversation",
   update_widget: "conversation",
   // artifacts (agents-artifact-tools.ts): the bot's own saved widgets; a
@@ -68,10 +70,14 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   delete_artifact: "conversation",
   // a page proposal: a card in the member's own conversation; publishing is theirs
   propose_page: "conversation",
+  // a phone call: a card in the member's own conversation, through their own Twilio profile
+  place_phone_call: "conversation",
   send_voice_note: "conversation",
   end_call: "conversation",
   request_credential: "conversation",
   request_login: "conversation",
+  // a sign-in card in the member's own conversation, for their own engine account
+  open_connector_setup: "conversation",
   // claims (perspicax-claims.ts): a lease in Perspicax held by this bot for
   // its person, through the turn's own Perspicax token; claim_list is a read
   claim: "conversation",
@@ -95,12 +101,26 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   propose_team_memory: "own-setup",
   propose_team_setup: "own-setup",
   propose_bot_deletion: "own-setup",
+  archive_bot: "own-setup",
+  // every setting as the member (server/settings-actions.ts): the member's
+  // own rights decide on the route the screen calls, a card otherwise
+  sagax_settings: "own-setup",
+  // the member's own cards, at their request (server/primary-approvals.ts)
+  sagax_approvals: "own-setup",
   // The in-chat terminal (2026-10-15, JC): the list is what THIS person may
   // open (their own environments; the server's hosts for an admin only), and
   // the offer only stages a card the person approves; the server checks the
   // person's rights again when they open it (terminal-resources/registry.ts).
   list_terminal_resources: "read",
   offer_shell_terminal: "conversation",
+  publish_remote_session: "conversation",
+  // a usage card (server/resource-usage/): read-only, on a computer this
+  // person already reaches; the target's own rights are checked
+  resource_usage: "conversation",
+  // the speaker's own Tailcat session: a fixed read, and one command that
+  // asks unless it only reads (server/remote-session-exec.ts)
+  remote_session_snapshot: "read",
+  remote_session_exec: "conversation",
   // join_meeting only stages a consent card; the person approves each join
   join_meeting: "conversation",
 });

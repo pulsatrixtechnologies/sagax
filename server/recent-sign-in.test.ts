@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { RECENT_SIGN_IN_MS, recentInteractiveSignIn, recentPersonSignIn } from "./recent-sign-in.ts";
+import { AUTH_TIME_SKEW_MS, RECENT_SIGN_IN_MS, authAtFromAuthTime, recentInteractiveSignIn, recentPersonSignIn } from "./recent-sign-in.ts";
 import type { RequestAuth } from "./request-auth.ts";
 import { SessionRegistry, type SessionRecord } from "./sessions.ts";
 
@@ -110,6 +110,24 @@ describe("other sessions", () => {
     registry.close();
     const again = new SessionRegistry({ file: join(dir, "sessions.json"), now });
     expect(again.byId(issued.session.id)?.authAt).toBe(clock);
+  });
+});
+
+describe("the provider's auth_time (2026-10-19)", () => {
+  it("dates the sign-in when it is recent, never later than now", () => {
+    expect(authAtFromAuthTime(clock / 1000, clock)).toBe(clock);
+    expect(authAtFromAuthTime(clock / 1000 - 600, clock)).toBe(clock - 600_000);
+    expect(authAtFromAuthTime((clock - RECENT_SIGN_IN_MS) / 1000, clock)).toBe(clock - RECENT_SIGN_IN_MS);
+    // a little skew ahead of this clock is dated now
+    expect(authAtFromAuthTime((clock + AUTH_TIME_SKEW_MS) / 1000, clock)).toBe(clock);
+  });
+
+  it("gives nothing for an old sign-in (a silent single sign-on), a forged future or a value that is not a time", () => {
+    expect(authAtFromAuthTime((clock - RECENT_SIGN_IN_MS) / 1000 - 1, clock)).toBeUndefined();
+    expect(authAtFromAuthTime((clock + AUTH_TIME_SKEW_MS) / 1000 + 1, clock)).toBeUndefined();
+    for (const value of [undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(authAtFromAuthTime(value, clock)).toBeUndefined();
+    }
   });
 });
 

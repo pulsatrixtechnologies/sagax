@@ -8,6 +8,8 @@ import {
   folderDigest,
   isManifestUrl,
   marketplaceServerName,
+  marketplaceVisibility,
+  marketplaceVisibleTo,
   PluginMarketplaces,
   pluginInstallPlan,
   pluginRevision,
@@ -240,6 +242,100 @@ describe("updating an installed plugin in place", () => {
     );
     expect(command).toEqual({ command: "node", args: ["b.js"], env: { MODE: "fast", TOKEN: "mine" }, enabled: true, source: "devjc" });
     expect(updatedServerEntry({ type: "http", url: "https://a.test", headers: {}, enabled: true }, { command: "node" }, "devjc")).toMatchObject({ enabled: false });
+  });
+});
+
+describe("per-marketplace visibility (private to a person vs org-wide)", () => {
+  const makeStore = (source: string) => new PluginMarketplaces({
+    dataDir: join(dir, "data"),
+    gitEnvironment: () => ({}),
+    policy: () => undefined,
+    now: () => 1_000,
+    git: async (args) => { cpSync(source, args.at(-1)!, { recursive: true }); },
+  });
+
+  const alice = { principal: "alice" };
+  const bob = { principal: "bob" };
+
+  it("fails closed: an unknown or missing visibility reads as private", () => {
+    expect(marketplaceVisibility({})).toBe("private");
+    expect(marketplaceVisibility({ visibility: "org" })).toBe("org");
+    expect(marketplaceVisibility({ visibility: "garbage" as unknown as "org" })).toBe("private");
+  });
+
+  it("marketplaceVisibleTo: org is public, private is the owner's only", () => {
+    expect(marketplaceVisibleTo({ visibility: "org", addedBy: "alice" }, bob)).toBe(true);
+    expect(marketplaceVisibleTo({ visibility: "private", addedBy: "alice" }, alice)).toBe(true);
+    expect(marketplaceVisibleTo({ visibility: "private", addedBy: "alice" }, bob)).toBe(false);
+    // the host operator / solo owner (seesAll) and an unfiltered call see all
+    expect(marketplaceVisibleTo({ visibility: "private", addedBy: "alice" }, { seesAll: true })).toBe(true);
+    expect(marketplaceVisibleTo({ visibility: "private", addedBy: "alice" }, undefined)).toBe(true);
+    // a private marketplace with no known owner is nobody's but the operator's
+    expect(marketplaceVisibleTo({ visibility: "private" }, bob)).toBe(false);
+  });
+
+  it("defaults a newly added marketplace to private, owned by the actor", async () => {
+    const source = join(dir, "repo");
+    marketplaceRepo(source);
+    const markets = makeStore(source);
+    const view = await markets.add({ source: "alice/marketplace" }, "alice");
+    expect(view).toMatchObject({ visibility: "private", mine: true });
+    // alice sees it; bob does not; it is not reachable by bob
+    expect(markets.list(alice).map((market) => market.name)).toEqual(["devjc"]);
+    expect(markets.list(bob)).toEqual([]);
+    expect(markets.canAccess("devjc", alice)).toBe(true);
+    expect(markets.canAccess("devjc", bob)).toBe(false);
+  });
+
+  it("stops bob from reaching alice's private marketplace (install, refresh, remove)", async () => {
+    const source = join(dir, "repo");
+    marketplaceRepo(source);
+    const markets = makeStore(source);
+    await markets.add({ source: "alice/marketplace" }, "alice");
+    await expect(markets.prepare("devjc", "notes", "bob", bob)).rejects.toMatchObject({ code: "not_found" });
+    await expect(markets.refresh("devjc", "bob", { viewer: bob })).rejects.toMatchObject({ code: "not_found" });
+    await expect(markets.remove("devjc", bob)).rejects.toMatchObject({ code: "not_found" });
+    await expect(markets.setVisibility("devjc", "org", bob)).rejects.toMatchObject({ code: "not_found" });
+    // the owner can still prepare
+    await expect(markets.prepare("devjc", "notes", "alice", alice)).resolves.toMatchObject({ dir: expect.any(String) });
+  });
+
+  it("lets the owner share a marketplace org-wide, then everyone sees it", async () => {
+    const source = join(dir, "repo");
+    marketplaceRepo(source);
+    const markets = makeStore(source);
+    await markets.add({ source: "alice/marketplace" }, "alice");
+    expect(markets.list(bob)).toEqual([]);
+    const shared = await markets.setVisibility("devjc", "org", alice);
+    expect(shared).toMatchObject({ visibility: "org" });
+    expect(markets.list(bob).map((market) => market.name)).toEqual(["devjc"]);
+    expect(markets.canAccess("devjc", bob)).toBe(true);
+    // bob sees it but it is not "his" to change the visibility of
+    expect(markets.list(bob)[0]).toMatchObject({ mine: false });
+  });
+
+  it("honours an explicit org visibility on add", async () => {
+    const source = join(dir, "repo");
+    marketplaceRepo(source);
+    const markets = makeStore(source);
+    const view = await markets.add({ source: "alice/marketplace" }, "alice", { visibility: "org" });
+    expect(view).toMatchObject({ visibility: "org" });
+    expect(markets.list(bob).map((market) => market.name)).toEqual(["devjc"]);
+  });
+
+  it("migrates: a marketplace stored before visibility existed becomes private to its owner", async () => {
+    const source = join(dir, "repo");
+    marketplaceRepo(source);
+    const markets = makeStore(source);
+    await markets.add({ source: "alice/marketplace" }, "alice");
+    // rewrite state.json without the visibility field, as an old install had it
+    const statePath = join(dir, "data", "marketplaces", "state.json");
+    const state = JSON.parse(readFileSync(statePath, "utf8")) as { marketplaces: Record<string, Record<string, unknown>> };
+    delete state.marketplaces.devjc!.visibility;
+    writeFileSync(statePath, JSON.stringify(state));
+    const fresh = makeStore(source);
+    expect(fresh.list(alice)[0]).toMatchObject({ visibility: "private", mine: true });
+    expect(fresh.list(bob)).toEqual([]);
   });
 });
 

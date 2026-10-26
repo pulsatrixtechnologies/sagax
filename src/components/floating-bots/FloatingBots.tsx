@@ -66,6 +66,7 @@ import { characterMoves, isMoveClip } from "./moves";
 import { cueClipFor, SNOOZE_NAP_MS } from "./mascots";
 import { COMPOSER_ATTACH_EVENT } from "@/components/Composer";
 import { COMPOSER_MODEL_EVENT, composerModelLabel } from "@/components/ModelPicker";
+import { readableOr } from "../../../shared/human-id";
 
 /** A picture bigger than this stays in the app; the window shows the owl instead. */
 const AVATAR_BYTES_MAX = 280_000;
@@ -426,7 +427,7 @@ export function FloatingBots() {
         }
         live?.call.interrupt();
         setPanel({ previewing: { id: voiceId, loading: true } });
-        const label = callPanelRef.current.voices?.find((voice) => voice.id === voiceId)?.label ?? voiceId;
+        const label = readableOr(callPanelRef.current.voices?.find((voice) => voice.id === voiceId)?.label ?? voiceId, t("ids.customVoice"));
         const unsubscribe = speaker.subscribe((snapshot) => {
           if (snapshot.status === "speaking") setCallPanel((current) => (current.previewing?.id === voiceId ? { ...current, previewing: { id: voiceId, loading: false } } : current));
         });

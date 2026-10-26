@@ -31,7 +31,8 @@ import {
   type K8sGuards,
   type K8sSandboxConfig,
 } from "./sandboxd-k8s-spec.ts";
-import { SandboxService } from "./sandboxd-core.ts";
+import { SandboxError, SandboxService } from "./sandboxd-core.ts";
+import { SANDBOX_STARTING_CODE } from "./sandbox-k8s-wake.ts";
 import { runsConfigFromEnv } from "./sandboxd-runs-spec.ts";
 import type { ContainerStats, ContainerSummary, DockerApi, ExecRequest, ExecResult, TtyExec, TtySize } from "./sandboxd-docker.ts";
 import { createSandboxdHandler, createSandboxdUpgradeHandler } from "./sandboxd.ts";
@@ -261,7 +262,10 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
         throw new Error(`the server environment image is not available (${reason})`);
       }
       if (phase === "Failed" || phase === "Succeeded") await remove(podPath(names.container));
-      if (now() > deadline) throw new Error("the sandbox pod did not become ready");
+      // 2026-10-19: a cold node pool (0 -> 1) takes ~3 min. The caller is
+      // told the environment is still starting (503 `starting`): nothing
+      // ran, so it may send the same call again (server/user-sandbox-manager.ts).
+      if (now() > deadline) throw new SandboxError(503, SANDBOX_STARTING_CODE, "the server environment is still starting");
       await sleep(500);
     }
   }

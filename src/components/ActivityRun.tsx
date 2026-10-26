@@ -23,6 +23,7 @@ export function ActivityRun({
   nameOf,
   renderStep,
   renderMessage,
+  bare = false,
 }: {
   messages: Message[];
   /** how long the bot worked, when known */
@@ -34,8 +35,18 @@ export function ActivityRun({
   renderStep: (message: Message) => ReactNode;
   /** anything else in the group (a turn's narration) */
   renderMessage?: (message: Message) => ReactNode;
+  /** tool calls hidden: a settled group draws its narration without the
+   * "Worked 2m 53s" line above it */
+  bare?: boolean;
 }) {
   const summary = summarizeSteps(messages);
+  if (bare && !summary.running && summary.tools === 0) {
+    return (
+      <div className="flex flex-col gap-0.5" data-testid="activity-run-bare">
+        {messages.map((message) => <div key={message.id} className="contents">{renderMessage?.(message)}</div>)}
+      </div>
+    );
+  }
   const words = stepGroupWords(summary, elapsedMs, nameOf);
   const narrated = messages.some((message) => message.kind !== "activity");
   const hit = Boolean(focusedId) && messages.some((message) => message.id === focusedId);

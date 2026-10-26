@@ -18,6 +18,9 @@ const children = [];
 let logs = "";
 const owner = randomBytes(32).toString("base64url");
 const relay = randomBytes(32).toString("base64url");
+// The companion control port opens only with the launching app's per-launch token (OpenMausBot #2930 port).
+const controlToken = randomBytes(32).toString("base64url");
+const controlHeaders = { "x-openmausbot-control-token": controlToken };
 async function freePort() {
   const listener = createServer();
   listener.listen(0, "127.0.0.1");
@@ -71,8 +74,11 @@ app.whenReady().then(async () => {
   assert.equal((await api(harnessPort, "/api/bots", "POST", {})).status, 403);
   harness.postMessage({ type: "openmausbot:desktop-mutation-token", token: owner, companionToken: relay });
   const sidecar = fork("dist-companion/index.js", env);
-  await until(() => api(controlPort, "/state").catch(() => null));
-  const pairing = await api(controlPort, "/pairing", "POST");
+  // The control token alone: the relay's mutation token is withheld to prove the bootstrap fails closed.
+  sidecar.once("spawn", () => sidecar.postMessage({ type: "openmausbot:companion-mutation-token", controlToken }));
+  await until(() => api(controlPort, "/state", "GET", undefined, controlHeaders).then((r) => r.status === 200).catch(() => null));
+  assert.equal((await api(controlPort, "/state")).status, 403, "the control port needs its token");
+  const pairing = await api(controlPort, "/pairing", "POST", undefined, controlHeaders);
   assert.equal(pairing.status, 201);
   const paired = await api(phonePort, "/api/pair", "POST", { credential: pairing.body.token, deviceName: "Fixture phone" });
   assert.equal(paired.status, 201);
@@ -107,13 +113,13 @@ app.whenReady().then(async () => {
   const nextRelay = randomBytes(32).toString("base64url");
   harness.postMessage({ type: "openmausbot:desktop-mutation-token", token: owner, companionToken: nextRelay });
   const restarted = fork("dist-companion/index.js", env);
-  restarted.once("spawn", () => restarted.postMessage({ type: "openmausbot:companion-mutation-token", token: nextRelay }));
+  restarted.once("spawn", () => restarted.postMessage({ type: "openmausbot:companion-mutation-token", token: nextRelay, controlToken: randomBytes(32).toString("base64url") }));
   await until(() => phone("/api/bots").then((r) => r.status === 200).catch(() => false));
   assert.equal((await phone(`/api/bots/${id}/read`, "POST", {})).status, 200);
   assert.equal((await api(phonePort, `/api/bots/${id}/read`, "POST", {})).status, 401);
   assert.equal((await phone("/api/config", "PUT", {})).status, 403);
   assert.equal((await phone("/api/internal/anything", "POST", {})).status, 404);
-  assert.equal((await api(controlPort, `/devices/${paired.body.device.id}`, "DELETE")).status, 200);
+  assert.equal((await api(controlPort, `/devices/${paired.body.device.id}`, "DELETE", undefined, controlHeaders)).status, 200);
   assert.equal((await phone(`/api/bots/${id}/read`, "POST", {})).status, 401);
   console.log(JSON.stringify({ passed: true, realPairing: true, old403Reproduced: true,
     botCreated: true, readMarked: true, replyVerified: true, forgedHeadersIgnored: true,

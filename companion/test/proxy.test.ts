@@ -103,10 +103,13 @@ const device = async (
   return { status: res.status, body, headers: res.headers };
 };
 
+const CONTROL_TOKEN = "fixture-control-token";
+const controlHeaders = { "x-openmausbot-control-token": CONTROL_TOKEN };
+
 /** raw request with a chosen Host header — fetch will not let us set one */
 const withHost = (port: number, host: string, path = "/api/health", headers: Record<string, string> = {}) =>
   new Promise<number>((resolve, reject) => {
-    const r = request({ hostname: "127.0.0.1", port, path, headers: { host, ...headers } }, (res) => {
+    const r = request({ hostname: "127.0.0.1", port, path, headers: { host, ...controlHeaders, ...headers } }, (res) => {
       res.resume();
       resolve(res.statusCode ?? 0);
     });
@@ -929,6 +932,7 @@ describe("pairing, end to end", () => {
     const port = (paired.address() as { port: number }).port;
     const control = createControlServer({
       devices: registry,
+      controlToken: () => CONTROL_TOKEN,
       companionPort: port,
       discovery: () => ({ advertising: false, name: "Sagax" }),
       connectedDeviceIds: connections.ids,
@@ -948,7 +952,7 @@ describe("pairing, end to end", () => {
       // the person clicks "Start pairing" on the computer
       // SAFETY: POST /pairing is this sidecar's own API and always answers
       // with both credentials; the matches below fail if the shape drifts.
-      const opened = (await (await fetch(`${ctl}/pairing`, { method: "POST" })).json()) as {
+      const opened = (await (await fetch(`${ctl}/pairing`, { method: "POST", headers: controlHeaders })).json()) as {
         code: string;
         token: string;
       };
@@ -1026,7 +1030,7 @@ describe("pairing, end to end", () => {
       // the computer can see the phone, and take it away again
       // SAFETY: /state's shape is this sidecar's own API, asserted by the
       // control-server tests above; a drifted shape fails the expects below.
-      const state = (await (await fetch(`${ctl}/state`)).json()) as {
+      const state = (await (await fetch(`${ctl}/state`, { headers: controlHeaders })).json()) as {
         devices: Array<{ id: string; name: string }>;
         connectedDeviceIds: string[];
       };
@@ -1036,7 +1040,7 @@ describe("pairing, end to end", () => {
       // this test passing for the wrong reason.
       const ada = state.devices.find((d) => d.name === "Ada's iPhone")!;
       expect(state.connectedDeviceIds).toContain(ada.id);
-      const revoked = await fetch(`${ctl}/devices/${ada.id}`, { method: "DELETE" });
+      const revoked = await fetch(`${ctl}/devices/${ada.id}`, { method: "DELETE", headers: controlHeaders });
       expect(revoked.status).toBe(200);
       expect((await revoked.json() as { connectedDeviceIds: string[] }).connectedDeviceIds).not.toContain(ada.id);
       await eventStreamClosed;
@@ -1052,6 +1056,7 @@ describe("pairing, end to end", () => {
     const { createControlServer } = await import("../src/control.ts");
     const control = createControlServer({
       devices: new DeviceRegistry(),
+      controlToken: () => CONTROL_TOKEN,
       companionPort: 8800,
       discovery: () => ({ advertising: false, name: "Sagax" }),
     });
@@ -1083,6 +1088,7 @@ describe("pairing, end to end", () => {
 
     const control = createControlServer({
       devices: new DeviceRegistry(),
+      controlToken: () => CONTROL_TOKEN,
       companionPort: 8800,
       discovery: () => ({ advertising: false, name: "Sagax" }),
     });
@@ -1117,6 +1123,7 @@ describe("pairing, end to end", () => {
     const registry = new DeviceRegistry();
     const control = createControlServer({
       devices: registry,
+      controlToken: () => CONTROL_TOKEN,
       companionPort: 8800,
       discovery: () => ({ advertising: false, name: "Sagax" }),
     });
@@ -1128,18 +1135,21 @@ describe("pairing, end to end", () => {
     try {
       const evil = await fetch(`${base}/pairing`, {
         method: "POST",
-        headers: { origin: "https://evil.example" },
+        headers: { origin: "https://evil.example", ...controlHeaders },
       });
       expect(evil.status).toBe(403);
       // and no window opened on the way to being refused
       expect(registry.pairing()).toBe(null);
 
-      // A same-origin write is the control page itself, and must still work:
-      // the browser sends Origin on any method that is not GET or HEAD, so a
-      // blanket refusal would break the one legitimate browser there is.
+      // A page served from the control port itself, as a bot's browser would open it, has no token.
+      const tokenless = await fetch(`${base}/pairing`, { method: "POST", headers: { origin: base } });
+      expect(tokenless.status).toBe(403);
+      expect(registry.pairing()).toBe(null);
+
+      // Browsers send Origin on any write, so the control page's own must pass.
       const ours = await fetch(`${base}/pairing`, {
         method: "POST",
-        headers: { origin: base },
+        headers: { origin: base, ...controlHeaders },
       });
       expect(ours.status).toBe(201);
       expect(registry.pairing()).not.toBe(null);
@@ -1147,7 +1157,7 @@ describe("pairing, end to end", () => {
       // Revocation is the other write worth stealing.
       const stolen = await fetch(`${base}/devices/whatever`, {
         method: "DELETE",
-        headers: { origin: "https://evil.example" },
+        headers: { origin: "https://evil.example", ...controlHeaders },
       });
       expect(stolen.status).toBe(403);
     } finally {
@@ -1166,6 +1176,7 @@ describe("pairing, end to end", () => {
     const registry = new DeviceRegistry();
     const control = createControlServer({
       devices: registry,
+      controlToken: () => CONTROL_TOKEN,
       companionPort: 8800,
       discovery: () => ({ advertising: false, name: "Sagax" }),
     });

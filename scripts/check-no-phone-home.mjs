@@ -43,8 +43,8 @@ export const ALLOWED = [
     test: (match, around) => /^milind-soni$/i.test(match) && /BLOCKED_GITHUB_OWNERS = Object\.freeze\(\["milind-soni"\]\)/.test(around),
   },
   {
-    why: "Composio's app catalog: a person may connect their own PostHog account",
-    test: (match, around) => /^posthog$/i.test(match) && /slug: "posthog", label: "PostHog", blurb: "Analytics, feature flags, experiments", domain: "posthog\.com"/.test(around),
+    why: "Grok import's toolkit slug map (shared/grok-import.ts): the word PostHog as a slug, no host",
+    test: (match, around) => /^posthog$/i.test(match) && /sentry:\s*["`]sentry["`],\s*posthog:\s*["`]posthog["`]/.test(around),
   },
   {
     // Server side only: the push hub of an organization server (server/push/)
@@ -55,6 +55,14 @@ export const ALLOWED = [
       /^api(?:\.sandbox)?\.push\.apple\.com$/i.test(match) &&
       file.replaceAll("\\", "/").startsWith("dist-server/") &&
       /APNS_HOSTS\d*\s*=\s*Object\.freeze\(\{\s*production: "api\.push\.apple\.com",\s*sandbox: "api\.sandbox\.push\.apple\.com",?\s*\}\)/.test(around),
+  },
+  {
+    // sagax_help knowledge (server/self-knowledge/): generated documentation
+    // prose that names the hosts and projects Sagax blocks. It is data the
+    // bot reads, never a URL the app fetches or a client of these hosts.
+    why: "generated sagax_help knowledge text (documentation prose, never fetched), dist-server only",
+    test: (match, around, file = "") =>
+      file.replaceAll("\\", "/") === "dist-server/self-knowledge/knowledge.generated.json",
   },
 ];
 

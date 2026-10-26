@@ -171,10 +171,34 @@ describe("patchPipTrees", () => {
   });
 });
 
+describe("--no-venv (an image without Hermes)", () => {
+  it("passes without a venv and refuses one found anyway", () => {
+    const root = mkdtempSync(join(tmpdir(), "harden-no-venv-"));
+    try {
+      mkdirSync(join(root, "node_modules"), { recursive: true });
+      const ok = spawnSync(process.execPath, [script, "--no-venv", "--root", root], { encoding: "utf8" });
+      expect(ok.status, ok.stderr + ok.stdout).toBe(0);
+      expect(ok.stdout).toMatch(/pip 0 venv/);
+      mkdirSync(join(root, "hermes", "venv", "bin"), { recursive: true });
+      writeFileSync(join(root, "hermes", "venv", "bin", "pip"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      const ko = spawnSync(process.execPath, [script, "--no-venv", "--root", root], { encoding: "utf8" });
+      expect(ko.status, ko.stderr + ko.stdout).not.toBe(0);
+      expect(ko.stderr).toMatch(/--no-venv but a venv was found/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("parseArgs", () => {
   it("collects --root values and refuses a stray flag", () => {
     expect(parseArgs(["--root", "/opt/engines", "--root", "/usr/local/lib/node_modules"])).toEqual({
       roots: ["/opt/engines", "/usr/local/lib/node_modules"],
+      noVenv: false,
+    });
+    expect(parseArgs(["--no-venv", "--root", "/usr/local/lib/node_modules"])).toEqual({
+      roots: ["/usr/local/lib/node_modules"],
+      noVenv: true,
     });
     expect(() => parseArgs(["--root"])).toThrow(/--root needs a directory/);
     expect(() => parseArgs(["--latest"])).toThrow(/unknown argument/);

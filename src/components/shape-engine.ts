@@ -34,13 +34,25 @@ export const BREATH_S = 3.4;
 /** How much a breath stretches the body, as a fraction. */
 export const BREATH_AMOUNT = 0.005;
 /** The blink schedule, s. */
-export const BLINK = { first: 1.4, minGap: 1.9, maxGap: 4.6, length: 0.18, closing: 0.45, doubleChance: 0.18, doubleAfter: 0.24, floor: 0.06 } as const;
+export const BLINK = { first: 1.1, minGap: 1, maxGap: 4.2, length: 0.16, closing: 0.45, doubleChance: 0.24, doubleAfter: 0.22, floor: 0.06 } as const;
 /** How far the gaze turns toward the pointer at the edge of its reach (degrees) and how long the turn eases, s. */
 export const HOVER = { yaw: 16, pitch: 13, turn: 0.85 } as const;
 /** The imaginary head's own turn and tilt, degrees: the resting gaze looks back at the viewer through it. */
 export const HEAD = { yaw: 28, pitch: 29 } as const;
 /** The resting face sits a little below the head's middle (degrees of pitch), so the eyes rest about mid-body. */
-export const FACE_DROP = -7;
+export const FACE_DROP = 2;
+/** The eyes' size on the body (2026-10-18: bigger, simpler, readable from the sidebar up). */
+export const EYE_SCALE = { w: 0.92, h: 1.02 } as const;
+/** How much of a face's roll the eyes keep: they stand nearly upright on the turned body. */
+export const EYE_ROLL = 0;
+/** How far apart the eyes sit, on top of each face's own split. */
+export const EYE_SPREAD = 1.32;
+/** How far a turn of the head (a look, the pointer) moves the face's middle across the body. */
+export const EYE_GAZE = 0.55;
+/** The eyes are a little longer than wide scaling alone gives (tall capsules). */
+export const EYE_LENGTH = 1;
+/** Where the face sits on the body before the pose turns it (R): to the right, a little up, so the turned body looks up and to the right. */
+export const EYE_SHIFT = { x: 0.1, y: 0.2 } as const;
 
 
 /* --------------------------------------------------------- expressions */
@@ -296,15 +308,30 @@ function placeEye(yaw: number, pitch: number, roll: number, shape: EyeShape, ope
   const ex: Point = [(across[0] - mid[0]) * kx * turn, (across[1] - mid[1]) * kx * turn];
   const ey: Point = [(up[0] - mid[0]) * k, (up[1] - mid[1]) * k];
   const alpha = clamp01((c[2] - EYE_FADE.hidden) / EYE_FADE.over);
-  const h = Math.max(shape.h * Math.max(open, BLINK.floor), 0.012);
+  const h = Math.max(shape.h * EYE_SCALE.h * EYE_LENGTH * Math.max(open, BLINK.floor), 0.012);
   const tilt = shape.tilt * RAD;
-  const points = stadium(shape.w, h).map(([u, v]) => {
+  const points = stadium(shape.w * EYE_SCALE.w, h).map(([u, v]) => {
     // tilt in the eye's own plane, then lay it on the head (v grows downward, "up" is -v)
     const tu = u * Math.cos(tilt) - v * Math.sin(tilt);
     const tv = u * Math.sin(tilt) + v * Math.cos(tilt);
     return [c[0] + (tu * ex[0] - tv * ey[0]) * alpha, c[1] + (tu * ex[1] - tv * ey[1]) * alpha] as Point;
   });
   return { points, center: [c[0], c[1]], alpha, depth: c[2] };
+}
+
+/** The face's middle at rest (no look, no face of its own), R: where a turn is measured from. */
+const restMids = new Map<number, Point>();
+function solveRest(roll: number): Point {
+  const key = Math.round(roll * 100);
+  const hit = restMids.get(key);
+  if (hit) return hit;
+  const yaw = HEAD.yaw;
+  const pitch = HEAD.pitch + FACE_DROP;
+  const shape = EXPRESSIONS.neutral.left;
+  const a = placeEye(yaw, pitch, roll, shape, 1, { yaw, pitch });
+  if (restMids.size > 500) restMids.clear();
+  restMids.set(key, a.center);
+  return a.center;
 }
 
 /**
@@ -317,20 +344,24 @@ function placeEye(yaw: number, pitch: number, roll: number, shape: EyeShape, ope
 export function solveEyes(radii: Radii, face: Expression, gaze: { yaw: number; pitch: number; roll: number }, open: { left: number; right: number }): [PlacedEye, PlacedEye] {
   const yaw = HEAD.yaw + face.yaw + gaze.yaw;
   const pitch = HEAD.pitch + FACE_DROP + face.pitch + gaze.pitch;
-  const roll = face.roll + gaze.roll;
+  const roll = face.roll * EYE_ROLL + gaze.roll;
   const axes = { yaw, pitch };
-  const left = placeEye(yaw - face.split, pitch, roll, face.left, face.left.open * open.left, axes);
-  const right = placeEye(yaw + face.split, pitch, roll, face.right, face.right.open * open.right, axes);
-  // push out to the outline: the face's middle moves to where the body's radius puts it
+  const split = face.split * EYE_SPREAD;
+  const left = placeEye(yaw - split, pitch, roll, face.left, face.left.open * open.left, axes);
+  const right = placeEye(yaw + split, pitch, roll, face.right, face.right.open * open.right, axes);
+  // the face, seen from the front (2026-10-18): its middle rests at EYE_SHIFT (R, from the
+  // body's middle) and moves from there as much as the head's turn moves it (a look, a
+  // face, the pointer); the eyes keep their own distance from it, the width spread by
+  // the body's own width. The fit below pulls the middle in toward the body's middle.
   const mid: Point = [(left.center[0] + right.center[0]) / 2, (left.center[1] + right.center[1]) / 2];
-  const reach = radiusToward(radii, mid[0], mid[1] || -1e-6);
+  const rest = solveRest(roll);
   const spread = radiusToward(radii, 1, 0) * 0.5 + radiusToward(radii, -1, 0) * 0.5;
   const sx = Math.max(0.35, Math.min(1.25, spread));
-  const sy = Math.max(0.35, Math.min(1.25, reach));
+  const target: Point = [EYE_SHIFT.x + (mid[0] - rest[0]) * EYE_GAZE, EYE_SHIFT.y + (mid[1] - rest[1]) * EYE_GAZE];
   const place = (eyeAt: PlacedEye, s: number): PlacedEye => {
     const [cx, cy] = eyeAt.center;
-    const nx = cx * sx * s;
-    const ny = cy * sy * s;
+    const nx = target[0] * s + (cx - mid[0]) * sx;
+    const ny = target[1] * s + (cy - mid[1]);
     return { ...eyeAt, center: [nx, ny], points: eyeAt.points.map(([x, y]) => [x - cx + nx, y - cy + ny] as Point) };
   };
   const fits = (eyes: PlacedEye[]) => eyes.every((e) => e.alpha <= 0 || e.points.every(([x, y]) => Math.hypot(x, y) <= radiusToward(radii, x, y || -1e-6) - EYE_MARGIN));

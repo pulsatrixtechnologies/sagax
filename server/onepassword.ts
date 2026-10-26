@@ -20,7 +20,7 @@ import { execFile } from "node:child_process";
 import { realpathSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { normalizeVaultDomain, type VaultFillField } from "../shared/credential-vault.ts";
+import { bindingUrl, normalizeVaultDomain, vaultDomainMatches, vaultSiteOf, type VaultFillField } from "../shared/credential-vault.ts";
 import type { OnePasswordRef } from "./credential-vault.ts";
 
 export type OnePasswordVia = "cli" | "connect";
@@ -146,6 +146,8 @@ export function fieldValue(item: unknown, field: VaultFillField): string | null 
     case "apiKey":
       return value(rows.find((row) => row.id === "credential" || String(row.label ?? "").toLowerCase() === "credential"))
         ?? value(rows.find((row) => row.purpose === "PASSWORD"));
+    default:
+      return null;
   }
 }
 
@@ -156,6 +158,7 @@ export class OnePassword {
   private readonly organization: () => boolean;
   private readonly locate: () => Promise<string | null>;
   private cachedStatus: { at: number; status: OnePasswordStatus } | null = null;
+  private siteListCache = new Map<string, { at: number; items: OnePasswordItemSummary[] }>();
 
   constructor(options: { env?: NodeJS.ProcessEnv; exec?: ExecFileFn; fetch?: FetchFn; organization: () => boolean; locate?: () => Promise<string | null> }) {
     this.env = options.env ?? process.env;
@@ -278,6 +281,28 @@ export class OnePassword {
       if (out.length >= MAX_ITEMS) break;
     }
     return out;
+  }
+
+  /** 2026-10-21 (parité R10, ligne 82): the 1Password items a request card
+   * offers for one site, the exact address first, then other addresses of
+   * the same site. Names, vaults and sites only, never a value. */
+  async itemsForSite(domain: string, principalId = "local"): Promise<OnePasswordItemSummary[]> {
+    const wanted = normalizeVaultDomain(domain);
+    if (!wanted) return [];
+    // a card opened, on the computer or the phone, never makes 1Password
+    // list again within 30 s (review of R10)
+    // kept per person: one person's listing never answers another's card
+    let cached = this.siteListCache.get(principalId);
+    if (!cached || Date.now() - cached.at > 30_000) {
+      cached = { at: Date.now(), items: await this.listItems() };
+      if (this.siteListCache.size > 32) this.siteListCache.clear();
+      this.siteListCache.set(principalId, cached);
+    }
+    const items = cached.items.filter((item) => item.domains.length > 0);
+    const direct = items.filter((item) => vaultDomainMatches(item.domains, bindingUrl(wanted)));
+    const site = vaultSiteOf(wanted);
+    const related = site ? items.filter((item) => !direct.includes(item) && item.domains.some((entry) => vaultSiteOf(entry) === site)) : [];
+    return [...direct, ...related].slice(0, 20);
   }
 
   /** One field at fill time. Never cached; null when the item has none. */

@@ -199,7 +199,43 @@ describe("plans", () => {
       expect(() => deletePlan({ registry: incomplete, slug: "acme", keepData: false, layout })).toThrow("operator recovery");
     }
     const two = createPlan({ registry: created.registry, slug: "globex", seed: { admins: ["g@x.test"], members: [] }, now, layout }).registry;
-    expect(argvOf(upgradePlan({ registry: suspendPlan({ registry: two, slug: "globex", layout }).registry }))).toEqual(["npm install -g openmausbot@latest", "systemctl restart openmausbot@acme.service"]);
+    expect(argvOf(upgradePlan({ registry: suspendPlan({ registry: two, slug: "globex", layout }).registry, version: "0.7.1", node: "/usr/bin/node", script: "/usr/lib/node_modules/@pulsatrixtechnologies/sagax/cli.js", layout }))).toEqual([
+      "npm install -g @pulsatrixtechnologies/sagax@0.7.1",
+      "systemctl daemon-reload",
+      "systemctl restart openmausbot@acme.service",
+    ]);
+  });
+
+  it("upgrades to one pinned release of this project's scoped package, never a floating or unscoped one", () => {
+    const one = createPlan({ registry: emptyRegistry("example.test"), slug: "acme", seed: { admins: ["a@b.test"], members: [] }, now, layout }).registry;
+    const running = { ...one, workspaces: { acme: { ...one.workspaces.acme!, status: "running" as const } } };
+    // A fleet first set up from another global package (any unscoped name) is
+    // moved onto the scoped package: same node_modules, new entry.
+    const legacyEntry = "/usr/lib/node_modules/some-cli/cli.js";
+    const steps = upgradePlan({ registry: running, version: "0.7.1", node: "/usr/bin/node", script: legacyEntry, layout });
+    expect(argvOf(steps)[0]).toBe("npm install -g @pulsatrixtechnologies/sagax@0.7.1");
+    const unit = steps.find((step) => step.kind === "write" && step.path === layout.unitFile);
+    expect(unit).toMatchObject({ mode: 0o644, content: expect.stringContaining("ExecStart=/usr/bin/node /usr/lib/node_modules/@pulsatrixtechnologies/sagax/cli.js serve ") });
+    expect(unit && unit.kind === "write" ? unit.content : "").not.toContain(legacyEntry);
+    // The units are rewritten before anything restarts on them.
+    const order = steps.map((step) => (step.kind === "run" ? step.argv.join(" ") : step.kind === "write" ? `write ${step.path}` : step.kind));
+    expect(order.indexOf(`write ${layout.unitFile}`)).toBeLessThan(order.indexOf("systemctl daemon-reload"));
+    expect(order.indexOf("systemctl daemon-reload")).toBeLessThan(order.indexOf("systemctl restart openmausbot@acme.service"));
+    expect(steps.some((step) => step.kind === "write" && step.path === layout.agentUnitFile)).toBe(false);
+
+    // With an operator, the agent unit follows; the agent is not restarted under its own feet.
+    const operated = upgradePlan({ registry: { ...running, operator: "ops" }, version: "1.2.3-rc.1", node: "/usr/bin/node", script: "/opt/node/lib/node_modules/@pulsatrixtechnologies/sagax/cli.js", layout });
+    expect(argvOf(operated)[0]).toBe("npm install -g @pulsatrixtechnologies/sagax@1.2.3-rc.1");
+    expect(operated.find((step) => step.kind === "write" && step.path === layout.agentUnitFile)).toMatchObject({ content: expect.stringContaining("ExecStart=/usr/bin/node /opt/node/lib/node_modules/@pulsatrixtechnologies/sagax/cli.js fleet agent ") });
+    expect(argvOf(operated).some((argv) => argv.includes("fleet.service"))).toBe(false);
+    expect(operated.at(-1)).toMatchObject({ kind: "note", text: expect.stringContaining("restart the fleet agent") });
+
+    for (const version of ["latest", "next", "", "0.7", "^0.7.1", "~0.7.1", ">=0.7.1", "0.7.1 || 1", "v0.7.1", "0.7.1; rm -rf /", "file:/tmp/x.tgz", "github:someone/thing", "../x"]) {
+      expect(() => upgradePlan({ registry: running, version, node: "/usr/bin/node", script: legacyEntry, layout }), version).toThrow("exact release version");
+    }
+    // A checkout is updated in place, not swapped for a package.
+    expect(() => upgradePlan({ registry: running, version: "0.7.1", node: "/usr/bin/node", script: "/opt/src/server/cli.ts", layout })).toThrow("not a global npm install");
+    expect(() => upgradePlan({ registry: running, version: "0.7.1", node: "/usr/bin/node", script: "/opt/src/dist-server/cli.js", layout })).toThrow("not a global npm install");
   });
 
   it("seeds only the trusted portal gateway and reserves the portal hostname", () => {

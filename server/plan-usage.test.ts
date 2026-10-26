@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join, normalize } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  clearPlanUsageAlerts,
   clearPlanUsageCache,
+  newPlanUsageAlerts,
+  planUsageAlertText,
   fetchPlanUsage,
   fileCredentialReader,
   loadPlanUsage,
@@ -419,5 +422,29 @@ describe("plan usage fetcher", () => {
       { id: "codex", name: "Codex", driver: "codex", environment: {}, instanceId: "codex" },
       { id: "grok", name: "Grok", driver: "grok", environment: { GROK_HOME: "/tmp/grok" }, instanceId: "grok" },
     ]);
+  });
+});
+
+describe("plan threshold alerts (J4)", () => {
+  const row = (used: number, resetsAt = "2026-10-27T00:00:00Z") => ({
+    id: "claude", name: "Claude", state: "windows",
+    fiveHour: { available: false, usedPercent: null, remainingPercent: null, resetsAt: null },
+    weekly: { available: true, usedPercent: used, remainingPercent: 100 - used, resetsAt },
+  });
+  const report = (used: number, resetsAt?: string) => ({ fetchedAt: "", providers: [row(used, resetsAt)] }) as never;
+  beforeEach(() => clearPlanUsageAlerts());
+
+  it("warns once at the line, again when spent, and again after the reset", () => {
+    expect(newPlanUsageAlerts(report(79), "p")).toEqual([]);
+    expect(newPlanUsageAlerts(report(82), "p")).toMatchObject([{ window: "weekly", level: "warn", usedPercent: 82 }]);
+    expect(newPlanUsageAlerts(report(90), "p")).toEqual([]);
+    expect(newPlanUsageAlerts(report(100), "p")).toMatchObject([{ level: "limit" }]);
+    expect(newPlanUsageAlerts(report(85, "2026-11-03T00:00:00Z"), "p")).toHaveLength(1);
+    expect(newPlanUsageAlerts(report(85, "2026-11-03T00:00:00Z"), "other")).toHaveLength(1);
+  });
+
+  it("uses the configured line", () => {
+    expect(newPlanUsageAlerts(report(60), "p", 50)).toHaveLength(1);
+    expect(planUsageAlertText({ providerId: "c", provider: "Claude", window: "weekly", level: "warn", usedPercent: 82, resetsAt: null }).title).toBe("Claude: 82% of your weekly limit used");
   });
 });

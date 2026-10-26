@@ -38,6 +38,8 @@ const TRANSIENT_PATTERNS: Array<{ pattern: RegExp; reason: TransientReason }> = 
   { pattern: /\b(?:429|rate.?limit|too many requests)\b/i, reason: "rate_limited" },
   { pattern: /\boverloaded\b|\bcapacity\b/i, reason: "overloaded" },
   { pattern: /\b5\d{2}\b|\binternal server error\b|\bbad gateway\b|\bservice unavailable\b/i, reason: "server_error" },
+  // Codex's ChatGPT workspace routing lookup (codex-cli 0.160); only its "unauthorized" variant is a sign-in problem.
+  { pattern: /\bworkspace routing discovery (?:failed|timed out)\b/i, reason: "server_error" },
   {
     pattern:
       /\b(?:econnreset|econnrefused|epipe|etimedout|eai_again|connection reset|connection refused|socket hang up|network error|fetch failed)\b/i,

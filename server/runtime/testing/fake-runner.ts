@@ -62,7 +62,7 @@ export const handOut = (children: ChildSpec[], after: Script): Script => ({ kind
 export const hang = (): Script => ({ kind: "hang" });
 export const custom = (fn: (ctx: TurnContext) => RunResult | Promise<RunResult>): Script => ({ kind: "custom", fn });
 
-export type RunnerMethod = "validate" | "canStart" | "run" | "park" | "report" | "changed" | "names" | "outward";
+export type RunnerMethod = "validate" | "canStart" | "run" | "park" | "remind" | "report" | "changed" | "names" | "outward";
 
 export interface RunnerCall {
   method: RunnerMethod;
@@ -274,6 +274,10 @@ export class FakeRunner implements TurnRunner {
     this.#maybeThrow("park");
     this.calls.push({ method: "park", id: a.id, a: clone(a), question });
     this.parked.add(a.id);
+  }
+
+  remind(a: Assignment, question: string): void {
+    this.calls.push({ method: "remind", id: a.id, a: clone(a), question });
   }
 
   report(a: Assignment, parent?: Assignment): void {

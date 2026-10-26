@@ -7,50 +7,6 @@
 // this build has never heard of must still decode and still read as itself.
 import Foundation
 
-// MARK: - Connector card (`kind: "connector"`)
-
-/// `ConnectorCardData` in `shared/wire.ts`: a bot asked to connect an app
-/// (Composio toolkit) from inside the conversation.
-public struct ConnectorRequestCard: Codable, Hashable, Sendable {
-    public enum Status: String, Sendable {
-        case required, authorizing, connected, failed
-    }
-
-    public var slug: String
-    public var label: String
-    public var description: String
-    /// Raw on purpose; see `state`.
-    public var status: String
-    /// Cards created by one agent request resume together after all connect.
-    public var resumeKey: String
-    public var alias: String?
-    public var error: String?
-    public var dismissed: Bool?
-    public var resumed: Bool?
-
-    public init(
-        slug: String, label: String, description: String, status: String, resumeKey: String,
-        alias: String? = nil, error: String? = nil, dismissed: Bool? = nil, resumed: Bool? = nil
-    ) {
-        self.slug = slug
-        self.label = label
-        self.description = description
-        self.status = status
-        self.resumeKey = resumeKey
-        self.alias = alias
-        self.error = error
-        self.dismissed = dismissed
-        self.resumed = resumed
-    }
-
-    public var state: Status? { Status(rawValue: status) }
-
-    /// Still asking: not connected, not put away, not already resumed.
-    public var isPending: Bool {
-        dismissed != true && resumed != true && state != .connected
-    }
-}
-
 // MARK: - Access card (`kind: "access"`)
 
 /// `WireAccessCard` in `shared/wire.ts`: a turn that could not run for lack

@@ -385,6 +385,7 @@ describe("iOS parity routes", () => {
       ["GET", "/api/settings/bot"], ["PUT", "/api/settings/bot"],
       ["GET", "/api/auto-review/rules"], ["DELETE", "/api/auto-review/rules/command.bot_1.0b1c"],
       ["GET", "/api/computer/status"], ["POST", "/api/computer/update"], ["POST", "/api/computer/reset"],
+      ["GET", "/api/computer/maintenance"], ["PUT", "/api/computer/maintenance"],
       ["GET", "/api/plugins/search"], ["GET", "/api/plugins/installed"], ["POST", "/api/plugins/install"],
       ["POST", "/api/mcp/servers/notion/oauth/start"], ["GET", "/api/mcp/servers/notion/oauth/status"],
       ["DELETE", "/api/me"],
@@ -402,6 +403,7 @@ describe("iOS parity routes", () => {
     for (const [method, path] of [
       ["POST", "/api/auth/session"], ["DELETE", "/api/bots/bot_1/links"], ["GET", "/api/bots/bot_1/export"],
       ["DELETE", "/api/settings/bot"], ["POST", "/api/auto-review/rules"], ["POST", "/api/computer/status"],
+      ["POST", "/api/computer/maintenance"], ["GET", "/api/computer/disk-saver"], ["POST", "/api/computer/disk-saver"],
       ["POST", "/api/mcp/servers/notion/oauth/disconnect"], ["POST", "/api/mcp/servers"], ["DELETE", "/api/mcp/servers/notion"], ["GET", "/api/me"],
       ["POST", "/api/usage"], ["GET", "/api/usage.csv"], ["PATCH", "/api/bots/bot_1/soul"], ["POST", "/api/bots/bot_1/command-allowlist"],
       ["DELETE", "/api/me/preferences"], ["DELETE", "/api/me/appearance"], ["POST", "/api/me/appearance"], ["DELETE", "/api/groups/room_1"], ["POST", "/api/me/server-environment/delete"],

@@ -37,6 +37,8 @@ export async function connectFakeDesktop(options: {
   cookie: string;
   name?: string;
   attachmentsDir?: string;
+  /** The platform the app reports (default linux). */
+  platform?: "darwin" | "win32" | "linux";
   handle?: (operation: Operation, progress: (message: string) => Promise<void>) => Promise<ToolResult> | ToolResult;
   /** Where the tunnel connects for a host:port; null refuses (outside-lan). */
   resolve?: (host: string, port: number) => { host: string; port: number } | null;
@@ -52,7 +54,7 @@ export async function connectFakeDesktop(options: {
     return parsed;
   };
   await post("/api/desktop-bridge/connect", {
-    id, name: options.name ?? "Fake desktop", platform: "linux", attachmentsDir: options.attachmentsDir ?? "/tmp/sagax-fake/attachments",
+    id, name: options.name ?? "Fake desktop", platform: options.platform ?? "linux", attachmentsDir: options.attachmentsDir ?? "/tmp/sagax-fake/attachments",
     capabilities: { shell: true, files: true, fetch: true, browser: true, computer: false, localVm: true },
   });
   const operations: Operation[] = [];

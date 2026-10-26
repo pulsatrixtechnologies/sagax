@@ -5,7 +5,11 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { createPortal } from "react-dom";
 import {
   Archive,
+  ArrowDown,
+  ArrowUp,
   BellDot,
+  CheckCheck,
+  ListChecks,
   Check,
   ChevronRight,
   ClipboardCopy,
@@ -32,20 +36,20 @@ import {
   Users,
   X,
   PictureInPicture2,
-  LayoutGrid,
   UserRoundPen,
 } from "lucide-react";
-import { api, openBotCatalog, useStore, formatTime, visibleMessages, currentTaskBot, botOpensTo, openBot, startNewTopic, type AppState, type Bot, type BotProject, type ConfigStatus, type FolderOwnerKind, type Group, type GroupTaskUpdatePatch, type InstanceInfo, type Message } from "@/state/store";
+import { api, useStore, formatTime, visibleMessages, currentTaskBot, botOpensTo, openBot, startNewTopic, type AppState, type Bot, type BotProject, type ConfigStatus, type FolderOwnerKind, type Group, type GroupTaskUpdatePatch, type InstanceInfo, type Message } from "@/state/store";
 
 import { peerLine } from "@/lib/peer-message";
 import { viewerMayDeleteGroup, viewerOwnsGroup } from "@/lib/group-owner";
 import { otherAuthorName, viewerActorId } from "@/lib/viewer";
 import { showBotArchive, showBotDelete, showBotRename, showServerSectionMove } from "@/lib/bot-capabilities";
+import { viewerLocalBotSettings } from "@/lib/viewer-bot-overrides";
+import { ModelPicker } from "./ModelPicker";
 import { llmThreadTitlesEnabled } from "@/lib/feature-flags";
 import { templatesEntryActions } from "@/lib/templates-entry";
 import { useAdvancedMode } from "@/lib/interface-mode";
 
-import { InitialsAvatar } from "./Avatar";
 import { SidebarMascotAvatar, SidebarMascotProvider } from "./SidebarMascotAvatar";
 import { stateForBot } from "@/lib/mascot";
 import { mascotRowAnimated } from "@/lib/mascot-animate";
@@ -71,6 +75,9 @@ import { ChevronsRight, Eye, UserRound } from "lucide-react";
 import { entriesToUnhide, hiddenKey, hiddenKeySet, hideFromSidebar, showInSidebar, useSidebarHidden } from "@/lib/sidebar-hidden";
 import { closedDmToReopen, groupHiddenKey, hiddenSidebarRows, withoutHiddenEntries } from "@/lib/sidebar-hidden-entries";
 import { PersonAvatar } from "./MessageAuthor";
+import { SidebarSharerBadge } from "./SidebarSharerBadge";
+import { botSharer } from "@/lib/bot-sharer";
+import { presenceLabel, usePresence } from "@/lib/presence";
 import { OrgSectionMenuItems, SectionNameInput, orgSectionMenuItems, type OrgSectionMenuActions } from "./OrgSectionMenu";
 import {
   EMPTY_PERSONAL_SECTIONS,
@@ -111,7 +118,7 @@ import { newThreadChoices, type NewThreadChoice } from "@/lib/confidential-threa
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { draggedFolder, draggedThread, FOLDER_DRAG_TYPE, THREAD_DRAG_TYPE, moveFolder, placeFolder } from "@/lib/folder-order";
 import { addBotCalendarDrag } from "@/lib/bot-drag";
-import { folderUnreadThreadIds, markFolderRead, markGroupFolderRead } from "@/lib/folder-read";
+import { folderUnreadThreadIds, markBotRead, markFolderRead, markGroupFolderRead } from "@/lib/folder-read";
 import { personPickerThreads } from "@/lib/person-threads";
 import { approvalModeFor } from "../../shared/approval-mode";
 import { liveActivityLabel } from "@/lib/live-activity";
@@ -147,7 +154,6 @@ import {
   partitionSidebarGroups,
   placeSection,
   sameSectionOrder,
-  sidebarConnectorPreview,
   sidebarGoalRunPreview,
   sidebarLayoutInteractive,
   sidebarSectionCollapsed,
@@ -160,19 +166,17 @@ import { buildTeamMapSections } from "@/lib/team-map";
 import { sidebarSectionAttention } from "@/lib/sidebar-attention";
 import { botListItemPointerIntent } from "@/lib/sidebar-selection";
 import { phoneSettingsAction, SidebarPhoneButton } from "./SidebarPhoneButton";
-import { SidebarPlaces } from "./SidebarPlaces";
 import { PulsatrixMark } from "./PulsatrixMark";
 import type { SidebarMenuItem } from "./SidebarPopoverMenu";
 import { roomSpeakerIds, roomThreadSpeakerId, roomThreadWorking } from "@/lib/room-threads";
 
-import { profileInitials, SidebarProfileMenu, SidebarRoutinesBadge } from "./SidebarProfileMenu";
-import { SidebarConnectApps } from "./ConnectAppsPill";
+import { SidebarProfileMenu, SidebarRoutinesBadge } from "./SidebarProfileMenu";
 import { SidebarUpdatePill } from "./SidebarUpdatePill";
 import { SidebarSectionHeader } from "./SidebarSectionHeader";
 import { useShowThreads, useThreadsLocationChoice } from "@/lib/thread-preferences";
 import { openBotConversationActions } from "./thread-home";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
-import { botShowsUnread, isInterBotThread } from "@/lib/bot-unread";
+import { botShowsUnread, isInterBotThread, offscreenUnread, toggleSelected } from "@/lib/bot-unread";
 import { SidebarBotActivity, sidebarBotActivityTasks } from "./SidebarBotActivity";
 import { citationPreviewText } from "@/lib/citations";
 import { groupMemberBots } from "@/lib/group-members";
@@ -292,7 +296,6 @@ function preview(bot: Bot, visible: Message[], instances: InstanceInfo[]): strin
   // a failed turn reads as the chat row says it, never "error: …"
   if (last.kind === "activity" && last.tool) return activityPreview(last.tool, botEngine(bot, instances), last.dataResult);
   if (last.kind === "screen") return t("sidebar.preview.screenFrame");
-  if (last.kind === "connector" && last.connector) return sidebarConnectorPreview(last.connector, t);
   // one line of what the reply says, never the Markdown that draws it
   // (`**[repo](https://…)**` reads as "repo")
   const peer = peerLine(last);
@@ -339,9 +342,7 @@ export function groupPreview(group: Group, bots: Bot[], config: ConfigStatus | n
     ? activityPreview(last.tool, botEngine(bots.find((bot) => bot.id === last.from?.botId), instances), last.dataResult)
     : last.kind === "goal.run" && last.goalRun
       ? sidebarGoalRunPreview(last.goalRun)
-      : last.kind === "connector" && last.connector
-        ? sidebarConnectorPreview(last.connector, t)
-        : (last.text ?? "");
+      : (last.text ?? "");
   const readable = plainPreviewText(citationPreviewText(text));
   if (last.role === "user") {
     // Someone else's words (src/lib/viewer.ts): a direct conversation's row
@@ -433,6 +434,8 @@ export function GroupListItem({
   const orgPeople = useOrgPeople();
   const peer = peopleDmPeer(group, viewerActorId(state.config), orgPeople);
   const rowName = peer?.name ?? group.name;
+  // The person's presence, also in the rail's accessible name (no text there).
+  const peerPresence = usePresence(peer?.id);
   // No achievement title or points here: they live in the person panel.
   const previewShown = !expanded && (!quiet || groupStatus);
   return (
@@ -467,7 +470,7 @@ export function GroupListItem({
         selected && !expanded ? "bg-sidebar-selected" : "hover:bg-sidebar-hover",
       )}
       title={density === "icons" ? rowName : undefined}
-      aria-label={density === "icons" ? [rowName, groupStatus ? t("chat.activity.working") : null, group.unread ? t("task.unread") : null].filter(Boolean).join(" · ") : undefined}
+      aria-label={density === "icons" ? [rowName, peerPresence ? presenceLabel(peerPresence) : null, groupStatus ? t("chat.activity.working") : null, group.unread ? t("task.unread") : null].filter(Boolean).join(" · ") : undefined}
       data-people-dm={peer ? peer.id : undefined}
     >
       {peer
@@ -1170,7 +1173,10 @@ export function BotContextMenu({
   onReplacePrimary,
   variant = "sidebar",
   onEditPersona,
+  onSelect,
 }: {
+  /** Starts a multi-selection with this bot (the sidebar row menu only). */
+  onSelect?: (botId: string) => void;
   menu: MenuState | null;
   onClose: () => void;
   onArchive?: (bot: Bot) => void;
@@ -1401,6 +1407,7 @@ export function BotContextMenu({
       { id: "pin" },
     ),
     ...(moveItem ? [moveItem] : []),
+    ...(onSelect && variant === "sidebar" ? [item(<ListChecks size={16} className="text-ink" />, t("sidebar.select.start"), () => onSelect(bot.id), { id: "select" })] : []),
     divider("d-name"),
     ...(canRename ? [item(<Pencil size={16} className="text-ink" />, t("persona.menu.rename"), () => onRename(bot.id), { id: "rename" })] : []),
     editItem,
@@ -1928,9 +1935,12 @@ export function BotListItem({
   onMenu,
   startRename = false,
   onRenameStarted,
+  selection,
 }: {
   bot: Bot;
   density: SidebarDensity;
+  /** Multi-select: while `active`, a click toggles the row instead of opening it. */
+  selection?: { active: boolean; selected: boolean; onToggle: () => void };
   query?: string;
   /** Quiet rows: name and status only (see sidebar-preferences). */
   quiet?: boolean;
@@ -1966,35 +1976,47 @@ export function BotListItem({
   const title = bot.title.trim();
   const unreadThreads = !iconOnly && showThreads ? sidebarUnreadThreads(bot, selected ? bot.threadId : null) : [];
   const rowClass = cn(
-    "flex w-full items-center text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/60",
+    "flex items-center text-left outline-none focus-visible:ring-1 focus-visible:ring-accent/60",
     iconOnly
-      ? "justify-center rounded-lg px-1 py-1.5"
-      : comfortable
+      // Grok Bot's rail: a 54px square, 9px around the 36px portrait
+      ? "mx-auto h-[54px] w-[54px] shrink-0 justify-center rounded-[10px] p-[9px]"
+      : cn("w-full", comfortable
         ? "h-[54px] gap-2 rounded-[10px] py-2 pl-2 pr-2"
-        : "gap-2 rounded-lg py-1.5 pl-2 pr-9",
+        : "gap-2 rounded-lg py-1.5 pl-2 pr-9"),
     // room for New thread and the "..." while they show (hover, focus, touch)
-    !iconOnly && "group-hover:pr-[64px] group-focus-within:pr-[64px] max-md:pr-[64px] touch:pr-[64px]",
+    !iconOnly && !selection?.active && "group-hover:pr-[64px] group-focus-within:pr-[64px] max-md:pr-[64px] touch:pr-[64px]",
+    // room for the selection check
+    !iconOnly && selection?.active && "pr-9",
     // The Primary Bot is called out by the star on its avatar, not by
     // tinting the whole row.
-    selected ? "bg-sidebar-selected" : "hover:bg-sidebar-hover",
+    selected || selection?.selected ? "bg-sidebar-selected" : "hover:bg-sidebar-hover",
   );
   const activityTasks = sidebarBotActivityTasks(bot, pendingQueued);
   const waiting = bot.activity === "waiting-on-you" || activityTasks.some((task) => task.activity === "waiting-on-you");
   // Real work in a sibling still outranks an idle coordination wait.
   const working = !waiting && (Boolean(bot.busy) || activityTasks.some((task) => task.busy || task.activity === "working"));
+  // A routine run is shown in Automations, not in the sidebar: while the bot's
+  // open thread is only a run's thread, its work keeps the mascot dot but
+  // leaves the row's status line alone.
+  const routineOnlyWork = working && Boolean(bot.tasks?.some((task) => task.threadId === bot.threadId && task.routineRunId))
+    && !activityTasks.some((task) => task.busy || task.activity === "working");
+  const lineWorking = working && !routineOnlyWork;
   const teammateWait = !waiting && !working && (Boolean(bot.waitingForTeammates) || activityTasks.some((task) => Boolean(task.waitingForTeammates)));
   const queued = activityTasks.some((task) => task.queued);
   const unread = botShowsUnread(bot);
   // quiet rows drop the last-message preview but keep a line that reports
   // something happening now; an idle bot is just its name
-  const statusLine = deleting || working || waiting || teammateWait || queued;
+  const statusLine = deleting || lineWorking || waiting || teammateWait || queued;
   // The viewer's own Primary Bot wears the orange star at the avatar's
   // bottom-right corner; a status dot then sits at the top-right instead.
   const primary = isViewersPrimaryBot(bot, orgViewerId(state));
-  const dotCorner = primary ? "-top-0.5" : "-bottom-0.5";
+  // A bot shared with the viewer wears its sharer's face at the bottom-right
+  // (as in Browse Bots), so the status dot moves up, like beside the star.
+  const sharer = botSharer(bot, orgViewerId(state), useOrgPeople());
+  const dotCorner = primary || sharer ? "-top-0.5" : "-bottom-0.5";
   // Grok Bot marks an unread bot with a blue dot at the row's end, the name
   // keeps its weight.
-  const trailingDot = !iconOnly && unread && !renaming && !deleting;
+  const trailingDot = !iconOnly && unread && !renaming && !deleting && !selection?.active;
   const body = (
     <>
       {/* flex, not inline: an inline wrapper adds a baseline gap under the
@@ -2019,6 +2041,7 @@ export function BotListItem({
             signal in icons-only density, where the text is hidden. */}
         {working && <StatusDot tone="success" testId="working-dot" className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
         {waiting && <StatusDot tone="warning" testId="waiting-dot" role="status" label={t("sidebar.preview.waiting")} className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
+        {sharer && !primary && <SidebarSharerBadge sharer={sharer} avatarSize={avatarSize} />}
         {teammateWait && <StatusDot tone="accent" testId="teammate-wait-dot" role="status" label={t("sidebar.preview.waitingOnTeammate")} className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
         {!teammateWait && !waiting && !working && queued && <StatusDot tone="queued" testId="queued-dot" role="status" label={t("task.queued")} className={cn("absolute -right-0.5", dotCorner)} sizeClassName={iconOnly ? "size-3" : "size-2.5"} />}
       </span>
@@ -2058,7 +2081,7 @@ export function BotListItem({
             </span>
           ) : (
             <span className="flex min-h-[18px] min-w-0 items-center gap-1.5 truncate text-[13px] leading-[18px] text-sidebar-ink-secondary">
-              {working ? (
+              {lineWorking ? (
                 // the same typing dots as the chat header; sized to the text's
                 // line box so the row does not jump when work starts or ends
                 <span className="flex h-[18px] items-center" role="status">
@@ -2066,7 +2089,7 @@ export function BotListItem({
                   <span className="sr-only">{t("sidebar.preview.working")}</span>
                 </span>
               ) : (
-                <span dir="auto" className="truncate">{waiting ? t("sidebar.preview.waiting") : teammateWait ? t("sidebar.preview.waitingOnTeammate") : queued ? t("task.queued") : preview(bot, visible, instances)}</span>
+                <span dir="auto" className="truncate">{waiting ? t("sidebar.preview.waiting") : teammateWait ? t("sidebar.preview.waitingOnTeammate") : queued ? t("task.queued") : preview(routineOnlyWork ? { ...bot, busy: false } : bot, visible, instances)}</span>
               )}
             </span>
           )}
@@ -2087,6 +2110,12 @@ export function BotListItem({
   });
   const onSelect = (event: React.MouseEvent) => {
     if (renaming) return;
+    // Cmd/Ctrl-click starts a selection; once one is open, a click joins it.
+    if (selection && (selection.active || event.metaKey || event.ctrlKey || event.shiftKey)) {
+      event.preventDefault();
+      selection.onToggle();
+      return;
+    }
     const insideRenameInput = event.target instanceof HTMLInputElement;
     if (botListItemPointerIntent(event.type, insideRenameInput) === "select") openConversation();
   };
@@ -2112,13 +2141,16 @@ export function BotListItem({
             : undefined
         }
         aria-busy={deleting || undefined}
-        aria-current={selected && !renaming ? "page" : undefined}
+        aria-current={selected && !renaming && !selection?.active ? "page" : undefined}
+        aria-pressed={selection?.active ? selection.selected : undefined}
         data-sidebar-bot-row={bot.id}
+        data-sidebar-unread={unread ? "" : undefined}
         onClick={onSelect}
         onKeyDown={(event) => {
           if (renaming) return;
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
+            if (selection?.active) { selection.onToggle(); return; }
             openConversation();
           }
         }}
@@ -2130,10 +2162,15 @@ export function BotListItem({
       {trailingDot && (
         <span data-sidebar-unread-dot aria-hidden="true" className="absolute right-2 top-1/2 size-2 -translate-y-1/2 rounded-full bg-unread pointer-events-none transition-opacity group-hover:opacity-0 group-focus-within:opacity-0 max-md:opacity-0 touch:opacity-0" />
       )}
+      {selection?.active && !renaming && (
+        <span data-sidebar-select-mark aria-hidden="true" className={cn("pointer-events-none absolute top-1/2 flex size-[18px] -translate-y-1/2 items-center justify-center rounded-full border", iconOnly ? "right-1 top-3" : "right-3", selection.selected ? "border-accent bg-accent text-accent-ink" : "border-sidebar-ink-secondary/60")}>
+          {selection.selected && <Check size={12} strokeWidth={3} />}
+        </span>
+      )}
       {!renaming && iconOnly && unread && (
         <span className="pointer-events-none absolute bottom-1.5 right-1.5 size-2 rounded-full border border-sidebar bg-unread" />
       )}
-      {!renaming && !deleting && !iconOnly && <>
+      {!renaming && !deleting && !iconOnly && !selection?.active && <>
         {/* direct New thread, beside the "..." (JC, 2026-10-15) */}
         {showThreads && <button type="button" data-sidebar-bot-new-thread={bot.id} aria-label={t("task.newShort")} title={t("task.newShort")}
           onClick={() => dispatch({ type: "newTask", botId: bot.id })}
@@ -2487,6 +2524,77 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [renameBotId, setRenameBotId] = useState<string | null>(null);
   const [sectionPicker, setSectionPicker] = useState<MenuState | null>(null);
+  // Multi-select (Cmd/Ctrl-click or "Select" in a row's menu): grouped actions
+  // on bots. `selecting` stays on while the bar is open, even at zero.
+  const [selecting, setSelecting] = useState(false);
+  const [selectedBotIds, setSelectedBotIds] = useState<string[]>([]);
+  const [batchModel, setBatchModel] = useState(false);
+  const [batchSectionPicker, setBatchSectionPicker] = useState<MenuState | null>(null);
+  const [batchArchiveConfirm, setBatchArchiveConfirm] = useState(false);
+  const clearSelection = () => {
+    setSelecting(false);
+    setSelectedBotIds([]);
+    setBatchSectionPicker(null);
+  };
+  // Unread bots scrolled out of the list: the "more unread" pills.
+  const [moreUnread, setMoreUnread] = useState({ above: 0, below: 0 });
+  const measureUnread = useCallback(() => {
+    const list = listFade.ref.current;
+    if (!list) return;
+    const view = list.getBoundingClientRect();
+    const rows = Array.from(list.querySelectorAll<HTMLElement>("[data-sidebar-bot-row]")).map((row) => {
+      const box = row.getBoundingClientRect();
+      return { top: box.top, bottom: box.bottom, unread: row.hasAttribute("data-sidebar-unread") };
+    });
+    const { above, below } = offscreenUnread(rows, { top: view.top, bottom: view.bottom });
+    setMoreUnread((prev) => (prev.above === above && prev.below === below ? prev : { above, below }));
+  }, [listFade.ref]);
+  const jumpToUnread = (direction: "above" | "below") => {
+    const list = listFade.ref.current;
+    if (!list) return;
+    const view = list.getBoundingClientRect();
+    const rows = Array.from(list.querySelectorAll<HTMLElement>("[data-sidebar-bot-row][data-sidebar-unread]"));
+    const offscreen = rows.filter((row) => {
+      const box = row.getBoundingClientRect();
+      const middle = (box.top + box.bottom) / 2;
+      return direction === "above" ? middle < view.top : middle > view.bottom;
+    });
+    const target = direction === "above" ? offscreen[offscreen.length - 1] : offscreen[0];
+    target?.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
+  const selectionFor = (botId: string) => ({
+    active: selecting,
+    selected: selectedBotIds.includes(botId),
+    onToggle: () => {
+      setSelecting(true);
+      setSelectedBotIds((current) => toggleSelected(current, botId));
+    },
+  });
+  // The pills follow the list: bots changing, the window resizing, a row
+  // opening or closing. Plain scrolling is measured by the list's onScroll.
+  useLayoutEffect(() => {
+    measureUnread();
+    const list = listFade.ref.current;
+    if (!list || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measureUnread);
+    observer.observe(list);
+    for (const child of Array.from(list.children)) observer.observe(child);
+    return () => observer.disconnect();
+  }, [measureUnread, state.bots, state.groups, selecting]);
+  // The rail has no bar: leaving the wide sidebar ends the selection.
+  useEffect(() => {
+    if (density === "icons" && selecting) clearSelection();
+  });
+  // Escape leaves the selection (unless a menu or dialog already took it).
+  useEffect(() => {
+    if (!selecting) return;
+    const onKey = (event: KeyboardEvent) => {
+      const typing = event.target instanceof HTMLElement && (event.target.isContentEditable || ["INPUT", "TEXTAREA"].includes(event.target.tagName));
+      if (event.key === "Escape" && !typing && !event.defaultPrevented && !document.querySelector("[role=dialog], [role=menu], [data-section-picker]")) clearSelection();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  });
 
   const [teamMenu, setTeamMenu] = useState<{ name: string; x: number; y: number } | null>(null);
   const [teamSettings, setTeamSettings] = useState<string | null>(null);
@@ -3090,8 +3198,17 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
         )}
       </div>
 
+      {density !== "icons" && moreUnread.above > 0 && (
+        <div className="relative z-10 h-0">
+          <button type="button" data-sidebar-more-unread="above" onClick={() => jumpToUnread("above")}
+            aria-label={t("sidebar.unreadAbove", { count: moreUnread.above })}
+            className="absolute left-1/2 top-1 flex whitespace-nowrap -translate-x-1/2 items-center gap-1 rounded-full bg-unread px-2.5 py-1 text-[12px] font-medium leading-4 text-accent-ink shadow-md hover:brightness-110">
+            <ArrowUp size={12} aria-hidden="true" />{t("sidebar.unreadAbove", { count: moreUnread.above })}
+          </button>
+        </div>
+      )}
       {/* Bot list. GET /api/org 404 keeps this roster. */}
-      <div ref={listFade.ref} onScroll={listFade.onScroll} style={listFade.style} className={cn("flex-1 overflow-y-auto pb-6 pt-1", density === "icons" ? "px-2" : "pl-3 pr-[13px]")}
+      <div ref={listFade.ref} onScroll={() => { listFade.onScroll(); measureUnread(); }} style={listFade.style} className={cn("flex-1 overflow-y-auto overflow-x-hidden pb-6 pt-1", density === "icons" ? "px-2" : "pl-3 pr-[13px]")}
         data-sidebar-rail={density === "icons" ? "" : undefined}
         onKeyDown={density === "icons" ? moveRailFocus : undefined}
         onContextMenu={orgMode ? (event) => { if (event.target === event.currentTarget || (event.target as HTMLElement).dataset?.sidebarEmpty !== undefined) openOrgMenu(event, null, null); } : undefined}>
@@ -3115,20 +3232,23 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
                   aria-current={selected ? "page" : undefined}
                   className={cn(
                     density === "icons"
-                      ? "flex w-20 min-w-0 flex-col items-center gap-1.5 rounded-xl px-1 pb-1 pt-1.5"
-                      // the selected tile is a neutral lighter card with a
-                      // 16px radius
-                      // Grok Bot's pinned tile: 6px over a 60px portrait, 6px
-                      // between portrait, name and role, 4px under, 8px aside
-                      : "flex w-[95px] shrink-0 flex-col items-center gap-1.5 rounded-2xl px-1 pb-1 pt-1.5",
+                      ? "mx-auto flex w-full min-w-0 flex-col items-center gap-1.5 rounded-xl px-1 pb-1 pt-1.5"
+                      // Grok Bot's pinned tile: 95px wide, 10px corners,
+                      // 6px over a 60px portrait, 6px to the name, 4px
+                      // between name and role, 4px under, 8px aside
+                      : "flex w-[95px] shrink-0 flex-col items-center gap-1.5 rounded-[10px] px-2 pb-1 pt-1.5",
                     density === "icons"
                       ? selected ? "bg-sidebar-selected" : "hover:bg-sidebar-hover"
                       : selected ? "bg-sidebar-card" : "hover:bg-sidebar-hover/60",
                   )}
                 >
                   <SidebarMascotAvatar botId={bot.id} bot={bot} primary={isViewersPrimaryBot(bot, viewerId)} primaryRingClassName={selected && density !== "icons" ? "ring-sidebar-card" : "ring-sidebar"} state="idle" size={density === "icons" ? 36 : 60} animated={false} />
-                  {density !== "icons" && <span className="w-full truncate text-center text-[12px] leading-4 text-sidebar-ink">{bot.name}</span>}
-                  {density !== "icons" && title ? <BotRoleTag text={title} tile /> : null}
+                  {density !== "icons" && (
+                    <span data-sidebar-tile-labels="" className="flex w-full min-w-0 flex-col items-center gap-1">
+                      <span className="w-full truncate text-center text-[12px] leading-4 text-sidebar-ink">{bot.name}</span>
+                      {title ? <BotRoleTag text={title} tile /> : null}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -3222,6 +3342,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
                           onMenu={setMenu}
                           startRename={renameBotId === bot.id}
                           onRenameStarted={() => setRenameBotId(null)}
+                          selection={selectionFor(bot.id)}
                         />
                       </div>
                     ))}
@@ -3246,6 +3367,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
                           onMenu={setMenu}
                           startRename={renameBotId === bot.id}
                           onRenameStarted={() => setRenameBotId(null)}
+                          selection={selectionFor(bot.id)}
                         />
                       </div>
                     ))}
@@ -3283,6 +3405,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
                           onMenu={setMenu}
                           startRename={renameBotId === bot.id}
                           onRenameStarted={() => setRenameBotId(null)}
+                          selection={selectionFor(bot.id)}
                         />
                       </div>
                     ))}
@@ -3295,9 +3418,52 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           {density !== "icons" && <HiddenEntriesRow rows={hiddenSidebarRows(sidebarHidden.items, { bots: state.bots, groups: state.groups, viewerId, people: sidebarPeople })} />}
         </div>
       </div>
+      {density !== "icons" && moreUnread.below > 0 && (
+        <div className="relative z-10 h-0">
+          <button type="button" data-sidebar-more-unread="below" onClick={() => jumpToUnread("below")}
+            aria-label={t("sidebar.unreadBelow", { count: moreUnread.below })}
+            className="absolute bottom-2 left-1/2 flex whitespace-nowrap -translate-x-1/2 items-center gap-1 rounded-full bg-unread px-2.5 py-1 text-[12px] font-medium leading-4 text-accent-ink shadow-md hover:brightness-110">
+            <ArrowDown size={12} aria-hidden="true" />{t("sidebar.unreadBelow", { count: moreUnread.below })}
+          </button>
+        </div>
+      )}
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {reorderAnnouncement}
       </p>
+      {selecting && density !== "icons" && (() => {
+        const chosen = selectedBotIds.flatMap((id) => state.bots.filter((bot) => bot.id === id));
+        const count = chosen.length;
+        const allPinned = count > 0 && chosen.every((bot) => bot.pinned);
+        const canMove = showServerSectionMove(state.config, personal !== null);
+        const archivable = chosen.filter((bot) => currentArchivableBot(state.bots, bot.id));
+        const button = "flex h-8 min-w-0 flex-1 items-center justify-center rounded-full text-sidebar-ink-secondary hover:bg-sidebar-hover hover:text-sidebar-ink disabled:pointer-events-none disabled:opacity-40";
+        return (
+          <div className="px-4 pb-2">
+          <div data-sidebar-select-bar role="toolbar" aria-label={t("sidebar.select.count", { count })} className="flex h-9 w-full items-center justify-evenly rounded-full border border-sidebar-hairline-weak bg-sidebar-card px-1">
+            <button type="button" className={button} disabled={count === 0} title={t("sidebar.select.markRead")} aria-label={t("sidebar.select.markRead")}
+              onClick={() => {
+                for (const bot of chosen) {
+                  void markBotRead(bot, api, (updated) => dispatch({ type: "botPatched", bot: updated }))
+                    .catch((cause) => dispatch({ type: "error", message: cause instanceof Error ? cause.message : String(cause) }));
+                }
+                clearSelection();
+              }}><CheckCheck size={16} /></button>
+            <button type="button" className={button} disabled={count === 0} title={allPinned ? t("sidebar.bot.unpin") : t("sidebar.bot.pin")} aria-label={allPinned ? t("sidebar.bot.unpin") : t("sidebar.bot.pin")}
+              onClick={() => {
+                for (const bot of chosen) dispatch({ type: "updateBot", botId: bot.id, patch: { pinned: !allPinned } });
+                clearSelection();
+              }}>{allPinned ? <PinOff size={16} /> : <Pin size={16} />}</button>
+            <button type="button" data-sidebar-select-model className={button} disabled={chosen.every((bot) => viewerLocalBotSettings(state.config, bot))} title={t("sidebar.select.model")} aria-label={t("sidebar.select.model")} aria-haspopup="dialog"
+              onClick={() => setBatchModel(true)}><SlidersHorizontal size={16} /></button>
+            {canMove && <button type="button" className={button} disabled={count === 0} title={t("sidebar.select.move", { count })} aria-label={t("sidebar.select.move", { count })} aria-haspopup="menu"
+              onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); setBatchSectionPicker({ botId: "", x: rect.left, y: rect.top - 260 }); }}><FolderInput size={16} /></button>}
+            {showBotArchive(state.config) && <button type="button" className={button} disabled={archivable.length === 0} title={t("sidebar.bot.archive")} aria-label={t("sidebar.bot.archive")}
+              onClick={() => setBatchArchiveConfirm(true)}><Archive size={16} /></button>}
+            <button type="button" className={button} title={t("sidebar.select.clear")} aria-label={t("sidebar.select.clear")} onClick={clearSelection}><X size={16} /></button>
+          </div>
+          </div>
+        );
+      })()}
 
       {/* Footer. Collapsing the sidebar keeps the places and the avatar at
           the same y: the same bottom padding, the same row metrics
@@ -3342,26 +3508,20 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
         {density === "icons" ? (
           <>
             <SidebarConnectApps iconOnly icon={<Puzzle size={20} />} onOpen={() => dispatch({ type: "togglePlugins", open: true })} />
-            {/* the rail's avatar opens Settings, so Browse bots keeps its icon */}
-            {!remoteClient && <SidebarPlaces iconOnly places={[{ key: "browse-bots", label: t("sidebar.browseBots"), icon: LayoutGrid, animation: "grid", onSelect: () => dispatch(openBotCatalog()) }]} />}
-            <div className="flex items-center justify-center">
-              <button
-                onClick={() => dispatch({ type: "toggleAppSettings" })}
-                data-sidebar-account-rail
-                className="flex h-10 min-w-0 items-center justify-center rounded-lg px-2 text-left hover:bg-sidebar-hover"
-                aria-label={t("sidebar.appSettings")}
-                title={state.config?.profile?.name?.trim() || t("sidebar.appSettings")}
-              >
-                <InitialsAvatar initials={profileInitials(state.config?.profile)} size={28} />
-              </button>
+            {/* one avatar, like the wide foot: its menu holds Settings,
+                Approvals, Code and the rest; Browse bots is a tab of Connect apps */}
+            <div data-sidebar-account-rail className="flex h-10 items-center justify-center">
+              <SidebarProfileMenu avatarOnly places={accountPlaces} />
             </div>
           </>
         ) : (
-          // Grok Bot's foot: your avatar (it opens the account menu, Browse
-          // bots included), 8px, then the wide Connect apps pill, then the
-          // update button while an update downloads or waits.
-          <div data-sidebar-account-row className="flex items-center gap-2">
-            <SidebarProfileMenu avatarOnly places={accountPlaces} />
+          // The foot (reference design): the account pill, your avatar and
+          // name (it opens the account menu, Browse bots included), 6px,
+          // then the Connect apps button, then the update button while an
+          // update downloads or waits. Both tiles take their height from
+          // --foot-tile-h on the row (styles.css).
+          <div data-sidebar-account-row className="flex items-center gap-1.5 [container-type:inline-size]">
+            <SidebarProfileMenu avatarOnly withName places={accountPlaces} />
             <SidebarConnectApps onOpen={() => dispatch({ type: "togglePlugins", open: true })} />
             {/* a waiting update, right of the pill, which gives way when it
                 widens (JC, 2026-10-18) */}
@@ -3383,6 +3543,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
             setSectionPicker({ botId, x: menu.x, y: menu.y });
           }}
           onRename={(botId) => setRenameBotId(botId)}
+          onSelect={(botId) => { setSelecting(true); setSelectedBotIds((current) => current.includes(botId) ? current : [...current, botId]); }}
           // Edit bot opens the bot editor (JC, 2026-10-16: it did nothing
           // visible since the panel fallback lost its settings view)
           onEditPersona={(target) => dispatch({ type: "openPersonaEditor", botId: target.id })}
@@ -3481,6 +3642,55 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       {moveToTeam && <TeamDialog section={moveToTeam} onClose={() => setMoveToTeam(null)} />}
       {shareTeam !== null && <ShareTeamDialog team={shareTeam} onClose={() => setShareTeam(null)} />}
       {teamSettings !== null && <TeamSettingsDialog team={teamSettings} onClose={() => setTeamSettings(null)} />}
+      {batchModel && (() => {
+        const writable = selectedBotIds.flatMap((id) => state.bots.filter((bot) => bot.id === id && !viewerLocalBotSettings(state.config, bot)));
+        const first = writable[0];
+        if (!first) return null;
+        return (
+          <ModelPicker
+            bot={first}
+            threadId={first.threadId}
+            windowOnly
+            alsoApplyTo={writable.slice(1).map((bot) => bot.id)}
+            onWindowClose={() => setBatchModel(false)}
+          />
+        );
+      })()}
+      <SectionPicker
+          current={undefined}
+          names={personal ? personalSectionNames(personal) : undefined}
+          anchor={batchSectionPicker}
+          onClose={() => setBatchSectionPicker(null)}
+          onAssign={(section) => {
+            const ids = selectedBotIds.filter((id) => state.bots.some((bot) => bot.id === id));
+            if (!personal && remoteClient) {
+              // one request for the whole selection
+              void api("/api/sidebar-sections", { method: "POST", body: JSON.stringify({ name: section, botIds: ids }) })
+                .then(({ bots }) => bots.forEach((bot: Bot) => dispatch({ type: "botPatched", bot })))
+                .catch((cause) => dispatch({ type: "error", message: cause instanceof Error ? cause.message : String(cause) }));
+            } else {
+              for (const id of ids) assignSection("bot", id, section);
+            }
+            clearSelection();
+          }}
+        />
+      <ConfirmDialog
+        open={batchArchiveConfirm}
+        title={t("sidebar.select.archiveTitle", { count: selectedBotIds.filter((id) => currentArchivableBot(state.bots, id)).length })}
+        body={t("sidebar.select.archiveBody")}
+        confirmLabel={t("sidebar.bot.archive")}
+        icon={<Archive size={18} />}
+        onCancel={() => setBatchArchiveConfirm(false)}
+        returnFocusRef={sidebarRef}
+        onConfirm={() => {
+          setBatchArchiveConfirm(false);
+          // never the last active bot: the guard reads one snapshot, so cap here
+          const keep = state.bots.filter((bot) => !bot.hidden).length - 1;
+          const ids = selectedBotIds.filter((id) => currentArchivableBot(state.bots, id)).slice(0, Math.max(0, keep));
+          clearSelection();
+          void (async () => { for (const id of ids) await archiveBot({ id }); })();
+        }}
+      />
       <SectionPicker
           current={sectionPicker ? layoutBots.find((b) => b.id === sectionPicker.botId)?.section : undefined}
           names={personal ? personalSectionNames(personal) : undefined}
@@ -3620,5 +3830,40 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       />
     </aside>
     </SidebarMascotProvider>
+  );
+}
+
+/** The sidebar's "Connect apps" entry: a plain nav button that opens the
+ * Plugins panel. It no longer previews connected accounts (the standalone
+ * account inventory went away); the panel itself lists MCP servers, engine
+ * connectors, the catalog, skills and marketplaces. */
+function SidebarConnectApps({ onOpen, iconOnly = false, icon }: { onOpen: () => void; iconOnly?: boolean; icon?: React.ReactNode }) {
+  const label = t("chat.connectApps.pill");
+  if (iconOnly) {
+    return (
+      <button
+        type="button"
+        data-tour="nav-apps"
+        data-sidebar-connect-apps=""
+        onClick={onOpen}
+        aria-label={label}
+        title={label}
+        className="flex h-9 w-full items-center justify-center rounded-lg px-2 text-sidebar-ink-secondary hover:bg-sidebar-hover hover:text-sidebar-ink"
+      >
+        {icon}
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      data-tour="nav-apps"
+      data-sidebar-connect-apps=""
+      onClick={onOpen}
+      className="flex h-[var(--foot-tile-h,2.25rem)] min-w-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-sidebar-ink-secondary hover:bg-sidebar-hover hover:text-sidebar-ink"
+    >
+      <Puzzle size={16} aria-hidden="true" className="shrink-0" />
+      <span className="truncate">{label}</span>
+    </button>
   );
 }

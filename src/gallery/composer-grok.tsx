@@ -7,9 +7,8 @@
 import { StrictMode, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AudioLines, ChevronDown, Globe, Hand, Mic, Paperclip } from "lucide-react";
-import { ApprovalModeSelector } from "../components/ApprovalModeSelector";
 import { MentionTextarea } from "../components/MentionTextarea";
-import { ATTACH_ICON, ComposerCtaSeat, ComposerMicButton, ComposerModelRow, ComposerPlusMenu, ComposerSendButton, DictationChip, RecordMark } from "../components/ComposerControls";
+import { ATTACH_ICON, ComposerCtaSeat, ComposerMicButton, ComposerPlusMenu, ComposerSendButton, DictationChip, RecordMark } from "../components/ComposerControls";
 import { cn } from "../lib/cn";
 import { setLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -89,13 +88,6 @@ function After() {
               { id: "attach", label: t("composer.plus.attach"), icon: ATTACH_ICON, onSelect: () => {} },
               { id: "teach", label: t("composer.plus.teach"), icon: <RecordMark />, onSelect: () => {} },
             ]}
-            rows={(close) => (
-              <>
-                {/* the model moved here from the bar's end (2026-10-18) */}
-                <ComposerModelRow chip={{ label: "claude-sonnet-5", title: "claude-sonnet-5", busy: false, ultracode: false, open: false }} onOpen={() => {}} />
-                <ApprovalModeSelector variant="row" onDone={close} approvalMode="ask" providerName="Claude" driverKind="claude" onSelect={() => {}} />
-              </>
-            )}
           />
         </div>
         <RealField value={typedText} />

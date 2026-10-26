@@ -11,10 +11,9 @@
 import { useEffect, useState } from "react";
 import { ArrowUp, CalendarClock, Check, Folder, Plug } from "lucide-react";
 import { MausAvatar } from "@/components/Avatar";
-import { ServiceIcon, type ToolkitCard } from "@/components/PluginsPanel";
+import { ServiceIcon, type ToolkitCard } from "@/components/plugins/PluginParts";
 import { cn } from "@/lib/cn";
 import { reducedMotion } from "@/lib/onboarding";
-import { api } from "@/state/store";
 import type { SceneProps } from "./types";
 
 const SETUP_MS = 6600;
@@ -37,12 +36,11 @@ const APPS = [
 
 type Phase = "compose" | "sent" | "reply" | "configured";
 
-/** Official logos from the catalog, fetched once per session. */
+/** Logos for the onboarding reel. The icons fall back to the app's domain,
+ * so the reel needs no catalog service. */
 let catalog: Promise<Map<string, ToolkitCard>> | null = null;
 function loadCatalog(): Promise<Map<string, ToolkitCard>> {
-  catalog ??= api("/api/connectors/catalog")
-    .then((d: { cards?: ToolkitCard[] }) => new Map((d.cards ?? []).map((card) => [card.slug, card])))
-    .catch(() => new Map<string, ToolkitCard>());
+  catalog ??= Promise.resolve(new Map<string, ToolkitCard>());
   return catalog;
 }
 

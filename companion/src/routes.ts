@@ -251,6 +251,9 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // Bot Computer: this computer's local container (status, update, reset).
   { method: "GET", path: /^\/api\/computer\/status$/ },
   { method: "POST", path: /^\/api\/computer\/(?:update|reset)$/ },
+  // Its scheduled update (parity R7, O2): read and set, never the disk saver.
+  { method: "GET", path: /^\/api\/computer\/maintenance$/ },
+  { method: "PUT", path: /^\/api\/computer\/maintenance$/ },
   // Plugins: the catalog, what is installed, adding one and its sign-in.
   { method: "GET", path: /^\/api\/plugins\/(?:search|installed)$/ },
   { method: "POST", path: /^\/api\/plugins\/install$/ },
@@ -374,6 +377,13 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "POST", path: /^\/api\/me\/achievements\/events$/ },
   { method: "PUT", path: /^\/api\/me\/achievements\/settings$/ },
   { method: "GET", path: /^\/api\/achievements\/public$/ },
+  //   phone tools (server/routes/phone-tools.ts): what this phone offers, the
+  //   requests waiting on it, the person's answer, and "Toujours permettre"
+  { method: "POST", path: /^\/api\/me\/phone-tools\/device$/ },
+  { method: "GET", path: /^\/api\/me\/phone-tools\/requests$/ },
+  { method: "POST", path: /^\/api\/me\/phone-tools\/requests\/[\w-]+$/ },
+  { method: "GET", path: /^\/api\/me\/phone-tools\/grants$/ },
+  { method: "DELETE", path: /^\/api\/me\/phone-tools\/grants$/ },
   // Inline video widgets: proxied media (also open without a device token,
   // see denyReason) and YouTube transcripts (session auth).
   { method: "GET", path: /^\/api\/media\/proxy\/.+/ },
@@ -444,22 +454,6 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "POST", path: /^\/api\/routines\/[\w-]+\/run$/ },
   { method: "POST", path: /^\/api\/routine-runs\/[\w-]+\/(?:cancel|seen)$/ },
 
-  // Multi-account Composio management exposes opaque ids and aliases only.
-  // Account-level removal is allowed: the handler still proves the account
-  // belongs to the host's own user before revoking, and a paired client can
-  // already add accounts — connectable but not disconnectable is the bug
-  // being fixed here. The whole-service DELETE stays denied: it belongs to
-  // the host.
-  { method: "GET", path: /^\/api\/connectors\/catalog$/ },
-  { method: "GET", path: /^\/api\/connectors\/connected$/ },
-  { method: "GET", path: /^\/api\/connectors$/ },
-  { method: "POST", path: /^\/api\/connectors\/[\w-]+\/authorize$/ },
-  { method: "DELETE", path: /^\/api\/connectors\/[\w-]+\/accounts\/[\w-]+$/ },
-  // Inline connector cards are scoped by bot, transcript message, and
-  // thread. They expose the same opaque OAuth authorization already allowed
-  // above, then only poll, resume, or dismiss that exact pending card.
-  { method: "GET", path: /^\/api\/bots\/[\w-]+\/connector-cards\/[\w-]+\/status$/ },
-  { method: "POST", path: /^\/api\/bots\/[\w-]+\/connector-cards\/[\w-]+\/(?:authorize|resume|dismiss)$/ },
   // A remote client may decline or retry a credential request, but never
   // claim that it stored a host credential. Saving and `provided` stay local
   // to the host's OS-backed credential store.

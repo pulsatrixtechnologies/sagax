@@ -8,18 +8,26 @@
 // room posts, checking a delegation made this turn) are the harness's: one
 // proxy can serve many turns of a warm engine, and only the harness knows
 // where a turn begins.
+import { readFileSync } from "node:fs";
 import { CREDENTIAL_TARGETS, isCredentialTargetId } from "../../shared/credential-request.ts";
 import { normalizeCronSchedule } from "../../shared/routine-schedule.ts";
+import { wrapUntrusted } from "../../shared/safety-review.ts";
 
 import { peerName } from "../peer-roster.ts";
 import { CLOUD_AGENT_READ_TOOLS, CLOUD_AGENT_WRITE_TOOLS, cloudAgentToolAction } from "../../shared/cloud-agents.ts";
 import { callCardTool, CARD_TOOL_NAMES } from "./agents-call-cards.ts";
+import { callPhoneTool, PHONE_TOOL_NAME } from "./agents-phone-tools.ts";
+import { callConnectorSetupTool, CONNECTOR_SETUP_TOOL_NAME } from "./agents-connector-setup.ts";
 import { ARTIFACT_TOOL_NAMES, callArtifactTool } from "./agents-call-artifacts.ts";
+import { HELP_TOOL_NAMES } from "./agents-help-tools.ts";
+import { SETTINGS_TOOL_NAMES } from "./agents-settings-tools.ts";
+import { APPROVALS_TOOL_NAMES } from "./agents-approvals-tools.ts";
 import { AGENT_API_TOOL_NAMES, catalogProfileFromEnv, PERSPICAX_TOOL_NAMES, SHARED_COMPUTER_TOOL_NAMES, WEEKDAYS } from "./agents-catalog.ts";
 import { harnessClientFromEnv } from "./agents-client.ts";
 import type { HarnessClient, Json } from "./agents-client.ts";
 import { boundedAgentResult } from "./agents-result.ts";
 import { isClaimTool } from "../perspicax-claims.ts";
+import { handleRemoteSupportCall, remoteSupportFromEnv, type RemoteSupportContext } from "../remote-support-local.ts";
 
 export interface ToolCallContext {
   /** The calling bot's id (excluded from list_bots; the sender). */
@@ -34,6 +42,8 @@ export interface ToolCallContext {
   // Presentation only: the server still authenticates and scopes every call.
   sharedComputers: boolean;
   client: HarnessClient;
+  /** Local technician key for remote support. Absent: the tool refuses rather than invent a key elsewhere. */
+  remoteSupport?: RemoteSupportContext;
 }
 
 export interface ToolCallResult {
@@ -49,13 +59,25 @@ export interface ToolCallResult {
  *   (agents-catalog.ts) and the harness address and token (agents-client.ts). */
 export function toolCallContextFromEnv(env: NodeJS.ProcessEnv): ToolCallContext {
   const profile = catalogProfileFromEnv(env);
+  const launchedDepth = Number(env.SAGAX_TURN_DEPTH ?? "0") || 0;
+  const depthFile = env.SAGAX_TURN_DEPTH_FILE;
   return {
     botId: profile.botId,
     threadId: env.SAGAX_THREAD_ID ?? "",
-    depth: Number(env.SAGAX_TURN_DEPTH ?? "0") || 0,
+    // A process kept across turns reads the current turn's depth each call.
+    get depth() {
+      if (!depthFile) return launchedDepth;
+      try {
+        const value = Number(readFileSync(depthFile, "utf8").trim());
+        return Number.isInteger(value) && value >= 0 ? value : launchedDepth;
+      } catch {
+        return launchedDepth;
+      }
+    },
     externalRuntime: profile.externalRuntime === true,
     sharedComputers: profile.sharedComputers,
     client: harnessClientFromEnv(env),
+    remoteSupport: remoteSupportFromEnv(env),
   };
 }
 
@@ -142,13 +164,25 @@ const SUPPORTED_SCHEDULES =
   'Supported schedules: {"type":"once","at":"2026-09-01T09:00:00+05:30"} (future RFC3339 with explicit offset), ' +
   '{"type":"weekly","time":"09:00","weekdays":["monday","friday"]}, {"type":"daily","time":"09:00"}, ' +
   '{"type":"interval","every_minutes":15,"weekdays":["monday","friday"],"window_start":"09:00","window_end":"17:00"}, ' +
-  'or {"type":"cron","expression":"0 9 1 * *","timeZone":"Asia/Kolkata"} (monthly at 09:00 on day 1; five fields and an explicit IANA timezone).';
+  'or {"type":"cron","expression":"0 9 1 * *","timeZone":"Asia/Kolkata"} (monthly at 09:00 on day 1; five fields and an explicit IANA timezone). ' +
+  'A repeating schedule may set "timing" to "flexible" with window_early_minutes and window_late_minutes (default 15; together capped at half the gap).';
 
 /** The outcome of coercing a model-sent schedule: the harness-dialect
  * schedule, or a message telling the model exactly what to send instead. */
 interface NormalizedSchedule {
   schedule?: Json;
   error?: string;
+}
+
+/** Timing fields the model may send, copied onto the harness schedule. */
+function copiedTiming(raw: Json): Json {
+  const out: Json = {};
+  if (typeof raw.timing === "string") out.timing = raw.timing;
+  const early = raw.window_early_minutes ?? raw.windowEarlyMinutes;
+  const late = raw.window_late_minutes ?? raw.windowLateMinutes;
+  if (typeof early === "number") out.windowEarlyMinutes = early;
+  if (typeof late === "number") out.windowLateMinutes = late;
+  return out;
 }
 
 /** A schedule as the harness accepts it, or a message telling the model
@@ -167,14 +201,15 @@ function normalizeScheduleInput(args: Json): NormalizedSchedule {
   }
   if (!jsonRecord(raw)) return { error: `The schedule must be a JSON object. ${SUPPORTED_SCHEDULES}` };
   const type = typeof raw.type === "string" ? raw.type.trim().toLowerCase() : "";
+  const timingFields = ["timing", "window_early_minutes", "windowEarlyMinutes", "window_late_minutes", "windowLateMinutes"];
   const fields = type === "once"
     ? ["type", "at"]
     : type === "weekly" || type === "daily"
-      ? ["type", "time", "weekdays"]
+      ? ["type", "time", "weekdays", ...timingFields]
       : type === "interval"
-        ? ["type", "every_minutes", "everyMinutes", "starts_at", "anchorAt", "weekdays", "every_day", "window_start", "window_end", "window", "all_day", "ends_at", "endsAt", "never_ends"]
+        ? ["type", "every_minutes", "everyMinutes", "starts_at", "anchorAt", "weekdays", "every_day", "window_start", "window_end", "window", "all_day", "ends_at", "endsAt", "never_ends", ...timingFields]
         : type === "cron"
-          ? ["type", "expression", "timeZone"]
+          ? ["type", "expression", "timeZone", ...timingFields]
           : null;
   // Provider conversions may send unused optional fields as null. Ignore
   // those, but never silently discard an actual scheduling constraint (for
@@ -185,7 +220,7 @@ function normalizeScheduleInput(args: Json): NormalizedSchedule {
   }
   if (type === "cron") {
     try {
-      return { schedule: { ...normalizeCronSchedule({ type, expression: raw.expression, timeZone: raw.timeZone }) } };
+      return { schedule: { ...normalizeCronSchedule({ type, expression: raw.expression, timeZone: raw.timeZone }), ...copiedTiming(raw) } };
     } catch (error) {
       return { error: `${error instanceof Error ? error.message : "Invalid cron schedule"}. ${SUPPORTED_SCHEDULES}` };
     }
@@ -220,7 +255,7 @@ function normalizeScheduleInput(args: Json): NormalizedSchedule {
       if (!full) return { error: `Unsupported weekday "${String(day)}". Use full names: ${WEEKDAYS.join(", ")}.` };
       if (!normalized.includes(full)) normalized.push(full);
     }
-    return { schedule: { type: "weekly", time, weekdays: normalized } };
+    return { schedule: { type: "weekly", time, weekdays: normalized, ...copiedTiming(raw) } };
   }
   if (type === "interval") {
     for (const flag of ["every_day", "all_day", "never_ends"]) {
@@ -299,6 +334,7 @@ function normalizeScheduleInput(args: Json): NormalizedSchedule {
         ...(intervalWeekdays !== undefined ? { weekdays: intervalWeekdays } : {}),
         ...(window !== undefined ? { window } : {}),
         ...(endsAt !== undefined ? { endsAt } : {}),
+        ...copiedTiming(raw),
       },
     };
   }
@@ -372,6 +408,9 @@ function routineFields(args: Json): { fields: Json; error?: string } {
   if (args.overlap !== undefined && args.overlap !== "skip" && args.overlap !== "queue") {
     return { fields, error: "overlap must be skip or queue." };
   }
+  if (args.enabled !== undefined && typeof args.enabled !== "boolean") {
+    return { fields, error: "enabled must be true or false." };
+  }
   if (args.clear_timeout != null && typeof args.clear_timeout !== "boolean") {
     return { fields, error: "clear_timeout must be true or false." };
   }
@@ -391,6 +430,7 @@ function routineFields(args: Json): { fields: Json; error?: string } {
   if (typeof args.continuity === "boolean") fields.continuity = args.continuity;
   if (args.overlap !== undefined) fields.overlap = args.overlap;
   if (typeof runOnStartup === "boolean") fields.runOnStartup = runOnStartup;
+  if (typeof args.enabled === "boolean") fields.enabled = args.enabled;
   return { fields };
 }
 
@@ -517,10 +557,49 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
   }
   // create_options_card, show_widget, update_widget (agents-call-cards.ts).
   if (CARD_TOOL_NAMES.has(name)) return callCardTool(name, args, context);
+  if (name === PHONE_TOOL_NAME) return callPhoneTool(args, context);
+  if (name === CONNECTOR_SETUP_TOOL_NAME) return callConnectorSetupTool(args, context);
   if (ARTIFACT_TOOL_NAMES.has(name)) return callArtifactTool(name, args, context);
+  // sagax_help (server/self-knowledge.ts): a few sections of the generated
+  // knowledge base, chosen and worded for this server and speaker.
+  if (HELP_TOOL_NAMES.has(name)) {
+    if (typeof args.question !== "string" || !args.question.trim()) return { text: "question: what the person wants to know about Sagax or Perspicax.", isError: true };
+    const { ok, body } = await apiResponse("/api/internal/self-knowledge", { method: "POST", body: JSON.stringify({ question: args.question }) });
+    if (!ok) return { text: String(body.error ?? "The knowledge base is unavailable; check your own tool list before you answer."), isError: true };
+    return { text: String(body.text ?? "") };
+  }
+  // sagax_settings (server/settings-actions.ts): every setting, as the person
+  if (SETTINGS_TOOL_NAMES.has(name)) {
+    if (EXTERNAL_RUNTIME) return { text: `Unknown tool: ${name}`, isError: true };
+    const { status, body } = await apiResponse("/api/internal/settings", { method: "POST", body: JSON.stringify(args ?? {}) });
+    const text = String(body.text ?? body.error ?? "").slice(0, 12000);
+    if (status >= 400 || body.error) return { text: text || "The change was refused.", isError: true };
+    return { text: text || "Done." };
+  }
+  // sagax_approvals (server/primary-approvals.ts): the person's cards, at their request
+  if (APPROVALS_TOOL_NAMES.has(name)) {
+    if (EXTERNAL_RUNTIME) return { text: `Unknown tool: ${name}`, isError: true };
+    const { status, body } = await apiResponse("/api/internal/approvals", { method: "POST", body: JSON.stringify(args ?? {}) });
+    const text = String(body.text ?? body.error ?? "").slice(0, 8000);
+    if (status >= 400 || body.error) return { text: text || "The answer was refused.", isError: true };
+    return { text: text || "Done." };
+  }
   if (name === "answer_approval" || name === "nudge_person" || name === "manage_pairing" || name === "manage_settings" || PERSPICAX_TOOL_NAMES.has(name)) {
     if (EXTERNAL_RUNTIME) return { text: `Unknown tool: ${name}`, isError: true };
     if (PERSPICAX_TOOL_NAMES.has(name)) {
+      if (name === "remote_support_open" || name === "remote_support_status" || name === "remote_support_close") {
+        if (!context.remoteSupport?.dir) return { text: "Remote support runs on this computer, and this turn has no local directory for the technician key.", isError: true };
+        const record = args && typeof args === "object" && !Array.isArray(args) ? args : {};
+        return handleRemoteSupportCall({
+          name,
+          args: record,
+          local: context.remoteSupport,
+          post: async (tool, toolArgs) => {
+            const { status, body } = await apiResponse("/api/internal/perspicax/tool", { method: "POST", body: JSON.stringify({ tool, args: toolArgs }) });
+            return { status, body: body && typeof body === "object" ? body : {} };
+          },
+        });
+      }
       const { status, body } = await apiResponse("/api/internal/perspicax/tool", { method: "POST", body: JSON.stringify({ tool: name, args }) });
       const text = String(body.text ?? body.error ?? "").slice(0, 12000);
       if (status >= 400 || body.error || body.isError) return { text: text || "Perspicax refused the call.", isError: true };
@@ -593,11 +672,13 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
       && (canonical.thread === undefined || canonical.thread === "standing" || canonical.thread === "new")
       && (canonical.reply === undefined || canonical.reply === "resume" || canonical.reply === "none")
       && (canonical.consult === undefined || typeof canonical.consult === "boolean")
+      && (canonical.mode === undefined || canonical.mode === "work" || canonical.mode === "consult")
+      && (canonical.relay === undefined || typeof canonical.relay === "boolean")
       && (canonical.done_when === undefined || typeof canonical.done_when === "string")
       && (canonical.reason === undefined || typeof canonical.reason === "string");
     if (!usable) {
       return {
-        text: `coordinate_bots takes snake_case arguments: bot_ids (an array of 1-4 teammate ids) and message are required; group_id, reason, rework, thread ("standing" or "new"), reply ("resume" or "none"), consult (true or false) and done_when are optional. Received: ${Object.keys(args).join(", ") || "none"}.`,
+        text: `coordinate_bots takes snake_case arguments: bot_ids (an array of 1-4 teammate ids) and message are required; group_id, reason, rework, thread ("standing" or "new"), reply ("resume" or "none"), consult (true or false), relay (true or false) and done_when are optional. Received: ${Object.keys(args).join(", ") || "none"}.`,
         isError: true,
       };
     }
@@ -607,6 +688,10 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
       rework: canonical.rework,
       thread: canonical.thread, reply: canonical.reply, consult: canonical.consult,
       done_when: typeof canonical.done_when === "string" && canonical.done_when.trim() ? canonical.done_when.trim() : undefined,
+      // main's spelling of the same choice (absent: consult for the bot that
+      // sent this work, else work); `consult: true` is "consult".
+      ...(canonical.mode === "work" || canonical.mode === "consult" ? { mode: canonical.mode } : {}),
+      ...(canonical.relay === true ? { relay: true } : {}),
     }) });
     return { text: JSON.stringify(r), ...(r.error ? { isError: true } : {}) };
   }
@@ -755,7 +840,16 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
     if (folder) body.folder = folder;
     if (args.report_back === true) body.reportBack = true;
     if (typeof args.workspace === "string" && args.workspace) body.workspace = args.workspace;
+    if (args.read_only === true) body.readOnly = true;
+    const resumeId = typeof args.thread_id === "string" ? args.thread_id.trim() : "";
+    if (resumeId) body.resumeThreadId = resumeId;
     const r = await api("/api/internal/threads", { method: "POST", body: JSON.stringify(body) });
+    if (resumeId && (!r.error || r.state === "failed")) {
+      // a follow-up into a thread of its own (sub-agent resume, parity D1)
+      const into = `Sent a follow-up into #${String(r.title ?? title)} [thread id: ${String(r.threadId ?? resumeId)}]`;
+      if (r.state === "failed") return { text: `${into}, but it could not start: ${String(r.error ?? "unknown reason")}. Tell the person.`, isError: true };
+      return { text: `${into}. ${r.state === "queued" ? "It waits for a free slot, then runs" : "It is running now"} with that thread's history; its result stays in that thread. Mention it to the person as #${String(r.title ?? title)}.` };
+    }
     // A refusal opened nothing. A "failed" state opened the thread and could
     // not start its turn — that one still counts, and still has an id.
     if (r.error && r.state !== "failed") return { text: `Couldn't open that thread: ${String(r.error)}`, isError: true };
@@ -797,6 +891,21 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
   }
   if (name === "list_team_setup") {
     return { text: JSON.stringify(await api("/api/internal/team-setup-catalog")) };
+  }
+  // 2026-10-20 (JC: "le bot principal fait tout"): asked now by the person,
+  // a deletion or an archive is the screen's own (sagax_settings, quote)
+  if ((name === "propose_bot_deletion" && typeof args.quote === "string") || name === "archive_bot") {
+    if (EXTERNAL_RUNTIME) return { text: `Unknown tool: ${name}`, isError: true };
+    const botId = String(args.bot_id ?? "").trim();
+    if (!botId) return { text: `${name} needs bot_id.`, isError: true };
+    const restore = name === "archive_bot" && args.restore === true;
+    const { status, body } = await apiResponse("/api/internal/settings", { method: "POST", body: JSON.stringify({
+      action: "set", key: name === "archive_bot" ? "bot.hidden" : "bot.delete", target: botId, value: name === "archive_bot" ? !restore : true,
+      ...(typeof args.quote === "string" ? { quote: args.quote } : {}),
+    }) });
+    const text = String(body.text ?? body.error ?? "").slice(0, 4000);
+    if (status >= 400 || body.error) return { text: text || "The change was refused.", isError: true };
+    return { text: text || "Done." };
   }
   if (name === "propose_team_setup" || name === "propose_bot_deletion") {
     const deleting = name === "propose_bot_deletion";
@@ -920,6 +1029,14 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
       text: `A secure ${r.label ?? CREDENTIAL_TARGETS[credentialId].label} request is ready. The desktop app and a freshly QR-paired mobile app show its secure entry card; older mobile pairings explain how to pair again or finish on the computer. End this turn; Sagax will resume the task after the user saves or declines. Never ask them to paste the key into chat.`,
     };
   }
+  if (name === "connect_github") {
+    const r = await api("/api/internal/github-connect", {
+      method: "POST",
+      body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, ...(args.reconnect === true ? { reconnect: true } : {}) }),
+    });
+    if (r.error) return { text: `Couldn't start the GitHub sign-in: ${r.error}`, isError: true };
+    return { text: githubConnectText(r) };
+  }
   if (name === "request_login") {
     const domain = typeof args.domain === "string" ? args.domain.trim().slice(0, 253) : "";
     const itemName = typeof args.name === "string" ? args.name.trim().slice(0, 120) : "";
@@ -939,7 +1056,7 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
     if (Array.isArray(r.granted) && r.granted.length) {
       const rows = (r.granted as Array<{ handle: string; name: string; domains: string[]; fields: string[] }>)
         .map((item) => `${item.handle} "${item.name}" (sites: ${item.domains.join(", ")}; fields: ${item.fields.join(", ")})`);
-      return { text: `Already allowed for you: ${rows.join("; ")}. Call fill_credential in the browser with the handle and the field. You never see the value.` };
+      return { text: `Already allowed for you: ${rows.join("; ")}. Call fill_credential in the browser with the handle and field login to sign in (or one field). You never see the value.` };
     }
     return {
       text: "A secure login request card is ready for the person. End this turn; Sagax resumes the task with the login's handle after they allow it or decline. Never ask them for a password or a code in chat.",
@@ -951,10 +1068,57 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
     if (r.error) return { text: String(r.error), isError: true };
     const resources = Array.isArray(r.resources) ? r.resources : [];
     if (!resources.length) {
-      return { text: "No terminal destination is available to this person here (their cloud computer, Local VM and computer are not reachable, and the server hosts are an organization admin's). Tell them; do not offer a terminal." };
+      return { text: "No terminal destination is available to this person here (their cloud computer, Local VM and computer are not reachable right now, and the organization's server hosts need “Run commands on the organization's server”, which an organization admin gives in Perspicax under Bot rights > Who has what). Tell them; do not offer a terminal." };
     }
     const fallback = r.default && typeof r.default === "object" ? `\nDefault (where you work now): ${JSON.stringify(r.default)}` : "";
     return { text: `Terminal destinations this person may open:\n${JSON.stringify(resources, null, 2)}${fallback}` };
+  }
+  if (name === "publish_remote_session") {
+    const banned = ["address", "nodekey", "node_key", "token", "key", "client_key"];
+    if (banned.some((field) => Object.prototype.hasOwnProperty.call(args ?? {}, field))) {
+      return { text: "Do not send a tunnel address or a key. publish_remote_session takes the session id, the code, the OS, the rights and the end time.", isError: true };
+    }
+    const published = await apiResponse("/api/internal/remote-sessions/publish", { method: "POST", body: JSON.stringify(args ?? {}) });
+    const r = published.body;
+    if (!published.ok || r.error) return { text: String(r.error ?? "The remote session card could not be posted."), isError: true };
+    const host = typeof r.hostLabel === "string" && r.hostLabel.trim() ? r.hostLabel.trim() : "the remote computer";
+    const reach = r.reachable === false
+      ? " The tunnel folder is not on this server yet, so a shell and file transfer will wait until it is."
+      : " The person can open a shell, send a file, or close the session from that card.";
+    return { text: `A remote session card for ${host} is in the chat.${reach} Never repeat a tunnel address or a key.` };
+  }
+  if (name === "resource_usage") {
+    const target = typeof args.target === "string" ? args.target.trim() : "";
+    const host = typeof args.host === "string" ? args.host.trim().slice(0, 200) : "";
+    const session = typeof args.session === "string" ? args.session.trim().slice(0, 200) : "";
+    const started = await apiResponse("/api/internal/resource-usage/start", {
+      method: "POST",
+      body: JSON.stringify({ target, ...(host ? { host } : {}), ...(session ? { session } : {}) }),
+    });
+    const r = started.body;
+    if (!started.ok || r.error) return { text: String(r.error ?? "No usage card could be shown."), isError: true };
+    const summary = typeof r.summary === "string" ? r.summary : "";
+    return { text: `${summary} The live card is in the chat (it updates every two seconds for five minutes, then the person can tap Reprendre). Answer in a sentence or two from these numbers; do not repeat the whole card.` };
+  }
+  if (name === "remote_session_exec" || name === "remote_session_snapshot") {
+    const exec = name === "remote_session_exec";
+    if (exec && (typeof args.command !== "string" || !args.command.trim())) return { text: "command: the command line to run on the remote computer.", isError: true };
+    const body = {
+      ...(typeof args.session === "string" && args.session.trim() ? { session: args.session.trim() } : {}),
+      ...(exec ? { command: String(args.command) } : {}),
+      ...(exec && typeof args.timeout_seconds === "number" ? { timeout_seconds: args.timeout_seconds } : {}),
+    };
+    const { ok, body: r } = await apiResponse(`/api/internal/remote-sessions/${exec ? "exec" : "snapshot"}`, { method: "POST", body: JSON.stringify(body) });
+    if (!ok || r.error) return { text: String(r.error ?? "The remote computer did not run that command."), isError: true };
+    const exitCode = Number(r.exitCode ?? 0);
+    const stdout = String(r.stdout ?? "");
+    const stderr = String(r.stderr ?? "");
+    const lines = [`${String(r.host ?? "remote computer")} (${String(r.os ?? "")}): ${r.timedOut ? "stopped at its time limit" : `exit code ${exitCode}`}`];
+    // the client's computer wrote this: data, never instructions (review of #965)
+    if (stdout) lines.push(wrapUntrusted("remote stdout", stdout.replace(/\s+$/, "")));
+    if (stderr) lines.push(wrapUntrusted("remote stderr", stderr.replace(/\s+$/, "")));
+    if (!stdout && !stderr && !r.timedOut) lines.push("(no output)");
+    return { text: lines.join("\n"), ...(exitCode !== 0 || r.timedOut ? { isError: true } : {}) };
   }
   if (name === "offer_shell_terminal") {
     const resourceId = typeof args.resource_id === "string" ? args.resource_id.trim() : "";
@@ -963,7 +1127,7 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
     if (!reason) {
       return { text: "offer_shell_terminal needs a reason (one short sentence shown on the card).", isError: true };
     }
-    const r = await api("/api/internal/terminal/offer", {
+    const offered = await apiResponse("/api/internal/terminal/offer", {
       method: "POST",
       body: JSON.stringify({
         ...(resourceId ? { resourceId } : {}),
@@ -971,7 +1135,12 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
         reason,
       }),
     });
-    if (r.error) return { text: String(r.error), isError: true };
+    const r = offered.body;
+    if (!offered.ok || r.error) return { text: String(r.error ?? "No terminal could be opened."), isError: true };
+    if (r.opened === true) {
+      const host = typeof r.hostLabel === "string" && r.hostLabel.trim() ? r.hostLabel.trim() : "the remote computer";
+      return { text: `A terminal is already open on ${host}. End this turn. You cannot type in it unless the person turns on bot input. Never ask them to paste a password or a tunnel address.` };
+    }
     const destination = r.destination && typeof r.destination === "object" ? r.destination as { label?: unknown; provider?: unknown; hostLabel?: unknown } : null;
     const where = destination && typeof destination.hostLabel === "string"
       ? ` on ${String(destination.label ?? destination.provider ?? "")} (${destination.hostLabel})`
@@ -1057,7 +1226,8 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
       method: "POST",
       body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, routineId }),
     });
-    return { text: `Started a run of routine ${routineId}${typeof r.runId === "string" ? ` (run ${r.runId})` : ""}. It runs on its own; check list_routines for the result.` };
+    const note = typeof r.message === "string" ? ` ${r.message}` : " It runs on its own.";
+    return { text: `${r.alreadyRunning === true ? "Joined the run already under way" : "Started a run"} of routine ${routineId}${typeof r.runId === "string" ? ` (run ${r.runId})` : ""}.${note} Check list_routines for the result.` };
   }
   if (name === "propose_routine") {
     const { fields: routine, error: scheduleError } = routineFields(args);
@@ -1075,6 +1245,7 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
         routine,
         // JSON.stringify drops the key entirely when no target was named
         forBotId: forBotId || undefined,
+        ...(typeof args.quote === "string" ? { quote: args.quote } : {}),
       }),
     });
     return confirmationResult(r, `the new routine “${routine.name}”`);
@@ -1093,6 +1264,7 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
       routineId,
       // JSON.stringify drops the key entirely when no target was named
       ...(forBotId ? { forBotId } : {}),
+      ...(typeof args.quote === "string" ? { quote: args.quote } : {}),
     };
     if (action === "update") {
       if (!jsonRecord(args.changes)) {
@@ -1100,6 +1272,9 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
       }
       const { fields: changes, error: scheduleError } = routineFields(args.changes);
       if (scheduleError) return { text: scheduleError, isError: true };
+      if (Object.hasOwn(changes, "enabled")) {
+        return { text: "Pause and resume are their own actions. Do not set enabled in changes.", isError: true };
+      }
       if (!Object.keys(changes).length) {
         return { text: "The update action needs at least one supported field in changes.", isError: true };
       }
@@ -1142,6 +1317,7 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
         reason: args.reason,
         // JSON.stringify drops the key entirely when no target was named
         forBotId: forBotId || undefined,
+        ...(typeof args.quote === "string" ? { quote: args.quote } : {}),
       }),
     });
     return confirmationResult(r, "the profile change", "profile");
@@ -1169,6 +1345,7 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
         reason: args.reason,
         // JSON.stringify drops the key entirely when no target was named
         forBotId: forBotId || undefined,
+        ...(typeof args.quote === "string" ? { quote: args.quote } : {}),
       }),
     });
     return confirmationResult(r, "the default model change", "model");
@@ -1550,4 +1727,31 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
     };
   }
   return { text: `Unknown tool: ${name}`, isError: true };
+}
+
+/** What connect_github tells the bot, per state of the person's connection.
+ * The code and link are for the person; the device code never leaves the server. */
+export function githubConnectText(r: Record<string, unknown>): string {
+  const login = typeof r.login === "string" ? r.login : "";
+  const orgs = typeof r.orgAccessUrl === "string" ? r.orgAccessUrl : "";
+  switch (r.state) {
+    case "connected":
+      return `GitHub is connected as @${login}. Continue the task.${orgs ? ` If a repository of an organization still answers 404 or 403, that organization has not granted access: ask the person to open ${orgs} and click Grant (or Request) next to it, or call connect_github with reconnect true.` : ""}`;
+    case "pending": {
+      const until = typeof r.expiresAt === "number" ? ` It expires at ${new Date(r.expiresAt).toISOString().slice(11, 16)} UTC.` : "";
+      return `Show the person, in one short message in their language: the code ${String(r.userCode)} and the link ${String(r.verificationUri)}. They open the link, sign in to GitHub, type the code and authorize Sagax; on that page, next to each organization, they click Grant (or Request when they are not an owner) so their bots reach its repositories.${until} Then end this turn. When they say it is done, call connect_github again to confirm. Never ask for a token or for gh auth login.`;
+    }
+    case "group":
+      return "Connecting GitHub is done in a 1:1 conversation with the person or in Connect apps > GitHub, never in a group. Say so.";
+    case "not_person":
+      return "GitHub is connected only on the person's own request in their 1:1 conversation, never from a routine, an automation or another bot's turn. Tell them to ask you directly or to use Connect apps > GitHub.";
+    case "admin_only":
+      return "An administrator manages this person's integrations: they cannot connect GitHub themselves. Tell them to ask an administrator.";
+    case "integrations_off":
+      return "The person has turned off their integrations for bots (Connect apps). Say so; never ask for a token.";
+    case "no_device_flow":
+      return `This server has no GitHub OAuth App for the device flow yet.${login ? ` GitHub is connected as @${login} with a token that may not cover their organizations.` : ""} Tell the person to connect in Connect apps > GitHub with a classic personal access token with the repo and read:org scopes (a fine-grained token reaches one owner only), and an administrator to add the OAuth App's client id in Settings > Organization.`;
+    default:
+      return typeof r.message === "string" ? r.message : "GitHub sign-in is unavailable right now.";
+  }
 }

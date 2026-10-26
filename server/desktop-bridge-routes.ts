@@ -6,6 +6,9 @@
 //   GET  /api/desktop-bridge/<id>/tunnel   (WebSocket) network egress
 //   GET  /api/me/desktop-bridge            the person's own status + activity
 //   POST /api/desktop-bridge/<id>/system   coarse OS, CPU, memory, disk facts
+//   POST /api/me/desktop-bridge/computers/rename|remove
+//                                          { computer: id or name, name? }: the person's
+//                                          other computers (remove: offline only)
 //   POST /api/me/desktop-bridge/local-vm   the person's own Local VM through
 //                                          their desktop: { action: status|start }
 //   GET/PUT /api/me/local-models           this person's expose and share switches
@@ -29,6 +32,8 @@ import { PASS, type RouteHandler } from "./routes/table.ts";
 
 const ID_ROUTE = /^\/api\/desktop-bridge\/([0-9a-f-]{36})\/(poll|lease|progress|result|disconnect|system)$/;
 const LOCAL_VM_ROUTE = "/api/me/desktop-bridge/local-vm";
+/** Settings > Computer > Other computers: rename or remove one of the person's computers. */
+const COMPUTER_ROUTE = /^\/api\/me\/desktop-bridge\/computers\/(rename|remove)$/;
 const LOCAL_MODELS_ROUTE = "/api/me/local-models";
 const LOCAL_MODELS_PUBLISH = /^\/api\/desktop-bridge\/([0-9a-f-]{36})\/local-models$/;
 /** What the person's Computer tab may ask of their own Local VM. */
@@ -106,7 +111,7 @@ export function createDesktopBridgeRoutes(deps: {
 }): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
     const publishMatch = LOCAL_MODELS_PUBLISH.exec(path);
-    if (path !== "/api/me/desktop-bridge" && path !== "/api/desktop-bridge/connect" && path !== LOCAL_VM_ROUTE && path !== LOCAL_MODELS_ROUTE && !publishMatch && !ID_ROUTE.test(path)) return PASS;
+    if (path !== "/api/me/desktop-bridge" && path !== "/api/desktop-bridge/connect" && path !== LOCAL_VM_ROUTE && !COMPUTER_ROUTE.test(path) && path !== LOCAL_MODELS_ROUTE && !publishMatch && !ID_ROUTE.test(path)) return PASS;
     res.setHeader("cache-control", "no-store");
     if (!deps.organization()) return json(res, 404, { error: `no route: ${method} ${path}` });
     const person = auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() : undefined;
@@ -133,6 +138,20 @@ export function createDesktopBridgeRoutes(deps: {
     if (method !== "POST") return json(res, 405, { error: "method not allowed" });
     if (!/^application\/json\b/i.test(String(req.headers["content-type"] ?? ""))) return json(res, 415, { error: "JSON required" });
     const body = await readBody(req, 4_000_000) as Record<string, unknown> | null;
+    const computerRoute = COMPUTER_ROUTE.exec(path);
+    if (computerRoute) {
+      if (typeof body?.computer !== "string") return json(res, 400, { error: "computer must be the id or the name of one of your computers", code: "computer_missing" });
+      try {
+        if (computerRoute[1] === "rename") {
+          if (typeof body.name !== "string") return json(res, 400, { error: "name must be text", code: "computer_name" });
+          return json(res, 200, { ok: true, ...deps.bridges.rename(person, body.computer, body.name) });
+        }
+        return json(res, 200, { ok: true, ...deps.bridges.remove(person, body.computer) });
+      } catch (error) {
+        const status = Number((error as { status?: number }).status) || 400;
+        return json(res, status, { error: (error as Error).message, ...((error as { code?: string }).code ? { code: (error as { code: string }).code } : {}) });
+      }
+    }
     if (path === LOCAL_VM_ROUTE) {
       // The person's own Local VM on their own connected computer, asked by
       // that person from their Computer tab (never a bot, never another's).

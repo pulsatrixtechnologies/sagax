@@ -1,4 +1,4 @@
-// The Plugins panel's one list: connected apps (Composio), MCP servers the
+// The Plugins panel's one list: the xAI cloud connectors, MCP servers the
 // person added, the reviewed plugin catalog and local skills, read as rows
 // of one kind. Pure functions only, so the three views and their tests share
 // the same sorting, search and sections.
@@ -30,7 +30,7 @@ export interface PluginItem {
   /** what the row's button does: Add (nothing to sign in to), Connect (an
    * account), or nothing (installed: the row opens the detail page) */
   action: "add" | "connect" | null;
-  /** where it came from: "manual", "catalog", "composio", "local" or a
+  /** where it came from: "manual", "catalog", "grok", "local" or a
    * marketplace name */
   source: string;
   /** the item this one is shown under: the marketplace plugin that
@@ -48,9 +48,9 @@ export interface PluginItem {
   merged?: string[];
 }
 
-/** Tag words to a category, first rule first. A tag is a category name from
- * Composio ("developer tools", "crm"), a marketplace plugin's category or a
- * catalog category; a tag no rule knows says nothing. */
+/** Tag words to a category, first rule first. A tag is a marketplace
+ * plugin's category or a catalog category; a tag no rule knows says
+ * nothing. */
 const TAG_RULES: Array<[PluginCategory, RegExp]> = [
   ["passwords", /\bpassword/],
   ["support", /\b(support|help ?desk|ticketing|customer service)\b/],
@@ -91,8 +91,6 @@ export function appKey(name: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
-interface AppCard { slug: string; label: string; blurb: string; logo: string | null; domain: string | null; noAuth?: boolean; categories?: string[] }
-interface AppStatus { connected: boolean; pending?: boolean; status?: string; accounts?: Array<{ id: string; status: string }> }
 interface McpListing {
   name: string;
   enabled: boolean;
@@ -119,8 +117,6 @@ interface MarketplaceListing {
 }
 
 export interface PluginSources {
-  cards?: readonly AppCard[] | null;
-  status?: Readonly<Record<string, AppStatus>>;
   servers?: readonly McpListing[] | null;
   featured?: readonly FeaturedListing[] | null;
   skills?: readonly SkillListing[] | null;
@@ -128,11 +124,19 @@ export interface PluginSources {
   /** Whop, an MCP server connected like an app (#2411): its server's name
    * once added, and whether it is signed in and on. */
   whop?: { description: string; server?: string; connected: boolean } | null;
-  /** false when connected apps cannot be connected here (no Composio key
-   * nor managed service): an app that also exists as an MCP server is then
-   * offered as the server */
-  composioUsable?: boolean;
+  /** Cloud connectors of the xAI account (shared/grok-cloud-connectors.ts),
+   * only when a Grok provider is set up. A catalog of names managed on
+   * grok.com: never connected, never merged with an MCP server. */
+  grok?: { connectors: readonly { id: string; name: string; tag: string }[]; description: string } | null;
 }
+
+/** Grok connector rows live in their own namespace: their key and id start
+ * with this, so they never merge with an MCP server row. */
+export const GROK_CONNECTOR_PREFIX = "grok:";
+
+/** A row of the xAI connector catalog (managed on grok.com, not here). */
+export const isGrokConnector = (item: Pick<PluginItem, "source" | "key">) =>
+  item.source === "grok" && item.key.startsWith(GROK_CONNECTOR_PREFIX);
 
 export const WHOP_KEY = "whop:whop";
 
@@ -152,31 +156,22 @@ function hostOf(url: string | undefined): string | null {
  * the MCP server it became. */
 export function buildPluginItems(sources: PluginSources): PluginItem[] {
   const items: PluginItem[] = [];
-  const status = sources.status ?? {};
-  // A connected app the catalog does not list (a partial or curated
-  // catalog) is still connected: it gets a row of its own.
-  const cardSlugs = new Set((sources.cards ?? []).map((card) => card.slug));
-  const uncatalogued: AppCard[] = Object.entries(status)
-    .filter(([slug, state]) => !cardSlugs.has(slug) && (state.connected || (state.accounts?.length ?? 0) > 0))
-    .map(([slug]) => ({ slug, label: slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()), blurb: "", logo: null, domain: null }));
-  for (const card of [...(sources.cards ?? []), ...uncatalogued]) {
-    const state = status[card.slug];
-    const accounts = state?.accounts ?? [];
-    const failed = Boolean(state?.status && /^(expired|failed)$/i.test(state.status));
-    const connected = Boolean(card.noAuth) || Boolean(state?.connected) || accounts.length > 0;
+  for (const connector of sources.grok?.connectors ?? []) {
+    const id = connector.id.trim();
+    const name = connector.name.trim();
+    if (!id || !name) continue;
     items.push({
-      key: `app:${card.slug}`,
+      key: `${GROK_CONNECTOR_PREFIX}${id}`,
       kind: "app",
-      id: card.slug,
-      name: card.label,
-      description: card.blurb,
-      logo: card.logo,
-      domain: card.domain,
-      category: categoryFromTags(card.categories),
-      installed: connected,
-      status: state?.pending ? "pending" : failed && !accounts.length ? "needs_auth" : connected ? "connected" : "available",
-      action: connected ? null : card.noAuth ? "add" : "connect",
-      source: "composio",
+      id: `${GROK_CONNECTOR_PREFIX}${id}`,
+      name,
+      description: sources.grok!.description,
+      domain: "grok.com",
+      category: categoryFromTags([connector.tag]),
+      installed: false,
+      status: "available",
+      action: null,
+      source: "grok",
     });
   }
   if (sources.whop) {
@@ -280,19 +275,18 @@ export function buildPluginItems(sources: PluginSources): PluginItem[] {
       });
     }
   }
-  return mergeSameApps(items, sources.composioUsable !== false);
+  return mergeSameApps(items);
 }
 
-/** Kinds that stand for an app someone connects: the same app from two
- * sources (a Composio app and a catalog MCP server) is one row. */
-const mergeable = (item: PluginItem) => !item.parent && (item.kind === "app" || item.kind === "featured" || item.kind === "mcp");
+/** Kinds that stand for an app someone connects: the same app from a
+ * featured listing and a catalog MCP server is one row. */
+const mergeable = (item: PluginItem) => !item.parent && !isGrokConnector(item) && (item.kind === "app" || item.kind === "featured" || item.kind === "mcp");
 
 /** One row per app. What is installed always shows; otherwise the row
- * offers the best way to connect it: the connected app (Composio) when it
- * can be connected here, else the MCP server. The row keeps the best logo,
- * site and category any of its sources has, and stays recommended when one
- * of them was. */
-export function mergeSameApps(items: readonly PluginItem[], composioUsable = true): PluginItem[] {
+ * offers the best way to connect it, preferring a featured listing over its
+ * MCP server. The row keeps the best logo, site and category any of its
+ * sources has, and stays recommended when one of them was. */
+export function mergeSameApps(items: readonly PluginItem[]): PluginItem[] {
   const groups = new Map<string, PluginItem[]>();
   for (const item of items) {
     if (!mergeable(item)) continue;
@@ -307,7 +301,7 @@ export function mergeSameApps(items: readonly PluginItem[], composioUsable = tru
     const category = group.find((item) => item.category !== "other")?.category ?? "other";
     const recommended = group.some((item) => item.recommended);
     const installed = group.filter((item) => item.installed);
-    const rank = (item: PluginItem) => item.kind === "app" ? (composioUsable ? 0 : 2) : item.kind === "featured" ? 1 : 3;
+    const rank = (item: PluginItem) => item.kind === "app" ? 0 : item.kind === "featured" ? 1 : 3;
     const keep = installed.length ? installed : [[...group].sort((a, b) => rank(a) - rank(b))[0]!];
     for (const item of group) {
       if (!keep.includes(item)) {

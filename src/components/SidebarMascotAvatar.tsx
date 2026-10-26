@@ -5,7 +5,7 @@ import { isShapeMove, type ShapeMove } from "./shape-engine";
 import { pointerGazeOffset } from "@/lib/owl/owl-art";
 import { pickSidebarReaction, type SidebarMascotReactionKind } from "@/lib/sidebar-mascot/interaction";
 import { attachSidebarMascotRoot, registerSidebarMascot, refreshSidebarMascotReducedMotion } from "@/lib/sidebar-mascot/loop";
-import { useReducedMotion } from "./skin-fx/skin-fx";
+import { FX_FULL_MIN, useReducedMotion } from "./skin-fx/skin-fx";
 import { BotAvatar, type BotAvatarProps, type MausAvatarHandle } from "./Avatar";
 import type { FxMoveRequest } from "./skin-fx/skin-fx";
 
@@ -28,7 +28,8 @@ export function SidebarMascotProvider({ rootRef, children }: { rootRef: React.Re
     attachSidebarMascotRoot(rootRef.current);
   }, [rootRef.current]);
   useEffect(() => {
-    if (reduced) refreshSidebarMascotReducedMotion();
+    // both ways: turning reduced motion back off brings the gaze back without a reload
+    refreshSidebarMascotReducedMotion();
   }, [reduced]);
   return children;
 }
@@ -82,7 +83,8 @@ export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string }) {
       const clip = SHAPE_REACT[kind] ?? "wink";
       if (isShapeMove(clip)) {
         setTapMove({ clip, key: Date.now() });
-        return;
+        // a small shape cannot play the move (no live loop): it blinks (ShapeMascot) and squishes below
+        if ((avatarProps.size ?? 44) >= FX_FULL_MIN) return;
       }
     }
     // Rigid squish on the wrapper for every other character.
@@ -111,6 +113,7 @@ export function SidebarMascotAvatar(props: BotAvatarProps & { botId: string }) {
       <span ref={box} className="inline-flex">
         <BotAvatar
           {...avatarProps}
+          fillBox
           animated={avatarProps.animated || Boolean(tapMove)}
           sidebarAlive={alive && !tapMove}
           mascotRef={mascotRef}

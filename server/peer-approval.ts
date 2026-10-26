@@ -14,7 +14,9 @@
 // the user-facing Always-allow flow already mirrors that key back into
 // `alwaysAllow`, so the two sides never disagree about what was granted.
 
+import { botRecipientAllowed } from "../shared/allowed-recipients.ts";
 import { newId } from "./contracts.ts";
+import { standingGrantsAllowed } from "./custom-rules-org.ts";
 import { deliverableNotification, type Notification } from "./notify.ts";
 import { peerAllowKey, type PeerAction } from "./peer-approval-key.ts";
 import type { BotRecord, Message, Store } from "./store.ts";
@@ -164,8 +166,12 @@ function announceCard(bus: ApprovalBus, from: BotRecord, card: Message, sourceTh
   }
   const group = room && !room.dm ? { id: room.id, name: room.name } : undefined;
   const title = card.card?.title ?? "";
-  const detail = card.card?.subtitle ? `${title} — ${card.card.subtitle}` : title;
-  bus.notify?.(deliverableNotification("approval", from, sourceThreadId, detail, { avatarUrl: from.avatarUrl, group }));
+  const detail = card.card?.subtitle ? `${title}: ${card.card.subtitle}` : title;
+  bus.notify?.(deliverableNotification("approval", from, sourceThreadId, detail, {
+    avatarUrl: from.avatarUrl,
+    group,
+    ...(card.card?.requestId ? { requestId: card.card.requestId } : {}),
+  }));
 }
 
 /** Ask the user (in the source task thread) whether `from` may `action` `target`.
@@ -181,6 +187,13 @@ export function requestPeerApproval(
   sourceThreadId = from.threadId,
 ): Promise<PeerApprovalOutcome> {
   if (bus.autoApply?.(from.id, sourceThreadId) || allowKeyAllowed(from, peerAllowKey(action, target.id))) {
+    return Promise.resolve("allow");
+  }
+  // 2026-10-21 (parité 1C, JC: « hors liste = carte, dans la liste = part
+  // sans carte »): a bot on the sender's allowed recipients is reached with
+  // no card. A room (post_to_room) is not a recipient. A standing grant: off
+  // while the organization turned standing grants off.
+  if (action !== "post_to_room" && standingGrantsAllowed() && botRecipientAllowed(from.allowedRecipients, target.id)) {
     return Promise.resolve("allow");
   }
   return new Promise((resolve) => {

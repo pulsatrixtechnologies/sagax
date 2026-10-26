@@ -19,6 +19,7 @@ const HIDDEN_SETTINGS: ReadonlySet<AppSettingsSection> = new Set([
   "mail",
   "activity",
   "backups",
+  "import",
   "workspaces",
   "people",
 ]);

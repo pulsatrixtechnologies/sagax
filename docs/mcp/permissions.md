@@ -38,7 +38,7 @@ One permission per action, named `resource:verb` (`memory:save`,
 | own | the caller's own work: memory, skills, files, widgets, reactions, proposals |
 | dispatch | puts other bots, people, routines or cloud agents to work |
 | claim | holds on shared work (acquire, renew, release) |
-| admin | creates bots, rooms or credentials, edits shared rules, runs host commands, pairing, settings |
+| admin | creates bots, rooms or credentials, runs host commands, settings (2026-10-19: a bot's own rules and docs, its person's logins, computer choice and creating a pairing for the speaking person are `own`, never for a service turn, see docs/member-admin-audit.md) |
 
 ## Roles (widest scope per tier)
 

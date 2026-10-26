@@ -174,8 +174,23 @@ public enum RoutineCalendar {
         _ day: Date, routines: [Routine], runs: [RoutineRun], botId: String? = nil, calendar: Calendar = .current
     ) -> [RoutineCalendarItem] {
         let start = startOfDay(day, calendar: calendar)
-        return items(routines: routines, runs: runs, from: start, to: addDays(start, 1, calendar: calendar), calendar: calendar)
+        return planned(items(routines: routines, runs: runs, from: start, to: addDays(start, 1, calendar: calendar), calendar: calendar))
             .filter { botId == nil || $0.botId == botId }
+    }
+
+    /// The calendar shows what was PLANNED, never what ran: a receipt becomes
+    /// its plain planned occurrence (no status), a receipt of a deleted
+    /// routine goes away, and the history stays in the list view.
+    public static func planned(_ items: [RoutineCalendarItem]) -> [RoutineCalendarItem] {
+        var seen = Set<String>()
+        var out: [RoutineCalendarItem] = []
+        for item in items {
+            guard let routine = item.routine else { continue }
+            let id = "plan-\(routine.id)-\(Int64(item.at.rounded()))"
+            if !seen.insert(id).inserted { continue }
+            out.append(RoutineCalendarItem(id: id, at: item.at, durationMinutes: item.durationMinutes, routine: routine, run: nil))
+        }
+        return out
     }
 
     /// `packCalendarCollisions`: overlapping items share a cluster's column

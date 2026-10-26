@@ -2,7 +2,7 @@
 // see, keeps the prior text so a revert needs nothing else, and never
 // takes down the change it records. Bot writes are caught at the turn
 // boundary; these tests simulate a bot's file tool with a plain write.
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -34,6 +34,43 @@ beforeEach(resetMemoryJournalState);
 afterEach(resetMemoryJournalState);
 
 describe("unifiedDiff", () => {
+  it("diffs a shared head and tail exactly as the whole line table does (port de OpenMausBot #3131)", () => {
+    const fullTableOps = (a: string[], b: string[]) => {
+      const cols = b.length + 1;
+      const table = new Uint32Array((a.length + 1) * cols);
+      for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) {
+        table[i * cols + j] = a[i] === b[j] ? table[(i + 1) * cols + j + 1] + 1 : Math.max(table[(i + 1) * cols + j], table[i * cols + j + 1]);
+      }
+      return table[0];
+    };
+    let seed = 11;
+    const next = (n: number) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+    const pick = (n: number) => Array.from({ length: next(n) }, () => "xyz"[next(3)]!);
+    for (let round = 0; round < 400; round++) {
+      const head = pick(6), tail = pick(6);
+      const a = [...head, ...pick(6), ...tail];
+      const b = [...head, ...pick(6), ...tail];
+      const diff = unifiedDiff(a.map((line) => `${line}\n`).join(""), b.map((line) => `${line}\n`).join(""), "MEMORY.md", 1_000_000);
+      // An edit script of minimal length keeps a longest common subsequence.
+      const kept = a.length - diff.removed;
+      expect({ a, b, kept }).toEqual({ a, b, kept: fullTableOps(a, b) });
+      expect(b.length - diff.added).toBe(kept);
+      // Applying the hunks' sides gives back each version.
+      if (a.join() !== b.join()) {
+        const body = diff.text.split("\n").slice(2).filter((line) => !line.startsWith("@@"));
+        expect(body.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("diffs a few changed lines of a file too large for the whole table", () => {
+    const lines = Array.from({ length: 3_000 }, (_, i) => `line ${i}`);
+    const after = [...lines.slice(0, 1_500), "inserted", ...lines.slice(1_500)];
+    const diff = unifiedDiff(`${lines.join("\n")}\n`, `${after.join("\n")}\n`, "MEMORY.md", 1_000_000);
+    expect(diff).toMatchObject({ added: 1, removed: 0, truncated: false });
+    expect(diff.text).toContain("@@ -1499,4 +1499,5 @@");
+  });
+
   it("is empty when nothing changed", () => {
     expect(unifiedDiff("a\nb\n", "a\nb\n", "MEMORY.md")).toEqual({ text: "", added: 0, removed: 0, truncated: false });
   });
@@ -328,6 +365,30 @@ describe("turn boundary", () => {
 
   it("hands back the write's own result when the journal cannot read the file", () => {
     expect(journalTurnWrite("bad/id", "memory/log/2026-10-13.md", "t1", () => "written")).toBe("written");
+  });
+
+  it("reuses the baseline of a file whose size and mtime are unchanged, and journals one that moved (port of OpenMausBot #2465)", () => {
+    const bot = freshBot();
+    ensureWorkspace(bot);
+    const note = join(workspaceDir(bot), "MEMORY.md");
+    writeFileSync(note, "aaaa\n");
+    // A whole-millisecond mtime: utimesSync takes a Date (ms), so restoring a
+    // sub-millisecond mtime read from APFS or ext4 would move it.
+    const whole = new Date(Math.floor(statSync(note).mtimeMs / 1000) * 1000);
+    utimesSync(note, whole, whole);
+    const before = statSync(note);
+    beginMemoryTurn(bot, "t1");
+    endMemoryTurn("t1");
+    // same size, same mtime: not read again, so not journaled (the accepted trade)
+    beginMemoryTurn(bot, "t2");
+    writeFileSync(note, "bbbb\n");
+    utimesSync(note, before.atime, before.mtime);
+    expect(endMemoryTurn("t2")).toEqual([]);
+    // a new mtime is read and journaled
+    beginMemoryTurn(bot, "t3");
+    writeFileSync(note, "cccc\n");
+    utimesSync(note, before.atime, new Date(before.mtimeMs + 5000));
+    expect(endMemoryTurn("t3").length).toBe(1);
   });
 
   it("never throws when a workspace vanished mid-turn", () => {

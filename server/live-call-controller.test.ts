@@ -1094,20 +1094,6 @@ describe("LiveCallController relay", () => {
 
     // A connect-an-app or credential card waits on the person in the chat;
     // without a word the call went silent until the idle hang-up.
-    it("points the person at the chat when the bot needs an app connected", async () => {
-      const t = await live();
-      const connector = { slug: "gmail", label: "Gmail", description: "Read mail", status: "required" as const, resumeKey: "k1" };
-      t.message({ id: "k1", kind: "connector", connector });
-      t.patch({ id: "k1", kind: "connector", connector: { ...connector, status: "authorizing" } });
-      await vi.advanceTimersByTimeAsync(0);
-      const said = t.socket().appends("instructions").map((e) => String(e.content));
-      expect(said).toHaveLength(1);
-      expect(said[0]).toContain("Gmail");
-      expect(said[0]).toContain("in the chat");
-      t.message({ id: "k2", kind: "connector", connector: { ...connector, label: "Slack", status: "connected" } });
-      await vi.advanceTimersByTimeAsync(0);
-      expect(t.socket().appends("instructions")).toHaveLength(1);
-    });
 
     it("points at the chat for a credential, and never asks for it aloud", async () => {
       const t = await live();

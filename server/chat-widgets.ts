@@ -13,6 +13,7 @@ import {
 } from "../shared/widget.ts";
 import { parsePageProposal, type PageKind } from "../shared/published-pages.ts";
 import type { MausColor } from "../shared/wire.ts";
+import { createAppCard, isAppTool } from "./chat-apps.ts";
 import { createOptionsCard } from "./options-card.ts";
 import { isSecretName, mask, redactSecretsInText } from "./redact.ts";
 import type { Message } from "./store.ts";
@@ -139,6 +140,7 @@ export function createAgentCard(args: {
   const { store, bot, threadId, input } = args;
   if (!isRecord(input) || input.tool === undefined) return createOptionsCard(args);
   if (input.tool === "propose_page") return proposePageCard(args, input);
+  if (isAppTool(input.tool)) return createAppCard({ store, bot, threadId, input, authored: args.authored });
   if (input.tool !== "show_widget" && input.tool !== "update_widget") {
     return { ok: false, status: 400, error: "tool: must be show_widget or update_widget." };
   }

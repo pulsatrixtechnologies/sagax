@@ -549,6 +549,9 @@ public struct CaptureReport: Decodable, Hashable, Sendable {
     public var added: Int
     public var topics: Int?
     public var aboutMe: Int?
+    /// Facts memory already held: the "N already known" of the receipt
+    /// (parity M3). Absent on a report written before it.
+    public var known: Int?
 
     /// `noticedCount`: facts filed in MEMORY.md and topic files.
     public var noticed: Int { added + (topics ?? 0) }
@@ -1063,6 +1066,50 @@ struct SlackManagementAnswer: Decodable {
     var managementUrl: String?
 }
 
+// MARK: - Bot email address (B21 / CO5, 2026-10-21)
+
+/// `GET /api/bots/:id/inbound-mail`: the bot's own address, given by the
+/// Perspicax relay. `available` false on a solo server, an older
+/// Perspicax, or when inbound mail is off.
+public struct BotInboundMail: Decodable, Equatable, Sendable {
+    public var available: Bool?
+    public var address: String?
+    public var enabled: Bool?
+}
+
+/// What the profile shows: the address (not an id, shown as is) and
+/// whether it still waits for the administrator to turn it on (addresses
+/// are off by default, JC decision 1 of 2026-10-21).
+public struct BotInboundMailRow: Equatable, Sendable {
+    public var address: String
+    public var waitingForAdmin: Bool
+    public init(address: String, waitingForAdmin: Bool) {
+        self.address = address
+        self.waitingForAdmin = waitingForAdmin
+    }
+}
+
+public enum BotInboundMailRules {
+    /// A row only for an available, well-formed address; nil hides it.
+    public static func row(_ answer: BotInboundMail?) -> BotInboundMailRow? {
+        guard let answer, answer.available == true, let address = answer.address,
+              address.count <= 320, isAddress(address)
+        else { return nil }
+        return BotInboundMailRow(address: address, waitingForAdmin: answer.enabled != true)
+    }
+
+    static func isAddress(_ value: String) -> Bool {
+        let parts = value.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2, let local = parts.first, let domain = parts.last,
+              (1...64).contains(local.count), (1...253).contains(domain.count)
+        else { return false }
+        let forbidden = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "<>()\",;:"))
+        guard local.unicodeScalars.allSatisfy({ !forbidden.contains($0) }) else { return false }
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-")
+        return domain.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+}
+
 // MARK: - Duplicate (BA19, store.tsx duplicateBot)
 
 /// What a copy of a bot carries: the profile fields the desktop copies,
@@ -1159,16 +1206,14 @@ public enum AccessRules {
 /// An admin's Access patch (`PATCH /api/bots/:id`); nil fields are left out.
 public struct BotAccessPatch: Encodable, Hashable, Sendable {
     public var browser: Bool?
-    public var composio: Bool?
     public var alwaysAllow: [String]?
     public var mcpServers: [String]?
     public var memoryEnabled: Bool?
     public var memoryUpkeep: Bool?
 
-    public init(browser: Bool? = nil, composio: Bool? = nil, alwaysAllow: [String]? = nil, mcpServers: [String]? = nil,
+    public init(browser: Bool? = nil, alwaysAllow: [String]? = nil, mcpServers: [String]? = nil,
                 memoryEnabled: Bool? = nil, memoryUpkeep: Bool? = nil) {
         self.browser = browser
-        self.composio = composio
         self.alwaysAllow = alwaysAllow
         self.mcpServers = mcpServers
         self.memoryEnabled = memoryEnabled

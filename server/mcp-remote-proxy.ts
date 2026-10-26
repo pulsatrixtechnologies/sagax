@@ -38,6 +38,7 @@ import {
   remoteMcpSpec,
 } from "./mcp-http.ts";
 import { lenientToolValidator, schemaProblems } from "./mcp-schema-validator.ts";
+import { rateLimitGaveUpText, rateLimitRetryText, rateLimitWait, sleepUnlessAborted } from "./rate-limit-retry.ts";
 
 type Json = Record<string, unknown>;
 function isRecord(value: unknown): value is Json {
@@ -149,6 +150,24 @@ function remoteErrorText(detail: string): string {
   text = redactSecretsInText(text).trim();
   if (text.length > REMOTE_ERROR_CHARS) text = `${text.slice(0, REMOTE_ERROR_CHARS - 1)}…`;
   return text || "Remote MCP request failed";
+}
+/** What a refused HTTP request means, in words a person can act on. The status code itself carries no secret. */
+function remoteStatusText(status: number | undefined, retryAfterMs?: number): string {
+  if (status === 403) {
+    return "This MCP server refused the request (HTTP 403). Its sign-in may be missing a permission (scope) it needs, "
+      + "or the service may not be turned on for that account or project.";
+  }
+  if (status === 404) return "This MCP server's address was not found (HTTP 404). Check its URL in Plugins → MCP servers.";
+  if (status === 429) return rateLimitGaveUpText(serverLabel(), retryAfterMs);
+  if (status !== undefined && status >= 500) return `This MCP server had a problem on its side (HTTP ${status}). Try again later.`;
+  return status === undefined ? "Remote MCP request failed" : `Remote MCP request failed (HTTP ${status})`;
+}
+/** What a person calls this server in a notice. */
+function serverLabel(): string { return context.title ?? (directory?.server ? `The ${directory.server} connector` : "This MCP server"); }
+/** Tells the engine (a logging notification) the call waits, then waits; false when cancelled meanwhile. */
+async function announceAndWait(wait: number, signal: AbortSignal): Promise<boolean> {
+  send({ jsonrpc: "2.0", method: "notifications/message", params: { level: "warning", logger: "sagax", data: rateLimitRetryText(serverLabel(), wait) } });
+  return sleepUnlessAborted(wait, signal);
 }
 const allowed = (name: string) => !directory?.scope || allowsTool(directory.scope, { kind: "mcp", server: directory.server, name });
 
@@ -324,11 +343,21 @@ async function handle(message: Json): Promise<void> {
   const deadline = message.method !== "tools/call" ? 30_000 : directory ? 120_000 : undefined;
   const signal = deadline === undefined ? controller.signal : AbortSignal.any([controller.signal, AbortSignal.timeout(deadline)]);
   try {
-    const result = directory
-      ? await directed(message, signal)
+    const attempt = () => directory
+      ? directed(message, signal)
       : message.method === "initialize"
-        ? await client.initialize("Sagax tool proxy", signal)
-        : await client.request(message.method, message.params, signal);
+        ? client.initialize("Sagax tool proxy", signal)
+        : client.request(message.method as string, message.params, signal);
+    // A 429 refused the request before anything ran (R1): wait the server's
+    // own Retry-After, say so, and ask again, a few times at most.
+    let result: unknown;
+    for (let retries = 0; ; retries += 1) {
+      try { result = await attempt(); break; }
+      catch (failure) {
+        const wait = failure instanceof McpHttpError && failure.status === 429 && message.method === "tools/call" && !signal.aborted ? rateLimitWait(failure.retryAfterMs, retries) : null;
+        if (wait === null || !await announceAndWait(wait, signal)) throw failure;
+      }
+    }
     if (message.method === "initialize") initialized = true;
     send({ jsonrpc: "2.0", id: message.id, result });
   } catch (failure) {
@@ -338,6 +367,8 @@ async function handle(message: Json): Promise<void> {
     if (failure instanceof Refusal) error(message.id, failure.code, failure.message);
     else if (failure instanceof McpRpcError) error(message.id, failure.code ?? -32603, remoteErrorText(failure.detail));
     else if (failure instanceof McpHttpError && failure.status === 401) error(message.id, -32603, CREDENTIALS_REFUSED);
+    else if (failure instanceof McpHttpError && failure.kind === "status" && !signal.aborted) error(message.id, -32603, remoteStatusText(failure.status, failure.retryAfterMs));
+    else if (failure instanceof McpHttpError && failure.kind === "network" && failure.message === "request failed" && !signal.aborted) error(message.id, -32603, "Could not reach this MCP server. Check its URL and that it is online.");
     else error(message.id, signal.aborted ? -32800 : -32603, signal.aborted ? "MCP request cancelled" : "Remote MCP request failed");
   } finally { pending.delete(id); }
 }

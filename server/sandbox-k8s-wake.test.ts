@@ -16,7 +16,7 @@ import { createComputerStatusRoutes } from "./routes/computer-status.ts";
 import { dispatchRoutes } from "./routes/table.ts";
 import { createUserSandboxRoutes } from "./user-sandbox-routes.ts";
 import {
-  DEFAULT_WAKE_TIMEOUT_MS, POST_WINDOW_MS, SandboxClusterWaker, provisionerNotReached, provisionerUnreachable, sandboxWakeSettingsFromEnv,
+  DEFAULT_WAKE_TIMEOUT_MS, POST_WINDOW_MS, SANDBOX_STARTING_CODE, SANDBOX_STARTING_RETRY_DELAY_MS, SANDBOX_STARTING_RETRY_MS, SandboxClusterWaker, provisionerNotReached, provisionerUnreachable, sandboxWakeSettingsFromEnv,
 } from "./sandbox-k8s-wake.ts";
 import type { SandboxExecOutput, SandboxStatus } from "./sandboxd-core.ts";
 import { SandboxdRequestError, sandboxdHealth, type SandboxdClient } from "./user-sandbox-client.ts";
@@ -30,14 +30,25 @@ function refused(): Error {
   return Object.assign(new Error("connect ECONNREFUSED 10.0.0.4:8791"), { code: "ECONNREFUSED" });
 }
 
+function starting(): Error {
+  return new SandboxdRequestError(503, SANDBOX_STARTING_CODE, "the server environment is still starting");
+}
+
+function reset(): Error {
+  return Object.assign(new Error("socket hang up"), { code: "ECONNRESET" });
+}
+
 const RUNNING: SandboxStatus = { state: "running" } as unknown as SandboxStatus;
 const EXEC_OK: SandboxExecOutput = { exitCode: 0, stdout: "ok", stderr: "" } as unknown as SandboxExecOutput;
 
-/** A provisioner that refuses connections while `cluster.up` is false. */
-function fakeProvisioner(cluster: { up: boolean }, calls: string[], name: string): SandboxdClient {
+/** A provisioner that refuses connections while `cluster.up` is false.
+ * `faults[method]`: errors thrown, one per call, before answering. */
+function fakeProvisioner(cluster: { up: boolean }, calls: string[], name: string, faults: Record<string, Error[]> = {}): SandboxdClient {
   const gate = async <T>(method: string, value: T): Promise<T> => {
     calls.push(`${name}:${method}`);
     if (!cluster.up) throw refused();
+    const fault = faults[method]?.shift();
+    if (fault) throw fault;
     return value;
   };
   return {
@@ -87,6 +98,7 @@ interface Rig {
   posts: { url: string; method: string }[];
   probes: () => number;
   waits: ClusterWaitEvent[];
+  faults: Record<string, Error[]>;
 }
 
 /** `upAfterProbes`: the cluster answers from that many health probes after the first webhook POST. */
@@ -97,6 +109,7 @@ function rig(options: { route?: "docker" | "kubernetes"; upAfterProbes?: number;
   let probes = 0;
   let probesAfterPost = 0;
   const waits: ClusterWaitEvent[] = [];
+  const faults: Record<string, Error[]> = {};
   const fetchImpl = (async (input: URL | string, init?: RequestInit) => {
     posts.push({ url: String(input), method: init?.method ?? "GET" });
     if (options.webhook === "throw") throw Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error(`getaddrinfo ENOTFOUND ${SECRET_URL}`), { code: "ENOTFOUND" }) });
@@ -118,15 +131,16 @@ function rig(options: { route?: "docker" | "kubernetes"; upAfterProbes?: number;
   });
   const manager = new UserSandboxManager({
     client: fakeProvisioner({ up: true }, calls, "docker"),
-    kubernetes: fakeProvisioner(cluster, calls, "kubernetes"),
+    kubernetes: fakeProvisioner(cluster, calls, "kubernetes", faults),
     kubernetesWaker: waker,
     onClusterWait: (event) => waits.push(event),
     backendFor: () => options.route ?? "kubernetes",
     instance: "default",
     stateFile: join(dir, "deletions.json"),
     now: () => clock,
+    sleep: async (ms) => { clock += ms; },
   });
-  return { manager, waker, cluster, calls, posts, probes: () => probes, waits };
+  return { manager, waker, cluster, calls, posts, probes: () => probes, waits, faults };
 }
 
 function expectNoSecret(texts: readonly string[]): void {
@@ -134,11 +148,11 @@ function expectNoSecret(texts: readonly string[]): void {
 }
 
 describe("sandboxWakeSettingsFromEnv", () => {
-  it("is off without the variable, and defaults the timeout to 8 minutes", () => {
+  it("is off without the variable, and defaults the timeout to 9 minutes", () => {
     expect(sandboxWakeSettingsFromEnv({})).toBeNull();
     expect(sandboxWakeSettingsFromEnv({ SAGAX_SANDBOX_K8S_WAKE_URL: "  " })).toBeNull();
     const settings = sandboxWakeSettingsFromEnv({ SAGAX_SANDBOX_K8S_WAKE_URL: SECRET_URL });
-    expect(settings?.timeoutMs).toBe(8 * 60_000);
+    expect(settings?.timeoutMs).toBe(9 * 60_000);
     expect(sandboxWakeSettingsFromEnv({ SAGAX_SANDBOX_K8S_WAKE_URL: SECRET_URL, SAGAX_SANDBOX_K8S_WAKE_TIMEOUT_MS: "300000" })?.timeoutMs).toBe(300_000);
   });
 
@@ -297,6 +311,66 @@ describe("the cluster wake", () => {
     expect(result.exitCode).toBe(0);
     expect(r.posts).toHaveLength(1);
     expect(r.calls).toEqual(["kubernetes:exec", "kubernetes:exec", "kubernetes:exec"]);
+  });
+
+  // 2026-10-19 (GOX): the provisioner answered after a cold start, then the
+  // first exec waited on a node pool scaling 0 -> 1 and the routine gave up.
+  it("sends a call again while the provisioner says the environment is still starting, then runs it once", async () => {
+    const r = rig();
+    r.cluster.up = true;
+    r.faults.exec = [starting(), starting(), starting()];
+    const result = await r.manager.exec(ALICE, { argv: ["gh", "auth", "status"] });
+    expect(result.exitCode).toBe(0);
+    expect(r.calls).toEqual(["kubernetes:exec", "kubernetes:exec", "kubernetes:exec", "kubernetes:exec"]);
+    expect(r.posts).toHaveLength(0);
+    expect(r.waits.map((wait) => wait.phase)).toContain("waiting");
+  });
+
+  it("stops sending a still-starting call after its bound, with the provisioner's refusal", async () => {
+    const r = rig();
+    r.cluster.up = true;
+    r.faults.exec = Array.from({ length: 500 }, () => starting());
+    await expect(r.manager.exec(ALICE, { argv: ["true"] })).rejects.toMatchObject({ code: SANDBOX_STARTING_CODE });
+    const sent = r.calls.length;
+    expect(sent).toBeGreaterThan(10);
+    expect(sent).toBeLessThanOrEqual(SANDBOX_STARTING_RETRY_MS / SANDBOX_STARTING_RETRY_DELAY_MS + 1);
+  });
+
+  it("a status read cut by a reset is sent once more; a command cut by a reset is not (it may have run)", async () => {
+    const r = rig();
+    r.cluster.up = true;
+    r.faults.status = [reset()];
+    const view = await r.manager.power(ALICE, "start");
+    expect(view.state).toBe("running");
+    // the cut read, the one sent again, then the view's own read
+    expect(r.calls.filter((call) => call === "kubernetes:status")).toHaveLength(3);
+    r.faults.exec = [reset()];
+    await expect(r.manager.exec(ALICE, { argv: ["true"] })).rejects.toBeTruthy();
+    expect(r.calls.filter((call) => call === "kubernetes:exec")).toHaveLength(1);
+  });
+
+  it("prewake starts the cluster and the person's environment before a routine of a bot that used it, and never on Docker", async () => {
+    const r = rig({ upAfterProbes: 2 });
+    // never used by this bot: nothing is woken or created
+    expect(await r.manager.prewake(ALICE, "bot-1")).toBe(false);
+    expect(r.posts).toHaveLength(0);
+    r.cluster.up = true;
+    await r.manager.exec(ALICE, { argv: ["true"] }, "bot-1");
+    r.cluster.up = false;
+    r.waker.markUnreachable();
+    clock += 10 * 60_000;
+    expect(await r.manager.prewake(ALICE, "bot-1")).toBe(true);
+    expect(r.posts).toHaveLength(1);
+    expect(r.calls.at(-1)).toBe("kubernetes:ensure");
+    // a prewake is not a use: a week later it stops
+    clock += 8 * 24 * 3600_000;
+    expect(await r.manager.prewake(ALICE, "bot-1")).toBe(false);
+    const docker = rig({ route: "docker" });
+    await docker.manager.exec(ALICE, { argv: ["true"] }, "bot-1");
+    docker.calls.length = 0;
+    expect(await docker.manager.prewake(ALICE, "bot-1")).toBe(false);
+    expect(docker.calls).toEqual([]);
+    expect(docker.posts).toHaveLength(0);
   });
 
   it("never touches the Docker route", async () => {

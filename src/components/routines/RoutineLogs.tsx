@@ -3,7 +3,7 @@ import { CircleAlert, FileText, Loader2, Search } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { isRoutineProblemRun, type RoutineRun, type RoutineRunStatusFilter } from "@/lib/routines";
+import { isRoutineProblemRun, routineRunMatchesStatus, type RoutineRun, type RoutineRunStatusFilter } from "@/lib/routines";
 import { routineDateTime, routineRunError, routineRunLabel, routineRunTime, routineRunTone } from "@/lib/routine-display";
 import type { Bot } from "@/state/store";
 import { RoutineOwnerBadge } from "./RoutineScopeBar";
@@ -28,14 +28,14 @@ export function RoutineLogs({ runs, bots, ownerOf, viewerPrincipalId, loading, e
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(50);
   const [confirmClear, setConfirmClear] = useState(false);
-  const filtered = runs.filter((run) => (!routineId || run.routineId === routineId) && (status === "all" || (status === "problems" ? isRoutineProblemRun(run) : run.status === status))
+  const filtered = runs.filter((run) => (!routineId || run.routineId === routineId) && routineRunMatchesStatus(run, status)
     && `${run.routineName} ${bots.find((bot) => bot.id === run.botId)?.name ?? ""} ${run.output ?? ""} ${run.error ?? ""} ${run.attention ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()))
     .sort((a, b) => routineRunTime(b) - routineRunTime(a));
   return <section className="mx-auto w-full max-w-5xl space-y-4 p-4 sm:p-6" aria-label={t("routines.logs")}>
     <div><h2 className="text-[17px] font-semibold text-ink">{t("routines.logs")}</h2><p className="mt-1 text-[12px] text-ink-secondary">{t("routines.logsHint")}</p></div>
     <div className="flex flex-wrap items-center gap-2">
       <label className="flex min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-hairline/50 bg-panel px-3 py-2 text-ink-secondary focus-within:border-focus"><Search size={14} /><input aria-label={t("routines.searchLogs")} placeholder={t("routines.searchLogs")} value={query} onChange={(event) => { setQuery(event.target.value); setLimit(50); }} className="min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-none" /></label>
-      <select aria-label={t("routines.filterStatus")} value={status} onChange={(event) => { onStatusChange(event.target.value as RoutineRunStatusFilter); setLimit(50); }} className="rounded-lg border border-hairline/50 bg-panel px-3 py-2 text-[12px] text-ink"><option value="all">{t("routines.allStatuses")}</option><option value="problems">{t("routines.status.problems")}</option>{(["queued", "running", "waiting", "completed", "failed", "missed", "cancelled"] as const).map((value) => <option key={value} value={value}>{t(`routines.status.${value}`)}</option>)}</select>
+      <select aria-label={t("routines.filterStatus")} value={status} onChange={(event) => { onStatusChange(event.target.value as RoutineRunStatusFilter); setLimit(50); }} className="rounded-lg border border-hairline/50 bg-panel px-3 py-2 text-[12px] text-ink"><option value="all">{t("routines.allStatuses")}</option><option value="problems">{t("routines.status.problems")}</option>{(["queued", "running", "waiting", "completed", "failed", "missed", "nothing_to_report", "cancelled"] as const).map((value) => <option key={value} value={value}>{t(`routines.status.${value}`)}</option>)}</select>
       {onClearLogs && <button type="button" disabled={runs.length === 0} onClick={() => setConfirmClear(true)} className="rounded-lg border border-hairline/50 bg-panel px-3 py-2 text-[12px] text-ink hover:bg-raised disabled:opacity-40">{t("routines.clearLogs")}</button>}
       {onClearLogs && <ConfirmDialog open={confirmClear} title={t("routines.clearLogsTitle")} body={t("routines.clearLogsBody")} confirmLabel={t("routines.clearLogsConfirm")} onCancel={() => setConfirmClear(false)} onConfirm={() => { setConfirmClear(false); onClearLogs(); }} />}
     </div>

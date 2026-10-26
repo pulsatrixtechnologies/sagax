@@ -1,0 +1,14 @@
+/* Hibou 98's Windows editions (JC, 2026-10-19): « pour Hibou 98 les variantes
+   sont Windows XP, Vista, 7, 8, 8.1, 10, 11 ». Each edition lays the chrome of
+   its era over the retro98 skin, as `data-skin-tint` (src/lib/skin-families.ts):
+   its palette tokens and its structural rules live in its own file, every
+   selector starting with [data-skin="retro98"][data-skin-tint="<edition>"], so
+   an edition is inert under any other one. Loaded with retro98.css only when an
+   edition is worn (applySkin in src/lib/skins.ts). */
+@import "./retro-editions/xp.css";
+@import "./retro-editions/vista.css";
+@import "./retro-editions/win7.css";
+@import "./retro-editions/win8.css";
+@import "./retro-editions/win81.css";
+@import "./retro-editions/win10.css";
+@import "./retro-editions/win11.css";

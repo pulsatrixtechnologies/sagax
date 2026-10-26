@@ -1,7 +1,7 @@
 import { t } from "./i18n";
 
 export interface FeatureFlagConfig {
-  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; routinesInConversation?: boolean; llmThreadTitles?: boolean; connectedApps?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; roomMemoryCapture?: boolean };
+  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; routinesInConversation?: boolean; llmThreadTitles?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; roomMemoryCapture?: boolean };
   browserEngine?: { kind: "engine" | "unavailable"; reason?: string; installable?: boolean; installing?: boolean; installError?: string };
 }
 
@@ -86,16 +86,6 @@ export function showToolCallsEnabled(config: FeatureFlagConfig | null | undefine
  * Off by default — the run stays in a hidden thread and the chat only gets the card. */
 export function routinesInConversationEnabled(config: FeatureFlagConfig | null | undefined): boolean {
   return config?.features?.routinesInConversation === true;
-}
-
-/** Connected apps (Composio): the Settings > Connections card. (The
- * sidebar's Connected apps row follows Settings > Appearance > Sidebar
- * shortcuts; this switch only seeds that setting's first value.) Experimental: off until switched on in
- * Settings > Experimental features; mirrors the server's
- * connectedAppsEnabled. While off, the claude.ai connectors status shows in
- * Settings > Model providers. */
-export function connectedAppsEnabled(config: FeatureFlagConfig | null | undefined): boolean {
-  return config?.features?.connectedApps === true;
 }
 
 /** The former Experimental switch for the sidebar's Browse Bots row, stored

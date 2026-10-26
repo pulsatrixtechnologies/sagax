@@ -171,7 +171,7 @@ describe("preloadScreens", () => {
     });
     vi.stubGlobal("cancelIdleCallback", cancel);
     const preloads = stubPreloads();
-    expect(preloads.length).toBe(17);
+    expect(preloads.length).toBe(19);
     const stop = preloadScreens();
     for (const preload of preloads) expect(preload).not.toHaveBeenCalled();
     idle!();
@@ -247,7 +247,8 @@ describe("launch bundle", () => {
       "ActivityPanel", "BotSettingsDialog", "ComputerPanel", "InspectorPanel", "KeyboardShortcutsModal",
       "LocalVmWorkspace", "NewBotDialog", "RemoteAgentSettingsPanel", "remote-desktop-panel", "RoutineCalendarPage",
       "RoutinesPage", "SettingsModal", "TeamMapPage", "TriggersPanel",
-      "achievements/AchievementsModal", "bot-catalog/BotCatalogModal",
+      "achievements/AchievementsModal", "bot-catalog/BotCatalogModal", "code/CodePage", "code/RunView", "code/DiffView",
+      "approvals/ApprovalsPage", "approvals/ApprovalDetail", "approvals/ApprovalsHistory",
     ].map((name) => `components/${name}.tsx`);
     expect(deferred.filter((file) => reached.has(file))).toEqual([]);
   });

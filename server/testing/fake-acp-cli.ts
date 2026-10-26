@@ -16,7 +16,7 @@
 //   FAKE_ACP_CACHED_LIVE_LOAD  acknowledge session/load of a live session but
 //                       keep its original MCP credentials, matching Qwen.
 //   FAKE_ACP_TEXT_REPLY  answer every session/prompt with only this text.
-//   FAKE_ACP_MODE   happy (default) | image | empty-reply | reasoning-only | exit-early | fail-after-text | hang | hang-initialize | stall-after-text | stall-first-prompt | unkeyed-tool | no-auth | auth-required | permission | question
+//   FAKE_ACP_MODE   happy (default) | image | empty-reply | reasoning-only | reasoning-only-error | exit-early | fail-after-text | hang | hang-initialize | stall-after-text | stall-first-prompt | unkeyed-tool | no-auth | auth-required | permission | question
 //                   | ask-question-unsupported (send a cursor/ask_question server→client
 //                     request mid-prompt; the driver must answer -32601 method
 //                     not found, and the prompt completes only after that
@@ -104,6 +104,8 @@
 //   FAKE_ACP_RPC_FAILURE_FILE  read a JSON-RPC error object on session/prompt;
 //                       once read this process stays poisoned even if the
 //                       file is removed. A replacement process can recover.
+//   FAKE_ACP_RPC_FAILURE_WHILE_FILE=1  not poisoned: fail only while the
+//                       file exists (an engine's usage limit that resets).
 //   FAKE_ACP_RPC_FAILURE_METHOD  initialize, session/new or session/prompt (default).
 //   FAKE_ACP_RPC_FAILURE_GATE  hold the error until this file exists.
 //   FAKE_ACP_RPC_FAILURE_AFTER_OUTPUT  emit text + a tool result before failing.
@@ -176,7 +178,7 @@
 // Keep this file dependency-free — it runs as a bare `node` subprocess.
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
 const mode = process.env.FAKE_ACP_MODE ?? "happy";
 
@@ -535,6 +537,7 @@ let onAskQuestionAnswered: (() => void) | null = null;
 let hangingPromptId: unknown = null;
 // stall-first-prompt mode: how many prompts this process has received
 let stallPrompts = 0;
+let reasoningErrors = 0;
 let hangKeepAlive: ReturnType<typeof setInterval> | null = null;
 
 // ask-peer mode: the "agents" MCP server entry from session/new's mcpServers
@@ -612,7 +615,10 @@ function emitUsageUpdates(): void {
 }
 function failRpc(msg: { method: string; id: unknown }): boolean {
   if (msg.method !== (process.env.FAKE_ACP_RPC_FAILURE_METHOD ?? "session/prompt")) return false;
+  // The server's own catalog probe is not a turn: the armed failure (and its gate) belongs to turns, so a status read never waits on it.
+  if (process.cwd().endsWith(["", "providers", "opencode", "discovery"].join(sep))) return false;
   const failureFile = process.env.FAKE_ACP_RPC_FAILURE_FILE;
+  if (process.env.FAKE_ACP_RPC_FAILURE_WHILE_FILE === "1") rpcFailure = null;
   if (failureFile && existsSync(failureFile)) rpcFailure = JSON.parse(readFileSync(failureFile, "utf8"));
   if (!rpcFailure) return false;
   if (msg.method === "session/prompt" && process.env.FAKE_ACP_RPC_FAILURE_AFTER_USAGE === "1") emitUsageUpdates();
@@ -1057,6 +1063,30 @@ function handle(msg: any) {
         );
       };
       const promptHead = String(msg.params?.prompt?.[0]?.text ?? "");
+      if (mode === "reasoning-only-error") {
+        // Grok/xAI's "empty response from model (reasoning_only)": a thought
+        // stream, then an rpc -32603 with that detail, for the first N prompts
+        // of the turn (FAKE_ACP_REASONING_FAIL_TIMES, default every prompt).
+        // After that it answers normally, so one fixture drives both the nudge
+        // recovery and the bounded give-up. Each failure is counted to
+        // FAKE_ACP_REASONING_COUNT_FILE so a test can prove the bound.
+        out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_thought_chunk", content: { text: "thinking hard, producing no answer" } } } });
+        const failTimes = process.env.FAKE_ACP_REASONING_FAIL_TIMES === undefined
+          ? Infinity
+          : Number(process.env.FAKE_ACP_REASONING_FAIL_TIMES);
+        if (reasoningErrors < failTimes) {
+          reasoningErrors += 1;
+          if (process.env.FAKE_ACP_REASONING_COUNT_FILE) {
+            try { writeFileSync(process.env.FAKE_ACP_REASONING_COUNT_FILE, String(reasoningErrors)); } catch {}
+          }
+          recordMethod("session/prompt.error");
+          out({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: "Internal error", data: { details: "empty response from model (reasoning_only)" } } });
+          return;
+        }
+        out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: "here is the answer after thinking" } } } });
+        complete();
+        return;
+      }
       if (promptHead.includes("[sagax-cache-prime]")) {
         voiceCachePrimed = true;
         out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: "ok" } } } });

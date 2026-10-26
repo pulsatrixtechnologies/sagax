@@ -12,6 +12,7 @@ import { t } from "@/lib/i18n";
 import { personInitials } from "@/lib/people-dm";
 import { personAvatarSrc } from "@/lib/profile-management";
 import { PersonAvatar } from "../MessageAuthor";
+import { personLabel } from "@/lib/human-label";
 
 export interface RunAsOption {
   principalId: string;
@@ -45,7 +46,7 @@ export function runAsRows(options: RunAsOptions, selected: string | undefined, q
 
 /** The option's text: its name, and why it cannot be chosen. */
 export function runAsOptionLabel(person: RunAsOption): string {
-  const name = person.name || person.principalId;
+  const name = personLabel(person.name, person.principalId);
   return person.selectable ? name : t("routines.runAsField.noRight", { name });
 }
 
@@ -63,7 +64,7 @@ export function RunAsField({ options, value, onChange }: {
   const chosen = rows.find((person) => person.principalId === selected)
     ?? options.people.find((person) => person.principalId === selected)
     ?? (options.current ? { principalId: options.current.principalId, name: options.current.name, selectable: true, ...(options.current.pending ? { pending: true as const } : {}) } : undefined);
-  const chosenName = chosen?.name || chosen?.principalId || "";
+  const chosenName = chosen ? personLabel(chosen.name, chosen.principalId) : "";
   const avatar = <PersonAvatar avatarUrl={personAvatarSrc(chosen?.avatarUrl)} initials={personInitials(chosenName || "?")} size={24} />;
   const pendingHint = chosen?.pending ? <p data-run-as-pending className="text-[11px] leading-relaxed text-ink-secondary">{t("routines.runAsField.pending", { name: chosenName })}</p> : null;
   if (!options.canChoose) {

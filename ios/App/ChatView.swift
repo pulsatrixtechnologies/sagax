@@ -52,7 +52,11 @@ struct ChatView: View {
         return Binding(get: { model.text }, set: { if model.text != $0 { model.text = $0 } })
     }
     @State var revealedMessageId: String?
+    /// The row the "New" line sits above, set when an unread chat opens.
+    @State var newDividerBefore: String?
     @State var showingTasks = false
+    /// A bot-to-bot conversation opened read only (BB1).
+    @State var openBotConversation: BotConversation?
     @State var showingComputer = false
     @State var showingPlus = false
     /// The bot panel, full screen, and the tab it opens on (`BotPanelDoor`).
@@ -173,6 +177,13 @@ struct ChatView: View {
         return session.startedTopics[bot.id]
     }
 
+    /// A thread this bot's chat should move to in place (Go to message on a
+    /// link of another of its conversations), if any.
+    var threadSwitch: ThreadSwitch? {
+        guard case let .bot(bot) = chat else { return nil }
+        return session.threadSwitches[bot.id]
+    }
+
     /// Bot selection is local to this screen; another device's navigation
     /// must not move a draft, approval, or Stop action to a different thread.
     var threadId: String { current.threadId }
@@ -226,6 +237,11 @@ struct ChatView: View {
         // whole chain as one opaque type made the optimizer abort ("Possible
         // non-terminating type substitution") when archiving Release.
         AnyView(screen)
+        .sheet(item: $openBotConversation) { row in
+            if case let .bot(bot) = current {
+                BotConversationPage(row: row, selfBot: bot).environmentObject(session)
+            }
+        }
         .sheet(isPresented: $showingTasks) {
             if current.supportsTasks {
                 TaskManagerView(chat: current) { selectedThreadId = $0 }
@@ -403,6 +419,13 @@ struct ChatView: View {
             session.consumeStartedTopic(bot.id)
             selectedThreadId = started
         }
+        .onValueChange(of: threadSwitch) { request in
+            // Go to message on a link of another conversation of this bot:
+            // this screen switches there, as a thread chip does
+            guard let request, case let .bot(bot) = current else { return }
+            session.threadSwitches[bot.id] = nil
+            selectedThreadId = request.threadId
+        }
     }
 
     var arrival: some View {
@@ -415,7 +438,10 @@ struct ChatView: View {
             // #219: selecting a closed conversation with a person reopens it
             if case let .room(room) = openedChat { SidebarPrefsModel.shared.reopenIfClosed(session, room: room) }
             await session.loadThreadIfNeeded(openedChat.threadId)
-            // opening a chat is what marks it read, exactly as on the desktop
+            // what was unread on opening keeps its "New" line until the chat
+            // is left; opening a chat is what marks it read, exactly as on
+            // the desktop
+            newDividerBefore = openedChat.unread ? NewMessagesDivider.anchor(rows) : nil
             if openedChat.unread { await session.markRead(openedChat) }
 #if DEBUG
             // `-open-plus`: the + sheet up, for the screenshot harness
@@ -503,6 +529,15 @@ struct ChatView: View {
         // one tap away behind "Earlier topics".
         let fresh = session.isFreshTopic(current)
         let transcript = fresh ? [] : rows
+        let storedBot: Bot? = { if case let .bot(bot) = current { return session.state.bot(bot.id) }; return nil }()
+        let conversationRows = BotConversations.visible(
+            storedBot?.botConversations ?? [],
+            openThreadId: threadId,
+            mainThreadId: storedBot?.mainThreadId,
+            fallbackThreadId: storedBot?.threadId ?? threadId,
+            linkedThreadIds: BotConversations.linkedThreadIds(in: messages))
+        let conversationAnchors = BotConversations.anchors(
+            conversationRows, rowStarts: transcript.map { $0.head.at }, hasMore: session.state.hasMore[threadId] == true)
         // A VStack with the composer as a sibling, rather than a scroll view
         // with `.safeAreaInset`. The inset version sized itself to its
         // content, so a short transcript left the composer floating in the
@@ -543,6 +578,7 @@ struct ChatView: View {
 
                         ForEach(Array(transcript.enumerated()), id: \.element.id) { index, row in
                             VStack(alignment: .leading, spacing: 0) {
+                                ForEach(conversationAnchors.before[index] ?? []) { conversationLine($0) }
                                 // a gap in time is worth marking; a timestamp
                                 // on every message is just noise
                                 if let desktop = desktopChatText {
@@ -572,6 +608,9 @@ struct ChatView: View {
                                         .padding(.bottom, 17.6)
                                 } else if index > 0 {
                                     Color.clear.frame(height: Self.rowGap)
+                                }
+                                if desktopChatText == nil, row.id == newDividerBefore {
+                                    NewMessagesLine()
                                 }
                                 // WP15 (RM21): another person's name over their run
                                 if case let .person(_, name, initials, personId)? = roomPersonLabel(at: index, in: transcript) {
@@ -612,6 +651,8 @@ struct ChatView: View {
 #endif
                         }
 
+                        ForEach(conversationAnchors.after) { conversationLine($0) }
+
                         // The reply as it is typed. It sits after the last
                         // settled message and disappears the moment the real
                         // one arrives — the store clears it on the same frame
@@ -626,7 +667,8 @@ struct ChatView: View {
                             showsReasoning: activityDetail != ActivityDetail.hidden.rawValue,
                             busy: current.busy,
                             color: current.color,
-                            name: current.name
+                            name: current.name,
+                            chat: current
                         )
 
                         // The bottom of the conversation: 26.3 pt from the
@@ -868,6 +910,30 @@ struct ChatView: View {
     }
 }
 
+/// The "New" line above the replies that were unread when the chat opened
+/// (`NewMessagesDivider`): a hairline in the accent on each side of a small
+/// capitalised word.
+struct NewMessagesLine: View {
+    @Environment(\.themePalette) var themePalette
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Rectangle().fill(Theme.accentText.opacity(0.6)).frame(height: 1)
+            Text("New")
+                .textCase(.uppercase)
+                .font(.system(size: 11, weight: .semibold))
+                .kerning(0.6)
+                .foregroundStyle(Theme.accentText)
+                .fixedSize()
+            Rectangle().fill(Theme.accentText.opacity(0.6)).frame(height: 1)
+        }
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("New messages"))
+        .accessibilityIdentifier("chat-new-divider")
+    }
+}
+
 /// The end of the transcript while a bot works: the reply as it is typed,
 /// its reasoning before any answer exists, or the typing dots. The only part
 /// of the chat that re-renders per streamed frame (`StreamingStore`).
@@ -880,6 +946,8 @@ struct ChatLiveTail: View {
     let busy: Bool
     let color: String
     let name: String
+    /// The conversation, for its mascot on the thinking line.
+    var chat: Chat? = nil
     /// Replies that finished streaming while this chat was open.
     @State private var finished = 0
 
@@ -907,10 +975,27 @@ struct ChatLiveTail: View {
                 .padding(.top, ChatView.rowGap)
                 .id(ChatView.liveBubbleId)
         } else if busy {
-            TypingIndicatorView(tintColor: MausPalette.color(color))
-                .padding(.top, ChatView.rowGap)
-                .id(ChatView.liveBubbleId)
-                .accessibilityLabel("\(name) is working")
+            // the reference design's thinking line: the bot's own small
+            // mascot at work, then a quiet word (the dots for a room)
+            Group {
+                if let chat, chat.isBot {
+                    HStack(spacing: 10) {
+                        ChatAvatarView(chat: chat, size: 28, state: .thinking, animated: true)
+                        Text("Thinking…")
+                            .font(Theme.Font.body)
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                    .padding(.leading, 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .ignore)
+                } else {
+                    TypingIndicatorView(tintColor: MausPalette.color(color))
+                }
+            }
+            .padding(.top, ChatView.rowGap)
+            .id(ChatView.liveBubbleId)
+            .accessibilityLabel("\(name) is working")
+            .accessibilityIdentifier("chat-thinking")
         }
     }
 }

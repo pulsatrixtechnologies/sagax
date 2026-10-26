@@ -207,6 +207,13 @@ export function SidebarPopoverMenu({
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         aria-label={ariaLabel}
+        // A click leaves the trigger focused, and any key pressed afterwards
+        // (an arrow, Escape) would make that focus :focus-visible and draw
+        // the ring. The pointer mark (until blur or Tab) keeps it off;
+        // keyboard focus still shows it (styles.css, [data-pointer-focus]).
+        onPointerDown={(event) => { event.currentTarget.dataset.pointerFocus = ""; }}
+        onKeyDown={(event) => { if (event.key === "Tab") delete event.currentTarget.dataset.pointerFocus; }}
+        onBlur={(event) => { delete event.currentTarget.dataset.pointerFocus; }}
         onClick={() => {
           clearTimers();
           if (open && (pinned || !openOnHover)) close();

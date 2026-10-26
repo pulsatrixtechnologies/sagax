@@ -6,7 +6,16 @@ import { DATA_DIR, instanceConfigs, loadConfig, PROVIDER_CREDENTIAL_ENV, WORKSPA
 import { acquireDataDirLease } from "./data-dir-lease.ts";
 import { SetupCancelled, type SetupIo } from "./cli-prompts.ts";
 import { isSetupComplete, readCliStartup, runSetup, saveCliStartup } from "./cli-setup.ts";
+import { ONBOARDING_ENGINE_KEYS_FILE, readOnboardingEngineKey } from "./onboarding-engine-key.ts";
 import { OpenAICompatDriver } from "./drivers/openai-compat.ts";
+
+/** The key the running driver resolves for an instance — read from the
+ * encrypted store and injected back onto the transient config, never from
+ * config.json. */
+function liveKey(instanceId: string): string | undefined {
+  const config = instanceConfigs(loadConfig())[instanceId]?.config;
+  return config && typeof config === "object" && "key" in config ? (config as { key?: string }).key : undefined;
+}
 
 const options = { dataDir: DATA_DIR, port: 8799 };
 const configPath = join(DATA_DIR, "config.json");
@@ -271,7 +280,16 @@ describe("API onboarding", () => {
     expect(deps.models).toHaveBeenCalledWith("https://api.example.test/v1", expected);
     expect(deps.verify).toHaveBeenCalledWith("https://api.example.test/v1", expected, "fixture-default");
     expect(ui.io.secret).not.toHaveBeenCalled();
-    expect(loadConfig().instances?.existing).toEqual({ ...original, config: { ...original.config, model: "fixture-default" } });
+    // An inline plaintext key is sealed out of config.json on reuse; a key read
+    // from an environment variable stays with the instance untouched.
+    const expectedConfig: Record<string, unknown> = { ...original.config, model: "fixture-default" };
+    delete expectedConfig.key;
+    expect(loadConfig().instances?.existing).toEqual({ ...original, config: expectedConfig });
+    expect(readFileSync(configPath, "utf8")).not.toContain("config-key");
+    if (configKey) {
+      expect(readOnboardingEngineKey(DATA_DIR, "existing")).toBe(configKey);
+      expect(liveKey("existing")).toBe(configKey);
+    }
     ui.assertConsumed();
   });
 
@@ -284,7 +302,10 @@ describe("API onboarding", () => {
     const ui = prompts({ choices: [3, 0], confirms: [true, true] });
     expect(await runSetup(options, ui.io, deps)).toBe(true);
     expect(deps.verify).toHaveBeenCalledWith("https://openrouter.ai/api/v1", "fixture-key", "fixture-default", "fireworks");
-    expect(loadConfig().instances?.routed.config).toEqual({ url: "https://openrouter.ai/api/v1", key: "fixture-key", model: "fixture-default" });
+    expect(loadConfig().instances?.routed.config).toEqual({ url: "https://openrouter.ai/api/v1", model: "fixture-default" });
+    expect(readFileSync(configPath, "utf8")).not.toContain("fixture-key");
+    expect(readOnboardingEngineKey(DATA_DIR, "routed")).toBe("fixture-key");
+    expect(liveKey("routed")).toBe("fixture-key");
     ui.assertConsumed();
   });
 
@@ -319,8 +340,11 @@ describe("API onboarding", () => {
     expect(id).toMatch(/^api-[\da-f]{8}$/);
     expect(saved.instances?.pinned).toEqual(original);
     expect(saved.instances?.[id]?.config).toEqual({
-      url: "https://openrouter.ai/api/v1", key: "fixture-new-key", model: "fixture-default", provider: "fireworks",
+      url: "https://openrouter.ai/api/v1", model: "fixture-default", provider: "fireworks",
     });
+    expect(readFileSync(configPath, "utf8")).not.toContain("fixture-new-key");
+    expect(readOnboardingEngineKey(DATA_DIR, id)).toBe("fixture-new-key");
+    expect(liveKey(id)).toBe("fixture-new-key");
     expect(OpenAICompatDriver.decodeConfig(instanceConfigs(saved)[id]!.config).provider).toBe("fireworks");
     ui.assertConsumed();
   });
@@ -351,14 +375,23 @@ describe("API onboarding", () => {
     expect(id).toMatch(/^api-[\da-f]{8}$/);
     expect(saved.defaultModelSelection).toEqual({ instanceId: id, model: "fixture-selected" });
     expect(saved.instances.oldApi).toEqual(existing.instances.oldApi);
-    expect(saved.instances[id]).toMatchObject({ driver: "openai-compat", config: { url: "https://api.openai.com/v1", key: "new-fixture-secret", model: "fixture-selected" } });
+    // The new connection's key is sealed in the store, not in config.json.
+    expect(saved.instances[id]).toMatchObject({ driver: "openai-compat", config: { url: "https://api.openai.com/v1", model: "fixture-selected" } });
+    expect(saved.instances[id].config).not.toHaveProperty("key");
+    expect(readFileSync(configPath, "utf8")).not.toContain("new-fixture-secret");
+    expect(readOnboardingEngineKey(DATA_DIR, id)).toBe("new-fixture-secret");
+    expect(liveKey(id)).toBe("new-fixture-secret");
     expect(saved).toMatchObject({ openaiCompat: existing.openaiCompat, xai: existing.xai, profile: existing.profile, futureSetting: existing.futureSetting });
     expect(readFileSync(join(DATA_DIR, "bots.json"), "utf8")).toBe(sentinel);
     expect(readFileSync(join(DATA_DIR, "messages-existing-thread.json"), "utf8")).toBe(transcript);
     expect(ui.lines.join("\n")).toMatch(/billed separately/);
-    expect(ui.lines.join("\n")).toMatch(/plaintext/);
+    expect(ui.lines.join("\n")).toMatch(/stored encrypted/);
+    expect(ui.lines.join("\n")).not.toMatch(/plaintext/);
     expect(ui.lines.join("\n")).not.toContain("new-fixture-secret");
-    if (process.platform !== "win32") expect(statSync(configPath).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") {
+      expect(statSync(configPath).mode & 0o777).toBe(0o600);
+      expect(statSync(join(DATA_DIR, ONBOARDING_ENGINE_KEYS_FILE)).mode & 0o777).toBe(0o600);
+    }
     ui.assertConsumed();
   });
 
@@ -418,9 +451,13 @@ describe("API onboarding", () => {
     ]);
     expect(deps.verify).toHaveBeenCalledWith("https://custom.example.test/v1", "fixture-custom-key", "fixture-default");
     const cfg = loadConfig();
-    expect(cfg.instances?.[cfg.defaultModelSelection!.instanceId]).toMatchObject({
-      driver: "openai-compat", config: { url: "https://custom.example.test/v1", key: "fixture-custom-key" },
+    const customId = cfg.defaultModelSelection!.instanceId;
+    expect(cfg.instances?.[customId]).toMatchObject({
+      driver: "openai-compat", config: { url: "https://custom.example.test/v1" },
     });
+    expect(cfg.instances?.[customId]?.config).not.toHaveProperty("key");
+    expect(readFileSync(configPath, "utf8")).not.toContain("fixture-custom-key");
+    expect(liveKey(customId)).toBe("fixture-custom-key");
     ui.assertConsumed();
   });
 
@@ -579,8 +616,11 @@ describe("connection recovery", () => {
       expect(ui.io.confirm.mock.invocationCallOrder[i]).toBeLessThan(deps.verify.mock.invocationCallOrder[i]!);
     }
     const saved = loadConfig();
-    expect(saved.instances?.[saved.defaultModelSelection!.instanceId]?.config).toMatchObject({ key: "fixture-replacement-key" });
+    const savedId = saved.defaultModelSelection!.instanceId;
+    expect(saved.instances?.[savedId]?.config).not.toHaveProperty("key");
+    expect(liveKey(savedId)).toBe("fixture-replacement-key");
     expect(readFileSync(configPath, "utf8")).not.toContain("fixture-wrong-key");
+    expect(readFileSync(configPath, "utf8")).not.toContain("fixture-replacement-key");
     expect(ui.lines.join("\n")).not.toContain("fixture-replacement-key");
     ui.assertConsumed();
   });

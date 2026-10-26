@@ -1,0 +1,568 @@
+/* Hibou 98, Windows XP edition (data-skin-tint="xp"): the Luna blue look of
+   2001 laid over the 98 structure. Blue title bars rounded at the top, a red
+   close box with a white X and blue minimize/maximize boxes, beige-grey
+   (#ece9d8) chrome, soft rounded push buttons with a blue rim on hover,
+   Tahoma 8pt (11px), #316ac5 selection, white menus with a pale blue band,
+   Luna scrollbars and a "rolling hills under a blue sky" desktop drawn with
+   gradients only. Every glyph is a data-URI SVG drawn here; no image or font
+   from the era is embedded. Every selector starts with
+   [data-skin="retro98"][data-skin-tint="xp"], one attribute more than the
+   rules of retro98.css, so it wins over them in any load order. */
+
+/* ══ palette (measured by pnpm check:contrast as retro98+xp) ══════════════ */
+[data-skin="retro98"][data-skin-tint="xp"] {
+  --skin-swatch: #0a5bd6;   /* Luna blue (decorative) */
+  --color-app: #ffffff;
+  --color-panel: #ece9d8;
+  --color-sidebar: #ece9d8;
+  --color-sidebar-ink: #000000;
+  --color-sidebar-ink-secondary: #2f2d24;
+  --color-sidebar-hover: #316ac514;
+  --color-sidebar-selected: #316ac533;
+  --color-sidebar-hairline: #aca899;
+  --color-raised: #f4f3ee;
+  --color-raised-hover: #e3e0d0;
+  --color-composer: #ffffff;
+  --color-composer-ring: #7f9db9;
+  --color-card: #ece9d8;
+  --color-menu: #ffffff;
+  --color-inset: #ffffff;
+  --color-control: #f4f3ee;
+  --color-hairline: #aca899;
+
+  --color-ink: #000000;
+  --color-ink-secondary: #3b3a33;
+  --color-ink-tertiary: #3b3a33;
+
+  --color-accent: #316ac5;
+  --color-accent-border: #2154a8;
+  --color-accent-text: #1a4b9c;
+  --color-accent-ink: #ffffff;
+  --color-focus: #000000;
+  --color-unread: var(--color-accent);
+  --color-scrollbar: #9db6f2;
+
+  --font-sans: Tahoma, Verdana, Geneva, sans-serif;
+  --radius-lg: 3px;
+  --radius-xl: 8px;
+  --color-popover-border: #5d7ea6;
+  --color-popover-field: #f4f3ee;   /* a field inside a white XP menu reads one step off it */
+}
+
+/* ══ structure: the bevel tokens of retro98.css, redrawn as Luna ══════════
+   (`:root` first keeps this block out of the contrast script's palette parse) */
+:root[data-skin="retro98"][data-skin-tint="xp"] {
+  --r98-font: Tahoma, Verdana, Geneva, sans-serif;
+  --r98-face: #ece9d8;
+  --xp-face: #ece9d8;
+  --xp-frame: #0842cc;
+  --xp-sel: #316ac5;
+  --xp-title: linear-gradient(180deg, #0a5fe8 0%, #3d8dfb 7%, #0a5fe8 16%, #0450dd 45%, #0659f0 82%, #0a63fb 90%, #0748c9 96%, #04359f 100%);
+  --xp-title-dim: linear-gradient(180deg, #7a96df 0%, #a8c0f0 8%, #7b9ae4 30%, #6e8fe0 80%, #6383d8 100%);
+  --xp-button: linear-gradient(180deg, #ffffff 0%, #f6f5f1 45%, #ecebe5 80%, #d6d0c5 100%);
+  --xp-button-down: linear-gradient(180deg, #d9d6cc 0%, #e5e3da 30%, #f1f0ea 100%);
+  --r98-raised: inset 0 0 0 1px #003c74, inset 0 -1px 0 1px #d6d0c5, inset 0 1px 0 1px #ffffff;
+  --r98-pressed: inset 0 0 0 1px #003c74, inset 0 2px 0 1px #d1ccc1;
+  --r98-default: inset 0 0 0 1px #003c74, inset 0 0 0 3px #98b8ea;
+  --r98-window-bevel: inset 0 0 0 1px #aca899;
+  --r98-field: inset 0 0 0 1px #7f9db9;
+  --r98-status: none;
+  --r98-groove: inset 0 0 0 1px #d0d0bf;
+  --r98-thin-raised: inset 0 0 0 1px #c8c5b4, inset 0 -2px 0 0 #e4e1d4;
+  --r98-thin-sunken: inset 0 0 0 1px #9d9d92, inset 0 2px 0 0 #dcd9cc;
+  --r98-tab: inset 0 0 0 1px #919b9c;
+  --r98-arrow-down: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='17' height='19' viewBox='0 0 17 19'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23d8e5fd'/%3E%3Cstop offset='1' stop-color='%23a5c0f4'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='.5' y='.5' width='16' height='18' rx='2' fill='url(%23g)' stroke='%23b8cdf8'/%3E%3Cpath d='M5 8l3.5 3.5L12 8' fill='none' stroke='%234d6185' stroke-width='2'/%3E%3C/svg%3E");
+  --r98-check: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9' viewBox='0 0 9 9'%3E%3Cpath d='M1 4.5l2.5 2.5L8 1.5' fill='none' stroke='%2321a121' stroke-width='2'/%3E%3C/svg%3E");
+}
+
+/* ══ the desktop: blue sky over a green hill ══════════════════════════════ */
+[data-skin="retro98"][data-skin-tint="xp"] body {
+  background:
+    radial-gradient(ellipse 22% 7% at 28% 22%, rgb(255 255 255 / 0.7), transparent 70%),
+    radial-gradient(ellipse 30% 9% at 70% 15%, rgb(255 255 255 / 0.55), transparent 70%),
+    radial-gradient(ellipse 120% 48% at 38% 104%, #4c9a2a 0 52%, #3f8a22 62%, transparent 63%),
+    radial-gradient(ellipse 110% 44% at 92% 110%, #5aa83a 0 50%, transparent 51%),
+    linear-gradient(180deg, #1c5fd0 0%, #3b84e6 30%, #7fb4ef 58%, #b9d8f6 72%, #dcecfa 80%) !important;
+  background-attachment: fixed !important;
+  color: #000;
+}
+
+/* ══ the window: a Luna frame around the client area ══════════════════════ */
+[data-skin="retro98"][data-skin-tint="xp"] [data-app-shell] {
+  padding: 0 3px 3px !important;
+  background: var(--xp-face) !important;
+  border-radius: 8px 8px 0 0 !important;
+  box-shadow: inset 3px 0 0 var(--xp-frame), inset -3px 0 0 var(--xp-frame), inset 0 -3px 0 var(--xp-frame), inset 4px 0 0 #1c5ee6, inset -4px 0 0 #1c5ee6 !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [data-app-shell] > .app-shell-row,
+[data-skin="retro98"][data-skin-tint="xp"] [data-app-shell] main,
+[data-skin="retro98"][data-skin-tint="xp"] [data-sidebar],
+[data-skin="retro98"][data-skin-tint="xp"] [data-tour="composer"] {
+  background: var(--xp-face) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-top {
+  margin: 0 -3px;
+  padding: 0 4px;
+}
+
+/* title bar */
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-titlebar {
+  height: 28px;
+  margin: 0 -4px;
+  padding: 0 5px 0 7px;
+  gap: 5px;
+  border-radius: 8px 8px 0 0 !important;
+  background: var(--xp-title);
+  box-shadow: inset 1px 1px 0 rgb(255 255 255 / 0.35), inset -1px 0 0 rgb(0 0 0 / 0.25) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-titlebar-mac {
+  padding-left: 76px;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-titlebar-text {
+  font: bold 13px/28px "Trebuchet MS", Tahoma, sans-serif !important;
+  color: #fff;
+  text-shadow: 1px 1px 0 #0a1883 !important;
+  -webkit-font-smoothing: antialiased !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-caption {
+  gap: 2px;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-caption-btn {
+  width: 21px;
+  min-width: 21px !important;
+  height: 21px;
+  min-height: 21px !important;
+  border: 1px solid #fff !important;
+  border-radius: 3px !important;
+  background-color: #2a63e0 !important;
+  background-position: center !important;
+  box-shadow: inset 1px 1px 2px rgb(255 255 255 / 0.55), inset -1px -1px 2px rgb(0 20 120 / 0.45) !important;
+  background-image: var(--xp-glyph), radial-gradient(circle at 85% 85%, #0a46d0 0%, #2f6ae6 45%, #6b98f2 75%, #b4cbf7 100%) !important;
+  background-repeat: no-repeat !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-caption-btn:hover {
+  filter: brightness(1.12);
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-caption-btn:active {
+  filter: brightness(0.85);
+  box-shadow: inset 1px 1px 2px rgb(0 20 120 / 0.55) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-min {
+  --xp-glyph: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='19' height='19'%3E%3Cpath fill='%23fff' d='M5 12h6v3H5z'/%3E%3C/svg%3E");
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-max {
+  --xp-glyph: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='19' height='19'%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M4 4h11v11H4zM5.5 7v6.5h8V7z'/%3E%3C/svg%3E");
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-close {
+  margin-left: 2px;
+  --xp-glyph: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='19' height='19'%3E%3Cpath d='M5 5l9 9M14 5l-9 9' stroke='%23fff' stroke-width='2.4' stroke-linecap='square'/%3E%3C/svg%3E");
+  background-image: var(--xp-glyph), radial-gradient(circle at 85% 85%, #b2260c 0%, #dc4a24 45%, #ec7e5d 75%, #f6b9a3 100%) !important;
+  box-shadow: inset 1px 1px 2px rgb(255 255 255 / 0.5), inset -1px -1px 2px rgb(110 10 0 / 0.5) !important;
+}
+
+/* menu bar: flat on the face, the hovered or open item filled with Luna blue */
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-menubar {
+  height: 21px;
+  margin: 0 -1px;
+  background: var(--xp-face);
+  border-bottom: 1px solid #d8d2bd;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-menubar-item {
+  height: 19px;
+  padding: 0 7px !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-menubar-item:is(:hover, .r98w-open) {
+  background: var(--xp-sel) !important;
+  color: #fff;
+  box-shadow: none !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-mnemonic {
+  text-decoration: none;
+}
+/* the drop-down: a white menu with a pale blue band down its left */
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-dropdown,
+[data-skin="retro98"][data-skin-tint="xp"] :is([role="menu"], [role="listbox"], .bg-menu):not(.r98-root *, [data-r98-chrome] *) {
+  padding: 2px !important;
+  border: 1px solid #aca899 !important;
+  background: linear-gradient(90deg, #e3ebf8 0 22px, #ffffff 22px) !important;
+  box-shadow: 2px 2px 3px rgb(0 0 0 / 0.3) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] :is([role="listbox"]):not(.r98-root *, [data-r98-chrome] *) {
+  background: #fff !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-dropdown-item {
+  height: 20px;
+  min-height: 20px !important;
+  padding-right: 18px !important;
+  grid-template-columns: 22px 1fr auto;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-dropdown-item:is(:hover, :focus):not([aria-disabled="true"]),
+[data-skin="retro98"][data-skin-tint="xp"] :is([role="menuitem"], [role="option"], [role="menuitemcheckbox"], [role="menuitemradio"]):not(.r98-root *, [data-r98-chrome] *):is(:hover, :focus, [aria-selected="true"], [data-highlighted]) {
+  background: var(--xp-sel) !important;
+  color: #fff !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-dropdown-item[aria-disabled="true"] {
+  color: #aca899;
+  text-shadow: none;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-dropdown-sep {
+  height: 1px;
+  margin: 3px 2px 3px 26px;
+  border: 0;
+  background: #aca899;
+}
+
+/* toolbar: a rebar band with a dotted grip, flat buttons that rise on hover */
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-toolbar {
+  height: 30px;
+  margin: 0 -1px 3px;
+  border-top: 1px solid #fff;
+  background: linear-gradient(180deg, #fbfbf8 0%, #f2f0e6 55%, #e6e2d1 100%);
+  box-shadow: inset 0 -1px 0 #d8d2bd !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-toolbar::before {
+  width: 3px;
+  box-shadow: none;
+  background: radial-gradient(circle, #c1beb3 1px, transparent 1.2px) 0 0 / 3px 4px;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-tool {
+  width: 26px;
+  min-width: 26px !important;
+  height: 24px;
+  border-radius: 3px !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-tool:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffffff, #f0eee3 70%, #dedbcd) !important;
+  box-shadow: inset 0 0 0 1px #c8c5b4 !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-tool:is(:active, [aria-pressed="true"]):not(:disabled) {
+  background: linear-gradient(180deg, #dedccf, #eceadf) !important;
+  box-shadow: inset 0 0 0 1px #9d9d92 !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-tool-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 5px;
+  box-shadow: none;
+  background: #c5c2b2;
+}
+
+/* status bar */
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-status {
+  height: 22px;
+  margin: 3px -1px 0;
+  padding: 0 2px;
+  gap: 0;
+  border-top: 1px solid #d8d2bd;
+  background: linear-gradient(180deg, #f3f1e7, var(--xp-face));
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-status-field {
+  padding: 2px 7px;
+  box-shadow: inset -1px 0 0 #c5c2b2, inset -2px 0 0 #fff !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-status-field:last-child {
+  box-shadow: none !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-led {
+  width: 9px;
+  height: 9px;
+  border-radius: 50% !important;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.35), inset 1px 1px 1px rgb(255 255 255 / 0.7) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-led-on {
+  background: #3cbb2a;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .r98w-led-off {
+  background: #d63b1a;
+}
+
+/* ══ type and selection ═══════════════════════════════════════════════════ */
+[data-skin="retro98"][data-skin-tint="xp"] ::selection {
+  background: var(--xp-sel);
+  color: #fff;
+}
+[data-skin="retro98"][data-skin-tint="xp"] :disabled {
+  color: #aca899;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .text-accent,
+[data-skin="retro98"][data-skin-tint="xp"] .text-accent-text {
+  color: var(--color-accent-text) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [data-retro-author]::before {
+  color: #0b3a9e;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [data-retro-author][data-retro-role="user"]::before {
+  color: #9b2a06;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .chat-md a {
+  color: #0b3dce !important;
+}
+
+/* ══ sidebar: the Explorer tree on white, Luna selection ══════════════════ */
+[data-skin="retro98"][data-skin-tint="xp"] [data-sidebar] [data-section] > button::before {
+  border-color: #7a8fb5;
+  background: linear-gradient(135deg, #fff, #d9d6c8);
+  color: #1b2d63;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [data-sidebar] [data-sidebar-bot-row][aria-current] > div.min-w-0 > div:first-child,
+[data-skin="retro98"][data-skin-tint="xp"] [data-sidebar] [data-sidebar-place][aria-current] > .truncate,
+[data-skin="retro98"][data-skin-tint="xp"] [data-sidebar] button[class*="w-20"][aria-current] > span:not(:first-child) {
+  background: var(--xp-sel);
+  outline: none;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [data-sidebar] [data-sidebar-foot-divider] {
+  height: 1px !important;
+  border: 0;
+  background: #c5c2b2 !important;
+}
+
+/* ══ push buttons: rounded, beige-grey, a blue rim on hover ═══════════════ */
+[data-skin="retro98"][data-skin-tint="xp"] :is(button, [role="button"], a[class*="px-"]):is(.ui-button, .ui-button-primary, .bg-elevated, .bg-raised, .bg-control, .bg-accent, .bg-card, .bg-danger, .bg-inset, .border, [class*="bg-raised/"], [class*="bg-elevated/"], [class*="bg-accent/"], [class*="bg-danger/"], [class*="bg-control/"]):not(.r98-root *, [data-r98-chrome] *, [role="tab"], [role="switch"], [role="radio"], [data-sidebar-bot-row], [data-tour="model"], [data-r98-close], [data-r98-send], .rounded-full.size-6),
+[data-skin="retro98"][data-skin-tint="xp"] [data-r98-send],
+[data-skin="retro98"][data-skin-tint="xp"] .r98-dialog-ok,
+[data-skin="retro98"][data-skin-tint="xp"] .chat-md th,
+[data-skin="retro98"][data-skin-tint="xp"] .app-docked-panel > div.h-12 button {
+  background: var(--xp-button) !important;
+  border-radius: 3px !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .chat-md th {
+  border-radius: 0 !important;
+  background: linear-gradient(180deg, #fff, #f1efe2 80%, #e2decd) !important;
+  box-shadow: inset 0 -3px 0 #e2decd, inset -1px 0 0 #c7c5b2 !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] :is(button, [role="button"], a[class*="px-"]):is(.ui-button, .ui-button-primary, .bg-elevated, .bg-raised, .bg-control, .bg-accent, .bg-card, .bg-danger, .bg-inset, .border, [class*="bg-raised/"], [class*="bg-elevated/"], [class*="bg-accent/"], [class*="bg-danger/"], [class*="bg-control/"]):not(.r98-root *, [data-r98-chrome] *, [role="tab"], [role="switch"], [role="radio"], [data-sidebar-bot-row], [data-tour="model"], [data-r98-close], [data-r98-send], .rounded-full.size-6):hover:not(:disabled),
+[data-skin="retro98"][data-skin-tint="xp"] :is([data-r98-send], .r98-dialog-ok):hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1px #003c74, inset 0 0 0 3px #7da2ce, inset 0 -1px 0 3px #c2d4ee !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] :is(button, [role="button"], a[class*="px-"]):is(.ui-button, .ui-button-primary, .bg-elevated, .bg-raised, .bg-control, .bg-accent, .bg-card, .bg-danger, .bg-inset, .border, [class*="bg-raised/"], [class*="bg-elevated/"], [class*="bg-accent/"], [class*="bg-danger/"], [class*="bg-control/"]):not(.r98-root *, [data-r98-chrome] *, [role="tab"], [role="switch"], [role="radio"], [data-sidebar-bot-row], [data-tour="model"], [data-r98-close], [data-r98-send], .rounded-full.size-6):active:not(:disabled),
+[data-skin="retro98"][data-skin-tint="xp"] :is([data-r98-send], .r98-dialog-ok):active:not(:disabled) {
+  background: var(--xp-button-down) !important;
+  box-shadow: var(--r98-pressed) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [data-r98-send]:disabled,
+[data-skin="retro98"][data-skin-tint="xp"] button:disabled:not(.r98-root *) {
+  color: #aca899 !important;
+  text-shadow: none !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [data-r98-send]:disabled {
+  background: #f4f3ee !important;
+  box-shadow: inset 0 0 0 1px #c9c7ba !important;
+}
+/* flat icon buttons: a soft rounded rise on hover */
+[data-skin="retro98"][data-skin-tint="xp"] :is(button, [role="button"]):is(.rounded-full, [class*="size-7"], [class*="size-8"], [class*="size-9"]):not([role="tab"], [role="switch"], .r98-root *, [data-r98-chrome] *, [data-r98-send], [data-sidebar-bot-row]):hover:not(:disabled) {
+  border-radius: 3px !important;
+  background: linear-gradient(180deg, #fff, #f0eee3 70%, #dedbcd) !important;
+}
+
+/* ══ fields: white with a thin blue-grey rim; the combo box's blue arrow ═══ */
+[data-skin="retro98"][data-skin-tint="xp"] :is(input, textarea):read-only:not([type="checkbox"], [type="radio"], .r98-root *),
+[data-skin="retro98"][data-skin-tint="xp"] :is(input, textarea, select):disabled:not(.r98-root *) {
+  background-color: #f4f3ee !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] select:not(.r98-root *),
+[data-skin="retro98"][data-skin-tint="xp"] [data-tour="model"] {
+  background-position: right 1px center !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] select:focus:not(.r98-root *) {
+  color: #000 !important;
+  background-color: #fff !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] input[type="checkbox"]:not(.sr-only, .hidden, .r98-root *),
+[data-skin="retro98"][data-skin-tint="xp"] button[role="switch"] {
+  background: linear-gradient(135deg, #dcdcd7, #ffffff) center / 13px 13px no-repeat !important;
+  box-shadow: inset 0 0 0 1px #1c5180 !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] input[type="checkbox"]:checked:not(.sr-only, .hidden, .r98-root *),
+[data-skin="retro98"][data-skin-tint="xp"] button[role="switch"][aria-checked="true"] {
+  background: var(--r98-check) center / 9px 9px no-repeat, linear-gradient(135deg, #dcdcd7, #ffffff) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] input[type="radio"]:not(.sr-only, .hidden, .r98-root *) {
+  width: 13px;
+  height: 13px;
+  border-radius: 50% !important;
+  background: linear-gradient(135deg, #dcdcd7, #ffffff) !important;
+  box-shadow: inset 0 0 0 1px #1c5180 !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] input[type="radio"]:checked:not(.sr-only, .hidden, .r98-root *) {
+  background: radial-gradient(circle, #5fd84c 0 2px, #21a121 3px, transparent 3.5px), linear-gradient(135deg, #dcdcd7, #ffffff) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] input[type="range"] {
+  accent-color: var(--xp-sel);
+}
+
+/* ══ tabs, group boxes, the property sheet ════════════════════════════════ */
+[data-skin="retro98"][data-skin-tint="xp"] [role="tab"]:not(.r98-root *) {
+  background: linear-gradient(180deg, #fff, #f3f3ef 60%, #e6e5dd) !important;
+  border-radius: 3px 3px 0 0 !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [role="tab"][aria-selected="true"]:not(.r98-root *) {
+  background: #fcfcfe !important;
+  box-shadow: inset 0 0 0 1px #919b9c, inset 0 3px 0 #e68b2c, inset 0 4px 0 #ffc73c !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] :is(.rounded-xl, .rounded-2xl, [class*="rounded-[14px]"], .rounded-lg):is(.border, [class*="border-["], .bg-card):not(button, input, textarea, select, [role="log"] *, .r98-root *, [data-r98-chrome] *, [role="dialog"], [role="menu"], [role="listbox"], [data-tour="composer"], :has(> svg.lucide-search + input)) {
+  border-radius: 4px !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] :is(.rounded-xl, .rounded-2xl):is(.border, [class*="border-["], .bg-card):not([role="log"] *) > div:first-child:is(.font-medium, .font-semibold),
+[data-skin="retro98"][data-skin-tint="xp"] :is(.rounded-xl, .rounded-2xl):is(.border, [class*="border-["], .bg-card):not([role="log"] *) > div:first-child > div:first-child > div:first-child:is(.font-medium, .font-semibold),
+[data-skin="retro98"][data-skin-tint="xp"] [data-settings-card] > h3 > button > span:first-child {
+  background: var(--xp-face);
+  color: #0046d5 !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [data-settings-card] > h3 > button svg.lucide-chevron-down {
+  border-radius: 3px !important;
+  background: var(--xp-button);
+}
+[data-skin="retro98"][data-skin-tint="xp"] [role="log"] :is(.bg-card, .bg-inset, .bg-raised, [class*="bg-raised/"], [class*="bg-inset/"]):not(button, [data-retro-author] > div > div[title], .chat-md *) {
+  background: #f7f6f0 !important;
+  border-radius: 4px !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .chat-md div:has(> div > table) > div:first-child:not(:has(table)),
+[data-skin="retro98"][data-skin-tint="xp"] .chat-md :is(figure, div):has(> pre) > div:first-child:not(:has(pre)),
+[data-skin="retro98"][data-skin-tint="xp"] .chat-md div:has(> div > div > pre),
+[data-skin="retro98"][data-skin-tint="xp"] .chat-md div:has(> div > div > pre) > div:first-child {
+  background: var(--xp-face) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .chat-md tr:hover td {
+  background: var(--xp-sel) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] hr {
+  border-top-color: #c5c2b2;
+  border-bottom: 0;
+}
+
+/* the docked panel: a tool window with a Luna caption */
+[data-skin="retro98"][data-skin-tint="xp"] .app-docked-panel {
+  background: var(--xp-face) !important;
+  box-shadow: inset 0 0 0 1px #7f9db9 !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .app-docked-panel > div.h-12 {
+  height: 23px !important;
+  border-radius: 4px 4px 0 0 !important;
+  background: var(--xp-title);
+}
+[data-skin="retro98"][data-skin-tint="xp"] .app-docked-panel > div.h-12[data-r98-caption]::before {
+  text-shadow: 1px 1px 0 #0a1883;
+}
+[data-skin="retro98"][data-skin-tint="xp"] .app-docked-panel > div.flex-1 > div:not(:first-child),
+[data-skin="retro98"][data-skin-tint="xp"] .app-docked-panel > div.flex-1 > div:nth-child(2) {
+  background: #fcfcfe;
+  box-shadow: inset 0 0 0 1px #919b9c !important;
+}
+
+/* ══ dialogs: Luna windows ════════════════════════════════════════════════ */
+[data-skin="retro98"][data-skin-tint="xp"] :is([role="dialog"][aria-modal="true"], [role="alertdialog"], dialog):not(.r98-root *) {
+  padding: 30px 3px 3px !important;
+  background-color: var(--xp-face) !important;
+  border-radius: 8px 8px 0 0 !important;
+  box-shadow: inset 0 0 0 3px var(--xp-frame), inset 0 0 0 4px #1c5ee6, 3px 3px 8px rgb(0 0 0 / 0.35) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [data-r98-title]::before {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 29px;
+  padding: 0 34px 0 9px;
+  border-radius: 7px 7px 0 0;
+  background: var(--xp-title);
+  font: bold 13px/29px "Trebuchet MS", Tahoma, sans-serif;
+  text-shadow: 1px 1px 0 #0a1883;
+  -webkit-font-smoothing: antialiased;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [data-r98-close="bar"] {
+  top: 4px !important;
+  right: 6px !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [data-r98-close] {
+  width: 21px !important;
+  min-width: 21px !important;
+  height: 21px !important;
+  min-height: 21px !important;
+  border: 1px solid #fff !important;
+  border-radius: 3px !important;
+  background: radial-gradient(circle at 85% 85%, #b2260c 0%, #dc4a24 45%, #ec7e5d 75%, #f6b9a3 100%) !important;
+  color: #fff !important;
+  box-shadow: inset 1px 1px 2px rgb(255 255 255 / 0.5), inset -1px -1px 2px rgb(110 10 0 / 0.5) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [data-r98-close]:active {
+  filter: brightness(0.85);
+}
+[data-skin="retro98"][data-skin-tint="xp"] [data-r98-close] svg {
+  width: 13px !important;
+  height: 13px !important;
+  color: #fff !important;
+  stroke-width: 3 !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [role="dialog"][aria-modal="true"] > nav {
+  box-shadow: inset 0 0 0 1px #7f9db9 !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [role="dialog"][aria-modal="true"] > nav > button {
+  border-radius: 0 !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [role="dialog"][aria-modal="true"] > nav > button[aria-current] {
+  background: var(--xp-sel) !important;
+}
+[data-skin="retro98"][data-skin-tint="xp"] [role="tooltip"]:not(.r98-root *) {
+  border-radius: 0 !important;
+  box-shadow: 2px 2px 3px rgb(0 0 0 / 0.25) !important;
+}
+
+/* the retro assistant's own windows take the Luna caption colours */
+[data-skin="retro98"][data-skin-tint="xp"] .r98-root {
+  --r98-navy: #0450dd;
+  --r98-title-2: #3d8dfb;
+}
+
+/* ══ Luna scrollbars ══════════════════════════════════════════════════════ */
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar {
+  width: 17px;
+  height: 17px;
+}
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-corner {
+  background: #ece9d8;
+}
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-track:vertical {
+  background: linear-gradient(90deg, #f3f1ea, #fefefe 60%, #f1efe6);
+}
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-track:horizontal {
+  background: linear-gradient(180deg, #f3f1ea, #fefefe 60%, #f1efe6);
+}
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  border: 1px solid #fff;
+  box-shadow: inset 0 0 0 1px #a5bbea;
+}
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-thumb:vertical {
+  background:
+    url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M0 .5h7M0 2.5h7M0 4.5h7M0 6.5h7' stroke='%23eef4fe'/%3E%3Cpath d='M1 1.5h7M1 3.5h7M1 5.5h7M1 7.5h7' stroke='%238cb0f8'/%3E%3C/svg%3E") center no-repeat,
+    linear-gradient(90deg, #cad9fc, #bccff9 40%, #aec4f6);
+}
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-thumb:horizontal {
+  background:
+    url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M.5 0v7M2.5 0v7M4.5 0v7M6.5 0v7' stroke='%23eef4fe'/%3E%3Cpath d='M1.5 1v7M3.5 1v7M5.5 1v7M7.5 1v7' stroke='%238cb0f8'/%3E%3C/svg%3E") center no-repeat,
+    linear-gradient(180deg, #cad9fc, #bccff9 40%, #aec4f6);
+}
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-button:vertical:start,
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-button:vertical:end,
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-button:horizontal:start,
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-button:horizontal:end {
+  width: 17px;
+  height: 17px;
+  border: 1px solid #fff;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px #a5bbea;
+  background-color: #c1d3fb;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-button:vertical:start {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6'%3E%3Cpath d='M1 5l3.5-3.5L8 5' fill='none' stroke='%234d6185' stroke-width='2'/%3E%3C/svg%3E"), linear-gradient(135deg, #e0e9fd, #b4c9f6);
+}
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-button:vertical:end {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='%234d6185' stroke-width='2'/%3E%3C/svg%3E"), linear-gradient(135deg, #e0e9fd, #b4c9f6);
+}
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-button:horizontal:start {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='9'%3E%3Cpath d='M5 1L1.5 4.5 5 8' fill='none' stroke='%234d6185' stroke-width='2'/%3E%3C/svg%3E"), linear-gradient(135deg, #e0e9fd, #b4c9f6);
+}
+[data-skin="retro98"][data-skin-tint="xp"] ::-webkit-scrollbar-button:horizontal:end {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='9'%3E%3Cpath d='M1 1l3.5 3.5L1 8' fill='none' stroke='%234d6185' stroke-width='2'/%3E%3C/svg%3E"), linear-gradient(135deg, #e0e9fd, #b4c9f6);
+}

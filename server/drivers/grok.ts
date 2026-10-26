@@ -56,6 +56,7 @@ export const GrokDriver: ProviderDriver<GrokConfig> = {
       timeoutMs: 120_000,
       retryScale: Number(process.env.FAKE_GROK_RETRY_SCALE ?? "1"),
       generateModel: () => "grok-3-mini",
+      permissionReview: true,
       warmSession: true,
       nativeLog: {
         source: "xai.chat.completions",

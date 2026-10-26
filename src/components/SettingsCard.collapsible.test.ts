@@ -154,7 +154,7 @@ describe("collapsible settings card", () => {
 
 describe("collapsed card summaries", () => {
   it("summarizes About me, keys, cleanup and VM setup in one line each", async () => {
-    const { connectedAppsSummary, cardsMatching } = await import("./SettingsModal");
+    const { cardsMatching } = await import("./SettingsModal");
     const { aboutMeFirstLine } = await import("./AboutMeSettings");
     const { threadCleanupSummary } = await import("./ThreadCleanupSettings");
     const { setupStep } = await import("./LocalComputerSection");
@@ -164,11 +164,6 @@ describe("collapsed card summaries", () => {
     expect(aboutMeFirstLine("I run an MSP")).toBe("I run an MSP");
     expect(aboutMeFirstLine("\n## Who I am\nTwo\nThree")).toBe("Who I am");
 
-    // Connected apps says what is true, never a bare "Not set" (2026-10-14).
-    expect(connectedAppsSummary({ composio: { configured: true, mode: "managed" } } as never)).toBe("Ready: connected apps run through your organization's service.");
-    expect(connectedAppsSummary({ composio: { configured: true, mode: "self-hosted" } } as never)).toBe("Composio key saved.");
-    expect(connectedAppsSummary(null)).toBe("No Composio key yet. Paste one below to connect apps.");
-
     expect(threadCleanupSummary(null, null)).toBe("Off");
     expect(threadCleanupSummary(30, 52_428_800)).toBe("Delete after 30 days · Trim at 50 MiB");
 
@@ -176,8 +171,6 @@ describe("collapsed card summaries", () => {
     expect(setupStep({ runtime: "podman", daemonUp: true, image: false } as never)).toBe(3);
 
     expect(cardsMatching("ab")).toEqual([]);
-    // Connected apps is a card of Models and voice now: a search opens it
-    expect(cardsMatching("composio")).toEqual(["connections.apps"]);
     expect(cardsMatching("jev")).toEqual(["engines.decisionModel"]);
     expect(cardsMatching("about")).toEqual(["general.aboutMe"]);
     expect(cardsMatching("openrouter")).toEqual(["engines.moreProviders"]);
@@ -209,8 +202,8 @@ describe("skin picker", () => {
     const { SkinPicker } = await import("./SkinPicker");
     const html = renderToStaticMarkup(createElement(SkinPicker));
     expect(html).toContain("grid-cols-[repeat(auto-fill,minmax(132px,1fr))]");
-    expect(html).toContain('title="Pulsatrix blue. Deep navy with a soft glow from the top."');
-    expect(html).toContain('aria-description="Pulsatrix blue. Deep navy with a soft glow from the top."');
+    expect(html).toContain(`title="Perspicax&#x27;s own look: navy chrome, Geist and a soft glow from the top."`);
+    expect(html).toContain(`aria-description="Perspicax&#x27;s own look: navy chrome, Geist and a soft glow from the top."`);
     expect(html).toContain('aria-pressed="true"');
   });
 });

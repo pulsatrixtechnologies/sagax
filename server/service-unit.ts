@@ -6,6 +6,7 @@
 // the CLI decides where the file goes.
 import { homedir, userInfo } from "node:os";
 import { posix } from "node:path";
+import { NPM_BIN, NPM_PACKAGE } from "./npm-package.ts";
 
 // Unit files describe a Linux or macOS machine, so their paths are POSIX
 // whatever host renders them (the Windows CI runner included).
@@ -117,7 +118,7 @@ export function launchdPlist(spec: ServiceSpec): string {
 export function unstableInstallWarning(script: string): string | null {
   const normalized = script.replace(/\\/g, "/");
   if (/\/_npx\//.test(normalized) || /\/\.npm\/_npx\//.test(normalized)) {
-    return `this command runs from an npx cache (${dirname(script)}), which npm may delete at any time. Install it permanently first (npm install -g openmausbot) and run \`openmausbot service install\` from that install.`;
+    return `this command runs from an npx cache (${dirname(script)}), which npm may delete at any time. Install it permanently first (npm install -g ${NPM_PACKAGE}, then \`${NPM_BIN} service install\`), or run \`pnpm omb service install\` from a checkout you keep in place.`;
   }
   return null;
 }

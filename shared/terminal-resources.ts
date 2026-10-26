@@ -17,6 +17,7 @@ export type TerminalProviderKind =
   | "local-vm"
   | "desktop"
   | "cloud-vm"
+  | "tailcat"
   | "test";
 
 export type TerminalResourceStatus = "online" | "offline" | "unknown";

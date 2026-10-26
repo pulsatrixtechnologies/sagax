@@ -1,9 +1,8 @@
 // What the interactive cards may do, as the Electron renderer decides it
 // (feature parity matrix, package WP2): the approval dock
 // (`PendingApproval.tsx`), the option card's dismiss (`OptionCard.tsx`), the
-// credential card's resume and dismiss (`SecretRequestCard.tsx`), the
-// connector card (`ConnectorCard.tsx`), the access card (`AccessCard.tsx`),
-// the parallel task card (`ParallelTaskCard.tsx`), the goal run card
+// credential card's resume and dismiss (`SecretRequestCard.tsx`), the access
+// card (`AccessCard.tsx`), the parallel task card (`ParallelTaskCard.tsx`), the goal run card
 // (`GoalRunCard.tsx`) and the error row's Retry (`ChatView.tsx` `ErrorRow`).
 //
 // Pure rules only, so they are unit tested without a simulator. The views in
@@ -42,6 +41,9 @@ public struct CommandAllowlistCandidate: Codable, Hashable, Sendable {
 public struct ProposalRequestMarker: Codable, Hashable, Sendable {
     public struct Operation: Codable, Hashable, Sendable {
         public var action: String?
+        /// Set when a new routine was proposed to start paused (#898).
+        /// Absent on older cards: those start live.
+        public var paused: Bool? = nil
     }
 
     public var operation: Operation?
@@ -220,6 +222,8 @@ public struct ApprovalDockActions: Hashable, Sendable {
     public var denyIsCancel = false
     /// Remember the server's `allowKey` for the bot ("Always allow").
     public var alwaysAllowTool = false
+    /// Keep the card's owner rule (`OptionCard.ownerRule`).
+    public var alwaysAllowRule = false
     /// The provider keeps the allow for its session.
     public var alwaysAllowSession = false
     /// Remember the exact command ("Always allow this command").
@@ -243,6 +247,8 @@ public struct ApprovalDecision: Hashable, Sendable {
     public var alwaysAllowKey: String?
     /// A verified security key step-up for this answer (Client+StepUp.swift).
     public var stepUp: String?
+    /// "Always allow" on a card with an owner rule: keep that rule ("allow").
+    public var rule: String? = nil
 
     public init(
         requestId: String, behavior: String, message: String? = nil, reviewedSha256: String? = nil,
@@ -313,12 +319,17 @@ public enum ApprovalDockRules {
         let profile = card.profileRequest != nil
         let teamSetup = card.teamSetupRequest != nil
         let durable = routine || skill || profile || teamSetup
-        let canRememberCommand = ownerOrAdmin && !durable && card.allowKey == nil && card.commandAllowlist != nil
-        actions.cancelTurn = !durable
+        let canRememberCommand = ownerOrAdmin && !durable && card.allowKey == nil && card.commandAllowlist != nil && card.ownerRule == nil
+        // 2026-10-20 (JC): the card offers Deny, Always allow, Allow once;
+        // the composer's stop button ends a turn
+        actions.cancelTurn = false
         actions.denyIsCancel = routine || profile || teamSetup
-        actions.alwaysAllowTool = !durable && hasBot && card.allowKey != nil
-        actions.alwaysAllowSession = !durable && card.allowKey == nil && !canRememberCommand && card.allowSession == true
-        actions.alwaysAllowCommand = canRememberCommand
+        // 2026-10-20 (JC): one "Always allow", one click; the card's owner
+        // rule first (every card since #855), then the older grants
+        actions.alwaysAllowRule = card.ownerRule != nil
+        actions.alwaysAllowTool = !actions.alwaysAllowRule && !durable && hasBot && card.allowKey != nil
+        actions.alwaysAllowSession = !actions.alwaysAllowRule && !durable && card.allowKey == nil && !canRememberCommand && card.allowSession == true
+        actions.alwaysAllowCommand = !actions.alwaysAllowRule && canRememberCommand
         if teamSetup {
             actions.primary = .option(card.options.first ?? "")
         } else if skill {
@@ -330,13 +341,13 @@ public enum ApprovalDockRules {
         return actions
     }
 
-    public enum Choice: Sendable { case allowOnce, deny, alwaysAllowTool, alwaysAllowSession, alwaysAllowCommand }
+    public enum Choice: Sendable { case allowOnce, deny, alwaysAllowTool, alwaysAllowSession, alwaysAllowCommand, alwaysAllowRule }
 
     /// The respond body for one dock button (`decideRequest` in the store).
     public static func decision(_ choice: Choice, for pending: PendingApproval) -> ApprovalDecision {
         let card = pending.card
         let allow = choice != .deny
-        return ApprovalDecision(
+        var decision = ApprovalDecision(
             requestId: pending.requestId,
             behavior: allow ? "allow" : "deny",
             message: allow ? nil : "Denied by the user.",
@@ -345,6 +356,8 @@ public enum ApprovalDockRules {
             rememberCommand: choice == .alwaysAllowCommand,
             alwaysAllowKey: choice == .alwaysAllowTool ? card.allowKey : nil
         )
+        if choice == .alwaysAllowRule, card.ownerRule != nil { decision.rule = "allow" }
+        return decision
     }
 
     /// The parallel tasks of `threadId` that wait on the person: their
@@ -369,7 +382,7 @@ public enum ApprovalDockRules {
 /// What a settled approval card says happened (`approvalCardOutcome`).
 public enum ApprovalOutcome: Hashable, Sendable {
     case expired, allowed, alwaysAllowed, denied, cancelled
-    case routineScheduled, routineUpdated, routinePaused, routineResumed, routineRunQueued, routineDeleted
+    case routineScheduled, routineCreatedPaused, routineUpdated, routinePaused, routineResumed, routineRunQueued, routineDeleted
     case skillEnabled, skillUpdated, profileUpdated
     case teamSetupApplied, botDeleted
 
@@ -382,7 +395,8 @@ public enum ApprovalOutcome: Hashable, Sendable {
         if !proposal, card.alwaysAllowed?.isEmpty == false { return .alwaysAllowed }
         if let setup = card.teamSetupRequest { return setup.deletion == true ? .botDeleted : .teamSetupApplied }
         switch card.routineRequest?.operation?.action {
-        case "create": return .routineScheduled
+        case "create":
+            return card.routineRequest?.operation?.paused == true ? .routineCreatedPaused : .routineScheduled
         case "update": return .routineUpdated
         case "pause": return .routinePaused
         case "resume": return .routineResumed
@@ -429,6 +443,53 @@ public enum OptionCardRules {
     }
 }
 
+/// "Ignore the question" on a live ask (parity Q2).
+///
+/// The silent X is not this. The server refuses the canned dismiss sentence
+/// until the question is already answered, so a tap here is an explicit
+/// answer: the person chose not to pick an option, and the bot continues.
+/// The sentence is English because the model reads it, and it is not the
+/// canned dismiss sentence the server rejects.
+public enum QuestionIgnore {
+    public static let answer = "The user skipped this question without choosing an option. Continue with your best judgment."
+
+    public enum Face: Equatable, Sendable {
+        case ignore
+        /// Seconds left before the server declines the card on its own.
+        case closesAutomatically(remaining: Int)
+    }
+
+    public static func canIgnore(_ card: OptionCard) -> Bool {
+        guard card.isPending, !card.isPermission else { return false }
+        if card.routineRequest != nil || card.skillRequest != nil || card.profileRequest != nil
+            || card.modelRequest != nil || card.teamSetupRequest != nil || card.tighteningRequest != nil
+            || card.adminApproval == true { return false }
+        return true
+    }
+
+    /// `expiresAt` is milliseconds. No deadline, or one already past, is a
+    /// plain Ignore. A countdown only while the card will close by itself.
+    public static func face(expiresAt: Double?, now: Date = Date()) -> Face {
+        guard let expiresAt, expiresAt.isFinite else { return .ignore }
+        let remaining = expiresAt / 1_000 - now.timeIntervalSince1970
+        guard remaining > 0, remaining < 24 * 60 * 60 else { return .ignore }
+        return .closesAutomatically(remaining: Int(remaining.rounded(.down)))
+    }
+
+    /// `m:ss`, or `h:mm:ss` once an hour is left.
+    public static func clock(_ seconds: Int) -> String {
+        let left = max(0, seconds)
+        if left >= 3_600 {
+            return String(format: "%d:%02d:%02d", left / 3_600, (left % 3_600) / 60, left % 60)
+        }
+        return String(format: "%d:%02d", left / 60, left % 60)
+    }
+
+    public static func isSkip(_ text: String?) -> Bool {
+        text?.trimmingCharacters(in: .whitespacesAndNewlines) == answer
+    }
+}
+
 // MARK: - Credential card (SecretRequestCard.tsx)
 
 public enum SecretCardRules {
@@ -454,40 +515,6 @@ public enum SecretCardRules {
     /// "Try again": the key is saved (or declined) but resuming failed.
     public static func canRetryResume(_ secret: SecretRequestCardData) -> Bool {
         outcome(secret) != nil && secret.superseded != true && secret.resumed != true && !(secret.error ?? "").isEmpty
-    }
-}
-
-// MARK: - Connector card (ConnectorCard.tsx)
-
-public enum ConnectorCardRules {
-    public enum Action: Hashable, Sendable {
-        /// Connect securely / Try again / Open again.
-        case connect(label: ConnectLabel)
-        case continueTask
-        case continuing
-    }
-
-    public enum ConnectLabel: Hashable, Sendable { case connectSecurely, tryAgain, openAgain }
-
-    public static func action(_ card: ConnectorRequestCard) -> Action {
-        switch card.state {
-        case .connected:
-            return card.resumed == true ? .continuing : .continueTask
-        case .authorizing:
-            return .connect(label: .openAgain)
-        case .failed:
-            return .connect(label: .tryAgain)
-        default:
-            return .connect(label: .connectSecurely)
-        }
-    }
-
-    /// The desktop polls status every 4 s, 75 times, while authorizing.
-    public static let pollInterval: TimeInterval = 4
-    public static let pollLimit = 75
-
-    public static func polls(_ card: ConnectorRequestCard) -> Bool {
-        card.state == .authorizing && card.dismissed != true
     }
 }
 
@@ -723,7 +750,7 @@ public enum AllowRuleText {
 /// the action; a proposal says what is being confirmed.
 public enum ApprovalHeading: Hashable, Sendable {
     case wantsTo(ApprovalToolAction)
-    case confirmRoutine, confirmRoutineChange, enableSkill, updateSkill, confirmProfileChange
+    case confirmRoutine, confirmPausedRoutine, confirmRoutineChange, enableSkill, updateSkill, confirmProfileChange
     case teamSetup(String)
 
     public static func of(_ card: OptionCard) -> ApprovalHeading {
@@ -731,7 +758,10 @@ public enum ApprovalHeading: Hashable, Sendable {
         if let skill = card.skillRequest { return skill.action == "update" ? .updateSkill : .enableSkill }
         if card.profileRequest != nil { return .confirmProfileChange }
         if let routine = card.routineRequest {
-            return routine.operation?.action == "create" ? .confirmRoutine : .confirmRoutineChange
+            if routine.operation?.action == "create" {
+                return routine.operation?.paused == true ? .confirmPausedRoutine : .confirmRoutine
+            }
+            return .confirmRoutineChange
         }
         return .wantsTo(.of(tool: card.tool))
     }

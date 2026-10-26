@@ -58,6 +58,11 @@ export class TurnNotStartedError extends Error {
 }
 
 
+/** The CLI refused sign-in before any model or tool activity, and its process stopped. */
+export class TurnAuthenticationRefusedError extends TurnNotStartedError {
+  override readonly name = "TurnAuthenticationRefusedError";
+}
+
 /** Variants are opaque provider IDs, not the cross-engine effort enum. */
 export function isModelVariant(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 256 &&
@@ -239,10 +244,6 @@ export interface SendTurnInput {
   preloadBrowserTools?: boolean;
   /** Per-bot integrations the driver may hand to the agent as tools. */
   integrations?: {
-    /** A local stdio bridge owns the remote Composio transport. Keeping the
-     * bridge harness-controlled lets it turn connection requests into trusted
-     * chat cards consistently across provider CLIs. */
-    composio?: { command: string; args: string[]; env: Record<string, string> };
     /** Direct stdio connection to a computer MCP server: Cua Driver (host,
      * sandbox, or VPS) or the harness's own cloud computer server (a Boat).
      * Every engine reaches every computer this way, on its own model.
@@ -269,6 +270,9 @@ export interface SendTurnInput {
     agents?: { command: string; args: string[]; env: Record<string, string> };
     /** Physical Android phone tools over authorized USB debugging. */
     phone?: { command: string; args: string[]; env: Record<string, string> };
+    /** Messages on the solo Mac where this process runs. Never mounted on
+     * an organization server, and never a desktop-bridge operation. */
+    messages?: { command: string; args: string[]; env: Record<string, string> };
     /** The app's built-in browser: an MCP proxy (server/harness-mcp-proxy browser)
      * that forwards to the Electron-owned WebContentsView the Browser tab
      * shows. One tab per bot, in its own persistent session partition. */
@@ -286,6 +290,12 @@ export interface SendTurnInput {
      * A server is either a command this machine runs (stdio) or a server
      * reached at a URL; a driver that cannot speak to one kind skips it. */
     custom?: Record<string, McpServerSpec>;
+    /** Per-server result budget for `custom` (config.json
+     * `mcpServers.<name>.resultBudget`): characters of one tool result
+     * allowed into context, 0 = never trim. A name missing here uses the app
+     * default (mcp-gate-config.ts resultBudget). Kept apart from the specs so
+     * a server mounted as it is never carries a field its engine rejects. */
+    customResultBudgets?: Record<string, number>;
   };
   cwd?: string;
   /** Let the engine also load the MCP servers from the person's own CLI
@@ -315,6 +325,11 @@ export interface SendTurnInput {
    * Claude driver then drops --strict-mcp-config only; other drivers ignore
    * it. Their tools ride the normal permission flow, never pre-allowed. */
   claudeAiConnectors?: boolean;
+  /** Grok: load the cloud connectors of the xAI account this turn runs on,
+   * which is the person's own grok.com sign-in
+   * (harness-connectors.ts grokCloudConnectorsForTurn). Absent or false:
+   * off, whatever the organization turn (review of #943). */
+  grokCloudConnectors?: boolean;
   /** Claude Code plugins installed on the bot (server/bot-plugins.ts): one
    * folder each, already stripped of hooks, MCP and LSP servers. The Claude
    * driver loads each with --plugin-dir. Other drivers do not get these
@@ -390,10 +405,6 @@ export interface ProviderAdapter {
      * told it has a computer whose tools its driver cannot mount — it
      * burns turns hunting for tools that aren't there. */
     computerMcp?: boolean;
-    /** True when the driver mounts turn.integrations.composio (the user's
-     * connected apps). Same rule again: a key in the config says the user
-     * HAS those connections, not that this driver can reach them. */
-    composioMcp?: boolean;
     /** True when the driver can mount the first-party physical-phone MCP. */
     phoneMcp?: boolean;
     /** True when the driver can mount the built-in browser MCP. Same rule:
@@ -433,7 +444,7 @@ export interface ProviderAdapter {
      * Full-auto/bypass provider instances must leave this false. */
     localComputerMcp?: boolean;
     /** True when the driver mounts turn.integrations.custom (the user's own
-     * MCP servers from config). Same rule as composioMcp: an entry in the
+     * MCP servers from config). Same rule as computerMcp: an entry in the
      * config says the servers exist, not that this engine can reach them. */
     customMcp?: boolean;
     /** True when a turn given a resumeCursor runs in that exact native
@@ -506,6 +517,11 @@ export interface ProviderAdapter {
   /** Close an idle warm process on this thread. A process whose turn is
    * already running is left alone. */
   releaseWarmSession?(threadId: ThreadId): void;
+  /** Size on disk of the saved session a resume of this cursor would load
+   * (Claude's session file), for server/stale-session.ts. Undefined when the
+   * engine cannot tell, or when a live process already holds that session
+   * (nothing would be loaded). */
+  sessionBytes?(threadId: ThreadId, resumeCursor: unknown): number | undefined;
   stopAll(): Promise<void>;
   onEvent(listener: RuntimeEventListener): () => void;
   /** Prompt-cache keep-warm (server/cache-keepwarm.ts). Only drivers that
@@ -717,6 +733,11 @@ export interface TextGenerationOptions {
   onDelta?: (delta: string) => void;
   /** Cap the completion. The opener asks for a sentence, not an essay. */
   maxTokens?: number;
+  /** No extended thinking: an extraction step (memory capture) gains
+   * nothing from it, and a capture of several conversations spent 3,000 to
+   * 4,000 thinking tokens and ran past its 60 s limit. Drivers without a
+   * switch ignore it. */
+  noThinking?: boolean;
 }
 
 export interface ProviderInstance {

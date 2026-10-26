@@ -143,3 +143,13 @@ describe("unassigned items are always visible", () => {
     expect(partitionSidebarGroups(view.groups).unsectionedRooms.map((group) => group.id)).toEqual(["room", "dm-carol"]);
   });
 });
+
+describe("a room that arrives after the sections were set", () => {
+  it("stays in the list (Unassigned) until the person files it", () => {
+    const prefs = { sections: [{ name: "Work", items: [itemKey("group", "old")] }] };
+    const view = withPersonalSections([], [{ id: "old", section: "General" }, { id: "bot-made", section: "General" }], prefs);
+    expect(view.groups.map((group) => group.id)).toEqual(["old", "bot-made"]);
+    expect(view.groups.find((group) => group.id === "old")!.section).toBe("Work");
+    expect(view.groups.find((group) => group.id === "bot-made")!.section).toBeUndefined();
+  });
+});

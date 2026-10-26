@@ -98,9 +98,12 @@ Hosted sign-in starts have a bounded per-source allocation limit. A full
 handoff table returns 429 without evicting existing sign-ins or preventing
 their callbacks from completing. Email/account sessions survive a successful
 graceful shutdown. An unclean shutdown or failed session persistence requires
-account sign-in again; paired-device sessions are preserved. A durable boot
-marker prevents old, revoked account tokens from reappearing after a failed
-write and restart. Local allow-list membership is read once per revalidation
+email/account sign-in again; paired-device sessions are preserved. A "Sign in
+with Pulsatrix" session survives an unclean shutdown when no session write was
+lost (no `sessions.json.unsynced` marker), but is served again only after the
+provider refreshes its grant (503 `idp_recheck_pending` while the provider
+does not answer; 401 when it refuses). A durable boot marker prevents old,
+revoked account tokens from reappearing after a failed write and restart. Local allow-list membership is read once per revalidation
 pass, not once per session on each streamed event.
 
 ## Isolated verification

@@ -246,16 +246,15 @@ const definitions = [
       fr: "Lire et exporter qui a changé les réglages, les personnes, les accès et les bots, et qui a répondu aux cartes d'approbation.",
     },
   },
+  // 2026-10-19 (JC): delegable. Nobody but an admin acts on an admin
+  // (their sessions, codes, connections, bots or pages), and attaching an
+  // interim person stays an admin's (it merges identities).
   {
-    key: "people.manage", group: "people", memberDefault: false, adminOnly: true,
+    key: "people.manage", group: "people", memberDefault: false, adminOnly: false,
     label: { en: "Manage other people", fr: "Gérer les autres personnes" },
     description: {
-      en: "Disable, enable and reset people, revoke their connections, attach interim people and act on bots they own.",
-      fr: "Désactiver, réactiver et réinitialiser des personnes, révoquer leurs connexions, rattacher des personnes intérimaires et agir sur les bots qu'elles possèdent.",
-    },
-    adminOnlyReason: {
-      en: "It reaches other people's accounts and data.",
-      fr: "Elle touche aux comptes et aux données des autres personnes.",
+      en: "See and end people's sessions and pairing codes, revoke their connections, stop or delete their bots and revoke their published pages. Never an organization admin's, and attaching an interim person stays with admins.",
+      fr: "Voir et fermer les sessions et les codes de jumelage des personnes, révoquer leurs connexions, arrêter ou supprimer leurs bots et révoquer leurs pages publiées. Jamais ceux d'un admin de l'organisation, et rattacher une personne intérimaire reste aux admins.",
     },
   },
   {
@@ -266,40 +265,64 @@ const definitions = [
       fr: "Lire l'utilisation, les dépenses et le budget du serveur, et les exporter.",
     },
   },
+  // 2026-10-19 (JC): delegable for the export; a restore replaces sign-in,
+  // people and sessions, so it stays an admin's.
   {
-    key: "backup.workspace", group: "backup", memberDefault: false, adminOnly: true,
-    label: { en: "Back up and restore the server", fr: "Sauvegarder et restaurer le serveur" },
+    key: "backup.workspace", group: "backup", memberDefault: false, adminOnly: false,
+    label: { en: "Back up the server", fr: "Sauvegarder le serveur" },
     description: {
-      en: "Export, schedule and restore the server's backups.",
-      fr: "Exporter, planifier et restaurer les sauvegardes du serveur.",
-    },
-    adminOnlyReason: {
-      en: "A backup holds everyone's conversations and files; a restore replaces them.",
-      fr: "Une sauvegarde contient les conversations et les fichiers de tout le monde; une restauration les remplace.",
+      en: "Export and download the server's backups and see their status. A backup holds everyone's conversations and files. Restoring stays with admins.",
+      fr: "Exporter et télécharger les sauvegardes du serveur et voir leur état. Une sauvegarde contient les conversations et les fichiers de tout le monde. La restauration reste aux admins.",
     },
   },
+  // 2026-10-19 (JC): running commands on the organization's shared host is
+  // a right an admin gives (a person, a team), never an admin's alone. A
+  // person's own destinations (their cloud computer, their Local VM, their
+  // own computer) never need it: those commands are theirs at their own
+  // approval level.
   {
-    key: "host.shell", group: "host", memberDefault: false, adminOnly: true,
-    label: { en: "Run commands on the server", fr: "Exécuter des commandes sur le serveur" },
+    key: "host.commands", group: "host", memberDefault: false, adminOnly: false,
+    label: { en: "Run commands on the organization's server", fr: "Exécuter des commandes sur le serveur de l'organisation" },
     description: {
-      en: "Approve a member bot's server-level commands, save command rules, change the server's own MCP servers, an engine's program path, its computers and this computer.",
-      fr: "Approuver les commandes de niveau serveur des bots des membres, enregistrer des règles de commande, changer les serveurs MCP du serveur, le chemin du programme d'un moteur, ses ordinateurs et cet ordinateur.",
-    },
-    adminOnlyReason: {
-      en: "It runs programs on the server's own machine, outside anyone's space.",
-      fr: "Elle exécute des programmes sur la machine du serveur, hors de l'espace de chacun.",
+      en: "Open a terminal on the organization's server hosts (the Sagax server, its SSH and unRAID hosts) and approve by hand the server commands of the bots they own. A shell there reaches the whole server, everyone's data included: give it only to people you would trust as admins of the server. Their own cloud computer, Local VM and computer never need it.",
+      fr: "Ouvrir un terminal sur les hôtes du serveur de l'organisation (le serveur Sagax, ses hôtes SSH et unRAID) et approuver à la main les commandes serveur des bots qu'ils possèdent. Un terminal là-bas atteint tout le serveur, données de chacun comprises : ne la donnez qu'à des personnes à qui vous confieriez l'administration du serveur. Leur propre ordinateur infonuagique, leur VM locale et leur ordinateur n'en ont jamais besoin.",
     },
   },
+  // 2026-10-19 (JC): delegable. Equivalent to an admin on the server's
+  // machine: the label says so.
   {
-    key: "server.settings", group: "server", memberDefault: false, adminOnly: true,
+    key: "host.shell", group: "host", memberDefault: false, adminOnly: false,
+    label: { en: "Change the server's own setup", fr: "Changer la configuration propre du serveur" },
+    description: {
+      en: "Approve the server commands of other people's bots, save command rules, change the server's own MCP servers, an engine's program path, its computers and this computer. It runs programs on the server's machine: give it only to people you would trust as admins of the server.",
+      fr: "Approuver les commandes serveur des bots des autres, enregistrer des règles de commande, changer les serveurs MCP du serveur, le chemin du programme d'un moteur, ses ordinateurs et cet ordinateur. Elle exécute des programmes sur la machine du serveur : ne la donnez qu'à des personnes à qui vous confieriez l'administration du serveur.",
+    },
+  },
+  // 2026-10-19 (JC): delegable. Who is an admin (the sign-in lists), the
+  // operator's own profile, tool grants, the interim attach window and the
+  // server's provider keys stay with admins.
+  {
+    key: "server.settings", group: "server", memberDefault: false, adminOnly: false,
     label: { en: "Change the server's settings", fr: "Changer les réglages du serveur" },
     description: {
-      en: "Change the installation's settings, keys, mail, webhooks and organization policies (Full access, marketplaces, GitHub app).",
-      fr: "Changer les réglages de l'installation, les clés, le courriel, les webhooks et les politiques de l'organisation (accès complet, marchés, application GitHub).",
+      en: "Change the installation's settings, webhooks, bot defaults and organization policies (Full access, marketplaces and their tokens, GitHub app). It changes security and payment settings for everyone. Who is an admin, tool grants, the interim attach window and the server's provider keys (OpenRouter, OpenAI, Anthropic, voice...) stay with admins.",
+      fr: "Changer les réglages de l'installation, les webhooks, les valeurs par défaut des bots et les politiques de l'organisation (accès complet, marchés et leurs jetons, application GitHub). Elle change les réglages de sécurité et de paiement pour tout le monde. Qui est admin, les droits d'outils, la fenêtre de rattachement intérimaire et les clés de fournisseurs du serveur (OpenRouter, OpenAI, Anthropic, voix...) restent aux admins.",
     },
-    adminOnlyReason: {
-      en: "It changes security and payment settings for everyone.",
-      fr: "Elle change les réglages de sécurité et de paiement pour tout le monde.",
+  },
+  // 2026-10-22 (JC): the experimental features of the server (Settings >
+  // Experimental), delegable on its own. It governs who sees and toggles the
+  // early features there (skill authoring, the built-in browser, connected
+  // apps, the decision model, the data window, the meeting notetaker). These
+  // are server-wide switches, so it is implied by server.settings (a person
+  // who may change the settings may always manage the experiments): see
+  // server/org-permissions.ts. A person given only this key never reaches any
+  // other installation setting.
+  {
+    key: "server.experimental", group: "server", memberDefault: false, adminOnly: false,
+    label: { en: "Manage experimental features", fr: "Gérer les fonctionnalités expérimentales" },
+    description: {
+      en: "See Settings > Experimental and turn its early features on or off for the whole server (skill authoring, the built-in browser, connected apps, the decision model, the data window, the meeting notetaker). It reaches no other installation setting. Anyone who can change the server's settings already has it.",
+      fr: "Voir Réglages > Expérimental et activer ou désactiver ses fonctionnalités en avant-première pour tout le serveur (rédaction de compétences, navigateur intégré, applications connectées, modèle de décision, fenêtre de données, preneur de notes de réunion). Elle n'atteint aucun autre réglage de l'installation. Toute personne qui peut changer les réglages du serveur l'a déjà.",
     },
   },
   {
@@ -459,9 +482,12 @@ export const BOT_FIELD_PERMISSIONS: Readonly<Record<string, PermissionKey>> = {
   approvalMode: "bots.approvalLevel",
   autoApprove: "bots.approvalLevel",
   acknowledgeLocalAuto: "bots.approvalLevel",
+  proactiveMode: "bots.approvalLevel",
   memoryEnabled: "bots.behaviour",
+  teamMemorySharing: "bots.behaviour",
   memoryUpkeep: "bots.behaviour",
   voiceNotes: "bots.behaviour",
+  emailDrafts: "bots.behaviour",
   fallback: "bots.behaviour",
   parkDirectMessages: "bots.behaviour",
   maxConcurrentThreads: "bots.behaviour",
@@ -476,12 +502,10 @@ export const BOT_FIELD_PERMISSIONS: Readonly<Record<string, PermissionKey>> = {
   toolScope: "bots.tools",
   mcpServers: "bots.tools",
   mcpAccounts: "bots.tools",
-  composio: "bots.tools",
-  connectorTools: "bots.tools",
-  connectorScopes: "bots.tools",
   outbound: "bots.tools",
   peers: "bots.tools",
   approvePeerComms: "bots.tools",
+  allowedRecipients: "bots.tools",
   acknowledgePeerScope: "bots.tools",
   visibility: "sharing.visibility",
   section: "sharing.visibility",
@@ -508,4 +532,41 @@ export function permissionRefusal(key: PermissionKey): { error: "forbidden"; per
 /** The catalogue as GET /api/org/admin/capabilities returns it. */
 export function permissionCatalogue(): { version: number; groups: readonly PermissionGroup[]; permissions: readonly PermissionDefinition<PermissionKey>[] } {
   return { version: PERMISSION_CATALOGUE_VERSION, groups: PERMISSION_GROUPS, permissions: PERMISSIONS };
+}
+
+/** The server-wide `features` keys that `server.experimental` governs, i.e.
+ * the switches of Settings > Experimental (src/components/settings/
+ * ExperimentalSettings.tsx). A person holding only `server.experimental` may
+ * PATCH /api/config with these feature keys and nothing else; the client
+ * hides every other control from them. The host-reaching feature switches
+ * (sharedComputers, claudeUserMcp, vpsComputer, boatComputer) are NOT here:
+ * those stay with admins whatever right a delegate holds. Stable: the server
+ * refusal and the client gate both read this one list. */
+export const EXPERIMENTAL_FEATURE_KEYS: readonly string[] = [
+  "skillAuthoring", "browser", "connectedApps", "decisionModel", "dataWindow", "meetingNotetaker",
+];
+
+const EXPERIMENTAL_FEATURE_SET = new Set<string>(EXPERIMENTAL_FEATURE_KEYS);
+
+export function isExperimentalFeatureKey(key: string): boolean {
+  return EXPERIMENTAL_FEATURE_SET.has(key);
+}
+
+/** The first field a `server.experimental`-only caller (no `server.settings`,
+ * not an admin) may not send to PUT/PATCH /api/config, or null when the body
+ * is a features-only patch touching those experimental keys alone. It lets
+ * such a delegate flip the experiments of the server and nothing else. */
+export function experimentalOnlyConfigViolation(body: unknown): string | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return "body";
+  const record = body as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (key !== "features") return key;
+  }
+  const features = record.features;
+  if (features === undefined) return null;
+  if (!features || typeof features !== "object" || Array.isArray(features)) return "features";
+  for (const key of Object.keys(features as object)) {
+    if (!EXPERIMENTAL_FEATURE_SET.has(key)) return `features.${key}`;
+  }
+  return null;
 }

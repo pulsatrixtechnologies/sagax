@@ -21,15 +21,21 @@ import {
   costTrend,
   dailyCosts,
   formatCost,
+  parseCapInput,
   personalUsagePeriods,
+  previousCyclePeriod,
   rankedGroups,
+  usageLocale,
   usageQuery,
+  type PersonalSpendCap,
   type PersonalUsageGroup,
   type PersonalUsageSummary,
 } from "@/lib/usage-personal";
+import { fetchMyTraces } from "@/lib/usage-trace";
 import { PlanUsage } from "./PlanUsage";
+import { UsageTraces } from "./usage/UsageTraces";
 import { perspicaxConsoleUrl } from "./PerspicaxOrgSettings";
-import { CompactRow, DescribedRow, FoldRow, PILL, SettingsGroup } from "./SettingsPrimitives";
+import { CompactRow, ConfirmPill, DescribedRow, FIELD, FoldRow, PILL, PillSelect, PRIMARY_PILL, SettingsGroup } from "./SettingsPrimitives";
 
 export interface PersonalUsage {
   month: PersonalUsageSummary;
@@ -37,6 +43,37 @@ export interface PersonalUsage {
   days30: PersonalUsageSummary;
   byBot: PersonalUsageSummary;
   byModel: PersonalUsageSummary;
+}
+
+/** One billing cycle's totals and breakdowns: the current month (already
+ * loaded, plus the by-source list) or the whole previous month. */
+export interface CycleDetail {
+  total: PersonalUsageSummary;
+  byBot: PersonalUsageSummary;
+  byModel: PersonalUsageSummary;
+  /** null where the server does not group by engine (an older one). */
+  byEngine: PersonalUsageSummary | null;
+}
+
+export type UsageCycle = "current" | "previous";
+
+const optional = async <T,>(read: Promise<T>): Promise<T | null> => read.catch(() => null);
+
+/** "Cycle précédent": last month in full, by bot, by model and by source.
+ * The current cycle's own by-source list rides along on the same call shape. */
+export async function loadCycleDetail(cycle: UsageCycle, usage: PersonalUsage, now = new Date(), get: <T>(path: string) => Promise<T> = api): Promise<CycleDetail> {
+  if (cycle === "current") {
+    const range = personalUsagePeriods(now).month;
+    return { total: usage.month, byBot: usage.byBot, byModel: usage.byModel, byEngine: await optional(get<PersonalUsageSummary>(usageQuery(range, "engine"))) };
+  }
+  const range = previousCyclePeriod(now);
+  const [total, byBot, byModel, byEngine] = await Promise.all([
+    get<PersonalUsageSummary>(usageQuery(range, "day")),
+    get<PersonalUsageSummary>(usageQuery(range, "bot")),
+    get<PersonalUsageSummary>(usageQuery(range, "model")),
+    optional(get<PersonalUsageSummary>(usageQuery(range, "engine"))),
+  ]);
+  return { total, byBot, byModel, byEngine };
 }
 
 /** The Cost card's error: "failed" for a read that failed, "unavailable"
@@ -122,12 +159,28 @@ export function UsageSection() {
     );
     return () => { alive = false; };
   }, []);
+  const [cycle, setCycle] = useState<UsageCycle>("current");
+  const [detail, setDetail] = useState<{ cycle: UsageCycle; data: CycleDetail } | null>(null);
+  useEffect(() => {
+    if (!usage) return;
+    let alive = true;
+    loadCycleDetail(cycle, usage).then(
+      (data) => { if (alive) setDetail({ cycle, data }); },
+      () => { if (alive) setDetail(null); },
+    );
+    return () => { alive = false; };
+  }, [cycle, usage]);
   const consoleUrl = org && viewerIsOrgAdmin(state.config) ? perspicaxConsoleUrl(org.org.identity.issuer) : null;
   return (
     <UsageLayout
-      cost={<CostCard usage={usage} error={error} consoleUrl={consoleUrl} />}
+      cost={(
+        <div className="flex min-w-0 flex-col gap-6">
+          <CostCard usage={usage} error={error} consoleUrl={consoleUrl} cycle={cycle} onCycle={setCycle} detail={detail?.cycle === cycle ? detail.data : null} />
+          {usage && <SpendCapCard />}
+        </div>
+      )}
       plan={<PlanUsage enabled={planUsageShown({ organization: org !== null, viewUsage: canViewUsage(state.config) })} />}
-      rest={null}
+      rest={<UsageTraces load={fetchMyTraces} />}
     />
   );
 }
@@ -150,11 +203,21 @@ export function Sparkline({ values }: { values: number[] }) {
 /** Cost (2026-10-15: on top): this month with its trend, the last 30 days,
  * then the breakdown by bot and by model, folded with its count; for an
  * organization admin, the organization's own usage in its console. */
-export function CostCard({ usage, error, consoleUrl = null }: { usage: PersonalUsage | null; error: PersonalUsageError | null; consoleUrl?: string | null }) {
+export function CostCard({ usage, error, consoleUrl = null, cycle = "current", onCycle, detail = null }: {
+  usage: PersonalUsage | null;
+  error: PersonalUsageError | null;
+  consoleUrl?: string | null;
+  cycle?: UsageCycle;
+  onCycle?: (next: UsageCycle) => void;
+  /** The shown cycle's breakdowns once loaded; the previous cycle's totals come from here. */
+  detail?: CycleDetail | null;
+}) {
   const periods = personalUsagePeriods();
-  const current = costOf(usage?.month);
-  const trend = usage ? costTrend(current, costOf(usage.previous)) : null;
-  const estimated = (usage?.month.total.estimatedUsd ?? 0) > 0;
+  const previousCycle = cycle === "previous";
+  const shownTotal = previousCycle ? detail?.total : usage?.month;
+  const current = costOf(shownTotal);
+  const trend = usage && !previousCycle ? costTrend(current, costOf(usage.previous)) : null;
+  const estimated = (shownTotal?.total.estimatedUsd ?? 0) > 0;
   const status = error === "unavailable" ? (
     <p role="status" className="px-3.5 py-2.5 text-[13px] text-ink-secondary" data-usage-unavailable>{t("usage.personal.unavailable")}</p>
   ) : error ? (
@@ -171,11 +234,11 @@ export function CostCard({ usage, error, consoleUrl = null }: { usage: PersonalU
         {usage && !status && (
           <>
             <DescribedRow
-              label={t("usage.personal.breakdownSummary")}
+              label={previousCycle ? previousCycleLabel() : t("usage.personal.breakdownSummary")}
               rowId="month"
               description={(
                 <>
-                  {t("usage.personal.turns", { turns: usage.month.total.turns })}
+                  {shownTotal ? t("usage.personal.turns", { turns: shownTotal.total.turns }) : t("planUsage.loading")}
                   {trend !== null && (
                     <> · <span data-usage-trend={trend} className={cn(trend > 0 ? "text-warning" : "text-success")}>
                       {t(trend > 0 ? "usage.personal.trendUp" : trend < 0 ? "usage.personal.trendDown" : "usage.personal.trendSame", { percent: Math.abs(trend) })}
@@ -185,12 +248,30 @@ export function CostCard({ usage, error, consoleUrl = null }: { usage: PersonalU
                 </>
               )}
             >
+              {onCycle && (
+                <PillSelect<UsageCycle>
+                  value={cycle}
+                  ariaLabel={t("usage.personal.cycle")}
+                  onChange={onCycle}
+                  options={[
+                    { value: "current", label: t("usage.personal.cycleCurrent") },
+                    { value: "previous", label: t("usage.personal.cyclePrevious") },
+                  ]}
+                />
+              )}
               <span className="text-[17px] font-semibold tabular-nums leading-6 text-ink" data-usage-cost>{formatCost(current)}</span>
             </DescribedRow>
-            <CompactRow label={t("usage.personal.last30")} rowId="days30">
-              <Sparkline values={dailyCosts(usage.days30, periods.days30)} />
-            </CompactRow>
-            <BreakdownRow usage={usage} />
+            {!previousCycle && (
+              <CompactRow label={t("usage.personal.last30")} rowId="days30">
+                <Sparkline values={dailyCosts(usage.days30, periods.days30)} />
+              </CompactRow>
+            )}
+            <BreakdownRow
+              bots={rankedGroups(previousCycle ? detail?.byBot : usage.byBot)}
+              models={rankedGroups(previousCycle ? detail?.byModel : usage.byModel)}
+              sources={detail?.byEngine ? rankedGroups(detail.byEngine) : null}
+              loading={previousCycle && !detail}
+            />
           </>
         )}
         {consoleUrl && (
@@ -214,7 +295,7 @@ export function CostCard({ usage, error, consoleUrl = null }: { usage: PersonalU
 
 const TOP = 5;
 
-function GroupList({ title, groups, kind }: { title: string; groups: PersonalUsageGroup[]; kind: "bot" | "model" }) {
+function GroupList({ title, groups, kind }: { title: string; groups: PersonalUsageGroup[]; kind: "bot" | "model" | "source" }) {
   const [all, setAll] = useState(false);
   const shown = all ? groups : groups.slice(0, TOP);
   return (
@@ -244,8 +325,7 @@ function GroupList({ title, groups, kind }: { title: string; groups: PersonalUsa
 
 /** By bot and by model, this month: folded under a count pill (the number
  * of bots). */
-function BreakdownRow({ usage }: { usage: PersonalUsage }) {
-  const bots = rankedGroups(usage.byBot);
+function BreakdownRow({ bots, models, sources, loading }: { bots: PersonalUsageGroup[]; models: PersonalUsageGroup[]; sources: PersonalUsageGroup[] | null; loading: boolean }) {
   return (
     <FoldRow
       cardId="usage.breakdown"
@@ -254,9 +334,103 @@ function BreakdownRow({ usage }: { usage: PersonalUsage }) {
       toggleLabel={t("usage.personal.breakdown")}
     >
       <div className="flex flex-col gap-3">
-        <GroupList kind="bot" title={t("usage.personal.byBot")} groups={bots} />
-        <GroupList kind="model" title={t("usage.personal.byModel")} groups={rankedGroups(usage.byModel)} />
+        {loading ? <p role="status" className="text-[13px] text-ink-secondary">{t("planUsage.loading")}</p> : (
+          <>
+            <GroupList kind="bot" title={t("usage.personal.byBot")} groups={bots} />
+            <GroupList kind="model" title={t("usage.personal.byModel")} groups={models} />
+            {sources && <GroupList kind="source" title={t("usage.personal.bySource")} groups={sources} />}
+          </>
+        )}
       </div>
     </FoldRow>
+  );
+}
+
+/** "septembre 2026": the month a previous-cycle figure is for. */
+function previousCycleLabel(now = new Date()): string {
+  const at = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  try {
+    return new Intl.DateTimeFormat(usageLocale(), { month: "long", year: "numeric", timeZone: "UTC" }).format(at);
+  } catch {
+    return at.toISOString().slice(0, 7);
+  }
+}
+
+/** Limite de dépenses: the person's own monthly limit. A reached limit stops
+ * new turns (the server answers 409 spend_cap) until it is raised here; the
+ * owner is the one who can (admin scope). Hidden where the server does not
+ * know the route or an organization sets limits in its console. */
+const readSpendCap = () => api<PersonalSpendCap>("/api/me/spend-cap");
+const writeSpendCap = (monthlyUsd: number | null) => api<PersonalSpendCap>("/api/me/spend-cap", { method: "PUT", body: JSON.stringify({ monthlyUsd }) });
+
+export function SpendCapCard({ read = readSpendCap, write = writeSpendCap, initial = null }: {
+  read?: () => Promise<PersonalSpendCap>;
+  write?: (monthlyUsd: number | null) => Promise<PersonalSpendCap>;
+  initial?: PersonalSpendCap | null;
+}) {
+  const [data, setData] = useState<PersonalSpendCap | null>(initial);
+  const [text, setText] = useState("");
+  const [failed, setFailed] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    read().then((next) => { if (alive) setData(next); }, () => { /* an older server: no card */ });
+    return () => { alive = false; };
+  }, [read]);
+  if (!data || !data.supported) return null;
+  const parsed = parseCapInput(text, data.minUsd);
+  const save = async (value: number | null) => {
+    setBusy(true);
+    setFailed(null);
+    try {
+      setData(await write(value));
+      setText("");
+    } catch (error) {
+      setFailed(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const cap = data.cap;
+  return (
+    <div data-settings-card="usage.spendCap">
+      <SettingsGroup title={t("usage.cap.title")} groupId="spendCap">
+        <DescribedRow
+          label={t("usage.cap.monthly")}
+          rowId="cap-state"
+          description={cap
+            ? (
+              <>
+                {t("usage.cap.spent", { spent: formatCost(cap.spentUsd), cap: formatCost(cap.monthlyUsd), percent: cap.percent })}
+                <span className={cn("block", cap.exceeded ? "text-danger" : cap.warn ? "text-warning" : undefined)} data-cap-status={cap.exceeded ? "reached" : cap.warn ? "near" : "within"}>
+                  {cap.exceeded ? t("usage.cap.reached") : cap.warn ? t("usage.cap.nearing") : t("usage.cap.within")}
+                </span>
+              </>
+            )
+            : t("usage.cap.none")}
+        >
+          {cap && <ConfirmPill label={t("usage.cap.remove")} confirmLabel={t("usage.cap.removeConfirm")} onConfirm={() => void save(null)} disabled={busy} />}
+        </DescribedRow>
+        <div className="flex flex-wrap items-center gap-2 px-3.5 pb-2.5" data-settings-row="cap-edit">
+          <input
+            type="text"
+            inputMode="decimal"
+            className={cn(FIELD, "w-40")}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            placeholder={cap ? t("usage.cap.raisePlaceholder") : t("usage.cap.placeholder")}
+            aria-label={t("usage.cap.monthly")}
+            aria-invalid={text !== "" && parsed === null}
+            data-cap-input
+          />
+          <button type="button" className={PRIMARY_PILL} disabled={busy || parsed === null} onClick={() => parsed !== null && void save(parsed)} data-cap-save>
+            {cap ? t("usage.cap.raise") : t("usage.cap.set")}
+          </button>
+        </div>
+        {text !== "" && parsed === null && <p role="alert" className="px-3.5 pb-2.5 text-[12px] text-danger">{t("usage.cap.invalid", { min: formatCost(data.minUsd) })}</p>}
+        {failed && <p role="alert" className="px-3.5 pb-2.5 text-[12px] text-danger">{failed}</p>}
+        <p className="px-3.5 pb-2.5 text-[12px] leading-4 text-ink-secondary">{t("usage.cap.hint")}</p>
+      </SettingsGroup>
+    </div>
   );
 }

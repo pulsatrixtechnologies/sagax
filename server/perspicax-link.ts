@@ -250,6 +250,27 @@ const OWN_ACCOUNT_ERASE_ANSWER_MAX_BYTES = 8 * 1024;
  * uses one of the person's keys; `unsupported`: an older Perspicax without the route;
  * `refused`: another 4xx (its status kept); `link`: no link or the link
  * token was refused; `unreachable`: no answer, a 5xx or an unreadable one. */
+/** 2026-10-19 (Perspicax #384, lot P1.9): a personal cloud agent run's
+ * subscription token, handed over by this server. */
+export const SUBSCRIPTION_TOKEN_TIMEOUT_MS = 10_000;
+
+export interface SubscriptionTokenBody {
+  provider: "anthropic" | "openai";
+  /** The short access token, never a refresh token. */
+  access_token: string;
+  /** RFC 3339, within 24 h. */
+  expires_at: string;
+  account_id?: string;
+}
+
+export type SubscriptionTokenDeposit =
+  | { ok: true }
+  /** link: no or refused link token; subject: the person's sign-in token is
+   * not valid there; gone: no live personal run of this person (404);
+   * forbidden: personal credentials are off for the organization; rejected:
+   * Perspicax refused the body (400); unsupported: an older Perspicax (405). */
+  | { ok: false; error: "link" | "subject" | "gone" | "forbidden" | "rejected" | "unsupported" | "unreachable"; status?: number; message?: string };
+
 export type OwnAccountErasure =
   | { ok: true; sub: string; auditId?: string }
   | { ok: false; error: "link" | "subject" | "reauth_required" | "last_admin" | "bound" | "unsupported" | "refused" | "unreachable"; status?: number };
@@ -393,6 +414,9 @@ export function sameSecret(presented: string, expected: string): boolean {
 
 /** The organization's people, read from Perspicax with the link token. One
  * refresh at a time; a failed call keeps the last good data. */
+/** A person missing from two directory answers this far apart is out. */
+export const DIRECTORY_ABSENT_CONFIRM_MS = 60_000;
+
 export class PerspicaxDirectory {
   private readonly options: PerspicaxDirectoryOptions;
   private readonly fetcher: typeof fetch;
@@ -406,6 +430,12 @@ export class PerspicaxDirectory {
   private timer: ReturnType<typeof setInterval> | null = null;
   /** Slice 4: provider names per subject, from the last directory. */
   private keysBySub = new Map<string, string[]>();
+  /** 2026-10-20: a known subject missing from the directory, since when
+   * (memory only). Out only once it is still missing on a later answer at
+   * least DIRECTORY_ABSENT_CONFIRM_MS after: a partial answer from a
+   * Perspicax being redeployed must not sign anyone out. An explicit
+   * `disabled` is acted on at once. */
+  private absentSince = new Map<string, number>();
   /** Slice 4: owner keys read through the link, in memory only. */
   private readonly keyCache = new Map<string, { key: string; fingerprint: string; until: number }>();
   /** Avatars read through the link, by subject and version, in memory only. */
@@ -823,9 +853,21 @@ export class PerspicaxDirectory {
     } catch {
       return { ok: false, error: "unreachable" };
     }
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       void response.body?.cancel().catch(() => {});
       return { ok: false, error: "link", status: response.status };
+    }
+    if (response.status === 403) {
+      // 2026-10-21: a route may refuse the person rather than the link
+      // (inbound mail: `{"error":"not_owner"}`); its small JSON body is kept.
+      let refusal: unknown;
+      try {
+        const text = await readLimited(response, 4_096);
+        refusal = text ? JSON.parse(text) : undefined;
+      } catch {
+        refusal = undefined;
+      }
+      return { ok: false, error: "link", status: 403, ...(refusal !== undefined ? { body: refusal } : {}) };
     }
     let text: string | null;
     try {
@@ -1044,6 +1086,67 @@ export class PerspicaxDirectory {
     if (status === 409 && parsed.code === "last_admin") return { ok: false, error: "last_admin", status };
     if (status === 409 && parsed.code === "bound") return { ok: false, error: "bound", status };
     if (status >= 400 && status < 500) return { ok: false, error: "refused", status };
+    return { ok: false, error: "unreachable", status };
+  }
+
+  /** The link token for a link route this server calls with its own client
+   * (the cloud agents client, server/cloud-agents/perspicax-client.ts), or
+   * null when the server is not linked. `reread` reads the file again (after
+   * a 401: the token may have rotated). Never logged. */
+  linkBearer(reread = false): string | null {
+    const link = reread ? this.readLink() : this.link ?? this.readLink();
+    return link?.linkToken ?? null;
+  }
+
+  /** Hand Perspicax the short access token of a personal run's engine
+   * subscription: `PUT /api/v1/agents/runs/{id}/subscription-token` with the
+   * link token (which server) and the person's live sign-in access token
+   * (SUBJECT_TOKEN_HEADER, who; Perspicax checks they asked for the run). A
+   * 401 re-reads the link file once. Never logs a token; never throws. */
+  async depositSubscriptionToken(subjectToken: string, runId: string, body: SubscriptionTokenBody): Promise<SubscriptionTokenDeposit> {
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(runId)) return { ok: false, error: "rejected" };
+    let link = this.link ?? this.readLink();
+    if (!link) return { ok: false, error: "link" };
+    const call = (token: string) => this.fetcher(`${this.options.serverBase.replace(/\/+$/, "")}/api/v1/agents/runs/${encodeURIComponent(runId)}/subscription-token`, {
+      method: "PUT",
+      redirect: "error",
+      signal: AbortSignal.timeout(SUBSCRIPTION_TOKEN_TIMEOUT_MS),
+      headers: { accept: "application/json", "content-type": "application/json", authorization: `Bearer ${token}`, [SUBJECT_TOKEN_HEADER]: subjectToken },
+      body: JSON.stringify(body),
+    });
+    let response: Response;
+    try {
+      response = await call(link.linkToken);
+      if (response.status === 401) {
+        void response.body?.cancel().catch(() => {});
+        const again = this.readLink();
+        if (!again) return { ok: false, error: "link" };
+        link = again;
+        response = await call(link.linkToken);
+      }
+    } catch {
+      return { ok: false, error: "unreachable" };
+    }
+    const status = response.status;
+    if (status === 204 || status === 200) {
+      void response.body?.cancel().catch(() => {});
+      return { ok: true };
+    }
+    let parsed: Record<string, unknown> = {};
+    try {
+      const text = await readLimited(response, 16_384);
+      const value: unknown = text ? JSON.parse(text) : null;
+      if (value && typeof value === "object" && !Array.isArray(value)) parsed = value as Record<string, unknown>;
+    } catch {
+      /* not JSON */
+    }
+    const message = typeof parsed.message === "string" ? parsed.message.slice(0, 300) : undefined;
+    const said = message ? { message } : {};
+    if (status === 401) return { ok: false, error: "link", status };
+    if (status === 403) return { ok: false, error: parsed.code === "subject" ? "subject" : "forbidden", status, ...said };
+    if (status === 404) return { ok: false, error: "gone", status, ...said };
+    if (status === 405) return { ok: false, error: "unsupported", status };
+    if (status === 400 || status === 409 || status === 422) return { ok: false, error: "rejected", status, ...said };
     return { ok: false, error: "unreachable", status };
   }
 
@@ -1271,8 +1374,17 @@ export class PerspicaxDirectory {
       if (before?.orgRole === "admin" && orgRole !== "admin") this.options.onRoleNarrowed(after.id);
       this.reportIntegrationRights(person, before, after.id, orgRole);
     }
+    for (const sub of this.absentSince.keys()) if (listed.has(sub)) this.absentSince.delete(sub);
     for (const [sub, principal] of known) {
       if (listed.has(sub) || principal.disabledAt !== undefined) continue;
+      const since = this.absentSince.get(sub);
+      if (since === undefined) {
+        this.absentSince.set(sub, fetchStartedAt);
+        this.log("perspicax directory: a known person is missing from the directory; signed out if still missing on a later answer");
+        continue;
+      }
+      if (fetchStartedAt - since < DIRECTORY_ABSENT_CONFIRM_MS) continue;
+      this.absentSince.delete(sub);
       this.options.onPersonOut(iss, sub);
     }
   }

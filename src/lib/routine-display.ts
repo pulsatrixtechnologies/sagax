@@ -12,8 +12,11 @@ export function latestRoutineRun(routineId: string, runs: readonly RoutineRun[])
 }
 
 export function routineRunLabel(run: RoutineRun): string {
+  // a completed run with nothing for the person posted nothing (2026-10-22)
+  if (run.status === "completed" && run.quiet) return t("routines.status.nothing_to_report");
   if (run.goalStatus) return t(`routines.goal.${run.goalStatus}`);
-  return t(`routines.status.${run.status}`);
+  const status = t(`routines.status.${run.status}`);
+  return run.retried && run.status !== "queued" ? t(`routines.retried.${run.retried}`, { status }) : status;
 }
 
 /** Driver stop codes a run's error can still be (a run recorded before the
@@ -37,6 +40,7 @@ export function routineRunTone(run: RoutineRun): string {
   if (run.status === "waiting" || ["needs-input", "limit-reached", "paused"].includes(run.goalStatus ?? "")) return "text-warning";
   if (["failed", "missed"].includes(run.status) || ["failed", "blocked"].includes(run.goalStatus ?? "")) return "text-danger";
   if (run.status === "running") return "text-accent";
+  if (run.status === "completed" && run.quiet) return "text-ink-secondary";
   if (run.status === "completed" && (!run.goalStatus || run.goalStatus === "completed")) return "text-success";
   return "text-ink-secondary";
 }

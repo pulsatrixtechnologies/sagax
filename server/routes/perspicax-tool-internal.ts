@@ -17,7 +17,18 @@ export interface PerspicaxToolInternalDeps {
   /** A confidential thread's refusal (server/confidential-threads.ts): the
    * text to answer with, or null to go on. */
   confidential?(capability: InternalCapabilityView, tool: string, args: Record<string, unknown>): string | null;
+  /** Whose credentials made this turn's call and which bot. A remote_support_*
+   * answer carries it, so the support folder records the real opener
+   * (server/remote-support-local.ts), not an older speaker a kept proxy holds. */
+  owner?(capability: InternalCapabilityView): { principalId: string; botId: string } | null;
+  /** remote_support_status / remote_support_close: true when the support
+   * folder for this code has no owner or names this very owner. Checked on the
+   * server, before Perspicax is called, so a call for someone else's session
+   * never reaches Perspicax and never touches its folder. */
+  ownsSupportCode?(code: string, owner: { principalId: string; botId: string } | null): boolean;
 }
+
+const REMOTE_SUPPORT_OWNED = new Set(["remote_support_status", "remote_support_close"]);
 
 /** Answers `{ text, isError }` (200), or `{ error, code }`: 400 for a tool it
  * does not forward, 409 when no profile is mounted in this turn or the server
@@ -35,6 +46,15 @@ export function createPerspicaxToolInternalRoutes(deps: PerspicaxToolInternalDep
     if (confidential) return json(res, 200, { text: confidential, isError: true });
     const refusal = await deps.review(JSON.stringify({ tool, args }), capability);
     if (refusal) return json(res, 200, { text: String(refusal), isError: true });
+    const owner = tool.startsWith("remote_support_") ? deps.owner?.(capability) ?? null : null;
+    // Check the support folder's owner before touching Perspicax: a status or
+    // close for a code opened by someone else on this host is refused here.
+    if (REMOTE_SUPPORT_OWNED.has(tool) && deps.ownsSupportCode) {
+      const code = typeof args.code === "string" ? args.code : "";
+      if (!deps.ownsSupportCode(code, owner)) {
+        return json(res, 200, { text: "That support code was opened by someone else on this computer. Open a new session with remote_support_open.", isError: true });
+      }
+    }
     const answer = await mcp.callTool({ threadId: capability.threadId, generation: capability.generation, botId: capability.botId, name: tool, args });
     if (!answer.ok) {
       return json(res, answer.code === "profile_not_mounted" ? 409 : 502, {
@@ -43,6 +63,6 @@ export function createPerspicaxToolInternalRoutes(deps: PerspicaxToolInternalDep
       });
     }
     const text = typeof answer.value === "string" ? answer.value : JSON.stringify(answer.value);
-    return json(res, 200, { text, isError: answer.isError });
+    return json(res, 200, { text, isError: answer.isError, ...(owner ? { owner } : {}) });
   };
 }

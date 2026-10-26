@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { setLocale } from "@/lib/i18n";
+
 import { escapeCancelsReply, replyAuthor, replySnippet } from "./replies";
 import { citationAttachment, createCitationTextSelector, serializeCitation } from "./citations";
 import type { Message } from "@/state/store";
@@ -18,6 +20,18 @@ describe("reply display", () => {
     expect(replySnippet('<attached-image path="/tmp/a.png" name="Beach.png" />')).toBe("[image]");
     expect(replySnippet('<attached-file path="/tmp/a.pdf" name="Plan.pdf" />')).toBe("[file]");
     expect(replySnippet("123456", 5)).toBe("1234…");
+  });
+
+  it("names a link-only message by its site, not its address", () => {
+    expect(replySnippet("https://www.example.com/a/b?x=1")).toBe("[link] example.com");
+    expect(replySnippet("[the docs](https://docs.example.org/start)")).toBe("the docs");
+    expect(replySnippet("see https://example.com/x for more")).toBe("see https://example.com/x for more");
+    setLocale("fr");
+    try {
+      expect(replySnippet("https://www.example.com/a/b?x=1")).toBe("[lien] example.com");
+    } finally {
+      setLocale("en");
+    }
   });
 
   it("uses readable citation content without leaking metadata", () => {

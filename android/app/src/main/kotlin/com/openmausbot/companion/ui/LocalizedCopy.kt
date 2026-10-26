@@ -97,7 +97,7 @@ private val localizedCopyResources = mapOf(
     "Archive" to R.string.mobile_a11y_archive,
     "Archived" to R.string.mobile_archived_eddc813f,
     "Art direction" to R.string.mobile_art_direction_52d878a2,
-    "Ask %1\$s" to R.string.mobile_composer_ask_bot,
+    "Message %1\$s" to R.string.mobile_composer_message_bot,
     "Automatic" to R.string.mobile_share_route_automatic,
     "Avatar" to R.string.mobile_avatar_7631b26e,
     "Back" to R.string.mobile_back_b52b36b7,
@@ -146,7 +146,6 @@ private val localizedCopyResources = mapOf(
     "Computer" to R.string.mobile_computer_924645b3,
     "computer" to R.string.mobile_computer_c60266a8,
     "Computer only" to R.string.mobile_computer_only_bc8646ec,
-    "Configure Composio on your computer first. Provider credentials are never returned to this phone." to R.string.mobile_configure_composio_on_your_compute_4281e8b0,
     "Confirm computer" to R.string.mobile_confirm_computer_d778cfbd,
     "Connect" to R.string.mobile_connect_b65463cb,
     "Connect %1\$s" to R.string.mobile_connect_card_label_c9e612b4,
@@ -610,8 +609,8 @@ private val localizedCopyResources = mapOf(
 @Composable
 internal fun localizedMobileCopy(source: String): String {
     localizedCopyResources[source]?.let { return stringResource(it) }
-    Regex("""^Ask (.+)$""")
-        .matchEntire(source)?.let { return stringResource(R.string.mobile_composer_ask_bot, it.groupValues[1]) }
+    Regex("""^Message (.+)$""")
+        .matchEntire(source)?.let { return stringResource(R.string.mobile_composer_message_bot, it.groupValues[1]) }
     Regex("""^Today (.+)$""")
         .matchEntire(source)?.let { return stringResource(R.string.mobile_date_today_with_time, it.groupValues[1]) }
     Regex("""^Yesterday (.+)$""")

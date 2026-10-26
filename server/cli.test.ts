@@ -5,7 +5,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { applyStartupPreferences, formatSessions, pairingBlock, parseArgs, qrToString, runAccess, runLogin, runOnboardingCommand, serverEntry, type CliOptions, verifyPhoneEndpoint } from "./cli.ts";
+import { applyStartupPreferences, formatSessions, parseArgs, runAccess, runLogin, runOnboardingCommand, serverEntry, type CliOptions, USAGE, verifyPhoneEndpoint } from "./cli.ts";
+import { browserSignInLines, pairingBlock, qrToString } from "./cli-pairing.ts";
 import { readAdminActivityRange } from "./admin-activity.ts";
 import { SetupCancelled } from "./cli-prompts.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
@@ -82,6 +83,18 @@ describe("openmausbot command line", () => {
     expect(noUrl).toContain("/pair on the address you use");
     expect(noUrl).toContain("set SAGAX_PUBLIC_URL");
     expect(qrToString("https://example.com").length).toBeGreaterThan(200);
+  });
+
+  it("adds a link that signs in a browser on this computer, which is no longer the owner by being here", () => {
+    const local = "http://127.0.0.1:8799/pair#code=ABCD-EFGH-JKLM";
+    const block = pairingBlock({ code: "ABCD-EFGH-JKLM", url: null, localUrl: local, expiresAt: Date.now() + 60_000, hint: "set OMB_PUBLIC_URL" });
+    expect(block).toContain(`this computer: ${local}`);
+    expect(block).toContain("/pair on the address you use");
+    expect(block).not.toContain(qrToString(local));
+    const guided = browserSignInLines(local, "ABCD-EFGH-JKLM", Date.now() + 60_000);
+    expect(guided).toContain(local);
+    expect(guided).toContain("ABCD-EFGH-JKLM");
+    expect(guided).toContain("openmausbot pair");
   });
 
   describe("the two links one pairing window has", () => {
@@ -177,6 +190,15 @@ describe("openmausbot command line", () => {
   }, 90_000);
 });
 
+describe("the help text", () => {
+  it("names the published package and its bin, never the upstream package", () => {
+    expect(USAGE).toContain("npm install -g @pulsatrixtechnologies/sagax");
+    expect(USAGE).toContain("npx @pulsatrixtechnologies/sagax");
+    expect(USAGE).toContain("sagax serve");
+    expect(USAGE).not.toMatch(/openmausbot/i);
+  });
+});
+
 describe("terminal onboarding commands", () => {
   const inputTty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
   const outputTty = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
@@ -219,7 +241,7 @@ describe("terminal onboarding commands", () => {
     expect(setup.runSetup).toHaveBeenCalledWith({ dataDir: options.dataDir, port: options.port });
     expect(setup.isSetupComplete).not.toHaveBeenCalled();
     expect(serve).not.toHaveBeenCalled();
-    expect(output.log).toHaveBeenCalledWith(expect.stringContaining("Start with: openmausbot"));
+    expect(output.log).toHaveBeenCalledWith(expect.stringContaining("Start with: sagax (or npx @pulsatrixtechnologies/sagax"));
     expect(phoneSetup).toHaveBeenCalledOnce();
     expect(setup.saveCliStartup).toHaveBeenCalledWith(options.dataDir, { access: "local" });
   });

@@ -46,7 +46,6 @@ function messageText(message: Message): string {
   const parts = [message.text ?? ""];
   if (message.card) parts.push(message.card.title, message.card.subtitle, ...message.card.options, message.card.answered ?? "");
   if (message.tool) parts.push(`[${message.tool.name}${message.tool.ok === false ? ": failed" : ""}]`);
-  if (message.kind === "connector") parts.push("[Connection card — reconnect in Settings]");
   if (message.kind === "secret") parts.push("[Secret request — not restored]");
   if (message.kind === "signin") parts.push("[Sign-in request — not restored]");
   if (message.routineRun) parts.push(`[Routine: ${message.routineRun.routineName} — ${message.routineRun.status}]`, message.routineRun.summary ?? "", message.routineRun.error ?? "");
@@ -157,10 +156,6 @@ export function createTeamBackup(store: Store, routines: Routine[], name: string
       mascotSkin: bot.mascotSkin && bot.mascotSkin !== "none" ? bot.mascotSkin : undefined,
       chiefOfStaff: Boolean(bot.chiefOfStaff), hidden: Boolean(bot.hidden),
       playbooks: options.scrub ? (bot.playbooks ?? []).map((playbook) => ({ ...playbook, instructions: text(playbook.instructions) })) : bot.playbooks ?? [],
-      // Grants are workspace-private authority: they travel in this backup
-      // so the team's shape is not lost, but the import below still lands
-      // every bot grant-less — restoring them is a deliberate later choice.
-      ...(bot.connectorTools ? { connectorTools: structuredClone(bot.connectorTools) } : {}),
       ...(bot.toolScope !== undefined ? { toolScope: structuredClone(bot.toolScope) } : {}),
       memory: options.memory && !options.memory(bot.id) ? undefined : memoryFor(bot.id, options.scrub),
       ...(() => {
@@ -266,8 +261,8 @@ export function importTeamBackup(store: Store, routines: RoutineManager, input: 
       }, { seedMessages: false });
       bots.push(bot);
       botIds.set(source.key, bot.id);
-      store.patchBot(bot.id, { composio: false, computer: "off", browser: false, approvalMode: "ask", autoApprove: false,
-        connectorTools: {}, toolScope: source.toolScope, hidden: source.hidden, playbooks: source.playbooks });
+      store.patchBot(bot.id, { computer: "off", browser: false, approvalMode: "ask", autoApprove: false,
+        toolScope: source.toolScope, hidden: source.hidden, playbooks: source.playbooks });
       if (source.memory) restoreMemory(bot.id, source.memory);
       if (channels && bot.section) {
         channelFor(bot.section);

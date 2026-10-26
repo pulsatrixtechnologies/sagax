@@ -8,6 +8,8 @@
 // Shared between the harness (which enforces it) and the app (which shows
 // the setting), so both agree on what "outbound" means.
 
+import { connectorWriteKind } from "./engine-connectors.ts";
+
 export type OutboundPolicy = {
   /** ask: every outbound call waits for a tap. allow: up to dailyCap a day. */
   policy: "ask" | "allow";
@@ -47,15 +49,15 @@ const SENT_NOUNS = new Set(["MESSAGE", "COMMENT", "POST", "EMAIL", "MAIL", "INVO
  * REDDIT_GET_POST fetches a post, it does not post. */
 const READ_VERBS = new Set(["GET", "LIST", "FETCH", "SEARCH", "READ", "FIND", "RETRIEVE", "LOOKUP", "DOWNLOAD", "VIEW", "CHECK", "COUNT"]);
 
-/** The action part of a tool name, as upper-case word tokens. Composio's
- * TOOLKIT_ACTION drops its toolkit; an MCP server's mcp__server__action
- * drops its server; a bare built-in like Bash stays as it is. */
+/** The action part of a tool name, as upper-case word tokens. An MCP
+ * server's mcp__server__action drops its server; an engine connector slug
+ * like TOOLKIT_ACTION drops its toolkit; a bare built-in like Bash stays as
+ * it is. */
 function actionTokens(name: string): string[] {
   let action = name;
   if (name.startsWith("mcp__")) {
-    const [, server = "", ...rest] = name.split("__");
+    const [, , ...rest] = name.split("__");
     action = rest.join("_");
-    if (server === "composio") return actionTokens(action);
   } else if (/^[A-Z][A-Z0-9]*_[A-Z0-9_]+$/.test(name)) {
     action = name.slice(name.indexOf("_") + 1);
   }
@@ -76,15 +78,46 @@ export function isReadOnlyTool(name: string): boolean {
 
 /** Does this tool send something to someone, or move money? */
 export function isOutboundTool(name: string): boolean {
-  // A raw API call from the workbench can do anything an app tool can, and
-  // nothing here can read which; it is treated as a send.
-  if (name === "COMPOSIO_PROXY_EXECUTE") return true;
   const tokens = actionTokens(name);
   if (tokens.length === 0) return false;
   if (isReadOnlyTool(name)) return false;
+  // A draft, a reply draft included, sends nothing until it is sent.
+  if (tokens.includes("DRAFT") && !tokens.includes("SEND") && !tokens.includes("SENDS")) return false;
   if (tokens.some((token) => SEND_VERBS.has(token))) return true;
+  // A mail, Teams, calendar or file connector acts as the person outside the
+  // app: an event mails its attendees, a SharePoint write lands in a shared
+  // site, and an engine's own connector server fails closed on any call that
+  // is not a read or a draft (shared/engine-connectors.ts). Same reading for
+  // an MCP tool and an engine connector slug (GOOGLECALENDAR_CREATE_EVENT).
+  if (connectorWriteKind(name)) return true;
   if (tokens.includes("DRAFT")) return false;
   return tokens.some((token) => CREATE_VERBS.has(token)) && tokens.some((token) => SENT_NOUNS.has(token));
+}
+
+/** What a plain message send is called: an email, a mail, a text, a DM. */
+const MESSAGE_NOUNS = new Set(["EMAIL", "EMAILS", "MAIL", "GMAIL", "OUTLOOK", "SMS", "MMS", "TEXT", "MESSAGE", "MESSAGES", "IMESSAGE", "DM"]);
+const MESSAGE_VERBS = new Set(["SEND", "SENDS", "CREATE", "NEW"]);
+/** Verbs and nouns of an outbound call that is not a plain message: money,
+ * invitations, shares, public posts, comments, replies and forwards (they
+ * reach whoever is on the original thread). A bot's allowed recipients
+ * (shared/allowed-recipients.ts) never answer these. */
+const NOT_A_MESSAGE = new Set([
+  "REFUND", "CHARGE", "PAY", "PAYOUT", "TRANSFER", "INVOICE", "PAYMENT", "INVITE", "SHARE", "PUBLISH", "TWEET", "RETWEET",
+  "BROADCAST", "POST", "COMMENT", "ISSUE", "TASK", "EVENT", "CALENDAR", "REPLY", "RESPOND", "FORWARD", "GRANT", "ASSIGN",
+]);
+
+/** An outbound call that sends a message (an email, a text) to people it
+ * names, and nothing else. An allow list: a send verb and a message noun,
+ * and none of the words of money, invitations, shares, posts or replies. No
+ * raw API call. */
+export function isMessageSendTool(name: string): boolean {
+  if (!isOutboundTool(name)) return false;
+  const tokens = actionTokens(name);
+  if (tokens.some((token) => NOT_A_MESSAGE.has(token))) return false;
+  const server = name.startsWith("mcp__") ? (name.split("__")[1] ?? "").toUpperCase() : "";
+  const toolkit = /^[A-Z][A-Z0-9]*_/.test(name) ? name.slice(0, name.indexOf("_")) : "";
+  const nouns = [...tokens, ...server.split(/[^A-Z0-9]+/), toolkit];
+  return tokens.some((token) => MESSAGE_VERBS.has(token)) && nouns.some((token) => MESSAGE_NOUNS.has(token));
 }
 
 /** The stored shape, or null when the value is not one. */
@@ -99,47 +132,3 @@ export function normalizeOutboundPolicy(value: unknown): OutboundPolicy | null {
 
 /** What a bot without a stored policy does: ask, every time. */
 export const DEFAULT_OUTBOUND_POLICY: OutboundPolicy = { policy: "ask", dailyCap: OUTBOUND_DEFAULT_CAP };
-
-/** One app tool a connector request would run, with its arguments when the
- * request carries them. */
-export interface ConnectorCall {
-  slug: string;
-  arguments?: unknown;
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === "object" && !Array.isArray(value);
-
-/** Composio's session exposes a handful of meta tools and runs the app
- * tools inside them: a multi-execute call carries a list of slugs with
- * arguments. Arbitrary workbench/bash code is opaque: it requires an
- * explicit unrestricted approval, never an inferred app or send count.
- * Search, schema lookup, and connection management run no app tools. */
-export function connectorCallsIn(name: string, args: unknown): ConnectorCall[] {
-  if (name === "COMPOSIO_MULTI_EXECUTE_TOOL") {
-    const tools = isRecord(args) && Array.isArray(args.tools) ? args.tools
-      : isRecord(args) && typeof args.tool_slug === "string" ? [args] : [];
-    if (!tools.length) return [{ slug: "COMPOSIO_PROXY_EXECUTE", arguments: args }];
-    const calls: ConnectorCall[] = [];
-    for (const item of tools) {
-      if (!isRecord(item)) return [{ slug: "COMPOSIO_PROXY_EXECUTE", arguments: args }];
-      const slug = [item.tool_slug, item.slug, item.name, item.tool].find((value) => typeof value === "string" && value);
-      if (typeof slug !== "string") return [{ slug: "COMPOSIO_PROXY_EXECUTE", arguments: args }];
-      calls.push({ slug, ...(item.arguments !== undefined ? { arguments: item.arguments } : {}) });
-    }
-    return calls;
-  }
-  if (name === "COMPOSIO_REMOTE_WORKBENCH" || name === "COMPOSIO_REMOTE_BASH_TOOL") {
-    // Arbitrary code can compute tool names and repeat calls. Its app and
-    // outbound count cannot be inferred from literals in the source.
-    return [{ slug: "COMPOSIO_PROXY_EXECUTE", arguments: args }];
-  }
-  if (["COMPOSIO_SEARCH_TOOLS", "COMPOSIO_GET_TOOL_SCHEMAS", "COMPOSIO_MANAGE_CONNECTIONS", "COMPOSIO_WAIT_FOR_CONNECTIONS"].includes(name)) return [];
-  if (name.startsWith("COMPOSIO_")) return [{ slug: "COMPOSIO_PROXY_EXECUTE", arguments: args }];
-  return [{ slug: name, ...(args !== undefined ? { arguments: args } : {}) }];
-}
-
-/** The subset of a request's app tools that would send something. */
-export function outboundCallsIn(name: string, args: unknown): ConnectorCall[] {
-  return connectorCallsIn(name, args).filter((call) => isOutboundTool(call.slug));
-}

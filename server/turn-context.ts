@@ -1,9 +1,13 @@
 import type { DriverKind } from "./contracts.ts";
 import { peerName } from "./peer-roster.ts";
 import { wrapUntrusted } from "../shared/safety-review.ts";
+import { replaysTranscriptNatively } from "./runtime/capabilities.ts";
 
-// All three use createOpenAIChatRuntime and get history via SendTurnInput.transcript.
-export const NATIVELY_REPLAYING_DRIVER_KINDS: readonly DriverKind[] = ["grok", "openai-compat", "minimax"];
+// Every driver built on createOpenAIChatRuntime gets its history via
+// SendTurnInput.transcript; the list lives in runtime/capabilities.ts.
+export function replaysNatively(kind: DriverKind): boolean {
+  return replaysTranscriptNatively(kind);
+}
 
 // Building the text a driver actually receives. Three situations force an
 // inline replay of the active branch: a rewind (the visible branch changed),
@@ -31,6 +35,10 @@ export interface TurnContextInput {
    * Told as a continuation, never as a hand-over or a rewind, so the bot
    * carries on as if nothing happened. */
   compacted?: boolean;
+  /** The fold came from a stale session (server/stale-session.ts): the
+   * conversation resumes after a pause, and unfinished earlier work waits
+   * for the person to ask for it again. */
+  paused?: boolean;
 }
 
 /** Does this engine need the thread replayed to it? True when a DIFFERENT
@@ -61,6 +69,8 @@ const FRESH_PREAMBLE =
   "[You are joining this conversation mid-thread (the user switched this bot over to you). The conversation so far:]";
 const COMPACTED_PREAMBLE =
   "[This is your ongoing conversation with this user. Its older turns are condensed into the summary below; the latest turns follow word for word. Continue exactly where you left off, and do not mention the summary:]";
+const PAUSED_PREAMBLE =
+  "[This is your ongoing conversation with this user, resumed after a pause. Its older turns are condensed into the summary below; the latest turns follow word for word. Do not mention the summary. Work left unfinished earlier is done again only if the user's new message asks for it:]";
 const EXTERNAL_UPDATE_PREAMBLE =
   "[This conversation received an update outside your provider session. The complete current history follows so you can use that update in your next response:]";
 
@@ -107,7 +117,7 @@ export function buildTurnContext(input: TurnContextInput): {
   if (!replay) return { turnText: text, resume };
   return {
     turnText: [
-      rewound ? REWOUND_PREAMBLE : externallyUpdated ? EXTERNAL_UPDATE_PREAMBLE : fresh ? FRESH_PREAMBLE : COMPACTED_PREAMBLE,
+      rewound ? REWOUND_PREAMBLE : externallyUpdated ? EXTERNAL_UPDATE_PREAMBLE : fresh ? FRESH_PREAMBLE : input.paused ? PAUSED_PREAMBLE : COMPACTED_PREAMBLE,
       "",
       ...transcript.map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`),
       "",

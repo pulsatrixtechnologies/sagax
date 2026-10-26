@@ -5,12 +5,12 @@ import { cn } from "@/lib/cn";
 import { roomThreadSpeakerId, roomThreadWorking } from "@/lib/room-threads";
 import { t } from "@/lib/i18n";
 import { taskHiddenFromSidebar } from "@/lib/bot-unread";
-import { orderedSidebarThreads, orderedThreadList, threadRecency, threadUpdatedLabel } from "./SidebarThreadRow";
+import { isArchived, orderedSidebarThreads, orderedThreadList, threadRecency, threadUpdatedLabel } from "./SidebarThreadRow";
 import type { SidebarDensity } from "@/lib/sidebar-preferences";
 
 /** Attention is not history browsing: idle conversations never enter this list.
  * Read the sibling's own status, not the bot's aggregate busy/waiting flags. */
-export function sidebarBotActivityTasks(bot: Bot, queued: Record<string, unknown[]>): Array<Task & { queued: boolean }> {
+export function sidebarBotActivityTasks(bot: Bot, queued: Record<string, unknown[]>, archivedApprovals = false): Array<Task & { queued: boolean }> {
   const tasks = bot.tasks ?? [{
     threadId: bot.threadId, title: t("task.newShort"), createdAt: 0,
     busy: bot.busy, activity: bot.activity, unread: bot.unread,
@@ -20,6 +20,9 @@ export function sidebarBotActivityTasks(bot: Bot, queued: Record<string, unknown
     // Routine runs are reachable through their run receipt, never a menu;
     // an AI client's hidden conversation through the Activity panel (#291).
     .filter((task) => !taskHiddenFromSidebar(task, bot.id))
+    // An archived thread stays put away until it is unarchived; across bots
+    // the one thing that still reaches the person is an approval it waits on.
+    .filter((task) => !isArchived(task) || (archivedApprovals && task.activity === "waiting-on-you"))
     .filter((task) => task.activity === "waiting-on-you" || task.activity === "working" || task.busy || task.waitingForTeammates === true || task.queued || task.unread);
 }
 
@@ -30,7 +33,9 @@ export function threadsWhenTreeHidden(bot: Bot, queued: Record<string, unknown[]
   const attention = sidebarBotActivityTasks(bot, queued);
   const seen = new Set(attention.map((task) => task.threadId));
   const pinned = (bot.tasks ?? [])
-    .filter((task) => task.pinned === true && !task.routineRunId && !seen.has(task.threadId))
+    // an automatic routine results thread never surfaces here either, even
+    // pinned (JC 2026-10-22: routines stay out of the unified conversation)
+    .filter((task) => task.pinned === true && !task.routineRunId && task.routineResults !== true && !seen.has(task.threadId))
     .map((task) => ({ ...task, queued: Boolean(queued[task.threadId]?.length) }));
   return orderedThreadList([...attention, ...pinned]);
 }
@@ -135,7 +140,7 @@ export function crossBotAttentionThreads(
   const flat: FlatAttentionEntry[] = [
     ...bots
       .filter((bot) => bot.id !== exceptBotId && !bot.hidden)
-      .flatMap((bot): FlatAttentionEntry[] => sidebarBotActivityTasks(bot, queued)
+      .flatMap((bot): FlatAttentionEntry[] => sidebarBotActivityTasks(bot, queued, true)
         .map((task) => ({ ...task, botId: bot.id, botName: bot.name }))),
     ...groups
       .flatMap((group): FlatAttentionEntry[] => sidebarGroupActivityTasks(group, bots, queued)

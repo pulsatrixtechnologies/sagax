@@ -8,7 +8,9 @@ import { X } from "lucide-react";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { CompactRow, HelpTip, PillSelect, SettingsGroup } from "../SettingsPrimitives";
 import { t } from "@/lib/i18n";
-import { useStore, type Bot } from "@/state/store";
+import { engineLabel } from "@/lib/human-label";
+import { currentTaskBot, useStore, visibleMessages, type Bot } from "@/state/store";
+import { pendingApprovals } from "../PendingApproval";
 import { engineOfferContext, useOfferedInstances } from "@/lib/offered-instances";
 import { engineOffer } from "../../../shared/offered-engines";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -24,7 +26,13 @@ export function ModelSection({ bot }: { bot: Bot }) {
   const { draft } = useBotEditor();
   const viewerLocal = viewerLocalBotSettings(state.config, bot);
   const override = useViewerBotOverride(bot.id, viewerLocal);
-  const shown = viewerLocal ? botWithViewerSettings(bot, override) : bot;
+  const viewerShown = viewerLocal ? botWithViewerSettings(bot, override) : bot;
+  // 2026-10-19: the model waits only for the turn the server waits for (the
+  // viewer's selected thread, checkedModelSelection), never for another
+  // conversation of the bot: a bot-to-bot one waiting on a card locked the
+  // field with nothing to act on.
+  const turn = modelTurnLock(bot);
+  const shown = { ...viewerShown, busy: turn.busy };
   const modelVariants = state.instances.find((instance) => instance.instanceId === shown.modelSelection.instanceId)?.capabilities?.modelVariants;
   const effortTitle = modelVariants ? t("botPanel.model.reasoning") : t("botPanel.model.effort");
   // Says what the app does, not what the engine ends up at: Codex applies a
@@ -56,6 +64,7 @@ export function ModelSection({ bot }: { bot: Bot }) {
               </div>
             }
           />
+          {!draft && turn.busy && <ModelLockLine bot={bot} lock={turn} />}
           {/* Right below the picker, so it shows the moment the model changes. */}
           {!draft && <ThreadModelsLine bot={bot} className="mt-2" />}
         </div>
@@ -113,6 +122,45 @@ function KeepWarmSettings({ bot, workspaceOn, onChange }: { bot: Bot; workspaceO
   );
 }
 
+export interface ModelTurnLock {
+  busy: boolean;
+  /** Why: an approval waits on the person, an admin, or a turn runs. */
+  reason?: "approval" | "admin" | "working";
+}
+
+/** Whether the bot's model waits for a turn, and why (the viewer's selected
+ * thread only, as the server checks it). */
+export function modelTurnLock(bot: Bot): ModelTurnLock {
+  const selected = currentTaskBot(bot);
+  const busy = selected.busy === true;
+  if (!busy) return { busy: false };
+  if (selected.activity !== "waiting-on-you") return { busy, reason: "working" };
+  const open = pendingApprovals(visibleMessages(bot));
+  const admin = open.length > 0 && open.every((pending) => Boolean(pending.message.card?.adminApproval));
+  return { busy, reason: admin ? "admin" : "approval" };
+}
+
+/** Says why the model is locked, with the way out: back to the selected
+ * conversation, where the card waits (or the turn can be stopped). */
+function ModelLockLine({ bot, lock }: { bot: Bot; lock: ModelTurnLock }) {
+  const { dispatch } = useStore();
+  const open = () => {
+    dispatch({ type: "toggleSettings", open: false });
+    dispatch({ type: "select", id: bot.id });
+  };
+  const line = lock.reason === "admin" ? t("botPanel.model.lockedAdmin")
+    : lock.reason === "approval" ? t("botPanel.model.lockedApproval")
+      : t("botPanel.model.lockedWorking");
+  return (
+    <p data-model-lock={lock.reason} role="status" className="mt-2 text-[12px] leading-4 text-ink-secondary">
+      {line}{" "}
+      <button type="button" onClick={open} className="underline underline-offset-2 hover:text-ink">
+        {t("botPanel.model.lockedOpen")}
+      </button>
+    </p>
+  );
+}
+
 /** Ordered backups use the same opt-in, proven-before-start recovery as
  * the workspace backup. They change only the failed thread's model. */
 function FallbackChain({ bot, onChange }: { bot: Bot; onChange: (fallback: Bot["fallback"]) => void }) {
@@ -131,7 +179,7 @@ function FallbackChain({ bot, onChange }: { bot: Bot; onChange: (fallback: Bot["
       instance.instanceId !== bot.modelSelection.instanceId &&
       !chain.some((entry) => entry.instanceId === instance.instanceId),
   );
-  const nameOf = (instanceId: string) => state.instances.find((instance) => instance.instanceId === instanceId)?.displayName ?? instanceId;
+  const nameOf = (instanceId: string) => engineLabel(state.instances.find((instance) => instance.instanceId === instanceId)?.displayName, instanceId);
 
   const add = (instanceId: string) => {
     const instance = state.instances.find((candidate) => candidate.instanceId === instanceId);

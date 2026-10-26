@@ -9,6 +9,7 @@ import { NewTaskFolderDialog } from "./NewTaskFolderDialog";
 
 const dispatch = vi.hoisted(() => vi.fn());
 vi.mock("@/state/store", () => ({ useStore: () => ({ dispatch }) }));
+vi.mock("./remote-session/use-remote-sessions", () => ({ useRemoteSessions: () => ({ rows: [], reload: () => {} }) }));
 const bot = { id: "bot", threadId: "old-thread", name: "Pepper", cwd: "/projects/default",
   projects: [{ id: "project", name: "Project" }],
   tasks: [{ threadId: "old-thread", projectId: "project" }] } as Bot;

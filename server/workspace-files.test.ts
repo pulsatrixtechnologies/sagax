@@ -94,7 +94,7 @@ describe("RULES.md", () => {
       { id: "rules", label: "Rules", text: rulesSystemPrompt(BOT) },
       { id: "docs", label: "Docs", text: " DOCS-MARKER" },
     ]);
-    expect(built.sections.map((section) => section.id)).toEqual(["misuse-policy", "persona", "soul", "rules", "user-profile", "memory", "docs"]);
+    expect(built.sections.map((section) => section.id)).toEqual(["misuse-policy", "run-yourself", "verify-first", "persona", "soul", "rules", "user-profile", "memory", "docs"]);
     expect(built.text.indexOf("BEGIN RULES")).toBeGreaterThan(built.text.indexOf("END STANDING INSTRUCTIONS"));
     expect(built.text.indexOf("BEGIN RULES")).toBeLessThan(built.text.indexOf("MEMORY-MARKER"));
     // rules are standing: the stable half; the docs index moves with docs_update
@@ -204,6 +204,30 @@ describe("docs/", () => {
     expect(renameDoc(BOT, "docs/a.md", "docs/c.md")).toMatchObject({ ok: true, path: "docs/c.md" });
     expect(existsSync(join(workspaceDir(BOT), "docs", "a.md"))).toBe(false);
     expect(readFileSync(join(workspaceDir(BOT), "docs", "c.md"), "utf8")).toBe("# A\n");
+  });
+
+  it("workspace_read reads the bot's own skill revisions and installed plugins, never another hidden name (2026-10-19)", () => {
+    write("skills/.revisions/r1/SKILL.md", "# Triage\n## Zone Z\nExact text.\n");
+    write(".git/config", "[remote] url = https://token@github.com/x");
+    write("skills/.env", "SECRET=1");
+    expect(readWorkspaceText(BOT, "skills/.revisions/r1/SKILL.md").text).toContain("## Zone Z");
+    for (const path of [".git/config", "skills/.env", ".claude/settings.json", "skills/.revisions/../../.git/config"]) {
+      expect(() => readWorkspaceText(BOT, path), path).toThrow();
+    }
+    const pluginDir = join(tmpdir(), `ws-plugin-${process.pid}-${counter}`);
+    mkdirSync(join(pluginDir, "skills", "flow", "scripts"), { recursive: true });
+    mkdirSync(join(pluginDir, ".claude-plugin"), { recursive: true });
+    writeFileSync(join(pluginDir, "skills", "flow", "scripts", "px_flow.py"), "print('dry run')\n");
+    writeFileSync(join(pluginDir, ".claude-plugin", "plugin.json"), "{}");
+    const plugins = [{ name: "pulsatrix-flow", dir: pluginDir }];
+    expect(readWorkspaceText(BOT, "plugins/pulsatrix-flow/skills/flow/scripts/px_flow.py", 0, plugins)).toMatchObject({ path: "plugins/pulsatrix-flow/skills/flow/scripts/px_flow.py", text: "print('dry run')\n" });
+    expect(readWorkspaceText(BOT, "plugins/pulsatrix-flow/.claude-plugin/plugin.json", 0, plugins).text).toBe("{}");
+    for (const path of ["plugins/pulsatrix-flow/../../etc/passwd", "plugins/other/skills/x.md", "plugins/pulsatrix-flow/missing.md"]) {
+      expect(() => readWorkspaceText(BOT, path, 0, plugins), path).toThrow();
+    }
+    // without the plugin list, nothing outside the workspace is read
+    expect(() => readWorkspaceText(BOT, "plugins/pulsatrix-flow/skills/flow/scripts/px_flow.py")).toThrow();
+    rmSync(pluginDir, { recursive: true, force: true });
   });
 
   it("workspace_read stays inside the workspace: traversal, absolute, hidden and links refused", () => {

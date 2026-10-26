@@ -489,7 +489,8 @@ describe("VPS computer inventory UI", () => {
     expect(markup).toContain("SSH host: production-vps");
     expect(markup).toContain("Research");
     expect(markup).toContain("Owned by this bot");
-    expect(markup).toContain("Orphaned VPS computer · ID ef123456");
+    expect(markup).toContain(">Orphaned VPS computer<");
+    expect(markup).not.toContain("· ID ef123456");
     expect(markup).toContain("Its bot no longer exists");
     expect(markup).toContain("Running");
     expect(markup).toContain("Stopped");

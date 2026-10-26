@@ -15,6 +15,7 @@ import { SPECULATIVE_REVISE_MS } from "./speculative";
 import { LiveTranscriber } from "./stt-stream";
 import { BARGE_IN_CONFIRM_MS } from "./turns";
 import { VAD_FRAME, type VoiceProbability } from "./vad";
+import type { VoiceModeSettings } from "../../../shared/voice-mode";
 
 /** Voiced frames that cover SPECULATIVE_REVISE_MS at 32 ms/frame. */
 const REVISE_FRAMES = Math.ceil(SPECULATIVE_REVISE_MS / 32);
@@ -583,6 +584,42 @@ describe("VoiceCall", () => {
     t.player.drain();
     await expect(heard).resolves.toBe(true);
     expect(t.call.current.phase).toBe("listening");
+  });
+
+  it("an answer finished with replyDone is never spoken again when its final text streams in once more", async () => {
+    const t = await setup();
+    t.call.replyProgress("It is sunny today. Bring an umbrella tomorrow.");
+    const heard = t.call.replyDone("It is sunny today. Bring an umbrella tomorrow.");
+    const after = t.speech.mock.calls.length;
+    expect(after).toBeGreaterThan(0);
+    // a late streaming update redelivers the same, finished answer: nothing more is spoken
+    t.call.replyProgress("It is sunny today. Bring an umbrella tomorrow.");
+    expect(t.speech.mock.calls.length).toBe(after);
+    t.player.drain();
+    await heard;
+    // a genuinely different answer still speaks
+    const next = t.call.replyDone("A different thing entirely.");
+    expect(t.speech.mock.calls.length).toBeGreaterThan(after);
+    t.player.drain();
+    await next;
+  });
+
+  it("pins the chosen voice for the session: a settings read that reports no voice keeps it", async () => {
+    const live = { value: { voice: "ara", speed: 1, language: "fr" } as VoiceModeSettings };
+    const t = await setup({ options: { voice: () => live.value } });
+    // the first clause is spoken with the chosen voice (ara)
+    t.call.replyProgress("Bonjour. Et");
+    expect(t.speech).toHaveBeenCalledTimes(1);
+    // the settings momentarily report no chosen voice (a default fallback, the
+    // preference sync writing the server's value, a race): the voice holds
+    live.value = { voice: "", speed: 1, language: "fr" };
+    t.call.replyProgress("Bonjour. Et comment ca va aujourd'hui.");
+    const heard = t.call.replyDone("Bonjour. Et comment ca va aujourd'hui.");
+    const voices = t.speech.mock.calls.map((c) => (c[2] as VoiceModeSettings).voice);
+    expect(voices.length).toBeGreaterThan(1);
+    expect(new Set(voices)).toEqual(new Set(["ara"]));
+    t.player.drain();
+    await heard;
   });
 
   it("with Only my voice and an enrollment, another voice is ignored", async () => {

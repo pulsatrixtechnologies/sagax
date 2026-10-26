@@ -180,11 +180,11 @@ final class NavigationMenusTests: XCTestCase {
 
     func testPlacesFollowTheExperimentalSwitches() {
         XCTAssertEqual(NavigationMenus.places(gate: admin, connected: true, features: nil), [])
-        let on = ServerFeatures(connectedApps: true, templates: true)
-        XCTAssertEqual(NavigationMenus.places(gate: admin, connected: true, features: on), [.connectedApps, .templates])
-        // the remote client: Connected apps yes, Browse Bots never; a
-        // member browses the catalogue (CLIENT_ALLOW)
-        XCTAssertEqual(NavigationMenus.places(gate: sidecar, connected: true, features: on), [.connectedApps])
+        let on = ServerFeatures(templates: true)
+        XCTAssertEqual(NavigationMenus.places(gate: admin, connected: true, features: on), [.templates])
+        // the remote client never shows Browse Bots; a member browses the
+        // catalogue (CLIENT_ALLOW)
+        XCTAssertEqual(NavigationMenus.places(gate: sidecar, connected: true, features: on), [])
         XCTAssertEqual(NavigationMenus.places(gate: client, connected: true, features: on), [.templates])
         XCTAssertEqual(NavigationMenus.places(gate: admin, connected: false, features: on), [])
         XCTAssertEqual(NavigationMenus.accountShortcuts(gate: admin, connected: true), [.teamMap, .automations])

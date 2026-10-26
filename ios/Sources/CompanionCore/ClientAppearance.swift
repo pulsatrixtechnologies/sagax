@@ -44,7 +44,7 @@ extension CompanionClient {
     /// server the whole record is replaced, so it is read first and only
     /// the appearance keys change.
     public func saveComputerAppearance(_ values: [String: String], to source: ComputerAppearanceSource) async throws {
-        let keys = [DesktopAppearanceKeys.skin, DesktopAppearanceKeys.font, DesktopAppearanceKeys.retroOn, DesktopAppearanceKeys.retroUnlocked]
+        let keys = [DesktopAppearanceKeys.skin, DesktopAppearanceKeys.skinMode, DesktopAppearanceKeys.font, DesktopAppearanceKeys.retroOn, DesktopAppearanceKeys.retroUnlocked]
         switch source {
         case .organization:
             var record = try await preferences().preferences

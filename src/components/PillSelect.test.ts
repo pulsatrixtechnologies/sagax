@@ -31,7 +31,7 @@ afterEach(async () => {
 });
 
 const pill = () => host.querySelector<HTMLButtonElement>("[data-pill-select]")!;
-const listbox = () => host.querySelector('[role="listbox"]');
+const listbox = () => document.body.querySelector('[role="listbox"]');
 const frame = () => act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(null))); });
 
 describe("PillSelect", () => {
@@ -42,7 +42,7 @@ describe("PillSelect", () => {
     await act(async () => pill().click());
     await frame();
     expect(pill().getAttribute("aria-expanded")).toBe("true");
-    const options = [...host.querySelectorAll('[role="option"]')];
+    const options = [...document.body.querySelectorAll('[role="option"]')];
     expect(options.map((node) => node.textContent)).toEqual(["System", "English", "Français"]);
     expect(options.map((node) => node.getAttribute("aria-selected"))).toEqual(["false", "true", "false"]);
     expect(document.activeElement?.textContent).toBe("English");
@@ -74,9 +74,40 @@ describe("PillSelect", () => {
   it("picking the current value changes nothing", async () => {
     await act(async () => pill().click());
     await frame();
-    const english = [...host.querySelectorAll<HTMLElement>('[role="option"]')][1]!;
+    const english = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')][1]!;
     await act(async () => english.click());
     expect(onChange).not.toHaveBeenCalled();
+    expect(listbox()).toBeNull();
+  });
+
+  it("draws the menu in a portal on <body>, out of the clipping container, over dialogs", async () => {
+    host.style.overflow = "hidden";
+    await act(async () => pill().click());
+    await frame();
+    const list = listbox() as HTMLElement;
+    expect(host.contains(list)).toBe(false);
+    expect(list.parentElement).toBe(document.body);
+    expect(list.className).toContain("fixed");
+    expect(list.className).toContain("z-[70]");
+  });
+
+  it("is positioned against the pill with inline coordinates", async () => {
+    pill().getBoundingClientRect = () => ({ left: 700, top: 100, right: 780, bottom: 128, width: 80, height: 28, x: 700, y: 100, toJSON() {} });
+    await act(async () => pill().click());
+    await frame();
+    const list = listbox() as HTMLElement;
+    expect(list.style.top).toBe("132px");
+    expect(list.dataset.side).toBe("bottom");
+    expect(list.style.left).not.toBe("");
+  });
+
+  it("a press inside the portalled menu is not an outside press, one outside closes it", async () => {
+    await act(async () => pill().click());
+    await frame();
+    const option = document.body.querySelectorAll<HTMLElement>('[role="option"]')[0]!;
+    await act(async () => { option.dispatchEvent(new Event("pointerdown", { bubbles: true })); });
+    expect(listbox()).not.toBeNull();
+    await act(async () => { document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })); });
     expect(listbox()).toBeNull();
   });
 });

@@ -138,7 +138,7 @@ describe("sidebar footer row", () => {
     expect(lineAt).toBeGreaterThan(nameAt);
     expect(badgeAt).toBeGreaterThan(lineAt);
     // right of the whole account block, same flex row, centred, never under the name
-    expect(html).toContain('<div class="flex items-center gap-1"><div class="min-w-0 flex-1">');
+    expect(html).toContain('<div class="flex items-center gap-1"><div class="relative min-w-0 flex-1">');
     expect(html).toContain('class="flex shrink-0 items-center" data-routines-line=""');
     expect(html).not.toContain("-mt-[21px]");
     expect(html).not.toContain("pl-[46px]");
@@ -220,6 +220,46 @@ describe("sidebar footer row", () => {
   });
 });
 
+describe("the wide foot's account pill (reference design)", () => {
+  it("draws the avatar and the name in one rounded pill that opens the account menu", () => {
+    const html = renderToStaticMarkup(createElement(SidebarProfileMenu, { avatarOnly: true, withName: true }));
+    const pill = /<span[^>]*data-sidebar-account-pill=""[^>]*>/.exec(html)?.[0] ?? "";
+    expect(pill).toContain("rounded-full");
+    expect(pill).toContain("h-[var(--foot-tile-h,2.25rem)]");
+    expect(pill).toContain("[button:focus-visible:not([data-pointer-focus])&gt;&amp;]:ring-2");
+    expect(html).toContain('aria-haspopup="menu"');
+    expect(html).toMatch(/data-account-pill-name=""[^>]*>[^<]+<\/span>/);
+    expect(html).toContain("width:28px");
+    // no title or points line in the pill, and not the wide row's layout
+    expect(html).not.toContain("data-member-line");
+    expect(html).not.toContain("data-sidebar-account-row");
+  });
+
+  it("fills the row and keeps room for its name when Connect apps widens", () => {
+    const html = renderToStaticMarkup(createElement(SidebarProfileMenu, { avatarOnly: true, withName: true }));
+    // the outer box takes the rest of the row; its floor is low (the avatar
+    // and an ellipsis) so the English label is never cut from a 260px
+    // sidebar: the label's own cap (styles.css) keeps the name its avatar and
+    // about three characters when the label is longer
+    const outer = /^<div class="([^"]*)"/.exec(html)?.[1] ?? "";
+    expect(outer.split(" ")).toEqual(expect.arrayContaining(["flex-1", "min-w-[3.5rem]"]));
+    const pill = /<span[^>]*data-sidebar-account-pill=""[^>]*>/.exec(html)?.[0] ?? "";
+    expect(pill).toContain("w-full");
+    // tight insets, so "Jean…" still shows beside the open label at 280px
+    expect(pill.split(/[\s"]/)).toEqual(expect.arrayContaining(["gap-1", "pl-1", "pr-1.5"]));
+    // the name is one line, cut only by the room it has (never in markup)
+    const name = /<span data-account-pill-name="" class="([^"]*)"/.exec(html)?.[1] ?? "";
+    expect(name.split(" ")).toEqual(expect.arrayContaining(["min-w-0", "flex-1", "truncate"]));
+  });
+
+  it("is wired in the sidebar's wide foot, the rail keeps the bare avatar", () => {
+    const source = readFileSync(new URL("./Sidebar.tsx", import.meta.url), "utf8");
+    expect(source).toContain("<SidebarProfileMenu avatarOnly withName places={accountPlaces} />");
+    const rail = source.slice(source.indexOf("data-sidebar-account-rail"));
+    expect(rail.slice(0, 200)).toContain("<SidebarProfileMenu avatarOnly places={accountPlaces} />");
+  });
+});
+
 describe("the footer avatar (Grok Bot's foot, 2026-10-16)", () => {
   it("draws no presence dot on the avatar", () => {
     fixture.state = { ...fixture.state, config: { ...fixture.state.config, viewer: { principalId: "pr_me" } } as AppState["config"] };
@@ -262,3 +302,63 @@ describe("the routines badge in Grok Bot's foot (JC, 2026-10-16)", () => {
     expect(source.indexOf("<SidebarRoutinesBadge />", pill)).toBeGreaterThan(pill);
   });
 });
+
+// The wide foot's account pill (avatarOnly + withName) beside the Connect apps
+// pill: the second line (title and points) lives in the pill, and both tiles
+// take their height from the same custom property so they never differ.
+describe("sidebar foot account pill: title and points line", () => {
+  const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const pill = (props: Record<string, unknown> = {}) => renderToStaticMarkup(createElement(SidebarProfileMenu, { avatarOnly: true, withName: true, ...props }));
+  const withSettings = (patch: Partial<AchievementSnapshot["settings"]>, extra: Partial<AchievementSnapshot> = {}) => {
+    const base = points();
+    resetAchievementsForTests({ status: "ready", snapshot: { ...base, ...extra, settings: { ...base.settings, ...patch } } });
+  };
+
+  it.each([
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ])("shows points %s and title %s as the toggles say", (showPoints, showTitle) => {
+    withSettings({ showPoints, showTitle });
+    const html = pill();
+    expect(html).toContain(">Jean-Christophe Proulx</span>");
+    expect(html.includes("data-member-line")).toBe(showPoints || showTitle);
+    expect(html.includes(">Commander<")).toBe(showTitle);
+    expect(html.includes("data-gamertag")).toBe(showPoints);
+    expect(html.includes(">195<")).toBe(showPoints);
+    expect(html.includes("data-account-pill-line")).toBe(showPoints || showTitle);
+    // the name stays on top
+    if (showPoints || showTitle) expect(html.indexOf("data-member-line")).toBeGreaterThan(html.indexOf(">Jean-Christophe Proulx</span>"));
+  });
+
+  it("takes the points from the achievements state, never a fixed number", () => {
+    withSettings({}, { points: 1240 });
+    const html = pill();
+    expect(html).toContain(">1,240<");
+    expect(html).not.toContain(">195<");
+  });
+
+  it("shows nothing while the achievements are not loaded, like today", () => {
+    resetAchievementsForTests();
+    const html = pill();
+    expect(html).not.toContain("data-member-line");
+    expect(html).not.toContain("data-account-pill-line");
+  });
+
+  it("never prints an id: the title is its human name", () => {
+    withSettings({});
+    expect(pill()).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
+  });
+
+  it("gives the account pill and the Connect apps pill one height, from one property", () => {
+    const tile = "h-[var(--foot-tile-h,2.25rem)]";
+    withSettings({});
+    expect(pill()).toContain(tile);
+    const connect = readFileSync(new URL("./Sidebar.tsx", import.meta.url), "utf8");
+    expect(connect).toContain(tile);
+    expect(css).toMatch(/\[data-sidebar-account-row\]\s*\{[^}]*--foot-tile-h:\s*2\.25rem/);
+    expect(css).toMatch(/\[data-sidebar-account-row\]:has\(\[data-account-pill-line\]\)\s*\{[^}]*--foot-tile-h:\s*2\.75rem/);
+  });
+});
+

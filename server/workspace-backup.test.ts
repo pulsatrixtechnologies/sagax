@@ -1,4 +1,4 @@
-import { createCipheriv, createHash, randomBytes, scryptSync } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -69,6 +69,8 @@ function fixture(root: string): DatabaseSync {
   writeFileSync(join(root, "environment-id"), "source-environment");
   mkdirSync(join(root, "tools"));
   writeFileSync(join(root, "tools", "downloaded"), "reinstallable");
+  mkdirSync(join(root, "agent-browser-profiles"));
+  writeFileSync(join(root, "agent-browser-profiles", "Cookies"), "a kept Chrome profile stays on this machine");
   mkdirSync(join(root, "decider-log"));
   writeFileSync(join(root, "decider-log", "2026-09.ndjson"), '{"seam":"roomRouting"}\n');
   const db = new DatabaseSync(join(root, "messages.db"));
@@ -181,6 +183,7 @@ describe("encrypted full workspace backups", () => {
       expect(existsSync(join(target, "messages.db-wal"))).toBe(false);
       expect(readFileSync(join(result.safetyCopyPath!, "data", "messages.db-wal"), "utf8")).toBe("old database WAL must not enter the new DB");
       expect(existsSync(join(target, "tools"))).toBe(false);
+      expect(existsSync(join(target, "agent-browser-profiles"))).toBe(false);
       // this machine's decision-model log stays on this machine
       expect(existsSync(join(target, "decider-log"))).toBe(false);
       expect(readJson(join(result.safetyCopyPath!, "data", "bots.json"))).toEqual([{ id: "old" }]);
@@ -703,6 +706,341 @@ describe("encrypted full workspace backups", () => {
     expect(applyPendingWorkspaceRestore(target)).toMatchObject({ restored: true });
     expect(readFileSync(join(target, person, "sheet.json"), "utf8")).toBe(other);
     for (const path of [confidential, cased, empty]) expect(existsSync(join(target, path))).toBe(false);
+  });
+
+  it("keeps every engine's settings and never its sign-in: the person signs in again after a restore", async () => {
+    const source = directory();
+    const put = (path: string, content: string) => { mkdirSync(join(path, ".."), { recursive: true }); writeFileSync(path, content); };
+    const ana = join(source, "principals", "pr_ana");
+    const secrets: Record<string, string> = {
+      "claude/.credentials.json": '{"claudeAiOauth":{"accessToken":"ENGINE_TOKEN_claude"}}',
+      "claude/backups/.claude.json.backup.1792350746720": '{"oauthAccount":{"emailAddress":"ENGINE_TOKEN_backup"}}',
+      "claude/.pulsabot-login.json": '{"at":1}',
+      "codex/auth.json": '{"OPENAI_API_KEY":"ENGINE_TOKEN_codex"}',
+      "codex/.credentials.json": '{"mcp":"ENGINE_TOKEN_codex_mcp"}',
+      "grok/.grok/auth.json": '{"x":{"key":"ENGINE_TOKEN_grok","refresh_token":"ENGINE_TOKEN_grok"}}',
+      "grok/.grok/mcp_credentials.json": '{"x":{"token_response":{"access_token":"ENGINE_TOKEN_grok_mcp"}}}',
+      "kimi/credentials/kimi-code.json": '{"access_token":"ENGINE_TOKEN_kimi"}',
+      "piAgent-key/auth.json": '{"anthropic":{"type":"api_key","key":"ENGINE_TOKEN_pi"}}',
+      "geminiAgent-key/.gemini/oauth_creds.json": '{"refresh_token":"ENGINE_TOKEN_gemini"}',
+    };
+    const settings: Record<string, string> = {
+      "claude/settings.json": '{"model":"opus"}', "claude/CLAUDE.md": "Ana's rules", "codex/config.toml": 'model = "gpt-5"\n',
+      "grok/.grok/config.toml": "[ui]\n", "kimi/config.toml": "[kimi]\n", "piAgent-key/settings.json": '{"defaultModel":"x"}',
+      "geminiAgent-key/.gemini/settings.json": '{"theme":"x"}',
+    };
+    for (const [path, content] of Object.entries({ ...secrets, ...settings })) put(join(ana, path), content);
+    put(join(ana, "claude", ".claude.json"), JSON.stringify({ theme: "dark", oauthAccount: { emailAddress: "ENGINE_TOKEN_account" }, primaryApiKey: "ENGINE_TOKEN_apikey", customApiKeyResponses: { approved: ["ENGINE_TOKEN_suffix"] } }));
+    put(join(source, "org", "grokAgent-key", ".grok", "auth.json"), "ENGINE_TOKEN_org");
+    put(join(source, "engine-policies", "hermes-org", "config.yaml"), "model: x\n");
+    put(join(source, "engine-policies", "hermes-org", "auth.json"), "ENGINE_TOKEN_hermes");
+    // Sagax's own sign-ins: a person's MCP OAuth tokens and cloud agent keys,
+    // the marketplace Git tokens, revocations pending, a turn's bearer
+    put(join(ana, "mcp-oauth.enc"), "ENGINE_TOKEN_mcp");
+    put(join(ana, "cloud-agent-credentials.enc"), "ENGINE_TOKEN_cloud");
+    put(join(source, "marketplace-tokens.enc"), "ENGINE_TOKEN_marketplace");
+    put(join(source, "idp-revocations.enc"), "ENGINE_TOKEN_revocations");
+    put(join(source, "comms-tokens", "abc.token"), "ENGINE_TOKEN_comms");
+    const exported = await createWorkspaceBackup(source, { password: PASSWORD });
+    expect(exported.summary.exclusions.join(" ")).toMatch(/No secret is included/);
+    const target = directory();
+    // the destination's own sign-in under the same person stays this machine's
+    put(join(target, "principals", "pr_ana", "claude", ".credentials.json"), "DESTINATION_TOKEN");
+    // the workspace's own Git tokens stay this machine's
+    put(join(target, "marketplace-tokens.enc"), "DESTINATION_MARKETPLACE");
+    const staged = await stageWorkspaceBackup(target, exported.path, { password: PASSWORD });
+    const stagedRoot = join(target, ".backups", staged.id, "staged");
+    const paths: string[] = readJson(join(stagedRoot, "manifest.json")).entries.map((entry: { path: string }) => entry.path);
+    for (const path of Object.keys(secrets)) expect(paths, path).not.toContain(`principals/pr_ana/${path}`);
+    expect(paths).not.toContain("org/grokAgent-key/.grok/auth.json");
+    expect(paths).not.toContain("engine-policies/hermes-org/auth.json");
+    for (const path of Object.keys(settings)) expect(paths, path).toContain(`principals/pr_ana/${path}`);
+    const everything = (root: string): string => readdirSync(root, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile()).map((entry) => readFileSync(join(entry.parentPath, entry.name), "utf8")).join("\n");
+    expect(everything(join(stagedRoot, "data"))).not.toContain("ENGINE_TOKEN");
+    commitPendingWorkspaceRestore(target, staged.id);
+    expect(applyPendingWorkspaceRestore(target)).toMatchObject({ restored: true });
+    for (const [path, content] of Object.entries(settings)) expect(readFileSync(join(target, "principals", "pr_ana", path), "utf8")).toBe(content);
+    expect(readJson(join(target, "principals", "pr_ana", "claude", ".claude.json"))).toEqual({ theme: "dark" });
+    expect(readFileSync(join(target, "principals", "pr_ana", "claude", ".credentials.json"), "utf8")).toBe("DESTINATION_TOKEN");
+    for (const path of Object.keys(secrets).filter((path) => path !== "claude/.credentials.json")) expect(existsSync(join(target, "principals", "pr_ana", path)), path).toBe(false);
+    expect(existsSync(join(target, "engine-policies", "hermes-org", "auth.json"))).toBe(false);
+    expect(readFileSync(join(target, "engine-policies", "hermes-org", "config.yaml"), "utf8")).toBe("model: x\n");
+    for (const path of ["principals/pr_ana/mcp-oauth.enc", "principals/pr_ana/cloud-agent-credentials.enc", "idp-revocations.enc", "comms-tokens"]) expect(existsSync(join(target, path)), path).toBe(false);
+    expect(readFileSync(join(target, "marketplace-tokens.enc"), "utf8")).toBe("DESTINATION_MARKETPLACE");
+  });
+
+  it("restores an archive from a release that exported engine sign-ins without installing them, and says so", async () => {
+    const source = directory();
+    const exported = await createWorkspaceBackup(source, { password: PASSWORD });
+    const probe = await stageWorkspaceBackup(source, exported.path, { password: PASSWORD });
+    const base = readJson(join(source, ".backups", probe.id, "staged", "manifest.json"));
+    const file = (path: string, content: string) => ({ path, type: "file", size: Buffer.byteLength(content), mode: 0o600, sha256: createHash("sha256").update(content).digest("hex") });
+    const dir = (path: string) => ({ path, type: "directory", size: 0, mode: 0o700 });
+    const token = '{"claudeAiOauth":{"accessToken":"OLD_ENGINE_TOKEN"}}';
+    const codex = '{"tokens":{"refresh_token":"OLD_ENGINE_TOKEN"}}';
+    const config = 'model = "gpt-5"\n';
+    const account = JSON.stringify({ theme: "light", oauthAccount: { emailAddress: "OLD_ENGINE_TOKEN" } });
+    const home = "principals/pr_ana";
+    const entries = [dir("principals"), dir(home), dir(`${home}/claude`), file(`${home}/claude/.credentials.json`, token), file(`${home}/claude/.claude.json`, account),
+      dir(`${home}/CODEX`), file(`${home}/CODEX/Auth.json`, codex), file(`${home}/CODEX/config.toml`, config), dir(`${home}/kimi`), dir(`${home}/kimi/credentials`), file(`${home}/kimi/credentials/kimi-code.json`, token)];
+    const manifest = {
+      ...base, entries,
+      summary: { ...base.summary, directories: 6, files: 5, bytes: entries.reduce((total, entry) => total + entry.size, 0) },
+    };
+    const archive = encryptedPayload(source, Buffer.concat([
+      tarEntry("manifest.json", "File", JSON.stringify(manifest)), tarEntry("data", "Directory"), tarEntry("data/principals", "Directory"), tarEntry(`data/${home}`, "Directory"),
+      tarEntry(`data/${home}/claude`, "Directory"), tarEntry(`data/${home}/claude/.credentials.json`, "File", token), tarEntry(`data/${home}/claude/.claude.json`, "File", account),
+      tarEntry(`data/${home}/CODEX`, "Directory"), tarEntry(`data/${home}/CODEX/Auth.json`, "File", codex), tarEntry(`data/${home}/CODEX/config.toml`, "File", config),
+      tarEntry(`data/${home}/kimi`, "Directory"), tarEntry(`data/${home}/kimi/credentials`, "Directory"), tarEntry(`data/${home}/kimi/credentials/kimi-code.json`, "File", token),
+      Buffer.alloc(1024),
+    ]));
+    const target = directory();
+    const staged = await stageWorkspaceBackup(target, archive, { password: PASSWORD });
+    expect(staged.summary.warnings.join(" ")).toMatch(/3 file\(s\) in this backup hold secrets/);
+    expect(staged.summary).toMatchObject({ files: 2, reconnect: { engines: { count: 3, people: 1 } } });
+    const stagedData = join(target, ".backups", staged.id, "staged", "data");
+    for (const path of [`${home}/claude/.credentials.json`, `${home}/CODEX/Auth.json`, `${home}/kimi/credentials`]) expect(existsSync(join(stagedData, path)), path).toBe(false);
+    expect(readFileSync(join(stagedData, home, "claude", ".claude.json"), "utf8")).not.toContain("OLD_ENGINE_TOKEN");
+    commitPendingWorkspaceRestore(target, staged.id);
+    expect(applyPendingWorkspaceRestore(target)).toMatchObject({ restored: true });
+    expect(readFileSync(join(target, home, "CODEX", "config.toml"), "utf8")).toBe(config);
+    expect(readJson(join(target, home, "claude", ".claude.json"))).toEqual({ theme: "light" });
+    for (const path of [`${home}/claude/.credentials.json`, `${home}/CODEX/Auth.json`, `${home}/kimi/credentials`]) expect(existsSync(join(target, path)), path).toBe(false);
+  });
+
+  it("holds no secret anywhere: every byte of the archive, its staging and the restored folder is free of them (JC 2026-10-18 « Exclure tout »)", async () => {
+    const source = directory();
+    fixture(source).close();
+    let n = 0;
+    const fake = () => `FAKE_SECRET_DO_NOT_USE_${++n}_END`;
+    const put = (path: string, content: string) => { mkdirSync(join(source, path, ".."), { recursive: true }); writeFileSync(join(source, path), content); };
+    // the engines' sign-ins, a person's and the organization's
+    for (const path of ["principals/pr_ana/claude/.credentials.json", "principals/pr_ana/codex/auth.json", "principals/pr_ana/grok/.grok/auth.json",
+      "principals/pr_ana/grok/.grok/mcp_credentials.json", "principals/pr_ana/kimi/credentials/kimi-code.json", "principals/pr_ana/geminiAgent-key/.gemini/oauth_creds.json",
+      "principals/pr_ana/geminiAgent-key/.gemini/.env", "principals/pr_ana/claude/.pulsabot-login.json", "org/grokAgent-key/.grok/auth.json", "engine-policies/hermes-org/auth.json",
+      "engine-policies/hermes-org/.env", "org/droid/.factory/auth.encrypted", "org/cline/.cline/data/secrets.json"]) put(path, `{"token":"${fake()}"}`);
+    // the engines' settings, with keys, tokens, env and headers in them
+    put("principals/pr_ana/claude/.claude.json", JSON.stringify({ theme: "dark", oauthAccount: { emailAddress: fake() }, primaryApiKey: fake(), customApiKeyResponses: { approved: [fake()] },
+      mcpServers: { docs: { command: "docs", env: { DOCS_TOKEN: fake() }, headers: { Authorization: fake() } } } }));
+    put("principals/pr_ana/claude/settings.json", JSON.stringify({ model: "opus", env: { ANY_NAME: fake() } }));
+    put("principals/pr_ana/codex/config.toml", ['model = "gpt-5"', "[mcp_servers.docs]", 'command = "docs"', `bearer_token = "${fake()}"`, `http_headers = { "X-Key" = "${fake()}" }`, "[mcp_servers.docs.env]", `ANY = "${fake()}"`, ""].join("\n"));
+    put("principals/pr_ana/grok/.grok/config.toml", ['[model."local"]', 'base_url = "http://127.0.0.1:1234/v1"', `api_key = "${fake()}"`, ""].join("\n"));
+    put("engine-policies/hermes-org/config.yaml", ["providers:", "  local:", "    base_url: http://127.0.0.1:1234/v1", `    api_key: ${fake()}`, ""].join("\n"));
+    put("principals/pr_ana/piAgent-key/models.json", JSON.stringify({ providers: { local: { baseUrl: "http://127.0.0.1:1234/v1", apiKey: fake(), models: [{ id: "m", maxTokens: 1 }] } } }));
+    put("org/opencode/.config/opencode/opencode.json", JSON.stringify({ provider: { local: { options: { baseURL: "http://127.0.0.1:1234/v1", apiKey: fake() } } } }));
+    put("org/droid/.factory/settings.json", JSON.stringify({ customModels: [{ id: "m", baseUrl: "http://127.0.0.1:1234/v1", apiKey: fake() }] }));
+    put("org/cline/.cline/data/cline_mcp_settings.json", JSON.stringify({ mcpServers: { a: { url: "https://mcp.example/a", headers: { "X-Api-Key": fake() } } } }));
+    // a person's sealed stores, and the workspace's keys and stores
+    for (const name of ["connections.enc", "credential-vault.enc", "engine-api-keys.enc", "mcp-oauth.enc", "cloud-agent-credentials.enc"]) put(`principals/pr_ana/${name}`, fake());
+    for (const name of ["marketplace-tokens.enc", "idp-revocations.enc", "agent-api.key", "media-proxy.key", "published-pages.key", "template-links.key", "org-github-tokens.enc",
+      "engine-api-keys.enc", "mcp-oauth.enc", "mcp-oauth.key", "trigger-poller-credentials.enc", "idp-grants.enc", "idp-grants.key", "browser-engine-key", "workspace-credentials.json",
+      "tunnel-account.json", "comms-tokens/a.token", "hook-tokens/b.token", "providers/chatgpt-plan/x/credentials.json", "push-devices/pr_ana.json", "linked/perspicax-link.json"]) put(name, fake());
+    json(join(source, "published-pages.json"), { version: 2, pages: [{ id: "p1" }, { id: "p2" }] });
+    json(join(source, "template-links.json"), { version: 1, links: [{ id: "t1" }] });
+    // settings that hold secrets beside the portable ones
+    json(join(source, "config.json"), { language: "fr", profile: { name: "Ana" }, features: { browser: true }, xai: { key: fake() }, mail: { password: fake() },
+      mcpServers: { docs: { command: "docs", env: { DOCS_TOKEN: fake() } } }, instances: { claude: { driver: "claudeAgent", environment: { ANTHROPIC_TOKEN: fake() } } } });
+    json(join(source, "webhooks.json"), { version: 1, webhooks: [{ id: "hook", endpointId: "endpoint", enabled: true, secretHash: fake(), pendingToken: fake(), signingSecret: fake() }] });
+    // a *_FILE secret the server reads from inside its data folder
+    process.env.SAGAX_TEST_LINK_FILE = join(source, "linked", "perspicax-link.json");
+    let exported;
+    try { exported = await createWorkspaceBackup(source, { password: PASSWORD }); } finally { delete process.env.SAGAX_TEST_LINK_FILE; }
+    const MARKER = "FAKE_SECRET_DO_NOT_USE";
+    // the archive: ciphertext, then every byte of its plaintext
+    const archive = readFileSync(exported.path);
+    expect(archive.includes(MARKER)).toBe(false);
+    const header = archive.subarray(0, 44);
+    const decipher = createDecipheriv("aes-256-gcm", scryptSync(PASSWORD, header.subarray(16, 32), 32, { N: 131_072, r: 8, p: 1, maxmem: 256 * 1024 ** 2 }), header.subarray(32, 44));
+    decipher.setAAD(header);
+    decipher.setAuthTag(archive.subarray(archive.length - 16));
+    const plaintext = Buffer.concat([decipher.update(archive.subarray(44, archive.length - 16)), decipher.final()]);
+    expect(plaintext.length).toBeGreaterThan(0);
+    for (let i = 1; i <= n; i++) expect(plaintext.includes(`${MARKER}_${i}_END`), `${MARKER}_${i}_END`).toBe(false);
+    expect(plaintext.includes(MARKER)).toBe(false);
+    // settings travel without their secrets
+    expect(plaintext.includes("http://127.0.0.1:1234/v1")).toBe(true);
+    expect(exported.summary.reconnect).toEqual({
+      engines: { count: 9, people: 1 }, providerKeys: { count: 6, people: 1 }, connections: { count: 1, people: 1 }, credentialVault: { count: 1, people: 1 },
+      mcp: { count: 3, people: 1 }, github: { count: 2 }, cloudAgents: { count: 1, people: 1 }, triggers: { count: 2 }, phones: { count: 1 }, sharedLinks: { count: 3 },
+      engineSettings: { count: 8, people: 1 },
+    });
+    // staging and restoring leave none on disk either; the destination keeps its own
+    const target = directory();
+    mkdirSync(join(target, "principals", "pr_ana", "codex"), { recursive: true });
+    writeFileSync(join(target, "principals", "pr_ana", "codex", "auth.json"), "DESTINATION_OWN_SIGN_IN");
+    writeFileSync(join(target, "principals", "pr_ana", "connections.enc"), "DESTINATION_OWN_CONNECTIONS");
+    writeFileSync(join(target, "agent-api.key"), "DESTINATION_OWN_KEY");
+    mkdirSync(join(target, "push-devices"));
+    writeFileSync(join(target, "push-devices", "pr_ana.json"), "DESTINATION_OWN_PHONE");
+    const staged = await stageWorkspaceBackup(target, exported.path, { password: PASSWORD });
+    expect(staged.summary.reconnect).toEqual(exported.summary.reconnect);
+    // this server's own *_FILE secret in a folder the archive also brings
+    mkdirSync(join(target, "linked"));
+    writeFileSync(join(target, "linked", "perspicax-link.json"), "DESTINATION_OWN_LINK");
+    process.env.SAGAX_TEST_LINK_FILE = join(target, "linked", "perspicax-link.json");
+    try {
+      commitPendingWorkspaceRestore(target, staged.id);
+      expect(applyPendingWorkspaceRestore(target)).toMatchObject({ restored: true, summary: { reconnect: exported.summary.reconnect } });
+    } finally { delete process.env.SAGAX_TEST_LINK_FILE; }
+    expect(readFileSync(join(target, "linked", "perspicax-link.json"), "utf8")).toBe("DESTINATION_OWN_LINK");
+    const scan = (root: string): string[] => readdirSync(root, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile())
+      .filter((entry) => readFileSync(join(entry.parentPath, entry.name)).includes(MARKER)).map((entry) => join(entry.parentPath, entry.name));
+    expect(scan(target)).toEqual([]);
+    expect(readFileSync(join(target, "principals", "pr_ana", "codex", "auth.json"), "utf8")).toBe("DESTINATION_OWN_SIGN_IN");
+    expect(readFileSync(join(target, "principals", "pr_ana", "connections.enc"), "utf8")).toBe("DESTINATION_OWN_CONNECTIONS");
+    expect(readFileSync(join(target, "agent-api.key"), "utf8")).toBe("DESTINATION_OWN_KEY");
+    expect(readFileSync(join(target, "push-devices", "pr_ana.json"), "utf8")).toBe("DESTINATION_OWN_PHONE");
+    expect(readJson(join(target, "principals", "pr_ana", "codex", "..", "piAgent-key", "models.json"))).toEqual({ providers: { local: { baseUrl: "http://127.0.0.1:1234/v1", models: [{ id: "m", maxTokens: 1 }] } } });
+    expect(readJson(join(target, "principals", "pr_ana", "claude", ".claude.json"))).toEqual({ theme: "dark", mcpServers: { docs: { command: "docs", env: {}, headers: {} } } });
+    expect(readLastWorkspaceRestore(target)?.summary?.reconnect).toEqual(exported.summary.reconnect);
+  });
+
+  it("holds none of the secrets the security review found, whatever their form: deep or suffixed stores, dotted and inline TOML, flow and multi-line YAML, names with a secret word in them, tools' sign-in files", async () => {
+    const source = directory();
+    fixture(source).close();
+    let n = 0;
+    // obvious fakes, each also shaped like a real key so that the value check sees them
+    const fake = (shape = "sk-") => `${shape}FAKESECRETDONOTUSE${String(++n).padStart(3, "0")}xxxxxxxxxxxxxxxxxxxx`;
+    const put = (path: string, content: string) => { mkdirSync(join(source, path, ".."), { recursive: true }); writeFileSync(join(source, path), content); };
+    // 1. sealed stores and keys at any depth, and with a copy, lock or temp suffix
+    for (const path of ["bots/bot/vault.enc", "principals/pr_ana/sub/deep.enc", "principals/pr_ana/connections.enc.bak", "agent-api.key.lock", "mcp-oauth.enc.tmp",
+      "data-scopes/bot/s/store.key~", "browser-state/x.json.enc.previous", "principals/pr_ana/codex/auth.json.bak", "principals/pr_ana/claude/.credentials.json.lock",
+      "org/codex/.codex/auth.json.1.tmp", "principals/pr_ana/codex/.ssh/id_ed25519", "principals/pr_ana/codex/server.pem"]) put(path, fake());
+    // 2. TOML: dotted keys, inline tables, env tables in every form, multi-line values
+    put("principals/pr_ana/codex/config.toml", [
+      'model = "gpt-5"', "model_max_output_tokens = 4000", 'api_key_env = "OPENAI_API_KEY"',
+      `providers.local.api_key = "${fake()}"`,
+      `local = { base_url = "http://127.0.0.1:1234/v1", api_key = "${fake()}", nested = { token = "${fake()}", keep = 1 } }`,
+      `mcp_servers.a.env = { ANY = "${fake()}" }`, `mcp_servers.b.env.ANY = "${fake()}"`, `"mcp_servers"."c".'env' = { X = '${fake()}' }`,
+      "[mcp_servers.docs]", 'command = "docs"', "args = [", '  "--token",', `  "${fake("ghp_")}",`, '  "--verbose",', "]",
+      `openai_api_key = """`, fake(), '"""', `github_token = '''${fake("ghp_")}'''`,
+      `servers = [{ name = "x", headers = { Authorization = "Bearer ${fake("")}" } }]`,
+      "[mcp_servers.docs.env.nested]", `ANY = "${fake()}"`, "[ui]", 'theme = "dark"', "",
+    ].join("\n"));
+    // 3. YAML: flow mappings, quoted keys, block and folded values, header and env sequences, args
+    put("engine-policies/hermes-org/config.yaml", [
+      "model:", "  default: x", "  max_tokens: 1000", "providers:", `  local: { base_url: "http://127.0.0.1:1234/v1", api_key: ${fake()} }`,
+      "  other:", "    api_key: |", `      ${fake()}`, "    secret_key: >", `      ${fake()}`, `  "github_token": "${fake("ghp_")}"`,
+      "mcp_servers:", "  docs:", "    command: docs", `    args: [--key, ${fake()}]`, "    headers:", `      - "Authorization: Bearer ${fake("")}"`,
+      "    env:", `      TOKEN: ${fake()}`, `url: https://user:${fake("")}@example.com/x`, "",
+    ].join("\n"));
+    // 4. field names with a secret word in them, in JSON settings
+    put("principals/pr_ana/claude/settings.json", JSON.stringify({ model: "opus", maxTokens: 8, apiKeyHelper: "/usr/local/bin/key-helper",
+      openai_api_key: fake(), github_token: fake(), apiToken: fake(), GITHUB_PAT: fake(), credentials: { user: fake() }, db_password: fake(), XAI_API_KEY: fake(),
+      mcpServers: { a: { command: "a", args: ["--api-key", fake()] } } }));
+    put("principals/pr_ana/grok/.grok/mcp.json", JSON.stringify({ servers: [{ url: "https://mcp.example", clientSecret: fake(), sessionKey: fake() }] }));
+    // 5. the tools' own sign-in files, in an engine home and in a work folder
+    for (const name of [".netrc", ".git-credentials", ".pypirc", "_netrc", ".pgpass"]) {
+      put(`principals/pr_ana/codex/${name}`, fake());
+      put(`task-workspaces/bot/thread/${name}`, fake());
+    }
+    // npm and Yarn settings stay, without their tokens
+    put("task-workspaces/bot/thread/.npmrc", `registry=https://registry.example/\n//registry.example/:_authToken=${fake("")}\n_auth=${fake("")}\n`);
+    put("principals/pr_ana/codex/.yarnrc.yml", `npmRegistryServer: "https://registry.example"\nnpmAuthToken: ${fake("")}\n`);
+    // names that end with key, more key shapes, the value after a secret flag
+    put("principals/pr_ana/claude/.mcp.json", JSON.stringify({ key: fake(""), OPENAI_KEY: fake(""), groqKey: fake(""), sort_key: "name",
+      mcpServers: { b: { command: "b", args: ["--token", fake(""), `--api-key=${fake("")}`, "--port", "8080"] } }, other: [fake("gsk_"), fake("hf_")] }));
+    put("principals/pr_ana/grok/.grok/config.toml", ['[mcp_servers.x]', `args = ["--token", "${fake("")}", "--port", "8080"]`, `key = "${fake("")}"`, ""].join("\n"));
+    put("task-workspaces/bot/thread/.ssh/id_rsa", fake());
+    put("task-workspaces/bot/thread/.ssh/id_rsa.pub", "ssh-ed25519 PUBLIC_KEY_KEPT");
+    put("attachments/talk.key", "KEYNOTE_DOCUMENT_KEPT");
+    const exported = await createWorkspaceBackup(source, { password: PASSWORD });
+    const MARKER = "FAKESECRETDONOTUSE";
+    const archive = readFileSync(exported.path);
+    expect(archive.includes(MARKER)).toBe(false);
+    const header = archive.subarray(0, 44);
+    const decipher = createDecipheriv("aes-256-gcm", scryptSync(PASSWORD, header.subarray(16, 32), 32, { N: 131_072, r: 8, p: 1, maxmem: 256 * 1024 ** 2 }), header.subarray(32, 44));
+    decipher.setAAD(header);
+    decipher.setAuthTag(archive.subarray(archive.length - 16));
+    const plaintext = Buffer.concat([decipher.update(archive.subarray(44, archive.length - 16)), decipher.final()]).toString("latin1");
+    const left = Array.from({ length: n }, (_, i) => `${MARKER}${String(i + 1).padStart(3, "0")}`).filter((marker) => plaintext.includes(marker));
+    expect(left).toEqual([]);
+    // what is not a secret travels
+    for (const kept of ["model_max_output_tokens = 4000", 'api_key_env = "OPENAI_API_KEY"', "http://127.0.0.1:1234/v1", '"--verbose"', 'theme = "dark"', "max_tokens: 1000",
+      "command: docs", "/usr/local/bin/key-helper", "PUBLIC_KEY_KEPT", "KEYNOTE_DOCUMENT_KEPT", "keep = 1", "registry=https://registry.example/",
+      "npmRegistryServer", '"--port", "8080"', '"sort_key": "name"']) expect(plaintext, kept).toContain(kept);
+    expect(exported.summary.reconnect?.files?.count).toBeGreaterThanOrEqual(7);
+    // restoring brings none back and leaves the destination's own deep store in place
+    const target = directory();
+    mkdirSync(join(target, "principals", "pr_ana", "sub"), { recursive: true });
+    writeFileSync(join(target, "principals", "pr_ana", "sub", "deep.enc"), "DESTINATION_OWN_VAULT");
+    const staged = await stageWorkspaceBackup(target, exported.path, { password: PASSWORD });
+    commitPendingWorkspaceRestore(target, staged.id);
+    expect(applyPendingWorkspaceRestore(target)).toMatchObject({ restored: true });
+    const scan = (root: string): string[] => readdirSync(root, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile())
+      .filter((entry) => readFileSync(join(entry.parentPath, entry.name)).includes(MARKER)).map((entry) => join(entry.parentPath, entry.name));
+    expect(scan(target)).toEqual([]);
+    expect(readFileSync(join(target, "principals", "pr_ana", "sub", "deep.enc"), "utf8")).toBe("DESTINATION_OWN_VAULT");
+    expect(readFileSync(join(target, "attachments", "talk.key"), "utf8")).toBe("KEYNOTE_DOCUMENT_KEPT");
+  });
+
+  it("never hands this machine's secrets of a principal id to another person the archive puts behind that id", async () => {
+    const principalsFile = (sub: string) => ({ version: 1, principals: [{ id: "pr_ana", kind: "human", subject: { iss: "https://idp.example", sub }, createdAt: 1 }] });
+    const source = directory();
+    fixture(source).close();
+    json(join(source, "principals.json"), principalsFile("someone-else"));
+    mkdirSync(join(source, "principals", "pr_ana"), { recursive: true });
+    writeFileSync(join(source, "principals", "pr_ana", "notes.md"), "archive person");
+    const exported = await createWorkspaceBackup(source, { password: PASSWORD });
+    const restore = async (sub: string) => {
+      const target = directory();
+      json(join(target, "principals.json"), principalsFile(sub));
+      mkdirSync(join(target, "principals", "pr_ana", "codex"), { recursive: true });
+      writeFileSync(join(target, "principals", "pr_ana", "connections.enc"), "DESTINATION_OWN_CONNECTIONS");
+      writeFileSync(join(target, "principals", "pr_ana", "codex", "auth.json"), "DESTINATION_OWN_SIGN_IN");
+      const staged = await stageWorkspaceBackup(target, exported.path, { password: PASSWORD });
+      commitPendingWorkspaceRestore(target, staged.id);
+      expect(applyPendingWorkspaceRestore(target)).toMatchObject({ restored: true });
+      return target;
+    };
+    const other = await restore("ana");
+    expect(existsSync(join(other, "principals", "pr_ana", "connections.enc"))).toBe(false);
+    expect(existsSync(join(other, "principals", "pr_ana", "codex", "auth.json"))).toBe(false);
+    const same = await restore("someone-else");
+    expect(readFileSync(join(same, "principals", "pr_ana", "connections.enc"), "utf8")).toBe("DESTINATION_OWN_CONNECTIONS");
+    expect(readFileSync(join(same, "principals", "pr_ana", "codex", "auth.json"), "utf8")).toBe("DESTINATION_OWN_SIGN_IN");
+  });
+
+  it("restores an archive from a release that exported secrets without them, says so, and lists what to reconnect", async () => {
+    const source = directory();
+    const exported = await createWorkspaceBackup(source, { password: PASSWORD });
+    const probe = await stageWorkspaceBackup(source, exported.path, { password: PASSWORD });
+    const base = readJson(join(source, ".backups", probe.id, "staged", "manifest.json"));
+    const file = (path: string, content: string) => ({ path, type: "file", size: Buffer.byteLength(content), mode: 0o600, sha256: createHash("sha256").update(content).digest("hex") });
+    const dir = (path: string) => ({ path, type: "directory", size: 0, mode: 0o700 });
+    const secret = (i: number) => `FAKE_SECRET_DO_NOT_USE_OLD_${i}`;
+    const toml = `model = "gpt-5"\napi_key = "${secret(7)}"\n`;
+    const files: Array<[string, string]> = [
+      ["principals/pr_ana/connections.enc", secret(1)], ["principals/pr_ana/credential-vault.enc", secret(2)], ["agent-api.key", secret(3)],
+      ["media-proxy.key", secret(4)], ["push-devices/pr_ana.json", secret(5)], ["published-pages.key", secret(6)], ["principals/pr_ana/codex/config.toml", toml],
+    ];
+    const dirs = ["principals", "principals/pr_ana", "principals/pr_ana/codex", "push-devices"];
+    const entries = [...dirs.map(dir), ...files.map(([path, content]) => file(path, content))];
+    const manifest = {
+      ...base, entries,
+      summary: { ...base.summary, directories: dirs.length, files: files.length, bytes: files.reduce((total, [, content]) => total + Buffer.byteLength(content), 0) },
+    };
+    const archive = encryptedPayload(source, Buffer.concat([
+      tarEntry("manifest.json", "File", JSON.stringify(manifest)), tarEntry("data", "Directory"),
+      ...dirs.map((path) => tarEntry(`data/${path}`, "Directory")), ...files.map(([path, content]) => tarEntry(`data/${path}`, "File", content)),
+      Buffer.alloc(1024),
+    ]));
+    const target = directory();
+    writeFileSync(join(target, "media-proxy.key"), "DESTINATION_OWN_KEY");
+    const staged = await stageWorkspaceBackup(target, archive, { password: PASSWORD });
+    expect(staged.summary.warnings.join(" ")).toMatch(/6 file\(s\) in this backup hold secrets.*reconnect/);
+    expect(staged.summary.warnings.join(" ")).toMatch(/1 engine settings file\(s\)/);
+    expect(staged.summary).toMatchObject({ files: 1, reconnect: { connections: { count: 1, people: 1 }, credentialVault: { count: 1, people: 1 }, phones: { count: 1 }, engineSettings: { count: 1, people: 1 } } });
+    const scan = (root: string): string[] => readdirSync(root, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile())
+      .filter((entry) => readFileSync(join(entry.parentPath, entry.name)).includes("FAKE_SECRET_DO_NOT_USE")).map((entry) => join(entry.parentPath, entry.name));
+    expect(scan(join(target, ".backups"))).toEqual([]);
+    commitPendingWorkspaceRestore(target, staged.id);
+    expect(applyPendingWorkspaceRestore(target)).toMatchObject({ restored: true });
+    expect(scan(target)).toEqual([]);
+    expect(readFileSync(join(target, "principals", "pr_ana", "codex", "config.toml"), "utf8")).toBe('model = "gpt-5"\n');
+    expect(readFileSync(join(target, "media-proxy.key"), "utf8")).toBe("DESTINATION_OWN_KEY");
+    for (const path of ["principals/pr_ana/connections.enc", "agent-api.key", "push-devices"]) expect(existsSync(join(target, path)), path).toBe(false);
   });
 
   it("still restores an archive from a release that exported hook tokens, without installing them", async () => {

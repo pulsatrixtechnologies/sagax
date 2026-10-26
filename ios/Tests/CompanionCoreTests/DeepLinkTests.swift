@@ -31,6 +31,15 @@ final class DeepLinkTests: XCTestCase {
         XCTAssertEqual(CompanionDeepLink.parse(url), .chat(threadId: "t-9f2c"))
     }
 
+    func testParsesABotLink() throws {
+        XCTAssertEqual(CompanionDeepLink.parse(try XCTUnwrap(URL(string: "sagax://bot/b-41"))), .bot(id: "b-41"))
+        XCTAssertEqual(CompanionDeepLink.parse(try XCTUnwrap(URL(string: "SAGAX://Bot/b%2041"))), .bot(id: "b 41"))
+        XCTAssertNil(CompanionDeepLink.parse(try XCTUnwrap(URL(string: "sagax://bot"))))
+        XCTAssertNil(CompanionDeepLink.parse(try XCTUnwrap(URL(string: "sagax://bot/a/b"))))
+        XCTAssertNil(CompanionDeepLink.parse(try XCTUnwrap(URL(string: "sagax://bot/a%2Fb"))))
+        XCTAssertNil(CompanionDeepLink.parse(try XCTUnwrap(URL(string: "other://bot/b-41"))))
+    }
+
     func testParsesInboxLinksAndTheTodoAlias() throws {
         XCTAssertEqual(CompanionDeepLink.parse(try XCTUnwrap(URL(string: "sagax://inbox"))), .inbox)
         XCTAssertEqual(CompanionDeepLink.parse(try XCTUnwrap(URL(string: "sagax://todo"))), .inbox)

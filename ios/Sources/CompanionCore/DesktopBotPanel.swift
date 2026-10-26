@@ -50,7 +50,7 @@ public enum DesktopPanelSection: String, CaseIterable, Hashable, Sendable {
         case .soul: ["standing instructions", "instructions", "persona", "rules", "soul.md"]
         case .skills: ["skills", "learned", "procedures", "teach"]
         case .memory: ["memory", "notes", "remember", "topics"]
-        case .access: ["works on", "computer", "vm", "cloud", "vps", "folder", "workspace", "browser", "connected apps", "composio", "webhooks", "always allow", "grants", "tool selection", "tools", "mcp", "allow", "exclude"]
+        case .access: ["works on", "computer", "vm", "cloud", "vps", "folder", "workspace", "browser", "webhooks", "always allow", "grants", "tool selection", "tools", "mcp", "allow", "exclude"]
         case .worksOn: ["works on", "computer", "auto", "cloud", "local vm", "vm", "this computer", "browser", "off", "where it works"]
         case .model: ["engine", "model", "provider", "cli", "effort"]
         case .permissions: ["auto mode", "approve", "auto approve", "review", "routine approvals", "peers", "contact", "coordination", "chief of staff", "section"]
@@ -139,6 +139,36 @@ public enum DesktopPanelGroup: String, CaseIterable, Hashable, Sendable {
         guard !wanted.isEmpty else { return true }
         if label.lowercased().contains(wanted) { return true }
         return sections(in: visible).contains { $0.matches(query, label: sectionLabel($0)) }
+    }
+}
+
+/// The iPhone's Edit bot groups, in the desktop editor's own order
+/// (`persona-sections.ts` `PERSONA_GROUPS`: Instructions, Model and tools,
+/// Security, Activity) under the inline identity block (avatar, name, label,
+/// description), which is the Profile group's home. Grok Bot's phone editor
+/// has no Profile list and no search: the three pages Profile held are moved,
+/// not dropped. Who can see it and Shared with join Security (they are access
+/// rules); the read-only Overview (what the model sees, export) opens Activity.
+public enum PhoneBotEditGroup: String, CaseIterable, Hashable, Sendable {
+    case instructions, modelTools, security, activity
+
+    public var sections: [DesktopPanelSection] {
+        switch self {
+        case .instructions: [.soul, .skills, .memory]
+        case .modelTools: [.model, .worksOn, .access, .slack, .voice]
+        case .security: [.permissions, .perspicax, .visibility, .sharing]
+        case .activity: [.overview, .usage, .history]
+        }
+    }
+
+    /// The groups with at least one of `visible`, in order.
+    public static func visible(_ visible: [DesktopPanelSection]) -> [PhoneBotEditGroup] {
+        allCases.filter { !$0.sections(in: visible).isEmpty }
+    }
+
+    /// The group's sections this pairing lists.
+    public func sections(in visible: [DesktopPanelSection]) -> [DesktopPanelSection] {
+        sections.filter(visible.contains)
     }
 }
 
@@ -267,16 +297,38 @@ public struct WebhookListing: Decodable, Hashable, Identifiable, Sendable {
     public var botId: String
     public var enabled: Bool
     public var deliveryCount: Int
+    /// Public path id. The bearer token never rides this list.
+    public var endpointId: String?
+    public var lastReceivedAt: Double?
+    /// Typed source (`github`, `slack`, ...). Nil on a plain bearer webhook.
+    public var sourceType: String?
+    public var sourceEvents: [String]
+    /// Read-only filter line (`repo: acme/app`). Empty when there is none.
+    public var sourceFilters: String
+    /// The signing secret is set on the computer. The value is never here.
+    public var signingSecretSet: Bool
 
-    public init(id: String, name: String, botId: String, enabled: Bool, deliveryCount: Int) {
+    public init(
+        id: String, name: String, botId: String, enabled: Bool, deliveryCount: Int,
+        endpointId: String? = nil, lastReceivedAt: Double? = nil, sourceType: String? = nil,
+        sourceEvents: [String] = [], sourceFilters: String = "", signingSecretSet: Bool = false
+    ) {
         self.id = id
         self.name = name
         self.botId = botId
         self.enabled = enabled
         self.deliveryCount = deliveryCount
+        self.endpointId = endpointId
+        self.lastReceivedAt = lastReceivedAt
+        self.sourceType = sourceType
+        self.sourceEvents = sourceEvents
+        self.sourceFilters = sourceFilters
+        self.signingSecretSet = signingSecretSet
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, botId, enabled, deliveryCount }
+    private enum CodingKeys: String, CodingKey {
+        case id, name, botId, enabled, deliveryCount, endpointId, lastReceivedAt, source, signingSecretSet
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -285,20 +337,183 @@ public struct WebhookListing: Decodable, Hashable, Identifiable, Sendable {
         botId = (try? c.decode(String.self, forKey: .botId)) ?? ""
         enabled = (try? c.decode(Bool.self, forKey: .enabled)) ?? false
         deliveryCount = (try? c.decode(Int.self, forKey: .deliveryCount)) ?? 0
+        endpointId = try? c.decodeIfPresent(String.self, forKey: .endpointId)
+        lastReceivedAt = try? c.decodeIfPresent(Double.self, forKey: .lastReceivedAt)
+        signingSecretSet = (try? c.decodeIfPresent(Bool.self, forKey: .signingSecretSet)) ?? false
+        if let source = try? c.decode(WebhookSourceWire.self, forKey: .source) {
+            sourceType = source.type
+            sourceEvents = source.events ?? []
+            sourceFilters = WebhookPublicURL.filtersLine(source.filters ?? [:])
+        } else {
+            sourceType = nil
+            sourceEvents = []
+            sourceFilters = ""
+        }
+    }
+}
+
+/// A typed trigger's public fields. Filters that are not a list of strings
+/// are dropped. A secret is not a field of this object.
+private struct WebhookSourceWire: Decodable {
+    var type: String?
+    var events: [String]?
+    var filters: [String: [String]]?
+
+    private enum CodingKeys: String, CodingKey { case type, events, filters }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        type = try c.decodeIfPresent(String.self, forKey: .type)
+        events = try c.decodeIfPresent([String].self, forKey: .events)
+        filters = try? c.decode([String: [String]].self, forKey: .filters)
+    }
+}
+
+/// Where deliveries land, without a token (`ingress` on `GET /api/webhooks`).
+public struct WebhookIngress: Decodable, Hashable, Sendable {
+    public var available: Bool
+    public var baseUrl: String
+}
+
+/// The URL a person may read. A typed trigger is `/sources/<id>` (the
+/// provider signs it). A bearer webhook is `/hooks/<id>` and the token
+/// stays on the computer. Anything that could hide a path is refused.
+public enum WebhookPublicURL {
+    public static func make(baseURL: String?, endpointId: String?, typed: Bool) -> String? {
+        guard let endpointId else { return nil }
+        let id = endpointId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty, id.range(of: #"^[A-Za-z0-9_-]{1,128}$"#, options: .regularExpression) != nil else { return nil }
+        let path = (typed ? "/sources/" : "/hooks/") + id
+        let base = (baseURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty else { return path }
+        let trimmed = base.hasSuffix("/") ? String(base.dropLast()) : base
+        guard trimmed.hasPrefix("https://") || trimmed.hasPrefix("http://") else { return path }
+        guard !trimmed.contains(" ") else { return path }
+        return trimmed + path
+    }
+
+    /// Brand names, never translated (`TRIGGER_SOURCES` labels).
+    public static func sourceLabel(_ type: String) -> String {
+        switch type {
+        case "github": "GitHub"
+        case "gitlab": "GitLab"
+        case "slack": "Slack"
+        case "teams": "Microsoft Teams"
+        case "email": "Outlook"
+        case "calendar": "Outlook Calendar"
+        case "sentry": "Sentry"
+        case "pagerduty": "PagerDuty"
+        case "linear": "Linear"
+        // not a brand: the app translates it (Localizable "Bot email")
+        case "botmail": "Bot email"
+        default: type
+        }
+    }
+
+    /// English label of each typed trigger event kind, the desktop's
+    /// `triggers.event.*` words and the app catalog's keys. A kind this
+    /// build does not know is shown as sent.
+    public static let eventLabels: [String: String] = [
+        "pr.opened": "Pull request opened",
+        "pr.updated": "Pull request updated (new commits)",
+        "pr.merged": "Pull request merged",
+        "pr.closed": "Pull request closed without merge",
+        "pr.review_requested": "Review requested",
+        "pr.review_submitted": "Any review submitted",
+        "pr.review_approved": "Review approves",
+        "pr.review_changes_requested": "Review requests changes",
+        "pr.review_commented": "Review comments only",
+        "pr.comment": "PR comment posted",
+        "pr.review_comment": "Inline review comment",
+        "pr.thread_resolved": "Review thread resolved",
+        "pr.thread_reopened": "Review thread reopened",
+        "ci.failed": "CI failed",
+        "ci.succeeded": "CI succeeded",
+        "issue.opened": "Issue opened",
+        "push": "Push",
+        "release.published": "Release published",
+        "mr.opened": "Merge request opened",
+        "mr.merged": "Merge request merged",
+        "mr.closed": "Merge request closed",
+        "pipeline.failed": "Pipeline failed",
+        "pipeline.succeeded": "Pipeline succeeded",
+        "mention": "@mention of the app",
+        "reaction": "Reaction added",
+        "message": "Message in a channel",
+        "message.created": "New message",
+        "message.updated": "Message edited",
+        "email.received": "Email received",
+        "event.created": "Event created",
+        "event.updated": "Event updated",
+        "event.cancelled": "Event cancelled",
+        "event.starting": "Event starting (connector)",
+        "issue.created": "Issue created",
+        "issue.resolved": "Issue resolved",
+        "issue.assigned": "Issue assigned",
+        "issue.archived": "Issue archived",
+        "issue.unresolved": "Issue unresolved again",
+        "alert.triggered": "Alert triggered",
+        "error.created": "Error captured",
+        "incident.triggered": "Incident triggered",
+        "incident.acknowledged": "Incident acknowledged",
+        "incident.escalated": "Incident escalated",
+        "incident.reassigned": "Incident reassigned",
+        "incident.resolved": "Incident resolved",
+        "issue.updated": "Issue updated",
+        "issue.status_changed": "Issue status changed",
+        "issue.removed": "Issue removed",
+        "comment.created": "Comment added",
+        "cycle.completed": "Cycle completed",
+    ]
+
+    public static func eventLabel(_ kind: String) -> String? {
+        eventLabels[kind]
+    }
+
+    public static func filtersLine(_ filters: [String: [String]]) -> String {
+        filters.keys.sorted().compactMap { key in
+            let values = (filters[key] ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            guard !values.isEmpty else { return nil }
+            return "\(key): \(values.joined(separator: ", "))"
+        }.joined(separator: " · ")
     }
 }
 
 public struct WebhooksResponse: Decodable, Sendable {
     public var webhooks: [WebhookListing]
+    public var ingress: WebhookIngress?
+
+    private enum CodingKeys: String, CodingKey { case webhooks, ingress }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        webhooks = (try? c.decode([WebhookListing].self, forKey: .webhooks)) ?? []
+        ingress = try? c.decode(WebhookIngress.self, forKey: .ingress)
+    }
 
     /// One bot's webhooks, in the server's order.
     public func of(botId: String) -> [WebhookListing] { webhooks.filter { $0.botId == botId } }
+}
+
+private struct WebhookOneResponse: Decodable {
+    var webhook: WebhookListing
 }
 
 public extension CompanionClient {
     /// `GET /api/webhooks`: the triggers (Edit persona > Access's Webhooks card).
     func webhooks() async throws -> WebhooksResponse {
         try await send(makeRequest("GET", "/api/webhooks"), as: WebhooksResponse.self)
+    }
+
+    /// Pause or resume a trigger the computer already has. Creating,
+    /// rotating and revealing a secret stay on the computer: this body is
+    /// only `enabled`.
+    func setWebhookEnabled(id: String, enabled: Bool) async throws -> WebhookListing {
+        guard Self.validRouteID(id) else { throw APIError.badURL }
+        return try await send(
+            try makeRequest("PATCH", "/api/webhooks/\(id)", body: ["enabled": enabled, "verificationPending": false]),
+            as: WebhookOneResponse.self
+        ).webhook
     }
 
     /// `PATCH /api/bots/:id` with the panel's own fields.

@@ -14,20 +14,27 @@ const WRITES = [
 ];
 
 describe("grokApprovalGateEnabled", () => {
-  it("is on only for listed bots or all, and off for anything else", () => {
+  it("is on by default (engine parity) and off only for an explicit opt-out", () => {
     const dir = mkdtempSync(join(tmpdir(), "gate-flag-"));
     try {
       const write = (content: string) => writeFileSync(join(dir, GROK_APPROVAL_GATE_FILE), content);
-      expect(grokApprovalGateEnabled("b1", dir)).toBe(false);
-      write(JSON.stringify({ bots: ["b1"] }));
+      // no file: every bot, and a turn with no bot
       expect(grokApprovalGateEnabled("b1", dir)).toBe(true);
+      expect(grokApprovalGateEnabled(undefined, dir)).toBe(true);
+      write(JSON.stringify({ off: ["b1"] }));
+      expect(grokApprovalGateEnabled("b1", dir)).toBe(false);
+      expect(grokApprovalGateEnabled("b2", dir)).toBe(true);
+      expect(grokApprovalGateEnabled(undefined, dir)).toBe(true);
+      write(JSON.stringify({ bots: "none" }));
       expect(grokApprovalGateEnabled("b2", dir)).toBe(false);
       expect(grokApprovalGateEnabled(undefined, dir)).toBe(false);
-      write(JSON.stringify({ bots: "all" }));
+      // the earlier opt-in list no longer narrows: an unlisted bot is gated too
+      write(JSON.stringify({ bots: ["b1"] }));
       expect(grokApprovalGateEnabled("b2", dir)).toBe(true);
-      for (const bad of ["", "nope", "[]", JSON.stringify({ bots: "b1" }), JSON.stringify({ bots: [1] }), JSON.stringify({})]) {
+      // anything unreadable fails toward Sagax's decision, never Grok's classifier
+      for (const bad of ["", "nope", "[]", JSON.stringify({ bots: "b1" }), JSON.stringify({ off: "b1" }), JSON.stringify({ off: [1] }), JSON.stringify({})]) {
         write(bad);
-        expect(grokApprovalGateEnabled("b1", dir)).toBe(false);
+        expect(grokApprovalGateEnabled("b1", dir)).toBe(true);
       }
     } finally {
       removeTempDir(dir);
@@ -50,7 +57,7 @@ describe("gateReadOnlyTools", () => {
   it("gives every other server nothing, whatever it is named", () => {
     expect(gateReadOnlyTools({ name: "agents", builtin: false, spec: bridge })).toEqual([]);
     expect(gateReadOnlyTools({ name: "perspicax_fake", builtin: false, spec: { command: "node", args: ["/tmp/x.mjs"], env: { SAGAX_PERSPICAX_PROFILE: "p" } } })).toEqual([]);
-    for (const name of ["composio", "browser", "computer", "sagax-environment", "sagax-computer", "github"]) {
+    for (const name of ["browser", "computer", "sagax-environment", "sagax-computer", "github"]) {
       expect(gateReadOnlyTools({ name, builtin: name !== "sagax-environment" && name !== "sagax-computer" && name !== "github" })).toEqual([]);
     }
   });

@@ -1,0 +1,26 @@
+{
+ "messages": [
+  {
+   "id": "e1",
+   "role": "user",
+   "kind": "text",
+   "at": 1789088405000,
+   "text": "Quel est le total de la semaine ?"
+  },
+  {
+   "id": "e2",
+   "role": "bot",
+   "kind": "text",
+   "at": 1789088408000,
+   "text": "Le total de la semaine est de 38 heures."
+  },
+  {
+   "id": "e3",
+   "role": "bot",
+   "kind": "text",
+   "at": 1789088409000,
+   "text": "Je peux detailler par client si tu veux."
+  }
+ ],
+ "hasMore": false
+}

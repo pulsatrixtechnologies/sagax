@@ -3,17 +3,18 @@
  * or points under the name) and off (the account row alone, title and
  * points under the name). Not shipped in the app.
  * The capture script answers /api itself (an empty roster).
- * ?view=grok shows Grok Bot's foot instead (the avatar, Connect apps and
+ * ?view=foot shows the reference design's foot instead (the avatar, Connect apps and
  * the update button), with a stand-in updater bridge:
  * &update=none|ready|downloading (percent 40)|preparing; &pill=0 leaves the
- * update button out (the foot as it was before it).
+ * update button out (the foot as it was before it); &width=<px> (280) and
+ * &name=<text> (a long one by default); &points=0 / &title=0 switch "Show my
+ * points" / "Show my title" off.
  * ?skin=<id>&lang=<code> */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { LayoutGrid, Puzzle } from "lucide-react";
 import { SidebarPlaces, type SidebarPlace } from "../components/SidebarPlaces";
 import { SidebarProfileMenu } from "../components/SidebarProfileMenu";
-import { SidebarConnectApps } from "../components/ConnectAppsPill";
 import { SidebarUpdatePill } from "../components/SidebarUpdatePill";
 import type { UpdaterState } from "../lib/updater";
 import { resetAchievementsForTests } from "../lib/achievements";
@@ -54,9 +55,23 @@ resetAchievementsForTests({
     rewards: [],
     recent: [],
     items: [],
-    settings: { showPoints: true, showTitle: true, toasts: true, native: false, public: false, title: "commander" },
+    settings: { showPoints: params.get("points") !== "0", showTitle: params.get("title") !== "0", toasts: true, native: false, public: false, title: "commander" },
   },
 });
+
+// ?view=foot: the profile carries a long name (&name=<text>); every other
+// /api call is left to the capture script.
+if (params.get("view") === "foot") {
+  const realFetch = window.fetch.bind(window);
+  const profileName = params.get("name") ?? "Jean Exemple-Martin";
+  window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (new URL(url, location.href).pathname === "/api/config") {
+      return new Response(JSON.stringify({ profile: { name: profileName } }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return realFetch(input, init);
+  }) as typeof window.fetch;
+}
 
 const places: SidebarPlace[] = [
   { key: "plugins", tourId: "nav-apps", label: t("sidebar.nav.connectedApps"), icon: Puzzle, animation: "puzzle", onSelect: () => {} },
@@ -76,15 +91,25 @@ function Foot({ on }: { on: boolean }) {
   );
 }
 
-/** Grok Bot's foot, as Sidebar.tsx lays it out. */
-function GrokFoot() {
+/** The reference design's foot, as Sidebar.tsx lays it out, at the sidebar's width
+ * (&width=<px>, 280 by default like the app) for a person with a long name. */
+function ReferenceFoot() {
+  const width = Math.min(400, Math.max(240, Number(params.get("width")) || 280));
   return (
-    <div className="flex w-[280px] flex-col rounded-xl border-[0.5px] border-hairline-weak bg-sidebar" data-gallery="grok">
+    <div className="flex flex-col rounded-xl border-[0.5px] border-hairline-weak bg-sidebar" style={{ width }} data-gallery="foot">
       <div className="h-24" />
       <div className="px-4 pb-4">
-        <div data-sidebar-account-row className="flex items-center gap-2">
-          <SidebarProfileMenu avatarOnly />
-          <SidebarConnectApps onOpen={() => {}} />
+        <div data-sidebar-account-row className="flex items-center gap-1.5 [container-type:inline-size]">
+          <SidebarProfileMenu avatarOnly withName />
+          {/* the same tile as Sidebar.tsx's SidebarConnectApps (not exported) */}
+          <button
+            type="button"
+            data-sidebar-connect-apps=""
+            className="flex h-[var(--foot-tile-h,2.25rem)] min-w-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-sidebar-ink-secondary hover:bg-sidebar-hover hover:text-sidebar-ink"
+          >
+            <Puzzle size={16} aria-hidden="true" className="shrink-0" />
+            <span className="truncate">{t("chat.connectApps.pill")}</span>
+          </button>
           {params.get("pill") !== "0" && <SidebarUpdatePill />}
         </div>
       </div>
@@ -93,11 +118,11 @@ function GrokFoot() {
 }
 
 function Gallery() {
-  if (params.get("view") === "grok") {
+  if (params.get("view") === "foot") {
     return (
       <StoreProvider>
         <div className="flex min-h-screen items-end bg-app p-8 text-ink">
-          <GrokFoot />
+          <ReferenceFoot />
         </div>
       </StoreProvider>
     );

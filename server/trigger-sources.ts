@@ -14,6 +14,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import {
   TRIGGER_SOURCES,
+  triggerEventSelected,
   type NormalizedTriggerEvent,
   type TriggerFilterKey,
   type TriggerSourceConfig,
@@ -95,6 +96,18 @@ function names(value: unknown, field: string): string[] | undefined {
   return out.length ? out.slice(0, 30) : undefined;
 }
 
+/** Every identity of a person the provider sent (name, handle, email, id),
+ * so a filter on any one of them matches. */
+function identities(value: unknown, ...keys: string[]): string[] | undefined {
+  const out = Array.from(new Set(keys.map((key) => str(get(value, key), 200)).filter((entry): entry is string => Boolean(entry))));
+  return out.length ? out : undefined;
+}
+
+/** GitHub marks app and bot accounts `type: "Bot"`. */
+function isBotAccount(...accounts: unknown[]): boolean {
+  return accounts.some((account) => str(get(account, "type"))?.toLowerCase() === "bot");
+}
+
 function compact<T extends Record<string, unknown>>(input: T): T {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as T;
 }
@@ -104,7 +117,7 @@ function event(
   kind: string,
   title: string,
   fields: NormalizedTriggerEvent["fields"],
-  extra: Partial<Pick<NormalizedTriggerEvent, "url" | "occurredAt" | "text" | "resource">> = {},
+  extra: Partial<Pick<NormalizedTriggerEvent, "url" | "occurredAt" | "text" | "resource" | "fromBot">> = {},
 ): NormalizedTriggerEvent {
   return compact({
     source,
@@ -115,6 +128,7 @@ function event(
     occurredAt: extra.occurredAt,
     text: extra.text?.slice(0, MAX_TEXT),
     resource: extra.resource,
+    fromBot: extra.fromBot || undefined,
   });
 }
 
@@ -160,6 +174,9 @@ export function verifySource(
   secret: string,
   config?: Pick<TriggerSourceConfig, "tenantId">,
 ): VerifyResult {
+  // Bot email has no endpoint: it arrives only through the Perspicax relay's
+  // own route (server/bot-inbound-mail.ts), whatever is presented here.
+  if (TRIGGER_SOURCES[type].secretMode === "relay") return { ok: false, reason: "Bot email arrives only through the Perspicax relay" };
   if (!secret) return { ok: false, reason: "No signing secret is set for this trigger" };
   const { headers, rawBody, now } = request;
   const windowSeconds = TRIGGER_SOURCES[type].replayWindowSeconds ?? 300;
@@ -232,10 +249,18 @@ export function verifySource(
       if (!withinWindow(sentAt / 1000, now, windowSeconds)) return { ok: false, reason: "Timestamp outside the replay window", replay: true };
       return { ok: true };
     }
+    case "botmail":
+      return { ok: false, reason: "Bot email arrives only through the Perspicax relay" };
   }
 }
 
 // ── normalization ────────────────────────────────────────────────────────
+
+const REVIEW_KINDS = new Map([
+  ["approved", "pr.review_approved"],
+  ["changes_requested", "pr.review_changes_requested"],
+  ["commented", "pr.review_commented"],
+]);
 
 function githubEvents(request: SourceRequest, payload: JsonValue | undefined): NormalizeResult {
   const name = request.headers["x-github-event"] ?? "";
@@ -247,7 +272,7 @@ function githubEvents(request: SourceRequest, payload: JsonValue | undefined): N
   const deliveryKey = digest(request.rawBody);
   const one = (normalized: NormalizedTriggerEvent): NormalizeResult => ({ events: [{ event: normalized, dedupeKey: `github:${deliveryKey}` }] });
   if (name === "ping") return { ignored: "Ping from GitHub: the signature is valid" };
-  if (name === "pull_request" || name === "pull_request_review") {
+  if (name === "pull_request" || name === "pull_request_review" || name === "pull_request_review_comment" || name === "pull_request_review_thread") {
     const pr = get(payload, "pull_request");
     const base = {
       repo,
@@ -259,11 +284,30 @@ function githubEvents(request: SourceRequest, payload: JsonValue | undefined): N
     const extra = { url: str(get(pr, "html_url"), 500), text: str(get(pr, "body"), MAX_TEXT), occurredAt: str(get(pr, "updated_at")) };
     if (name === "pull_request_review") {
       if (action !== "submitted") return { ignored: `Review action “${action ?? "none"}” is not handled` };
-      return one(event("github", "pr.review_submitted", title, { ...base, reviewer: str(get(payload, "review", "user", "login")) }, {
-        ...extra, text: str(get(payload, "review", "body"), MAX_TEXT) ?? extra.text,
+      return one(event("github", REVIEW_KINDS.get(str(get(payload, "review", "state"))?.toLowerCase() ?? "") ?? "pr.review_submitted", title, {
+        ...base, reviewer: str(get(payload, "review", "user", "login")),
+      }, {
+        ...extra, url: str(get(payload, "review", "html_url"), 500) ?? extra.url, text: str(get(payload, "review", "body"), MAX_TEXT) ?? extra.text,
+      }));
+    }
+    if (name === "pull_request_review_comment") {
+      if (action !== "created") return { ignored: `Review comment action “${action ?? "none"}” is not handled` };
+      const comment = get(payload, "comment");
+      return one(event("github", "pr.review_comment", title, { ...base, reviewer: str(get(comment, "user", "login")) }, {
+        url: str(get(comment, "html_url"), 500) ?? extra.url, text: str(get(comment, "body"), MAX_TEXT), occurredAt: str(get(comment, "created_at")),
+        fromBot: isBotAccount(get(comment, "user"), get(payload, "sender")),
+      }));
+    }
+    if (name === "pull_request_review_thread") {
+      const kind = action === "resolved" ? "pr.thread_resolved" : action === "unresolved" ? "pr.thread_reopened" : undefined;
+      if (!kind) return { ignored: `Review thread action “${action ?? "none"}” is not handled` };
+      const first = get(payload, "thread", "comments", 0);
+      return one(event("github", kind, title, { ...base, reviewer: str(get(first, "user", "login")) }, {
+        url: str(get(first, "html_url"), 500) ?? extra.url, text: str(get(first, "body"), MAX_TEXT),
       }));
     }
     if (action === "opened" || action === "reopened" || action === "ready_for_review") return one(event("github", "pr.opened", title, base, extra));
+    if (action === "synchronize") return one(event("github", "pr.updated", title, base, extra));
     if (action === "closed") return one(event("github", get(pr, "merged") === true ? "pr.merged" : "pr.closed", title, base, extra));
     if (action === "review_requested") {
       const reviewer = str(get(payload, "requested_reviewer", "login")) ?? str(get(payload, "requested_team", "slug"));
@@ -284,10 +328,25 @@ function githubEvents(request: SourceRequest, payload: JsonValue | undefined): N
     }));
   }
   if (name === "issues") {
-    if (action !== "opened") return { ignored: `Issue action “${action ?? "none"}” is not handled` };
+    const kind = action === "opened" ? "issue.opened" : action === "assigned" ? "issue.assigned" : undefined;
+    if (!kind) return { ignored: `Issue action “${action ?? "none"}” is not handled` };
     const issue = get(payload, "issue");
-    return one(event("github", "issue.opened", str(get(issue, "title")) ?? "Issue", { repo, label: names(get(issue, "labels"), "name"), sender }, {
+    return one(event("github", kind, str(get(issue, "title")) ?? "Issue", {
+      repo, label: names(get(issue, "labels"), "name"), sender, assignee: kind === "issue.assigned" ? identities(get(payload, "assignee"), "login", "id") : undefined,
+    }, {
       url: str(get(issue, "html_url"), 500), text: str(get(issue, "body"), MAX_TEXT),
+    }));
+  }
+  if (name === "issue_comment") {
+    if (action !== "created") return { ignored: `Comment action “${action ?? "none"}” is not handled` };
+    const issue = get(payload, "issue");
+    // GitHub sends PR conversation comments as issue comments; only those
+    // on a pull request are a PR comment.
+    if (get(issue, "pull_request") === undefined) return { ignored: "Comment on an issue, not a pull request, is not handled" };
+    const comment = get(payload, "comment");
+    return one(event("github", "pr.comment", str(get(issue, "title")) ?? "Pull request", { repo, label: names(get(issue, "labels"), "name"), sender }, {
+      url: str(get(comment, "html_url"), 500) ?? str(get(issue, "html_url"), 500), text: str(get(comment, "body"), MAX_TEXT), occurredAt: str(get(comment, "created_at")),
+      fromBot: isBotAccount(get(comment, "user"), get(payload, "sender")),
     }));
   }
   if (name === "push") {
@@ -401,6 +460,16 @@ function graphEvents(type: TriggerSourceType, payload: JsonValue | undefined): N
   return events.length ? { events } : { ignored: "No handled change in this Microsoft Graph notification" };
 }
 
+// Sentry renamed "ignored" to "archived"; both mean the issue was archived.
+const SENTRY_ISSUE_KINDS = new Map([
+  ["created", "issue.created"],
+  ["resolved", "issue.resolved"],
+  ["assigned", "issue.assigned"],
+  ["archived", "issue.archived"],
+  ["ignored", "issue.archived"],
+  ["unresolved", "issue.unresolved"],
+]);
+
 function sentryEvents(request: SourceRequest, payload: JsonValue | undefined): NormalizeResult {
   const resource = request.headers["sentry-hook-resource"] ?? "";
   const action = str(get(payload, "action"));
@@ -409,11 +478,12 @@ function sentryEvents(request: SourceRequest, payload: JsonValue | undefined): N
   const key = digest(request.rawBody);
   const one = (normalized: NormalizedTriggerEvent): NormalizeResult => ({ events: [{ event: normalized, dedupeKey: `sentry:${key}` }] });
   if (resource === "issue") {
-    const kind = action === "created" ? "issue.created" : action === "resolved" ? "issue.resolved" : action === "assigned" ? "issue.assigned" : undefined;
+    const kind = SENTRY_ISSUE_KINDS.get(action ?? "");
     if (!kind) return { ignored: `Sentry issue action “${action ?? "none"}” is not handled` };
     const issue = get(data, "issue");
     return one(event("sentry", kind, str(get(issue, "title")) ?? "Sentry issue", {
       project: str(get(issue, "project", "slug")), level: str(get(issue, "level")),
+      assignee: identities(get(issue, "assignedTo"), "name", "email", "id"),
     }, { url: str(get(issue, "web_url"), 500), text: str(get(issue, "culprit"), MAX_TEXT) }));
   }
   if (resource === "event_alert" || resource === "metric_alert") {
@@ -457,8 +527,28 @@ function linearEvents(request: SourceRequest, payload: JsonValue | undefined): N
   const action = str(get(payload, "action"));
   const data = get(payload, "data");
   const key = digest(request.rawBody);
+  const updatedFrom = get(payload, "updatedFrom");
+  const changed = (field: string) => updatedFrom !== null && typeof updatedFrom === "object" && Object.hasOwn(updatedFrom, field);
+  const sender = str(get(payload, "actor", "name")) ?? str(get(payload, "actor", "email"));
+  if (type === "Cycle") {
+    // A cycle completes when its completedAt goes from empty to set.
+    if (action !== "update" || !changed("completedAt") || !str(get(data, "completedAt"))) {
+      return { ignored: `Linear Cycle “${action ?? "none"}” is not a completed cycle` };
+    }
+    const number = str(get(data, "number"));
+    return {
+      events: [{
+        event: event("linear", "cycle.completed", str(get(data, "name")) ?? (number ? `Cycle ${number}` : "Linear cycle"), {
+          team: str(get(data, "team", "key")), sender,
+        }, { url: str(get(payload, "url"), 500), text: str(get(data, "description"), MAX_TEXT), occurredAt: str(get(data, "completedAt")) }),
+        dedupeKey: `linear:${key}`,
+      }],
+    };
+  }
   const kind = type === "Issue"
-    ? action === "create" ? "issue.created" : action === "update" ? "issue.updated" : action === "remove" ? "issue.removed" : undefined
+    ? action === "create" ? "issue.created"
+      : action === "update" ? changed("stateId") ? "issue.status_changed" : "issue.updated"
+        : action === "remove" ? "issue.removed" : undefined
     : type === "Comment" && action === "create" ? "comment.created" : undefined;
   if (!kind) return { ignored: `Linear ${type ?? "event"} “${action ?? "none"}” is not handled` };
   const issue = type === "Comment" ? get(data, "issue") : data;
@@ -468,7 +558,9 @@ function linearEvents(request: SourceRequest, payload: JsonValue | undefined): N
         team: str(get(issue, "team", "key")) ?? str(get(data, "team", "key")),
         project: str(get(issue, "project", "name")),
         label: names(get(issue, "labels"), "name"),
-        sender: str(get(payload, "actor", "name")) ?? str(get(payload, "actor", "email")),
+        status: str(get(issue, "state", "name")),
+        assignee: identities(get(issue, "assignee"), "name", "displayName", "email", "id"),
+        sender,
       }, { url: str(get(payload, "url"), 500), text: str(get(data, "body"), MAX_TEXT) ?? str(get(data, "description"), MAX_TEXT), occurredAt: str(get(payload, "createdAt")) }),
       dedupeKey: `linear:${key}`,
     }],
@@ -488,6 +580,7 @@ export function normalizeSource(type: TriggerSourceType, request: SourceRequest)
     case "sentry": return sentryEvents(request, payload);
     case "pagerduty": return pagerdutyEvents(request, payload);
     case "linear": return linearEvents(request, payload);
+    case "botmail": return { ignored: "Bot email arrives only through the Perspicax relay" };
   }
 }
 
@@ -506,10 +599,14 @@ export type FilterResult =
  * sent nothing for is deferred when the source says so (Graph basic
  * notifications), else it is a miss: a filter never passes by absence. */
 export function matchSourceFilters(config: TriggerSourceConfig, normalized: NormalizedTriggerEvent): FilterResult {
-  if (config.events.length && !config.events.includes(normalized.kind)) {
+  if (!triggerEventSelected(config.type, config.events, normalized.kind, config.catalog)) {
     return { match: false, reason: `Event “${normalized.kind}” is not selected` };
   }
+  if (normalized.fromBot && !config.includeBotComments) {
+    return { match: false, reason: "Comment posted by a GitHub app or bot: this trigger leaves those out" };
+  }
   const deferrable = new Set(TRIGGER_SOURCES[config.type].deferredFilters ?? []);
+  const contains = new Set(TRIGGER_SOURCES[config.type].containsFilters ?? []);
   const deferred: Array<{ key: TriggerFilterKey; values: string[] }> = [];
   for (const [rawKey, rawValues] of Object.entries(config.filters)) {
     const key = rawKey as TriggerFilterKey;
@@ -533,7 +630,10 @@ export function matchSourceFilters(config: TriggerSourceConfig, normalized: Norm
       return { match: false, reason: `Filter “${key}” has nothing to match in this event` };
     }
     const candidates = Array.isArray(field) ? field : [field];
-    if (!values.some((pattern) => candidates.some((candidate) => globMatches(pattern, candidate)))) {
+    const matches = contains.has(key)
+      ? (pattern: string, candidate: string) => candidate.toLowerCase().includes(pattern.toLowerCase())
+      : globMatches;
+    if (!values.some((pattern) => candidates.some((candidate) => matches(pattern, candidate)))) {
       return { match: false, reason: `Filter “${key}” did not match` };
     }
   }
@@ -548,6 +648,8 @@ const SAMPLE_FIELDS: Partial<Record<TriggerFilterKey, string>> = {
   label: "bug",
   sender: "octocat",
   reviewer: "octocat",
+  assignee: "octocat",
+  status: "In Progress",
   channel: "C0123456789",
   reaction: "eyes",
   team: "ENG",
@@ -570,7 +672,7 @@ export function sampleSourceEvent(config: TriggerSourceConfig): NormalizedTrigge
   const fields: NormalizedTriggerEvent["fields"] = {};
   for (const key of definition.filters) {
     if (key === "keyword") continue;
-    const value = pick(key) ?? SAMPLE_FIELDS[key];
+    const value = pick(key) ?? (config.type === "botmail" && key === "sender" ? "someone@example.com" : SAMPLE_FIELDS[key]);
     if (value) fields[key as Exclude<TriggerFilterKey, "keyword">] = value;
   }
   const keyword = pick("keyword");

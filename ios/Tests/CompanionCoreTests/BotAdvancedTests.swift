@@ -171,6 +171,15 @@ final class BotAdvancedTests: XCTestCase {
         }
     }
 
+    func testCaptureReportCarriesTheAlreadyKnownCount() throws {
+        // parity M3: "3 added, 2 already known"; an older report has no count
+        let receipt = try JSONDecoder().decode(CaptureReport.self, from: Data(#"{"at": 1, "added": 2, "topics": 1, "known": 2}"#.utf8))
+        XCTAssertEqual(receipt.noticed, 3)
+        XCTAssertEqual(receipt.known, 2)
+        let older = try JSONDecoder().decode(CaptureReport.self, from: Data(#"{"at": 1, "added": 0}"#.utf8))
+        XCTAssertNil(older.known)
+    }
+
     func testMemoryFileRequestsCarryThePathInTheQuery() throws {
         let request = try client.memoryFileRequest("DELETE", botId: "b1", path: "memory/clients.md")
         XCTAssertEqual(request.httpMethod, "DELETE")

@@ -173,7 +173,6 @@ enum IPadParityScreen: String, CaseIterable {
     case teamMap = "team-map"
     case templates = "templates"
     case newBot = "new-bot"
-    case pluginsApps = "plugins-apps"
     case pluginsMcp = "plugins-mcp"
     case keyboardShortcuts = "keyboard-shortcuts"
     case noticeThreadGone = "notice-thread-gone"

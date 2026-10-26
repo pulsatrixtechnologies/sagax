@@ -15,9 +15,11 @@
 import { useEffect, useState } from "react";
 import { emailGateDone } from "@/lib/analytics";
 import { launchBridges, launchDue, serverModeBridge } from "@/lib/launch";
-import { hostedMember, LOCAL_VIEWER, welcomeDue, welcomeViewer, type BeatId, type WelcomeViewer } from "@/lib/onboarding";
+import { hostedMember, LOCAL_VIEWER, welcomeDue, welcomeViewer, type WelcomeViewer } from "@/lib/onboarding";
+import type { FirstRunStep } from "@/lib/first-run";
 import { api, useStore } from "@/state/store";
 import { OrgEngineSetupGate } from "@/components/OrgEngineSetup";
+import { GuidedFirstRun } from "./GuidedFirstRun";
 import { LaunchScreen } from "./LaunchScreen";
 import { SharedWorkspaceHint } from "./SharedWorkspaceHint";
 import { WelcomeFlow } from "./WelcomeFlow";
@@ -62,7 +64,7 @@ export function WelcomeGate({ viewer }: { viewer: WelcomeViewer | null }) {
   // Set when the engines beat's server row opened the launch screen, so
   // choosing no server there brings the person back to that beat rather
   // than the greeting.
-  const [resumeAt, setResumeAt] = useState<BeatId | undefined>(undefined);
+  const [resumeAt, setResumeAt] = useState<FirstRunStep | undefined>(undefined);
   // Set once "No server" was chosen this visit, so the tour never
   // waits on that choice being saved.
   const [launchChosen, setLaunchChosen] = useState(false);
@@ -136,26 +138,43 @@ export function WelcomeGate({ viewer }: { viewer: WelcomeViewer | null }) {
   // gets the step to connect their own (OrgEngineSetup.tsx): a member, who
   // never gets the welcome flow, and an admin once it is done.
   if (!state.welcomeOpen && !due) return <OrgEngineSetupGate />;
-  const bot = state.bots.find((b) => !b.hidden) ?? null;
   const replay = state.welcomeOpen && !due;
+  const dismiss = () => {
+    setDismissed(true);
+    setResumeAt(undefined);
+    dispatch({ type: "toggleWelcome", open: false });
+  };
+  // A hosted team workspace keeps the managed welcome flow: its organization
+  // assigns the models, so the connect-an-engine / create-a-bot guide does not
+  // apply, and the hosted greeting (read-only name and email) still stands.
+  if (viewer.hosted) {
+    const bot = state.bots.find((b) => !b.hidden) ?? null;
+    return (
+      <WelcomeFlow
+        bot={bot}
+        replay={replay}
+        hosted
+        profileManaged={viewer.profileManaged}
+        onDone={() => {
+          dismiss();
+          // the first real finish hands over to the guided tour; a replay does not
+          if (!replay) dispatch({ type: "toggleTour", open: true });
+        }}
+      />
+    );
+  }
+  // Everyone else gets the guided first run: connect an engine, create the
+  // first bot, send the first message. One dedicated, dismissible guide over
+  // the existing screens, never a widget inside the conversation.
   return (
-    <WelcomeFlow
-      bot={bot}
+    <GuidedFirstRun
       replay={replay}
-      hosted={viewer.hosted}
-      profileManaged={viewer.profileManaged}
-      initialBeat={resumeAt}
+      initialStep={resumeAt}
       onOpenServer={() => {
-        setResumeAt("engines");
+        setResumeAt("engine");
         dispatch({ type: "toggleLaunch", open: true, mode: "server" });
       }}
-      onDone={() => {
-        setDismissed(true);
-        setResumeAt(undefined);
-        dispatch({ type: "toggleWelcome", open: false });
-        // the first real finish hands over to the guided tour; a replay does not
-        if (!replay) dispatch({ type: "toggleTour", open: true });
-      }}
+      onDone={dismiss}
     />
   );
 }

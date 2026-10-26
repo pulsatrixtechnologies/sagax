@@ -35,6 +35,11 @@ export interface TerminalRequestServiceDeps {
   /** Whose conversation this is when the task names nobody (a solo server's
    * operator): the bot's owner. */
   owner?(botId: string, threadId: string): string;
+  /** 2026-10-19 (JC: "Toujours permettre" on every card): the Always allow
+   * this person kept for this bot and this destination, or null. */
+  keptRule?(principalId: string, botId: string, candidate: { tool: string; scope: Record<string, string> }, threadId: string): { id: string } | null;
+  /** One journal row for an offer a kept rule opened. */
+  journalRule?(input: { threadId: string; botId: string; requestId: string; summary: string; rule: string }): void;
 }
 
 /** The card's choice when the bot names none: where the bot works, else the
@@ -46,7 +51,9 @@ export function defaultTerminalDestination(resources: readonly TerminalResource[
     const here = personal(workPlace);
     if (here) return here;
   }
-  return personal("sandbox") ?? personal("local-vm") ?? personal("desktop") ?? resources[0]!;
+  // A Tailcat session is opened by the remote-session offer, never as the
+  // workplace fallback. It must not steal the card when it happens to be first.
+  return personal("sandbox") ?? personal("local-vm") ?? personal("desktop") ?? resources.find((row) => row.provider !== "tailcat") ?? null;
 }
 
 function choiceOf(resource: TerminalResource): TerminalDestinationChoice {
@@ -71,13 +78,20 @@ function listContext(principalId: string, botId: string, threadId: string, acces
 export function createTerminalRequestService(deps: TerminalRequestServiceDeps) {
   const ownerOf = (botId: string, threadId: string) =>
     (deps.store.taskByThread(botId, threadId)?.ownerPrincipalId || deps.owner?.(botId, threadId) || "").trim().toLowerCase();
+  /** What this person may open here: deps.access, plus whether this
+   * conversation is their own (2026-10-19: their own environments open from
+   * any conversation of theirs, whoever owns the bot). */
+  const accessFor = (principalId: string, botId: string, threadId: string): TerminalAccess => {
+    const person = principalId.trim().toLowerCase();
+    return { ...deps.access(person, botId), ownsConversation: Boolean(person) && ownerOf(botId, threadId) === person };
+  };
 
   /** What this person may open for this bot in this conversation: the list
    * behind list_terminal_resources and the card's menu. */
   async function destinations(args: { botId: string; threadId: string; principalId?: string }) {
     const principalId = args.principalId?.trim().toLowerCase() || ownerOf(args.botId, args.threadId);
     if (!principalId) return { principalId: "", resources: [] as TerminalResource[], defaultResource: null };
-    const ctx = listContext(principalId, args.botId, args.threadId, deps.access(principalId, args.botId));
+    const ctx = listContext(principalId, args.botId, args.threadId, accessFor(principalId, args.botId, args.threadId));
     const resources = await deps.registry.listAll(ctx);
     const workPlace = deps.workPlace?.(args.botId, args.threadId, principalId) ?? null;
     return { principalId, resources, defaultResource: defaultTerminalDestination(resources, workPlace) };
@@ -122,6 +136,8 @@ export function createTerminalRequestService(deps: TerminalRequestServiceDeps) {
         destinations: [choiceOf(resource), ...others.map(choiceOf)],
       };
       const bot = deps.store.bot(args.botId);
+      // what Always allow keeps: this bot, this destination
+      const rule = { tool: "sagax:terminal", scope: { destination: terminalResourceKey(resource.provider, resource.id) }, description: `Open a terminal on ${resource.hostLabel}` };
       const message = deps.store.appendMessage(args.threadId, {
         role: "bot",
         kind: "options",
@@ -133,6 +149,7 @@ export function createTerminalRequestService(deps: TerminalRequestServiceDeps) {
           requestId,
           tool: "shell_terminal",
           terminalRequest: payload,
+          ownerRule: rule,
         },
       });
       deps.audit.write({
@@ -145,6 +162,14 @@ export function createTerminalRequestService(deps: TerminalRequestServiceDeps) {
         provider: resource.provider,
         requestId,
       });
+      const kept = deps.keptRule?.(principalId, args.botId, rule, args.threadId) ?? null;
+      if (kept) {
+        // the person's kept rule answers as them, with their own rights
+        const opened = await this.resolve({ threadId: args.threadId, requestId, behavior: "allow", principalId });
+        if (opened.claimed && "outcome" in opened && opened.outcome === "allowed-once") {
+          deps.journalRule?.({ threadId: args.threadId, botId: args.botId, requestId, summary: payload.reason, rule: kept.id });
+        }
+      }
       return { requestId, messageId: message.id, resource };
     },
 
@@ -182,7 +207,7 @@ export function createTerminalRequestService(deps: TerminalRequestServiceDeps) {
         return { claimed: true, outcome: "rejected" };
       }
       const principalId = args.principalId.trim().toLowerCase();
-      const access = deps.access(principalId, request.botId);
+      const access = accessFor(principalId, request.botId, request.threadId);
       const wanted = args.pick ?? { provider: request.provider, resourceId: request.resourceId };
       const from = terminalResourceKey(request.provider, request.resourceId);
       const to = terminalResourceKey(wanted.provider, wanted.resourceId);
@@ -195,7 +220,7 @@ export function createTerminalRequestService(deps: TerminalRequestServiceDeps) {
       if (!resource) {
         // The card stays open: the person can pick a destination they may open.
         deps.audit.write({ at: deps.now(), kind: "session.refused", principalId, requestId: args.requestId, resourceId: to, provider: wanted.provider, reason: "not_allowed" });
-        return { claimed: true, status: 403, error: "You are not allowed to open a terminal on this destination, or it is no longer available." };
+        return { claimed: true, status: 403, error: "You are not allowed to open a terminal on this destination, or it is no longer available. Your own cloud computer, Local VM and computer are always yours; a host of the organization's server needs \"Run commands on the organization's server\", which an organization admin gives in Perspicax (Bot rights > Who has what)." };
       }
       if (to !== from) deps.audit.write({ at: deps.now(), kind: "session.destination", principalId, requestId: args.requestId, from, to });
       try {

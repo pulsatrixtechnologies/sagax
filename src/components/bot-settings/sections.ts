@@ -57,7 +57,7 @@ export const BOT_SECTIONS: Array<{
   { id: "memory", label: "Memory", labelKey: "botSettings.nav.memory", icon: Brain, keywords: ["memory", "notes", "remember", "topics"] },
   { id: "files", label: "Bot folder", labelKey: "botSettings.nav.files", icon: FolderTree, keywords: ["files", "workspace", "docs", "documents", "markdown", "folder", "upload", "procedures", "templates"] },
   { id: "routines", label: "Routines", labelKey: "botSettings.nav.routines", icon: CalendarClock, keywords: ["schedule", "routines", "cron", "tasks"] },
-  { id: "access", label: "Access", labelKey: "botSettings.nav.access", icon: Network, keywords: ["computer", "vm", "cloud", "vps", "folder", "workspace", "browser", "connected apps", "composio", "webhooks", "always allow", "grants", "tool selection", "tools", "mcp", "allow", "exclude"] },
+  { id: "access", label: "Access", labelKey: "botSettings.nav.access", icon: Network, keywords: ["computer", "vm", "cloud", "vps", "folder", "workspace", "browser", "webhooks", "always allow", "grants", "tool selection", "tools", "mcp", "allow", "exclude"] },
   { id: "worksOn", label: "Workspace", labelKey: "computer.worksOn", icon: Monitor, keywords: ["workspace", "zone de travail", "works on", "computer", "auto", "cloud", "local vm", "vm", "this computer", "browser", "off", "where it works"] },
   { id: "model", label: "Model", labelKey: "botSettings.nav.model", icon: Cpu, keywords: ["engine", "model", "provider", "cli", "effort"] },
   { id: "permissions", label: "Permissions", labelKey: "botSettings.nav.permissions", icon: ShieldCheck, keywords: ["auto mode", "approve", "auto approve", "review", "routine approvals", "peers", "contact", "coordination", "chief of staff", "section"] },

@@ -182,6 +182,17 @@ describe("the words", () => {
     expect(progressLocale({ callLanguage: "auto", lastUserText: "can you check the ticket", pageLocale: "fr", looksFrench })).toBe("en");
     expect(progressLocale({ lastUserText: "kannst du das prüfen", pageLocale: "de", looksFrench })).toBe("de");
   });
+
+  it("on auto, a locale the call already settled on is kept, so the spoken lines do not flip French and English", () => {
+    // the person first spoke French: the call's lines settle on French, and a
+    // later English-looking turn (or a short ambiguous one) does not flip them
+    expect(progressLocale({ callLanguage: "auto", lastUserText: "can you check the ticket", pageLocale: "en", looksFrench, sticky: "fr" })).toBe("fr");
+    expect(progressLocale({ callLanguage: "auto", lastUserText: "ok", pageLocale: "en", looksFrench, sticky: "fr" })).toBe("fr");
+    // the other way: settled on English, a French turn does not flip it
+    expect(progressLocale({ callLanguage: "auto", lastUserText: "peux-tu vérifier le billet", pageLocale: "fr", looksFrench, sticky: "en" })).toBe("en");
+    // a language picked in the panel still wins over a sticky guess
+    expect(progressLocale({ callLanguage: "fr", lastUserText: "can you check the ticket", pageLocale: "en", looksFrench, sticky: "en" })).toBe("fr");
+  });
 });
 
 describe("turnTools", () => {

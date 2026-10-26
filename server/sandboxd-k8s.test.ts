@@ -9,7 +9,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 
 import { createSandboxAudit } from "./sandbox-audit.ts";
-import { SandboxService } from "./sandboxd-core.ts";
+import { SANDBOX_STARTING_CODE } from "./sandbox-k8s-wake.ts";
+import { SandboxError, SandboxService } from "./sandboxd-core.ts";
 import { createSandboxdHandler } from "./sandboxd.ts";
 import { SandboxdVerifier } from "./sandboxd-auth.ts";
 import { kubeconfigFileFromEnv, kubernetesClient, type K8sClient, type K8sResponse } from "./sandboxd-k8s-client.ts";
@@ -505,5 +506,36 @@ describe.runIf(spawnSync("python3", ["-c", "pass"]).status === 0)("environment t
     const ordinary = await callUserSandboxTool("write_file", { path: join(dir, "docs", "readme.md"), content: "# hi" }, exec);
     expect(ordinary.isError, message(ordinary)).toBeFalsy();
     expect(readFileSync(join(dir, "real-docs", "readme.md"), "utf8")).toBe("# hi");
+  });
+});
+
+describe("a pod that does not run in time (2026-10-19, cold node pool)", () => {
+  it("answers 503 starting, so the caller may send the call again: nothing ran", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-k8s-"));
+    const auditFile = join(dir, "audit.jsonl");
+    const processEnv = {
+      SAGAX_SANDBOX_IMAGE: IMAGE, SAGAX_SANDBOX_K8S_STORAGE_CLASS: "encrypted", SAGAX_SANDBOX_K8S_REGISTRY: REGISTRY,
+      SAGAX_SANDBOXD_TLS_INSECURE: "1", SAGAX_SANDBOX_K8S_SECRETS_ENCRYPTED: "true", SAGAX_SANDBOX_K8S_NETWORK_POLICY: "enforced",
+      SAGAX_SANDBOX_AUDIT_LOG: auditFile,
+    };
+    const sandbox = sandboxdConfigFromEnv(processEnv);
+    const { k8s } = kubernetesSandboxConfigFromEnv(processEnv, sandbox);
+    const cluster = memoryCluster();
+    const pending: K8sClient = {
+      ...cluster.client,
+      async request(method, path, body) {
+        const answer = await cluster.client.request(method, path, body);
+        const obj = answer.body as Obj;
+        if (obj?.kind === "Pod") obj.status = { phase: "Pending" };
+        return answer;
+      },
+    };
+    let clock = 0;
+    const api = kubernetesApi(sandbox, k8s, pending, createSandboxAudit({ file: auditFile }), { now: () => clock, sleep: async (ms) => { clock += ms; } });
+    const service = new SandboxService(api, sandbox, () => clock);
+    await service.installEgressPolicy();
+    const refusal = await service.ensure(person).catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(SandboxError);
+    expect(refusal).toMatchObject({ status: 503, code: SANDBOX_STARTING_CODE });
   });
 });

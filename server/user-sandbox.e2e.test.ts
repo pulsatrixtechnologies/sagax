@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { claudeLaunchLevel } from "./testing/claude-level.ts";
 
 import { SandboxdVerifier } from "./sandboxd-auth.ts";
 import { SandboxService } from "./sandboxd-core.ts";
@@ -442,7 +443,7 @@ posixOnly("organization server environments (user-sandbox)", () => {
     const level = (mode: string) => api("PATCH", `/api/bots/${fern.id}/tasks/${fern.threadId}`, bob, { approvalMode: mode });
     const permissionMode = () => {
       const argv = (JSON.parse(readFileSync(engineDump, "utf8")) as { argv: string[] }).argv;
-      return argv[argv.indexOf("--permission-mode") + 1];
+      return claudeLaunchLevel(argv);
     };
     const runs = async (text: string) => {
       rmSync(engineDump, { force: true });

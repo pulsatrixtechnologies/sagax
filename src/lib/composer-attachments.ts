@@ -129,7 +129,7 @@ export function fileAttachment(name: string, path: string, size: number, archive
 
 /** Matches the server's IMAGE_MAX_BYTES — checked client-side so an
  * oversized paste is refused before the upload starts, not mid-stream. */
-export const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+export const IMAGE_MAX_BYTES = 32 * 1024 * 1024;
 export const FILE_MAX_BYTES = 25 * 1024 * 1024;
 /** Matches the server's ARCHIVE_MAX_BYTES. */
 export const ARCHIVE_MAX_BYTES = 90 * 1024 * 1024;
@@ -358,7 +358,7 @@ function canonicalImageName(originalName: string, path: string, mime: string): s
  * with the path; the prompt references that path so every CLI can open it. */
 export function optimisticImageAttachment(file: File): ImageAttachment | null {
   if (!isImageFile(file)) return null;
-  if (file.size > IMAGE_MAX_BYTES) throw Object.assign(new Error(`${file.name} exceeds 10 MB`), { status: 413 });
+  if (file.size > IMAGE_MAX_BYTES) throw Object.assign(new Error(`${file.name} exceeds ${IMAGE_MAX_BYTES / (1024 * 1024)} MB`), { status: 413 });
   const mime = file.type.split(";", 1)[0]!.trim().toLowerCase();
   const previewUrl = typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : undefined;
   return {
@@ -378,7 +378,7 @@ export async function imageAttachmentFromFile(
   optimistic?: Pick<ImageAttachment, "id" | "previewUrl">,
 ): Promise<ImageAttachment | null> {
   if (!isImageFile(file)) return null;
-  if (file.size > IMAGE_MAX_BYTES) throw Object.assign(new Error(`${file.name} exceeds 10 MB`), { status: 413 });
+  if (file.size > IMAGE_MAX_BYTES) throw Object.assign(new Error(`${file.name} exceeds ${IMAGE_MAX_BYTES / (1024 * 1024)} MB`), { status: 413 });
   const bytes = new Uint8Array(await file.arrayBuffer());
   const uploadId = newUploadId();
   const saved = await uploadWithRetry<{ path: string; mime: string; bytes: number }>(

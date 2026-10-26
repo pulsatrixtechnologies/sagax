@@ -32,12 +32,22 @@ final class SecurityKeyStepUp: NSObject, ASWebAuthenticationPresentationContextP
         }
     }
 
+    /// The ceremony page itself (adding a key). Same sheet as a step-up.
+    func open(page: URL, ceremonyId: String) async throws -> Bool {
+        try await run(page, ceremonyId: ceremonyId)
+    }
+
     /// Start a step-up for `refusal.target`, run its page, and return the
     /// ceremony id to send as `stepUp`.
     func confirm(_ refusal: StepUpRequired, with client: CompanionClient) async throws -> String {
         let start = try await client.beginStepUp(target: refusal.target)
         guard let url = client.stepUpPageURL(start) else { throw Failure.unavailable }
-        let ok: Bool = try await withCheckedThrowingContinuation { continuation in
+        guard try await run(url, ceremonyId: start.ceremonyId) else { throw Failure.failed }
+        return start.ceremonyId
+    }
+
+    private func run(_ url: URL, ceremonyId: String) async throws -> Bool {
+        try await withCheckedThrowingContinuation { continuation in
             let sheet = ASWebAuthenticationSession(url: url, callbackURLScheme: "sagax") { [weak self] callback, error in
                 Task { @MainActor in
                     self?.session = nil
@@ -45,7 +55,7 @@ final class SecurityKeyStepUp: NSObject, ASWebAuthenticationPresentationContextP
                         continuation.resume(throwing: Failure.cancelled)
                         return
                     }
-                    continuation.resume(returning: CompanionClient.stepUpSucceeded(callback, ceremonyId: start.ceremonyId))
+                    continuation.resume(returning: CompanionClient.stepUpSucceeded(callback, ceremonyId: ceremonyId))
                 }
             }
             // Safari's own passkeys and keys: not an ephemeral session.
@@ -57,8 +67,6 @@ final class SecurityKeyStepUp: NSObject, ASWebAuthenticationPresentationContextP
                 continuation.resume(throwing: Failure.failed)
             }
         }
-        guard ok else { throw Failure.failed }
-        return start.ceremonyId
     }
 
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {

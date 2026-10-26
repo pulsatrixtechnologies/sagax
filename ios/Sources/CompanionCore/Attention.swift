@@ -14,12 +14,15 @@ public struct AttentionSettings: Hashable, Sendable {
     public var nudgeSound: Bool
     /// The haptic on a nudge (the desktop's window shake).
     public var nudgeHaptic: Bool
+    /// A distinct sound when an approval banner arrives. On by default.
+    public var approvalChime: Bool
 
-    public init(sound: Bool = true, badge: Bool = true, nudgeSound: Bool = true, nudgeHaptic: Bool = true) {
+    public init(sound: Bool = true, badge: Bool = true, nudgeSound: Bool = true, nudgeHaptic: Bool = true, approvalChime: Bool = true) {
         self.sound = sound
         self.badge = badge
         self.nudgeSound = nudgeSound
         self.nudgeHaptic = nudgeHaptic
+        self.approvalChime = approvalChime
     }
 
     /// All on by default, as on the desktop.

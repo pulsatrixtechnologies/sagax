@@ -32,6 +32,9 @@ export interface FailedComposerSend {
   threadId: string;
   /** Channel delivery mode; absent for 1:1 messages and legacy retries. */
   channelMode?: "chat" | "goal";
+  /** The network was down when this send failed: it is queued, labelled, and
+   * goes out by itself when the connection returns. */
+  offline?: boolean;
 }
 type FailedComposerSendInput = Omit<FailedComposerSend, "id">;
 export interface ComposerSendSnapshot extends FailedComposerSendInput {
@@ -468,15 +471,44 @@ export function rememberFailedComposerSend(
   id: string,
   input: FailedComposerSendInput,
 ): FailedComposerSend {
-  const failed = { ...input, id: `${Date.now().toString(36)}-${++failedSendSequence}` };
+  const failed = {
+    ...input,
+    offline: input.offline ?? (isNetworkOffline() || undefined),
+    id: `${Date.now().toString(36)}-${++failedSendSequence}`,
+  };
   failedSends.set(id, [...failedComposerSends(id), failed]);
   publishFailedSends(id);
   return failed;
 }
 
-/** Recovers a rejected POST without ever replacing a newer draft. */
+/** True when the browser knows it has no network. Unknown reads as online. */
+export function isNetworkOffline(): boolean {
+  try {
+    return (globalThis as { navigator?: { onLine?: boolean } }).navigator?.onLine === false;
+  } catch {
+    return false;
+  }
+}
+
+/** Live network state for labels and banners. */
+export function useNetworkOnline(): boolean {
+  const subscribe = useCallback((listener: () => void) => {
+    const target = globalThis as unknown as Partial<Pick<EventTarget, "addEventListener" | "removeEventListener">>;
+    target.addEventListener?.("online", listener);
+    target.addEventListener?.("offline", listener);
+    return () => {
+      target.removeEventListener?.("online", listener);
+      target.removeEventListener?.("offline", listener);
+    };
+  }, []);
+  return useSyncExternalStore(subscribe, () => !isNetworkOffline(), () => true);
+}
+
+/** Recovers a rejected POST without ever replacing a newer draft. A send
+ * that failed with no network is always queued (never put back in the box),
+ * so it can be labelled and sent when the connection returns. */
 export function recoverFailedComposerSend(sent: ComposerSendSnapshot): "restored" | "outbox" {
-  if (draftRevision(sent.draftId) !== sent.revision) {
+  if ((isNetworkOffline() && sent.attachments.length === 0) || draftRevision(sent.draftId) !== sent.revision) {
     rememberFailedComposerSend(sent.draftId, {
       sendId: sent.sendId,
       text: sent.text,

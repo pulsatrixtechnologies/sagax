@@ -35,6 +35,14 @@ describe("routine list", () => {
     expect(markup).not.toContain("Scheduled occurrences skipped while busy");
   });
 
+  it("names the automatic second start in a run's label", () => {
+    expect(logs({ runs: [{ ...run, retried: "stalled" }] })).toContain("Retried after the engine stalled · Completed");
+    expect(logs({ runs: [{ ...run, status: "failed", retried: "restarted", error: "Sagax restarted while this routine was running" }] }))
+      .toContain("Retried after Sagax restarted · Failed");
+    expect(logs({ runs: [{ ...run, status: "queued", retried: "usage_limit", attention: "Waiting for the engine's usage limit to reset" }] }))
+      .toContain(">Queued<");
+  });
+
   it("retains visible records during a failed refresh", () => {
     const markup = list({ error: true });
     expect(markup).toContain('role="alert"');

@@ -23,7 +23,11 @@ The desktop application ships two separate components:
   notices remain unchanged. `scripts/build-windows-browser-vendor.mjs` pins
   the source archive, patch, Rust 1.97.1, pnpm 11.1.3 and Windows GNU target,
   builds the real upstream dashboard, and emits executable and build-input
-  digests in `provenance.json`. Native Windows cold-start and close/reopen
+  digests in `provenance.json`. The candidate revision `0.36.0-omb.2` adds
+  `CREATE_NO_WINDOW` on the Chrome children (port of OpenMausBot #2891; a
+  detached daemon's flags never reach them), with a Windows-only test that
+  checks `GetConsoleWindow() == 0`; the app still resolves `0.36.0-omb.1`
+  until that build is published and its digest pinned. Native Windows cold-start and close/reopen
   checks are required before those executable bytes are published and pinned.
   Upstream 0.38.2 does not include that fix (PR1781 is still open); keep this tested Windows build
   until an updated official or backported release passes those native checks.

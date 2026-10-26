@@ -15,6 +15,8 @@
 import { lstatSync, readFileSync, readdirSync, realpathSync, statSync, type Stats } from "node:fs";
 import { dirname, join, sep } from "node:path";
 
+import { READABLE_HIDDEN_SEGMENTS } from "../shared/readable-hidden.ts";
+
 import { RULE_SETS_DIR, RULES_FILE, RULES_MAX_BYTES, RULES_MAX_LINES, effectiveRulesText, listRuleSets } from "./rule-sets.ts";
 import {
   DOCS_DIR,
@@ -130,10 +132,13 @@ export class WorkspacePathError extends Error {
   }
 }
 
+export { READABLE_HIDDEN_SEGMENTS };
+
 /** A workspace-relative path as the tools and the Files list spell it:
  * forward slashes, no empty, "." or ".." segment, no hidden segment, no
- * absolute or drive prefix, no backslash or NUL. Returns it normalised. */
-export function normaliseWorkspacePath(input: unknown): string {
+ * absolute or drive prefix, no backslash or NUL. Returns it normalised.
+ * `readHidden`: the READABLE_HIDDEN_SEGMENTS folders pass (reads only). */
+export function normaliseWorkspacePath(input: unknown, opts: { readHidden?: boolean } = {}): string {
   if (typeof input !== "string") throw new WorkspacePathError("path must be a string");
   const path = input.trim().replace(/^\.\/+/, "");
   if (!path || path.length > 512) throw new WorkspacePathError("path is empty or too long");
@@ -141,7 +146,7 @@ export function normaliseWorkspacePath(input: unknown): string {
     throw new WorkspacePathError(`path must be relative to the workspace: ${JSON.stringify(input)}`);
   }
   const parts = path.split("/");
-  if (parts.some((part) => !part || part === "." || part === ".." || part.startsWith("."))) {
+  if (parts.some((part) => !part || part === "." || part === ".." || (part.startsWith(".") && !(opts.readHidden && READABLE_HIDDEN_SEGMENTS.has(part))))) {
     throw new WorkspacePathError(`path leaves the workspace or names a hidden file: ${JSON.stringify(input)}`);
   }
   return parts.join("/");
@@ -151,9 +156,11 @@ export function normaliseWorkspacePath(input: unknown): string {
  * proving it stays there: the grammar refuses traversal, and realpath on
  * the parent refuses a link out of the workspace (a bot can make one with
  * its file tools). The file itself must be a regular file, not a link. */
-export function resolveWorkspaceFile(botId: string, input: unknown): { path: string; absolute: string; stat: Stats } {
-  const path = normaliseWorkspacePath(input);
-  const root = workspaceDir(botId);
+export function resolveWorkspaceFile(botId: string, input: unknown, opts: { readHidden?: boolean; root?: string; prefix?: string } = {}): { path: string; absolute: string; stat: Stats } {
+  const shown = normaliseWorkspacePath(input, opts);
+  const path = opts.prefix && shown.startsWith(opts.prefix) ? shown.slice(opts.prefix.length) : shown;
+  if (!path) throw new WorkspacePathError("path is empty or too long");
+  const root = opts.root ?? workspaceDir(botId);
   const absolute = join(root, ...path.split("/"));
   let realRoot: string;
   let realParent: string;
@@ -172,15 +179,35 @@ export function resolveWorkspaceFile(botId: string, input: unknown): { path: str
   } catch {
     throw new WorkspacePathError(`no such file: ${path}`, 404);
   }
-  if (stat.isSymbolicLink()) throw new WorkspacePathError(`${path} is a link, not a file`);
-  if (!stat.isFile()) throw new WorkspacePathError(`${path} is not a file`);
-  return { path, absolute, stat };
+  if (stat.isSymbolicLink()) throw new WorkspacePathError(`${shown} is a link, not a file`);
+  if (!stat.isFile()) throw new WorkspacePathError(`${shown} is not a file`);
+  return { path: shown, absolute, stat };
+}
+
+/** An installed plugin of the bot, readable as `plugins/<name>/...`. */
+export interface ReadablePlugin { name: string; dir: string }
+
+/** The file a bot's own read names: its workspace first (hidden revision
+ * and manifest folders included), else `plugins/<name>/<file>` inside one of
+ * its installed plugins, with the same proofs (no traversal, no link out,
+ * a regular file). */
+export function resolveOwnReadable(botId: string, input: unknown, plugins: readonly ReadablePlugin[] = []): { path: string; absolute: string; stat: Stats } {
+  try {
+    return resolveWorkspaceFile(botId, input, { readHidden: true });
+  } catch (error) {
+    if (!(error instanceof WorkspacePathError) || error.status !== 404) throw error;
+    const shown = normaliseWorkspacePath(input, { readHidden: true });
+    const match = /^plugins\/([^/]+)\/./.exec(shown);
+    const plugin = match ? plugins.find((candidate) => candidate.name === match[1]) : undefined;
+    if (!plugin) throw error;
+    return resolveWorkspaceFile(botId, shown, { readHidden: true, root: plugin.dir, prefix: `plugins/${plugin.name}/` });
+  }
 }
 
 /** A text file of the workspace for workspace_read: up to
  * WORKSPACE_READ_MAX_BYTES from `offset` (bytes), refusing binary files. */
-export function readWorkspaceText(botId: string, input: unknown, offset = 0): { path: string; text: string; bytes: number; offset: number; nextOffset: number | null } {
-  const file = resolveWorkspaceFile(botId, input);
+export function readWorkspaceText(botId: string, input: unknown, offset = 0, plugins: readonly ReadablePlugin[] = []): { path: string; text: string; bytes: number; offset: number; nextOffset: number | null } {
+  const file = resolveOwnReadable(botId, input, plugins);
   const buffer = readFileSync(file.absolute);
   if (buffer.subarray(0, 8192).includes(0)) throw new WorkspacePathError(`${file.path} is not a text file`);
   const start = Math.max(0, Math.min(Math.trunc(offset) || 0, buffer.length));

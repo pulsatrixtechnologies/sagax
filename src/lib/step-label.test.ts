@@ -19,6 +19,15 @@ describe("step labels in plain words", () => {
     expect(stepLabel({ name: "Read", ok: true })).toBe("Read a file");
   });
 
+  it("says a phone tool waits on the person's phone, and which tool (row 81)", () => {
+    const running = readStep({ name: "mcp__agents__phone_tool", ok: undefined, input: JSON.stringify({ tool: "location" }) });
+    expect(running).toEqual({ label: "Waiting for your phone. Approve it there", target: "Location" });
+    expect(readStep({ name: "mcp__agents__phone_tool", ok: true, input: JSON.stringify({ tool: "contacts", query: "Marie" }) }).label).toBe("Used a tool on your phone");
+    setLocale("fr");
+    expect(readStep({ name: "mcp__agents__phone_tool", ok: undefined, input: JSON.stringify({ tool: "reminders" }) })).toEqual({ label: "L'autorisation doit être donnée sur votre téléphone", target: "Rappels" });
+    expect(readStep({ name: "mcp__agents__phone_tool", ok: false, input: JSON.stringify({ tool: "teleport" }) })).toEqual({ label: "N'a pas pu utiliser un outil de votre téléphone" });
+  });
+
   it("speaks in the tense of the state: running, done, failed", () => {
     expect(stepPhase({ ok: undefined })).toBe("running");
     expect(stepPhase({ ok: true })).toBe("done");
@@ -143,6 +152,18 @@ describe("an MCP call names its server and tool", () => {
     expect(stepLabel(gateway({ server: "acme_crm" }, true))).toBe("Checked Acme Crm");
     expect(readStep(gateway({ search: "schedule today" }, true))).toEqual({ label: "Searched for MCP tools", target: "schedule today" });
     expect(stepLabel({ name: "mcp", ok: false })).toBe("Could not reach the MCP servers");
+  });
+
+  it("reads Grok's search_tool and use_tool rows as what they did, never 'Used use tool'", () => {
+    // rows stored before the driver named the tool (grok 1.0.62 titles them use_tool, search_tool)
+    const use = (ok?: boolean) => ({ name: "use_tool", ok, input: JSON.stringify({ tool_name: "perspicax__cw_psa__query", tool_input: { resource: "service.tickets" } }) });
+    expect(stepLabel(use(true))).toBe("Viewed tickets in ConnectWise PSA");
+    expect(stepLabel(use())).toBe("Viewing tickets in ConnectWise PSA");
+    expect(stepLabel({ name: "Use Tool", ok: true, input: JSON.stringify({ tool_name: "remote__status", tool_input: {} }) })).not.toMatch(/use tool/i);
+    expect(readStep({ name: "search_tool", ok: true, input: JSON.stringify({ query: "remote session health", limit: 20 }) })).toEqual({ label: "Looked for a tool", target: "remote session health" });
+    expect(stepLabel({ name: "Search Tool", ok: undefined })).toBe("Looking for a tool");
+    // a use_tool whose target is unreadable still reads as a tool, not "use tool"
+    expect(stepLabel({ name: "use_tool", ok: true })).toBe("Used a tool");
   });
 
   it("speaks French when the interface is in French", () => {

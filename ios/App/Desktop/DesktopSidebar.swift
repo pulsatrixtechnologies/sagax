@@ -3,9 +3,9 @@
 // (the 80 pt icon rail) and -06-main-threads: the 36 pt band, the brand row
 // (mark, "Sagax", the round Search and New buttons), the pinned tiles, the
 // collapsible sections and their rows, the places (Team map, Automations;
-// Connected apps and Templates once Experimental features turns them on),
-// the account row with its gamertag and menu, and the edge (I2b: the
-// sidebar as the desktop redrew it in October 2026).
+// Templates once Experimental features turns it on), the account row with its
+// gamertag and menu, and the edge (I2b: the sidebar as the desktop redrew it
+// in October 2026).
 //
 // Built from the phone's own state: `SidebarPrefsModel` (the person's
 // sections, folds, order, hidden entries and the thread switch, WP6), the
@@ -606,10 +606,9 @@ struct DesktopHiddenEntries: View {
 
 // MARK: - Footer
 
-/// The server's experimental switches the sidebar reads (Connected apps and
-/// Templates), from `GET /api/config`: read when the shell appears and again
-/// when a modal closes (Settings > Experimental features may have changed
-/// them).
+/// The server's experimental switches the sidebar reads (Templates), from
+/// `GET /api/config`: read when the shell appears and again when a modal
+/// closes (Settings > Experimental features may have changed them).
 @MainActor
 final class DesktopSidebarFlags: ObservableObject {
     static let shared = DesktopSidebarFlags()
@@ -631,15 +630,15 @@ final class DesktopSidebarFlags: ObservableObject {
         viewerId = PrimaryBotRules.viewerId(config: config)
     }
 
-    /// After Settings > Experimental PATCH, so Connected apps and Browse Bots
-    /// hide at once like the desktop store's `configStatus`.
+    /// After Settings > Experimental PATCH, so Browse Bots hides at once like
+    /// the desktop store's `configStatus`.
     func apply(_ features: ServerFeatures?) {
         self.features = features
     }
 
     func apply(_ config: DesktopSettingsConfig?) {
         guard let features = config?.features else { return }
-        self.features = ServerFeatures(browser: features.browser, connectedApps: features.connectedApps, templates: features.templates)
+        self.features = ServerFeatures(browser: features.browser, templates: features.templates)
     }
 }
 
@@ -707,8 +706,6 @@ struct DesktopSidebarFooter: View {
             DesktopPlaceRow(title: String(localized: "Team map"), icon: .network, id: place.rawValue, iconOnly: icons, selected: model.page == .teamMap) { model.show(.teamMap) }
         case .automations:
             DesktopPlaceRow(title: String(localized: "Automations"), icon: .calendarDays, id: place.rawValue, iconOnly: icons, selected: model.page == .automations) { model.show(.automations) }
-        case .connectedApps:
-            DesktopPlaceRow(title: String(localized: "Connected apps"), icon: .puzzle, id: place.rawValue, iconOnly: icons) { model.modal = .plugins }
         case .templates:
             DesktopPlaceRow(title: String(localized: "Browse Bots"), icon: .library, id: place.rawValue, iconOnly: icons) { model.modal = .templates }
         }

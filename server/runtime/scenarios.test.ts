@@ -482,6 +482,58 @@ describe("§2 lifecycle", () => {
   });
 });
 
+describe("§4b a question waits for the person (bot quality 2026-10-19)", () => {
+  it("S07c default limits: answered after 45 minutes, the branch resumes and finishes (no failed), one reminder with the whole question", async () => {
+    const w = world();
+    const root = beginChief(w);
+    const long = `Which colour? ${"Context the person needs to decide. ".repeat(12)}End of question.`;
+    const child = ok(enqueueFrom(w, root, workFor("dev", "Pick a colour")));
+    w.runner.script("dev", needsInput(long), complete("painted blue"));
+    w.rt.end(root.id, { ok: true, text: "" });
+    await drain(w);
+    expect(get(w, child.id).status).toBe("needs_input");
+    expect(w.runner.callsOf("remind", child.id)).toHaveLength(0);
+
+    w.clock.advance(31 * 60_000);
+    await drain(w);
+    expect(get(w, child.id).status).toBe("needs_input");
+    const reminders = w.runner.callsOf("remind", child.id);
+    expect(reminders).toHaveLength(1);
+    expect(reminders[0]!.question).toBe(long);
+    expect(long.length).toBeGreaterThan(180);
+
+    w.clock.advance(14 * 60_000);
+    await drain(w);
+    expect(w.runner.callsOf("remind", child.id)).toHaveLength(1);
+    expect(w.rt.answer(child.id, "blue")).toBe(true);
+    await drain(w);
+    const c = get(w, child.id);
+    expect(c.status).toBe("completed");
+    expect(c.outcome).toBe("done");
+    expect(get(w, root.id).status).toBe("completed");
+    invariants(w);
+  });
+
+  it("S07d reminds once a day while it waits, and expires only after the week", async () => {
+    const w = world();
+    const root = beginChief(w);
+    const child = ok(enqueueFrom(w, root, workFor("dev", "Pick a colour")));
+    w.runner.script("dev", needsInput("Which colour?"), complete("never"));
+    w.rt.end(root.id, { ok: true, text: "" });
+    await drain(w);
+    for (let hour = 0; hour < 6 * 24; hour += 1) {
+      w.clock.advance(60 * 60_000);
+      await drain(w);
+    }
+    expect(get(w, child.id).status).toBe("needs_input");
+    expect(w.runner.callsOf("remind", child.id).length).toBe(6);
+    w.clock.advance(25 * 60 * 60_000);
+    await drain(w);
+    expect(get(w, child.id)).toMatchObject({ status: "failed", outcome: "expired" });
+    invariants(w);
+  });
+});
+
 // ── §5 Restart ─────────────────────────────────────────────────────────
 
 describe("§5 restart", () => {

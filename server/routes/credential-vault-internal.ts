@@ -22,6 +22,9 @@ export interface CredentialVaultInternalDeps {
   /** The bot's display name, when the conversation is the bot's own. */
   botName(botId: string, threadId: string): string | null;
   postCard(botId: string, threadId: string, secret: SecretRequestCardData): string;
+  /** A new card replaces the open one: a person's own sign-in begun from it
+   * ends (server/browser-runtime.ts endPersonSignIn). */
+  endPersonSignIn?(botId: string, threadId: string): Promise<void>;
 }
 
 function fieldsOf(item: VaultItemListing): string[] {
@@ -56,6 +59,7 @@ export function createCredentialVaultInternalRoutes(deps: CredentialVaultInterna
     const messageId = deps.postCard(capability.botId, capability.threadId, vaultRequestCard({
       principalId, botName, ...(name ? { name } : {}), ...(domain ? { domain } : {}), ...(reason ? { reason } : {}),
     }));
+    await deps.endPersonSignIn?.(capability.botId, capability.threadId);
     return json(res, 201, { messageId });
   };
 }

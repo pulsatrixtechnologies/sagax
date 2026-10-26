@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Bot, Group, GroupTask, Task } from "@/state/store";
 import { botShowsUnread } from "@/lib/bot-unread";
 import { t } from "@/lib/i18n";
-import { attentionHasRunningWork, attentionJumpAction, attentionOwnerName, attentionRowStatus, attentionTriggerLabel, attentionUnpinAction, crossBotAttentionThreads, crossBotPinnedThreads, sidebarGroupActivityTasks } from "./SidebarBotActivity";
+import { attentionHasRunningWork, attentionJumpAction, attentionOwnerName, attentionRowStatus, attentionTriggerLabel, attentionUnpinAction, crossBotAttentionThreads, crossBotPinnedThreads, sidebarBotActivityTasks, sidebarGroupActivityTasks, threadsWhenTreeHidden } from "./SidebarBotActivity";
 
 const task = (threadId: string, title: string, extra: Partial<Task>): Task =>
   ({ threadId, title, createdAt: 0, ...extra }) as Task;
@@ -38,6 +38,14 @@ describe("botShowsUnread", () => {
       task("c1", "Test de latence", { hidden: true, unread: true }),
     ], { unread: true });
     expect(botShowsUnread(hidden)).toBe(false);
+  });
+
+  it("ignores an archived thread's unread reply", () => {
+    const archived = bot("p", "Plain", "p0", [
+      task("p0", "Read chat", {}),
+      task("p1", "Put away", { archivedAt: 5, unread: true }),
+    ], { unread: true });
+    expect(botShowsUnread(archived)).toBe(false);
   });
 });
 
@@ -93,6 +101,19 @@ describe("cross-bot attention", () => {
     const runner = bot("r", "Runner", "r0", [task("r0", "Routine step", { routineRunId: "run-1", busy: true })]);
     const plain = bot("p", "Plain", "p0", [task("p0", "Unread note", { unread: true })]);
     expect(crossBotAttentionThreads([hidden, runner, plain], {}).map((entry) => entry.task.threadId)).toEqual(["p0"]);
+  });
+
+  it("keeps an archived thread out of the bot's rows, and offers it across bots only while it waits on the person", () => {
+    const alpha = bot("a", "Alpha", "a0", [
+      task("a0", "Idle chat", {}),
+      task("a1", "Archived approval", { archivedAt: 5, activity: "waiting-on-you" }),
+      task("a2", "Archived reply", { archivedAt: 5, unread: true }),
+      task("a3", "Archived work", { archivedAt: 5, busy: true, activity: "working" }),
+      task("a4", "Archived queue", { archivedAt: 0 }),
+    ]);
+    expect(sidebarBotActivityTasks(alpha, { a4: [{}] })).toEqual([]);
+    expect(threadsWhenTreeHidden(alpha, { a4: [{}] })).toEqual([]);
+    expect(crossBotAttentionThreads([alpha], { a4: [{}] }).map((entry) => entry.task.threadId)).toEqual(["a1"]);
   });
 
   it("orders waiting ahead of unread across bots, not just inside one", () => {

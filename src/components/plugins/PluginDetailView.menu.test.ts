@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { buildPluginItems, CATEGORY_ORDER } from "@/lib/plugins-model";
 import { PluginDetailView } from "./PluginDetailView";
-import { ConnectAppsView, categoryPills } from "./ConnectAppsView";
+import { ConnectAppsView, categoryPills, moreCategoryPills } from "./ConnectAppsView";
 import { Breadcrumb } from "../Breadcrumb";
 import { isBackShortcut, pageKeyAction } from "@/lib/back-shortcut";
 
@@ -88,11 +88,15 @@ describe("Category pills", () => {
     expect(onFilter).toHaveBeenCalledWith("design");
   });
 
-  it("keeps the chosen category's pill, pressed, even with no row in it", () => {
+  it("keeps a chosen More category out of the row and marks More pressed", () => {
     flushSync(() => root.render(createElement(ConnectAppsView, {
       items, loading: false, search: "", onSearch: noop, filter: "finance", onFilter: noop,
       onOpenManage: noop, onOpenItem: noop, renderAction: () => null,
     })));
+    expect(host.querySelector('[data-plugins-chip="finance"]')).toBeNull();
+    expect(host.querySelector("[data-plugins-more]")?.getAttribute("aria-pressed")).toBe("true");
+    expect(moreCategoryPills(items, "finance")).toContain("finance");
+    click(host.querySelector("[data-plugins-more]"));
     expect(host.querySelector('[data-plugins-chip="finance"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 });

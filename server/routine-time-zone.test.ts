@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { defaultOrgTimeZone } from "./bot-settings.ts";
 import { nextOccurrence, RoutineManager, setRoutineTimeZone } from "./routines.ts";
 
 const dirs: string[] = [];
@@ -62,5 +63,41 @@ describe("routine time zone", () => {
     expect(manager.rescheduleWallClock()).toBe(1);
     expect(manager.listRoutines()[0]!.nextRunAt).toBe(Date.UTC(2026, 9, 1, 13, 0));
     expect(manager.rescheduleWallClock()).toBe(0);
+  });
+});
+
+describe("organization default zone (2026-10-20 routines ran 4 h early)", () => {
+  it("defaults to America/Toronto on a UTC host, else the env, else nothing", () => {
+    expect(defaultOrgTimeZone("UTC", undefined)).toBe("America/Toronto");
+    expect(defaultOrgTimeZone("Etc/UTC", undefined)).toBe("America/Toronto");
+    expect(defaultOrgTimeZone("UTC", "Europe/Paris")).toBe("Europe/Paris");
+    expect(defaultOrgTimeZone("UTC", "Not/AZone")).toBe("America/Toronto");
+    expect(defaultOrgTimeZone("Asia/Tokyo", undefined)).toBeNull();
+  });
+
+  it("a daily 12:00 created by a client with no zone runs at 12:00 Toronto", () => {
+    setRoutineTimeZone(() => defaultOrgTimeZone("UTC", undefined) ?? undefined);
+    const daily = { type: "daily" as const, time: "12:00", weekdays: [0, 1, 2, 3, 4, 5, 6] };
+    // 2026-10-20 12:00 EDT = 16:00 UTC
+    expect(nextOccurrence(daily, Date.UTC(2026, 9, 20, 5, 0))).toBe(Date.UTC(2026, 9, 20, 16, 0));
+  });
+
+  it("start() repairs a next run stored with the old UTC reading", () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-routine-tz-"));
+    dirs.push(dir);
+    const now = Date.UTC(2026, 9, 20, 5, 0);
+    const make = () => new RoutineManager({
+      file: join(dir, "routines.json"), now: () => now, botState: () => "ready",
+      createTask: () => ({ threadId: "t" }), startTurn: async () => {},
+      timeZoneFor: () => "America/Toronto",
+    });
+    const first = make();
+    const routine = first.create({ name: "Pause", prompt: "x", botId: "maus-1", schedule: { type: "daily", time: "12:00", weekdays: [0, 1, 2, 3, 4, 5, 6] } });
+    // Simulate the persisted UTC-read value.
+    (first as unknown as { routines: Array<{ id: string; nextRunAt: number }> }).routines.find((r) => r.id === routine.id)!.nextRunAt = Date.UTC(2026, 9, 20, 12, 0);
+    (first as unknown as { save(): void }).save();
+    const second = make();
+    second.start(); second.stop();
+    expect(second.listRoutines().find((r) => r.id === routine.id)!.nextRunAt).toBe(Date.UTC(2026, 9, 20, 16, 0));
   });
 });

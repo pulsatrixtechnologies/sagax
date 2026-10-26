@@ -13,6 +13,8 @@ import type { PerspicaxOrg } from "@/lib/perspicax-org";
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
   api: vi.fn(async () => ({ bots: [], approvals: [] })),
+  // an admin sees OrgTeamSecrets (#932), which reads the bots from the store
+  useStore: () => ({ state: { bots: [] }, dispatch: vi.fn() }),
 }));
 
 const org = (viewerRole: "admin" | "member"): PerspicaxOrg => ({

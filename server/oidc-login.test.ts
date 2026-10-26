@@ -219,10 +219,11 @@ describe("the sign-in routes (in process)", () => {
     provider.user = { ...USER };
   });
 
-  async function walk(client?: string, options: { binding?: string; returnTo?: string } = {}) {
+  async function walk(client?: string, options: { binding?: string; returnTo?: string; fresh?: boolean } = {}) {
     const query = new URLSearchParams();
     if (client) query.set("client", client);
     if (options.returnTo !== undefined) query.set("return", options.returnTo);
+    if (options.fresh) query.set("fresh", "1");
     const start = await fetch(`${base}/auth/oidc/start${query.size ? `?${query}` : ""}`, { redirect: "manual" });
     const location = start.headers.get("location") ?? "";
     if (!location.startsWith(provider.issuer)) return { start, callback: null as Response | null, location };
@@ -575,6 +576,89 @@ describe("the sign-in routes (in process)", () => {
     // a web sign-in is an interactive sign-in (server/recent-sign-in.ts)
     expect(typeof record.authAt).toBe("number");
     expect(recentInteractiveSignIn(record)).toBe(true);
+  });
+
+  describe("a recent sign-in comes from the provider's auth_time (2026-10-19)", () => {
+    const sessionOf = (callback: Response | null) => {
+      const cookie = callback!.headers.getSetCookie().find((c) => c.startsWith("omb_session_test="))!;
+      return sessions.authenticate(decodeURIComponent(cookie.split(";")[0]!.split("=")[1]!))!;
+    };
+    async function signInWith(authTime: number | null, options: { fresh?: boolean } = {}) {
+      provider.tamper = { claims: (c) => {
+        if (authTime !== null) return { ...c, auth_time: authTime };
+        const { auth_time: _drop, ...rest } = c;
+        return rest;
+      } };
+      try {
+        const walked = await walk(undefined, options);
+        return { ...walked, record: sessionOf(walked.callback) };
+      } finally {
+        provider.tamper = {};
+      }
+    }
+    const seconds = () => Math.floor(Date.now() / 1000);
+
+    it("stamps authAt with the provider's auth_time, not the moment of the callback", async () => {
+      const at = seconds() - 120;
+      const { location, record } = await signInWith(at);
+      expect(location).toBe("/");
+      expect(record.authAt).toBe(at * 1000);
+      expect(recentInteractiveSignIn(record)).toBe(true);
+    });
+
+    it("a silent or old sign-in at Perspicax, no auth_time, or one from the future: a valid session that is not recent", async () => {
+      for (const authTime of [seconds() - 16 * 60, null, seconds() + 3_600, 0]) {
+        const { location, record } = await signInWith(authTime);
+        expect(location, String(authTime)).toBe("/");
+        expect(record.authAt, String(authTime)).toBeUndefined();
+        expect(recentInteractiveSignIn(record), String(authTime)).toBe(false);
+      }
+    });
+
+    it("a little clock skew is dated now, never later", async () => {
+      const before = Date.now();
+      const { record } = await signInWith(seconds() + 30);
+      expect(record.authAt).toBeGreaterThanOrEqual(before);
+      expect(record.authAt).toBeLessThanOrEqual(Date.now());
+      expect(recentInteractiveSignIn(record)).toBe(true);
+    });
+
+    it("Sign in again (fresh=1) asks Perspicax for prompt=login and max_age=0, web and desktop; a plain sign-in does not", async () => {
+      await walk();
+      expect(provider.lastAuthorize?.prompt).toBeUndefined();
+      expect(provider.lastAuthorize?.max_age).toBeUndefined();
+      const { location, record } = await signInWith(seconds(), { fresh: true });
+      expect(location).toBe("/");
+      expect(provider.lastAuthorize).toMatchObject({ prompt: "login", max_age: "0", scope: "openid profile email offline_access" });
+      expect(recentInteractiveSignIn(record)).toBe(true);
+      expect((await walk("desktop", { fresh: true })).location).toMatch(/^openmausbot:\/\/auth/);
+      expect(provider.lastAuthorize).toMatchObject({ prompt: "login", max_age: "0" });
+      // anything else than 1 is a plain sign-in
+      const start = await fetch(`${base}/auth/oidc/start?fresh=yes`, { redirect: "manual" });
+      expect(new URL(start.headers.get("location")!).searchParams.get("prompt")).toBeNull();
+    });
+
+    it("a desktop sign-in hands the provider's auth_time through its pairing window, and an old one hands none", async () => {
+      const at = seconds() - 60;
+      provider.tamper = { claims: (c) => ({ ...c, auth_time: at }) };
+      let walked;
+      try {
+        walked = await walk("desktop");
+      } finally {
+        provider.tamper = {};
+      }
+      const codeOf = (location: string) => /#code=(omb_pair_[A-Za-z0-9_-]{43})$/.exec(location)![1]!;
+      const paired = sessions.exchange({ code: codeOf(walked.location), label: "desktop", source: "10.0.9.1" });
+      expect(paired.ok && sessions.byId(paired.session.id)!.authAt).toBe(at * 1000);
+      provider.tamper = { claims: (c) => ({ ...c, auth_time: seconds() - 3_600 }) };
+      try {
+        walked = await walk("desktop");
+      } finally {
+        provider.tamper = {};
+      }
+      const old = sessions.exchange({ code: codeOf(walked.location), label: "desktop", source: "10.0.9.2" });
+      expect(old.ok && sessions.byId(old.session.id)!.authAt).toBeUndefined();
+    });
   });
 
   it("passes a rate-limited code exchange back as rate_limited, for a sign-in and a delegation (fix 2)", async () => {

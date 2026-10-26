@@ -9,6 +9,7 @@ import { Star } from "lucide-react";
 
 import { useStore, type Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
+import { engineLabel, personLabel } from "@/lib/human-label";
 import { canEditBotField, showBotRename } from "@/lib/bot-capabilities";
 import { isViewersPrimaryBot, viewerOwnsBot } from "@/lib/primary-bot";
 import { viewerActorId } from "@/lib/viewer";
@@ -62,7 +63,7 @@ export function PersonaOverview({ bot, derived }: {
     ? t("persona.overview.ownerYou")
     : (() => {
       const person = people.get(bot.ownerUserId?.trim().toLowerCase() ?? "");
-      return person?.name || person?.login || bot.ownerUserId || "";
+      return bot.ownerUserId ? personLabel(person?.name, person?.login, bot.ownerUserId) : "";
     })();
 
   return (
@@ -118,7 +119,7 @@ export function PersonaOverview({ bot, derived }: {
       </section>
 
       <SettingsGroup title={t("persona.overview.summaryTitle")} groupId="personaSummary">
-        <Fact label={t("persona.overview.engine")}>{engine?.displayName ?? bot.modelSelection.instanceId}</Fact>
+        <Fact label={t("persona.overview.engine")}>{engineLabel(engine?.displayName, bot.modelSelection.instanceId)}</Fact>
         <Fact label={t("persona.overview.model")}>{personaModelSummary(bot, engine)}</Fact>
         <Fact label={t("persona.overview.owner")}>{owner}</Fact>
         <Fact label={t("persona.overview.sharing")}>{personaSharingSummary(bot)}</Fact>

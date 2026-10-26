@@ -128,6 +128,20 @@ describe("Model providers on an organization server", () => {
     expect(await render()).not.toContain("data-model-host-tools");
   });
 
+  it("shows the Pays with line once on a card (subtitle only, not again in the body), admin and member", async () => {
+    orgFixture();
+    fixture.instances = [instance("grok", "grokAgent", "Grok")];
+    fixture.mine = [mine("grok", "grokAgent", "Grok", { myKey: true, myTurns: "key" })];
+    for (const role of ["admin", "member"] as const) {
+      fixture.viewer = { role };
+      const html = await render();
+      expect(html.match(/>Pays with: your key in Perspicax</g)).toHaveLength(1);
+      expect(html).toContain("Connect Grok");
+      expect(html).toContain("data-engine-keys-link");
+      expect(html).toContain("Manage my keys in Perspicax");
+    }
+  });
+
   it("gives a member (not an admin) their own sign-in on each engine, from the server's redacted rows", async () => {
     orgFixture();
     fixture.viewer = { role: "member" };

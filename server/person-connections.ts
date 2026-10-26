@@ -19,7 +19,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { isPublicDomainAddress } from "./custom-domain.ts";
-import { isHarnessOwnedMcpEnvName, mcpServerNameError } from "./mcp-registry.ts";
+import { isReservedMcpEnvEntry, mcpServerNameError } from "./mcp-registry.ts";
 import type { VaultKeySource } from "./mcp-oauth.ts";
 
 export const MAX_PERSONAL_MCP_SERVERS = 20;
@@ -193,9 +193,9 @@ export function parsePersonalMcpInput(input: unknown, now = Date.now(), allowPri
   }
   const env = value.env ?? {};
   if (Object.keys(env).length > 64) throw new PersonConnectionsError("Use at most 64 environment variables.", "invalid_env");
-  for (const key of Object.keys(env)) {
+  for (const [key, val] of Object.entries(env)) {
     if (!ENV_NAME.test(key)) throw new PersonConnectionsError(`Environment variable “${key}” is not valid.`, "invalid_env");
-    if (isHarnessOwnedMcpEnvName(key)) throw new PersonConnectionsError(`Environment variable “${key}” is reserved by Sagax.`, "invalid_env");
+    if (isReservedMcpEnvEntry(key, String(val))) throw new PersonConnectionsError(`Environment variable “${key}” is reserved by Sagax.`, "invalid_env");
   }
   return { name: value.name, server: { kind: "stdio", command: value.command, args: value.args ?? [], env, runsIn: "environment", enabled: true, addedAt: now } };
 }

@@ -27,8 +27,10 @@ function memoryStorage(): FloatingStorage & { removeItem(key: string): void } {
 
 /** The eyes a shape's fill cuts out: its outline's closed subpaths after the body's own. */
 const eyeCuts = (html: string) => {
-  const d = /class="shape-fill" d="([^"]+)" fill-rule="evenodd"/.exec(html)?.[1] ?? "";
-  return d.split("M").filter(Boolean).slice(1);
+  // the eyes: their own opaque path on a turned body (2026-10-18), or cut out of a flat skin's fill
+  const own = /<path d="([^"]+)"[^>]*data-shape-eyes=""/.exec(html)?.[1];
+  if (own) return own.split("M").filter(Boolean);
+  return (/class="shape-fill" d="([^"]+)" fill-rule="evenodd"/.exec(html)?.[1] ?? "").split("M").filter(Boolean).slice(1);
 };
 
 describe("the eight shapes (stored ids bean, pill, pick and drop)", () => {
@@ -85,7 +87,7 @@ describe("a bot's character and its look", () => {
     }
   });
 
-  it("gives every shape the same resting face: rounded bars about twice as tall as wide, the right one a little higher", () => {
+  it("gives every shape the same resting face: rounded bars about twice as tall as wide, side by side", () => {
     for (const shape of MASCOT_SHAPES) {
       const html = renderToStaticMarkup(createElement(BotAvatar, { bot: { color: "white", mascotLook: { character: "shape", shape } }, size: 60, animated: false }));
       const eyes = eyeCuts(html).map((d) => {
@@ -97,7 +99,8 @@ describe("a bot's character and its look", () => {
       expect(eyes, shape).toHaveLength(2);
       const [left, right] = eyes;
       expect(left.x).toBeLessThan(right.x);
-      expect(right.y, shape).toBeLessThan(left.y);
+      // nearly level, the body's turn moving them only a little (2026-10-18)
+      expect(Math.abs(right.y - left.y), shape).toBeLessThan(3);
       for (const eye of eyes) expect(eye.h / eye.w, shape).toBeGreaterThan(1.4);
     }
   });

@@ -16,9 +16,12 @@ import { ensureDirs, NATIVE_DIR } from "../config.ts";
 import type { ProviderInstance } from "../contracts.ts";
 import { recordEvents, type EventRecorder } from "../testing/events.ts";
 import { encodeInjectId, localHost } from "./local-inject.ts";
+import { sagaxInternalSelfAnswers } from "../sagax-internal-tools.ts";
 import {
   applyPiLocalCatalog,
   buildMcpServers,
+  piGatedMcpInput,
+  piGatedMcpTool,
   decodePiFrame,
   ensurePiInjectModel,
   fetchPiModels,
@@ -155,6 +158,38 @@ describe("piLineReader", () => {
   });
 });
 
+describe("piGatedMcpTool", () => {
+  const mounted = { data: {}, perspicax_jc: {}, "my-mail": {} };
+  it("names the tool of the extension's own gated confirm, like the other engines", () => {
+    expect(piGatedMcpTool("Allow data:data_sql?", mounted)).toBe("data__data_sql");
+    expect(piGatedMcpTool("Allow perspicax_jc:claim?", mounted)).toBe("perspicax_jc__claim");
+    expect(piGatedMcpTool("Allow my-mail:send-draft?", mounted)).toBe("my-mail__send-draft");
+  });
+  it("names nothing for an unmounted server, another title or a question", () => {
+    for (const title of ["Allow other:x?", "Allow data:data_sql", "allow data:data_sql?", "Allow data:data sql?", "Allow click on your computer?", "Allow data:data_sql?\nmore", undefined, 7]) {
+      expect(piGatedMcpTool(title, mounted)).toBeUndefined();
+    }
+    expect(piGatedMcpTool("Allow data:data_sql?", null)).toBeUndefined();
+  });
+});
+
+describe("piGatedMcpInput", () => {
+  it("passes the extension's JSON, reads its no-argument line as {}, and never turns a missing or cut message into no arguments", () => {
+    expect(piGatedMcpInput('{"sql":"select 1"}', "data__data_sql")).toBe('{"sql":"select 1"}');
+    expect(piGatedMcpInput("Run data:data_show", "data__data_show")).toBe("{}");
+    expect(piGatedMcpInput("Run s:a__b", "s__a__b")).toBe("{}");
+    expect(piGatedMcpInput("Run data:other", "data__data_show")).toBe("Run data:other");
+    expect(piGatedMcpInput('{"sql":"select * from read_csv(', "data__data_sql")).toBe('{"sql":"select * from read_csv(');
+    expect(piGatedMcpInput(undefined, "data__data_sql")).toBe("(arguments not shown)");
+    expect(piGatedMcpInput("", "data__data_sql")).toBe("(arguments not shown)");
+  });
+  it("keeps a confined Data call with unshown arguments on its card (sagax-internal-tools)", () => {
+    for (const message of [undefined, "", '{"sql":"attach \'x\''] as const) {
+      expect(sagaxInternalSelfAnswers("data__data_sql", piGatedMcpInput(message, "data__data_sql"), ["/w"], true)).toBe(false);
+    }
+  });
+});
+
 describe("buildMcpServers", () => {
   it("mounts a selected custom mail server without unrelated built-ins", () => {
     const servers = buildMcpServers({ threadId: "selected", text: "Read mail", toolScope: { allow: ["mcp:mail:*"] }, integrations: {
@@ -166,6 +201,20 @@ describe("buildMcpServers", () => {
     expect(servers?.mail).toMatchObject({ scope: "custom" });
   });
 
+  it("gates a custom server with its own result limit, and others with the app's", () => {
+    const servers = buildMcpServers({ threadId: "budget", text: "Go", integrations: {
+      custom: { big: { command: "node", args: ["big"], env: {} }, never: { command: "node", args: ["never"], env: {} }, plain: { command: "node", args: ["plain"], env: {} } },
+      customResultBudgets: { big: 40_000, never: 0 },
+    } });
+    const envOf = (name: string) => (servers as Record<string, { env: Record<string, string> }>)[name]!.env;
+    const budget = (name: string) => envOf(name).SAGAX_GATE_BUDGET;
+    expect(budget("big")).toBe("40000");
+    expect(budget("plain")).toBe(String(process.env.SAGAX_MCP_RESULT_BUDGET ? Number(process.env.SAGAX_MCP_RESULT_BUDGET) : 8_000));
+    // 0 = never trim: mounted as it is, with no gate and no extra field
+    expect(budget("never")).toBeUndefined();
+    expect(JSON.stringify(servers?.never)).not.toContain("resultBudget");
+  });
+
   it("rejects malformed policy and mounts nothing for native-only selection", () => {
     expect(() => buildMcpServers({ threadId: "bad", text: "Stop", toolScope: { allow: null } as never })).toThrow(/tool selection/i);
     expect(buildMcpServers({ threadId: "native", text: "Draft", toolScope: { allow: ["native:read", "native:write"] }, integrations: { agents: { command: "node", args: [], env: {} } } })).toBeNull();
@@ -174,18 +223,16 @@ describe("buildMcpServers", () => {
     expect(buildMcpServers({ threadId: "t", text: "hi" })).toBeNull();
   });
 
-  it("passes composio/agents/phone through as stdio servers", () => {
+  it("passes agents/phone through as stdio servers", () => {
     const servers = buildMcpServers({
       threadId: "t",
       text: "hi",
       integrations: {
-        composio: { command: "node", args: ["c"], env: { A: "1" } },
         agents: { command: "node", args: ["a"], env: { B: "2" } },
         phone: { command: "node", args: ["p"], env: {} },
       },
     });
     expect(servers).toEqual({
-      composio: { command: "node", args: ["c"], env: { A: "1" } },
       agents: { command: "node", args: ["a"], env: { B: "2" } },
       phone: { command: "node", args: ["p"], env: {} },
     });
@@ -219,6 +266,18 @@ describe("buildMcpServers", () => {
     expect(scoped.args[0]).toContain("mcp-gate");
     expect(scoped.env.SAGAX_GATE_DIRECTORY).toBe("1");
     expect(JSON.parse(JSON.parse(scoped.env.SAGAX_GATE_UPSTREAM).env.SAGAX_REMOTE_MCP_DIRECTORY)).toEqual({ name: "whop", toolScope });
+  });
+
+  it("sends Sagax's own Browser and Data through the approval path, as on Claude (engine parity)", () => {
+    const servers = buildMcpServers({ threadId: "t", text: "hi", integrations: {
+      browser: { command: "node", args: ["b"], env: {} },
+      data: { command: "node", args: ["d"], env: {} },
+      agents: { command: "node", args: ["a"], env: {} },
+    } });
+    expect(servers?.browser).toMatchObject({ scope: "approval" });
+    expect(servers?.data).toMatchObject({ scope: "approval" });
+    // the agents tools never ask, on every engine
+    expect(servers?.agents).not.toHaveProperty("scope");
   });
 
   it("marks a host computer with scope so the extension gates its tools", () => {
@@ -818,7 +877,7 @@ describe("PiDriver turns (fake CLI)", () => {
       threadId: "t-mcp",
       text: "hi",
       integrations: {
-        composio: { command: "node", args: ["connector-proxy.js"], env: { COMPOSIO_KEY: "ck" } },
+        agents: { command: "node", args: ["agents-proxy.js"], env: { SAGAX_COMMS_TOKEN: "ck" } },
       },
     });
     await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
@@ -837,8 +896,8 @@ describe("PiDriver turns (fake CLI)", () => {
     expect(mcpRow!.argv).not.toContain("--no-builtin-tools");
 
     const servers = mcpRow!.mcpConfig!.mcpServers!;
-    // composio passes through verbatim as a stdio server
-    expect(servers.composio).toMatchObject({ command: "node", args: ["connector-proxy.js"], env: { COMPOSIO_KEY: "ck" } });
+    // a built-in server passes through verbatim as a stdio server
+    expect(servers.agents).toMatchObject({ command: "node", args: ["agents-proxy.js"], env: { SAGAX_COMMS_TOKEN: "ck" } });
   });
 
   it("withholds pi builtins on an organization turn and still loads the Sagax MCP extension", async () => {
@@ -850,7 +909,7 @@ describe("PiDriver turns (fake CLI)", () => {
       threadId: "t-withhold",
       text: "hi",
       withholdHostTools: true,
-      integrations: { composio: { command: "node", args: ["connector-proxy.js"], env: {} } },
+      integrations: { agents: { command: "node", args: ["agents-proxy.js"], env: {} } },
     });
     await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
     const rows = readFileSync(dump, "utf8").trim().split("\n").map((line) => JSON.parse(line) as { argv: string[] });

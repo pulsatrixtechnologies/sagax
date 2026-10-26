@@ -10,7 +10,7 @@ const operator = { viewer: { operator: true, principalId: "pr_local", email: "jc
 describe("viewerCan (2026-10-09)", () => {
   it("reads the server's list, else the member defaults for a member, else everything", () => {
     expect(viewerCan({ viewer: { ...member.viewer!, permissions: ["usage.view"] } } as ConfigStatus, "usage.view")).toBe(true);
-    expect(viewerCan({ viewer: { ...member.viewer!, permissions: ["usage.view", "host.shell"] } } as ConfigStatus, "host.shell")).toBe(false);
+    expect(viewerCan({ viewer: { ...member.viewer!, permissions: ["usage.view", "server.link"] } } as ConfigStatus, "server.link")).toBe(false);
     expect(viewerCan({ viewer: { ...member.viewer!, permissions: [] as string[] } } as ConfigStatus, "bots.create")).toBe(false);
     // an older server sends no list: a member holds the defaults
     expect(viewerCan(member, "bots.create")).toBe(true);

@@ -73,7 +73,6 @@
     <string name="mobile_collapse_9cf188d3">收起</string>
     <string name="mobile_collapsed_0084e8fa">已收起</string>
     <string name="mobile_computer_924645b3">電腦</string>
-    <string name="mobile_configure_composio_on_your_compute_4281e8b0">請先在電腦上設定 Composio。提供者憑證絕不會傳回此手機。</string>
     <string name="mobile_confirm_computer_d778cfbd">確認電腦</string>
     <string name="mobile_connect_b65463cb">連線</string>
     <string name="mobile_connect_card_label_c9e612b4">連線至 %1$s</string>
@@ -723,7 +722,7 @@
     <string name="mobile_pairing_enter_code_notice">請輸入電腦上顯示的 6 位數代碼：</string>
     <string name="mobile_pairing_rescan_notice">配對完成前，應用程式已重新啟動。該一次性代碼絕不會重複使用，因為它可能已被兌換。請在電腦上重新開始配對，並掃描新的 QR 碼。</string>
 
-    <string name="mobile_composer_ask_bot">詢問 %1$s</string>
+    <string name="mobile_composer_message_bot">傳訊息給 %1$s</string>
     <string name="mobile_composer_sends_into_turn">傳送至目前回合</string>
     <string name="mobile_composer_sends_after_turn">在目前回合結束後傳送</string>
     <string name="mobile_date_today_with_time">今天 %1$s</string>

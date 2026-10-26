@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { prepareCloudflared } from "./prepare-cloudflared.mjs";
+import { prepareTailcat } from "./prepare-tailcat.mjs";
 import { stageBrowserTarget } from "./prepare-browser.mjs";
 import { stageDuckdb } from "./prepare-duckdb.mjs";
 
@@ -96,6 +97,7 @@ run(node, ["scripts/prepare-android-tools.mjs"], { SAGAX_ANDROID_TOOLS_PLATFORM:
 for (const entry of readdirSync(androidRoot)) if (entry !== "win32") rmSync(join(androidRoot, entry), { recursive: true, force: true });
 
 await prepareCloudflared({ root, platform: "win32" });
+await prepareTailcat({ root, platform: "win32" });
 await stageBrowserTarget(root, "win32-x64");
 await stageCuaWindowsNatives();
 await stageDuckdbWindows();

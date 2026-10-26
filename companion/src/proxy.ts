@@ -12,6 +12,7 @@
 // harness as itself, from the machine the harness is already willing to
 // serve. Packaged harnesses also require a private per-launch relay capability,
 // attached only after authenticating the phone and authorizing its route.
+import { COMPANION_TRANSPORT_HEADER, companionTransport } from "./transport.ts";
 import { request as httpRequest, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 
@@ -28,6 +29,7 @@ import {
   isMessageFileDownload,
   isSandboxViewerAccess,
 } from "./routes.ts";
+import { sendTunnelJson } from "./tunnel-gzip.ts";
 import { CompanionViewerRelay } from "./viewer-relay.ts";
 import { createSseScrubber, isJson, scrub } from "./wire.ts";
 
@@ -159,11 +161,9 @@ const sendJson = (res: ServerResponse, status: number, body: unknown): void => {
     return;
   }
   const text = JSON.stringify(body);
-  res.writeHead(status, {
-    "content-type": "application/json",
-    "content-length": Buffer.byteLength(text),
-    ...PRIVATE_RESPONSE_HEADERS,
-  });
+  const headers = { "content-type": "application/json", ...PRIVATE_RESPONSE_HEADERS };
+  if (sendTunnelJson(res, status, headers, text)) return;
+  res.writeHead(status, { ...headers, "content-length": Buffer.byteLength(text) });
   res.end(text);
 };
 
@@ -248,6 +248,8 @@ const forwardHeaders = (req: IncomingMessage, authenticatedDeviceId?: string, mu
   const out: Record<string, string> = {
     accept: String(req.headers.accept ?? "*/*"),
     ...companionIdentityHeaders(authenticatedDeviceId, mutationToken),
+    // the phone's own connection, never a header it sent (phone tools, transport.ts)
+    [COMPANION_TRANSPORT_HEADER]: companionTransport(req),
   };
   const contentType = req.headers["content-type"];
   if (contentType) out["content-type"] = String(contentType);
@@ -710,10 +712,9 @@ export function createProxyHandler(options: ProxyOptions) {
           delete headers["content-length"];
           delete headers["content-encoding"];
           delete headers["transfer-encoding"];
-          res.writeHead(status, {
-            ...privateHeaders(headers),
-            "content-length": Buffer.byteLength(text),
-          });
+          const reply = privateHeaders(headers);
+          if (sendTunnelJson(res, status, reply, text)) return;
+          res.writeHead(status, { ...reply, "content-length": Buffer.byteLength(text) });
           res.end(text);
         }
       },

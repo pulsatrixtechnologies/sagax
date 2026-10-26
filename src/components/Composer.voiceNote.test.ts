@@ -103,29 +103,12 @@ afterEach(() => {
 });
 
 describe("composer voice note", () => {
-  it("records from the + menu, then sends the clip and its transcript", () => {
+  it("is no longer offered in the + menu", () => {
     render(createElement(Composer, { bot: bot("teal") }));
     click($("[data-composer-plus]"));
-    click($('[data-composer-plus-item="voiceNote"]'));
-    expect(fixture.started).toBe(1);
-    expect($('[data-voice-note-chip="recording"]')).not.toBeNull();
-    expect($("[data-composer-cta]")).toBeNull();
-    expect($("[data-composer-mic]")?.getAttribute("aria-hidden")).toBe("true");
-    click($("[data-voice-note-send]"));
-    const sent = fixture.dispatch.mock.calls.map(([action]) => action).find((action) => action.type === "send");
-    expect(sent).toBeDefined();
-    expect(sent.text).toContain("Peux-tu rappeler le client demain");
-    expect(sent.text).toContain('<attached-file path="/home/.sagax/attachments/123e4567-e89b-42d3-a456-426614174000.wav" name="voice-note-20261016-090307.wav" />');
+    expect($('[data-composer-plus-item="voiceNote"]')).toBeNull();
+    expect(fixture.started).toBe(0);
     expect($("[data-voice-note-chip]")).toBeNull();
-  });
-
-  it("cancel throws the recording away and sends nothing", () => {
-    render(createElement(Composer, { bot: bot("teal") }));
-    click($("[data-composer-plus]"));
-    click($('[data-composer-plus-item="voiceNote"]'));
-    click($("[data-voice-note-cancel]"));
-    expect($("[data-voice-note-chip]")).toBeNull();
-    expect(fixture.dispatch.mock.calls.some(([action]) => action.type === "send")).toBe(false);
   });
 
   it("asks for a transcript only when this bot has speech to text", () => {

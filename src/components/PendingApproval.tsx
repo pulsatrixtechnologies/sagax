@@ -8,7 +8,7 @@
 // (it scrolls instead), and the buttons ordered least-destructive-last so
 // the primary action sits under your thumb.
 import { memo, useState } from "react";
-import { ChevronLeft, ChevronRight, GitFork } from "lucide-react";
+import { Bot as BotIcon, ChevronDown, ChevronLeft, ChevronRight, GitFork } from "lucide-react";
 import { api, useStore, type Bot, type Message } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t, tFromServer } from "@/lib/i18n";
@@ -19,9 +19,11 @@ import { ApprovalHeading, TechnicalDetails } from "./ApprovalParts";
 import { describeApproval, isTechnicalText } from "@/lib/approval-describe";
 import { reviewedSkillSha256 } from "../../shared/skill-request";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
-import { CustomRuleNoticeLine } from "./CustomRuleNotice";
-import { shellProgram } from "../../shared/custom-rules";
-import { CustomRuleForm, customRuleError } from "./bot-settings/CustomRulesCard";
+import { useOrgApprovalPolicy } from "@/lib/org-approval-policy";
+import { CustomRuleNoticeLine, riskList } from "./CustomRuleNotice";
+import { customRuleError } from "./bot-settings/CustomRulesCard";
+import { recipientKeysForSendCard } from "../../shared/send-card-recipients";
+import { parseRecipientEntry } from "../../shared/allowed-recipients";
 
 interface ApprovalLabels {
   [tool: string]: LocaleKey;
@@ -42,6 +44,9 @@ export interface Pending {
    * its own thread, where the answer goes, and its name for the card. */
   threadId?: string;
   parallelTitle?: string;
+  /** A bot-to-bot conversation's card (WireBot.waitingApprovals): the bot
+   * that asked ("" when its name is unknown). */
+  askedBy?: string;
 }
 
 /** The persisted payload is the authoritative marker. Tool names are
@@ -217,8 +222,13 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
    * and nothing else about a pending approval changes with the language. */
   locale?: string;
 }) {
-  const heldNote = tFromServer(pending.heldCode, pending.held);
+  // 2026-10-20 (JC, after Grok Bot): no explanatory paragraph on the card
+  // ("the provider requires your approval", "this sends something on your
+  // behalf"): the title says what waits. Only the person's own ask rule
+  // keeps its line, so they know why their rule stopped it.
+  const heldNote = pending.heldCode === "approval.held.customRule" ? tFromServer(pending.heldCode, pending.held) : undefined;
   const card = pending.message.card;
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const proposal = isSkillApproval(pending) || isRoutineApproval(pending) || isProfileApproval(pending) || Boolean(card?.teamSetupRequest);
   const view = !proposal && card ? toolApprovalView(card, bot?.name) : undefined;
   // never truncated: long commands wrap and scroll
@@ -237,6 +247,12 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
       }
       className="px-4 pt-3"
     >
+      {pending.askedBy !== undefined && (
+        <div className="mb-1.5 flex items-center gap-1.5 text-[11.5px] text-ink-secondary" data-approval-asked-by={pending.threadId}>
+          <BotIcon size={12} aria-hidden="true" />
+          <span className="truncate">{pending.askedBy ? t("approval.askedByBot", { name: pending.askedBy }) : t("approval.askedByOtherBot")}</span>
+        </div>
+      )}
       {pending.parallelTitle && (
         <div className="mb-1.5 flex items-center gap-1.5 text-[11.5px] text-ink-secondary" data-approval-parallel={pending.threadId}>
           <GitFork size={12} aria-hidden="true" />
@@ -264,7 +280,41 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
           </div>
         ) : undefined}
       />
-      {visibleText && (
+      {!proposal && (visibleText || view?.args || pending.tool) && (
+        // 2026-10-20 (JC, after Grok Bot): one short line of what runs, the
+        // rest folded under Details
+        <div className="mt-1.5" data-approval-preview={detailsOpen ? "open" : "closed"}>
+          <button
+            type="button"
+            aria-expanded={detailsOpen}
+            aria-label={t("approval.aria.reviewDetails")}
+            onClick={() => setDetailsOpen((open) => !open)}
+            className="flex w-full min-w-0 items-center gap-1.5 rounded-lg bg-inset px-2.5 py-1.5 text-left text-[12px] text-ink-secondary hover:text-ink"
+          >
+            <ChevronDown size={13} aria-hidden="true" className={cn("shrink-0 transition-transform", detailsOpen ? "rotate-0" : "-rotate-90")} />
+            {visibleText && !detailsOpen
+              ? <code className="min-w-0 flex-1 truncate font-mono text-ink" title={visibleText}>{visibleText.replace(/\s+/g, " ")}</code>
+              : <span className="flex-1">{t("approval.details.more")}</span>}
+          </button>
+          {detailsOpen && (
+            <>
+              {visibleText && (
+                <pre
+                  tabIndex={0}
+                  aria-label={t("approval.aria.reviewDetails")}
+                  className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-inset px-3 py-2 font-mono text-[12px] leading-relaxed text-ink"
+                >
+                  {visibleText}
+                </pre>
+              )}
+              {view && (view.args || pending.tool) && (
+                <TechnicalDetails key={pending.requestId} tool={pending.tool} server={view.server} args={view.args} argsLabel={t("approval.aria.reviewDetails")} defaultOpen />
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {proposal && visibleText && (
         <pre
           tabIndex={0}
           aria-label={
@@ -283,11 +333,10 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
       )}
       {card?.skillRequest && <SkillRequestPreview request={card.skillRequest} />}
       {heldNote && <div className="mt-2 text-[12px] text-warning">{heldNote}</div>}
-      {card?.customRule && <CustomRuleNoticeLine notice={card.customRule} botId={bot?.id} />}
-      {view && (view.args || pending.tool) && (
-        // keyed by request: stepping to another request starts collapsed
-        <TechnicalDetails key={pending.requestId} tool={pending.tool} server={view.server} args={view.args} argsLabel={t("approval.aria.reviewDetails")} />
+      {card?.reviewing && !card.answered && (
+        <div data-auto-review="pending" className="mt-2 text-[12.5px] text-ink-secondary">{t("customRules.notice.reviewing")}</div>
       )}
+      {card?.customRule && <CustomRuleNoticeLine notice={card.customRule} botId={bot?.id} />}
     </div>
   );
 });
@@ -297,15 +346,28 @@ export function PendingApprovalActions({
   threadId,
   bot,
   onCancelTurn,
+  variant = "composer",
+  onDecided,
+  onDecideFailed,
 }: {
   pending: Pending;
   threadId: string;
   /** who asked — "always allow" is remembered against them */
   bot?: Bot;
   onCancelTurn: () => void;
+  /** "inbox": the Approvals screen's large Yes / No, the same answers and
+   * the same remembered grants as the composer's row */
+  variant?: "composer" | "inbox";
+  /** told once an answer was sent (the Approvals screen shows what follows) */
+  onDecided?: (behavior: "allow" | "deny") => void;
+  /** the server refused that answer (a 403, a 409): undo what onDecided showed */
+  onDecideFailed?: () => void;
 }) {
   const { dispatch } = useStore();
   const ownerOrAdmin = useOwnerOrAdmin();
+  // 2026-10-21: the organization may keep every approval to one card
+  // (server/custom-rules-org.ts): no Always allow, and the card says why
+  const orgPolicy = useOrgApprovalPolicy();
   const isRoutineRequest = isRoutineApproval(pending);
   const isSkillRequest = isSkillApproval(pending);
   const isProfileRequest = isProfileApproval(pending);
@@ -314,7 +376,11 @@ export function PendingApprovalActions({
   const durableRequest = isRoutineRequest || isSkillRequest || isProfileRequest || isTeamSetup;
   // 2026-10-14: the owner's own rule this card can remember (Always allow /
   // Always deny), which replaces the older per-bot grants on the card.
-  const ownerRule = !durableRequest && !pending.message.card?.adminApproval ? pending.message.card?.ownerRule : undefined;
+  // 2026-10-19 (JC: "Toujours permettre" on every card): an admin's card
+  // offers it too, to the admin who answers it (Always allow only).
+  const ownerRule = pending.message.card?.ownerRule;
+  // 2026-10-20 (JC): the card offers Deny, Always allow and Allow once
+  // only; Always deny and the detailed editor live in Settings > Security.
   const canRememberCommand = ownerOrAdmin === true && !durableRequest && !ownerRule && !pending.allowKey && Boolean(pending.commandAllowlist);
   const reviewedSha256 = pending.message.card?.skillRequest
     ? reviewedSkillSha256(pending.message.card.skillRequest)
@@ -322,7 +388,8 @@ export function PendingApprovalActions({
   // "Toujours permettre ceci": a custom rule in the person's words, saved
   // from this card, then this request allowed (2026-10-16)
   const candidate = !durableRequest && !pending.message.card?.adminApproval ? pending.message.card?.customRuleCandidate : undefined;
-  const decide = (behavior: "allow" | "deny", always = false, rememberCommand = false, rule?: "allow" | "deny") =>
+  const decide = (behavior: "allow" | "deny", always = false, rememberCommand = false, rule?: "allow" | "deny") => {
+    onDecided?.(behavior);
     dispatch({
       type: "decideRequest",
       threadId: pending.threadId ?? threadId,
@@ -336,7 +403,9 @@ export function PendingApprovalActions({
       always: always && !pending.allowKey && pending.allowSession ? true : undefined,
       rememberCommand: rememberCommand || undefined,
       rule,
+      ...(onDecideFailed ? { onError: () => onDecideFailed() } : {}),
     });
+  };
 
   const base = "rounded-full px-3.5 py-1.5 text-[13.5px] transition-colors";
   const secondary = cn(base, "border border-hairline/50 text-ink hover:bg-control");
@@ -353,25 +422,137 @@ export function PendingApprovalActions({
         <span role="status" className="flex min-w-0 flex-col text-[12.5px] text-ink-secondary">
           <span>{t("approval.waitingForAdmin")}</span>
           <span>{adminWillAnswerLine(pending.message.card.adminNames)}</span>
+          <span data-admin-delegate="">{t("approval.adminDelegate")}</span>
         </span>
       </div>
     );
   }
-  const destructiveKind = ownerRule?.destructive === "delete" ? t("approval.rule.kind.delete")
-    : ownerRule?.destructive === "bulk" ? t("approval.rule.kind.bulk")
-      : ownerRule?.destructive === "external-message" ? t("approval.rule.kind.externalMessage") : undefined;
+  const allowLabel = isTeamSetup ? pending.message.card?.options[0] : isSkillRequest
+    ? pending.message.card?.skillRequest?.action === "update"
+      ? t("approval.action.update")
+      : t("approval.action.enable")
+    : isRoutineRequest || isProfileRequest
+      ? t("approval.action.confirm")
+      : t("approval.action.allowOnce");
+  const denyLabel = isSuggestion ? t("approval.action.notNow") : isRoutineRequest || isProfileRequest || isTeamSetup ? t("approval.action.cancel") : t("approval.action.deny");
+  // 2026-10-20 (JC, after Grok Bot): one "Always allow", one click. It
+  // keeps the card's default rule (this bot, this kind of action or this
+  // program, never a second panel), answers this request and closes the
+  // card. The detailed rule editor lives in Settings > Security only.
+  // A send card's Always allow adds the recipient to this bot's list
+  // (shared/allowed-recipients.ts), instead of a wider rule.
+  const recipientKeys = !durableRequest && orgPolicy.alwaysAllow && bot
+    ? recipientKeysForSendCard(pending.message.card)
+    : null;
+  const alwaysAllow: { run: () => void; hint?: string } | undefined = ownerRule
+    ? { run: () => decide("allow", false, false, "allow"), hint: t("approval.action.alwaysAllowRuleHint", { name: bot?.name ?? t("approval.someone"), rule: ownerRule.description }) }
+    : durableRequest ? undefined
+      : bot && pending.allowKey ? { run: () => decide("allow", true), hint: t("approval.action.stopAsking", { name: bot.name, key: pending.allowKey }) }
+        : canRememberCommand && pending.commandAllowlist ? { run: () => decide("allow", false, true), hint: t("approval.action.alwaysAllowCommandHint", { cwd: pending.commandAllowlist.cwd }) }
+          : undefined;
+  const widening = !orgPolicy.alwaysAllow && !durableRequest ? (
+    <span className="text-[11.5px] text-ink-tertiary" data-org-always-allow-off="">{t("approval.orgOnce")}</span>
+  ) : recipientKeys && bot ? (
+    <AlwaysAllowRecipients
+      bot={bot}
+      keys={recipientKeys}
+      className={secondary}
+      onSaved={() => decide("allow")}
+    />
+  ) : alwaysAllow ? (
+    <button
+      type="button"
+      onClick={alwaysAllow.run}
+      disabled={isSkillRequest && !reviewedSha256}
+      title={alwaysAllow.hint}
+      className={cn(secondary, "disabled:cursor-not-allowed disabled:opacity-40")}
+      data-always-allow=""
+      {...(ownerRule ? { "data-owner-rule": "allow" } : {})}
+    >
+      {t("approval.action.alwaysAllow")}
+    </button>
+  ) : !durableRequest && candidate && bot ? (
+    // never without the bot: the rule would silently become one for all bots
+    <AlwaysAllowCandidate
+      candidate={candidate}
+      bot={bot}
+      threadId={pending.threadId ?? threadId}
+      requestId={pending.requestId}
+      className={secondary}
+      onSaved={() => decide("allow")}
+    />
+  ) : !durableRequest && pending.allowSession ? (
+    <button type="button" onClick={() => decide("allow", true)} title={t("approval.action.alwaysAllowSessionHint")} className={secondary} data-always-allow="">
+      {t("approval.action.alwaysAllow")}
+    </button>
+  ) : null;
+  // 2026-10-21 (parité R10, ligne 80): a screen action on the person's own
+  // computer whose app the server read says which app, and what Always
+  // allow then covers ("Katarina peut voir Safari, y cliquer et y saisir du
+  // texte sur cet ordinateur").
+  const computerApp = ownerRule?.tool === "computer_app" && typeof ownerRule.scope?.app === "string" ? ownerRule.scope.app : null;
+  const appLine = computerApp ? (
+    <span className="min-w-0 text-[12.5px] leading-5 text-ink-secondary" data-computer-app="">
+      {t("approval.computerApp.line", { name: bot?.name ?? t("approval.someone"), app: computerApp })}
+    </span>
+  ) : null;
+  // 2026-10-22: why a card still shows although the bot is on auto mode and
+  // has rules — a risky action (a deletion, an external send, a payment) no
+  // rule covers. Name the risk type in human terms; "Toujours permettre"
+  // (the candidate button below) authors a correctly scoped rule that covers
+  // it. Not shown when a rule notice already explains (card.customRule), nor
+  // on the owner-rule path.
+  const riskHint = candidate && candidate.risks.length > 0 && !ownerRule && !pending.message.card?.customRule ? (
+    <span className="basis-full min-w-0 text-[12.5px] leading-5 text-ink-secondary" data-approval-risk-hint="">
+      {t("approval.whyRisk", { kinds: riskList(candidate.risks) })}
+    </span>
+  ) : null;
+  if (variant === "inbox") {
+    // Yes and No side by side, as large as the panel allows: green allows
+    // exactly what the card shows, red declines it. The grants that last
+    // longer stay smaller underneath, so the big buttons only ever mean once.
+    const big = "flex min-h-14 flex-1 flex-col items-center justify-center rounded-2xl px-4 py-2.5 transition-[filter,transform] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:cursor-not-allowed disabled:opacity-40";
+    return (
+      <div className="flex flex-col gap-3 px-5 pb-5 pt-3" data-approval-actions="inbox">
+        {appLine}
+        {riskHint}
+        <div className="flex gap-3">
+          <button
+            type="button"
+            data-decision="deny"
+            aria-keyshortcuts="N"
+            onClick={() => decide("deny")}
+            className={cn(big, "bg-danger text-danger-ink hover:brightness-110 focus-visible:ring-danger/60")}
+          >
+            <span className="flex items-center gap-2 text-[17px] font-semibold leading-6">
+              {t("approvals.no")}
+              <kbd className="rounded-md bg-black/15 px-1.5 text-[11px] font-medium leading-5">N</kbd>
+            </span>
+            <span className="text-[12px] leading-4 opacity-90">{denyLabel}</span>
+          </button>
+          <button
+            type="button"
+            data-decision="allow"
+            aria-keyshortcuts="Y"
+            onClick={() => decide("allow")}
+            disabled={isSkillRequest && !reviewedSha256}
+            className={cn(big, "bg-success hover:brightness-110 focus-visible:ring-success/60")}
+          >
+            <span className="flex items-center gap-2 text-[17px] font-semibold leading-6">
+              {t("approvals.yes")}
+              <kbd className="rounded-md bg-black/15 px-1.5 text-[11px] font-medium leading-5">Y</kbd>
+            </span>
+            <span className="text-[12px] leading-4 opacity-90">{allowLabel}</span>
+          </button>
+        </div>
+        {widening && <div className="flex flex-wrap items-center gap-2">{widening}</div>}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-wrap items-center gap-2 px-4 pb-3 pt-2">
-      {destructiveKind && (
-        <p className="w-full text-[12.5px] text-warning" data-destructive-note>
-          {t("approval.rule.destructive", { kind: destructiveKind })}
-        </p>
-      )}
-      {!durableRequest && (
-        <button type="button" onClick={onCancelTurn} className={quiet}>
-          {t("approval.action.cancelTurn")}
-        </button>
-      )}
+      {appLine}
+      {riskHint}
       <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         <button
           type="button"
@@ -379,74 +560,9 @@ export function PendingApprovalActions({
           autoFocus={isTeamSetup}
           className={cn(base, "border border-danger/40 text-danger hover:bg-danger/10")}
         >
-          {isSuggestion ? t("approval.action.notNow") : isRoutineRequest || isProfileRequest || isTeamSetup ? t("approval.action.cancel") : t("approval.action.deny")}
+          {denyLabel}
         </button>
-        {ownerRule && (
-          <button
-            type="button"
-            onClick={() => decide("deny", false, false, "deny")}
-            title={t("approval.action.alwaysDenyRuleHint", { rule: ownerRule.description })}
-            className={secondary}
-            data-owner-rule="deny"
-          >
-            {t("approval.action.alwaysDeny")}
-          </button>
-        )}
-        {ownerRule && (
-          <button
-            type="button"
-            onClick={() => decide("allow", false, false, "allow")}
-            title={t("approval.action.alwaysAllowRuleHint", { name: bot?.name ?? t("approval.someone"), rule: ownerRule.description })}
-            className={secondary}
-            data-owner-rule="allow"
-          >
-            {t("approval.action.alwaysAllow")}
-          </button>
-        )}
-        {!ownerRule && !durableRequest && bot && pending.allowKey && (
-          <button
-            type="button"
-            onClick={() => decide("allow", true)}
-            title={t("approval.action.stopAsking", { name: bot.name, key: pending.allowKey })}
-            className={secondary}
-          >
-            {t("approval.action.alwaysAllow")}
-          </button>
-        )}
-        {!ownerRule && !durableRequest && !pending.allowKey && !canRememberCommand && pending.allowSession && (
-          <button
-            type="button"
-            onClick={() => decide("allow", true)}
-            title={t("approval.action.alwaysAllowSessionHint")}
-            className={secondary}
-          >
-            {t("approval.action.alwaysAllowSession")}
-          </button>
-        )}
-        {/* never without the bot: the rule would silently become one for all bots */}
-        {candidate && bot && (
-          <AlwaysAllowThis
-            candidate={candidate}
-            bot={bot}
-            threadId={pending.threadId ?? threadId}
-            requestId={pending.requestId}
-            className={secondary}
-            onSaved={(behavior) => {
-              if (behavior === "allow") decide("allow");
-              else if (behavior === "deny") decide("deny");
-            }}
-          />
-        )}
-        {canRememberCommand && pending.commandAllowlist && (
-          <button
-            type="button"
-            onClick={() => decide("allow", false, true)}
-            title={t("approval.action.alwaysAllowCommandHint", { cwd: pending.commandAllowlist.cwd })}
-            className={secondary}
-          >
-            {t("approval.action.alwaysAllowCommand")}
-          </button>
-        )}
+        {widening}
         <button
           type="button"
           onClick={() => decide("allow")}
@@ -456,86 +572,109 @@ export function PendingApprovalActions({
             "bg-accent font-medium text-accent-ink hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40",
           )}
         >
-          {isTeamSetup ? pending.message.card?.options[0] : isSkillRequest
-            ? pending.message.card?.skillRequest?.action === "update"
-              ? t("approval.action.update")
-              : t("approval.action.enable")
-            : isRoutineRequest || isProfileRequest
-              ? t("approval.action.confirm")
-              : t("approval.action.allowOnce")}
+          {allowLabel}
         </button>
       </div>
     </div>
   );
 }
 
-/** "Toujours permettre ceci" (2026-10-16): a custom rule in the person's
- * own words, prefilled from the call and saved from this card, then this
- * request answered. The server refuses a rule that would not cover the card
- * (a risky kind left unticked), so a saved rule always means what it says. */
-export function AlwaysAllowThis({ candidate, bot, threadId, requestId, className, onSaved }: {
+/** "Toujours permettre" on a send card: the recipients join this bot's
+ * allowed list, then this request is allowed once. The list screen is not
+ * redrawn here. */
+function AlwaysAllowRecipients({ bot, keys, className, onSaved }: {
+  bot: Bot;
+  keys: string[];
+  className: string;
+  onSaved: () => void;
+}) {
+  const store = useStore();
+  const dispatch = store.dispatch;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const bots = store.state?.bots ?? [];
+  const names = keys.map((key) => {
+    const entry = parseRecipientEntry(key);
+    if (!entry) return key;
+    if (entry.kind !== "bot") return entry.value;
+    return bots.find((candidate) => candidate.id === entry.value)?.name ?? t("botPanel.recipients.deletedBot");
+  }).join(", ");
+  return (
+    <>
+      <button
+        type="button"
+        disabled={busy}
+        title={t("approval.recipients.alwaysHint", { names })}
+        className={cn(className, "disabled:opacity-40")}
+        data-always-allow=""
+        data-always-allow-recipient=""
+        onClick={() => {
+          const current = bot.allowedRecipients ?? [];
+          const next = [...current];
+          for (const key of keys) if (!next.includes(key)) next.push(key);
+          if (next.length === current.length) {
+            onSaved();
+            return;
+          }
+          setBusy(true);
+          setError(null);
+          void api<{ bot: Bot }>(`/api/bots/${encodeURIComponent(bot.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ allowedRecipients: next }),
+          })
+            .then((response) => {
+              dispatch({ type: "botPatched", bot: response.bot });
+              onSaved();
+            })
+            .catch((failure: unknown) => setError(failure instanceof Error ? failure.message : String(failure)))
+            .finally(() => setBusy(false));
+        }}
+      >
+        {t("approval.action.alwaysAllow")}
+      </button>
+      {error && <div role="alert" className="order-last w-full basis-full text-[12px] text-danger">{error}</div>}
+    </>
+  );
+}
+
+/** "Always allow" for a card whose rule is the person's own words (a custom
+ * rule the server proposed, 2026-10-16): one click saves it for this bot,
+ * as proposed, then answers this request. No editor on the card
+ * (2026-10-20, JC): the rule can be changed in Settings > Security. */
+function AlwaysAllowCandidate({ candidate, bot, threadId, requestId, className, onSaved }: {
   candidate: NonNullable<NonNullable<Message["card"]>["customRuleCandidate"]>;
   bot: Bot;
   threadId: string;
   requestId: string;
   className: string;
-  onSaved: (behavior: "allow" | "ask" | "deny") => void;
+  onSaved: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!open) {
-    return (
+  return (
+    <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        disabled={busy}
         title={t("customRules.alwaysAllowThisHint", { name: bot.name })}
-        className={className}
-        data-always-allow-this-button
-      >
-        {t("customRules.alwaysAllowThis")}
-      </button>
-    );
-  }
-  return (
-    <div className="order-first w-full basis-full" data-always-allow-this>
-      {candidate.binding && shellProgram(candidate.binding.command) === "git" && (
-        <p role="note" className="mb-1.5 text-[12px] text-warning" data-custom-rule-git-hooks>{t("customRules.gitHooks")}</p>
-      )}
-      <CustomRuleForm
-        fromCard
-        botName={bot.name}
-        initial={{ when: candidate.when, behavior: "allow", allBots: false, riskScope: [] }}
-        risks={candidate.risks}
-        saveLabel={t("customRules.form.saveAndAllow")}
-        busy={busy}
-        onCancel={() => {
-          setOpen(false);
-          setError(null);
-        }}
-        onSave={(draft) => {
+        className={cn(className, "disabled:opacity-40")}
+        data-always-allow=""
+        onClick={() => {
           setBusy(true);
           setError(null);
           void api("/api/custom-rules", {
             method: "POST",
-            body: JSON.stringify({
-              when: draft.when,
-              behavior: draft.behavior,
-              botId: draft.allBots ? null : bot.id,
-              riskScope: draft.riskScope,
-              ...(draft.behavior === "allow" ? { fromCard: { threadId, requestId } } : {}),
-            }),
+            body: JSON.stringify({ when: candidate.when, behavior: "allow", botId: bot.id, riskScope: candidate.risks, fromCard: { threadId, requestId } }),
           })
-            .then(() => {
-              setOpen(false);
-              onSaved(draft.behavior);
-            })
+            .then(() => onSaved())
             .catch((failure: unknown) => setError(customRuleError(failure)))
             .finally(() => setBusy(false));
         }}
-      />
-      {error && <div role="alert" className="mt-2 text-[12px] text-danger">{error}</div>}
-    </div>
+      >
+        {t("approval.action.alwaysAllow")}
+      </button>
+      {error && <div role="alert" className="order-last w-full basis-full text-[12px] text-danger">{error}</div>}
+    </>
   );
 }
 
@@ -568,6 +707,7 @@ export function PendingApprovalBox({
       {/* locale: the panel is memoized and its other props do not
           change with the language (see MessagesList in ChatView) */}
       <PendingApprovalPanel
+        key={pending.requestId}
         pending={pending}
         count={approvals.length}
         index={index}
@@ -589,9 +729,12 @@ export function PendingApprovalBox({
         pending={pending}
         threadId={threadId}
         bot={botFor(pending)}
-        // a parallel task's "cancel" stops that task, never this conversation's turn
+        // a parallel task's "cancel" stops that task, a bot-to-bot
+        // conversation's stops that conversation's turn, never this one's
         onCancelTurn={pending.threadId && pending.threadId !== threadId && botFor(pending)
-          ? () => dispatch({ type: "stopParallelTask", botId: botFor(pending)!.id, threadId: pending.threadId! })
+          ? pending.askedBy !== undefined
+            ? () => dispatch({ type: "interrupt", botId: botFor(pending)!.id, threadId: pending.threadId! })
+            : () => dispatch({ type: "stopParallelTask", botId: botFor(pending)!.id, threadId: pending.threadId! })
           : onCancelTurn}
       />
     </div>

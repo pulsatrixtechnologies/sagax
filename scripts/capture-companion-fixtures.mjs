@@ -73,8 +73,9 @@ const start = (label, args, env) => {
   const child = spawn(process.execPath, args, {
     cwd: ROOT,
     env: { PATH: dirname(process.execPath), TZ: "UTC", ...env },
-    stdio: ["ignore", "ignore", "pipe"],
+    stdio: ["ignore", "pipe", "pipe"],
   });
+  child.stdout.on("data", (c) => (child.out = (child.out ?? "") + c));
   child.stderr.on("data", (c) => (child.err = (child.err ?? "") + c));
   children.push({ label, child });
   return child;
@@ -190,7 +191,11 @@ async function main() {
     SAGAX_CONTROL_PORT: String(CONTROL_PORT),
     SAGAX_COMPANION_DIR: join(home, "companion"),
   });
-  await waitFor(`${CONTROL}/state`, "companion", sidecar);
+  // The control page itself needs no token; its API needs the one the
+  // standalone companion prints (OpenMausBot #2930 port).
+  await waitFor(`${CONTROL}/`, "companion", sidecar);
+  for (let attempt = 0; attempt < 50 && !/#token=[\w-]{43}/.test(sidecar.out ?? ""); attempt++) await new Promise((resolve) => setTimeout(resolve, 100));
+  const controlHeaders = { "x-openmausbot-control-token": /#token=([\w-]{43})/.exec(sidecar.out ?? "")?.[1] ?? "" };
 
   // ── what an unpaired phone sees, captured before there is a token ──────
   console.log("writing:");
@@ -202,7 +207,7 @@ async function main() {
   })).body);
 
   // ── pair, exactly as the phone does ────────────────────────────────────
-  const { code } = (await json(`${CONTROL}/pairing`, { method: "POST" })).body;
+  const { code } = (await json(`${CONTROL}/pairing`, { method: "POST", headers: controlHeaders })).body;
   const paired = await json(`${SIDECAR}/api/pair`, {
     method: "POST",
     headers: { "content-type": "application/json" },

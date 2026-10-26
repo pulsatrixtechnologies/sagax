@@ -14,6 +14,14 @@ vi.mock("./DesktopCapabilities", () => ({
   useMacInsetChrome: () => ({}),
 }));
 
+// Threads on: these cases check that an opened-thread receipt still renders
+// its "Go to conversation" chip. ThreadChip now hides it when threads are
+// off (that is covered in ThreadChip.test.ts).
+vi.mock("@/lib/thread-preferences", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/thread-preferences")>(),
+  useShowThreads: () => true,
+}));
+
 import { GroupView, RoomToolChip } from "./GroupView";
 
 const chip = (patch: Partial<Message> = {}): Message => ({

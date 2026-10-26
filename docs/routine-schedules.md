@@ -72,6 +72,28 @@ use an appropriate event/webhook workflow instead of a fake weekly schedule.
   for the same cron routine does not accumulate overlapping copies (a run is
   waiting while teammates still owe it results on the job runtime,
   docs/runtime-contract.md §9).
+- A run waiting on the person (a question, an approval) gives way to its
+  routine's next occurrence once it has waited more than 30 minutes before that
+  occurrence came due and no hand-off to another bot is still open: it stops
+  with "Stopped waiting: the next scheduled run of this routine started
+  instead". An occurrence skipped behind a wait that is still held leaves one
+  Missed receipt per wait, so the owner hears of it.
+- An unattended bot run recovers from a passing failure by itself
+  (`server/routine-recovery.ts`):
+  - Its engine stalled, the provider rate-limited it or failed for a moment
+    (or Sagax restarted while it ran): it starts once more in the same
+    conversation after a short wait (15 s; a minute after a rate limit), told
+    to check what its first start already did. A second failure fails it:
+    "Failed after one automatic retry: ...".
+  - Its bot or conversation was busy when it started: it waits there,
+    checking every 30 s, for up to an hour.
+  - Signed out, out of credit, a usage limit or an engine that needs setting
+    up: no retry. The owner gets one notification per bot and cause saying
+    what to do, and no more until one of that bot's runs completes. A usage
+    limit that says when it resets (Claude Code does) puts the run back for
+    just after the reset, if that is within 12 hours.
+  - The log says what happened ("Retried after the engine stalled · Completed"),
+    and each routine shows "N of M runs OK this week".
 - Existing one-time, daily/weekday and interval schedules are not migrated or
   reinterpreted. Team exports retain cron expressions and zones; imports remain
   paused until enabled. Older phone apps safely treat cron as a newer schedule;
@@ -80,6 +102,44 @@ use an appropriate event/webhook workflow instead of a fake weekly schedule.
 Cron series are edited through the routine editor rather than calendar dragging,
 which could otherwise ambiguously change an entire expression. Dense calendar
 projections are bounded per day; Run logs remain the source of actual outcomes.
+
+## Exact or flexible timing
+
+A repeating routine starts at its scheduled time, or inside a window around
+that time. A one-time routine always starts at the time that was chosen.
+
+Flexible timing has an early window and a late window, in whole minutes.
+When neither is given, both are 15. The minutes are stored as written.
+When a start is placed they are capped at half the gap between consecutive
+scheduled times, so two windows cannot overlap. A daily gap is the shortest
+distance between the selected weekdays. An interval gap is its cadence. A
+cron gap is the shortest real time between consecutive runs. It comes
+from the minute and hour grid and the distance between matching days,
+including the step back to the next hour and the step from the last
+restricted day onto the next one. Month and weekday names, in any case,
+including a range, a list, or a step, are read as numbers. A spring-forward
+from 2024 through 2031 shortens a gap that contains the skipped minutes, and
+a time inside those minutes is counted at the later instant the clock jumps to.
+A day-of-month expression whose only spring-forward falls outside that span
+keeps the wall-clock gap. The repeated hour when the clocks fall back does
+not shorten a gap. The result does not depend on when it is measured, and it
+is remembered for that expression and zone. A field that is not a number or
+a three-letter name is still walked, and a cycle longer than 2,500 steps
+can be cut short. A late window of 0 means the
+run is ready by the scheduled time.
+
+The start inside the window is chosen from the routine and the scheduled
+slot. It stays the same after a restart. The following slot is computed
+from the scheduled time, not from the shifted start. A slot that already
+fired is not placed again, including after a pause, a schedule edit, a
+restart, a time-zone change, or a suspension from an older build being
+cleared, while its window is still open.
+
+The editor offers Exact or Flexible on a repeating routine. A flexible
+schedule reads "around HH:MM (-E/+L min)".
+
+An older build does not know these fields. The first time that build saves
+the routine, it drops the timing settings.
 
 ## Webhooks: always a bearer token
 

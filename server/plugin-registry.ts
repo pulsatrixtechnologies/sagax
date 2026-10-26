@@ -9,7 +9,12 @@
 // and always show the remote's domain, because a search for a brand can
 // return a third party's server. A registry failure only empties the
 // community part: the featured list always answers.
-import { PLUGIN_CATALOG, type PluginCatalogEntry } from "../shared/plugin-catalog.ts";
+//
+// Data centers (2026-10-21): a featured entry may list its regional
+// addresses; a registry remote whose address has ONE variable with a closed
+// list of choices ({region} with choices us, eu) becomes one address per
+// choice. Either way the person picks the region before connecting.
+import { PLUGIN_CATALOG, type PluginCatalogEntry, type PluginRegion } from "../shared/plugin-catalog.ts";
 
 export const REGISTRY_URL = "https://registry.modelcontextprotocol.io/v0/servers";
 export const REGISTRY_TIMEOUT_MS = 5_000;
@@ -42,6 +47,8 @@ export interface PluginListing {
   site?: string;
   /** Featured: the Connect apps category from the catalog. */
   category?: string;
+  /** The provider's data centers, `url` being the default one. */
+  regions?: PluginRegion[];
 }
 
 export function featuredListing(entry: PluginCatalogEntry): PluginListing {
@@ -49,7 +56,35 @@ export function featuredListing(entry: PluginCatalogEntry): PluginListing {
     id: entry.id, name: entry.name, description: entry.description, url: entry.url, transport: entry.transport,
     domain: new URL(entry.url).hostname, auth: entry.auth, source: "featured", reviewed: true, icon: entry.icon, docsUrl: entry.docsUrl,
     site: entry.domain, ...(entry.category ? { category: entry.category } : {}),
+    ...(entry.regions ? { regions: entry.regions.map((region) => ({ ...region })) } : {}),
   };
+}
+
+/** The listing as it connects to one data center: its address becomes that
+ * region's. Null when the listing has no such region. Pure. */
+export function listingInRegion(listing: PluginListing, regionId: string | undefined): PluginListing | null {
+  if (regionId === undefined) return listing;
+  const region = listing.regions?.find((candidate) => candidate.id === regionId);
+  if (!region) return null;
+  let domain: string;
+  try { domain = new URL(region.url).hostname; } catch { return null; }
+  return { ...listing, url: region.url, domain };
+}
+
+/** The regions of a remote address with one templated variable whose
+ * choices are listed ({region} in https://{region}.example.com/mcp). Pure. */
+export function registryRegions(url: string, variables: unknown): { url: string; regions: PluginRegion[] } | null {
+  const names = [...url.matchAll(/\{([A-Za-z_][A-Za-z0-9_]{0,31})\}/g)].map((match) => match[1]!);
+  if (names.length !== 1 || /[{}]/.test(url.replaceAll(`{${names[0]}}`, ""))) return null;
+  const variable = record(record(variables)?.[names[0]!]);
+  const choices = Array.isArray(variable?.choices) ? variable.choices.filter((choice): choice is string => typeof choice === "string" && /^[A-Za-z0-9-]{1,32}$/.test(choice)) : [];
+  if (choices.length < 2 || choices.length > 8) return null;
+  const regions = choices.map((choice) => ({ id: choice.toLowerCase(), label: choice.toUpperCase(), url: url.replaceAll(`{${names[0]}}`, choice) }));
+  if (regions.some((region) => !region.url.startsWith("https://") || region.url.length > 2_048)) return null;
+  try { for (const region of regions) new URL(region.url); } catch { return null; }
+  const wanted = variable?.default;
+  const fallback = typeof wanted === "string" ? regions.find((region) => region.id === wanted.toLowerCase()) : undefined;
+  return { url: (fallback ?? regions[0]!).url, regions };
 }
 
 export function featuredMatching(query: string): PluginListing[] {
@@ -77,7 +112,9 @@ export function registryListing(row: unknown): PluginListing | null {
   const remotes = Array.isArray(server.remotes) ? server.remotes.map(record).filter((remote): remote is Json => remote !== null) : [];
   for (const remote of remotes) {
     const type = remote.type === "streamable-http" ? "http" : remote.type === "sse" ? "sse" : null;
-    const url = typeof remote.url === "string" ? remote.url : "";
+    const raw = typeof remote.url === "string" ? remote.url : "";
+    const regional = /[{}]/.test(raw) ? registryRegions(raw, remote.variables) : null;
+    const url = regional ? regional.url : raw;
     if (!type || !url.startsWith("https://") || /[{}]/.test(url) || url.length > 2_048) continue;
     let domain: string;
     try { domain = new URL(url).hostname; } catch { continue; }
@@ -91,6 +128,7 @@ export function registryListing(row: unknown): PluginListing | null {
       id: `registry:${name}`, name: title, description: text(server.description, 300), url, transport: type, domain,
       auth: needsHeaders ? "headers" : "unknown", source: "registry", reviewed: false,
       ...(iconUrl ? { iconUrl } : {}), ...(website ? { docsUrl: website } : {}),
+      ...(regional ? { regions: regional.regions } : {}),
     };
   }
   return null;

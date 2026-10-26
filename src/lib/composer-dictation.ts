@@ -50,3 +50,12 @@ export function joinDictated(base: string, heard: string): string {
   if (!words) return base;
   return base ? `${base} ${words}` : words;
 }
+
+/** Held at least this long, a press of the mic or of its shortcut is a
+ * "hold to dictate": letting go stops. Shorter, it is a tap that toggles. */
+export const DICTATION_HOLD_MS = 350;
+
+/** Whether a press that began at `at` and ends at `now` was a hold. */
+export function isDictationHold(at: number, now: number): boolean {
+  return now - at >= DICTATION_HOLD_MS;
+}

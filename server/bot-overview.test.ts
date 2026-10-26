@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildBotOverview, connectedAppsFacts, grantsSummary, setupSteps, soulLead, type OverviewFacts } from "./bot-overview.ts";
+import { buildBotOverview, setupSteps, soulLead, type OverviewFacts } from "./bot-overview.ts";
 
 function baseFacts(overrides: Partial<OverviewFacts> = {}): OverviewFacts {
   return {
@@ -15,7 +15,6 @@ function baseFacts(overrides: Partial<OverviewFacts> = {}): OverviewFacts {
       autoApprove: false,
       approvePeerComms: false,
       peers: [],
-      composio: undefined,
       browser: undefined,
       chiefOfStaff: undefined,
     },
@@ -24,7 +23,6 @@ function baseFacts(overrides: Partial<OverviewFacts> = {}): OverviewFacts {
     webhooks: [],
     skills: [],
     engine: null,
-    connectedApps: { configured: false, authoritative: true, services: [] },
     sectionPeers: 0,
     timeZone: "UTC",
     recent: [],
@@ -35,7 +33,6 @@ function baseFacts(overrides: Partial<OverviewFacts> = {}): OverviewFacts {
 const WONT_ORDER = [
   "Command approvals use Ask mode; saved permissions and provider rules still apply.",
   "Cannot initiate contact with other bots.",
-  "Has no connected apps.",
   "Can't use a computer.",
   "Won't act on a schedule.",
   "Profile proposal cards require your approval.",
@@ -154,62 +151,6 @@ describe("buildBotOverview", () => {
     ]);
   });
 
-  it("shows two connected services in reaches", () => {
-    const facts = baseFacts({
-      bot: { ...baseFacts().bot, composio: true, computer: "local" },
-      engine: { composioMcp: true },
-      connectedApps: { configured: true, authoritative: true, services: ["gmail", "linear"] },
-    });
-    const overview = buildBotOverview(facts);
-    expect(overview.reaches).toContain("Can use 2 connected apps: gmail, linear.");
-    expect(overview.wont).not.toContain("Has no connected apps.");
-  });
-
-  it("reports connected apps could not be checked when unauthoritative, without also claiming none connected", () => {
-    const facts = baseFacts({
-      bot: { ...baseFacts().bot, composio: true, computer: "local" },
-      engine: { composioMcp: true },
-      connectedApps: { configured: true, authoritative: false, services: [] },
-    });
-    const overview = buildBotOverview(facts);
-    expect(overview.reaches).toContain("Connected apps could not be checked.");
-    expect(overview.wont).not.toContain("Has no connected apps.");
-    expect(overview.reaches.some((line) => line.startsWith("Can use"))).toBe(false);
-  });
-
-  it("states 'Has no connected apps.' when apps are off for the bot, even if the inventory is unverifiable", () => {
-    // Apps off is a definite negative that needs no inventory — saying
-    // "could not be checked" here would imply the bot might have apps.
-    const facts = baseFacts({
-      bot: { ...baseFacts().bot, composio: false, computer: "local" },
-      engine: { composioMcp: true },
-      connectedApps: { configured: true, authoritative: false, services: [] },
-    });
-    const overview = buildBotOverview(facts);
-    expect(overview.wont).toContain("Has no connected apps.");
-    expect(overview.reaches).not.toContain("Connected apps could not be checked.");
-  });
-
-  it("stays silent about apps in reaches when the engine cannot mount them", () => {
-    const facts = baseFacts({
-      bot: { ...baseFacts().bot, composio: true, computer: "local" },
-      engine: { composioMcp: false },
-      connectedApps: { configured: true, authoritative: false, services: ["gmail"] },
-    });
-    const overview = buildBotOverview(facts);
-    expect(overview.wont).toContain("Has no connected apps.");
-    expect(overview.reaches.some((line) => line.includes("connected app"))).toBe(false);
-  });
-
-  it("uses the singular for one connected app", () => {
-    const facts = baseFacts({
-      bot: { ...baseFacts().bot, composio: true, computer: "local" },
-      engine: { composioMcp: true },
-      connectedApps: { configured: true, authoritative: true, services: ["gmail"] },
-    });
-    expect(buildBotOverview(facts).reaches).toContain("Can use 1 connected app: gmail.");
-  });
-
   it("writes daily and once schedules as prose", () => {
     const overview = buildBotOverview(baseFacts({
       routines: [
@@ -271,62 +212,6 @@ describe("soulLead", () => {
   });
 });
 
-describe("connectedAppsFacts", () => {
-  it("lists the connected slugs when the inventory reads cleanly", async () => {
-    const facts = await connectedAppsFacts(true, "configured", async () => ({
-      gmail: { connected: true },
-      linear: { connected: false },
-    }));
-    expect(facts).toEqual({ configured: true, authoritative: true, services: ["gmail"] });
-  });
-
-  it("marks the inventory unverified instead of throwing when the read fails", async () => {
-    const facts = await connectedAppsFacts(true, "configured", async () => {
-      throw new Error("Connected apps: HTTP 502");
-    });
-    expect(facts).toEqual({ configured: true, authoritative: false, services: [] });
-  });
-
-  it("never reads when the connector is unconfigured or the store was unreadable", async () => {
-    let reads = 0;
-    const read = async () => {
-      reads += 1;
-      return {};
-    };
-    expect(await connectedAppsFacts(false, "unconfigured", read)).toEqual({ configured: false, authoritative: true, services: [] });
-    expect(await connectedAppsFacts(false, "unreadable", read)).toEqual({ configured: false, authoritative: false, services: [] });
-    expect(reads).toBe(0);
-  });
-});
-
-describe("grantsSummary", () => {
-  it("stays off the wire for a bot with no grants record", () => {
-    expect(grantsSummary(undefined)).toBeUndefined();
-    expect(buildBotOverview(baseFacts()).grants).toBeUndefined();
-  });
-
-  it("summarizes wildcards, exact lists and an explicit no-tools record", () => {
-    const grants = grantsSummary({
-      slack: { tools: "*" },
-      gmail: { tools: ["GMAIL_SEND_EMAIL", "GMAIL_FETCH_EMAILS"] },
-    });
-    // sorted by slug, so the order both clients render is deterministic
-    expect(grants).toEqual([
-      { slug: "gmail", level: "partial", toolCount: 2 },
-      { slug: "slack", level: "all", toolCount: 0 },
-    ]);
-    // {} is the explicit no-tools record: an empty list, not an absent one
-    expect(grantsSummary({})).toEqual([]);
-    expect(buildBotOverview(baseFacts({ bot: { ...baseFacts().bot, connectorTools: {} } })).grants).toEqual([]);
-  });
-
-  it("rides along in the built overview for a partial grant set", () => {
-    const connectorTools = { gmail: { tools: ["GMAIL_SEND_EMAIL"] } };
-    const overview = buildBotOverview(baseFacts({ bot: { ...baseFacts().bot, connectorTools } }));
-    expect(overview.grants).toEqual([{ slug: "gmail", level: "partial", toolCount: 1 }]);
-  });
-});
-
 describe("setupSteps", () => {
   it("lists optional setup ideas without inspecting conversation history", () => {
     const steps = setupSteps(baseFacts({ bot: { ...baseFacts().bot, name: "New bot", title: "", description: "" } }));
@@ -336,32 +221,24 @@ describe("setupSteps", () => {
       ["folder", false],
       ["schedule", false],
     ]);
-    // no apps step: this bot's engine has no connected-apps tools
-    expect(steps.find((step) => step.id === "apps")).toBeUndefined();
     expect(steps.every((step) => step.section)).toBe(true);
   });
 
   it("marks steps done from the same facts the sentences use", () => {
     const facts = baseFacts({
-      bot: { ...baseFacts().bot, name: "Kiwi", title: "Tracker", soul: "Be brief.", cwd: "/work", composio: true },
-      engine: { composioMcp: true },
-      connectedApps: { configured: true, authoritative: true, services: ["gmail"] },
+      bot: { ...baseFacts().bot, name: "Kiwi", title: "Tracker", soul: "Be brief.", cwd: "/work" },
       routines: [{ id: "r1", name: "Digest", enabled: true, schedule: { type: "daily", time: "09:00", weekdays: [1, 2, 3, 4, 5] }, nextRunAt: null }],
     });
     expect(setupSteps(facts).every((step) => step.done)).toBe(true);
-    expect(setupSteps(facts).map((step) => step.id)).toContain("apps");
     expect(buildBotOverview(facts).setup).toEqual(setupSteps(facts));
   });
 
-  it("does not count an unverified app inventory or a paused routine as done", () => {
+  it("does not count a paused routine as done", () => {
     const facts = baseFacts({
-      bot: { ...baseFacts().bot, composio: true },
-      engine: { composioMcp: true },
-      connectedApps: { configured: true, authoritative: false, services: ["gmail"] },
+      bot: { ...baseFacts().bot, name: "Kiwi", title: "Tracker", soul: "Be brief.", cwd: "/work" },
       routines: [{ id: "r1", name: "Digest", enabled: false, schedule: { type: "daily", time: "09:00", weekdays: [1] }, nextRunAt: null }],
     });
     const byId = Object.fromEntries(setupSteps(facts).map((step) => [step.id, step.done]));
-    expect(byId.apps).toBe(false);
     expect(byId.schedule).toBe(false);
   });
 });

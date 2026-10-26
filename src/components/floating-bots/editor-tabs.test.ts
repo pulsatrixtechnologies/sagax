@@ -126,9 +126,9 @@ describe("color palettes", () => {
       const hex = MASCOT_COLOR_HEX[name];
       expect(contrastRatio(hex, eyeInkOn(hex)), name).toBeGreaterThanOrEqual(3);
     }
-    // a shape's eyes are holes: the page behind shows through on any body color
+    // a shape's eyes are two opaque capsules in their own ink (light on a dark body), on any body color
     const html = renderToStaticMarkup(createElement(BotAvatar, { bot: { color: "midnight", mascotLook: { character: "shape" } } as never, size: 40 }));
-    expect(html).toMatch(/class="shape-fill" d="M[^"]+ZM[^"]+ZM[^"]+Z" fill-rule="evenodd"/);
+    expect(html).toMatch(/<path d="M[^"M]+M[^"M]+" fill="#f4f1ea"[^>]*data-shape-eyes=""/);
   });
 
   it("keeps the owl's eye readable in its socket on every color and skin", () => {
@@ -208,10 +208,9 @@ describe("Shape grid thumbnails", () => {
         expect(span).not.toContain("skin-fx-live");
       }
     }
-    // the clay body is the bot's own color, lit from the upper left (the clay gradient holds the color itself)
+    // the body is the bot's own colour, one flat fill (2026-10-18: no clay gradient any more)
     const plain = render({ color: "mint", mascotLook: { character: "shape", skins: { shape: "plain" } } });
     const grid = plain.slice(plain.indexOf("data-character-shape"), plain.indexOf("data-color-tabs"));
-    expect(grid.match(/fill="url\(#[^)]+-clay\)"/g)?.length).toBe(MASCOT_SHAPES.length);
-    expect(grid.match(new RegExp(`offset="0.7" stop-color="${MASCOT_COLOR_HEX.mint}"`, "gi"))?.length).toBeGreaterThanOrEqual(MASCOT_SHAPES.length);
+    expect(grid.match(new RegExp(`class="shape-fill" d="[^"]+" fill-rule="evenodd" data-shape-outline="" fill="${MASCOT_COLOR_HEX.mint}"`, "gi"))?.length).toBe(MASCOT_SHAPES.length);
   });
 });

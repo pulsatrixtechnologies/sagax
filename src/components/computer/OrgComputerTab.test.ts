@@ -203,7 +203,7 @@ describe("the cloud screen while its cluster wakes", () => {
     const waking = render(WAKING);
     expect(waking).toContain('data-computer-screen="starting"');
     expect(waking).toMatch(/data-screen-hint=""[^>]*text-\[11px\][^>]*text-ink-tertiary/);
-    expect(waking).toContain("The environment was asleep outside office hours. Starting can take a few minutes.");
+    expect(waking).toContain("The environment was asleep. Starting can take a few minutes.");
     expect(waking).not.toContain("cannot be reached");
     expect(waking).not.toContain(">Try again<");
     expect(waking).not.toMatch(/text-danger|text-warning/);
@@ -212,8 +212,8 @@ describe("the cloud screen while its cluster wakes", () => {
 
   it("adds how long only after two minutes", () => {
     expect(wakingHint(null)).toBeUndefined();
-    expect(wakingHint(90_000)).toBe("The environment was asleep outside office hours. Starting can take a few minutes.");
-    expect(wakingHint(3 * 60_000 + 20_000)).toBe("The environment was asleep outside office hours. Starting can take a few minutes. For 3 min so far.");
+    expect(wakingHint(90_000)).toBe("The environment was asleep. Starting can take a few minutes.");
+    expect(wakingHint(3 * 60_000 + 20_000)).toBe("The environment was asleep. Starting can take a few minutes. For 3 min so far.");
     expect(render({ ...WAKING, waking: { since: 1, elapsedMs: 4 * 60_000 } })).toContain("For 4 min so far.");
   });
 

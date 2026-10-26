@@ -40,7 +40,7 @@ function sshArgv(dataDir: string, alias: string) {
   return { command: "ssh", args, env: { ...process.env, PATH: ssh.path } };
 }
 
-function configuredHosts(cfg: AppConfig): { ssh: SshAliasTerminalHost[]; unraid: SshAliasTerminalHost[] } {
+export function configuredHosts(cfg: AppConfig): { ssh: SshAliasTerminalHost[]; unraid: SshAliasTerminalHost[] } {
   const ssh: SshAliasTerminalHost[] = [];
   const unraid: SshAliasTerminalHost[] = [];
   const raw = cfg.terminalShell?.hosts;
@@ -92,9 +92,15 @@ export function installTerminalFeature(deps: {
   owner?: (botId: string, threadId: string) => string;
   /** The bot owns this conversation (internal routes). */
   ownsThread: (botId: string, threadId: string) => boolean;
+  /** 2026-10-19: Always allow kept for a terminal offer (terminal-requests.ts). */
+  keptRule?: (principalId: string, botId: string, candidate: { tool: string; scope: Record<string, string> }, threadId: string) => { id: string } | null;
+  journalRule?: (input: { threadId: string; botId: string; requestId: string; summary: string; rule: string }) => void;
   /** The person's own environments, when this server has them. */
   personal?: Partial<Record<"sandbox" | "local-vm" | "desktop", PersonalTerminalDeps>>;
   now?: () => number;
+  /** When the person asks for a shell and a Tailcat session is already
+   * connected, open it instead of a workplace card. Null: no session. */
+  openRemoteShell?(args: { botId: string; threadId: string }): Promise<{ hostLabel: string; messageId: string } | { error: string } | null>;
 }): TerminalFeature {
   const now = deps.now ?? (() => Date.now());
   const audit = createTerminalAuditLog(deps.dataDir);
@@ -121,13 +127,19 @@ export function installTerminalFeature(deps: {
     access: deps.access,
     ...(deps.workPlace ? { workPlace: deps.workPlace } : {}),
     ...(deps.owner ? { owner: deps.owner } : {}),
+    ...(deps.keptRule ? { keptRule: deps.keptRule } : {}),
+    ...(deps.journalRule ? { journalRule: deps.journalRule } : {}),
   });
 
   return {
     registry,
     sessions,
     requests,
-    internalRoute: createTerminalInternalRoutes({ requests, ownsThread: deps.ownsThread }),
+    internalRoute: createTerminalInternalRoutes({
+      requests,
+      ownsThread: deps.ownsThread,
+      ...(deps.openRemoteShell ? { openRemoteShell: deps.openRemoteShell } : {}),
+    }),
     wire(routes, options) {
       routes.push(createTerminalRoutes({ requests, sessions, principalId: deps.principalId, upgrade: options.upgrade, live: options.live }));
     },

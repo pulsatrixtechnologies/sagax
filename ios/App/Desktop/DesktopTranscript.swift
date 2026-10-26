@@ -466,6 +466,7 @@ enum DesktopApprovalText {
         switch ApprovalHeading.of(card) {
         case let .wantsTo(action): return wants(name, action)
         case .confirmRoutine: return wants(name, .scheduleRoutine)
+        case .confirmPausedRoutine: return String(localized: "\(name) wants to schedule a paused routine")
         case .confirmRoutineChange: return wants(name, .changeRoutine)
         case .enableSkill: return wants(name, .enableSkill)
         case .updateSkill: return wants(name, .updateSkill)

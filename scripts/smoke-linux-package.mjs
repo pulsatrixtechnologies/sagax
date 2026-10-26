@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { createServer } from "node:http";
 import {
   chmodSync,
   existsSync,
@@ -164,27 +163,6 @@ process.on("SIGTERM", shutdown);
 );
 chmodSync(sentinel, 0o755);
 
-// Accept the optional managed-Composio request but never answer it. The
-// renderer must still become ready and close normally while this request is
-// pending, proving hosted integration latency is outside first paint.
-let brokerRequests = 0;
-const brokerSockets = new Set();
-const slowBroker = createServer(() => {
-  brokerRequests += 1;
-});
-slowBroker.on("connection", (socket) => {
-  brokerSockets.add(socket);
-  socket.once("close", () => brokerSockets.delete(socket));
-});
-await new Promise((resolve, reject) => {
-  slowBroker.once("error", reject);
-  slowBroker.listen(0, "127.0.0.1", resolve);
-});
-const brokerAddress = slowBroker.address();
-if (!brokerAddress || typeof brokerAddress === "string") {
-  throw new Error("could not start the deterministic slow Composio broker");
-}
-
 const desktopEnv = {
   ...process.env,
   HOME: home,
@@ -193,7 +171,6 @@ const desktopEnv = {
   XDG_SESSION_TYPE: wayland ? "wayland" : "x11",
   XDG_CURRENT_DESKTOP: "GNOME",
   CUA_DRIVER_PATH: sentinel,
-  SAGAX_COMPOSIO_BROKER_URL: `http://127.0.0.1:${brokerAddress.port}`,
   SAGAX_SMOKE_TEST: "1",
   SAGAX_SMOKE_CUA: hardDeath || bundled || sessionBlocked ? "0" : "1",
   SAGAX_SMOKE_BUNDLED_CUA: bundled ? "1" : "0",
@@ -331,7 +308,6 @@ try {
     throw new Error("Linux package did not disable hardware acceleration before startup");
   }
   if (displayMediaRequests !== 0) throw new Error("launch triggered display capture without user intent");
-  await until(async () => brokerRequests > 0, "the optional slow-broker request");
   if (sessionBlocked) {
     await waitForExit();
     if (existsSync(marker)) throw new Error("release safety block still invoked a CUA executable");
@@ -346,7 +322,7 @@ try {
       throw new Error("release safety block did not clear the durable Linux opt-in");
     }
     console.log(
-      `[smoke-linux-package] OK (${wayland ? "GNOME/Wayland" : path.basename(executable)}): slow optional broker did not block first paint and Wayland CUA failed closed`,
+      `[smoke-linux-package] OK (${wayland ? "GNOME/Wayland" : path.basename(executable)}): Wayland CUA failed closed`,
     );
   } else if (bundled) {
     if (signalShutdown) child.kill("SIGTERM");
@@ -589,8 +565,6 @@ try {
   }
 } finally {
   await stopProcess();
-  for (const socket of brokerSockets) socket.destroy();
-  await new Promise((resolve) => slowBroker.close(resolve));
   if (process.env.SAGAX_KEEP_SMOKE_DIR !== "1") rmSync(sandbox, { recursive: true, force: true });
   else console.log(`[smoke-linux-package] kept ${sandbox}`);
 }

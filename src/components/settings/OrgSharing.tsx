@@ -25,6 +25,7 @@ import { ConfirmDialog } from "../ConfirmDialog";
 import { useHeldMenuMotion } from "../MenuMotion";
 import { PersonAvatar } from "../MessageAuthor";
 import { Card } from "../SettingsPrimitives";
+import { personLabel } from "@/lib/human-label";
 
 export interface OrgBot {
   id: string;
@@ -55,7 +56,7 @@ export function sharingLine(grants: readonly WireGrant[]): string {
 }
 
 export function ownerLabel(bot: Pick<OrgBot, "ownerName" | "ownerPrincipalId">): string {
-  return bot.ownerName || bot.ownerPrincipalId;
+  return personLabel(bot.ownerName, bot.ownerPrincipalId);
 }
 
 /** The bots whose name, owner or section holds the query (case-insensitive). */

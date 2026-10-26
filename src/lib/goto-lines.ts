@@ -6,8 +6,10 @@
 import type { Message } from "@/state/store";
 import type { ExchangeParty, ExchangeRun } from "@/lib/bot-exchange";
 import { isStatusActivity } from "@/lib/activity-runs";
+import { isAppleMobileWebClient } from "@/lib/tool-activity-rows";
 import { failedTurnCause } from "@/lib/failed-turn";
 import { isCancelledTranscriptRow } from "../../shared/client-cancel";
+import { shownCwWidget } from "../../shared/cw-widgets/tool-call";
 
 export type GotoTarget =
   | { kind: "exchange"; key: string; run: ExchangeRun }
@@ -191,15 +193,20 @@ export function gotoAgents(
 /** A 1:1 chat item that draws nothing: a folded tool run or a lone tool step
  * with Settings > Tool calls off. Mirrors ChatView's own rules; anything it
  * does not know stays visible and so ends a stack of go-to lines. */
-export function silentChatItem(item: AnyItem, showToolCalls: boolean): boolean {
+export function silentChatItem(item: AnyItem, showToolCalls: boolean, appleMobileWeb: boolean = isAppleMobileWebClient()): boolean {
   if (showToolCalls) return false;
   // a group with a turn's narration still shows that narration
-  if (item.kind === "run" && "messages" in item) return !item.messages.some((message) => message.tool?.widget || message.kind !== "activity");
+  if (item.kind === "run" && "messages" in item) return !item.messages.some((message) => shownCwWidget(message.tool) || message.kind !== "activity");
   if (item.kind !== "message" || !("message" in item)) return false;
   const message = item.message;
   if (message.kind !== "activity" || !message.tool || message.state) return false;
   if (isCancelledTranscriptRow(message)) return false;
-  if (message.comm || message.threadRef || message.dataResult || message.tool.widget) return false;
+  // A thread receipt, a Data receipt and a widget stay visible: the threads
+  // toggle, not this one, governs the first. A comm chip is verbose detail
+  // on desktop (silent with tool calls off, JC 2026-10-22), but stays on
+  // Apple mobile web, where it is the only trace a teammate was consulted.
+  if (message.threadRef || message.dataResult || message.tool.widget) return false;
+  if (message.comm) return !appleMobileWeb && message.tool.ok !== false;
   if (message.parallelTask?.role === "card" || isStatusActivity(message)) return false;
   return failedTurnCause(message.tool.name) === null;
 }

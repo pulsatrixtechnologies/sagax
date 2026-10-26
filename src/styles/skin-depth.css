@@ -1,0 +1,963 @@
+/* ── Full colour, "Plein" (2026-10-19) ─────────────────────────────────────
+   JC : « couleurs pleines ». With data-skin-depth="full" over a colour tint,
+   the colour reaches the whole surface, not only the accent: ground, rail,
+   cards, menus, fields, composer, your own bubble, the scrollbar and a top
+   glow in the accent (Pulsatrix's radial wash). A dark Red reads bordeaux,
+   a light Green mint.
+
+   Every value is the base skin's own token re-hued toward the colour in
+   OKLCH at the same lightness, so each family keeps its ladder and its cast:
+   Pulsatrix keeps part of its night blue, Foundry its warmth, Atelier its
+   paper; Midnight and Daylight are neutral, so they take the colour alone.
+   The accent family stays the tint block's. One block per base skin and
+   colour, measured by pnpm check:contrast as "<base>+<colour>+full".
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Pulsatrix, Rouge plein */
+[data-skin="pulsatrix"][data-skin-tint="red"][data-skin-depth="full"] {
+  --color-app: #160509;
+  --color-panel: #1f0910;
+  --color-raised: #371823;
+  --color-raised-hover: #44212e;
+  --color-composer: #371823;
+  --color-card: #290f18;
+  --color-menu: #280d15;
+  --color-inset: #1c0a12;
+  --color-control: #381823;
+  --color-hairline: #482835;
+  --color-popover-border: #7a5d65;
+  --color-sidebar: #1d070f;
+  --color-sidebar-hairline: #4b2a37;
+  --color-sidebar-hover: #ffedef0d;
+  --color-sidebar-selected: #e5807e29;
+  --color-sidebar-ink: #f8eff2;
+  --color-sidebar-ink-secondary: #b79ea9;
+  --color-ink: #f8eff2;
+  --color-ink-secondary: #b79ea9;
+  --color-ink-tertiary: #a9929d;
+  --color-hover: #88716f2c;
+  --color-selected: #906d6b52;
+  --color-bubble-user: #4f0010;
+  --color-bubble-user-ink: #f8eff2;
+  --color-scrollbar: #5b3041;
+  --color-maus-line: #b79ea9;
+  --color-danger: #f55d66;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Pulsatrix, Rose plein */
+[data-skin="pulsatrix"][data-skin-tint="pink"][data-skin-depth="full"] {
+  --color-app: #150412;
+  --color-panel: #1d081b;
+  --color-raised: #341731;
+  --color-raised-hover: #40203f;
+  --color-composer: #341731;
+  --color-card: #270e24;
+  --color-menu: #250c22;
+  --color-inset: #1b091b;
+  --color-control: #351632;
+  --color-hairline: #452745;
+  --color-popover-border: #775c73;
+  --color-sidebar: #1b0619;
+  --color-sidebar-hairline: #472947;
+  --color-sidebar-hover: #ffecf80d;
+  --color-sidebar-selected: #e283b129;
+  --color-sidebar-ink: #f7eff7;
+  --color-sidebar-ink-secondary: #b49eb5;
+  --color-ink: #f7eff7;
+  --color-ink-secondary: #b49eb5;
+  --color-ink-tertiary: #a691a8;
+  --color-hover: #8670792c;
+  --color-selected: #8d6d7a52;
+  --color-bubble-user: #4d0231;
+  --color-bubble-user-ink: #f7eff7;
+  --color-scrollbar: #572e55;
+  --color-maus-line: #b49eb5;
+  --color-danger: #f55d66;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Pulsatrix, Vert plein */
+[data-skin="pulsatrix"][data-skin-tint="green"][data-skin-depth="full"] {
+  --color-app: #000e0b;
+  --color-panel: #001410;
+  --color-raised: #002b23;
+  --color-raised-hover: #03362e;
+  --color-composer: #002b23;
+  --color-card: #001f18;
+  --color-menu: #001d16;
+  --color-inset: #001713;
+  --color-control: #012b23;
+  --color-hairline: #073d33;
+  --color-popover-border: #4e6e64;
+  --color-sidebar: #001410;
+  --color-sidebar-hairline: #073d33;
+  --color-sidebar-hover: #e3f8ec0d;
+  --color-sidebar-selected: #79d69229;
+  --color-sidebar-ink: #ebf4f2;
+  --color-sidebar-ink-secondary: #91ada8;
+  --color-ink: #ebf4f2;
+  --color-ink-secondary: #91ada8;
+  --color-ink-tertiary: #84a09b;
+  --color-hover: #6b7c6e2c;
+  --color-selected: #657f6952;
+  --color-bubble-user: #013b1d;
+  --color-bubble-user-ink: #ebf4f2;
+  --color-scrollbar: #054b3f;
+  --color-maus-line: #91ada8;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Pulsatrix, Jaune plein */
+[data-skin="pulsatrix"][data-skin-tint="yellow"][data-skin-depth="full"] {
+  --color-app: #100900;
+  --color-panel: #160e02;
+  --color-raised: #2d210f;
+  --color-raised-hover: #382b18;
+  --color-composer: #2d210f;
+  --color-card: #211706;
+  --color-menu: #201504;
+  --color-inset: #181108;
+  --color-control: #2d210d;
+  --color-hairline: #3d3221;
+  --color-popover-border: #6f6455;
+  --color-sidebar: #160e02;
+  --color-sidebar-hairline: #3d3221;
+  --color-sidebar-hover: #fbf1e00d;
+  --color-sidebar-selected: #f5cc6829;
+  --color-sidebar-ink: #f5f1ed;
+  --color-sidebar-ink-secondary: #ada59c;
+  --color-ink: #f5f1ed;
+  --color-ink-secondary: #ada59c;
+  --color-ink-tertiary: #a0988f;
+  --color-hover: #8176642c;
+  --color-selected: #85755952;
+  --color-bubble-user: #3f2e02;
+  --color-bubble-user-ink: #f5f1ed;
+  --color-scrollbar: #4c3d25;
+  --color-maus-line: #ada59c;
+  --color-danger: #f55d66;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Midnight, Rouge plein */
+[data-skin="midnight"][data-skin-tint="red"][data-skin-depth="full"] {
+  --color-app: #210a0a;
+  --color-panel: #270d0d;
+  --color-raised: #351313;
+  --color-raised-hover: #461e1e;
+  --color-composer: #351313;
+  --color-card: #331414;
+  --color-menu: #331414;
+  --color-inset: #2a1313;
+  --color-control: #401b1b;
+  --color-hairline: #4f2928;
+  --color-popover-border: #886765;
+  --color-sidebar: #1d0506;
+  --color-sidebar-hairline: #4c2726;
+  --color-sidebar-hover: #fff2f10f;
+  --color-sidebar-selected: #fff2f114;
+  --color-sidebar-ink: #fdf2f2;
+  --color-sidebar-ink-secondary: #fff1f1a8;
+  --color-ink: #fdf2f2;
+  --color-ink-secondary: #fff1f1a8;
+  --color-ink-tertiary: #fff1f18a;
+  --color-hover: #8771702c;
+  --color-selected: #8f6e6c52;
+  --color-bubble-user: #5e2727;
+  --color-bubble-user-ink: #fdf2f2;
+  --color-scrollbar: #653333;
+  --color-maus-line: #fff1f1;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Midnight, Rose plein */
+[data-skin="midnight"][data-skin-tint="pink"][data-skin-depth="full"] {
+  --color-app: #1f0a14;
+  --color-panel: #250d18;
+  --color-raised: #321322;
+  --color-raised-hover: #431e2f;
+  --color-composer: #321322;
+  --color-card: #301421;
+  --color-menu: #301421;
+  --color-inset: #241019;
+  --color-control: #3d1b2b;
+  --color-hairline: #4e2a3a;
+  --color-popover-border: #856673;
+  --color-sidebar: #1b0510;
+  --color-sidebar-hairline: #492636;
+  --color-sidebar-hover: #fff1f60f;
+  --color-sidebar-selected: #fff1f614;
+  --color-sidebar-ink: #fcf2f6;
+  --color-sidebar-ink-secondary: #fff1f6a8;
+  --color-ink: #fcf2f6;
+  --color-ink-secondary: #fff1f6a8;
+  --color-ink-tertiary: #fff1f68a;
+  --color-hover: #8571792c;
+  --color-selected: #8c6d7a52;
+  --color-bubble-user: #5a273f;
+  --color-bubble-user-ink: #fcf2f6;
+  --color-scrollbar: #613348;
+  --color-maus-line: #fff1f6;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Midnight, Bleu plein */
+[data-skin="midnight"][data-skin-tint="blue"][data-skin-depth="full"] {
+  --color-app: #071223;
+  --color-panel: #09162a;
+  --color-raised: #0d1f39;
+  --color-raised-hover: #182c4a;
+  --color-composer: #0d1f39;
+  --color-card: #0f1f36;
+  --color-menu: #0f1f36;
+  --color-inset: #101b2d;
+  --color-control: #152844;
+  --color-hairline: #223652;
+  --color-popover-border: #617189;
+  --color-sidebar: #030e20;
+  --color-sidebar-hairline: #203350;
+  --color-sidebar-hover: #eff6ff0f;
+  --color-sidebar-selected: #eff6ff14;
+  --color-sidebar-ink: #f0f6fd;
+  --color-sidebar-ink-secondary: #f0f6fea8;
+  --color-ink: #f0f6fd;
+  --color-ink-secondary: #f0f6fea8;
+  --color-ink-tertiary: #f0f6fe8a;
+  --color-hover: #6d78882c;
+  --color-selected: #68789152;
+  --color-bubble-user: #1e3b65;
+  --color-bubble-user-ink: #f0f6fd;
+  --color-scrollbar: #2b456a;
+  --color-maus-line: #f0f6fe;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Midnight, Vert plein */
+[data-skin="midnight"][data-skin-tint="green"][data-skin-depth="full"] {
+  --color-app: #041708;
+  --color-panel: #051b0b;
+  --color-raised: #072610;
+  --color-raised-hover: #12341b;
+  --color-composer: #072610;
+  --color-card: #0b2512;
+  --color-menu: #0b2512;
+  --color-inset: #0d2011;
+  --color-control: #103018;
+  --color-hairline: #1e3d25;
+  --color-popover-border: #5f7863;
+  --color-sidebar: #001304;
+  --color-sidebar-hairline: #1c3b23;
+  --color-sidebar-hover: #e8fbeb0f;
+  --color-sidebar-selected: #e0ffe514;
+  --color-sidebar-ink: #f0f7f1;
+  --color-sidebar-ink-secondary: #e6fceaa8;
+  --color-ink: #f0f7f1;
+  --color-ink-secondary: #e6fceaa8;
+  --color-ink-tertiary: #e6fcea8a;
+  --color-hover: #6c7c6e2c;
+  --color-selected: #667f6a52;
+  --color-bubble-user: #144623;
+  --color-bubble-user-ink: #f0f7f1;
+  --color-scrollbar: #254f2f;
+  --color-maus-line: #e6fcea;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Midnight, Jaune plein */
+[data-skin="midnight"][data-skin-tint="yellow"][data-skin-depth="full"] {
+  --color-app: #1b1000;
+  --color-panel: #201400;
+  --color-raised: #2b1c00;
+  --color-raised-hover: #3c2800;
+  --color-composer: #2b1c00;
+  --color-card: #2b1c00;
+  --color-menu: #2b1c00;
+  --color-inset: #241905;
+  --color-control: #372400;
+  --color-hairline: #44310e;
+  --color-popover-border: #7d6e54;
+  --color-sidebar: #160c00;
+  --color-sidebar-hairline: #422f0b;
+  --color-sidebar-hover: #fff4e10f;
+  --color-sidebar-selected: #fff4e214;
+  --color-sidebar-ink: #f9f4ed;
+  --color-sidebar-ink-secondary: #fff4e0a8;
+  --color-ink: #f9f4ed;
+  --color-ink-secondary: #fff4e0a8;
+  --color-ink-tertiary: #fff4e08a;
+  --color-hover: #8076652c;
+  --color-selected: #85755b52;
+  --color-bubble-user: #4f3600;
+  --color-bubble-user-ink: #f9f4ed;
+  --color-scrollbar: #583f0f;
+  --color-maus-line: #fff4e0;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Foundry, Rouge plein */
+[data-skin="foundry"][data-skin-tint="red"][data-skin-depth="full"] {
+  --color-app: #1c0803;
+  --color-panel: #240d05;
+  --color-raised: #37160a;
+  --color-raised-hover: #462011;
+  --color-composer: #37160a;
+  --color-card: #2d1107;
+  --color-menu: #2d1107;
+  --color-inset: #160502;
+  --color-control: #38160a;
+  --color-hairline: #502b1b;
+  --color-popover-border: #7f6052;
+  --color-sidebar: #240d05;
+  --color-sidebar-hairline: #502b1b;
+  --color-sidebar-hover: #85726d2c;
+  --color-sidebar-selected: #8e6f6652;
+  --color-sidebar-ink: #f9ede5;
+  --color-sidebar-ink-secondary: #bea091;
+  --color-ink: #f9ede5;
+  --color-ink-secondary: #bea091;
+  --color-ink-tertiary: #b39689;
+  --color-hover: #85726d2c;
+  --color-selected: #8c706852;
+  --color-bubble-user: #431200;
+  --color-bubble-user-ink: #f9ede5;
+  --color-scrollbar: #552815;
+  --color-maus-line: #bea091;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Foundry, Rose plein */
+[data-skin="foundry"][data-skin-tint="pink"][data-skin-depth="full"] {
+  --color-app: #1c0708;
+  --color-panel: #240c0d;
+  --color-raised: #371515;
+  --color-raised-hover: #461f1d;
+  --color-composer: #371515;
+  --color-card: #2d1011;
+  --color-menu: #2d1011;
+  --color-inset: #160405;
+  --color-control: #381515;
+  --color-hairline: #502a27;
+  --color-popover-border: #7f5f5b;
+  --color-sidebar: #240c0d;
+  --color-sidebar-hairline: #502a27;
+  --color-sidebar-hover: #8671732c;
+  --color-sidebar-selected: #8f6d7052;
+  --color-sidebar-ink: #f9ede7;
+  --color-sidebar-ink-secondary: #be9f98;
+  --color-ink: #f9ede7;
+  --color-ink-secondary: #be9f98;
+  --color-ink-tertiary: #b39690;
+  --color-hover: #8671732c;
+  --color-selected: #8c6e7052;
+  --color-bubble-user: #431012;
+  --color-bubble-user-ink: #f9ede7;
+  --color-scrollbar: #552625;
+  --color-maus-line: #be9f98;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Foundry, Bleu plein */
+[data-skin="foundry"][data-skin-tint="blue"][data-skin-depth="full"] {
+  --color-app: #001119;
+  --color-panel: #021721;
+  --color-raised: #072531;
+  --color-raised-hover: #0f313d;
+  --color-composer: #072531;
+  --color-card: #041e28;
+  --color-menu: #041e28;
+  --color-inset: #000c14;
+  --color-control: #052531;
+  --color-hairline: #1e3b46;
+  --color-popover-border: #566c74;
+  --color-sidebar: #021721;
+  --color-sidebar-hairline: #1e3b46;
+  --color-sidebar-hover: #697a842c;
+  --color-sidebar-selected: #5e7c8c52;
+  --color-sidebar-ink: #ecf1ef;
+  --color-sidebar-ink-secondary: #9babae;
+  --color-ink: #ecf1ef;
+  --color-ink-secondary: #9babae;
+  --color-ink-tertiary: #90a1a5;
+  --color-hover: #697a842c;
+  --color-selected: #617c8a52;
+  --color-bubble-user: #022935;
+  --color-bubble-user-ink: #ecf1ef;
+  --color-scrollbar: #123c4b;
+  --color-maus-line: #9babae;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Foundry, Vert plein */
+[data-skin="foundry"][data-skin-tint="green"][data-skin-depth="full"] {
+  --color-app: #0c1100;
+  --color-panel: #121701;
+  --color-raised: #1f2402;
+  --color-raised-hover: #2a3005;
+  --color-composer: #1f2402;
+  --color-card: #191e01;
+  --color-menu: #191e01;
+  --color-inset: #080c00;
+  --color-control: #1f2401;
+  --color-hairline: #353a12;
+  --color-popover-border: #676c4d;
+  --color-sidebar: #121701;
+  --color-sidebar-hairline: #353a12;
+  --color-sidebar-hover: #747a6a2c;
+  --color-sidebar-selected: #727c6052;
+  --color-sidebar-ink: #f0f1e3;
+  --color-sidebar-ink-secondary: #a8aa8d;
+  --color-ink: #f0f1e3;
+  --color-ink-secondary: #a8aa8d;
+  --color-ink-tertiary: #9ea085;
+  --color-hover: #747a6a2c;
+  --color-selected: #727b6352;
+  --color-bubble-user: #232700;
+  --color-bubble-user-ink: #f0f1e3;
+  --color-scrollbar: #343b05;
+  --color-maus-line: #a8aa8d;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Foundry, Jaune plein */
+[data-skin="foundry"][data-skin-tint="yellow"][data-skin-depth="full"] {
+  --color-app: #170c00;
+  --color-panel: #1f1100;
+  --color-raised: #301d00;
+  --color-raised-hover: #3d2702;
+  --color-composer: #301d00;
+  --color-card: #271700;
+  --color-menu: #271700;
+  --color-inset: #110800;
+  --color-control: #2f1d00;
+  --color-hairline: #493108;
+  --color-popover-border: #786548;
+  --color-sidebar: #1f1100;
+  --color-sidebar-hairline: #493108;
+  --color-sidebar-hover: #8075672c;
+  --color-sidebar-selected: #86745b52;
+  --color-sidebar-ink: #f6eee2;
+  --color-sidebar-ink-secondary: #b7a489;
+  --color-ink: #f6eee2;
+  --color-ink-secondary: #b7a489;
+  --color-ink-tertiary: #ad9a81;
+  --color-hover: #8075672c;
+  --color-selected: #85745e52;
+  --color-bubble-user: #322002;
+  --color-bubble-user-ink: #f6eee2;
+  --color-scrollbar: #4b3000;
+  --color-maus-line: #b7a489;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+}
+
+/* Pulsatrix Light, Rouge plein */
+[data-skin="pulsatrix-light"][data-skin-tint="red"][data-skin-depth="full"] {
+  --color-app: #ffe6e7;
+  --color-panel: #fff1f1;
+  --color-raised: #ffffff;
+  --color-raised-hover: #ffe3e4;
+  --color-composer: #ffffff;
+  --color-card: #fffdfc;
+  --color-menu: #ffffff;
+  --color-inset: #ffdbde;
+  --color-hover: #8e6e6d2c;
+  --color-selected: #98696752;
+  --color-control: #e8bdc2;
+  --color-hairline: #e1b6bc;
+  --color-popover-border: #937a7d;
+  --color-composer-ring: #00000000;
+  --color-sidebar: #482630;
+  --color-sidebar-hairline: #6a454f;
+  --color-sidebar-hover: #ffedef12;
+  --color-sidebar-selected: #e6807d38;
+  --color-sidebar-ink: #f9eff2;
+  --color-sidebar-ink-secondary: #dfc4ca;
+  --color-ink: #1a1218;
+  --color-ink-secondary: #674d52;
+  --color-ink-tertiary: #674d52;
+  --color-bubble-user: #ffe1e0;
+  --color-bubble-user-ink: #1a1218;
+  --color-scrollbar: #dba6ad;
+  --color-maus-line: #6f555a;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}
+
+/* Pulsatrix Light, Rose plein */
+[data-skin="pulsatrix-light"][data-skin-tint="pink"][data-skin-depth="full"] {
+  --color-app: #ffe4f2;
+  --color-panel: #fff0f7;
+  --color-raised: #ffffff;
+  --color-raised-hover: #ffe1f1;
+  --color-composer: #ffffff;
+  --color-card: #fffdfe;
+  --color-menu: #ffffff;
+  --color-inset: #fddaee;
+  --color-hover: #8b6e7a2c;
+  --color-selected: #93697b52;
+  --color-control: #e4bcd5;
+  --color-hairline: #dcb5cf;
+  --color-popover-border: #917a89;
+  --color-composer-ring: #00000000;
+  --color-sidebar: #452540;
+  --color-sidebar-hairline: #664461;
+  --color-sidebar-hover: #ffebf712;
+  --color-sidebar-selected: #e382b038;
+  --color-sidebar-ink: #f7eff6;
+  --color-sidebar-ink-secondary: #dcc3d6;
+  --color-ink: #19121d;
+  --color-ink-secondary: #654d5e;
+  --color-ink-tertiary: #654d5e;
+  --color-bubble-user: #fee6f1;
+  --color-bubble-user-ink: #19121d;
+  --color-scrollbar: #d6a5c5;
+  --color-maus-line: #6d5566;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}
+
+/* Pulsatrix Light, Vert plein */
+[data-skin="pulsatrix-light"][data-skin-tint="green"][data-skin-depth="full"] {
+  --color-app: #dbf5e3;
+  --color-panel: #e6fbec;
+  --color-raised: #fefffe;
+  --color-raised-hover: #d4f4df;
+  --color-composer: #fefffe;
+  --color-card: #f9fffa;
+  --color-menu: #fefffe;
+  --color-inset: #cfefdb;
+  --color-hover: #677e6b2c;
+  --color-selected: #5e816552;
+  --color-control: #acd5c0;
+  --color-hairline: #a3cbb7;
+  --color-popover-border: #70887c;
+  --color-composer-ring: #00000000;
+  --color-sidebar: #0c3b2e;
+  --color-sidebar-hairline: #2f5c4d;
+  --color-sidebar-hover: #e3f8eb12;
+  --color-sidebar-selected: #78d69138;
+  --color-sidebar-ink: #ebf4f1;
+  --color-sidebar-ink-secondary: #b9d3c9;
+  --color-ink: #091818;
+  --color-ink-secondary: #415c51;
+  --color-ink-tertiary: #415c51;
+  --color-bubble-user: #d5ffde;
+  --color-bubble-user-ink: #091818;
+  --color-scrollbar: #90c4aa;
+  --color-maus-line: #496459;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}
+
+/* Pulsatrix Light, Jaune plein */
+[data-skin="pulsatrix-light"][data-skin-tint="yellow"][data-skin-depth="full"] {
+  --color-app: #f6edd5;
+  --color-panel: #fcf4e0;
+  --color-raised: #fffffe;
+  --color-raised-hover: #f6eacd;
+  --color-composer: #fffffe;
+  --color-card: #fffdf8;
+  --color-menu: #fffffe;
+  --color-inset: #f0e5ca;
+  --color-hover: #81765c2c;
+  --color-selected: #86754d52;
+  --color-control: #d4c9aa;
+  --color-hairline: #cdc2a5;
+  --color-popover-border: #888170;
+  --color-composer-ring: #00000000;
+  --color-sidebar: #3a321a;
+  --color-sidebar-hairline: #595139;
+  --color-sidebar-hover: #f9f2e012;
+  --color-sidebar-selected: #f2cd6638;
+  --color-sidebar-ink: #f4f2ed;
+  --color-sidebar-ink-secondary: #d2ccbb;
+  --color-ink: #151513;
+  --color-ink-secondary: #5b5543;
+  --color-ink-tertiary: #5b5543;
+  --color-bubble-user: #fff7d2;
+  --color-bubble-user-ink: #151513;
+  --color-scrollbar: #c4b58e;
+  --color-maus-line: #635d4b;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}
+
+/* Daylight, Rouge plein */
+[data-skin="daylight"][data-skin-tint="red"][data-skin-depth="full"] {
+  --color-app: #fef5f4;
+  --color-panel: #fff0ef;
+  --color-raised: #ebdddd;
+  --color-raised-hover: #f2cdcb;
+  --color-composer: #fffbfb;
+  --color-card: #f9e8e7;
+  --color-menu: #fffbfb;
+  --color-inset: #ffdddb;
+  --color-hover: #8c6f6d2c;
+  --color-selected: #966a6852;
+  --color-control: #ffd1cf;
+  --color-hairline: #eec1be;
+  --color-popover-border: #957b79;
+  --color-composer-ring: #fddbd9;
+  --color-sidebar: #fff4f4;
+  --color-sidebar-hairline: #e9bcb9;
+  --color-sidebar-hover: #8c6f6d2c;
+  --color-sidebar-selected: #966a6852;
+  --color-sidebar-ink: #140a09;
+  --color-sidebar-ink-secondary: #69504f;
+  --color-ink: #140a09;
+  --color-ink-secondary: #6b4f4e;
+  --color-ink-tertiary: #6b4f4e;
+  --color-bubble-user: #170001;
+  --color-bubble-user-ink: #fffbfb;
+  --color-scrollbar: #edb4b1;
+  --color-maus-line: #735755;
+  --color-danger: #ac2532;
+  --color-warning: #805200;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}
+
+/* Daylight, Rose plein */
+[data-skin="daylight"][data-skin-tint="pink"][data-skin-depth="full"] {
+  --color-app: #fff4f8;
+  --color-panel: #ffeff5;
+  --color-raised: #eadde2;
+  --color-raised-hover: #efccda;
+  --color-composer: #fffbfc;
+  --color-card: #f7e8ee;
+  --color-menu: #fffbfc;
+  --color-inset: #fedbe9;
+  --color-hover: #8a6e792c;
+  --color-selected: #92697b52;
+  --color-control: #fbd1e2;
+  --color-hairline: #eac0d1;
+  --color-popover-border: #937a84;
+  --color-composer-ring: #fadae7;
+  --color-sidebar: #fff3f8;
+  --color-sidebar-hairline: #e4bbcc;
+  --color-sidebar-hover: #8a6e792c;
+  --color-sidebar-selected: #92697b52;
+  --color-sidebar-ink: #130a0e;
+  --color-sidebar-ink-secondary: #665059;
+  --color-ink: #130a0e;
+  --color-ink-secondary: #664c57;
+  --color-ink-tertiary: #664c57;
+  --color-bubble-user: #150009;
+  --color-bubble-user-ink: #fffbfc;
+  --color-scrollbar: #e7b3c9;
+  --color-maus-line: #715761;
+  --color-danger: #ac2532;
+  --color-warning: #805200;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}
+
+/* Daylight, Bleu plein */
+[data-skin="daylight"][data-skin-tint="blue"][data-skin-depth="full"] {
+  --color-app: #f3f8ff;
+  --color-panel: #edf4ff;
+  --color-raised: #dbe2ec;
+  --color-raised-hover: #c6d9f4;
+  --color-composer: #fafcff;
+  --color-card: #e5edfa;
+  --color-menu: #fafcff;
+  --color-inset: #d8e8ff;
+  --color-hover: #69788e2c;
+  --color-selected: #62789952;
+  --color-control: #cbe0fe;
+  --color-hairline: #b6cdee;
+  --color-popover-border: #768396;
+  --color-composer-ring: #d5e6fe;
+  --color-sidebar: #f2f8ff;
+  --color-sidebar-hairline: #b4caeb;
+  --color-sidebar-hover: #69788e2c;
+  --color-sidebar-selected: #62789952;
+  --color-sidebar-ink: #080d15;
+  --color-sidebar-ink-secondary: #4c586a;
+  --color-ink: #080d15;
+  --color-ink-secondary: #48566a;
+  --color-ink-tertiary: #48566a;
+  --color-bubble-user: #00061b;
+  --color-bubble-user-ink: #fafcff;
+  --color-scrollbar: #aac6f0;
+  --color-maus-line: #526075;
+  --color-danger: #ac2532;
+  --color-warning: #805200;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}
+
+/* Daylight, Vert plein */
+[data-skin="daylight"][data-skin-tint="green"][data-skin-depth="full"] {
+  --color-app: #e8ffec;
+  --color-panel: #e7faea;
+  --color-raised: #dae4dc;
+  --color-raised-hover: #c4e0c9;
+  --color-composer: #f6fff7;
+  --color-card: #e4f0e6;
+  --color-menu: #f6fff7;
+  --color-inset: #d3efd7;
+  --color-hover: #687e6b2c;
+  --color-selected: #5f816552;
+  --color-control: #c7e9cc;
+  --color-hairline: #b4d5b9;
+  --color-popover-border: #758878;
+  --color-composer-ring: #d3ecd7;
+  --color-sidebar: #eafded;
+  --color-sidebar-hairline: #b1d2b7;
+  --color-sidebar-hover: #687e6b2c;
+  --color-sidebar-selected: #5f816552;
+  --color-sidebar-ink: #070f09;
+  --color-sidebar-ink-secondary: #4a5d4d;
+  --color-ink: #070f09;
+  --color-ink-secondary: #465b4a;
+  --color-ink-tertiary: #465b4a;
+  --color-bubble-user: #000b02;
+  --color-bubble-user-ink: #f5fff6;
+  --color-scrollbar: #a6d1ae;
+  --color-maus-line: #506554;
+  --color-danger: #ac2532;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}
+
+/* Daylight, Jaune plein */
+[data-skin="daylight"][data-skin-tint="yellow"][data-skin-depth="full"] {
+  --color-app: #fff7e3;
+  --color-panel: #fcf3df;
+  --color-raised: #e5e1d6;
+  --color-raised-hover: #e3d6b8;
+  --color-composer: #fffcf3;
+  --color-card: #f2ecdf;
+  --color-menu: #fffcf3;
+  --color-inset: #f2e5c7;
+  --color-hover: #80765e2c;
+  --color-selected: #85765052;
+  --color-control: #edddb7;
+  --color-hairline: #d9caa5;
+  --color-popover-border: #8a816c;
+  --color-composer-ring: #efe3c8;
+  --color-sidebar: #fff7e2;
+  --color-sidebar-hairline: #d6c7a2;
+  --color-sidebar-hover: #80765e2c;
+  --color-sidebar-selected: #85765052;
+  --color-sidebar-ink: #100d05;
+  --color-sidebar-ink-secondary: #5f5642;
+  --color-ink: #100d05;
+  --color-ink-secondary: #5e543d;
+  --color-ink-tertiary: #5e543d;
+  --color-bubble-user: #0c0600;
+  --color-bubble-user-ink: #fffcf4;
+  --color-scrollbar: #d6c293;
+  --color-maus-line: #685e46;
+  --color-danger: #ac2532;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}
+
+/* Atelier, Rouge plein */
+[data-skin="atelier"][data-skin-tint="red"][data-skin-depth="full"] {
+  --color-app: #ffe7df;
+  --color-panel: #fff2ec;
+  --color-raised: #ffffff;
+  --color-raised-hover: #ffe4d8;
+  --color-composer: #ffffff;
+  --color-card: #fffdfc;
+  --color-menu: #ffffff;
+  --color-inset: #ffeee7;
+  --color-hover: #8c6f692c;
+  --color-selected: #966b6252;
+  --color-control: #ffddcf;
+  --color-hairline: #e3b29d;
+  --color-popover-border: #9f8279;
+  --color-composer-ring: #00000000;
+  --color-sidebar: #fff7f2;
+  --color-sidebar-hairline: #e3b29d;
+  --color-sidebar-hover: #8c6f692c;
+  --color-sidebar-selected: #966b6252;
+  --color-sidebar-ink: #221713;
+  --color-sidebar-ink-secondary: #6b5046;
+  --color-ink: #221713;
+  --color-ink-secondary: #6d4f44;
+  --color-ink-tertiary: #6d4f44;
+  --color-bubble-user: #ffe4d8;
+  --color-bubble-user-ink: #221713;
+  --color-scrollbar: #edb19b;
+  --color-maus-line: #7d5e51;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}
+
+/* Atelier, Rose plein */
+[data-skin="atelier"][data-skin-tint="pink"][data-skin-depth="full"] {
+  --color-app: #ffe6e6;
+  --color-panel: #fff2f0;
+  --color-raised: #ffffff;
+  --color-raised-hover: #ffe3df;
+  --color-composer: #ffffff;
+  --color-card: #fffdfd;
+  --color-menu: #ffffff;
+  --color-inset: #ffedec;
+  --color-hover: #8c6e732c;
+  --color-selected: #95697052;
+  --color-control: #fedcd8;
+  --color-hairline: #e2b0ab;
+  --color-popover-border: #9e8181;
+  --color-composer-ring: #00000000;
+  --color-sidebar: #fff6f4;
+  --color-sidebar-hairline: #e2b0ab;
+  --color-sidebar-hover: #8c6e732c;
+  --color-sidebar-selected: #95697052;
+  --color-sidebar-ink: #221617;
+  --color-sidebar-ink-secondary: #6a4f4e;
+  --color-ink: #221617;
+  --color-ink-secondary: #6d4e4d;
+  --color-ink-tertiary: #6d4e4d;
+  --color-bubble-user: #ffe3df;
+  --color-bubble-user-ink: #221617;
+  --color-scrollbar: #ecafae;
+  --color-maus-line: #7c5d5a;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}
+
+/* Atelier, Bleu plein */
+[data-skin="atelier"][data-skin-tint="blue"][data-skin-depth="full"] {
+  --color-app: #efe9ff;
+  --color-panel: #f7f3ff;
+  --color-raised: #ffffff;
+  --color-raised-hover: #efe5fe;
+  --color-composer: #ffffff;
+  --color-card: #fdfdff;
+  --color-menu: #ffffff;
+  --color-inset: #f4effe;
+  --color-hover: #78738c2c;
+  --color-selected: #78719652;
+  --color-control: #eadffe;
+  --color-hairline: #c4b8d2;
+  --color-popover-border: #8c8699;
+  --color-composer-ring: #00000000;
+  --color-sidebar: #faf7ff;
+  --color-sidebar-hairline: #c4b8d2;
+  --color-sidebar-hover: #78738c2c;
+  --color-sidebar-selected: #78719652;
+  --color-sidebar-ink: #1a1821;
+  --color-sidebar-ink-secondary: #5a5363;
+  --color-ink: #1a1821;
+  --color-ink-secondary: #5a5366;
+  --color-ink-tertiary: #5a5366;
+  --color-bubble-user: #efe5fe;
+  --color-bubble-user-ink: #1a1821;
+  --color-scrollbar: #c6badf;
+  --color-maus-line: #696274;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}
+
+/* Atelier, Vert plein */
+[data-skin="atelier"][data-skin-tint="green"][data-skin-depth="full"] {
+  --color-app: #e5f2d8;
+  --color-panel: #effae3;
+  --color-raised: #fefffe;
+  --color-raised-hover: #e3f1cd;
+  --color-composer: #fefffe;
+  --color-card: #fafff7;
+  --color-menu: #fefffe;
+  --color-inset: #e8f8d8;
+  --color-hover: #6e7d662c;
+  --color-selected: #697f5d52;
+  --color-control: #dbedc2;
+  --color-hairline: #b6c698;
+  --color-popover-border: #838e76;
+  --color-composer-ring: #00000000;
+  --color-sidebar: #f2fde6;
+  --color-sidebar-hairline: #b6c698;
+  --color-sidebar-hover: #6e7d662c;
+  --color-sidebar-selected: #697f5d52;
+  --color-sidebar-ink: #161c12;
+  --color-sidebar-ink-secondary: #525b43;
+  --color-ink: #161c12;
+  --color-ink-secondary: #515b41;
+  --color-ink-tertiary: #515b41;
+  --color-bubble-user: #dff3c5;
+  --color-bubble-user-ink: #161c12;
+  --color-scrollbar: #b4cb95;
+  --color-maus-line: #606a4e;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}
+
+/* Atelier, Jaune plein */
+[data-skin="atelier"][data-skin-tint="yellow"][data-skin-depth="full"] {
+  --color-app: #f9ecd0;
+  --color-panel: #fff4dc;
+  --color-raised: #fffffe;
+  --color-raised-hover: #fce8c2;
+  --color-composer: #fffffe;
+  --color-card: #fffdf8;
+  --color-menu: #fffffe;
+  --color-inset: #fff0d1;
+  --color-hover: #81765e2c;
+  --color-selected: #86755052;
+  --color-control: #f9e2b5;
+  --color-hairline: #d3bb8b;
+  --color-popover-border: #95886f;
+  --color-composer-ring: #00000000;
+  --color-sidebar: #fff8e8;
+  --color-sidebar-hairline: #d3bb8b;
+  --color-sidebar-hover: #81765e2c;
+  --color-sidebar-selected: #86755052;
+  --color-sidebar-ink: #1e190f;
+  --color-sidebar-ink-secondary: #62553c;
+  --color-ink: #1e190f;
+  --color-ink-secondary: #635538;
+  --color-ink-tertiary: #635538;
+  --color-bubble-user: #ffe8b9;
+  --color-bubble-user-ink: #1e190f;
+  --color-scrollbar: #d9be84;
+  --color-maus-line: #736445;
+  --app-glow:
+    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 6%, transparent), transparent 68%);
+}

@@ -905,61 +905,32 @@ describe("Store", () => {
     expect(store.activePath(bot.threadId).at(-1)?.id).toBe(orphan.id);
   });
 
-  it("persists the per-bot composio gate", () => {
+  it("drops legacy Composio bot fields on load and remembers the bots that had grants", () => {
     const store = new Store(selection);
-    const bot = store.createBot();
-    store.patchBot(bot.id, { composio: false });
-    const reloaded = new Store(selection);
-    expect(reloaded.bot(bot.id)?.composio).toBe(false);
-  });
-
-  it("persists per-bot connector tool grants without touching legacy records", () => {
-    const store = new Store(selection);
-    const bot = store.createBot();
-    const legacy = store.createBot();
-    store.patchBot(bot.id, {
-      connectorTools: {
-        gmail: { tools: ["GMAIL_SEND_EMAIL", "GMAIL_GET_MESSAGE", "GMAIL_SEND_EMAIL"] },
-        github: { tools: "*" },
-      },
-    });
-    // the stored form is canonical: duplicates removed, order preserved
-    expect(store.bot(bot.id)?.connectorTools).toEqual({
-      gmail: { tools: ["GMAIL_SEND_EMAIL", "GMAIL_GET_MESSAGE"] },
-      github: { tools: "*" },
-    });
-    const reloaded = new Store(selection);
-    expect(reloaded.bot(bot.id)?.connectorTools).toEqual(store.bot(bot.id)?.connectorTools);
-    // a record from before the field existed round-trips unchanged: absent
-    // grants still defer to the legacy composio boolean
-    expect(reloaded.bot(legacy.id)?.connectorTools).toBeUndefined();
-    expect(reloaded.bot(legacy.id)?.composio).toBeUndefined();
-  });
-
-  it("rejects malformed connector tool grants at the store boundary", () => {
-    const store = new Store(selection);
-    const bot = store.createBot();
-    const malformed: unknown[] = [
-      "nope",
-      ["gmail"],
-      { Gmail: { tools: "*" } },
-      { "bad slug!": { tools: "*" } },
-      { gmail: { tools: [] } },
-      { gmail: { tools: ["gmail_send_email"] } },
-      { gmail: { tools: ["GMAIL_SEND_EMAIL", 7] } },
-      { gmail: { tools: "*", accountId: "private" } },
-      { gmail: { tools: "GMAIL_SEND_EMAIL" } },
-      { gmail: "*" },
-    ];
-    for (const value of malformed) {
-      expect(() => store.patchBot(bot.id, { connectorTools: value as never })).toThrow(/connectorTools/);
+    const granted = store.createBot();
+    const plain = store.createBot();
+    // Write the legacy fields straight into bots.json, as an older release
+    // would have persisted them, then reload: the Store strips them.
+    const disk = JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8")) as Record<string, unknown>[];
+    for (const record of disk) {
+      if (record.id === granted.id) {
+        record.composio = true;
+        record.connectorTools = { gmail: { tools: ["GMAIL_SEND_EMAIL"] } };
+        record.connectorScopes = { apps: { gmail: "write" } };
+      } else if (record.id === plain.id) {
+        record.composio = false;
+      }
     }
-    expect(store.bot(bot.id)?.connectorTools).toBeUndefined();
-    // explicit {} grants no tools; undefined returns the bot to legacy behavior
-    store.patchBot(bot.id, { connectorTools: {} });
-    expect(store.bot(bot.id)?.connectorTools).toEqual({});
-    store.patchBot(bot.id, { connectorTools: undefined });
-    expect(store.bot(bot.id)?.connectorTools).toBeUndefined();
+    writeFileSync(join(DATA_DIR, "bots.json"), JSON.stringify(disk));
+    const reloaded = new Store(selection);
+    for (const id of [granted.id, plain.id]) {
+      const record = reloaded.bot(id) as unknown as Record<string, unknown>;
+      expect("composio" in record).toBe(false);
+      expect("connectorTools" in record).toBe(false);
+      expect("connectorScopes" in record).toBe(false);
+    }
+    // Only the bot that actually had grants is flagged for the admin notice.
+    expect(reloaded.legacyComposioBots).toEqual([granted.name]);
   });
 
   it("rotates colors across created bots", () => {
@@ -1848,13 +1819,6 @@ describe("Store", () => {
     expect(store.messagesFor(bot.threadId)).toHaveLength(0);
   });
 
-  it("persists the per-bot composio gate", () => {
-    const store = new Store(selection);
-    const bot = store.createBot();
-    store.patchBot(bot.id, { composio: false });
-    const reloaded = new Store(selection);
-    expect(reloaded.bot(bot.id)?.composio).toBe(false);
-  });
 
   it("deleteBot removes the bot and its durable transcript", () => {
     const store = new Store(selection);
@@ -2667,7 +2631,7 @@ describe("soul", () => {
       ] };
     store.applyTeamSetup(request);
     expect(new Store(selection).bot("created-by-chief")?.visibility).toEqual({ people: ["hr@example.test"] });
-    expect(new Store(selection).bot("created-by-chief")).toMatchObject({ composio: false, connectorTools: {}, approvePeerComms: false });
+    expect(new Store(selection).bot("created-by-chief")).toMatchObject({ approvePeerComms: false });
     const open = new Store(selection);
     const everyoneChief = open.createBot({ name: "Ops", section: "Ops" });
     open.patchBot(everyoneChief.id, { chiefOfStaff: true });

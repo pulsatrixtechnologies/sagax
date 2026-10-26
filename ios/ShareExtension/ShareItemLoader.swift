@@ -264,7 +264,7 @@ enum ShareItemLoader {
             provider,
             type: type,
             into: inbox,
-            maximumBytes: AttachmentPolicy.maximumFileBytes
+            maximumBytes: max(AttachmentPolicy.maximumFileBytes, AttachmentPolicy.maximumImageBytes)
         )
         let claimedMime = UTType(type)?.preferredMIMEType?.lowercased() ?? "application/octet-stream"
         if AttachmentPolicy.imageMIMETypes.contains(claimedMime),
@@ -280,7 +280,7 @@ enum ShareItemLoader {
         else {
             throw ShareItemLoadingError.tooLarge(
                 copied.name,
-                AttachmentPolicy.maximumImageBytes / (1_024 * 1_024)
+                AttachmentPolicy.maximumImageMegabytes
             )
         }
         let converted = inbox.appendingPathComponent("\(UUID().uuidString)-image.jpg")

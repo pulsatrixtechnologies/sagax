@@ -67,7 +67,25 @@ export function withReleaseNote(notes, version, body) {
 export function createUpdaterCoordinator(
   updater,
   setState,
-  { handOffInstall = null, nativeStaging = false, fetchReleaseNotes = null } = {},
+  {
+    handOffInstall = null,
+    nativeStaging = false,
+    fetchReleaseNotes = null,
+    // Windows: false, so the NSIS installer shows its progress window and
+    // relaunches the app (see electron/updater.mjs).
+    silentInstall = true,
+    // Asks the person before an install nobody confirmed in the page (an
+    // older page's button, a stray call). Resolves true to go on. Without
+    // it such a call does nothing: nothing installs unconfirmed.
+    confirmInstall = null,
+    // How long the native macOS staging pass (Squirrel.Mac unpacking the ZIP
+    // after the transfer) may run before we declare it hung. The 0.7.x assets
+    // are hundreds of MB, and staging is disk-bound, so a slow or full disk
+    // needs far more than the old five minutes. The watchdog is reset by every
+    // download-progress, so this is an idle deadline, never a wall clock on a
+    // transfer that is still moving bytes.
+    prepareTimeoutMs = 20 * 60 * 1000,
+  } = {},
 ) {
   // The update the state shows, and the body the release API gave for it.
   let notesVersion = null;
@@ -171,6 +189,24 @@ export function createUpdaterCoordinator(
     routeError(manual, error);
   }
 
+  // Squirrel.Mac native staging is event-only: it emits no progress and
+  // resolves downloadUpdate solely on the native ready event. If it never
+  // readies we would sit in "preparing" forever, so an idle watchdog fails it
+  // into a restart-required state. Every download-progress re-arms it, so a
+  // transfer that is still moving bytes is never mistaken for a hang.
+  function armPrepareWatchdog(operation) {
+    if (!operation) return;
+    clearTimeout(operation.timer);
+    operation.timer = setTimeout(() => {
+      if (downloadOperation !== operation || operation.failed) return;
+      updater.logger?.warn?.(
+        `Native update preparation went quiet past the ${Math.round(prepareTimeoutMs / 60000)}-minute deadline; a restart is required before retrying.`,
+      );
+      routeError(true, new Error("Preparing the update took too long."));
+    }, prepareTimeoutMs);
+    operation.timer.unref?.();
+  }
+
   function checkOwnsState() {
     return !recoveryRequired && !actionOwnsState && !installOperation && !downloadOperation && !checkOperation?.supersededByDownload;
   }
@@ -206,7 +242,14 @@ export function createUpdaterCoordinator(
     routeError(manual, error);
   });
   updater.on("download-progress", (progress) => {
-    if (recoveryRequired || installOperation || nativeStagingStarted) return;
+    if (recoveryRequired || installOperation) return;
+    // While the native updater prepares, bytes may still be arriving. Push the
+    // preparation deadline back on each one so a large or slow transfer never
+    // trips the watchdog; the "preparing" state stays as it is.
+    if (nativeStagingStarted) {
+      if (downloadOperation && !downloadOperation.failed) armPrepareWatchdog(downloadOperation);
+      return;
+    }
     setState({ status: "downloading", percent: Math.round(progress?.percent ?? 0) });
   });
   updater.on("update-downloaded", (info) => {
@@ -219,11 +262,7 @@ export function createUpdaterCoordinator(
       if (nativeStaging && !nativeStagingStarted) {
         nativeStagingStarted = true;
         setState(withNotes({ status: "preparing", version: info?.version, message: undefined }, info));
-        downloadOperation.timer = setTimeout(() => {
-          updater.logger?.warn?.("Native update preparation exceeded the five-minute deadline; restart is required before retrying.");
-          routeError(true, new Error("Preparing the update took too long."));
-        }, 5 * 60 * 1000);
-        downloadOperation.timer.unref?.();
+        armPrepareWatchdog(downloadOperation);
       }
       return;
     }
@@ -299,8 +338,32 @@ export function createUpdaterCoordinator(
     }
   }
 
-  function install() {
-    if (recoveryRequired || installOperation || downloadOperation || (nativeStaging && !nativeReady)) return;
+  function installBlocked() {
+    return Boolean(recoveryRequired || installOperation || downloadOperation || (nativeStaging && !nativeReady));
+  }
+
+  /** Installs only on the person's explicit confirmation: `confirmed` from
+   * the page's "Restart to install" (the update dialog), otherwise the
+   * `confirmInstall` question must say yes first. */
+  function install({ confirmed = false } = {}) {
+    if (installBlocked()) return;
+    if (confirmed === true) {
+      installConfirmed();
+      return;
+    }
+    if (!confirmInstall) {
+      updater.logger?.warn?.("Install refused: it was not confirmed.");
+      return;
+    }
+    return Promise.resolve()
+      .then(() => confirmInstall({ version: notesVersion }))
+      .then((yes) => {
+        if (yes === true && !installBlocked()) installConfirmed();
+      })
+      .catch((error) => updater.logger?.warn?.("Install confirmation failed:", error));
+  }
+
+  function installConfirmed() {
     actionOwnsState = true;
     if (handOffInstall) {
       handOff();
@@ -310,7 +373,8 @@ export function createUpdaterCoordinator(
     installOperation = operation;
     setState({ status: "installing" });
     try {
-      updater.quitAndInstall(true, true);
+      // isForceRunAfter: Sagax opens again once the new version is in.
+      updater.quitAndInstall(silentInstall, true);
     } catch (error) {
       routeError(true, error);
       return;

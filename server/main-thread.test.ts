@@ -59,3 +59,12 @@ describe("a thread saved on a routine as the oldest one", () => {
     expect(wasOldestThread([latest, later], "deleted")).toBe(false);
   });
 });
+
+// 2026-10-22: an automatic "<routine> · Results" thread is not where the person is.
+describe("a routine results thread", () => {
+  it("is never the main thread nor the oldest one", () => {
+    const results = { threadId: "results", createdAt: 0, askedAt: 99, routineResults: true as const };
+    expect(mainThread([results, { ...later, askedAt: 5 }])).toBe("later");
+    expect(oldestThread([results, later])).toBe("later");
+  });
+});

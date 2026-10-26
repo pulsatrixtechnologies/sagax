@@ -16,6 +16,21 @@ import { t } from "@/lib/i18n";
 import { sandboxViewerPath, sandboxViewerProblem, type SandboxViewerProblem } from "@/lib/sandbox-desktop";
 import { REVEALED_CONTROL } from "./computer/ComputerScreen";
 
+/** "Take control" in the middle of a view-only screen, shown on intent
+ * (REVEALED_CONTROL). The bot's server environment and a Tailcat remote
+ * session (RemoteScreenCard) both use it. */
+export function TakeControlPill({ onClick }: { onClick: () => void }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <button type="button" onClick={onClick} data-take-control
+        className={cn("flex min-h-[44px] items-center gap-2 rounded-full bg-black/65 px-4 py-2 text-[13px] font-medium text-white shadow-md backdrop-blur-sm hover:bg-black/80 md:min-h-0", REVEALED_CONTROL)}>
+        <Hand size={15} aria-hidden="true" />
+        {t("sandboxDesktop.takeControl")}
+      </button>
+    </div>
+  );
+}
+
 type ViewState = "idle" | "connecting" | "connected" | "stopped" | SandboxViewerProblem;
 
 /** `onConnected`: the view is live (opening it may have started the
@@ -95,13 +110,7 @@ export function SandboxDesktopView({ onConnected, embedded = false, onTakeContro
         {live && !control && controlled === undefined && (
           // View-only: one button in the middle of the screen to take the
           // wheel (the server then refuses the bots' clicks there).
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <button type="button" onClick={onTakeControl ?? toggleControl} data-take-control
-              className={cn("flex min-h-[44px] items-center gap-2 rounded-full bg-black/65 px-4 py-2 text-[13px] font-medium text-white shadow-md backdrop-blur-sm hover:bg-black/80 md:min-h-0", REVEALED_CONTROL)}>
-              <Hand size={15} aria-hidden="true" />
-              {t("sandboxDesktop.takeControl")}
-            </button>
-          </div>
+          <TakeControlPill onClick={onTakeControl ?? toggleControl} />
         )}
         {live && control && controlled === undefined && (
           <button type="button" onClick={toggleControl} data-release-control title={t("sandboxDesktop.controlHint")}

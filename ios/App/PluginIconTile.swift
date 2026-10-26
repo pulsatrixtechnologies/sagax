@@ -54,8 +54,6 @@ struct PluginIconTile: View {
         switch plugin {
         case let .mcp(_, _, _, _, _, icon, catalogId):
             self.init(key: icon ?? catalogId, size: size, circle: circle)
-        case let .composio(_, _, _, logo, _):
-            self.init(key: nil, remote: logo, size: size, circle: circle)
         }
     }
 

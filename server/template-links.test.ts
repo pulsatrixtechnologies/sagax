@@ -189,6 +189,40 @@ describe("template link routes", () => {
     expect((await call(handler, "DELETE", `/api/template-links/${created.body.link.id}`)).status).toBe(404);
   });
 
+  it("updates the template under the same link and shows its details, never the starter notes", async () => {
+    const { links: store } = links();
+    let description = "Answers tickets";
+    const handler = createTemplateLinkRoutes({
+      links: store,
+      buildTemplate: (body) => {
+        const document = template();
+        document.package.presets![0]!.description = body.description ?? description;
+        return document;
+      },
+      creator: () => undefined,
+      origin: () => "https://sagax.example.com",
+      reachable: () => true,
+    });
+    const created = await call(handler, "POST", "/api/template-links", {});
+    const id = created.body.link.id as string;
+    description = "Answers tickets and calls";
+    const updated = await call(handler, "PUT", `/api/template-links/${id}`, {});
+    expect(updated.status).toBe(200);
+    expect(updated.body.link.url).toBe(created.body.link.url);
+    expect(updated.body.link.updatedAt).toEqual(expect.any(Number));
+    expect(updated.body.template).toMatchObject({ title: "Support agent", description: "Answers tickets and calls", skills: ["follow-up"] });
+    const token = (created.body.link.path as string).split("/").at(-1)!;
+    expect(store.open(token)?.document.package.presets?.[0]?.description).toBe("Answers tickets and calls");
+    const details = await call(handler, "GET", `/api/template-links/${id}`);
+    expect(details.body.template.description).toBe("Answers tickets and calls");
+    expect(JSON.stringify(details.body)).not.toContain("Private client notes");
+    expect(JSON.stringify(details.body)).not.toContain("Be kind.");
+    expect((await call(handler, "PUT", `/api/template-links/${id}`, { bogus: 1 })).status).toBe(400);
+    await call(handler, "DELETE", `/api/template-links/${id}`);
+    expect((await call(handler, "PUT", `/api/template-links/${id}`, {})).status).toBe(404);
+    expect((await call(handler, "GET", `/api/template-links/${id}`)).status).toBe(404);
+  });
+
   it("imports another server's link through its JSON, stripped again, and refuses what is not a link", async () => {
     const { links: store } = links();
     const asked: string[] = [];

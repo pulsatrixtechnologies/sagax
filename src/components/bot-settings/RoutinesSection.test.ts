@@ -96,19 +96,27 @@ describe("RoutinesSection", () => {
 
   // The bot panel lists each routine with its name and when it runs. Pause,
   // Resume, the run logs and Delete live on the routine's own page.
-  it("renders each routine's name without a switch on the row", () => {
+  it("renders each routine's name with an on/off switch on the row", () => {
     const markup = render([activeRoutine, pausedRoutine], []);
     expect(markup).toContain("Morning brief");
     expect(markup).toContain("Weekly digest");
-    expect(markup).not.toContain('aria-label="Pause"');
-    expect(markup).not.toContain('aria-label="Resume"');
-    expect(markup).not.toContain('role="switch"');
+    expect(markup).toContain('aria-label="Pause"');
+    expect(markup).toContain('aria-label="Resume"');
+    expect(markup.match(/role="switch"/g)).toHaveLength(2);
+    expect(markup).toContain('aria-checked="true"');
+    expect(markup).toContain('aria-checked="false"');
+  });
+
+  it("disables the switch with the reason for a routine the person may not change", () => {
+    const markup = render([{ ...activeRoutine, canEdit: false }], []);
+    expect(markup).toMatch(/role="switch"[^>]*disabled|disabled=""[^>]*role="switch"/);
+    expect(markup).toContain("Read only: you can see this routine");
   });
 
   it("shows when an enabled routine runs, and marks a disabled one paused", () => {
     const markup = render([activeRoutine, pausedRoutine], []);
     expect(markup).toContain("Every weekday at");
-    expect(markup).toContain("· Paused");
+    expect(markup).toContain('data-routine-when="Paused"');
     expect(markup).not.toContain(">Active<");
   });
 

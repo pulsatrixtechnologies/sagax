@@ -18,6 +18,7 @@ struct AboutPage: View {
     @Environment(\.themePalette) var themePalette
     @EnvironmentObject private var session: Session
     @State private var link: URL?
+    @State private var copied = false
 
     static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev" }
     static var build: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?" }
@@ -41,6 +42,13 @@ struct AboutPage: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.bottom, 20)
+            SettingsCard {
+                SettingsRow(title: "Copy version", accessory: copied ? .value(String(localized: "Copied")) : .none, identifier: "about-copy-version") {
+                    PlatformBridge.copyToPasteboard(AppVersionText.line(version: Self.version, build: Self.build, platform: Self.platform, osVersion: UIDevice.current.systemVersion))
+                    copied = true
+                }
+            }
+            SettingsSpacer(SettingsMetrics.cardGap)
             if let connection = session.connection {
                 SettingsCard {
                     SettingsRow(title: "Computer", accessory: .value(connection.name), identifier: "about-computer")

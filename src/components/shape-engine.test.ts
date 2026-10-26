@@ -1,5 +1,6 @@
 // The clean-room Shapes engine (shape-art.ts, shape-engine.ts): geometry,
 // timings, the gaze solver's bounds, the moves and reduced motion.
+import { REST_POSE, warpPath } from "./shape-volume";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
@@ -81,7 +82,7 @@ describe("timing", () => {
     expect(engine.frame(1 + MORPH_S).body).toBe(target);
   });
 
-  it("blinks first at 1.4 s, then every 1.9 to 4.6 s, sometimes twice, each blink 0.18 s", () => {
+  it("blinks first at BLINK.first, then every BLINK.minGap to BLINK.maxGap s, sometimes twice, each blink BLINK.length", () => {
     for (const seed of [1, 7, 42, 99]) {
       const times = blinkSchedule(seed, 120);
       expect(times[0]).toBe(BLINK.first);
@@ -89,14 +90,16 @@ describe("timing", () => {
         const gap = times[i] - times[i - 1];
         const double = Math.abs(gap - BLINK.doubleAfter) < 1e-9;
         if (!double) {
-          expect(gap).toBeGreaterThanOrEqual(1.9 - BLINK.doubleAfter - 1e-9);
-          expect(gap).toBeLessThanOrEqual(4.6 + 1e-9);
+          expect(gap).toBeGreaterThanOrEqual(BLINK.minGap - BLINK.doubleAfter - 1e-9);
+          expect(gap).toBeLessThanOrEqual(BLINK.maxGap + 1e-9);
         }
       }
     }
     const doubles = blinkSchedule(5, 2000).filter((t, i, all) => i > 0 && Math.abs(t - all[i - 1] - BLINK.doubleAfter) < 1e-9).length;
     expect(doubles).toBeGreaterThan(0);
-    expect(BLINK.length).toBe(0.18);
+    // a natural, irregular rhythm (measured 2026-10-18): about one blink every 1 to 4 s, each under 0.2 s
+    expect(BLINK.length).toBeLessThan(0.2);
+    expect(BLINK.minGap).toBeLessThan(BLINK.maxGap);
     const at = [10];
     expect(blinkOpen(10 + BLINK.length * BLINK.closing, at)).toBeCloseTo(BLINK.floor, 5);
     expect(blinkOpen(9.99, at)).toBe(1);
@@ -251,7 +254,8 @@ describe("reduced motion", () => {
     const html = renderToStaticMarkup(createElement(ShapeMascot, { shape: "cloud", color: BLUE, size: 120, move: { clip: "orbit", key: 1 } }));
     expect(html).not.toContain("skin-fx-live");
     const still = stillFrame({ shape: "cloud", expression: "neutral", color: BLUE });
-    expect(html).toContain(`d="${still.body}${still.eyes}"`);
+    // the resting outline, in the resting pose (a plain body bends a little into its turn)
+    expect(html).toContain(`d="${warpPath(still.body, REST_POSE)}"`);
     expect(html).not.toContain("-ring0");
   });
 });

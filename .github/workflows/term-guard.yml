@@ -8,7 +8,8 @@
 # runner and never checks out or runs code from the pull request: it checks
 # out the BASE branch (trusted) for the guard script, does not persist
 # credentials, and reads the PR diff and commits only as data through the
-# API with curl and jq. Event text is passed only through environment
+# API with curl and jq, and the diff with a blobless git fetch (never a
+# checkout). Event text is passed only through environment
 # variables. If the secret is missing the job fails (fail closed).
 name: term-guard
 
@@ -54,6 +55,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           case "$REPO" in
@@ -89,14 +92,24 @@ jobs:
             fi
             page=$((page + 1))
           done
-          curl --fail-with-body --silent --show-error \
-            --proto '=https' --tlsv1.2 \
-            --retry 3 --retry-delay 2 \
-            -o "$RUNNER_TEMP/pr.diff" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github.diff" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "$api"
+          # The diff comes from git, not the API's diff media type: GitHub
+          # answers that with HTTP 406 past its size limit (300 files or
+          # 20,000 lines), which left large pull requests unscanned. A blobless fetch
+          # of the two commits into an empty repository, then `git diff` from
+          # their merge base (what the pull request shows). Nothing is checked
+          # out and no attribute driver runs, so the PR stays data. The
+          # repository is public: no credentials are used.
+          case "$BASE_SHA" in *[!0-9a-f]*|'') echo "refusing base sha" >&2; exit 1 ;; esac
+          case "$HEAD_SHA" in *[!0-9a-f]*|'') echo "refusing head sha" >&2; exit 1 ;; esac
+          src="$RUNNER_TEMP/pr-src"
+          git init -q --bare "$src"
+          git -C "$src" remote add origin "https://github.com/${REPO}.git"
+          git -C "$src" config remote.origin.promisor true
+          git -C "$src" config remote.origin.partialclonefilter blob:none
+          git -C "$src" -c protocol.version=2 fetch -q --no-tags --filter=blob:none origin "$BASE_SHA" "$HEAD_SHA"
+          merge_base="$(git -C "$src" merge-base "$BASE_SHA" "$HEAD_SHA")"
+          git -C "$src" diff --no-color --no-ext-diff --no-textconv -M "$merge_base" "$HEAD_SHA" > "$RUNNER_TEMP/pr.diff"
+          echo "files in diff: $(grep -c '^diff --git ' "$RUNNER_TEMP/pr.diff" || true)"
           echo "diff bytes: $(wc -c < "$RUNNER_TEMP/pr.diff")"
           echo "commits: $(wc -l < "$RUNNER_TEMP/commits.jsonl")"
 

@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { MASCOT_COLOR_NAMES } from "./mascot-colors.ts";
 
-import { CONNECTOR_SLUG_PATTERN, CONNECTOR_TOOL_NAME_PATTERN } from "./wire.ts";
 import { parseToolScope, type ToolScope } from "./tool-scope.ts";
 
 export const MAX_TEAM_BACKUP_BYTES = 50 * 1024 * 1024;
@@ -69,15 +68,6 @@ const memory = z.object({
   logs: z.array(z.object({ name: z.string().regex(/^\d{4}-\d{2}-\d{2}\.md$/), text: memoryText })).max(10_000),
 });
 
-/** The private backup is the one portable format grants travel in, so the
- * shape is checked with the same patterns the store validates patches
- * against. Shareable exports never carry grants at all, and an import
- * always lands bots grant-less whatever the file says. */
-const connectorTools = z.record(
-  z.string().regex(CONNECTOR_SLUG_PATTERN),
-  z.object({ tools: z.union([z.literal("*"), z.array(z.string().regex(CONNECTOR_TOOL_NAME_PATTERN)).min(1).max(500)]) }),
-);
-
 /** A responder kind from a newer release restores as the room's first
  * member as lead (what a room without one does) instead of refusing the
  * whole backup. Malformed values still fail the schema. */
@@ -112,7 +102,6 @@ const backupSchema = z.object({
     chiefOfStaff: z.boolean(),
     hidden: z.boolean(),
     playbooks: z.array(playbook).max(200),
-    connectorTools: connectorTools.optional(),
     toolScope: z.custom<ToolScope>((value) => value !== undefined && parseToolScope(value).ok, "Invalid tool selection")
       .transform((value) => { const parsed = parseToolScope(value); return parsed.ok ? parsed.scope! : value; }).optional(),
     memory: memory.optional(),

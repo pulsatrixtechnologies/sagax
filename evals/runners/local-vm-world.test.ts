@@ -35,7 +35,7 @@ describe("localVm world installSkill", () => {
         { kind: "waitForTurns", bot: "worker", count: 1, timeoutMs: 20_000 },
       ],
       assertions: [
-        { kind: "systemPromptIncludes", bot: "worker", turn: 0, includes: '<openmaus-skill id="local-vm-pin"' },
+        { kind: "instructionsInclude", bot: "worker", turn: 0, includes: '<openmaus-skill id="local-vm-pin"' },
       ],
     });
     const result = await runScenario(scenario);

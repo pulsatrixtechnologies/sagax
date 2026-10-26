@@ -1,6 +1,8 @@
 // Density is an occasional preference chosen in Settings > Appearance; the
 // Sagax sidebar head keeps only its frequent controls (search and New). The
 // edge collapses it: see `sidebarDragTarget` in sidebar-preferences.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -126,37 +128,64 @@ describe("sidebar header", () => {
     },
   );
 
-  // Grok Bot's foot (JC, 2026-10-15): the avatar (the account menu) and the
-  // wide Connect apps pill, whatever Sidebar shortcuts said. No Browse Bots
-  // row and no name row: Browse Bots is in the avatar's menu.
-  it.each([true, false])("draws only the avatar and the Connect apps pill at the foot (shortcuts %s)", (shortcuts) => {
+  // The foot (reference design): the account pill (avatar and name, the
+  // account menu) and the plain Connect apps button, whatever Sidebar
+  // shortcuts said. No Browse Bots row: Browse Bots is in the account menu.
+  it.each([true, false])("draws only the account pill and the Connect apps button at the foot (shortcuts %s)", (shortcuts) => {
     fixture.density = "comfortable";
     fixture.shortcuts = shortcuts;
     resetAchievementsForTests({ status: "ready", snapshot: achievementSnapshot() });
     const html = render();
     const foot = html.slice(html.indexOf("data-sidebar-foot"));
     expect(foot).toContain("data-sidebar-account-row");
+    // the row is the container the open label's cap measures (100cqw)
+    const row = /<div data-sidebar-account-row="[^"]*" class="([^"]*)"/.exec(foot)?.[1] ?? "";
+    expect(row.split(" ")).toEqual(expect.arrayContaining(["gap-1.5", "[container-type:inline-size]"]));
     expect(foot).not.toContain("data-sidebar-place=");
     expect(foot).not.toContain(">Browse Bots</span>");
     expect(foot).not.toContain("data-account-name");
-    expect(foot).not.toContain("data-member-line");
-    const pill = (foot.match(/<button[^>]*data-sidebar-connect-apps[^>]*>/g) ?? [])[0] ?? "";
+    // Show my title / Show my points are on: the line sits under the name
+    expect(foot).toContain("data-member-line");
+    const buttons = foot.match(/<button[^>]*data-sidebar-connect-apps[^>]*>[\s\S]*?<\/button>/g) ?? [];
+    expect(buttons).toHaveLength(1);
+    const pill = buttons[0] ?? "";
+    expect(pill).toContain('type="button"');
     expect(pill).toContain('data-tour="nav-apps"');
-    expect(pill).toContain("rounded-full");
-    expect(pill).toContain("flex-1");
-    expect(pill).toContain("h-9");
-    expect(foot).toContain(">Connect apps</span>");
+    // a plain rounded-lg nav button, no longer the removed round pill
+    expect(pill).toContain("rounded-lg");
+    expect(pill).not.toContain("rounded-full");
+    expect(pill).not.toContain("sidebar-apps-pill");
+    // it gives its label up before the account pill's minimum
+    expect(pill).toContain("min-w-0");
+    expect(pill.slice(0, pill.indexOf(">"))).not.toContain("shrink-0");
+    // same height as the account pill (the --foot-tile-h tile of #980)
+    expect(pill).toContain("h-[var(--foot-tile-h,2.25rem)]");
+    // the label is always shown (no hover reveal), as a truncating span
+    expect(pill).toMatch(/<span class="truncate">Connect apps<\/span>/);
+    expect(pill).toContain("lucide-puzzle");
+    // the account pill carries the avatar and the name
+    expect(foot).toContain("data-sidebar-account-pill");
+    expect(foot).toContain("data-account-pill-name");
     // the avatar comes first, then the pill
     expect(foot.indexOf("aria-haspopup")).toBeLessThan(foot.indexOf("data-sidebar-connect-apps"));
     expect(html).toMatch(/data-sidebar-foot[^>]*class="px-4 pb-4"/);
   });
 
-  it("keeps Connect apps and Browse Bots as icon buttons on the collapsed rail", () => {
+  it("always draws the Connect apps button, wide or collapsed (no feature flag any more)", () => {
+    expect(render()).toContain("data-sidebar-connect-apps");
+    fixture.density = "icons";
+    expect(render()).toContain("data-sidebar-connect-apps");
+    expect(render()).toContain("data-sidebar-account-rail");
+  });
+
+  it("keeps one Connect apps icon on the collapsed rail", () => {
     fixture.density = "icons";
     const html = render();
     expect((html.match(/<button[^>]*data-sidebar-connect-apps[^>]*>/g) ?? [])[0]).toContain('aria-label="Connect apps"');
-    expect(html).toContain('aria-label="Browse Bots"');
-    expect(html).toContain('data-place-anim="grid"');
+    // one entry for apps and bots: Browse Bots is a tab of Connect apps
+    expect(html).not.toContain('aria-label="Browse Bots"');
+    expect(html).not.toContain('data-place-anim="grid"');
+    expect(html).toContain("data-sidebar-account-rail");
   });
 
   it("hides the brand row when the sidebar logo is turned off, keeping search and New", () => {
@@ -177,5 +206,13 @@ describe("sidebar header", () => {
     setLocale("fr");
     expect(t("sidebar.search")).toBe("Rechercher");
   });
-});
 
+  it("keeps no .sidebar-apps-pill or .connect-apps-pill rule in styles.css (the label always shows)", () => {
+    const css = readFileSync(resolve(__dirname, "../styles.css"), "utf8");
+    expect(css).not.toContain("sidebar-apps-pill");
+    expect(css).not.toContain("connect-apps-pill");
+    expect(css).not.toContain("connect-apps-tile-in");
+    // the equal-height foot tiles (#980) stay
+    expect(css).toContain("--foot-tile-h: 2.25rem");
+  });
+});

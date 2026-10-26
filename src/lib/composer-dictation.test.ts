@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DICTATION_BARS, dictationEngine, dictationLevels, formatDictationTime, joinDictated } from "./composer-dictation";
+import { DICTATION_BARS, DICTATION_HOLD_MS, dictationEngine, isDictationHold, dictationLevels, formatDictationTime, joinDictated } from "./composer-dictation";
 
 describe("composer dictation", () => {
   it("prefers the Mac's own dictation, then voice mode's speech to text, else none", () => {
@@ -28,5 +28,11 @@ describe("composer dictation", () => {
     expect(joinDictated("", " bonjour ")).toBe("bonjour");
     expect(joinDictated("Salut", "ça va")).toBe("Salut ça va");
     expect(joinDictated("Salut", "  ")).toBe("Salut");
+  });
+
+  it("tells a tap from a hold at 350 ms", () => {
+    expect(DICTATION_HOLD_MS).toBe(350);
+    expect(isDictationHold(1000, 1200)).toBe(false);
+    expect(isDictationHold(1000, 1350)).toBe(true);
   });
 });

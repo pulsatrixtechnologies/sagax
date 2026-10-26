@@ -172,6 +172,15 @@ describe("protocol", () => {
       .toEqual({ commands: [{ seq: 2, kind: "approve", data: { approval_id: "a", option: "allow" } }], lastSeq: 3 });
   });
 
+  it("parses a duration an admin extended and drops a bad one", () => {
+    expect(parseCommands({ commands: [
+      { seq: 4, kind: "limits", data: { max_duration_sec: 7200 } },
+      { seq: 5, kind: "limits", data: { max_duration_sec: 12 * 3600 + 1 } },
+      { seq: 6, kind: "limits", data: { max_duration_sec: "60" } },
+      { seq: 7, kind: "limits", data: {} },
+    ] })).toEqual({ commands: [{ seq: 4, kind: "limits", data: { max_duration_sec: 7200 } }], lastSeq: 7 });
+  });
+
   it("rebuilds the context of a followup on a relaunched Pod", () => {
     const b = parseBootstrap({
       run_id: "r", env_id: "e", title: "t", prompt: "Fix it", engine: "claude-code", model: null, effort: null,
@@ -282,6 +291,8 @@ describe("sagax-run image", () => {
     expect(dockerfile).toMatch(/^FROM \$\{SANDBOX_IMAGE\}$/m);
     expect(dockerfile).toContain('ENV ENGINE_SET="claude codex"');
     expect(dockerfile).toMatch(/^USER 1000:1000$/m);
+    // No Hermes in this image: the overlay runs npm only (a venv found fails).
+    expect(dockerfile).toContain("harden-image-deps.mjs --no-venv --root /usr/local/lib/node_modules");
     expect(dockerfile).toContain('ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/node", "/opt/sagax-runner/dist-server/sagax-runner.js"]');
     const bundle = readFileSync(new URL("../../scripts/bundle-server.mjs", import.meta.url), "utf8");
     expect(bundle.match(/const ENTRY_POINTS = \[([\s\S]*?)\];/)?.[1]).toMatch(/["']sagax-runner\.ts["']/);

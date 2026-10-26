@@ -99,7 +99,7 @@ describe("groupActivityRuns", () => {
   });
 
   it("shows the cluster wake rows as notices in the person's language", () => {
-    expect(statusActivity(tool(SANDBOX_WAKE_NOTICE))).toEqual({ kind: "notice", text: "The environment was asleep outside office hours. Starting can take a few minutes." });
+    expect(statusActivity(tool(SANDBOX_WAKE_NOTICE))).toEqual({ kind: "notice", text: "The environment was asleep. Starting can take a few minutes." });
     expect(statusActivity(tool(SANDBOX_WAKE_TIMEOUT_NOTICE))).toEqual({ kind: "notice", text: "The server environment did not start in time. Send the message again in a few minutes." });
   });
 
@@ -343,5 +343,21 @@ describe("groupTranscript", () => {
       "run",
       "message",
     ]);
+  });
+});
+
+describe("1Password waiting row (parité R10)", () => {
+  it("is a notice in the reader's language", async () => {
+    const { ONE_PASSWORD_WAITING } = await import("../../shared/credential-vault");
+    const row = statusActivity({ id: "a", role: "bot", kind: "activity", at: 1, tool: { name: ONE_PASSWORD_WAITING, ok: true } } as Message);
+    expect(row?.kind).toBe("notice");
+    expect(row?.text).toContain("1Password");
+  });
+});
+
+describe("the connector switch line (review of #943)", () => {
+  it("reads in the person's language, from the structured line", () => {
+    const message: Message = { id: "cs", at: 1, role: "bot", kind: "activity", tool: { name: "notice: Switched to Claude for Gmail.", ok: true, connectorSwitch: { engine: "Claude", connector: "Gmail" } } };
+    expect(statusActivity(message)).toEqual({ kind: "notice", text: "Switched to Claude for Gmail" });
   });
 });

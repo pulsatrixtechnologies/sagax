@@ -448,7 +448,7 @@ struct DesktopModelPicker: View {
                         } else {
                             Image(systemName: "arrow.down.to.line").font(.system(size: 12, weight: .semibold))
                         }
-                        Text("Update \(rail.displayName ?? rail.instanceId) on this server")
+                        Text("Update \(HumanID.readable(rail.displayName, rail.instanceId, or: String(localized: "Removed engine"))) on this server")
                             .font(theme.font(12.5, .semibold))
                     }
                     .foregroundStyle(theme.accentInk)
@@ -600,7 +600,7 @@ enum DesktopEngineRail {
         switch family(instance) {
         case .claude: "Claude"
         case .openai: "OpenAI"
-        case nil: instance.displayName ?? instance.instanceId
+        case nil: HumanID.readable(instance.displayName, instance.instanceId, or: String(localized: "Removed engine"))
         }
     }
 

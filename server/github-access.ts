@@ -13,7 +13,7 @@
 //
 // A token is only ever sent to GitHub's own hosts, in a header, never in a
 // URL, an argv, a file or a log line.
-import { githubOrigins } from "./github-connect.ts";
+import { githubOrigins, githubTokenKind } from "./github-connect.ts";
 
 export type GithubCredentialVia = "marketplace" | "person" | "organization";
 
@@ -22,6 +22,9 @@ export interface GithubCredential {
   via: GithubCredentialVia;
   /** The organization token's label, for messages. Never the token. */
   label?: string;
+  /** The person's GitHub login (via "person"): tells a repository of their
+   * own account from one of an organization the token may not cover. */
+  login?: string;
 }
 
 export type GithubAccessCode =
@@ -30,10 +33,11 @@ export type GithubAccessCode =
   | "bad_token"
   | "sso_required"
   | "rate_limited"
-  | "forbidden";
+  | "forbidden"
+  | "org_not_covered";
 
 /** What the person can do about it. */
-export type GithubAccessFix = "connect_or_token" | "check_access" | "replace_token" | "authorize_sso" | "wait" | "token_scope";
+export type GithubAccessFix = "connect_or_token" | "check_access" | "replace_token" | "authorize_sso" | "wait" | "token_scope" | "reconnect_with_orgs";
 
 export interface GithubAccessFailure {
   code: GithubAccessCode;
@@ -45,6 +49,8 @@ export interface GithubAccessFailure {
   ssoUrl?: string;
   /** Epoch ms when the rate limit resets. */
   resetAt?: number;
+  /** The organization the person's token does not cover (org_not_covered). */
+  organization?: string;
 }
 
 const VIA_TEXT: Record<GithubCredentialVia, string> = {
@@ -86,6 +92,20 @@ export function githubAccessFailure(
       message: `GitHub refused ${credential ? VIA_TEXT[credential.via] : "the token"} (401): it is wrong, expired or revoked. Replace it, then try again.`,
     };
   }
+  // The person's own connection refused on a repository of another owner:
+  // say it does not cover that organization instead of a bare 404 or 403.
+  // A fine-grained token reaches one owner only; an OAuth token may lack
+  // read:org or the organization's approval of the OAuth App.
+  const owner = /^([^/\s]+)\//.exec(repo)?.[1];
+  if ((status === 404 || (status === 403 && !headers.get("retry-after"))) && credential?.via === "person" && credential.login && owner && owner.toLowerCase() !== credential.login.toLowerCase()) {
+    const why = githubTokenKind(credential.token) === "fine_grained"
+      ? "a fine-grained token reaches one owner only (your own account)"
+      : "the organization has not granted it access, or it lacks the read:org and repo scopes";
+    return {
+      code: "org_not_covered", status: 422, fix: "reconnect_with_orgs", organization: owner,
+      message: `Your GitHub token does not cover the organization ${owner} (GitHub answered ${status} for ${repo}): ${why}. Reconnect GitHub with access to organizations (Connect apps > GitHub), or check the address.`,
+    };
+  }
   if (status === 404) {
     if (!credential) {
       return {
@@ -109,7 +129,7 @@ export function githubAccessFailure(
 
 /** Most telling first: what the person must fix before anything else. */
 const RANK: Record<GithubAccessCode, number> = {
-  sso_required: 0, bad_token: 1, forbidden: 2, not_found_or_no_access: 3, rate_limited: 4, private_needs_token: 5,
+  sso_required: 0, bad_token: 1, org_not_covered: 2, forbidden: 3, not_found_or_no_access: 4, rate_limited: 5, private_needs_token: 6,
 };
 
 export type GithubProbe =

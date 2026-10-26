@@ -1,17 +1,16 @@
 // "Create a Team Bot from this conversation" (server/team-bot-draft.ts).
 //
 //   POST /api/bots/:id/team-bot-draft   { threadId, language? }
-//        { draft, memory: { notes: [{ path, bytes }] } }: the new bot's name,
-//        role, description and instructions drafted by this bot's model from
-//        the conversation (or from its title and lines when the model cannot),
-//        and the memory notes that MAY go along, for the dialog to list.
-//        Reading the conversation is the only right it needs.
-//   POST /api/bots/:id/team-bot-carry   { threadId, newBotId, includeMemory: true, notes?, summary? }
-//        Copies the ticked notes of this bot's memory, and a summary of the
-//        conversation (memory/conversation-carry-over.md), into the new bot.
-//        Without `includeMemory: true` it answers 400 and writes nothing:
-//        memory carry-over is an explicit opt-in. Needs to read this
-//        conversation and to change the new bot.
+//        { draft }: the new bot's name, role, description and instructions
+//        drafted by this bot's model from the conversation (or from its title
+//        and lines when the model cannot). Reading the conversation is the
+//        only right it needs.
+//   POST /api/bots/:id/team-bot-carry   410 private_memory_never, always.
+//        JC 2026-10-21: a Team Bot copied from a conversation takes the
+//        persona, the rules, the plugins and the team's shared memory (it
+//        stays in the same team), never a conversation nor the bot's own
+//        memory, which is its owner's. The route that used to copy memory
+//        notes and a summary of the conversation writes nothing now.
 //
 // The bot itself is created by the ordinary POST /api/bots, its plugins by
 // /api/bots/:id/plugins/install, and it is shared with the team through the
@@ -19,12 +18,8 @@
 // grants through Perspicax). Nothing here adds a multi-person view.
 import { z } from "zod";
 
-import { draftSummary } from "../compaction-summary.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import {
-  CARRY_SUMMARY_PATH,
-  carryOverNote,
-  carryOverPlan,
   conversationLines,
   excerptText,
   fallbackTeamBotDraft,
@@ -44,23 +39,16 @@ export interface TeamBotFromThreadDeps {
   mayChange(auth: RequestAuth, botId: string): boolean;
   /** The bot's one-shot when its model may be asked now; null otherwise. */
   generate(botId: string): Generate | null;
-  /** The source bot's memory notes that may travel (index and topics). */
-  memoryNotes(botId: string): Array<{ path: string; bytes: number }>;
-  readNote(botId: string, path: string): string;
-  writeNote(auth: RequestAuth, botId: string, path: string, text: string): void;
+  /** Unused since 2026-10-21: a copy never takes the bot's memory. */
+  memoryNotes?(botId: string): Array<{ path: string; bytes: number }>;
+  readNote?(botId: string, path: string): string;
+  writeNote?(auth: RequestAuth, botId: string, path: string, text: string): void;
   now?(): number;
   /** The one-shot's limit (tests shorten it). */
   timeoutMs?: number;
 }
 
 const draftBody = z.object({ threadId: z.string().regex(/^[\w-]{1,128}$/), language: z.enum(["fr", "en"]).optional() }).strict();
-const carryBody = z.object({
-  threadId: z.string().regex(/^[\w-]{1,128}$/),
-  newBotId: z.string().regex(/^[\w-]{1,128}$/),
-  includeMemory: z.boolean().optional(),
-  notes: z.array(z.string().max(300)).max(200).optional(),
-  summary: z.boolean().optional(),
-}).strict();
 
 async function withTimeout<T>(work: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
   const controller = new AbortController();
@@ -99,41 +87,13 @@ export function createTeamBotFromThreadRoutes(deps: TeamBotFromThreadDeps): Rout
           result = fallback;
         }
       }
-      return json(res, 200, { draft: result, memory: { notes: deps.memoryNotes(bot.id), summaryPath: CARRY_SUMMARY_PATH } });
+      return json(res, 200, { draft: result });
     }
-    const carry = path.match(/^\/api\/bots\/([\w-]{1,128})\/team-bot-carry$/);
-    if (carry && method === "POST") {
-      const parsed = carryBody.safeParse(await readBody(req));
-      if (!parsed.success) return json(res, 400, { error: "send { threadId, newBotId, includeMemory: true, notes?, summary? }" });
-      const plan = carryOverPlan(parsed.data, deps.memoryNotes(carry[1]!).map((note) => note.path));
-      if (!plan.includeMemory) return json(res, 400, { error: "Memory carry-over is opt-in: send includeMemory: true.", code: "memory_opt_in" });
-      const bot = deps.bot(carry[1]!);
-      const thread = bot ? deps.thread(auth, bot.id, parsed.data.threadId) : null;
-      if (!bot || !thread) return json(res, 404, { error: "Conversation not found" });
-      const target = deps.bot(parsed.data.newBotId);
-      if (!target || target.id === bot.id || !deps.mayChange(auth, target.id)) return json(res, 404, { error: "New bot not found" });
-      const written: string[] = [];
-      for (const note of plan.notes) {
-        const text = deps.readNote(bot.id, note);
-        if (!text.trim()) continue;
-        deps.writeNote(auth, target.id, note, text);
-        written.push(note);
-      }
-      if (plan.summary) {
-        const lines = conversationLines(thread.messages);
-        if (lines.length) {
-          const generate = deps.generate(bot.id) ?? undefined;
-          const summary = await draftSummary(lines, { signal: new AbortController().signal, generateText: generate, timeoutMs: deps.timeoutMs ?? 20_000 });
-          deps.writeNote(auth, target.id, CARRY_SUMMARY_PATH, carryOverNote(summary, { threadTitle: thread.title, botName: bot.name, at: deps.now?.() ?? Date.now() }));
-          written.push(CARRY_SUMMARY_PATH);
-          // The index points at it, so the new bot finds it.
-          const index = deps.readNote(target.id, "MEMORY.md");
-          if (!index.includes(CARRY_SUMMARY_PATH)) {
-            deps.writeNote(auth, target.id, "MEMORY.md", `${index.trimEnd()}${index.trim() ? "\n" : ""}- [Conversation carried over](${CARRY_SUMMARY_PATH}): where this bot comes from.\n`);
-          }
-        }
-      }
-      return json(res, 200, { written });
+    if (/^\/api\/bots\/[\w-]{1,128}\/team-bot-carry$/.test(path) && method === "POST") {
+      return json(res, 410, {
+        error: "A copy never takes a conversation or the bot's private memory. Its team's shared memory follows it in the same team.",
+        code: "private_memory_never",
+      });
     }
     return PASS;
   };

@@ -6,6 +6,7 @@ import type { MausColor } from "@/lib/mascot";
 import { BotAvatar, InitialsAvatar, type BotAvatarProps } from "./Avatar";
 import { PersonLabelTag } from "./LabelTag";
 import { WithPresence } from "./PresenceDot";
+import { personLabel } from "@/lib/human-label";
 
 export function channelRosterActions(input: {
   actorRole: "owner" | "admin" | "member" | null;
@@ -54,7 +55,7 @@ export function ChannelMembers(props: {
         {part === "all" && <h2 className="px-2 text-[12px] font-semibold text-ink-secondary">Gens</h2>}
         <ul className="overflow-hidden rounded-xl bg-card">
           {props.humans.map((human) => {
-            const label = human.label || human.id;
+            const label = personLabel(human.label, human.id);
             return (
               <li key={human.id} className="flex items-center gap-3 border-b border-hairline/30 px-3 py-2 last:border-b-0">
                 {(() => {

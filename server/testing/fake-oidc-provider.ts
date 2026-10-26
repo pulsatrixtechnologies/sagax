@@ -146,6 +146,22 @@ export interface FakeOidcProvider {
   /** The next token request answers this status (429 `rate_limited`, else
    * `temporarily_unavailable`), whatever the grant. */
   failNextToken(status: number): void;
+  /** 2026-10-20, Perspicax's refresh reuse grace (local-oauth
+   * REFRESH_REUSE_GRACE, 30 s): a rotated refresh token presented again
+   * within this many ms gets the pair already issued for it; later, the
+   * whole family is revoked. 0 (the default): a rotated token is just
+   * invalid_grant. */
+  reuseGraceMs: number;
+  /** The next refresh rotates as usual, then its answer is lost (the
+   * connection is cut), as when a deploy stops Perspicax mid-answer. */
+  dropNextRefreshAnswer(): void;
+  /** The next refresh rotates at once and answers only after `ms` (a crash
+   * of the client in between loses the answer). */
+  delayNextRefreshAnswer(ms: number): void;
+  /** Perspicax down (connections refused) and up again on the same address,
+   * its grants kept (a redeploy). */
+  stop(): Promise<void>;
+  start(): Promise<void>;
   /** A back-channel logout token for this subject, signed by the provider's
    * key unless `strayKey`; `claims` and `header` bend one thing at a time. */
   logoutToken(input: { sub: string; claims?: (claims: Record<string, unknown>) => Record<string, unknown>; header?: (header: Record<string, unknown>) => Record<string, unknown>; strayKey?: boolean }): string;
@@ -235,7 +251,12 @@ export async function startFakeOidcProvider(options: { clientId?: string; user?:
     return next;
   };
   let failNext: number | null = null;
+  let dropNextAnswer = false;
+  let delayNextAnswerMs = 0;
+  /** Rotated refresh tokens and the answer issued for them (reuse grace). */
+  const rotatedAnswers = new Map<string, { at: number; family: string; body: Record<string, unknown> }>();
   let server: Server | null = null;
+  let listenPort = 0;
   /** Slice 5: sign-in access tokens (the exchange subjects) and exchanged MCP tokens. */
   const accessTokens = new Map<string, { sub: string; exp: number }>();
   /** Access tokens of a routine delegation family: never a subject to issue one. */
@@ -282,6 +303,23 @@ export async function startFakeOidcProvider(options: { clientId?: string; user?:
     failNextToken(status) {
       failNext = status;
     },
+    reuseGraceMs: 0,
+    dropNextRefreshAnswer() {
+      dropNextAnswer = true;
+    },
+    delayNextRefreshAnswer(ms) {
+      delayNextAnswerMs = ms;
+    },
+    stop: () => new Promise<void>((resolve) => {
+      if (!server?.listening) return resolve();
+      server.close(() => resolve());
+      server.closeAllConnections();
+    }),
+    start: () => new Promise<void>((resolve, reject) => {
+      if (!server || server.listening) return resolve();
+      server.once("error", reject);
+      server.listen(listenPort, "127.0.0.1", () => { server!.off("error", reject); resolve(); });
+    }),
     logoutToken(input) {
       const now = Math.floor(Date.now() / 1000);
       let claims: Record<string, unknown> = {
@@ -562,6 +600,13 @@ export async function startFakeOidcProvider(options: { clientId?: string; user?:
         };
         if (form.grant_type === "refresh_token") {
           const held = form.refresh_token ? refreshTokens.get(form.refresh_token) : undefined;
+          const reused = !held && form.refresh_token ? rotatedAnswers.get(form.refresh_token) : undefined;
+          if (reused && provider.reuseGraceMs > 0 && !deadFamilies.has(reused.family) && form.client_id === clientId) {
+            // Perspicax: within the grace, the pair already issued; after it, the family ends.
+            if (Date.now() - reused.at <= provider.reuseGraceMs) return send(res, 200, reused.body);
+            endFamily(reused.family);
+            return send(res, 400, { error: "invalid_grant" });
+          }
           if (!held || deadFamilies.has(held.family) || form.client_id !== clientId) return send(res, 400, { error: "invalid_grant" });
           if (held.resource && form.resource !== held.resource) return send(res, 400, { error: "invalid_target" });
           if (disabled.has(held.user.sub)) return send(res, 400, { error: "invalid_grant" });
@@ -576,14 +621,27 @@ export async function startFakeOidcProvider(options: { clientId?: string; user?:
             else user.role = role;
           }
           provider.refreshCount += 1;
-          return send(res, 200, {
+          const answer = {
             access_token: newAccess(held.user.sub),
             refresh_token: issueRefresh(held.family, held.user, held.resource),
             token_type: "Bearer",
             expires_in: 3600,
             scope: delegation && !provider.tamper.omitRoutinesMarker ? `openid profile email offline_access ${MARKER}` : "openid profile email offline_access",
             ...(provider.tamper.noIdToken ? {} : { id_token: idToken(user, null) }),
-          });
+          };
+          rotatedAnswers.set(form.refresh_token!, { at: Date.now(), family: held.family, body: answer });
+          if (dropNextAnswer) {
+            dropNextAnswer = false;
+            res.socket?.destroy();
+            return;
+          }
+          if (delayNextAnswerMs > 0) {
+            const wait = delayNextAnswerMs;
+            delayNextAnswerMs = 0;
+            setTimeout(() => { if (!res.destroyed && !res.writableEnded) send(res, 200, answer); }, wait).unref();
+            return;
+          }
+          return send(res, 200, answer);
         }
         const grant = form.code ? codes.get(form.code) : undefined;
         if (form.code) codes.delete(form.code); // single use
@@ -694,6 +752,7 @@ export async function startFakeOidcProvider(options: { clientId?: string; user?:
     send(res, 404, { error: "not_found" });
   });
   await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", () => resolve()));
-  provider.issuer = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  listenPort = (server.address() as AddressInfo).port;
+  provider.issuer = `http://127.0.0.1:${listenPort}`;
   return provider;
 }

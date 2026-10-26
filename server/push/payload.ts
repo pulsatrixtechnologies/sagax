@@ -11,6 +11,12 @@ import { botAvatarUrlSchema } from "../../shared/bot-avatar.ts";
 
 export type PushKind = "message" | "nudge" | "approval" | "achievement" | "routine";
 
+/** Lock-screen actions. A question uses the plain update category: it has
+ * no Allow or Deny. A key-protected approval opens the app. */
+export const APPROVAL_CATEGORY = "SAGAX_APPROVAL";
+export const APPROVAL_KEY_CATEGORY = "SAGAX_APPROVAL_KEY";
+export const UPDATE_CATEGORY = "SAGAX_UPDATE";
+
 export interface PushMessage {
   kind: PushKind;
   /** The person it is for (principal id). */
@@ -26,8 +32,16 @@ export interface PushMessage {
   fromId?: string;
   /** The event's own id (a nudge's id), for the phone's dedup. */
   id?: string;
-  /** The approval a push is about: the tap opens its card. */
+  /** The approval a push is about: the tap opens its card, and Allow or
+   * Deny from the banner answers this request. */
   requestId?: string;
+  /** `approval` or `question` when `kind` is `approval`. A question is not answerable from the banner. */
+  prompt?: "approval" | "question";
+  /** Allow must open Sagax: the person's security key signs it. */
+  needsKey?: boolean;
+  /** A finished routine, so the banner can name it. */
+  routineRunId?: string;
+  routineName?: string;
   /** When it happened, milliseconds since 1970. */
   at: number;
   /** A string of the app's own catalog (ios/App/Localizable.xcstrings) the
@@ -36,6 +50,7 @@ export interface PushMessage {
   titleLocKey?: string;
   titleLocArgs?: string[];
   bodyLocKey?: string;
+  bodyLocArgs?: string[];
   /** Display name of the bot or person. The iOS Notification Service
    * Extension uses this as the communication-notification sender. */
   senderName?: string;
@@ -52,12 +67,24 @@ export interface DevicePushSettings {
   sound: boolean;
   badge: boolean;
   nudgeSound: boolean;
+  /** Distinct sound on an approval banner. On unless the phone said otherwise. */
+  approvalChime: boolean;
 }
 
-export const DEFAULT_DEVICE_SETTINGS: DevicePushSettings = Object.freeze({ sound: true, badge: true, nudgeSound: true });
+export const DEFAULT_DEVICE_SETTINGS: DevicePushSettings = Object.freeze({
+  sound: true, badge: true, nudgeSound: true, approvalChime: true,
+});
 
 /** The bundled wizz, converted for notifications (ios/App/nudge.caf). */
 export const NUDGE_SOUND = "nudge.caf";
+/** A short chime, distinct from the system sound and from the nudge (ios/App/approval.caf). */
+export const APPROVAL_SOUND = "approval.caf";
+
+/** Which category the phone registered. Questions and ordinary news have no actions. */
+export function pushCategory(message: Pick<PushMessage, "kind" | "prompt" | "needsKey">): string {
+  if (message.kind !== "approval" || message.prompt === "question") return UPDATE_CATEGORY;
+  return message.needsKey ? APPROVAL_KEY_CATEGORY : APPROVAL_CATEGORY;
+}
 
 const TITLE_MAX = 120;
 const BODY_MAX = 240;
@@ -142,9 +169,12 @@ export function buildApnsRequest(input: {
   const { message } = input;
   const settings = { ...DEFAULT_DEVICE_SETTINGS, ...input.settings };
   const soundOn = settings.sound && input.personSound !== false;
+  const approvalChime = message.kind === "approval" && message.prompt !== "question" && settings.approvalChime !== false;
   const sound = message.kind === "nudge"
     ? (settings.nudgeSound ? NUDGE_SOUND : soundOn ? "default" : undefined)
-    : soundOn ? "default" : undefined;
+    : !soundOn ? undefined
+      : approvalChime ? APPROVAL_SOUND
+        : "default";
   const senderName = communicationSenderName(message);
   const avatarUrl = pushAvatarUrl(message.avatarUrl);
   const senderId = (message.senderId ?? message.botId ?? message.fromId)?.trim() || undefined;
@@ -157,16 +187,22 @@ export function buildApnsRequest(input: {
     if (message.titleLocArgs?.length) alert["title-loc-args"] = message.titleLocArgs.map((arg) => clip(arg, TITLE_MAX));
   }
   if (message.bodyLocKey) alert["loc-key"] = message.bodyLocKey;
+  if (message.bodyLocArgs?.length) alert["loc-args"] = message.bodyLocArgs.map((arg) => clip(arg, TITLE_MAX));
   // The banner's title is the bot (name and face); an approval says under it
   // what it would allow, in the card's own words.
   if (message.kind === "approval" && senderName && message.title.trim() && message.title.trim() !== senderName) {
     alert.subtitle = clip(message.title, TITLE_MAX);
+  } else if (message.routineName) {
+    const name = clip(message.routineName, 80);
+    alert.subtitle = clip(`Open routine ${name}`, TITLE_MAX);
+    alert["subtitle-loc-key"] = "Open routine %@";
+    alert["subtitle-loc-args"] = [name];
   }
   const aps: Record<string, unknown> = {
     alert,
     // the phone wakes in the background to count its unread (the badge)
     "content-available": 1,
-    category: message.kind === "approval" ? "SAGAX_APPROVAL" : "SAGAX_UPDATE",
+    category: pushCategory(message),
   };
   if (sound) aps.sound = sound;
   if (message.threadId) aps["thread-id"] = message.threadId;
@@ -185,6 +221,10 @@ export function buildApnsRequest(input: {
   if (message.fromId) payload.fromId = message.fromId;
   if (message.id) payload.id = message.id;
   if (message.requestId) payload.requestId = message.requestId;
+  if (message.prompt) payload.prompt = message.prompt;
+  if (message.needsKey) payload.needsKey = true;
+  if (message.routineRunId) payload.routineRunId = message.routineRunId;
+  if (message.routineName) payload.routineName = clip(message.routineName, 80);
   if (senderName) payload.senderName = senderName;
   if (senderId) payload.senderId = senderId;
   if (avatarUrl) payload.avatarUrl = avatarUrl;

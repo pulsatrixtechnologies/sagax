@@ -106,6 +106,48 @@ public enum AskQuestionAnswer {
         return "\(preamble)\n\n\(blocks.joined(separator: "\n\n"))"
     }
 
+    /// The answer read back per question ("Q: …\nA: …" blocks), keyed by
+    /// the question text. An answer without blocks reads as the only
+    /// question's answer.
+    public static func byQuestion(_ answer: String, questions: [AskQuestion]) -> [String: String] {
+        let body = withoutPreamble(answer)
+        var found: [String: String] = [:]
+        for block in body.components(separatedBy: "\n\nQ: ") {
+            let text = block.hasPrefix("Q: ") ? String(block.dropFirst(3)) : block
+            guard let split = text.range(of: "\nA: ") else { continue }
+            let question = String(text[..<split.lowerBound])
+            if questions.contains(where: { $0.question == question }) {
+                found[question] = String(text[split.upperBound...])
+            }
+        }
+        if found.isEmpty, questions.count == 1, !body.hasPrefix("Q: ") {
+            found[questions[0].question] = body
+        }
+        return found
+    }
+
+    /// Which labels an answer names, and what is left over (an answer in
+    /// words). Several picks are joined with ", " and a label may hold a
+    /// comma, so the longest labels match first, each as a whole segment.
+    /// The same rule as `picksInAnswer` (src/components/QuestionSheet.tsx).
+    public static func picks(in value: String, labels: [String]) -> (picked: [String], rest: String) {
+        let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return ([], "") }
+        if labels.contains(text) { return ([text], "") }
+        var remaining = ", \(text), "
+        var picked: Set<String> = []
+        for label in labels.sorted(by: { $0.count > $1.count }) {
+            let needle = ", \(label), "
+            guard let range = remaining.range(of: needle) else { continue }
+            picked.insert(label)
+            remaining.replaceSubrange(range, with: ", ")
+        }
+        var rest = remaining
+        while rest.hasPrefix(", ") { rest.removeFirst(2) }
+        while rest.hasSuffix(", ") { rest.removeLast(2) }
+        return (labels.filter { picked.contains($0) }, rest.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
     /// The same answer without the model-facing lead-in, for a settled card.
     public static func withoutPreamble(_ answer: String) -> String {
         let lead = "\(preamble)\n\n"

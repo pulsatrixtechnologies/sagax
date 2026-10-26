@@ -199,6 +199,10 @@ test("the system browser starts the desktop flow, with the loopback return when 
   assert.equal(url.origin + url.pathname, `${ORG}/auth/oidc/start`);
   assert.equal(url.searchParams.get("client"), "desktop");
   assert.equal(url.searchParams.get("return"), back);
+  assert.equal(url.searchParams.get("fresh"), null);
+  // "Sign in again" (2026-10-19): the page's fresh=1 rides to the server.
+  assert.equal(oidcLoginStartUrl(`${ORG}/auth/oidc/start?fresh=1`, state), `${ORG}/auth/oidc/start?fresh=1`);
+  assert.equal(new URL(desktopStartUrl(ORG, back, true)).searchParams.get("fresh"), "1");
 });
 
 test("a return link is honoured only for a saved server, with the credential in the hash", () => {

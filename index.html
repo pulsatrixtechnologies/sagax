@@ -14,12 +14,40 @@
     <script>
       (function () {
         var SKINS = ["pulsatrix", "pulsatrix-light", "midnight", "atelier", "foundry", "lagoon", "graphite", "linen", "dusk", "daylight", "retro98", "meadow"];
+        // Auto (src/lib/skin-families.ts): a variant's light and dark skins.
+        var PAIRS = {"pulsatrix-light":["pulsatrix-light","pulsatrix"],"pulsatrix":["pulsatrix-light","pulsatrix"],"daylight":["daylight","midnight"],"midnight":["daylight","midnight"],"atelier":["atelier","foundry"],"foundry":["atelier","foundry"]};
+        // A skin no variant lists any more: its base skin and colour (LEGACY_SKINS).
+        var LEGACY = {"graphite":["midnight","blue"],"linen":["daylight","blue"],"dusk":["midnight","pink"],"meadow":["daylight","green"],"lagoon":["atelier","blue"]};
+        // The tints (colours, Windows editions) each base skin can wear.
+        var TINTS = {"pulsatrix-light":["red","pink","green","yellow","aurore","ocean","neon","foret","sunset","nordic","candy"],"pulsatrix":["red","pink","green","yellow","aurore","ocean","neon","foret","cyberpunk","sunset","nordic"],"daylight":["red","pink","blue","green","yellow","aurore","ocean","neon","foret","sunset","nordic","candy"],"midnight":["red","pink","blue","green","yellow","aurore","ocean","neon","foret","cyberpunk","sunset","nordic"],"atelier":["red","pink","blue","green","yellow","aurore","ocean","neon","foret","sunset","nordic","candy"],"foundry":["red","pink","blue","green","yellow","aurore","ocean","neon","foret","cyberpunk","sunset","nordic"],"retro98":["xp","vista","win7","win8","win81","win10","win11"]};
         var d = "pulsatrix";
-        var s;
+        // The textures a ground can wear (src/lib/skin-families.ts SKIN_TEXTURES, "none" aside).
+        var TEXTURES = ["grain","grid","dots","lines"];
+        var s, m, t, p, x;
         try {
           s = localStorage.getItem("omb-skin");
+          m = localStorage.getItem("omb-skin-mode");
+          t = localStorage.getItem("omb-skin-tint");
+          p = localStorage.getItem("omb-skin-depth");
+          x = localStorage.getItem("omb-skin-texture");
         } catch (e) {}
-        document.documentElement.dataset.skin = SKINS.indexOf(s) >= 0 ? s : d;
+        if (LEGACY[s]) {
+          t = LEGACY[s][1];
+          s = LEGACY[s][0];
+        }
+        s = SKINS.indexOf(s) >= 0 ? s : d;
+        if (m === "auto" && PAIRS[s]) {
+          var k = false;
+          try {
+            k = matchMedia("(prefers-color-scheme: dark)").matches;
+          } catch (e) {}
+          s = PAIRS[s][k ? 1 : 0];
+        }
+        document.documentElement.dataset.skin = s;
+        var r = document.documentElement.dataset;
+        if (t && TINTS[s] && TINTS[s].indexOf(t) >= 0) r.skinTint = t;
+        if (p === "full") r.skinDepth = p;
+        if (TEXTURES.indexOf(x) >= 0) r.skinTexture = x;
       })();
     </script>
   </head>

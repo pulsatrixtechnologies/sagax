@@ -45,6 +45,19 @@ struct ChatNameCapsule: View {
                     animated: state.showsActivity,
                     background: Theme.glassFill
                 )
+                // a green dot on the mascot while the bot works (the
+                // reference design's header pill)
+                .overlay(alignment: .bottomTrailing) {
+                    if chat.isBot, state.showsActivity {
+                        Circle()
+                            .fill(Theme.success)
+                            .frame(width: 10, height: 10)
+                            .overlay(Circle().strokeBorder(Theme.glassFill, lineWidth: 2))
+                            .offset(x: 2, y: 2)
+                            .transition(.opacity)
+                            .accessibilityHidden(true)
+                    }
+                }
                 Text(verbatim: people.name(chat, session: session))
                     .font(Theme.Font.bodyMedium)
                     .foregroundStyle(Theme.textPrimary)

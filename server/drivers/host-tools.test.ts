@@ -3,7 +3,7 @@
 // requests declined.
 import { describe, expect, it } from "vitest";
 
-import { CLAUDE_HOST_TOOLS, CODEX_WITHHELD_APPROVAL, GROK_MCP_TOOLS, PI_HOST_TOOLS, claudeDisallowedTools, codexHostToolArgs, codexHostToolRequest, grokHostToolArgs, grokOrgAgentProfile, piHostToolArgs } from "./host-tools.ts";
+import { CLAUDE_HOST_TOOLS, CLAUDE_UNUSED_COMMANDS, CLAUDE_UNUSED_TOOLS, CODEX_WITHHELD_APPROVAL, GROK_MCP_TOOLS, PI_HOST_TOOLS, claudeDisallowedTools, codexHostToolArgs, codexHostToolRequest, grokHostToolArgs, grokOrgAgentProfile, piHostToolArgs } from "./host-tools.ts";
 
 describe("Claude Code host tools", () => {
   it("denies shell, file and fetch built-ins, keeping configured denials", () => {
@@ -14,8 +14,15 @@ describe("Claude Code host tools", () => {
   });
 
   it("changes nothing on a solo server", () => {
-    expect(claudeDisallowedTools(["Task"], false)).toEqual(["Task"]);
-    expect(claudeDisallowedTools(undefined, false)).toEqual([]);
+    expect(claudeDisallowedTools(["Task"], false)).toEqual(["Task", ...CLAUDE_UNUSED_TOOLS]);
+    expect(claudeDisallowedTools(undefined, false)).toEqual([...CLAUDE_UNUSED_TOOLS]);
+    expect(claudeDisallowedTools(["Task"], false, true)).toEqual(["Task"]);
+  });
+
+  it("removes the built-ins a Sagax turn never uses, keeping work tools", () => {
+    for (const tool of ["CronCreate", "ScheduleWakeup", "ListAgents", "PushNotification", "RemoteTrigger"]) expect(CLAUDE_UNUSED_TOOLS).toContain(tool);
+    for (const tool of ["Bash", "Read", "Write", "Edit", "Task", "WebSearch", "WebFetch", "Skill", "TodoWrite", "ToolSearch", "AskUserQuestion", "Monitor", "Workflow"]) expect(CLAUDE_UNUSED_TOOLS).not.toContain(tool);
+    expect([...CLAUDE_UNUSED_COMMANDS].sort()).toEqual(["loop", "schedule"]);
     expect(CLAUDE_HOST_TOOLS.every((tool) => !tool.startsWith("mcp__"))).toBe(true);
   });
 });

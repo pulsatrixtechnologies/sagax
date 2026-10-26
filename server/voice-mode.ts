@@ -158,6 +158,8 @@ export interface VoiceModeDeps {
    * (server/voice-keyterms.ts). Never a secret. */
   keyterms?(target: VoiceTarget, speaker: VoiceSpeaker): string[];
   recordUsage(usage: VoiceUsage): void;
+  /** Throws the spend-limit refusal (409 `spend_cap`) when the limit is reached. */
+  assertWithinBudget?(): void;
   /** A line for the server log (a call's speech falling back to POST). */
   log?(line: string): void;
   /** The thread is on a live call (server/voice-call-session.ts): every
@@ -490,6 +492,12 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
       return json(res, 200, { ready: true, utterances: deps.utterances(text) });
     }
     if (limited(who)) return json(res, 429, { error: "Too many voice requests. Wait a moment." });
+    // Voice costs money like a turn does: a reached spend limit stops it too.
+    try {
+      deps.assertWithinBudget?.();
+    } catch (error) {
+      return json(res, 409, { error: error instanceof Error ? error.message : String(error), code: "spend_cap" });
+    }
 
     if (action === "voices") {
       try {

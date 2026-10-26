@@ -131,7 +131,6 @@ describe("workspace credential env", () => {
         fishAudioKey: "fish-secret",
         opencodeGoApiKey: "ocg-secret",
         openaiImageApiKey: "image-secret",
-        composioApiKey: "ak_handled-separately",
       }),
     ).toEqual({
       XAI_API_KEY: "xai-secret",

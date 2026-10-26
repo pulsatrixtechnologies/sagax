@@ -117,7 +117,7 @@ final class DesktopShellModel: ObservableObject {
     @Published var modelPickerOpen = false
     /// The Settings modal's section and the Plugins modal's tab (I5).
     @Published var settingsSection: DesktopSettingsSection = .general
-    @Published var pluginsTab: DesktopPluginsTab = .apps
+    @Published var pluginsTab: DesktopPluginsTab = .mcp
 
     // MARK: Sidebar (I2)
 

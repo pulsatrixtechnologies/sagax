@@ -12,13 +12,15 @@ import { execFile, spawn } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { basename, delimiter, dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { DATA_DIR } from "./config.ts";
 import { browserBundlePaths } from "./browser-bundle-release.ts";
+import { browserProcessesRunning, browserProcessTree, releaseBrowserProfile, stopBrowserProcesses } from "./browser-processes.ts";
 import { BROWSER_VIEWPORT_ARGS, browserRuntimeEnv, ownsBrowserViewport } from "./browser-runtime.ts";
 import { SIGN_IN_PROMPT } from "./system-prompt.ts";
+import { gateChromeSettings } from "./browser/egress/gate.ts";
 import {
   AGENT_BROWSER_VERSION,
   agentBrowserReleaseUrl,
@@ -36,6 +38,23 @@ const DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
 export function browserRestoreKey(session: string): string {
   if (!/^[A-Za-z0-9_.-]{1,96}$/.test(session)) throw new Error("Invalid browser session.");
   return `omb-${createHash("sha256").update(session).digest("hex")}`;
+}
+
+const PROFILES_DIR = "agent-browser-profiles";
+
+/** Where every saved session's Chrome profile lives. Outside `<data dir>/browser`
+ * and `tools`, so no sweep of the engine's own folders reaches it. */
+export function browserProfilesRoot(dataDir = DATA_DIR): string {
+  return join(dataDir, PROFILES_DIR);
+}
+
+/** A saved session's own Chrome profile, kept between launches (port of
+ * OpenMausBot #3141). agent-browser otherwise starts each Chrome on a new
+ * temporary profile, so only the cookies of its restore file survive a close:
+ * localStorage and IndexedDB sign-ins (Slack, Discord, Firebase...) were lost. */
+export function browserProfileDirectory(session: string, dataDir = DATA_DIR): string {
+  if (!/^[A-Za-z0-9_.-]{1,96}$/.test(session)) throw new Error("Invalid browser session.");
+  return join(browserProfilesRoot(dataDir), createHash("sha256").update(session).digest("hex").slice(0, 32));
 }
 
 /** Where agent-browser keeps saved session state (`--restore`) for this
@@ -119,24 +138,66 @@ async function runningBrowserSessions(binaryPath: string, controlEnv: NodeJS.Pro
   } catch { return null; }
 }
 
-/** Close exactly one daemon without the CLI's implicit launch envelope. */
-export async function closeBrowserSession(binaryPath: string, env: NodeJS.ProcessEnv, timeoutMs = 15_000): Promise<boolean> {
-  if (!env.AGENT_BROWSER_SESSION || !/^[A-Za-z0-9_.-]{1,96}$/.test(env.AGENT_BROWSER_SESSION)) return false;
+/** The sessions whose daemons run under this HOME, from the launch-free
+ * inventory; null when the engine could not say. */
+export function runningBrowserSessionNames(binaryPath: string, env: NodeJS.ProcessEnv, timeoutMs = 15_000): Promise<string[] | null> {
+  const controlEnv = daemonControlEnv(env);
+  return controlEnv ? runningBrowserSessions(binaryPath, controlEnv, Date.now() + timeoutMs) : Promise.resolve(null);
+}
+
+/** The last close asked for, by daemon. Closes of one browser run one after
+ * another (the shutdown sweep beside a temporary browser's own close): the
+ * later one finds nothing running and sends no second `close`. */
+const closingBrowsers = new Map<string, Promise<boolean>>();
+
+/** Close exactly one daemon and the Chrome under it, without the CLI's
+ * implicit launch envelope. True once nothing of that browser runs. */
+export function closeBrowserSession(binaryPath: string, env: NodeJS.ProcessEnv, timeoutMs = 15_000): Promise<boolean> {
+  const session = env.AGENT_BROWSER_SESSION;
+  if (!session || !/^[A-Za-z0-9_.-]{1,96}$/.test(session)) return Promise.resolve(false);
+  const key = browserDaemonPidPath(env);
+  const attempt = (closingBrowsers.get(key) ?? Promise.resolve(true)).then(() => closeOnce(binaryPath, env, session, timeoutMs)).catch(() => false).finally(() => {
+    if (closingBrowsers.get(key) === attempt) closingBrowsers.delete(key);
+  });
+  closingBrowsers.set(key, attempt);
+  return attempt;
+}
+
+async function closeOnce(binaryPath: string, env: NodeJS.ProcessEnv, session: string, timeoutMs: number): Promise<boolean> {
   const closeEnv = daemonControlEnv(env);
   if (!closeEnv) return false;
   const deadline = Date.now() + timeoutMs;
+  // The inventory answers first: `close` to a stopped session starts a
+  // daemon only to stop it again, and leaves its .config file behind.
+  const running = await runningBrowserSessions(binaryPath, closeEnv, deadline);
+  if (!running) return false;
+  if (!running.includes(session)) return true;
+  const pidFile = browserDaemonPidPath(env);
+  const daemonPid = () => { try { return readFileSync(pidFile, "utf8").trim(); } catch { return null; } };
+  const closing = daemonPid();
+  // Read before anything is asked to stop: once the daemon exits, its Chrome
+  // is re-parented and can no longer be found under it.
+  const tree = closing === null ? null : await browserProcessTree(binaryPath, Number(closing), session).catch(() => null);
   // A daemon that does not answer `close` keeps running with its Chrome,
   // detached from us, and every later restart failed the same way (#2603).
-  if (!(await runBrowserCommand(binaryPath, closeEnv, ["close"], deadline)).ok) return killBrowserDaemon(binaryPath, env);
-  // Native close acknowledges before the daemon exits. Observe its actual
-  // removal through the launch-free inventory command before reconnecting.
-  while (Date.now() < deadline) {
-    const sessions = await runningBrowserSessions(binaryPath, closeEnv, deadline);
-    if (!sessions) return false;
-    if (!sessions.includes(env.AGENT_BROWSER_SESSION)) return true;
-    await new Promise((resolve) => setTimeout(resolve, Math.min(25, Math.max(1, deadline - Date.now()))));
+  if ((await runBrowserCommand(binaryPath, closeEnv, ["close"], deadline)).ok) {
+    // Native close answers before the daemon exits, and Chrome's helper
+    // processes can outlive the answer: closed means the inventory no longer
+    // lists this daemon (a new one may already have the session's name) and
+    // nothing of its process tree runs.
+    while (Date.now() < deadline) {
+      const sessions = await runningBrowserSessions(binaryPath, closeEnv, deadline);
+      if (!sessions) return false;
+      const listed = sessions.includes(session) && daemonPid() === closing;
+      if (!listed && !(tree && await browserProcessesRunning(tree))) return true;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(25, Math.max(1, deadline - Date.now()))));
+    }
   }
-  return killBrowserDaemon(binaryPath, env);
+  // Last resort: stop the daemon and its Chrome by the tree read before the
+  // close. Only a pid file that still names this session's daemon of this
+  // agent-browser binary gave one, so a stale file naming a reused pid, even
+  // one another bot's engine now runs under, kills nothing.
+  return tree ? stopBrowserProcesses(tree) : false;
 }
 
 /** Run one engine command in a session's running browser and return its
@@ -175,70 +236,42 @@ export function browserDaemonPidPath(env: NodeJS.ProcessEnv): string {
   return join(namespace ? join(base, "namespaces", namespace, "run") : base, `${session}.pid`);
 }
 
-function execText(file: string, args: string[]): Promise<string | null> {
-  return new Promise((done) => {
-    execFile(file, args, { encoding: "utf8", timeout: 5_000, windowsHide: true }, (error, stdout) => done(error ? null : stdout));
-  });
-}
-
-/** Polls every 50 ms until `done()` or `ms` have passed. */
-async function waitUntil(done: () => boolean, ms: number): Promise<void> {
-  for (let waited = 0; waited < ms && !done(); waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
-}
-
-function processAlive(pid: number): boolean {
+function portInFile(path: string): number[] {
   try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
+    const port = Number(readFileSync(path, "utf8").split("\n", 1)[0]!.trim());
+    return Number.isInteger(port) && port > 0 && port < 65_536 ? [port] : [];
+  } catch { return []; }
 }
 
-/** Every process below `root`, read before anything is signalled: once the
- * daemon dies, its Chrome is re-parented and can no longer be found. */
-async function processDescendants(root: number): Promise<number[]> {
-  const listing = await execText("ps", ["-A", "-o", "pid=,ppid="]);
-  if (listing === null) return [];
-  const children = new Map<number, number[]>();
-  for (const line of listing.trim().split("\n")) {
-    const [pid, ppid] = line.trim().split(/\s+/).map(Number);
-    if (!Number.isInteger(pid) || !Number.isInteger(ppid)) continue;
-    children.set(ppid!, [...children.get(ppid!) ?? [], pid!]);
-  }
-  const found: number[] = [];
-  const walk = (pid: number) => { for (const child of children.get(pid) ?? []) { found.push(child); walk(child); } };
-  walk(root);
-  return found;
+/** The stream servers of this machine's agent-browser daemons (they upgrade
+ * a WebSocket from any origin), which no bot's browser may reach (egress
+ * gate, port of OpenMausBot #2930). */
+export function agentBrowserStreamPorts(env: NodeJS.ProcessEnv = browserRuntimeEnv({ AGENT_BROWSER_SESSION: "sagax" })): number[] {
+  const directory = dirname(browserDaemonPidPath(env));
+  try { return readdirSync(directory).filter((name) => name.endsWith(".stream")).flatMap((name) => portInFile(join(directory, name))); }
+  catch { return []; }
 }
 
-/** Last resort when the daemon will not close: stop it and its Chrome by the
- * pid it wrote. Only a pid that still runs this exact agent-browser binary
- * is touched, so a stale file naming a reused pid kills nothing. True once
- * the daemon is gone. */
-async function killBrowserDaemon(binaryPath: string, env: NodeJS.ProcessEnv): Promise<boolean> {
-  let pid: number;
-  try { pid = Number(readFileSync(browserDaemonPidPath(env), "utf8").trim()); }
-  catch { return false; }
-  if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid || !processAlive(pid)) return false;
-  if (process.platform === "win32") {
-    const image = await execText("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"]);
-    if (!image?.toLowerCase().startsWith(`"${basename(binaryPath).toLowerCase()}"`)) return false;
-    // /T takes the daemon's Chrome with it.
-    await execText("taskkill", ["/PID", String(pid), "/T", "/F"]);
-  } else {
-    const command = await execText("ps", ["-o", "args=", "-p", String(pid)]);
-    if (!command?.trim().startsWith(binaryPath)) return false;
-    const tree = [pid, ...await processDescendants(pid)];
-    const signal = (targets: number[], value: NodeJS.Signals) => { for (const target of targets) { try { process.kill(target, value); } catch { /* already gone */ } } };
-    // TERM lets Chrome save the profile; a daemon stopped mid-hang only
-    // acts on KILL, which follows for whatever is still there.
-    signal(tree, "SIGTERM");
-    await waitUntil(() => !tree.some(processAlive), 2_000);
-    signal(tree.filter(processAlive), "SIGKILL");
-  }
-  await waitUntil(() => !processAlive(pid), 2_000);
-  return !processAlive(pid);
+/** The DevTools ports of the Chromes agent-browser launched: on the temporary profiles it creates in the temp folder, and
+ * on the saved sessions' own profiles. */
+export function agentBrowserDevToolsPorts(temp = tmpdir(), profiles = browserProfilesRoot()): number[] {
+  const ports = (directory: string, keep: (name: string) => boolean) => {
+    try { return readdirSync(directory).filter(keep).flatMap((name) => portInFile(join(directory, name, "DevToolsActivePort"))); }
+    catch { return []; }
+  };
+  return [...ports(temp, (name) => name.startsWith("agent-browser-chrome-")), ...ports(profiles, () => true)];
+}
+
+/** agent-browser relaunches a running Chrome when a command's launch
+ * settings differ, so every command for a session carries these same ones.
+ * Chrome fails every connection through port 0 (no gate: no network). */
+function agentBrowserEgressEnv(port: number, platform: NodeJS.Platform, mediaUdp: boolean): Record<string, string> {
+  const gate = gateChromeSettings(port, platform);
+  // A meeting's audio and video need WebRTC over UDP, which a SOCKS5 CONNECT
+  // gate cannot carry: a meeting browser keeps it; every page request (TCP)
+  // still goes through the gate.
+  const args = mediaUdp ? gate.args.filter((arg) => !arg.includes("webrtc-ip-handling-policy")) : gate.args;
+  return { AGENT_BROWSER_PROXY: gate.proxy, AGENT_BROWSER_PROXY_BYPASS: gate.bypass, AGENT_BROWSER_ARGS: args.join("\n") };
 }
 
 const preparedBrowserSessions = new Map<string, Promise<void>>();
@@ -257,6 +290,9 @@ export async function prepareBrowserSessionState(
   const env = browserRuntimeEnv({ ...options.env, AGENT_BROWSER_SESSION: session, AGENT_BROWSER_HEADLESS: "1" });
   ensureManagedBrowserConfig(env);
   if (options.persistent === false) return;
+  // A Chrome left on the kept profile by a killed daemon would take the next launch (Chrome exits with code 21).
+  await releaseBrowserProfile(env.AGENT_BROWSER_PROFILE);
+  check();
   const directory = browserSessionsDirectory(env);
   const key = join(directory, session);
   let pending = preparedBrowserSessions.get(key);
@@ -604,6 +640,8 @@ export function browserEngineStatus(options: BrowserLookupOptions = {}): Browser
     : { kind: "unavailable", reason: `agent-browser publishes no build for ${platform}-${arch}`, installable: false };
 }
 
+const PROFILE_CACHE_ARG = `--disk-cache-size=${64 * 1024 * 1024}`;
+
 /** The MCP server a turn mounts so the bot gets browser tools. One isolated,
  * auto-restored session per browser profile (or per bot), page-provided
  * WebMCP tools off, and only the core tool set. A profile set to My Chrome
@@ -624,6 +662,17 @@ export function agentBrowserIntegration(input: {
    * this workspace's own config, never from the ambient process environment,
    * which the curated env below never forwards (#1396). */
   attach?: { cdpUrl?: string };
+  /** The workspace's configured CDP target (browserEngineAttachCdpUrl): the
+   * same as `attach: { cdpUrl }`. Never from the ambient environment. */
+  attachCdpUrl?: string;
+  /** The egress gate port a launched Chrome connects through
+   * (server/browser/egress, port of OpenMausBot #2930); without one the
+   * browser connects nowhere. Ignored when attaching to a running Chrome. */
+  egressPort?: number;
+  /** A meeting browser: WebRTC media may use UDP outside the gate. */
+  meetingMedia?: boolean;
+  /** The data dir that holds the kept Chrome profiles (default: the server's). */
+  dataDir?: string;
 }): { command: string; args: string[]; env: Record<string, string> } {
   const sourceEnv = input.env ?? process.env;
   const env: Record<string, string> = {
@@ -647,11 +696,14 @@ export function agentBrowserIntegration(input: {
   // kept a headed launch config still comes back headless instead of failing
   // every launch until it is killed by hand (#1383).
   const displayless = (input.platform ?? process.platform) === "linux" && !sourceEnv.DISPLAY && !sourceEnv.WAYLAND_DISPLAY;
-  if (input.attach) {
+  // main's single CDP target (browserEngineAttachCdpUrl) is the attach case
+  // with a named target.
+  const attach = input.attach ?? (input.attachCdpUrl ? { cdpUrl: input.attachCdpUrl } : undefined);
+  if (attach) {
     // The person's Chrome keeps its own sign-ins. Restoring would copy this
     // session's saved cookies into it, and saving would copy every cookie of
     // their real profile into OMB's store, so neither happens.
-    if (input.attach.cdpUrl) env.AGENT_BROWSER_CDP = input.attach.cdpUrl;
+    if (attach.cdpUrl) env.AGENT_BROWSER_CDP = attach.cdpUrl;
     else env.AGENT_BROWSER_AUTO_CONNECT = "1";
     env.AGENT_BROWSER_RESTORE_SAVE = "never";
   } else {
@@ -662,6 +714,14 @@ export function agentBrowserIntegration(input: {
     if (input.headless !== false || displayless) {
       env.AGENT_BROWSER_HEADLESS = "1";
       env.AGENT_BROWSER_HEADED = "0";
+    }
+    Object.assign(env, agentBrowserEgressEnv(input.egressPort ?? 0, input.platform ?? process.platform, input.meetingMedia === true));
+    // A saved session (a bot's own browser or a shared profile) keeps its Chrome profile. The temporary browser,
+    // meetings and My Chrome (attached, never launched here) are not saved, so they get none.
+    if (input.persistent !== false) {
+      env.AGENT_BROWSER_PROFILE = browserProfileDirectory(input.session, input.dataDir);
+      // Chrome's default disk cache is several hundred megabytes per profile.
+      env.AGENT_BROWSER_ARGS = [env.AGENT_BROWSER_ARGS, PROFILE_CACHE_ARG].filter(Boolean).join("\n");
     }
   }
   // MCP clients may filter the parent environment. Carry the configured
@@ -799,9 +859,20 @@ export function agentBrowserFrame(input: {
   });
 }
 
+/** A temporary browser's session id starts with this data dir's tag, so a
+ * daemon a crash left behind is still recognisably this data dir's after the
+ * in-memory record of it is gone (BrowserSweep). */
+function temporaryBrowserPrefix(dataDir: string): string {
+  return `guest-${createHash("sha256").update(resolve(dataDir)).digest("hex").slice(0, 8)}-`;
+}
+
+export function isTemporaryBrowserSession(session: string, dataDir = DATA_DIR): boolean {
+  return session.startsWith(temporaryBrowserPrefix(dataDir));
+}
+
 /** Session ids are file-system and shell safe: a bot id or a profile partition. */
-export function browserSessionId(botId: string, partitionId: string): string {
-  if (partitionId === "guest") return `guest-${randomUUID()}`;
+export function browserSessionId(botId: string, partitionId: string, dataDir = DATA_DIR): string {
+  if (partitionId === "guest") return `${temporaryBrowserPrefix(dataDir)}${randomBytes(8).toString("hex")}`;
   const raw = partitionId || `bot-${botId}`;
   return raw.replace(/[^A-Za-z0-9_.-]/gu, "_").slice(0, 96);
 }
@@ -832,7 +903,7 @@ export const BUILT_IN_BROWSER_SYSTEM_PROMPT =
 export async function clearBrowserSessionState(
   binaryPath: string,
   session: string,
-  options: { env?: NodeJS.ProcessEnv; encryptionKey?: string; timeoutMs?: number } = {},
+  options: { env?: NodeJS.ProcessEnv; encryptionKey?: string; timeoutMs?: number; dataDir?: string } = {},
 ): Promise<boolean> {
   // The native state-clear CLI ignores the daemon session, and even its named
   // form currently drops that name before dispatch. Never invoke it here.
@@ -858,6 +929,8 @@ export async function clearBrowserSessionState(
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     const candidates = bases.map((base) => new RegExp(`^${base}-candidate-[0-9]+\\.json(?:\\.enc)?$`));
     for (const name of pendingFiles) if (candidates.some((candidate) => candidate.test(name))) remove(join(pendingDirectory, name));
+    // The session's kept Chrome profile goes with its saved state.
+    rmSync(browserProfileDirectory(session, options.dataDir), { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     preparedBrowserSessions.delete(join(directory, session));
     return true;
   } catch { return false; }

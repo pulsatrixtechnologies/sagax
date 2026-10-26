@@ -13,10 +13,17 @@
 //   person approves its card. Declining, no answer, a closed channel or no
 //   running turn all mean the call never reaches the server.
 //
-// Per-bot flag: DATA_DIR/grok-approval-gate.json, {"bots": "all"} or
-// {"bots": ["<botId>", ...]}. Missing, empty or invalid = off = Grok's own
-// auto mode, exactly as before. Read on every turn, so turning it off is a
-// file edit (the next turn of each bot respawns Grok in auto mode).
+// On by default since 2026-10-19 (engine parity, JC: whatever the
+// provider, everything must work the same): Approve for me on Grok decides
+// through Sagax, like Claude since #797, so the owner's setup (#820), the
+// member rules (#776-#812) and the person's cards apply the same way on both
+// engines, and no MCP call waits 4-9 s on Grok's classifier.
+// Opt-out, per bot or for all: DATA_DIR/grok-approval-gate.json
+// {"off": ["<botId>", ...]} or {"bots": "none"}. Those bots' Auto turns run
+// Grok's own auto mode, as before the gate. The earlier opt-in list
+// ({"bots": [...]}) no longer narrows anything; a missing, empty or invalid
+// file means on. Read on every turn: the next turn of each bot respawns Grok
+// in the new mode.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DATA_DIR } from "../../config.ts";
@@ -29,18 +36,20 @@ import { cloudOnlyBot } from "../../cloud-only-bots.ts";
 
 export const GROK_APPROVAL_GATE_FILE = "grok-approval-gate.json";
 
-/** Whether this bot's Grok turns run with the Sagax approval gate. */
+/** Whether this bot's Grok Auto turns run with the Sagax approval gate:
+ * yes unless the flag file opts this bot (or every bot) out. */
 export function grokApprovalGateEnabled(botId: string | undefined, dataDir: string = DATA_DIR): boolean {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(join(dataDir, GROK_APPROVAL_GATE_FILE), "utf8"));
   } catch {
-    return false;
+    return true;
   }
-  const bots = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as { bots?: unknown }).bots : undefined;
-  if (bots === "all") return true;
-  if (!botId || !Array.isArray(bots)) return false;
-  return bots.some((id) => typeof id === "string" && id === botId);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return true;
+  const flag = parsed as { bots?: unknown; off?: unknown };
+  if (flag.bots === "none") return false;
+  if (!botId || !Array.isArray(flag.off)) return true;
+  return !flag.off.some((id) => typeof id === "string" && id === botId);
 }
 
 /** The reviewed read-only tools of one mounted server, by upstream name.

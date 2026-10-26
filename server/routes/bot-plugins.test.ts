@@ -36,7 +36,7 @@ function write(root: string, path: string, content: string) {
 function marketplaceRepo(): string {
   const repo = temp();
   write(repo, ".claude-plugin/marketplace.json", JSON.stringify({ name: "acme-tools", plugins: [{ name: "reviewer", source: "./plugins/reviewer" }] }));
-  write(repo, "plugins/reviewer/.claude-plugin/plugin.json", JSON.stringify({ name: "reviewer" }));
+  write(repo, "plugins/reviewer/.claude-plugin/plugin.json", JSON.stringify({ name: "reviewer", userConfig: { team: { type: "string", title: "Team" }, token: { type: "string", title: "Token", sensitive: true } } }));
   write(repo, "plugins/reviewer/agents/critic.md", "---\nname: critic\n---\nCritic");
   write(repo, "plugins/reviewer/commands/review.md", "Review the diff");
   return repo;
@@ -76,6 +76,7 @@ async function boot() {
       mayChange: (auth, bot) => [bot.owner, ...bot.managers, ADMIN].includes(who(auth)),
       actor: (auth) => who(auth) || undefined,
       mayManageMarketplaces: (auth) => who(auth) === ADMIN,
+      mayShareOrgWide: (auth) => who(auth) === ADMIN,
       policy: () => undefined,
       engineLoadsPlugins: () => true,
     }),
@@ -112,6 +113,28 @@ async function boot() {
   return { call, plugins, shared };
 }
 
+describe("org-wide sharing is admins only, on the bot route too", () => {
+  it("refuses a non-admin owner who adds a bot marketplace with visibility=org (403), admin can, default stays private", async () => {
+    const { call, shared } = await boot();
+    // pr_alice owns alice-bot and may change its plugins, but is not an admin
+    const over = await call("pr_alice", "POST", "/api/bots/alice-bot/plugins/marketplaces", { source: "acme/tools", visibility: "org" });
+    expect(over.status).toBe(403);
+    expect(over.body.code).toBe("marketplace_org_admin_only");
+    expect(shared.record("acme-tools")).toBeUndefined();
+    // the default (no visibility) is allowed and lands private
+    const added = await call("pr_bob", "POST", "/api/bots/bob-bot/plugins/marketplaces", { source: "acme/tools" });
+    expect(added.status).toBe(201);
+    expect(shared.record("acme-tools")?.visibility).toBe("private");
+  });
+
+  it("lets an admin add a bot marketplace org-wide", async () => {
+    const { call, shared } = await boot();
+    const added = await call(ADMIN, "POST", "/api/bots/alice-bot/plugins/marketplaces", { source: "acme/tools", visibility: "org" });
+    expect(added.status).toBe(201);
+    expect(shared.record("acme-tools")?.visibility).toBe("org");
+  });
+});
+
 describe("one marketplace list, two install scopes", () => {
   it("lists the workspace's marketplaces on every bot and installs a whole plugin on one bot only", async () => {
     const { call } = await boot();
@@ -129,6 +152,20 @@ describe("one marketplace list, two install scopes", () => {
     // the workspace list says one bot uses it, and refuses to drop it
     const workspace = await call(ADMIN, "GET", "/api/marketplaces");
     expect(workspace.body.marketplaces[0]).toMatchObject({ name: "acme-tools", bots: 1 });
+  });
+
+  it("saves a plugin's configuration for its bot's owner, never a secret, and refuses anyone else", async () => {
+    const { call } = await boot();
+    await call(ADMIN, "POST", "/api/marketplaces", { source: "acme/tools" });
+    await call("pr_alice", "POST", "/api/bots/alice-bot/plugins/install", { marketplace: "acme-tools", plugin: "reviewer" });
+    const listed = await call("pr_alice", "GET", "/api/bots/alice-bot/plugins");
+    expect(listed.body.plugins[0].config.fields.map((field: { key: string }) => field.key)).toEqual(["team", "token"]);
+    const saved = await call("pr_alice", "PUT", "/api/bots/alice-bot/plugins/reviewer@acme-tools/config", { values: { team: "Platform" } });
+    expect(saved.status).toBe(200);
+    expect(saved.body.plugin.config.values).toEqual({ team: "Platform" });
+    const secret = await call("pr_alice", "PUT", "/api/bots/alice-bot/plugins/reviewer@acme-tools/config", { values: { token: "abc" } });
+    expect(secret).toMatchObject({ status: 400, body: { code: "sensitive_field" } });
+    expect((await call("pr_bob", "PUT", "/api/bots/alice-bot/plugins/reviewer@acme-tools/config", { values: { team: "x" } })).status).toBe(403);
   });
 
   it("lets a member change only the plugins of a bot they own or manage", async () => {

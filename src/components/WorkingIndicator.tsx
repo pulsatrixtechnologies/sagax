@@ -1,10 +1,7 @@
 // Duty-cycled activity indicators. A spinner repaints every vsync for its
-// whole lifetime; these dots step through a few opacity holds per cycle,
-// and the timer mutates its own text node once a second instead of
-// committing through React. Long-lived indicators must stay this cheap.
-import { useEffect, useRef } from "react";
+// whole lifetime; these dots step through a few opacity holds per cycle.
+// Long-lived indicators must stay this cheap.
 import { cn } from "@/lib/cn";
-import { formatElapsed } from "@/lib/working-time";
 
 export function WorkingDots({ size = 4, className }: { size?: number; className?: string }) {
   return (
@@ -18,18 +15,4 @@ export function WorkingDots({ size = 4, className }: { size?: number; className?
       ))}
     </span>
   );
-}
-
-/** Self-ticking elapsed readout — counts up from `since` (epoch ms). */
-export function WorkingTimer({ since, className }: { since: number; className?: string }) {
-  const node = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    const tick = () => {
-      if (node.current) node.current.textContent = formatElapsed(Date.now() - since);
-    };
-    tick();
-    const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
-  }, [since]);
-  return <span ref={node} className={cn("tabular-nums", className)} />;
 }

@@ -153,7 +153,7 @@ const PLAN_USAGE_CACHE_MS = 45_000;
 const CREDENTIAL_READ_MAX_BYTES = 1_000_000;
 const KEYCHAIN_TIMEOUT_MS = 5_000;
 const KEYCHAIN_MAX_BUFFER = 1_000_000;
-const CLAUDE_KEYCHAIN_SERVICE = "Claude Code-credentials";
+export const CLAUDE_KEYCHAIN_SERVICE = "Claude Code-credentials";
 const CLAUDE_MODEL_FAMILIES = ["opus", "sonnet", "haiku"];
 
 const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
@@ -454,6 +454,57 @@ export async function loadPlanUsage(input: {
     cachedReports.delete(oldest);
   }
   return report;
+}
+
+/** J4: a plan window that has crossed the warning line (default 80 %) or
+ * is spent (100 %). */
+export interface PlanUsageAlert {
+  providerId: string;
+  provider: string;
+  window: "fiveHour" | "weekly";
+  level: "warn" | "limit";
+  usedPercent: number;
+  resetsAt: string | null;
+}
+
+export const PLAN_ALERT_DEFAULT_PERCENT = 80;
+/** Windows already announced, per audience: a window warns once (and once
+ * more when it is spent) until its reset moves it to a new key. */
+const announcedWindows = new Map<string, true>();
+const ANNOUNCED_MAX = 512;
+
+export function clearPlanUsageAlerts(): void {
+  announcedWindows.clear();
+}
+
+/** The windows of `report` that newly crossed `threshold` for `scope` (a
+ * person, or "server" solo). Each (window, reset, level) is returned once. */
+export function newPlanUsageAlerts(report: PlanUsageReport, scope: string, threshold = PLAN_ALERT_DEFAULT_PERCENT): PlanUsageAlert[] {
+  const line = Math.min(99, Math.max(1, Number.isFinite(threshold) ? Math.round(threshold) : PLAN_ALERT_DEFAULT_PERCENT));
+  const out: PlanUsageAlert[] = [];
+  for (const row of report.providers) {
+    if (row.state !== "windows") continue;
+    for (const window of ["fiveHour", "weekly"] as const) {
+      const value = row[window];
+      if (!value.available || value.usedPercent === null) continue;
+      const level = value.usedPercent >= 100 ? "limit" : value.usedPercent >= line ? "warn" : null;
+      if (!level) continue;
+      const key = `${scope}\u0000${row.id}\u0000${window}\u0000${(value.resetsAt ?? "").slice(0, 16)}\u0000${level}`;
+      if (announcedWindows.has(key)) continue;
+      announcedWindows.set(key, true);
+      if (announcedWindows.size > ANNOUNCED_MAX) announcedWindows.delete(announcedWindows.keys().next().value as string);
+      out.push({ providerId: row.id, provider: row.name, window, level, usedPercent: value.usedPercent, resetsAt: value.resetsAt });
+    }
+  }
+  return out;
+}
+
+/** The notice's words, English like the server's other notification titles. */
+export function planUsageAlertText(alert: PlanUsageAlert): { title: string; body: string } {
+  const span = alert.window === "weekly" ? "weekly" : "5-hour";
+  return alert.level === "limit"
+    ? { title: `${alert.provider}: ${span} usage limit reached`, body: `Your ${span} limit on ${alert.provider} is used up. Turns on it wait for the reset or continue on another engine.` }
+    : { title: `${alert.provider}: ${Math.round(alert.usedPercent)}% of your ${span} limit used`, body: `You have used ${Math.round(alert.usedPercent)}% of your ${span} limit on ${alert.provider}.` };
 }
 
 function closedWindow(): PlanWindow {
@@ -832,7 +883,7 @@ function claudeCredentialFromText(text: string | null, now: number): PlanCredent
 }
 
 /** macOS 26 `security -w` may print the JSON secret as hex. */
-function decodeKeychainSecret(raw: string | null): string | null {
+export function decodeKeychainSecret(raw: string | null): string | null {
   if (!raw) return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -857,7 +908,7 @@ function claudeKeychainServices(account: PlanAccount, env: NodeJS.ProcessEnv, re
   return [`${CLAUDE_KEYCHAIN_SERVICE}-${suffix}`];
 }
 
-function readDarwinClaudeKeychain(service: string): Promise<string | null> {
+export function readDarwinClaudeKeychain(service: string): Promise<string | null> {
   if (process.platform !== "darwin") return Promise.resolve(null);
   return new Promise((resolve) => {
     try {

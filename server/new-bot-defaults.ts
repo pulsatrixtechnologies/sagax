@@ -40,7 +40,6 @@ export const botDefaultsProfileSchema = profilePatchSchema.extend({
   managedSections: strings(100, 60).optional(),
   approvePeerComms: z.boolean().optional(),
   peers: strings(1000, 100).nullable().optional(),
-  composio: z.boolean().optional(),
   browser: z.boolean().optional(),
   browserProfile: z.string().max(100).nullable().optional(),
   mcpServers: strings(100, 100).nullable().optional(),

@@ -114,6 +114,10 @@ const REFUSED_INTERNAL_ROUTES: Record<string, string> = {
   "/api/internal/team-setup-requests": "peer",
   // a bot acting as the person reaches other conversations through their routes
   "/api/internal/act": "peer",
+  // sagax_settings replays the same routes through act
+  "/api/internal/settings": "peer",
+  // sagax_approvals answers cards in other conversations as the person
+  "/api/internal/approvals": "peer",
 };
 
 export const CONFIDENTIAL_PEER_REFUSED = "This is a confidential thread: nothing from it goes to another bot, agent, room or channel. Do the work here, or ask the person to continue from an ordinary thread.";

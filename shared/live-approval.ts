@@ -103,11 +103,6 @@ export function spokenReviewPrompt(card: OptionCardData): string {
   return `Tell the user, in your own words, that you need their decision in the chat: ${title}. They review it on screen and choose there; it cannot be decided by voice.`;
 }
 
-/** The bot waits for an app to be connected in the chat (a connector card). */
-export function spokenConnectorPrompt(label: string): string {
-  return `Tell the user, in your own words, that you need them to connect ${brief(label || "an app", 80)} in the chat before you can go on. It cannot be done by voice.`;
-}
-
 /** The bot waits for a credential entered on screen (a secret card). It must
  * never travel through the call, so the voice never asks for it aloud. */
 export function spokenSecretPrompt(label: string): string {

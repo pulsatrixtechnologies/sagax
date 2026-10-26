@@ -88,6 +88,17 @@ describe("why GitHub refuses", () => {
     expect(githubAccessFailure({ status: 403, headers: headers({ "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1790000000" }) }, "acme/private", null))
       .toMatchObject({ code: "rate_limited", status: 429, fix: "wait", resetAt: 1_790_000_000_000 });
     expect(githubAccessFailure({ status: 403, headers: headers() }, "acme/private", person)).toMatchObject({ code: "forbidden", fix: "token_scope" });
+    // The person's own token on another owner's repository: the organization is named.
+    const fine: GithubCredential = { token: "github_pat_x", via: "person", login: "jc" };
+    const org = githubAccessFailure({ status: 404, headers: headers() }, "goxtechnologies/repo", fine);
+    expect(org).toMatchObject({ code: "org_not_covered", fix: "reconnect_with_orgs", organization: "goxtechnologies" });
+    expect(org!.message).toContain("does not cover the organization goxtechnologies");
+    expect(org!.message).toContain("fine-grained");
+    expect(org!.message).not.toContain("github_pat_x");
+    expect(githubAccessFailure({ status: 403, headers: headers() }, "pulsatrixtechnologies/repo", { token: "gho_x", via: "person", login: "jc" }))
+      .toMatchObject({ code: "org_not_covered", organization: "pulsatrixtechnologies" });
+    // Their own account's repository stays a plain 404.
+    expect(githubAccessFailure({ status: 404, headers: headers() }, "JC/private", fine)).toMatchObject({ code: "not_found_or_no_access" });
     expect(githubAccessFailure({ status: 200, headers: headers() }, "acme/private", null)).toBeNull();
   });
 

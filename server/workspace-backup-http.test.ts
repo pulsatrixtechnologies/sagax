@@ -3,12 +3,12 @@
 // workflow is covered separately by workspace-backup-workflow.e2e.test.ts.
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { createServer, request, type IncomingMessage, type Server } from "node:http";
+import { createServer, request, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { WorkspaceBackupSummary } from "../shared/workspace-backup.ts";
-import { resolveRequestAuth } from "./request-auth.ts";
+import { resolveRequestAuth, type RequestAuth } from "./request-auth.ts";
 import { SessionRegistry } from "./sessions.ts";
 import { WorkspaceBackupMaintenance } from "./workspace-backup-maintenance.ts";
 
@@ -166,4 +166,18 @@ it("accepts drafts between 1 and 2 MiB and enforces the preference cap in UTF-8 
   expect((await rejected.json() as { error: string }).error).toContain("2 MB backup preference limit");
   expect(archive.create).toHaveBeenCalledOnce();
   expect(readdirSync(join(dataDir, ".backups"))).toHaveLength(1);
+});
+
+it("says what the last restore asks to reconnect, by category and count only", async () => {
+  const reconnect = { engines: { count: 2, people: 1 }, github: { count: 1 } };
+  const routes = createWorkspaceBackupRoutes({
+    dataDir, appVersion: "0.1.71", restored: { restored: true, id: "11111111-1111-4111-8111-111111111111", summary: { reconnect } },
+    readBody: async () => ({}), authorized: () => true, status: () => ({ busy: false, pendingRestore: false }),
+    exclusive: (work) => work(),
+  });
+  let body = "";
+  const res = { setHeader: vi.fn(), writeHead: vi.fn(), end: (text: string) => { body = text; } };
+  const handled = await routes({ method: "GET" } as IncomingMessage, res as unknown as ServerResponse, "/api/workspace-backup/status", { kind: "local" } as unknown as RequestAuth);
+  expect(handled).toBe(true);
+  expect(JSON.parse(body)).toMatchObject({ lastRestoreId: "11111111-1111-4111-8111-111111111111", lastRestoreReconnect: reconnect });
 });

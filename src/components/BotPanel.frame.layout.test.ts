@@ -110,15 +110,15 @@ describe("docked panel scrolling", () => {
   const groupPanel = read("./GroupPanel.tsx");
   const body = (source: string) => source.match(/className="(content-card-body [^"]*)"/)?.[1] ?? "";
 
-  it("makes the bot and person panel card the scroll container", () => {
-    for (const source of [botPanel, personPanel]) {
+  it("makes the bot, person and group panel card the scroll container", () => {
+    for (const source of [botPanel, personPanel, groupPanel]) {
       const classes = body(source).split(/\s+/);
       for (const c of ["flex", "min-h-0", "flex-1", "flex-col", "overflow-y-auto", "overflow-x-hidden"]) expect(classes, c).toContain(c);
     }
   });
 
   it("stops the tab content (Details, Library, Computer) from shrinking inside it", () => {
-    for (const source of [botPanel, personPanel]) expect(body(source)).toContain("[&>*]:shrink-0");
+    for (const source of [botPanel, personPanel, groupPanel]) expect(body(source)).toContain("[&>*]:shrink-0");
   });
 
   it("keeps the header and the tab strip out of the card's scroll region", () => {

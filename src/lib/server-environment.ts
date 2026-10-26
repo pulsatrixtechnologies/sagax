@@ -13,7 +13,7 @@ export interface ServerEnvironmentStatus {
   idleMinutes?: number | null;
   pendingDeletionAt?: number | null;
   error?: string;
-  /** The environments' cluster is waking (it slept outside office hours):
+  /** The environments' cluster is waking (it slept while idle):
    * since when on the server, and for how long so far. */
   waking?: { since: number; elapsedMs: number };
 }

@@ -17,11 +17,11 @@ import type { LocaleKey } from "@/locales";
 import { WEBHOOK_DEFAULT_MAX_PENDING_RUNS, webhookActivationDefaults, type WebhookTrigger, type WebhookTriggerInput } from "@/lib/webhooks";
 import { api, openBotThread, useStore, type Bot } from "@/state/store";
 import { useShowThreads } from "@/lib/thread-preferences";
-import { TRIGGER_SOURCES as TYPED_SOURCES, TRIGGER_SOURCE_TYPES, isTriggerSourceType, type TriggerSourceSetup } from "../../shared/trigger-sources";
+import { TRIGGER_SOURCE_TYPES, isRelaySource, isTriggerSourceType, type TriggerSourceSetup } from "../../shared/trigger-sources";
 
 import { DANGER_PILL, DIALOG, DialogCloseButton, GROUP_CARD, PILL, PillSelect, PRIMARY_PILL, Switch } from "./SettingsPrimitives";
 import { MarkdownEditor } from "./markdown/MarkdownEditor";
-import { EMPTY_TYPED_DRAFT, TypedSourceFields, TypedTriggerRow, typedTriggerInput, type TypedDraft } from "./TypedTriggers";
+import { EMPTY_TYPED_DRAFT, TypedSourceFields, TypedTriggerRow, typedSourceLabel, typedTriggerInput, type TypedDraft } from "./TypedTriggers";
 import {
   WebhookEditor,
   outcomeLabel,
@@ -46,7 +46,7 @@ export const TRIGGER_SOURCES: Array<{ id: string; labelKey?: LocaleKey; label?: 
 ];
 
 export function triggerSourceLabel(id: string): string {
-  if (isTriggerSourceType(id)) return TYPED_SOURCES[id].label;
+  if (isTriggerSourceType(id)) return typedSourceLabel(id);
   const source = TRIGGER_SOURCES.find((entry) => entry.id === id);
   if (!source) return "";
   return source.labelKey ? t(source.labelKey) : source.label ?? "";
@@ -204,7 +204,7 @@ export function TriggersPanel() {
                 }}
                 options={[
                   ...TRIGGER_SOURCES.map((entry) => ({ value: entry.id, label: triggerSourceLabel(entry.id), group: t("triggers.group.link") })),
-                  ...TRIGGER_SOURCE_TYPES.map((type) => ({ value: type as string, label: TYPED_SOURCES[type].label, group: t("triggers.group.signed") })),
+                  ...TRIGGER_SOURCE_TYPES.map((type) => ({ value: type as string, label: typedSourceLabel(type), group: isRelaySource(type) ? t("triggers.group.botmail") : t("triggers.group.signed") })),
                 ]}
               />
               {source === "custom" && (
@@ -227,7 +227,7 @@ export function TriggersPanel() {
               />
               <span>{t("triggers.should")}</span>
             </div>
-            {isTriggerSourceType(source) && <TypedSourceFields type={source} draft={typedDraft} onChange={setTypedDraft} creating />}
+            {isTriggerSourceType(source) && <TypedSourceFields type={source} draft={typedDraft} onChange={setTypedDraft} creating botId={chosenBot} />}
             <MarkdownEditor
               value={prompt}
               onChange={setPrompt}

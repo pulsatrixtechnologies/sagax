@@ -17,7 +17,11 @@ GitHub noreply address (`<id>+<login>@users.noreply.github.com`) for commits.
 - Runs on `pull_request_target` so fork pull requests are scanned. The job
   checks out only the base branch for the trusted guard script
   (`scripts/ci/term-guard.py`). It never checks out the pull request head.
-  Title, branch, commits and the diff are read through the API as data.
+  Title, branch and commits are read through the API as data. The diff
+  comes from a blobless `git fetch` of the base and head commits into an
+  empty bare repository and `git diff` from their merge base (no checkout,
+  no diff drivers), because the API's diff media type answers HTTP 406 for
+  a large pull request.
 
 Tests: `python3 scripts/ci/term-guard.test.py`.
 

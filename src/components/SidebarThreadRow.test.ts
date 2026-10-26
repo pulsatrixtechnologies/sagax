@@ -468,15 +468,26 @@ describe("archived threads", () => {
       "pinned-closed", "newer", "mid", "also", "fourth", "fifth", "sixth",
     ]);
   });
-  it("folds archived threads out of the default list, but never when they need the person", () => {
+  it("keeps archived threads out of the default list until the person unarchives them, even when they need the person", () => {
     const rows = [
       { threadId: "0", title: "Current work" },
       { threadId: "1", title: "Put away", archivedAt: 5 },
       { threadId: "2", title: "Needs you", archivedAt: 5, activity: "waiting-on-you" as const, busy: false },
+      { threadId: "3", title: "Working", archivedAt: 5, busy: true },
+      { threadId: "4", title: "New reply", archivedAt: 5, unread: true },
+      { threadId: "5", title: "Queued", archivedAt: 5, queued: true },
+      { threadId: "6", title: "Teammates", archivedAt: 5, waitingForTeammates: true },
     ];
-    expect(visibleSidebarThreads(rows, "0").map((task) => task.threadId)).toEqual(["0", "2"]);
-    expect(visibleSidebarThreads(rows, "0", "", [], true).map((task) => task.threadId)).toEqual(["0", "1", "2"]);
+    expect(visibleSidebarThreads(rows, "0").map((task) => task.threadId)).toEqual(["0"]);
+    expect(visibleSidebarThreads(rows, "0", "", [], true).map((task) => task.threadId)).toEqual(["0", "1", "2", "3", "4", "5", "6"]);
     expect(visibleSidebarThreads(rows, "0", "put away").map((task) => task.threadId)).toEqual(["1"]);
+  });
+  it("shows an archived thread while it is the open one", () => {
+    const rows = [
+      { threadId: "0", title: "Current work" },
+      { threadId: "1", title: "Put away", archivedAt: 5 },
+    ];
+    expect(visibleSidebarThreads(rows, "1").map((task) => task.threadId)).toEqual(["0", "1"]);
   });
   it("says Archived under the title and dims the row, behind any live status", () => {
     expect(threadByline({ archivedAt: 5 })).toBe("Archived");

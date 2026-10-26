@@ -22,8 +22,11 @@ import {
 } from "./engine-transcripts.ts";
 import { escapeAttribute, splitTranscriptAttachments } from "../src/lib/composer-attachments.ts";
 import { WORKSPACE_BACKUP_CLIENT_KEYS } from "../shared/workspace-backup-client.ts";
-import { confidentialDataScopePath, ephemeralWorkspaceTokenPath, excludedWorkspaceAuthPath, liveDataEnginePath, portableWorkspaceConfig, redownloadedOrgLibraryPath, restoredWorkspaceConfig } from "./workspace-backup-policy.ts";
-import type { WorkspaceBackupClientState, WorkspaceBackupPrivateMetadata, WorkspaceBackupSummary } from "../shared/workspace-backup.ts";
+import {
+  CLAUDE_AUTH_FIELDS, configSecretCounts, confidentialDataScopePath, destinationSignInFile, disposableEngineHomePath, engineSettingsPath, ephemeralWorkspaceTokenPath, excludedWorkspaceAuthPath, liveDataEnginePath,
+  portableWorkspaceConfig, ReconnectTally, redownloadedOrgLibraryPath, registrySettingsPath, restoredWorkspaceConfig, savedSignInPath, secretCategory, withoutEngineSecrets, withoutRegistrySecrets,
+} from "./workspace-backup-policy.ts";
+import { WORKSPACE_BACKUP_RECONNECT, type WorkspaceBackupClientState, type WorkspaceBackupPrivateMetadata, type WorkspaceBackupReconnectCategory, type WorkspaceBackupSummary } from "../shared/workspace-backup.ts";
 
 export type { WorkspaceBackupSummary, WorkspaceBackupPrivateMetadata } from "../shared/workspace-backup.ts";
 export const MAX_WORKSPACE_BACKUP_BYTES = 10 * 1024 ** 3;
@@ -35,7 +38,7 @@ const HEADER_BYTES = MAGIC.length + 16 + 12;
 const TAG_BYTES = 16;
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const EXCLUDED = new Set([
-  ".backups", "tools", "cache", ".cache", "tmp", ".tmp", "dist-native", "tunnel-runtime",
+  ".backups", "tools", "agent-browser-profiles", "cache", ".cache", "tmp", ".tmp", "dist-native", "tunnel-runtime",
   // a note to the next backup (CONFIDENTIAL_FORGOTTEN_MARKER), and the
   // room-handoff file the job runtime imported once (runtime/import-legacy.ts):
   // dead data whose briefs and results may be a confidential thread's
@@ -62,9 +65,12 @@ const EXCLUDED = new Set([
   // machine's own, kept in place by a restore, which settles what it brought.
   "cloud-owner.json",
 ]);
+// JC 2026-10-18 15:55 « Exclure tout » (workspace-backup-policy.ts savedSignInPath)
+const NO_SECRET_NOTE = "No secret is included: engine sign-ins and API keys, provider keys, personal connections, the credential vault, MCP sign-ins, headers and environment values, GitHub tokens, cloud agent keys, trigger secrets, phone push registrations and signing keys. Settings are included. After a restore, reconnect what the reconnect list names; this device keeps its own.";
 const EXCLUSION_NOTES = [
   "Device pairing, server identity, live leases and runtime files (existing destination identities are preserved).",
-  "Saved credentials, provider and MCP connections, managed provider login homes and browser login profiles are not transferred. Destination connections are preserved; reconnect on a new device.",
+  NO_SECRET_NOTE,
+  "Managed provider login homes and browser login profiles are not transferred. Destination connections are preserved.",
   "Downloaded tools and caches; these can be installed again.",
   "Installed dependency folders (node_modules) and symbolic links inside conversation work folders; reinstall or recreate them in the project.",
   "External project folders, CLI login homes, browser session homes, OS keychains, companion devices and other servers.",
@@ -121,7 +127,24 @@ const LIVE_DATABASE_SIDECARS = new Set(Object.keys(SNAPSHOT_DATABASES).flatMap((
  * machine's own (never exported or installed): a crash before the restore
  * still costs account sign-ins, as it would have without one. */
 function keptInPlace(name: string): boolean {
-  return preserved(name) || name.toLowerCase() === "sessions.json.open";
+  return preserved(name) || ["sessions.json.open", "sessions.json.unsynced"].includes(name.toLowerCase()) || destinationSignInFile(name);
+}
+/** Files a `*_FILE` variable names (a Docker secret, the Perspicax link
+ * file `SAGAX_PERSPICAX_LINK_FILE`, a mail password) when they sit inside
+ * the data folder: never exported, and left in place by a restore. */
+function environmentSecretPaths(dataDir: string): Set<string> {
+  const paths = new Set<string>();
+  let root: string;
+  try { root = realpathSync(dataDir); } catch { root = resolve(dataDir); }
+  for (const [name, value] of Object.entries(process.env)) {
+    if (!name.endsWith("_FILE") || typeof value !== "string" || !value.trim()) continue;
+    const target = resolve(value.trim());
+    for (const base of new Set([root, resolve(dataDir)])) {
+      const path = relative(base, target).replaceAll("\\", "/");
+      if (path && path !== ".." && !path.startsWith("../") && !isAbsolute(path)) paths.add(path);
+    }
+  }
+  return paths;
 }
 function folder(path: string): void {
   mkdirSync(path, { recursive: true, mode: 0o700 });
@@ -465,6 +488,47 @@ function databaseCounts(path: string): { threads: number; messages: number } {
   } finally { db.close(); }
 }
 
+/** A secret left out of a backup, counted for the reconnect list: a
+ * folder of phone registrations counts each person's file. */
+/** Settings copied without their secrets: an engine's (withoutEngineSecrets)
+ * and a project's npm or Yarn settings (withoutRegistrySecrets). */
+const scrubbedSettingsPath = (path: string) => engineSettingsPath(path) || registrySettingsPath(path);
+const withoutSettingsSecrets = (path: string, text: string) => registrySettingsPath(path) && !engineSettingsPath(path) ? withoutRegistrySecrets(path, text) : withoutEngineSecrets(path, text);
+const settingsCategory = (path: string, text: string): WorkspaceBackupReconnectCategory =>
+  registrySettingsPath(path) ? "files" : claudeSignedIn(path, text) ? "engines" : "engineSettings";
+
+function tallySecret(reconnect: ReconnectTally, source: string, path: string): void {
+  if (/^push-devices$/i.test(path)) {
+    try {
+      for (const name of readdirSync(source)) if (/\.json$/i.test(name)) reconnect.path(`push-devices/${name}`, "phones");
+    } catch { /* not a folder */ }
+    return;
+  }
+  reconnect.path(path);
+}
+/** Whether a Claude Code `.claude.json` names a signed-in account or key. */
+function claudeSignedIn(path: string, text: string): boolean {
+  if (!/(?:^|\/)\.claude\.json$/i.test(path)) return false;
+  try {
+    const value = JSON.parse(text) as unknown;
+    return record(value) && CLAUDE_AUTH_FIELDS.some((key) => value[key] !== undefined);
+  } catch { return false; }
+}
+/** The published pages and template links of a data folder: their links are
+ * signed with keys that never leave the machine (published-pages.key,
+ * template-links.key), so restored elsewhere they are shared again. */
+function sharedLinkCount(root: string): number {
+  let count = 0;
+  for (const [file, key, field] of [["published-pages.json", "published-pages.key", "pages"], ["template-links.json", "template-links.key", "links"]] as const) {
+    if (!existsSync(join(root, key)) || !existsSync(join(root, file))) continue;
+    try {
+      const value = privateJson(join(root, file));
+      if (record(value) && Array.isArray(value[field])) count += value[field].length;
+    } catch { /* an unreadable record file counts nothing */ }
+  }
+  return count;
+}
+
 /** The existing maintenance gate owns exclusivity until this worker has exited.
  * Keep synchronous file validation/fsync intact, but off the request thread. */
 export async function createWorkspaceBackup(dataDir: string, options: CreateWorkspaceBackupOptions): Promise<CreatedWorkspaceBackup> {
@@ -513,6 +577,10 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
   let skippedDependencies = 0;
   let skippedWorkLinks = 0;
   let skippedEngineStores = 0;
+  let skippedEngineSettings = 0;
+  // what the reconnect list names, by category (counts only)
+  const reconnect = new ReconnectTally();
+  const environmentSecrets = environmentSecretPaths(dataDir);
   try {
     const root = realpathSync(dataDir);
     const roster = existsSync(join(root, "bots.json")) ? privateJson(join(root, "bots.json")) : [];
@@ -550,9 +618,15 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
     }
     const walk = (directory: string, prefix = "") => {
       for (const name of readdirSync(directory).sort()) {
-        if (!prefix && excluded(name)) continue;
+        if (!prefix && excluded(name)) { reconnect.path(name); continue; }
         const path = prefix ? `${prefix}/${name}` : name;
-        if (excludedWorkspaceAuthPath(path) || ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || liveDataEnginePath(path) || confidentialDataScopePath(path)) continue;
+        if (excludedWorkspaceAuthPath(path)) { reconnect.path(path); continue; }
+        if (ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || liveDataEnginePath(path) || confidentialDataScopePath(path)) continue;
+        // no secret in a backup (JC 2026-10-18 « Exclure tout »): an engine's
+        // saved sign-in, a person's sealed stores, the workspace's keys, the
+        // phones' push registrations; whoever restores reconnects them
+        if (savedSignInPath(path)) { tallySecret(reconnect, join(directory, name), path); continue; }
+        if (disposableEngineHomePath(path) || environmentSecrets.has(path)) continue;
         // Do not silently skip noncanonical source spellings: reject them so
         // a case-sensitive host cannot export auth paths active on Windows/Mac.
         if (forbiddenArchivePath(path)) throw new Error("A workspace filename conflicts with a protected authentication or runtime path.");
@@ -616,7 +690,26 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
             continue;
           }
           if (engineKind === "chat" && engineText !== null && chatOfKeys(engineText, engineKeys)) continue;
-          const filtered = engineText === null || engineKind === "chat" || !engineKind || engineKind === "database" ? null : engineStoreFiltered(engineKind, engineText, engineKeys);
+          let filtered = engineText === null || engineKind === "chat" || !engineKind || engineKind === "database" ? null : engineStoreFiltered(engineKind, engineText, engineKeys);
+          if (scrubbedSettingsPath(path)) {
+            // an engine's settings travel without their keys, tokens and
+            // env or header values (Claude Code's .claude.json without its
+            // signed-in account or API key login)
+            const text = filtered ?? smallText(source);
+            let scrubbed: string | null = null;
+            try {
+              if (text === null) throw new Error("too large");
+              scrubbed = withoutSettingsSecrets(path, text);
+            } catch {
+              skippedEngineSettings++;
+              reconnect.path(path, registrySettingsPath(path) ? "files" : "engineSettings");
+              continue;
+            }
+            if (scrubbed !== null) {
+              filtered = scrubbed;
+              reconnect.path(path, settingsCategory(path, text));
+            }
+          }
           if (filtered !== null) {
             writeFileSync(destination, filtered, { mode: 0o600, flag: "wx" });
             copied = { size: lstatSync(destination).size, mode: 0o600, sha256: hashFile(destination) };
@@ -636,13 +729,19 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
             copied = { size: lstatSync(destination).size, mode: 0o600, sha256: hashFile(destination) };
           } else if (path === "config.json" || path === "webhooks.json" || (path === "bots.json" && confidential.size)) {
             const value = privateJson(source);
-            if (path === "config.json") writeJson(destination, portableWorkspaceConfig(value));
+            if (path === "config.json") {
+              const counts = configSecretCounts(value);
+              reconnect.count("providerKeys", counts.providerKeys);
+              reconnect.count("mcp", counts.mcp);
+              writeJson(destination, portableWorkspaceConfig(value));
+            }
             else if (path === "bots.json") writeJson(destination, rosterWithoutConfidentialContent(value));
             else {
               if (!record(value)) throw new Error("Invalid webhook definitions in workspace backup.");
               // No credential leaves in a backup: the bearer hash, a migrated
               // token waiting to be copied, a typed trigger's signing secret.
               if (Array.isArray(value.webhooks)) for (const webhook of value.webhooks) if (record(webhook)) {
+                if (["secretHash", "pendingToken", "signingSecret", "graphSubscription"].some((key) => webhook[key] !== undefined)) reconnect.count("triggers", 1);
                 delete webhook.secretHash;
                 delete webhook.pendingToken;
                 delete webhook.signingSecret;
@@ -660,9 +759,12 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
       }
     };
     walk(root);
+    // links signed with a key that stays on this machine change on another
+    reconnect.count("sharedLinks", sharedLinkCount(root));
     if (skippedLinks) warnings.push(`${skippedLinks} managed skill discovery link(s) were omitted and are recreated by the app.`);
     if (skippedDependencies) warnings.push(`${skippedDependencies} installed dependency folder(s) (node_modules) were omitted; reinstall them in the project after restoring.`);
     if (skippedEngineStores) warnings.push(`${skippedEngineStores} engine history, log or database file(s) could not be copied without a confidential thread's entries and were omitted.`);
+    if (skippedEngineSettings) warnings.push(`${skippedEngineSettings} engine settings file(s) could not be copied without their sign-in and were omitted.`);
     if (skippedWorkLinks) warnings.push(`${skippedWorkLinks} symbolic link(s) in conversation work folders were omitted; what they point to is outside this backup.`);
     const summary: WorkspaceBackupSummary = {
       format: "openmaus.workspace-backup", version: 1, id: job.id, createdAt: new Date().toISOString(),
@@ -672,6 +774,8 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
       ...databaseCounts(join(snapshot, "data", "messages.db")),
       exclusions: EXCLUSION_NOTES, warnings,
     };
+    const reconnectList = reconnect.result();
+    if (Object.keys(reconnectList).length) summary.reconnect = reconnectList;
     const manifest: Manifest = {
       summary, sourceDataDir: resolve(dataDir), clientState: options.clientState ?? {}, entries,
     };
@@ -709,7 +813,7 @@ function validateManifest(value: unknown): Manifest {
     value.sourceDataDir === posix.parse(value.sourceDataDir).root || value.sourceDataDir === win32.parse(value.sourceDataDir).root ||
     value.sourceDataDir.replaceAll("\\", "/").split("/").some((part) => part === "." || part === "..") ||
     Object.keys(value).some((key) => !["summary", "sourceDataDir", "clientState", "entries"].includes(key)) ||
-    Object.keys(value.summary).some((key) => !["format", "version", "id", "createdAt", "appVersion", "files", "directories", "bytes", "bots", "groups", "threads", "messages", "exclusions", "warnings"].includes(key)) || !record(value.clientState) ||
+    Object.keys(value.summary).some((key) => !["format", "version", "id", "createdAt", "appVersion", "files", "directories", "bytes", "bots", "groups", "threads", "messages", "exclusions", "warnings", "reconnect"].includes(key)) || !record(value.clientState) ||
     !Object.values(value.clientState).every((item) => typeof item === "string") || !Array.isArray(value.entries) ||
     value.entries.length > MAX_WORKSPACE_BACKUP_FILES) throw new Error("Invalid or unsupported workspace backup metadata.");
   if (Object.keys(value.clientState).some((key) => !WORKSPACE_BACKUP_CLIENT_KEYS.includes(key as typeof WORKSPACE_BACKUP_CLIENT_KEYS[number])) ||
@@ -719,6 +823,12 @@ function validateManifest(value: unknown): Manifest {
   }
   for (const key of ["exclusions", "warnings"] as const) {
     if (!Array.isArray(value.summary[key]) || !value.summary[key].every((item) => typeof item === "string")) throw new Error("Invalid workspace backup summary.");
+  }
+  if (value.summary.reconnect !== undefined) {
+    const list = value.summary.reconnect;
+    if (!record(list) || Object.entries(list).some(([category, entry]) => !(WORKSPACE_BACKUP_RECONNECT as readonly string[]).includes(category) || !record(entry) ||
+      Object.keys(entry).some((field) => field !== "count" && field !== "people") || !Number.isSafeInteger(entry.count) || (entry.count as number) < 1 ||
+      (entry.people !== undefined && (!Number.isSafeInteger(entry.people) || (entry.people as number) < 1)))) throw new Error("Invalid workspace backup summary.");
   }
   const names = new Map<string, string>();
   let bytes = 0;
@@ -861,7 +971,7 @@ export async function stageWorkspaceBackup(dataDir: string, archivePath: string,
     const staged = join(job.directory, "staged");
     folder(staged);
     await tar.x({ file: plaintext, cwd: staged, strict: true, preservePaths: false, umask: 0o077, noChmod: true, brotli: false, zstd: false });
-    const manifest = withoutConfidentialEngineSessions(staged, withoutConfidentialDataScopes(staged, validateStaged(staged, expected)));
+    const manifest = withoutConfidentialEngineSessions(staged, withoutConfidentialDataScopes(staged, withoutEngineCredentials(staged, validateStaged(staged, expected))));
     const versions = [manifest.summary.appVersion, options.currentAppVersion ?? ""].map((version) => /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version)?.slice(1).map(Number));
     if (versions[0] && versions[1]) {
       for (let i = 0; i < 3; i++) {
@@ -876,6 +986,68 @@ export async function stageWorkspaceBackup(dataDir: string, archivePath: string,
     rmSync(job.directory, { recursive: true, force: true });
     throw error;
   }
+}
+
+/** An archive from a release that exported secrets (the engines' sign-ins,
+ * a person's sealed stores, the workspace's keys, phone registrations:
+ * workspace-backup-policy.ts savedSignInPath) passed its checks whole; they
+ * leave the staged copy at once, and the engines' settings lose their keys,
+ * tokens and env or header values, with the manifest and summary recounted,
+ * so no staged file keeps a secret on disk while a restore receipt holds the
+ * job (prepareRestore filters them too). The preview lists what to
+ * reconnect. */
+function withoutEngineCredentials(staged: string, manifest: Manifest): Manifest {
+  const data = join(staged, "data");
+  const dropped = manifest.entries.filter((entry) => savedSignInPath(entry.path));
+  const touched = new Set<string>();
+  const unreadable = new Set<string>();
+  const reconnect = new ReconnectTally(manifest.summary.reconnect);
+  for (const entry of dropped) if (entry.type === "file") reconnect.path(entry.path, /^push-devices\//i.test(entry.path) ? "phones" : secretCategory(entry.path));
+  for (const entry of manifest.entries) {
+    if (entry.type !== "file" || !scrubbedSettingsPath(entry.path) || savedSignInPath(entry.path)) continue;
+    const path = join(data, entry.path);
+    try {
+      const text = smallText(path);
+      if (text === null) throw new Error("too large");
+      const scrubbed = withoutSettingsSecrets(entry.path, text);
+      if (scrubbed !== null) {
+        writeFileSync(path, scrubbed, { mode: 0o600 });
+        touched.add(entry.path);
+        reconnect.path(entry.path, settingsCategory(entry.path, text));
+      }
+    } catch {
+      // a settings file that cannot be read is not restored
+      rmSync(path, { force: true });
+      unreadable.add(entry.path);
+      reconnect.path(entry.path, "engineSettings");
+    }
+  }
+  if (!dropped.length && !touched.size && !unreadable.size) return manifest;
+  for (const entry of dropped) rmSync(join(data, entry.path), { recursive: true, force: true });
+  const gone = new Set([...dropped.map((entry) => entry.path), ...unreadable]);
+  const entries: Entry[] = [];
+  for (const entry of manifest.entries) {
+    if (gone.has(entry.path)) continue;
+    if (!touched.has(entry.path)) { entries.push(entry); continue; }
+    const path = join(data, entry.path);
+    entries.push({ ...entry, size: lstatSync(path).size, sha256: hashFile(path) });
+  }
+  const files = dropped.filter((entry) => entry.type === "file").length + unreadable.size;
+  const reconnectList = reconnect.result();
+  const summary: WorkspaceBackupSummary = {
+    ...manifest.summary,
+    files: entries.filter((entry) => entry.type === "file").length,
+    directories: entries.filter((entry) => entry.type === "directory").length,
+    bytes: entries.reduce((total, entry) => total + (entry.type === "file" ? entry.size : 0), 0),
+    warnings: [
+      ...manifest.summary.warnings,
+      ...(files ? [`${files} file(s) in this backup hold secrets (sign-ins, keys, phone registrations) and are not restored. After the restore, reconnect what the reconnect list names.`] : []),
+      ...(touched.size ? [`${touched.size} engine settings file(s) in this backup are restored without their keys, tokens and environment or header values.`] : []),
+    ],
+    ...(Object.keys(reconnectList).length ? { reconnect: reconnectList } : {}),
+  };
+  writeJson(join(staged, "manifest.json"), { ...manifest, entries, summary });
+  return validateStaged(staged);
 }
 
 /** An archive from a release that exported a confidential thread's Data
@@ -1103,12 +1275,30 @@ function prepareRestore(dataDir: string, id: string, manifest: Manifest): string
   // journal files would then be absent from the manifest.
   const stagedData = join(job, "staged", "data");
   const engineKeys = confidentialEngineKeys(stagedData, existsSync(join(stagedData, "bots.json")) ? privateJson(join(stagedData, "bots.json")) : [], manifest.sourceDataDir, false);
-  const installed = manifest.entries.filter((entry) => !ephemeralWorkspaceTokenPath(entry.path) && !confidentialDataScopePath(entry.path) && !confidentialEngineSessionPath(entry.path, engineKeys));
+  const installed = manifest.entries.filter((entry) => !ephemeralWorkspaceTokenPath(entry.path) && !confidentialDataScopePath(entry.path) && !savedSignInPath(entry.path) && !disposableEngineHomePath(entry.path) && !confidentialEngineSessionPath(entry.path, engineKeys));
   for (const entry of installed.filter((entry) => entry.type === "directory")) folder(join(prepared, entry.path));
   for (const entry of installed) {
     const destination = join(prepared, entry.path);
     if (entry.type === "file") copyRegular(join(job, "staged", "data", entry.path), destination);
   }
+  // A `*_FILE` secret inside the data folder stays where it is: a top-level
+  // one in place (applyPendingWorkspaceRestore), a nested one copied into the
+  // install copy, never the archive's.
+  for (const path of environmentSecretPaths(dataDir)) {
+    rmSync(join(prepared, path), { recursive: true, force: true });
+    const parts = path.split("/");
+    const source = join(dataDir, path);
+    if (parts.length < 2 || !validRelative(path) || !entryExists(source) || !lstatSync(source).isFile()) continue;
+    let parent = prepared;
+    let usable = true;
+    for (const part of parts.slice(0, -1)) {
+      parent = join(parent, part);
+      if (!entryExists(parent)) folder(parent);
+      else if (!lstatSync(parent).isDirectory() || lstatSync(parent).isSymbolicLink()) { usable = false; break; }
+    }
+    if (usable) cpSync(source, join(prepared, path), { dereference: false, errorOnExist: true, force: false });
+  }
+  carryDestinationSecrets(dataDir, prepared);
   const changeJson = (name: string, change: (value: unknown) => void) => {
     const path = join(prepared, name);
     if (!existsSync(path)) return;
@@ -1280,6 +1470,87 @@ function prepareRestore(dataDir: string, id: string, manifest: Manifest): string
   return prepared;
 }
 
+/** The destination's own secrets (savedSignInPath) under its people and
+ * engine homes (`principals/<id>/` of the same person only, `org/`,
+ * `engine-policies/`) never left this machine, and
+ * a restore does not take them away: each one goes into the install copy
+ * at its path (one the archive cannot hold, savedSignInPath), and a
+ * restored `.claude.json` gets back this machine's Claude sign-in fields.
+ * A person the archive brings who has none here reconnects. */
+function carryDestinationSecrets(dataDir: string, prepared: string): void {
+  const visit = (relativePath: string) => {
+    const source = join(dataDir, relativePath);
+    let stat;
+    try { stat = lstatSync(source); } catch { return; }
+    if (stat.isSymbolicLink()) return;
+    if (savedSignInPath(relativePath)) {
+      const target = join(prepared, relativePath);
+      if (entryExists(target)) return;
+      const parent = relativePath.split("/").slice(0, -1);
+      for (let i = 1; i <= parent.length; i++) {
+        const path = join(prepared, ...parent.slice(0, i));
+        if (!entryExists(path)) folder(path);
+        else if (!lstatSync(path).isDirectory() || lstatSync(path).isSymbolicLink()) return;
+      }
+      cpSync(source, target, { recursive: true, dereference: false, verbatimSymlinks: true, errorOnExist: true, force: false });
+      return;
+    }
+    if (stat.isDirectory()) {
+      for (const name of readdirSync(source)) if (name !== "node_modules" && validRelative(`${relativePath}/${name}`)) visit(`${relativePath}/${name}`);
+      return;
+    }
+    if (!stat.isFile() || !engineSettingsPath(relativePath) || !/(?:^|\/)\.claude\.json$/i.test(relativePath)) return;
+    const target = join(prepared, relativePath);
+    try {
+      if (!lstatSync(target).isFile()) return;
+      const own = privateJson(source);
+      const restored = privateJson(target);
+      if (!record(own) || !record(restored) || !CLAUDE_AUTH_FIELDS.some((key) => own[key] !== undefined)) return;
+      for (const key of CLAUDE_AUTH_FIELDS) if (own[key] !== undefined) restored[key] = own[key];
+      writeFileSync(target, JSON.stringify(restored, null, 2), { mode: 0o600 });
+    } catch { /* absent or unreadable: the restored settings stay as they are */ }
+  };
+  visit("org");
+  visit("engine-policies");
+  // a person's only to the same person: an archive whose principal id names
+  // someone else (another account behind the same id) never receives this
+  // machine's secrets of that id; that person reconnects
+  const same = samePrincipals(dataDir, prepared);
+  const people = join(dataDir, "principals");
+  let ids: string[] = [];
+  try { ids = lstatSync(people).isDirectory() ? readdirSync(people) : []; } catch { /* none */ }
+  for (const id of ids) if (same(id) && validRelative(`principals/${id}`)) visit(`principals/${id}`);
+}
+
+/** Whether a principal id names the same person in the destination's
+ * principals.json and the archive's (by provider subject, else local
+ * operator, else email): true when the archive does not name it (its folder
+ * comes from this machine) or has no principals.json. */
+function samePrincipals(dataDir: string, prepared: string): (id: string) => boolean {
+  const read = (path: string): Map<string, Record<string, unknown>> | null => {
+    try {
+      const value = privateJson(path);
+      const list = Array.isArray(value) ? value : record(value) && Array.isArray(value.principals) ? value.principals : null;
+      if (!list) return null;
+      return new Map(list.filter(record).filter((item) => typeof item.id === "string").map((item) => [(item.id as string).toLowerCase(), item]));
+    } catch { return null; }
+  };
+  const own = read(join(dataDir, "principals.json"));
+  const archived = existsSync(join(prepared, "principals.json")) ? read(join(prepared, "principals.json")) : new Map();
+  return (id: string) => {
+    const key = id.toLowerCase();
+    const mine = own?.get(key);
+    const theirs = archived?.get(key);
+    if (!archived) return false;
+    if (!theirs) return true;
+    if (!mine) return false;
+    const subject = (item: Record<string, unknown>) => record(item.subject) ? `${String(item.subject.iss)}\n${String(item.subject.sub)}` : null;
+    if (subject(mine) || subject(theirs)) return subject(mine) === subject(theirs);
+    if (mine.local === true || theirs.local === true) return mine.local === theirs.local;
+    return typeof mine.email === "string" && mine.email.toLowerCase() === String(theirs.email ?? "").toLowerCase();
+  };
+}
+
 export function readLastWorkspaceRestore(dataDir: string): LastWorkspaceRestore | null {
   const root = backupRoot(dataDir);
   const path = join(root, "last-restore.json");
@@ -1338,7 +1609,7 @@ export function applyPendingWorkspaceRestore(dataDir: string): WorkspaceRestoreR
   folder(join(safetyCopyPath, "data"));
   const journal: RestoreJournal = {
     id: pending.id, phase: "applying",
-    existing: readdirSync(dataDir).filter((name) => !keptInPlace(name)).sort(),
+    existing: readdirSync(dataDir).filter((name) => !keptInPlace(name) && !environmentSecretPaths(dataDir).has(name)).sort(),
     incoming: readdirSync(prepared).sort(),
   };
   // Top-level source and destination names are checked before recording any
@@ -1383,5 +1654,5 @@ export function removeWorkspaceBackupJob(dataDir: string, id: string): void {
  * rules as the export walk (cloud-move.ts sizes a move with it). Symbolic
  * links are the caller's to skip. */
 export function omittedFromWorkspaceBackup(path: string): boolean {
-  return excluded(path.split("/")[0]) || excludedWorkspaceAuthPath(path) || ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || liveDataEnginePath(path) || confidentialDataScopePath(path);
+  return excluded(path.split("/")[0]) || excludedWorkspaceAuthPath(path) || ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || liveDataEnginePath(path) || confidentialDataScopePath(path) || savedSignInPath(path) || disposableEngineHomePath(path);
 }

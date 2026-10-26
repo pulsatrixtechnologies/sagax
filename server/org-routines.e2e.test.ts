@@ -309,7 +309,7 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
   }, 30_000);
 
   it("scenario D: her routine runs while she has no session, on her key and her delegation", async () => {
-    const routine = await api("POST", "/api/routines", alice, { name: "Hourly report", botId: x.id, prompt: "Write the hourly report.",
+    const routine = await api("POST", "/api/routines", alice, { name: "Hourly report", botId: x.id, prompt: "Write the hourly report.", postResults: true,
       schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 4_000 } });
     expect(routine.status, routine.text).toBe(201);
     r1 = routine.body.routine.id;

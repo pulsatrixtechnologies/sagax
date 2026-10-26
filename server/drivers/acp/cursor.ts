@@ -12,6 +12,7 @@ import type { ModelCatalog, ProviderErrorCode } from "../../contracts.ts";
 import { titleCaseModelId } from "../../contracts.ts";
 import { execCli } from "../../procs.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
+import { sagaxReviewsAuto } from "../sagax-reviewer.ts";
 
 /** Translate an argv `--model` slug into the id this ACP session will accept.
  *
@@ -383,6 +384,14 @@ export function classifyCursorError(error: unknown): ProviderErrorCode | undefin
   return undefined;
 }
 
+/** Cursor's approval flags: `--force` for Full access, `--auto-review` (its
+ * own reviewer) for Approve for me unless Sagax decides for this bot
+ * (sagax-reviewer.ts, parity A13), nothing (it asks) otherwise. */
+export function cursorApprovalArgs(fullAuto: boolean, approvalMode: string | undefined, sagaxReviews = false): string[] {
+  if (fullAuto) return ["--force"];
+  return approvalMode === "auto" && !sagaxReviews ? ["--auto-review"] : [];
+}
+
 const support = (run: typeof execCli): AcpSupport => ({
   driverKind: "cursorAgent",
   displayName: "Cursor",
@@ -417,7 +426,7 @@ const support = (run: typeof execCli): AcpSupport => ({
   // `--force` is the documented auto-approve switch (`--yolo` is an alias);
   // ACP sessions use session/set_model below; keep argv for older CLIs.
   spawnArgs: (config, turn) => [
-    ...(config.fullAuto ? ["--force"] : turn.approvalMode === "auto" ? ["--auto-review"] : []),
+    ...cursorApprovalArgs(config.fullAuto, turn.approvalMode, turn.approvalMode === "auto" && sagaxReviewsAuto(turn.botId)),
     ...(turn.model ? ["--model", turn.model] : []),
     "acp",
   ],

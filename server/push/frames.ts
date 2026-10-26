@@ -26,6 +26,9 @@ export interface NotifyNote {
   audience?: string[];
   avatarUrl?: string;
   requestId?: string;
+  needsKey?: boolean;
+  routineRunId?: string;
+  routineName?: string;
 }
 
 export interface FramePushDeps {
@@ -60,6 +63,9 @@ export function pushesForFrame(payload: Record<string, unknown>, deps: FramePush
       ...(Array.isArray(raw.audience) ? { audience: raw.audience.filter((id): id is string => typeof id === "string") } : {}),
       ...(avatarUrl ? { avatarUrl } : {}),
       ...(text(raw.requestId) ? { requestId: text(raw.requestId).slice(0, 128) } : {}),
+      ...(raw.needsKey === true ? { needsKey: true } : {}),
+      ...(text(raw.routineRunId) ? { routineRunId: text(raw.routineRunId).slice(0, 128) } : {}),
+      ...(text(raw.routineName) ? { routineName: text(raw.routineName).slice(0, 80) } : {}),
     };
     const people = note.audience ?? deps.notificationPeople(note);
     const unique = [...new Set(people.map((id) => id.trim().toLowerCase()).filter(Boolean))];
@@ -77,6 +83,10 @@ export function pushesForFrame(payload: Record<string, unknown>, deps: FramePush
       ...(senderId ? { senderId } : {}),
       ...(note.avatarUrl ? { avatarUrl: note.avatarUrl } : {}),
       ...(note.requestId ? { requestId: note.requestId } : {}),
+      ...(note.kind === "approval" || note.kind === "question" ? { prompt: note.kind as "approval" | "question" } : {}),
+      ...(note.kind === "approval" && note.needsKey ? { needsKey: true } : {}),
+      ...(note.routineRunId ? { routineRunId: note.routineRunId } : {}),
+      ...(note.routineName ? { routineName: note.routineName } : {}),
       at,
     }));
   }

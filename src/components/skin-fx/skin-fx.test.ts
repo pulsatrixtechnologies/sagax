@@ -20,7 +20,12 @@ import { fxPalette } from "./skin-fx";
 const here = dirname(fileURLToPath(import.meta.url));
 const css = readFileSync(join(here, "skin-fx.css"), "utf8").replace(/\r\n/g, "\n");
 /** The eyes a shape's fill cuts out: its outline's closed subpaths after the body's own. */
-const eyeCuts = (html: string) => (/class="shape-fill" d="([^"]+)" fill-rule="evenodd"/.exec(html)?.[1] ?? "").split("M").filter(Boolean).slice(1);
+const eyeCuts = (html: string) => {
+  // the eyes: their own opaque path on a turned body (2026-10-18), or cut out of a flat skin's fill
+  const own = /<path d="([^"]+)"[^>]*data-shape-eyes=""/.exec(html)?.[1];
+  if (own) return own.split("M").filter(Boolean);
+  return (/class="shape-fill" d="([^"]+)" fill-rule="evenodd"/.exec(html)?.[1] ?? "").split("M").filter(Boolean).slice(1);
+};
 const shape = (skin: string, size: number, extra: Record<string, unknown> = {}) =>
   renderToStaticMarkup(createElement(BotAvatar, { bot: { color: "blue", mascotLook: { character: "shape", shape: "hexagon", skins: { shape: skin } } } as never, size, ...extra }));
 const trombi = (skin: string, size: number, extra: Record<string, unknown> = {}) =>
@@ -50,7 +55,14 @@ describe("premium skins render at every size", () => {
     const eyes = (skin: string) => eyeCuts(shape(skin, 60, { animated: false }));
     const plain = eyes("plain");
     expect(plain).toHaveLength(2);
-    for (const skin of SHAPE_SKINS) expect(eyes(skin), skin).toEqual(plain);
+    // every skin with a body in volume shares the same eyes; the flat Outline skin keeps its own (cut out of a flat body)
+    // every skin shows two eyes; the skins drawn on the resting outline share them exactly
+    // (only the plain body bends into its turn, and the flat Outline skin cuts them out)
+    const pastel = eyes("pastel");
+    for (const skin of SHAPE_SKINS) {
+      expect(eyes(skin), skin).toHaveLength(2);
+      if (skin !== "plain" && skin !== "outline") expect(eyes(skin), skin).toEqual(pastel);
+    }
   });
 
   it("draws every Trombi skin, full when large, still when small, with his own eyes", () => {

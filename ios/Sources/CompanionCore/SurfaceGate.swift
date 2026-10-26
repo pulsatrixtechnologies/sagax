@@ -102,10 +102,6 @@ public enum SurfaceFeature: String, CaseIterable, Hashable, Sendable {
     case composerSuggestions
 
     // Cards
-    /// Connector card: status, resume, dismiss (CA10).
-    case connectorCard
-    /// Connector card: Connect (authorize). Client sessions wait on S2.
-    case connectorCardAuthorize
     /// Parallel task card: Stop (TH8). Sidecars wait on S1.
     case parallelTaskStop
 
@@ -174,15 +170,6 @@ public enum SurfaceFeature: String, CaseIterable, Hashable, Sendable {
     /// admin scoped on a server and opened on the sidecar by D1. The
     /// built-in roles need no route and show everywhere.
     case createBotPresets
-    /// Connected apps (PL1): the sidecar allows connectors; a client
-    /// session does not. Marketplace / Connected (PL2) and disconnecting
-    /// one account (PL4) ride the same routes.
-    case connectedApps
-    /// "Allow <bot>" for a bot whose own Connected apps switch is off (PL6):
-    /// `PATCH /api/bots/:id {composio}`. The sidecar's phone fields and a
-    /// client session both refuse `composio` (what a bot may reach), so only
-    /// an admin session sees it.
-    case connectedAppsPerBot
     /// MCP servers, read-only, with their sign-in and its status (PL8, PL9):
     /// the sidecar serves the listing and the OAuth start and status; a
     /// client session does not (admin).
@@ -334,7 +321,7 @@ public struct SurfaceGate: Hashable, Sendable {
 
     public func allows(_ feature: SurfaceFeature) -> Bool {
         switch feature {
-        case .replyQuote, .regenerate, .speakReply, .reactions, .messagePin, .connectorCard, .createBot:
+        case .replyQuote, .regenerate, .speakReply, .reactions, .messagePin, .createBot:
             return true
         // Search and citations pass both gates; the remote client shows them.
         case .findInConversation, .citationQuote:
@@ -361,9 +348,9 @@ public struct SurfaceGate: Hashable, Sendable {
             return scope != .sidecar || sidecarRoutes.contains(.harnessCommands)
         case .inspector, .scheduledCalls, .sectionManagement:
             return scope == .serverAdmin
-        case .connectorCardAuthorize, .botOverview, .connectedApps, .botOwnerExtras, .threadFolders, .mcpServers:
+        case .botOverview, .botOwnerExtras, .threadFolders, .mcpServers:
             return scope != .serverClient
-        case .connectedAppsPerBot, .harnessConnectorsSetting:
+        case .harnessConnectorsSetting:
             return scope == .serverAdmin
         case .harnessConnectors:
             return scope != .sidecar || sidecarRoutes.contains(.harnessConnectors)

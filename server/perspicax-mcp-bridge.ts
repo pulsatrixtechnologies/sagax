@@ -13,12 +13,26 @@
 // section 4 ("Injection par engine"), decision D1 of the slice 5 plan.
 //
 // stdout is the MCP transport. Never log there.
+import { readFileSync } from "node:fs";
 import readline from "node:readline";
 
 type Json = Record<string, unknown>;
 
 const HARNESS = (process.env.SAGAX_HARNESS_URL ?? "http://127.0.0.1:8799").replace(/\/+$/, "");
-const TOKEN = process.env.SAGAX_PERSPICAX_TOKEN ?? "";
+const LAUNCH_TOKEN = process.env.SAGAX_PERSPICAX_TOKEN ?? "";
+// A kept or pre-warmed engine process outlives the turn it was launched
+// for: the harness rewrites the current turn's capability in this file
+// (server/drivers/spawn-contract.ts warmPerspicaxEnv). Read on every frame;
+// the launch value is the fallback. Never logged, never sent to stdout.
+const TOKEN_FILE = process.env.SAGAX_PERSPICAX_TOKEN_FILE ?? "";
+function turnToken(): string {
+  if (!TOKEN_FILE) return LAUNCH_TOKEN;
+  try {
+    return readFileSync(TOKEN_FILE, "utf8").trim() || LAUNCH_TOKEN;
+  } catch {
+    return LAUNCH_TOKEN;
+  }
+}
 const PROFILE = process.env.SAGAX_PERSPICAX_PROFILE ?? "";
 const BOT_ID = process.env.SAGAX_BOT_ID ?? "";
 const THREAD_ID = process.env.SAGAX_THREAD_ID ?? "";
@@ -61,7 +75,7 @@ async function forward(message: Json): Promise<void> {
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json", authorization: `Bearer ${TOKEN}` },
+      headers: { "content-type": "application/json", accept: "application/json", authorization: `Bearer ${turnToken()}` },
       body: JSON.stringify(message),
       signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
     });

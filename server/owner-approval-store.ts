@@ -15,12 +15,15 @@ import { z } from "zod";
 import { writeFileAtomic } from "./atomic.ts";
 import {
   BOT_PERMISSION_MODES,
+  MAX_EXACT_VALUE,
   RULE_BEHAVIORS,
+  RULE_SITUATIONS,
   type BotPermissionMode,
   type DestructiveKind,
   type OwnerRule,
   type RuleBehavior,
   type RuleScope,
+  type RuleSituation,
 } from "./owner-approval.ts";
 
 export const MAX_RULES_PER_OWNER = 2_000;
@@ -31,10 +34,12 @@ const ruleSchema = z.object({
   ownerId: z.string().min(1).max(200),
   botId: z.string().min(1).max(200).nullable(),
   tool: z.string().min(1).max(300),
-  scope: z.record(z.string().max(40), z.string().max(200)),
+  // an exact command or path is kept whole (owner-approval.ts EXACT_KEYS)
+  scope: z.record(z.string().max(40), z.string().max(MAX_EXACT_VALUE)),
   destructive: z.enum(["delete", "bulk", "external-message"]).optional(),
   behavior: z.enum(RULE_BEHAVIORS),
   description: z.string().max(MAX_DESCRIPTION),
+  from: z.enum(RULE_SITUATIONS).optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -61,6 +66,8 @@ export interface NewRule {
   destructive?: DestructiveKind;
   behavior: RuleBehavior;
   description: string;
+  /** owner-approval.ts OwnerRule.from */
+  from?: RuleSituation;
 }
 
 export interface RulePatch {
@@ -113,14 +120,30 @@ export class OwnerApprovalStore {
     return this.data.rules.filter((rule) => same(rule.ownerId, ownerId) && (botId === undefined || rule.botId === null || rule.botId === botId));
   }
 
+  /** 2026-10-19: the allow rules saved on an admin's card of this bot
+   * (`from: "admin"`), whoever saved them; the caller checks each person's
+   * right again at each use. */
+  adminRulesForBot(botId: string): OwnerRule[] {
+    return this.data.rules.filter((rule) => rule.botId === botId && rule.from === "admin" && rule.behavior === "allow").map((rule) => ({ ...rule }));
+  }
+
+  /** 2026-10-21: one rule saved on an admin's card, by its id, whoever
+   * saved it (the bot's owner and an admin may remove it). */
+  adminRuleById(id: string): OwnerRule | undefined {
+    const rule = this.data.rules.find((row) => row.id === id && row.from === "admin" && row.botId !== null);
+    return rule ? { ...rule } : undefined;
+  }
+
   /** Save a rule for this person. The same tool, scope, kind and bot
    * replaces its behavior instead of adding a second row. */
   add(input: NewRule): OwnerRule {
     const at = this.now();
-    const scope = Object.fromEntries(Object.entries(input.scope).slice(0, 8));
+    // never cut a scope short: a dropped key would make the rule wider
+    if (Object.keys(input.scope).length > 16) throw Object.assign(new Error("This rule's scope is too large to keep."), { status: 409 });
+    const scope = { ...input.scope };
     const existing = this.data.rules.find((rule) =>
       same(rule.ownerId, input.ownerId) && rule.botId === input.botId && rule.tool === input.tool
-      && rule.destructive === input.destructive && JSON.stringify(rule.scope) === JSON.stringify(scope));
+      && rule.destructive === input.destructive && rule.from === input.from && JSON.stringify(rule.scope) === JSON.stringify(scope));
     if (existing) {
       existing.behavior = input.behavior;
       existing.description = input.description.slice(0, MAX_DESCRIPTION);
@@ -140,6 +163,7 @@ export class OwnerApprovalStore {
       ...(input.destructive ? { destructive: input.destructive } : {}),
       behavior: input.behavior,
       description: input.description.slice(0, MAX_DESCRIPTION),
+      ...(input.from ? { from: input.from } : {}),
       createdAt: at,
       updatedAt: at,
     };

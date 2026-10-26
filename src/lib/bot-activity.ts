@@ -16,6 +16,8 @@ import {
   type BotCodePullRequest,
 } from "../../shared/bot-activity";
 import type { BotLaunchedAgentItem } from "../../shared/bot-launched-agents.ts";
+import { branchArchiveKey } from "../../shared/bot-code-branches.ts";
+import type { CodingBranch } from "@/lib/code-branches";
 
 export type { BotLaunchedAgentItem };
 
@@ -139,17 +141,21 @@ export const CODE_WORK_SHOWN = 5;
 
 export interface CodingWork {
   pullRequests: BotCodePullRequest[];
-  branches: BotCodeBranch[];
+  /** Each with the coding thread and folder it came from and the pull
+   * request opened from it (src/lib/code-branches.ts acts on them). */
+  branches: CodingBranch[];
   commits: BotCodeCommit[];
+  /** Branches the person archived (`archived` keys), newest first. */
+  archivedBranches?: CodingBranch[];
 }
 
 /** Details > Coding below the running jobs: the pull requests, branches
  * and commits the bot's coding jobs of the window produced (the server's
  * `code`, read off their own git, gh and GitHub calls), newest first, each
  * once, CODE_WORK_SHOWN of each at most. */
-export function codingWork(items: readonly BotActivityItem[]): CodingWork {
+export function codingWork(items: readonly BotActivityItem[], archived?: ReadonlySet<string>): CodingWork {
   const pulls = new Map<string, BotCodePullRequest>();
-  const branches = new Map<string, BotCodeBranch>();
+  const branches = new Map<string, CodingBranch>();
   const commits = new Map<string, BotCodeCommit>();
   const newer = <T extends { at: number }>(map: Map<string, T>, key: string, value: T) => {
     const before = map.get(key);
@@ -160,15 +166,37 @@ export function codingWork(items: readonly BotActivityItem[]): CodingWork {
     for (const pull of item.code.pullRequests) {
       newer(pulls, pull.url ?? (pull.number !== undefined ? `${pull.repo ?? ""}#${pull.number}` : `${item.id}:${pull.title ?? pull.at}`), pull);
     }
-    for (const branch of item.code.branches) newer(branches, `${branch.repo ?? ""}:${branch.name}`, branch);
+    for (const branch of item.code.branches) {
+      newer(branches, `${branch.repo ?? ""}:${branch.name}`, {
+        ...branch,
+        ...(item.threadId ? { threadId: item.threadId } : {}),
+        ...(item.code.folder ? { folder: item.code.folder } : {}),
+      });
+    }
     for (const commit of item.code.commits) newer(commits, commit.sha, commit);
   }
   const newest = <T extends { at: number }>(values: Iterable<T>) => [...values].sort((a, b) => b.at - a.at).slice(0, CODE_WORK_SHOWN);
-  return { pullRequests: newest(pulls.values()), branches: newest(branches.values()), commits: newest(commits.values()) };
+  // A branch carries the newest pull request opened from it (its card says
+  // "PR #n open" or "Merged"; the pull request keeps its own row too).
+  const linked = [...branches.values()].map((branch) => {
+    const pull = [...pulls.values()]
+      .filter((entry) => entry.branch === branch.name && (!entry.repo || !branch.repo || entry.repo === branch.repo))
+      .sort((a, b) => b.at - a.at)[0];
+    return pull ? { ...branch, pull } : branch;
+  });
+  const isArchived = (branch: CodingBranch) => Boolean(archived?.has(branchArchiveKey(branch.repo ?? branch.folder, branch.name)));
+  const listed = newest(linked.filter((branch) => !isArchived(branch)));
+  const archivedBranches = linked.filter(isArchived).sort((a, b) => b.at - a.at);
+  return {
+    pullRequests: newest(pulls.values()),
+    branches: listed,
+    commits: newest(commits.values()),
+    ...(archivedBranches.length ? { archivedBranches } : {}),
+  };
 }
 
 export function codingWorkEmpty(work: CodingWork): boolean {
-  return !work.pullRequests.length && !work.branches.length && !work.commits.length;
+  return !work.pullRequests.length && !work.branches.length && !work.commits.length && !work.archivedBranches?.length;
 }
 
 /** A running coding job's place: its repository folder's name and branch. */

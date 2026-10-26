@@ -240,6 +240,7 @@ struct CardView: View {
         case .denied: String(localized: "Denied")
         case .cancelled: String(localized: "Cancelled")
         case .routineScheduled: String(localized: "Routine scheduled")
+        case .routineCreatedPaused: String(localized: "Paused routine created")
         case .routineUpdated: String(localized: "Routine updated")
         case .routinePaused: String(localized: "Routine paused")
         case .routineResumed: String(localized: "Routine resumed")

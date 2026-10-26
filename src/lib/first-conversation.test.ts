@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { anchorFor, cardAnswered, nextSpotlight, placementFor, SPOTLIGHTS, tourComplete, type ChatObservation } from "./first-conversation";
 
-const quiet: ChatObservation = { replyStarted: false, replyFinished: false, approvalVisible: false, connectorVisible: false };
+const quiet: ChatObservation = { replyStarted: false, replyFinished: false, approvalVisible: false };
 
 describe("first conversation spotlights", () => {
   it("shows nothing until the first reply starts", () => {
@@ -22,8 +22,6 @@ describe("first conversation spotlights", () => {
   it("counts a card spotlight as done once its card is answered", () => {
     expect(cardAnswered("spot.approval", { ...quiet, approvalVisible: true })).toBe(false);
     expect(cardAnswered("spot.approval", { ...quiet, replyStarted: true })).toBe(true);
-    expect(cardAnswered("spot.connector", { ...quiet, connectorVisible: true })).toBe(false);
-    expect(cardAnswered("spot.connector", quiet)).toBe(true);
     // the chrome spotlights have no card to answer
     expect(cardAnswered("spot.composer", quiet)).toBe(false);
     expect(cardAnswered("spot.model", quiet)).toBe(false);
@@ -31,13 +29,11 @@ describe("first conversation spotlights", () => {
 
   it("lets a live card interrupt the chrome order", () => {
     expect(nextSpotlight({ ...quiet, replyStarted: true, approvalVisible: true }, [], null)).toBe("spot.approval");
-    expect(nextSpotlight({ ...quiet, replyStarted: true, connectorVisible: true }, [], null)).toBe("spot.connector");
-    expect(nextSpotlight({ ...quiet, approvalVisible: true, connectorVisible: true }, ["spot.approval"], null)).toBe("spot.connector");
   });
 
   it("shows each spotlight once", () => {
     const all = [...SPOTLIGHTS];
-    expect(nextSpotlight({ replyStarted: true, replyFinished: true, approvalVisible: true, connectorVisible: true }, all, null)).toBeNull();
+    expect(nextSpotlight({ replyStarted: true, replyFinished: true, approvalVisible: true }, all, null)).toBeNull();
     expect(tourComplete(all)).toBe(true);
     expect(tourComplete(all.slice(1))).toBe(false);
   });

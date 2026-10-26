@@ -552,9 +552,9 @@ public enum ShapeGaze {
         let ex = (x: (across.x - mid.x) * kx * turn, y: (across.y - mid.y) * kx * turn)
         let ey = (x: (up.x - mid.x) * k, y: (up.y - mid.y) * k)
         let alpha = ShapeMath.clamp01((c.z - ShapeEngineData.eyeFade.hidden) / ShapeEngineData.eyeFade.over)
-        let h = max(shape.h * max(open, ShapeEngineData.blink.floor), 0.012)
+        let h = max(shape.h * ShapeEngineData.eyeScale.h * ShapeEngineData.eyeLength * max(open, ShapeEngineData.blink.floor), 0.012)
         let tilt = shape.tilt * ShapeMath.rad
-        let points = stadium(shape.w, h).map { p -> CGPoint in
+        let points = stadium(shape.w * ShapeEngineData.eyeScale.w, h).map { p -> CGPoint in
             let tu = p.x * cos(tilt) - p.y * sin(tilt)
             let tv = p.x * sin(tilt) + p.y * cos(tilt)
             return CGPoint(x: c.x + (tu * ex.x - tv * ey.x) * alpha, y: c.y + (tu * ex.y - tv * ey.y) * alpha)
@@ -564,21 +564,33 @@ public enum ShapeGaze {
 
     private static func nonZero(_ v: Double) -> Double { v == 0 || v.isNaN ? -1e-6 : v }
 
+    /// The face's middle at rest (no look, no face of its own): where a turn is measured from (`solveRest`).
+    private static func restMid(_ roll: Double) -> CGPoint {
+        let yaw = ShapeEngineData.head.yaw
+        let pitch = ShapeEngineData.head.pitch + ShapeEngineData.faceDrop
+        let eye = ShapeEngineData.expressions[.neutral]!.left
+        return placeEye(yaw, pitch, roll, eye, 1, axes: (yaw: yaw, pitch: pitch)).center
+    }
+
     /// Both eyes for a face on a body (`solveEyes`).
     public static func solveEyes(_ radii: [Double], _ face: ShapeFace, gaze: (yaw: Double, pitch: Double, roll: Double), open: (left: Double, right: Double)) -> [ShapePlacedEye] {
         let yaw = ShapeEngineData.head.yaw + face.yaw + gaze.yaw
         let pitch = ShapeEngineData.head.pitch + ShapeEngineData.faceDrop + face.pitch + gaze.pitch
-        let roll = face.roll + gaze.roll
+        let roll = face.roll * ShapeEngineData.eyeRoll + gaze.roll
         let axes = (yaw: yaw, pitch: pitch)
-        let left = placeEye(yaw - face.split, pitch, roll, face.left, face.left.open * open.left, axes: axes)
-        let right = placeEye(yaw + face.split, pitch, roll, face.right, face.right.open * open.right, axes: axes)
+        let split = face.split * ShapeEngineData.eyeSpread
+        let left = placeEye(yaw - split, pitch, roll, face.left, face.left.open * open.left, axes: axes)
+        let right = placeEye(yaw + split, pitch, roll, face.right, face.right.open * open.right, axes: axes)
+        // the face seen from the front: its middle rests at eyeShift and moves as much as the head's turn moves it
         let mid = CGPoint(x: (left.center.x + right.center.x) / 2, y: (left.center.y + right.center.y) / 2)
-        let reach = ShapeMath.radiusToward(radii, mid.x, nonZero(mid.y))
+        let rest = restMid(roll)
         let spread = ShapeMath.radiusToward(radii, 1, 0) * 0.5 + ShapeMath.radiusToward(radii, -1, 0) * 0.5
         let sx = max(0.35, min(1.25, spread))
-        let sy = max(0.35, min(1.25, reach))
+        let target = CGPoint(x: ShapeEngineData.eyeShift.x + (mid.x - rest.x) * ShapeEngineData.eyeGaze,
+                             y: ShapeEngineData.eyeShift.y + (mid.y - rest.y) * ShapeEngineData.eyeGaze)
         func place(_ eye: ShapePlacedEye, _ s: Double) -> ShapePlacedEye {
-            let nx = eye.center.x * sx * s, ny = eye.center.y * sy * s
+            let nx = target.x * s + (eye.center.x - mid.x) * sx
+            let ny = target.y * s + (eye.center.y - mid.y)
             var out = eye
             out.center = CGPoint(x: nx, y: ny)
             out.points = eye.points.map { CGPoint(x: $0.x - eye.center.x + nx, y: $0.y - eye.center.y + ny) }
@@ -693,6 +705,16 @@ public enum ShapeFrames {
     }
 
     private static let stills = Stills()
+
+    /// Le repos d'une forme avec les yeux ouverts de `open` (0...1) : un clignement
+    /// des petites tailles (`gazeFrame` avec `open` sur le desktop). Mémoïsé
+    /// seulement à `open` 1 (le still ordinaire).
+    public static func still(_ shape: MascotShape, _ expression: ShapeExpression, color: String, open: Double) -> ShapeFrame {
+        if open >= 1 { return still(shape, expression, color: color) }
+        let radii = ShapeEngineData.radii[shape] ?? ShapeEngineData.radii[.circle]!
+        return compose(Inputs(radii: radii, rest: radii, face: ShapeEngineData.expressions[expression]!, gaze: (0, 0, 0), open: (open, open),
+                              color: color, body: (0, 0, 0, 1, 1), eyes: 1, pose: nil, t: 0))
+    }
 
     /// The resting frame of a shape: no wander, no blink, no move (`stillFrame`).
     /// Memoised per shape and face; the colour is the caller's.

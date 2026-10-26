@@ -131,13 +131,13 @@ export function SidebarSectionHeader({
           // attention marks; no chevron (a click folds it, aria-expanded
           // says which way). Only the name, no count, as Grok Bot's "My
           // Team" (JC, 2026-10-15)
-          className="group/section flex h-7 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left text-sidebar-ink-secondary transition-colors hover:bg-sidebar-hover hover:text-sidebar-ink"
+          className="group/section flex h-[30px] w-full min-w-0 items-center gap-2 rounded-md px-2 pb-1.5 pt-2 text-left text-sidebar-ink-secondary transition-colors hover:bg-sidebar-hover hover:text-sidebar-ink"
         >
           <span className="sidebar-section-label truncate text-[12px] font-normal leading-4">{name}</span>
           {marks}
         </button>
       ) : (
-        <div className="flex h-7 min-w-0 items-center gap-2 px-2">
+        <div className="flex h-[30px] min-w-0 items-center gap-2 px-2 pb-1.5 pt-2">
           <span className="sidebar-section-label truncate text-[12px] font-normal leading-4 text-sidebar-ink-secondary">{name}</span>
           {marks}
         </div>

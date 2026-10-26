@@ -76,9 +76,11 @@ export function ComposerAttachments({
     };
     const onDrop = async (e: DragEvent) => {
       if (!carriesFiles(e)) return;
-      e.preventDefault();
       depth.current = 0;
       setDragging(false);
+      // A drop target inside the app took it (a bot's avatar): not an attachment.
+      if (e.defaultPrevented) return;
+      e.preventDefault();
       const files = Array.from(e.dataTransfer?.files ?? []);
       // Same intake the attach button uses: a dropped file and a picked one
       // must not appear in a different order.

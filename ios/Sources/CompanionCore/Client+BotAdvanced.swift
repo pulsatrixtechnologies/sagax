@@ -254,6 +254,13 @@ public extension CompanionClient {
         return SlackRules.managementURL(available: answer.available, managementUrl: answer.managementUrl)
     }
 
+    /// `GET /api/bots/:id/inbound-mail`: the bot's own email address row,
+    /// or nil when there is none to show (or the read fails).
+    func botInboundMail(botId: String) async -> BotInboundMailRow? {
+        guard let answer = try? await send(botRequest("GET", botId, "/inbound-mail"), as: BotInboundMail.self) else { return nil }
+        return BotInboundMailRules.row(answer)
+    }
+
     // MARK: Command allowlist
 
     /// `GET /api/bots/:id/command-allowlist?threadId=`: the rules and the

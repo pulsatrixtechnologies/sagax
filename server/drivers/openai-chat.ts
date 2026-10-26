@@ -13,13 +13,15 @@ import { ASK_USER_TOOL, ASK_USER_TOOL_DEFINITION, askQuestionSummary, parseAskQu
 import { allowsTool, parseToolScope } from "../../shared/tool-scope.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { cwToolResult, toolDetailPreview } from "../tool-summary.ts";
+import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../shared/phone-tools.ts";
 import { ChatToolSessionError, mountChatTools, providerToolLimit, type ChatToolDefinition, type ChatToolSession, type ChatToolResult } from "./chat-mcp-tools.ts";
 import { assertImageTransport, chatImageBudget, chatToolImages, chatUserContent, type ChatContentPart } from "./chat-images.ts";
-import { promptHalves, volatileContextNote, withContextNote } from "./prompt-split.ts";
+import { promptHalves, sectionDelta, sectionFingerprints, volatileContextNote, volatileSectionsUpdate, withContextNote } from "./prompt-split.ts";
 import { createChatToolApproval } from "./chat-tool-approval.ts";
 import { ChatProtocolError, ChatReasoningDetails, ChatToolCalls, object, type ChatToolCall } from "./openai-chat-protocol.ts";
 import { appendNative } from "./native.ts";
 import { classifyError, computeBackoff, interruptibleDelay, RETRY_MAX_ATTEMPTS } from "./retry.ts";
+import { outOfCreditsMessage } from "./engine-errors.ts";
 import { classifyContinuable, writeTurnHandoff } from "../turn-continuation.ts";
 import { DUPLEX_INTERRUPT_WAIT_MS } from "../voice-call-duplex.ts";
 import { KEY_REJECTED_REASON, keyRejected, noteKeyAccepted, noteKeyRejected, rejectsKey } from "../key-rejections.ts";
@@ -132,6 +134,9 @@ interface RuntimeOptions<Config> {
   /** Most tools the provider takes in one request, when it differs from
    * PROVIDER_TOOL_LIMITS (chat-mcp-tools.ts). */
   toolLimit?: number;
+  /** Isolated permission review (lot A1b). Same completion as generateText,
+   * with no tools, and never inferred from generateText itself. */
+  permissionReview?: boolean;
   /** Opt-in structured images and harness-authorized computer/browser MCP. */
   computerUse?: boolean;
   /** Whether a model accepts image parts (default: every model does). A
@@ -177,6 +182,11 @@ interface DeliveredUserMessage {
   sent: string;
   /** The trimmed volatile half, when this message carried its note. */
   volatile?: string;
+  /** With a note: the volatile sections it carried (prompt-split.ts
+   * sectionFingerprints), all of them (`full`) or only those it changed,
+   * null for one it announced as gone. Replay merges them to know which
+   * copy of each section the replayed history holds. */
+  sections?: { full: boolean; prints: Record<string, string | null> };
   /** Fingerprint of the message just before it when it was sent ("" for
    * none), so an identical text sent elsewhere later is not mistaken for it. */
   after: string;
@@ -203,7 +213,7 @@ const fingerprint = (text: string) => createHash("sha256").update(text).digest("
 function replayDelivered(
   transcript: ReadonlyArray<{ role: "user" | "assistant"; text: string }>,
   records: readonly DeliveredUserMessage[],
-): { content: Map<number, string>; matched: DeliveredUserMessage[]; volatile: string | undefined } {
+): { content: Map<number, string>; matched: DeliveredUserMessage[]; volatile: string | undefined; sections: Record<string, string> | undefined } {
   const found: Array<{ index: number; record: DeliveredUserMessage }> = [];
   let next = records.length - 1;
   for (let index = transcript.length - 1; index >= 0 && next >= 0; index--) {
@@ -221,15 +231,34 @@ function replayDelivered(
   }
   const content = new Map<number, string>();
   let volatile: string | undefined;
+  // The copy of each volatile section the replayed notes hold: unknown
+  // (undefined) until a full note is in the window, and again after a note
+  // that recorded no sections.
+  let sections: Record<string, string> | undefined;
   let budget = MAX_REPLAY_EXTRA_BYTES;
   for (const { index, record } of found) {
     const extra = Buffer.byteLength(record.sent) - Buffer.byteLength(transcript[index]!.text);
     if (extra > budget) break;
     budget -= extra;
     content.set(index, record.sent);
-    if (record.volatile !== undefined) volatile = record.volatile;
+    if (record.volatile !== undefined) {
+      volatile = record.volatile;
+      if (!record.sections) sections = undefined;
+      else if (!record.sections.full && !sections) {
+        // Only a partial copy is in the window (its full note was trimmed
+        // away): unknown, so the next turn delivers the whole half again.
+        volatile = undefined;
+      } else {
+        const merged: Record<string, string> = record.sections.full ? {} : { ...sections };
+        for (const [id, print] of Object.entries(record.sections.prints)) {
+          if (print === null) delete merged[id];
+          else merged[id] = print;
+        }
+        sections = merged;
+      }
+    }
   }
-  return { content, matched: found.map(({ record }) => record), volatile };
+  return { content, matched: found.map(({ record }) => record), volatile, sections };
 }
 
 const NUDGE_ANNOUNCED_ACTION = "You said what you would do next but called no tool. Do it now with your tools, or reply with your final answer if nothing is left to do.";
@@ -620,8 +649,16 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     const transcript = turn.transcript ?? [];
     const replay = replayDelivered(transcript, delivered.get(turn.threadId) ?? []);
     const volatile = halves.volatile.trim();
-    const note = halves.stable === null || (!turn.mentionTurn && replay.volatile === volatile) ? ""
-      : volatileContextNote(volatile, Boolean(replay.volatile));
+    // Only the sections that changed ride when the replayed notes hold a
+    // known copy of each (2026-10-19 perf parity, point 4).
+    const skip = halves.stable === null || (!turn.mentionTurn && replay.volatile === volatile);
+    const sectionsNote = skip || replay.volatile === undefined ? null
+      : volatileSectionsUpdate(turn.systemVolatileSections, replay.sections, Boolean(turn.mentionTurn));
+    const note = skip ? "" : sectionsNote ?? volatileContextNote(volatile, Boolean(replay.volatile));
+    const current = turn.systemVolatileSections ? sectionFingerprints(turn.systemVolatileSections) : undefined;
+    const sectionsRecord = !note || !current ? undefined
+      : sectionsNote === null ? { full: true, prints: current as Record<string, string | null> }
+      : { full: false, prints: sectionDelta(current, replay.sections ?? {}, Boolean(turn.mentionTurn)) };
     const textOnly = (text: string) => !options.computerUse || seesImages(turn) || !turn.images?.length ? text
       : `${text}\n\n${TEXT_ONLY_ATTACHMENT_NOTE}`;
     const userTurn = note ? { ...turn, text: withContextNote(note, turn.text) } : turn;
@@ -631,6 +668,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       text: kept,
       sent: textOnly(withContextNote(note, kept)),
       ...(note ? { volatile } : {}),
+      ...(sectionsRecord ? { sections: sectionsRecord } : {}),
       after: transcript.length ? fingerprint(transcript.at(-1)!.text) : "",
     };
     delivered.delete(turn.threadId);
@@ -749,6 +787,9 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         // ask_user, added below, keeps its place within the limit.
         const toolLimit = (options.toolLimit ?? providerToolLimit(options.driverKind)) - (questionAllowed ? 1 : 0);
         tools = await mountChatTools(options.tools === false ? undefined : turn.integrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs, toolLimit);
+        for (const { server, reason } of tools.skipped) {
+          emit({ ...base(turn.threadId, turnId), type: "runtime.notice", message: `MCP server "${server}" was skipped for this turn: ${safeText(reason)}` });
+        }
         let optionalQuestionOnly = questionAllowed && tools.definitions.length === 0;
         // The runtime's one built-in tool rides the same list: ask_user is
         // how a chat-completions engine reaches a person. An MCP server that
@@ -973,7 +1014,8 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
             }
             if (!started) emit({ ...base(turn.threadId, turnId), type: "item.started", itemType: "tool", itemId: call.id, title: call.function.name });
             const text = safeText(result.text);
-            const output = preview({ ok: result.ok, result: text });
+            // a phone's answer reaches the model, never the event log or the chat (phone_tool)
+            const output = isPhoneToolCallName(call.function.name) ? PHONE_TOOL_OUTPUT_NOT_KEPT : preview({ ok: result.ok, result: text });
             emit({
               ...base(turn.threadId, turnId), type: "item.completed", itemType: "tool", itemId: call.id, ok: result.ok, output,
               ...(result.ok ? cwToolResult(call.function.name, text) : {}),
@@ -1002,7 +1044,9 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         }
         if (abort.signal.aborted) { ok = false; stopReason = "interrupted"; }
         if (failure && (!abort.signal.aborted || cleanupFailed)) {
-          emit({ ...base(turn.threadId, turnId), type: "runtime.error", message: failure, terminal: !abort.signal.aborted });
+          // "upstream" (an OpenAI-compatible URL) names no provider, and the Cloud trial credit reads its raw line.
+          const message = options.httpErrorLabel === "upstream" ? failure : outOfCreditsMessage(options.httpErrorLabel, failure);
+          emit({ ...base(turn.threadId, turnId), type: "runtime.error", message, terminal: !abort.signal.aborted });
         }
         // Automatic continuity: a resumable terminal (the step or tool-call
         // cap) persists a handoff and raises cap.exhausted so the harness
@@ -1058,7 +1102,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         browserMcp: options.tools !== false, nativeImageInput: true, images: true } : {}),
         // Its tool loop only reaches MCP servers; nothing runs on this machine.
         withholdsHostTools: true,
-        sessionModelSwitch: "in-session", customMcp: options.tools !== false, agentsMcp: options.tools !== false, composioMcp: options.tools !== false,
+        sessionModelSwitch: "in-session", customMcp: options.tools !== false, agentsMcp: options.tools !== false,
         dataMcp: options.tools !== false,
         // The runtime owns the whole tool loop, so it can always take a
         // user message mid-turn: park it, deliver before the next completion.
@@ -1129,6 +1173,19 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       if (toolCalls.length) throw new ChatProtocolError("provider returned tool calls to a text-only helper");
       return text.trim() ? text : reasoning;
     },
+    ...(options.permissionReview ? {
+      reviewPermission: async (prompt: string, signal?: AbortSignal) => {
+        const model = options.generateModel?.() ?? options.models().default;
+        const { text, reasoning, toolCalls } = await complete(
+          [{ role: "user", content: prompt }], model, false, signal,
+          undefined, [], undefined, 400, resolveKey(),
+        );
+        if (toolCalls.length) throw new ChatProtocolError("permission review returned a tool call");
+        const answer = (text.trim() ? text : reasoning).trim();
+        if (!answer) throw new ChatProtocolError("permission review returned no text");
+        return answer;
+      },
+    } : {}),
     dispose: async () => {
       const turns = [...active.values()];
       for (const turn of turns) turn.abort.abort();

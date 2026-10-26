@@ -37,7 +37,11 @@ export interface EngineCapabilities {
  * none of the tool results, so the continuation rule needs this number. */
 const CHAT_STEP_CAP = 64;
 
-type EngineRow = Pick<EngineCapabilities, "resume" | "stepCap">;
+/** transcript: the engine sends the thread as SendTurnInput.transcript
+ * messages, so the turn text must not replay it inline a second time. */
+type EngineRow = Pick<EngineCapabilities, "resume" | "stepCap"> & { transcript?: true };
+
+const CHAT_ROW: EngineRow = { resume: false, stepCap: CHAT_STEP_CAP, transcript: true };
 
 /** Per engine, what approval-mode.ts does not say. Keys are the drivers'
  * `driverKind` values (server/drivers/builtIn.ts registers them). */
@@ -65,14 +69,20 @@ const ENGINES: Readonly<Record<string, EngineRow>> = {
   // The chat-completions family (createOpenAIChatRuntime, openai-chat.ts):
   // no native session, every turn replays the transcript, MAX_CHAT_ROUNDS
   // steps per turn.
-  "openai-compat": { resume: false, stepCap: CHAT_STEP_CAP }, // openai-compat.ts:6
-  grok: { resume: false, stepCap: CHAT_STEP_CAP }, // grok.ts:6
-  minimax: { resume: false, stepCap: CHAT_STEP_CAP }, // minimax.ts:11
-  mistral: { resume: false, stepCap: CHAT_STEP_CAP }, // mistral.ts:48
-  cerebras: { resume: false, stepCap: CHAT_STEP_CAP }, // cerebras.ts:41
-  groq: { resume: false, stepCap: CHAT_STEP_CAP }, // groq.ts:41
-  meta: { resume: false, stepCap: CHAT_STEP_CAP }, // meta.ts:54
+  "openai-compat": CHAT_ROW, // openai-compat.ts:6
+  grok: CHAT_ROW, // grok.ts:6
+  minimax: CHAT_ROW, // minimax.ts:11
+  mistral: CHAT_ROW, // mistral.ts:48
+  cerebras: CHAT_ROW, // cerebras.ts:41
+  groq: CHAT_ROW, // groq.ts:41
+  meta: CHAT_ROW, // meta.ts:54
 };
+
+/** True when the engine replays the thread itself from SendTurnInput.transcript
+ * (the chat-completions family), so the turn text must not carry it too. */
+export function replaysTranscriptNatively(driverKind: string | undefined): boolean {
+  return driverKind !== undefined && Object.hasOwn(ENGINES, driverKind) && ENGINES[driverKind]!.transcript === true;
+}
 
 /** The engines with a row, for the table test. */
 export const ENGINE_KINDS: readonly string[] = Object.keys(ENGINES);

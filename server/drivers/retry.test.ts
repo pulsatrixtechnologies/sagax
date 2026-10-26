@@ -37,6 +37,13 @@ describe("classifyError", () => {
     });
   });
 
+  it("calls Codex's failed workspace routing discovery transient, but not a refused sign-in", () => {
+    expect(classifyError({ text: "stream error: workspace routing discovery failed: error sending request" })).toEqual({ transient: true, reason: "server_error" });
+    expect(classifyError(new Error("workspace routing discovery timed out"))).toEqual({ transient: true, reason: "server_error" });
+    expect(classifyError({ exitCode: 1, stderr: "Error: workspace routing discovery failed" })).toEqual({ transient: true, reason: "server_error" });
+    expect(classifyError({ text: "workspace routing discovery unauthorized (401)" })).toEqual({ transient: false, reason: "auth" });
+  });
+
   it("calls connection failures and timeouts transient", () => {
     expect(classifyError(new Error("fetch failed"))).toMatchObject({ transient: true });
     expect(classifyError(new Error("read ECONNRESET"))).toMatchObject({ transient: true, reason: "connection_reset" });

@@ -19,9 +19,11 @@ import {
   type SpawnOptions,
 } from "node:child_process";
 import { existsSync } from "node:fs";
+import { sagaxFolder } from "../shared/human-id.ts";
 import type { Readable, Writable } from "node:stream";
 import { join, posix, win32 } from "node:path";
 import { engineStartGate } from "./engine-start-gate.ts";
+import { markOomVictim, memoryGuardSettings } from "./engine-memory-guard.ts";
 import { resolveCliSpawn, splitCliString, type ResolvedSpawn } from "./env-path.ts";
 
 export function resolveCli(cli: string, args: string[] = [], env?: NodeJS.ProcessEnv): ResolvedSpawn {
@@ -107,12 +109,41 @@ export function assertSafeCliArgv(
 // Only spawnCli establishes a private POSIX group. A plain spawned child
 // (for example inside an MCP gate) may share our own group: never signal it.
 const cliGroups = new WeakSet<ChildProcess>();
+const CHILD_OOM_SCORE_ADJ = memoryGuardSettings().childOomScoreAdj;
 const stopping = new WeakMap<ChildProcess, Promise<boolean>>();
+
+const MAX_ENDED_SESSIONS = 4_096;
+const engineSessions = { live: new Set<number>(), ended: new Set<number>() };
+
+/** POSIX session ids of the engines that run bots' turns (each leads its own
+ * session). A server opened by any process in one counts as the bot's, even
+ * after the shell that started it exits: a bot's browser may open it on a
+ * server host (server/browser/egress, port of OpenMausBot #2930). */
+export function botEngineSessions(): { live: ReadonlySet<number>; ended: ReadonlySet<number> } {
+  return engineSessions;
+}
+
+function rememberEngineSession(child: ChildProcess): void {
+  const pid = child.pid;
+  if (!pid) return;
+  engineSessions.live.add(pid);
+  child.once("exit", () => {
+    engineSessions.live.delete(pid);
+    engineSessions.ended.add(pid);
+    if (engineSessions.ended.size > MAX_ENDED_SESSIONS) engineSessions.ended.delete(engineSessions.ended.values().next().value!);
+  });
+}
+
+/** `bot`: an engine running bots' turns, whose own servers that bot's
+ * browser may open on a server host. `sagax`: everything else (logins,
+ * probes, the browser engine itself). */
+export type CliOwner = "bot" | "sagax";
 
 export function spawnCli(
   cli: string,
   args: string[],
   opts: SpawnOptions,
+  owner: CliOwner = "sagax",
 ): ChildProcessByStdio<Writable, Readable, Readable> {
   const resolved = resolveCli(cli, args);
   assertSafeCliArgv(resolved);
@@ -123,6 +154,10 @@ export function spawnCli(
     ...(process.platform === "win32" ? { windowsHide: true } : { detached: true }),
   }) as ChildProcessByStdio<Writable, Readable, Readable>; // callers always pipe all three
   if (process.platform !== "win32") cliGroups.add(child);
+  if (process.platform !== "win32" && owner === "bot") rememberEngineSession(child);
+  // An engine dies before the server when the container runs out of memory
+  // (server/engine-memory-guard.ts); its MCP proxies inherit the score.
+  markOomVictim(child.pid, CHILD_OOM_SCORE_ADJ);
 
   // A write to a dying child's stdin fails differently per platform, and one
   // of the ways is fatal. On POSIX the kill is synchronous, the stream is
@@ -139,6 +174,8 @@ export function spawnCli(
   return child;
 }
 
+const EXEC_KILL_GRACE_MS = 2_000;
+
 export function execCli(
   cli: string,
   args: string[],
@@ -153,10 +190,18 @@ export function execCli(
     return;
   }
   const run = (done: () => void = () => {}) => {
-    execFile(resolved.command, resolved.args, { ...opts, windowsHide: true, encoding: "utf8" }, (err, stdout, stderr) => {
+    let escalate: NodeJS.Timeout | undefined;
+    const child = execFile(resolved.command, resolved.args, { ...opts, windowsHide: true, encoding: "utf8" }, (err, stdout, stderr) => {
+      clearTimeout(escalate);
       done();
       cb(err, stdout, stderr);
     });
+    // Node calls back only once the child exits, and a CLI wrapper that traps SIGTERM outlives the timeout's signal.
+    // Only the child is stopped: execFile starts no process group, so a grandchild that ignores SIGTERM can outlive it.
+    if (opts.timeout) {
+      escalate = setTimeout(() => void killCliTree(child, 0), opts.timeout + EXEC_KILL_GRACE_MS);
+      escalate.unref?.();
+    }
   };
   // A known engine CLI boots a whole runtime even to print its version:
   // while the server boots, those probes share the engine start limit
@@ -198,7 +243,7 @@ type SpawnFailure = { message: string; setup: boolean };
 export function describeSpawnFailure(err: NodeJS.ErrnoException, cli: string, cwd?: string): SpawnFailure {
   if (err.code === "ENOENT") {
     if (cwd && !existsSync(cwd))
-      return { message: `This chat's working folder no longer exists: ${cwd}. Choose another folder in the bot's settings, or create it again.`, setup: false };
+      return { message: `This chat's working folder no longer exists${sagaxFolder(cwd) ? "" : `: ${cwd}`}. Choose another folder in the bot's settings, or create it again.`, setup: false };
     return { message: `\`${cli}\` isn't installed, or isn't on this app's PATH`, setup: true };
   }
   if (err.code === "EACCES" || err.code === "EPERM")
@@ -256,8 +301,12 @@ async function stopCliTree(child: ChildProcess, pid: number, timeoutMs: number):
       const deadline = Date.now() + ms;
       while (!settled()) {
         const remaining = deadline - Date.now();
-        if (remaining <= 0) return false;
-        await new Promise((resolve) => setTimeout(resolve, Math.min(25, remaining)));
+        if (remaining <= 0) {
+          // Timers run before libuv's poll phase reads SIGCHLD: a blocked loop reaches the deadline with the exit unread.
+          await new Promise((resolve) => setImmediate(resolve));
+          return settled();
+        }
+        await exitOrDelay(child, Math.min(25, remaining));
       }
       return true;
     };
@@ -308,8 +357,28 @@ async function stopCliTree(child: ChildProcess, pid: number, timeoutMs: number):
   });
 }
 
-/** Per-turn broker channel: unix socket on POSIX, named pipe on Windows
- * (Node can't listen on a filesystem socket path there — EACCES). */
+function exitOrDelay(child: ChildProcess, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      child.off("exit", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    child.once("exit", done);
+  });
+}
+
+/** True once the process itself has exited, within `ms`; members it left in its group are not counted. */
+export async function waitForExit(child: ChildProcess, ms: number): Promise<boolean> {
+  const exited = () => child.exitCode !== null || child.signalCode !== null;
+  const deadline = Date.now() + ms;
+  while (!exited() && Date.now() < deadline) await exitOrDelay(child, Math.min(250, deadline - Date.now()));
+  if (!exited()) await new Promise((resolve) => setImmediate(resolve));
+  return exited();
+}
+
+/** Unix socket on POSIX, named pipe on Windows (Node cannot listen on a filesystem socket path there: EACCES). */
 export function brokerSocketPath(dataDir: string, tag: string): string {
   return process.platform === "win32"
     // Named pipes share a global namespace; DATA_DIR cannot isolate two

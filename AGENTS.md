@@ -15,6 +15,427 @@ repository. Do not add an upstream remote with push access.
 
 More specific `AGENTS.md` files override this note within their directories.
 
+## Bots' browser keeps its own Chrome profile: port of OpenMausBot #3141 (2026-10-20)
+
+A saved session (a bot's own browser, a shared profile) runs Chrome on
+`<data dir>/agent-browser-profiles/<sha256(session)>` (`AGENT_BROWSER_PROFILE`,
+`server/browser-engine.ts` `browserProfileDirectory`), so localStorage and
+IndexedDB sign-ins survive restart, idle close, app restart and a crash; the
+restore file still carries cookies. Never for the temporary browser,
+confidential threads, meetings, or My Chrome / a CDP attach (no profile, no
+gate bypass; My Chrome rules of #838/#859 unchanged). The disk cache is capped
+at 64 MB. `releaseBrowserProfile` (`server/browser-processes.ts`) stops a Chrome
+orphaned on the profile and drops a stale SingletonLock before a launch; the
+orphan sweep finds Chromes on kept profiles but only ever removes temporary
+ones. Deleting a bot or profile deletes its kept profile
+(`clearBrowserSessionState`); workspace backups leave the folder out. Windows:
+profile kept, no lock handling. #3182 (identity-check retry) does not apply:
+Sagax has no Chrome identity launcher.
+
+## Tailcat remote sessions
+
+A connected Tailcat session is a first-class card (`remoteSession` on the message) and a Sessions à distance section in the bot panel. The address and the client key stay in the Flow session folder on this host. Never accept them as tool arguments, never put them in an API answer, a log line, or visible text. The support code is the label. The 12-hex folder id stays off the screen. Screenshot in the Computer tab is read-only. Shell reuses the in-chat terminal (`provider: tailcat`). Sagax ships tailcat 0.7.0 beside the app (`dist-native/tailcat`, then the app resources) and in the server image at `/usr/local/bin/tailcat`. Do not tell a bot to install it onto the system PATH. The panel section always renders (empty state when none). A session the bot opened with `remote_support_open` registers itself through `PerspicaxMcp.relay` -> `server/remote-session-register.ts` when the status says connected; its tunnel is in `<data dir>/remote-support/sessions/<CODE>/`, and resolves only for the person and bot named in that folder's `open.json` (the speaker whose Perspicax credentials opened it; never the conversation owner, never the 12-hex id alone). Prendre le contrôle opens the Computer tab in every mode (`startRemoteControl`, `visiblePanelTabs`); the screen stays read-only until live control lands over `RemoteSessionScreen`. Bot guidance (standard rights, three calls, script in the first reply, no jpg, no Preview) lives in the tool descriptions and the `remote-support` guide. See `docs/remote-sessions.md`.
+
+## Never a UUID/GUID on screen (2026-10-19)
+
+JC: "N'affiche JAMAIS des GUID, on ne comprend rien." Jamais d'UUID/GUID
+visible ; libellé humain, identifiant seulement en info-bulle ou action
+Copier. On desktop, web, iOS and Android:
+
+- Show a name: the bot's, the person's, the engine's, the environment or
+  computer ("Cloud computer", "Local VM", the Mac's name), the repository
+  or folder. When the name is gone, show a plain word ("Deleted bot",
+  "Unknown person", "Removed engine", "Account 2"), never the id. Never cut
+  an id short as a label (`id.slice(0, 8)` reads no better).
+- The id may stay in a `title` tooltip or a Copy action for support, never
+  in the text itself.
+- Helpers: `shared/human-id.ts` (`isOpaqueId`, `containsUuid`,
+  `readableOr`, `sagaxFolder`, `quotedIdOr` for server text a person may
+  read), `src/lib/human-label.ts` (`personLabel`, `botLabel`,
+  `engineLabel`), `src/lib/short-path.ts` (`shortPath`/`humanPath`: the
+  folders Sagax names after ids, task-workspaces/<bot>/<thread>,
+  parallel-worktrees/<bot>/<thread> and workspaces/<bot>, read as "This
+  conversation's folder", "Parallel task's folder", "The bot's own
+  folder"). iOS: `HumanID` (`ios/App/HumanID.swift`).
+- Text the server returns to a bot that holds an id it needs (a cloud
+  agent's `cloud_agent_id`, an `env_id`) tells the bot to name the thing
+  to the person, never the id.
+- Guard: `src/lib/no-visible-ids.test.ts` renders key cards and labels
+  with UUID fixtures and fails when a UUID reaches visible text. Add a
+  case there for any new screen that names records.
+
+## Local access hardened: port of OpenMausBot #2930 (2026-10-19)
+
+JC: PORT COMPLET of upstream a5f9183bc. Three walls, each with tests:
+
+- **Browsers never get loopback trust** (`server/request-auth.ts`
+  `fromBrowser`): a session-less loopback request carrying `Sec-Fetch-Site`,
+  `Sec-Fetch-Dest`, or a WebSocket `Origin` gets 401 `BROWSER_SIGN_IN` unless
+  it carries the desktop owner header (`x-openmausbot-desktop-owner`, added by
+  the app window on http: and ws:). Same rule for the owner view of a
+  published page (`loopbackBrowserRefused`). Programs (CLI, curl, MCP proxies,
+  the companion relay) are unchanged. `openmausbot serve`/`pair` print a
+  `this computer:` sign-in link (`server/cli-pairing.ts`). Dev only:
+  `SAGAX_DEV_TRUST_LOCAL_BROWSER=1` (set by `pnpm dev:server` via
+  `server/dev-server.ts` and by `scripts/control-omb.ts` fixtures; ignored by
+  builds, the desktop app and service trust). Electron: no session but the
+  default one reaches the server (`electron/server-session.mjs`).
+- **Companion control token**: every route of `127.0.0.1:8811` but the page
+  needs `x-openmausbot-control-token`, minted per sidecar launch by
+  `electron/companion.mjs` (private port) or printed by a standalone sidecar
+  (`/#token=…`).
+- **Egress gate for bots' browsers** (`server/browser/egress/`, adapted from
+  T3 Code, MIT, NOTICE): one SOCKS5 gate per browser session; never Sagax's
+  own ports, metadata (Azure IMDS) or link-local; on a server (organization,
+  AKS sandbox) never the private network unless `browserEngine.egress.allow`.
+  Meeting browsers keep WebRTC UDP. `agent_browser_read` with `url` refused.
+  Refusals are appended to the bot's next browser result.
+- Tests: `server/request-auth.e2e.test.ts` (real headless Chrome page cannot
+  create a bot), `server/browser/egress/hostile-pages.e2e.test.ts`,
+  `companion/test/control.test.ts`. Docs: `docs/self-hosting.md#a-browser-signs-in`,
+  `docs/browser-packaging.md#what-a-bots-browser-can-reach`.
+
+## Widgets check themselves before they show (2026-10-19)
+
+JC: "Le bot doit être capable de se contre-valider et de l'ajuster
+dynamiquement quand il le construit." A bot passes the HTML of a ```widget
+fence to `check_widget` (`server/drivers/agents-widget-tools.ts`) before it
+shows it; the system prompt says so (`WIDGET_SELF_CHECK_PROMPT`).
+
+- `server/widget-check.ts` renders the chat's own document
+  (`buildWidgetDocument`, iframe sandboxed to allow-scripts) at 720 and 360
+  px, light and dark, and `server/widget-check-audit.ts` reports: JS errors,
+  horizontal scroll, overflow, clipped, overlapping or crushed text, hidden or
+  covered controls, contrast below 3:1, targets under 24 px with a neighbour
+  (or under 12 px). The bot gets the list plus a small JPEG as the tool result.
+- Three checks per turn (thread + generation); a fourth is refused without a
+  render, and the same HTML again costs nothing. After the third failure the
+  bot shows its best version in a ```widget-imperfect fence; the chat draws it
+  with a discreet "Affichage imparfait".
+- One warm headless Chrome over a CDP pipe (no port, no window), closed after
+  3 idle minutes, never started while `memoryWatch` is high or critical (#804),
+  OOM score 900, 20 s deadline per check, at most 4 checks waiting. No
+  network at all (closed proxy, loopback included, plus Fetch interception):
+  a widget that navigates its frame away is reported, never audited. Chrome: `SAGAX_WIDGET_CHECK_CHROME` (`off` disables), then
+  `AGENT_BROWSER_EXECUTABLE_PATH`, the desktop bundle, a Playwright headless
+  shell. Never the person's browser. No Chrome: the tool says "unavailable".
+- Tests: `server/widget-check.test.ts` (fixtures in
+  `server/testing/widget-check-fixtures/`, broken ones must fail, healthy ones
+  must pass with no defect).
+
+## Every setting is an action: sagax_settings (2026-10-19)
+
+JC: "Tout doit être modifiable via les bots. Absolument tout. [...] Arrête
+la paranoïa." A bot reads and changes any setting for the person speaking
+to it with `sagax_settings` (agents catalog, `server/drivers/agents-settings-tools.ts`,
+permission `settings:change`, member scope `own-setup`, deferred on Claude):
+`list` (by family) gives the keys, `get` reads, `set` changes.
+
+- Registry: `shared/settings-actions.ts`, one entry per setting (bot,
+  thread, routine, group, section, rules, account, appearance,
+  notifications, models, connections, credentials, server, organization,
+  computer): the route the screen calls and how to read it back. Adding a
+  setting to the app: add its entry, run `pnpm gen:settings-doc` (writes
+  `docs/settings-actions.md`, the inventory; the test fails when stale)
+  and `pnpm gen:self-knowledge`.
+- Rights: the route is replayed by the act engine (`server/bot-act.ts`
+  `handlePlanned`) with the person's own session; a route they cannot call
+  is refused before any card ("needs rights they do not have"), and the
+  route's own checks answer the rest. Turns with no person (routine,
+  webhook, guest) are refused as for `act`.
+- Policy (`shared/settings-actions-policy.ts`): a class the person protects
+  with a security key: card; secret, others, bulk, delete, org: card at
+  every level, Full included; not the owner's own work (the speaker owns
+  the speaking bot and the target): card; Ask or Edits: card; an approval
+  level or owner mode raised: runs up to the speaking bot's own level,
+  never Full or Custom; else it runs. Every applied change writes
+  `setting.change` (category `setting`) to the admin journal.
+- A planned replay carries `x-sagax-act-confirmed` (one-shot, 60 s, method
+  and path, minted only by this server): `ruleManager` then reads the bot
+  act copy as the person, and the approval-mode and settings step-up gates
+  accept the classes the card's key already covered (`actConfirmedCovers`;
+  a policy run covers none). `botActStepUpContent` adds the planned
+  classes to the card's own.
+- Device preferences (skin, notifications...) go to the person's open app
+  as the `setPreference` screen command (`DEVICE_PREFERENCE_KEYS` only;
+  `applyBotPreference`); an organization server saves them per person as
+  a change by hand.
+- `act` still refuses approval fields, rules and card answers; its error
+  points to `sagax_settings`. Security keys, vault export and import, and
+  the desktop-only Full of a personal server stay the person's (listed in
+  the doc).
+- Tests: `shared/settings-actions*.test.ts`, `server/settings-actions.test.ts`,
+  `server/settings-actions.e2e.test.ts`.
+
+## Always allow on every card (2026-10-19)
+
+JC: "On doit avoir des cartes, mais avoir la possibilité de faire TOUJOURS
+le Toujours permettre." Every approval card offers Always allow to the
+person who answers it, with the exact scope written on the card
+(`approval.always.scopeLine`): this bot, this tool or kind of action, this
+target. The rule is an owner rule (`server/owner-approval.ts`, store
+`owner-approvals.json`), the person's own, listed and revocable in
+Settings > Security (`MyApprovalRules`, also `rules.owner` and
+`rules.ownerDelete` in sagax_settings). Rules:
+
+- Scope: an exact shell line (`command`, argv joined), an exact path
+  (`path`, `file_path`...), compared case included; a native shell line is
+  bound to its folder (a folder Sagax made for the bot by its kind,
+  `sagax:conversation`). A value too long to keep offers no rule, never a
+  wider one. Non-engine cards match the whole scope key for key
+  (`ruleCoversExactScope`).
+- Situations (`OwnerRule.from`): a held card (safety hold, sandbox
+  widening) and a turn that is not the person's own words (routine,
+  webhook, another bot, their real computer) are answered only by a rule
+  saved on that same kind of card. An admin's card of a member's bot
+  (`from: admin`) is the answering admin's (or host.shell holder's, or the
+  owner holding host.commands for a holder's card) own rule for that bot,
+  Always allow only, checked again at each use (`strictCardRule`).
+- Never: someone else's environment (`crossPerson`), a guest's turn, a
+  question, a meeting's consent (legal consent stays per meeting).
+- A security key the person chose for one of the call's classes is still
+  asked each time; the rule never answers it (step-up wins). Saving the
+  rule itself is always-grant.
+- Families: engine cards (all engines, the broker decides), act and
+  sagax_settings cards (`server/bot-act.ts`: setting + target, exact value
+  digest when more than a simple change), the ConnectWise widget
+  (`cw_widget:cw_psa__write`, apart from the bot's own calls), native
+  safety holds (exact fingerprint), "Send on your behalf?" (one call, its
+  targets), routine, profile and model proposals, skills (exact content),
+  terminal offers (destination). Always deny only on engine tool cards
+  (`shared/approval-rule-card.ts`).
+- Bulk (Approvals screen): `rule: "allow"` keeps each card's own rule;
+  a card needing a key or with no rule is skipped.
+- Every automatic answer writes a decision row `source: owner-rule` (or
+  `admin-rule`) with the rule id.
+- Not covered yet: email draft send, team memory, confidential memory,
+  team setup cards.
+- Tests: `server/always-allow.e2e.test.ts` (engine card, key, bulk, act,
+  proposal, Codex and ACP engines), `server/member-own-destinations.e2e.test.ts`
+  (real computer, admin card), `server/cw-widgets.e2e.test.ts`,
+  `server/owner-approval.test.ts`.
+
+## Advanced approvals: one app, 1Password per request, card photos (2026-10-21, parité R10)
+
+- **One app of this computer** (`shared/computer-app.ts`,
+  `server/computer-app.ts`, `server/owner-approval.ts` `APP_RULE_TOOL`): a
+  screen action of the host Mac ("this computer", server mount `computer`,
+  a desktop or a solo server on macOS, the person's own turn, the same bot
+  and live turn generation, never an admin's, a held or an origin card)
+  carries the app the SERVER read: `lsof -d txt` (the kernel's executable),
+  the outermost `.app` under /Applications, /System/Applications, the
+  Safari cryptex, CoreServices/Applications or ~/Applications, then the
+  RUNNING process's code signature (`codesign --verify <pid>`, Identifier
+  and team, cached 3 s; Apple's own apps are team `apple`). A gate that
+  throws publishes the event as it was (the card asks). The read is asynchronous: the bus holds that one
+  permission event (and the thread's later ones behind it) while it runs
+  (`EventBus.setPublishGate`, at most 3 s), and drops any `screenApp` an
+  adapter wrote. "Toujours permettre" keeps `{ app, bundle, team }` under
+  `computer_app`; a rule missing one of them matches nothing.
+- An app rule covers only input that lands in that app: background
+  delivery (never `delivery_mode: foreground`), no hotkey, no key with a
+  modifier other than shift, no argument outside the reviewed list (so
+  never `screenshot_out_file` or `debug_image_out`), a `window_id` only
+  when CoreGraphics says it is the pid's own window, and typing only into
+  the focused element once Accessibility says it is not a password field
+  (`FOCUS_SCRIPT`: attribute names as `$('AXRole')`, never bare JS strings;
+  with a `window_id`, that window must be the pid's frontmost), never into
+  an element picked by index or position, never a key combo written in
+  `key` ("cmd+q"). `launch_app` is
+  never covered. Unsigned apps, Sagax itself and the denied bundle ids and
+  names (`NO_APP_RULE_BUNDLES`, `NO_APP_RULE`: shells, editors, launchers
+  and automation, Finder and system tools, remote desktops, VMs and
+  containers, Tailscale, password managers, AI agents, Mail, Messages,
+  Slack, Teams) never get one. The card says "<bot> peut voir <app>, y
+  cliquer et y saisir du texte sur cet ordinateur". The desktop bridge of
+  an organization server, a Local VM and a cloud computer read no app.
+- **1Password per request**: the sign-in card (`VaultRequestCard`, iOS
+  `VaultLoginCardView`) lists the person's 1Password items of the card's
+  site (`POST /api/bots/:id/vault-cards/:msg/onepassword`, names, vault and
+  sites only, listing kept 30 s per person). A pick is checked again
+  against 1Password's own listing and saved once as a reference
+  (`findOnePassword`). A 1Password item is allowed ONCE only (card and
+  Settings refuse Always, `onepassword_once_only`; an Always saved before
+  is ignored by `activeGrants`), and once is one
+  sign-in: the grant ends `VAULT_SINGLE_USE_MS` (60 s) after its first
+  fill. The bot is never told the item's title ("a login from their
+  1Password"), in the note, the fill result or a refusal. The value is read from 1Password only at fill time; the
+  conversation shows "En attente de 1Password" (`ONE_PASSWORD_WAITING`).
+  iOS preselects only an item of the exact host. Never on an organization
+  server. Settings > Credentials guides the setup (CLI, integration, check
+  again).
+- **Card photos** (iOS, Settings > Vault > New card): one or two photos,
+  read on the phone (Vision); `CardScanReading` picks a Luhn-valid number
+  of ASCII digits, the latest expiry and the name. Nothing is uploaded,
+  kept or logged; the security code is typed. Desktop has no on-device
+  text reader yet.
+- Not done: a device tool on the phone (row 81): Sagax has no phone tools.
+- Tests: `shared/computer-app.test.ts`, `server/computer-app.test.ts`,
+  `server/harness/bus.test.ts` (publish gate), `server/owner-approval.test.ts`
+  (app rules), `server/routes/credential-vault.test.ts` (1Password per
+  request, once only, single use), `ios/Tests/CompanionCoreTests/VaultLoginCardTests.swift`.
+
+## The Primary Bot answers the person's cards (2026-10-20)
+
+JC: "le bot principal doit pouvoir absolument tout faire" (Grok Bot
+parity). A person's Primary Bot answers, cancels and turns off the
+approval cards that wait on that person, when the person asks for it:
+
+- `sagax_approvals` (agents catalog, `server/drivers/agents-approvals-tools.ts`,
+  Primary Bot only, `CHIEF_ONLY_TOOL_NAMES`; route `/api/internal/approvals`,
+  `server/primary-approvals.ts`): `list` (the person's Approvals screen,
+  `inboxPending`, kept by `primaryAnswerable`; a short handle `c` + 7 hex,
+  never an id), `answer` (allow, always_allow, always_allow_this, deny,
+  always_deny, answer for a question), `cancel` (the card's turn).
+- The answer is the click: POST `/api/threads/:id/respond` (or the custom
+  rule's POST `/api/custom-rules` fromCard, or the interrupt) replayed by
+  `performBotActRouteOutsideConfidential` with the person's session and a
+  one-shot act confirmation carrying `primary` (bot, message). Every check
+  of the click applies (whose card, an admin's card for an admin only, a
+  security key). No card kind is excluded (JC: payments and sends
+  included). A card of the person's own confidential thread too (JC
+  2026-10-20): its replay carries a one-shot owner continuation bound to
+  that exact method and path (`mintOwnerContinuation` with `route`), and
+  `list` and the answer give the bot "<bot>'s card in a confidential
+  conversation", never its title, command or thread. A card that needs the
+  person's security key stays theirs (the key is physical).
+- Gate (`primaryTurnGate`): the speaking bot is `chiefOfStaff`, owned by
+  the turn's proven person, and the turn is that person's own message
+  (`ownEnvironmentOrigin`: never a routine, webhook, another bot's hop, a
+  guest). Proof (`shared/primary-request.ts`): `quote`, the person's words,
+  must be in that message and carry a word of the decision (allow, always,
+  deny, cancel; a refusal in or just before the quote is refused; a bare
+  "oui"/"ok"/"go" counts in a message of any length for a card,
+  `anyLength`, and in a reply of eight words or less for a setting). A
+  card is bound to the yes: the message names it (its bot, only when no
+  other card is that bot's, the bot that asked, or the handle,
+  `messageNamesCard`), or it is the latest card the person could see when
+  they wrote (`latestSeen`, JC 2026-10-20: "oui" answers the latest, the
+  answer says which). Security review 2026-10-20: an unnamed yes answers
+  one card per message (no cascade); a long message's bare yes counts only
+  when the message speaks of a card (`SPEAKS_OF_A_CARD` or a card's bot);
+  a card raised in the 3 s before the message makes an unnamed yes ask
+  which (`JUST_RAISED_MS`); a level's value and bot are in the quote itself,
+  "mets-toi" or its name for the speaking bot (`askedChange`); a question's answer must be
+  the person's own words (`personWrote`); a card raised after the message
+  is never answered. This is the only defense against injection: keep it.
+- Trace: the card's `answeredBy` gets `via: "primary-bot"` and `bot`
+  ("· via Cryptic", `approval.status.viaBot`); the admin journal writes
+  `approval.answer` with `via: primary-bot`, the bot and the message id.
+- Cards off: `sagax_settings` takes the same `quote`; for the keys of
+  `PERSON_ASKED_KEYS` only (approval levels, owner mode, Always allow,
+  rules), with the level named, the bot named when it is not the
+  speaking one, a new rule's words (three or more) or command in the message, its
+  behavior said, "every bot" said for a rule of every bot, and a rule
+  changed or removed named by two of its words (`askedChange`), the policy (`personAsked`) runs approval levels (`bot.approvalMode`, and
+  `thread.approvalMode` for a conversation that keeps its own level),
+  Always allow rules and their removal at once, at any level of the
+  speaking bot. A key, a secret, another person, a bulk change, the
+  organization and the desktop-only Full of a personal server keep theirs.
+  On an organization server Full runs at once too (JC 2026-10-20), through
+  the route's own rules (the organization allows Full, the person owns the
+  bot and holds `bots.fullAccess`). The settings replay carries `primary`
+  (`PlannedAct.primary`), so a level also changes while that bot works
+  (`primaryAskedReplay`: "mets-toi en Full"); the next turn starts on it.
+- Tests: `shared/primary-request.test.ts`, `server/primary-approvals.test.ts`,
+  `shared/settings-actions-policy.test.ts`, `server/primary-approvals.e2e.test.ts`.
+
+## The Primary Bot changes the person's bots at once (2026-10-20)
+
+JC: "le bot principal fait tout". Asked by the person in their message
+(same `quote` proof), the Primary Bot changes any of the person's bots or
+routines at once, no card, several bots in one order (one call per bot):
+
+- `sagax_settings`: beyond `PERSON_ASKED_KEYS`, the keys of `KEY_WORDS`
+  (`askedBotChange`, `server/settings-actions.ts`): the quote names each
+  bot (or "toi-même"/its name, never a bare "you"), and each key needs its
+  own words (the engine or model, the effort, a name or title in the
+  person's words, the team, "persona", "notif", "routine", "archive",
+  "supprime"); a refusal in the quote or a question/refusal right after it
+  is refused. Every other key (working folder, tools, grants, sharing,
+  runs as) keeps its card. Security review 2026-10-20: keep these checks.
+- `propose_model`, `propose_profile`, `propose_routine`,
+  `propose_routine_action` take `quote`: the endpoint proves it
+  (`primaryAskedProposal`, `server/index.ts`) and submits with the grant
+  `primary-bot` (`DirectApply`, passed down as `primaryAsked`, never a
+  shared flag), journaled `setting.change` `via: primary-bot` with the
+  quote; a refused quote writes `setting.refused`. A new working folder
+  keeps its card. `propose_bot_deletion` with `quote` and the new
+  `archive_bot` go through `sagax_settings` (`bot.delete`, `bot.hidden`).
+- A Primary Bot targets every bot of its person (`chiefPeerTargetRule`,
+  routine `for_bot_id`): managed teams no longer refuse.
+- Scope (prod 2026-10-20, 0.6.4, Melonie): a Primary Bot SEES and reaches
+  every bot its person owns (on an organization server also the ones the
+  person may manage), whatever the team: `canAccessBot` / `primaryCovers`
+  (`server/peer-roster.ts`, cover set by index.ts `setPrimaryCover`) feed
+  `canReachPeer` (list_bots, roster), `list_team_setup`, team setup
+  (`covers`), delegations and every "different section" refusal.
+  `managedSections` only widens coordination of other teams now. An
+  archived temporary agent (`archivedAgent`) is in no list.
+- Archive is idempotent (`temporaryAgentSetting`, index.ts, before
+  `settingsActions`): archiving an archived bot says "already archived";
+  a temporary agent (create_agent, never in `GET /api/bots`) is archived
+  with its own mark, read back by `get bot.hidden`, never restored.
+- `bot.primary` changes at once on the person's words to the current
+  Primary Bot ("fais de Melonie mon bot principal").
+- A new default model (`withDefaultModel`, store.ts) also moves a thread
+  whose own model was only a copy of the old default; a person's different
+  pick stays. Routine threads and the main thread follow the bot. Test:
+  `server/primary-scope.e2e.test.ts`, `server/thread-model.test.ts`.
+- A waiting proposal never blocks: past eight open cards the oldest is
+  replaced (`proposalPersistence`), nothing applied, journaled; a card under
+  a safety hold (`safetyIsArmed`) is never replaced.
+- Without the person's request (a tool, a page, a teammate) the quote fails
+  and the proposal stays a card. Test: `server/primary-applies.e2e.test.ts`.
+
+## Bots know Sagax and Perspicax: sagax_help (2026-10-19)
+
+JC: the bots know everything Sagax and Perspicax can do, kept up to date,
+without a bigger system prompt. A bot calls `sagax_help` (agents catalog,
+`server/drivers/agents-help-tools.ts`, read-only, permission `help:read`)
+and gets a few short sections: what, where in the app (English and French
+labels), who may do it, limits. The system prompt only says to call it
+(last sentence of `VERIFY_FIRST_PROMPT`).
+
+- The base is `server/self-knowledge/knowledge.generated.json`, written by
+  `pnpm gen:self-knowledge` (`scripts/self-knowledge/generate.ts`) from the
+  code: the agents tool catalog and its conditions, `MCP_PERMISSIONS`,
+  member scope and host-level tools, Settings pages and cards with their
+  locale labels, the bot editor's pages, the account menu, `engines.lock.json`,
+  the server's routes, the last 12 release notes, `apps/docs/content`,
+  `docs/` and this file. `pnpm build:server` regenerates it before every
+  build, and `scripts/bundle-server.mjs` copies it beside the bundle; the
+  server reads it on the first question only (`server/self-knowledge.ts`).
+- Perspicax's part comes from `server/self-knowledge/perspicax.snapshot.json`
+  (console menu and Settings window: labels, addresses, roles; nothing else,
+  since Perspicax is private and this repository public), written by
+  `scripts/self-knowledge/perspicax-snapshot.ts --repo <Perspicax checkout>`
+  from its latest release tag: rerun it after a Perspicax release. How-tos
+  about the console go in the guides. Live, a bot on an organization server
+  reads its catalog with `api_list`.
+- `scripts/self-knowledge/guides.ts` holds the only hand-written part: short
+  how-tos, each with references (`tool:`, `setting:`, `bot-setting:`,
+  `menu:`, `px:`, `file:`) that the generator checks; a guide naming
+  something gone fails the build. A customer named in a doc's example tag
+  is scrubbed, and the generator refuses to write a base holding a
+  secret, a real email address or such a tag (`auditKnowledgeText`).
+- AGENTS.md is indexed as maintainers' notes (kind `notes`), weighed below
+  the user docs; infrastructure docs are left out (`DOCS_LEFT_OUT`).
+- `scripts/self-knowledge/knowledge.test.ts` fails when the tools,
+  permissions, Settings, menus, engines or guides changed without
+  regenerating. `server/self-knowledge.test.ts` holds the 20 bench questions
+  (`server/self-knowledge/bench-questions.json`). Adding a tool or a
+  Settings card: rerun `pnpm gen:self-knowledge` and commit the JSON.
+
+## Side cards on the chat's right edge (2026-10-19)
+
+The dev context pods (Environment, Context, Connectors, Changes) and the
+"This run" checklist above the composer are one column: same width, same
+right edge, same card. Both draw with `src/lib/side-card.ts` (`SIDE_CARD`,
+`SIDE_CARD_HEADER`, `SIDE_CARD_ICON_BUTTON`) and take their width from
+`railGeometry` (`src/components/dev-pods/DevPods.tsx`); the run card sits
+in `RailAligned`. No hard-coded width or radius on either side.
+
 ## Tests
 
 `pnpm test` runs every vitest file in one serial process (about 45 minutes),
@@ -35,6 +456,49 @@ boots its own server and drives fake engines through real turns; keep that
 isolation rather than sharing a server between tests. Suites pick free ports
 with `server/testing/ports.ts` and each vitest process gets its own Local VM
 namespace, so shards do not collide.
+
+## Bot quality: approvals and tools where the bot works (2026-10-19)
+
+JC's GO on points 1 and 2 of the bot quality diagnostic. Rules:
+
+- Claude's Approve for me never launches `--permission-mode auto`: its
+  classifier refused external writes in silence. It is `acceptEdits` plus
+  `CLAUDE_AUTO_ALLOWED_TOOLS` (`server/drivers/claude.ts`: web search, task
+  list, ToolSearch, Task, `pwd`; no git, Skill, ls or wc rule); every other
+  call reaches the broker and is a real card (`autoVerdict` decides, as
+  before). Tests read the level with `server/testing/claude-level.ts`.
+- Owner setup (2026-10-19, `server/owner-autonomy.ts`): at Approve for me
+  or Full access, the owner mode `approval` reads as `auto` for the owner's
+  own work (`ownerLineageOrigin`: the owner's words signed in, their
+  scheduled or manual routine, a hop from their own bot speaking for them;
+  never the operator, a webhook, another person or a routine hop):
+  destructive calls, ask rules, security keys and holds keep their card.
+  Perspicax reads on Sagax's own `perspicax_*` mount (`perspicaxSelfAnswer`)
+  run unasked for the owner's own work at Auto/Edits/Full; leases (`claim`,
+  `claim_renew`, `claim_release`) never ask; the owner's deny and ask rules
+  come first. A lineage hop runs in the owner's cloud computer unasked only
+  when it reaches no credential (`lineageEnvironmentCall`); the Mac and the
+  Local VM keep the direct-turn rule. The ordinary-bot roster shows the
+  description of the owner's own teammates; a person's AI client
+  conversation never reuses a bot-opened thread and carries `aiClientPrompt`.
+- A parked question (NEEDS INPUT) waits: reminder after 30 min then daily
+  (`inputRemindMs`, `TurnRunner.remind`), expiry after 7 days, never the
+  old 30 min `failed`. The card (`WireMessage.inputRequest`,
+  `src/components/InputRequestCard.tsx`) holds the whole question and
+  answers in place; it goes to the requester's conversation and, when that
+  is bot-to-bot, to the root conversation too.
+- `workspace_read` reads the bot's own `skills/.revisions` and
+  `.claude-plugin` (`shared/readable-hidden.ts`) and its installed plugins as
+  `plugins/<name>/...`; every other hidden name stays refused, nothing hidden
+  is writable. The member-bot file rule (`memberBotAdminApproval`) admits the
+  same two folders for reads only.
+- The bot's enabled plugins are copied into its owner's own cloud computer
+  (`server/sandbox-plugins.ts`, `/workspace/sagax-plugins/<plugin>`), once
+  per change, never into another person's environment. GitHub there stays
+  the environment owner's own connection (`syncGithubForTurn`), never an
+  organization or another person's token.
+- `RUN_YOURSELF_PROMPT` sits above every persona: run commands yourself,
+  never ask the person to run or paste, approvals through the card.
 
 ## Workspace: always Auto, the bot chooses (2026-10-18)
 
@@ -108,6 +572,51 @@ lui-même." On every server (solo and organization):
 - Tests: `server/surface.test.ts`, `server/surface-pins.e2e.test.ts`,
   `server/host-lazy-claim.e2e.test.ts`, `server/group-local-vm.e2e.test.ts`,
   `server/place-view.e2e.test.ts`, `server/desktop-bridge.e2e.test.ts`.
+
+## Routine runs work in the background (2026-10-22)
+
+JC: "when routine runs you don't need to show something within the chat or
+the sidebar... simply let it run in the background, just letting know by
+'Handling it' is sufficient. If the routine explicitly says to stay silent
+you don't tell me anything in the chat."
+
+- A run always executes in its own hidden task (`routineRunId`), never in
+  the person's conversation: no `joinConversation`, the old
+  `features.routinesInConversation` switch is ignored and gone from Settings.
+  While queued or running nothing reaches the chat or the sidebar; the bot's
+  status (working dot, "Handling it") is the only live signal.
+- `server/routine-report.ts`: the contract (`ROUTINE_REPORT_CONTRACT`, in
+  `ROUTINE_EXECUTION_PROMPT`) tells the bot to end with `NOTHING_TO_REPORT`
+  when nothing needs the person and never to restate the instructions.
+  `routineReportOutcome` reads the final message (the marker, else a short
+  no-op report, longer when the routine asks for silence, never one with a
+  question); a quiet completed run gets `RoutineRun.quiet` and its note stays
+  in `output` without the marker.
+- `syncRoutineRunToSource` (server/index.ts) posts ONE `routine.run` message
+  per run only when `routineRunReportable`: a report (completed, not quiet),
+  a question or approval card waiting in the run's task (re-synced from
+  `tellThePerson`), a team goal needing input, or a failure. Missed,
+  cancelled, deferred, pre-check `nothing_to_report` and quiet runs post
+  nothing, ring nothing (`done` notification skipped) and mark nothing unread.
+  A message already posted (it waited on the person) is patched in place.
+- The client draws it as the bot's report (`ChatMarkdown`, inert) with a
+  small "Routine: <name> · View run" line (`src/components/RoutineRunCard.tsx`).
+  Automations > Logs lists a quiet run as "Nothing to report"
+  (`routineRunMatchesStatus`). iOS gets the same: nothing is posted or pushed.
+- JC, same day: "I am not in thread mode, everything should be unified in a
+  single chat page." A run for a person (`runAs`, organization server)
+  reports into their own conversation with the bot (`personMainThread`, else
+  `ensureViewerThread`), never a new "<name> · Results" thread. Such threads,
+  old ones included (`markRoutineResultsThreads` at start), carry
+  `routineResults: true`: still listed with threads shown, but never a
+  stream segment, a main thread, a row under the bot, a dot or a preview
+  (`isStreamSegment`, `mainThread`, `taskHiddenFromSidebar`,
+  `taskCountsAsBotUnread`, iOS `BotTask.isHiddenFromPerson`).
+- No "Showing saved messages" banner over an archived conversation
+  (`SavedMessagesNotice` removed); offline keeps `ChatStaleBanner`.
+- Tests: `server/routine-report.test.ts`, `server/routines.test.ts` ("background
+  runs"), `server/routine-silent-runs.e2e.test.ts`, `src/lib/routine-quiet.test.ts`,
+  `src/components/RoutineRunCard.test.ts`.
 
 ## Routines and webhooks: bearer token on every webhook (2026-10-08)
 
@@ -256,6 +765,132 @@ notifications), Sentry, PagerDuty, Linear. Rules, covered by
   connector account. The imported copy is off and its import warnings say
   what it still needs (a provided secret, a password or link).
 
+## Bot email address: Perspicax relay (2026-10-21)
+
+JC decision 2026-10-21 (B21, iOS CO5): option 1 of the #943 design note.
+Each bot of an organization server has its own address,
+`<name>@<inbound domain>`, given and received by Perspicax (the domain, the
+inbound provider, MX and the safety rules live there). Mail only wakes a
+routine. Wire contract v2 of 2026-10-21 (Perspicax <-> Sagax, Perspicax
+#419). Rules, none optional,
+covered by `server/bot-inbound-mail.test.ts`,
+`server/bot-mail-addresses.test.ts`, `server/routes/bot-inbound-mail.test.ts`,
+`server/oidc-rp.test.ts`, `server/org-member-api.e2e.test.ts` (M10),
+`src/components/bot-settings/BotEmailAddress.test.ts`,
+`src/components/TypedTriggers.test.ts` and iOS `BotInboundMailTests`:
+
+- Delivery: `POST /api/org/inbound-mail` (`server/bot-inbound-mail.ts`),
+  answered before the session gate and loopback trust, next to the member
+  API. The only credential is a console assertion (typ
+  `pulsabot-console+jwt`, at most 120 s, single-use `jti`, `aud` this
+  server's public origin, `server_id` when linked) whose `act.sub` is
+  `perspicax-mail` and whose `body_sha256` claim is the lowercase hex
+  SHA-256 of the exact body bytes (compared in constant time with the body
+  read; missing or different: 401). That actor is accepted HERE ONLY: the admin API
+  (console only) and the member API (`ORG_MEMBER_ASSERTION_ACTORS`) refuse
+  it. Order: 401 `unauthorized` (assertion, replay, body digest, solo
+  server), 400 `invalid` (body not the contract's, no 64-hex `dedupeKey`,
+  over 256 KiB), 404 `no_bot`, 403
+  `not_owner` (assertion `sub` is not the owner's Perspicax user id, or the
+  bot has no Perspicax owner), 403 `owner_inactive`. Every answer carries
+  `X-Sagax-Mail-Api: 1`.
+- Then every ENABLED typed trigger of source `botmail` on that bot goes
+  through `WebhookManager.ingest(id, event, dedupeKey)`: filters, dedupe on
+  Perspicax's `dedupeKey` (the Message-ID is shown, never the key), the per-trigger rate, the unfinished-runs cap and the
+  fence are the typed triggers' own. 202 `{triggers, delivered, duplicate,
+  ignored, reason?: "no_trigger"}`; 429 `rate_limited` only when every
+  trigger refused on its rate. A paused bot's triggers (`disableForBot`)
+  receive nothing.
+- Dedupe window (second review, 2026-10-22): the keys live in the typed
+  triggers' delivery ring (`MAX_DELIVERIES`, 2000, in server/webhooks.ts),
+  ONE ring for every trigger of the server, kept in `webhooks.json`. A
+  retry of the same mail is caught while its key is among the last 2000
+  deliveries of all triggers; past that (a busy server, hours later) a
+  retry would run again. Perspicax keeps its own one-hour memory by
+  `dedupeKey` and does not re-count a retry. A per-trigger ring was judged
+  not worth it here (it changes the persisted shape every trigger shares).
+- Source `botmail` (`shared/trigger-sources.ts`, label "Bot email", fr
+  "Courriel du bot"; the Outlook `email` source is a different thing):
+  `secretMode: "relay"`, no secret and no endpoint. Create and PATCH refuse
+  a signing secret, rotate refuses, `/sources/<endpointId>` always answers
+  401 for it, the create answer has no `sourceSetup`. Filters: `sender`
+  exact or `*` glob on the bare address only, `subject` CONTAINS
+  (case-insensitive, `containsFilters`), `keyword` over subject and text.
+- Confined runs (S2): a run woken by a `botmail` trigger is confined like a
+  guest's turn (`botmailConfined` in server/index.ts, `botmailRunConfined`
+  in server/bot-inbound-mail.ts): no shell or WebFetch (`guestConfined`,
+  Claude `--restricted`), Ask whatever the bot's level (no Full, no Auto),
+  no rule the owner saved and no kept card answers for it, no self-apply.
+  An engine that cannot run confined refuses the run. The trigger's owner
+  may opt in with `source.allowFullTools` (off by default, a switch with a
+  warning in the trigger editor). A webhook run whose trigger is gone is
+  confined (fail closed).
+- Confinement follows no work out (second review, 2026-10-22), on every
+  server, a Cloud home or not: while `botmailConfined(threadId)` holds, the
+  internal routes by which a run makes another bot, a room or a new
+  conversation act for it answer 403 `botmail_confined`
+  (`botmailConfinedInternalRefusal`: ask-bot, delegate-bot,
+  coordinate-bots, post-to-room, create-room, manage-room, threads (a
+  parallel task), retry-thread, create-bot, team-setup-requests,
+  routine-requests, act, settings, approvals). A room turn of a confined
+  run is confined too (`roomGuestConfined`). M10 proves the refusals on a
+  real server.
+- The mail is untrusted data: the run prompt is the owner's instructions,
+  then `[BOT EMAIL RULES]` (the sender is not the owner, the email is not a
+  request from the owner, answer only through a mail connector's send tool
+  and its approval card, #943; SPF and DKIM as Perspicax reported them;
+  attachments listed, never attached), then the mail inside
+  `[UNTRUSTED BOTMAIL EVENT DATA <boundary>]`, markers defanged. The fence
+  shows `sender: <bare address>` and the display name on its own line,
+  "Display name (unverified)". Never
+  instructions, never a widened permission. Sagax never sends mail for a
+  bot from this path; Perspicax never does either (no open relay).
+- No message text in a log, an audit row or the trigger's event log
+  (`webhooks.json`): the event log row says "Email from <domain>", and one
+  admin activity row per accepted delivery, category `webhook`, action
+  `bot-mail.delivered`, actor the owner `via: "perspicax-mail"`: the bot,
+  trigger counts and the FULL sender address (JC decision 3), never the
+  subject or the text. Confidential threads are not
+  touched: a mail starts a routine run in its own thread.
+- Addresses: `server/bot-mail-addresses.ts` asks Perspicax
+  (`POST /api/v1/pulsabot/inbound-mail/addresses`, link token) for every bot
+  with a Perspicax owner in ONE call (at most 500), with `complete: true`
+  only when that is every such bot (Perspicax then drops the rows of bots
+  not listed), keeps the answer 5 minutes, asks again at once for a bot the
+  cached answer did not cover, and re-syncs at once (`resync()`) when a bot
+  is deleted or changes owner.
+  A 404 (older Perspicax), any refusal, a timeout, a wrong shape or inbound
+  mail off: `available: false`. Never logs the token or a body.
+- Addresses are OFF by default (JC decision 1): `enabled: false` until the
+  administrator turns them on; the address shows greyed with "En attente
+  d'activation par l'administrateur".
+- Owner's change (JC decision 4): `PUT /api/bots/:id/inbound-mail
+  {localPart}` (session): the person acting must own the bot (checked
+  here), the format `^[a-z0-9]([a-z0-9.-]{0,38}[a-z0-9])?$` is checked here,
+  then Perspicax (`POST .../addresses/{botId}/local-part`, link token,
+  `owner_sub` of the person acting) checks uniqueness and reserved names;
+  400 invalid, 403 not_owner, 404 no_bot, 409 taken, 429 rate_limited
+  (Perspicax's own limit per bot and per owner), else 503, each with a
+  readable reason. Sagax allows at most 5 changes a minute per bot and per
+  owner (`LOCAL_PART_CHANGES_PER_MINUTE`, counted only when Perspicax is
+  asked), else 429 `rate_limited` with `Retry-After: 60`. The cache is dropped; one audit row `bot-mail.address-changed`
+  (the bot and its new address).
+- App: `GET /api/bots/:id/inbound-mail` (client-scoped, the bot visibility
+  check applies) answers `{available, address, enabled, canChange}`.
+  Desktop: an "Adresse courriel" group at the top of the bot's Overview
+  with a Copy button, Changer for the owner, the rule line, and the waiting
+  line when `enabled` is false; nothing at all when not available
+  (`BotEmailAddress.tsx`). Trigger editor: "Courriel du bot" shows the
+  bot's address where other sources show a URL, no secret, and the full
+  tools switch. iOS (CO5): the same card in the bot panel
+  (`BotPanelPhone.swift` `emailCard`), copy and the waiting state; the
+  change is on the desktop. The address is not an id; it may be shown and
+  copied.
+- Attachments: metadata only; their bytes come in a later lot.
+- Perspicax side (domain, provider, MX, loops, size caps, allowlist,
+  rename) is the Perspicax PR; the steps JC does outside code are listed
+  there.
+
 ## Confidential threads: kept to their owner (2026-10-16)
 
 JC: a « Fil confidentiel » is a 1:1 bot thread nothing of which is
@@ -373,6 +1008,87 @@ remembered, exported, logged or shared beyond its owner
   `src/components/ChatView.confidential.test.ts`,
   `ios/Tests/CompanionCoreTests/ConfidentialThreadTests.swift`.
 
+## Workspace backup: no secret at all (2026-10-18)
+
+JC, 15:55: « Exclure tout ». A workspace backup (`.sagaxbackup`,
+`server/workspace-backup.ts`, also what a cloud move and the desktop's
+company backups carry) holds no secret: every rule is in
+`server/workspace-backup-policy.ts`, covered by
+`workspace-backup-policy.test.ts` and `workspace-backup.test.ts` (one test
+fills every location below with obvious fakes and scans every byte of the
+decrypted archive, the staging and the restored folder).
+
+- `savedSignInPath` (never exported, never installed by a restore):
+  - in an engine home (`principals/<id>/<engine>`, `principals/<id>/<driver>-key`,
+    `org/<x>`, `engine-policies/<x>`): `.credentials.json`, `auth.json`,
+    `mcp_credentials.json`, `oauth_creds.json`, `.env`, `credentials/`
+    (Kimi), `.ssh/`, `.aws/`, `.docker/`, `gh/`, any `.pem`/`.enc`/`.key`
+    and the like (`engineCredentialPath`, list in the file), Sagax's
+    `.pulsabot-login.json` marker and Claude's `.claude.json.backup*`;
+  - anywhere, even a work folder: `.netrc`, `_netrc`, `.git-credentials`,
+    `.pypirc`, `.pgpass`, SSH private keys (`credentialFileName`; reconnect
+    category `files`); `.npmrc` and `.yarnrc.yml` are copied without their
+    tokens (`withoutRegistrySecrets`);
+  - every sealed store or key of a person, `principals/<id>/*.enc` and
+    `*.key` (`connections.enc`, `credential-vault.enc`, `engine-api-keys.enc`,
+    `mcp-oauth.enc`, `cloud-agent-credentials.enc`, any future one);
+  - every `*.enc` and `*.key` at ANY depth outside the person's own files
+    (`attachments/`, `task-workspaces/`, `workspaces/`, where a `.key` may be
+    a Keynote document), with copy suffixes (`.bak`, `.lock`, `.tmp`,
+    `.previous`, `.1.tmp`, `~`), at the top of the data folder
+    (`marketplace-tokens.enc`, `idp-revocations.enc`, the HMAC keys
+    `agent-api.key`, `media-proxy.key`, `published-pages.key`,
+    `template-links.key`, any future one) and `push-devices/`.
+  A new secret store goes there by name (`.enc` or `.key` already does),
+  never in `excludedWorkspaceAuthPath`, which refuses the whole archive.
+- Engine settings files (`engineSettingsPath`: `.claude.json`,
+  `settings.json`, `config.toml`, `config.yaml`, `models.json`,
+  `opencode.json`, the MCP files) are copied by `withoutEngineSecrets`:
+  without any key whose name holds a secret word (`secretFieldName`: words
+  of the name, so `openai_api_key`, `github_token`, `apiToken`, `GITHUB_PAT`,
+  `db_password`, `credentials`, any name ending in `key`: `key`,
+  `OPENAI_KEY`; not `api_key_env`, `envKey`, `max_tokens`, `sort_key`),
+  without any value shaped like a key (`secretValue`: `sk-`, `ghp_`, JWT,
+  `Bearer`, PEM, `user:pass@` URL, also inside `args`), the argument after
+  a secret flag (`--token <v>`, `--api-key=<v>`) and without the
+  values of every `env` and `headers` map. TOML: dotted keys, inline tables,
+  `[x.env.y]` tables, multi-line arrays and strings (small reader in the
+  file). YAML: parsed by `yaml` and edited in place (flow maps, block and
+  folded values, sequences). A file that does not parse is left out with a
+  warning.
+- `config.json` keeps only `PORTABLE_CONFIG_KEYS` (none holds a secret);
+  `webhooks.json` loses `secretHash`, `pendingToken`, `signingSecret`,
+  `graphSubscription`; a `*_FILE` variable's file inside the data folder (the
+  Perspicax link file) is never exported and stays in place.
+- The destination keeps its own: top-level ones stay in place
+  (`destinationSignInFile`, `keptInPlace`; a missing HMAC key is made again
+  at start, so old shared links change only on another machine), and
+  `carryDestinationSecrets` puts the destination's own secrets back into
+  the restored tree, only under `org/`, `engine-policies/` and
+  `principals/<id>/` when the archive's principals.json names the same
+  person behind that id (subject, else local operator, else email;
+  `samePrincipals`), never elsewhere
+  (and the Claude sign-in fields into a restored `.claude.json`).
+- An older archive that holds them still restores: `withoutEngineCredentials`
+  drops them at staging (manifest recounted, warnings) and `prepareRestore`
+  never installs them.
+- The summary's `reconnect` (`ReconnectTally`, shared
+  `WORKSPACE_BACKUP_RECONNECT`) counts by category what the source held:
+  engines (per engine home, with people), provider keys, connections,
+  credential vault, MCP, GitHub, cloud agents, triggers, phones, shared
+  links, engine settings. Counts only, never a name or a value. The restore
+  preview and Settings > Backups after the restore (`GET
+  /api/workspace-backup/status` `lastRestoreReconnect`) show it
+  (`WorkspaceBackupReconnectList`, keys `backup.reconnect.*`).
+- A bot export (`server/bot-zip.ts` walkFiles) leaves out the same sign-in
+  files, `.enc`, `.pem`, `.p12`, `.pfx`, a `.key` that is not a Keynote zip,
+  `.env` (not its templates), `.ssh/`, `.aws/`, `.docker/` and an `.npmrc`
+  with a token (`exportedSecretFile`).
+- `comms-tokens/` and an engine home's `tmp/`, `.tmp/`, `.cache/`,
+  `Library/Caches/` (`disposableEngineHomePath`) are never exported.
+- Not covered: secrets a person typed into a conversation, a note or a
+  project file (the export warns), and secrets in engine transcripts.
+
 ## Meetings: the bot takes notes (2026-10-16)
 
 `join_meeting` (`server/meetings/`, card `meetingRequest`, UI
@@ -473,20 +1189,31 @@ in `server/routes/security-keys.ts`. Rules, covered by
 - "A sign-in younger than 15 minutes" (`server/recent-sign-in.ts`,
   2026-10-18) is the session's `authAt`, never its `createdAt`: a bot that
   can create a pairing code (`manage_pairing`, act on
-  `POST /api/auth/pairing`) redeems it into a brand new session. Only an
-  interactive sign-in stamps `authAt`: "Sign in with Pulsatrix" (web, or
-  handed to the desktop or a phone through its one-time pairing window) and
-  an email code the person typed. A pairing code, the phone's `/api/pair`,
-  an invite link, a renewal, a bot-act copy and an act-as session stamp
-  nothing, and a session stored before this change has none (sign in
-  again). A headless server's loopback never counts (a bot's shell is a
-  loopback caller there); the desktop app's own person does. The same rule
-  gates the vault export for a person without a key. Not covered yet: the
-  provider's `auth_time` and `max_age` (a silent single sign-on at
-  Perspicax still counts), and a headless solo server with no email
-  sign-in has no way to a recent sign-in (a first key there needs the
-  desktop app). Tests: `server/recent-sign-in.test.ts`,
-  `server/recent-sign-in.e2e.test.ts`, C5 in
+  `POST /api/auth/pairing`) redeems it into a brand new session. Only
+  "Sign in with Pulsatrix" stamps `authAt` (web, or handed to the desktop
+  or a phone through its one-time pairing window), and only from the
+  id_token's verified `auth_time` when that moment is itself within the
+  15 minutes (no more than 60 s ahead of this clock, dated now then;
+  `authAtFromAuthTime`, 2026-10-19): a silent single sign-on or an old
+  sign-in at the provider gives a valid session that is not recent. An
+  email code is a valid sign-in but never a recent one (a bot that reads
+  the person's mailbox can type it). A pairing code, the phone's
+  `/api/pair`, an invite link, a renewal, a bot-act copy and an act-as
+  session stamp nothing, and a session stored before this change has none
+  (sign in again). "Sign in again" (Settings > Security for the first key,
+  the vault export's refusal) is `/auth/oidc/start?fresh=1`
+  (`src/lib/sign-in-again.ts`; the desktop app carries `fresh` to the
+  system browser): Perspicax gets `prompt=login` and `max_age=0` and asks
+  for the factors even with a console session there (Perspicax keeps no
+  sign-in session at `/oauth/authorize` and answers `prompt=none` with
+  `login_required`). A server without the Pulsatrix sign-in has no path to
+  a recent sign-in: the row says so, with no button, and a first key or an
+  export in clear there needs the desktop app. A headless server's
+  loopback never counts (a bot's shell is a loopback caller there); the
+  desktop app's own person does. The same rule gates the vault export for a
+  person without a key. Tests: `server/recent-sign-in.test.ts`,
+  `server/recent-sign-in.e2e.test.ts`, `server/oidc-login.test.ts` (the
+  auth_time and `fresh` cases), `server/email-signin.test.ts`, C5 in
   `server/org-admin-console.e2e.test.ts`. The last key removed
   clears the classes.
 - Recovery when every key is lost: stop the server, remove the person's
@@ -770,7 +1497,7 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
 `src/components/routines/RoutineOwnerName.test.ts` and
 `server/org-bot-force.test.ts`:
 
-- Connected apps (Composio) is experimental (`features.connectedApps`, off):
+- Connected apps is experimental (`features.connectedApps`, off):
   off hides the sidebar entry, the Settings > Connected apps page and the tour's
   apps steps. The claude.ai connectors status then shows in Settings > Model
   providers (`HarnessConnectorsSection placement="settings"`).
@@ -1086,7 +1813,7 @@ rules, covered by `server/owner-approval.test.ts`,
   (`memberBotAdminApproval`): a server command, a file outside the bot's
   workspace, a host-level `agents` tool or built-in MCP server (`computer`,
   `browser`, `shell`...), an unknown server or tool. A remote or personal MCP
-  server, Sagax's own `perspicax_*` mounts, Composio and a web search are
+  server, Sagax's own `perspicax_*` mounts and a web search are
   the owner's (`ownerScopedTool`, `ownerScopedMcpServerFor`).
 - On the owner route, the owner's rules then the bot's mode answer before a
   card (`ownerDecision`): deny wins, then ask, then allow. A rule is one
@@ -1175,10 +1902,35 @@ covered by `shared/custom-rules.test.ts`, `server/auto-approve.custom-rules.test
   inside as written and as resolved and none through a symbolic link; a
   deny or ask catches either, case-insensitively and in one Unicode form.
   A server's readOnlyHint never makes a call a read. Tools are named whole,
-  server included; products match known server ids (or a Perspicax or
-  Composio gateway's tool prefix). No model reviewer is wired:
-  `customRulesReviewPrompt`, `tightenCustomDecision` and
-  `safetyReviewPrompt(call, policy)` are the tighten-only contract for one.
+  server included; products match known server ids (or a Perspicax
+  gateway's tool prefix).
+- Model reviewer (examen automatique, 2026-10-21, Grok Bot parity A1, JC:
+  "OUI, comme Grok"; `server/custom-rules-model.ts`, contract
+  `customRulesJudgePrompt` / `modelCustomDecision` in shared/custom-rules.ts):
+  a card the matcher left to the person (`none`, no risk-blocked allow) is
+  judged after it opens by the bot engine's isolated `reviewPermission`
+  (Haiku on Claude; Codex, Grok and ACP use their own isolated tool-free
+  call, prompt never in argv; no reviewer on the engine = no review) against the
+  person's rules and the organization's (R1..Rn, organization first, exact
+  command rules left out; the call between untrusted delimiters). The same
+  cards a custom allow may answer, including a routine, a webhook and
+  another bot (lot A1b, JC: comme Grok). Still never an admin card, a hold,
+  a sandbox widening, a question, a guest, a security key, an owner ask
+  rule or an email draft. The card shows "Examen en cours" and the
+  notification waits until the verdict. Allow or deny only when it names a
+  rule of that behavior; an organization rule never allows; an allow covers
+  a shell line only when it is one plain line (no chaining, redirection,
+  substitution, quoting or control character), never a risk class the rule
+  does not tick, never a local path it cannot read; ask keeps the card
+  with the notice. Unsure, failed, timed out (30 s) or answered meanwhile:
+  the card stays. The engine gets the answer, the card `answeredBy.via:
+  auto-review` and `customRule` (`reviewer: model`, `reason`), the journal
+  `source: auto-review` with the rule and the reason (dropped in a
+  confidential thread). Cache: one call per prompt in flight, 10 minutes.
+  Tests: `shared/custom-rules.test.ts`, `server/custom-rules-model.test.ts`,
+  `server/custom-rules-model.e2e.test.ts`. `tightenCustomDecision` and
+  `safetyReviewPrompt(call, policy)` stay the tighten-only contract of the
+  safety review.
 - Tests: `server/custom-rules.security.test.ts` holds every probe input of
   the four reviews; add each new bypass there.
 
@@ -1201,6 +1953,23 @@ a room and never shown in a card's arguments. A partial send records who
 already received it, and Retry of the same draft skips them. Deny sends nothing. The
 draft shows the status and a send error inline; Retry asks again.
 
+## Chat parity leftovers (2026-10-21)
+
+- A visualization (`ArtifactFrame`) says when a script fails and when it
+  has not reported a size within 10 seconds. Full screen opens that frame
+  over the app. Widgets still appear only when the person asks (#876).
+- Cancel reply removes a message that is still only on screen. Once the
+  POST has started, the chat says it is already being sent.
+- An archived thread shows "Showing saved messages" until dismissed.
+- Email drafts can be turned off per bot (`emailDrafts: false`, Permissions).
+  The prompt drops the email fence and `POST /email-drafts` answers 409
+  `email_drafts_off`. A draft card says who it was created for.
+- A goal card in a room with more than one goal says "Goal n of total",
+  lists the earlier goals, and can show the full goal text.
+- Always allow on a send card (email draft, a plain message send, or
+  ask_bot / delegate_bot) adds that recipient to the bot's allowed list.
+  It does not replace the Permissions list screen.
+
 ## Server log on disk and expired approvals (2026-10-11)
 
 - The server log tail behind `GET /api/org/admin/logs`
@@ -1217,6 +1986,34 @@ draft shows the status and a send error inline; Retry asks again.
   `expired` (source `timeout`), and `GET approvals/history` answers it as
   `decision: "expired"` with `by` null (`server/org-admin-routines.test.ts`).
   The bot activity log reads it as denied (nothing ran).
+
+## One look for every interactive question (2026-10-20)
+
+JC's capture: every question a bot asks looks the same. Under the bot's
+bubble, a separate card in the bubble's own fill (`bg-card`), 16px corners
+and padding, the bubble's width; the question in bold; one row per answer:
+a 22px rounded key (A, B, C, a lighter fill and a hairline) then the label
+in plain text. No outline, no filled buttons, no technical header, no Send
+for a one-pick question. A row lights up under the pointer, a click is the
+answer, the letter keys answer once the card has focus. Choose several:
+boxes in place of keys and a quiet send. An answer in words: one plain
+field (the "Other" row opens it). Once answered the card stays, the chosen
+row marked and the others dimmed (never folded into a line).
+
+- Web/desktop: `src/components/QuestionSheet.tsx` (`QuestionSheet`,
+  `SheetChoices`, `SheetKey`, `SheetField`, `picksInAnswer`). Used by
+  `QuestionCard` (AskUserQuestion and the engines' asks, also on the
+  Approvals screen), `OptionCard` (ask_person and flat asks, in a chat, a
+  room or a bot-to-bot thread) and a widget's one choice (`ChoiceRows` in
+  `widget/WidgetBody.tsx` shows the key in place of a radio ring).
+- iOS/iPad: `ios/App/Cards/QuestionSheet.swift`, used by
+  `QuestionCardView` and `FlatQuestionCardView` (a live flat ask; a
+  permission or a proposal keeps `CardView`). `AskQuestionAnswer.byQuestion`
+  and `.picks(in:labels:)` mirror `picksInAnswer`.
+- Gallery: `dev/previews/question-preview.html` (`?lang=fr&skin=midnight`);
+  the phone's `ios/parity/capture.sh cards` shows the same variants.
+- Tests: `QuestionSheet.test.ts`, `QuestionCard*.test.ts`,
+  `OptionCard.test.ts`, `WidgetChoiceList.test.ts`, `AskQuestionTests.swift`.
 
 ## Settled approvals in the chat (2026-10-05)
 
@@ -2599,6 +3396,60 @@ not reload the page. `scripts/verify-desktop-sign-in.ts` proves it in a real
 Electron window. A change to that server code needs the server image
 redeployed.
 
+## Never signed out by a deploy (2026-10-20)
+
+JC's rule: a person is signed out only when their session is revoked, their
+account disabled, or after 30 days without use (`SESSION_TTL_MS`). Never by
+a Sagax or Perspicax deploy or restart, an app update, a failed refresh or a
+sensitive action. Keep these, each covered by a test:
+
+- Every 401 for a presented credential has a `code`
+  (`shared/session-refusal.ts`): `session_unknown` (the only retryable one),
+  `session_revoked`, `session_expired`, `idp_session_ended`,
+  `principal_disabled`, `session_cookie_only`, `sign_in_required`. Ended
+  sessions are remembered by token hash in `sessions.json` (`ended`, 35 days,
+  2,000 entries; `SessionRegistry.explainRefusal`). Each refusal and each
+  session the server ends is one `auth: session refused|ended` line
+  (`server/auth-refusal-log.ts`: code, route without query, via, client
+  family, session id prefix; never a token, hash or cookie; repeats once a
+  minute).
+- `server/idp-session.ts`: a refresh is marked in the vault before it is
+  sent (`refreshStartedAt`) and resumed at boot (`resumeInterrupted`); the
+  rotated token is written first and kept in memory if the write fails; the
+  vault is re-read before a refresh and before each write (a deploy's two
+  processes). `invalid_grant` is asked again after 2 s with the newest token
+  before it ends that sign-in; the person is marked out (all sessions,
+  `disabledAt`) only when a second sign-in of theirs is refused too, or when
+  they have no other sign-in to ask. The vault is written under an O_EXCL
+  lock, refresh paths only `update` a grant still present (never bring back
+  a removed one), and a file that cannot be read is never written over.
+  `invalid_client` and the like are a deploy for 15 minutes, then end the
+  sign-in; an ignored id_token keeps the 24 h clock running. Transient failures retry at 5 s
+  and 15 s (inside Perspicax's 30 s reuse grace), then each minute; 24 hours
+  of observed failures answer 503 `idp_unreachable`, never a sign-out.
+  `server/oidc-rp.ts`: only `invalid_grant` is a refusal; `invalid_client`
+  and the like, a 200 that is not a token answer, and an id_token that does
+  not verify (except another subject) are not.
+- The Perspicax directory puts a missing person out only when two answers a
+  minute apart miss them (`DIRECTORY_ABSENT_CONFIRM_MS`); `disabled` at once.
+- Clients: `resolveSessionState` (`src/lib/session.ts`, used by
+  `src/main.tsx`) retries 503, 5xx and network errors with backoff and shows
+  the sign-in screen only for a definitive code or after three
+  `session_unknown`. The desktop bridge and computer sharing back off to 10
+  minutes on 401/403 (`electron/auth-backoff.mjs`). The cookie jar is flushed
+  before a quit and an update (`electron/session-persistence.mjs`); the
+  startup eviction empties the HTTP cache only.
+- Tests: `server/no-logout.e2e.test.ts` ("redéploiement Sagax",
+  "redéploiement Perspicax", "mise à jour de l'app", "jeton expiré ->
+  rafraîchi en silence", "révocation -> déconnexion", "action sensible ->
+  confirmation ponctuelle sans déconnexion"), `server/deploy-bench.e2e.test.ts`
+  and the bench `node --experimental-strip-types
+  scripts/bench-deploy-no-logout.ts [people] [sessions]`,
+  `electron/session-persistence.node-test.mjs`,
+  `electron/auth-backoff.node-test.mjs`. The fake Perspicax
+  (`server/testing/fake-oidc-provider.ts`) has `reuseGraceMs`,
+  `dropNextRefreshAnswer`, `delayNextRefreshAnswer`, `stop` and `start`.
+
 ## Server environments (organization mode)
 
 On an organization server, bots run shell, file and browser tools in a
@@ -2657,6 +3508,22 @@ not open a shared machine. Keep these rules, each covered by `server/user-sandbo
   environment only; shutdown and pause under a running turn need `confirm`.
   Tests: `server/user-sandbox-desktop.test.ts`, `server/sandboxd.test.ts`;
   Docker: `scripts/smoke-sandbox-desktop.ts`.
+
+## Messages and lifecycle hooks (2026-10-21)
+
+Messages (iMessage and SMS) run only in the solo Sagax process on the Mac
+where that process runs (`shared/imessage.ts`, `server/imessage-mcp.ts`).
+The Use Messages switch is `messages.json` in the data dir. Sends to someone
+on the bot's allowed recipients go through. Everyone else gets a card.
+Group chats are refused. This is not a desktop-bridge action: an
+organization server must not ask the signed-in Mac to open Messages.
+
+Plugin lifecycle hooks are stripped from the folder Claude loads with
+`--plugin-dir`. The commands are kept under `bot-plugins/<bot>/computer-hooks/`
+and run only when the owner turns them on, on the bot's computer (sandbox,
+the person's PC, or the solo machine). They never run in the Sagax server
+process and never on an organization server's own host
+(`server/lifecycle-hooks.ts`).
 
 ## Desktop bridge (organization mode)
 
@@ -3037,6 +3904,124 @@ these rules, each covered by `server/harness-connectors.test.ts` or
   rules, see docs/self-hosting.md) and stays.
 - Codex: ChatGPT connectors need Codex's own ChatGPT login, which Sagax's
   ChatGPT plan mode and API keys do not have, so Codex turns get none.
+- Grok: only an organization turn (host tools withheld) loads the xAI
+  account's cloud connectors (`grokCloudConnectorEnv` in
+  `server/drivers/acp/grok.ts`). Grok reaches them through `use_tool`, and a
+  server Sagax did not mount keeps its card. A solo turn forces
+  `GROK_MANAGED_MCPS_ENABLED=false`: in `--permission-mode default` Grok can
+  call those servers with no prompt. Gateway tools stay off. A tool
+  selection turns the connectors off too.
+
+## Mail, Teams, calendar and SharePoint through the engines' connectors (parité R9 + R11, 2026-10-21)
+
+JC: prioritize the connectors the engines already bring (claude.ai
+connectors, the xAI account's cloud connectors on grok.com) over any
+Microsoft 365 enterprise app or Entra app registration of our own. Sagax
+builds no Graph client, no Teams bot registration and no mailbox for this.
+
+- What each engine brings is one pure table, `shared/engine-connectors.ts`:
+  capabilities `mail`, `calendar`, `teams`, `sharepoint` (and `files`), by
+  claude.ai connector name (Microsoft 365, Gmail, Google Calendar, ...) and
+  by Grok cloud connector id (`shared/grok-cloud-connectors.ts`). Codex and
+  Gemini bring none. Connect apps > Manage > Providers and the engine cards
+  (Settings > Engines) show it; the names stay read-only ("Manage on ...").
+- A turn is told what its own engine reaches (`engineConnectorsPrompt` in
+  `server/harness-connectors.ts`, the "claude-ai" prompt section).
+- Whose connectors (review of #943): only the sign-in of the person the
+  turn is for (`accountConnectorsForTurn`: the speaker, a routine's owner).
+  When the account is someone else's (another person's subscription pays,
+  the machine's login in solo for anyone but the operator) the turn is
+  told they belong to someone else and nothing is offered; Grok's cloud
+  connectors stay off (`grokCloudConnectors` on the turn,
+  `grokCloudConnectorEnv(..., ownAccount)`).
+- Automatic engine switch (JC 2026-10-21, `server/connector-switch.ts`): a
+  person's request that needs mail, calendar, Teams or SharePoint
+  (`connectorNeed` on the person's raw message only, never the prompt
+  composed around it: page, mail or data context, a quoted reply, a
+  drained queue's prompt) and whose bot's engine lacks it runs, for that
+  request only, on another engine of that person that has it. Candidates:
+  `autoEnginesFor` (allowed engines and models, approval level); never a
+  model whose catalogue price is above the bot's own (unknown prices on
+  one side only: no switch); the bot's effort kept when accepted. Reach:
+  their own sign-in only and only when known (Claude from the cached
+  claude.ai inventory, never waited on, a cold cache is unknown; Grok's
+  connected connectors are never known, so Grok is neither a target nor a
+  reason). Unknown on the bot's engine: no switch. One line "Passé à
+  Claude pour Gmail" (`tool.connectorSwitch`) after admission. Card
+  continuations, compactions, computer choices, Auto, warm-ups, routines
+  and handed-out work stay on the bot's engine. Covered by
+  `server/connector-switch.e2e.test.ts`. `SAGAX_CONNECTOR_SWITCH=0` turns
+  it off.
+- Grok rules of #918 are unchanged otherwise: organization turn (host
+  tools withheld), no tool selection.
+- Every outward call through a connector waits for the approval card
+  (`isOutboundTool` via `connectorWriteKind`, same reading for an MCP tool):
+  sends, automatic replies (out of office, mailbox
+  settings), Teams posts and chats, events and meetings (create, insert,
+  change, cancel), answering an invitation, every SharePoint, OneDrive or
+  Google Drive write (upload, save, permissions, grant access). On an
+  engine connector server (`isEngineConnectorServer`) any call that is not
+  a read or a draft asks (fail closed). Reads, drafts and reply drafts do
+  not. Full access and the primary bot rule are unchanged.
+- An outward card never offers "always for this session", and the ACP
+  driver answers Grok's ask once, never `allow_always`
+  (`server/drivers/acp/connector-ask.ts`). A Grok `use_tool` call to a
+  server Sagax did not mount is an engine connector: the card gets its
+  `tool_input`, or says Grok did not share the details
+  (`approval.held.connectorNoDetails`), and is outward unless its name
+  plainly reads.
+- The card shows every recipient's address (`Name <address>`; a name that
+  looks like another address or a domain is dropped): a display name is
+  the sender's to choose.
+- Needs its own infrastructure, so not built here (flagged for JC): a
+  dedicated inbound address per bot (B21, iOS CO5), a Teams app per bot
+  (B20, needs a Bot Framework registration), a free message in a Meet or
+  Zoom meeting chat (G10).
+
+## Connect a connector from the chat: open_connector_setup (2026-10-22)
+
+JC (Sagax 0.7.2, a Grok bot): « peux tu le connecter » (Microsoft Teams)
+took 13 tool calls and ended in "I can't". Now one call posts a card.
+
+- Agents tool `open_connector_setup` (`server/drivers/agents-connector-setup.ts`,
+  loaded directly, never deferred; Grok is told to call
+  `agents__open_connector_setup` with use_tool without search_tool):
+  connector by name, optional `via` (grok, claude) and `language`.
+- Where (`shared/connector-setup.ts` `chooseConnectorSetupRoute`): engine
+  connectors first. A Grok bot on the person's own xAI account:
+  https://grok.com/connectors (xAI documents no per-connector link). A Claude
+  bot on the person's own subscription: https://claude.ai/customize/connectors.
+  Else Sagax's Connect apps card (the existing
+  `/api/internal/connectors/request`). An engine account that is someone
+  else's (#943 `accountConnectorsForTurn` "foreign") is refused. Only a
+  person's own turn (`connectorSetupSpeaker`: person or operator, never a
+  routine or a peer).
+- Card (`connectorSetup` on the message, `src/components/connector-setup/`):
+  one primary button "Connecter Microsoft Teams" that opens the page through
+  `openExternalLink` (Electron open-external, else a new tab); nothing opens
+  without the click. Hosts allowed: grok.com and claude.ai over https
+  (`isConnectorSetupUrl`, checked by server and card). The row's text is the
+  fallback with the link, for iOS and Android until they draw the card.
+- "Connecté" only on evidence (`POST /api/connector-setup/:id/check`, the
+  person the card is for only: an owner digest on the card, never their id).
+  Claude: that person's own claude.ai inventory read again (cache
+  refreshed), never a call. Grok (no API says which connectors are
+  connected): a successful call to that connector after the card, recorded
+  as it settles with whose turn and which bot (`ConnectorSetupProofs`, in
+  memory, bounded) and matching the card's person and bot; `use_tool` input
+  is read only for exactly that meta tool; any tool with "auth" in its name
+  is no proof. Until then "Pas encore confirmé". Checked on "J'ai terminé"
+  and when the window regains focus after the click.
+- Desktop: the button goes through its own IPC `desktop:open-connector-setup`
+  (desktopUiOnly, `connectorSetupUrl` allows grok.com and claude.ai only),
+  else `openExternalLink`. That one logs a bridge refusal and falls back to
+  `window.open` (a silent rejection made "Manage on Grok" do nothing); when
+  neither opens, the caller shows "Ce lien ne peut pas être ouvert d'ici."
+- Tests: `shared/connector-setup.test.ts`, `server/routes/connector-setup.test.ts`,
+  `server/drivers/agents-connector-setup.test.ts`,
+  `src/components/connector-setup/ConnectorSetupCard.test.ts`,
+  `src/lib/app-links.test.ts`. Not yet: a native iOS card, the card in rooms
+  (GroupView), Grok rows in iOS Connect apps.
 
 ## Engine slash commands in the chat
 
@@ -3174,6 +4159,86 @@ of that thread. The owner's notification of such a run names no thread, only
 `server/activity-code-work.test.ts`, `ActivitySection.test.ts`,
 `InlineEditableText.test.ts`, `BotSettingsDialog.caption.test.ts`,
 `server/org-routines.e2e.test.ts` (owner pays).
+
+## Coding branches: the person acts on them (2026-10-19)
+
+JC: "Mets le même encadré pour les éléments de coding" and "Je devrais
+pouvoir interagir (commit, push, etc.), archiver". Details > Coding's pull
+requests, branches and commits sit in the Routines card (`GROUPED_CARD`,
+`GROUPED_ROW` in `src/lib/grouped-card.ts`, used by `RoutineList` grouped
+and `ActivitySection`; never a copy of the classes). A branch row
+(`src/components/bot-settings/CodeBranchList.tsx`) is its icon, name, a
+status pill (Not pushed, Pushed, PR #n open, Merged, PR closed, Deleted),
+then repository, commits ahead, changed files and time, and a "..." menu:
+Commit (proposed message, editable; the changed files, all chosen), Push,
+Open the pull request (or open one), View diff (the Code section's
+`DiffView`), Show in folder (local app, a local path only), Open in
+Computer, Archive or Unarchive, Delete local branch. Each action shows a
+spinner on the row, then one line saying what happened or why not. A
+pull request carries its head `branch` (`server/activity-code-work.ts`),
+so the card shows what the bot did to it until GitHub says more.
+
+Rules, none optional (`server/routes/bot-code-branches.ts`, git in
+`server/code-branches.ts`):
+
+- Where: the coding thread's own folder (`task.cwd`) when it is a git
+  repository on this server; a branch is acted on only if that thread
+  worked on it (its own calls; never the folder's checked-out branch just
+  because it is there). A branch
+  whose repository is elsewhere (the person's sandbox, a Local VM, their
+  computer through the bridge) reads `place: "elsewhere"` and nothing runs
+  (known gap: those places have exec paths, `UserSandboxManager.exec`,
+  `containerExec`, the bridge's `run_command`, but no thread records the
+  repository's folder there).
+- Who: the thread must pass `thread.post` for the viewer (not theirs reads
+  as 404). Their own branch asks no approval. Push and pull requests use
+  their own credentials: on a solo server the host's git and gh are theirs;
+  on an organization server only their GitHub connection
+  (`usablePersonGithub`), as an extra header for github.com with no system
+  or global git config, no credential helper, no ssh, and gh with
+  `GH_TOKEN` and an empty config; without it the action is refused
+  (`github_not_connected`), never done with the server's or the
+  organization's tokens. The token rides the push call only (and the
+  remote HEAD read with it), never status, add, commit or diff. On an
+  organization server: a request with no person is refused (`no_person`),
+  never run as the server; git and gh get no `HOME`, ssh agent or config
+  folder of the server's (`isolated`); a commit needs the person's name and
+  email (`no_author`); the repository's local and worktree git config
+  must hold only plainly safe keys (`SAFE_LOCAL_CONFIG`, an allowlist:
+  filters, diff drivers, signing programs, url rewrites, proxies, TLS,
+  headers, helpers, includes and remote helpers are refused as
+  `unsafe_config`, so an LFS repository is not acted on there); the push
+  goes to `https://github.com/<repo>.git` named in the command (origin's
+  URLs never decide it); a worktree counts only if its git folder is the
+  repository's own; every answer (state, errors, git messages) shows a
+  server path as its folder name only (`redactPaths`).
+- What: never a force push, never the default branch (no push, delete or
+  pull request): origin's HEAD, the remote's HEAD read at push time, and
+  main, master, trunk and develop by name whatever HEAD says (or when
+  origin has no HEAD); a pull request goes to GitHub's own default branch
+  (`gh api repos/<repo>`) and never from it. Hooks, fsmonitor, textconv,
+  signing programs and signature checks off on every call; gh runs in a
+  fresh empty folder (an empty home and config per call on an
+  organization server) with `--title`/`--body` from the commits, never
+  `--fill`, the message
+  through a fresh private temp file (`mkdtemp`, `wx`; never argv, never in
+  the repository). Delete: refused while checked out in a
+  worktree (no folder is ever removed); work not on origin needs
+  `confirmUnpushed` (the panel asks twice). Pull requests: GitHub only,
+  through `gh pr create --fill --repo`, an open one reused.
+- Archive: per person and bot in `code-branch-archive.json` (0600), keyed
+  `repo-or-folder:branch`; the branch stays; "Show archived (n)" brings it
+  back. Archived branches do not take one of the five places.
+- Every action writes an admin activity row (`code.branch.commit`, `push`,
+  `pull_request`, `delete`, `archive`, `unarchive`).
+- iOS and Android: their Coding section lists running jobs only, no
+  branches yet; the card and a subset of actions (Push, PR, Archive) are
+  for later.
+- Tests: `server/routes/bot-code-branches.e2e.test.ts` (real git, a bare
+  local remote), `src/components/bot-settings/CodeBranchList.test.ts`,
+  `ActivitySection.test.ts`, `server/activity-code-work.test.ts`.
+  Screenshots: `node scripts/capture-bot-panel-coding.mjs` (headless, the
+  gallery `src/gallery/bot-panel-coding.html`).
 
 ## Parallel tasks (sending while the bot works, 2026-10-02)
 
@@ -3314,6 +4379,46 @@ exported and read by older builds, no client reads it). Rules, covered by
 - Tests: `server/context-compaction.e2e.test.ts`,
   `server/context-compaction-replay.e2e.test.ts`, the compaction block of
   `server/hooks.e2e.test.ts` (mid tool call), `server/context-budget.test.ts`.
+
+## Stale engine sessions and small talk (2026-10-20)
+
+JC: "Hello Cryptic" resumed a 6.4 MB Claude session whose last turn, 15 h
+earlier, had stopped on a pending `gh auth login -w`: the bot picked it back
+up (cloud computer woken, three commands, text at +67 s). Rules:
+
+- A thread's engine session is not resumed when the thread's last message is
+  older than `context.staleSessionHours` (default 6, 0 off), or, once quiet
+  for `context.staleSessionColdMinutes` (default 60: the prompt cache is
+  cold), the engine reports a saved session larger than
+  `context.staleSessionBytes` (default 2 MB, about the largest 10% of Claude
+  sessions, 0 off; `ProviderAdapter.sessionBytes`, Claude only: the
+  `projects/<cwd>/<id>.jsonl` file, never while a live process holds it).
+  An active task keeps its session however large.
+  `server/stale-session.ts`, `staleEngineSession` in `server/index.ts`.
+  Engines handed the transcript every turn, a rewound thread or another
+  engine joining are not concerned (they rebuild anyway). Routine, teammate
+  and room threads are judged the same way. `context.autoCompact: false`
+  (debugging) turns this off too.
+- Then `compactConversation` folds at once with the deterministic summary
+  (no model call on the person's wait), keeping the latest two exchanges
+  (one, or none, on a short thread); with nothing new since the last fold it
+  re-applies that fold. The record is marked `stale` (kept across a retry or
+  a restart). The turn starts a new session under
+  `PAUSED_PREAMBLE` (`server/turn-context.ts`): "resumed after a pause",
+  unfinished work only if the new message asks for it. No chat row. A
+  prewarm of a stale thread is skipped (`prewarmRefusal` "stale session").
+- Small talk (`server/small-talk.ts` `isSmallTalk`: a greeting, thanks, a
+  goodbye or how-are-you alone, FR/EN, at most the bot's name around it;
+  never "ok", "oui", "vas-y", "ça va", "quoi de neuf"): the person's turn carries
+  `SMALL_TALK_TURN_NOTE`, and its cloud computer tools answer
+  `SMALL_TALK_CLOUD_REFUSAL` without waking it (`/api/internal/sandbox/mcp`)
+  while that message is the latest (a request steered in lifts it).
+  The standing rule rides `RUN_YOURSELF_PROMPT`: small talk calls no tool and
+  never resumes earlier work; one line may name it and ask.
+- Tests: `server/stale-session.test.ts`, `server/small-talk.test.ts`,
+  `server/turn-context.test.ts`, the stale case of
+  `server/context-compaction.e2e.test.ts`, `sessionBytes` in
+  `server/drivers/claude.test.ts`.
 
 ## Single stream when threads are off (2026-10-17)
 
@@ -3624,7 +4729,48 @@ Skins are blocks of tokens in `src/styles.css` (`[data-skin="x"]`), listed
 in `src/lib/skins.ts`: Pulsatrix, Pulsatrix Light, Midnight, Atelier,
 Foundry, Lagoon, Graphite, Linen, Dusk, Daylight, Hibou 98 (`retro98`, plus
 its structural `src/styles/retro98.css`) and Meadow. Each skin is one mode
-(light or dark); there is no separate light/dark switch per skin.
+(light or dark).
+
+### Skin families (2026-10-19)
+
+JC: "chaque skin devrait avoir ses propres variantes au lieu d'avoir des
+skins très proches visuellement". Settings > Appearance > Skin shows
+FAMILIES (`src/lib/skin-families.ts`), then the chosen family's Variant
+(swatches, like Background effects' Colour) and its Mode (Light, Dark,
+Auto: follows the system; a pill like Intensity). A variant in a scheme IS
+one of the skins above, unchanged:
+
+- Pulsatrix: Blue (`pulsatrix-light` / `pulsatrix`).
+- Studio: Neutral (`daylight` / `midnight`), Slate (`linen` / `graphite`),
+  Plum (`dusk`, dark only), Meadow (`meadow`, light only).
+- Atelier: Brass (`atelier` / `foundry`), Lagoon (`lagoon`, light only).
+- Hibou 98: its own family, secret as before, no variant or mode row.
+
+Storage: `omb-skin` still holds the worn skin id (CSS, the Windows caption
+overlay, the phone's "Same as my computer" and older builds read it as
+before), so every saved skin maps to itself with no migration step.
+`omb-skin-mode` = "auto" adds Auto: the first-paint script (`index.html`,
+`src/lib/skin-bootstrap.ts`, kept equal by `skin-families.test.ts`),
+`readSkin()` and `installSkinAutoFollow()` (main.tsx, live on a system
+change) swap a paired skin for the system's scheme; a variant with one
+scheme turns Auto off. `omb-skin-variants` remembers the last variant per
+family. Both travel with the person (`shared/user-preferences.ts`), in
+backups, and `omb-skin-mode` in `/api/me/appearance`.
+
+- One option, one place: General's Theme menu (12 skin names) is gone; the
+  skin, its variant and the mode are chosen only in Appearance > Skin.
+- A new skin goes in a family (a variant's `light` or `dark`); the tests
+  fail if a skin id has no place or two. Each skin block sets
+  `--skin-swatch` (the decorative variant swatch, never text).
+- iOS mirrors the model (`ios/Sources/CompanionCore/SkinFamilies.swift`):
+  families Black (Black, Dim: the phone's own), Pulsatrix, Studio, Atelier;
+  Auto is ThemeMode `.system` with the variant's pair, Light or Dark is
+  `.fixed`; "Same as my computer" stays a source toggle. Meadow is not on
+  the phone yet, and Hibou 98 stays desktop only.
+- Tests: `src/lib/skin-families.test.ts`, `src/components/SkinPicker.dom.test.ts`,
+  `src/lib/skin-bootstrap.test.ts`, `ios/Tests/CompanionCoreTests/SkinFamiliesTests.swift`.
+  Gallery: `src/gallery/skin-families.html` (`?view=board` every family and
+  variant; `?skin=&auto=1&unlocked=1` the picker).
 
 - Never hard-code a colour in a component. Fix a failing pair in the skin
   block (or in `retro98.css` for Hibou 98), never in the `.tsx`.
@@ -3888,6 +5034,9 @@ rules, each covered by `shared/achievements-catalog.test.ts`,
   does: title then points under the name, each only while its switch is on,
   the name centred beside the avatar with both off, and the active routines
   badge always at the right edge of the row, centred (never under the name).
+  The wide foot's account pill (beside the Connect apps pill) shows the same
+  second line; both pills take `--foot-tile-h` (36px, 44px with the line) from
+  the row, so their heights always match.
   Titles and points also show in a person's detail (the person panel, from a
   people row or a DM header, the viewer's own included) and on
   Settings > Achievements. Two switches there, same style, stored in the
@@ -4099,6 +5248,12 @@ it after an upstream merge instead of renaming by hand.
   signature, Windows install id), the package.json `name` and the
   `openmausbot` command (`server/openmausbot.ts`, `dist-server/openmausbot.js`,
   named by installed service units).
+- Not kept: the npm package. It is `@pulsatrixtechnologies/sagax` and installs one
+  command, `sagax` (`scripts/build-npm-package.mjs`, `server/npm-package.ts`,
+  `docs/releasing.md`). The unscoped names belong to others; nothing
+  installs, suggests or publishes them, and `fleet upgrade` installs an
+  exact `@pulsatrixtechnologies/sagax@X.Y.Z`, never a floating tag. Until the first
+  publish, the checkout (`pnpm omb`) is the way to run the CLI.
 - Links: both schemes `sagax://` and `openmausbot://`, both
   `/.well-known/sagax/` and `/.well-known/openmausbot/`, and the health body's
   `app: "openmausbot"` beside `product: "sagax"`.
@@ -4166,6 +5321,70 @@ kernel OOM-killed engine children within two minutes of each start.
 - Covered by `server/engine-start-gate.test.ts`. Measured in a 5 GiB
   container with 16 overdue routines: peak 5.25 GB and 37 engine processes
   before, 1.40 GB and 3 after.
+- After boot, routine turns keep a steady limit (`routineEngineGate`,
+  `SAGAX_ROUTINE_ENGINE_SLOTS`, default 3 on a Linux server, 0 = off, off
+  on the desktop app). Same rules, no window.
+
+## Engine memory guard (2026-10-19)
+
+The GOX server (5 GiB container) was OOM-killed four times on 2026-10-19:
+the kernel's task lists showed 11 to 15 `claude` CLIs (~125 MiB each) and
+133 to 174 Node MCP proxies (~21 MiB each, ~13 per Claude session), so about
+400 MiB per live session, kept ten minutes after each turn with no bound;
+the kernel then killed the server itself. `server/engine-memory-guard.ts`:
+
+- `IdleEnginePool`: at most `SAGAX_MAX_IDLE_ENGINE_SESSIONS` finished
+  sessions stay warm (default 4 on a Linux server, unbounded on desktop);
+  the oldest idle one closes through `releaseWarmSession`. A running turn or
+  a live call's process is never closed.
+- `MemoryWatch` (cgroup v2/v1 working set, inactive file cache excluded, every `SAGAX_MEMORY_WATCH_MS`, 15 s): at
+  `SAGAX_MEMORY_HIGH_RATIO` (0.75) closes every idle session; at
+  `SAGAX_MEMORY_CRITICAL_RATIO` (0.88) logs `[memory] ALERT critical` and
+  holds new routine turns (max 10 min); logs `[memory] ALERT kernel
+  OOM-killed` on a new `oom_kill` and a `[memory] used ...` line every 5 min.
+- Engines and all their descendants get `oom_score_adj`
+  `SAGAX_CHILD_OOM_SCORE_ADJ` (500; `spawnCli` plus a sweep each tick), so an
+  OOM kill takes one engine (one turn), not the server.
+
+## Usage limits: automatic backup engine (2026-10-19)
+
+Port of OpenMausBot #3074 (backup engine, back after the reset, with the
+clock fix #3120) and #2754 (another engine when one runs out), adapted to
+JC's rule: no card, the turn continues at once.
+
+- A failed turn whose cause is a usage limit (`limitKindOf` in
+  `server/limit-reset-time.ts`: the shared `quota` class, a spent balance,
+  a driver's `quota` stop, or a 429 the driver gave up on) blocks that
+  engine for that payer (`autoPayerKey`) until its reset: the engine's own
+  time (`runtime.error.limitResetsAt`, from Claude's `rate_limit_info`;
+  Retry-After, "try again in", an ISO or epoch reset, Codex's "try again
+  at 5:23 PM"), else a prudent estimate (1 h, 15 min for a 429).
+- The person's own message (request origin `user`) is sent again at once on
+  a backup, in the same thread, the message not duplicated
+  (`server/limit-failover-host.ts`). The engine's error row becomes one
+  `recovery:` line carrying `tool.limitFailover`, which the app draws in the
+  reader's language (`limitFailover.*` keys, `src/lib/limit-failover.ts`).
+- Candidates are `autoEnginesFor` (the same filter Auto uses): enabled,
+  organization policy and `allowedEngines`, sign-ins and keys of this
+  speaker (`resolveEngineAccess`), approval mode, tools the thread needs.
+  Never another sign-in to the same subscription engine
+  (`limitBackupAllowed`). Order: the bot's own backups, then the default
+  model of new bots, then the catalog. Engines blocked for this payer are
+  skipped: no ping-pong, at most 3 takeovers per message.
+- Only the thread moves (`switchTaskModel`, `rewound`), never the bot. The
+  failover is kept in `DATA_DIR/limit-failovers.json`; the first turn after
+  the reset plus `AFTER_RESET_MS` goes back to the engine the thread started
+  on, with one line. A thread someone moved since is left alone.
+- No backup: the line says the message is sent again at the reset, and it
+  is, once. A routine run is run again on the backup (`runNow`, once per
+  run), else at the reset (at most once per 12 h per routine). Other turns
+  (delegations, webhooks) only block the engine: their next turn starts on a
+  backup before it is refused (`beforeTurn` in `startTurn`).
+- Auto threads are left to Auto. Off with `SAGAX_LIMIT_FAILOVER=0`. Tests:
+  `server/limit-reset-time.test.ts`, `server/limit-failover.test.ts`,
+  `server/limit-failover-host.test.ts`, `src/lib/limit-failover.test.ts`,
+  `server/limit-failover.e2e.test.ts` (fake engines, the reset shortened by
+  `SAGAX_TEST_LIMIT_AFTER_RESET_MS`, read only when HOME is the data dir).
 
 ## App icon: the Pulsatrix logo (2026-10-14)
 
@@ -4258,8 +5477,8 @@ organization server serves the same bundle. Three ways in, all through
 - "What's new" opens once after an update (`whatsNewDecision`), never on a
   fresh install or a dev build. Before an update the feed's release body is
   shown by `UpdateBanner`, folded under "What's new in <version>" in the
-  small "Update ready" dialog (title, one sentence, the pills Not now and
-  Update). The dialog opens when an update has downloaded; after Not now,
+  small "Update ready" dialog (title, one sentence, the pills Later and
+  Restart to install). The dialog opens when an update has downloaded; after Later,
   the round cloud button at the right of the sidebar's account row
   (`SidebarProfileMenu`, `showsUpdateButton`, a downloaded update only)
   opens it again through `openUpdatePrompt` (`src/lib/update-prompt.ts`).
@@ -4281,6 +5500,39 @@ file with no English section is shown whole. A new release only needs its
 file in `docs/releases`; no list to edit. Tests:
 `src/lib/bundled-release-notes.test.ts`, `src/lib/release-notes.test.ts`,
 `src/components/SidebarProfileMenu.test.ts`.
+
+## Updates: confirmed, visible, never silent on Windows (2026-10-19)
+
+A Windows report: account menu > Help > "Check for updates" on an update
+already downloaded quit the app straight into a silent NSIS install, minutes
+with no window, shortcut and pin icons blank, Sagax not reopened; and a
+relaunch during that install showed a bare "Not Found". Keep these rules:
+
+- "Check for updates" (menu, Settings > Updates) never installs: it calls
+  `requestUpdateCheck` (`src/lib/update-prompt.ts`) and `UpdateBanner`
+  follows the check in its dialog: searching, "Sagax X.Y.Z is available"
+  (notes, progress, Later keeps it downloading), "Update ready" (Later,
+  Restart to install), "Sagax is up to date", or the failure with Try again.
+- Only the dialog's Restart to install installs, as
+  `updater.install({ confirmed: true })`. Main installs an unconfirmed call
+  (an older organization page) only after a native question, Later by
+  default (`electron/update-confirm.mjs`, coordinator `confirmInstall`).
+- Windows: `autoInstallOnAppQuit` is off (electron-updater would run the
+  installer silently on quit) and `quitAndInstall(false, true)` runs the
+  NSIS installer with its progress window, then reopens Sagax. macOS and
+  AppImage keep install on quit and the silent swap.
+- NSIS identity is pinned (`electron/packaging-windows.node-test.mjs`):
+  appId, productName, package name (install folder), shortcutName,
+  one-click per user, shortcuts created once and kept by updates
+  (`--keep-shortcuts`). `build/installer.nsh` only refreshes shell icons.
+- At start the packaged app waits on the loading screen while its bundle is
+  incomplete (`uiBundleState`, `waitForUiBundle`), and a main-frame load of
+  its page that answers an HTTP error or cannot connect is retried behind a
+  loading page, then shown as an error page with Try again
+  (`installLoadRecovery`, `electron/load-recovery.mjs`).
+- Tests: `electron/updater-coordinator.node-test.mjs`,
+  `electron/updater.test.mjs`, `electron/update-confirm.node-test.mjs`,
+  `electron/load-recovery.node-test.mjs`, `src/components/UpdateBanner.test.ts`.
 
 ## No phone-home
 
@@ -4355,6 +5607,60 @@ before each run, satisfying the AgileBits code requirement on macOS, with a
 short environment.
 One-time codes are computed at fill time (`server/totp.ts`).
 
+Logins that fill where you'd expect (2026-10-19, port of OpenMausBot #2929,
+#2725/#2726 and the sign-in request of #2707, on this vault: no second login
+store). `fill_credential` with `field: "login"` (`server/login-fill.ts`, the
+loop in `BrowserRuntime.loginHeld`) signs in in one call: it reads what the
+page asks for with a script that carries no secret (`loginStateScript`),
+fills each field of the step through the same single-field path
+(`fillOne`: origin guard, top frame, POST on the page's origin, the vault's
+grant and site check on the engine's URL, the stdin write, the redactor),
+submits once (`submitScript`: the form's `requestSubmit` with its submit
+button, else a sign-in button around the field), waits for the page
+(`settleAfterSubmit`) and fills the next step (user name, Next, password,
+one-time code; at most `MAX_LOGIN_STEPS`). A password or code asked again,
+or left in place by an inline error, is a refusal: the filled password and
+code are emptied (`clearScript`) and nothing is sent twice. A visible
+CAPTCHA stops before the submit; `submit: false` only fills. Sites stay
+exact by default (stricter than upstream's whole-registrable-site rule):
+when a fill lands on another address, the refusal names the page's host and
+tells the bot to call `request_login` with it; the card then offers logins
+of the same site (`matchingItems`, `vaultSiteOf`: last two labels, a
+country's shared second level, a short list of shared hosting names) and,
+for a login of that same site only, "Also fill it on <site>", unticked
+(`addSite` on the grant route, with Always only; the server checks
+`siteAddable` itself: an exact host of the login's own site, never a
+wildcard, a shared hosting name or a look-alike; audited as `addedSite:
+true` with no site name). The card also lets the person sign in themselves
+in the bot's browser: `self-start` arms that browser first
+(`BrowserRuntime.armForPerson`: refused where a bot ran a script in it,
+then scripts, screenshots, preview frames and CSS selectors are off until a
+restart; until Done the sign-in under way survives any restart or close,
+`forgetSession` arms the new browser again and the bot's `restart_browser`
+is refused; it ends at Done, on a grant or a decline from the card, when a
+newer card replaces it, or after `PERSON_SIGN_IN_MS`, 30 minutes; meanwhile
+PATCH /api/bots/:id refuses a browser profile change,
+`browserProfileChangeRefusal`; the card polls `self-status` and says "Not
+protected any more" once the browser is no longer armed, also after a
+restart of Sagax), and Done (`signed-in`, 409 `not_armed` when the browser
+was not armed) empties its password and code fields
+(`clearAfterPerson`; refused while the person still holds the browser),
+resumes the bot (`signedInNote`: no handle, no value), then marks the card
+and writes `credentials.signed_in` (no site). The submit checks again, in
+its own evaluation, that the form posts on the page's origin; any exit of a
+sign-in that is not a finished step empties what it typed; the page's alert
+reaches the bot only quoted as untrusted page text (`pageSays`). 1Password stays per item (a reference with its own bot
+grants, read at fill time, never on an organization server): finer than
+upstream's per-vault grants. Tests: `server/login-fill.test.ts` (happy-dom
+page behind a fake engine: one, two and three steps, refusals, CAPTCHA),
+`server/login-fill.e2e.test.ts` (a local fake site in a throwaway headless
+Chromium from Playwright's cache, skipped without it: one and two steps, a
+refused login, another site; what the bot sees and what the process prints
+hold no value nor encoding), the card blocks of
+`server/routes/credential-vault.test.ts` and
+`src/components/VaultRequestCard.test.ts`, and the data-folder sweep of
+`server/credential-vault.e2e.test.ts`.
+
 Reads of the vault are POSTs (`/api/me/credentials/list`, `/notes`, the
 1Password picker): a packaged desktop answers loopback GETs from any local
 process. The agent tool policy keeps `/api/me/credentials*` and
@@ -4406,6 +5712,153 @@ export blocks of `server/credential-vault.test.ts` and
 the launcher forwards a throwaway `SAGAX_MCP_OAUTH_KEY` and sends the owner
 capability on its own starter rename).
 
+## My Chrome: a bot drives the person's own Chrome (2026-10-19)
+
+Port of OpenMausBot #2706 (My Chrome) with what Sagax needs of #2925, #2928,
+#2939 and #2949, narrowed by JC's rules. Off by default. Settings >
+Experimental > My Chrome (`src/components/settings/MyChromeSettings.tsx`,
+under the built-in browser row) turns it on and lists the allowed sites, each
+one exact origin (`https://host[:port]`, `http://localhost:port` the only
+plain http; `server/browser/my-chrome/sites.ts`), with Revoke, Stop / Resume
+and Chrome's address. A bot uses it when its browser session is "My Chrome"
+(`browserProfile: "my-chrome"`, `MY_CHROME_PROFILE`; BrowserProfilesManager
+offers it where the server does). Settings live in `my-chrome.json` (0600,
+`server/browser/my-chrome/settings.ts`); a file that does not read is "off".
+An organization server never offers it unless that file says
+`allowOnOrganizationServer: true` by hand (no route sets it).
+
+- The engine is still agent-browser (`AGENT_BROWSER_CDP`), but it reaches the
+  gate (`server/browser/my-chrome/gate.ts`), never Chrome: a loopback
+  WebSocket with a random 48-hex path per bot session. The gate holds one
+  DevTools connection to the person's Chrome, found from the setting (a port,
+  a loopback `ws://` or `http://`) or Chrome's `DevToolsActivePort` file
+  (`locate.ts`: that file only, never the profile's cookies, Login Data or
+  history; remote debugging on at `chrome://inspect/#remote-debugging`,
+  Chrome 144+, which asks the person before it lets Sagax in).
+- The engine sees only the tabs it opened through the gate (and popups they
+  opened): `Target.getTargets` is filtered, attaching to any other tab is
+  refused. A new tab starts blank, gets its guard, then goes to the address.
+  The guard (the gate's own session per tab) intercepts documents (`Fetch`)
+  and fails any top-level navigation outside the allowed sites: address,
+  link, redirect, form, script, popup (held by `Target.autoAttachRelated`
+  until guarded). Revoking a site refuses the engine on it at once.
+- `cdp-policy.ts` allowlists methods: no cookie call (`Network.getCookies`,
+  `getAllCookies`, `Storage.*`, `Page.getCookies`), no storage of any origin
+  (`DOMStorage`, `IndexedDB`, `CacheStorage`), no body or interception
+  (`getResponseBody`, `loadNetworkResource`, `Fetch`), no browser-wide call,
+  context, download, file upload, permission, autofill. Network events lose
+  every header, cookie and body; the `ExtraInfo` events are dropped. Frames
+  and workers of another site inside an allowed page are detached from the
+  engine; a frame of another origin on the same site (it would share the
+  page's process) is not loaded (`maybeSameSite`, errs toward "same").
+  `Page.captureSnapshot` and `addScriptToEvaluateOnNewDocument` with
+  `runImmediately` are refused, downloads are denied in the tab, and a
+  network event toward a site not allowed shows its origin only (no path,
+  query or initiator). Unknown methods are refused.
+- Each driven tab carries a banner (bottom right, "A Sagax bot is driving
+  this tab" / "Un bot Sagax pilote cet onglet") in an isolated world, hidden
+  from the accessibility tree, with a Stop button whose binding exists only
+  in that world and counts only a trusted click. Sagax shows its own banner
+  while a bot drives (`src/components/MyChromeIndicator.tsx`: which bot, on
+  which site, Stop). Stop (`POST /api/my-chrome/stop`, the tab's button, or
+  turning My Chrome off) terminates every engine connection first, then
+  removes the guards and banners, closes the Chrome connection and the
+  engines' sessions and forgets every gate address handed out (a copy left
+  in an engine's environment cannot reconnect after Resume); `stopped` is
+  saved and holds until Resume.
+- `/api/my-chrome/*` answers the person only (security review 2026-10-20,
+  #834): a session that is not an act/actAs one, or loopback on the desktop
+  (Electron's capability); a headless server's loopback (a bot's shell) is
+  refused.
+- A bot with a shell (command tool) on the same computer as the person's
+  Chrome is never given My Chrome (JC 2026-10-20, after #838): it could read
+  Chrome's `DevToolsActivePort` and talk to Chrome without the gate. It keeps
+  its own bot browser. `server/browser/my-chrome/shell.ts`
+  (`hasShellOnThisComputer`: every engine has a shell, so only a cloud-only
+  or team-computer bot has none here); `effectiveBrowserProfile` in
+  server/index.ts maps "my-chrome" to the bot's own session for a bot with a
+  shell (session, integration, internal browser route), `MyChromeService.urlFor`
+  refuses it too, the prompt says so (`MY_CHROME_SHELL_PROMPT`) and the
+  profile picker's hint says "This bot has a terminal on your computer: it
+  uses its own browser" (`shellBotIds` in the status). The saved profile
+  stays "my-chrome" and applies again if the shell goes away.
+- Gate hardening (2026-10-20): `Page.navigateToHistoryEntry` reads the
+  entry's address first and refuses one off the allowed sites (the
+  back/forward cache restores a page with no request for the Fetch guard to
+  see; an unreadable entry is refused); the banner host carries `!important`
+  inline styles and a MutationObserver that restores them (a page stylesheet
+  or `host.style` cannot hide it).
+- The bot's calls (`server/browser/my-chrome/pilot.ts`, from the internal
+  browser route): only the page tools (no `agent_browser_eval`, cookies,
+  state, profiles, `read` with a URL, screenshot to a file), elements only by
+  `@eN` refs. A payment or purchase, a send (form, email, message, post,
+  save, confirm) or a delete waits on the same Allow / Deny card as a safety
+  hold (`confirmHeldCard` in server/index.ts; Full access and Approve for me
+  do not answer it). It is named from the role and name of the ref in the
+  bot's last snapshot, the key (Enter or Space, except after typing in a
+  search box), text with a line break, or an address (`/delete`,
+  `/checkout`...). An unknown ref or a button with no name is a card too.
+  Refs come only from a snapshot (JSON `data.refs` first; a ref the text
+  names twice differently is dropped), never from page text read by another
+  tool. Enter or Space with any modifier (Control+Enter...) is a send.
+  The card offers "Always allow" for one kind (payment, send or delete) on
+  one exact origin (`my_chrome:<kind>:<origin>`, `myChromeAllowKey`), saved
+  in the bot's `alwaysAllow` through the usual route (step-up, answerer
+  checks) and revocable there; a doubt ("unclear") or a page without a web
+  origin is carded every time.
+  Passwords go only through the vault's `fill_credential`. What the gate
+  blocked is added to the next result. The bot's prompt gets
+  `MY_CHROME_SYSTEM_PROMPT`. A confidential conversation never uses it.
+- Routes: `POST /api/my-chrome/{status,enable,sites,sites/revoke,address,stop,resume}`,
+  POST only, the person or an admin (`adminOrDelegate(server.settings)`),
+  admin and off in the agent tool policy.
+- The egress gate of the bots' own browsers (#2930) does not apply to My
+  Chrome (the person's browser); the site allowlist and the gate do.
+  `browserEngine.attachCdpUrl` keeps its old meaning (every bot attaches,
+  ungated): an operator setting, separate from My Chrome.
+
+Tests: `server/browser/my-chrome/my-chrome.test.ts` (sites, settings,
+locating Chrome, the DevTools policy, cards), `server/routes/my-chrome.test.ts`,
+`src/components/MyChromeIndicator.dom.test.ts`, and
+`server/browser/my-chrome/my-chrome.e2e.test.ts` against a throwaway headless
+Chrome for Testing (temporary profile, `--headless=new`, its own loopback
+port; `SAGAX_TEST_CHROME` or the Playwright cache, never the person's
+Chrome) and two local sites: the person's tabs stay invisible, every cookie
+and storage call is refused, no address, link, redirect or popup reaches the
+other site, its frame stays away from the engine, revoking works at once, the
+banner's Stop (a trusted click) and Sagax's Stop cut at once. With
+`SAGAX_TEST_AGENT_BROWSER=<agent-browser binary>` the last suite drives the
+real tool path: cards for delete, payment and send, refusals, Stop.
+
+## Import a shared Grok Bot (2026-10-19)
+
+Port of OpenMausBot #3073, without its optional Cursor sign-in (a third-party
+account token Sagax does not keep). Settings > Import
+(`src/components/settings/ImportSettings.tsx`, section `import`, hidden like
+Backups for whoever cannot manage backups, and in Simple mode), and a Grok
+Bot export dropped on Bot templates > Import (`TemplateTools` readFile).
+`src/components/GrokImportBox.tsx` reads an `https://x.ai/bot/<id>` link or a
+marketplace page through `POST /api/team-library/grok`
+(`server/routes/team-library-grok.ts`, admin scope; `server/team-library.ts`
+`fetchGrokTemplateCard` fetches only x.ai, redirects must stay there, 20 s,
+2 MB) and shows the public card (name, creator, description) with Start
+from the description (`grokStarterPackage`). The full setup comes from the
+person's own Grok Bot: Copy export prompt (`GROK_EXPORT_PROMPT`), then paste
+its JSON reply or choose it saved as a `.json` file (`openmaus.grok/1`, or
+pi-grokbot-import's `grokbot-bundle/v1`; the format ids stay upstream's).
+`shared/grok-import.ts` turns it into an `openmaus.package` v2 with one bot:
+instructions (cut at the soul limit, with a note), skills off, routines with
+a cron or a plain time paused, apps as connector requirements (connector
+slugs when known), memories only when exported, key-shaped text redacted.
+Event routines and unreadable schedules are listed under Left out with their
+original text. The preview and Add are the templates' own
+(`TeamImportPreview`, `POST /api/teams/import?mode=add`). Tests:
+`shared/grok-import.test.ts`, `server/team-library.test.ts` (fixtures
+`server/fixtures/grok-share-page*.html`),
+`server/routes/team-library-grok.test.ts`,
+`src/components/settings/ImportSettings.dom.test.ts` (the export fixture
+`shared/fixtures/grok-import/shared-grok-bot.json`).
+
 ## Declarative chat widgets (show_widget, ported from upstream 2026-10-14)
 
 A bot shows a card, list, form, table or chart with the agents tool
@@ -4450,6 +5903,46 @@ build its own bubble. Gallery: `src/gallery/chat-widgets.html`
 (`npx vite --config vite.gallery.config.ts`, then
 `/src/gallery/chat-widgets.html?skin=<id>&lang=<code>&only=<sample>&narrow=1`).
 
+## Views in the chat only on request (2026-10-20)
+
+JC: « je veux pas de widget qui pop dans le chat pour aucune raison ».
+One rule, `shared/requested-views.ts` (`askedForView`): a view a tool result
+would add on its own appears only when the person's message of that turn
+asked for that kind of view; views the bot writes itself follow the same rule
+through the prompt. Approval, connection and credential cards and attachments
+the person asked for are not views.
+
+- ConnectWise tool row widget: `cwToolRowWidget` needs a view tool
+  (`cw_psa__show_*`) AND an ask ("view"). `slimMessage` strips the widget of
+  any other stored row, for every client.
+- Video players from a tool's output (Glitcho `list_followed`, any
+  `sagaxVideo`/`url` JSON): `videoMessagesFromTool` needs an ask ("video").
+- Settled screenshot at the end of a computer turn: needs an ask ("screen");
+  the live screen panel is unchanged.
+- Video and screen rows the server lets through carry `requested: true`;
+  web (ChatView, GroupView) and iOS (`MessageRow`) draw only those, so older
+  rows stay hidden.
+- Prompt (`RICH_OUTPUT_PROMPT`, `WIDGET_PROMPT`): ```chart, ```csv,
+  ```widget, ```cw, show_widget and an inline YouTube player only when asked
+  or when the request cannot be answered without one; show_widget forms only
+  to book, schedule or pick, never to display data.
+- Sagax renders no MCP Apps `ui://` resource itself: nothing to gate there.
+- Captures: `docs/screenshots/views-on-request/` (before, after).
+
+### ConnectWise views on demand only (2026-10-20)
+
+- A ConnectWise tool row draws its widget (`CwWidgetView`, iOS
+  `CwWidgetCard`) only for a Perspicax view tool `cw_psa__show_<view>`
+  (`isCwViewTool`, `cwToolRowWidget`, `shownCwWidget`; iOS
+  `CwWidgets.isViewTool`). Perspicax serves those tools only when the
+  profile's "Vues interactives" is on (Perspicax #386). Every other read or
+  write (`cw_psa__query`, `find_*`, `*_write`) is an ordinary row and the bot
+  answers with a Markdown table. Rows stored earlier keep a `widget` field
+  and still draw as rows.
+- The bot writes a ```cw fence only when the person explicitly asks for an
+  interactive view (`CW_FENCE_PROMPT`, `server/system-prompt.ts`).
+- Test: `server/cw-widget-actions.test.ts`, `server/cw-widgets.e2e.test.ts`.
+
 ## Conversation events: routines turned on or off, Connect apps (2026-10-15)
 
 - A turn that turns routines on or off leaves ONE line per action and per
@@ -4471,6 +5964,49 @@ build its own bubble. Gallery: `src/gallery/chat-widgets.html`
   empty conversation. It opens Connect apps with those apps first
   (`pluginsFocusApps`, section "needed").
 
+## Bots parity 2F: template update, avatar drop and paste, reset, bot link (2026-10-21)
+
+- Template links: `PUT /api/template-links/:id` freezes the New bot
+  defaults again under the SAME link (`TemplateLinks.update`, `updatedAt`);
+  `GET /api/template-links/:id` gives title, description, skills, never the
+  persona. Share preset > Share the link has Update the template and View
+  the shared copy. A bot does it with `sagax_settings` `template.share`,
+  `template.update`, `template.remove` (card: a public link reaches others);
+  "a template of yourself" = set `server.newBotDefaults` first.
+- Avatar (`src/lib/avatar-input.ts`): drop or paste a PNG, JPEG, GIF or WebP
+  of at most 25 MB on the big avatar or the Upload area, and export the
+  current picture. The avatar's handlers `preventDefault`; the window drop
+  target of the composer (`ComposerAttachments.tsx`) skips a drop already
+  taken, so the picture never becomes an attachment too.
+- Reset the history (bot "..." menu, `src/lib/bot-history-reset.ts`): a new
+  conversation, then every open one of the person archived (never routine
+  runs, confidential threads, an AI client's hidden thread, or a bot-to-bot
+  thread); memory, files, routines and settings stay.
+- Copy link to this bot: `openmausbot://bot/<id>` (`botRefUrl`), which the
+  app already opens (`electron/chat-link.mjs`).
+
+## Plugins parity 2F: configuration, data centers, link (2026-10-21)
+
+- Plugin configuration (`server/plugin-config.ts`): the `userConfig` fields a
+  Claude Code plugin declares in `.claude-plugin/plugin.json`, filled per bot
+  (`PUT /api/bots/:id/plugins/:key/config { values }`, owner or manager,
+  `bot-plugins/<bot>/plugins/config.json` 0600). Values replace
+  `${user_config.KEY}` in the plugin's skills, agents and commands, from each
+  file's original kept under `.claude-plugin/sagax-originals/`; an update
+  copies the plugin again and the values go back in; uninstall forgets them.
+  A `sensitive` field is never stored nor written: 400 `sensitive_field`,
+  the form points to Settings > Credentials.
+- Data centers: a catalog entry may list `regions` (the default `url` among
+  them) and a registry remote whose address has one `{variable}` with
+  `choices` becomes one address per choice (`registryRegions`). Add asks
+  first (`plugins/DataCenterDialog.tsx`), `POST /api/plugins/install`
+  takes `region` and refuses an id the listing does not offer
+  (`unknown_region`). No catalog entry has regions yet: add one only with
+  the provider's documented regional addresses.
+- Copy link to this plugin (`src/lib/plugin-link.ts`): a marketplace
+  plugin's repository, a reviewed server's documentation, else its https
+  address; nothing for a connected app or a local server.
+
 ## Team Bot from a conversation, template links, away routines, emoji (2026-10-16)
 
 Parity with Grok Bot (audit items 10, 11, 14 and the emoji picker). Keep:
@@ -4481,11 +6017,14 @@ Parity with Grok Bot (audit items 10, 11, 14 and the emoji picker). Keep:
   (`threadTitleGate`, the generated-title path), conversation as data, text
   lines only, secrets scrubbed; a fallback draft from the title and lines
   when the model cannot. Plugins and connectors of the source bot are ticked
-  boxes. Memory carry-over is an explicit opt-in, OFF by default:
-  `POST /api/bots/:id/team-bot-carry` answers 400 `memory_opt_in` without a
-  literal `includeMemory: true` and writes nothing; with it, only the ticked
-  notes plus `memory/conversation-carry-over.md` (compaction summary
-  helper), all listed in the dialog first. The bot is created by
+  boxes. Since 2026-10-21 (JC: a copy, never the private memory) the copy
+  starts from the source bot's persona (the drafted text one click away),
+  copies its rule sets, copies each ticked plugin's saved configuration
+  (never a secret field) and joins its team, whose shared memory
+  (`server/team-memory.ts`) then follows; it never takes a conversation or
+  the bot's own memory: `POST /api/bots/:id/team-bot-carry` answers 410
+  `private_memory_never` and writes nothing, and the draft lists no notes.
+  The bot is created by
   `POST /api/bots` and published by the existing Team Bot path (Sharing,
   Perspicax grants); the app adds no multi-person view.
 - Template public links (`server/template-links.ts`,
@@ -4630,6 +6169,84 @@ publiées). Keep these rules, covered by `server/published-pages.test.ts`,
   (the page keeps its own history), the phone apps' card (they show the
   row's text).
 
+### Pages: edit, comments, annotation, Presentation, link switch (lot R8, 2026-10-21)
+
+Grok Bot parity, chat rows 31 to 34. Covered by
+`server/published-pages-editing.test.ts`, the second case of
+`server/published-pages.e2e.test.ts` and `src/components/PageViewer.test.ts`.
+
+- Full-page viewer (`src/components/PageViewer.tsx`, opened from the card's
+  and the Settings row's Open full page): rename, version picker, Annotate,
+  Present, Edit, Comments, Share. The page is always the preview wrapper and
+  its frame, never a srcdoc. Shared controls: `src/components/page-controls.tsx`.
+  ChatView is untouched (the card renders the dialog itself).
+- Rename: `PATCH /api/pages/:id { title }` in any state (`page.title`, used by
+  the summary, the wrapper and the frame `<title>`). Access and expiry still
+  need a published page.
+- The person's edit: `GET /api/pages/:id/versions/:n/source` (their own pages
+  only) and `POST /api/pages/:id/versions { kind, content, title? }`: a new
+  `proposed` version with `author: "person"`, under the same caps, secret-shaped
+  text removed (`redact`, wired to `redactSecretsInText`). Readers keep the
+  published version until the person publishes the new one (Save and publish
+  reuses the page's access and a future expiry only).
+- Comments: `GET|POST /api/pages/:id/comments`, `DELETE .../comments/:cid`;
+  200 per page, 2000 characters, optional version and anchor. Never in the
+  summary (a count only), the wrapper or the frame.
+- Annotation: `/pages/preview/<id>/<n>?annotate=1` (the page's person only)
+  frames `...?t=<ticket>&a=1`, which adds `ANNOTATE_SOURCE`
+  (`server/published-pages-render.ts`): clicks are caught before the page
+  sees them, the element gets a numbered badge, and `{ type:
+  "sagax-page-annotation", v: 1, n, tag, text, path }` is posted to
+  `window.top`. Nothing else: no network. A Markdown page or a presentation
+  runs it by a per-response nonce (`script-src 'nonce-...'`, sandbox
+  `allow-scripts` for that response only); an HTML page inline after the
+  prelude. A reading link never gets it, whatever its query. The app keeps a
+  message only when `event.source` is the frame inside its own wrapper and
+  `parseAnnotationMessage` accepts it (plain text, capped); the page's own
+  scripts can forge one, which only adds a line the person sees. Send writes
+  one ordinary message to the page's bot in the page's conversation
+  (`annotationPrompt`: title and version, never an id).
+- Presentation: `kind: "presentation"` (tool `propose_page`, the editor):
+  Markdown slides split on a line of three dashes (`splitSlides`), rendered by
+  our escaper into full-height sections with scroll snapping and Previous /
+  Next as in-page anchors: no script at all, same sandbox and CSP as
+  Markdown. Present asks the frame element for full screen; the banner stays.
+- Public-link switch: `GET /api/pages/policy` (any person),
+  `GET|PUT /api/admin/pages/policy { linkSharing }` (admins, audited
+  `page.policy`), stored in `published-pages.json` (`policy`, absent = on).
+  Off: publish or PATCH to `link` is 403 `link_sharing_off`, and a page
+  already shared by link reads as `org` (signed-in people only) until it is on
+  again; the link itself is kept. Settings action `org.pagesLinkSharing`
+  (class org: a card at every level). On by default (the page itself still
+  starts private and asks a second press for a link).
+- Review of #952: every PATCH field is checked before anything changes (no
+  rename kept behind a refused access); switching a published page to a link
+  asks the same second press as a first publish; a refusal for a closed link
+  switch reads "Choisissez « Mon organisation »" (`pageErrorText`). At most 50
+  annotations; the message quotes the page's text as untrusted, never as
+  instructions, and the panel shows it in full before Send; an anchor's text
+  and path lose secret-shaped text. The editor, comment and reader-comment
+  routes are one regex per line with their method, so each has its own
+  tool-policy row, all `defaultEnabled: false`.
+- Reader comments (JC 2026-10-21): per page, off by default
+  (`PATCH /api/pages/:id { readerComments }`), and an admin policy
+  (`readerComments` in the pages policy, on = allowed; off: no page takes or
+  shows them; settings action `org.pagesReaderComments`). On a reading link
+  with them on, the wrapper adds a plain form (no script; `form-action` pinned
+  to `/pages/comment/<token>`) and the approved comments, escaped. `POST
+  /pages/comment/<token>` (before the auth gate): only a reader of a published
+  page with them open, an Origin (when sent) of this host, never
+  `Sec-Fetch-Site: cross-site`, urlencoded, 16 KB,
+  name 60 and text 1000 characters, secret-shaped text removed, honeypot
+  `website` thanked and dropped, 5 posts per address per 10 minutes
+  (`requestSource`), 50 pending and 200 kept per page. Each waits as
+  `pending` and is never shown before its person approves it in the viewer
+  (`GET /api/pages/:id/reader-comments`, `POST .../:cid/approve`, `DELETE
+  .../:cid`). Page history: `reader-comments`, `reader-comment`,
+  `reader-comment-approve`, `reader-comment-remove`.
+- Not done here: iOS (C11, annotation is desktop only on Grok too; #937 holds
+  the phone screens), multi-file pages.
+
 ## Voice notes, microphone choice, logs and feedback (2026-10-16)
 
 - Voice notes (+ > Record a voice note, `src/components/useVoiceNoteRecorder.ts`,
@@ -4753,6 +6370,11 @@ image `deploy/run/Dockerfile` (built locally by `scripts/build-run-image.sh`,
 never pushed). The Pod comes from the run provisioner
 (`server/sandboxd-runs-spec.ts`). Rules, none optional:
 
+- The image has no Hermes, so its engines stage runs
+  `scripts/harden-image-deps.mjs --no-venv` (npm overlay only; a venv found
+  anyway fails the build). Without the flag the script requires a Hermes
+  venv and the build stops at "no venv found" (fixed 2026-10-20).
+
 - Known MVP limit: one run token, also the model proxy key, so the agent
   can call the runner routes itself; `verify` is information, not proof,
   and Perspicax checks every bundle again.
@@ -4762,6 +6384,11 @@ never pushed). The Pod comes from the run provisioner
   stopped, secrets wiped, nothing more sent). `PX_CONTROL_URL` is https
   (loopback http for tests), and the token is only sent to its origin:
   a bootstrap whose `git_url` or `model_proxy` points elsewhere fails.
+- Duration: the runner's own deadline comes from the bootstrap
+  (`limits.max_duration_sec`) and is re-armed by a `limits` command
+  (`{max_duration_sec}`: what the Pod has left after an admin extended the
+  run, 1 s to 12 h, a number only). Perspicax enforces the run's maximum
+  too; the Pod's hard deadline is the 12 h cap.
 - Secrets: one 0400 file each in `/dev/shm/px-secrets` (memory), visible
   to `setup`; the `setup_only` ones (the default) are erased before the
   engine starts. Every secret value and the run token are masked in all
@@ -4796,3 +6423,52 @@ never pushed). The Pod comes from the run provisioner
   engine; Git guard negatives), `server/runner/runner-drivers.test.ts` (the
   real Claude and Codex drivers with their fake CLIs),
   `server/runner/units.test.ts`.
+
+## Engine parity: approvals decide in Sagax on every engine (2026-10-19)
+
+JC: whatever the provider (Grok, Claude, Codex, Gemini, Kimi, pi, local
+models), a bot behaves the same. Approve for me never hands the decision to
+an engine's own classifier when Sagax can hold the call: Claude runs
+Auto-accept edits plus a fixed allowlist (#797), and Grok Auto runs the
+Sagax approval gate by default (`server/drivers/acp/grok-approval-gate.ts`,
+opt-out `{"off": [botId]}` or `{"bots": "none"}` in
+`DATA_DIR/grok-approval-gate.json`). Every call that reaches Sagax goes
+through the same `request.opened` path (owner setup #820, member rules
+#776-#812, safety review, security keys), whatever the engine.
+
+## Resource usage card (2026-10-21)
+
+JC: « un graphique de consommation du CPU, RAM, Disque (IO, usage), Network
+usage qui s'affiche de manière esthétique lorsqu'on le demande ». The agents
+tool `resource_usage` (target `this_computer`, `sagax_server`, `host`,
+`remote_session`, `bot_computer`) posts a live card (`resourceUsage` on the
+message) and answers the bot with the first sample in words.
+
+- Only when asked (#876): the server refuses unless the person's message of
+  the turn asks about usage (`askedForResources`, shared/resource-usage.ts, or
+  `askedForView`). Read-only, so no approval card (#875).
+- Rights are the existing ones (server/resource-usage/targets.ts): this
+  computer or the Sagax server for the solo operator or an organization admin;
+  SSH and unRAID hosts by `terminalResourceAllowed`; a Tailcat session only
+  for its person and bot while `readTunnel` resolves (owned + tunnelOf); the
+  bot's Local VM for its owner (solo). Reprendre opens the target again, so
+  the check runs again. Organization: the person's own computer is not offered
+  yet (it would need a native bridge action in the desktop app).
+- Sampling (server/resource-usage/): one read-only loop per card, `scripts.ts`
+  (macOS top, vm_stat, ioreg, netstat -ibn, df; Linux /proc; Windows CIM
+  performance classes, which read the same on a French Windows and need no
+  admin; PowerShell as -EncodedCommand). The loop ends by itself on the
+  computer after the run. `sampler.ts`: 2 s cadence, 5 min runs, pauses after
+  20 s with nobody watching, at most 2 running per person (a third pauses the
+  oldest), a flooding stream is dropped. Parsers are tested from fixtures
+  (`server/resource-usage/fixtures`).
+- Card: `src/components/resource-usage/` (`ResourceUsageBody` is pure), the
+  stream is `GET /api/resource-usage/:id/live`, for the person who asked only.
+  Chart colors are `CHART_PALETTE` (dataviz), values are ink text beside
+  colored marks, a full volume shows an icon and a word, a Valeurs table
+  shows the same numbers. Never an id on screen.
+- Gallery: `src/gallery/resource-usage.html`; captures
+  `node scripts/capture-resource-usage.mjs` (`SAGAX_CHROMIUM` for another
+  headless shell); four of them are in `docs/screenshots/resource-usage/`.
+- iOS and Android show the row's text fallback (none yet): a native card is a
+  follow-up.

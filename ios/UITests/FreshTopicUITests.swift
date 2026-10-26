@@ -27,7 +27,8 @@ final class FreshTopicUITests: XCTestCase {
     @MainActor
     private func open(fresh: Bool) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["-demo", "-AppleLanguages", "(fr)", "-AppleLocale", "fr_CA", "-companion.prefs.language", "fr"]
+        // no pairing left by an earlier run: the demo opens only unpaired
+        app.launchArguments += ["-reset-pairings", "-demo", "-AppleLanguages", "(fr)", "-AppleLocale", "fr_CA", "-companion.prefs.language", "fr"]
         if fresh { app.launchArguments += ["-fresh-topic"] }
         app.launch()
         XCTAssertTrue(app.descendants(matching: .any)["demo-banner"].firstMatch.waitForExistence(timeout: 30), "demo home")

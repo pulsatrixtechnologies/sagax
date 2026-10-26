@@ -1,12 +1,11 @@
 // iPad I5: Plugins as the desktop's modal (src/components/PluginsPanel.tsx):
 // `min(800, 100vw-40)` by `min(700, 100dvh-96)` on the elevated fill, the
-// title, the Connected apps / MCP servers tabs, and each tab's page. The
-// data and actions are the phone's (ConnectedAppsModel, McpServersModel,
+// title, the MCP servers page, and the person's own claude.ai connectors.
+// The data and actions are the phone's (McpServersModel,
 // HarnessConnectorsModel, WP9); what a pairing may do follows SurfaceGate:
-// connecting apps and signing in to MCP servers for a sidecar or an admin,
-// the workspace key, the Claude Code switch and an MCP server's test, on/off
-// and removal for an admin. Adding or editing an MCP server stays on the
-// computer (it runs a command there).
+// signing in to MCP servers for a sidecar or an admin, the Claude Code switch
+// and an MCP server's test, on/off and removal for an admin. Adding or editing
+// an MCP server stays on the computer (it runs a command there).
 import SwiftUI
 import UIKit
 import CompanionCore
@@ -15,32 +14,25 @@ struct DesktopPluginsModal: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var shell: DesktopShellModel
-    @StateObject private var apps = ConnectedAppsModel()
     @StateObject private var mcp = McpServersModel()
     @StateObject private var harness = HarnessConnectorsModel()
     @StateObject private var settings = DesktopSettingsModel()
     let close: () -> Void
 
     private var tabs: [DesktopPluginsTab] { DesktopPluginsTab.available(for: session.surfaceGate) }
-    private var tab: DesktopPluginsTab {
-        tabs.contains(shell.pluginsTab) ? shell.pluginsTab : (tabs.first ?? .apps)
-    }
 
     var body: some View {
         DesktopModalFrame(width: 800, background: \.elevated, close: close) {
             VStack(alignment: .leading, spacing: 0) {
                 header
                 if tabs.isEmpty {
-                    DesktopText("Connected apps and MCP servers are managed by an admin of this server.", color: \.inkSecondary)
+                    DesktopText("MCP servers are managed by an admin of this server.", color: \.inkSecondary)
                         .padding(.horizontal, 32)
                         .padding(.top, 20)
                     Spacer(minLength: 0)
                 } else {
-                    tabBar
-                        .padding(.horizontal, 32)
-                        .padding(.top, 12)
                     ScrollView {
-                        AnyView(page)
+                        DesktopMcpServersPage()
                             .padding(.horizontal, 32)
                             .padding(.top, 20)
                             .padding(.bottom, 24)
@@ -49,20 +41,17 @@ struct DesktopPluginsModal: View {
                 }
             }
         }
-        .environmentObject(apps)
         .environmentObject(mcp)
         .environmentObject(harness)
         .environmentObject(settings)
         .task {
             settings.attach(session)
             async let config: Void = settings.load()
-            async let catalog: Void = apps.load(session)
             async let servers: Void = mcp.load(session.settingsClient)
             async let connectors: Void = loadHarness()
-            _ = await (config, catalog, servers, connectors)
+            _ = await (config, servers, connectors)
         }
         .onDisappear {
-            apps.stopPolling()
             mcp.stopAll()
         }
         .accessibilityElement(children: .contain)
@@ -80,328 +69,14 @@ struct DesktopPluginsModal: View {
             VStack(alignment: .leading, spacing: 4) {
                 DesktopText("Plugins", size: 17, weight: .semibold, line: 24, tracking: -0.136)
                     .accessibilityAddTraits(.isHeader)
-                DesktopText("Connect apps and your own MCP tools.", line: 19.5, color: \.inkSecondary)
+                DesktopText("Your own MCP tools and claude.ai connectors.", line: 19.5, color: \.inkSecondary)
             }
             Spacer(minLength: 0)
-            if tab == .apps, !tabs.isEmpty {
-                Button {
-                    Task { await apps.loadInventory(session) }
-                } label: {
-                    DesktopSettingsIconView(icon: .refreshCw, size: 17)
-                        .foregroundStyle(theme.inkSecondary)
-                        .rotationEffect(.degrees(apps.refreshing ? 180 : 0))
-                        .frame(width: 28, height: 28)
-                }
-                .buttonStyle(DesktopHoverFill(radius: 8))
-                .disabled(apps.refreshing)
-                .padding(.top, 2)
-                .accessibilityLabel(Text("Refresh connection status"))
-                .accessibilityIdentifier("desktop-plugins.refresh")
-            }
             DesktopCloseButton(label: "Close plugins", identifier: "desktop-plugins.close", action: close)
         }
         .padding(.leading, 32)
         .padding(.trailing, 32)
         .padding(.top, 24)
-    }
-
-    private var tabBar: some View {
-        HStack(spacing: 4) {
-            ForEach(tabs, id: \.self) { item in
-                Button { shell.pluginsTab = item } label: {
-                    Text(item == .apps ? "Connected apps" : "MCP servers")
-                        .font(theme.font(13))
-                        .foregroundStyle(item == tab ? theme.ink : theme.inkTertiary)
-                        .padding(.horizontal, 8)
-                        .frame(height: 24)
-                        .background(item == tab ? theme.hover : .clear, in: Capsule())
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(item == tab ? [.isSelected] : [])
-                .accessibilityIdentifier("desktop-plugins.tab.\(item.rawValue)")
-            }
-            Spacer(minLength: 0)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("Plugin type"))
-    }
-
-    @ViewBuilder
-    private var page: some View {
-        switch tab {
-        case .apps: DesktopConnectedAppsPage()
-        case .mcp: DesktopMcpServersPage()
-        }
-    }
-}
-
-// MARK: - Connected apps
-
-struct DesktopConnectedAppsPage: View {
-    @Environment(\.desktopTheme) private var theme
-    @Environment(\.openURL) private var openURL
-    @EnvironmentObject private var session: Session
-    @EnvironmentObject private var apps: ConnectedAppsModel
-    @EnvironmentObject private var settings: DesktopSettingsModel
-    @State private var confirming: (card: ConnectorCard, account: ConnectorAccount)?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            controls
-            if session.surfaceGate.allows(.harnessConnectors) {
-                AnyView(DesktopHarnessConnectorsBox())
-                    .padding(.top, 16)
-            }
-            if apps.catalog != nil, !apps.configured, !apps.stale {
-                AnyView(setup)
-                    .padding(.top, 12)
-            }
-            if let error = apps.error {
-                DesktopText(verbatim: error, size: 12.5, color: \.danger)
-                    .padding(.top, 12)
-            }
-            list
-                .padding(.top, 20)
-        }
-        .confirmationDialog(
-            Text(verbatim: confirmationText),
-            isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Disconnect", role: .destructive) {
-                guard let confirming else { return }
-                Task { await apps.disconnect(confirming.card, account: confirming.account, session: session) }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-    }
-
-    private var confirmationText: String {
-        guard let confirming else { return "" }
-        let account = confirming.account
-        let identity = account.desktopAlias.map { "“\($0)” (\(account.id))" } ?? "“\(account.id)”"
-        return pluginsFormat("Disconnect %1$@ from %2$@? Only this %2$@ account will be revoked. Your other %2$@ accounts will stay connected.", identity, confirming.card.label)
-    }
-
-    /// Marketplace / Connected, and the search field.
-    private var controls: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 0) {
-                segment(.marketplace, Text("Marketplace"))
-                segment(.connected, apps.connectedCount > 0 ? Text("Connected") + Text(verbatim: " \(apps.connectedCount)") : Text("Connected"))
-            }
-            .padding(2)
-            .frame(height: 28)
-            .background(theme.hover, in: Capsule())
-            Spacer(minLength: 0)
-            HStack(spacing: 10) {
-                DesktopSettingsIconView(icon: .search, size: 17)
-                    .foregroundStyle(theme.inkSecondary)
-                TextField(text: $apps.search, prompt: Text("Search apps").foregroundColor(theme.inkSecondary)) { Text("Search apps") }
-                    .font(theme.font(13))
-                    .foregroundStyle(theme.ink)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .accessibilityIdentifier("desktop-plugins.search")
-            }
-            .padding(.horizontal, 17)
-            .frame(width: 320, height: 44)
-            .background(theme.hover, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(theme.borderStrong, lineWidth: 1))
-        }
-    }
-
-    private func segment(_ value: ConnectorsTab, _ label: Text) -> some View {
-        Button { apps.tab = value } label: {
-            label
-                .font(theme.font(13))
-                .foregroundStyle(apps.tab == value ? theme.ink : theme.inkSecondary)
-                .padding(.horizontal, 12)
-                .frame(height: 24)
-                .background(apps.tab == value ? theme.hover : .clear, in: Capsule())
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(apps.tab == value ? [.isSelected] : [])
-        .accessibilityIdentifier("desktop-plugins.apps-tab.\(value == .marketplace ? "marketplace" : "connected")")
-    }
-
-    /// `ConnectedAppsSetup`: the workspace key for an admin (`canConfigure`),
-    /// a note for everyone else, as the remote client draws it.
-    private var setup: some View {
-        HStack(alignment: .top, spacing: 12) {
-            DesktopSettingsIconView(icon: .plugZap, size: 18)
-                .foregroundStyle(theme.accent)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: 0) {
-                DesktopText("Set up connected apps", size: 13.5, weight: .medium, line: 20.25)
-                DesktopText("Connected apps run through your own Composio project, so your accounts and tokens stay in a project you control.",
-                            size: 12.5, line: 20.3, color: \.inkSecondary)
-                    .padding(.top, 4)
-                if session.surfaceGate.scope == .serverAdmin {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Button {
-                            if let url = URL(string: "https://platform.composio.dev") { openURL(url) }
-                        } label: {
-                            HStack(spacing: 4) {
-                                step(1, Text("Create a free Composio account at") + Text(verbatim: " ")
-                                    + Text(verbatim: "platform.composio.dev").foregroundColor(theme.accent).fontWeight(.medium))
-                                DesktopSettingsIconView(icon: .externalLink, size: 11)
-                                    .foregroundStyle(theme.accent)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        step(2, Text("Open your project settings and copy the project API key (it starts with ak_)."))
-                        step(3, Text("Paste it below and save. The key is checked with Composio before it is stored."))
-                    }
-                    .padding(.top, 8)
-                    DesktopKeyField(
-                        title: Text("Composio project key"), provider: .composio,
-                        configured: settings.config?.keyConfigured(.composio) ?? false,
-                        help: Text("The key is write-only: it is stored by this installation and never shown again.")
-                    ) { value in
-                        let error = await settings.apply(.apiKey(.composio, value), key: "composio")
-                        if error == nil { await apps.loadCatalog(session) }
-                        return error
-                    }
-                    .padding(.top, 14)
-                    DesktopText("The key is write-only: it is stored by this installation and never shown again. Change it later in App Settings, Connections.",
-                                size: 11.5, line: 18.7, color: \.inkTertiary)
-                        .padding(.top, 8)
-                } else {
-                    DesktopText("Ask the owner of this installation or an admin to add a Composio key.",
-                                size: 12.5, weight: .medium, line: 20.3)
-                        .padding(.top, 8)
-                }
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(1)
-        .background(theme.inset, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-        .accessibilityIdentifier("desktop-plugins.setup")
-    }
-
-    private func step(_ n: Int, _ text: Text) -> some View {
-        HStack(alignment: .top, spacing: 4) {
-            DesktopText(verbatim: "\(n).", size: 12.5, line: 20.3, color: \.inkSecondary)
-            DesktopText(text, size: 12.5, line: 20.3, color: \.inkSecondary)
-        }
-        .padding(.leading, 4)
-    }
-
-    @ViewBuilder
-    private var list: some View {
-        if apps.catalog == nil {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                DesktopText("Loading catalog…", size: 12.5, color: \.inkSecondary)
-            }
-        } else {
-            DesktopText(apps.tab == .connected ? Text("Your connections") : (apps.search.isEmpty ? Text("Available apps") : Text("Search results")),
-                        size: 12, weight: .medium, color: \.inkSecondary)
-                .padding(.bottom, 12)
-            let cards = apps.visible
-            if cards.isEmpty {
-                DesktopText(apps.tab == .connected ? Text("No connected apps yet") : Text("No apps found"), color: \.inkSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 40)
-            }
-            let rows = stride(from: 0, to: cards.count, by: 2).map { Array(cards[$0..<min($0 + 2, cards.count)]) }
-            VStack(spacing: 0) {
-                ForEach(rows, id: \.first?.slug) { row in
-                    HStack(alignment: .top, spacing: 12) {
-                        ForEach(row, id: \.slug) { card in appCell(card) }
-                        if row.count == 1 { Color.clear.frame(maxWidth: .infinity, maxHeight: 1) }
-                    }
-                }
-            }
-        }
-    }
-
-    private func appCell(_ card: ConnectorCard) -> some View {
-        let state = apps.statuses[card.slug]
-        let pending = state?.pending == true
-        let failed = ConnectedAppsRules.isFailed(state)
-        let accounts = state?.accounts ?? []
-        let included = ConnectedAppsRules.isIncluded(card, state)
-        let busy = apps.busySlug == card.slug
-        let unavailable = ConnectedAppsRules.managedUnavailable(mode: apps.catalog?.mode, slug: card.slug)
-        let action = ConnectedAppsRules.action(
-            phase: apps.phase, busy: busy, included: included, canContinue: pending && apps.pendingURLs[card.slug] != nil,
-            pending: pending, hasAccounts: !accounts.isEmpty, failed: failed
-        )
-        let enabled = apps.configured && apps.phase == .ready && !busy && !included && !unavailable
-        let subtitle: Text = {
-            if pending { return Text("Finish setup in your browser") }
-            if failed && accounts.isEmpty { return Text("Authorization expired. Try again") }
-            return Text(verbatim: card.blurb)
-        }()
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                DesktopAppMark(card: card)
-                VStack(alignment: .leading, spacing: 0) {
-                    DesktopText(verbatim: card.label, weight: .medium).lineLimit(1)
-                    DesktopText(subtitle, size: 12, color: \.inkTertiary).lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Button { apps.tapAction(card, session: session) } label: {
-                    Group {
-                        if busy { ProgressView().controlSize(.mini) } else { actionLabel(unavailable ? nil : action, unavailable: unavailable) }
-                    }
-                    .frame(minWidth: 64)
-                }
-                .buttonStyle(DesktopButtonStyle(kind: .hover, height: 30))
-                .disabled(!enabled)
-                .accessibilityIdentifier("desktop-plugins.app.\(card.slug)")
-            }
-            ForEach(accounts) { account in
-                HStack(spacing: 8) {
-                    DesktopText(verbatim: account.desktopAlias ?? account.id, size: 12, weight: .medium)
-                    Spacer(minLength: 0)
-                    Button("Disconnect") { confirming = (card, account) }
-                        .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12, height: 26))
-                        .disabled(busy)
-                        .accessibilityIdentifier("desktop-plugins.disconnect.\(account.id)")
-                }
-                .padding(.leading, 56)
-            }
-            if apps.aliasSlug == card.slug && !pending {
-                HStack(spacing: 8) {
-                    TextField(text: $apps.aliasDraft, prompt: Text("Account label (work, personal…)")) { Text("Account label") }
-                        .font(theme.font(13))
-                        .padding(.horizontal, 10)
-                        .frame(height: 30)
-                        .background(theme.inset, in: RoundedRectangle(cornerRadius: 8))
-                        .onSubmit { Task { await apps.connect(card, session: session) } }
-                    Button("Continue") { Task { await apps.connect(card, session: session) } }
-                        .buttonStyle(DesktopButtonStyle(kind: .accent, height: 30))
-                        .disabled(apps.aliasDraft.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-                .padding(.leading, 56)
-            }
-        }
-        .padding(.leading, 12)
-        .padding(.trailing, 8)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func actionLabel(_ action: ConnectorAction?, unavailable: Bool) -> Text {
-        if unavailable { return Text("Self-host only") }
-        switch action {
-        case .included: return Text("Included")
-        case .checking: return Text("Checking…")
-        case .unavailable: return Text("Unavailable")
-        case .continueSetup: return Text("Continue")
-        case .checkStatus: return Text("Check status")
-        case .addAccount: return Text("Add account")
-        case .retry: return Text("Retry")
-        case .connect, nil: return Text("Connect")
-        }
     }
 }
 
@@ -527,6 +202,7 @@ struct DesktopMcpServersPage: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var mcp: McpServersModel
+    @EnvironmentObject private var harness: HarnessConnectorsModel
     @EnvironmentObject private var settings: DesktopSettingsModel
     @State private var adminServers: [MCPServerListing]?
     @State private var busy: String?
@@ -541,6 +217,10 @@ struct DesktopMcpServersPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if session.surfaceGate.allows(.harnessConnectors) {
+                DesktopHarnessConnectorsBox()
+                    .padding(.bottom, 20)
+            }
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     DesktopText("Your MCP servers", size: 15, weight: .semibold, line: 22.5)
@@ -808,56 +488,6 @@ struct DesktopMcpServersPage: View {
         defer { busy = nil }
         do { adminServers = try await client.deleteMCPServer(server.name) }
         catch { self.error = error.localizedDescription }
-    }
-}
-
-private extension ConnectorAccount {
-    var desktopAlias: String? {
-        let value = alias?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value?.isEmpty == false ? value : nil
-    }
-}
-
-/// An app's logo as the desktop draws it (`rounded-xl object-contain size-11`),
-/// else its initial on the control fill.
-struct DesktopAppMark: View {
-    @Environment(\.desktopTheme) private var theme
-    let card: ConnectorCard
-
-    private var source: URL? {
-        if let logo = card.logo, let url = URL(string: logo), url.scheme == "https" { return url }
-        if let domain = card.domain, !domain.isEmpty {
-            return URL(string: "https://www.google.com/s2/favicons?domain=\(domain)&sz=64")
-        }
-        return nil
-    }
-
-    var body: some View {
-        Group {
-            if let source {
-                AsyncImage(url: source) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFit()
-                    } else {
-                        initial
-                    }
-                }
-            } else {
-                initial
-            }
-        }
-        .frame(width: 44, height: 44)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .accessibilityHidden(true)
-    }
-
-    private var initial: some View {
-        ZStack {
-            theme.control
-            Text(verbatim: String(card.label.prefix(1)).uppercased())
-                .font(theme.font(15, .semibold))
-                .foregroundStyle(theme.inkSecondary)
-        }
     }
 }
 

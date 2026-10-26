@@ -15,7 +15,7 @@ import MessageUI
 
 /// The sheet's pages.
 enum SettingsRoute: Hashable {
-    case account, usage, plugins, rules, timeZone, botComputer, appearance, language, haptics, general, experimental, notifications, privacy
+    case account, usage, plugins, rules, approvalGrants, timeZone, botComputer, pages, appearance, language, haptics, general, experimental, notifications, privacy, vault, securityKeys
 }
 
 struct SettingsView: View {
@@ -189,6 +189,12 @@ private struct SettingsRootPage: View {
         if session.connection != nil {
             SettingsSectionLabel(text: "Bot")
             SettingsBotCard(showsComputer: has(.computer))
+            SettingsSpacer(SettingsMetrics.cardGap)
+            SettingsCard {
+                SettingsRow(title: "Published pages", accessory: .chevron, height: 44, identifier: "settings-pages") {
+                    navigator.push(.pages)
+                }
+            }
         }
         SettingsSpacer(SettingsMetrics.cardGap)
         SettingsCard {
@@ -201,6 +207,12 @@ private struct SettingsRootPage: View {
             SettingsRow(title: "Language", accessory: .valueChevron(AppLanguage.resolved(language).shortLabel), height: 43.33, identifier: "settings-language") { navigator.push(.language) }
             CardHairline(leadingInset: SettingsMetrics.rowInset)
             SettingsRow(title: "Haptics", accessory: .valueChevron(haptics ? String(localized: "On") : String(localized: "Off")), height: 43.67, identifier: "settings-haptics") { navigator.push(.haptics) }
+            if session.connection != nil {
+                CardHairline(leadingInset: SettingsMetrics.rowInset)
+                SettingsRow(title: "Vault", accessory: .chevron, height: 44, identifier: "settings-vault") { navigator.push(.vault) }
+                CardHairline(leadingInset: SettingsMetrics.rowInset)
+                SettingsRow(title: "Security keys", accessory: .chevron, height: 44, identifier: "settings-security-keys") { navigator.push(.securityKeys) }
+            }
         }
         let more = sections.filter { [.general, .organization, .experimental].contains($0) }
         if !more.isEmpty {
@@ -325,14 +337,18 @@ private struct SettingsRootPage: View {
         case .plugins: navigator.push(.plugins)
         case .account: navigator.push(.account)
         case .botComputer: navigator.push(.botComputer)
+        case .pages: navigator.push(.pages)
         case .usage: navigator.push(.usage)
         case .rules: navigator.push(.rules)
+        case .approvalGrants: navigator.push(.approvalGrants)
         case .timeZone: navigator.push(.timeZone)
         case .language: navigator.push(.language)
         case .haptics: navigator.push(.haptics)
         case .quickReplies: navigator.sheet = .quickReplies
         case .walkieVoice: navigator.sheet = .walkieVoice
         case .about: navigator.sheet = .about
+        case .credentials: navigator.push(.vault)
+        case .securityKeys: navigator.push(.securityKeys)
         }
     }
 }
@@ -351,8 +367,10 @@ struct SettingsRouteView: View {
         // Connect apps (#203, #218): the desktop panel's three views
         case .plugins: ConnectAppsPage()
         case .rules: AutoReviewRulesView()
+        case .approvalGrants: ApprovalGrantsPage()
         case .timeZone: TimeZonePickerView()
         case .botComputer: BotComputerSettingsView()
+        case .pages: PublishedPagesPage()
         case .appearance: AppearanceSettingsView()
         case .language: LanguageSettingsView()
         case .haptics: HapticsSettingsView()
@@ -360,6 +378,8 @@ struct SettingsRouteView: View {
         case .experimental: ExperimentalSettingsView()
         case .notifications: NotificationsSettingsView()
         case .privacy: PrivacySettingsView()
+        case .vault: VaultSettingsView()
+        case .securityKeys: SecurityKeysSettingsView()
         }
     }
 }

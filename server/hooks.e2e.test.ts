@@ -65,7 +65,6 @@ function harness(label: string, serverEnv: Record<string, string>, instanceEnv: 
         claude: {
           driver: "claudeAgent",
           environment: {
-            ...instanceEnv,
             FAKE_CLAUDE_TURN_STATE: join(home, "turns"),
             FAKE_CLAUDE_PROMPTS: join(home, "prompts.ndjson"),
             FAKE_CLAUDE_HOOKS: "1",
@@ -73,6 +72,7 @@ function harness(label: string, serverEnv: Record<string, string>, instanceEnv: 
               { name: "Bash", input: { command: "cat big.log" }, ok: true, output: BIG },
               { name: "Read", input: { file_path: "a.ts" }, ok: true, output: "const a = 1;" },
             ]),
+            ...instanceEnv,
           },
           config: { cli: FAKE_CLAUDE },
         },
@@ -179,6 +179,34 @@ posixOnly("engine hooks e2e: compaction", () => {
     expect(replies.at(-1)!.text).toContain("did in an earlier turn");
     expect(replies.at(-1)!.text).toContain("Bash ×1");
   }, 90_000);
+});
+
+posixOnly("engine hooks e2e: a shell call that hit its time limit", () => {
+  const dumpDir = mkdtempSync(join(tmpdir(), "sagax-hooks-timeout-dump-"));
+  const dump = join(dumpDir, "turn.json");
+  afterAll(() => removeTempDir(dumpDir));
+  const h = harness("timeout", {}, {
+    FAKE_CLAUDE_DUMP: dump,
+    FAKE_CLAUDE_TOOL_CALLS: JSON.stringify([
+      { name: "Bash", input: { command: "ffmpeg -i talk.mp3 -ar 16000 talk.wav" }, ok: false, output: "Exit code 143\nCommand timed out after 2m 0s" },
+      { name: "Bash", input: { command: "find / -iname 'ggml-*.bin'" }, ok: false, output: "Exit code 143\nCommand timed out after 2m 0s" },
+      { name: "Bash", input: { command: "false" }, ok: false, output: "Exit code 1" },
+    ]),
+  });
+
+  it("tells the engine how to rerun it, and the prompt said so up front", async () => {
+    const bot = await h.runTurn();
+    const reply: Msg = bot.messages.filter((m: Msg) => m.role === "bot" && m.kind === "text" && m.text).at(-1);
+    expect(reply.text!.match(/hit the shell time limit/g)).toHaveLength(2);
+    expect(reply.text).toContain("up to 600000");
+    expect(reply.text).toContain("mdfind -name");
+    const preview = await h.api("GET", `/api/bots/${bot.id}/system-prompt`);
+    const shell = preview.body.sections.find((s: { id: string }) => s.id === "shell");
+    expect(shell?.text).toContain("Long-running shell commands");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.systemPrompt).toContain(shell.text.trim());
+    expect(seen.env.BASH_MAX_TIMEOUT_MS).toBe("600000");
+  }, 60_000);
 });
 
 posixOnly("engine hooks e2e with SAGAX_HOOKS=0", () => {

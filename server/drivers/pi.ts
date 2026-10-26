@@ -68,7 +68,7 @@ import {
 import { appendNative } from "./native.ts";
 import { piHostToolArgs } from "./host-tools.ts";
 import { canUseMcpServer, parseToolScope } from "../../shared/tool-scope.ts";
-import { gateServer, mcpStdioServer, resultBudget } from "../mcp-gate-config.ts";
+import { customServerGate, gateServer, mcpStdioServer } from "../mcp-gate-config.ts";
 import { remoteMcpSpec } from "../mcp-http.ts";
 import { readMcpGatewayCall } from "../../shared/mcp-gateway-call.ts";
 
@@ -144,7 +144,6 @@ export function buildMcpServers(turn: SendTurnInput): Record<string, unknown> | 
   const parsed = parseToolScope(turn.toolScope);
   if (!parsed.ok) throw new Error(parsed.error);
   const servers: Record<string, unknown> = {};
-  if (turn.integrations?.composio) servers.composio = { ...turn.integrations.composio };
   if (turn.integrations?.localComputer) {
     const local = turn.integrations.localComputer;
     servers.computer = {
@@ -158,6 +157,7 @@ export function buildMcpServers(turn: SendTurnInput): Record<string, unknown> | 
   }
   if (turn.integrations?.agents) servers.agents = { ...turn.integrations.agents };
   if (turn.integrations?.phone) servers.phone = { ...turn.integrations.phone };
+  if (turn.integrations?.messages) servers.messages = { ...turn.integrations.messages };
   if (turn.integrations?.dweb) {
     servers.dweb = {
       command: process.execPath,
@@ -165,21 +165,55 @@ export function buildMcpServers(turn: SendTurnInput): Record<string, unknown> | 
       env: { ...NODE_ENV_FLAG, DWEB_URL: turn.integrations.dweb.url },
     };
   }
-  if (turn.integrations?.browser) servers.browser = { ...turn.integrations.browser };
-  if (turn.integrations?.data) servers.data = { ...turn.integrations.data };
+  // Browser and Data reach Sagax's approval path as on Claude (mounted, not
+  // pre-allowed there): the person's rules, the safety review and the
+  // security keys apply, and a Data call in the bot's own workspace is
+  // answered without a card (sagax-internal-tools.ts). Engine parity
+  // 2026-10-19: pi ran both with no card at every level.
+  if (turn.integrations?.browser) servers.browser = { ...turn.integrations.browser, scope: "approval" };
+  if (turn.integrations?.data) servers.data = { ...turn.integrations.data, scope: "approval" };
   for (const [name, server] of Object.entries(turn.integrations?.custom ?? {})) servers[name] = { ...server, scope: "custom" };
   for (const [name, server] of Object.entries(servers)) {
     if (parsed.scope !== undefined && !canUseMcpServer(parsed.scope, name)) { delete servers[name]; continue; }
     // Pi registers every tool it is given and has no tool search of its own,
     // so a URL server's big catalog is searched instead (mcp-directory.ts).
     const directory = remoteMcpSpec(server) !== undefined;
-    const gated = gateServer({ name, server, toolScope: parsed.scope, threadId: turn.threadId, budget: name in (turn.integrations?.custom ?? {}) ? resultBudget() : 0, nodeEnv: NODE_ENV_FLAG, directory });
+    const gated = gateServer({ name, server, toolScope: parsed.scope, threadId: turn.threadId, nodeEnv: NODE_ENV_FLAG, directory, ...customServerGate(name, name in (turn.integrations?.custom ?? {}), turn.integrations?.customResultBudgets) });
     const stdio = gated ?? mcpStdioServer(server, { nodeEnv: NODE_ENV_FLAG, ...(directory ? { directory: { name } } : {}) });
     if (!stdio) throw new Error("Pi MCP server configuration is invalid");
     const original = server as { scope?: string };
     servers[name] = { ...stdio, ...(original.scope ? { scope: original.scope } : {}), ...(directory ? { directory: true } : {}) };
   }
   return Object.keys(servers).length ? servers : null;
+}
+
+/** The `<server>__<tool>` a gated MCP confirm names, as the other engines
+ * report it (`mcpTool`), so Sagax's name-based answers (its own tools, a
+ * Perspicax read or lease, the person's rules) apply on pi too. Only the
+ * exact title pi-mcp-extension writes (`Allow <server>:<tool>?`) for a server
+ * mounted on this turn; anything else stays an unnamed card. A convenience,
+ * not a security boundary: pi's RPC does not say which extension asked, and
+ * in solo the person's own extensions (code inside pi already) could write
+ * the same title; an organization turn runs pi with --no-extensions. */
+export function piGatedMcpTool(title: unknown, mounted: Record<string, unknown> | null): string | undefined {
+  if (typeof title !== "string" || !mounted) return undefined;
+  const match = /^Allow ([A-Za-z0-9][\w-]{0,63}):([A-Za-z][\w-]{0,127})\?$/.exec(title);
+  if (!match || !Object.hasOwn(mounted, match[1]!)) return undefined;
+  return `${match[1]}__${match[2]}`;
+}
+
+/** The arguments of a named gated confirm, as Sagax's approval path reads
+ * them (`input`). pi-mcp-extension writes them as JSON cut at 300
+ * characters, or `Run <server>:<tool>` when there are none. A cut or
+ * missing message never reads as "no arguments": it stays text that does
+ * not parse, so a call judged on its arguments keeps its card. */
+export function piGatedMcpInput(message: unknown, mcpTool: string): string {
+  if (typeof message !== "string") return "(arguments not shown)";
+  const cut = mcpTool.indexOf("__");
+  const server = mcpTool.slice(0, cut);
+  const tool = mcpTool.slice(cut + 2);
+  if (message === `Run ${server}:${tool}`) return "{}";
+  return message || "(arguments not shown)";
 }
 
 /** A pi `get_available_models` response payload, parsed at its I/O boundary. */
@@ -784,7 +818,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
       }
 
       // integrations → stdio MCP servers for the pi-mcp-extension. The config
-      // carries credentials (boat token, composio key, comms token), so it goes
+      // carries credentials (boat token, comms token), so it goes
       // into a 0600 temp file removed when the turn settles — never on argv.
       const mcpServers = buildMcpServers(turn);
       let mcpTempDir: string | null = null;
@@ -796,7 +830,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
           writeFileSync(join(mcpTempDir, "mcp.json"), JSON.stringify({ mcpServers: mcpServers ?? {}, toolScope, scopeReadyPath, approvalMode: turn.approvalMode }), { mode: 0o600 });
         } catch (err) {
           // A failed write must not leave the temp dir behind — a partial file
-          // could still hold the boat token / composio key / comms token.
+          // could still hold the boat token / comms token.
           try {
             rmSync(mcpTempDir, { recursive: true, force: true });
           } catch {
@@ -814,7 +848,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
       ];
 
       // spawnCli can throw synchronously (unresolvable CLI); if it does, the
-      // 0600 temp file with the boat token / composio key / comms token must
+      // 0600 temp file with the boat token / comms token must
       // not be left on disk — settle() never runs because no child existed.
       const child = (() => {
         try {
@@ -826,7 +860,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
               ...input.environment,
               ...(mcpTempDir ? { SAGAX_MCP_CONFIG: join(mcpTempDir, "mcp.json") } : {}),
             }), turn.access),
-          });
+          }, "bot");
         } catch (err) {
           if (mcpTempDir) {
             try {
@@ -1064,6 +1098,8 @@ export const PiDriver: ProviderDriver<PiConfig> = {
               const selectOptions: string[] = isSelect && Array.isArray(evt.options)
                 ? evt.options.filter((option): option is string => typeof option === "string") : [];
               const summary = String(evt.title ?? (isQuestion ? "pi has a question" : "pi wants confirmation")).slice(0, 200);
+              const mcpTool = isQuestion ? undefined : piGatedMcpTool(evt.title, mcpServers);
+              const mcpInput = mcpTool ? piGatedMcpInput(evt.message, mcpTool) : undefined;
               // A select is a question with named options; the structured
               // card renders from it while the flat choices keep older
               // clients answering. An input has nothing to pick from and
@@ -1126,6 +1162,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
                 requestType: isQuestion ? "question" : "permission",
                 tool: String(evt.title ?? "pi"),
                 summary,
+                ...(mcpTool ? { mcpTool, input: mcpInput } : {}),
                 ...(choices ? { choices } : {}),
                 ...(question ? { questions: [question] } : {}),
               });
@@ -1430,7 +1467,6 @@ export const PiDriver: ProviderDriver<PiConfig> = {
           // pi-mcp-extension (pi core has no MCP client of its own).
           agentsMcp: true,
           computerMcp: true,
-          composioMcp: true,
           phoneMcp: true,
           customMcp: true,
           browserMcp: true,

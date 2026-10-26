@@ -206,10 +206,13 @@ export function progressText(
 /** The call's language for the app's own words: the one chosen for the
  * call; on auto, a page in English or French follows the person's last
  * words (French or not), any other page language is kept (the French guess
- * only tells French from English). */
-export function progressLocale(opts: { callLanguage?: string; lastUserText?: string; pageLocale: string; looksFrench: (text: string) => boolean }): string {
+ * only tells French from English). On auto, `sticky` (the locale already
+ * settled on this call) is kept so the spoken lines do not flip French and
+ * English turn to turn; a language picked in the panel always wins. */
+export function progressLocale(opts: { callLanguage?: string; lastUserText?: string; pageLocale: string; looksFrench: (text: string) => boolean; sticky?: string }): string {
   const chosen = opts.callLanguage?.trim();
   if (chosen && chosen !== "auto") return chosen.toLowerCase();
+  if (opts.sticky === "fr" || opts.sticky === "en") return opts.sticky;
   const page = opts.pageLocale.toLowerCase();
   const enOrFr = /^(en|fr)(?:-|$)/.test(page);
   const last = opts.lastUserText?.trim();

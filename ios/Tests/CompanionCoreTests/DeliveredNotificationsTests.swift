@@ -43,6 +43,19 @@ final class DeliveredNotificationsTests: XCTestCase {
         XCTAssertTrue(hidden.isHiddenFromPerson)
     }
 
+    /// 2026-10-22 (JC): a routine's automatic results thread is no row, no
+    /// badge and never the single chat's home; reports go to the person's chat.
+    func testRoutineResultsThreadsStayOutOfTheListBadgeAndStream() throws {
+        var results = task("r", unread: true)
+        results.routineResults = true
+        let alpha = bot("a", tasks: [task("t"), results])
+        XCTAssertEqual(alpha.visibleTasks.map(\.threadId), ["t"])
+        XCTAssertTrue(alpha.attentionTasks().isEmpty)
+        XCTAssertFalse(FreshTopic.isSegment(results))
+        let json = #"{"threadId":"r","title":"t","createdAt":0,"modelSelection":{"instanceId":"e","model":"m"},"routineResults":true}"#
+        XCTAssertEqual(try JSONDecoder().decode(BotTask.self, from: Data(json.utf8)).routineResults, true)
+    }
+
     func testDecodesTheHiddenFlag() throws {
         let json = #"{"threadId":"h","title":"t","createdAt":0,"modelSelection":{"instanceId":"e","model":"m"},"hidden":true}"#
         let decoded = try JSONDecoder().decode(BotTask.self, from: Data(json.utf8))

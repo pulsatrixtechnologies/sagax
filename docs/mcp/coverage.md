@@ -6,7 +6,7 @@ exposes to a bot or an AI client. The machine-readable form is the registry in
 `server/mcp-permissions.ts`; `server/mcp-permissions.test.ts` fails when a
 catalog tool has no permission.
 
-Totals: capabilities 124, covered 124, gaps 0.
+Totals: capabilities 140, covered 140, gaps 0.
 
 Sources read: the agents tool catalog, the internal routes it calls
 (`/api/internal/*`), the member API (`docs/org-member-api.md`), and the
@@ -45,6 +45,8 @@ Reading the table:
 | teamsetup:list | sagax | `list_team_setup` | `teamsetup:list` | covered |
 | computers:list | sagax | `list_shared_computers` | `computers:list` | covered |
 | terminal:list | sagax | `list_terminal_resources` | `terminal:list` | covered |
+| resources:usage | sagax | `resource_usage` | `resources:usage` | covered |
+| connectors:setup | sagax | `open_connector_setup` | `connectors:setup` | covered |
 | delegation:check | sagax | `check_delegation` | `delegation:check` | covered |
 | delegation:wait | sagax | `wait_delegation` | `delegation:wait` | covered |
 | sessions:search | sagax | `session_search` | `sessions:search` | covered |
@@ -73,13 +75,18 @@ Reading the table:
 | memory:log | sagax | `memory_log` | `memory:log` | covered |
 | groupmemory:save | sagax | `group_memory_update` | `groupmemory:save` | covered |
 | files:attach | sagax | `attach_file` | `files:attach` | covered |
+| widgets:check | sagax | `check_widget` | `widgets:check` | covered |
+| help:read | sagax | `sagax_help` | `help:read` | covered |
 | widgets:show | sagax | `show_widget` | `widgets:show` | covered |
 | widgets:update | sagax | `update_widget` | `widgets:update` | covered |
+| apps:show | sagax | `show_html` | `apps:show` | covered |
+| apps:update | sagax | `update_html` | `apps:update` | covered |
 | artifacts:save | sagax | `save_artifact` | `artifacts:save` | covered |
 | artifacts:update | sagax | `update_artifact` | `artifacts:update` | covered |
 | artifacts:list | sagax | `list_artifacts` | `artifacts:list` | covered |
 | artifacts:delete | sagax | `delete_artifact` | `artifacts:delete` | covered |
 | pages:propose | sagax | `propose_page` | `pages:propose` | covered |
+| phone:call | sagax | `place_phone_call` | `phone:call` | covered |
 | cards:options | sagax | `create_options_card` | `cards:options` | covered |
 | rooms:react | sagax | `react_to_message` | `rooms:react` | covered |
 | rooms:unreact | sagax | `remove_reaction` | `rooms:unreact` | covered |
@@ -93,6 +100,9 @@ Reading the table:
 | routines:propose | sagax | `propose_routine` | `routines:propose` | covered |
 | routines:propose.action | sagax | `propose_routine_action` | `routines:propose.action` | covered |
 | terminal:offer | sagax | `offer_shell_terminal` | `terminal:offer` | covered |
+| remote:publish | sagax | `publish_remote_session` | `remote:publish` | covered |
+| remote:snapshot | sagax | `remote_session_snapshot` | `remote:snapshot` | covered |
+| remote:exec | sagax | `remote_session_exec` | `remote:exec` | covered |
 | meetings:join | sagax | `join_meeting` | `meetings:join` | covered |
 | bots:ask | sagax | `ask_bot` | `bots:ask` | covered |
 | bots:delegate | sagax | `delegate_bot` | `bots:delegate` | covered |
@@ -108,6 +118,7 @@ Reading the table:
 | cloudagents:archive | sagax | `archive_cloud_agent` | `cloudagents:archive` | covered |
 | bots:create | sagax | `create_bot` | `bots:create` | covered |
 | bots:delete.propose | sagax | `propose_bot_deletion` | `bots:delete.propose` | covered |
+| bots:archive | sagax | `archive_bot` | `bots:archive` | covered |
 | agents:create | sagax | `create_agent` | `agents:create` | covered |
 | agents:delete | sagax | `delete_agent` | `agents:delete` | covered |
 | rooms:create | sagax | `create_room` | `rooms:create` | covered |
@@ -155,6 +166,9 @@ Reading the table:
 | flow:read | perspicax | `flow` | `flow:read` | covered |
 | flow:action | perspicax | `flow_action` | `flow:action` | covered |
 | review:write | perspicax | `review_write` | `review:write` | covered |
+| remotesupport:open | perspicax | `remote_support_open` | `remotesupport:open` | covered |
+| remotesupport:status | perspicax | `remote_support_status` | `remotesupport:status` | covered |
+| remotesupport:close | perspicax | `remote_support_close` | `remotesupport:close` | covered |
 | api:query | perspicax | `<profile>__query` | `api:query` | covered (bridge) |
 | api:write | perspicax | `<profile>__write`, `<profile>__<resource>_write` | `api:write` | covered (bridge) |
 | api:action | perspicax | `<profile>__action` | `api:action` | covered (bridge) |
@@ -162,6 +176,8 @@ Reading the table:
 | api:operation | perspicax | `<profile>__<operation>` | `api:operation` | covered (bridge) |
 | pairing:manage | sagax | `manage_pairing` | `pairing:manage` | covered |
 | settings:manage | sagax | `manage_settings` | `settings:manage` | covered |
+| settings:change | sagax | `sagax_settings` | `settings:change` | covered |
+| approvals:primary | sagax | `sagax_approvals` | `approvals:primary` | covered |
 
 
 ## Gap summary by priority
@@ -178,7 +194,7 @@ mode still decide. Perspicax's own Sagax tools (`sagax_bots`, `sagax_send`,
 `sagax_thread`, `sagax_routine_run`, `sagax_approve`, `sagax_nudge`) are
 aliases of the Sagax permissions they stand for. The Perspicax gateway tools
 (`PERSPICAX_TOOLS`: the memory tools, the `api_*` meta-tools, `identity`,
-`flow`, `flow_action`, `review_write`) are listed only on an organization
+`flow`, `flow_action`, the `remote_support_*` tools, `review_write`) are listed only on an organization
 server linked to Perspicax (`SAGAX_PERSPICAX_TOOLS`) and forwarded by
 `/api/internal/perspicax/tool` to the profile mounted in the turn, after the
 misuse and safety review. Reading the Perspicax catalog to vet resource names

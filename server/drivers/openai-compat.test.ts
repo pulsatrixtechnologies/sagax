@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CALL_MARK, ENDED_MARK, INTERRUPTED_MARK, voiceCallTurn } from "../testing/voice-call-turns.ts";
 import { recordEvents } from "../testing/events.ts";
-import { buildTurnContext, NATIVELY_REPLAYING_DRIVER_KINDS } from "../turn-context.ts";
+import { buildTurnContext, replaysNatively } from "../turn-context.ts";
 import { instanceConfigs } from "../config.ts";
 import { OpenAICompatDriver } from "./openai-compat.ts";
 
@@ -511,7 +511,7 @@ describe("OpenAICompatDriver", () => {
     ];
     // Mirrors server/index.ts's real call: buildTurnContext only inlines the
     // transcript into turnText when the driver is NOT in
-    // NATIVELY_REPLAYING_DRIVER_KINDS. openai-compat's runtime already
+    // replaysNatively. openai-compat's runtime already
     // replays via SendTurnInput.transcript (messagesFor() in
     // openai-chat.ts), so both must not fire for the same turn.
     const { turnText } = buildTurnContext({
@@ -520,7 +520,7 @@ describe("OpenAICompatDriver", () => {
       rewound: true,
       fresh: false,
       externallyUpdated: false,
-      replaysNatively: NATIVELY_REPLAYING_DRIVER_KINDS.includes("openai-compat"),
+      replaysNatively: replaysNatively("openai-compat"),
     });
     const inst = await OpenAICompatDriver.create({
       instanceId: "test-u25",
@@ -684,7 +684,7 @@ describe("OpenAICompatDriver", () => {
       });
       const recorder = recordEvents(inst.adapter);
       let turns = 0;
-      const send = async (input: { text: string; volatile: string; transcript: Array<{ role: "user" | "assistant"; text: string }>; threadId?: string; mentionTurn?: boolean; recalled?: string }) => {
+      const send = async (input: { text: string; volatile: string; transcript: Array<{ role: "user" | "assistant"; text: string }>; threadId?: string; mentionTurn?: boolean; recalled?: string; sections?: Array<{ id: string; text: string }> }) => {
         const threadId = input.threadId ?? "thread-replay";
         const settled = ++turns;
         await inst.adapter.sendTurn({
@@ -693,6 +693,7 @@ describe("OpenAICompatDriver", () => {
           system: `Standing rules.\n\n${input.volatile}`,
           systemStable: "Standing rules.",
           systemVolatile: input.volatile,
+          ...(input.sections ? { systemVolatileSections: input.sections } : {}),
           transcript: input.transcript,
           ...(input.mentionTurn ? { mentionTurn: true } : {}),
           ...(input.recalled ? { recalled: input.recalled } : {}),
@@ -746,6 +747,31 @@ describe("OpenAICompatDriver", () => {
         role: "user",
         content: "The Sagax context notes from earlier in this conversation have been cleared; the standing instructions still apply.\n\nagain",
       });
+      await done();
+    });
+
+    it("sends only the changed sections while the replayed notes hold the rest", async () => {
+      const { send, done } = await fixture();
+      const memory = { id: "memory", text: "Memory: likes tea." };
+      const at = (label: string) => ({ id: "recent", text: `\n\nRecent: ${label}` });
+      const turn = (sections: Array<{ id: string; text: string }>) => ({ volatile: sections.map((x) => x.text).join(""), sections });
+      await send({ text: "hello", ...turn([memory, at("2h")]), transcript: [] });
+      const second = await send({ text: "next", ...turn([memory, at("3h")]), transcript: [{ role: "user", text: "hello" }, { role: "assistant", text: "hi" }] });
+      expect(second.at(-1).content).toContain("Recent: 3h");
+      expect(second.at(-1).content).not.toContain("likes tea");
+      const history = [
+        { role: "user" as const, text: "hello" }, { role: "assistant" as const, text: "hi" },
+        { role: "user" as const, text: "next" }, { role: "assistant" as const, text: "hi" },
+      ];
+      const third = await send({ text: "again", ...turn([memory, at("3h")]), transcript: history });
+      expect(third.at(-1)).toEqual({ role: "user", content: "again" });
+      // once the full note leaves the window, the whole half rides again,
+      // even when it did not change
+      const unchanged = await send({ text: "same", ...turn([memory, at("3h")]), transcript: history.slice(2) });
+      expect(unchanged.at(-1).content).toContain("likes tea");
+      const trimmed = await send({ text: "later", ...turn([memory, at("4h")]), transcript: history.slice(2) });
+      expect(trimmed.at(-1).content).toContain("likes tea");
+      expect(trimmed.at(-1).content).toContain("Recent: 4h");
       await done();
     });
 

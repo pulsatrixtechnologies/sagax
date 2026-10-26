@@ -74,27 +74,32 @@ describe("OptionCard", () => {
     const card = msg({ id: "quiz", kind: "options", card: { title: "Pick one", subtitle: "", options: ["A thing"] } });
     const markup = renderToStaticMarkup(createElement(StoreProvider, null, createElement(OptionCard, { botId: "atlas", message: card })));
     expect(markup).toContain(`aria-label="${t("onboarding.card.dismiss")}"`);
-    expect(markup).toContain('<input dir="auto"');
+    // the field opens from the "Other" row, after the card's own rows
+    expect(markup).toContain(">Other<");
+    expect(markup).toContain('aria-keyshortcuts="B"');
   });
 
   const render = (card: Message["card"]) => renderToStaticMarkup(
     createElement(StoreProvider, null, createElement(OptionCard, { botId: "atlas", message: msg({ id: "ask", kind: "options", card }) })),
   );
 
-  it("waits in the shared ask card with its title in the accent ink", () => {
+  it("waits in the shared question card: bold title, the bubble's fill, lettered rows", () => {
     const markup = render({ title: "Pick a region", subtitle: "Where should the bucket live?", options: ["us-east-1", "eu-west-1"], requestId: "r1" });
     expect(markup).toContain('data-ask-card="pending"');
-    expect(markup).toContain("text-accent-text");
-    expect(markup).toContain("Pick a region");
+    expect(markup).toContain("rounded-2xl bg-card p-4");
+    expect(markup).not.toContain("text-accent-text");
+    expect(markup).toMatch(/font-semibold[^"]*"><bdi dir="auto">Pick a region</);
+    expect(markup).toMatch(/size-\[22px\][^>]*>A</);
     expect(markup).toContain("eu-west-1");
   });
 
-  it("folds an answered live ask into one line with what was picked", () => {
+  it("keeps an answered live ask, the pick marked and the rest dimmed", () => {
     const markup = render({ title: "Pick a region", subtitle: "Where?", options: ["us-east-1", "eu-west-1"], requestId: "r1", answered: "eu-west-1" });
     expect(markup).toContain('data-ask-card="settled"');
-    expect(markup).toContain("eu-west-1");
-    expect(markup).not.toContain("us-east-1");
-    expect(markup).not.toContain("<input");
+    expect(markup).toMatch(/aria-checked="true"[^]*eu-west-1/);
+    expect(markup).toMatch(/opacity-45[^]*us-east-1/);
+    expect(markup).not.toContain("<textarea");
+    expect(markup).not.toContain(">Other<");
   });
 
   it("says a live ask nobody answered was closed, not answered", () => {

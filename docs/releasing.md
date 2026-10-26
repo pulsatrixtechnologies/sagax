@@ -183,10 +183,45 @@ or credentials file.
 3. README and docs downloads point at the canonical repo, while the legacy
    mirror exists only for installed updater clients and historical releases.
 
-The npm package is published separately and its versioned `.tgz` is attached
-only to the canonical release. It is not a desktop updater artifact; the
-mirror checks permit that one extra file while still verifying the complete,
-byte-identical desktop asset set.
+The npm package is published separately (below). It is not a desktop
+updater artifact and is not attached to the GitHub release: releases are
+immutable once published, and their body is the desktop update notes.
+
+## npm package: `@pulsatrixtechnologies/sagax`
+
+The CLI and server are published to npm as `@pulsatrixtechnologies/sagax` (command
+`sagax`), at the release's own version: tag `pulsa-vX.Y.Z` publishes
+`@pulsatrixtechnologies/sagax@X.Y.Z`, built from `package.json` `forkVersion`. This is
+the only npm package of this project. The unscoped names are not ours: one
+is the upstream author's package and `sagax` is an unrelated one, so never
+publish, install or document them. Until the first version is on npm, the
+checkout (`pnpm install && pnpm build`, then `pnpm omb <command>`) remains
+the way to run the CLI, and docs that show `npm install -g @pulsatrixtechnologies/sagax`
+say so.
+
+- `.github/workflows/npm-package.yml` runs on every pushed `pulsa-v*` tag
+  (`gh release create pulsa-vX.Y.Z`, step 5 above, creates and pushes it)
+  and on a manual dispatch. It builds the package
+  (`scripts/build-npm-package.mjs`), proves the packed tarball runs with no
+  `node_modules`, checks that the tag, the package version and
+  `forkVersion` agree, then publishes with
+  `npm publish --provenance --access public`. A manual run on a branch
+  stops before publishing; a manual run on a `pulsa-v` tag publishes (use it
+  to retry a failed publish).
+- Publishing uses npm trusted publishing (OIDC): no npm token is stored.
+  The publish job runs in the GitHub environment `npm` with
+  `id-token: write`. The trusted publisher on npmjs.com names organization
+  `pulsatrixtechnologies`, repository `Sagax`, workflow `npm-package.yml`
+  and environment `npm`, and allows `npm publish`.
+- npm accepts a trusted publisher only on a package that already exists.
+  The first version is therefore published once with a short-lived
+  granular token saved as the optional repository secret `NPM_TOKEN`
+  (the workflow falls back to it only when OIDC fails), or by hand from the
+  proven tarball. Then add the trusted publisher, delete `NPM_TOKEN`, revoke
+  the token, and set the package to require two-factor authentication and
+  disallow tokens.
+- `fleet upgrade` installs exactly `@pulsatrixtechnologies/sagax@<version>`, never a
+  floating tag, so a fleet moves only when its operator names a release.
 
 ## Why the gates exist
 

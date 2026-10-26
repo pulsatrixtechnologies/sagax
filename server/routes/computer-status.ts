@@ -71,6 +71,13 @@ export interface ComputerStatusRouteDeps {
   local: LocalComputerLike;
   /** The owner of this computer: loopback (the paired phone included) or an admin session. */
   mayManageLocal: (auth: RequestAuth) => boolean;
+  /** One update at a time per computer, never under a working bot
+   * (MaintenanceScheduler claim/release/busy, keys as computerCareKey). */
+  updateGuard?: {
+    claim(key: string): boolean;
+    release(key: string): void;
+    busy(key: string): Promise<boolean>;
+  };
 }
 
 export function sandboxStatus(view: UserSandboxView): ComputerStatus {
@@ -104,6 +111,7 @@ export function createComputerStatusRoutes(deps: ComputerStatusRouteDeps): Route
       if (body?.confirm !== true) return json(res, 400, { error: "Confirm the reset ({ confirm: true }).", code: "confirm" });
     }
 
+    let held: string | null = null;
     try {
       if (deps.organization()) {
         const principalId = auth.kind === "session" ? auth.session.principalId?.trim() : undefined;
@@ -113,10 +121,18 @@ export function createComputerStatusRoutes(deps: ComputerStatusRouteDeps): Route
           if (action === "status") return json(res, 200, { kind: "org-sandbox", configured: false, state: "unavailable", diskState: "normal", workspaceBytes: null } satisfies ComputerStatus);
           return json(res, 409, { error: "This server has no server environments.", code: "not_configured" });
         }
+        if (action !== "status") {
+          const refused = await hold(`person:${principalId}`);
+          if (refused) return json(res, 409, refused);
+        }
         const view = action === "status" ? await manager.status(principalId) : action === "update" ? await manager.update(principalId) : await manager.reset(principalId);
         return json(res, 200, sandboxStatus(view));
       }
       if (!deps.mayManageLocal(auth)) return json(res, 403, { error: "forbidden: only this computer's owner can manage its computer" });
+      if (action !== "status") {
+        const refused = await hold("local");
+        if (refused) return json(res, 409, refused);
+      }
       const local = action === "status" ? await deps.local.status() : action === "update" ? await deps.local.update() : await deps.local.reset();
       return json(res, 200, { kind: "local", ...local } satisfies ComputerStatus);
     } catch (error) {
@@ -127,6 +143,24 @@ export function createComputerStatusRoutes(deps: ComputerStatusRouteDeps): Route
         return json(res, status, { error: error instanceof Error ? error.message : String(error), ...(typeof code === "string" ? { code } : {}) });
       }
       return json(res, 502, { error: `The computer could not be ${action === "status" ? "read" : action === "update" ? "updated" : "reset"}.`, code: "unavailable" });
+    } finally {
+      if (held) deps.updateGuard?.release(held);
+    }
+
+    /** Take the computer for this update or reset, or say why not. An
+     * update also waits for no bot to be working on it (it would end the
+     * bot's task); a reset was confirmed and is not held back by that. */
+    async function hold(key: string): Promise<{ error: string; code: string } | null> {
+      const guard = deps.updateGuard;
+      if (!guard) return null;
+      if (!guard.claim(key)) return { error: "The computer is already being updated. Try again when it is done.", code: "computer_updating" };
+      held = key;
+      if (action === "update" && await guard.busy(key)) {
+        guard.release(key);
+        held = null;
+        return { error: "A bot is working on the computer. Try again when it is done.", code: "computer_busy" };
+      }
+      return null;
     }
   };
 }

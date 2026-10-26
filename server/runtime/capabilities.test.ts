@@ -3,11 +3,13 @@
 // continuation rule read these flags, never driver names. The expected
 // table is written out in full so a change in shared/approval-mode.ts or
 // in a driver's resume path is a visible diff here, not a silent shift.
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { BUILT_IN_DRIVERS } from "../drivers/builtIn.ts";
-import { ENGINE_KINDS, engineCapabilities, type EngineCapabilities } from "./capabilities.ts";
+import { ENGINE_KINDS, engineCapabilities, replaysTranscriptNatively, type EngineCapabilities } from "./capabilities.ts";
 
 const chat: EngineCapabilities = { resume: false, nativeReviewer: false, full: true, edits: false, stepCap: 64, subagents: false };
 const bare: EngineCapabilities = { resume: true, nativeReviewer: false, full: false, edits: false, subagents: false };
@@ -78,5 +80,31 @@ describe("engineCapabilities", () => {
     const found = /^const MAX_CHAT_ROUNDS = (\d+);/m.exec(source);
     expect(found, "MAX_CHAT_ROUNDS moved or was renamed; update server/runtime/capabilities.ts").not.toBeNull();
     expect(engineCapabilities("openai-compat").stepCap).toBe(Number(found![1]));
+  });
+});
+
+describe("replaysTranscriptNatively", () => {
+  const root = fileURLToPath(new URL("../drivers/", import.meta.url));
+  const sources = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory() ? sources(join(dir, entry.name))
+      : entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts") ? [join(dir, entry.name)] : []);
+  const chatKinds = sources(root).flatMap((file) => {
+    const text = readFileSync(file, "utf8");
+    if (!text.includes("createOpenAIChatRuntime(")) return [];
+    const kind = /driverKind: "([^"]+)"/.exec(text)?.[1] ?? /DRIVER_KIND = "([^"]+)"/.exec(text)?.[1];
+    expect(kind, `${file} calls createOpenAIChatRuntime but declares no readable driverKind`).toBeDefined();
+    return [kind!];
+  });
+
+  it("finds the chat-completions family", () => {
+    expect(chatKinds.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("is true for every driver built on createOpenAIChatRuntime, and for no other", () => {
+    for (const kind of BUILT_IN_DRIVERS.map((driver) => driver.driverKind)) {
+      expect(replaysTranscriptNatively(kind), kind).toBe(chatKinds.includes(kind));
+    }
+    expect(replaysTranscriptNatively("someFutureEngine")).toBe(false);
+    expect(replaysTranscriptNatively(undefined)).toBe(false);
   });
 });

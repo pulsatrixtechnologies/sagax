@@ -292,20 +292,6 @@ final class CardsUITests: XCTestCase {
         XCTAssertTrue(element(app, "approval-dock-detail").label.contains("pas-lecture"))
     }
 
-    /// Cancel turn stops the reply: the turn ends and its asks close.
-    @MainActor
-    func testDockCancelTurn() throws {
-        try setUpFixture()
-        let ids = try asks([["tool": "Bash", "input": ["command": "printf 'annule'"]]])
-        let lab = try bot("asks")
-        let app = try launch("Card Lab")
-        tap(app, "approval-cancel-turn")
-        try eventually("the turn stopped") { try !busy(lab.id) }
-        try eventually("its ask closed") { try card(ids[0], in: lab.threadId)?.answered != nil }
-        XCTAssertNotEqual(try card(ids[0], in: lab.threadId)?.answered, "allow")
-        try eventually("the dock leaves") { !element(app, "approval-dock").exists }
-    }
-
     // MARK: - Parallel task (TH8)
 
     @MainActor

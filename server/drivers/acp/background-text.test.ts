@@ -128,6 +128,21 @@ describe("ACP memory one-shot (generateMemoryText)", () => {
       defaultCli: FAKE_CLI, nativeSource: "opt-out-test.acp", loginNote: "sign in", spawnArgs: () => [],
       pickAuthMethod: () => null, authFailure: "continue", isAuthenticated: () => true, backgroundText: false,
     };
-    expect((await create(createAcpDriver(support))).generateMemoryText).toBeUndefined();
+    const opted = await create(createAcpDriver(support));
+    expect(opted.generateMemoryText).toBeUndefined();
+    expect(opted.reviewPermission).toBeUndefined();
+  });
+
+  it("reviews a permission on the same tool-free session and refuses a tool (lot A1b)", async () => {
+    process.env.FAKE_ACP_TEXT_REPLY = '{"decision":"none"}';
+    process.env.FAKE_ACP_DUMP = join(scratch, "dump.json");
+    const engine = await create(GrokAgentDriver);
+    expect(engine.generateText).toBeUndefined();
+    await expect(engine.reviewPermission!("judge this card")).resolves.toBe('{"decision":"none"}');
+    const session = JSON.parse(readFileSync(`${process.env.FAKE_ACP_DUMP}.session.json`, "utf8"));
+    expect(session.mcpServers).toEqual([]);
+    expect(session.cwd).toMatch(/omb-acp-review-/);
+    delete process.env.FAKE_ACP_TEXT_REPLY;
+    await expect(engine.reviewPermission!("judge this card")).rejects.toThrow(/tried to use a tool/);
   });
 });

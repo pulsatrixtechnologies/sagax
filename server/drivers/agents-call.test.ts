@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { MEMORY_MAX_LINES, readMemoryFile, readMemoryTopic, updateMemory, writeMemoryFile } from "../workspace.ts";
-import { callTool, type ToolCallContext } from "./agents-call.ts";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { callTool, toolCallContextFromEnv, type ToolCallContext } from "./agents-call.ts";
 
 function context(overrides: Partial<ToolCallContext> = {}): ToolCallContext {
   return {
@@ -373,5 +376,24 @@ describe("end_call", () => {
     expect(called).toBe(false);
     expect(result.isError).toBe(true);
     expect(result.text).toContain("no live phone call");
+  });
+});
+
+describe("the turn depth of a process kept across turns", () => {
+  it("reads the current turn's depth on each call, and falls back to the launch depth", () => {
+    const dir = mkdtempSync(join(tmpdir(), "turn-depth-"));
+    try {
+      const file = join(dir, "t.depth");
+      writeFileSync(file, "0");
+      const context = toolCallContextFromEnv({ SAGAX_TURN_DEPTH: "0", SAGAX_TURN_DEPTH_FILE: file });
+      expect(context.depth).toBe(0);
+      writeFileSync(file, "1");
+      expect(context.depth).toBe(1);
+      writeFileSync(file, "not a number");
+      expect(context.depth).toBe(0);
+      expect(toolCallContextFromEnv({ SAGAX_TURN_DEPTH: "2" }).depth).toBe(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

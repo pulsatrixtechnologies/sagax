@@ -1,5 +1,5 @@
 // How a held outbound action reads at a glance: "Send to Linear?" and
-// "Create linear comment ×2", rather than the Composio slug the bot called.
+// "Create linear comment ×2", rather than the raw tool slug the bot called.
 //
 // The rules match the phones (ios/Sources/CompanionCore/ApprovalCard.swift):
 // the computer's own list of calls when the card carries one, else the
@@ -89,15 +89,4 @@ export function outboundSummary(card: Pick<OptionCardData, "outboundRequest" | "
     headline: app ? t("approval.outbound.sendTo", { app }) : t("approval.outbound.sendOnBehalf"),
     summary: collapseOutboundCalls(calls, app === null),
   };
-}
-
-/** Composio names its tools TOOLKIT_ACTION_WORDS, all upper case. */
-const COMPOSIO_TOOL = /^[A-Z][A-Z0-9]+_([A-Z0-9_]+)$/;
-
-/** A Composio slug as a verb phrase, "LINEAR_CREATE_LINEAR_COMMENT" →
- * "create linear comment"; undefined for any other name. */
-export function composioActionPhrase(tool: string): string | undefined {
-  const match = COMPOSIO_TOOL.exec(tool);
-  if (!match) return undefined;
-  return match[1]!.replace(/_+/g, " ").trim().toLowerCase() || undefined;
 }

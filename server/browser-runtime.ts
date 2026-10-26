@@ -1,8 +1,14 @@
 import { killCliTree, spawnCli } from "./procs.ts";
 import { scrubHeldSecrets } from "../shared/redact.ts";
-import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, OBSERVE_PAGE_SCRIPT, parsePageState, scrubBrowserResult, shapeBrowserToolResult, slimBrowserToolList, stripHarnessOwnedArguments, type PageState } from "./browser-tool-shape.ts";
+import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, OBSERVE_PAGE_SCRIPT, parsePageState, READ_OPEN_PAGE_ONLY, readsAroundBrowser, scrubBrowserResult, shapeBrowserToolResult, slimBrowserToolList, stripHarnessOwnedArguments, type PageState } from "./browser-tool-shape.ts";
 import { randomBytes } from "node:crypto";
-import { aimOf, FILL_CREDENTIAL_TOOL, FILL_CREDENTIAL_TOOL_SPEC, formPostsOnly, formStaysOnOrigin, parseEvalArray, parseFillArguments, parseProbe, parseWrite, probeScript, problemText, SecretRedactor, writeScript } from "./credential-fill.ts";
+import { aimOf, FILL_CREDENTIAL_TOOL, FILL_CREDENTIAL_TOOL_SPEC, formPostsOnly, formStaysOnOrigin, LOGIN_MODE, parseEvalArray, parseEvalObject, parseFillArguments, parseProbe, parseWrite, probeScript, problemText, SecretRedactor, writeScript, type FillRequest, type LoginRequest } from "./credential-fill.ts";
+import { itemIdFromHandle } from "../shared/credential-vault.ts";
+import {
+  parsePurchaseCall, parseReceiptCall, RECORD_PURCHASE_TOOL, RECORD_PURCHASE_TOOL_SPEC, REQUEST_PURCHASE_TOOL, REQUEST_PURCHASE_TOOL_SPEC,
+  type PurchaseFlightLeg, type PurchaseItem,
+} from "../shared/payment-vault.ts";
+import { clearScript, loginOutcomeText, loginStateScript, markerScript, MAX_LOGIN_STEPS, parseLoginState, stepFields, submitScript, type LoginField, type LoginOutcome, type LoginPageState } from "./login-fill.ts";
 import type { VaultFillField } from "../shared/credential-vault.ts";
 
 export interface BrowserSpawnSpec {
@@ -18,11 +24,14 @@ export const BROWSER_CONTROL_REFUSAL = "Browser tools are paused while a person 
 export const BROWSER_RESTART_TOOL = "restart_browser";
 const BROWSER_RESTART_TOOL_SPEC = {
   name: BROWSER_RESTART_TOOL,
-  description: "Close and restart your browser. Use this only when a browser tool says the browser must be restarted, or it stays busy after a call that did not answer. Every open tab is closed and page state such as form input and sign-ins is lost; afterwards open the page you need again and check whether the interrupted action already happened before repeating it.",
+  description: "Close and restart your browser. Use this only when a browser tool says the browser must be restarted, or it stays busy after a call that did not answer. Every open tab is closed and unsaved page state such as form input is lost; sign-ins stay unless it is a temporary browser. afterwards open the page you need again and check whether the interrupted action already happened before repeating it.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
 };
 const BROWSER_INTERRUPTED = `The browser engine is stuck. Press Restart in the Browser panel, or call ${BROWSER_RESTART_TOOL}, before using browser tools again.`;
-const RESTART_COST = "a restart closes every tab and loses page state such as form input and sign-ins";
+/** Told on the first call after an idle close (closeIfIdle). A temporary
+ * browser saves nothing, so its sign-ins went with it. */
+const idleClosedNote = (saves: boolean) => `Your browser sat unused and was closed to free memory; this call opened it again. Pages you had open are gone (${saves ? "saved sign-ins are kept" : "it is a temporary browser, so its sign-ins are gone too"}), so open the page you need again before using earlier @eN refs.`;
+const RESTART_COST = "a restart closes every tab and loses page state such as form input";
 /** Actions whose result also says what changed on the page, so the model
  * need not spend a step reading it back. */
 const PAGE_ACTIONS: ReadonlySet<string> = new Set([
@@ -77,10 +86,16 @@ export class TransportError extends Error {}
 export interface CredentialFillAccess {
   /** The value to type: the vault checks the bot's grant and the page's
    * top-level URL (read from the engine) against the item's sites. */
-  resolve(request: { handle: string; field: VaultFillField; pageUrl: string }): Promise<{ ok: true; value: string; label: string } | { ok: false; message: string }>;
+  /** `form`: the identity of the form the field sits in (its submit
+   * targets), so a payment approval is used on that one form. */
+  resolve(request: { handle: string; field: VaultFillField; pageUrl: string; form?: string }): Promise<{ ok: true; value: string; label: string } | { ok: false; message: string; code?: string }>;
   /** The bot holds a live grant on some item: its own scripts are off in
    * the whole browser session, so it cannot plant a listener before a fill. */
   armed(): boolean;
+  /** Ask the person to approve a payment. The value never comes back. */
+  requestPurchase?(input: { pageUrl: string; amount: string; currency: string; cardId: string; merchant?: string; addressId?: string; contactId?: string; items?: PurchaseItem[]; flights?: PurchaseFlightLeg[] }): { ok: true; message: string } | { ok: false; message: string };
+  /** The shop confirmed the order: the receipt for the person. */
+  recordPurchase?(input: { pageUrl: string; orderRef?: string; total?: string; items?: PurchaseItem[]; flights?: PurchaseFlightLeg[] }): { ok: true; message: string } | { ok: false; message: string };
 }
 
 /** Argument names that address an element. On a browser where a login was
@@ -141,6 +156,25 @@ return 'free';
 const FILLED_VALUES_SCRIPT = `(() => {'use strict';
 return JSON.stringify(Array.from(document.querySelectorAll('[data-sagax-filled]')).map((el) => typeof el.value === 'string' ? el.value : '').filter(Boolean).slice(0, 20));
 })()`;
+/** The taint a person's own sign-in leaves (armForPerson): not an origin. */
+const PERSON_SIGN_IN = "person-sign-in";
+/** How long a person's own sign-in holds the bot's browser at most. */
+export const PERSON_SIGN_IN_MS = 30 * 60_000;
+const PERSON_SIGNING_IN = "The person is signing in themselves in this browser; it cannot be restarted until they press Done on the login card.";
+export const NOT_ARMED_FOR_PERSON = "This browser was not prepared for your sign-in. Press \"I'll sign in myself instead\" on the card again, sign in, then press Done.";
+/** Empty every password and one-time code field of the top document. */
+const CLEAR_SIGN_IN_FIELDS_SCRIPT = `(() => {'use strict';
+let cleared = 0;
+for (const el of Array.from(document.querySelectorAll('input'))) {
+  const code = el.autocomplete === 'one-time-code' || /otp|totp|2fa|mfa|one.?time|verification|security.?code|auth.?code/i.test([el.name, el.id, el.autocomplete, el.placeholder].join(' '));
+  if (el.type !== 'password' && !code) continue;
+  if (!el.value) continue;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, '');
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  cleared++;
+}
+return String(cleared);
+})()`;
 const KEYS_INTO_FILLED_REFUSAL = "That field holds a saved login Sagax filled: it cannot be typed into or edited, and keys are not sent to it. Act on another field, or submit the form.";
 
 /** The bot's script, run only if the page is still on `origin`: the check is
@@ -163,7 +197,13 @@ const SCRIPTS_OFF_AFTER_FILL = "Scripts in the page are turned off in this brows
 const SCRIPTS_OFF_WHILE_ALLOWED = "Scripts in the page are turned off in this browser while you are allowed to use a saved login, so nothing can capture it. Use snapshots, clicks, fills and get_text.";
 const SCREENSHOT_AFTER_FILL_REFUSAL = "Screenshots are turned off in this browser since Sagax filled a saved login in it, so the value cannot appear in an image. Use a snapshot or get_text, or call restart_browser.";
 
-const FIELD_NAMES: Record<VaultFillField, string> = { username: "user name", password: "password", totp: "one-time code", apiKey: "API key" };
+const FIELD_NAMES: Record<VaultFillField, string> = {
+  username: "user name", password: "password", totp: "one-time code", apiKey: "API key",
+  cardNumber: "card number", cardExpiry: "expiry", cardCvc: "security code", cardholder: "name on the card",
+  addressLine1: "street", addressLine2: "address line", addressCity: "city", addressRegion: "region",
+  addressPostal: "postal code", addressCountry: "country", addressRecipient: "recipient", addressPhone: "phone",
+  contactName: "name", contactEmail: "email", contactPhone: "phone", contactCompany: "company",
+};
 
 function toolText(text: string, isError = false): { content: Array<{ type: "text"; text: string }>; isError?: true } {
   return { content: [{ type: "text", text }], ...(isError ? { isError: true as const } : {}) };
@@ -412,6 +452,18 @@ interface Gate {
    * refused until it ends, so no tab switch or script lands between its steps. */
   exclusive: boolean;
   changed: Set<() => void>;
+  /** Live views open on this browser (watch): it is never idle while one is. */
+  watchers: number;
+  /** The bot's MCP requests in flight (agentRpc), a tool listing included. */
+  calls: number;
+  /** When a bot, a person or a live view last used it. */
+  lastUsed: number;
+  /** Its launch settings, as last used: an idle close closes with them. */
+  spec?: BrowserSpawnSpec;
+  /** An idle close in progress: agent calls and new views wait for it. */
+  idleClose?: Promise<void>;
+  /** Closed while idle since the last agent call, which is told so. */
+  idleClosed: boolean;
 }
 
 /** A session's MCP client, the launch settings it was started with, and its
@@ -427,6 +479,21 @@ export type PauseStream = (session: string, spec: BrowserSpawnSpec) => Promise<(
 /** Closes one session's native browser daemon; true only when it is gone. */
 export type CloseBrowser = (session: string, spec: BrowserSpawnSpec) => Promise<boolean>;
 
+/** A tool result with one more text line at its end (an egress refusal). */
+function withNotice(result: unknown, notice: string | null): unknown {
+  if (!notice || !result || typeof result !== "object" || !Array.isArray((result as { content?: unknown }).content)) return result;
+  const shaped = result as { content: unknown[] };
+  return { ...shaped, content: [...shaped.content, { type: "text", text: notice }] };
+}
+
+/** PATCH /api/bots/:id changing the bot's browser profile while a person
+ * signs in themselves in its browser: the Browser panel would move to a
+ * browser that is not armed. Null to go on, else the refusal. */
+export function browserProfileChangeRefusal(runtime: Pick<BrowserRuntime, "personSigningInForBot">, botId: string, current: string | undefined, requested: string | undefined): string | null {
+  if (requested === current || !runtime.personSigningInForBot(botId)) return null;
+  return "Someone is signing in themselves in this bot's browser. Finish (Done) or decline the login card first.";
+}
+
 export class BrowserRuntime {
   private gates = new Map<string, Gate>();
   private clients = new Map<string, ClientEntry>();
@@ -438,19 +505,39 @@ export class BrowserRuntime {
   /** recoveryCheckMs: how long the call after a lost one waits for the
    * engine to answer. It stays well inside the harness proxy's 130 s budget
    * for one call. */
-  private options: { requestTimeoutMs: number; takeoverTimeoutMs: number; idleMs: number; maxPending: number; resultBudget: number; recoveryCheckMs: number };
+  /** loginSettleMs / loginPollMs: how long a sign-in waits for the page to
+   * answer a submit, and how often it looks (server/login-fill.ts). */
+  private options: { requestTimeoutMs: number; takeoverTimeoutMs: number; idleMs: number; maxPending: number; resultBudget: number; recoveryCheckMs: number; loginSettleMs: number; loginPollMs: number };
   private closeBrowser: CloseBrowser;
   private applyViewport?: ApplyViewport;
   private pauseStream?: PauseStream;
+  /** What the egress gate refused for a session since the last call, as one
+   * line (server/browser/egress/registry.ts, port of OpenMausBot #2930). */
+  private egressNotice?: (session: string) => string | null;
   /** Values filled into each session, hidden from every later result. */
   readonly redactor = new SecretRedactor();
   /** Held secrets (a filled login's password, a fresh one-time code) out of
    * every tool result before the bot reads it. */
   private scrub: (text: string) => string;
   private onTiming?: (timing: BrowserTiming) => void;
+  /** Sessions where a person is signing in themselves (armForPerson until
+   * Done): kept apart from the redactor, which a restart forgets. */
+  /** The clock of a person's sign-in (PERSON_SIGN_IN_MS), for tests. */
+  private now: () => number;
+  private personSignIns = new Map<string, { botId: string; until: number }>();
 
-  constructor({ closeBrowser, applyViewport, pauseStream, scrub, onTiming, ...options }: Partial<BrowserRuntime["options"]> & { closeBrowser?: CloseBrowser; applyViewport?: ApplyViewport; pauseStream?: PauseStream; scrub?: (text: string) => string; onTiming?: (timing: BrowserTiming) => void } = {}) {
-    this.options = { requestTimeoutMs: 120_000, takeoverTimeoutMs: 15_000, idleMs: 60_000, maxPending: 16, resultBudget: DEFAULT_BROWSER_RESULT_BUDGET, recoveryCheckMs: 30_000, ...options };
+  /** The person's sign-in under way in this session, if it has not run out
+   * (PERSON_SIGN_IN_MS: a card left open never blocks the bot for good). */
+  private signingIn(session: string): boolean {
+    const entry = this.personSignIns.get(session);
+    if (entry && entry.until <= this.now()) this.personSignIns.delete(session);
+    return this.personSignIns.has(session);
+  }
+
+  constructor({ closeBrowser, applyViewport, pauseStream, egressNotice, now, scrub, onTiming, ...options }: Partial<BrowserRuntime["options"]> & { closeBrowser?: CloseBrowser; applyViewport?: ApplyViewport; pauseStream?: PauseStream; egressNotice?: (session: string) => string | null; now?: () => number; scrub?: (text: string) => string; onTiming?: (timing: BrowserTiming) => void } = {}) {
+    this.now = now ?? Date.now;
+    this.egressNotice = egressNotice;
+    this.options = { requestTimeoutMs: 120_000, takeoverTimeoutMs: 15_000, idleMs: 60_000, maxPending: 16, resultBudget: DEFAULT_BROWSER_RESULT_BUDGET, recoveryCheckMs: 30_000, loginSettleMs: 8_000, loginPollMs: 250, ...options };
     this.closeBrowser = closeBrowser ?? (async () => false);
     this.applyViewport = applyViewport;
     this.pauseStream = pauseStream;
@@ -476,7 +563,7 @@ export class BrowserRuntime {
   private gate(session: string): Gate {
     let gate = this.gates.get(session);
     if (!gate) {
-      gate = { owner: null, ready: false, releasing: false, agents: 0, dispatched: 0, humans: 0, uncertain: false, lostCall: null, closing: false, exclusive: false, changed: new Set() };
+      gate = { owner: null, ready: false, releasing: false, agents: 0, dispatched: 0, humans: 0, uncertain: false, lostCall: null, closing: false, exclusive: false, changed: new Set(), watchers: 0, calls: 0, lastUsed: Date.now(), idleClosed: false };
       this.gates.set(session, gate);
     }
     return gate;
@@ -505,6 +592,7 @@ export class BrowserRuntime {
       return result;
     } finally {
       gate.agents--;
+      gate.lastUsed = Date.now();
       this.changed(gate);
     }
   }
@@ -533,16 +621,35 @@ export class BrowserRuntime {
    * the runtime's own recovery notes included, loses the values Sagax filled
    * in this session and any held secret on the way out. */
   async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, credentials?: CredentialFillAccess): Promise<unknown> {
+    // agent_browser_read with a `url` fetches around the browser and its
+    // egress gate; it reads the open page only (OpenMausBot #2930 port).
+    if (method === "tools/call" && readsAroundBrowser(params)) return toolText(READ_OPEN_PAGE_ONLY, true);
+    // A call that arrives while its idle browser closes waits, then reopens
+    // it. Without one, nothing is awaited: the call is counted in the same
+    // turn of the event loop, so no idle close can start under it.
+    for (let closing = this.gates.get(session)?.idleClose; closing; closing = this.gates.get(session)?.idleClose) await closing;
+    const gate = this.gate(session);
+    gate.spec = spec;
+    gate.calls++;
     try {
       // A value Sagax filled never comes back to a bot, whatever tool reads the page.
-      const result = this.redactor.redact(session, await this.agentRpcUnredacted(session, spec, method, params, beforeDispatch, credentials));
-      return method === "tools/call" ? scrubBrowserResult(result, this.scrub) : result;
+      const redacted = this.redactor.redact(session, await this.agentRpcUnredacted(session, spec, method, params, beforeDispatch, credentials));
+      if (method !== "tools/call") return redacted;
+      const result = withNotice(scrubBrowserResult(redacted, this.scrub), this.egressNotice?.(session) ?? null);
+      if (!gate.idleClosed) return result;
+      gate.idleClosed = false;
+      const content = (result as { content?: unknown } | null)?.content;
+      const note = idleClosedNote(spec.env.AGENT_BROWSER_RESTORE_SAVE !== "never");
+      return { ...result as object, content: [{ type: "text", text: note }, ...Array.isArray(content) ? content : []] };
     } catch (error) {
       if (error instanceof Error) {
         const message = this.redactor.redactText(session, error.message);
         if (message !== error.message) error.message = message;
       }
       throw error;
+    } finally {
+      gate.calls--;
+      gate.lastUsed = Date.now();
     }
   }
 
@@ -600,6 +707,12 @@ export class BrowserRuntime {
       try {
         if (method === "tools/call" && toolName === FILL_CREDENTIAL_TOOL) {
           return await this.fillCredential(session, spec, entry.client, params, beforeDispatch, credentials);
+        }
+        if (method === "tools/call" && toolName === REQUEST_PURCHASE_TOOL) {
+          return await this.requestPurchase(session, entry.client, params, beforeDispatch, credentials);
+        }
+        if (method === "tools/call" && toolName === RECORD_PURCHASE_TOOL) {
+          return await this.recordPurchase(session, entry.client, params, beforeDispatch, credentials);
         }
         let guardedParams = params;
         if (method === "tools/call" && scriptTool(toolName)) {
@@ -832,48 +945,91 @@ export class BrowserRuntime {
    * engine's command over stdin, never on a command line (agent-browser
    * 0.38.2 mcp.rs call_eval): no process list shows it. The result names the
    * item and the field, never the value. */
+  /** Ask the person to approve a payment. The card number stays in the vault. */
+  private async requestPurchase(session: string, client: BrowserClient, params: unknown, beforeDispatch: (() => void) | undefined, credentials: CredentialFillAccess | undefined): Promise<unknown> {
+    const call = parsePurchaseCall(params);
+    if (typeof call === "string") return toolText(call, true);
+    if (!credentials?.requestPurchase) return toolText("Purchases are not available in this browser.", true);
+    const cardId = itemIdFromHandle(call.credential);
+    const addressId = call.address ? itemIdFromHandle(call.address) : null;
+    const contactId = call.contact ? itemIdFromHandle(call.contact) : null;
+    if (!cardId || (call.address && !addressId) || (call.contact && !contactId)) return toolText("request_purchase needs a card handle (cred_...).", true);
+    const href = await this.engineUrl(client);
+    beforeDispatch?.();
+    if (this.gate(session).owner !== null) throw new Error(BROWSER_CONTROL_REFUSAL);
+    if (!href) return toolText("The page's address could not be read; nothing was asked.", true);
+    const opened = credentials.requestPurchase({
+      pageUrl: href, amount: call.amount, currency: call.currency, cardId,
+      ...(call.merchant ? { merchant: call.merchant } : {}),
+      ...(addressId ? { addressId } : {}),
+      ...(contactId ? { contactId } : {}),
+      ...(call.items ? { items: call.items } : {}),
+      ...(call.flights ? { flights: call.flights } : {}),
+    });
+    return toolText(opened.message, !opened.ok);
+  }
+
+  /** The receipt of a purchase the person approved, from the shop's
+   * confirmation page (the page's own site, never one the bot names). */
+  private async recordPurchase(session: string, client: BrowserClient, params: unknown, beforeDispatch: (() => void) | undefined, credentials: CredentialFillAccess | undefined): Promise<unknown> {
+    const call = parseReceiptCall(params);
+    if (typeof call === "string") return toolText(call, true);
+    if (!credentials?.recordPurchase) return toolText("Purchases are not available in this browser.", true);
+    const href = await this.engineUrl(client);
+    beforeDispatch?.();
+    if (this.gate(session).owner !== null) throw new Error(BROWSER_CONTROL_REFUSAL);
+    if (!href) return toolText("The page's address could not be read; nothing was recorded.", true);
+    const recorded = credentials.recordPurchase({ pageUrl: href, ...call });
+    return toolText(recorded.message, !recorded.ok);
+  }
+
   private async fillCredential(session: string, spec: BrowserSpawnSpec, client: BrowserClient, params: unknown, beforeDispatch: (() => void) | undefined, credentials: CredentialFillAccess | undefined): Promise<unknown> {
     const request = parseFillArguments(params);
     if (typeof request === "string") return toolText(request, true);
     if (!credentials) return toolText("Saved credentials are not available to you here; nothing was filled.", true);
     if (!await this.holdExclusive(session)) return toolText(BROWSER_FILLING, true);
+    const stillOurs = () => {
+      beforeDispatch?.();
+      if (this.gate(session).owner !== null) throw new Error(BROWSER_CONTROL_REFUSAL);
+    };
     try {
-      return await this.fillHeld(session, spec, client, request, beforeDispatch, credentials);
+      if (request.field === LOGIN_MODE) return await this.loginHeld(session, spec, client, request, stillOurs, credentials);
+      const href = await this.engineUrl(client);
+      stillOurs();
+      if (!href) return toolText("The page's address could not be read; nothing was filled.", true);
+      const done = await this.fillOne(session, spec, client, request, href, stillOurs, credentials);
+      if (!done.ok) return toolText(done.message, true);
+      return toolText(`Filled the ${FIELD_NAMES[request.field]} of "${done.label}" on ${new URL(href).host}. You do not see the value; check the page and submit the form when ready.`);
     } finally {
       this.gate(session).exclusive = false;
     }
   }
 
-  private async fillHeld(session: string, spec: BrowserSpawnSpec, client: BrowserClient, request: Exclude<ReturnType<typeof parseFillArguments>, string>, beforeDispatch: (() => void) | undefined, credentials: CredentialFillAccess): Promise<unknown> {
-    const stillOurs = () => {
-      beforeDispatch?.();
-      if (this.gate(session).owner !== null) throw new Error(BROWSER_CONTROL_REFUSAL);
-    };
-    const href = await this.engineUrl(client);
-    stillOurs();
-    if (!href) return toolText("The page's address could not be read; nothing was filled.", true);
+  /** One field, the session already held: probe, vault, write. */
+  private async fillOne(session: string, spec: BrowserSpawnSpec, client: BrowserClient, request: FillRequest, href: string, stillOurs: () => void, credentials: CredentialFillAccess, typing?: (nonce: string) => void): Promise<{ ok: true; label: string; nonce: string } | { ok: false; code: string; message: string }> {
+    const refuse = (code: string) => ({ ok: false as const, code, message: problemText(code, request.field) });
     const origin = new URL(href).origin;
-    if (this.redactor.wasScripted(session, origin)) return toolText(problemText("scripted", request.field), true);
+    if (this.redactor.wasScripted(session, origin)) return refuse("scripted");
     const aim = aimOf(request);
     if (request.ref) {
       const clicked = await client.rpc("tools/call", { name: "agent_browser_click", arguments: { selector: request.ref } });
       stillOurs();
       if ((clicked as { isError?: unknown } | null)?.isError === true) {
-        return toolText(`${request.ref} could not be focused; nothing was filled. Take a new snapshot and pass a current ref.`, true);
+        return { ok: false, code: "ref", message: `${request.ref} could not be focused; nothing was filled. Take a new snapshot and pass a current ref.` };
       }
     }
     const nonce = randomBytes(16).toString("hex");
     const probe = parseProbe(await client.rpc("tools/call", { name: "agent_browser_eval", arguments: { script: probeScript(aim, request.field, nonce, origin), timeoutMs: 5_000 } }));
     stillOurs();
-    if (!probe) return toolText("The page could not be read; nothing was filled.", true);
-    if (probe.problem === "moved") return toolText(problemText("moved", request.field), true);
-    if (!probe.top) return toolText(problemText("frame", request.field), true);
-    if (probe.problem) return toolText(problemText(probe.problem, request.field), true);
-    if (!formStaysOnOrigin(probe.targets, origin)) return toolText(problemText("cross_origin_form", request.field), true);
-    if (!formPostsOnly(probe.methods)) return toolText(problemText("get_form", request.field), true);
-    const resolved = await credentials.resolve({ handle: request.credential, field: request.field, pageUrl: href });
+    if (!probe) return { ok: false, code: "unreadable", message: "The page could not be read; nothing was filled." };
+    if (probe.problem === "moved") return refuse("moved");
+    if (!probe.top) return refuse("frame");
+    if (probe.problem) return refuse(probe.problem);
+    if (!formStaysOnOrigin(probe.targets, origin)) return refuse("cross_origin_form");
+    if (!formPostsOnly(probe.methods)) return refuse("get_form");
+    const resolved = await credentials.resolve({ handle: request.credential, field: request.field, pageUrl: href, form: [...probe.targets, ...probe.methods].sort().join("\n") });
     stillOurs();
-    if (!resolved.ok) return toolText(resolved.message, true);
+    if (!resolved.ok) return { ok: false, code: resolved.code ?? "vault", message: resolved.message };
     // Remembered before the value leaves: anything the engine says from now
     // on, including an error that quotes it, is redacted.
     this.redactor.remember(session, resolved.value, { shortLived: request.field === "totp", pieces: request.field !== "username", caseless: request.field === "username" });
@@ -881,7 +1037,10 @@ export class BrowserRuntime {
     // The engine's stream would broadcast the write, value included, to its
     // clients: it is off while the write runs.
     const resume = this.pauseStream ? await this.pauseStream(session, spec) : async () => {};
-    if (!resume) return toolText("The browser's live view could not be paused, so nothing was typed. Try again.", true);
+    if (!resume) return { ok: false, code: "stream", message: "The browser's live view could not be paused, so nothing was typed. Try again." };
+    // Known before the write leaves, so a sign-in cut short after it (an
+    // error, the person taking the browser) still empties this field.
+    typing?.(nonce);
     let written: string | null;
     try {
       written = parseWrite(await client.rpc("tools/call", {
@@ -890,9 +1049,212 @@ export class BrowserRuntime {
     } finally {
       await resume().catch(() => undefined);
     }
-    beforeDispatch?.();
-    if (written !== "ok") return toolText(problemText(written ?? "fill_failed", request.field), true);
-    return toolText(`Filled the ${FIELD_NAMES[request.field]} of "${resolved.label}" on ${new URL(href).host}. You do not see the value; check the page and submit the form when ready.`);
+    stillOurs();
+    if (written !== "ok") return refuse(written ?? "fill_failed");
+    return { ok: true, label: resolved.label, nonce };
+  }
+
+  /** What the page asks for now (server/login-fill.ts), or null. */
+  private async loginState(client: BrowserClient, origin: string): Promise<LoginPageState | null> {
+    try {
+      return parseLoginState(parseEvalObject(await client.rpc("tools/call", { name: "agent_browser_eval", arguments: { script: loginStateScript(origin), timeoutMs: 5_000 } })));
+    } catch (error) {
+      if (error instanceof TransportError) throw error;
+      return null;
+    }
+  }
+
+  /** fill_credential with field "login" (server/login-fill.ts, port of
+   * OpenMausBot #2929): each step of the sign-in is filled through fillOne,
+   * then submitted once; a field that comes back after it was sent is a
+   * refusal, and the password and code are then cleared from the page. */
+  private async loginHeld(session: string, spec: BrowserSpawnSpec, client: BrowserClient, request: LoginRequest, stillOurs: () => void, credentials: CredentialFillAccess): Promise<unknown> {
+    const secrets: Array<{ nonce: string; origin: string }> = [];
+    const state = { settled: false };
+    try {
+      return await this.loginSteps(session, spec, client, request, stillOurs, credentials, secrets, state);
+    } finally {
+      // Any exit that is not a finished step (a refusal, an error, a lost
+      // engine, the person taking the browser): the password and code Sagax
+      // typed are emptied, best effort, so none waits in the page.
+      if (!state.settled && secrets.length) {
+        for (const origin of new Set(secrets.map((secret) => secret.origin))) {
+          const nonces = secrets.filter((secret) => secret.origin === origin).map((secret) => secret.nonce);
+          await client.rpc("tools/call", { name: "agent_browser_eval", arguments: { script: clearScript(nonces, origin), timeoutMs: 5_000 } }).catch(() => undefined);
+        }
+      }
+    }
+  }
+
+  private async loginSteps(session: string, spec: BrowserSpawnSpec, client: BrowserClient, request: LoginRequest, stillOurs: () => void, credentials: CredentialFillAccess, secrets: Array<{ nonce: string; origin: string }>, outcome: { settled: boolean }): Promise<unknown> {
+    const sent = new Set<LoginField>();
+    const filled: LoginField[] = [];
+    let label = "";
+    const clear = async (): Promise<boolean> => {
+      let cleared = false;
+      for (const origin of new Set(secrets.map((secret) => secret.origin))) {
+        try {
+          const nonces = secrets.filter((secret) => secret.origin === origin).map((secret) => secret.nonce);
+          const answer = parseWrite(await client.rpc("tools/call", { name: "agent_browser_eval", arguments: { script: clearScript(nonces, origin), timeoutMs: 5_000 } }));
+          cleared ||= answer === "cleared";
+        } catch (error) {
+          if (error instanceof TransportError) throw error;
+        }
+      }
+      return cleared;
+    };
+    const finish = (result: LoginOutcome, isError = false) => {
+      outcome.settled = result.kind !== "refused" && result.kind !== "nothing";
+      return toolText(loginOutcomeText(result), isError);
+    };
+    for (let step = 0; step < MAX_LOGIN_STEPS; step++) {
+      const href = await this.engineUrl(client);
+      stillOurs();
+      if (!href) return step === 0 ? toolText("The page's address could not be read; nothing was filled.", true) : finish({ kind: "submitted", label, filled, url: "(unreadable)", alert: "" });
+      const origin = new URL(href).origin;
+      const state = await this.loginState(client, origin);
+      stillOurs();
+      if (!state) {
+        if (step === 0) return toolText("The page could not be read; nothing was filled.", true);
+        return finish({ kind: "submitted", label, filled, url: href, alert: "" });
+      }
+      const { fill, again } = stepFields(state, sent);
+      // Sent once and asked again: the site said no. A user name shown
+      // again beside a new field is a page that keeps it; a password or
+      // code asked again, nothing new at all, or a filled password or code
+      // still in place, is a refusal.
+      if (step > 0 && (again.some((field) => field !== "username") || (fill.length === 0 && (again.length > 0 || state.secretLeft)))) {
+        const cleared = await clear();
+        stillOurs();
+        return finish({ kind: "refused", label, filled, alert: state.alert, cleared }, true);
+      }
+      if (fill.length === 0) {
+        if (step === 0) return toolText("No sign-in field was found on this page; nothing was filled. Open the site's sign-in page first, or fill one field at a time with its @eN ref.", true);
+        return finish({ kind: "submitted", label, filled, url: href, alert: state.alert });
+      }
+      const stepFilled: LoginField[] = [];
+      let last = "";
+      for (const field of fill) {
+        const done = await this.fillOne(session, spec, client, { credential: request.credential, field }, href, stillOurs, credentials,
+          field === "username" ? undefined : (nonce) => { secrets.push({ nonce, origin }); });
+        if (!done.ok) {
+          // A field the page seemed to have but the finder does not take, or
+          // that this login has no value for (a code without a seed): left.
+          if (field !== "password" && (done.code === "missing" || done.code === "no_value")) continue;
+          if (secrets.length) await clear();
+          stillOurs();
+          return toolText(done.message, true);
+        }
+        label = done.label;
+        stepFilled.push(field);
+        sent.add(field);
+        last = done.nonce;
+      }
+      if (!stepFilled.length) return toolText("This login has nothing to fill into the fields this page shows; nothing was filled.", true);
+      filled.push(...stepFilled);
+      if (!request.submit) return finish({ kind: "filled_only", label, filled });
+      if (state.captcha) return finish({ kind: "captcha", label, filled });
+      let submitted: string | null = null;
+      try {
+        submitted = parseWrite(await client.rpc("tools/call", { name: "agent_browser_eval", arguments: { script: submitScript(last, origin), timeoutMs: 5_000 } }));
+      } catch (error) {
+        if (error instanceof TransportError) throw error;
+      }
+      stillOurs();
+      if (submitted === "captcha") return finish({ kind: "captcha", label, filled });
+      if (submitted === "unsafe_form") return toolText("The form changed where or how it sends just before the submit (another site, or in the page address), so Sagax did not submit it and emptied the password and code it typed.", true);
+      if (submitted !== "submitted" && submitted !== "clicked") return finish({ kind: "no_submit", label, filled });
+      await this.settleAfterSubmit(client, href, last, origin, sent, stillOurs);
+    }
+    const href = await this.engineUrl(client);
+    stillOurs();
+    return finish({ kind: "submitted", label, filled, url: href || "(unreadable)", alert: "" });
+  }
+
+  /** Wait for the page to answer a submit: a new address, the filled field
+   * gone, or a field to fill. Bounded; the next step judges (an inline
+   * error that leaves the filled password in place is a refusal there). */
+  private async settleAfterSubmit(client: BrowserClient, href: string, nonce: string, origin: string, sent: ReadonlySet<LoginField>, stillOurs: () => void): Promise<void> {
+    const pause = () => new Promise((resolve) => setTimeout(resolve, this.options.loginPollMs));
+    const deadline = Date.now() + this.options.loginSettleMs;
+    while (Date.now() < deadline) {
+      await pause();
+      stillOurs();
+      let now = "";
+      try { now = await this.engineUrl(client); } catch (error) { if (error instanceof TransportError) throw error; }
+      if (now && now !== href) {
+        // A navigation: give the new document a moment to be readable.
+        for (let tries = 0; tries < 20 && Date.now() < deadline && !await this.loginState(client, new URL(now).origin); tries++) await pause();
+        return;
+      }
+      let marker: string | null = null;
+      try {
+        marker = parseWrite(await client.rpc("tools/call", { name: "agent_browser_eval", arguments: { script: markerScript(nonce, origin), timeoutMs: 5_000 } }));
+      } catch (error) {
+        if (error instanceof TransportError) throw error;
+      }
+      if (marker === "gone" || marker === "moved") return;
+      const state = await this.loginState(client, origin);
+      if (!state) continue;
+      const next = stepFields(state, sent);
+      if (next.fill.length || next.again.length) return;
+    }
+  }
+
+  /** A person is about to sign in themselves in this browser (the vault
+   * card's "I'll sign in myself", port of OpenMausBot #2707). Refused where a
+   * bot ran a script in this browser session (a listener could still wait
+   * in the page); otherwise armed like a filled browser: the bot's scripts,
+   * screenshots, preview frames and CSS selectors are off until a restart.
+   * Null when armed, else the refusal. */
+  armForPerson(session: string, botId: string): string | null {
+    if (this.signingIn(session)) { this.redactor.taint(session, PERSON_SIGN_IN); this.personSignIns.set(session, { botId, until: this.now() + PERSON_SIGN_IN_MS }); return null; }
+    if (this.redactor.everScripted(session)) return "A bot ran a script in this browser, so it is not clean for a sign-in. Press Restart in the Browser panel (or ask the bot to call restart_browser), then try again.";
+    this.redactor.taint(session, PERSON_SIGN_IN);
+    this.personSignIns.set(session, { botId, until: this.now() + PERSON_SIGN_IN_MS });
+    return null;
+  }
+
+  /** Whether a person's own sign-in is under way in this session. */
+  armedForPerson(session: string): boolean {
+    return this.signingIn(session) && this.redactor.isTainted(session, PERSON_SIGN_IN);
+  }
+
+  /** Whether a person is signing in themselves in one of this bot's
+   * browsers: its browser profile does not change meanwhile. */
+  personSigningInForBot(botId: string): boolean {
+    return [...this.personSignIns.keys()].some((session) => this.personSignIns.get(session)?.botId === botId && this.signingIn(session));
+  }
+
+  /** The person's sign-in ended (Done, or the card declined): the browser
+   * stays armed until its next restart, as after a fill. */
+  endPersonSignIn(session: string): void {
+    this.personSignIns.delete(session);
+  }
+
+  /** Forget what a session's browser held (a restart, a close, an idle
+   * close). A person's sign-in under way survives it: the session is armed
+   * again at once, so no script of the bot runs in the new browser either. */
+  private forgetSession(session: string): void {
+    this.redactor.forget(session);
+    if (this.signingIn(session)) this.redactor.taint(session, PERSON_SIGN_IN);
+  }
+
+  /** After the person signed in themselves: empty the page's password and
+   * code fields, so the bot never reads them back. Null when done (or no
+   * browser runs), else why not (the person still holds the browser). */
+  async clearAfterPerson(session: string): Promise<string | null> {
+    if (!this.armedForPerson(session)) return NOT_ARMED_FOR_PERSON;
+    const entry = this.clients.get(session);
+    if (!entry) return null;
+    try {
+      await this.withAgentAction(session, async () => entry.client.rpc("tools/call", { name: "agent_browser_eval", arguments: { script: CLEAR_SIGN_IN_FIELDS_SCRIPT, timeoutMs: 5_000 } }));
+      return null;
+    } catch (error) {
+      if (error instanceof Error && error.message === BROWSER_CONTROL_REFUSAL) return "Give the browser back to the bot (or wait a few seconds without using it), then press Done.";
+      if (error instanceof TransportError) return null;
+      return error instanceof Error ? error.message : "The browser could not be reached.";
+    }
   }
 
   /** One call the harness itself makes in a browser it owns (a meeting's
@@ -1025,6 +1387,7 @@ export class BrowserRuntime {
     if (!owner || !gate || gate.owner !== owner) return;
     gate.ready = false;
     gate.releasing = true;
+    gate.lastUsed = Date.now();
     this.changed(gate); // don't admit agents until pending human input drains.
   }
 
@@ -1044,7 +1407,63 @@ export class BrowserRuntime {
       }
       throw error;
     }
-    finally { gate.humans--; this.changed(gate); }
+    finally { gate.humans--; gate.lastUsed = Date.now(); this.changed(gate); }
+  }
+
+  /** A live view opened on this browser: it stays open while watched, and
+   * its idle time starts when the last view leaves. Call the returned
+   * function once the view closes. */
+  watch(session: string, spec: { command: string; args?: readonly string[]; env?: Record<string, string | undefined> }): () => void {
+    const gate = this.gate(session);
+    gate.watchers++;
+    gate.spec = { command: spec.command, args: [...spec.args ?? []], env: { ...spec.env } } as BrowserSpawnSpec;
+    let watching = true;
+    return () => {
+      if (!watching) return;
+      watching = false;
+      gate.watchers--;
+      gate.lastUsed = Date.now();
+    };
+  }
+
+  /** Resolves once an idle close of this browser in progress is over. */
+  async settled(session: string): Promise<void> { await this.gates.get(session)?.idleClose; }
+
+  /** Close a browser nothing has used for `idleMs`: no bot call, no person's
+   * hold or input, no open live view (the caller checks that no turn holds
+   * it). Saved sign-ins stay, and the next call opens it again. The same
+   * barrier as a restart, so nothing reaches the browser while it closes.
+   * A browser attached to the person's own Chrome is never closed. `spec`
+   * is its launch settings for one nothing here has called yet (a turn
+   * that has not used it): its idle time starts at this first look. */
+  async closeIfIdle(session: string, idleMs: number, spec?: { command: string; args?: readonly string[]; env: Record<string, string | undefined> }): Promise<boolean> {
+    const gate = spec ? this.gate(session) : this.gates.get(session);
+    if (gate && !gate.spec && spec) gate.spec = { command: spec.command, args: [...spec.args ?? []], env: { ...spec.env } } as BrowserSpawnSpec;
+    const launch = gate?.spec;
+    if (!gate || !launch || launch.env.AGENT_BROWSER_CDP || launch.env.AGENT_BROWSER_AUTO_CONNECT || !(idleMs > 0) || Date.now() - gate.lastUsed < idleMs) return false;
+    if (gate.calls || gate.agents || gate.humans || gate.owner !== null || gate.closing || gate.releasing || gate.watchers || gate.exclusive) return false;
+    gate.closing = true;
+    gate.ready = false;
+    let finished!: () => void;
+    gate.idleClose = new Promise((resolve) => { finished = resolve; });
+    this.changed(gate);
+    try {
+      if (!await this.closeBrowser(session, launch)) return false;
+      this.forgetSession(session);
+      await this.clients.get(session)?.client.stop();
+      await this.clients.get(session)?.client.stop(); // see restart()
+      gate.uncertain = false;
+      gate.lostCall = null;
+      gate.idleClosed = true;
+      return true;
+    } catch {
+      return false;
+    } finally {
+      gate.closing = false;
+      gate.idleClose = undefined;
+      finished();
+      this.changed(gate);
+    }
   }
 
   /** Exclusive recovery. Unlike take(), this never waits through active work
@@ -1060,7 +1479,7 @@ export class BrowserRuntime {
     this.changed(gate);
     try {
       await closeBrowser();
-      this.redactor.forget(session);
+      this.forgetSession(session);
       await this.clients.get(session)?.client.stop();
       // A tools/list admitted before closing set in can register a client
       // while that stop awaits; registration is synchronous, so one re-check
@@ -1086,6 +1505,9 @@ export class BrowserRuntime {
    * close — but it never takes a person's hold, and a failed close leaves no
    * owner behind that would lock a person out of the panel. */
   async agentRestart(session: string, closeBrowser: () => Promise<boolean>): Promise<void> {
+    // A person is signing in themselves here: a bot's restart would wipe
+    // what keeps its scripts off (armForPerson), so it waits for Done.
+    if (this.signingIn(session)) throw new Error(PERSON_SIGNING_IN);
     const gate = this.gate(session);
     if (gate.owner !== null) throw new Error(BROWSER_CONTROL_REFUSAL);
     if (gate.closing || gate.releasing || gate.agents || gate.humans) throw new Error("The browser is busy. Wait for current work to finish before restarting.");
@@ -1094,7 +1516,7 @@ export class BrowserRuntime {
     this.changed(gate);
     try {
       if (!await closeBrowser()) throw new Error("The browser could not be closed. Ask the person to press Restart in the Browser panel of Sagax on their computer, or to restart Sagax.");
-      this.redactor.forget(session);
+      this.forgetSession(session);
       await this.clients.get(session)?.client.stop();
       await this.clients.get(session)?.client.stop(); // see restart()
       gate.uncertain = false;
@@ -1122,7 +1544,7 @@ export class BrowserRuntime {
     await this.clients.get(session)?.client.stop();
     gate.closing = false;
     this.changed(gate);
-    if (!gate.owner && !gate.agents && !gate.humans) { this.gates.delete(session); this.toolLists.delete(session); this.redactor.forget(session); }
+    if (!gate.owner && !gate.agents && !gate.humans && !gate.watchers && !gate.calls) { this.gates.delete(session); this.toolLists.delete(session); this.forgetSession(session); }
   }
 
   async closeAll(): Promise<void> {
@@ -1161,7 +1583,7 @@ function firstText(result: unknown): string {
  * fill_credential. An engine tool with either name is replaced. */
 function withRestartTool(result: unknown): unknown {
   if (!result || typeof result !== "object" || !Array.isArray((result as { tools?: unknown }).tools)) return result;
-  const own = new Set<unknown>([BROWSER_RESTART_TOOL, FILL_CREDENTIAL_TOOL]);
+  const own = new Set<unknown>([BROWSER_RESTART_TOOL, FILL_CREDENTIAL_TOOL, REQUEST_PURCHASE_TOOL, RECORD_PURCHASE_TOOL]);
   const tools = ((result as { tools: unknown[] }).tools).filter((tool) => !own.has((tool as { name?: unknown } | null)?.name));
-  return { ...result, tools: [...tools, BROWSER_RESTART_TOOL_SPEC, FILL_CREDENTIAL_TOOL_SPEC] };
+  return { ...result, tools: [...tools, BROWSER_RESTART_TOOL_SPEC, FILL_CREDENTIAL_TOOL_SPEC, REQUEST_PURCHASE_TOOL_SPEC, RECORD_PURCHASE_TOOL_SPEC] };
 }

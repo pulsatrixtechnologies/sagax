@@ -10,6 +10,7 @@ import { MISUSE_POLICY_PROMPT } from "../shared/misuse-guardrails.ts";
 import { soulSystemPrompt } from "./bot-folder.ts";
 import { BUILT_IN_BROWSER_SYSTEM_PROMPT } from "./browser-engine.ts";
 import {
+  longCommandsPrompt,
   buildSystemPrompt,
   CLOUD_HOME_PLACE,
   cloudHomePrompt,
@@ -17,8 +18,6 @@ import {
   computerPrompt,
   resolveComputerPromptKind,
   mentionPrompt,
-  COMPOSIO_PROMPT,
-  composioSystemPrompt,
   customMcpPrompt,
   CREDENTIAL_PROMPT,
   LEARN_PROMPT,
@@ -26,11 +25,15 @@ import {
   PROFILE_CREATOR_PROMPT,
   ROUTINE_PROMPT,
   ROUTINE_EXECUTION_PROMPT,
+  CLAUDE_REUSE_VOLATILE_SECTIONS,
   WEBHOOK_PROMPT,
   SIGN_IN_PROMPT,
   RICH_OUTPUT_PROMPT,
+  richOutputPrompt,
   WIDGET_PROMPT,
   WIDGET_APPROVAL_PROMPT,
+  RUN_YOURSELF_PROMPT,
+  VERIFY_FIRST_PROMPT,
   type ComputerPromptKind,
 } from "./system-prompt.ts";
 import { WIDGET_KIT_CSS } from "../src/lib/widget-kit.ts";
@@ -82,6 +85,19 @@ describe("computerPrompt", () => {
 });
 
 describe("buildSystemPrompt", () => {
+  it("says the proposal-result paragraph once when routines, skills and the profile are all on", () => {
+    const paragraph = " Follow the tool result: a change to your own routines";
+    const prompt = buildSystemPrompt("persona", "", [
+      { id: "routine", label: "Routines", text: ROUTINE_PROMPT },
+      { id: "profile", label: "Profile changes", text: PROFILE_PROMPT },
+      { id: "learn", label: "Skill authoring", text: LEARN_PROMPT },
+    ]).text;
+    expect(prompt.split(paragraph)).toHaveLength(2);
+    expect(prompt).toContain("use list_routines and propose_routine");
+    expect(prompt).toContain("use propose_profile");
+    expect(prompt).toContain("use skills_list and skill_manage");
+  });
+
   it("keeps shared context stable and omits an empty user profile", () => {
     for (const profile of [undefined, {}, { aboutMe: " \n" }]) {
       expect(userProfileSystemPrompt(profile)).toBe("");
@@ -117,11 +133,30 @@ describe("buildSystemPrompt", () => {
     // memory, mentions, and recent work differ between two turns of one live
     // session (recent work relabels "2h ago" every turn), so a driver holding
     // a process open must not key that process on them
-    expect(built.stable).toBe(MISUSE_POLICY_PROMPT + "You are Kiwi. Search past sessions.");
+    expect(built.stable).toBe(MISUSE_POLICY_PROMPT + RUN_YOURSELF_PROMPT + VERIFY_FIRST_PROMPT + "You are Kiwi. Search past sessions.");
     expect(built.volatile).toContain("likes tea");
     expect(built.volatile).toContain("@Fig");
     expect(built.volatile).toContain("today 20:48");
     expect(built.volatile).not.toContain("Search past sessions");
+  });
+
+  it("keeps a Claude turn's switched-on instructions volatile, and setup, the teammate task and the webhook's untrusted-data rule stable", () => {
+    const built = buildSystemPrompt("You are Kiwi.", "", [
+      { id: "setup", label: "Setup", text: " Set yourself up." },
+      { id: "skill-instructions", label: "Skill instructions", text: " Use the deploy skill." },
+      { id: "playbooks", label: "Playbooks", text: " Follow the triage playbook." },
+      { id: "assignment", label: "Teammate task", text: " You were asked by a teammate." },
+      { id: "routine-execution", label: "Routine execution", text: ROUTINE_EXECUTION_PROMPT },
+      { id: "webhook", label: "Webhook provenance", text: WEBHOOK_PROMPT },
+    ], CLAUDE_REUSE_VOLATILE_SECTIONS);
+    for (const text of ["Use the deploy skill.", "Follow the triage playbook.", ROUTINE_EXECUTION_PROMPT.trim()]) {
+      expect(built.volatile).toContain(text);
+      expect(built.stable).not.toContain(text);
+    }
+    expect(built.stable).toContain("Set yourself up.");
+    expect(built.stable).toContain("You were asked by a teammate.");
+    expect(built.stable).toContain(WEBHOOK_PROMPT.trim());
+    expect(built.volatile).not.toContain("UNTRUSTED WEBHOOK EVENT DATA");
   });
 
   it("has an empty volatile half when nothing mid-conversation is present", () => {
@@ -132,9 +167,11 @@ describe("buildSystemPrompt", () => {
 
   it("is the persona alone when there is no soul and no parts", () => {
     const built = buildSystemPrompt("You are Kiwi.", "", []);
-    expect(built.text).toBe(MISUSE_POLICY_PROMPT + "You are Kiwi.");
+    expect(built.text).toBe(MISUSE_POLICY_PROMPT + RUN_YOURSELF_PROMPT + VERIFY_FIRST_PROMPT + "You are Kiwi.");
     expect(built.sections).toEqual([
       { id: "misuse-policy", label: "Security policy", text: MISUSE_POLICY_PROMPT, bytes: Buffer.byteLength(MISUSE_POLICY_PROMPT, "utf8") },
+      { id: "run-yourself", label: "Do the work yourself", text: RUN_YOURSELF_PROMPT, bytes: Buffer.byteLength(RUN_YOURSELF_PROMPT, "utf8") },
+      { id: "verify-first", label: "Verify, never assume", text: VERIFY_FIRST_PROMPT, bytes: Buffer.byteLength(VERIFY_FIRST_PROMPT, "utf8") },
       { id: "persona", label: "Identity", text: "You are Kiwi.", bytes: 13 },
     ]);
   });
@@ -154,19 +191,19 @@ describe("buildSystemPrompt", () => {
       { id: "memory", label: "Memory", text: " Your memory file is X." },
     ];
     const built = buildSystemPrompt("You are Kiwi.", "", parts);
-    expect(built.text).toBe(MISUSE_POLICY_PROMPT + "You are Kiwi. You can act on the computer. Your memory file is X.");
-    expect(built.sections.map((s) => s.id)).toEqual(["misuse-policy", "persona", "computer", "memory"]);
+    expect(built.text).toBe(MISUSE_POLICY_PROMPT + RUN_YOURSELF_PROMPT + VERIFY_FIRST_PROMPT + "You are Kiwi. You can act on the computer. Your memory file is X.");
+    expect(built.sections.map((s) => s.id)).toEqual(["misuse-policy", "run-yourself", "verify-first", "persona", "computer", "memory"]);
   });
 
   it("puts the soul block directly after the persona and measures it in bytes", () => {
     const built = buildSystemPrompt("You are Kiwi.", "Be brief. é", [
       { id: "memory", label: "Memory", text: " Your memory file is X." },
     ]);
-    expect(built.sections.map((s) => s.id)).toEqual(["misuse-policy", "persona", "soul", "memory"]);
-    const soul = built.sections[2]!;
+    expect(built.sections.map((s) => s.id)).toEqual(["misuse-policy", "run-yourself", "verify-first", "persona", "soul", "memory"]);
+    const soul = built.sections[4]!;
     expect(soul.text).toBe(soulSystemPrompt("Be brief. é"));
     expect(soul.bytes).toBe(Buffer.byteLength(soul.text, "utf8"));
-    expect(built.text).toBe(MISUSE_POLICY_PROMPT + "You are Kiwi." + soul.text + " Your memory file is X.");
+    expect(built.text).toBe(MISUSE_POLICY_PROMPT + RUN_YOURSELF_PROMPT + VERIFY_FIRST_PROMPT + "You are Kiwi." + soul.text + " Your memory file is X.");
   });
 });
 
@@ -221,10 +258,16 @@ describe("computerPrompt", () => {
 
 describe("shared sentences", () => {
   it("each begins with one space so they concatenate onto the persona line", () => {
-    for (const sentence of [COMPOSIO_PROMPT, CREDENTIAL_PROMPT, ROUTINE_PROMPT, ROUTINE_EXECUTION_PROMPT, LEARN_PROMPT, WEBHOOK_PROMPT, PROFILE_PROMPT, PROFILE_CREATOR_PROMPT, SIGN_IN_PROMPT]) {
+    for (const sentence of [CREDENTIAL_PROMPT, ROUTINE_PROMPT, ROUTINE_EXECUTION_PROMPT, LEARN_PROMPT, WEBHOOK_PROMPT, PROFILE_PROMPT, PROFILE_CREATOR_PROMPT, SIGN_IN_PROMPT]) {
       expect(sentence.startsWith(" ")).toBe(true);
       expect(sentence.startsWith("  ")).toBe(false);
     }
+  });
+
+  it("tells a routine run it works in the background and how to say nothing to report (JC 2026-10-22)", () => {
+    expect(ROUTINE_EXECUTION_PROMPT).toContain("the person does not see this conversation");
+    expect(ROUTINE_EXECUTION_PROMPT).toContain("Never restate or quote the routine's instructions");
+    expect(ROUTINE_EXECUTION_PROMPT).toContain("end your final message with the line NOTHING_TO_REPORT on its own");
   });
 
   it("tells a bot offered create_bot that its person's own request may create one bot (2026-10-17)", () => {
@@ -264,36 +307,6 @@ describe("shared sentences", () => {
     expect(LEARN_PROMPT).toContain("only when the user explicitly asks to revise that exact name");
     expect(CREDENTIAL_PROMPT).toContain("secure credential request");
     expect(CREDENTIAL_PROMPT).not.toContain("applied immediately");
-  });
-});
-
-describe("composioSystemPrompt", () => {
-  it("keeps the generic all-tools sentence for legacy bots", () => {
-    expect(composioSystemPrompt(undefined)).toBe(COMPOSIO_PROMPT);
-  });
-
-  it("is absent when no tools are granted", () => {
-    expect(composioSystemPrompt({})).toBe("");
-  });
-
-  it("names exactly the granted services for a partial grant", () => {
-    const prompt = composioSystemPrompt({
-      gmail: { tools: ["GMAIL_SEND_EMAIL"] },
-      google_calendar: { tools: "*" },
-    });
-    expect(prompt).toContain("(Gmail, Google Calendar)");
-    expect(prompt).toContain("COMPOSIO_SEARCH_TOOLS");
-    expect(prompt).toContain("COMPOSIO_MULTI_EXECUTE_TOOL");
-    expect(prompt).toContain("Only the tools this bot was granted will run");
-    // a partial-grant prompt never advertises services the bot lacks
-    expect(prompt).not.toContain("Slack");
-    expect(prompt).not.toContain("Notion");
-  });
-
-  it("starts with exactly one space like every shared sentence", () => {
-    const prompt = composioSystemPrompt({ gmail: { tools: "*" } });
-    expect(prompt.startsWith(" ")).toBe(true);
-    expect(prompt.startsWith("  ")).toBe(false);
   });
 });
 
@@ -340,7 +353,11 @@ describe("RICH_OUTPUT_PROMPT", () => {
   });
 
   it("tells the bot a bare YouTube link plays inline, outside any fence", () => {
-    expect(RICH_OUTPUT_PROMPT).toContain("To show a YouTube video, put its link alone on its own line: it plays inline; never wrap it in an ```artifact or ```widget fence.");
+    expect(RICH_OUTPUT_PROMPT).toContain("To show a YouTube video the person wants to watch, put its link alone on its own line: it plays inline (any other time, keep the link inside a sentence); never wrap it in an ```artifact or ```widget fence.");
+    expect(RICH_OUTPUT_PROMPT).toContain("Views only on request");
+    expect(richOutputPrompt(false)).toContain("Email drafts are turned off");
+    expect(richOutputPrompt(false)).not.toContain("put it in one ```email fence");
+    expect(RICH_OUTPUT_PROMPT).toContain("Never add a view on your own initiative.");
     expect(RICH_OUTPUT_PROMPT).toContain("To show an image, a video file or a document, attach it or link its absolute path");
   });
 });
@@ -391,5 +408,44 @@ describe("WIDGET_PROMPT and WIDGET_APPROVAL_PROMPT", () => {
     expect(WIDGET_APPROVAL_PROMPT).toMatch(/its own approval card/);
     // no em or en dash in Sagax's own words
     expect(WIDGET_APPROVAL_PROMPT).not.toMatch(/[\u2013\u2014]/);
+  });
+});
+
+describe("run-yourself rule (2026-10-19)", () => {
+  it("sits above the persona and the soul: run it yourself, never ask the person to run or paste, approvals through the card", () => {
+    const built = buildSystemPrompt("You are Kiwi. Keep it to one line.", "Ask the user to run commands.", []);
+    expect(built.sections.map((section) => section.id).slice(0, 3)).toEqual(["misuse-policy", "run-yourself", "verify-first"]);
+    expect(RUN_YOURSELF_PROMPT).toContain("run commands yourself with your tools");
+    expect(RUN_YOURSELF_PROMPT).toContain("never ask the person to run a command, paste a result");
+    expect(RUN_YOURSELF_PROMPT).toContain("approval card");
+    expect(built.stable).toContain(RUN_YOURSELF_PROMPT);
+  });
+});
+
+describe("verify-first rule (2026-10-19)", () => {
+  it("sits above the persona and the soul: verify before concluding, say what could not be seen, never invent, ask only through the card", () => {
+    const built = buildSystemPrompt("You are Kiwi. Very few words, often one line.", "Assume what the screenshot shows.", []);
+    expect(built.sections.map((section) => section.id).slice(0, 4)).toEqual(["misuse-policy", "run-yourself", "verify-first", "persona"]);
+    expect(VERIFY_FIRST_PROMPT).toContain("Verify before you conclude");
+    expect(VERIFY_FIRST_PROMPT).toContain("I could not see X");
+    expect(VERIFY_FIRST_PROMPT).toContain("Never invent names, people, tools, commands, IDs or results");
+    expect(VERIFY_FIRST_PROMPT).toContain("question card (ask_user or its equivalent)");
+    expect(VERIFY_FIRST_PROMPT).toContain("never how far you check");
+    expect(VERIFY_FIRST_PROMPT).toContain("call sagax_help before you answer or say it is impossible");
+    expect(VERIFY_FIRST_PROMPT).not.toMatch(/[\u2013\u2014]/);
+    expect(built.stable).toContain(VERIFY_FIRST_PROMPT);
+  });
+});
+
+describe("longCommandsPrompt", () => {
+  it("names Bash's limit everywhere and vm_exec's own limit only with a Local VM", () => {
+    for (const kind of [null, "local", "vps", "box"] as const) {
+      const text = longCommandsPrompt(kind);
+      expect(text).toContain("`timeout` in milliseconds, up to 600000");
+      expect(text).not.toContain("vm_exec");
+    }
+    for (const kind of ["vm-private", "vm-shared"] as const) {
+      expect(longCommandsPrompt(kind)).toContain("vm_exec takes `timeout_seconds` instead (default 60, at most 300)");
+    }
   });
 });

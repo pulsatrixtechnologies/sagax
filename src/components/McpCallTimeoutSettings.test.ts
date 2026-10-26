@@ -22,7 +22,7 @@ vi.mock("@/state/store", () => ({
 }));
 
 // A config as a server from before the setting sends it: everything else, no `mcp`.
-const olderServerConfig = { rooms: { turnTimeoutMinutes: 5 }, composio: { configured: false }, box: { configured: false }, vps: { configured: false, sshAlias: "" } };
+const olderServerConfig = { rooms: { turnTimeoutMinutes: 5 }, box: { configured: false }, vps: { configured: false, sshAlias: "" } };
 
 let host: HTMLDivElement;
 let root: Root;

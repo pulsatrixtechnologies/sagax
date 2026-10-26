@@ -20,6 +20,7 @@ import { ChevronLeft, ExternalLink, FileText, Loader2, Send, Square } from "luci
 
 import { api, useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
+import { engineLabel } from "@/lib/human-label";
 import {
   activityStatusActive,
   activityStatusLabel,
@@ -196,7 +197,7 @@ export function ActivityDetailBody({ item, detail, error, now, engineName, onSto
         {shown.botName && shown.kind === "subagent" && <Fact label={t("botPanel.activity.bot")}>{shown.botName}</Fact>}
         {detail?.engine && (
           <Fact label={t("botPanel.activity.engine")}>
-            {[engineName?.(detail.engine.instanceId) ?? detail.engine.instanceId, detail.engine.model].filter(Boolean).join(" · ")}
+            {[engineLabel(engineName?.(detail.engine.instanceId), detail.engine.instanceId), detail.engine.model].filter(Boolean).join(" · ")}
           </Fact>
         )}
         {detail?.via && <Fact label={t("botPanel.activity.via")}>{activityViaLabel(detail.via)}</Fact>}

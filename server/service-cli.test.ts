@@ -35,7 +35,7 @@ describe("openmausbot service", () => {
     out.length = 0;
     const refused = runServiceCommand({ action: "install", dataDir: join(dir, "x"), port: 8799, script: "/home/maus/.npm/_npx/deadbeef/node_modules/openmausbot/cli.js", node: "/usr/bin/node", platform: "linux" }, io);
     expect(refused).toBe(1);
-    expect(err.join("\n")).toMatch(/npm install -g openmausbot/);
+    expect(err.join("\n")).toContain("npm install -g @pulsatrixtechnologies/sagax");
     expect(existsSync(join(dir, "x", "openmausbot.service"))).toBe(false);
   });
 

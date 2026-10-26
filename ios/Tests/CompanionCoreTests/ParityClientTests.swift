@@ -490,6 +490,33 @@ final class RosterPreviewKindTests: XCTestCase {
         XCTAssertEqual(rosterPreviewLine([chip], detail: .full).kind, .sentToBot)
     }
 
+    func testASentNoteShowsWhatItSentAndAReceivedOneHasNoSendIcon() throws {
+        var sent = message("a", kind: .activity)
+        sent.tool = ToolActivity(name: "Messaged @Cryptic", ok: true)
+        sent.comm = try JSONDecoder().decode(
+            CommChip.self,
+            from: Data(#"{"groupId":"g","withBotId":"c","withName":"Cryptic","withColor":"blue","direction":"sent","text":"Peux-tu vérifier le billet ?"}"#.utf8)
+        )
+        XCTAssertEqual(rosterPreviewLine([sent], detail: .full), RosterPreviewLine(text: "Messaged @Cryptic: Peux-tu vérifier le billet ?", kind: .sentToBot))
+
+        var received = message("b", kind: .activity)
+        received.tool = ToolActivity(name: "Message from @Cryptic", ok: true)
+        received.comm = try JSONDecoder().decode(
+            CommChip.self,
+            from: Data(#"{"groupId":"g","withBotId":"c","withName":"Cryptic","withColor":"blue","direction":"received"}"#.utf8)
+        )
+        XCTAssertEqual(rosterPreviewKind(of: received), .plain)
+
+        // an older server: no direction, the note's own words tell
+        var legacy = message("c", kind: .activity)
+        legacy.tool = ToolActivity(name: "Message from @Cryptic", ok: true)
+        legacy.comm = try JSONDecoder().decode(
+            CommChip.self,
+            from: Data(#"{"groupId":"g","withBotId":"c","withName":"Cryptic","withColor":"blue"}"#.utf8)
+        )
+        XCTAssertEqual(rosterPreviewKind(of: legacy), .plain)
+    }
+
     func testTheKindFollowsTheFoldedRowNotTheRawLastMessage() {
         var tool = message("b", kind: .activity)
         tool.tool = ToolActivity(name: "shell", ok: true)
@@ -499,5 +526,53 @@ final class RosterPreviewKindTests: XCTestCase {
 
     func testAnEmptyThreadIsPlainAndEmpty() {
         XCTAssertEqual(rosterPreviewLine([], detail: .full), RosterPreviewLine(text: "", kind: .plain))
+    }
+}
+
+final class HomeSelectionTests: XCTestCase {
+    func testOffscreenUnreadCountsAndPicksTheNearest() {
+        let rows = [
+            UnreadRowBox(id: "a", top: -200, bottom: -140, unread: true),
+            UnreadRowBox(id: "b", top: -100, bottom: -40, unread: true),
+            UnreadRowBox(id: "c", top: 10, bottom: 70, unread: true),
+            UnreadRowBox(id: "d", top: 90, bottom: 150, unread: false),
+            UnreadRowBox(id: "e", top: 700, bottom: 760, unread: true),
+            UnreadRowBox(id: "f", top: 800, bottom: 860, unread: true),
+        ]
+        let result = OffscreenUnread.compute(rows: rows, viewportTop: 0, viewportBottom: 600)
+        XCTAssertEqual(result, OffscreenUnread(above: 2, below: 2, nearestAbove: "b", nearestBelow: "e"))
+    }
+
+    func testARowHalfShownCountsAsSeen() {
+        let rows = [UnreadRowBox(id: "a", top: -30, bottom: 30, unread: true)]
+        XCTAssertEqual(OffscreenUnread.compute(rows: rows, viewportTop: 0, viewportBottom: 600).above, 0)
+    }
+}
+
+final class CommPreviewTests: XCTestCase {
+    private func note(_ name: String, text: String? = nil) throws -> Message {
+        var message = Message(id: "n", role: .bot, kind: .activity, at: 1)
+        message.tool = ToolActivity(name: name, ok: true)
+        var json = #"{"groupId":"g","withBotId":"x","withName":"Cryptic","withColor":"blue""#
+        if let text { json += #","text":"\#(text)""# }
+        json += "}"
+        message.comm = try JSONDecoder().decode(CommChip.self, from: Data(json.utf8))
+        return message
+    }
+
+    func testSentShowsTheTextAndThePaperPlane() throws {
+        let line = rosterPreviewLine([try note("Messaged @Cryptic", text: "Bonjour")], detail: .full)
+        XCTAssertEqual(line, RosterPreviewLine(text: "Messaged @Cryptic: Bonjour", kind: .sentToBot))
+    }
+
+    func testSentWithoutTextKeepsTheName() throws {
+        let line = rosterPreviewLine([try note("Messaged @Cryptic")], detail: .full)
+        XCTAssertEqual(line, RosterPreviewLine(text: "Messaged @Cryptic", kind: .sentToBot))
+    }
+
+    func testReceivedHasNoPaperPlane() throws {
+        let line = rosterPreviewLine([try note("Message from @Cryptic", text: "Salut")], detail: .full)
+        XCTAssertEqual(line.kind, .plain)
+        XCTAssertEqual(line.text, "Message from @Cryptic")
     }
 }

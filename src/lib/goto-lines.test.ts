@@ -44,6 +44,9 @@ function thread(botId: string, threadId: string, title: string): Item {
 function toolStep(): Item {
   return { kind: "message", message: { id: `s${++seq}`, role: "bot", kind: "activity", at: seq, tool: { name: "search", ok: true } } as Message };
 }
+function comm(): Item {
+  return { kind: "message", message: { id: `c${++seq}`, role: "bot", kind: "activity", at: seq, tool: { name: "Messaged @Ada", ok: true }, comm: { groupId: "g", withBotId: "ada", withName: "Ada", withColor: "teal" } } as Message };
+}
 function text(): Item {
   return { kind: "message", message: { id: `x${++seq}`, role: "bot", kind: "text", text: "hello", at: seq } as Message };
 }
@@ -137,6 +140,14 @@ describe("silentChatItem", () => {
     expect(silentChatItem(status, false)).toBe(false);
     expect(silentChatItem(thread("a", "b", "c"), false)).toBe(false);
     expect(silentChatItem(text(), false)).toBe(false);
+  });
+
+  // JC 2026-10-22: a bot-to-bot comm chip is verbose detail. With tool calls
+  // off it is silent (hidden, and so it does not break a stack of go-to
+  // lines); with tool calls on it shows like any step.
+  it("treats a comm chip as silent with tool calls off, visible with them on", () => {
+    expect(silentChatItem(comm(), false)).toBe(true);
+    expect(silentChatItem(comm(), true)).toBe(false);
   });
 });
 

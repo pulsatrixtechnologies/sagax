@@ -196,7 +196,7 @@ test("Mac transfer failures cannot overlap a pending download and remain retryab
   assert.equal(h.getState().status, "error");
   assert.notEqual(h.getState().retryable, false);
   await h.coordinator.check(true);
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
   assert.equal(calls, 1);
   pending.reject(failure);
   await settle();
@@ -241,11 +241,11 @@ test("a restart watchdog keeps Windows/AppImage installs locked against overlapp
   h.updater.quitAndInstall = () => { quits += 1; };
   await downloadInto(h);
   h.updater.checkForUpdates = () => assert.fail("install still owns the updater");
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
   watchdog();
   h.updater.downloadUpdate = () => assert.fail("a retry must not overlap a slow installer");
   await h.coordinator.check(true);
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
   assert.equal(h.getState().status, "installing");
   assert.match(h.getState().message, /Quit and reopen/);
   assert.equal(quits, 1);
@@ -256,7 +256,7 @@ test("an asynchronous native install error escapes the restarting spinner", () =
   const error = new Error("native staging failed");
   updater.quitAndInstall = () => updater.emit("error", error);
 
-  coordinator.install();
+  coordinator.install({ confirmed: true });
 
   assert.deepEqual(getState(), { status: "error", message: "native staging failed" });
   assert.equal(errorStates(states).length, 1);
@@ -268,7 +268,7 @@ test("a synchronous install failure becomes a user-visible error", () => {
     throw new Error("install threw");
   };
 
-  coordinator.install();
+  coordinator.install({ confirmed: true });
 
   assert.deepEqual(getState(), { status: "error", message: "install threw" });
 });
@@ -546,7 +546,7 @@ test("the hand-off install opens the staged package instead of quitting", async 
   await downloadInto(h);
   assert.equal(h.getState().status, "downloaded");
 
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.deepEqual(received, [["/tmp/Pulsa Bot-2.0.0-amd64.deb"]]);
@@ -561,7 +561,7 @@ test("a failed hand-off is reported instead of leaving the card spinning", async
   const h = harness({ handOffInstall: () => Promise.reject(new Error("no handler for .deb")) });
 
   await downloadInto(h);
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
   await new Promise((resolve) => setImmediate(resolve));
 
   // version survives the merge from the download — assert what the card reads
@@ -578,7 +578,7 @@ test("the hand-off sees no staged file when nothing downloaded", async () => {
     },
   });
 
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.deepEqual(received, [null]);
@@ -592,7 +592,7 @@ test("without a hand-off the install still quits and installs", async () => {
   };
 
   await downloadInto(h, ["/tmp/Pulsa Bot-2.0.0.AppImage"]);
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
 
   assert.equal(called, 1);
   assert.equal(h.getState().status, "installing");
@@ -655,7 +655,7 @@ test("checks cannot replace an install in progress or its completed hand-off", a
   const h = harness({ handOffInstall: () => pending.promise });
   await downloadInto(h);
   h.updater.checkForUpdates = () => assert.fail("installation owns the updater");
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
 
   await h.coordinator.check();
   await h.coordinator.check(true);
@@ -678,7 +678,7 @@ test("failed download and hand-off actions survive automatic checks but remain r
       await settle();
     } else {
       await downloadInto(h);
-      h.coordinator.install();
+      h.coordinator.install({ confirmed: true });
       await new Promise((resolve) => setImmediate(resolve));
     }
     let checks = 0;
@@ -825,4 +825,168 @@ test("a failed notes read leaves the update alone", async () => {
   await settle();
   assert.equal(h.getState().status, "downloading");
   assert.equal(Object.hasOwn(h.getState(), "notes"), false);
+});
+
+// 2026-10-19 (a Windows report): "Check for updates" on a downloaded update
+// quit straight into a silent install. Nothing installs unconfirmed now, on
+// any platform, and the flow from check to ready never installs by itself.
+for (const nativeStaging of [false, true]) {
+  const platform = nativeStaging ? "macOS" : "Windows/AppImage";
+  test(`${platform}: available, downloading, downloaded: nothing installs along the way`, async () => {
+    const h = harness({ nativeStaging, confirmInstall: () => assert.fail("nobody asked to install") });
+    h.updater.quitAndInstall = () => assert.fail("nothing installs without the person's confirmation");
+    h.updater.downloadUpdate = () => {
+      h.updater.emit("download-progress", { percent: 40 });
+      h.updater.emit("update-downloaded", { version: "2.0.0" });
+      return Promise.resolve(["/tmp/Sagax-2.0.0-setup.exe"]);
+    };
+    await found(h, { manual: true });
+    await settle();
+    const statuses = h.states.map((entry) => entry.status);
+    assert.deepEqual(statuses.filter((status, index) => status !== statuses[index - 1]),
+      ["checking", "downloading", ...(nativeStaging ? ["preparing"] : []), "downloaded"]);
+    assert.equal(h.states.find((entry) => entry.status === "downloading").version, "2.0.0");
+    assert.equal(h.getState().version, "2.0.0");
+  });
+
+  test(`${platform}: an install nobody confirmed does nothing without a question to ask`, async () => {
+    const h = harness({ nativeStaging });
+    h.updater.quitAndInstall = () => assert.fail("an unconfirmed install must not quit");
+    h.updater.downloadUpdate = () => {
+      h.updater.emit("update-downloaded", { version: "2.0.0" });
+      return Promise.resolve(["/tmp/Sagax-2.0.0-setup.exe"]);
+    };
+    await found(h);
+    await settle();
+    await h.coordinator.install();
+    await h.coordinator.install({ confirmed: "yes" });
+    assert.equal(h.getState().status, "downloaded");
+  });
+
+  test(`${platform}: an unconfirmed install asks first, and only a yes installs`, async () => {
+    const asked = [];
+    let answer = false;
+    let quits = 0;
+    const h = harness({ nativeStaging, confirmInstall: async (details) => { asked.push(details); return answer; } });
+    h.updater.quitAndInstall = () => { quits += 1; };
+    h.updater.downloadUpdate = () => {
+      h.updater.emit("update-downloaded", { version: "2.0.0" });
+      return Promise.resolve(["/tmp/Sagax-2.0.0-setup.exe"]);
+    };
+    await found(h);
+    await settle();
+
+    await h.coordinator.install();
+    assert.deepEqual(asked, [{ version: "2.0.0" }]);
+    assert.equal(quits, 0);
+    assert.equal(h.getState().status, "downloaded");
+
+    answer = true;
+    await h.coordinator.install();
+    assert.equal(quits, 1);
+    assert.equal(h.getState().status, "installing");
+  });
+}
+
+test("a failing confirmation never installs", async () => {
+  const h = harness({ confirmInstall: async () => { throw new Error("dialog gone"); } });
+  h.updater.quitAndInstall = () => assert.fail("no answer is not a yes");
+  await assert.doesNotReject(h.coordinator.install());
+  assert.equal(h.getState().status, "idle");
+});
+
+test("Windows installs with the installer's progress window and reopens Sagax; elsewhere silently", async () => {
+  for (const [silentInstall, expected] of [[undefined, [true, true]], [true, [true, true]], [false, [false, true]]]) {
+    const h = harness(silentInstall === undefined ? {} : { silentInstall });
+    const calls = [];
+    h.updater.quitAndInstall = (...args) => { calls.push(args); };
+    await downloadInto(h, ["/tmp/Sagax-2.0.0-setup.exe"]);
+    h.coordinator.install({ confirmed: true });
+    assert.deepEqual(calls, [expected], String(silentInstall));
+  }
+});
+
+test("no update: the person's check lands back on idle, never installing", async () => {
+  const h = harness({ confirmInstall: () => assert.fail("nothing to install") });
+  h.updater.quitAndInstall = () => assert.fail("nothing to install");
+  h.updater.checkForUpdates = async () => {
+    h.updater.emit("checking-for-update");
+    h.updater.emit("update-not-available", { version: "1.0.0" });
+  };
+  await h.coordinator.check(true);
+  assert.deepEqual(h.states.map((entry) => entry.status), ["checking", "idle"]);
+});
+
+// 2026-10-22 (JC, a 0.7.4 update on a slow disk): "Preparing the update took
+// too long." The old deadline was a hardcoded five minutes that a large
+// (hundreds of MB) native staging pass could not meet, and it fired even while
+// bytes were still arriving. It is now generous, configurable, and reset by
+// every download-progress so a live transfer is never mistaken for a hang.
+async function intoPreparing(h, { version = "2.0.0" } = {}) {
+  // The native ready event never comes, so downloadUpdate stays pending and
+  // the coordinator sits in "preparing" with its watchdog armed.
+  h.updater.downloadUpdate = () => new Promise(() => {});
+  h.updater.checkForUpdates = async () => {
+    h.updater.emit("checking-for-update");
+    h.updater.emit("update-available", { version });
+  };
+  await h.coordinator.check(true);
+  h.updater.emit("update-downloaded", { version });
+}
+
+test("the native preparation deadline is configurable and arms when preparing starts", async (t) => {
+  const h = harness({ nativeStaging: true, prepareTimeoutMs: 1234 });
+  const delays = [];
+  t.mock.method(globalThis, "setTimeout", (_cb, delay) => { delays.push(delay); return { unref() {} }; });
+  await intoPreparing(h);
+  assert.equal(h.getState().status, "preparing");
+  assert.deepEqual(delays, [1234]);
+});
+
+test("the default native preparation deadline is more generous than the old five minutes", async (t) => {
+  const h = harness({ nativeStaging: true });
+  const delays = [];
+  t.mock.method(globalThis, "setTimeout", (_cb, delay) => { delays.push(delay); return { unref() {} }; });
+  await intoPreparing(h);
+  assert.equal(h.getState().status, "preparing");
+  assert.equal(delays.length, 1);
+  assert.ok(delays[0] > 5 * 60 * 1000, `deadline ${delays[0]} must exceed the old 5 min`);
+});
+
+test("download progress during preparation pushes the deadline back instead of failing", async (t) => {
+  const h = harness({ nativeStaging: true, prepareTimeoutMs: 1000 });
+  let seq = 0;
+  const live = new Map();
+  let last = null;
+  t.mock.method(globalThis, "setTimeout", (cb) => { const id = ++seq; live.set(id, cb); last = { id, cb }; return { id, unref() {} }; });
+  t.mock.method(globalThis, "clearTimeout", (handle) => { if (handle) live.delete(handle.id); });
+  await intoPreparing(h);
+  const firstId = last.id;
+  h.updater.emit("download-progress", { percent: 50 });
+  assert.equal(live.has(firstId), false, "the stale deadline is cleared on progress");
+  assert.notEqual(last.id, firstId, "a fresh deadline is armed");
+  assert.equal(h.getState().status, "preparing", "still preparing, never failed while bytes arrive");
+  // Only once the newest deadline fires in true silence is a restart required.
+  last.cb();
+  assert.equal(h.getState().status, "error");
+  assert.equal(h.getState().retryable, false);
+  assert.match(h.getState().message, /Quit and reopen/);
+});
+
+test("a stalled preparation becomes a recoverable restart-required error, not a stuck busy state", async (t) => {
+  const h = harness({ nativeStaging: true, prepareTimeoutMs: 1000 });
+  let fire = null;
+  t.mock.method(globalThis, "setTimeout", (cb) => { fire = cb; return { unref() {} }; });
+  await intoPreparing(h);
+  assert.equal(h.getState().status, "preparing");
+  fire();
+  assert.equal(h.getState().status, "error");
+  assert.equal(h.getState().retryable, false);
+  // A late progress event cannot drag the state back into a busy phase.
+  h.updater.emit("download-progress", { percent: 80 });
+  assert.equal(h.getState().status, "error");
+  // Recovery is a restart: a fresh check stays a no-op until the app reopens.
+  h.updater.checkForUpdates = () => assert.fail("recovery requires a restart first");
+  await h.coordinator.check(true);
+  assert.equal(h.getState().status, "error");
 });

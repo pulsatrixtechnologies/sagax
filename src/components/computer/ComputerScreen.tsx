@@ -88,7 +88,8 @@ export function ComputerScreen({
   controls?: ScreenControls | undefined;
   busy?: boolean;
   error?: string | undefined;
-  source: "server" | "local" | "browser";
+  /** remote: a Tailcat remote-support session (RemoteScreenCard). */
+  source: "server" | "local" | "browser" | "remote";
   /** The state's icon when nothing is live (a monitor by default). */
   icon?: typeof Monitor;
 }) {

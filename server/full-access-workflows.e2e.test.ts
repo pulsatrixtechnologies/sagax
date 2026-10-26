@@ -165,7 +165,8 @@ it("applies requested Full Access workflows through MCP without duplicate approv
     const mira = (await bots()).find(bot => bot.name === "Mira");
     expect(mira).toMatchObject({ section: "Research", approvalMode: "auto", autoApprove: true, composio: false });
     const routine = (await api("GET", "/api/routines")).routines.find((item: any) => item.name === "Monthly fixture report");
-    expect(routine).toMatchObject({ botId: chief.id, enabled: true, schedule });
+    // New routines start paused (routines.newPaused, on by default).
+    expect(routine).toMatchObject({ botId: chief.id, enabled: false, nextRunAt: null, schedule });
     expect((await api("GET", `/api/bots/${chief.id}/skills`)).skills).toEqual(expect.arrayContaining([expect.objectContaining({ name: "monthly-fixture-review", enabled: true })]));
     // The decision log says Full access applied these, not the self rule.
     await expect.poll(async () => (await api("GET", "/api/decisions")).decisions

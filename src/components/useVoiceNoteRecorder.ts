@@ -25,8 +25,8 @@ interface Recording {
   rate: number;
 }
 
-async function openRecording(onLevel: (level: number) => void): Promise<Recording> {
-  const stream = await openPreferredMicrophone({ echoCancellation: true, noiseSuppression: true, autoGainControl: true });
+async function openRecording(onLevel: (level: number) => void, onWaiting?: () => void): Promise<Recording> {
+  const stream = await openPreferredMicrophone({ echoCancellation: true, noiseSuppression: true, autoGainControl: true }, undefined, onWaiting);
   const context = new AudioContext({ latencyHint: "interactive" });
   const source = context.createMediaStreamSource(stream);
   const frames: Float32Array[] = [];
@@ -156,10 +156,13 @@ export function useVoiceNoteRecorder({
     levels.current = [];
     setHistory([]);
     try {
+      // A slow system prompt keeps waiting (a late "Allow" still records);
+      // after a while the person is told what it waits for.
       recording.current = await openRecording((level) => {
         levels.current.push(level);
         if (levels.current.length > 512) levels.current.splice(0, levels.current.length - 256);
-      });
+      }, () => setError(t("microphone.waitingForPermission")));
+      setError(null);
     } catch {
       setError(t("composer.voiceNote.permission"));
       return;

@@ -10,6 +10,8 @@ import {
   fromLocalDateAndTime,
   packCalendarCollisions,
   projectedRoutineItems,
+  scheduledRoutineItems,
+  groupCalendarSlots,
   scheduleAt,
   slotAt,
   snapMinutes,
@@ -404,5 +406,29 @@ describe("routine calendar projection", () => {
 
     expect(items).toHaveLength(12);
     expect(items.at(-1)?.at).toBe(from + 99 * 5 * 60_000);
+  });
+});
+
+describe("calendar shows plans, not runs", () => {
+  const routine = (id: string, hh: number): Routine => ({
+    id, name: id, prompt: "p", target: "bot", botId: "b1", runOn: "maus", enabled: true,
+    schedule: { type: "once", at: new Date(2026, 9, 19, hh, 0).getTime() }, durationMinutes: 30,
+    nextRunAt: new Date(2026, 9, 19, hh, 0).getTime(), createdAt: 1,
+  } as Routine);
+  it("turns run receipts into plain planned occurrences without a status", () => {
+    const r = routine("a", 10);
+    const at = r.schedule.type === "once" ? r.schedule.at : 0;
+    const runs = [1, 2].map((n) => ({ id: `run${n}`, routineId: "a", routineName: "a", target: "bot", botId: "b1", runOn: "maus", scheduledFor: at, status: "failed", manual: false, createdAt: at }) as RoutineRun);
+    const items = scheduledRoutineItems([r], runs, at - 1000, at + 1000);
+    expect(items).toHaveLength(1);
+    expect(items[0]?.run).toBeNull();
+  });
+  it("collapses a crowded half hour into one +N marker", () => {
+    const at = new Date(2026, 9, 19, 10, 0).getTime();
+    const mk = (id: string, off = 0) => ({ id, at: at + off, durationMinutes: 30 });
+    const out = groupCalendarSlots([mk("a"), mk("b"), mk("c"), mk("d", 60_000), mk("e", 3_600_000)]);
+    expect(out.shown.map((i) => i.id)).toEqual(["a", "e"]);
+    expect(out.overflow[0]?.items).toHaveLength(3);
+    expect(groupCalendarSlots([mk("a"), mk("b")]).overflow).toEqual([]);
   });
 });

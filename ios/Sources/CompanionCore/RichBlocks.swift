@@ -24,7 +24,7 @@ public enum RichFenceKind: String, Sendable {
 public enum RichBlocks {
     private static let fenceKinds: [String: RichFenceKind] = [
         "email": .email, "mail": .email, "eml": .email,
-        "widget": .widget, "html-widget": .widget, "artifact": .widget,
+        "widget": .widget, "html-widget": .widget, "widget-imperfect": .widget, "artifact": .widget,
         "chart": .chart,
         "csv": .csv, "tsv": .csv,
         "cw": .cw,
@@ -321,6 +321,8 @@ extension RichBlocks {
         let base = ":root{color-scheme:\(scheme);--omb-bg:\(dark ? "#1b1b1b" : "#ffffff");--omb-fg:\(dark ? "#f2f2f2" : "#161616");--omb-muted:\(dark ? "#a3a3a3" : "#5c5c5c");--omb-border:\(dark ? "#3a3a3a" : "#dedede");--omb-accent:\(dark ? "#3987e5" : "#2a78d6")}"
             + "html,body{margin:0;padding:0}body{padding:12px;background:var(--omb-bg);color:var(--omb-fg);font:13px/20px Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;overflow-x:auto}"
             + "button,input,select,textarea{font:inherit}*,*::before,*::after{box-sizing:border-box}"
+            + "label:has(>input[type=checkbox],>input[type=radio]){display:flex;flex-direction:row;align-items:flex-start;gap:8px;width:auto}"
+            + "label,button,input[type=range],input[type=checkbox],input[type=radio]{-webkit-user-select:none;user-select:none}"
             + "@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}"
         let reporter = "(function(){var last=0;function send(){var h=Math.ceil(Math.max(document.documentElement.scrollHeight,document.body?document.body.scrollHeight:0));if(h!==last){last=h;parent.postMessage({type:\"\(widgetMessage)\",height:h},\"*\");}}"
             + "addEventListener('load',send);if(typeof ResizeObserver!=='undefined'){new ResizeObserver(send).observe(document.documentElement);}setTimeout(send,50);setTimeout(send,500);})();"

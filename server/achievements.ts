@@ -458,6 +458,12 @@ export interface RequestLookups {
   group(id: string): { peopleDm: boolean; humans: number; bots: number } | null;
 }
 
+/** The people a room lists: distinct persons, never a `team:` entry (a team
+ * is not a second person) and at least the one who made it. */
+export function roomPeopleCount(humanIds: readonly string[] | undefined): number {
+  return new Set((humanIds ?? []).filter((id) => !id.startsWith("team:"))).size || 1;
+}
+
 /**
  * The events a successful request means for the person who made it, read from
  * its method and path only (the handler already authorized it). A message's

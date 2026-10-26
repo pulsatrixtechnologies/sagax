@@ -18,6 +18,22 @@ enum BotAdvancedWording {
         }
     }
 
+    /// The last capture's receipt, as MemoryUpkeepCard words it: what it
+    /// noticed, then what memory already held (parity M3). Empty when it
+    /// found nothing at all.
+    static func captureReceipt(_ capture: CaptureReport) -> String {
+        let known = capture.known ?? 0
+        let knownText = known == 0 ? "" : " " + (known == 1
+            ? String(localized: "1 was already known.")
+            : String(localized: "\(known) were already known."))
+        if capture.noticed > 0 {
+            return (capture.noticed == 1
+                ? String(localized: "Last noticed 1 fact \(ago(capture.at)).")
+                : String(localized: "Last noticed \(capture.noticed) facts \(ago(capture.at)).")) + knownText
+        }
+        return known > 0 ? String(localized: "Last capture \(ago(capture.at)): nothing new.") + knownText : ""
+    }
+
     /// `journalSummary`: "Ara added 2 lines to MEMORY.md".
     static func journalSummary(_ row: MemoryJournalRow, botName: String) -> String {
         let who: String = switch row.who {

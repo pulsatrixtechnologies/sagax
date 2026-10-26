@@ -20,6 +20,7 @@
 //      each key this page has not changed meanwhile, and tells the modules
 //      with a `storage` event for that key so they read it again.
 // Anywhere else the server answers 404 and nothing here runs.
+import { DEVICE_PREFERENCE_KEYS } from "../../shared/settings-actions";
 import { USER_PREFERENCE_KEYS, cleanUserPreferences, type UserPreferences } from "../../shared/user-preferences";
 
 export const PREFERENCES_PATH = "/api/me/preferences";
@@ -232,6 +233,19 @@ export async function startPreferenceSync(deps: PreferenceSyncDeps): Promise<Pre
 export function announceServerPreferences(frame: { preferences?: unknown; updatedAt?: unknown }): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(PREFERENCES_EVENT, { detail: frame }));
+}
+
+/** A bot set one of the person's preferences (sagax_settings,
+ * DEVICE_PREFERENCE_KEYS): written here, announced as another tab's write,
+ * and on an organization server saved by the watcher like a change by hand. */
+export function applyBotPreference(key: string, value: string): void {
+  if (typeof window === "undefined" || !DEVICE_PREFERENCE_KEYS.has(key)) return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    return;
+  }
+  announceKey(key);
 }
 
 /** A `storage` event for one key on this page, as another tab's write raises it. */

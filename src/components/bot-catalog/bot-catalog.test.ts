@@ -216,6 +216,48 @@ describe("the detail pane", () => {
     expect(html).not.toContain("<textarea");
   });
 
+  it("draws the instructions as markdown, not as raw text", () => {
+    const soul = "# Responsabilités\n\n- Répondre **vite**\n- Garder un ton *clair*\n\n1. Accuser réception\n\nAvec `une date`.";
+    const html = renderToStaticMarkup(createElement(BotCatalogDetailView, {
+      item: pixel, content: { soul, memories: null, skills: [], routines: [], integrations: [] }, tab: "soul", onTab: () => {}, onBack: () => {}, actions: null,
+    }));
+    const body = html.slice(html.indexOf("data-catalog-soul"));
+    expect(body).toMatch(/role="heading" aria-level="1"[^>]*>Responsabilités/);
+    expect(body).toContain("<li>");
+    expect(body).toContain("<strong>vite</strong>");
+    expect(body).toContain("<em>clair</em>");
+    expect(body).toContain("<ol");
+    expect(body).toContain("<code");
+    expect(body).not.toContain("# Responsabilités");
+    expect(body).not.toContain("**vite**");
+    expect(body).not.toContain("whitespace-pre-wrap");
+  });
+
+  it("keeps each block of the page from shrinking over the next, and the rail scrolls on a phone", () => {
+    const html = renderToStaticMarkup(createElement(BotCatalogDetailView, {
+      item: pixel, content: { soul: "x", memories: null, skills: [], routines: [], integrations: [] }, tab: "soul", onTab: () => {}, onBack: () => {}, actions: null,
+    }));
+    const layout = html.match(/<div class="([^"]*)" data-catalog-tabs-layout/)?.[1] ?? "";
+    expect(layout).toContain("shrink-0");
+    expect(layout).toContain("sm:flex-row");
+    expect(html.match(/<p class="([^"]*)" data-catalog-readonly/)?.[1]).toContain("shrink-0");
+    const rail = html.match(/<div role="tablist"[^>]*class="([^"]*)"/)?.[1] ?? "";
+    expect(rail).toContain("overflow-x-auto");
+    expect(rail).toContain("sm:sticky");
+    // the selected tab, the counts and no id
+    expect(html).toMatch(/aria-selected="true"[^>]*data-catalog-tab="soul"/);
+    expect(html).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
+  });
+
+  it("shows a clean empty state on every tab", () => {
+    const content = { soul: "  ", memories: [], skills: [], routines: [], integrations: [] };
+    for (const tab of ["soul", "memories", "skills", "routines", "integrations"] as const) {
+      const html = renderToStaticMarkup(createElement(BotCatalogDetailView, { item: pixel, content, tab, onTab: () => {}, onBack: () => {}, actions: null }));
+      expect(html, tab).toContain("data-catalog-tab-empty");
+      expect(html, tab).toContain("Everything here is read only.");
+    }
+  });
+
   it("explains hidden memories on a published bot, and lists integrations", () => {
     const content = { soul: "", memories: null, skills: [], routines: [], integrations: [{ name: "figma-mcp", kind: "mcp" as const }, { name: "browser", kind: "browser" as const }] };
     const memories = renderToStaticMarkup(createElement(BotCatalogDetailView, { item: pixel, content, tab: "memories", onTab: () => {}, onBack: () => {}, actions: null }));

@@ -4,6 +4,8 @@
 // queued runs recover, a run that was waiting on a hand-off stays waiting
 // because the runtime still carries its tree, the imported hand-offs
 // dispatch and resume their requesters, and the file is renamed .migrated.
+// A run whose turn was working when the server stopped resumes once in its
+// own thread instead of failing.
 import { spawn, type ChildProcess } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -15,7 +17,7 @@ import { RoutineManager, type RoutineRun } from "./routines.ts";
 import { waitForExit } from "./testing/cleanup.ts";
 import { readHandoffs } from "./testing/handoff-rows.ts";
 
-it("recovers queued/due work and a waiting routine's imported hand-off after restart", async () => {
+it("recovers queued/due work, resumes a cut routine once and a waiting routine's imported hand-off after restart", async () => {
   const fixture = await launchVerificationServer();
   const { url, dataDir, logPath } = fixture.info;
   let restarted: ChildProcess | undefined;
@@ -61,6 +63,13 @@ it("recovers queued/due work and a waiting routine's imported hand-off after res
       name: "Waiting on peer work", prompt: "Resume once the peer reports", botId: interruptedBot.id,
       enabled: false, schedule: { type: "daily", time: "09:00", weekdays: [1] },
     })).routine;
+    // A run whose turn was working when the server stopped resumes once in
+    // its own thread (ROUTINE_RESTART_RESUMES).
+    const cutBot = (await api("POST", "/api/bots", { name: "Cut routine" })).bot;
+    const cut = (await api("POST", "/api/routines", {
+      name: "Interrupted peer work", prompt: "Resume once after recovery", botId: cutBot.id,
+      enabled: false, schedule: { type: "daily", time: "09:00", weekdays: [1] },
+    })).routine;
     // #325: not due for days, but marked to run whenever the app starts.
     const startupBot = (await api("POST", "/api/bots", { name: "Restart on startup" })).bot;
     const onStartup = (await api("POST", "/api/routines", {
@@ -93,6 +102,12 @@ it("recovers queued/due work and a waiting routine's imported hand-off after res
       prompt: interrupted.prompt, target: "bot", botId: interruptedBot.id, runOn: "maus",
       scheduledFor: dueAt, createdAt: dueAt, startedAt: dueAt, manual: true,
       status: "waiting", threadId: interruptedBot.threadId,
+    });
+    disk.runs.push({
+      id: "cut-run", routineId: cut.id, routineName: cut.name,
+      prompt: cut.prompt, target: "bot", botId: cutBot.id, runOn: "maus",
+      scheduledFor: dueAt, createdAt: dueAt, startedAt: dueAt, manual: true,
+      status: "running", threadId: cutBot.threadId,
     });
     disk.runs.push({
       id: "historical-run", routineId: "historical-routine", routineName: "Previously completed work",
@@ -140,7 +155,7 @@ it("recovers queued/due work and a waiting routine's imported hand-off after res
       expect(restarted.exitCode, `restarted server exited; see ${logPath}`).toBeNull();
       try {
         runs = (await api("GET", "/api/routines")).runs;
-        if ([scheduled.id, manual.id, cron.id, interrupted.id, onStartup.id].every((id) => runs.some((run) => run.routineId === id && run.status === "completed"))) break;
+        if ([scheduled.id, manual.id, cron.id, interrupted.id, cut.id, onStartup.id].every((id) => runs.some((run) => run.routineId === id && run.status === "completed"))) break;
       } catch {
         // The exact replacement child is still starting its listener.
       }
@@ -154,6 +169,8 @@ it("recovers queued/due work and a waiting routine's imported hand-off after res
       expect.objectContaining({ id: queued.id, routineId: manual.id, status: "completed" }),
       expect.objectContaining({ routineId: onStartup.id, triggerSource: "startup", status: "completed" }),
       expect.objectContaining({ id: "interrupted-run", status: "completed" }),
+      // Cut once: resumed in its own thread and finished there.
+      expect.objectContaining({ id: "cut-run", status: "completed", restartResumes: 1 }),
     ]));
     expect(runs.filter(run => run.routineId === onStartup.id)).toHaveLength(1);
     const resumedRun = runs.find((run) => run.id === "interrupted-run")!;

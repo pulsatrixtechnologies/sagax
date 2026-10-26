@@ -8,6 +8,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PanelRight } from "lucide-react";
 
 import { useStore, type Bot, type Group } from "@/state/store";
+import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -23,20 +24,6 @@ import { HelpTip } from "./SettingsPrimitives";
 
 export const GROUP_PANEL_TABS = ["details", "instructions", "memory", "advanced"] as const;
 export type GroupPanelTab = (typeof GROUP_PANEL_TABS)[number];
-
-// The bot panel's width is the user's panel width: one remembered size.
-const SETTINGS_WIDTH_KEY = "omb-settings-panel-width";
-const SETTINGS_MIN_WIDTH = 320;
-const SETTINGS_MAX_WIDTH = 720;
-const SETTINGS_DEFAULT_WIDTH = 360;
-
-function readSettingsWidth(): number {
-  try {
-    const stored = Number(localStorage.getItem(SETTINGS_WIDTH_KEY));
-    if (Number.isFinite(stored) && stored >= SETTINGS_MIN_WIDTH && stored <= SETTINGS_MAX_WIDTH) return stored;
-  } catch { /* default width */ }
-  return SETTINGS_DEFAULT_WIDTH;
-}
 
 const tabLabel = (tab: GroupPanelTab) =>
   tab === "instructions" ? t("groupPanel.tab.instructions") : tab === "memory" ? t("groupPanel.tab.memory") : t(`botPanel.tab.${tab}`);
@@ -66,6 +53,20 @@ export function GroupAvatarStack({ members, size }: { members: Bot[]; size: numb
   );
 }
 
+/** A titled block inside the group panel's tabs, with the same heading tone
+ * and inner rhythm as the bot panel's Details sections (flex gap-2, a quiet
+ * 13px heading). Section bodies (the member roster, the responder select)
+ * stay their own components; this only frames them so a group and a bot read
+ * as one design. */
+export function PanelSection({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
+  return (
+    <section className={cn("flex flex-col gap-2", className)}>
+      <h3 className="text-[13px] font-normal leading-[18px] text-ink-secondary">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
 export function GroupPanel({
   group,
   members,
@@ -86,14 +87,15 @@ export function GroupPanel({
   readOnlyNote?: boolean;
 }) {
   const { dispatch } = useStore();
-  const { padClass } = useCaptionChrome();
+  const { padClass, dragProps } = useCaptionChrome();
   const { macInset, browser } = useMacInsetChrome();
   const dialogRef = useRef<HTMLElement | null>(null);
   const [tab, setTab] = useState<GroupPanelTab>("details");
   // A remote client edits neither the responder nor the folder: no Advanced tab.
   const tabs: readonly GroupPanelTab[] = advanced == null ? GROUP_PANEL_TABS.filter((id) => id !== "advanced") : GROUP_PANEL_TABS;
-  const [settingsWidth, setSettingsWidth] = useState(readSettingsWidth);
-  const settingsResize = useRef<{ x: number; width: number; current: number } | null>(null);
+  // The one app-wide docked-panel width: the group opens at the width the bot
+  // panel was left at, and its resize handle is the shared one.
+  const dockedPanel = useDockedPanelWidth();
   const [bulletin, setBulletin] = useState(group.bulletin);
   useEffect(() => setBulletin(group.bulletin), [group.bulletin]);
 
@@ -131,49 +133,12 @@ export function GroupPanel({
       aria-labelledby="group-panel-title"
       tabIndex={-1}
       data-testid="group-panel"
-      style={{ width: settingsWidth }}
+      style={{ width: dockedPanel.width }}
       className="app-docked-panel animate-panel-in relative flex h-full min-w-0 shrink-0 flex-col border-l-[0.5px] border-hairline-weak bg-app outline-none max-lg:absolute max-lg:inset-0 max-lg:z-40 max-lg:w-auto"
     >
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label={t("computer.resizeAria")}
-        aria-valuemin={SETTINGS_MIN_WIDTH}
-        aria-valuemax={SETTINGS_MAX_WIDTH}
-        aria-valuenow={settingsWidth}
-        tabIndex={0}
-        onPointerDown={(event) => {
-          settingsResize.current = { x: event.clientX, width: settingsWidth, current: settingsWidth };
-          event.currentTarget.setPointerCapture(event.pointerId);
-        }}
-        onPointerMove={(event) => {
-          const from = settingsResize.current;
-          if (!from) return;
-          const next = Math.min(SETTINGS_MAX_WIDTH, Math.max(SETTINGS_MIN_WIDTH, from.width + (from.x - event.clientX)));
-          settingsResize.current = { ...from, current: next };
-          setSettingsWidth(next);
-        }}
-        onPointerUp={(event) => {
-          const width = settingsResize.current?.current;
-          if (width == null) return;
-          settingsResize.current = null;
-          event.currentTarget.releasePointerCapture(event.pointerId);
-          try { localStorage.setItem(SETTINGS_WIDTH_KEY, String(width)); } catch { /* session only */ }
-        }}
-        onKeyDown={(event) => {
-          const delta = event.key === "ArrowLeft" ? 24 : event.key === "ArrowRight" ? -24 : 0;
-          if (!delta) return;
-          event.preventDefault();
-          setSettingsWidth((current) => {
-            const next = Math.min(SETTINGS_MAX_WIDTH, Math.max(SETTINGS_MIN_WIDTH, current + delta));
-            try { localStorage.setItem(SETTINGS_WIDTH_KEY, String(next)); } catch { /* session only */ }
-            return next;
-          });
-        }}
-        className="app-resize-handle -left-[3px] hidden lg:block"
-      />
+      <DockedPanelResizeHandle label={t("computer.resizeAria")} panel={dockedPanel} />
       {(macInset || browser) && <div className="content-topbar-strip" />}
-      <div className={cn("content-topbar relative flex h-12 shrink-0 items-center justify-between px-3", padClass)}>
+      <div {...dragProps} className={cn("content-topbar relative flex h-12 shrink-0 items-center justify-between px-3", padClass)}>
         <span />
         <div className="flex items-center gap-2">
           <ExportTranscriptMenu title={group.name} messages={group.messages} isGroup />
@@ -183,14 +148,16 @@ export function GroupPanel({
         </div>
       </div>
 
-      <div className="content-card-body flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="content-card-body flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [&>*]:shrink-0">
         <div className="flex shrink-0 flex-col items-center px-4 pb-3">
-          <div className="py-3">
-            <GroupAvatarStack members={members} size={112} />
+          {/* The group's avatar sits where the bot's mascot does (#977): the
+              same top padding and box size, so the two headers line up. */}
+          <div className="flex justify-center pt-5 pb-0">
+            <GroupAvatarStack members={members} size={144} />
           </div>
           {/* As on a bot: the name is edited where it shows (its owner),
               and the (i) beside it reveals the group instructions. */}
-          <div className="mt-2 flex max-w-full items-center justify-center gap-0.5">
+          <div className="-mt-1 flex max-w-full items-center justify-center gap-0.5">
             <InlineEditableText
               id="group-panel-title"
               value={group.name}
@@ -208,7 +175,7 @@ export function GroupPanel({
               onSave={canEdit ? (next) => dispatch({ type: "patchGroup", groupId: group.id, patch: { bulletin: next } }) : undefined}
             />
           </div>
-          <span className="mt-0.5 max-w-full truncate text-[12px] leading-4 text-ink-secondary">
+          <span className="mt-0.5 max-w-full truncate text-[12.5px] leading-4 text-ink-secondary">
             {members.length === 1 ? t("groupPanel.botOne") : t("groupPanel.botMany", { count: members.length })}
           </span>
           <div
@@ -249,7 +216,7 @@ export function GroupPanel({
         )}
 
         {tab === "details" && (
-          <div className="flex flex-col gap-5 px-4 pb-6 pt-2">
+          <div className="flex flex-col gap-6 px-4 pb-6 pt-2">
             {details}
           </div>
         )}

@@ -118,7 +118,7 @@ function SandboxedFrame({ srcDoc, title, theme, fill = false, onEscaped }: {
 
 const TOOL = "flex size-6 items-center justify-center rounded-md text-ink-secondary hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:pointer-events-none disabled:opacity-40";
 
-function WidgetFrameComponent({ code, pending = false }: { code: string; pending?: boolean }) {
+function WidgetFrameComponent({ code, pending = false, imperfect = false }: { code: string; pending?: boolean; imperfect?: boolean }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const theme = useWidgetTheme(frameRef);
   const [showSource, setShowSource] = useState(false);
@@ -158,6 +158,7 @@ function WidgetFrameComponent({ code, pending = false }: { code: string; pending
       ) : blocked ? null : (
         <SandboxedFrame key={generation} srcDoc={srcDoc} title={title} theme={theme} onEscaped={reset} />
       )}
+      {imperfect && !pending && !blocked && <p data-widget-imperfect="" className="pt-1 text-[11px] text-ink-tertiary">{t("rich.widget.imperfect")}</p>}
       {escapes > 0 && <p role="alert" className="py-1.5 text-[11.5px] text-warning">{blocked ? t("rich.widget.blocked") : t("rich.widget.escaped")}</p>}
       {(showSource || pending) && (
         <pre className="mt-1.5 max-h-80 overflow-auto rounded-xl border border-hairline/40 bg-inset p-3 text-[12.5px] leading-relaxed text-ink">{code}</pre>

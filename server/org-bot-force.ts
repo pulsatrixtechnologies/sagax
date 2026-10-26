@@ -24,6 +24,10 @@ export interface OrgBotForceDeps {
   /** An organization server (`SAGAX_IDENTITY=perspicax`). */
   organization: boolean;
   isAdmin(auth: RequestAuth): boolean;
+  /** 2026-10-19: whether this caller may act on what this person owns (a
+   * person an admin gave people.manage never acts on an admin's). Absent:
+   * yes. */
+  mayActOn?(auth: RequestAuth, ownerPrincipalId: string): boolean;
   bot(id: string): ForceBot | null;
   /** The principal of the caller (the operator's own at this computer). */
   actorId(auth: RequestAuth): string;
@@ -51,6 +55,9 @@ export function createOrgBotForceRoutes(deps: OrgBotForceDeps): RouteHandler {
     }
     const bot = deps.bot(match[1]!);
     if (!bot) return json(res, 404, { error: "no such bot" });
+    if (deps.mayActOn && !deps.mayActOn(auth, bot.ownerPrincipalId)) {
+      return json(res, 403, { error: "Only an organization admin can act on an admin's bot.", code: "target_is_admin" });
+    }
     const action = match[2] === "force-stop" ? "stop" : "delete";
     if (action === "delete") {
       const body = await readBody(req).catch(() => null) as { confirm?: unknown } | null;

@@ -9,8 +9,8 @@
 // the room above it.
 import "./dev-pods.css";
 import "./all-pods";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch } from "react";
-import { PanelRight } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type ReactNode } from "react";
+import { CodeXml } from "lucide-react";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -54,6 +54,31 @@ export function railGeometry(paneWidth: number): { fits: boolean; width: number 
   const room = gutter - RAIL_EDGE - RAIL_GAP;
   if (room >= RAIL_MIN) return { fits: true, width: Math.floor(Math.min(RAIL_MAX, room)) };
   return { fits: false, width: Math.floor(Math.min(RAIL_MAX, Math.max(0, paneWidth - 2 * RAIL_EDGE))) };
+}
+
+/** Puts a card in the side-card column: the rail's right edge and width
+ * (`railGeometry` of the pane), whether the rail is on screen or not. Its
+ * own width is the pane's (the composer dock spans it), so the card above
+ * the composer ("This run") lines up with the pods at the top. */
+export function RailAligned({ children, className }: { children: ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [paneWidth, setPaneWidth] = useState(0);
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const measure = () => setPaneWidth(node.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const width = paneWidth > 0 ? railGeometry(paneWidth).width : RAIL_MAX;
+  return (
+    <div ref={ref} data-rail-aligned="" className={cn("flex justify-end", className)} style={{ paddingRight: RAIL_EDGE }}>
+      <div className="flex min-w-0 max-w-full" style={{ width }}>{children}</div>
+    </div>
+  );
 }
 
 const devModes = new Map<string, { state: DevModeState; evaluated: string }>();
@@ -312,7 +337,7 @@ export function DevPodsToggle({ bot }: { bot: Pick<Bot, "id" | "threadId"> }) {
       onClick={toggle}
       className={cn(CIRCLE_BUTTON, shown && "bg-elevated-hover")}
     >
-      <PanelRight size={18} strokeWidth={1.75} />
+      <CodeXml size={18} strokeWidth={1.75} />
     </button>
   );
 }

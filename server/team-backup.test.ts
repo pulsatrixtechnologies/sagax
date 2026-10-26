@@ -27,7 +27,7 @@ function fixture() {
   const otherChief = store.createBot({ name: "Ava", section: "Operations" }, { seedMessages: false });
   const archived = store.createBot({ name: "Archived" }, { seedMessages: false });
   store.patchBot(archived.id, { hidden: true });
-  store.patchBot(chief.id, { chiefOfStaff: true, autoApprove: true, approvalMode: "full", alwaysAllow: ["Bash"], cwd: "/private/old-workspace", composio: true,
+  store.patchBot(chief.id, { chiefOfStaff: true, autoApprove: true, approvalMode: "full", alwaysAllow: ["Bash"], cwd: "/private/old-workspace",
     playbooks: [{ key: "research", name: "Research", summary: "Find evidence", triggers: ["research"], instructions: "Cite sources" }] });
   store.setPrimaryBot(otherChief.id);
   const root = store.appendMessage(chief.threadId, { role: "user", kind: "text", text: "Original question", at: 100 });
@@ -68,7 +68,7 @@ describe("additive portable team backups", () => {
     const backup = createTeamBackup(store, routines.listRoutines(), "Selected tools");
     expect(backup.bots.find((bot) => bot.key === chief.id)).toHaveProperty("toolScope", scope);
     const restored = importTeamBackup(store, routines, backup, selection());
-    expect(restored.bots.find((bot) => bot.name === "Mira 2")).toMatchObject({ toolScope: scope, computer: "off", composio: false, approvalMode: "ask", connectorTools: {} });
+    expect(restored.bots.find((bot) => bot.name === "Mira 2")).toMatchObject({ toolScope: scope, computer: "off", approvalMode: "ask" });
     expect(restored.bots.find((bot) => bot.name === "Scout 2")).toHaveProperty("toolScope", { allow: [] });
     const invalid = structuredClone(backup) as unknown as { bots: Array<{ toolScope: unknown }> };
     invalid.bots[0].toolScope = { allow: null };
@@ -136,7 +136,7 @@ describe("additive portable team backups", () => {
     expect(importedChief.soulHash).toBe(soulHash(chief.soul!));
     expect(readFileSync(soulFile(importedChief.id), "utf8")).toBe(chief.soul);
     expect(importedChief.chiefOfStaff).toBeFalsy();
-    expect(importedChief).toMatchObject({ section: "Engineering 2", description: chief.description, computer: "off", composio: false, browser: false, approvalMode: "ask", autoApprove: false, resumeCursors: {}, playbooks: chief.playbooks });
+    expect(importedChief).toMatchObject({ section: "Engineering 2", description: chief.description, computer: "off", browser: false, approvalMode: "ask", autoApprove: false, resumeCursors: {}, playbooks: chief.playbooks });
     // The person already has a Primary Bot (Ava): the backup's leader arrives as an ordinary bot.
     expect(result.bots.find((bot) => bot.name === "Ava 2")).toMatchObject({ section: "Operations 2" });
     expect(result.bots.find((bot) => bot.name === "Ava 2")?.chiefOfStaff).toBeFalsy();
@@ -187,23 +187,6 @@ describe("additive portable team backups", () => {
     const second = importTeamBackup(store, routines, backup, selection());
     expect(second.bots.find((bot) => bot.name === "Mira 3")).toMatchObject({ section: "Engineering 3" });
     expect(store.bot(importedChief.id)).toEqual(importedChief);
-  });
-
-  it("carries connector grants in the private backup but lands imported bots grant-less", () => {
-    const { store, routines, chief } = fixture();
-    store.patchBot(chief.id, { connectorTools: { gmail: { tools: ["GMAIL_SEND_EMAIL", "GMAIL_SEND_EMAIL"] } } });
-    const backup = createTeamBackup(store, routines.listRoutines(), "Granted team");
-    expect(backup.bots.find((bot) => bot.key === chief.id)?.connectorTools).toEqual({
-      gmail: { tools: ["GMAIL_SEND_EMAIL"] },
-    });
-    const result = importTeamBackup(store, routines, JSON.parse(JSON.stringify(backup)), selection());
-    const imported = result.bots.find((bot) => bot.name === "Mira 2")!;
-    expect(imported.composio).toBe(false);
-    expect(imported.connectorTools).toEqual({});
-    // the backup format itself rejects grant shapes the store would refuse
-    const tampered = JSON.parse(JSON.stringify(backup)) as { bots: { key: string; connectorTools: unknown }[] };
-    tampered.bots[0].connectorTools = { gmail: { tools: [] } };
-    expect(() => parseTeamBackup(tampered)).toThrow();
   });
 
   it("keeps first-message title markers armed-once through backup and restore", () => {

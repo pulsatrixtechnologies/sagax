@@ -34,7 +34,8 @@ describe("the permission catalogue", () => {
   });
 
   it("keeps the admin-only list tiny, each with its reason, never a member default", () => {
-    expect([...ADMIN_ONLY_PERMISSIONS].sort()).toEqual(["backup.workspace", "host.shell", "people.manage", "server.link", "server.settings"]);
+    // 2026-10-19 (JC): only what decides who reaches the server at all
+    expect([...ADMIN_ONLY_PERMISSIONS].sort()).toEqual(["server.link"]);
     for (const entry of PERMISSIONS.filter((row) => row.adminOnly)) {
       expect(entry.memberDefault, entry.key).toBe(false);
       expect(entry.adminOnlyReason?.en, entry.key).toBeTruthy();
@@ -92,20 +93,22 @@ describe("can", () => {
   });
 
   it("needs the key for anyone else, and never grants an admin-only key", () => {
-    const member = { admin: false, permissions: new Set(["usage.view", "host.shell"]) };
+    const member = { admin: false, permissions: new Set(["usage.view", "host.shell", "server.link"]) };
     expect(can(member, "usage.view")).toBe(true);
     expect(can(member, "engines.manage")).toBe(false);
-    expect(can(member, "host.shell")).toBe(false);
+    // 2026-10-19: host.shell is given in Perspicax; server.link never
+    expect(can(member, "host.shell")).toBe(true);
+    expect(can(member, "server.link")).toBe(false);
     expect(can({ admin: false, permissions: ["bots.create"] }, "bots.create")).toBe(true);
   });
 });
 
 describe("normalizePermissions", () => {
   it("keeps known grantable keys in catalogue order and reports the rest", () => {
-    expect(normalizePermissions(["usage.view", "bots.create", "nope.key", "host.shell", 7, "usage.view"])).toEqual({
+    expect(normalizePermissions(["usage.view", "bots.create", "nope.key", "server.link", 7, "usage.view"])).toEqual({
       granted: ["bots.create", "usage.view"],
       unknown: ["nope.key"],
-      ignored: ["host.shell"],
+      ignored: ["server.link"],
     });
     expect(normalizePermissions("bots.create")).toEqual({ granted: [], unknown: [], ignored: [] });
     expect(normalizePermissions(null).granted).toEqual([]);

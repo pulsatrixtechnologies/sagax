@@ -11,6 +11,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_REFRESH_AFTER_SECONDS,
   IDP_KEY_FILE,
+  IDP_CLIENT_REFUSED_GRACE_MS,
+  IDP_QUICK_RETRY_MS,
   IDP_REFRESH_WAIT_MS,
   IDP_RETRY_AFTER_FAILURE_MS,
   IDP_SUBJECT_MIN_LIFE_MS,
@@ -32,6 +34,7 @@ import { PrincipalRegistry } from "./principals.ts";
 import { SessionRegistry, type Scope } from "./sessions.ts";
 
 const ISS = "https://px.example.test";
+const REJ: RefreshOutcome = { ok: false, kind: "rejected", error: "invalid_grant" };
 const KEY = "a".repeat(64);
 let dir: string;
 let clock: number;
@@ -121,7 +124,7 @@ function setup(options: { refreshAfterMs?: number; revocations?: RevocationSink;
   const vault = new IdpGrantVault(dir, () => ({ kind: "key", key: Buffer.from(KEY, "hex") }));
   const logs: string[] = [];
   const timers: Array<{ run: () => void; at: number }> = [];
-  const manager = new IdpSessionManager({ vault, rp: provider.rp, sessions, principals, now: () => clock, refreshAfterMs: options.refreshAfterMs ?? 3_000_000, log: (l) => logs.push(l), schedule: (run, delayMs) => { timers.push({ run, at: clock + delayMs }); }, ...(options.revocations ? { revocations: options.revocations } : {}), ...(options.onRenewed ? { onRenewed: options.onRenewed } : {}) });
+  const manager = new IdpSessionManager({ vault, rp: provider.rp, sessions, principals, now: () => clock, refreshAfterMs: options.refreshAfterMs ?? 3_000_000, log: (l) => logs.push(l), schedule: (run, delayMs) => { timers.push({ run, at: clock + delayMs }); }, sleep: async () => {}, ...(options.revocations ? { revocations: options.revocations } : {}), ...(options.onRenewed ? { onRenewed: options.onRenewed } : {}) });
   sessions.onSessionRevoked((sessionId) => manager.release(sessionId, { revokeAtIdp: true }));
   sessions.onExchanged((session) => { if (session.idp?.grantRef) manager.bindSession(session.idp.grantRef, session.id); });
   /** A web sign-in: principal, grant, session bound to it. */
@@ -192,18 +195,57 @@ describe("refresh on use", () => {
     expect(renewed).toHaveLength(1);
   });
 
-  it("revokes every session of a grant the provider rejects, without calling revoke", async () => {
-    const { manager, provider, vault, signIn, sessions } = setup({ refreshAfterMs: 1000 });
+  it("revokes every session of a grant the provider rejects twice, without calling revoke; with no other sign-in to ask, the person is marked out", async () => {
+    const { manager, provider, vault, signIn, sessions, principals } = setup({ refreshAfterMs: 1000 });
     const a = signIn("S1");
     const b = signIn("S2");
     clock += 1000;
-    provider.script.push({ ok: false, kind: "rejected", error: "invalid_grant" });
+    provider.script.push(REJ, REJ);
     manager.touch(a.record()!);
     await manager.settled();
+    expect(provider.calls).toHaveLength(2);
     expect(sessions.byId(a.sessionId)).toBeNull();
+    expect(sessions.explainRefusal("x").code).toBe("session_unknown");
     expect(vault.get(a.grantRef)).toBeUndefined();
     expect(provider.revoked).toEqual([]);
     expect(sessions.byId(b.sessionId)).not.toBeNull();
+    // refused twice and nothing else to ask: routines and channel turns stop
+    // too, until the next sign-in (security review of 2026-10-20)
+    expect(principals.byId(a.principal.id)?.disabledAt).toBe(clock);
+    expect(principals.byId(b.principal.id)?.disabledAt).toBeUndefined();
+  });
+
+  it("a refusal answered once (a race, a provider mid-deploy) keeps the session: asked again, it refreshes", async () => {
+    const { manager, provider, vault, signIn, sessions, principals, logs } = setup({ refreshAfterMs: 1000 });
+    const a = signIn("S1");
+    clock += 1000;
+    provider.script.push(REJ);
+    manager.touch(a.record()!);
+    await manager.settled();
+    expect(provider.calls).toHaveLength(2);
+    expect(sessions.byId(a.sessionId)).not.toBeNull();
+    expect(vault.get(a.grantRef)).toMatchObject({ refreshToken: "pxlr1.rot1" });
+    expect(vault.get(a.grantRef)?.refreshStartedAt).toBeUndefined();
+    expect(principals.byId(a.principal.id)?.disabledAt).toBeUndefined();
+    expect(logs.some((line) => line.includes("asking again"))).toBe(true);
+  });
+
+  it("a refusal of a token another server already rotated is asked again with the newer token from the vault", async () => {
+    const { manager, provider, signIn, sessions } = setup({ refreshAfterMs: 1000 });
+    const a = signIn("S1");
+    clock += 1000;
+    // the old server of a deploy rotates the grant and writes it, while this
+    // one already sent the old token
+    let release: (outcome: RefreshOutcome) => void = () => {};
+    provider.script.push(new Promise<RefreshOutcome>((resolve) => { release = resolve; }));
+    manager.touch(a.record()!);
+    await Promise.resolve();
+    const other = new IdpGrantVault(dir, () => ({ kind: "key", key: Buffer.from(KEY, "hex") }));
+    other.set({ ...other.get(a.grantRef)!, refreshToken: "pxlr1.kept-by-the-other-server" });
+    release(REJ as RefreshOutcome);
+    await manager.settled();
+    expect(provider.calls[1]).toBe("pxlr1.kept-by-the-other-server");
+    expect(sessions.byId(a.sessionId)).not.toBeNull();
   });
 
   it("a rejected refresh puts the person out: their paired devices, other sign-ins and open codes end, even without a back-channel push", async () => {
@@ -217,12 +259,12 @@ describe("refresh on use", () => {
     sessions.openPairing({ principalId: bob.principal.id, scopes: ["client"] });
     const alice = signIn("A1", "admin");
     clock += 1000;
-    // Bob is disabled: his freshest other sign-in, checked next, is refused too
-    provider.script.push({ ok: false, kind: "rejected", error: "invalid_grant" }, { ok: false, kind: "rejected", error: "invalid_grant" });
+    // Bob is disabled: refused twice, then his freshest other sign-in, checked next, is refused twice too
+    provider.script.push(REJ, REJ, REJ, REJ);
     manager.touch(bob.record()!);
     await manager.settled();
-    expect(provider.calls).toHaveLength(2);
-    expect(provider.calls[1]).toBe(otherToken);
+    expect(provider.calls).toHaveLength(4);
+    expect(provider.calls[2]).toBe(otherToken);
     for (const id of [bob.sessionId, bobWeb2.sessionId, phone.session.id]) expect(sessions.byId(id)).toBeNull();
     expect(vault.get(bob.grantRef)).toBeUndefined();
     expect(vault.get(bobWeb2.grantRef)).toBeUndefined();
@@ -244,13 +286,13 @@ describe("refresh on use", () => {
     sessions.openPairing({ principalId: evicted.principal.id, scopes: ["client"] });
     vault.set({ grantRef: "rd-A1", iss: ISS, sub: "A1", refreshToken: "pxlr1.delegation-A1", createdAt: clock, refreshedAt: clock, lastOkAt: clock, kind: "routines", principalId: evicted.principal.id });
     clock += 1000;
-    provider.script.push({ ok: false, kind: "rejected", error: "invalid_grant" });
+    provider.script.push(REJ, REJ);
     manager.touch(evicted.record()!);
     await manager.settled();
     // the refused family's session ends; the freshest other one was checked and rotated
     expect(sessions.byId(evicted.sessionId)).toBeNull();
     expect(vault.get(evicted.grantRef)).toBeUndefined();
-    expect(provider.calls).toHaveLength(2);
+    expect(provider.calls).toHaveLength(3);
     expect(vault.get(kept.grantRef)).toMatchObject({ refreshToken: "pxlr1.rot1", lastOkAt: clock });
     // the person stays in: other sessions, paired devices, open codes, the delegation
     expect(principals.byId(evicted.principal.id)?.disabledAt).toBeUndefined();
@@ -268,7 +310,7 @@ describe("refresh on use", () => {
     clock += 1;
     const second = signIn("A2");
     clock += 1000;
-    provider.script.push({ ok: false, kind: "rejected", error: "invalid_grant" }, { ok: false, kind: "transient", error: "unreachable" });
+    provider.script.push(REJ, REJ, { ok: false, kind: "transient", error: "unreachable" });
     manager.touch(first.record()!);
     await manager.settled();
     expect(sessions.byId(first.sessionId)).toBeNull();
@@ -276,23 +318,81 @@ describe("refresh on use", () => {
     expect(principals.byId(first.principal.id)?.disabledAt).toBeUndefined();
   });
 
-  it("a rotated grant that cannot be kept ends only its own session, not the person", async () => {
-    const { manager, vault, signIn, sessions, principals } = setup({ refreshAfterMs: 1000 });
+  it("a refresh a crash interrupted is resumed at boot, at once (inside Perspicax's reuse grace)", async () => {
+    const { manager, provider, vault, signIn, sessions } = setup({ refreshAfterMs: 1000 });
+    const a = signIn("S1");
+    signIn("S2");
+    // the crash: the write-ahead mark is on disk, the answer never came back
+    vault.set({ ...vault.get(a.grantRef)!, refreshStartedAt: clock });
+    expect(manager.resumeInterrupted()).toBe(1);
+    await manager.settled();
+    expect(provider.calls).toEqual([`pxlr1.first-S1-${clock}`]);
+    expect(vault.get(a.grantRef)).toMatchObject({ refreshToken: "pxlr1.rot1" });
+    expect(vault.get(a.grantRef)?.refreshStartedAt).toBeUndefined();
+    expect(sessions.byId(a.sessionId)).not.toBeNull();
+    expect(manager.resumeInterrupted()).toBe(0);
+  });
+
+  it("a client refusal (invalid_client) is a deploy for 15 minutes, then ends the sign-in; an ignored id_token keeps the 24 h clock running", async () => {
+    const { manager, provider, vault, signIn, sessions } = setup({ refreshAfterMs: 1000 });
+    const a = signIn("S1");
+    clock += 1000;
+    provider.script.push({ ok: false, kind: "transient", error: "HTTP 401 (invalid_client)", clientRefused: true });
+    manager.touch(a.record()!);
+    await manager.settled();
+    expect(sessions.byId(a.sessionId)).not.toBeNull();
+    clock += IDP_CLIENT_REFUSED_GRACE_MS;
+    provider.script.push({ ok: false, kind: "transient", error: "HTTP 401 (invalid_client)", clientRefused: true });
+    manager.touch(a.record()!);
+    await manager.settled();
+    expect(sessions.byId(a.sessionId)).toBeNull();
+    const b = signIn("S2");
+    clock += 1000;
+    provider.script.push({ ok: true, refreshToken: "pxlr1.unverified", note: "the refreshed id_token was ignored (bad signature)" });
+    manager.touch(b.record()!);
+    await manager.settled();
+    expect(vault.get(b.grantRef)).toMatchObject({ refreshToken: "pxlr1.unverified", failingSince: clock });
+  });
+
+  it("a refresh never brings back a grant another process removed while it was out", async () => {
+    const { manager, provider, vault, signIn } = setup({ refreshAfterMs: 1000 });
+    const a = signIn("S1");
+    clock += 1000;
+    let release: (outcome: RefreshOutcome) => void = () => {};
+    provider.script.push(new Promise<RefreshOutcome>((resolve) => { release = resolve; }));
+    manager.touch(a.record()!);
+    await Promise.resolve();
+    const other = new IdpGrantVault(dir, () => ({ kind: "key", key: Buffer.from(KEY, "hex") }));
+    other.delete(a.grantRef);
+    release({ ok: true, refreshToken: "pxlr1.after-logout" });
+    await manager.settled();
+    expect(vault.get(a.grantRef)).toBeUndefined();
+    expect(new IdpGrantVault(dir, () => ({ kind: "key", key: Buffer.from(KEY, "hex") })).get(a.grantRef)).toBeUndefined();
+  });
+
+  it("a rotated grant that cannot be written yet stays in memory, the session is kept, and the next write saves it", async () => {
+    const { manager, vault, signIn, sessions, principals, provider } = setup({ refreshAfterMs: 1000 });
     const bob = signIn("B1");
     const phone = sessions.issue({ label: "phone", scopes: ["client"], principalId: bob.principal.id });
     clock += 1000;
-    const set = vault.set.bind(vault);
-    vault.set = () => { throw new Error("disk full"); };
+    const internals = vault as unknown as { persist: (document: unknown) => void };
+    const persist = internals.persist.bind(vault);
+    internals.persist = () => { throw new Error("disk full"); };
     manager.touch(bob.record()!);
     await manager.settled();
-    vault.set = set;
-    expect(sessions.byId(bob.sessionId)).toBeNull();
+    expect(sessions.byId(bob.sessionId)).not.toBeNull();
     expect(sessions.byId(phone.session.id)).not.toBeNull();
     expect(principals.byId(bob.principal.id)?.disabledAt).toBeUndefined();
+    expect(vault.get(bob.grantRef)?.refreshToken).toBe("pxlr1.rot1");
+    expect(provider.revoked).toEqual([]);
+    internals.persist = persist;
+    vault.set(vault.get(bob.grantRef)!);
+    const reread = new IdpGrantVault(dir, () => ({ kind: "key", key: Buffer.from(KEY, "hex") }));
+    expect(reread.get(bob.grantRef)?.refreshToken).toBe("pxlr1.rot1");
   });
 
-  it("keeps the session on a transient failure, waits a minute, and ends it after 24 hours without success", async () => {
-    const { manager, provider, vault, signIn, sessions } = setup({ refreshAfterMs: 1000 });
+  it("keeps the session on a transient failure, retries at 5 s and 15 s then each minute, and never ends it (24 hours of failures only pause it)", async () => {
+    const { manager, provider, vault, signIn, sessions, advance } = setup({ refreshAfterMs: 1000 });
     const a = signIn("S1");
     clock += 1000;
     provider.script.push({ ok: false, kind: "transient", error: "HTTP 503" });
@@ -301,33 +401,42 @@ describe("refresh on use", () => {
     expect(sessions.byId(a.sessionId)).not.toBeNull();
     expect(vault.get(a.grantRef)).toMatchObject({ failedAt: clock, failingSince: clock });
     expect(manager.mustRefuse(a.record()!)).toBeNull();
-    // no new attempt inside the minute
+    // the quick retries run on their own, inside Perspicax's reuse grace
+    provider.script.push({ ok: false, kind: "transient", error: "timeout" });
+    advance(IDP_QUICK_RETRY_MS[0]!);
+    await manager.settled();
+    expect(provider.calls).toHaveLength(2);
+    provider.script.push({ ok: false, kind: "transient", error: "timeout" });
+    advance(IDP_QUICK_RETRY_MS[1]!);
+    await manager.settled();
+    expect(provider.calls).toHaveLength(3);
+    // then no new attempt inside the minute
     clock += IDP_RETRY_AFTER_FAILURE_MS - 1;
     manager.touch(a.record()!);
     await manager.settled();
-    expect(provider.calls).toHaveLength(1);
-    // failing for a day ends it
+    expect(provider.calls).toHaveLength(3);
+    // failing, observed, for a day: not served (503 upstream), never ended
     const since = vault.get(a.grantRef)!.failingSince!;
-    for (let i = 0; i < 3; i++) {
-      clock += IDP_RETRY_AFTER_FAILURE_MS;
-      provider.script.push({ ok: false, kind: "transient", error: "timeout" });
-      manager.touch(a.record()!);
-      await manager.settled();
-    }
-    expect(vault.get(a.grantRef)!.failingSince).toBe(since);
     clock = since + IDP_UNREACHABLE_GRACE_MS;
+    provider.script.push({ ok: false, kind: "transient", error: "timeout" });
+    manager.touch(a.record()!);
+    await manager.settled();
+    expect(vault.get(a.grantRef)!.failingSince).toBe(since);
     expect(manager.mustRefuse(a.record()!)).toBe("idp_unreachable");
-    // a success in between clears the failure
+    expect(sessions.byId(a.sessionId)).not.toBeNull();
+    // Perspicax answers again: served again
+    clock += IDP_RETRY_AFTER_FAILURE_MS;
+    manager.touch(a.record()!);
+    await manager.settled();
+    expect(vault.get(a.grantRef)!.failingSince).toBeUndefined();
+    expect(manager.mustRefuse(a.record()!)).toBeNull();
+    // one failure, then a quiet weekend: the next request just refreshes
     const b = signIn("S2");
     clock += 1000;
     provider.script.push({ ok: false, kind: "transient", error: "timeout" });
     manager.touch(b.record()!);
     await manager.settled();
-    clock += IDP_RETRY_AFTER_FAILURE_MS;
-    manager.touch(b.record()!);
-    await manager.settled();
-    expect(vault.get(b.grantRef)!.failingSince).toBeUndefined();
-    clock += IDP_UNREACHABLE_GRACE_MS;
+    clock += IDP_UNREACHABLE_GRACE_MS * 2;
     expect(manager.mustRefuse(b.record()!)).toBeNull();
   });
 
@@ -361,7 +470,7 @@ describe("refresh on use", () => {
     const { manager, sessions, vault, signIn } = setup();
     const web = signIn("P1");
     const phone = sessions.issue({ label: "phone", scopes: ["client"], principalId: web.principal.id, idp: { iss: ISS, sub: "P1" } });
-    vault.set({ ...vault.get(web.grantRef)!, failingSince: clock });
+    vault.set({ ...vault.get(web.grantRef)!, failingSince: clock, failedAt: clock + IDP_UNREACHABLE_GRACE_MS });
     clock += IDP_UNREACHABLE_GRACE_MS;
     expect(manager.mustRefuse(sessions.byId(phone.session.id)!)).toBe("idp_unreachable");
     const web2 = signIn("P1");
@@ -383,8 +492,8 @@ describe("refresh on use", () => {
     expect(vault.get(newer.grantRef)!.refreshToken).toBe("pxlr1.demoted");
     expect(sessions.byId(phone.session.id)!.scopes).toEqual(["client"]);
     clock += 1000;
-    // the person is out: the grant tried and the other one checked are both refused
-    provider.script.push({ ok: false, kind: "rejected", error: "invalid_grant" }, { ok: false, kind: "rejected", error: "invalid_grant" });
+    // the person is out: the grant tried and the other one checked are both refused (each twice)
+    provider.script.push(REJ, REJ, REJ, REJ);
     manager.touch(sessions.byId(phone.session.id)!);
     await manager.settled();
     expect(sessions.byId(phone.session.id)).toBeNull();
@@ -620,10 +729,10 @@ describe("the sign-in access token as a token exchange subject (slice 5)", () =>
     expect(provider.calls).toHaveLength(2);
   });
 
-  it("a rejected refresh answers ended and puts the person out", async () => {
+  it("a refresh rejected twice answers ended and ends that sign-in", async () => {
     const { manager, provider, signIn, sessions, principals } = setup();
     const a = signIn("S1", "employee", undefined, { accessToken: "pxlo1.S1.old", accessExpiresAt: clock + 1000 });
-    provider.script.push({ ok: false, kind: "rejected", error: "invalid_grant" });
+    provider.script.push(REJ, REJ);
     await expect(manager.subjectToken({ iss: ISS, sub: "S1" })).resolves.toEqual({ ok: false, error: "ended" });
     expect(sessions.byId(a.sessionId)).toBeNull();
     expect(principals.byId(a.principal.id)?.disabledAt).toBe(clock);
@@ -694,7 +803,7 @@ describe("routine delegations beside the sign-in grants (slice 6)", () => {
     expect(vault.get("rd-B1")).toBeDefined();
     const again = signIn("B1");
     clock += 1000;
-    provider.script.push({ ok: false, kind: "rejected", error: "invalid_grant" });
+    provider.script.push(REJ, REJ);
     manager.touch(again.record()!);
     await manager.settled();
     expect(vault.get(again.grantRef)).toBeUndefined();

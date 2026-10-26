@@ -6,14 +6,16 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { WireMessage } from "../shared/wire.ts";
 import {
+  recordRoutineChange,
   recordRoutineToggle,
+  routineChangeText,
   routineToggleForViewer,
   routineToggleText,
   routineToggleTurnKey,
   type RoutineToggleStore,
 } from "./routine-chat-events.ts";
 import { RoutineRequestService, type RoutineRequestOptionCard } from "./routine-requests.ts";
-import { RoutineManager, type RoutineEnabledChange, type Routine } from "./routines.ts";
+import { RoutineManager, type RoutineChangeNote, type RoutineEnabledChange, type Routine } from "./routines.ts";
 
 /** A thread store that keeps rows in order, like the real active path. */
 class Thread implements RoutineToggleStore {
@@ -56,6 +58,7 @@ function wired(thread: Thread) {
   const dir = mkdtempSync(join(tmpdir(), "sagax-routine-lines-"));
   dirs.push(dir);
   const changes: Array<{ routine: Routine; change: RoutineEnabledChange }> = [];
+  const edits: Array<{ routine: Routine; change: RoutineChangeNote }> = [];
   const routines = new RoutineManager({
     file: join(dir, "routines.json"),
     now: () => Date.parse("2026-10-15T14:00:00Z"),
@@ -72,11 +75,20 @@ function wired(thread: Thread) {
         routine: { id: routine.id, name: routine.name, botId: routine.botId },
       });
     },
+    onRoutineChanged: (routine, change) => {
+      edits.push({ routine, change });
+      recordRoutineChange(thread, {
+        threadId: change.threadId,
+        action: change.action,
+        atMessageId: change.messageId,
+        routine: { id: routine.id, name: routine.name, botId: routine.botId },
+      });
+    },
   });
   const make = (name: string, botId = "bot-a") => routines.create({
     name, prompt: "Check the queue", botId, schedule: { type: "daily", time: "09:00", weekdays: [1, 2, 3, 4, 5] },
   });
-  return { routines, changes, make };
+  return { routines, changes, edits, make };
 }
 
 describe("routine lines in the conversation", () => {
@@ -114,13 +126,14 @@ describe("routine lines in the conversation", () => {
 
   it("writes nothing for a change made outside a conversation or one that leaves the switch as it was", () => {
     const thread = new Thread();
-    const { routines, changes, make } = wired(thread);
+    const { routines, changes, edits, make } = wired(thread);
     const routine = make("Morning brief");
     thread.say("t1", "hello");
     routines.update(routine.id, { enabled: false });
-    routines.update(routine.id, { name: "Renamed" }, undefined, { conversation: { threadId: "t1" } });
+    routines.update(routine.id, { name: "Renamed" });
     routines.update(routine.id, { enabled: false }, undefined, { conversation: { threadId: "t1" } });
     expect(changes).toHaveLength(0);
+    expect(edits).toHaveLength(0);
     expect(thread.lines("t1")).toHaveLength(0);
   });
 
@@ -144,6 +157,55 @@ describe("routine lines in the conversation", () => {
     expect(changes[0].change).toMatchObject({ enabled: false, threadId: "t1", messageId: proposal.messageId });
     const [line] = thread.lines("t1");
     expect(line.routineToggle).toMatchObject({ action: "disabled", turnKey: ask.id, routines: [{ id: routine.id, name: "Morning brief" }] });
+  });
+
+  it("writes a named line for a routine a bot creates, updates or deletes from a conversation", () => {
+    const thread = new Thread();
+    const { routines } = wired(thread);
+    const card = <A extends "create" | "update" | "delete">(threadId: string, messageId: string, action: A) => ({
+      requestId: `req-${messageId}`, messageId, botId: "bot-a", threadId, action,
+      fingerprintVersion: 1 as const, fingerprint: `fp-${messageId}`,
+    });
+
+    const askCreate = thread.say("t1", "Crée une routine de revue des billets");
+    const created = routines.create(
+      { name: "Revue des billets GECKO", prompt: "Revois les billets", botId: "bot-a", schedule: { type: "daily", time: "09:00", weekdays: [1, 2, 3, 4, 5] } },
+      card("t1", askCreate.id, "create"),
+    );
+    let lines = thread.lines("t1");
+    expect(lines).toHaveLength(1);
+    expect(lines[0].routineToggle).toMatchObject({ action: "created", turnKey: askCreate.id, routines: [{ id: created.id, name: "Revue des billets GECKO" }] });
+    expect(lines[0].text).toBe("Created a routine");
+
+    const askRename = thread.say("t1", "Renomme-la");
+    routines.update(created.id, { name: "Revue quotidienne des billets" }, card("t1", askRename.id, "update"));
+    lines = thread.lines("t1");
+    expect(lines).toHaveLength(2);
+    expect(lines[1].routineToggle).toMatchObject({ action: "updated", turnKey: askRename.id, routines: [{ id: created.id, name: "Revue quotidienne des billets" }] });
+
+    const askDelete = thread.say("t1", "Supprime-la");
+    routines.remove(created.id, card("t1", askDelete.id, "delete"));
+    lines = thread.lines("t1");
+    expect(lines).toHaveLength(3);
+    expect(lines[2].routineToggle).toMatchObject({ action: "deleted", turnKey: askDelete.id, routines: [{ id: created.id, name: "Revue quotidienne des billets" }] });
+  });
+
+  it("does not write an 'updated' line for a bare pause or resume (the toggle line carries those)", () => {
+    const thread = new Thread();
+    const { routines, edits, make } = wired(thread);
+    const routine = make("Résumé du matin");
+    thread.say("t1", "Mets la routine en pause");
+    const meta = { conversation: { threadId: "t1" } };
+    routines.update(routine.id, { enabled: false }, undefined, meta);
+    routines.update(routine.id, { enabled: true }, undefined, meta);
+    expect(edits).toHaveLength(0);
+    expect(thread.lines("t1").every((line) => line.routineToggle!.action === "disabled" || line.routineToggle!.action === "enabled")).toBe(true);
+  });
+
+  it("names a change line without a routine in its fallback text", () => {
+    expect(routineChangeText("created")).toBe("Created a routine");
+    expect(routineChangeText("updated")).toBe("Updated a routine");
+    expect(routineChangeText("deleted")).toBe("Deleted a routine");
   });
 
   it("finds the turn from the person's line, never a peer's", () => {

@@ -2,6 +2,8 @@
 // the server trusts loopback and none of this is visible; on a remote host
 // the browser must hold a session cookie from pairing (see /pair).
 
+import { isDefinitiveSessionRefusal, sessionRetryDelay, UNKNOWN_SESSION_RETRIES } from "../../shared/session-refusal";
+
 export interface EnvironmentDescriptor {
   environmentId: string;
   label: string;
@@ -36,24 +38,31 @@ export type SessionState =
   // `cloudGuest`: on an OMB Cloud home, a device that is not one of the
   // owner's own; it writes only in `openedThreads`, the conversations it opened.
   | { kind: "session"; id: string; label: string; scopes: string[]; expiresAt: number; cloudGuest?: true; openedThreads?: string[] }
-  | { kind: "unauthenticated"; error: string }
-  | { kind: "unreachable"; error: string };
+  // `code`: the server's reason (shared/session-refusal.ts), when it gave one
+  | { kind: "unauthenticated"; error: string; code?: string }
+  | { kind: "unreachable"; error: string; status?: number };
 
-/** Ask the server who we are. A 401/403 means "go pair"; a network failure
- * is reported separately so the pair page can say the server is down. */
+/** Ask the server who we are, once. A 401/403 is "unauthenticated" with the
+ * server's reason code; a network failure or a 5xx (a deploy, a restart
+ * confirming sign-ins: 503) is "unreachable". Use resolveSessionState to
+ * decide whether to show the sign-in screen. */
 export async function readSessionState(fetchImpl: typeof fetch = fetch): Promise<SessionState> {
   let res: Response;
   try {
-    res = await fetchImpl("/api/auth/session", { credentials: "same-origin" });
+    res = await fetchImpl("/api/auth/session", { credentials: "same-origin", cache: "no-store" });
   } catch (error) {
     return { kind: "unreachable", error: error instanceof Error ? error.message : String(error) };
   }
   const body: unknown = await res.json().catch(() => ({}));
   const record = Object(body) as Record<string, unknown>; // SAFETY: read with typeof checks below; never trusted as a shape
   if (res.status === 401 || res.status === 403) {
-    return { kind: "unauthenticated", error: typeof record.error === "string" ? record.error : `${res.status}` };
+    return {
+      kind: "unauthenticated",
+      error: typeof record.error === "string" ? record.error : `${res.status}`,
+      ...(typeof record.code === "string" ? { code: record.code } : {}),
+    };
   }
-  if (!res.ok) return { kind: "unreachable", error: `${res.status} ${res.statusText}` };
+  if (!res.ok) return { kind: "unreachable", error: `${res.status} ${res.statusText}`, status: res.status };
   if (record.kind === "session" && typeof record.id === "string") {
     return {
       kind: "session",
@@ -68,6 +77,51 @@ export async function readSessionState(fetchImpl: typeof fetch = fetch): Promise
     };
   }
   return record.trust === "service" ? { kind: "loopback", trust: "service" } : { kind: "loopback" };
+}
+
+/** Whether this answer is reason enough to show the sign-in screen
+ * (2026-10-20, JC: never for a deploy, a restart or a failed refresh): a
+ * definitive refusal (revoked, expired, disabled, the Pulsatrix sign-in
+ * ended) or a 403 says so at once; an unknown session (or a 401 without a
+ * code, from an older server) only after it repeats. */
+export function signInScreenDue(state: SessionState, unknownStreak: number): boolean {
+  if (state.kind !== "unauthenticated") return false;
+  if (isDefinitiveSessionRefusal(state.code)) return true;
+  // A 403 here is a loopback or cross-origin refusal, not a lost session.
+  if (state.code === undefined && state.error.startsWith("forbidden")) return true;
+  return unknownStreak >= UNKNOWN_SESSION_RETRIES;
+}
+
+/** Ask the server who we are, retrying in silence what may pass: a network
+ * failure or a 5xx (Sagax redeployed or confirming sign-ins after a restart)
+ * with backoff for up to about `unreachableBudgetMs`, then "unreachable"
+ * (the app opens and keeps reconnecting); an unknown session a few times
+ * before "unauthenticated". A definitive refusal answers at once. */
+export async function resolveSessionState(options: {
+  fetchImpl?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+  unreachableBudgetMs?: number;
+  random?: () => number;
+} = {}): Promise<SessionState> {
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const budget = options.unreachableBudgetMs ?? 30_000;
+  let waited = 0;
+  let unknown = 0;
+  let attempt = 0;
+  for (;;) {
+    const state = await readSessionState(options.fetchImpl ?? fetch);
+    if (state.kind === "session" || state.kind === "loopback") return state;
+    attempt += 1;
+    if (state.kind === "unauthenticated") {
+      unknown += 1;
+      if (signInScreenDue(state, unknown)) return state;
+    } else if (waited >= budget) {
+      return state;
+    }
+    const delay = sessionRetryDelay(attempt, { baseMs: 1_000, maxMs: 8_000, ...(options.random ? { random: options.random } : {}) });
+    waited += delay;
+    await sleep(delay);
+  }
 }
 
 /** Why the pair page shows on this machine: the server trusts local

@@ -142,6 +142,13 @@ export interface Assignment {
   /** The same brief to the same assignee under one parent is one request;
    * a repeat lands on it unless rework is set. */
   rework: boolean;
+  /** Another tree's live request this one joined (same brief, same
+   * assignee, same person, sent at the same time): it runs no turn of its
+   * own and settles with that request's result. */
+  joins?: string;
+  /** Who the tree acts for (a principal id, or the solo owner), harness-set
+   * and never shown: two trees join only when it is the same, known person. */
+  person?: string;
   /** While parked: the exact question for the person. */
   question?: string;
   /** The person's answer, harness-quoted, carried into the next turn. */
@@ -164,6 +171,9 @@ export interface Assignment {
   approved?: boolean;
   /** A room brief shown once per call: every recipient of that call shares it. */
   batchKey?: string;
+  /** The requester only passes this request on: its reply is the answer the
+   * person sees, and a resume carrying only such replies runs no turn. */
+  relay?: boolean;
   /** Schema version of the row. */
   version: 1;
 }
@@ -234,6 +244,10 @@ export interface EnqueueRequest {
   approved?: boolean;
   /** A room brief shown once per call. */
   batchKey?: string;
+  /** Assignment.relay. */
+  relay?: boolean;
+  /** Who a new root acts for (Assignment.person); a child inherits its root's. */
+  person?: string;
 }
 
 export type EnqueueResult =
@@ -313,9 +327,13 @@ export interface TurnRunner {
   /** Run one turn of the assignee. Resolves when the engine settles. The
    * signal aborts the turn (a cancel or a stop). */
   run(a: Assignment, input: RunInput, signal: AbortSignal): Promise<RunResult>;
-  /** The assignment is parked on the person; show what it needs. `restored`
-   * is the restart's re-park: show it again only if it never got shown. */
+  /** The assignment is parked on the person; show what it needs.
+   * `restored` is the restart's re-park: show it again only if it never got
+   * shown (or its card is gone). */
   park(a: Assignment, question: string, restored?: boolean): void;
+  /** Still parked after inputRemindMs (then daily): remind the person, the
+   * same question in full. Optional: a host without it reminds nobody. */
+  remind?(a: Assignment, question: string, waitedMs: number): void;
   /** A settled child, into its requester's conversation (a chip, a line), or
    * a root that ended alone, into its own. Called once per settlement. */
   report(a: Assignment, parent?: Assignment): void;
@@ -354,8 +372,12 @@ export interface Limits {
    * counts as activity by touching progress()). */
   turnStallMs: number;
   /** How long a parked assignment waits on the person before it expires:
-   * not run, not refused. */
+   * not run, not refused. 2026-10-19 (bot quality, cause B): a week. A
+   * question is never cancelled because the person was away for an hour. */
   inputWaitMs: number;
+  /** A parked question is shown again (runner.remind) after this long, then
+   * every day, until it is answered or expires. */
+  inputRemindMs: number;
 }
 
 export const DEFAULT_LIMITS: Limits = {
@@ -366,8 +388,12 @@ export const DEFAULT_LIMITS: Limits = {
   queueMs: 24 * 60 * 60_000,
   stallMs: 4 * 60 * 60_000,
   turnStallMs: 20 * 60_000,
-  inputWaitMs: 30 * 60_000,
+  inputWaitMs: 7 * 24 * 60 * 60_000,
+  inputRemindMs: 30 * 60_000,
 };
+
+/** After the first reminder, one a day. */
+export const INPUT_REMIND_REPEAT_MS = 24 * 60 * 60_000;
 
 // ── read models ────────────────────────────────────────────────────────
 

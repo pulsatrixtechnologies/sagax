@@ -4,7 +4,6 @@ import java.io.IOException
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.NetworkInterface
-import java.net.URI
 import java.net.UnknownHostException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -306,12 +305,6 @@ class CompanionClient(
             },
         ),
     )
-
-    suspend fun connectorCatalog(): ConnectorCatalog =
-        send(makeRequest("GET", "/api/connectors/catalog"))
-
-    suspend fun allConnectorStatuses(): ConnectorStatuses =
-        send(makeRequest("GET", "/api/connectors/connected"))
 
     suspend fun image(threadId: String, messageId: String): ByteArray {
         val raw = perform(makeRequest("GET", "/api/threads/${segment(threadId)}/messages/${segment(messageId)}/image"))
@@ -626,21 +619,6 @@ class CompanionClient(
 
     suspend fun alwaysAllow(botId: String, key: String, threadId: String? = null) {
         sendUnit(makeRequest("POST", "/api/bots/${segment(botId)}/always-allow", body = jsonBody("allowKey" to key, "threadId" to threadId)))
-    }
-
-    suspend fun authorizeConnector(slug: String, alias: String?): URI {
-        if (!validConnectorSlug(slug)) throw APIError.BadUrl
-        val body = ConnectedAppsRules.trimmedAlias(alias)?.let { jsonBody("alias" to it) }
-        val response = send<ConnectorAuthorizationResponse>(makeRequest(
-            "POST",
-            "/api/connectors/$slug/authorize",
-            body = body,
-        ))
-        val url = runCatching { URI(response.url) }.getOrNull()
-        if (url == null || !url.scheme.equals("https", ignoreCase = true) || url.host.isNullOrEmpty()) {
-            throw APIError.BadUrl
-        }
-        return url
     }
 
     suspend fun toggleReaction(threadId: String, messageId: String, emoji: String): Message =
@@ -1112,11 +1090,6 @@ class CompanionClient(
         private val INSTANCE_ID = Regex("^[A-Za-z0-9_.-]+$")
 
         private fun isSafeSendId(value: String): Boolean = value.length in 16..80 && isSafeRouteId(value)
-
-        private fun validConnectorSlug(value: String): Boolean =
-            value.isNotEmpty() && value.all {
-                it in '0'..'9' || it in 'A'..'Z' || it in 'a'..'z' || it == '_' || it == '-'
-            }
 
         private fun requireSupported(schedule: RoutineSchedule) {
             if (schedule.type == RoutineSchedule.Kind.UNKNOWN) {

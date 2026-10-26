@@ -22,8 +22,14 @@ onlyBuiltDependencies:
 # mermaid 12.1 still allows dompurify 3.4.13. Force the patched release.
 # Dependabot: transitive copies below the fixed versions (miniflare pins sharp
 # 0.35.4; mermaid and rehype-katex pull katex 0.16.x).
+# dompurify 3.4.17 fixes the SAFE_FOR_TEMPLATES shadow-root bypass (critical),
+# the IN_PLACE detached-subtree hook gap (high) and the SMIL href guard (low).
+# @vitest/mocker 4.1.11 (dev-only, via @cloudflare/vitest-plugin -> vitest 4.x)
+# has a code-injection and a Windows traversal fix in 4.1.12; the bound keeps
+# vitest 5.x's own @vitest/mocker 5.x untouched.
 overrides:
-  dompurify: 3.4.16
+  dompurify: 3.4.17
+  "@vitest/mocker@<4.1.12": 4.1.12
   sharp@<0.35.5: 0.35.5
   katex@<0.18.2: 0.18.2
   # @simplewebauthn/server (security keys): its certificate parsers stay on

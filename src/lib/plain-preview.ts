@@ -1,3 +1,6 @@
+import { t } from "@/lib/i18n";
+import { richFenceKind } from "@/lib/rich-blocks";
+
 /**
  * One line of plain text for a list preview (the sidebar's bot and room
  * rows): what a person would read in the message, without the Markdown that
@@ -8,6 +11,25 @@
  * only to never show syntax a person did not type to be read.
  */
 export function plainPreviewText(text: string): string {
+  const out = plainPreviewBody(text);
+  // a reply that is nothing but a rich view (a ```widget, chart, table...)
+  // has no sentence to preview: name the view rather than show its source
+  return out || (hasRichFence(text) ? t("sidebar.preview.richBlock") : out);
+}
+
+const RICH_PREVIEW_LANGS = new Set(["mermaid"]);
+
+function isRichFence(info: string): boolean {
+  const lang = info.trim().split(/\s+/)[0] ?? "";
+  return richFenceKind(lang) !== null || RICH_PREVIEW_LANGS.has(lang.toLowerCase());
+}
+
+function hasRichFence(text: string): boolean {
+  for (const match of text.matchAll(/^[ \t]*(?:`{3,}|~{3,})([^\n]*)/gm)) if (isRichFence(match[1] ?? "")) return true;
+  return false;
+}
+
+function plainPreviewBody(text: string): string {
   // backslash escapes read as the character: park them out of the way so
   // no rule below takes an escaped * or _ for markup
   const escaped: string[] = [];
@@ -25,7 +47,12 @@ export function plainPreviewText(text: string): string {
     return `\uE002${code.length - 1}\uE003`;
   };
   // (a closing fence is the same character, at least as long as the opening)
-  out = out.replace(/^[ \t]*((`|~)\2{2,})[^\n]*(?:\n([\s\S]*?))?(?:\n[ \t]*\1\2*[ \t]*(?=\n|$(?![\s\S]))|$(?![\s\S]))/gm, (_block, _fence: string, _char: string, body: string | undefined) => `\n${park(body ?? "")}\n`);
+  out = out.replace(/^[ \t]*((`|~)\2{2,})([^\n]*)(?:\n([\s\S]*?))?(?:\n[ \t]*\1\2*[ \t]*(?=\n|$(?![\s\S]))|$(?![\s\S]))/gm, (_block, _fence: string, _char: string, info: string, body: string | undefined) => {
+    // a rich view's source (widget HTML, chart JSON, csv rows...) is code to
+    // draw something, never something to read: it leaves the preview
+    if (isRichFence(info)) return "\n";
+    return `\n${park(body ?? "")}\n`;
+  });
   out = out.replace(/(`+)([^`]*?)\1/g, (_span, _ticks: string, body: string) => park(body));
   // images read as their alt text, links as their label
   out = out.replace(/!\[([^\]]*)\]\((?:[^()]|\([^)]*\))*\)/g, "$1");

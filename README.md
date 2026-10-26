@@ -153,6 +153,8 @@ Get the latest build from the
 | Windows, portable | `Sagax-X.Y.Z-win-x64.zip` or `Sagax-X.Y.Z-win-arm64.zip` |
 | iPhone and iPad | TestFlight beta, on invitation: write to hello@pulsatrix.ca |
 
+- New to Sagax? The [10-minute MSP quickstart](docs/quickstart-msp.md) takes
+  you from install to a working first message.
 - macOS builds are signed and notarized by Apple.
 - The Windows installer is not signed yet: in SmartScreen choose
   **More info**, then **Run anyway**.

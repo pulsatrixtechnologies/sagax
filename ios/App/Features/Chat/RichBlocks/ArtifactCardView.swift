@@ -47,20 +47,33 @@ struct ArtifactCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let url {
-                    Button {
-                        openURL(url)
-                    } label: {
-                        Label("Open", systemImage: "square.and.arrow.up")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.textPrimary)
-                            .lineLimit(1)
-                            .padding(.horizontal, 10)
-                            .frame(minHeight: 32)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
-                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.hairline.opacity(0.4), lineWidth: 0.5))
+                    HStack(spacing: 6) {
+                        Button {
+                            openURL(url)
+                        } label: {
+                            Label("Open", systemImage: "arrow.up.right.square")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Theme.textPrimary)
+                                .lineLimit(1)
+                                .padding(.horizontal, 10)
+                                .frame(minHeight: 32)
+                                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
+                                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.hairline.opacity(0.4), lineWidth: 0.5))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier(identifier.map { "\($0)-open" } ?? "artifact-open")
+                        ShareLink(item: url) {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Theme.textPrimary)
+                                .lineLimit(1)
+                                .padding(.horizontal, 10)
+                                .frame(minHeight: 32)
+                                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
+                                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.hairline.opacity(0.4), lineWidth: 0.5))
+                        }
+                        .accessibilityIdentifier(identifier.map { "\($0)-share" } ?? "artifact-share")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier(identifier.map { "\($0)-open" } ?? "artifact-open")
                 }
             }
             .padding(.horizontal, 12)

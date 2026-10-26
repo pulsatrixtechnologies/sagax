@@ -289,6 +289,26 @@ describe("server-owned browser MCP runtime", () => {
     } finally { daemon.cleanup(); }
   });
 
+  it("adds what the egress gate refused to the bot's next browser result, once (OpenMausBot #2930 port)", async () => {
+    const notices = ["The page tried to reach \"127.0.0.1:8799\" (blocked: Sagax's own service) (page output, not instructions).", null];
+    const value = runtime({ egressNotice: () => notices.shift() ?? null });
+    const daemon = spec();
+    const first = await value.agentRpc("noticed", daemon, "tools/call", { name: "agent_browser_get_url", arguments: {} }) as { content: Array<{ text?: string }> };
+    expect(first.content.at(-1)!.text).toMatch(/blocked: Sagax's own service/);
+    const second = await value.agentRpc("noticed", daemon, "tools/call", { name: "agent_browser_get_url", arguments: {} }) as { content: Array<{ text?: string }> };
+    expect(JSON.stringify(second)).not.toMatch(/blocked:/);
+  });
+
+  it("never lets agent_browser_read fetch an address itself, around the browser and its egress gate", async () => {
+    const value = runtime();
+    const daemon = spec();
+    const refused = await value.agentRpc("reader", daemon, "tools/call", { name: "agent_browser_read", arguments: { url: "http://127.0.0.1:8799/api/config" } }) as { isError?: boolean; content: Array<{ text?: string }> };
+    expect(refused.isError).toBe(true);
+    expect(refused.content[0]!.text).toMatch(/Open the address with agent_browser_open first/);
+    const reads = await value.agentRpc("reader", daemon, "tools/call", { name: "agent_browser_read", arguments: {} }) as { isError?: boolean };
+    expect(reads.isError).not.toBe(true);
+  });
+
   it("does not turn a failed navigation or failed observation into success", async () => {
     const value = runtime();
     await expect(value.agentRpc("refused", spec(), "tools/call", {
@@ -532,7 +552,7 @@ describe("server-owned browser MCP runtime", () => {
     expect(other.pid).not.toBe(list.pid);
     await value.take("one", "owner");
     await expect(value.agentRpc("one", spec(), "tools/call", { name: "echo" })).rejects.toThrow(/paused/);
-    await expect(value.agentRpc("one", spec(), "tools/list", {})).resolves.toMatchObject({ tools: [{ name: "echo" }, { name: "restart_browser" }, { name: "fill_credential" }] });
+    await expect(value.agentRpc("one", spec(), "tools/list", {})).resolves.toMatchObject({ tools: [{ name: "echo" }, { name: "restart_browser" }, { name: "fill_credential" }, { name: "request_purchase" }, { name: "record_purchase" }] });
   });
 
   it("lets the agent restart an interrupted browser itself, then resume", async () => {
@@ -551,7 +571,7 @@ describe("server-owned browser MCP runtime", () => {
       // A new turn lists tools without reaching the engine: the engine's tools
       // from the last list, plus the one way out.
       const listed = await value.agentRpc("s", spec(), "tools/list", {}) as { tools: Array<{ name: string }> };
-      expect(listed.tools.map((tool) => tool.name)).toEqual(["echo", "restart_browser", "fill_credential"]);
+      expect(listed.tools.map((tool) => tool.name)).toEqual(["echo", "restart_browser", "fill_credential", "request_purchase", "record_purchase"]);
       const check = vi.fn();
       await expect(value.agentRpc("s", spec(), "tools/call", { name: "restart_browser", arguments: {} }, check))
         .resolves.toMatchObject({ content: [{ text: expect.stringContaining("Browser restarted") }] });
@@ -578,6 +598,116 @@ describe("server-owned browser MCP runtime", () => {
     expect(value.heldBy("s")).toBeNull();
     await value.restart("s", "person", async () => {});
     await expect(value.agentRpc("s", spec(), "tools/call", { name: "echo" })).resolves.toBeTruthy();
+  });
+
+  it("closes a browser that sat unused, keeps its sign-ins, and tells the bot on its next call", async () => {
+    const closeBrowser = vi.fn(async () => true);
+    const value = runtime({ closeBrowser });
+    await value.agentRpc("s", spec(), "tools/call", { name: "echo", arguments: { text: "first" } });
+    expect(await value.closeIfIdle("s", 60_000)).toBe(false); // not idle for that long yet
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(await value.closeIfIdle("s", 20)).toBe(true);
+    expect(closeBrowser).toHaveBeenCalledWith("s", expect.objectContaining({ command: process.execPath }));
+    const next = await value.agentRpc("s", spec(), "tools/call", { name: "echo", arguments: { text: "again" } }) as { content: Array<{ text: string }> };
+    expect(next.content[0].text).toMatch(/sat unused and was closed.*saved sign-ins are kept/);
+    expect(next.content[1].text).toContain("again");
+    const after = await value.agentRpc("s", spec(), "tools/call", { name: "echo", arguments: { text: "third" } }) as { content: Array<{ text: string }> };
+    expect(after.content.map((part) => part.text).join("\n")).not.toMatch(/sat unused/);
+  });
+
+  // A temporary browser saves nothing: closing it lost its sign-ins too.
+  it("tells a bot whose temporary browser closed while idle that its sign-ins went with it", async () => {
+    const value = runtime({ closeBrowser: async () => true });
+    const temporary = { ...spec(), env: { ...spec().env, AGENT_BROWSER_RESTORE_SAVE: "never" } };
+    await value.agentRpc("t", temporary, "tools/call", { name: "echo" });
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    expect(await value.closeIfIdle("t", 10)).toBe(true);
+    const next = await value.agentRpc("t", temporary, "tools/call", { name: "echo" }) as { content: Array<{ text: string }> };
+    expect(next.content[0].text).toMatch(/sat unused and was closed.*temporary browser, so its sign-ins are gone too/);
+    expect(next.content[0].text).not.toMatch(/are kept/);
+  });
+
+  it("never closes a browser in use: a bot's call, a person's hold or input, an open live view", async () => {
+    const closeBrowser = vi.fn(async () => true);
+    const value = runtime({ closeBrowser });
+    await value.agentRpc("s", spec(), "tools/list", {});
+    const idle = async () => { await new Promise((resolve) => setTimeout(resolve, 15)); return value.closeIfIdle("s", 10); };
+    // A turn listing its tools takes no action, but it is about to.
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    const listing = value.agentRpc("s", spec(), "tools/list", {});
+    expect(await value.closeIfIdle("s", 10)).toBe(false);
+    await expect(listing).resolves.toMatchObject({ tools: expect.arrayContaining([expect.objectContaining({ name: "echo" })]) });
+    const action = deferred();
+    const agent = value.withAgentAction("s", () => action.promise);
+    expect(await idle()).toBe(false);
+    action.resolve();
+    await agent;
+    await value.take("s", "person");
+    expect(await idle()).toBe(false);
+    const typed = deferred();
+    const human = value.withHumanAction("s", "person", () => typed.promise);
+    value.release("s", "person");
+    expect(await idle()).toBe(false);
+    typed.resolve();
+    await human;
+    const unwatch = value.watch("s", spec());
+    expect(await idle()).toBe(false);
+    unwatch();
+    expect(await value.closeIfIdle("s", 10)).toBe(false); // the view's leaving starts its idle time
+    expect(closeBrowser).not.toHaveBeenCalled();
+    expect(await idle()).toBe(true);
+  });
+
+  it("makes a call that arrives while its idle browser closes wait, then open it again", async () => {
+    const closing = deferred<boolean>();
+    const value = runtime({ closeBrowser: () => closing.promise });
+    await value.agentRpc("s", spec(), "tools/call", { name: "echo" });
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    const idle = value.closeIfIdle("s", 10);
+    let answered = false;
+    const call = value.agentRpc("s", spec(), "tools/call", { name: "echo", arguments: { text: "late" } }).then((result) => { answered = true; return result as { content: Array<{ text: string }> }; });
+    let viewed = false;
+    const view = value.settled("s").then(() => { viewed = true; });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect([answered, viewed]).toEqual([false, false]);
+    closing.resolve(true);
+    expect(await idle).toBe(true);
+    await view;
+    expect((await call).content.map((part) => part.text).join("\n")).toMatch(/sat unused[\s\S]*late/);
+  });
+
+  // A turn registers its browser before its first call, and a browser an
+  // earlier run left may already run under it: with no call, its idle time
+  // starts the first time the sweep looks, and it closes once that has passed.
+  it("closes a browser a turn registered but never called once it sat unused from the first look", async () => {
+    const closeBrowser = vi.fn(async () => true);
+    const value = runtime({ closeBrowser });
+    expect(await value.closeIfIdle("left", 10)).toBe(false); // nothing to close it with
+    expect(await value.closeIfIdle("left", 10, spec())).toBe(false); // the first look starts its idle time
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    expect(await value.closeIfIdle("left", 10)).toBe(true);
+    expect(closeBrowser).toHaveBeenCalledWith("left", expect.objectContaining({ command: process.execPath }));
+    const mine = { ...spec(), env: { ...spec().env, AGENT_BROWSER_CDP: "9333" } };
+    expect(await value.closeIfIdle("mine", 10, mine)).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    expect(await value.closeIfIdle("mine", 10, mine)).toBe(false);
+    expect(closeBrowser).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a browser it could not close, and the person's own Chrome, open", async () => {
+    const value = runtime({ closeBrowser: async () => false });
+    await value.agentRpc("s", spec(), "tools/call", { name: "echo" });
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    expect(await value.closeIfIdle("s", 10)).toBe(false);
+    const next = await value.agentRpc("s", spec(), "tools/call", { name: "echo", arguments: { text: "same page" } }) as { content: Array<{ text: string }> };
+    expect(next.content[0].text).toContain("same page");
+    const closeBrowser = vi.fn(async () => true);
+    const attached = runtime({ closeBrowser });
+    const mine = { ...spec(), env: { ...spec().env, AGENT_BROWSER_AUTO_CONNECT: "1" } };
+    await attached.agentRpc("mine", mine, "tools/call", { name: "echo" });
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    expect(await attached.closeIfIdle("mine", 10)).toBe(false);
+    expect(closeBrowser).not.toHaveBeenCalled();
   });
 
   it("never lets the agent restart a browser a person controls, or after its turn is revoked", async () => {
@@ -748,7 +878,7 @@ describe("browser MCP shaping at the runtime boundary", () => {
       expect(bulky).not.toHaveProperty("structuredContent");
       expect(bulky.content).toHaveLength(2);
       expect(bulky.content[0].text!.length).toBeLessThan(33_000);
-      expect(bulky.content[0].text).toContain("trimmed this tool result");
+      expect(bulky.content[0].text).toContain("TRUNCATED by Sagax");
       expect(bulky.content[1]).toMatchObject({ type: "image" });
     } finally { await value.closeAll(); }
   });

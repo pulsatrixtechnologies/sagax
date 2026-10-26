@@ -40,8 +40,6 @@ struct BotPanelAccess: View {
     private var engine: Instance? { instances.first { $0.instanceId == bot.modelSelection.instanceId } }
     private var modelCanBrowse: Bool { engine?.capabilities?.browserMcp == true && engine?.driverKind != "boxAgent" }
     private var browserSelectable: Bool { DesktopWorksOnRules.browserSelectable(config: config, modelCanBrowse: modelCanBrowse) }
-    private var appsOn: Bool { bot.composio != false }
-    private var appsConfigured: Bool { config?.composio?.configured == true }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -176,7 +174,6 @@ struct BotPanelAccess: View {
     private var rest: some View {
         VStack(alignment: .leading, spacing: 16) {
             AnyView(folderCard)
-            if config?.features?.connectedApps == true { AnyView(appsCard) }
             AnyView(mcpCard)
             if DesktopWorksOnRules.browserFeature(config) { AnyView(browserCard) }
             AnyView(webhooksCard)
@@ -210,22 +207,6 @@ struct BotPanelAccess: View {
             }
             .padding(.top, 12)
         }
-    }
-
-    private var appsCard: some View {
-        PanelCard {
-            PanelSettingRow(title: "Connected apps", detail: Text(appsDetail)) {
-                PanelSwitch(label: "Allow this bot to use connected apps", isOn: appsOn,
-                            disabled: !session.surfaceGate.allows(.connectedAppsPerBot) || (!appsOn && !appsConfigured)) { on in
-                    access(BotAccessPatch(composio: on))
-                }
-            }
-        }
-    }
-
-    private var appsDetail: LocalizedStringKey {
-        if !appsConfigured { return "Connect apps in App Settings before giving this bot access." }
-        return appsOn ? "Let this bot use your connected Gmail, Calendar, Slack, and other apps." : "Keep your connected apps unavailable to this bot."
     }
 
     private var mcpCard: some View {

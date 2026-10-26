@@ -4,6 +4,7 @@
 import type { Notification } from "../../shared/notification";
 import { createNotificationTargets, messageAttention, type MessageAttention } from "./attention";
 import { attentionSettings } from "./notification-preferences";
+import { notificationSoundPlan, playNotificationSound, toneReady } from "./notification-sound";
 
 export type NotifyFrame = Notification;
 
@@ -88,19 +89,23 @@ export function presentNotification(input: {
   /** withdrawNotification(key) takes it down again */
   withdrawKey?: string;
 }): boolean {
+  // Settings > Notifications > Notification sound: a chosen tone is played
+  // here and the notification itself is sent silent.
+  const plan = notificationSoundPlan(input.attention.sound);
   if (typeof window !== "undefined" && window.ogb?.notify) {
     wireDesktopClicks();
     window.ogb.notify({
       id: pendingClicks.add({ open: input.open }),
       title: input.title,
       body: input.body,
-      sound: input.attention.sound,
+      sound: plan.platformSound,
       persistent: input.attention.persistent,
       bounce: input.attention.bounce,
       flash: input.attention.flash,
       ...(input.target ? { target: input.target } : {}),
       ...(input.withdrawKey ? { withdrawKey: input.withdrawKey } : {}),
     });
+    if (plan.tone) playNotificationSound(plan.tone);
     return true;
   }
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return false;
@@ -111,9 +116,10 @@ export function presentNotification(input: {
     requireInteraction: input.attention.persistent,
     // The banner still lands; only the platform's alert sound is held back,
     // which is what a person on a call with the bot asked for.
-    ...(input.attention.sound ? {} : { silent: true }),
+    ...(plan.platformSound || (plan.tone && !toneReady()) ? {} : { silent: true }),
   };
   const note = new Notification(input.title, options);
+  if (plan.tone) playNotificationSound(plan.tone);
   note.onclick = () => {
     window.focus();
     input.open();

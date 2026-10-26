@@ -31,15 +31,20 @@ import { join } from "node:path";
 import { writeFileAtomic } from "./atomic.ts";
 import { threadOwner } from "./thread-privacy.ts";
 import {
+  DEFAULT_PAGES_POLICY,
   PAGE_FRAME_TICKET_MS,
   PAGE_LIMITS,
   PAGE_VIEW_PREFIX,
   type PageAccess,
+  type PageAnchor,
+  type PageComment,
   type PageKind,
   type PageStatus,
   type PageVersionState,
   type PageVersionSummary,
+  type PagesPolicy,
   type PublishedPageSummary,
+  type ReaderComment,
 } from "../shared/published-pages.ts";
 
 const TOKEN = /^([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{32})$/;
@@ -60,11 +65,13 @@ export interface PageVersionRecord {
   createdAt: number;
   state: PageVersionState;
   botId: string;
+  /** "person": the page's person wrote this version (their edit). */
+  author?: "person";
 }
 
 export interface PageHistoryEntry {
   at: number;
-  action: "propose" | "publish" | "decline" | "access" | "expiry" | "revoke";
+  action: "propose" | "publish" | "decline" | "access" | "expiry" | "revoke" | "rename" | "edit" | "reader-comments" | "reader-comment" | "reader-comment-approve" | "reader-comment-remove";
   version?: number;
   by?: string;
 }
@@ -86,6 +93,14 @@ export interface PageRecord {
   linkId?: string;
   versions: PageVersionRecord[];
   history: PageHistoryEntry[];
+  /** The person's own name for the page (Rename); else the version's title. */
+  title?: string;
+  /** The person's review notes. Never served to readers. */
+  comments?: PageComment[];
+  /** The person lets readers comment (off unless they turn it on). */
+  readerComments?: boolean;
+  /** Readers' comments: pending until the person approves one. */
+  readerNotes?: ReaderComment[];
 }
 
 export type PageError = { ok: false; status: 400 | 404 | 409; error: string; code: string };
@@ -107,9 +122,11 @@ export class PublishedPages {
   private readonly contentDir: string;
   private readonly key: Buffer;
   private readonly clock: () => number;
-  private cached: { mtimeMs: number; size: number; pages: PageRecord[] } | null = null;
+  private cached: { mtimeMs: number; size: number; pages: PageRecord[]; policy: PagesPolicy } | null = null;
   private readonly contents = new Map<string, string>();
   private contentBytes = 0;
+  /** Reader comment posts per source address, for the rate limit. */
+  private readonly readerPosts = new Map<string, number[]>();
 
   constructor(dataDir: string, clock: () => number = Date.now) {
     this.clock = clock;
@@ -174,16 +191,35 @@ export class PublishedPages {
     }
     if (this.cached && this.cached.mtimeMs === stat.mtimeMs && this.cached.size === stat.size) return this.cached.pages;
     let pages: PageRecord[] = [];
+    let policy: PagesPolicy = { ...DEFAULT_PAGES_POLICY };
     try {
-      const raw = JSON.parse(readFileSync(this.file, "utf8")) as { version?: unknown; pages?: unknown };
+      const raw = JSON.parse(readFileSync(this.file, "utf8")) as { version?: unknown; pages?: unknown; policy?: unknown };
       if (raw.version === 2 && Array.isArray(raw.pages)) {
         pages = raw.pages.filter((page): page is PageRecord => isRecord(page) && typeof page.id === "string" && PAGE_ID.test(page.id) && Array.isArray(page.versions));
+      }
+      if (isRecord(raw.policy)) {
+        policy = {
+          linkSharing: typeof raw.policy.linkSharing === "boolean" ? raw.policy.linkSharing : DEFAULT_PAGES_POLICY.linkSharing,
+          readerComments: typeof raw.policy.readerComments === "boolean" ? raw.policy.readerComments : DEFAULT_PAGES_POLICY.readerComments,
+        };
       }
     } catch {
       pages = [];
     }
-    this.cached = { mtimeMs: stat.mtimeMs, size: stat.size, pages };
+    this.cached = { mtimeMs: stat.mtimeMs, size: stat.size, pages, policy };
     return pages;
+  }
+
+  /** The organization's switch for public links (on by default). */
+  policy(): PagesPolicy {
+    this.load();
+    return { ...(this.cached?.policy ?? DEFAULT_PAGES_POLICY) };
+  }
+
+  setPolicy(change: Partial<PagesPolicy>): PagesPolicy {
+    const pages = this.snapshot();
+    this.save(pages, { ...this.policy(), ...change });
+    return this.policy();
   }
 
   /** Callers get copies: the cached index is never changed in place. */
@@ -191,8 +227,10 @@ export class PublishedPages {
     return structuredClone(this.load());
   }
 
-  private save(pages: PageRecord[]): void {
-    writeFileAtomic(this.file, JSON.stringify({ version: 2, pages }, null, 2), { mode: 0o600 });
+  private save(pages: PageRecord[], policy: PagesPolicy = this.policy()): void {
+    // the default policy is not written: an index without one reads as on
+    const kept = policy.linkSharing === DEFAULT_PAGES_POLICY.linkSharing && policy.readerComments === DEFAULT_PAGES_POLICY.readerComments ? {} : { policy };
+    writeFileAtomic(this.file, JSON.stringify({ version: 2, pages, ...kept }, null, 2), { mode: 0o600 });
     this.cached = null;
   }
 
@@ -275,7 +313,7 @@ export class PublishedPages {
 
   /** A bot's proposal: a new page, or a new version of one of this
    * conversation's pages. Never published here. */
-  propose(input: { pageId?: string; ownerId?: string; botId: string; threadId: string; title: string; kind: PageKind; content: string }):
+  propose(input: { pageId?: string; ownerId?: string; botId: string; threadId: string; title: string; kind: PageKind; content: string; author?: "person"; by?: string }):
     { ok: true; page: PageRecord; version: PageVersionRecord } | PageError {
     const pages = this.snapshot();
     const now = this.clock();
@@ -318,7 +356,7 @@ export class PublishedPages {
       pages.push(page);
     }
     const n = (page.versions.at(-1)?.n ?? 0) + 1;
-    const version: PageVersionRecord = { n, kind: input.kind, title: input.title, bytes, createdAt: now, state: "proposed", botId: input.botId };
+    const version: PageVersionRecord = { n, kind: input.kind, title: input.title, bytes, createdAt: now, state: "proposed", botId: input.botId, ...(input.author ? { author: input.author } : {}) };
     this.writeContent(page.id, n, input.content);
     page.versions.push(version);
     // Old versions that were never published go first; a published one stays.
@@ -328,10 +366,142 @@ export class PublishedPages {
       const [gone] = page.versions.splice(drop, 1);
       this.dropContent(page.id, gone!.n);
     }
-    page.history.push({ at: now, action: "propose", version: n });
+    page.history.push(input.author ? { at: now, action: "edit", version: n, ...(input.by ? { by: input.by } : {}) } : { at: now, action: "propose", version: n });
     page.updatedAt = now;
     this.save(pages);
     return { ok: true, page, version };
+  }
+
+  /** The person's own edit: a new version they wrote, stored as proposed
+   * (it waits for their Publish like any other), under the same caps. */
+  edit(id: string, input: { kind: PageKind; content: string; title?: string; by?: string }): { ok: true; page: PageRecord; version: PageVersionRecord } | PageError {
+    const page = this.get(id);
+    if (!page) return refuse(404, "not_found", "This page does not exist.");
+    const last = page.versions.at(-1);
+    return this.propose({
+      pageId: page.id,
+      ...(page.ownerId ? { ownerId: page.ownerId } : {}),
+      botId: page.botId,
+      threadId: page.threadId,
+      title: input.title ?? last?.title ?? page.title ?? "",
+      kind: input.kind,
+      content: input.content,
+      author: "person",
+      ...(input.by ? { by: input.by } : {}),
+    });
+  }
+
+  /** The person's name for the page, in any state. */
+  rename(id: string, title: string, by?: string): PageRecord | PageError {
+    return this.mutate(id, (page, now) => {
+      page.title = title;
+      page.history.push({ at: now, action: "rename", ...(by ? { by } : {}) });
+      return page;
+    });
+  }
+
+  comments(id: string): PageComment[] {
+    return this.get(id)?.comments ?? [];
+  }
+
+  addComment(id: string, input: { text: string; version?: number; anchor?: PageAnchor; by?: string }): { ok: true; comment: PageComment } | PageError {
+    let made: PageComment | null = null;
+    const result = this.mutate(id, (page, now) => {
+      const comments = page.comments ?? [];
+      if (comments.length >= PAGE_LIMITS.comments) return refuse(409, "too_many_comments", `A page keeps at most ${PAGE_LIMITS.comments} comments; delete some first.`);
+      if (input.version !== undefined && !page.versions.some((entry) => entry.n === input.version)) return refuse(404, "no_version", "This version does not exist.");
+      made = {
+        id: randomBytes(9).toString("base64url"),
+        at: now,
+        text: input.text,
+        ...(input.version !== undefined ? { version: input.version } : {}),
+        ...(input.anchor ? { anchor: input.anchor } : {}),
+        ...(input.by ? { by: input.by } : {}),
+      };
+      page.comments = [...comments, made];
+      return page;
+    });
+    if ("ok" in result) return result;
+    return { ok: true, comment: made! };
+  }
+
+  removeComment(id: string, commentId: string): PageRecord | PageError {
+    return this.mutate(id, (page) => {
+      const comments = page.comments ?? [];
+      if (!comments.some((entry) => entry.id === commentId)) return refuse(404, "no_comment", "This comment does not exist.");
+      page.comments = comments.filter((entry) => entry.id !== commentId);
+      return page;
+    });
+  }
+
+  /** The person's switch for reader comments on this page. */
+  setReaderComments(id: string, on: boolean, by?: string): PageRecord | PageError {
+    return this.mutate(id, (page, now) => {
+      if ((page.readerComments === true) !== on) {
+        page.readerComments = on;
+        page.history.push({ at: now, action: "reader-comments", ...(by ? { by } : {}) });
+      }
+      return page;
+    });
+  }
+
+  readerComments(id: string): ReaderComment[] {
+    return this.get(id)?.readerNotes ?? [];
+  }
+
+  /** The rate limit of reader comments: true (and counted) while this
+   * address posted fewer than the limit in the window. */
+  allowReaderPost(source: string): boolean {
+    const now = this.clock();
+    const since = now - PAGE_LIMITS.readerCommentWindowMs;
+    const recent = (this.readerPosts.get(source) ?? []).filter((at) => at > since);
+    if (recent.length >= PAGE_LIMITS.readerCommentsPerWindow) {
+      this.readerPosts.set(source, recent);
+      return false;
+    }
+    recent.push(now);
+    this.readerPosts.set(source, recent);
+    if (this.readerPosts.size > 10_000) {
+      for (const [key, times] of this.readerPosts) if (!times.some((at) => at > since)) this.readerPosts.delete(key);
+    }
+    return true;
+  }
+
+  /** A reader's comment, held for the person's approval. */
+  addReaderComment(id: string, input: { name: string; text: string; version?: number }): { ok: true; comment: ReaderComment } | PageError {
+    let made: ReaderComment | null = null;
+    const result = this.mutate(id, (page, now) => {
+      const notes = page.readerNotes ?? [];
+      if (notes.length >= PAGE_LIMITS.readerComments || notes.filter((entry) => entry.status === "pending").length >= PAGE_LIMITS.readerCommentsPending) {
+        return refuse(409, "too_many_reader_comments", "This page takes no more comments for now.");
+      }
+      made = { id: randomBytes(9).toString("base64url"), at: now, name: input.name, text: input.text, status: "pending", ...(input.version !== undefined ? { version: input.version } : {}) };
+      page.readerNotes = [...notes, made];
+      page.history.push({ at: now, action: "reader-comment" });
+      return page;
+    });
+    if ("ok" in result) return result;
+    return { ok: true, comment: made! };
+  }
+
+  approveReaderComment(id: string, commentId: string, by?: string): PageRecord | PageError {
+    return this.mutate(id, (page, now) => {
+      const note = (page.readerNotes ?? []).find((entry) => entry.id === commentId);
+      if (!note) return refuse(404, "no_comment", "This comment does not exist.");
+      note.status = "approved";
+      page.history.push({ at: now, action: "reader-comment-approve", ...(by ? { by } : {}) });
+      return page;
+    });
+  }
+
+  removeReaderComment(id: string, commentId: string, by?: string): PageRecord | PageError {
+    return this.mutate(id, (page, now) => {
+      const notes = page.readerNotes ?? [];
+      if (!notes.some((entry) => entry.id === commentId)) return refuse(404, "no_comment", "This comment does not exist.");
+      page.readerNotes = notes.filter((entry) => entry.id !== commentId);
+      page.history.push({ at: now, action: "reader-comment-remove", ...(by ? { by } : {}) });
+      return page;
+    });
   }
 
   /** The person's Publish: make `version` the one readers get, with who can
@@ -423,13 +593,14 @@ export class PublishedPages {
       state: entry.state,
       bytes: entry.bytes,
       botId: entry.botId,
+      ...(entry.author ? { author: entry.author } : {}),
     }));
     const current = page.versions.find((entry) => entry.n === page.currentVersion) ?? page.versions.at(-1);
     const live = page.status === "published" && page.linkId;
     const path = live ? this.path(page.linkId!) : undefined;
     return {
       id: page.id,
-      title: current?.title ?? "",
+      title: page.title ?? current?.title ?? "",
       status: page.status,
       access: page.access,
       expiresAt: page.expiresAt,
@@ -440,6 +611,9 @@ export class PublishedPages {
       updatedAt: page.updatedAt,
       expired: page.expiresAt !== null && page.expiresAt <= this.clock(),
       versions,
+      ...(page.comments?.length ? { comments: page.comments.length } : {}),
+      ...(page.readerComments ? { readerComments: true } : {}),
+      ...((page.readerNotes ?? []).some((entry) => entry.status === "pending") ? { pendingReaderComments: page.readerNotes!.filter((entry) => entry.status === "pending").length } : {}),
       ...(path ? { path, url: `${origin.replace(/\/+$/, "")}${path}`, reachable } : {}),
     };
   }

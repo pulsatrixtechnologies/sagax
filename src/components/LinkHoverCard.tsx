@@ -88,6 +88,13 @@ export function LinkPreviewCard({ href, github }: { href: string; github?: Githu
  * opens the card, leaving closes it after a grace period that lets the
  * pointer move into the card. */
 export function LinkHoverCard({ href, github, children }: { href: string; github?: GithubRef | null; children: (anchor: AnchorProps) => ReactNode }) {
+  return <HoverCard card={() => <LinkPreviewCard href={href} github={github} />} kind="link-preview">{children}</HoverCard>;
+}
+
+/** The same mechanics around any card: `card` is called only while open
+ * (so it may load what it shows lazily), `kind` names the floating box
+ * (`data-<kind>`). Used by links and by the bot library's files. */
+export function HoverCard({ card, kind, children }: { card: () => ReactNode; kind: string; children: (anchor: AnchorProps) => ReactNode }) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const anchorRef = useRef<HTMLElement | null>(null);
@@ -205,13 +212,13 @@ export function LinkHoverCard({ href, github, children }: { href: string; github
           ref={cardRef}
           id={id}
           role="tooltip"
-          data-link-preview=""
+          {...{ [`data-${kind}`]: "" }}
           className="fixed z-50"
           style={{ left: 0, top: 0, visibility: "hidden" }}
           onPointerEnter={(event) => { if (event.pointerType !== "touch") clear(); }}
           onPointerLeave={(event) => { if (event.pointerType !== "touch") later(false, HOVER_CLOSE_GRACE_MS); }}
         >
-          <LinkPreviewCard href={href} github={github} />
+          {card()}
         </div>,
         document.body,
       )}

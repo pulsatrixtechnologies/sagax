@@ -18,7 +18,7 @@ type Line =
   | { kind: "done"; label: string; value: string };
 
 const SCRIPT: Array<{ at: number; line: Line }> = [
-  { at: 300, line: { kind: "cmd", text: "npx openmausbot" } },
+  { at: 300, line: { kind: "cmd", text: "npx @pulsatrixtechnologies/sagax" } },
   { at: 1150, line: { kind: "out", text: "Welcome to Sagax", tone: "ink" } },
   { at: 1350, line: { kind: "out", text: "Let's connect your AI. Choose a provider, then a model.", tone: "dim" } },
   { at: 1800, line: { kind: "pick", label: "Choose your AI connection", options: ["Claude Code", "ChatGPT / Codex", "API key"], chosen: 0 } },

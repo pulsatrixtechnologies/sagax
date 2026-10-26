@@ -19,6 +19,7 @@ import { useSlackManagementUrl } from "./useSlackManagement";
 import { WorksOnSetting } from "../computer/WorksOnSetting";
 import { useBotSettingsDerived } from "./useBotSettingsDerived";
 import { OverviewSection } from "./OverviewSection";
+import { BotEmailAddress } from "./BotEmailAddress";
 import { SlackSection } from "./SlackSection";
 import { SoulSection } from "./SoulSection";
 import { SkillsSection } from "./SkillsSection";
@@ -129,7 +130,6 @@ export function useBotSectionContent(bot: Bot, {
         bot.approvePeerComms,
         bot.peers,
         bot.section,
-        bot.composio,
         bot.browser,
         bot.mcpServers,
         bot.chiefOfStaff,
@@ -148,7 +148,6 @@ export function useBotSectionContent(bot: Bot, {
       bot.approvePeerComms,
       bot.peers,
       bot.section,
-      bot.composio,
       bot.browser,
       bot.mcpServers,
       bot.chiefOfStaff,
@@ -248,13 +247,17 @@ export function useBotSectionContent(bot: Bot, {
           // changed, the request errored) keeps showing it rather than
           // replacing a fully populated card with an error block: the same
           // precedence PromptPreview already gives its own data vs. error.
-          <OverviewSection
-            overview={overview}
-            refreshError={overview !== null && overviewError}
-            prompt={prompt}
-            promptError={promptError}
-            onOpen={onOpenSection}
-          />
+          <div className="flex flex-col gap-5">
+            {/* B21 (2026-10-21): the bot's own address from the Perspicax relay; nothing when none */}
+            <BotEmailAddress botId={bot.id} />
+            <OverviewSection
+              overview={overview}
+              refreshError={overview !== null && overviewError}
+              prompt={prompt}
+              promptError={promptError}
+              onOpen={onOpenSection}
+            />
+          </div>
         );
       case "appearance":
         return <AppearancePane bot={bot} onPatch={derived.patch} />;

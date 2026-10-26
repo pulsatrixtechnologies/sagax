@@ -63,15 +63,17 @@ export interface ViewerCapabilities {
 
 /** `admin` is the request scope (loopback owner or an admin session).
  * `pairDevices` defaults to that same scope. */
-export function viewerCapabilities(input: { admin: boolean; pairDevices?: boolean; viewUsage?: boolean }): ViewerCapabilities {
+export function viewerCapabilities(input: { admin: boolean; pairDevices?: boolean; viewUsage?: boolean; editConfig?: boolean; manageComputers?: boolean; manageBackups?: boolean }): ViewerCapabilities {
   const admin = input.admin;
   return {
-    editConfig: admin,
-    manageKeys: admin,
-    manageComputers: admin,
+    // 2026-10-19 (JC): an organization member an admin gave server.settings,
+    // host.shell or backup.workspace in Perspicax sees those screens too.
+    editConfig: admin || input.editConfig === true,
+    manageKeys: admin || input.editConfig === true,
+    manageComputers: admin || input.manageComputers === true,
     // An organization member whose profile includes usage.view (2026-10-09).
     viewUsage: admin || input.viewUsage === true,
-    manageBackups: admin,
+    manageBackups: admin || input.manageBackups === true,
     pairDevices: input.pairDevices ?? admin,
   };
 }

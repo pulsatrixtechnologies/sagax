@@ -1,20 +1,23 @@
 import type { BotActivityItem, BotActivityStatus } from "../../shared/bot-activity.ts";
 import { cloudAgentStatusActive, type CloudAgentRecord, type CloudAgentWireItem } from "../../shared/cloud-agents.ts";
 
+/** Only a record launched from a thread is broadcast (the caller checks). */
 export function cloudAgentWireItem(record: CloudAgentRecord): CloudAgentWireItem {
   return {
     id: record.id,
-    botId: record.botId,
+    botId: record.botId ?? "",
     provider: record.provider,
     name: record.name,
     status: record.status,
     updatedAt: record.updatedAt,
-    threadId: record.threadId,
+    threadId: record.threadId ?? "",
   };
 }
 
 function mapStatus(status: CloudAgentRecord["status"]): BotActivityStatus {
-  if (status === "creating") return "queued";
+  if (status === "creating" || status === "queued") return "queued";
+  if (status === "waiting_for_approval") return "waiting";
+  if (status === "expired") return "failed";
   if (status === "running") return "running";
   if (status === "idle") return "waiting";
   if (status === "finished") return "finished";
@@ -28,7 +31,7 @@ export function cloudAgentActivityItem(botName: string, record: CloudAgentRecord
   return {
     id: `cloud:${record.id}`,
     kind: "session",
-    botId: record.botId,
+    botId: record.botId ?? "",
     botName,
     title: record.name,
     status: mapStatus(record.status),

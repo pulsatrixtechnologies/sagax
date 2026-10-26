@@ -189,6 +189,12 @@ export function parseThreadRefUrl(value: string): ThreadRefAddress | null {
   return owner ? { threadId: thread, botId: owner } : { threadId: thread };
 }
 
+/** The canonical link to a bot a person can copy (Copy link to this bot):
+ * it opens the bot's current conversation. */
+export function botRefUrl(botId: string): string {
+  return BOT_URL_PREFIX + encodeURIComponent(botId);
+}
+
 /** Parse a canonical bot link: `openmausbot://bot/<bot-id>`, the stable link
  * an external dashboard uses when it only knows the bot. Null for anything
  * else, including near-misses with extra path or query. */

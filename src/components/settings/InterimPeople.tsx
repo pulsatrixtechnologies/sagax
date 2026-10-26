@@ -9,6 +9,7 @@ import type { OrgDirectoryPerson } from "@/lib/perspicax-org";
 import { api } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { CountPill, DANGER_PILL, DescribedRow, PILL, PillSelect } from "../SettingsPrimitives";
+import { personLabel } from "@/lib/human-label";
 
 export interface InterimPerson {
   principalId: string;
@@ -49,7 +50,7 @@ export function InterimPeople({ until, onChanged }: { until: number; onChanged: 
   useEffect(() => { void load(); }, []);
 
   const targetOf = (person: InterimPerson) => picked[person.principalId] ?? person.suggested?.principalId ?? "";
-  const nameOf = (principalId: string) => directory.find((entry) => entry.principalId === principalId)?.name ?? principalId;
+  const nameOf = (principalId: string) => personLabel(directory.find((entry) => entry.principalId === principalId)?.name, principalId);
   const attach = async (person: InterimPerson) => {
     const to = targetOf(person);
     setBusy(true);

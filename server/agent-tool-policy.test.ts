@@ -18,6 +18,7 @@ describe("built-in agent tool read policy", () => {
       "skills_list",
       "workspace_read",
       "workspace_search",
+      "sagax_help",
       "list_agents",
       "find_agents",
       "get_agent",

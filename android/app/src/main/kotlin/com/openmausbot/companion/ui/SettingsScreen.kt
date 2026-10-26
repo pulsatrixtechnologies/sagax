@@ -72,7 +72,6 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenRoutines: (() -> Unit)? = null,
-    onOpenConnectedApps: (() -> Unit)? = null,
     /** Offered instead of the computer's details when there is no pairing. */
     onConnect: (() -> Unit)? = null,
 ) {
@@ -259,19 +258,13 @@ fun SettingsScreen(
             // Routine schedules live on the computer this phone is bound to.
             // With no binding there is nothing to schedule against, so the row
             // is absent rather than present and dead.
-            if (onOpenRoutines != null || onOpenConnectedApps != null) {
+            if (onOpenRoutines != null) {
                 SettingsSection(stringResource(R.string.mobile_settings_workspace_section)) {
                     onOpenRoutines?.let { openRoutines ->
                         SettingsButton(
                             text = stringResource(R.string.mobile_threads_routines_65d7efcd),
                             icon = R.drawable.ic_schedule,
                             onClick = openRoutines,
-                        )
-                    }
-                    onOpenConnectedApps?.let { openConnectedApps ->
-                        SettingsButton(
-                            text = stringResource(R.string.mobile_connected_apps_8ab72a8e),
-                            onClick = openConnectedApps,
                         )
                     }
                     Footnote(stringResource(R.string.mobile_settings_workspace_footer))

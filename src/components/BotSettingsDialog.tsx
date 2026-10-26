@@ -14,12 +14,13 @@ import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { reportAchievement } from "@/lib/achievements";
 import { cn } from "@/lib/cn";
 import { useAdvancedMode } from "@/lib/interface-mode";
-import { simpleHidesPanelTab } from "@/lib/interface-visibility";
 import { BotActionsMenu, type BotActionsMenuAnchor } from "./bot-settings/BotActionsMenu";
 import { LibraryTab } from "./bot-settings/LibraryTab";
 import { RoutinesSection } from "./bot-settings/RoutinesSection";
-import { PANEL_TABS, type PanelTab } from "./bot-settings/panel-tabs";
+import { RemoteSessionsSection } from "./remote-session/RemoteSessionsSection";
+import { visiblePanelTabs, type PanelTab } from "./bot-settings/panel-tabs";
 import { ActivitySection } from "./bot-settings/ActivitySection";
+import { SuggestionsSection } from "./bot-settings/SuggestionsSection";
 import { InlineEditableText } from "./bot-settings/InlineEditableText";
 import { PackageProvenance } from "./bot-settings/PackageProvenance";
 import { BOT_PROFILE_LIMITS } from "../../shared/bot-profile";
@@ -55,8 +56,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   // The Computer tab is the store's computer view, so every existing
   // "open the computer" link still lands on it. A bot that works nowhere
   // (Works on: Off) has no computer to show; Works on stays in the editor.
-  const panelTabs = PANEL_TABS.filter((id) => (advanced || !simpleHidesPanelTab(id)) && (id !== "computer" || bot.computer !== "off"));
-  // Simple never shows the computer tab. An open computer panel is closed
+  const computerOff = bot.computer === "off";
+  const panelTabs = visiblePanelTabs({ advanced, computerOff });
+  // Simple has no computer tab. An open computer panel is otherwise closed
   // by the shell; until that lands, the tab the person picked stays up.
   const tab: PanelTab = advanced && state.computerOpen && panelTabs.includes("computer") ? "computer" : pickedTab;
   // the Library holds the bot's files (an achievement teaches it)
@@ -187,7 +189,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
             {/* Name and label are edited where they show; the name stays
                 centered on its own line. The description is not shown here. */}
             <div
-              className="mt-2 flex max-w-full items-center justify-center"
+              className="-mt-1 flex max-w-full items-center justify-center"
               // the bot's menu on the name too, as on the mascot
               onContextMenu={openActionsAt}
             >
@@ -251,7 +253,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 
           {tab === "details" && (
             <div className="flex flex-col gap-6 px-4 pb-6 pt-2">
+              <SuggestionsSection bot={bot} routineCount={derived.botRoutines.length} />
               <ActivitySection bot={bot} />
+              <RemoteSessionsSection bot={bot} />
               <section data-bot-settings-section="routines" className="flex flex-col gap-2">
                 <RoutinesSection bot={bot} routines={derived.botRoutines} runs={state.routineRuns} grouped />
               </section>

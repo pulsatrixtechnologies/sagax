@@ -20,15 +20,21 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-skin");
 });
 
-function mount(code: string) {
+function mount(code: string, imperfect = false) {
   const host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
-  act(() => root!.render(createElement(WidgetFrame, { code })));
+  act(() => root!.render(createElement(WidgetFrame, { code, imperfect })));
   return host;
 }
 
 describe("WidgetFrame", () => {
+  it("marks a widget that failed its last self-check discreetly, and only that one", () => {
+    expect(mount("<p>x</p>", true).querySelector("[data-widget-imperfect]")?.textContent).toBeTruthy();
+    act(() => root?.unmount());
+    expect(mount("<p>x</p>").querySelector("[data-widget-imperfect]")).toBeNull();
+  });
+
   it("builds the document with the variables of the active skin", () => {
     document.documentElement.style.setProperty("--code-color-scheme", "dark");
     document.documentElement.style.setProperty("--color-panel", "#161616");

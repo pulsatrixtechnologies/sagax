@@ -53,12 +53,8 @@ final class AchievementToastUITests: XCTestCase {
             throw XCTSkip("every test unlock is already earned: restart the fixture")
         }
 
-        let app = XCUIApplication()
-        app.terminate()
-        app.launchArguments = arguments
-        app.launch()
+        let app = launchHome()
         let plus = app.buttons["home-plus"]
-        XCTAssertTrue(plus.waitForExistence(timeout: 30))
         // The first snapshot only seeds what is known: let it land first.
         Thread.sleep(forTimeInterval: 4)
 
@@ -81,6 +77,80 @@ final class AchievementToastUITests: XCTestCase {
         plus.tap()
         XCTAssertTrue(app.buttons["plus-menu.new-bot"].waitForExistence(timeout: 5), "a touch reaches the app after the banner")
         shot(app, "3-touch-after-banner")
+    }
+
+    /// While the banner shows, nothing under it gets a touch (JC
+    /// 2026-10-19): a touch on the card stays on the card (the account
+    /// button under it does not open its menu), the close button closes
+    /// the banner only, and a touch outside the card closes the banner
+    /// without opening the chat under it.
+    @MainActor
+    func testTouchesOnTheBannerNeverReachTheAppUnderIt() throws {
+        let app = launchHome()
+        let plus = app.buttons["home-plus"]
+        Thread.sleep(forTimeInterval: 4)
+        let toast = app.descendants(matching: .any)["achievement-toast"]
+        let accountMenu = app.buttons["account-menu.settings"]
+
+        // the card over the account button, then its close button
+        try unlockNext(in: app)
+        XCTAssertTrue(toast.waitForExistence(timeout: 15), "the unlock banner shows")
+        shot(app, "4-banner-over-the-home")
+        toast.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+        XCTAssertFalse(accountMenu.waitForExistence(timeout: 2), "a touch on the card stays on the card")
+        XCTAssertTrue(toast.exists, "a touch on the card keeps the banner")
+        app.buttons["achievement-toast-dismiss"].tap()
+        XCTAssertTrue(waitGone(toast, timeout: 5), "the close button closes the banner")
+        XCTAssertFalse(accountMenu.exists, "the close button's touch reached nothing under it")
+        XCTAssertFalse(app.buttons["chat-name"].exists)
+
+        // a touch outside the card closes it and goes no further
+        try unlockNext(in: app)
+        XCTAssertTrue(toast.waitForExistence(timeout: 15), "the second banner shows")
+        let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'chat-row.'")).firstMatch
+        XCTAssertTrue(row.exists, "a chat row under the backdrop")
+        // the backdrop covers it: XCTest no longer calls the row hittable
+        row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(waitGone(toast, timeout: 5), "a touch outside the card closes the banner")
+        XCTAssertFalse(app.buttons["chat-name"].waitForExistence(timeout: 2), "the touch did not open the chat under it")
+
+        // and the app answers again
+        plus.tap()
+        XCTAssertTrue(app.buttons["plus-menu.new-bot"].waitForExistence(timeout: 5), "a touch reaches the app after the banner")
+    }
+
+    /// The parity home. The first launch after an install can restore a
+    /// prewarmed scene without the launch arguments (the unpaired welcome):
+    /// that wrong route is restarted once.
+    @MainActor
+    private func launchHome() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.terminate()
+        app.launchArguments = arguments
+        app.launch()
+        if !app.buttons["home-plus"].waitForExistence(timeout: 20) {
+            app.terminate()
+            app.launch()
+        }
+        XCTAssertTrue(app.buttons["home-plus"].waitForExistence(timeout: 30))
+        return app
+    }
+
+    /// Earns the next test unlock on the server and brings the app back to
+    /// the front, which reloads the achievements.
+    @MainActor
+    private func unlockNext(in app: XCUIApplication) throws {
+        let (status, snapshot) = api("GET", "/api/me/achievements")
+        guard status == 200 else { throw XCTSkip("this pairing keeps no achievements (\(status))") }
+        let unlocked = Set((snapshot["items"] as? [[String: Any]] ?? [])
+            .filter { $0["unlockedAt"] != nil }.compactMap { $0["id"] as? String })
+        guard let next = unlocks.first(where: { !unlocked.contains($0.id) }) else {
+            throw XCTSkip("every test unlock is already earned: restart the fixture")
+        }
+        XCTAssertEqual(api("POST", "/api/me/achievements/events", body: ["events": [["type": next.event]]]).0, 200)
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 1.5)
+        app.activate()
     }
 
     // MARK: Helpers

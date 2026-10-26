@@ -247,6 +247,16 @@ describe("beat machine", () => {
     expect(beatsFor({ dictation: true, reel: true, hosted: false })).toEqual(["hello", "reel", "engines", "permissions", "bot"]);
   });
 
+  it("never puts phone pairing before the first message: it is offered later, never a beat", () => {
+    for (const dictation of [true, false]) {
+      for (const reel of [true, false]) {
+        for (const hosted of [true, false]) {
+          expect(beatsFor({ dictation, reel, hosted })).not.toContain("phone");
+        }
+      }
+    }
+  });
+
   it("walks forward and back and stops at the ends", () => {
     const beats = beatsFor({ dictation: true, reel: false });
     expect(nextBeat(beats, "hello")).toBe("engines");

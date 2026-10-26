@@ -30,7 +30,7 @@ it("reports every run into the bot's main thread while fresh executions, approva
     const { bot } = await control(["new-bot", "--name", "Results fixture"]) as any;
     const originalThread = (await api("GET", "/api/bots")).bots.find((candidate: any) => candidate.id === bot.id).threadId;
     const { routine } = await api("POST", "/api/routines", {
-      name: "Persistent report", prompt: "Report this run's state.", botId: bot.id, enabled: false,
+      name: "Persistent report", prompt: "Report this run's state.", botId: bot.id, enabled: false, postResults: true,
       schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 3_600_000 },
     }, 201);
     const completed: any[] = [];
@@ -55,8 +55,9 @@ it("reports every run into the bot's main thread while fresh executions, approva
     expect(cards).toHaveLength(2);
     for (const run of completed) expect(cards.find((message) => message.routineRun.runId === run.id)?.routineRun)
       .toMatchObject({ status: "completed", scheduledFor: run.scheduledFor, executionThreadId: run.threadId, summary: "hello from fake claude" });
-    // A phone without the card reads only the text, so it carries the result.
-    for (const card of cards) expect(card.text).toBe("Routine “Persistent report” completed\n\nhello from fake claude");
+    // A phone without the card reads only the text, so it carries the
+    // result: the bot's report, the routine named under it (2026-10-22).
+    for (const card of cards) expect(card.text).toBe("hello from fake claude\n\nRoutine “Persistent report”");
     const currentBot = async () => (await api("GET", "/api/bots")).bots.find((candidate: any) => candidate.id === bot.id);
     const savedBot = await currentBot();
     expect(savedBot.threadId).toBe(originalThread);
@@ -119,13 +120,14 @@ it("reports every run into the bot's main thread while fresh executions, approva
     broker = connect(socketPath);
     broker.on("error", () => {});
     await new Promise<void>((resolve, reject) => { broker!.once("connect", resolve); broker!.once("error", reject); });
-    broker.write(JSON.stringify({ t: "ask", id: "results-approval", kind: "permission", tool: "Bash", input: { command: "echo fixture-approval" } }) + "\n");
+    // The owner's routine work on Approve for me passes a plain command without a card (#820); a bulk change keeps one.
+    broker.write(JSON.stringify({ t: "ask", id: "results-approval", kind: "permission", tool: "mcp__perspicax__bulk_update", input: { note: "fixture-approval" } }) + "\n");
     await expect.poll(async () => (await runState(pending.id))?.status, { timeout: 15_000 }).toBe("waiting");
     const waitingCard = (await messages(dedicated)).find((message) => message.routineRun?.runId === pending.id);
     expect(waitingCard.routineRun).toMatchObject({ status: "waiting", executionThreadId: active.threadId });
     expect((await currentBot()).tasks.find((task: any) => task.threadId === active.threadId)).toMatchObject({ routineRunId: pending.id, unread: false });
     const approval = (await messages(active.threadId)).find((message) => message.card && !message.card.answered);
-    expect(approval?.card.tool).toBe("Bash");
+    expect(approval?.card.tool).toBe("mcp__perspicax__bulk_update");
 
     await api("DELETE", `/api/bots/${bot.id}/tasks/${dedicated}`);
     const fallback = (await currentBot()).tasks.find((task: any) => task.threadId === active.threadId);
@@ -171,6 +173,9 @@ it("reports a routine made in a chat into that chat once the person writes there
   const messages = async (id: string) => (await api("GET", `/api/threads/${id}/messages?limit=100`)).messages as any[];
   try {
     const { bot } = await cli("new-bot", "--name", "Chat routine fixture");
+    // A routine the bot proposes inherits the installation default; this
+    // fixture tests the visible-results behaviour, so turn it on.
+    await api("PATCH", "/api/config", { features: { routinesInConversation: true } });
     const first = bot.activeTaskId as string;
     const { task } = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Planning" }, 201);
     const chat = task.threadId as string;
@@ -231,7 +236,7 @@ async function resultsFixture() {
   const savedBot = async (id: string) => (await api("GET", "/api/bots")).bots.find((candidate: any) => candidate.id === id);
   const destination = async (id: string) => (await api("GET", "/api/routines")).routines.find((candidate: any) => candidate.id === id).resultsThreadId;
   const routine = async (botId: string) => (await api("POST", "/api/routines", {
-    name: "Morning report", prompt: "Report this run's state.", botId, enabled: false,
+    name: "Morning report", prompt: "Report this run's state.", botId, enabled: false, postResults: true,
     schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 3_600_000 },
   }, 201)).routine.id as string;
   const report = async (id: string) => {

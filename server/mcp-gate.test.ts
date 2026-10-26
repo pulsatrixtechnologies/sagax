@@ -162,7 +162,7 @@ describe("mcp-gate", () => {
     const answer = await call("search_products");
     const text = answer.result.content[0].text;
     expect(text.length).toBeLessThan(full.length / 10);
-    expect(text).toContain("Sagax trimmed this tool result");
+    expect(text).toContain("TRUNCATED by Sagax");
 
     const spillDir = join(scratch, "spill");
     const [file] = readdirSync(spillDir);
@@ -172,7 +172,7 @@ describe("mcp-gate", () => {
     // never trimming. It is there for the person and the harness.
     expect(text).not.toContain(join(spillDir, file));
 
-    const kept = JSON.parse(text.slice(0, text.indexOf("\n\n[Sagax")));
+    const kept = JSON.parse(text.split("\n\n")[1]);
     expect(kept.products[0]).toEqual(products[0]);
     expect(kept.nextOffset).toBe("1");
   });
@@ -187,6 +187,22 @@ describe("mcp-gate", () => {
     const answer = await call("search_products");
     expect(answer.result.structuredContent.products.length).toBeLessThan(300);
     expect(answer.result.structuredContent.products[0]).toEqual(products[0]);
+  });
+
+  it("keeps structuredContent on exactly the records the text kept", async () => {
+    const products = Array.from({ length: 300 }, (_, i) => ({ id: `p${i}`, blurb: "x".repeat(300) }));
+    start({
+      content: [{ type: "text", text: JSON.stringify({ products }) }],
+      structuredContent: { products },
+    }, { SAGAX_GATE_BUDGET: "20000" });
+
+    const answer = await call("search_products");
+    const text = answer.result.content[0].text as string;
+    expect(text.startsWith("⚠️ TRUNCATED by Sagax")).toBe(true);
+    expect(text.endsWith(text.split("\n\n")[0]!)).toBe(true);
+    const kept = JSON.parse(text.split("\n\n")[1]!);
+    expect(kept.products.length).toBeLessThan(300);
+    expect(answer.result.structuredContent).toEqual(kept);
   });
 
   it("honours a budget the harness sets", async () => {
@@ -341,7 +357,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     // naming no tool, which runs nothing; the tool call_tool runs is trimmed
     expect((await callWith("describe_tool", { name: "read" }, 3)).result.content[0].text).toHaveLength(4_000);
     expect((await callWith("call_tool", { arguments: {} }, 4)).result.content[0].text).toHaveLength(4_000);
-    expect((await callWith("call_tool", { name: "read", arguments: {} }, 5)).result.content[0].text).toContain("[Sagax trimmed");
+    expect((await callWith("call_tool", { name: "read", arguments: {} }, 5)).result.content[0].text).toContain("TRUNCATED by Sagax");
     expect(ran()).toEqual(["describe_tool", "call_tool", "call_tool"]);
   });
 

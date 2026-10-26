@@ -65,6 +65,13 @@ final class ProfileUITests: XCTestCase {
         app.descendants(matching: .any)[id].firstMatch
     }
 
+    /// The panel's Routines row opens the routines page.
+    private func openRoutines(in app: XCUIApplication) {
+        let row = element("panel-overview.routines", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 15), "the Routines row is listed")
+        row.tap()
+    }
+
     private func scrollTo(_ element: XCUIElement, in app: XCUIApplication) {
         let scroll = app.scrollViews["profile-scroll"].firstMatch
         for _ in 0..<6 where !element.isHittable {
@@ -311,6 +318,7 @@ final class ProfileUITests: XCTestCase {
     @MainActor
     func testRoutineDetailShowsTheScheduleAndTheActiveToggleSaves() throws {
         let app = launchProfile()
+        openRoutines(in: app)
         let row = element("profile-routine.Scan skills populaires mensuel", in: app)
         scrollTo(row, in: app)
         XCTAssertTrue(row.label.contains("CRON_TZ=America/Toronto 2 7 1-7 * 1"), row.label)
@@ -343,6 +351,7 @@ final class ProfileUITests: XCTestCase {
         let id = try XCTUnwrap(ara["id"] as? String)
         let name = "UI routine \(Int(Date().timeIntervalSince1970) % 100_000)"
         let app = launchProfile()
+        openRoutines(in: app)
         let add = element("profile-add-routine", in: app)
         scrollTo(add, in: app)
         add.tap()
@@ -421,6 +430,43 @@ final class ProfileUITests: XCTestCase {
         wait(for: [covered], timeout: 10)
         sleep(2)
         ParityShots.save("links-browser", app)
+    }
+
+    /// Go to message on a link of another of Ara's conversations switches
+    /// her chat to it in place: the panel closes onto that conversation and
+    /// Back goes home, with no second chat screen over the first one.
+    /// Needs the links lab (`PARITY_LINKS=1`, ios/parity/links-lab.mjs).
+    @MainActor
+    func testGoToMessageSwitchesTheChatToTheLinksConversation() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PARITY_LINKS"] == "1", "the fixture runs without PARITY_LINKS=1")
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the phone's chat stack")
+        // Ara's chat, her panel opened by hand: the 03 screen's launcher
+        // would open the panel again on every thread the chat shows
+        let app = launch(screen: "02-chat")
+        let name = app.buttons["chat-name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 30))
+        name.tap()
+        XCTAssertTrue(element("profile-name", in: app).waitForExistence(timeout: 10))
+        element("panel-tab.library", in: app).tap()
+        let chip = element("thread-files-chip.links", in: app)
+        XCTAssertTrue(chip.waitForExistence(timeout: 15))
+        chip.tap()
+        let link = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'profile-link.' AND label CONTAINS 'links-lab.example.com'")).firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: 10), "the other conversation's link")
+        link.press(forDuration: 1.2)
+        let go = app.buttons["Go to message"].firstMatch
+        XCTAssertTrue(go.waitForExistence(timeout: 5))
+        go.tap()
+
+        let reply = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "Le lien de l'autre conversation est prêt.")).firstMatch
+        XCTAssertTrue(reply.waitForExistence(timeout: 15), "the chat shows the link's conversation")
+        ParityShots.save("links-go-to-message", app)
+        let back = app.buttons["Back"].firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        back.tap()
+        XCTAssertTrue(app.buttons["home-plus"].waitForExistence(timeout: 10), "one chat screen: Back is home")
     }
 
     /// The iPad's bot panel has the same Links chip and rows.

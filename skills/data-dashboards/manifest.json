@@ -1,0 +1,25 @@
+{
+  "id": "data-dashboards",
+  "name": "Data Dashboards",
+  "version": "1.0.0",
+  "description": "Build a fast, good-looking data dashboard the person can keep in Sagax or share as a link, reusing the Data tools and the self-contained dashboard template.",
+  "defaultEnabled": true,
+  "triggerTerms": [
+    "dashboard",
+    "dashboards",
+    "chart",
+    "charts",
+    "visualize",
+    "visualise",
+    "visualization",
+    "visualisation",
+    "kpi",
+    "kpis",
+    "data viz",
+    "dataviz",
+    "a graph",
+    "graph of",
+    "graph it"
+  ],
+  "requiredCapabilities": []
+}

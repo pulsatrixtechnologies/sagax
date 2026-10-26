@@ -1,0 +1,58 @@
+@@begin
+@@os
+Windows
+@@host
+POSTE-01
+Microsoft Windows 11 Professionnel
+@@uptime
+93784
+@@cpu
+0=30
+1=10
+2=5
+3=7
+_Total=13
+@@mem
+total=16661464
+free=6164736
+@@swap
+size=2432 used=611
+@@disk
+read=1048576
+write=1572864
+@@net
+rx=131072 tx=65536
+rx=409600 tx=20480
+@@df
+C: 510770802688 219851800576
+D: 1000186310656 900186310656
+@@end
+@@begin
+@@os
+Windows
+@@host
+POSTE-01
+Microsoft Windows 11 Professionnel
+@@uptime
+93786
+@@cpu
+0=40
+1=12
+2=5
+3=7
+_Total=16
+@@mem
+total=16661464
+free=6164736
+@@swap
+size=2432 used=611
+@@disk
+read=2097152
+write=2097152
+@@net
+rx=131072 tx=65536
+rx=819200 tx=40960
+@@df
+C: 510770802688 219851800576
+D: 1000186310656 900186310656
+@@end

@@ -45,7 +45,16 @@ export type EventLogAppend = (
 
 const defaultAppend: EventLogAppend = (path, data, options) => appendFile(path, data, options);
 
-type QueuedLog = { event: RuntimeEvent; bytes: number };
+/** `line` is the event as the log writes it, redacted and serialized once
+ * when it is queued, not again at write time (port de OpenMausBot #3130). */
+type QueuedLog = { event: RuntimeEvent; line: string; bytes: number };
+
+/** The canonical log is a file people paste into bug reports: credential
+ * shaped content is scrubbed as the native tee does, and a widget's whole
+ * ConnectWise result never reaches it. */
+function logLine(event: RuntimeEvent): string {
+  return JSON.stringify(redactSecrets(withoutPrivateFields(event)));
+}
 
 type TextDelta = Extract<RuntimeEvent, { type: "content.delta" }>;
 
@@ -71,6 +80,12 @@ function isTerminalEvent(event: RuntimeEvent): boolean {
   }
   return event.type === "runtime.error" && event.terminal === true;
 }
+
+/** Returns a promise of the event to publish (the same one, or a copy with
+ * a server-read field) to hold it, or null to publish it now. The promise
+ * must settle quickly; a rejection publishes the event as it was. */
+export const GATE_MAX_MS = 3_000;
+export type PublishGate = (event: RuntimeEvent) => Promise<RuntimeEvent> | null;
 
 export class EventBus {
   private listeners = new Set<RuntimeEventListener>();
@@ -108,7 +123,55 @@ export class EventBus {
     }
   }
 
+  /** 2026-10-21 (parité R10, ligne 80): a gate that may hold one event while
+   * it reads something asynchronously (the app of a screen action), so no
+   * subscriber ever blocks on it. While an event of a thread is held, later
+   * events of that thread wait behind it, in order. */
+  private gate: PublishGate | null = null;
+  private held = new Map<string, RuntimeEvent[]>();
+
+  setPublishGate(gate: PublishGate | null): void {
+    this.gate = gate;
+  }
+
   publish(event: RuntimeEvent) {
+    // only the gate sets screenApp: whatever an adapter wrote there is dropped
+    if (event.type === "request.opened" && "screenApp" in event) {
+      const { screenApp: _dropped, ...clean } = event;
+      event = clean as RuntimeEvent;
+    }
+    const waiting = this.held.get(event.threadId);
+    if (waiting) {
+      waiting.push(event);
+      return;
+    }
+    // a gate that throws publishes the event as it was (review of #954):
+    // without the server's reading, the card simply asks
+    let hold: Promise<RuntimeEvent> | null = null;
+    try {
+      hold = this.gate?.(event) ?? null;
+    } catch {
+      hold = null;
+    }
+    if (hold) {
+      const queue: RuntimeEvent[] = [];
+      this.held.set(event.threadId, queue);
+      const release = (resolved: RuntimeEvent) => {
+        if (this.held.get(event.threadId) !== queue) return;
+        this.held.delete(event.threadId);
+        this.publishNow(resolved);
+        for (const next of queue) this.publish(next);
+      };
+      // never longer than GATE_MAX_MS: past it the event goes as it was
+      const timer = setTimeout(() => release(event), GATE_MAX_MS);
+      timer.unref?.();
+      hold.then((resolved) => { clearTimeout(timer); release(resolved); }, () => { clearTimeout(timer); release(event); });
+      return;
+    }
+    this.publishNow(event);
+  }
+
+  private publishNow(event: RuntimeEvent) {
     const pending = this.pendingText.get(event.threadId);
     if (event.type === "content.delta") {
       if (pending && sameStream(pending.event, event)) {
@@ -169,7 +232,8 @@ export class EventBus {
   }
 
   private enqueue(event: RuntimeEvent) {
-    const bytes = Buffer.byteLength(JSON.stringify(redactSecrets(withoutPrivateFields(event))));
+    const line = logLine(event);
+    const bytes = Buffer.byteLength(line);
     const overCount = this.queued.length >= MAX_QUEUED_EVENTS;
     const overBytes = this.queued.length > 0 && this.queuedBytes + bytes > MAX_QUEUED_BYTES;
     if ((overCount || overBytes) && !isTerminalEvent(event)) {
@@ -187,11 +251,11 @@ export class EventBus {
     // A turn's end is never dropped. Any accepted event ends a run of drops;
     // a later overflow needs its own marker after this newly accepted line.
     this.queuedLogWarnings.delete(event.threadId);
-    this.push(event, bytes);
+    this.push(event, line, bytes);
   }
 
-  private push(event: RuntimeEvent, bytes = Buffer.byteLength(JSON.stringify(redactSecrets(withoutPrivateFields(event))))) {
-    this.queued.push({ event, bytes });
+  private push(event: RuntimeEvent, line = logLine(event), bytes = Buffer.byteLength(line)) {
+    this.queued.push({ event, line, bytes });
     this.queuedBytes += bytes;
     this.kick();
   }
@@ -237,30 +301,26 @@ export class EventBus {
     let bytes = 0;
     for (const item of batch) bytes += item.bytes;
     this.queuedBytes -= bytes;
-    const groups: { threadId: string; events: RuntimeEvent[] }[] = [];
+    const groups: { threadId: string; items: QueuedLog[] }[] = [];
     for (const item of batch) {
       const last = groups.at(-1);
-      if (last && last.threadId === item.event.threadId) last.events.push(item.event);
-      else groups.push({ threadId: item.event.threadId, events: [item.event] });
+      if (last && last.threadId === item.event.threadId) last.items.push(item);
+      else groups.push({ threadId: item.event.threadId, items: [item] });
     }
-    for (const group of groups) await this.appendGroup(group.threadId, group.events);
+    for (const group of groups) await this.appendGroup(group.threadId, group.items);
     if (this.queued.length > 0) await this.drain();
   }
 
-  private async appendGroup(threadId: string, events: RuntimeEvent[]): Promise<void> {
+  private async appendGroup(threadId: string, items: QueuedLog[]): Promise<void> {
     // a deleted confidential thread's log is never written again
     if (threadLogsForgotten(threadId)) { this.pendingLogWarnings.delete(threadId); return; }
     const warning = this.pendingLogWarnings.get(threadId);
-    // A widget's whole ConnectWise result never reaches the log.
-    const redacted = events.map((event) => redactSecrets(withoutPrivateFields(event)));
-    const persisted: unknown[] = redacted;
-    if (warning) persisted.unshift(warning);
+    const events = items.map((item) => item.event);
+    const lines = items.map((item) => item.line);
+    if (warning) lines.unshift(JSON.stringify(warning));
     const file = join(EVENTS_DIR, `${threadId}.ndjson`);
     try {
-      // the canonical log is a file people paste into bug reports; scrub
-      // credential-shaped content (tool titles, request summaries, reply
-      // text) the same way the native tee does
-      await this.appendLog(file, persisted.map((entry) => JSON.stringify(entry)).join("\n") + "\n", { mode: 0o600 });
+      await this.appendLog(file, lines.join("\n") + "\n", { mode: 0o600 });
       if (warning) this.pendingLogWarnings.delete(threadId);
       // Best-effort size cap (#1280): an open thread's canonical log
       // otherwise grows without bound for as long as the thread stays open.

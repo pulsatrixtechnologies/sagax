@@ -37,6 +37,12 @@ struct TasksRoutinesView: View {
     @State private var scopeQuery = RoutineScopeQuery()
     @State private var allowedScopes = RoutineScopeAllowed.mineOnly
     @State private var scopeFacets = RoutineScopeFacets()
+    @State private var awayState: String?
+    @State private var awayBusy = false
+    @State private var confirmPauseAll = false
+    @State private var triggers: [WebhookListing] = []
+    @State private var triggerBaseURL: String?
+    @State private var triggerBusy: String?
 
     enum RoutinesSection: Hashable { case routines, logs }
     /// The desktop's Schedule view: List or Calendar (the default).
@@ -115,6 +121,7 @@ struct TasksRoutinesView: View {
                     scopeNote
                 }
                 scheduleViewPicker
+                if section == .routines, showsPauseChrome { routinePauseChrome }
             } onCreate: { at in
                 quickSlot = AutomationsSlot(at: at)
             } onAction: { action, item in
@@ -139,7 +146,10 @@ struct TasksRoutinesView: View {
                             .listRowInsets(EdgeInsets())
                     }
                 }
-                if section == .routines { routinesContent } else { logsContent }
+                if section == .routines {
+                    if showsPauseChrome { Section { routinePauseChrome } }
+                    routinesContent
+                } else { logsContent }
             }
         }
     }
@@ -341,6 +351,9 @@ struct TasksRoutinesView: View {
                     if routine.mayRun { Button("Run now") { Task { await runNow(routine) } }.tint(Theme.accent) }
                 }
                 .contextMenu {
+                    if let expression = routine.schedule.expression, routine.schedule.type == .cron {
+                        Button(String(localized: "Copy cron expression"), systemImage: "doc.on.doc") { PlatformBridge.copyToPasteboard(expression) }
+                    }
                     if routine.mayRun {
                         Button("Run now", systemImage: "play.fill") { Task { await runNow(routine) } }
                     }
@@ -368,13 +381,36 @@ struct TasksRoutinesView: View {
             }
         }
 
-        Section {
-            Label("Computer only", systemImage: "lock.desktopcomputer")
-                .foregroundStyle(Theme.textSecondary)
-        } header: {
-            Text("Webhooks")
-        } footer: {
-            Text("Creating or rotating a webhook changes an internet-reachable trigger and signing secret, so webhook management remains on the paired computer. Webhook run receipts still appear in Run logs.")
+        RoutineTriggersSection(hooks: triggers, baseURL: triggerBaseURL, busyId: triggerBusy) { hook in
+            Task { await toggleTrigger(hook) }
+        }
+    }
+
+    private var showsPauseChrome: Bool {
+        let shown = botFilter.routines(routines)
+        return awayState == "away"
+            || !RoutinePauseAll.pausable(shown).isEmpty
+            || !RoutinePauseAll.resumable(shown).isEmpty
+            || !RoutineAway.reports(shown).isEmpty
+    }
+
+    private var routinePauseChrome: some View {
+        RoutineAwayChrome(
+            routines: botFilter.routines(routines),
+            awayState: awayState,
+            busy: awayBusy,
+            onRun: { routine in Task { await runReported(routine) } },
+            onSeen: { routine in Task { await seenAway(routine) } },
+            onLeavePaused: { Task { await leavePaused() } },
+            onLetRun: { Task { await letThemRun() } },
+            onPauseAll: { confirmPauseAll = true },
+            onResumeAll: { Task { await setAll(enabled: true) } }
+        )
+        .confirmationDialog("Pause all", isPresented: $confirmPauseAll, titleVisibility: .visible) {
+            Button("Pause all", role: .destructive) { Task { await setAll(enabled: false) } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every routine you can change stops until you resume it.")
         }
     }
 
@@ -453,7 +489,85 @@ struct TasksRoutinesView: View {
             routines = loaded.routines.sorted(by: Routine.listOrder)
             runs = loaded.runs
         }
+        let triggersLoaded = await session.loadTriggers()
+        triggers = triggersLoaded.hooks
+        triggerBaseURL = triggersLoaded.baseURL
+        awayState = await session.loadRoutineAwayState()
         loading = false
+    }
+
+    private func seenAway(_ routine: Routine) async {
+        awayBusy = true
+        defer { awayBusy = false }
+        guard let updated = await session.markRoutineAwaySeen(routine) else { return }
+        if let index = routines.firstIndex(where: { $0.id == updated.id }) { routines[index] = updated }
+    }
+
+    private func runReported(_ routine: Routine) async {
+        awayBusy = true
+        defer { awayBusy = false }
+        _ = await session.runRoutine(routine)
+        guard let updated = await session.markRoutineAwaySeen(routine) else { return }
+        if let index = routines.firstIndex(where: { $0.id == updated.id }) { routines[index] = updated }
+        await reloadRuns()
+    }
+
+    /// Keep the reported routines off, then clear the report.
+    private func leavePaused() async {
+        awayBusy = true
+        defer { awayBusy = false }
+        for routine in RoutineAway.reports(botFilter.routines(routines)) {
+            var current = routine
+            if routine.mayEdit, routine.enabled, routine.canToggle(),
+               let paused = await session.setRoutineEnabled(routine, enabled: false) {
+                current = paused
+            }
+            let updated = await session.markRoutineAwaySeen(current) ?? current
+            if let index = routines.firstIndex(where: { $0.id == updated.id }) { routines[index] = updated }
+        }
+    }
+
+    private func letThemRun() async {
+        awayBusy = true
+        defer { awayBusy = false }
+        for routine in RoutineAway.reports(botFilter.routines(routines)) {
+            _ = await session.runRoutine(routine)
+            if let updated = await session.markRoutineAwaySeen(routine),
+               let index = routines.firstIndex(where: { $0.id == updated.id }) {
+                routines[index] = updated
+            }
+        }
+        await reloadRuns()
+    }
+
+    private func setAll(enabled: Bool) async {
+        awayBusy = true
+        defer { awayBusy = false }
+        let targets = enabled ? RoutinePauseAll.resumable(botFilter.routines(routines)) : RoutinePauseAll.pausable(botFilter.routines(routines))
+        for routine in targets {
+            if let updated = await session.setRoutineEnabled(routine, enabled: enabled),
+               let index = routines.firstIndex(where: { $0.id == updated.id }) {
+                routines[index] = updated
+            }
+        }
+    }
+
+    private func toggleTrigger(_ hook: WebhookListing) async {
+        triggerBusy = hook.id
+        defer { triggerBusy = nil }
+        guard let updated = await session.setWebhookEnabled(id: hook.id, enabled: !hook.enabled) else { return }
+        if let index = triggers.firstIndex(where: { $0.id == updated.id }) { triggers[index] = updated }
+        else { triggers.append(updated) }
+    }
+
+    /// Run logs only. A pause does not need the whole schedule again.
+    private func reloadRuns() async {
+        if organization {
+            let loaded = await session.loadScopedRoutines(scopeQuery)
+            runs = loaded.runs
+        } else {
+            runs = await session.loadRoutines().runs
+        }
     }
 
     private func showLogs(of routine: Routine) {
@@ -566,7 +680,7 @@ private struct RoutineRow: View {
                 }
                 // #149: an organization routine acts in its owner's name
                 if let runAs = routine.runAs {
-                    Text(String(localized: "Runs as \(runAs.name.isEmpty ? runAs.principalId : runAs.name)"))
+                    Text(String(localized: "Runs as \(HumanID.readable(runAs.name, runAs.principalId, or: String(localized: "Unknown person")))"))
                         .font(.caption2)
                         .foregroundStyle(Theme.textSecondary)
                         .accessibilityIdentifier("routines-row-run-as.\(routine.name)")

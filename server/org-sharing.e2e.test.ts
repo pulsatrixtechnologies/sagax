@@ -244,7 +244,7 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     // (none), the plugin marketplace policy (any, the default) and the
     // labeled access tokens (none).
     expect((await api("GET", "/api/org", alice)).body.settings).toEqual({
-      orgKeyConfigured: true, allowFullAccess: false, memberEnvironmentAutonomy: true, confidentialThreadsByDefault: false, memberAutoApproval: true, interimAttach: { until: null, people: 0 },
+      orgKeyConfigured: true, allowFullAccess: false, allowVaultExport: true, memberEnvironmentAutonomy: true, confidentialThreadsByDefault: false, memberAutoApproval: true, interimAttach: { until: null, people: 0 },
       github: { clientId: null, fromEnvironment: false }, pluginMarketplaces: { mode: "any" },
       githubTokens: [],
     });
@@ -848,10 +848,11 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
       // no mode reaches past the owner's rights: a server command still waits for an admin
       const shell = await ask("Bash", { command: "cat /etc/hostname" });
       expect(shell.card.adminApproval).toBe(true);
-      expect(shell.card.ownerRule).toBeUndefined();
+      // #855: the card carries an admin-kind rule, never one the owner could keep
+      expect(shell.card.ownerRule?.from).toBe("admin");
       expect((await respond(erin, shell.id, { rule: "allow" })).status).toBe(403);
-      expect((await respond(alice, shell.id, { rule: "allow" })).status).toBe(400);
-      expect((await respond(alice, shell.id)).status).toBe(200);
+      // #855: an admin may keep Always allow on the admin card (an admin rule)
+      expect((await respond(alice, shell.id, { rule: "allow" })).status).toBe(200);
       await waitFor(async () => shell.answer()?.behavior === "allow");
 
       // revoke: the rule goes, the next ticket update asks again (back on approval)

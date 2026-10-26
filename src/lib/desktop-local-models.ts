@@ -1,13 +1,15 @@
 // This person's Mac models (GET/PUT /api/me/local-models). Both switches
 // start off. The list is loopback bases the desktop probes; the server
 // does not call them.
-import { normalizeLoopbackBase, type LoopbackEndpoint } from "../../shared/desktop-local-models";
+import { normalizeLoopbackBase, type LoopbackEndpoint, type LoopbackProbe } from "../../shared/desktop-local-models";
 
 export interface LocalModelSettings {
   expose: boolean;
   share: boolean;
   endpoints: LoopbackEndpoint[];
   published: { id: string; label: string; models: string[] }[];
+  /** The desktop's last probe outcome per endpoint (Settings panel only). */
+  probes: LoopbackProbe[];
   connected: boolean;
 }
 
@@ -27,6 +29,13 @@ export async function saveLocalModels(patch: { expose?: boolean; share?: boolean
   });
   if (!response.ok) throw new Error("local models");
   return await response.json() as LocalModelSettings;
+}
+
+/** The desktop-only bridge for per-loopback-server API keys, or null on a
+ * remote server page or an older desktop build (then no key UI is shown).
+ * The key value never crosses this bridge: only the list of keyed bases. */
+export function localModelKeyBridge(): NonNullable<Window["ogb"]>["localModels"] | null {
+  return (typeof window !== "undefined" && window.ogb?.localModels) || null;
 }
 
 export { normalizeLoopbackBase };

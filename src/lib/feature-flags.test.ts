@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { builtInBrowserEnabled, connectedAppsEnabled, dataWindowEnabled, decisionModelEnabled, llmThreadTitlesEnabled, parseSkillReviewSteps, roomMemoryCaptureEnabled, routinesInConversationEnabled, sharedComputersEnabled, showToolCallsEnabled, skillAuthoringEnabled, skillReviewEnabled, skillReviewSteps, skillReviewUnavailableEngines } from "./feature-flags";
+import { builtInBrowserEnabled, dataWindowEnabled, decisionModelEnabled, llmThreadTitlesEnabled, parseSkillReviewSteps, roomMemoryCaptureEnabled, routinesInConversationEnabled, sharedComputersEnabled, showToolCallsEnabled, skillAuthoringEnabled, skillReviewEnabled, skillReviewSteps, skillReviewUnavailableEngines } from "./feature-flags";
 
 describe("experimental feature flags", () => {
   it("keeps skill authoring on by default, before and after the config arrives", () => {
@@ -62,9 +62,6 @@ describe("experimental feature flags", () => {
     expect(routinesInConversationEnabled(null)).toBe(false);
     expect(routinesInConversationEnabled({})).toBe(false);
     expect(routinesInConversationEnabled({ features: { routinesInConversation: true } })).toBe(true);
-    expect(connectedAppsEnabled(null)).toBe(false);
-    expect(connectedAppsEnabled({})).toBe(false);
-    expect(connectedAppsEnabled({ features: { connectedApps: true } })).toBe(true);
   });
 
   it("keeps computer sharing off unless the server says it is on", () => {

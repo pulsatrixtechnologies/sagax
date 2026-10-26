@@ -44,6 +44,12 @@ public enum RoutinePatch {
         case let .thread(id): if id != original.resultsThreadId { body["resultsThreadId"] = id }
         }
         if let runAs = input.runAs, !runAs.isEmpty, runAs != original.runAs?.principalId { body["runAs"] = runAs }
+        if let onlyWhenPresent = input.onlyWhenPresent, onlyWhenPresent != (original.onlyWhenPresent == true) {
+            body["onlyWhenPresent"] = onlyWhenPresent
+        }
+        if let postResults = input.postResults, postResults != (original.postResults == true) {
+            body["postResults"] = postResults
+        }
         return body
     }
 
@@ -69,6 +75,8 @@ public enum RoutinePatch {
         case let .thread(id): body["resultsThreadId"] = id
         }
         if let runAs = input.runAs, !runAs.isEmpty { body["runAs"] = runAs }
+        if input.onlyWhenPresent == true { body["onlyWhenPresent"] = true }
+        if let postResults = input.postResults { body["postResults"] = postResults }
         return body
     }
 

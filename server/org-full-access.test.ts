@@ -7,6 +7,8 @@ import {
   orgFullAccessGrantRefusal,
   orgFullAccessHolds,
   orgNewBotApprovalMode,
+  parseOrgFullAccessBody,
+  threadFollowsFullGrant,
 } from "./org-full-access.ts";
 
 const consent = { principalId: "alice", at: 1 };
@@ -78,5 +80,19 @@ describe("organization Full access grants", () => {
     expect(orgFullAccessHolds({ policyAllowed: true, ownerPrincipalId: "bob", consent })).toBe(false);
     expect(orgFullAccessHolds({ policyAllowed: true, ownerPrincipalId: "alice", consent: { principalId: "", at: 1 } })).toBe(false);
     expect(fullAccessConsentedBy("junk", "alice")).toBe(false);
+  });
+
+  it("accepts the open conversation beside the Full grant and nothing else", () => {
+    expect(parseOrgFullAccessBody({ approvalMode: "full", confirmFullAccess: true, threadId: "talk" })).toEqual({ confirm: true, threadId: "talk" });
+    expect(parseOrgFullAccessBody({ approvalMode: "full" })).toEqual({ confirm: false });
+    expect(parseOrgFullAccessBody({ approvalMode: "full", confirmFullAccess: true, computer: "local" })).toEqual({ error: "send { approvalMode: \"full\", confirmFullAccess } alone" });
+    expect(parseOrgFullAccessBody({ approvalMode: "full", threadId: "../talk" })).toEqual({ error: "send { approvalMode: \"full\", confirmFullAccess } alone" });
+  });
+
+  it("copies Full onto the open conversation, and leaves a missing or busy one alone", () => {
+    expect(threadFollowsFullGrant({ threadId: "talk", knownThread: true, threadBusy: false })).toBe("talk");
+    expect(threadFollowsFullGrant({ threadId: "talk", knownThread: false, threadBusy: false })).toBeNull();
+    expect(threadFollowsFullGrant({ threadId: "talk", knownThread: true, threadBusy: true })).toBeNull();
+    expect(threadFollowsFullGrant({ knownThread: true, threadBusy: false })).toBeNull();
   });
 });

@@ -4,9 +4,9 @@
 // machine your bots can borrow.
 import { useRetroSkin } from "./RetroChromeHost";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Archive, Bell, Check, Coins, Download, ExternalLink, FileText, FlaskConical, KeyRound, Monitor, Palette, Search, ShieldCheck, Terminal, User, X, Building2 } from "lucide-react";
-import { api, useStore, type AppSettingsSection, type ConfigStatus } from "@/state/store";
-import { connectedAppsEnabled, decisionModelEnabled } from "@/lib/feature-flags";
+import { Archive, Bell, Check, Coins, Download, FileText, FlaskConical, Import, KeyRound, Monitor, Palette, Search, ShieldCheck, Terminal, User, X, Building2 } from "lucide-react";
+import { api, useStore, type AppSettingsSection } from "@/state/store";
+import { decisionModelEnabled } from "@/lib/feature-flags";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { localeChoices, type LocaleKey } from "@/locales";
 import { t } from "@/lib/i18n";
@@ -17,19 +17,20 @@ import { servedPage } from "@/lib/desktop";
 import { brand } from "@/lib/brand";
 import { navigate } from "@/lib/view-transitions";
 import { useServerMode } from "./ServerModeSettings";
-import { ApiKeyRow, credentialCopy } from "./ApiKeys";
 import { DecisionModelSettings } from "./DecisionModelSettings";
 import { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
 import { useUpdaterState } from "@/lib/updater";
+import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
 import { EnginesSettings } from "./EnginesSettings";
 import { LocalComputerSection } from "./LocalComputerSection";
 import { peopleListServed, readMembership } from "../lib/membership";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
-import { canEditConfig, canManageBackups, canManageComputers, viewerCan } from "@/lib/viewer";
+import { canEditConfig, canManageBackups, canManageComputers, canManageExperimental, viewerCan } from "@/lib/viewer";
 import { OrganizationSettings } from "./OrganizationSettings";
-import { CompactRow, DescribedRow, PILL, PillSelect, requestSettingsCard, SettingRow, SettingsGroup, Switch, takeRequestedSettingsCard } from "./SettingsPrimitives";
+import { CompactRow, PillSelect, type PillOption, requestSettingsCard, SettingRow, SettingsGroup, Switch, takeRequestedSettingsCard } from "./SettingsPrimitives";
 import { OrgMemorySettings } from "./OrgMemorySettings";
 import { NotificationSettings } from "./NotificationSettings";
+import { TimeZoneRows } from "./settings/TimeZoneSettings";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { ExperimentalSettings } from "./settings/ExperimentalSettings";
 import { currentSettingsSection, isMovedOrganizationCard } from "@/lib/settings-sections";
@@ -40,14 +41,14 @@ import { CredentialsSettings } from "./settings/CredentialsSettings";
 import { PublishedPagesSettings } from "./PublishedPages";
 import { LicenseExpiryBanner } from "./LicenseExpiryBanner";
 import { workspacesAvailable } from "./WorkspacesSection";
-import { applySkin, readSkin, visibleSkins, type SkinId } from "@/lib/skins";
-import { readRetroUnlocked } from "@/lib/retro98";
 import { AboutMeEditor, aboutMeFirstLine } from "./AboutMeSettings";
 import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
 import { AccountCard } from "./settings/AccountCard";
 import { DefaultBotSettings } from "./NewBotDialog";
 import { WorkspaceBackupSettings } from "./WorkspaceBackupSettings";
+import { ImportSettings } from "./settings/ImportSettings";
 import { SecurityKeySettings } from "./SecurityKeySettings";
+import { MyApprovalRules } from "./settings/MyApprovalRules";
 import { cn } from "@/lib/cn";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { simpleHidesSettingsSection } from "@/lib/interface-visibility";
@@ -57,8 +58,6 @@ import { effectiveLanguage, setLanguageChoice, useLanguageChoice } from "@/lib/l
 export { chooseThreadsView } from "./settings/AppearanceSettings";
 
 export { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop };
-
-const COMPOSIO_PLATFORM_URL = "https://platform.composio.dev";
 
 // `labelKey`, not a label: t() reads the active pack when it is called, so a
 // label resolved here at module scope would freeze the language the app booted
@@ -94,10 +93,10 @@ export const SECTIONS: Array<{
   // Settings groups its rail: you, AI, the workspace, this app last.
   // 0.5.6 (JC): General is laid out as Grok Bot's (Account, Appearance,
   // System); Updates is a page of its own, as there.
-  { id: "general", group: "you", labelKey: "settings.section.general", icon: User, keywords: ["profile", "name", "email", "copy email", "account", "compte", "sign out", "label", "about me", "about", "suggestions", "suggested", "memory", "effort", "new bots", "reasoning", "threads", "parallel", "concurrency", "cleanup", "retention", "event log", "event-log", "log size", "automatic recovery", "backup model", "fallback", "advanced", "avancé", "tool access", "accès aux outils", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "nettoyage", "grants", "autorisations", "theme", "thème", "language", "langue", "microphone", "micro", "tour", "tours", "visite", "welcome", "bienvenue", "system", "système", "server", "serveur"] },
-  { id: "appearance", group: "you", labelKey: "settings.section.appearance", icon: Palette, keywords: ["skin", "theme", "appearance", "advanced", "simple", "mode", "tools", "tool calls", "threads", "show threads", "hide threads", "sidebar", "hidden", "hide", "show", "density", "compact", "comfortable", "avatars", "display", "run", "this run", "run card", "commands", "mascot", "owl", "desktop", "fly", "floating", "app icon", "dock", "icon", "taskbar", "providers", "sign-in", "unconfigured", "fournisseurs", "connexion", "non configurés", "send", "enter", "return", "shift+enter", "ctrl+enter", "cmd+enter", "⌘+enter", "new line", "keyboard", "ime", "japanese", "font", "police", "interface", "inspector", "inspecteur", "logo", "masqués", "mascottes", "icône", "barre latérale", "conversations", "desktop", "bureau"] },
+  { id: "general", group: "you", labelKey: "settings.section.general", icon: User, keywords: ["profile", "name", "email", "copy email", "account", "compte", "sign out", "label", "about me", "about", "suggestions", "suggested", "memory", "effort", "new bots", "reasoning", "threads", "parallel", "concurrency", "cleanup", "retention", "event log", "event-log", "log size", "automatic recovery", "backup model", "fallback", "advanced", "avancé", "tool access", "accès aux outils", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "nettoyage", "grants", "autorisations", "language", "langue", "time zone", "timezone", "fuseau horaire", "fuseau", "microphone", "micro", "tour", "tours", "visite", "welcome", "bienvenue", "system", "système", "server", "serveur"] },
+  { id: "appearance", group: "you", labelKey: "settings.section.appearance", icon: Palette, keywords: ["skin", "theme", "thème", "variant", "variante", "light", "clair", "dark", "sombre", "auto", "appearance", "advanced", "simple", "mode", "tools", "tool calls", "threads", "show threads", "hide threads", "sidebar", "hidden", "hide", "show", "density", "compact", "comfortable", "avatars", "display", "run", "this run", "run card", "commands", "mascot", "owl", "desktop", "fly", "floating", "app icon", "dock", "icon", "taskbar", "providers", "sign-in", "unconfigured", "fournisseurs", "connexion", "non configurés", "send", "enter", "return", "shift+enter", "ctrl+enter", "cmd+enter", "⌘+enter", "new line", "keyboard", "ime", "japanese", "font", "police", "accessibility", "accessibilité", "reduce motion", "motion", "animations", "contrast", "contraste", "text size", "taille du texte", "zoom", "hardware acceleration", "accélération matérielle", "gpu", "spell check", "spellcheck", "orthographe", "correcteur", "interface", "inspector", "inspecteur", "logo", "masqués", "mascottes", "icône", "barre latérale", "conversations", "desktop", "bureau"] },
   // 2026-10-14: Privacy is a card of this page on an organization server.
-  { id: "notifications", group: "you", labelKey: "settings.section.notifications", icon: Bell, keywords: ["notifications", "notification", "sound", "sounds", "mute", "silent", "chime", "alert", "alerts", "banner", "badge", "dock", "unread", "nudge", "wizz", "shake", "secousse", "son", "persistent", "stay", "privacy", "read receipts", "seen", "vu", "confidentialité", "accusés de lecture", "presence", "online", "away", "offline", "last seen", "status", "en ligne", "absent", "hors ligne", "privacidade", "alertes", "on screen", "à l'écran"] },
+  { id: "notifications", group: "you", labelKey: "settings.section.notifications", icon: Bell, keywords: ["notifications", "notification", "sound", "sounds", "notification sound", "son de notification", "tick", "tic", "carillon", "chime a", "chime b", "blip", "mute", "silent", "chime", "alert", "alerts", "banner", "badge", "dock", "unread", "nudge", "wizz", "shake", "secousse", "son", "persistent", "stay", "privacy", "read receipts", "seen", "vu", "confidentialité", "accusés de lecture", "presence", "online", "away", "offline", "last seen", "status", "en ligne", "absent", "hors ligne", "privacidade", "alertes", "on screen", "à l'écran"] },
   // 2026-10-16: the credential vault (logins, API keys, notes; 1Password).
   { id: "credentials", group: "you", labelKey: "settings.section.credentials", icon: KeyRound, keywords: ["credentials", "identifiants", "vault", "coffre", "password", "mot de passe", "login", "connexion", "totp", "2fa", "one-time code", "code à usage unique", "1password", "api key", "clé api", "autofill", "remplissage"] },
   // 2026-10-16 (wave 2, package E): security keys and passkeys, and which
@@ -105,27 +104,29 @@ export const SECTIONS: Array<{
   { id: "security", group: "you", labelKey: "settings.section.security", icon: ShieldCheck, keywords: ["security", "sécurité", "security key", "clé de sécurité", "passkey", "clé d'accès", "yubikey", "webauthn", "touch id", "face id", "step-up", "sensitive", "sensibles", "approvals", "approbations"] },
   // Models and voice (2026-10-14): Integrations and Models and accounts in
   // one page; Connected apps and Decision model are cards of it.
-  { id: "engines", group: "ai", labelKey: "settings.section.modelsVoice", icon: Terminal, keywords: ["models", "model providers", "engines", "claude", "codex", "grok", "providers", "cli", "sign in", "subscription", "keys", "api", "api key", "api keys", "connections", "integrations", "intégrations", "clés", "xai", "mistral", "cerebras", "router", "openrouter", "base url", "openai", "anthropic", "groq", "opencode", "provider", "voice", "voix", "tts", "elevenlabs", "fish", "chatterbox", "live call", "image", "avatar", "box", "vps", "cursor", "cloud agents", "composio", "connected apps", "apps", "gmail", "slack", "notion", "apps connectées", "decision", "jev", "typesafe", "routing", "auto", "who answers", "auto model", "modèle auto", "moteurs", "needs setup", "à configurer", "voice engine", "moteur de voix", "fish audio", "live calls", "appels en direct", "image provider", "fournisseur d'images", "génération d'images", "cloud coding agents", "microphone", "micro", "audio", "input device", "entrée audio"] },
+  { id: "engines", group: "ai", labelKey: "settings.section.modelsVoice", icon: Terminal, keywords: ["models", "model providers", "engines", "claude", "codex", "grok", "providers", "cli", "sign in", "subscription", "keys", "api", "api key", "api keys", "connections", "integrations", "intégrations", "clés", "xai", "mistral", "cerebras", "router", "openrouter", "base url", "openai", "anthropic", "groq", "opencode", "provider", "voice", "voix", "tts", "elevenlabs", "fish", "chatterbox", "live call", "image", "avatar", "box", "vps", "cursor", "cloud agents", "decision", "jev", "typesafe", "routing", "auto", "who answers", "auto model", "modèle auto", "moteurs", "needs setup", "à configurer", "voice engine", "moteur de voix", "fish audio", "live calls", "appels en direct", "image provider", "fournisseur d'images", "génération d'images", "cloud coding agents", "microphone", "micro", "audio", "input device", "entrée audio"] },
   // 2026-10-14: Memory is a card of this page (it was its own section).
   { id: "organization", group: "workspace", labelKey: "settings.section.organization", icon: Building2, keywords: ["company", "organization", "organisation", "sign in", "enroll", "managed", "models", "disconnect", "workspace", "cloud", "hosted", "vps", "server", "servers", "connect", "pair", "switch", "local", "memory", "obsidian", "vault", "sync", "git", "perspicax", "mémoire", "cache", "pending", "domain", "dns", "caddy", "full access", "accès complet", "approvals", "approbations", "waiting for an admin", "en attente", "people from before", "rattacher", "invite", "inviter", "invitation", "people", "personnes", "this computer", "cet ordinateur", "serveurs", "oublier", "forget", ...ORGANIZATION_ADVANCED_KEYWORDS] },
-  { id: "computer", group: "workspace", labelKey: "settings.section.computer", icon: Monitor, keywords: ["computer", "local vm", "vm", "virtual", "desktop", "ordinateur", "your computer", "votre ordinateur", "other computers", "autres ordinateurs", "network", "réseau", "traffic", "trafic", "server environment", "environnement serveur", "reset", "réinitialiser", "repair", "réparer", "update", "mise à jour", "maintenance", "entretien", "disk", "disque", "disk saver", "économiseur de disque", "cache", "clean", "nettoyer"] },
+  { id: "computer", group: "workspace", labelKey: "settings.section.computer", icon: Monitor, keywords: ["computer", "local vm", "vm", "virtual", "desktop", "ordinateur", "your computer", "votre ordinateur", "other computers", "autres ordinateurs", "rename", "renommer", "remove computer", "retirer", "network", "réseau", "traffic", "trafic", "server environment", "environnement serveur", "reset", "réinitialiser", "repair", "réparer", "update", "mise à jour", "maintenance", "entretien", "disk", "disque", "disk saver", "économiseur de disque", "cache", "clean", "nettoyer"] },
   { id: "usage", group: "workspace", labelKey: "settings.section.usage", icon: Coins, keywords: ["tokens", "cost", "billing", "plan", "forfait", "coût", "usage", "spend", "this month", "ce mois-ci", "last 30 days", "30 derniers jours", "by bot", "par bot", "by model", "par modèle", "renews", "renouvelle", "sagax business"] },
   // 2026-10-15: People and Installations are hidden in the app, like Email,
   // Activity and Pair devices (settings-sections.ts HIDDEN).
   // 2026-10-16: pages a bot proposed and the person published (Grok Bot's canvases).
   { id: "pages", group: "workspace", labelKey: "settings.section.pages", icon: FileText, keywords: ["pages", "published", "publiées", "canvas", "canevas", "share", "partager", "link", "lien", "revoke", "révoquer", "expiry", "expiration", "site", "html", "markdown"] },
   { id: "backups", group: "workspace", labelKey: "settings.section.backups", icon: Archive, keywords: ["export", "import", "restore", "full backup", "password", "recovery", "backup", "sauvegarde", "exporter", "restaurer", "replace", "remplacer", "mot de passe"] },
+  // 2026-10-19: a shared Grok Bot comes in here (port of OpenMausBot #3073).
+  { id: "import", group: "workspace", labelKey: "settings.section.import", icon: Import, keywords: ["import", "importer", "grok", "grok bot", "x.ai", "share link", "lien de partage", "template", "modèle"] },
   // 0.5.6: this app's updates and the pre-release channel (were in General
   // and General > Advanced). Shown where the desktop app answers.
   { id: "updates", group: "app", labelKey: "settings.updates.title", icon: Download, keywords: ["updates", "update", "version", "mise à jour", "mises à jour", "prerelease", "pre-release", "beta", "bêta", "restart"] },
-  { id: "experimental", group: "app", labelKey: "settings.section.experimental", icon: FlaskConical, keywords: ["early", "preview", "learn", "skill", "authoring", "browser", "profiles", "experimental", "expérimental", "data window", "fenêtre data", "decision model", "modèle de décision", "connected apps", "apps connectées", "compétences", "navigateur", "unavailable", "indisponible"] },
+  { id: "experimental", group: "app", labelKey: "settings.section.experimental", icon: FlaskConical, keywords: ["early", "preview", "learn", "skill", "authoring", "browser", "profiles", "experimental", "expérimental", "data window", "fenêtre data", "decision model", "modèle de décision", "compétences", "navigateur", "unavailable", "indisponible"] },
 ];
 
 /** Former sections that are a card of another page now (2026-10-14), by the
  * page that holds them. Each keeps its own visibility rules: the card shows
  * where the section would have, and its page shows when the card does. */
 const HOSTED_CARDS: Partial<Record<AppSettingsSection, AppSettingsSection[]>> = {
-  engines: ["connectedApps", "decisionModel"],
+  engines: ["decisionModel"],
   notifications: ["privacy"],
   organization: ["memory"],
 };
@@ -143,7 +144,6 @@ const CARD_KEYWORDS: Record<string, string[]> = {
   "engines.setup": ["needs setup", "kimi", "droid", "qwen", "hermes", "cline", "antigravity"],
   "voice.advanced": ["live call", "read replies", "hang up", "gpt-live"],
   "companion.domain": ["domain", "dns", "caddy"],
-  "connections.apps": ["composio", "connected apps"],
   "engines.decisionModel": ["decision", "jev", "typesafe"],
   "connections.cloudAgents": ["cursor", "cloud agent", "cloud coding"],
   "usage.breakdown": ["by bot", "by model", "par bot", "par modèle"],
@@ -177,9 +177,15 @@ export function memberHidesSection(id: AppSettingsSection, input: {
   manageComputers: boolean;
   manageBackups: boolean;
   organization: boolean;
+  /** server.experimental (implied by server.settings). Defaults to editConfig
+   * for an older server that sends no permission list. */
+  manageExperimental?: boolean;
 }): boolean {
-  if (id === "experimental" || id === "connectedApps" || id === "decisionModel" || id === "workspaces") return !input.editConfig;
-  if (id === "backups") return !input.manageBackups;
+  // Experimental is its own delegable right (server.experimental): a member an
+  // admin gave it sees the section without the rest of the installation.
+  if (id === "experimental") return !(input.manageExperimental ?? input.editConfig);
+  if (id === "decisionModel" || id === "workspaces") return !input.editConfig;
+  if (id === "backups" || id === "import") return !input.manageBackups;
   if (id === "computer") return !input.manageComputers && !input.organization;
   return false;
 }
@@ -195,43 +201,7 @@ export function sectionMatches(section: (typeof SECTIONS)[number], query: string
   return [t(section.labelKey), ...section.keywords, ...extra].some((part) => part.toLowerCase().includes(query));
 }
 
-/** Connected apps in words (2026-10-14: it said "Not set" whatever the
- * reason). Managed through the broker, a Composio key saved, or none yet. */
-export function connectedAppsSummary(config: ConfigStatus | null | undefined): string {
-  const mode = config?.composio?.mode;
-  if (mode === "managed") return t("connectedApps.state.managed");
-  if (mode === "self-hosted" || config?.composio?.configured) return t("connectedApps.state.keySaved");
-  return t("connectedApps.state.noKey");
-}
 
-/** Connected apps (Composio), a group of Models and voice: its state in
- * the row's grey line, where to get a key behind the info button, the key
- * field under it. */
-function ConnectedAppsGroup({ config }: { config: ConfigStatus | null | undefined }) {
-  return (
-    <div data-settings-card="connections.apps">
-      <SettingsGroup title={t("settings.connections.appsTitle")} groupId="connectedApps">
-        <DescribedRow
-          label={credentialCopy("composio").label}
-          rowId="composio"
-          help={(
-            <>
-              {t("settings.connections.appsSubtitle")}{" "}
-              <a href={COMPOSIO_PLATFORM_URL} target="_blank" rel="noopener noreferrer" className="text-accent-text hover:underline">platform.composio.dev</a>
-            </>
-          )}
-          description={<span data-connected-apps-state={config?.composio.mode ?? "unavailable"}>{connectedAppsSummary(config)}</span>}
-          below={<div className="mt-2"><ApiKeyRow section="composio" bare /></div>}
-        >
-          <a href={COMPOSIO_PLATFORM_URL} target="_blank" rel="noopener noreferrer" className={PILL}>
-            platform.composio.dev
-            <ExternalLink size={12} aria-hidden="true" />
-          </a>
-        </DescribedRow>
-      </SettingsGroup>
-    </div>
-  );
-}
 
 /** Sub-pages pushed inside a section (src/components/SettingsSubPage.tsx):
  * the section they belong to, their title and their page. */
@@ -270,16 +240,25 @@ export function UpdatesRow() {
                 : s.status === "error"
                   ? t("settings.updates.failed", { message: s.message ?? t("settings.updates.unknownError") })
                   : t("settings.updates.latest");
+  // A native staging failure (retryable === false) cannot be retried in place:
+  // the message tells the person to quit and reopen, so this button must do
+  // exactly that and stay clickable, never be greyed out.
+  const mustRestart = s.retryable === false;
   return (
     <SettingRow title={t("settings.updates.title")} subtitle={label}>
       <button
-        onClick={() => {
-          if (s.status === "downloaded") return void updater.install();
-          void updater.check();
-        }}
+        // The update dialog follows the check and asks before any restart
+        // ("Restart to install" or "Later"); this button never installs.
+        onClick={() =>
+          mustRestart
+            ? void window.ogb?.relaunch?.()
+            : s.status === "downloaded"
+              ? openUpdatePrompt()
+              : requestUpdateCheck()
+        }
         disabled={
           s.status === "checking" || s.status === "downloading" || s.status === "preparing" ||
-          s.status === "installing" || s.retryable === false
+          s.status === "installing"
         }
         className="ui-button"
       >
@@ -301,24 +280,44 @@ export function UpdatesRow() {
   );
 }
 
-/** Opt-in to pre-release versions. Updates only ever come from Sagax's own
- * GitHub releases (electron/update-feed.mjs); this only widens the channel. */
+/** The named update channel: Stable, or Nightly (versions still in testing).
+ * Updates only ever come from Sagax's own GitHub releases
+ * (electron/update-feed.mjs); this only widens the channel. */
 function PrereleaseRow() {
   const s = useUpdaterState();
-  const setPrereleases = window.ogb?.updater?.setPrereleases;
-  if (!setPrereleases) return null;
-  const on = s?.allowPrerelease === true;
+  const updater = window.ogb?.updater;
+  // An older main process only knows the pre-release switch.
+  const setChannel = updater?.setChannel ?? (updater?.setPrereleases ? (next: "stable" | "nightly") => updater.setPrereleases?.(next === "nightly") : undefined);
+  if (!setChannel) return null;
+  const channel = s?.channel ?? (s?.allowPrerelease === true ? "nightly" : "stable");
+  const options: ReadonlyArray<PillOption<"stable" | "nightly">> = [
+    { value: "stable", label: t("settings.updates.channel.stable") },
+    { value: "nightly", label: t("settings.updates.channel.nightly") },
+  ];
   return (
     <SettingRow
-      title={t("settings.updates.prerelease.title")}
-      subtitle={t("settings.updates.prerelease.short")}
+      title={t("settings.updates.channel.title")}
+      subtitle={t("settings.updates.channel.short")}
       help={t("settings.updates.prerelease.subtitle")}
     >
-      <Switch
-        checked={on}
-        aria-label={t("settings.updates.prerelease.aria")}
-        onClick={() => void setPrereleases(!on)}
-      />
+      <PillSelect value={channel} options={options} ariaLabel={t("settings.updates.channel.title")} onChange={(next) => void setChannel(next)} />
+    </SettingRow>
+  );
+}
+
+/** Install a downloaded update while the person is away, never with a bot at work. */
+function AutoInstallAwayRow() {
+  const s = useUpdaterState();
+  const setAway = window.ogb?.updater?.setAutoInstallAway;
+  if (!setAway || s?.installMode === "handoff") return null;
+  const on = s?.autoInstallWhenAway === true;
+  return (
+    <SettingRow
+      title={t("settings.updates.away.title")}
+      subtitle={t("settings.updates.away.short")}
+      help={t("settings.updates.away.help")}
+    >
+      <Switch checked={on} aria-label={t("settings.updates.away.title")} onClick={() => void setAway(!on)} />
     </SettingRow>
   );
 }
@@ -402,26 +401,6 @@ function LanguageRow() {
   );
 }
 
-/** General > Appearance > Theme: the skin, by name. The miniatures stay in
- * Appearance (2026-10-14 picker); this is the one-line choice Grok Bot has. */
-function ThemeRow() {
-  const [active, setActive] = useState<SkinId>(() => (document.documentElement.dataset.skin as SkinId) || readSkin());
-  const [skins] = useState(() => visibleSkins(readRetroUnlocked(), active));
-  return (
-    <CompactRow label={t("settings.theme.title")} rowId="theme">
-      <PillSelect
-        value={active}
-        ariaLabel={t("settings.theme.title")}
-        onChange={(next) => {
-          applySkin(next);
-          setActive(next);
-        }}
-        options={skins.map((skin) => ({ value: skin.id, label: skin.name }))}
-      />
-    </CompactRow>
-  );
-}
-
 type MicStatus = "granted" | "denied" | "restricted" | "not-determined" | string;
 
 /** General > System > Microphone: the desktop app's own permission, as the
@@ -491,6 +470,7 @@ export function SettingsModal() {
   const editConfig = canEditConfig(state.config);
   const manageComputers = canManageComputers(state.config);
   const manageBackups = canManageBackups(state.config);
+  const manageExperimental = canManageExperimental(state.config);
   // Server mode: this app shows its organization's server only (src/lib/launch.ts).
   const serverMode = useServerMode();
   const lockedServer = serverMode?.active ? serverMode : null;
@@ -530,10 +510,9 @@ export function SettingsModal() {
     // (2026-10-09: and to a person whose profile includes people.activityLog)
     if (id === "activity" && !(servedPage() && (ownerOrAdmin === true || (perspicaxOrg !== null && viewerCan(state.config, "people.activityLog"))))) return false;
     // Installation writes the server refuses with 403: hide the section.
-    if (memberHidesSection(id, { editConfig, manageComputers, manageBackups, organization })) return false;
-    // Decision model and Connected apps (Composio) are experimental, off until their switch is on.
+    if (memberHidesSection(id, { editConfig, manageComputers, manageBackups, organization, manageExperimental })) return false;
+    // Decision model is experimental, off until its switch is on.
     if (id === "decisionModel" && !decisionModelEnabled(state.config)) return false;
-    if (id === "connectedApps" && !connectedAppsEnabled(state.config)) return false;
     // Simple hides technical sections. Their saved values stay.
     return advanced || !simpleHidesSettingsSection(id);
   };
@@ -795,8 +774,11 @@ export function SettingsModal() {
                   )}
                 </SettingsGroup>
                 <SettingsGroup title={t("settings.group.appearance")} groupId="appearance">
-                  <ThemeRow />
+                  {/* the skin, its variant and Light, Dark or Auto are chosen in
+                      one place: Appearance > Skin (2026-10-19) */}
                   <LanguageRow />
+                  {/* the person's own time zone (parity 2E) */}
+                  <TimeZoneRows />
                 </SettingsGroup>
                 <SettingsGroup title={t("settings.group.system")} groupId="system">
                   <MicrophoneRow />
@@ -831,6 +813,7 @@ export function SettingsModal() {
                 <SettingsGroup title={t("settings.updates.group")} groupId="updates">
                   <UpdatesRow />
                   <PrereleaseRow />
+                  <AutoInstallAwayRow />
                 </SettingsGroup>
               </div>
             )}
@@ -842,16 +825,22 @@ export function SettingsModal() {
             {section === "engines" && (
               <div className="flex min-w-0 flex-col gap-6">
                 <EnginesSettings />
-                {/* Connected apps (Composio) and Decision model (2026-10-14):
-                    groups of Models and voice, shown while their experiment is on. */}
-                {allowed("connectedApps") && <ConnectedAppsGroup config={state.config} />}
+                {/* Decision model (2026-10-14): a group of Models and voice,
+                    shown while its experiment is on. */}
                 {allowed("decisionModel") && <DecisionModelSettings />}
               </div>
             )}
 
             {section === "backups" && <WorkspaceBackupSettings />}
+            {section === "import" && <ImportSettings />}
 
-            {section === "security" && <SecurityKeySettings />}
+            {section === "security" && (
+              <>
+                <SecurityKeySettings />
+                {/* every Always allow and Always deny the person saved, revocable (2026-10-19) */}
+                <MyApprovalRules />
+              </>
+            )}
 
             {section === "computer" && <LocalComputerSection />}
 

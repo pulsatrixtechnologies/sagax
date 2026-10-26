@@ -102,3 +102,13 @@ describe("widget document", () => {
     expect(doc).toContain("getBoundingClientRect().height");
   });
 });
+
+describe("widget kit form rows", () => {
+  it("keeps the control look on the input and lets a wrapping label flow as one row", async () => {
+    const { WIDGET_KIT_CSS } = await import("./widget-kit");
+    expect(WIDGET_KIT_CSS).toContain("input.checkbox{appearance:none");
+    expect(WIDGET_KIT_CSS).not.toMatch(/(^|[,}"])\.checkbox\{appearance/);
+    expect(WIDGET_KIT_CSS).toContain("label.checkbox");
+    expect(WIDGET_KIT_CSS).toContain("user-select:none");
+  });
+});

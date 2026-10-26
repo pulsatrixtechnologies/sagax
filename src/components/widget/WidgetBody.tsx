@@ -6,7 +6,8 @@ import { Fragment, useState, type KeyboardEvent } from "react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { widgetNumber, widgetString, type WidgetNode } from "../../../shared/widget";
-import { useWidgetForm, WidgetRadioMark } from "./WidgetControls";
+import { useWidgetForm } from "./WidgetControls";
+import { SheetKey, sheetKey } from "../QuestionSheet";
 import { WIDGET_ROW, WIDGET_ROW_CONTROLS, WidgetListRow, WidgetNodeView } from "./WidgetNodes";
 import { ALIGN, fourSides, kids } from "./widget-style";
 
@@ -143,7 +144,9 @@ function ChoiceRows({ rows, name, required }: { rows: WidgetNode[]; name: string
             )}
             style={{ gap }}
           >
-            <WidgetRadioMark on={checked} invalid={invalid} />
+            {/* the key every question card shows (QuestionSheet), so a
+                widget's one choice reads like any other question */}
+            <SheetKey letter={sheetKey(index)} on={checked} invalid={invalid} />
             {kids(row).map((child, at) => <WidgetNodeView key={child.id ?? at} node={child} where={{ axis: "row", gap, item: true, lead: at === 0 }} />)}
           </div>
         );

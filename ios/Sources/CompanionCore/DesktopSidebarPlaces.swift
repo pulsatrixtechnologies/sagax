@@ -4,10 +4,9 @@
 //
 // - Team map and Automations are not sidebar places on iOS. They live in
 //   the avatar popup, under Settings (`NavigationMenus.accountShortcuts`).
-// - Connected apps and Templates are experimental: each one shows only once
-//   Settings > Experimental features switches it on (`connectedAppsEnabled`,
-//   `templatesEnabled` in src/lib/feature-flags.ts), and only for a pairing
-//   allowed to open it.
+// - Templates is experimental: it shows only once Settings > Experimental
+//   features switches it on (`templatesEnabled` in src/lib/feature-flags.ts),
+//   and only for a pairing allowed to open it.
 // - The gamertag (a trophy and the points) shows under the name when the
 //   server keeps achievements, the snapshot is read and the person did not
 //   turn "Show my points" off.
@@ -16,7 +15,6 @@ import Foundation
 public enum DesktopSidebarPlace: String, CaseIterable, Sendable {
     case teamMap = "team-map"
     case automations
-    case connectedApps = "connected-apps"
     case templates
 }
 
@@ -25,12 +23,10 @@ public enum DesktopSidebarPlaces {
     public static func visible(
         connected: Bool,
         gate: SurfaceGate,
-        connectedAppsOn: Bool,
         templatesOn: Bool
     ) -> [DesktopSidebarPlace] {
         guard connected else { return [] }
         var out: [DesktopSidebarPlace] = []
-        if connectedAppsOn, gate.allows(.connectedApps) { out.append(.connectedApps) }
         // Browse Bots took the Templates place (#253, #259), same switch
         if templatesOn, gate.allows(.browseBots) { out.append(.templates) }
         return out
@@ -41,7 +37,6 @@ public enum DesktopSidebarPlaces {
         visible(
             connected: connected,
             gate: gate,
-            connectedAppsOn: features?.connectedApps == true,
             templatesOn: features?.templates == true
         )
     }

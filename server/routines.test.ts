@@ -4,8 +4,12 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GroupGoalRunStatus } from "../shared/group-goal-run.ts";
+import { isRoutineProblemRun } from "../shared/routines.ts";
+import { ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED } from "./routine-execution.ts";
 import {
   nextOccurrence,
+  PREWAKE_LEAD_MS,
+  PREWARM_ENGINE_LEAD_MS,
   RoutineManager,
   RoutineScheduleError,
   RoutineInputError,
@@ -172,11 +176,14 @@ describe("bounded scheduled overlap and run health", () => {
     expect(new RoutineManager(h.options).listRoutines()[0].overlap).toBeUndefined();
   });
 
-  it("leaves explicit manual requests independent of the scheduled queue", async () => {
+  it("queues an explicit manual request behind the routine's run in progress: one pass at a time", async () => {
     const h = harness(start);
     const routine = h.manager.create({ ...input(), overlap: "queue" });
     h.setNow(start + 5 * 60_000); await h.manager.tick();
     h.manager.runNow(routine.id); await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    expect(h.manager.listRuns().find(run => run.triggerSource === "manual")).toMatchObject({ status: "queued", deferredAt: expect.any(Number) });
+    finish(h, h.started[0]!.threadId, true); await h.manager.tick();
     expect(h.started).toHaveLength(2);
     expect(h.manager.listRuns().map(run => run.triggerSource).sort()).toEqual(["manual", "schedule"]);
   });
@@ -236,6 +243,25 @@ describe("bounded scheduled overlap and run health", () => {
     await h.manager.tick();
   });
 
+  it("tells of a failure once per streak, and again when it changes or after a run completes (port of OpenMausBot #3052)", async () => {
+    const h = harness(start);
+    const alerts: unknown[] = [];
+    h.options.onRunFailed = (_run, alert) => alerts.push(alert);
+    const routine = h.manager.create({ ...input(), enabled: false });
+    const attempt = async (threadId: string, error?: string) => {
+      h.manager.runNow(routine.id); await h.manager.tick();
+      if (error) h.manager.handleRuntimeEvent({ eventId: "error", provider: "fake", threadId, createdAt: new Date().toISOString(), type: "runtime.error", message: error });
+      finish(h, threadId, !error);
+    };
+    await attempt("thread-1", "Bridge rejected the token");
+    await attempt("thread-2", "Bridge rejected the token");
+    await attempt("thread-3", "Bridge rejected the chat id");
+    await attempt("thread-4");
+    await attempt("thread-5", "Bridge rejected the chat id");
+    expect(h.manager.listRuns().map(run => run.status)).toEqual(["failed", "failed", "failed", "completed", "failed"]);
+    expect(alerts).toEqual([undefined, null, undefined, undefined]);
+  });
+
   it("counts restart recovery only once and sanitizes obsolete or invalid health metadata", async () => {
     const h = harness(start);
     const routine = h.manager.create({ ...input(), enabled: false });
@@ -243,12 +269,155 @@ describe("bounded scheduled overlap and run health", () => {
     const disk = JSON.parse(readFileSync(h.options.file!, "utf8"));
     Object.assign(disk.routines[0], { failureStreak: 99, skippedRuns: -1, lastSkippedAt: 9e15, overlap: "invalid" });
     writeFileSync(h.options.file!, JSON.stringify(disk));
+    // The first restart resumes the cut run in place; the second cut fails it.
+    const resumed = new RoutineManager(h.options);
+    expect(resumed.takeRestartResumes()).toEqual([expect.objectContaining({ status: "running", restartResumes: 1 })]);
     for (let i = 0; i < 2; i++) {
       const saved = new RoutineManager(h.options).listRoutines()[0];
       expect(saved.failureStreak).toBe(1);
       expect(saved.skippedRuns).toBeUndefined(); expect(saved.lastSkippedAt).toBeUndefined(); expect(saved.overlap).toBeUndefined();
     }
     expect(() => h.manager.update(routine.id, { overlap: "invalid" as "queue" })).toThrow("skip or queue");
+  });
+});
+
+describe("a run left waiting for the person", () => {
+  const monday = Date.parse("2026-10-12T05:00:00Z");
+  const minutes = (count: number) => count * 60_000;
+  const daily = { name: "Morning check", prompt: "Sign in and check the dashboard", botId: "maus-1",
+    schedule: { type: "cron" as const, expression: "30 7 * * 1-5", timeZone: "Europe/London" } };
+  const event = (threadId: string) => ({ eventId: `event-${threadId}`, provider: "fake", threadId, createdAt: new Date(0).toISOString() });
+  /** The bot asked the person to sign in and ended its turn: its conversation stays parked on them. */
+  const parkOnPerson = (h: ReturnType<typeof harness>, threadId: string) => {
+    const parked = h.options.hasPendingDelegations;
+    h.options.hasPendingDelegations = (candidate) => candidate === threadId || parked?.(candidate) === true;
+    h.manager.handleRuntimeEvent({ ...event(threadId), type: "turn.completed", ok: true });
+  };
+  const ask = (h: ReturnType<typeof harness>, threadId: string) => h.manager.handleRuntimeEvent({
+    ...event(threadId), type: "request.opened", requestType: "question", tool: "ask", summary: "Which account should I use?",
+  });
+
+  it.each(["skip", "queue"] as const)("starts the next day's run instead of skipping it behind an unanswered sign-in (%s overlap)", async (overlap) => {
+    const h = harness(monday);
+    const routine = h.manager.create({ ...daily, ...(overlap === "queue" ? { overlap } : {}) });
+    const day1 = routine.nextRunAt!;
+    expect(new Date(day1).toISOString()).toBe("2026-10-12T06:30:00.000Z");
+    h.setNow(day1); await h.manager.tick();
+    h.setNow(day1 + minutes(2)); parkOnPerson(h, "thread-1");
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "waiting", waitingSince: day1 + minutes(2) });
+
+    const day2 = h.manager.listRoutines()[0].nextRunAt!;
+    expect(new Date(day2).toISOString()).toBe("2026-10-13T06:30:00.000Z");
+    h.setNow(day2); await h.manager.tick();
+
+    const [today, yesterday] = h.manager.listRuns();
+    expect(yesterday).toMatchObject({ status: "cancelled", error: ROUTINE_SUPERSEDED, finishedAt: day2, threadId: "thread-1" });
+    expect(today).toMatchObject({ status: "running", scheduledFor: day2, triggerSource: "schedule", threadId: "thread-2" });
+    expect(h.interruptedTurns).toEqual([{ botId: "maus-1", threadId: "thread-1" }]);
+    expect(h.started.map((turn) => turn.threadId)).toEqual(["thread-1", "thread-2"]);
+    expect(h.failed).toEqual([]);
+    expect(h.manager.listRoutines()[0]).toMatchObject({ nextRunAt: Date.parse("2026-10-14T06:30:00Z") });
+    expect(h.manager.listRoutines()[0].skippedRuns).toBeUndefined();
+    expect(JSON.parse(readFileSync(h.options.file!, "utf8")).runs.find((run: RoutineRun) => run.threadId === "thread-1"))
+      .toMatchObject({ status: "cancelled", error: ROUTINE_SUPERSEDED });
+  });
+
+  it("leaves a question asked shortly before the next occurrence alone, then replaces it at the one after", async () => {
+    const h = harness(monday);
+    const routine = h.manager.create({ ...daily, schedule: { type: "interval", everyMinutes: 60, anchorAt: monday } });
+    const first = routine.nextRunAt!;
+    h.setNow(first); await h.manager.tick();
+    h.setNow(first + minutes(5)); ask(h, "thread-1");
+    h.setNow(first + minutes(10));
+    h.manager.handleRuntimeEvent({ ...event("thread-1"), type: "request.resolved", behavior: "answer", source: "user" });
+    h.setNow(first + minutes(45)); ask(h, "thread-1");
+
+    h.setNow(first + minutes(60)); await h.manager.tick();
+    expect(h.manager.listRuns()).toHaveLength(1);
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "waiting", waitingSince: first + minutes(45) });
+    expect(h.manager.listRoutines()[0]).toMatchObject({ skippedRuns: 1, lastSkippedAt: first + minutes(60) });
+    expect(h.failed).toEqual([]);
+
+    h.setNow(first + minutes(120)); await h.manager.tick();
+    const [next, asked] = h.manager.listRuns();
+    expect(asked).toMatchObject({ status: "cancelled", error: ROUTINE_SUPERSEDED, threadId: "thread-1" });
+    expect(next).toMatchObject({ status: "running", scheduledFor: first + minutes(120), threadId: "thread-2" });
+    expect(h.interruptedTurns).toEqual([{ botId: "maus-1", threadId: "thread-1" }]);
+  });
+
+  it.each(["skip", "queue"] as const)("keeps today's %s overlap behind a run that was answered and is still working", async (overlap) => {
+    const h = harness(monday);
+    const routine = h.manager.create({ ...daily, ...(overlap === "queue" ? { overlap } : {}) });
+    h.setNow(routine.nextRunAt!); await h.manager.tick();
+    h.setNow(routine.nextRunAt! + minutes(5)); ask(h, "thread-1");
+    h.setNow(routine.nextRunAt! + minutes(10));
+    h.manager.handleRuntimeEvent({ ...event("thread-1"), type: "request.resolved", behavior: "answer", source: "user" });
+    const day2 = h.manager.listRoutines()[0].nextRunAt!;
+    h.setNow(day2); await h.manager.tick();
+    h.setNow(day2 + minutes(31)); await h.manager.tick();
+
+    expect(h.started).toHaveLength(1);
+    expect(h.interruptedTurns).toEqual([]);
+    expect(h.failed).toEqual([]);
+    expect(h.manager.listRuns().find((run) => run.threadId === "thread-1")?.status).toBe("running");
+    if (overlap === "skip") {
+      expect(h.manager.listRuns()).toHaveLength(1);
+      expect(h.manager.listRoutines()[0]).toMatchObject({ skippedRuns: 1, lastSkippedAt: day2 });
+      expect(h.deferred).toEqual([]);
+    } else {
+      expect(h.manager.listRuns()[0]).toMatchObject({ status: "queued", scheduledFor: day2, deferredAt: day2 });
+      expect(h.deferred).toHaveLength(1);
+    }
+  });
+
+  it("keeps a run whose delegated work is still open, and tells the owner once about the occurrences it skips", async () => {
+    const h = harness(monday);
+    h.options.handedOffWorkLive = (threadId) => threadId === "thread-1";
+    const routine = h.manager.create({ ...daily, schedule: { type: "interval", everyMinutes: 5, anchorAt: monday } });
+    h.setNow(routine.nextRunAt!); await h.manager.tick();
+    parkOnPerson(h, "thread-1");
+    for (let minute = 10; minute <= 120; minute += 5) {
+      h.setNow(monday + minutes(minute)); await h.manager.tick();
+    }
+
+    const missed = h.manager.listRuns().filter((run) => run.status === "missed");
+    expect(missed).toEqual([expect.objectContaining({ error: ROUTINE_SKIPPED_WHILE_WAITING, scheduledFor: monday + minutes(35) })]);
+    expect(h.failed.map((run) => run.id)).toEqual([missed[0]!.id]);
+    expect(h.manager.listRuns().find((run) => run.threadId === "thread-1")?.status).toBe("waiting");
+    expect(h.interruptedTurns).toEqual([]);
+    expect(h.started).toHaveLength(1);
+    expect(h.manager.listRoutines()[0].skippedRuns).toBe(23);
+  });
+
+  it("replaces a waiting run-now and a room goal that needs input through the same stop as the Stop button", async () => {
+    const h = harness(monday);
+    const bot = h.manager.create(daily);
+    const room = h.manager.create({ ...daily, name: "Team check", target: "room-goal", botId: "chief-1", groupId: "room-1" });
+    h.manager.runNow(bot.id); await h.manager.tick();
+    h.setNow(bot.nextRunAt! - minutes(40)); ask(h, "thread-1");
+    h.setNow(room.nextRunAt!); await h.manager.tick();
+    const goal = h.manager.listRuns().find((run) => run.target === "room-goal")!;
+    h.setNow(room.nextRunAt! + minutes(1));
+    expect(h.manager.finishGoalRun(goal.id, "needs-input", "Which launch date?")).toMatchObject({ status: "waiting" });
+
+    expect(h.manager.listRuns().find((run) => run.manual)).toMatchObject({ status: "cancelled", error: ROUTINE_SUPERSEDED });
+    const day2 = h.manager.listRoutines().find((routine) => routine.id === room.id)!.nextRunAt!;
+    h.setNow(day2); await h.manager.tick();
+    expect(h.manager.listRuns().find((run) => run.id === goal.id)).toMatchObject({ status: "cancelled", goalStatus: "stopped", error: ROUTINE_SUPERSEDED });
+    expect(h.interruptedGoals).toEqual([{ groupId: "room-1", threadId: "goal-thread-1" }]);
+    expect(h.startedGoals).toHaveLength(2);
+  });
+
+  it("keeps the wait when this computer was offline too long to start the occurrence", async () => {
+    const h = harness(monday);
+    const routine = h.manager.create(daily);
+    h.setNow(routine.nextRunAt!); await h.manager.tick();
+    parkOnPerson(h, "thread-1");
+    h.setNow(h.manager.listRoutines()[0].nextRunAt! + minutes(13 * 60)); await h.manager.tick();
+
+    expect(h.interruptedTurns).toEqual([]);
+    expect(h.manager.listRuns().map((run) => run.status)).toEqual(["missed", "waiting"]);
+    expect(h.started).toHaveLength(1);
   });
 });
 
@@ -594,7 +763,8 @@ describe("persistent routine results destinations", () => {
       // their matching destination and receipt in the already-saved file.
       expect(observations.length).toBeGreaterThan(0);
       for (const { payload, persisted: saved } of observations) {
-        const value = payload.kind === "routine" ? payload.routine : payload.run;
+        // A week's tally is derived from the runs on every read, never stored on the routine.
+        const { weekRuns: _derived, ...value } = payload.kind === "routine" ? payload.routine : payload.run;
         const records = payload.kind === "routine" ? saved.routines : saved.runs;
         expect(records.find((record: any) => record.id === value.id)).toEqual(JSON.parse(JSON.stringify(value)));
       }
@@ -1153,7 +1323,13 @@ describe("RoutineManager", () => {
       h.failed.push(run);
       failureWasPersistedBeforeCallback = readFileSync(routineFile, "utf8").includes('"status": "failed"');
     };
+    // The first reload resumes the cut run once, in its own thread.
+    const resumed = new RoutineManager(h.options);
+    expect(resumed.takeRestartResumes()).toMatchObject([{ routineId: routine.id, status: "running", threadId: "thread-1", restartResumes: 1 }]);
+    expect(h.failed).toEqual([]);
+    // Cut a second time, it fails.
     const reloaded = new RoutineManager(h.options);
+    expect(reloaded.takeRestartResumes()).toEqual([]);
     expect(reloaded.listRoutines()).toHaveLength(1);
     expect(reloaded.listRuns()).toMatchObject([
       {
@@ -2192,9 +2368,10 @@ describe("RoutineManager", () => {
     expect(runs.get(otherRoomRun.id)).toMatchObject({ status: "running", groupId: "room-2" });
     expect(runs.get(botRun.id)).toMatchObject({ status: "running", target: "bot" });
 
+    // The second Run now of that routine waited for the first (one pass at
+    // a time), so only the first had a goal thread to interrupt.
     expect(h.interruptedGoals).toEqual([
       { groupId: "room-1", threadId: "goal-thread-1" },
-      { groupId: "room-1", threadId: "goal-thread-2" },
     ]);
     expect(h.interruptedTurns).toEqual([]);
     expect(h.changed.map((run) => run.id)).toEqual([waitingRun.id, runningRun.id, queuedRun.id]);
@@ -2724,10 +2901,35 @@ describe("RoutineManager", () => {
     expect(h.failed).toHaveLength(1);
   });
 
-  // rpc_error and auth_required: production 2026-10-08, a Grok 402 showed as a
+  it.each([
+    // a Cloud run's Claude turn: its api-error frame is the run's error row, its result's stop token says nothing
+    ["stop_sequence", 'Your Claude account is out of credits (Claude says: "Credit balance is too low"). Add credits with Claude, then run it again.',
+      'Your Claude account is out of credits (Claude says: "Credit balance is too low"). Add credits with Claude, then run it again.'],
+    ["stop_sequence", undefined, "The engine stopped without saying why (stop reason: stop_sequence)."],
+    ["rpc_error", undefined, "The engine stopped without saying why (stop reason: rpc_error)."],
+    [undefined, undefined, "The bot did not complete this run"],
+  ])("records a failed run's real cause, never a bare stop token (%s)", async (stopReason, error, expected) => {
+    const h = harness();
+    const routine = h.manager.create({
+      name: "Morning report",
+      prompt: "Write the report",
+      botId: "maus-failed",
+      schedule: { type: "once", at: new Date(2026, 7, 17, 8, 1).getTime() },
+    });
+    h.setNow(routine.nextRunAt!);
+    await h.manager.tick();
+    const base = { provider: "claude", threadId: "thread-1", createdAt: new Date().toISOString() };
+    if (error) h.manager.handleRuntimeEvent({ ...base, eventId: "runtime-error", type: "runtime.error", message: error });
+    h.manager.handleRuntimeEvent({ ...base, eventId: "turn-completed", type: "turn.completed", ok: false, stopReason });
+
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "failed", error: expected });
+    expect(h.failed).toMatchObject([{ error: expected }]);
+  });
+
+  // rpc_error: production 2026-10-08, a Grok 402 showed as a
   // bare "Failed: rpc_error" in the routine modal. "quota" and
   // "stop_sequence": an account past its weekly limit (Oct 9-10).
-  it.each(["error", "tool_error", "rpc_error", "auth_required", "quota", "stop_sequence"])(
+  it.each(["error", "tool_error", "rpc_error", "quota", "stop_sequence"])(
     "keeps the run's own error over the provider's stop token %s",
     async (stopReason) => {
       const h = harness();
@@ -2903,6 +3105,95 @@ describe("RoutineManager", () => {
     expect(h.manager.clearRuns(() => true)).toHaveLength(1);
     expect([...byName().keys()]).toEqual(["My running"]);
     expect(h.manager.clearRuns(() => true)).toEqual([]);
+  });
+
+  describe("deleting a routine", () => {
+    const finish = (h: ReturnType<typeof harness>, threadId: string, ok: boolean) => h.manager.handleRuntimeEvent({
+      eventId: `${threadId}-done`, provider: "fake", threadId, createdAt: new Date().toISOString(),
+      type: "turn.completed", ok, ...(ok ? {} : { stopReason: "provider crashed" }),
+    });
+    const needsYou = (h: ReturnType<typeof harness>) => h.manager.listRuns().some((run) => isRoutineProblemRun(run) && !run.seenAt);
+    const nextRunAt = (h: ReturnType<typeof harness>, id: string) => h.manager.listRoutines().find((routine) => routine.id === id)!.nextRunAt!;
+
+    /** A daily routine with a seen failure, a completion, an unseen failure and an unseen miss, beside a kept routine's unseen failure. */
+    async function history() {
+      const h = harness();
+      const doomed = h.manager.create({
+        name: "Doomed daily", prompt: "Check it", botId: "maus-1",
+        schedule: { type: "daily", time: "08:05", weekdays: [0, 1, 2, 3, 4, 5, 6] },
+      });
+      h.setNow(nextRunAt(h, doomed.id));
+      await h.manager.tick();
+      finish(h, "thread-1", false);
+      const seenFailure = h.manager.listRuns()[0]!;
+      h.manager.markSeen(seenFailure.id);
+      h.setNow(nextRunAt(h, doomed.id));
+      await h.manager.tick();
+      finish(h, "thread-2", true);
+      h.setNow(nextRunAt(h, doomed.id));
+      await h.manager.tick();
+      finish(h, "thread-3", false);
+      h.setNow(nextRunAt(h, doomed.id) + 13 * 60 * 60_000);
+      await h.manager.tick();
+      const kept = h.manager.create({
+        name: "Kept report", prompt: "Write it", botId: "maus-2",
+        schedule: { type: "once", at: h.options.now!() + 60_000 },
+      });
+      h.setNow(kept.nextRunAt!);
+      await h.manager.tick();
+      finish(h, "thread-4", false);
+      const statuses = (name: string) => h.manager.listRuns().filter((run) => run.routineName === name)
+        .sort((a, b) => a.scheduledFor - b.scheduledFor).map((run) => run.status);
+      expect(statuses("Doomed daily")).toEqual(["failed", "completed", "failed", "missed"]);
+      expect(statuses("Kept report")).toEqual(["failed"]);
+      return { h, doomed, kept, seenFailure };
+    }
+
+    it("resolves its unseen failed and missed runs in the same mutation, and leaves every other run alone", async () => {
+      const { h, doomed, seenFailure } = await history();
+      const seenAt = h.manager.listRuns().find((run) => run.id === seenFailure.id)!.seenAt!;
+      h.emitted.length = 0;
+      const stampAt = h.options.now!() + 60_000;
+      h.setNow(stampAt);
+
+      expect(h.manager.remove(doomed.id)).toBe(true);
+
+      const doomedRuns = h.manager.listRuns().filter((run) => run.routineName === "Doomed daily")
+        .sort((a, b) => a.scheduledFor - b.scheduledFor);
+      expect(doomedRuns.map((run) => [run.status, run.seenAt])).toEqual([
+        ["failed", seenAt], ["completed", undefined], ["failed", stampAt], ["missed", stampAt],
+      ]);
+      const kept = h.manager.listRuns().find((run) => run.routineName === "Kept report")!;
+      expect(kept.seenAt).toBeUndefined();
+      const runFrames = h.emitted.filter((frame) => frame.kind === "routine.run");
+      expect(runFrames.map((frame) => [frame.run.status, frame.run.seenAt])).toEqual(
+        expect.arrayContaining([["failed", stampAt], ["missed", stampAt]]),
+      );
+      expect(runFrames).toHaveLength(2);
+      expect(h.emitted.some((frame) => frame.kind === "routine.deleted" && frame.routineId === doomed.id)).toBe(true);
+      const reloaded = new RoutineManager(h.options).listRuns().filter((run) => run.routineName === "Doomed daily");
+      expect(reloaded.filter((run) => isRoutineProblemRun(run) && !run.seenAt)).toEqual([]);
+    });
+
+    it("turns the Routines indicator off when the deleted routine held the only unseen problems", async () => {
+      const { h, doomed, kept } = await history();
+      h.manager.markSeen(h.manager.listRuns().find((run) => run.routineName === "Kept report")!.id);
+      expect(needsYou(h)).toBe(true);
+      h.manager.remove(doomed.id);
+      expect(needsYou(h)).toBe(false);
+      expect(h.manager.listRoutines().map((routine) => routine.id)).toEqual([kept.id]);
+    });
+
+    it("keeps its runs unseen when the delete cannot be saved", async () => {
+      const { h, doomed } = await history();
+      h.emitted.length = 0;
+      const save = vi.spyOn(h.manager as unknown as { save(): void }, "save").mockImplementationOnce(() => { throw new Error("fixture disk full"); });
+      expect(() => h.manager.remove(doomed.id)).toThrow("fixture disk full");
+      save.mockRestore();
+      expect(h.manager.listRoutines().some((routine) => routine.id === doomed.id)).toBe(true);
+      expect(h.manager.listRuns().filter((run) => run.routineName === "Doomed daily" && isRoutineProblemRun(run) && !run.seenAt)).toHaveLength(2);
+      expect(h.emitted).toHaveLength(0);
+    });
   });
 
   it("keeps recurring history while advancing the definition", async () => {
@@ -3707,5 +3998,359 @@ describe("the organization memory before a run (2026-10-11)", () => {
     h.manager.runNow(routine.id);
     await h.manager.tick();
     expect(h.started.map((turn) => turn.prompt)).toEqual(["Triage the new tickets"]);
+  });
+});
+
+describe("pre-waking a scheduled run's environment (2026-10-19)", () => {
+  const start = Date.parse("2026-10-19T18:00:00Z");
+  it("asks once per occurrence, PREWAKE_LEAD_MS before it is due, and never for a disabled routine", async () => {
+    const h = harness(start);
+    const asked: Array<{ id: string; dueAt: number }> = [];
+    h.options.prewake = (routine, dueAt) => asked.push({ id: routine.id, dueAt });
+    const routine = h.manager.create({ name: "Dispatch", prompt: "Dispatch", botId: "maus-1",
+      schedule: { type: "interval", everyMinutes: 60, anchorAt: start + 60 * 60_000 } });
+    h.manager.create({ name: "Off", prompt: "Off", botId: "maus-1", enabled: false,
+      schedule: { type: "interval", everyMinutes: 60, anchorAt: start + 60 * 60_000 } });
+    const dueAt = h.manager.getRoutine(routine.id)!.nextRunAt!;
+    await h.manager.tick();
+    expect(asked).toEqual([]);
+    h.setNow(dueAt - PREWAKE_LEAD_MS - 1_000);
+    await h.manager.tick();
+    expect(asked).toEqual([]);
+    h.setNow(dueAt - PREWAKE_LEAD_MS + 1_000);
+    await h.manager.tick();
+    await h.manager.tick();
+    expect(asked).toEqual([{ id: routine.id, dueAt }]);
+    h.setNow(dueAt);
+    await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    const next = h.manager.getRoutine(routine.id)!.nextRunAt!;
+    expect(next).toBeGreaterThan(dueAt);
+    h.setNow(next - PREWAKE_LEAD_MS + 1_000);
+    await h.manager.tick();
+    expect(asked).toEqual([{ id: routine.id, dueAt }, { id: routine.id, dueAt: next }]);
+  });
+
+  it("a failing prewake never stops the schedule", async () => {
+    const h = harness(start);
+    h.options.prewake = () => { throw new Error("cluster gone"); };
+    const routine = h.manager.create({ name: "Dispatch", prompt: "Dispatch", botId: "maus-1",
+      schedule: { type: "interval", everyMinutes: 60, anchorAt: start + 5 * 60_000 } });
+    await h.manager.tick();
+    h.setNow(h.manager.getRoutine(routine.id)!.nextRunAt!);
+    await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+  });
+});
+
+
+describe("pre-warming a scheduled run's engine (2026-10-19 perf parity)", () => {
+  const start = Date.parse("2026-10-19T18:00:00Z");
+  function warmHarness() {
+    const h = harness(start);
+    const reserved: Array<{ botId: string; title: string; threadId: string }> = [];
+    const warmed: Array<{ id: string; threadId: string }> = [];
+    const claimed: string[] = [];
+    const released: string[] = [];
+    let n = 0;
+    h.options.reserveTask = (botId, title) => {
+      const threadId = `reserved-${++n}`;
+      reserved.push({ botId, title, threadId });
+      return { threadId };
+    };
+    h.options.claimReservedTask = (_botId, threadId) => claimed.push(threadId);
+    h.options.releaseReservedTask = (_botId, threadId) => released.push(threadId);
+    h.options.prewarmEngine = (routine, _dueAt, threadId) => warmed.push({ id: routine.id, threadId });
+    return { ...h, reserved, warmed, claimed, released };
+  }
+
+  it("reserves and warms the run's task once, PREWARM_ENGINE_LEAD_MS ahead, and the run takes it", async () => {
+    const h = warmHarness();
+    const routine = h.manager.create({ name: "Dispatch", prompt: "Dispatch", botId: "maus-1",
+      schedule: { type: "interval", everyMinutes: 60, anchorAt: start + 60 * 60_000 } });
+    const dueAt = h.manager.getRoutine(routine.id)!.nextRunAt!;
+    h.setNow(dueAt - PREWARM_ENGINE_LEAD_MS - 1_000);
+    await h.manager.tick();
+    expect(h.warmed).toEqual([]);
+    h.setNow(dueAt - PREWARM_ENGINE_LEAD_MS + 1_000);
+    await h.manager.tick();
+    await h.manager.tick();
+    expect(h.warmed).toEqual([{ id: routine.id, threadId: "reserved-1" }]);
+    h.setNow(dueAt);
+    await h.manager.tick();
+    expect(h.started).toEqual([expect.objectContaining({ threadId: "reserved-1" })]);
+    expect(h.claimed).toEqual(["reserved-1"]);
+    expect(h.taskTitles).toEqual([]);
+    expect(h.released).toEqual([]);
+  });
+
+  it("releases a reserved task no run took, and a manual run never takes it", async () => {
+    const h = warmHarness();
+    const routine = h.manager.create({ name: "Dispatch", prompt: "Dispatch", botId: "maus-1",
+      schedule: { type: "interval", everyMinutes: 60, anchorAt: start + 60 * 60_000 } });
+    const dueAt = h.manager.getRoutine(routine.id)!.nextRunAt!;
+    h.setNow(dueAt - 30_000);
+    await h.manager.tick();
+    expect(h.warmed).toHaveLength(1);
+    h.manager.runNow(routine.id);
+    await h.manager.tick();
+    expect(h.started[0]!.threadId).not.toBe("reserved-1");
+    h.manager.update(routine.id, { enabled: false });
+    await h.manager.tick();
+    expect(h.released).toEqual(["reserved-1"]);
+  });
+
+  it("warms nothing without the hooks (no reservation)", async () => {
+    const h = harness(start);
+    const warmed: string[] = [];
+    h.options.prewarmEngine = (_routine, _dueAt, threadId) => warmed.push(threadId);
+    const routine = h.manager.create({ name: "Dispatch", prompt: "Dispatch", botId: "maus-1",
+      schedule: { type: "interval", everyMinutes: 60, anchorAt: start + 60 * 60_000 } });
+    h.setNow(h.manager.getRoutine(routine.id)!.nextRunAt! - 30_000);
+    await h.manager.tick();
+    expect(warmed).toEqual([]);
+  });
+});
+
+it("starts a routine at its due time, not at the next 10 s tick", async () => {
+  vi.useFakeTimers();
+  try {
+    const at = Date.parse("2026-10-20T15:00:00Z");
+    const h = harness(at - 60_000);
+    h.manager.create({ name: "On time", prompt: "Go", botId: "maus-1", schedule: { type: "once", at } });
+    h.manager.start();
+    await vi.advanceTimersByTimeAsync(0);
+    // the regular tick 3 s before it is due arms a wake at its time
+    h.setNow(at - 3_000);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(h.started).toHaveLength(0);
+    h.setNow(at);
+    await vi.advanceTimersByTimeAsync(3_005);
+    expect(h.started).toHaveLength(1);
+    h.manager.stop();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+describe("routine pre-check and nothing_to_report", () => {
+  const start = Date.parse("2026-10-20T08:00:00Z");
+  const input = () => ({ name: "Poll", prompt: "Check for news", botId: "maus-1",
+    schedule: { type: "interval" as const, everyMinutes: 5, anchorAt: start } });
+  const finish = (h: ReturnType<typeof harness>, threadId: string, ok: boolean) => h.manager.handleRuntimeEvent({
+    eventId: `done-${threadId}`, provider: "fake", threadId, createdAt: new Date().toISOString(), type: "turn.completed", ok,
+  });
+
+  it("without a pre-check, a due run starts its turn as before", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    expect(routine.precheck).toBeUndefined();
+    h.setNow(routine.nextRunAt!); await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+  });
+
+  it("a false condition records nothing_to_report, starts no turn, notifies nobody, and advances nextRunAt", async () => {
+    const h = harness(start);
+    const evaluated: unknown[] = [];
+    h.options.evaluatePrecheck = (_precheck, facts) => { evaluated.push(facts); return { wake: false, reason: "No change" }; };
+    const routine = h.manager.create({ ...input(), precheck: { kind: "condition", test: "every_nth", every: 3 } });
+    const due = routine.nextRunAt!;
+    h.setNow(due); await h.manager.tick(); await h.manager.tick();
+    const run = h.manager.listRuns()[0];
+    expect(run.status).toBe("nothing_to_report");
+    expect(run.quietReason).toBe("No change");
+    expect(evaluated).toHaveLength(1);
+    expect(h.started).toHaveLength(0);
+    // No lifecycle card at all, not even a queued one, so the chat stays clean.
+    expect(h.changed).toHaveLength(0);
+    expect(h.failed).toHaveLength(0);
+    expect(h.taskTitles).toHaveLength(0);
+    expect(h.manager.listRoutines()[0].nextRunAt).toBeGreaterThan(due);
+    expect(isRoutineProblemRun(run)).toBe(false);
+  });
+
+  it("a woken run shows its card from the start of its turn", async () => {
+    const h = harness(start);
+    h.options.evaluatePrecheck = () => ({ wake: true });
+    const routine = h.manager.create({ ...input(), precheck: { kind: "condition", test: "every_nth", every: 2 } });
+    h.setNow(routine.nextRunAt!); await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    expect(h.changed.some(changed => changed.status === "running")).toBe(true);
+  });
+
+  it("the pure every_nth condition wakes on its third occurrence", async () => {
+    const h = harness(start);
+    const routine = h.manager.create({ ...input(), precheck: { kind: "condition", test: "every_nth", every: 3 } });
+    for (let i = 0; i < 3; i += 1) {
+      h.setNow(routine.nextRunAt! + i * 5 * 60_000); await h.manager.tick(); await h.manager.tick();
+    }
+    expect(h.manager.listRuns().filter(run => run.status === "nothing_to_report")).toHaveLength(2);
+    expect(h.started).toHaveLength(1);
+  });
+
+  it("a true condition runs normally; Run now skips the pre-check", async () => {
+    const h = harness(start);
+    h.options.evaluatePrecheck = () => ({ wake: true });
+    const routine = h.manager.create({ ...input(), precheck: { kind: "condition", test: "elapsed_since_report", minMinutes: 1 } });
+    h.setNow(routine.nextRunAt!); await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    h.options.evaluatePrecheck = () => ({ wake: false, reason: "quiet" });
+    finish(h, "thread-1", true);
+    h.manager.runNow(routine.id); await h.manager.tick();
+    expect(h.started).toHaveLength(2);
+  });
+
+  it.each([
+    ["throws", () => { throw new Error("broken check"); }, /broken check/],
+    ["times out", () => new Promise<never>(() => {}), /did not answer/],
+  ])("a pre-check that %s fails the run with its reason and starts no turn", async (_label, evaluate, reason) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const h = harness(start);
+      h.options.evaluatePrecheck = evaluate as never;
+      const routine = h.manager.create({ ...input(), precheck: { kind: "condition", test: "every_nth", every: 2 } });
+      h.setNow(routine.nextRunAt!);
+      const ticking = h.manager.tick();
+      await vi.advanceTimersByTimeAsync(6_000);
+      await ticking;
+      const run = h.manager.listRuns()[0];
+      expect(run.status).toBe("failed");
+      expect(run.error).toMatch(/Pre-check failed/);
+      expect(run.error).toMatch(reason);
+      expect(h.started).toHaveLength(0);
+      expect(h.failed).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects a malformed pre-check, and null removes one", () => {
+    const h = harness(start);
+    expect(() => h.manager.create({ ...input(), precheck: { kind: "script", command: "true" } as never })).toThrow(/pre-check/);
+    const routine = h.manager.create({ ...input(), precheck: { kind: "condition", test: "every_nth", every: 2 } });
+    expect(h.manager.update(routine.id, { name: "Renamed" })?.precheck).toEqual({ kind: "condition", test: "every_nth", every: 2 });
+    expect(h.manager.update(routine.id, { precheck: null })?.precheck).toBeUndefined();
+  });
+
+  it("nothing_to_report neither breaks nor extends a failure streak", async () => {
+    const h = harness(start);
+    let wake = true;
+    h.options.evaluatePrecheck = () => wake ? { wake: true } : { wake: false, reason: "quiet" };
+    const routine = h.manager.create({ ...input(), precheck: { kind: "condition", test: "every_nth", every: 2 } });
+    h.setNow(routine.nextRunAt!); await h.manager.tick();
+    finish(h, "thread-1", false);
+    expect(h.manager.listRoutines()[0].failureStreak).toBe(1);
+    wake = false;
+    h.setNow(h.manager.listRoutines()[0].nextRunAt!); await h.manager.tick(); await h.manager.tick();
+    expect(h.manager.listRuns().some(run => run.status === "nothing_to_report")).toBe(true);
+    expect(h.manager.listRoutines()[0].failureStreak).toBe(1);
+  });
+});
+
+describe("background runs: nothing to report (JC 2026-10-22)", () => {
+  const at = new Date(2026, 7, 17, 8, 1).getTime();
+  const runOnce = async (output: string, prompt = "Check the invoices") => {
+    const h = harness();
+    const routine = h.manager.create({ name: "Acme invoices without PO", prompt, botId: "maus-1", schedule: { type: "once", at } });
+    h.setNow(routine.nextRunAt!);
+    await h.manager.tick();
+    const base = { eventId: "e", provider: "fake", threadId: "thread-1", createdAt: new Date(at).toISOString() };
+    h.manager.handleRuntimeEvent({ ...base, type: "item.completed", itemType: "assistant_text", text: output });
+    const settled = h.manager.handleRuntimeEvent({ ...base, type: "turn.completed", ok: true });
+    return { h, settled, run: h.manager.listRuns()[0]! };
+  };
+
+  it("a run that ends with the marker completes quiet, keeps its note in the logs, without the marker", async () => {
+    const { h, settled, run } = await runOnce("Checked 12 invoices, all have a PO.\n\nNOTHING_TO_REPORT");
+    expect(run).toMatchObject({ status: "completed", quiet: true, output: "Checked 12 invoices, all have a PO." });
+    // the wiring is told, so it can stay out of the chat
+    expect(settled).toMatchObject({ status: "completed", quiet: true });
+    expect(h.changed.at(-1)).toMatchObject({ status: "completed", quiet: true });
+  });
+
+  it("the Acme run with the marker completes quiet; a bare multi-sentence no-op posts", async () => {
+    const acme = "The 8:40 run is the invoicing-days boost. October 22 is outside days 1-5, so this pass ends with nothing to report.";
+    const withMarker = await runOnce(`${acme}\n\nNOTHING_TO_REPORT`);
+    expect(withMarker.run).toMatchObject({ status: "completed", quiet: true, output: acme });
+    // Without the marker, a whole message that is not a pure no-op is NOT
+    // auto-silenced (JC review 2026-10-22): the marker is the real mechanism.
+    const bare = await runOnce(acme);
+    expect(bare.run.status).toBe("completed");
+    expect(bare.run.quiet).toBeUndefined();
+  });
+
+  it("a run with a result is not quiet", async () => {
+    const { run } = await runOnce("3 invoices without a PO: #1201, #1207, #1210.");
+    expect(run.status).toBe("completed");
+    expect(run.quiet).toBeUndefined();
+  });
+
+  it("quiet survives a restart", async () => {
+    const { h } = await runOnce("NOTHING_TO_REPORT");
+    const again = new RoutineManager({ ...h.options });
+    expect(again.listRuns()[0]).toMatchObject({ status: "completed", quiet: true });
+  });
+
+  it("a room goal that completes with nothing to report is quiet", async () => {
+    const h = harness();
+    const routine = h.manager.create({
+      name: "Team check", prompt: "Check, silent if nothing", target: "room-goal", botId: "chief-1", groupId: "room-1",
+      schedule: { type: "once", at },
+    });
+    h.setNow(routine.nextRunAt!);
+    await h.manager.tick();
+    const run = h.manager.listRuns()[0]!;
+    expect(h.manager.finishGoalRun(run.id, "completed", "Nothing to report.")).toMatchObject({ status: "completed", quiet: true });
+    const reported = harness();
+    const second = reported.manager.create({
+      name: "Team check", prompt: "Check", target: "room-goal", botId: "chief-1", groupId: "room-1",
+      schedule: { type: "once", at },
+    });
+    reported.setNow(second.nextRunAt!);
+    await reported.manager.tick();
+    const done = reported.manager.finishGoalRun(reported.manager.listRuns()[0]!.id, "completed", "Two clients need a call back.");
+    expect(done?.quiet).toBeUndefined();
+  });
+});
+
+describe("postResults migration and per-routine choice (JC 2026-10-22)", () => {
+  it("pins every existing routine to postResults=true once, then marks the file migrated", () => {
+    const file = tempFile();
+    writeFileSync(file, JSON.stringify({
+      version: 1,
+      routines: [{
+        id: "old", routineId: "old", name: "Existing", prompt: "Do it", botId: "maus-1", target: "bot", runOn: "maus",
+        schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.parse("2026-01-01T00:00:00Z") },
+        durationMinutes: 30, enabled: true, nextRunAt: null, createdAt: 1, updatedAt: 1,
+      }],
+      runs: [],
+    }));
+    const opts = { file, now: () => Date.parse("2026-10-22T12:00:00Z"), botState: () => "ready" as const,
+      createTask: () => ({ threadId: "t" }), startTurn: async () => {} };
+    const first = new RoutineManager(opts);
+    expect(first.listRoutines()[0]?.postResults).toBe(true);
+    const saved = JSON.parse(readFileSync(file, "utf8"));
+    expect(saved.postResultsMigrated).toBe(true);
+    expect(saved.routines[0].postResults).toBe(true);
+    // A new routine made after the migration stays silent by default (undefined).
+    const fresh = first.create({ name: "New", prompt: "Do it", botId: "maus-1",
+      schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.parse("2026-11-01T00:00:00Z") } });
+    expect(fresh.postResults).toBeUndefined();
+    // A reload does not pin it (migration already done).
+    const second = new RoutineManager({ ...opts, now: () => Date.parse("2026-10-22T13:00:00Z") });
+    expect(second.getRoutine(fresh.id)?.postResults).toBeUndefined();
+    expect(second.getRoutine("old")?.postResults).toBe(true);
+  });
+
+  it("stores an explicit per-routine choice and clears it with null", () => {
+    const h = harness();
+    const routine = h.manager.create({ name: "R", prompt: "Do it", botId: "maus-1", postResults: true,
+      schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } });
+    expect(routine.postResults).toBe(true);
+    expect(h.manager.update(routine.id, { postResults: false })?.postResults).toBe(false);
+    expect(h.manager.update(routine.id, { postResults: null })?.postResults).toBeUndefined();
+    // omitting it preserves the stored value
+    expect(h.manager.update(routine.id, { postResults: true })?.postResults).toBe(true);
+    expect(h.manager.update(routine.id, { name: "R2" })?.postResults).toBe(true);
   });
 });

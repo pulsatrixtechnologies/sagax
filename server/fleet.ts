@@ -5,8 +5,9 @@
 // argument lists as steps, so what the CLI does as root is inspectable and
 // testable, and nothing here ever builds a shell command string.
 import { posix } from "node:path";
+import { globalPackageEntry, NPM_PACKAGE, pinnedInstallSpec } from "./npm-package.ts";
 
-const { join } = posix;
+const { basename, join } = posix;
 
 /** A workspace name: DNS label and Unix user suffix at once. */
 export const FLEET_SLUG = /^[a-z][a-z0-9-]{1,30}$/;
@@ -484,12 +485,28 @@ export function deletePlan(input: { registry: FleetRegistry; slug: string; keepD
   };
 }
 
-export function upgradePlan(input: { registry: FleetRegistry }): FleetStep[] {
+/** Move every running workspace onto one pinned release of the published
+ * package: install it, point the units at its entry (a fleet set up from
+ * another global package keeps running that package otherwise), restart.
+ * `script` is this CLI's resolved entry; a fleet run from a checkout is
+ * updated in that checkout instead. */
+export function upgradePlan(input: { registry: FleetRegistry; version: string; node: string; script: string; layout?: FleetLayout }): FleetStep[] {
+  const layout = input.layout ?? fleetLayout();
+  const spec = pinnedInstallSpec(input.version);
+  const script = globalPackageEntry(input.script);
+  if (!script) {
+    throw new Error(`fleet upgrade installs ${NPM_PACKAGE} with npm, but this fleet runs from ${input.script}, which is not a global npm install. Update that checkout (git pull, pnpm install, pnpm build:server) and restart the workspaces, or install ${spec} globally and rerun \`fleet init --domain ${input.registry.domain} --yes\` from it.`);
+  }
   const running = Object.values(input.registry.workspaces).filter((workspace) => workspace.status === "running").sort((a, b) => a.slug.localeCompare(b.slug));
+  const operator = input.registry.operator;
   return [
-    { kind: "run", argv: ["npm", "install", "-g", "openmausbot@latest"], why: "install the release every workspace runs from" },
-    ...running.map((workspace) => ({ kind: "run" as const, argv: ["systemctl", "restart", `openmausbot@${workspace.slug}.service`], why: `restart ${workspace.slug} on the new release` })),
+    { kind: "run", argv: ["npm", "install", "-g", spec], why: "install the pinned release every workspace runs from" },
+    { kind: "write", path: layout.unitFile, content: templateUnit({ node: input.node, script, layout }), mode: 0o644 },
+    ...(operator ? [{ kind: "write" as const, path: layout.agentUnitFile, content: agentUnit({ node: input.node, script, operator, layout }), mode: 0o644 }] : []),
+    { kind: "run", argv: ["systemctl", "daemon-reload"], why: `run the workspaces from ${script}` },
+    ...running.map((workspace) => ({ kind: "run" as const, argv: ["systemctl", "restart", `openmausbot@${workspace.slug}.service`], why: `restart ${workspace.slug} on ${spec}` })),
     ...running.map((workspace) => ({ kind: "health" as const, url: `http://127.0.0.1:${workspace.port}/api/health`, why: `wait for ${workspace.slug}` })),
+    ...(operator ? [{ kind: "note" as const, text: `restart the fleet agent (${basename(layout.agentUnitFile)}) when no fleet action is running, so it runs ${spec} too` }] : []),
   ];
 }
 

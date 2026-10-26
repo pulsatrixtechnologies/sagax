@@ -59,7 +59,16 @@ export function buildNotification(
   bot: NotifyBot,
   threadId: string,
   detail: string,
-  extra?: { avatarUrl?: string; group?: { id: string; name: string }; title?: string; requestId?: string; site?: string },
+  extra?: {
+    avatarUrl?: string;
+    group?: { id: string; name: string };
+    title?: string;
+    requestId?: string;
+    site?: string;
+    needsKey?: boolean;
+    routineRunId?: string;
+    routineName?: string;
+  },
 ): Notification | null {
   // The toggle means what it says: off is off, including for approvals.
   // A bot whose notifications you turned off can still block waiting for
@@ -100,6 +109,9 @@ export function buildNotification(
   if (extra?.avatarUrl) notification.avatarUrl = extra.avatarUrl;
   if (extra?.group) notification.groupId = extra.group.id;
   if (extra?.requestId) notification.requestId = extra.requestId;
+  if (extra?.needsKey) notification.needsKey = true;
+  if (extra?.routineRunId) notification.routineRunId = extra.routineRunId.slice(0, 128);
+  if (extra?.routineName) notification.routineName = summarize(extra.routineName, 80);
   return notification;
 }
 
@@ -111,7 +123,16 @@ export function deliverableNotification(
   bot: NotifyBot,
   threadId: string,
   detail: string,
-  extra?: { avatarUrl?: string; group?: { id: string; name: string }; title?: string; requestId?: string; site?: string },
+  extra?: {
+    avatarUrl?: string;
+    group?: { id: string; name: string };
+    title?: string;
+    requestId?: string;
+    site?: string;
+    needsKey?: boolean;
+    routineRunId?: string;
+    routineName?: string;
+  },
 ): Notification | null {
   return buildNotification(kind, { ...bot, notifications: undefined }, threadId, detail, extra);
 }

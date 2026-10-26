@@ -11,6 +11,7 @@ vi.mock("@/state/store", async (original) => ({
   useStore: () => ({ dispatch: fixture.dispatch }),
 }));
 vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => false }));
+vi.mock("@/lib/org-approval-policy", () => ({ useOrgApprovalPolicy: () => ({ alwaysAllow: true, orgRules: 0 }), noteOrgAlwaysAllowOff: () => {} }));
 
 import { CustomRuleNoticeLine, CustomRuleSavedInset, customRuleNoticeLine } from "./CustomRuleNotice";
 import { pendingApprovals, PendingApprovalActions, PendingApprovalPanel } from "./PendingApproval";
@@ -26,6 +27,17 @@ function message(extra: Partial<NonNullable<Message["card"]>> = {}): Message {
 }
 
 describe("rule notice", () => {
+  it("says when automatic review applied the rule, with its reason (lot A1)", () => {
+    const model = { ...notice, reviewer: "model" as const, reason: "The file is in Documents." };
+    expect(customRuleNoticeLine({ ...model, outcome: "approved" })).toBe("Approved by automatic review under your rule");
+    expect(customRuleNoticeLine({ ...model, behavior: "deny", outcome: "denied" })).toBe("Refused by automatic review under your rule");
+    expect(customRuleNoticeLine({ ...model, behavior: "ask", outcome: "held" })).toBe("Automatic review left this to you under your Ask first rule");
+    expect(customRuleNoticeLine({ ...model, behavior: "deny", outcome: "denied", org: true })).toBe("Refused by automatic review under your organization's rule");
+    const html = renderToStaticMarkup(createElement(CustomRuleNoticeLine, { notice: { ...model, outcome: "approved" } }));
+    expect(html).toContain("data-custom-rule-reason");
+    expect(html).toContain("The file is in Documents.");
+    expect(renderToStaticMarkup(createElement(CustomRuleNoticeLine, { notice: { ...notice, outcome: "approved" } }))).not.toContain("data-custom-rule-reason");
+  });
   it("says which rule decided, in its words, with Edit rule", () => {
     expect(customRuleNoticeLine({ ...notice, outcome: "approved" })).toBe("Approved automatically by your rule");
     expect(customRuleNoticeLine({ ...notice, behavior: "deny", outcome: "denied" })).toBe("Refused by your rule");
@@ -56,14 +68,17 @@ describe("Toujours permettre ceci", () => {
     return renderToStaticMarkup(PendingApprovalActions({ pending, bot, threadId: "thread-1", onCancelTurn: vi.fn() }));
   };
 
-  it("is offered when the server proposes a rule for this card", () => {
+  // 2026-10-20 (JC): one "Always allow", one click, no editor on the card
+  it("is offered as the one Always allow when the server proposes a rule for this card", () => {
     const html = render({ customRuleCandidate: { when: notice.when, risks: [] } });
-    expect(html).toContain("Always allow this");
-    expect(html).toContain("data-always-allow-this-button");
+    expect(html).toContain(">Always allow<");
+    expect(html).toContain("data-always-allow");
+    expect(html).not.toContain("Always allow this");
+    expect(html).not.toContain("Save and allow");
   });
 
   it("is never offered without a proposal or on an admin card", () => {
-    expect(render()).not.toContain("Always allow this");
-    expect(render({ adminApproval: true, customRuleCandidate: { when: notice.when, risks: [] } })).not.toContain("Always allow this");
+    expect(render()).not.toContain("data-always-allow");
+    expect(render({ adminApproval: true, customRuleCandidate: { when: notice.when, risks: [] } })).not.toContain("data-always-allow");
   });
 });

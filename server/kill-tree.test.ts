@@ -127,6 +127,29 @@ describe("killCliTree", () => {
     }
   });
 
+  it.skipIf(process.platform === "win32")("sees an exit that a blocked event loop has not read by the deadline", async () => {
+    const child = spawnCli(process.execPath, ["-e", `process.on('SIGTERM', () => {}); process.stdin.on('data', () => process.exit(0)); console.log(process.pid); ${IDLE}`], { stdio: ["pipe", "pipe", "pipe"] });
+    await reportedPid(child.stdout);
+    const kill = process.kill.bind(process);
+    // The SIGKILL is held back; instead a callback before the next timers phase lets the child exit while it blocks past the deadline.
+    const signals = vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
+      if (pid !== -child.pid! || signal !== "SIGKILL") return kill(pid, signal);
+      setImmediate(() => {
+        child.stdin.write("exit\n");
+        const until = Date.now() + 1_100;
+        while (Date.now() < until);
+      });
+      return true;
+    });
+    try {
+      await expect(killCliTree(child, 50)).resolves.toBe(true);
+      expect(child.exitCode).toBe(0);
+    } finally {
+      signals.mockRestore();
+      await killCliTree(child, 0);
+    }
+  }, 20_000);
+
   it.skipIf(process.platform === "win32")("does not signal an unowned process group or an unrelated child", async () => {
     const child = spawn(process.execPath, ["-e", STUBBORN], { stdio: ["ignore", "pipe", "ignore"] });
     const unrelated = spawnCli(process.execPath, ["-e", STUBBORN], { stdio: ["pipe", "pipe", "pipe"] });

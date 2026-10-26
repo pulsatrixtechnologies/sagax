@@ -29,6 +29,32 @@ export const BOOT_PROBE_FAST_INTERVAL_MS = 25;
 export const BOOT_PROBE_FAST_WINDOW_MS = 5_000;
 export const BOOT_PROBE_INTERVAL_MS = 500;
 
+export const SERVER_BOOT_TIMEOUT_MS = 60_000;
+export const SERVER_LISTENING_GRACE_MS = 180_000;
+const LISTENING_LINE = "openmausbot server on ";
+
+export function listeningSignal() {
+  let tail = "";
+  let heard = false;
+  return {
+    hear(chunk) {
+      if (heard) return;
+      const text = tail + chunk;
+      tail = text.slice(-LISTENING_LINE.length);
+      heard = text.includes(LISTENING_LINE);
+    },
+    heard: () => heard,
+  };
+}
+
+/** @param {number} port @param {{ outcome: string, waitedMs?: number }} identity */
+export function bootFailureMessage(port, identity) {
+  if (identity.outcome === "exited") return `child on port ${port} exited before answering /api/health`;
+  if (identity.outcome === "foreign-owner") return `port ${port} answered health checks from another process`;
+  if (identity.outcome === "ready") return `child on port ${port} answered after it stopped being the current server`;
+  return `child on port ${port} did not answer /api/health within ${Math.round((identity.waitedMs ?? 0) / 1000)}s`;
+}
+
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
@@ -37,27 +63,31 @@ const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  *   pid: () => number | undefined,
  *   bootTimeoutMs: number,
  *   isExited?: () => boolean,
+ *   isListening?: () => boolean,
+ *   listeningGraceMs?: number,
  *   now?: () => number,
  *   sleep?: (ms: number) => Promise<void>,
  *   fetchImpl?: typeof fetch,
  * }} options
- * @returns {Promise<{ outcome: "ready" | "foreign-owner" | "timeout" | "exited" }>}
+ * @returns {Promise<{ outcome: "ready" | "foreign-owner" | "timeout" | "exited", latencyMs?: number, waitedMs?: number }>}
 */
 export async function pollServerIdentity({
   port,
   pid,
   bootTimeoutMs,
   isExited = () => false,
+  isListening = () => false,
+  listeningGraceMs = 0,
   now = Date.now,
   sleep = defaultSleep,
   fetchImpl = globalThis.fetch,
 }) {
   const startedAt = now();
-  const deadline = startedAt + bootTimeoutMs;
+  const deadline = () => startedAt + bootTimeoutMs + (isListening() ? listeningGraceMs : 0);
   for (;;) {
     if (isExited()) return { outcome: "exited" };
-    const remainingMs = Math.max(0, deadline - now());
-    if (remainingMs <= 0) return { outcome: "timeout" };
+    const remainingMs = Math.max(0, deadline() - now());
+    if (remainingMs <= 0) return { outcome: "timeout", waitedMs: now() - startedAt };
 
     let res;
     try {
@@ -70,14 +100,14 @@ export async function pollServerIdentity({
       // it), then let the loop condition decide.
       const intervalMs =
         now() - startedAt < BOOT_PROBE_FAST_WINDOW_MS ? BOOT_PROBE_FAST_INTERVAL_MS : BOOT_PROBE_INTERVAL_MS;
-      await sleep(Math.min(intervalMs, Math.max(1, deadline - now())));
+      await sleep(Math.min(intervalMs, Math.max(1, deadline() - now())));
       continue;
     }
     const body = await res.json().catch(() => null);
     // Body consumption is covered by the same abort signal as fetch. If it
-    // reaches the deadline, a null body means the probe timed out—not that a
+    // reaches the deadline, a null body means the probe timed out, not that a
     // different process answered on the port.
-    if (now() >= deadline) return { outcome: "timeout" };
+    if (now() >= deadline()) return { outcome: "timeout", waitedMs: now() - startedAt };
     // Read the expected pid NOW, after the response landed: until the child's
     // `spawn` event fires the getter yields undefined, and a child that has
     // not spawned cannot be the one answering — so an answer during that
@@ -91,8 +121,8 @@ export async function pollServerIdentity({
       body.static;
     if (!identified) return { outcome: "foreign-owner" };
     // A response that finishes after the budget must not count as a healthy
-    // boot — re-check the clock before declaring victory.
-    if (now() >= deadline) return { outcome: "timeout" };
+    // boot: re-check the clock before declaring victory.
+    if (now() >= deadline()) return { outcome: "timeout", waitedMs: now() - startedAt };
     return { outcome: "ready", latencyMs: now() - startedAt };
   }
 }

@@ -25,9 +25,11 @@
 //     for this turn ended" (a disabled person mid-turn, S5-10);
 //   - no token is ever logged or put in an error.
 import { guardToolCall, type GuardOptions } from "./mcp-permissions.ts";
+import { telephonyRefusal } from "./telephony-guard.ts";
 import type { SubjectTokenOutcome } from "./idp-session.ts";
 import type { DirectoryProfile, ExchangeResult } from "./perspicax-link.ts";
 import { PERSPICAX_READ_ONLY_TOOLS } from "./drivers/acp/grok-read-only-tools.ts";
+import { executionKey, WriteOnce } from "./write-once.ts";
 
 export type PerspicaxUnavailableReason = "not_held" | "no_session" | "unreachable" | "rate_limited" | "no_delegation" | "unknown_speaker" | "unknown_profile";
 
@@ -95,6 +97,15 @@ export interface PerspicaxMcpOptions {
   /** Permission check for tools/call frames (server/mcp-permissions.ts). Null
    * or absent: no check. The audit hook never carries arguments or results. */
   permissionGuard?(input: { botId: string; principalId: string }): GuardOptions | null;
+  /** The scope a write of this turn is made once in (server/write-once.ts),
+   * or null for no guard: two unattended runs (routine passes, coordinated
+   * bots) of one person that send the same write with the same arguments
+   * at the same time make one call, the other gets its answer. */
+  writeOnceScope?(turn: { threadId: string; botId: string; principalId: string }): string | null;
+  /** Every remote_support_* answer of a turn (server/remote-session-register.ts):
+   * a session the bot opened becomes a Sagax session row and chat card. It
+   * never changes the answer and its failures are its own. */
+  onRemoteSupport?(call: { threadId: string; botId: string; principalId?: string; name: string; args: unknown; result: unknown }): void;
   fetch?: typeof fetch;
   now?: () => number;
   log?: (line: string) => void;
@@ -108,6 +119,21 @@ export const PERSPICAX_ACCESS_ENDED = "Perspicax access for this turn ended";
 /** A call Sagax did not replay after Perspicax dropped the MCP session: it can
  * change data, so the bot decides (the call never reached Perspicax's tool). */
 export const PERSPICAX_SESSION_RESET = "Perspicax had dropped this MCP session (idle or restarted). Sagax opened a new one, but did not replay this call because it can change data: it did not run. Call it again if it is still wanted.";
+
+/** The answer a write that was not sent again carries in front of the first one's. */
+export const PERSPICAX_WRITE_REPLAYED = "Not sent again: another run made this same write with the same arguments moments ago (one write per execution key). Its answer follows; the record already exists.";
+/** The tools whose name says they change data: a connector's `<api>__write`,
+ * `__action` or `__<x>_write`, its named writes (`log_time`, `book_*`,
+ * `update_*`, `create_*`, `delete_*`), and the host's own. Reads, polls
+ * (await_turn) and leases (claim*, per holder, renewals must reach
+ * Perspicax) are never answered from a previous call. */
+const WRITE_SUFFIX = /^(write|action|log_time|(book|update|create|delete)_[a-z0-9_]+|[A-Za-z0-9_]+_write)$/;
+const HOST_WRITES = new Set(["memory_write", "memory_propose", "memory_promote", "memory_forget", "create_agent", "delete_agent",
+  "sagax_send", "sagax_routine_run", "sagax_nudge", "remote_support_open", "remote_support_close"]);
+export function perspicaxWriteOnceTool(name: string): boolean {
+  const at = name.lastIndexOf("__");
+  return at > 0 ? WRITE_SUFFIX.test(name.slice(at + 2)) : HOST_WRITES.has(name);
+}
 
 /** Requests that only read, safe to send again on a new session. */
 const READ_ONLY_METHODS = new Set(["tools/list", "resources/list", "resources/templates/list", "resources/read", "prompts/list", "prompts/get", "ping", "completion/complete"]);
@@ -181,6 +207,25 @@ const RETRY_EXCHANGE_MS = 400;
 
 type Json = Record<string, unknown>;
 
+/** The telephony guard's refusal for a bot's own Twilio call
+ * (server/telephony-guard.ts), or null. */
+function telephonyBlock(frame: Json, twilioTools: ReadonlySet<string> | undefined): string | null {
+  if (frame.method !== "tools/call") return null;
+  const params = isObject(frame.params) ? frame.params : {};
+  return telephonyRefusal(String(params.name ?? ""), params.arguments, twilioTools ? { twilioTools } : {});
+}
+
+/** The tools of a tools/list answer that target Twilio under another name:
+ * their description names Twilio or its API host. */
+export function twilioToolsOf(body: unknown): string[] {
+  const result = isObject(body) && isObject(body.result) ? body.result : null;
+  const tools = result && Array.isArray(result.tools) ? result.tools : [];
+  return tools
+    .filter((tool): tool is Json => isObject(tool) && typeof tool.name === "string")
+    .filter((tool) => /twilio/i.test(`${String(tool.description ?? "")} ${JSON.stringify(tool._meta ?? {})}`))
+    .map((tool) => String(tool.name));
+}
+
 function isObject(value: unknown): value is Json {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -242,6 +287,10 @@ export class PerspicaxMcp {
   private readonly initParams = new Map<string, Json>();
   private reopens = 0;
   private nativeCalls = 0;
+  /** Per profile: tools whose tools/list entry names Twilio (telephony guard). */
+  private readonly twilioTools = new Map<string, Set<string>>();
+  /** "At the same time": a 5 minute window, then a write is sent again. */
+  private readonly writes = new WriteOnce<PerspicaxRelayAnswer>({ ttlMs: 5 * 60_000 });
 
   constructor(options: PerspicaxMcpOptions) {
     this.options = options;
@@ -374,6 +423,56 @@ export class PerspicaxMcp {
    * the call comes from callTool, whose native tool the agents proxy already
    * put through the permission check, so it is not judged (nor audited) twice. */
   async relay(input: { threadId: string; generation: string; botId: string; profileId: string; frame: unknown; judged?: boolean }): Promise<PerspicaxRelayAnswer> {
+    const answer = await this.relayKept(input);
+    this.noteRemoteSupport(input, answer);
+    return answer;
+  }
+
+  /** Hand a remote_support_* answer to onRemoteSupport, without waiting for it. */
+  private noteRemoteSupport(input: { threadId: string; generation: string; botId: string; frame: unknown }, answer: PerspicaxRelayAnswer) {
+    const hook = this.options.onRemoteSupport;
+    if (!hook || !isObject(input.frame) || input.frame.method !== "tools/call") return;
+    const params = isObject(input.frame.params) ? input.frame.params : {};
+    const name = typeof params.name === "string" ? params.name : "";
+    if (!name.startsWith("remote_support_")) return;
+    if (answer.status !== 200 || !isObject(answer.body) || !isObject(answer.body.result)) return;
+    try {
+      // the person whose token made the call: the session is theirs
+      const principalId = this.turnPrincipal(input.threadId, input.generation, input.botId);
+      hook({ threadId: input.threadId, botId: input.botId, ...(principalId ? { principalId } : {}), name, args: params.arguments ?? {}, result: answer.body.result });
+    } catch {
+      /* the answer goes back unchanged */
+    }
+  }
+
+  private async relayKept(input: { threadId: string; generation: string; botId: string; profileId: string; frame: unknown; judged?: boolean }): Promise<PerspicaxRelayAnswer> {
+    const once = this.writeOnceKey(input);
+    if (!once) return this.relayFrame(input);
+    const kept = (answer: PerspicaxRelayAnswer) => answer.status === 200 && isObject(answer.body) && isObject(answer.body.result) && answer.body.result.isError !== true;
+    const { value, replayed } = await this.writes.run(once, () => this.relayFrame(input), kept);
+    if (!replayed || !isObject(value.body) || !isObject(value.body.result)) return value;
+    this.log(`perspicax mcp: profile ${input.profileId} write not sent again (same execution key)`);
+    const result = value.body.result;
+    const content = Array.isArray(result.content) ? result.content : [];
+    return { status: 200, body: { ...value.body, id: (input.frame as Json).id, result: { ...result, content: [{ type: "text", text: PERSPICAX_WRITE_REPLAYED }, ...content] } } };
+  }
+
+  /** The execution key of a write this turn makes once, or null. */
+  private writeOnceKey(input: { threadId: string; generation: string; botId: string; profileId: string; frame: unknown }): string | null {
+    if (!this.options.writeOnceScope || !isObject(input.frame)) return null;
+    const frame = input.frame;
+    if (frame.method !== "tools/call" || frame.id === undefined || perspicaxReplayable(frame)) return null;
+    const params = isObject(frame.params) ? frame.params : {};
+    const name = typeof params.name === "string" ? params.name : "";
+    if (!perspicaxWriteOnceTool(name)) return null;
+    const entry = this.entries.get(key(input.threadId, input.generation, input.profileId));
+    if (!entry || entry.botId !== input.botId) return null;
+    const scope = this.options.writeOnceScope({ threadId: input.threadId, botId: input.botId, principalId: entry.principalId });
+    if (!scope) return null;
+    return executionKey([scope, entry.principalId, input.profileId, name, params.arguments ?? {}]);
+  }
+
+  private async relayFrame(input: { threadId: string; generation: string; botId: string; profileId: string; frame: unknown; judged?: boolean }): Promise<PerspicaxRelayAnswer> {
     const entry = this.entries.get(key(input.threadId, input.generation, input.profileId));
     if (!entry || entry.botId !== input.botId) return { status: 403, body: { error: "this Perspicax profile is not mounted in this turn", code: "profile_not_mounted" } };
     if (!isObject(input.frame)) return { status: 400, body: rpcError(null, -32600, "Invalid Request") };
@@ -384,7 +483,10 @@ export class PerspicaxMcp {
     if (!(this.options.botProfiles(input.botId) ?? []).includes(input.profileId)) {
       return { status: 403, body: { error: "this bot no longer lists that Perspicax profile", code: "profile_not_mounted" } };
     }
-    const blocked = input.judged ? null : await this.permissionBlock(entry, frame);
+    // a tools/call is always a request: one without an id would run with no
+    // answer and no guard (re-review of #956)
+    if (frame.method === "tools/call" && notification) return { status: 400, body: rpcError(null, -32600, "tools/call needs an id") };
+    const blocked = input.judged ? null : telephonyBlock(frame, this.twilioTools.get(input.profileId)) ?? await this.permissionBlock(entry, frame);
     if (blocked) return { status: 200, body: { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: blocked }], isError: true } } };
     const speaker = this.options.subjectOf(entry.principalId);
     if (!speaker || speaker.disabled) this.end(entry);
@@ -437,6 +539,10 @@ export class PerspicaxMcp {
     }
     try {
       const body = parseMcpBody(text, id);
+      if (frame.method === "tools/list" && body !== null) {
+        const named = twilioToolsOf(body);
+        if (named.length) this.twilioTools.set(input.profileId, new Set([...(this.twilioTools.get(input.profileId) ?? []), ...named].slice(-500)));
+      }
       return body === null ? { status: 200, body: rpcError(id, -32000, "Perspicax sent no answer") } : { status: 200, body };
     } catch {
       return { status: 200, body: rpcError(id, -32000, "Perspicax sent an answer that is not JSON") };
@@ -464,6 +570,11 @@ export class PerspicaxMcp {
       if (at.startsWith(prefix) && entry.botId === botId && !entry.ended && listed.includes(entry.profileId)) return entry;
     }
     return undefined;
+  }
+
+  /** The person this turn's Perspicax tokens speak for, if a profile is mounted. */
+  turnPrincipal(threadId: string, generation: string, botId: string): string | undefined {
+    return this.turnEntry(threadId, generation, botId)?.principalId || undefined;
   }
 
   /** Whether this turn of the bot has a Perspicax profile mounted, so the

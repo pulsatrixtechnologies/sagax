@@ -78,9 +78,10 @@ describe("BotExchangeChip", () => {
     expect(hidden).not.toContain("use_tool");
     const shown = renderToStaticMarkup(createElement(BotExchangeChip, { run: run(steps), forceOpen: true, showToolCalls: true }));
     expect(shown).toContain('data-testid="tool-activity"');
-    expect(shown).toContain("Used search tool");
+    expect(shown).toContain("Looked for a tool");
+    expect(shown).not.toContain("Used search tool");
     // a step row, not a bubble: the tool never sits in a speech bubble
-    expect(shown).not.toMatch(/rounded-\[18px\][^>]*>(Used search tool|Used use tool)</);
+    expect(shown).not.toMatch(/rounded-\[18px\][^>]*>(Looked for a tool|Used a tool)</);
   });
 
   it("opens the stored lines in the chat column, not over the viewport", () => {

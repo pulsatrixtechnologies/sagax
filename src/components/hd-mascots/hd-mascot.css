@@ -1,0 +1,46 @@
+/* HD mascots (HdMascot.tsx): painted art in the mascot's own box, so a
+   change between HD and vector, or between two clips, never moves the
+   layout. The next asset loads hidden behind the shown one and swaps in once
+   decoded. */
+.hd-mascot {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.hd-mascot > .hd-mascot-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.hd-mascot > .hd-mascot-next {
+  opacity: 0;
+  pointer-events: none;
+}
+/* under 48 px the head and shoulders, as the vector bust */
+.hd-mascot-bust {
+  overflow: hidden;
+  border-radius: 50%;
+}
+.hd-mascot-bust > .hd-mascot-art {
+  transform: scale(1.7);
+  transform-origin: 50% 24%;
+}
+/* a still breathes a little while motion is allowed */
+.hd-mascot-breathe > .hd-mascot-art:not(.hd-mascot-next) {
+  transform-origin: 50% 92%;
+  animation: hd-mascot-breathe 3.2s ease-in-out infinite;
+}
+@keyframes hd-mascot-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1.012, 0.988); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hd-mascot-breathe > .hd-mascot-art { animation: none; }
+}
+:root[data-reduced-motion="true"] .hd-mascot-breathe > .hd-mascot-art { animation: none; }
+[data-fx-paused] .hd-mascot-breathe > .hd-mascot-art { animation-play-state: paused; }

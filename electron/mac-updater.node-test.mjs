@@ -133,7 +133,7 @@ test("real Mac ZIP transfer stays preparing until native ready; restart is singl
   await h.transferred.promise;
   assert.equal(h.state().status, "preparing");
   assert.equal(h.updater.squirrelDownloadedUpdate, false);
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
   await h.coordinator.check(true);
   assert.deepEqual(h.calls(), { downloads: 1, checks: 0, quitCalls: 0 });
   const waitingListeners = h.native.listenerCount("update-downloaded");
@@ -146,12 +146,12 @@ test("real Mac ZIP transfer stays preparing until native ready; restart is singl
   assert.equal(h.updater.squirrelDownloadedUpdate, true);
   assert.equal(h.native.listenerCount("update-downloaded"), 1, "temporary staging listener was removed");
   assert.equal(h.timers.has(300_000), false);
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
   h.timers.get(120_000).callback();
   assert.equal(h.state().status, "installing");
   assert.match(h.state().message, /Quit and reopen/);
   assert.ok(h.warnings.some((message) => /restart handoff exceeded/.test(message)));
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
   await h.coordinator.check(true);
   h.native.emit("update-downloaded");
   assert.deepEqual(h.calls(), { downloads: 1, checks: 0, quitCalls: 1 });
@@ -170,7 +170,7 @@ test("a native staging deadline fails visibly without retrying or reviving on la
   assert.ok(h.warnings.some((message) => /preparation exceeded/.test(message)));
   const failed = h.state();
   await h.coordinator.check(true);
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
   h.native.emit("update-downloaded");
   await h.downloadSettled();
   h.updater.emit("download-progress", { percent: 100 });
@@ -196,7 +196,7 @@ test("native validation errors after ZIP transfer remain visible and clean up st
   assert.equal(h.timers.has(300_000), false);
   const failed = h.state();
   await h.coordinator.check(true);
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
   h.native.emit("update-downloaded");
   assert.deepEqual(h.state(), failed);
   assert.deepEqual(h.calls(), { downloads: 1, checks: 0, quitCalls: 0 });
@@ -212,7 +212,7 @@ test("a late native error after readiness is not silently routed as a background
   assert.equal(h.state().status, "error");
   assert.equal(h.state().retryable, false);
   assert.match(h.state().message, /native stage lost/);
-  h.coordinator.install();
+  h.coordinator.install({ confirmed: true });
   assert.equal(h.calls().quitCalls, 0);
 });
 

@@ -1,0 +1,132 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSLocationWhenInUseUsageDescription": {
+      "comment": "Phone tools (Features/PhoneTools): iOS permission prompt",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you allow it on your phone, Sagax sends your position once to the bot that asked. Never in the background."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand vous l'autorisez sur votre téléphone, Sagax envoie votre position une seule fois au bot qui l'a demandée. Jamais en arrière-plan."
+          }
+        }
+      }
+    },
+    "NSContactsUsageDescription": {
+      "comment": "Phone tools (Features/PhoneTools): iOS permission prompt",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you allow it on your phone, Sagax searches your contacts for the name a bot asked about and sends only the details it asked for."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand vous l'autorisez sur votre téléphone, Sagax cherche dans vos contacts le nom demandé par un bot et n'envoie que les renseignements demandés."
+          }
+        }
+      }
+    },
+    "NSRemindersFullAccessUsageDescription": {
+      "comment": "Phone tools (Features/PhoneTools): iOS permission prompt",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you allow it on your phone, Sagax reads or adds the reminders a bot asked for."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand vous l'autorisez sur votre téléphone, Sagax lit ou ajoute les rappels demandés par un bot."
+          }
+        }
+      }
+    },
+    "NSRemindersUsageDescription": {
+      "comment": "Phone tools (Features/PhoneTools): iOS permission prompt",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you allow it on your phone, Sagax reads or adds the reminders a bot asked for."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand vous l'autorisez sur votre téléphone, Sagax lit ou ajoute les rappels demandés par un bot."
+          }
+        }
+      }
+    },
+    "NSCalendarsFullAccessUsageDescription": {
+      "comment": "Phone tools (Features/PhoneTools): iOS permission prompt",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you allow it on your phone, Sagax reads your calendar for the days a bot asked about, or adds the event it asked for."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand vous l'autorisez sur votre téléphone, Sagax lit votre calendrier pour les jours demandés par un bot, ou ajoute l'événement demandé."
+          }
+        }
+      }
+    },
+    "NSCalendarsUsageDescription": {
+      "comment": "Phone tools (Features/PhoneTools): iOS permission prompt",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you allow it on your phone, Sagax reads your calendar for the days a bot asked about, or adds the event it asked for."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand vous l'autorisez sur votre téléphone, Sagax lit votre calendrier pour les jours demandés par un bot, ou ajoute l'événement demandé."
+          }
+        }
+      }
+    },
+    "NSFocusStatusUsageDescription": {
+      "comment": "Phone tools (Features/PhoneTools): iOS permission prompt",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you allow it on your phone, Sagax tells the bot that asked whether a Focus is on, so it can wait before disturbing you."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand vous l'autorisez sur votre téléphone, Sagax indique au bot qui l'a demandé si un mode de concentration est actif, pour qu'il attende avant de vous déranger."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

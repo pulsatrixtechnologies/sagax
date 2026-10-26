@@ -62,7 +62,7 @@ describe("workspace", () => {
     expect(prompt).toContain(JSON.stringify(join(TASK_WORKSPACES_DIR, BOT)));
     expect(prompt).toContain(JSON.stringify('/projects/quoted "folder"'));
     expect(prompt).not.toContain("existing private file contents");
-    expect(prompt).toContain("Do not move old files");
+    expect(prompt).toContain("Never move old files");
     expect(readFileSync(join(shared, "old.txt"), "utf8")).toBe("existing private file contents");
     expect(existsSync(join(thread, "old.txt"))).toBe(false);
     expect(workspaceLocationsPrompt(BOT, undefined)).toContain("inspect the working directory");
@@ -78,9 +78,19 @@ describe("workspace", () => {
   it("tells every bot that a picture it shows inline must be in the conversation's folders", () => {
     const thread = ensureTaskWorkspace(BOT, "thread-first");
     for (const prompt of [workspaceLocationsPrompt(BOT, thread), workspaceLocationsPrompt(BOT, thread, undefined, { attachFile: true })]) {
-      expect(prompt).toContain("Chat links and inline images open only files in currentWorkingFolder and sharedBotFolder.");
+      expect(prompt).toContain("Chat links and inline images open only files in currentWorkingFolder and sharedBotFolder;");
     }
-    expect(workspaceLocationsPrompt(BOT, thread)).toContain("Save a file or picture you want to show in chat there.");
+    expect(workspaceLocationsPrompt(BOT, thread)).toContain("save a file or picture you want to show in chat there.");
+  });
+
+  it("lets an engine that resolves relative paths name working-folder files briefly, and keeps absolute paths for reports", () => {
+    const thread = ensureTaskWorkspace(BOT, "thread-first");
+    const relative = workspaceLocationsPrompt(BOT, thread, undefined, { relativePaths: true });
+    expect(relative).toContain("name a file in it by its relative path");
+    expect(relative).toContain("give its full absolute path (never a relative one)");
+    expect(workspaceLocationsPrompt(BOT, thread)).not.toContain("by its relative path");
+    // no known folder: nothing to be relative to
+    expect(workspaceLocationsPrompt(BOT, undefined, undefined, { relativePaths: true })).not.toContain("by its relative path");
   });
 
   it("creates distinct private task desks outside shared memory and refuses path traversal", () => {

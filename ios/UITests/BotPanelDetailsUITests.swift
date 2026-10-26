@@ -113,6 +113,14 @@ final class BotPanelDetailsUITests: XCTestCase {
         app.descendants(matching: .any).matching(identifier: id).firstMatch
     }
 
+    /// One row of the panel's overview list (Coding, Routines, Library,
+    /// Computer) opens its page.
+    private func openPage(_ id: String, in app: XCUIApplication) {
+        let row = element(id, in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 15), "\(id) is listed")
+        row.tap()
+    }
+
     private func scrollTo(_ target: XCUIElement, in app: XCUIApplication) {
         let scroll = app.scrollViews["profile-scroll"].firstMatch
         for _ in 0..<8 where !(target.exists && target.isHittable) {
@@ -135,6 +143,7 @@ final class BotPanelDetailsUITests: XCTestCase {
     func testActivityCardStopsTheRunningTurn() throws {
         let lab = try busyCardLab()
         let app = launchProfile("Card Lab")
+        openPage("panel-overview.coding", in: app)
         let stop = element("activity-stop.thread:\(lab.threadId)", in: app)
         scrollTo(element("profile-activity", in: app), in: app)
         XCTAssertTrue(stop.waitForExistence(timeout: 30), "the running turn shows with Stop")
@@ -150,6 +159,7 @@ final class BotPanelDetailsUITests: XCTestCase {
     func testActivityDetailSteersThenStops() throws {
         let lab = try busyCardLab()
         let app = launchProfile("Card Lab")
+        openPage("panel-overview.coding", in: app)
         let row = element("activity-row.thread:\(lab.threadId)", in: app)
         scrollTo(element("profile-activity", in: app), in: app)
         XCTAssertTrue(row.waitForExistence(timeout: 30))
@@ -186,6 +196,7 @@ final class BotPanelDetailsUITests: XCTestCase {
         let listed = (try api("GET", "/api/bots/\(id)/activity?filter=other&limit=50") as? [String: Any])
         let ids = ((listed?["items"] as? [[String: Any]] ?? []) + (listed?["subagents"] as? [[String: Any]] ?? [])).compactMap { $0["id"] as? String }
         let app = launchProfile()
+        openPage("panel-overview.coding", in: app)
         let section = element("activity-section.other", in: app)
         scrollTo(section, in: app)
         XCTAssertTrue(section.waitForExistence(timeout: 20))
@@ -214,6 +225,7 @@ final class BotPanelDetailsUITests: XCTestCase {
         let routineId = try XCTUnwrap(((created?["routine"] as? [String: Any]) ?? created)?["id"] as? String)
         defer { _ = try? api("DELETE", "/api/routines/\(routineId)", allowFailure: true) }
         let app = launchProfile()
+        openPage("panel-overview.routines", in: app)
         let row = element("profile-routine.Routine WP7 a supprimer", in: app)
         scrollTo(row, in: app)
         XCTAssertTrue(row.waitForExistence(timeout: 20))

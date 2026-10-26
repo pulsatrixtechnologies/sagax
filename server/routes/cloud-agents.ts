@@ -3,7 +3,7 @@ import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 import type { CloudAgentManager } from "../cloud-agents/manager.ts";
 import type { CloudAgentCredentialStore } from "../cloud-agents/credentials.ts";
-import { CLOUD_AGENT_PROVIDERS, type CloudAgentFollowUpMode, type CloudAgentProviderId } from "../../shared/cloud-agents.ts";
+import { CLOUD_AGENT_PROVIDERS, type CloudAgentFollowUpMode, type CloudAgentKeyProviderId, type CloudAgentProviderId } from "../../shared/cloud-agents.ts";
 import { ProviderHttpError } from "../cloud-agents/providers/http.ts";
 
 export interface CloudAgentRouteDeps {
@@ -13,6 +13,8 @@ export interface CloudAgentRouteDeps {
   botVisible: (auth: RequestAuth, botId: string) => boolean;
   principalId: (auth: RequestAuth) => string | null;
   botName: (botId: string) => string | undefined;
+  /** The viewer may see this record: theirs, or one launched in a thread they can read. */
+  recordVisible: (auth: RequestAuth, record: import("../../shared/cloud-agents.ts").CloudAgentRecord) => boolean;
 }
 
 const BOT_PATH = /^\/api\/bots\/([\w-]+)\/cloud-agents(?:\/([\w-]+)(?:\/(follow-up|cancel|archive|artifacts|transcript))?)?$/;
@@ -26,12 +28,12 @@ function providerError(res: import("node:http").ServerResponse, json: typeof imp
 }
 
 export function createCloudAgentRoutes(deps: CloudAgentRouteDeps): RouteHandler {
-  return async ({ req, res, path, method, auth, json, readBody }) => {
+  return async ({ req, res, url, path, method, auth, json, readBody }) => {
     const credMatch = CREDS_PATH.exec(path);
     if (credMatch) {
       const principalId = deps.principalId(auth);
       if (!principalId) return json(res, 401, { error: "Unauthorized" });
-      const provider = credMatch[1] as CloudAgentProviderId | undefined;
+      const provider = credMatch[1] as CloudAgentKeyProviderId | undefined;
       const testing = path.endsWith("/test");
       if (!provider) {
         if (method !== "GET") return PASS;
@@ -83,8 +85,12 @@ export function createCloudAgentRoutes(deps: CloudAgentRouteDeps): RouteHandler 
 
     if (!agentId) {
       if (method === "GET") {
-        await deps.manager.syncBot(botId);
-        return json(res, 200, { items: deps.manager.list(botId) });
+        // The stored records only: the sync timer and the stream frames keep
+        // them fresh, so opening a thread never calls the providers.
+        const thread = url.searchParams.get("thread") ?? "";
+        const items = deps.manager.list(botId)
+          .filter((record) => (!thread || record.threadId === thread) && deps.recordVisible(auth, record));
+        return json(res, 200, { items });
       }
       if (method === "POST") {
         if (!principalId) return json(res, 401, { error: "Unauthorized" });
@@ -93,7 +99,7 @@ export function createCloudAgentRoutes(deps: CloudAgentRouteDeps): RouteHandler 
         const launch = body as Record<string, unknown>;
         const provider = launch.provider;
         if (typeof provider !== "string" || !CLOUD_AGENT_PROVIDERS.includes(provider as CloudAgentProviderId)) {
-          return json(res, 400, { error: "provider must be cursor, claude, or codex" });
+          return json(res, 400, { error: "provider must be cursor, claude, codex or perspicax" });
         }
         const prompt = typeof launch.prompt === "string" ? launch.prompt.trim() : "";
         if (!prompt) return json(res, 400, { error: "prompt is required" });
@@ -112,6 +118,8 @@ export function createCloudAgentRoutes(deps: CloudAgentRouteDeps): RouteHandler 
               name: typeof launch.name === "string" ? launch.name : undefined,
               workOnCurrentBranch: launch.workOnCurrentBranch === true,
               autoCreatePr: launch.autoCreatePr === true,
+              ...(typeof launch.envId === "string" && launch.envId ? { envId: launch.envId } : {}),
+              ...(typeof launch.engine === "string" && launch.engine ? { engine: launch.engine } : {}),
             },
           });
           return json(res, 201, { item: record });
@@ -124,7 +132,10 @@ export function createCloudAgentRoutes(deps: CloudAgentRouteDeps): RouteHandler 
 
     if (method === "GET" && !action) {
       const item = deps.manager.get(agentId);
-      if (!item || item.botId !== botId) return json(res, 404, { error: "no such cloud agent" });
+      if (!item || item.botId !== botId || !deps.recordVisible(auth, item)) return json(res, 404, { error: "no such cloud agent" });
+      // Only the person who launched it refreshes it: a refresh borrows
+      // their credentials (their key, or their Perspicax sign-in).
+      if (item.principalId !== deps.principalId(auth)) return json(res, 200, { item });
       await deps.manager.refresh(agentId);
       const fresh = deps.manager.get(agentId);
       return json(res, 200, { item: fresh });

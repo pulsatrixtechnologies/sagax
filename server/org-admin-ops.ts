@@ -1,9 +1,11 @@
 // Connections, Logs and Settings (console design 4.6, 4.8, 4.9 and section
-// 5): engines, people's connections, MCP servers, Composio, marketplaces and
+// 5): engines, people's connections, MCP servers, marketplaces and
 // the skills library, with a Test per line; the server log tail and the
 // incidents; the organization's policies. Never a key, a token, an env
 // value or a header value: providers and names only.
 import type { AdminPerson } from "./org-admin-routes.ts";
+import { compileRule, type CustomRule } from "../shared/custom-rules.ts";
+import { isOrgRuleBehavior, registeredCustomRuleStore, type CustomRuleStore, type OrgRulePatch } from "./custom-rules-store.ts";
 import {
   badRequest,
   enumParam,
@@ -14,6 +16,9 @@ import {
   onlyKeys,
   pageOf,
   parsePage,
+  fail,
+  notFound,
+  type ConsoleAnswer,
   type ConsoleContext,
   type ConsoleRoute,
 } from "./org-admin-console.ts";
@@ -23,14 +28,13 @@ import { LOG_LEVELS, type LogLevel, type LogLine } from "./server-log-ring.ts";
 
 export interface ConnectionsView {
   engines: Array<{ id: string; name: string; installed: boolean; version: string | null; orgKey: boolean; people: number }>;
-  people: Array<{ person: AdminPerson; engines: Array<{ id: string; via: EngineVia; ok: boolean | null; checkedAt: number | null }>; mcpServers: number; composioApps: number }>;
+  people: Array<{ person: AdminPerson; engines: Array<{ id: string; via: EngineVia; ok: boolean | null; checkedAt: number | null }>; mcpServers: number }>;
   mcpServers: Array<{ id: string; name: string; scope: "org" | "person"; owner: AdminPerson | null; transport: "remote" | "stdio"; state: string }>;
-  composio: { configured: boolean; apps: Array<{ slug: string; name: string; people: number }> };
   marketplaces: Array<{ id: string; name: string; url: string; allowed: boolean; plugins: number }>;
   skills: Array<{ id: string; name: string; source: string | null; version: string | null; bots: number }>;
 }
 
-export type TestKind = "engine" | "mcp" | "marketplace" | "composio";
+export type TestKind = "engine" | "mcp" | "marketplace";
 export interface TestResult { ok: boolean; reason: string | null; label: string | null }
 
 export interface Policies {
@@ -52,6 +56,21 @@ export interface OpsDeps {
    * ConsoleRefusal for a value it refuses. */
   saveSettings(changes: SettingsChanges, adminPrincipalId: string): void;
   now(): number;
+  /** 2026-10-21 (server/custom-rules-org.ts): the organization's approval
+   * rules and its Always allow switch. Default: the server's custom rule
+   * store. */
+  orgApprovals?: Pick<CustomRuleStore, "orgPolicy" | "orgRules" | "setOrgAlwaysAllow" | "addOrgRule" | "updateOrgRule" | "removeOrgRule">;
+}
+
+/** One organization rule as the console shows it. */
+export function orgRuleView(rule: CustomRule): { id: string; when: string; behavior: string; enabled: boolean; recognized: boolean; createdAt: number; updatedAt: number } {
+  return { id: rule.id, when: rule.when, behavior: rule.behavior, enabled: rule.enabled, recognized: compileRule(rule.when).recognized, createdAt: rule.createdAt, updatedAt: rule.updatedAt };
+}
+
+function storeError(error: unknown): ConsoleAnswer {
+  const status = (error as { status?: number }).status ?? 500;
+  const message = error instanceof Error ? error.message : String(error);
+  return status === 400 ? badRequest(message) : fail(status, status === 409 ? "conflict" : status === 503 ? "unavailable" : "error", message);
 }
 
 export interface SettingsChanges {
@@ -135,7 +154,111 @@ function settingsChanges(body: Record<string, unknown>): SettingsChanges | strin
 }
 
 export function opsRoutes(deps: OpsDeps): ConsoleRoute[] {
+  const approvals = () => deps.orgApprovals ?? registeredCustomRuleStore();
   return [
+    // 2026-10-21 (Grok Bot parity lot 1A): the organization's approvals.
+    // Rules ask first or refuse, for every person and bot, and members can
+    // neither change nor remove them; alwaysAllow false keeps every approval
+    // to one card at a time (server/custom-rules-org.ts).
+    {
+      method: "GET",
+      path: "org-approvals",
+      min: "admin",
+      handle() {
+        const store = approvals();
+        if (!store) return notImplemented("Organization approval rules are not available on this server.");
+        return ok({ ...store.orgPolicy(), rules: store.orgRules().map(orgRuleView) });
+      },
+    },
+    {
+      method: "POST",
+      path: "org-approvals",
+      min: "admin",
+      handle(ctx) {
+        const store = approvals();
+        if (!store) return notImplemented("Organization approval rules are not available on this server.");
+        const body = objectBody(ctx.body);
+        if (!body || onlyKeys(body, ["alwaysAllow"]) || typeof body.alwaysAllow !== "boolean") return badRequest("Send { \"alwaysAllow\": true | false }.");
+        const before = store.orgPolicy().alwaysAllow;
+        try {
+          store.setOrgAlwaysAllow(body.alwaysAllow);
+        } catch (error) {
+          return storeError(error);
+        }
+        if (before !== body.alwaysAllow) {
+          ctx.record({ category: "approval", action: "org.approvals.alwaysAllow", target: { kind: "organization" }, changed: ["alwaysAllow"], before: { alwaysAllow: before }, after: { alwaysAllow: body.alwaysAllow } });
+        }
+        return ok({ ...store.orgPolicy(), rules: store.orgRules().map(orgRuleView) });
+      },
+    },
+    {
+      method: "POST",
+      path: "org-approvals/rules",
+      min: "admin",
+      handle(ctx) {
+        const store = approvals();
+        if (!store) return notImplemented("Organization approval rules are not available on this server.");
+        const body = objectBody(ctx.body);
+        if (!body || onlyKeys(body, ["when", "behavior"]) || typeof body.when !== "string" || !body.when.trim() || body.when.length > 2000 || !isOrgRuleBehavior(body.behavior)) {
+          return badRequest("Send { \"when\": words, \"behavior\": \"ask\" or \"deny\" }. An organization rule never allows.");
+        }
+        let rule: CustomRule;
+        try {
+          rule = store.addOrgRule({ when: body.when, behavior: body.behavior });
+        } catch (error) {
+          return storeError(error);
+        }
+        ctx.record({ category: "approval", action: "org.approvals.rule.add", target: { kind: "org-rule", id: rule.id }, after: { when: rule.when, behavior: rule.behavior } });
+        return ok({ rule: orgRuleView(rule) }, 201);
+      },
+    },
+    {
+      method: "POST",
+      path: "org-approvals/rules/{id}",
+      min: "admin",
+      handle(ctx) {
+        const store = approvals();
+        if (!store) return notImplemented("Organization approval rules are not available on this server.");
+        const body = objectBody(ctx.body);
+        const bad = !body || onlyKeys(body, ["when", "behavior", "enabled"]) || !Object.keys(body).length
+          || (body.when !== undefined && (typeof body.when !== "string" || !body.when.trim() || body.when.length > 2000))
+          || (body.behavior !== undefined && !isOrgRuleBehavior(body.behavior))
+          || (body.enabled !== undefined && typeof body.enabled !== "boolean");
+        if (bad) return badRequest("Send { \"when\"?, \"behavior\"?: \"ask\" or \"deny\", \"enabled\"?: true or false }.");
+        const before = store.orgRules().find((rule) => rule.id === ctx.params.id);
+        if (!before) return notFound("No such organization rule.");
+        let rule: CustomRule | null;
+        try {
+          rule = store.updateOrgRule(ctx.params.id!, body as OrgRulePatch);
+        } catch (error) {
+          return storeError(error);
+        }
+        if (!rule) return notFound("No such organization rule.");
+        ctx.record({
+          category: "approval", action: "org.approvals.rule.update", target: { kind: "org-rule", id: rule.id },
+          before: { when: before.when, behavior: before.behavior, enabled: before.enabled }, after: { when: rule.when, behavior: rule.behavior, enabled: rule.enabled },
+        });
+        return ok({ rule: orgRuleView(rule) });
+      },
+    },
+    {
+      method: "POST",
+      path: "org-approvals/rules/{id}/remove",
+      min: "admin",
+      handle(ctx) {
+        const store = approvals();
+        if (!store) return notImplemented("Organization approval rules are not available on this server.");
+        let removed: CustomRule | null;
+        try {
+          removed = store.removeOrgRule(ctx.params.id!);
+        } catch (error) {
+          return storeError(error);
+        }
+        if (!removed) return notFound("No such organization rule.");
+        ctx.record({ category: "approval", action: "org.approvals.rule.remove", target: { kind: "org-rule", id: removed.id }, before: { when: removed.when, behavior: removed.behavior } });
+        return ok({ ok: true });
+      },
+    },
     {
       method: "GET",
       path: "connections",
@@ -151,9 +274,9 @@ export function opsRoutes(deps: OpsDeps): ConsoleRoute[] {
       async handle(ctx) {
         const body = objectBody(ctx.body);
         const kind = body?.kind;
-        if (!body || onlyKeys(body, ["kind", "id", "principalId"]) || (kind !== "engine" && kind !== "mcp" && kind !== "marketplace" && kind !== "composio")
+        if (!body || onlyKeys(body, ["kind", "id", "principalId"]) || (kind !== "engine" && kind !== "mcp" && kind !== "marketplace")
           || typeof body.id !== "string" || !body.id || body.id.length > 120 || (body.principalId !== undefined && (typeof body.principalId !== "string" || body.principalId.length > 160))) {
-          return badRequest("Send { \"kind\": \"engine\", \"mcp\", \"marketplace\" or \"composio\", \"id\", \"principalId\"? }.");
+          return badRequest("Send { \"kind\": \"engine\", \"mcp\" or \"marketplace\", \"id\", \"principalId\"? }.");
         }
         const principalId = typeof body.principalId === "string" ? body.principalId : null;
         const { result, latencyMs } = await timed(() => deps.test(kind, body.id as string, principalId));

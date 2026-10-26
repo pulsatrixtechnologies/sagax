@@ -12,6 +12,7 @@
 // person's credential stores are never read or written through the bridge,
 // sizes are bounded, and every action is recorded in this computer's
 // activity log (action and target only, never contents).
+import { createAuthBackoff } from "./auth-backoff.mjs";
 import fs from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
@@ -351,7 +352,7 @@ export async function executeBridgeOperation(operation, deps, signal) {
       return text(`unpacked ${result.manifest.files} files into ${path.join(dir, extractedFolderName(name))}`);
     }
     case "local_model":
-      return executeLocalModel(operation, deps.localModelBase ?? (() => null), deps.fetchUrl, signal, deps.localModelAnthropic ?? (() => false));
+      return executeLocalModel(operation, deps.localModelBase ?? (() => null), deps.fetchUrl, signal, deps.localModelAnthropic ?? (() => false), deps.localModelKey ?? (() => null));
     default:
       throw new Error("Unsupported operation");
   }
@@ -378,6 +379,11 @@ export function createDesktopBridge({
   fetchUrl = globalThis.fetch, browse, cuaConnection, hostControl, resolveProxy, proxyCredentials, lookup, tunnelConnect, WebSocketImpl = globalThis.WebSocket,
   platform = process.platform, hostname = os.hostname(), onChange = () => {}, localVm = createLocalVm(), retryMs = 5000,
   localModelFreshMs = LOCAL_MODEL_FRESH_MS,
+  // The per-loopback-server API key the person set on THIS computer, by base
+  // URL. Desktop-side only (electron/local-model-keys.mjs): it is used to set
+  // the Authorization header of the loopback probe and the model-serving
+  // calls, and is never sent to or stored on the organization server.
+  localModelKeyFor = () => null,
 }) {
   const roots = [...protectedPaths, ...personalSecretPaths(home)];
   const activity = createLendingActivity(activityFile);
@@ -397,11 +403,13 @@ export function createDesktopBridge({
     });
     const raw = await response.text();
     let json; try { json = JSON.parse(raw); } catch { json = null; }
-    if (!response.ok) throw Object.assign(new Error(json?.error ?? `Server request failed (${response.status})`), { status: response.status });
+    if (!response.ok) throw Object.assign(new Error(json?.error ?? `Server request failed (${response.status})`), { status: response.status, ...(typeof json?.code === "string" ? { code: json.code } : {}) });
     return json;
   };
 
   const run = env => {
+    // 2026-10-20: never 12 tries a minute against a server that refuses the session.
+    const backoff = createAuthBackoff({ baseMs: retryMs });
     const abort = new AbortController();
     const signal = abort.signal;
     let tunnel = null;
@@ -431,6 +439,7 @@ export function createDesktopBridge({
             await request(env, "/api/desktop-bridge/connect", registration, signal, secret);
           }
           registered = { id, secret };
+          backoff.reset();
           set({ connected: true, error: undefined });
           const preferences = async () => {
             try {
@@ -469,15 +478,25 @@ export function createDesktopBridge({
             if (!record?.expose) { localCatalog.clear(); localAnthropic.clear(); return; }
             const next = new Map();
             const published = [];
+            // Per-endpoint probe outcome for the Settings panel: "answered",
+            // "empty", "needs_key" or "offline". Only "answered" becomes a
+            // picker row; the rest tell the owner why a server is not listed.
+            const probes = [];
             // All endpoints at once: one slow server (the Anthropic probe
             // waits up to 8 s) never holds back the others or the next tick.
             const candidates = (Array.isArray(record.endpoints) ? record.endpoints : [])
               .map(endpoint => ({ endpoint, base: normalizeLoopbackBase(endpoint?.baseUrl) }))
               .filter(({ endpoint, base }) => base && typeof endpoint?.id === "string");
-            const results = await Promise.all(candidates.map(({ base }) => probeLoopbackCatalog(base, fetchUrl)));
+            // The per-endpoint key (if the person set one on this computer) is
+            // read here and passed only to the loopback probe. It never enters
+            // the `published`/`probes` payload sent to the server below.
+            const keys = await Promise.all(candidates.map(({ base }) => Promise.resolve(localModelKeyFor(base)).catch(() => null)));
+            const results = await Promise.all(candidates.map(({ base }, index) => probeLoopbackCatalog(base, fetchUrl, keys[index] ?? undefined)));
             candidates.forEach(({ endpoint, base }, index) => {
               const probed = results[index];
-              if (!probed?.models.length) return;
+              if (!probed) return;
+              probes.push({ id: endpoint.id, status: probed.status });
+              if (!probed.models.length) return;
               next.set(endpoint.id, base);
               published.push({ id: endpoint.id, label: String(endpoint.label ?? "").slice(0, 80), models: probed.models, details: probed.details, anthropic: probed.anthropic === true });
             });
@@ -491,9 +510,10 @@ export function createDesktopBridge({
               return;
             }
             try {
-              await request(env, `/api/desktop-bridge/${id}/local-models`, { endpoints: published }, live, secret);
+              await request(env, `/api/desktop-bridge/${id}/local-models`, { endpoints: published, probes }, live, secret);
             } catch (error) {
-              // A server that predates model names refuses the extra field. Send ids only.
+              // A server that predates model names or probe status refuses the
+              // extra field. Send ids only, with no probes.
               if (error?.status !== 400) throw error;
               plainCatalog = true;
               await request(env, `/api/desktop-bridge/${id}/local-models`, { endpoints: plain() }, live, secret);
@@ -508,7 +528,7 @@ export function createDesktopBridge({
               .finally(() => { probedAt = Date.now(); probing = null; });
             return probing;
           };
-          refreshNow = () => refreshLocalModels({ freshMs: localModelFreshMs });
+          refreshNow = (options) => refreshLocalModels({ freshMs: options?.force ? 0 : localModelFreshMs });
           live.addEventListener("abort", () => { refreshNow = null; }, { once: true });
           void refreshLocalModels();
           const modelTimer = setInterval(() => void refreshLocalModels(), LOCAL_MODEL_PROBE_MS);
@@ -582,6 +602,9 @@ export function createDesktopBridge({
                 home, attachmentsDir, protectedPaths: roots, fetchUrl, browse, localVm, progress, terminal: openTerminal,
                 localModelBase: (endpoint) => localCatalog.get(endpoint) ?? null,
                 localModelAnthropic: (endpoint) => localAnthropic.has(endpoint),
+                // The key for the served endpoint, by its loopback base, from
+                // this computer's store. Used only for the 127.0.0.1 request.
+                localModelKey: (endpoint) => { const base = localCatalog.get(endpoint); return base ? localModelKeyFor(base) : null; },
                 computer: cuaConnection ? async (op, sig) => {
                   if (hostControl) control = await hostControl(job.id, sig);
                   if (!cua) {
@@ -609,7 +632,7 @@ export function createDesktopBridge({
           if (signal.aborted) break;
           tunnel?.close(); tunnel = null;
           set({ connected: false, tunnel: false, ...(error?.quiet ? {} : { error: error?.message }) });
-          await delay(retryMs, undefined, { signal }).catch(() => {});
+          await delay(backoff.next(error), undefined, { signal }).catch(() => {});
         }
       }
       tunnel?.close();
@@ -626,7 +649,7 @@ export function createDesktopBridge({
         registered = null;
         set({ connected: false, tunnel: false });
       },
-      refreshLocalModels: () => (refreshNow ? refreshNow() : Promise.resolve()),
+      refreshLocalModels: (options) => (refreshNow ? refreshNow(options) : Promise.resolve()),
     };
   };
 
@@ -642,7 +665,7 @@ export function createDesktopBridge({
     state: () => ({ ...state }),
     /** Probe this computer's loopback model servers now (the model picker
      * opened) unless a probe finished in the last LOCAL_MODEL_FRESH_MS. */
-    refreshLocalModels: () => running?.refreshLocalModels() ?? Promise.resolve(),
+    refreshLocalModels: (options) => running?.refreshLocalModels(options) ?? Promise.resolve(),
     activity: limit => activity.list(limit),
     close() { running?.stop(); running = null; },
   };

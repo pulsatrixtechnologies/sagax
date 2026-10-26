@@ -33,14 +33,13 @@ describe("sidebar shortcuts preference", () => {
     const preference = await load();
     expect(preference.sidebarShortcutsOn({ features: {} })).toBe(false);
     expect(preference.sidebarShortcutsOn(null)).toBe(false);
-    expect(preference.sidebarShortcutsOn({ features: { connectedApps: true } })).toBe(true);
     expect(preference.sidebarShortcutsOn({ features: { templates: true } })).toBe(true);
     expect(local.setItem).not.toHaveBeenCalled();
   });
 
   it("migrates once: shown before means shown now, hidden before means hidden now", async () => {
     let preference = await load();
-    expect(preference.migrateSidebarShortcuts({ features: { connectedApps: true } })).toBe(true);
+    expect(preference.migrateSidebarShortcuts({ features: { templates: true } })).toBe(true);
     expect(local.getItem(preference.SIDEBAR_SHORTCUTS_KEY)).toBe("1");
     // the stored value is the person's from now on, whatever the switches say
     expect(preference.migrateSidebarShortcuts({ features: {} })).toBe(false);
@@ -49,7 +48,7 @@ describe("sidebar shortcuts preference", () => {
     local.clear();
     vi.resetModules();
     preference = await load();
-    expect(preference.migrateSidebarShortcuts({ features: { connectedApps: false, templates: false } })).toBe(true);
+    expect(preference.migrateSidebarShortcuts({ features: { templates: false } })).toBe(true);
     expect(local.getItem(preference.SIDEBAR_SHORTCUTS_KEY)).toBe("0");
     expect(preference.sidebarShortcutsOn({ features: { templates: true } })).toBe(false);
   });
@@ -68,7 +67,7 @@ describe("sidebar shortcuts preference", () => {
     vi.resetModules();
     preference = await load();
     expect(preference.storedSidebarShortcuts()).toBe(false);
-    expect(preference.sidebarShortcutsOn({ features: { connectedApps: true, templates: true } })).toBe(false);
+    expect(preference.sidebarShortcutsOn({ features: { templates: true } })).toBe(false);
     preference.setSidebarShortcuts(true);
     vi.resetModules();
     preference = await load();

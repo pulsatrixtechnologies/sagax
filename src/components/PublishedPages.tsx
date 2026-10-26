@@ -6,57 +6,27 @@
 // online. PublishedPagesSettings is Settings > Pages publiées: every page of
 // the person, its link, who can see it, its expiry, its versions, Revoke
 // and Delete.
-import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, ExternalLink, Eye, EyeOff, FileText, Globe, Loader2, Lock, Trash2, Users, XCircle } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Eye, EyeOff, FileText, Loader2, Maximize2, Trash2, XCircle } from "lucide-react";
 
-import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
-import type { LocaleKey } from "@/locales";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
-import { SettingsGroup, SettingsIntro, SettingsNotice, SettingsTextRow } from "./SettingsPrimitives";
+import { SettingsGroup, SettingsIntro, SettingsNotice, SettingsTextRow, SwitchRow } from "./SettingsPrimitives";
 import { api, useStore, type Message } from "@/state/store";
 import {
   PAGE_ACCESS,
-  PAGE_EXPIRY_CHOICES,
   type PageAccess,
+  type PagesPolicy,
   type PublishedPageSummary,
 } from "../../shared/published-pages";
+import { AccessPicker, ACCESS_LABEL, ExpirySelect, expiryFromHours, LinkRow, needsLinkConfirm, pageErrorText, previewSrc, usePagesPolicy, when } from "./page-controls";
+import { PageViewerDialog } from "./PageViewer";
 
-const ACCESS_LABEL: Record<PageAccess, LocaleKey> = {
-  private: "pages.access.private",
-  org: "pages.access.org",
-  link: "pages.access.link",
-};
-const ACCESS_HINT: Record<PageAccess, LocaleKey> = {
-  private: "pages.access.privateHint",
-  org: "pages.access.orgHint",
-  link: "pages.access.linkHint",
-};
-const ACCESS_ICON = { private: Lock, org: Users, link: Globe } as const;
-
-/** The expiry a choice of hours stands for (0: never). Pure. */
-export function expiryFromHours(hours: number, now = Date.now()): number | null {
-  return hours > 0 ? now + hours * 60 * 60 * 1000 : null;
-}
+export { expiryFromHours, previewSrc };
 
 /** The body of POST /api/pages/:id/publish. Pure. */
 export function publishBody(version: number, access: PageAccess, hours: number, now = Date.now()) {
   return { version, access, expiresAt: expiryFromHours(hours, now) };
-}
-
-function expiryLabel(hours: number): string {
-  if (hours === 0) return t("pages.expiry.never");
-  if (hours === 24) return t("pages.expiry.day");
-  if (hours === 7 * 24) return t("pages.expiry.week");
-  return t("pages.expiry.month");
-}
-
-function when(at: number): string {
-  return new Date(at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-}
-
-function openPage(url: string) {
-  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 /** One version, previewed exactly as readers get it: the server's wrapper
@@ -76,7 +46,7 @@ export function PagePreviewFrame({ pageId, version, title }: { pageId: string; v
         if (src) setPath(src);
         else setError(t("pages.previewUnavailable"));
       })
-      .catch((cause) => { if (live) setError(cause instanceof Error ? cause.message : String(cause)); });
+      .catch((cause) => { if (live) setError(pageErrorText(cause)); });
     return () => { live = false; };
   }, [pageId, version]);
   if (error) return <p role="alert" className="text-[12px] text-danger">{error}</p>;
@@ -93,64 +63,6 @@ export function PagePreviewFrame({ pageId, version, title }: { pageId: string; v
   );
 }
 
-/** Only this server's own preview wrapper path is ever framed. Pure. */
-export function previewSrc(path: string): string | null {
-  return /^\/pages\/preview\/[A-Za-z0-9_-]{8,40}\/\d{1,4}$/.test(path) ? path : null;
-}
-
-function AccessPicker({ value, onChange, name, disabled }: { value: PageAccess; onChange(access: PageAccess): void; name: string; disabled?: boolean }) {
-  return (
-    <fieldset className="space-y-1" disabled={disabled}>
-      <legend className="mb-1 text-[12px] font-medium text-ink">{t("pages.whoCanSee")}</legend>
-      {PAGE_ACCESS.map((access) => {
-        const Icon = ACCESS_ICON[access];
-        return (
-          <label key={access} className="flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 text-[12.5px] hover:bg-raised/50">
-            <input type="radio" name={name} value={access} checked={value === access} onChange={() => onChange(access)} className="mt-0.5" />
-            <Icon size={13} aria-hidden="true" className="mt-0.5 text-ink-secondary" />
-            <span>
-              <span className="text-ink">{t(ACCESS_LABEL[access])}</span>
-              <span className="block text-[11.5px] text-ink-tertiary">{t(ACCESS_HINT[access])}</span>
-            </span>
-          </label>
-        );
-      })}
-    </fieldset>
-  );
-}
-
-function ExpirySelect({ value, onChange, disabled }: { value: number; onChange(hours: number): void; disabled?: boolean }) {
-  return (
-    <label className="flex items-center gap-2 text-[12.5px] text-ink">
-      {t("pages.expiry.label")}
-      <select value={value} disabled={disabled} onChange={(event) => onChange(Number(event.target.value))}
-        className="rounded-md border border-hairline/50 bg-panel px-2 py-1 text-[12.5px]">
-        {value < 0 && <option value={-1} disabled>{t("pages.expiry.change")}</option>}
-        {PAGE_EXPIRY_CHOICES.map((hours) => <option key={hours} value={hours}>{expiryLabel(hours)}</option>)}
-      </select>
-    </label>
-  );
-}
-
-function LinkRow({ page }: { page: PublishedPageSummary }) {
-  const [copied, setCopied] = useState(false);
-  if (!page.url) return null;
-  return (
-    <div className="flex items-center gap-2 rounded-lg bg-raised/45 px-2.5 py-1.5 text-[12px]">
-      <span className="min-w-0 flex-1 truncate text-ink" title={page.url}>{page.url}</span>
-      <button type="button" aria-label={t("pages.copyLink")} title={t("pages.copyLink")} onClick={() => void copyText(page.url!).then((result) => setCopied(result === "copied"))}
-        className="rounded p-1 text-ink-secondary hover:bg-hover hover:text-ink">
-        {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
-      </button>
-      <button type="button" aria-label={t("pages.open")} title={t("pages.open")} onClick={() => openPage(page.url!)}
-        className="rounded p-1 text-ink-secondary hover:bg-hover hover:text-ink">
-        <ExternalLink size={13} />
-      </button>
-      {page.reachable === false && <span className="text-warning">{t("pages.localOnly")}</span>}
-    </div>
-  );
-}
-
 /** The approval card of a bot's proposal (message field `pagePublish`). */
 export function PagePublishCard({ message }: { message: Message }) {
   const ref = message.pagePublish!;
@@ -162,6 +74,9 @@ export function PagePublishCard({ message }: { message: Message }) {
   const [confirmLink, setConfirmLink] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [viewing, setViewing] = useState(false);
+  const openButton = useRef<HTMLButtonElement>(null);
+  const policy = usePagesPolicy();
 
   const load = useCallback(async () => {
     try {
@@ -182,7 +97,7 @@ export function PagePublishCard({ message }: { message: Message }) {
       setPage(answer.page);
       setConfirmLink(false);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(pageErrorText(cause));
     } finally {
       setBusy(false);
     }
@@ -205,9 +120,16 @@ export function PagePublishCard({ message }: { message: Message }) {
       className="my-2 w-full max-w-[640px] overflow-hidden rounded-xl border border-hairline/40 bg-panel shadow-sm">
       <header className="flex items-center gap-2 border-b border-hairline/30 bg-raised/30 px-3 py-2 text-[12px] text-ink-secondary">
         <FileText size={14} aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate font-medium text-ink">{ref.title}</span>
+        <span className="min-w-0 flex-1 truncate font-medium text-ink">{page?.title || ref.title}</span>
         <span>{t("pages.versionN", { n: String(ref.version) })}</span>
+        {page && (
+          <button ref={openButton} type="button" data-page-open aria-label={t("pages.openFull")} title={t("pages.openFull")} onClick={() => setViewing(true)}
+            className="rounded p-1 text-ink-secondary hover:bg-hover hover:text-ink">
+            <Maximize2 size={13} />
+          </button>
+        )}
       </header>
+      {viewing && <PageViewerDialog pageId={ref.pageId} version={ref.version} returnFocus={openButton.current} onClose={() => setViewing(false)} onChange={setPage} />}
       <div className="space-y-3 px-3 py-3">
         {!page && <Loader2 size={14} className="animate-spin text-ink-secondary" />}
         {page && (
@@ -220,7 +142,7 @@ export function PagePublishCard({ message }: { message: Message }) {
             {state === "proposed" && (
               <>
                 <p className="text-[12px] text-ink-secondary">{t("pages.reviewIntro")}</p>
-                <AccessPicker value={access} onChange={(next) => { setAccess(next); setConfirmLink(false); }} name={`page-access-${message.id}`} disabled={busy} />
+                <AccessPicker value={access} onChange={(next) => { setAccess(next); setConfirmLink(false); }} name={`page-access-${message.id}`} disabled={busy} linkOff={!policy.linkSharing} />
                 <ExpirySelect value={hours} onChange={setHours} disabled={busy} />
                 {confirmLink && <p role="alert" className="text-[12px] text-warning">{t("pages.confirmLink")}</p>}
                 <div className="flex flex-wrap gap-2">
@@ -252,11 +174,15 @@ export function PagePublishCard({ message }: { message: Message }) {
   );
 }
 
-function PageRow({ page, onChange, onRemoved }: { page: PublishedPageSummary; onChange(page: PublishedPageSummary): void; onRemoved(id: string): void }) {
+function PageRow({ page, linkOff, onChange, onRemoved }: { page: PublishedPageSummary; linkOff: boolean; onChange(page: PublishedPageSummary): void; onRemoved(id: string): void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [previewing, setPreviewing] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [pendingAccess, setPendingAccess] = useState<PageAccess | null>(null);
+  const [viewing, setViewing] = useState(false);
+  const openButton = useRef<HTMLButtonElement>(null);
   const call = async (path: string, init: RequestInit) => {
     setBusy(true);
     setError("");
@@ -265,7 +191,7 @@ function PageRow({ page, onChange, onRemoved }: { page: PublishedPageSummary; on
       if (answer.page) onChange(answer.page);
       else onRemoved(page.id);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(pageErrorText(cause));
     } finally {
       setBusy(false);
     }
@@ -278,7 +204,12 @@ function PageRow({ page, onChange, onRemoved }: { page: PublishedPageSummary; on
         <FileText size={14} aria-hidden="true" className="text-ink-secondary" />
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">{page.title}</span>
         <span className="rounded-full bg-raised px-2 py-0.5 text-[11px] text-ink-secondary">{status}</span>
+        <button ref={openButton} type="button" data-page-open aria-label={t("pages.openFull")} title={t("pages.openFull")} onClick={() => setViewing(true)}
+          className="rounded p-1 text-ink-secondary hover:bg-hover hover:text-ink">
+          <Maximize2 size={13} />
+        </button>
       </div>
+      {viewing && <PageViewerDialog pageId={page.id} returnFocus={openButton.current} onClose={() => setViewing(false)} onChange={onChange} />}
       <p className="text-[11.5px] text-ink-tertiary">
         {t("pages.updated", { when: when(page.updatedAt) })}
         {page.expiresAt !== null && ` · ${t("pages.expiresOn", { when: when(page.expiresAt) })}`}
@@ -289,17 +220,40 @@ function PageRow({ page, onChange, onRemoved }: { page: PublishedPageSummary; on
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 text-[12.5px] text-ink">
               {t("pages.whoCanSee")}
-              <select value={page.access} disabled={busy} onChange={(event) => void call("", { method: "PATCH", body: JSON.stringify({ access: event.target.value }) })}
+              <select value={pendingAccess ?? page.access} disabled={busy} onChange={(event) => {
+                const next = event.target.value as PageAccess;
+                // the same second press as a first publish for a public link
+                if (needsLinkConfirm(page.access, next)) return setPendingAccess(next);
+                void call("", { method: "PATCH", body: JSON.stringify({ access: next }) });
+              }}
                 className="rounded-md border border-hairline/50 bg-panel px-2 py-1 text-[12.5px]">
-                {PAGE_ACCESS.map((access) => <option key={access} value={access}>{t(ACCESS_LABEL[access])}</option>)}
+                {PAGE_ACCESS.map((access) => <option key={access} value={access} disabled={access === "link" && linkOff && page.access !== "link"}>{t(ACCESS_LABEL[access])}</option>)}
               </select>
             </label>
             <ExpirySelect value={-1} disabled={busy} onChange={(hours) => void call("", { method: "PATCH", body: JSON.stringify({ expiresAt: expiryFromHours(hours) }) })} />
-            <button type="button" data-page-revoke disabled={busy} onClick={() => void call("/revoke", { method: "POST", body: "{}" })}
-              className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[12.5px] text-danger hover:bg-danger/10 disabled:opacity-40">
-              <XCircle size={13} />{t("pages.revoke")}
-            </button>
+            {confirmRevoke ? (
+              <span role="alert" className="flex items-center gap-2 text-[12px]">
+                {t("pages.unpublishConfirm", { name: page.title })}
+                <button type="button" data-page-revoke disabled={busy} onClick={() => { setConfirmRevoke(false); void call("/revoke", { method: "POST", body: "{}" }); }}
+                  className="rounded px-1.5 py-1 text-danger hover:bg-danger/10 disabled:opacity-40">{t("pages.unpublish")}</button>
+                <button type="button" onClick={() => setConfirmRevoke(false)} className="rounded px-1.5 py-1 text-ink-secondary hover:bg-hover">{t("pages.cancel")}</button>
+              </span>
+            ) : (
+              <button type="button" disabled={busy} onClick={() => setConfirmRevoke(true)}
+                className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[12.5px] text-danger hover:bg-danger/10 disabled:opacity-40">
+                <XCircle size={13} />{t("pages.unpublish")}
+              </button>
+            )}
           </div>
+          {pendingAccess && (
+            <span role="alert" className="flex flex-wrap items-center gap-2 text-[12px]">
+              <span className="text-warning">{t("pages.confirmLinkChange")}</span>
+              <button type="button" disabled={busy} onClick={() => { const next = pendingAccess; setPendingAccess(null); void call("", { method: "PATCH", body: JSON.stringify({ access: next }) }); }}
+                className="rounded px-1.5 py-1 text-accent hover:bg-hover">{t("pages.publishConfirm")}</button>
+              <button type="button" onClick={() => setPendingAccess(null)} className="rounded px-1.5 py-1 text-ink-secondary hover:bg-hover">{t("pages.cancel")}</button>
+            </span>
+          )}
+          {linkOff && page.access === "link" && <p className="text-[12px] text-warning">{t("pages.linkOffActive")}</p>}
         </>
       )}
       <details className="text-[12px]">
@@ -349,6 +303,21 @@ function OrganizationPages() {
   const [pages, setPages] = useState<Array<PublishedPageSummary & { ownerId: string | null }> | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [policy, setPolicy] = useState<PagesPolicy | null>(null);
+  useEffect(() => {
+    api<PagesPolicy>("/api/admin/pages/policy").then(setPolicy).catch(() => setPolicy(null));
+  }, []);
+  const switchPolicy = async (change: Partial<PagesPolicy>) => {
+    setBusy("policy");
+    setError("");
+    try {
+      setPolicy(await api<PagesPolicy>("/api/admin/pages/policy", { method: "PUT", body: JSON.stringify(change) }));
+    } catch (cause) {
+      setError(pageErrorText(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
   useEffect(() => {
     api<{ pages: Array<PublishedPageSummary & { ownerId: string | null }> }>("/api/admin/pages")
       .then((answer) => setPages(answer.pages))
@@ -361,7 +330,7 @@ function OrganizationPages() {
       const answer = await api<{ page: PublishedPageSummary & { ownerId: string | null } }>(`/api/admin/pages/${encodeURIComponent(id)}/revoke`, { method: "POST", body: "{}" });
       setPages((current) => (current ?? []).map((entry) => (entry.id === id ? answer.page : entry)));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(pageErrorText(cause));
     } finally {
       setBusy(null);
     }
@@ -371,6 +340,14 @@ function OrganizationPages() {
     <div data-settings-card="pages.organization">
       <SettingsGroup title={t("pages.admin.title")} groupId="pages.organization">
         <SettingsTextRow>{t("pages.admin.intro")}</SettingsTextRow>
+        {policy && (
+          <div className="px-3.5 py-2.5">
+            <SwitchRow label={t("pages.admin.linkSharing")} description={t("pages.admin.linkSharingHint")} checked={policy.linkSharing}
+              disabled={busy === "policy"} onChange={(next) => void switchPolicy({ linkSharing: next })} />
+            <SwitchRow className="mt-3" label={t("pages.admin.readerComments")} description={t("pages.admin.readerCommentsHint")} checked={policy.readerComments}
+              disabled={busy === "policy"} onChange={(next) => void switchPolicy({ readerComments: next })} />
+          </div>
+        )}
         {pages !== null && live.length === 0 && <SettingsTextRow>{t("pages.admin.empty")}</SettingsTextRow>}
         {live.length > 0 && <ul className="flex flex-col">
           {live.map((page) => (
@@ -393,6 +370,7 @@ function OrganizationPages() {
 /** Settings > Pages publiées. */
 export function PublishedPagesSettings() {
   const { state } = useStore();
+  const policy = usePagesPolicy();
   const organization = usePerspicaxOrg() !== null;
   const admin = organization && (state.config?.viewer?.role === "admin" || state.config?.viewer?.role === "owner");
   const [pages, setPages] = useState<PublishedPageSummary[] | null>(null);
@@ -400,7 +378,7 @@ export function PublishedPagesSettings() {
   useEffect(() => {
     api<{ pages: PublishedPageSummary[] }>("/api/pages")
       .then((answer) => setPages(answer.pages))
-      .catch((cause) => { setPages([]); setError(cause instanceof Error ? cause.message : String(cause)); });
+      .catch((cause) => { setPages([]); setError(pageErrorText(cause)); });
   }, []);
   return (
     <section data-settings-card="pages" className="flex min-w-0 flex-col gap-3">
@@ -412,7 +390,7 @@ export function PublishedPagesSettings() {
         {pages && pages.length > 0 && (
           <ul className="flex flex-col">
             {pages.map((page) => (
-              <PageRow key={page.id} page={page}
+              <PageRow key={page.id} page={page} linkOff={!policy.linkSharing}
                 onChange={(next) => setPages((current) => (current ?? []).map((entry) => (entry.id === next.id ? next : entry)))}
                 onRemoved={(id) => setPages((current) => (current ?? []).filter((entry) => entry.id !== id))} />
             ))}

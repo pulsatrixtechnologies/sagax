@@ -1,0 +1,14 @@
+<div class="card">
+  <div class="card-header"><div><div class="card-title">Calculateur de marge</div><div class="card-description">Prix de vente et marge brute</div></div></div>
+  <div class="card-content grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
+    <div class="field"><label class="label" for="cost">Coût ($)</label><input id="cost" class="input" type="number" value="120"></div>
+    <div class="field"><label class="label" for="margin">Marge (%)</label><input id="margin" class="input" type="number" value="35"></div>
+  </div>
+  <div class="card-content"><div class="stat"><span class="muted">Prix de vente</span> <strong id="out">184,62 $</strong></div></div>
+  <table class="table"><thead><tr><th>Article</th><th>Coût</th><th>Prix</th></tr></thead><tbody><tr><td class="title">Licence M365</td><td class="num">120</td><td class="num">184,62</td></tr></tbody></table>
+</div>
+<script>
+const c=document.getElementById('cost'),m=document.getElementById('margin'),o=document.getElementById('out');
+function u(){const p=+c.value/(1-(+m.value)/100);o.textContent=p.toFixed(2).replace('.',',')+' $';}
+c.oninput=m.oninput=u;u();
+</script>

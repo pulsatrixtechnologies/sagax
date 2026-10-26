@@ -23,7 +23,6 @@ vi.mock("@/state/store", async (importOriginal) => ({
 vi.mock("@/lib/analytics", () => ({ analyticsEnabled: () => false, setAnalyticsEnabled: vi.fn() }));
 
 const baseConfig = (over: Record<string, unknown> = {}) => ({
-  composio: { configured: false, mode: "unavailable" },
   box: { configured: false },
   vps: { configured: false, sshAlias: "" },
   rooms: { turnTimeoutMinutes: 5 },
@@ -271,31 +270,25 @@ describe("Settings > Models and voice", () => {
     expect(html).toContain("Plus de fournisseurs");
   });
 
-  // 2026-10-14: Connected apps and Decision model are cards of this page
-  // while their experiment is on, no longer menu entries of their own.
-  it("holds Connected apps and Decision model as cards while their experiment is on", async () => {
+  // 2026-10-14: Decision model is a card of this page while its experiment
+  // is on, no longer a menu entry of its own.
+  it("holds Decision model as a card while its experiment is on", async () => {
     let html = await page();
-    expect(html).not.toContain("platform.composio.dev");
     expect(html).not.toContain('data-settings-card="engines.decisionModel"');
-    fixture.config = baseConfig({ features: { connectedApps: true, decisionModel: true } });
+    fixture.config = baseConfig({ features: { decisionModel: true } });
     html = await page();
-    expect(html).toContain('data-settings-card="connections.apps"');
-    expect(html).toContain("platform.composio.dev");
     expect(html).toContain('data-settings-card="engines.decisionModel"');
-    // the navigation has no entry for either
+    // the navigation has no entry for it
     const nav = part(html, "<nav", "</nav>");
-    expect(nav).not.toContain(">Connected apps<");
     expect(nav).not.toContain(">Decision model<");
   });
 
-  it("opens the card from an old Connected apps or Decision model link", async () => {
-    fixture.config = baseConfig({ features: { connectedApps: true, decisionModel: true } });
-    for (const section of ["connectedApps", "decisionModel"]) {
-      fixture.section = section;
-      const html = await page();
-      expect(html, section).toContain("data-models-voice");
-      expect(html, section).toContain('data-settings-card="engines.decisionModel"');
-    }
+  it("opens the card from an old Decision model link", async () => {
+    fixture.config = baseConfig({ features: { decisionModel: true } });
+    fixture.section = "decisionModel";
+    const html = await page();
+    expect(html).toContain("data-models-voice");
+    expect(html).toContain('data-settings-card="engines.decisionModel"');
   });
 
   it("points OpenCode users at `opencode auth login` in the OpenCode key dialog", async () => {

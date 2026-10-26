@@ -8,7 +8,7 @@ import { z } from "zod";
 import { writeFileAtomic } from "../atomic.ts";
 import type { VaultKeySource } from "../mcp-oauth.ts";
 import { principalDir } from "../person-connections.ts";
-import { CLOUD_AGENT_PROVIDERS, type CloudAgentProviderId } from "../../shared/cloud-agents.ts";
+import { CLOUD_AGENT_KEY_PROVIDERS, type CloudAgentKeyProviderId, type CloudAgentProviderId } from "../../shared/cloud-agents.ts";
 
 const AAD = Buffer.from("sagax cloud-agent-credentials v1");
 const FILE = "cloud-agent-credentials.enc";
@@ -21,7 +21,8 @@ const PRINCIPAL_ID = /^[A-Za-z0-9_.:-]{1,120}$/;
 const documentSchema = z.object({
   version: z.literal(1),
   providers: z.partialRecord(
-    z.enum(CLOUD_AGENT_PROVIDERS),
+    // Perspicax takes the person's sign-in, never a stored key.
+    z.enum(CLOUD_AGENT_KEY_PROVIDERS),
     z.object({
       token: z.string().min(1).max(16_384),
       addedAt: z.number(),
@@ -31,7 +32,7 @@ const documentSchema = z.object({
 }).strict();
 
 export interface CloudAgentCredentialListing {
-  provider: CloudAgentProviderId;
+  provider: CloudAgentKeyProviderId;
   configured: boolean;
   last4?: string;
   label?: string;
@@ -99,7 +100,7 @@ export class CloudAgentCredentialStore {
 
   list(principalId: string): CloudAgentCredentialListing[] {
     const doc = this.read(principalId);
-    return CLOUD_AGENT_PROVIDERS.map((provider) => {
+    return CLOUD_AGENT_KEY_PROVIDERS.map((provider) => {
       const row = doc.providers[provider];
       if (!row) return { provider, configured: false };
       const last4 = row.token.length >= 4 ? row.token.slice(-4) : undefined;
@@ -108,10 +109,11 @@ export class CloudAgentCredentialStore {
   }
 
   token(principalId: string, provider: CloudAgentProviderId): string | null {
+    if (provider === "perspicax") return null;
     return this.read(principalId).providers[provider]?.token ?? null;
   }
 
-  set(principalId: string, provider: CloudAgentProviderId, token: string, label?: string): void {
+  set(principalId: string, provider: CloudAgentKeyProviderId, token: string, label?: string): void {
     const trimmed = token.trim();
     if (!trimmed) throw new Error("empty token");
     const doc = this.read(principalId);
@@ -119,7 +121,7 @@ export class CloudAgentCredentialStore {
     this.write(principalId, doc);
   }
 
-  remove(principalId: string, provider: CloudAgentProviderId): boolean {
+  remove(principalId: string, provider: CloudAgentKeyProviderId): boolean {
     const doc = this.read(principalId);
     if (!doc.providers[provider]) return false;
     delete doc.providers[provider];

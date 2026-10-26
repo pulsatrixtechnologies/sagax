@@ -359,6 +359,64 @@ describe("start_thread on yourself", () => {
     }
   }, 60_000);
 
+  // Grok Bot parity D1: a sub-agent of one's own that is read-only, and one
+  // resumed by its id instead of opening a fresh thread.
+  it("opens a read-only thread in Ask and resumes its own earlier thread by id", async () => {
+    const bot = await createBot("Rhea", "gated");
+    const other = await createBot("Otto", "gated");
+    try {
+      expect((await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "edits" })).status).toBe(200);
+      const token = await heldTurn(bot, "Look into the logs, separately.");
+      const looked = await api("POST", "/api/internal/threads", { title: "Look only", message: "Read the logs.", readOnly: true }, token);
+      expect(looked.status).toBe(201);
+      expect(looked.body).toMatchObject({ self: true, readOnly: true });
+      // never wider than Ask, whatever the bot's level
+      expect(await taskOf(bot.id, looked.body.threadId)).toMatchObject({ approvalMode: "ask" });
+      const opening = (await messages(looked.body.threadId)).find((message) => message.role === "user");
+      expect(opening.text).toContain("Read-only task");
+      expect(opening.text).toContain("Read the logs.");
+      release(looked.body.threadId);
+      await expect.poll(async () => (await taskOf(bot.id, looked.body.threadId))?.busy, { timeout: 15_000 }).toBe(false);
+
+      // a teammate's thread, the person's own thread and an unknown id are not this bot's sub-agents
+      const teammate = await api("POST", "/api/internal/threads", { title: "x", message: "go", bot_id: other.id, toBotId: other.id, readOnly: true }, token);
+      expect(teammate.status).not.toBe(201);
+      expect((await botState(other.id)).tasks).toHaveLength(1);
+      expect((await api("POST", "/api/internal/threads", { message: "go on", resumeThreadId: bot.threadId }, token)).status).toBe(409);
+      const persons = (await api("POST", `/api/bots/${bot.id}/tasks`, { title: "The person's own" })).body.task;
+      expect((await api("POST", "/api/internal/threads", { message: "go on", resumeThreadId: persons.threadId }, token)).status).toBe(403);
+      expect((await api("POST", "/api/internal/threads", { message: "go on", resumeThreadId: other.threadId }, token)).status).toBe(404);
+      expect((await api("POST", "/api/internal/threads", { message: "go on", resumeThreadId: "no-such-thread" }, token)).status).toBe(404);
+
+      const resumed = await api("POST", "/api/internal/threads", { message: "Now check the config too.", resumeThreadId: looked.body.threadId }, token);
+      expect(resumed.status).toBe(201);
+      expect(resumed.body).toMatchObject({ threadId: looked.body.threadId, title: "Look only", self: true, resumed: true, state: "running" });
+      await expect.poll(async () => (await messages(looked.body.threadId)).filter((message) => message.role === "user").length, { timeout: 15_000 }).toBe(2);
+      const followUp = (await messages(looked.body.threadId)).filter((message) => message.role === "user").at(-1);
+      expect(followUp.text).toContain("Now check the config too.");
+      // still read-only: the thread kept Ask
+      expect(await taskOf(bot.id, looked.body.threadId)).toMatchObject({ approvalMode: "ask" });
+      // resuming opens no row: the main thread, the person's own and the read-only one
+      expect((await botState(bot.id)).tasks).toHaveLength(3);
+      release(looked.body.threadId);
+      await expect.poll(async () => (await taskOf(bot.id, looked.body.threadId))?.busy, { timeout: 15_000 }).toBe(false);
+
+      // a thread opened at the bot's level, resumed read-only, drops to Ask
+      const wide = await api("POST", "/api/internal/threads", { title: "Wide", message: "Fix the typo." }, token);
+      expect(await taskOf(bot.id, wide.body.threadId)).toMatchObject({ approvalMode: "edits" });
+      release(wide.body.threadId);
+      await expect.poll(async () => (await taskOf(bot.id, wide.body.threadId))?.busy, { timeout: 15_000 }).toBe(false);
+      const narrowed = await api("POST", "/api/internal/threads", { message: "Only look this time.", resumeThreadId: wide.body.threadId, readOnly: true }, token);
+      expect(narrowed.body).toMatchObject({ resumed: true, readOnly: true });
+      expect(await taskOf(bot.id, wide.body.threadId)).toMatchObject({ approvalMode: "ask", alwaysAllow: [] });
+      release(wide.body.threadId);
+      release(bot.threadId);
+      await expect.poll(async () => (await botState(bot.id))?.busy, { timeout: 15_000 }).toBe(false);
+    } finally {
+      await cleanup([bot.id, other.id]);
+    }
+  }, 60_000);
+
   // #1950: the person moved this thread off the bot default, so the work it
   // opens stays where they put it. A teammate's thread and a thread started
   // from scratch have no such parent and keep their own bot's default.

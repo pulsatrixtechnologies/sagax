@@ -178,6 +178,13 @@ export function scheduleAt(schedule: RoutineSchedule, occurrenceAt: number, next
     type: "daily",
     time: toLocalTimeInput(nextAt),
     weekdays: schedule.weekdays.map((weekday) => ((weekday + dayDelta) % 7 + 7) % 7).sort(),
+    ...(schedule.timing === "flexible"
+      ? {
+        timing: "flexible" as const,
+        windowEarlyMinutes: schedule.windowEarlyMinutes,
+        windowLateMinutes: schedule.windowLateMinutes,
+      }
+      : {}),
   };
 }
 
@@ -283,6 +290,57 @@ export function projectedRoutineItems(
     }
   }
   return items.sort((left, right) => left.at - right.at);
+}
+
+/**
+ * What the Calendar view draws: the PLANNED occurrences only, past and future,
+ * at their scheduled time. A run is a log entry (status, result), so it never
+ * shows here; it only confirms that a planned occurrence took place.
+ */
+export function scheduledRoutineItems(
+  routines: Routine[],
+  runs: RoutineRun[],
+  from: number,
+  to: number,
+): RoutineCalendarItem[] {
+  const seen = new Set<string>();
+  const items: RoutineCalendarItem[] = [];
+  // A manual "Run now" is not a planned occurrence.
+  for (const item of projectedRoutineItems(routines, runs.filter((run) => !run.manual), from, to)) {
+    if (!item.routine) continue;
+    const id = `plan-${item.routine.id}-${item.at}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    items.push({ ...item, id, run: null });
+  }
+  return items;
+}
+
+const SLOT_GROUP_MS = 30 * 60_000;
+
+/**
+ * Many routines in the same half hour: draw at most two cards. Past that,
+ * the first one stays and the others collapse into one "+N" marker that lists
+ * them on demand, instead of a stack of unreadable slivers.
+ */
+export function groupCalendarSlots<T extends CalendarCollisionItem>(
+  items: readonly T[],
+  maxVisible = 2,
+): { shown: T[]; overflow: Array<{ id: string; at: number; items: T[] }> } {
+  const slots = new Map<number, T[]>();
+  for (const item of [...items].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id))) {
+    const key = Math.floor(item.at / SLOT_GROUP_MS);
+    slots.set(key, [...(slots.get(key) ?? []), item]);
+  }
+  const shown: T[] = [];
+  const overflow: Array<{ id: string; at: number; items: T[] }> = [];
+  for (const slot of slots.values()) {
+    if (slot.length <= maxVisible) { shown.push(...slot); continue; }
+    shown.push(slot[0]!);
+    const rest = slot.slice(1);
+    overflow.push({ id: `more-${slot[0]!.id}`, at: slot[0]!.at, items: rest });
+  }
+  return { shown, overflow };
 }
 
 export function calendarRangeLabel(from: number, days: number): string {

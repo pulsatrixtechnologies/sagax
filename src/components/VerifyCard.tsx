@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { SIDE_CARD, SIDE_CARD_HEADER, SIDE_CARD_ICON_BUTTON } from "@/lib/side-card";
 import { runSummary, type RunSkill, type RunStep } from "@/lib/verify-steps";
 
 function StatusIcon({ status }: { status: RunStep["status"] }) {
@@ -17,8 +18,7 @@ function StatusIcon({ status }: { status: RunStep["status"] }) {
   }
 }
 
-const ICON_BUTTON =
-  "flex size-7 shrink-0 items-center justify-center rounded-lg text-ink-secondary outline-none hover:bg-raised-hover hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/60";
+const ICON_BUTTON = SIDE_CARD_ICON_BUTTON;
 
 /** A bot's run in the current ask as a checklist — every command it ran,
  * the control-CLI ones tagged verified — with one action: put the run into
@@ -26,7 +26,9 @@ const ICON_BUTTON =
  * the bot then writes the skill with skill_manage. The card renders whatever steps it
  * is given; whether a run is worth a card (`showRun`) is the caller's call.
  * Collapse is the card's own (a long run starts folded); dismissal is the
- * caller's, since it outlives the card. */
+ * caller's, since it outlives the card. It fills the width it is given: the
+ * caller sets it in the side-card column (`RailAligned`), so it lines up with
+ * the dev pods above it. */
 export function VerifyCard({
   steps,
   canSave,
@@ -51,12 +53,12 @@ export function VerifyCard({
   return (
     <section
       aria-label={t("chat.verify.aria")}
-      className="pointer-events-auto w-[22rem] max-w-full rounded-2xl border border-hairline/40 bg-raised/95 text-ink shadow-lg backdrop-blur-sm"
+      className={cn(SIDE_CARD, "w-full")}
     >
-      <div className="flex items-center gap-2 px-3 py-2">
-        <ListChecks size={14} className="shrink-0 text-accent" aria-hidden="true" />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="text-[13px] font-medium">{t("chat.verify.title")}</span>
+      <div className={SIDE_CARD_HEADER}>
+        <ListChecks size={14} strokeWidth={1.75} className="shrink-0 text-ink-secondary" aria-hidden="true" />
+        <div className="ml-0.5 flex min-w-0 flex-1 flex-col">
+          <span className="text-[13px] font-medium leading-[18px]">{t("chat.verify.title")}</span>
           <span role="status" aria-live="polite" aria-atomic="true" className="text-[12px] text-ink-secondary">
             {runSummary(steps).label}
           </span>

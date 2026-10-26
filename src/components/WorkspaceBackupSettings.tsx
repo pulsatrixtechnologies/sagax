@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Download, Loader2, Upload } from "lucide-react";
-import type { WorkspaceBackupSummary } from "../../shared/workspace-backup";
+import { WORKSPACE_BACKUP_RECONNECT, type WorkspaceBackupReconnect, type WorkspaceBackupSummary } from "../../shared/workspace-backup";
 import { api, useStore } from "@/state/store";
 import { canManageBackups } from "@/lib/viewer";
 import { t } from "@/lib/i18n";
 import { DANGER_PILL, DescribedRow, HelpTip, PILL, SettingsGroup } from "./SettingsPrimitives";
 import { applyWorkspaceClientState, collectWorkspaceClientState, WORKSPACE_RESTORE_MARKER } from "@/lib/workspace-backup-client";
 
-type BackupStatus = { busy: boolean; pendingRestore?: boolean; lastRestoreId?: string };
+type BackupStatus = { busy: boolean; pendingRestore?: boolean; lastRestoreId?: string; lastRestoreReconnect?: WorkspaceBackupReconnect | null };
 const inputClass = "w-full rounded-lg border-[0.5px] border-border bg-inset px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-focus disabled:opacity-50";
 const primaryPill = "ui-button ui-button-primary min-h-[44px] gap-1.5 self-end font-medium disabled:opacity-50 md:min-h-0";
 const buttonClass = "cursor-pointer inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-3 py-2 text-[13px] font-medium text-accent-ink disabled:opacity-40";
@@ -36,6 +36,23 @@ export function WorkspaceBackupRestartNotice({ onRetry }: { onRetry?: () => void
   </div>;
 }
 
+/** What to reconnect after a restore (JC 2026-10-18: no secret in a
+ * backup): one line per category with its count, never a name or a value. */
+export function WorkspaceBackupReconnectList({ reconnect, title, intro }: { reconnect?: WorkspaceBackupReconnect | null; title: string; intro?: string }) {
+  const entries = WORKSPACE_BACKUP_RECONNECT.flatMap((category) => {
+    const entry = reconnect?.[category];
+    return entry && entry.count > 0 ? [{ category, ...entry }] : [];
+  });
+  if (!entries.length) return null;
+  return <div data-backup-reconnect className="mt-3 rounded-lg border border-hairline/50 bg-inset p-3 text-[12px] text-ink">
+    <p className="font-medium">{title}</p>
+    {intro && <p className="mt-1 text-ink-secondary">{intro}</p>}
+    <ul className="mt-1 list-disc space-y-1 pl-4">{entries.map((entry) => <li key={entry.category} data-reconnect={entry.category}>
+      {t(`backup.reconnect.${entry.category}`, { count: entry.count })}{entry.people ? ` (${t("backup.reconnect.people", { people: entry.people })})` : ""}
+    </li>)}</ul>
+  </div>;
+}
+
 export function WorkspaceBackupSummaryView({ summary }: { summary: WorkspaceBackupSummary }) {
   return <div className="rounded-lg border border-hairline/50 bg-inset p-3">
     <h3 className="text-[14px] font-medium text-ink">{t("backup.preview")}</h3>
@@ -49,6 +66,7 @@ export function WorkspaceBackupSummaryView({ summary }: { summary: WorkspaceBack
       <dt className="text-ink-secondary">{t("backup.files")}</dt><dd className="text-ink">{summary.files}</dd>
       <dt className="text-ink-secondary">{t("backup.bytes")}</dt><dd className="text-ink">{summary.bytes.toLocaleString()}</dd>
     </dl>
+    <WorkspaceBackupReconnectList reconnect={summary.reconnect} title={t("backup.reconnect.title")} intro={t("backup.reconnect.intro")} />
     {summary.warnings.length > 0 && <ul className="mt-3 list-disc space-y-1 pl-4 text-[12px] text-warning">{summary.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
     {summary.exclusions.length > 0 && <div className="mt-3 text-[12px] text-ink-secondary"><p className="font-medium">{t("backup.exclusions")}</p><ul className="mt-1 list-disc space-y-1 pl-4">{summary.exclusions.map((exclusion, index) => <li key={index}>{exclusion}</li>)}</ul></div>}
   </div>;
@@ -179,6 +197,7 @@ function WorkspaceBackupForm() {
     <div data-settings-card="backups" className="flex flex-col">
       {error && <p role="alert" className="break-words px-3.5 py-1.5 text-[12px] text-danger">{error}</p>}
       {status?.pendingRestore ? <div className="px-3.5 py-2.5"><WorkspaceBackupRestartNotice /></div> : <>
+        {status?.lastRestoreReconnect && <div className="px-3.5 pb-1.5"><WorkspaceBackupReconnectList reconnect={status.lastRestoreReconnect} title={t("backup.reconnect.lastTitle")} /></div>}
         {(!status || status.busy) && <div role="status" className="flex items-center gap-2 px-3.5 py-1.5 text-[12px] text-ink-secondary"><span>{status?.busy ? t("backup.serverBusy") : t("backup.checkStatus")}</span><button type="button" onClick={() => void refresh()} className="cursor-pointer underline">{t("connectors.action.retry")}</button></div>}
         <DescribedRow
           label={t("backup.exportAction")}

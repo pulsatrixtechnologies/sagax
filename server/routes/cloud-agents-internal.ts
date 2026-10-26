@@ -48,7 +48,7 @@ export async function handleCloudAgentInternal(
     if (action === "launch") {
       const provider = body.provider;
       if (typeof provider !== "string" || !CLOUD_AGENT_PROVIDERS.includes(provider as CloudAgentProviderId)) {
-        return { text: "provider must be cursor, claude, or codex.", isError: true };
+        return { text: "provider must be cursor, claude, codex or perspicax.", isError: true };
       }
       const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
       if (!prompt) return { text: "prompt is required.", isError: true };
@@ -64,9 +64,15 @@ export async function handleCloudAgentInternal(
           name: typeof body.name === "string" ? body.name : undefined,
           workOnCurrentBranch: body.work_on_current_branch === true,
           autoCreatePr: body.auto_create_pr === true,
+          ...(typeof body.env_id === "string" && body.env_id.trim() ? { envId: body.env_id.trim() } : {}),
+          ...(typeof body.engine === "string" && body.engine.trim() ? { engine: body.engine.trim() } : {}),
         },
       });
-      return { text: `Launched cloud agent ${record.name} (${record.id}). Status: ${record.status}.${record.url ? ` ${record.url}` : ""}` };
+      const where = record.provider === "perspicax"
+        ? " It runs in Perspicax and shows in the person's Code section; a card under your message follows it."
+        : "";
+      // The id is for the follow-up tools; the person reads the run by name.
+      return { text: `Launched cloud agent ${record.name}. Status: ${record.status}.${record.url ? ` ${record.url}` : ""}${where} Its cloud_agent_id for follow-up calls is ${record.id}; never show that id to the person, call the run by its name.` };
     }
     if (action === "follow_up") {
       const id = String(body.cloud_agent_id ?? "").trim();

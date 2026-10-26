@@ -6,6 +6,7 @@
 // server decides what each scope answers (server/routine-scope.ts).
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { personLabel } from "@/lib/human-label";
 import { permissionMissingText } from "@/lib/permissions";
 import {
   ROUTINE_SCOPE_PERMISSION,
@@ -30,17 +31,19 @@ const STATUS_LABEL = {
 
 const SELECT = "max-w-[180px] rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong";
 
-export function RoutineScopeBar({ prefs, allowed, teams, owners, advanced, onChange }: {
+export function RoutineScopeBar({ prefs, allowed, teams, owners, advanced, hideStatus = false, onChange }: {
   prefs: RoutineScopePrefs;
   allowed: Record<RoutineScope, boolean>;
   teams: readonly RoutineScopeChoice[];
   owners: readonly RoutineScopeChoice[];
   /** Simple mode shows the scope control only. */
   advanced: boolean;
+  /** Calendar view: it shows plans, not run results, so no status filter. */
+  hideStatus?: boolean;
   onChange: (next: RoutineScopePrefs) => void;
 }) {
   const scope = allowed[prefs.scope] ? prefs.scope : "mine";
-  const filtered = Boolean(prefs.teamId || prefs.ownerId || prefs.status);
+  const filtered = Boolean(prefs.teamId || prefs.ownerId || (!hideStatus && prefs.status));
   return (
     <div data-routine-scope-bar className="flex flex-wrap items-center gap-2">
       <div role="radiogroup" aria-label={t("routines.scope.label")} className="flex items-center rounded-lg border border-hairline/50 bg-panel p-0.5">
@@ -81,10 +84,10 @@ export function RoutineScopeBar({ prefs, allowed, teams, owners, advanced, onCha
               {owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
             </select>
           )}
-          <select aria-label={t("routines.scope.statusFilter")} data-routine-filter="status" value={prefs.status ?? ""} onChange={(event) => onChange({ ...prefs, status: (event.target.value || undefined) as RoutineScopePrefs["status"] })} className={SELECT}>
+          {!hideStatus && <select aria-label={t("routines.scope.statusFilter")} data-routine-filter="status" value={prefs.status ?? ""} onChange={(event) => onChange({ ...prefs, status: (event.target.value || undefined) as RoutineScopePrefs["status"] })} className={SELECT}>
             <option value="">{t("routines.scope.anyStatus")}</option>
             {ROUTINE_SCOPE_STATUSES.map((status) => <option key={status} value={status}>{t(STATUS_LABEL[status])}</option>)}
-          </select>
+          </select>}
           {filtered && (
             <button type="button" data-routine-filter-reset onClick={() => onChange({ scope: prefs.scope, ...(prefs.botId ? { botId: prefs.botId } : {}) })} className="rounded-lg px-2 py-1.5 text-[12px] text-accent hover:underline">
               {t("routines.scope.reset")}
@@ -98,7 +101,7 @@ export function RoutineScopeBar({ prefs, allowed, teams, owners, advanced, onCha
 
 /** The owner of someone else's routine: their avatar (or initials) and name. */
 export function RoutineOwnerBadge({ owner, size = 16, className }: { owner: { id: string; name: string; avatarUrl?: string }; size?: number; className?: string }) {
-  const name = owner.name || owner.id;
+  const name = personLabel(owner.name, owner.id);
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]!.toUpperCase()).join("") || "?";
   return (
     <span data-routine-owner={owner.id} title={t("routines.scope.ownedBy", { name })} className={cn("inline-flex min-w-0 items-center gap-1", className)}>

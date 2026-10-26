@@ -37,6 +37,7 @@ import { useStore } from "@/state/store";
 import { InitialsAvatar } from "../Avatar";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { DIALOG, DialogCloseButton, PILL, PRIMARY_PILL } from "../SettingsPrimitives";
+import { AnchoredPopover } from "@/components/AnchoredPopover";
 
 const ERROR_KEYS: Record<string, LocaleKey> = {
   avatar_session_only: "settings.profile.photoError.sessionOnly",
@@ -68,6 +69,7 @@ export function OwnAvatarField({ principalId, avatarUrl, initials, onStatus }: {
   const { state, dispatch } = useStore();
   const fileRef = useRef<HTMLInputElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuElRef = useRef<HTMLElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [pending, setPending] = useState<{ url: string } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -83,6 +85,7 @@ export function OwnAvatarField({ principalId, avatarUrl, initials, onStatus }: {
     const close = (event: MouseEvent | KeyboardEvent) => {
       if (event instanceof KeyboardEvent && event.key !== "Escape") return;
       if (event instanceof MouseEvent && (event.target as Node | null)?.parentElement?.closest("[data-own-avatar]")) return;
+      if (event instanceof MouseEvent && menuElRef.current?.contains(event.target as Node | null)) return;
       setMenuOpen(false);
     };
     window.addEventListener("mousedown", close);
@@ -163,14 +166,14 @@ export function OwnAvatarField({ principalId, avatarUrl, initials, onStatus }: {
         </span>
       </button>
       {menuOpen && (
-        <div role="menu" className="absolute left-0 top-full z-10 mt-2 flex min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px]">
+        <AnchoredPopover anchorRef={buttonRef} popoverRef={menuElRef} role="menu" gap={8} className="flex min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px]">
           <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); fileRef.current?.click(); }} className="block w-full rounded-md px-2 py-1.5 text-left text-ink hover:bg-hover">
             {t("settings.profile.changePhoto")}
           </button>
           <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setConfirmRemove(true); }} className="block w-full rounded-md px-2 py-1.5 text-left text-danger hover:bg-hover">
             {t("settings.profile.removePhoto")}
           </button>
-        </div>
+        </AnchoredPopover>
       )}
       <input
         ref={fileRef}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AUTO_COMPUTER_MCP_NAME,
+  AUTO_COMPUTER_RULES,
   COMPUTER_SELECT_TOOL,
   autoComputerGuidance,
   autoComputerReason,
@@ -126,14 +127,25 @@ describe("switching routes the next tool calls", () => {
 });
 
 describe("Auto guidance (prompt fixture)", () => {
-  const text = autoComputerGuidance(auto(), true);
+  // The standing rules ride in the system prompt (volatile "workplace"
+  // section); each message carries only the short per-turn line.
+  const text = AUTO_COMPUTER_RULES;
+  const line = autoComputerGuidance(auto(), true);
 
   it("names the tool, the start place and what is available", () => {
-    expect(text).toMatch(/^<workplace>This bot's Workspace is Auto/);
-    expect(text).toContain("computer_select");
-    expect(text).toContain("This turn starts on the cloud (their server environment); available now: this_computer, browser, cloud, local_vm.");
+    expect(line).toMatch(/^<workplace>This bot's Workspace is Auto/);
+    expect(line).toContain("computer_select");
+    expect(line).toContain("This turn starts on the cloud (their server environment); available now: this_computer, browser, cloud, local_vm.");
+    expect(line.endsWith("</workplace>")).toBe(true);
+    expect(text).toMatch(/^This bot's Workspace is Auto/);
     expect(text).toContain("switch again mid-task");
-    expect(text.endsWith("</workplace>")).toBe(true);
+  });
+
+  it("keeps the per-message line short and free of the rules (2026-10-20 perf parity)", () => {
+    expect(line.length).toBeLessThan(260);
+    expect(line).not.toContain("this_computer: anything");
+    expect(text).not.toContain("This turn starts on");
+    expect(text).toContain("Each message's <workplace> line says where that turn starts");
   });
 
   it("routes the person's own machine, isolated work and heavy work", () => {
@@ -168,8 +180,17 @@ describe("Auto guidance (prompt fixture)", () => {
     expect(text).toContain("Never work around a refusal");
   });
 
+  it("rides the volatile half of the system prompt, never the stable one", async () => {
+    const { buildSystemPrompt } = await import("./system-prompt.ts");
+    const built = buildSystemPrompt("persona", "", [{ id: "workplace", label: "Workspace", text: `\n${AUTO_COMPUTER_RULES}` }]);
+    expect(built.stable).not.toContain("This bot's Workspace is Auto");
+    expect(built.volatile).toContain("This bot's Workspace is Auto");
+    expect(built.volatileSections.map((section) => section.id)).toContain("workplace");
+  });
+
   it("has no long dashes", () => {
     expect(text).not.toMatch(/[\u2013\u2014]/);
+    expect(line).not.toMatch(/[\u2013\u2014]/);
   });
 });
 

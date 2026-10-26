@@ -5,7 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import { costTrend, dailyCosts, formatCost, personalUsagePeriods, rankedGroups, usageQuery, type PersonalUsageSummary } from "@/lib/usage-personal";
+import { costTrend, dailyCosts, formatCost, parseCapInput, personalUsagePeriods, previousCyclePeriod, rankedGroups, usageQuery, type PersonalUsageSummary } from "@/lib/usage-personal";
 import type { PlanProvider } from "@/lib/plan-usage";
 
 vi.mock("@/state/store", async (importOriginal) => ({
@@ -15,7 +15,7 @@ vi.mock("@/state/store", async (importOriginal) => ({
 }));
 
 import { ApiError } from "@/state/store";
-import { CostCard, loadPersonalUsage, PersonalUsageUnavailable, planUsageShown, UsageLayout, type PersonalUsage } from "./UsageSection";
+import { CostCard, loadCycleDetail, loadPersonalUsage, PersonalUsageUnavailable, SpendCapCard, planUsageShown, UsageLayout, type PersonalUsage } from "./UsageSection";
 import { PlanUsageView, renewalDate } from "./PlanUsage";
 
 const NOW = new Date("2026-10-14T15:00:00Z");
@@ -277,5 +277,108 @@ describe("Usage laid out as Grok Bot's", () => {
     expect(html.indexOf("data-plan-refresh")).toBeLessThan(html.indexOf('data-plan-row="claude"'));
     expect(html).toContain('data-settings-row="keys"');
     expect(html).toContain("Gérer mes clés dans Perspicax");
+  });
+});
+
+
+describe("Cycle précédent and the by-source view", () => {
+  it("names last month in full, first to last day", () => {
+    expect(previousCyclePeriod(NOW)).toEqual({ from: "2026-09-01", to: "2026-09-30" });
+    expect(previousCyclePeriod(new Date("2026-01-05T00:00:00Z"))).toEqual({ from: "2025-12-01", to: "2025-12-31" });
+    expect(previousCyclePeriod(new Date("2026-03-31T00:00:00Z"))).toEqual({ from: "2026-02-01", to: "2026-02-28" });
+  });
+
+  it("asks for last month by day, bot, model and source, only the person's own", async () => {
+    const get = vi.fn(async (_path: string) => summary(4, 2));
+    const usage: PersonalUsage = { month: summary(1, 1), previous: summary(1, 1), days30: summary(1, 1), byBot: summary(1, 1), byModel: summary(1, 1) };
+    const detail = await loadCycleDetail("previous", usage, NOW, get as never);
+    const paths = get.mock.calls.map(([path]) => path);
+    expect(paths.sort()).toEqual(["day", "bot", "model", "engine"].map((by) => `/api/me/usage?from=2026-09-01&to=2026-09-30&groupBy=${by}`).sort());
+    expect(detail.total.total.costUsd).toBe(4);
+    expect(detail.byEngine).not.toBeNull();
+  });
+
+  it("keeps the current cycle's own lists and asks only for the by-source one; an older server just loses that list", async () => {
+    const usage: PersonalUsage = { month: summary(1, 1), previous: summary(1, 1), days30: summary(1, 1), byBot: summary(7, 1), byModel: summary(1, 1) };
+    const get = vi.fn(async (_path: string) => { throw new ApiError("bad", 400, { error: "groupBy must be one of bot" }); });
+    const detail = await loadCycleDetail("current", usage, NOW, get as never);
+    expect(get.mock.calls.map(([path]) => path)).toEqual(["/api/me/usage?from=2026-10-01&to=2026-10-14&groupBy=engine"]);
+    expect(detail.byBot.total.costUsd).toBe(7);
+    expect(detail.byEngine).toBeNull();
+  });
+
+  it("shows last month's cost, its month name, no trend, and a by-source list", () => {
+    const usage: PersonalUsage = { month: summary(9, 4), previous: summary(3, 2), days30: summary(9, 4), byBot: summary(9, 4), byModel: summary(9, 4) };
+    const detail = {
+      total: summary(12.5, 6),
+      byBot: summary(12.5, 6, [{ key: "bot:a", label: "Ada", turns: 6, costUsd: 12.5 }]),
+      byModel: summary(12.5, 6),
+      byEngine: summary(12.5, 6, [{ key: "engine:claudeAgent", label: "claudeAgent", turns: 6, costUsd: 12.5 }]),
+    };
+    const html = renderToStaticMarkup(createElement(CostCard, { usage, error: null, cycle: "previous", onCycle: () => {}, detail }));
+    expect(html).toContain("$12.50");
+    expect(html).not.toContain("$9.00");
+    expect(html).not.toContain("data-usage-trend");
+    expect(html).not.toContain("data-usage-sparkline");
+    expect(html).toContain("Previous cycle");
+    expect(html).toContain('data-usage-list="source"');
+    expect(html).toContain("By source");
+  });
+
+  it("the current cycle still shows the trend and the sparkline", () => {
+    const usage: PersonalUsage = { month: summary(9, 4), previous: summary(3, 2), days30: summary(9, 4), byBot: summary(9, 4), byModel: summary(9, 4) };
+    const html = renderToStaticMarkup(createElement(CostCard, { usage, error: null, onCycle: () => {} }));
+    expect(html).toContain("$9.00");
+    expect(html).toContain("data-usage-trend");
+    expect(html).toContain("This cycle");
+  });
+});
+
+describe("Limite de dépenses", () => {
+  const cap = (over: Partial<NonNullable<import("@/lib/usage-personal").PersonalSpendCap["cap"]>> = {}) => ({
+    supported: true, minUsd: 1,
+    cap: { month: "2026-10", monthlyUsd: 50, spentUsd: 12, percent: 24, warn: false, exceeded: false, ...over },
+  });
+
+  it("reads a typed amount: dollars, comma or point, at least the minimum", () => {
+    expect(parseCapInput("25")).toBe(25);
+    expect(parseCapInput(" $25,50 ")).toBe(25.5);
+    expect(parseCapInput("25.5")).toBe(25.5);
+    for (const bad of ["", "0", "0.5", "abc", "-4", "1.234", "1e3"]) expect(parseCapInput(bad), bad).toBeNull();
+  });
+
+  it("draws nothing where the server has no personal limit (organization or older server)", () => {
+    expect(renderToStaticMarkup(createElement(SpendCapCard, { initial: { supported: false, minUsd: 1, cap: null }, read: () => new Promise<never>(() => {}) }))).toBe("");
+    expect(renderToStaticMarkup(createElement(SpendCapCard, { read: () => new Promise<never>(() => {}) }))).toBe("");
+  });
+
+  it("with no limit set, offers to set one", () => {
+    const html = renderToStaticMarkup(createElement(SpendCapCard, { initial: { supported: true, minUsd: 1, cap: null }, read: () => new Promise<never>(() => {}) }));
+    expect(html).toContain("Spending limit");
+    expect(html).toContain("No limit is set");
+    expect(html).toContain("Set limit");
+    expect(html).not.toContain("Remove limit");
+  });
+
+  it("shows where the month stands, and a reached limit says new turns are refused until raised", () => {
+    const within = renderToStaticMarkup(createElement(SpendCapCard, { initial: cap(), read: () => new Promise<never>(() => {}) }));
+    expect(within).toContain("$12.00 of $50.00 (24%)");
+    expect(within).toContain('data-cap-status="within"');
+    expect(within).toContain("Change limit");
+    expect(within).toContain("Remove limit");
+    const reached = renderToStaticMarkup(createElement(SpendCapCard, { initial: cap({ spentUsd: 55, percent: 110, warn: true, exceeded: true }), read: () => new Promise<never>(() => {}) }));
+    expect(reached).toContain('data-cap-status="reached"');
+    expect(reached).toContain("next turns are refused until you raise it");
+    const near = renderToStaticMarkup(createElement(SpendCapCard, { initial: cap({ percent: 85, warn: true }), read: () => new Promise<never>(() => {}) }));
+    expect(near).toContain('data-cap-status="near"');
+  });
+
+  it("speaks Quebec French", () => {
+    setLocale("fr");
+    const html = renderToStaticMarkup(createElement(SpendCapCard, { initial: cap({ exceeded: true, warn: true, percent: 120, spentUsd: 60 }), read: () => new Promise<never>(() => {}) }));
+    expect(html).toContain("Limite de dépenses");
+    expect(html).toContain("Limite atteinte");
+    expect(html).toContain("Modifier la limite");
+    expect(html).not.toMatch(/[\u2013\u2014]/);
   });
 });

@@ -1,6 +1,6 @@
 // The small status dot of each screen in the Computer tab's picker (and on
 // its closed button): yellow while a computer sleeps or wakes (the cloud
-// cluster stopped outside office hours, a paused Local VM), green when it is
+// cluster stopped while idle, a paused Local VM), green when it is
 // up and reachable, a neutral light grey when it is off, not started, or
 // failed (never red: the dot stays quiet).
 //
@@ -14,7 +14,7 @@ import type { ScreenState } from "./desktop-local-vm";
 export type ScreenDot = "asleep" | "online" | "offline";
 
 /** A computer's screen state to its dot. `waking`: the cloud cluster is
- * being woken (it slept outside office hours). */
+ * being woken (it slept while idle). */
 export function screenDot(state: ScreenState | null | undefined, waking = false): ScreenDot {
   if (waking) return "asleep";
   if (state === "running") return "online";

@@ -31,6 +31,33 @@ describe("POST /api/internal/perspicax/tool", () => {
     expect(sent).toEqual([{ status: 200, body: { text: "{\"results\":2}", isError: false } }]);
   });
 
+  it("names who opened a remote support session, and only on remote_support_* answers", async () => {
+    const callTool = vi.fn(async () => ({ ok: true as const, isError: false, value: { code: "BQDHS7" } }));
+    const owner = vi.fn(() => ({ principalId: "person-a", botId: "bot-1" }));
+    const route = createPerspicaxToolInternalRoutes({ tools: new Set(["remote_support_open", "identity"]), perspicaxMcp: () => ({ callTool }), review: async () => null, owner });
+    expect((await call(route, "/api/internal/perspicax/tool", { tool: "remote_support_open", args: {} })).sent[0]?.body).toMatchObject({ owner: { principalId: "person-a", botId: "bot-1" } });
+    expect((await call(route, "/api/internal/perspicax/tool", { tool: "identity", args: {} })).sent[0]?.body).not.toHaveProperty("owner");
+    expect(owner).toHaveBeenCalledTimes(1);
+  });
+
+  it("checks the support folder owner before Perspicax for status and close (finding d)", async () => {
+    const callTool = vi.fn(async () => ({ ok: true as const, isError: false, value: { state: "connected" } }));
+    const owner = () => ({ principalId: "person-a", botId: "bot-1" });
+    const ownsSupportCode = vi.fn((code: string) => code === "MINE55");
+    const route = createPerspicaxToolInternalRoutes({
+      tools: new Set(["remote_support_status", "remote_support_close"]),
+      perspicaxMcp: () => ({ callTool }), review: async () => null, owner, ownsSupportCode,
+    });
+    // someone else's code: refused here, Perspicax never called
+    const refused = await call(route, "/api/internal/perspicax/tool", { tool: "remote_support_close", args: { code: "OTHER9", outcome: "ended" } });
+    expect(refused.sent[0]).toMatchObject({ status: 200, body: { isError: true } });
+    expect(callTool).not.toHaveBeenCalled();
+    // our code: the gate passes and Perspicax is called
+    await call(route, "/api/internal/perspicax/tool", { tool: "remote_support_status", args: { code: "MINE55" } });
+    expect(callTool).toHaveBeenCalledTimes(1);
+    expect(ownsSupportCode).toHaveBeenCalled();
+  });
+
   it("refuses an unlisted name, a review refusal, no link and no mounted profile", async () => {
     const callTool = vi.fn(async () => ({ ok: false as const, code: "profile_not_mounted" as const, error: "x" }));
     const ok = createPerspicaxToolInternalRoutes({ tools, perspicaxMcp: () => ({ callTool }), review: async () => null });

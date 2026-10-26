@@ -187,6 +187,8 @@ export const persistentNotifications = localSwitch("omb-notification-persistent"
 export const dockBadge = localSwitch("omb-dock-badge");
 /** A received nudge shakes the window. */
 export const nudgeShake = localSwitch("omb-nudge-shake");
+/** A soft chime when a new approval arrives on the open Approvals screen. */
+export const approvalChime = localSwitch("omb-approval-chime");
 
 /** Everything the attention rules read, as this computer has it now. */
 export interface AttentionSettings {

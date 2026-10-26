@@ -2,10 +2,6 @@
   "xai": {
     "configured": false
   },
-  "composio": {
-    "configured": false,
-    "mode": "unavailable"
-  },
   "box": {
     "configured": false
   },

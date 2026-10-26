@@ -9,7 +9,7 @@ of Linux desktop on your own server instead of this machine, see [byo-vps.md](by
 - The native Electron window and embedded Sagax server on GNOME Xorg and GNOME Wayland.
 - Local Claude, Codex, Grok, Gemini, and other configured agent CLIs.
 - Chat, streaming turns, approvals, bot-to-bot communication, and local data storage.
-- Composio connected apps and Boat cloud computers.
+- Connected apps and Boat cloud computers.
 - External documentation and OAuth links in the default browser.
 - An explicit, view-only local screen preview on GNOME Xorg and GNOME Wayland. The Wayland path uses the
   native portal chooser and keeps the selected PipeWire stream open until the user stops sharing.
@@ -226,7 +226,7 @@ The verifier checks `.deb` metadata, desktop identity, the exact dormant Cua res
 SquashFS/DEB directory modes, runtime path policy, and matching binary hashes across all artifacts. The local smoke
 launches the unpacked app and AppImage without `--no-sandbox`; CI first reproduces a `0.1.7` in-place DEB upgrade and
 then runs the same smoke against `/opt/Sagax/openmausbot`. These lanes prove the embedded server and UI are
-usable while an optional Composio broker stalls, verify that an old local-control opt-in is cleared, and assert that
+usable, verify that an old local-control opt-in is cleared, and assert that
 no Cua executable starts on Xorg or simulated Wayland. Low-level runtime tests retain the future private-daemon
 contract without activating it in a packaged app. Only a real-seat acceptance matrix can authorize re-enablement.
 

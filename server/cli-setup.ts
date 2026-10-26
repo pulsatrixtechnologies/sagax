@@ -16,6 +16,7 @@ import { ProviderRegistry } from "./harness/registry.ts";
 import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
 import { defaultSetupIo, SetupCancelled, type SetupIo } from "./cli-prompts.ts";
 import { API_ENDPOINTS, fetchSetupModels, normalizeApiUrl, verifySetupCompletion } from "./cli-api-setup.ts";
+import { onboardingKeyStorageNote, readOnboardingEngineKey, storeOnboardingEngineKey } from "./onboarding-engine-key.ts";
 import { readEnvName } from "../electron/legacy-names.mjs";
 
 type Inspection = { snapshot: ProviderSnapshot; models: ModelCatalog };
@@ -192,6 +193,9 @@ export async function runSetup(
     let id: string;
     let entry: InstanceConfig;
     let model: string;
+    // The access key to seal once the setup is confirmed (API connections
+    // only). It never rides in config.json.
+    let apiKeyToStore: string | undefined;
     for (;;) {
       pick ??= await io.choose("Choose your AI connection", providerOptions, existingDefault < 0 ? 0 : existingDefault + 3);
       const prior = pick >= 3 ? existing[pick - 3] : undefined;
@@ -222,7 +226,8 @@ export async function runSetup(
             const config = rawObject(prior[1].config);
             const decoded = BUILT_IN_DRIVERS.find((d) => d.driverKind === "openai-compat")!.decodeConfig(config);
             url = normalizeApiUrl(decoded.url);
-            key = decoded.key ?? readEnvName(decoded.apiKeyEnv, prior[1].environment ?? {})
+            key = decoded.key ?? readOnboardingEngineKey(DATA_DIR, prior[0])
+              ?? readEnvName(decoded.apiKeyEnv, prior[1].environment ?? {})
               ?? prior[1].environment?.OPENAI_COMPAT_API_KEY
               ?? readEnvName(decoded.apiKeyEnv) ?? process.env.OPENAI_COMPAT_API_KEY ?? "";
             routingProvider = decoded.provider;
@@ -261,10 +266,21 @@ export async function runSetup(
           // API additions never change the URL/key behind an existing bot. A new
           // isolated instance also avoids inherited global URL/key overrides.
           id = reuse && prior ? prior[0] : `api-${randomUUID().slice(0, 8)}`;
-          entry = reuse && prior
-            ? { ...cfg.instances![id]!, config: { ...rawObject(cfg.instances![id]!.config), model } }
-            : { driver: "openai-compat", displayName: label, config: { url, key, model, provider: routingProvider ?? "" } };
-          if (!reuse) io.log("The key will be stored in your private config.json (plaintext, owner-only permissions on Unix). Never share this file.");
+          if (reuse && prior) {
+            const priorConfig: Record<string, unknown> = { ...rawObject(cfg.instances![id]!.config), model };
+            // A plaintext key still inline on a reused instance is sealed and
+            // stripped from config.json now; a key already in the store, or one
+            // the instance reads from its own environment variable, stays as is.
+            const inline = typeof priorConfig.key === "string" ? priorConfig.key : undefined;
+            if (inline) { delete priorConfig.key; apiKeyToStore = inline; }
+            entry = { ...cfg.instances![id]!, config: priorConfig };
+          } else {
+            // The access key is sealed in the encrypted engine-key store, never
+            // written in clear into config.json.
+            entry = { driver: "openai-compat", displayName: label, config: { url, model, provider: routingProvider ?? "" } };
+            apiKeyToStore = key;
+          }
+          if (apiKeyToStore !== undefined) io.log(onboardingKeyStorageNote());
         }
         break;
       } catch (error) {
@@ -284,6 +300,10 @@ export async function runSetup(
     // An explicit fleet replaces the implicit fleet. Start from an EMPTY
     // config's defaults, not instanceConfigs(cfg), whose env contains secrets.
     const instances = { ...(cfg.instances && Object.keys(cfg.instances).length ? cfg.instances : instanceConfigs({})), [id]: entry };
+    // Seal the key first, so it is safe in the encrypted store before config.json
+    // (now keyless) is written. A store that cannot be written fails the save
+    // rather than falling back to plaintext.
+    if (apiKeyToStore !== undefined) storeOnboardingEngineKey(DATA_DIR, id, apiKeyToStore);
     saveConfig({ instances, defaultModelSelection: { instanceId: id, model } });
     io.log("\nSetup saved. Existing bots and conversations were not changed.");
     return true;

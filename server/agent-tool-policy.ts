@@ -19,6 +19,8 @@ export const READ_ONLY_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "skills_list",
   "workspace_read",
   "workspace_search",
+  // sagax_help (server/self-knowledge.ts): the built-in knowledge base.
+  "sagax_help",
   // The agent-to-agent API's reads (server/agent-api.ts AGENT_TOOL_POLICY).
   "list_agents",
   "find_agents",

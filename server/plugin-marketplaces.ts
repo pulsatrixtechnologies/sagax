@@ -67,7 +67,49 @@ const marketplaceRecord = z.object({
   addedAt: z.number(),
   addedBy: z.string().optional(),
   updatedAt: z.number(),
+  /** who may see and use it: "private" to the person who added it (the safe
+   * default, so a private repo reached through this computer's git
+   * credentials never leaks), or "org" (shared with everyone). Absent on a
+   * record written before this field existed: read as "private" (fail
+   * closed), so the old shared leak is closed at migration. */
+  visibility: z.enum(["private", "org"]).optional(),
 }).strict();
+
+export type MarketplaceVisibility = "private" | "org";
+
+/** Who is asking. On a solo server, or at the organization server's own
+ * console, the operator sees every marketplace (`seesAll`). Each signed-in
+ * person sees org-wide marketplaces and their own private ones only, so one
+ * person's private GitHub repo is never listed to, or reachable by, another.
+ * An absent viewer means an unfiltered, internal call. */
+export interface MarketplaceViewer {
+  /** the signed-in person (a principal id); absent at the console */
+  principal?: string;
+  /** the host operator / solo owner, who manages every marketplace */
+  seesAll?: boolean;
+}
+
+/** A marketplace's visibility, failing closed to "private". */
+export function marketplaceVisibility(record: { visibility?: MarketplaceVisibility }): MarketplaceVisibility {
+  return record.visibility === "org" ? "org" : "private";
+}
+
+/** May this viewer see and use this marketplace? Org-wide: everyone. Private:
+ * only the person who added it (and the operator / an unfiltered call). */
+export function marketplaceVisibleTo(record: { visibility?: MarketplaceVisibility; addedBy?: string }, viewer?: MarketplaceViewer): boolean {
+  if (marketplaceVisibility(record) === "org") return true;
+  if (!viewer) return true;
+  if (viewer.seesAll) return true;
+  return viewer.principal !== undefined && record.addedBy !== undefined && viewer.principal === record.addedBy;
+}
+
+/** Whether this viewer owns the marketplace (so may change its visibility,
+ * refresh or remove it as its author): its author, or the operator. */
+function marketplaceOwnedBy(record: { addedBy?: string }, viewer?: MarketplaceViewer): boolean {
+  if (!viewer) return true;
+  if (viewer.seesAll) return true;
+  return viewer.principal !== undefined && record.addedBy !== undefined && viewer.principal === record.addedBy;
+}
 
 const installedRecord = z.object({
   name: z.string(),
@@ -103,6 +145,10 @@ export interface MarketplaceView {
   description?: string;
   addedAt: number;
   updatedAt: number;
+  /** "private" (this person's) or "org" (shared with everyone) */
+  visibility: MarketplaceVisibility;
+  /** this viewer added it (so may change its visibility), or is the operator */
+  mine: boolean;
   /** bots with at least one plugin installed from it ("For this bot") */
   bots: number;
   plugins: Array<{
@@ -323,6 +369,8 @@ export function updatedServerEntry(existing: StoredMcpServer, entry: Record<stri
   const kept = {
     enabled: existing.enabled,
     ...(existing.disabledTools?.length ? { disabledTools: existing.disabledTools } : {}),
+    // the result size limit the person set (port of OpenMausBot #2727)
+    ...(existing.resultBudget !== undefined ? { resultBudget: existing.resultBudget } : {}),
     source: marketplace,
   };
   if ("url" in entry && "url" in existing) {
@@ -473,9 +521,11 @@ export class PluginMarketplaces {
     return this.revisions.get(key);
   }
 
-  list(): MarketplaceView[] {
+  /** The marketplaces this `viewer` may see: org-wide ones, and their own
+   * private ones. An absent viewer lists every marketplace (internal call). */
+  list(viewer?: MarketplaceViewer): MarketplaceView[] {
     const state = this.read();
-    return Object.entries(state.marketplaces).map(([name, market]): MarketplaceView => {
+    return Object.entries(state.marketplaces).filter(([, market]) => marketplaceVisibleTo(market, viewer)).map(([name, market]): MarketplaceView => {
       let entries: MarketplacePluginEntry[] = [];
       try {
         entries = readMarketplaceManifest(this.repoDir(name)).plugins;
@@ -489,6 +539,8 @@ export class PluginMarketplaces {
         ...(market.description ? { description: market.description } : {}),
         addedAt: market.addedAt,
         updatedAt: market.updatedAt,
+        visibility: marketplaceVisibility(market),
+        mine: marketplaceOwnedBy(market, viewer),
         bots: this.options.inUse?.(name).length ?? 0,
         plugins: entries.map((entry) => {
           const installed = state.installed[`${entry.name}@${name}`];
@@ -523,7 +575,7 @@ export class PluginMarketplaces {
   add(
     input: { source: string; ref?: string },
     actor: string | undefined,
-    options: { name?: string; environment?: (source: GitSource) => Promise<Record<string, string>> } = {},
+    options: { name?: string; visibility?: MarketplaceVisibility; viewer?: MarketplaceViewer; environment?: (source: GitSource) => Promise<Record<string, string>> } = {},
   ): Promise<MarketplaceView> {
     return this.serial(async () => {
       const state = this.read();
@@ -550,6 +602,11 @@ export class PluginMarketplaces {
           .find(([, market]) => (market.manifestUrl ?? market.source) === sourceId && (market.ref ?? "") === (source.ref ?? ""))?.[0];
         const name = options.name ?? sameSource ?? manifest.name;
         const taken = state.marketplaces[name];
+        // Never let a re-add reveal or reuse another person's private
+        // marketplace: to the person who cannot see it, it is simply taken.
+        if (taken && options.viewer && !marketplaceVisibleTo(taken, options.viewer)) {
+          throw new BotPluginError(`A marketplace named ${name} is already added.`, "name_taken", 409);
+        }
         if (taken && (taken.manifestUrl ?? taken.source) !== sourceId) {
           throw new BotPluginError(`A marketplace named ${name} is already added from ${taken.manifestUrl ?? taken.source}.`, "name_taken", 409);
         }
@@ -570,6 +627,9 @@ export class PluginMarketplaces {
           addedAt: taken?.addedAt ?? now,
           ...((taken?.addedBy ?? actor) ? { addedBy: taken?.addedBy ?? actor } : {}),
           updatedAt: now,
+          // A refresh keeps the visibility it had; a new add defaults to
+          // private unless org-wide was explicitly chosen.
+          visibility: taken ? marketplaceVisibility(taken) : (options.visibility === "org" ? "org" : "private"),
         };
         this.write(state);
         return this.list().find((view) => view.name === name)!;
@@ -579,18 +639,39 @@ export class PluginMarketplaces {
     });
   }
 
-  refresh(name: string, actor: string | undefined, options: { environment?: (source: GitSource) => Promise<Record<string, string>> } = {}): Promise<MarketplaceView> {
+  refresh(name: string, actor: string | undefined, options: { viewer?: MarketplaceViewer; environment?: (source: GitSource) => Promise<Record<string, string>> } = {}): Promise<MarketplaceView> {
     const market = this.read().marketplaces[name];
-    if (!market) return Promise.reject(new BotPluginError("No marketplace with that name.", "not_found", 404));
+    if (!market || !marketplaceVisibleTo(market, options.viewer)) return Promise.reject(new BotPluginError("No marketplace with that name.", "not_found", 404));
     return this.add({ source: market.manifestUrl ?? (market.source.includes("://") ? market.url : market.source), ...(market.ref ? { ref: market.ref } : {}) }, actor, { name, ...options });
+  }
+
+  /** Whether this viewer may see and use the marketplace (a private one is
+   * its author's only). Unknown marketplace: false. */
+  canAccess(name: string, viewer?: MarketplaceViewer): boolean {
+    const market = this.read().marketplaces[name];
+    return Boolean(market) && marketplaceVisibleTo(market!, viewer);
+  }
+
+  /** Change a marketplace's visibility. Only its author (or the operator)
+   * may; to anyone else a private marketplace does not exist. */
+  setVisibility(name: string, visibility: MarketplaceVisibility, viewer?: MarketplaceViewer): Promise<MarketplaceView> {
+    return this.serial(async () => {
+      const state = this.read();
+      const market = state.marketplaces[name];
+      if (!market || !marketplaceVisibleTo(market, viewer)) throw new BotPluginError("No marketplace with that name.", "not_found", 404);
+      if (!marketplaceOwnedBy(market, viewer)) throw new BotPluginError("Only the person who added this marketplace can change who can see it.", "marketplace_not_owner", 403);
+      state.marketplaces[name] = { ...market, visibility, updatedAt: this.now() };
+      this.write(state);
+      return this.list(viewer).find((view) => view.name === name)!;
+    });
   }
 
   /** Forget a marketplace. Its installed plugins must be uninstalled first,
    * for everyone and on every bot, so nothing is left without a source. */
-  remove(name: string): Promise<void> {
+  remove(name: string, viewer?: MarketplaceViewer): Promise<void> {
     return this.serial(async () => {
       const state = this.read();
-      if (!state.marketplaces[name]) throw new BotPluginError("No marketplace with that name.", "not_found", 404);
+      if (!state.marketplaces[name] || !marketplaceVisibleTo(state.marketplaces[name]!, viewer)) throw new BotPluginError("No marketplace with that name.", "not_found", 404);
       const left = Object.values(state.installed).filter((plugin) => plugin.marketplace === name).map((plugin) => plugin.name);
       if (left.length) throw new BotPluginError(`Uninstall its plugins first: ${left.join(", ")}.`, "has_plugins", 409);
       const bots = this.options.inUse?.(name) ?? [];
@@ -626,11 +707,11 @@ export class PluginMarketplaces {
 
   /** Put a plugin's files in place and read what it brings. The caller
    * adds the servers and skills, then records them with `recordInstall`. */
-  prepare(marketplace: string, plugin: string, actor: string | undefined): Promise<{ dir: string; plan: PluginInstallPlan; version?: string; revision?: string }> {
+  prepare(marketplace: string, plugin: string, actor: string | undefined, viewer?: MarketplaceViewer): Promise<{ dir: string; plan: PluginInstallPlan; version?: string; revision?: string }> {
     return this.serial(async () => {
       const state = this.read();
       const market = state.marketplaces[marketplace];
-      if (!market) throw new BotPluginError("No marketplace with that name.", "not_found", 404);
+      if (!market || !marketplaceVisibleTo(market, viewer)) throw new BotPluginError("No marketplace with that name.", "not_found", 404);
       const repo = this.repoDir(marketplace);
       const entry = readMarketplaceManifest(repo).plugins.find((candidate) => candidate.name === plugin);
       if (!entry) throw new BotPluginError("That plugin is not in this marketplace.", "not_found", 404);

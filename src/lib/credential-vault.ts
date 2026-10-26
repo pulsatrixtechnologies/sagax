@@ -3,7 +3,7 @@
 // here ever holds a value the server sent: the server never sends one, only
 // booleans that say one is saved. Values typed here go to the server once.
 import { api } from "@/state/store";
-import { bindingUrl, vaultDomainMatches, type VaultGrantMode, type VaultItemKind, type VaultItemListing } from "../../shared/credential-vault";
+import { bindingUrl, vaultDomainMatches, vaultSiteOf, type VaultGrantMode, type VaultItemKind, type VaultItemListing } from "../../shared/credential-vault";
 import type { VaultDuplicateMode, VaultExportFormat, VaultImportFormat, VaultTransferItem } from "../../shared/credential-vault-transfer";
 
 export type { VaultItemListing } from "../../shared/credential-vault";
@@ -23,8 +23,22 @@ export interface OnePasswordItem {
   domains: string[];
 }
 
+export interface PurchaseListing {
+  id: string;
+  merchant: string;
+  amount: string;
+  currency: string;
+  cardName: string;
+  cardLast4: string;
+  title: string;
+  line: string;
+  status: "pending" | "once" | "always" | "denied";
+  via?: string;
+}
+
 export interface CredentialVaultState {
   items: VaultItemListing[];
+  purchases?: PurchaseListing[];
   onePassword: OnePasswordStatus;
   /** The vault could not be opened on this launch (the keychain was busy). */
   unavailable?: string;
@@ -41,6 +55,9 @@ export interface VaultItemDraft {
   apiKey?: string;
   notes?: string;
   domains: string[];
+  card?: { pan?: string; cvv?: string; expMonth?: number; expYear?: number; holder?: string };
+  address?: { recipient?: string; line1?: string; line2?: string; city?: string; region?: string; postal?: string; country?: string; phone?: string };
+  contact?: { fullName?: string; email?: string; phone?: string; company?: string };
 }
 
 const ITEM = (id: string) => `/api/me/credentials/${encodeURIComponent(id)}`;
@@ -53,6 +70,12 @@ export const updateCredential = (id: string, patch: Partial<VaultItemDraft>) =>
   api<{ item: VaultItemListing }>(ITEM(id), { method: "PATCH", body: JSON.stringify(patch) });
 export const deleteCredential = (id: string) => api<{ ok: true }>(ITEM(id), { method: "DELETE" });
 export const revealCredentialNotes = (id: string) => api<{ notes: string }>(`${ITEM(id)}/notes`, { method: "POST", body: "{}" });
+/** One secret, for the signed-in person. The server never puts it on a list. */
+export const revealCredential = (id: string, field: "password" | "apiKey" | "notes" | "pan" | "cvv") =>
+  api<{ value: string }>(`${ITEM(id)}/reveal`, { method: "POST", body: JSON.stringify({ field }) });
+/** Each purchase is its own approval (JC 2026-10-22): no Always allow. */
+export const answerPurchase = (id: string, decision: "deny" | "once") =>
+  api<{ purchase: PurchaseListing }>(`/api/me/credentials/purchases/${encodeURIComponent(id)}/answer`, { method: "POST", body: JSON.stringify({ decision }) });
 export const allowBotAlways = (id: string, botId: string) =>
   api<{ item: VaultItemListing }>(`${ITEM(id)}/grants`, { method: "POST", body: JSON.stringify({ botId, mode: "always" }) });
 export const revokeBot = (id: string, botId: string) =>
@@ -65,20 +88,49 @@ export const importOnePasswordItem = (item: OnePasswordItem, domains?: string[])
   });
 
 const CARD = (botId: string, messageId: string) => `/api/bots/${encodeURIComponent(botId)}/vault-cards/${encodeURIComponent(messageId)}`;
-export const grantFromCard = (botId: string, messageId: string, threadId: string, mode: VaultGrantMode, choice: { itemId: string } | { item: VaultItemDraft }) =>
-  api<{ item: VaultItemListing }>(`${CARD(botId, messageId)}/grant`, { method: "POST", body: JSON.stringify({ threadId, mode, ...choice }) });
+/** 2026-10-21 (parité R10, ligne 82): a 1Password item a card offers for
+ * its site. Names, vault and sites only; the ids stay off the screen. */
+export interface CardOnePasswordItem {
+  vaultId: string;
+  itemId: string;
+  title: string;
+  vaultName: string;
+  domains: string[];
+}
+export const loadCardOnePassword = (botId: string, messageId: string, threadId: string) =>
+  api<{ available: boolean; onePassword: OnePasswordStatus; items: CardOnePasswordItem[] }>(`${CARD(botId, messageId)}/onepassword`, { method: "POST", body: JSON.stringify({ threadId }) });
+/** The key a card uses for a 1Password choice (never shown). */
+export const onePasswordChoiceKey = (item: Pick<CardOnePasswordItem, "vaultId" | "itemId">) => `op:${item.vaultId}:${item.itemId}`;
+export const grantFromCard = (botId: string, messageId: string, threadId: string, mode: VaultGrantMode, choice: { itemId: string } | { item: VaultItemDraft } | { onePassword: { vaultId: string; itemId: string } }, addSite = false) =>
+  api<{ item: VaultItemListing }>(`${CARD(botId, messageId)}/grant`, { method: "POST", body: JSON.stringify({ threadId, mode, ...choice, ...(addSite ? { addSite: true } : {}) }) });
+/** The person signed in themselves in the bot's browser instead. */
+/** Arm the bot's browser before the person signs in there themselves. */
+export const selfStartFromCard = (botId: string, messageId: string, threadId: string) =>
+  api<{ armed: true }>(`${CARD(botId, messageId)}/self-start`, { method: "POST", body: JSON.stringify({ threadId }) });
+/** Whether the bot's browser is still armed for the person's own sign-in. */
+export const selfStatusFromCard = (botId: string, messageId: string, threadId: string) =>
+  api<{ armed: boolean }>(`${CARD(botId, messageId)}/self-status`, { method: "POST", body: JSON.stringify({ threadId }) });
+export const signedInFromCard = (botId: string, messageId: string, threadId: string) =>
+  api<{ signedIn: true }>(`${CARD(botId, messageId)}/signed-in`, { method: "POST", body: JSON.stringify({ threadId }) });
 export const dismissCard = (botId: string, messageId: string, threadId: string) =>
   api<{ dismissed: true }>(`${CARD(botId, messageId)}/dismiss`, { method: "POST", body: JSON.stringify({ threadId }) });
 
 /** Items a request card offers: bound to the asked site (or a parent of it),
- * or named like the request; logins and API keys only. Pure, for tests. */
+ * or named like the request; then, after those, logins of the same site on
+ * another address (example.com for accounts.example.com), which the card
+ * can also fill there only if the person ticks it. Logins and API keys
+ * only. Pure, for tests. */
 export function matchingItems(items: readonly VaultItemListing[], request: { domain?: string; name?: string }): VaultItemListing[] {
   const name = request.name?.trim().toLowerCase();
-  return items.filter((item) => (item.kind === "login" || item.kind === "apiKey") && (
+  const usable = items.filter((item) => item.kind === "login" || item.kind === "apiKey");
+  const direct = usable.filter((item) =>
     (request.domain && vaultDomainMatches(item.domains, bindingUrl(request.domain))) ||
-    (name && item.name.toLowerCase().includes(name))
-  ));
+    (name && item.name.toLowerCase().includes(name)));
+  const site = request.domain ? vaultSiteOf(request.domain) : null;
+  const related = site ? usable.filter((item) => !direct.includes(item) && item.domains.some((domain) => vaultSiteOf(domain) === site)) : [];
+  return [...direct, ...related];
 }
+
 
 /** "a, b" or a list typed with spaces or new lines, as the server takes it. */
 export function parseDomains(text: string): string[] {

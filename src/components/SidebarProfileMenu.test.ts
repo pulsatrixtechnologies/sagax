@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -14,6 +15,7 @@ import { APP_REPOSITORY, DOCS_URL, HELP_CENTER_URL, LICENSE_URL, platformLabel }
 import type { UpdaterState } from "@/lib/updater";
 import { setLocale } from "@/lib/i18n";
 
+const SOURCE = readFileSync(new URL("./SidebarProfileMenu.tsx", import.meta.url), "utf8");
 const state = (patch: Partial<UpdaterState>): UpdaterState => ({ status: "idle", ...patch }) as UpdaterState;
 
 describe("profileInitials", () => {
@@ -167,7 +169,7 @@ describe("outward links", () => {
 describe("profileMenuItems (Grok Bot's account menu, 2026-10-16)", () => {
   const noop = () => {};
   const handlers = {
-    onAutomations: noop, onSettings: noop, onAchievements: noop, onShortcuts: noop, onReleaseNotes: noop, onAbout: noop,
+    onAutomations: noop, onRemoteSessions: noop, onSettings: noop, onAchievements: noop, onShortcuts: noop, onReleaseNotes: noop, onAbout: noop,
     onViewUsage: noop, onSwitch: noop, onAddOrganization: noop, onSignOut: noop, onMobile: noop,
   };
   const items = (patch: Partial<Parameters<typeof profileMenuItems>[0]> = {}) => profileMenuItems({
@@ -177,6 +179,7 @@ describe("profileMenuItems (Grok Bot's account menu, 2026-10-16)", () => {
     mobile: false,
     achievementsLabel: "Achievements",
     automationsActive: false,
+    remoteSessionsActive: false,
     updateItem: null,
     switchTargets: [],
     canAddOrganization: false,
@@ -185,8 +188,24 @@ describe("profileMenuItems (Grok Bot's account menu, 2026-10-16)", () => {
     ...patch,
   });
 
-  it("is Usage, Help, Settings, Automations and Achievements, in that order", () => {
-    expect(items().map((entry) => entry.key)).toEqual(["usage", "help", "settings", "routines", "achievements"]);
+  it("is Usage, Help, Settings, Automations, Remote sessions and Achievements, in that order", () => {
+    expect(items().map((entry) => entry.key)).toEqual(["usage", "help", "settings", "routines", "remote-sessions", "achievements"]);
+  });
+
+  it("opens the Remote sessions page next to Automations", () => {
+    let opened = 0;
+    const entry = items({ handlers: { ...handlers, onRemoteSessions: () => { opened += 1; } } }).find((item) => item.key === "remote-sessions")!;
+    expect(entry).toBeTruthy();
+    entry.onSelect();
+    expect(opened).toBe(1);
+  });
+
+  it("lists neither Approvals nor Code: both open from their address (#approvals, #code)", () => {
+    const labels = items().flatMap((entry) => [entry.key, entry.label]);
+    for (const gone of ["approvals", "code", "Approvals", "Code"]) expect(labels).not.toContain(gone);
+    expect(SOURCE).not.toMatch(/showCode|data-menu-count="approvals"/);
+    // the avatar's approvals dot is the one way in from the foot
+    expect(SOURCE.match(/showApprovals/g)).toHaveLength(1);
   });
 
   it("has no Team map: it opens from the Automations header and the palette (JC, 2026-10-18)", () => {

@@ -1,8 +1,9 @@
 // Settings > Appearance, laid out as Grok Bot's settings pages (0.5.6, JC):
 // grey headings outside the cards, compact rows (label at the left, control
 // at the right), pill menus rather than native selects, no help text but a
-// short grey line where it avoids a mistake. The skin miniatures stay here;
-// the one-line Theme menu is General's (#573), not repeated.
+// short grey line where it avoids a mistake. The skin is chosen here only:
+// its family, variant and Light, Dark or Auto (2026-10-19; General's Theme
+// menu of #573 is gone, one option in one place).
 import { useState, useSyncExternalStore } from "react";
 import { ChevronDown } from "lucide-react";
 import { FLOATING_LIVELINESS, floatingBotPrefs, HOTKEY_CHOICES, hotkeyLabel, setFloatingBarkSound, setFloatingFlyAway, setFloatingHotkey, setFloatingLiveliness, subscribeFloatingBots, type FloatingLiveliness, type HotkeyChoice } from "@/lib/floating-bots";
@@ -14,6 +15,7 @@ import { cn } from "@/lib/cn";
 import { canEditConfig } from "@/lib/viewer";
 import { FONT_IDS, applyFont, readFont, type FontId } from "@/lib/fonts";
 import { setAdvancedMode, useAdvancedMode } from "@/lib/interface-mode";
+import { setShowAllHistory, setShowSuggestions, useShowAllHistory, useShowSuggestions } from "@/lib/panel-visibility";
 import { setShowThreads, setThreadsLocation, useShowThreadsChoice, useThreadsLocationChoice, type ThreadsLocation } from "@/lib/thread-preferences";
 import { FRESH_TOPIC_AFTER_CHOICES, useFreshTopicAfter, writeFreshTopicAfter, type FreshTopicAfterHours } from "@/lib/fresh-topic";
 import { setShowUnreadyProviders, useShowUnreadyProviders } from "@/lib/unready-providers-preference";
@@ -23,9 +25,14 @@ import { parseSendKey, SEND_KEYS, sendKeyLabel, setSendKey, useSendKey } from "@
 import { setShowSidebarLogo, useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { setShowRoutinesBadge, useShowRoutinesBadge } from "@/lib/routines-badge-preferences";
 import { setShowInspectorButton, useShowInspectorButton } from "@/lib/inspector-preferences";
+import { contrastChoice, CONTRAST_CHOICES, MOTION_CHOICES, motionChoice, TEXT_SIZE_CHOICES, textSizeChoice } from "@/lib/accessibility-preferences";
+import { BOT_HOTKEY_MODIFIERS, botHotkeyModifierChoice, botHotkeysChoice, hardwareAccelerationChoice, hasDesktopShellPreferences, spellcheckChoice } from "@/lib/desktop-shell-preferences";
 import { CompactRow, DescribedRow, PillSelect, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { SidebarHiddenSettings } from "../SidebarHiddenSettings";
 import { SkinPicker } from "../SkinPicker";
+import { setBotAccentEnabled, useBotAccentEnabled } from "@/lib/bot-accent";
+import { setHdMascotsEnabled, useHdMascots } from "@/lib/hd-mascots-preference";
+import { HD_CHARACTERS } from "../hd-mascots/manifest";
 import { AppIconPicker, appIconAvailable } from "./AppIconPicker";
 import { BackgroundEffectsPicker } from "./BackgroundEffectsPicker";
 
@@ -170,6 +177,33 @@ function FreshTopicRow() {
   );
 }
 
+/** The open bot's colour as the app's accent (src/lib/bot-accent.ts). */
+function BotAccentRow() {
+  const enabled = useBotAccentEnabled();
+  return (
+    <DescribedRow label={t("settings.botAccent.title")} description={t("settings.botAccent.subtitle")} rowId="botAccent">
+      <Switch checked={enabled} aria-label={t("settings.botAccent.title")} onClick={() => setBotAccentEnabled(!enabled)} />
+    </DescribedRow>
+  );
+}
+
+/** HD mascots (src/lib/hd-mascots-preference.ts): painted art for the
+ * characters that ship it, or the classic vector look everywhere. Shown only
+ * while at least one character has HD art. */
+export function HdMascotsGroup({ characters = HD_CHARACTERS }: { characters?: readonly string[] }) {
+  const enabled = useHdMascots();
+  if (characters.length === 0) return null;
+  return (
+    <div data-settings-card="appearance.mascots-hd">
+      <SettingsGroup title={t("settings.group.mascots")} groupId="mascots">
+        <DescribedRow label={t("settings.hdMascots.title")} description={t("settings.hdMascots.subtitle")} rowId="hdMascots">
+          <Switch checked={enabled} aria-label={t("settings.hdMascots.title")} onClick={() => setHdMascotsEnabled(!enabled)} />
+        </DescribedRow>
+      </SettingsGroup>
+    </div>
+  );
+}
+
 /** A server feature (every viewer of the installation sees it). */
 function ToolCallsRow() {
   const { state, dispatch } = useStore();
@@ -274,6 +308,80 @@ function MascotsRow() {
   );
 }
 
+/** Settings > Appearance > Accessibility: motion, contrast and text size,
+ * each its own key for sagax_settings (appearance.reduceMotion, highContrast,
+ * textSize). */
+export function AccessibilityGroup() {
+  const motion = motionChoice.use();
+  const contrast = contrastChoice.use();
+  const size = textSizeChoice.use();
+  return (
+    <div data-settings-card="appearance.accessibility">
+      <SettingsGroup title={t("settings.group.accessibility")} groupId="accessibility">
+        <CompactRow label={t("settings.a11y.motion.title")} rowId="reduceMotion">
+          <PillSelect
+            value={motion}
+            ariaLabel={t("settings.a11y.motion.title")}
+            onChange={(next) => motionChoice.set(next)}
+            options={MOTION_CHOICES.map((id) => ({ value: id, label: t(`settings.a11y.motion.${id}`) }))}
+          />
+        </CompactRow>
+        <CompactRow label={t("settings.a11y.contrast.title")} rowId="highContrast">
+          <PillSelect
+            value={contrast}
+            ariaLabel={t("settings.a11y.contrast.title")}
+            onChange={(next) => contrastChoice.set(next)}
+            options={CONTRAST_CHOICES.map((id) => ({ value: id, label: t(`settings.a11y.contrast.${id}`) }))}
+          />
+        </CompactRow>
+        <CompactRow label={t("settings.a11y.textSize.title")} rowId="textSize">
+          <PillSelect
+            value={size}
+            ariaLabel={t("settings.a11y.textSize.title")}
+            onChange={(next) => textSizeChoice.set(next)}
+            options={TEXT_SIZE_CHOICES.map((id) => ({ value: id, label: t(`settings.a11y.textSize.${id}`) }))}
+          />
+        </CompactRow>
+      </SettingsGroup>
+    </div>
+  );
+}
+
+/** The two choices only the desktop shell honours (hardware acceleration
+ * needs a restart; the spell checker is applied as the shell allows). */
+function DesktopShellRows() {
+  const acceleration = hardwareAccelerationChoice.use() === "true";
+  const spelling = spellcheckChoice.use() === "true";
+  const hotkeys = botHotkeysChoice.use() === "true";
+  const chord = botHotkeyModifierChoice.use();
+  if (!hasDesktopShellPreferences()) return null;
+  // the bots' global shortcuts exist with the macOS menu bar list
+  const menuBar = window.ogb?.platform === "darwin";
+  return (
+    <>
+      <DescribedRow label={t("settings.hardwareAcceleration.title")} description={t("settings.hardwareAcceleration.note")} rowId="hardwareAcceleration">
+        <Switch checked={acceleration} aria-label={t("settings.hardwareAcceleration.title")} onClick={() => hardwareAccelerationChoice.set(acceleration ? "false" : "true")} />
+      </DescribedRow>
+      <SwitchLine label={t("settings.spellcheck.title")} checked={spelling} onChange={(next) => spellcheckChoice.set(next ? "true" : "false")} rowId="spellcheck" />
+      {menuBar && (
+        <DescribedRow label={t("settings.botHotkeys.title")} description={t("settings.botHotkeys.note")} rowId="botHotkeys">
+          <Switch checked={hotkeys} aria-label={t("settings.botHotkeys.title")} onClick={() => botHotkeysChoice.set(hotkeys ? "false" : "true")} />
+        </DescribedRow>
+      )}
+      {menuBar && hotkeys && (
+        <CompactRow label={t("settings.botHotkeys.chord")} rowId="botHotkeyChord">
+          <PillSelect
+            value={chord}
+            ariaLabel={t("settings.botHotkeys.chord")}
+            onChange={(next) => botHotkeyModifierChoice.set(next)}
+            options={BOT_HOTKEY_MODIFIERS.map((id) => ({ value: id, label: t(`settings.botHotkeys.chord.${id}`) }))}
+          />
+        </CompactRow>
+      )}
+    </>
+  );
+}
+
 export function AppearanceSettings() {
   const { state } = useStore();
   const advanced = useAdvancedMode();
@@ -284,6 +392,8 @@ export function AppearanceSettings() {
   const unready = useShowUnreadyProviders();
   const logo = useShowSidebarLogo();
   const routinesBadge = useShowRoutinesBadge();
+  const suggestions = useShowSuggestions();
+  const allHistory = useShowAllHistory();
   return (
     <>
       <SettingsGroup title={t("settings.group.interface")} groupId="interface">
@@ -293,6 +403,7 @@ export function AppearanceSettings() {
       <div data-settings-card="appearance.skin">
         <SettingsGroup title={t("settings.skin.title")} groupId="skin">
           <SkinPicker />
+          <BotAccentRow />
         </SettingsGroup>
       </div>
       {/* the effect behind the conversation, chosen as the skins are (the
@@ -315,12 +426,17 @@ export function AppearanceSettings() {
         <SidebarDensityRow />
         {advanced && <SwitchLine label={t("settings.sidebarLogo.title")} ariaLabel={t("settings.sidebarLogo.show")} checked={logo} onChange={setShowSidebarLogo} rowId="sidebarLogo" />}
         {advanced && <SwitchLine label={t("settings.routinesBadge.title")} ariaLabel={t("settings.routinesBadge.show")} checked={routinesBadge} onChange={setShowRoutinesBadge} rowId="routinesBadge" />}
+        <SwitchLine label={t("settings.showSuggestions.title")} ariaLabel={t("settings.showSuggestions.show")} checked={suggestions} onChange={setShowSuggestions} rowId="showSuggestions" />
+        <SwitchLine label={t("settings.allHistory.title")} ariaLabel={t("settings.allHistory.show")} checked={allHistory} onChange={setShowAllHistory} rowId="allHistory" />
         {/* Simple: the sidebar's own "Hidden (N)" row brings entries back. */}
         {advanced && <SidebarHiddenSettings />}
       </SettingsGroup>
+      <HdMascotsGroup />
+      <AccessibilityGroup />
       <SettingsGroup title={t("settings.group.desktop")} groupId="desktop">
         <AppIconRow />
         <MascotsRow />
+        <DesktopShellRows />
       </SettingsGroup>
     </>
   );

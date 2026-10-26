@@ -45,7 +45,7 @@ it("loads RULES.md after the soul, indexes docs/, and tracks what a turn used", 
 
     const preview = await api<{ sections: Array<{ id: string; text: string }> }>(`/api/bots/${bot.id}/system-prompt`);
     const ids = preview.sections.map((section) => section.id);
-    expect(ids.slice(0, 4)).toEqual(["misuse-policy", "persona", "soul", "rules"]);
+    expect(ids.slice(0, 6)).toEqual(["misuse-policy", "run-yourself", "verify-first", "persona", "soul", "rules"]);
     expect(ids.indexOf("docs")).toBeGreaterThan(ids.indexOf("memory"));
 
     await turn(bot.id, bot.threadId, "What are your rules?");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createRegistrySearch, featuredMatching, REGISTRY_CACHE_MS, registryListing } from "./plugin-registry.ts";
+import { createRegistrySearch, featuredMatching, listingInRegion, REGISTRY_CACHE_MS, registryListing, registryRegions } from "./plugin-registry.ts";
 
 const row = (name: string, remotes: unknown[], meta: Record<string, unknown> = { isLatest: true, status: "active" }, extra: Record<string, unknown> = {}) => ({
   server: { name, description: `${name} server`, version: "1.0.0", remotes, ...extra },
@@ -26,6 +26,26 @@ describe("registry listings", () => {
     expect(registryListing(row("a/tpl", [{ type: "streamable-http", url: "https://{tenant}.x.test/mcp" }]))).toBeNull();
     expect(registryListing(row("a/http", [{ type: "streamable-http", url: "http://x.test/mcp" }]))).toBeNull();
     expect(registryListing(null)).toBeNull();
+  });
+
+  it("offers one data center per choice of a remote's one variable, and connects to the chosen one", () => {
+    const listing = registryListing(row("io.example/crm", [{
+      type: "streamable-http", url: "https://{region}.mcp.example.test/mcp",
+      variables: { region: { description: "Data center", choices: ["us", "eu"], default: "eu" } },
+    }]));
+    expect(listing).toMatchObject({ url: "https://eu.mcp.example.test/mcp", domain: "eu.mcp.example.test" });
+    expect(listing?.regions).toEqual([
+      { id: "us", label: "US", url: "https://us.mcp.example.test/mcp" },
+      { id: "eu", label: "EU", url: "https://eu.mcp.example.test/mcp" },
+    ]);
+    expect(listingInRegion(listing!, "us")).toMatchObject({ url: "https://us.mcp.example.test/mcp", domain: "us.mcp.example.test" });
+    expect(listingInRegion(listing!, undefined)).toBe(listing);
+    expect(listingInRegion(listing!, "apac")).toBeNull();
+    // free text, two variables, or a single choice: not a region list
+    expect(registryRegions("https://{tenant}.x.test/mcp", { tenant: { description: "yours" } })).toBeNull();
+    expect(registryRegions("https://{a}.{b}.x.test/mcp", { a: { choices: ["1", "2"] }, b: { choices: ["1", "2"] } })).toBeNull();
+    expect(registryRegions("https://{r}.x.test/mcp", { r: { choices: ["us"] } })).toBeNull();
+    expect(registryRegions("https://{r}.x.test/mcp", { r: { choices: ["us/../x", "eu"] } })).toBeNull();
   });
 
   it("matches the featured list by words", () => {

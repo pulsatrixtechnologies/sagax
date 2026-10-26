@@ -64,6 +64,12 @@ public struct ApprovalPlainWords: Codable, Hashable, Sendable {
     }
 }
 
+/// The rule a permission card can keep (`OptionCardData.ownerRule`).
+public struct OwnerRuleCandidate: Codable, Hashable, Sendable {
+    public var description: String
+    public var from: String? = nil
+}
+
 public struct OptionCard: Codable, Hashable, Sendable {
     public var title: String
     public var subtitle: String
@@ -113,6 +119,10 @@ public struct OptionCard: Codable, Hashable, Sendable {
     /// The exact native command an owner or admin may remember
     /// ("Always allow this command").
     public var commandAllowlist: CommandAllowlistCandidate? = nil
+    /// 2026-10-20: the owner's rule this card keeps in one click ("Always
+    /// allow": this bot, this kind of action or this program). Nil on older
+    /// servers.
+    public var ownerRule: OwnerRuleCandidate? = nil
     /// Organization server: a server command of a member's bot that only an
     /// organization admin answers. Never remembered.
     public var adminApproval: Bool? = nil
@@ -307,6 +317,9 @@ public struct SecretRequestCardData: Codable, Hashable, Sendable {
     public var error: String?
     /// A newer request for the same key replaced this one.
     public var superseded: Bool? = nil
+    /// A bot's sign-in request (target "vaultLogin"): the site and, once
+    /// answered, the login chosen (VaultLoginCard.swift).
+    public var vault: VaultRequestPublic? = nil
 
     public var isPending: Bool { provided != true && dismissed != true && superseded != true }
 }
@@ -348,11 +361,19 @@ public struct Reaction: Codable, Hashable, Sendable {
 
 public struct CommChip: Codable, Hashable, Sendable {
     public var groupId: String
+    /// The thread this note points at (`Comm.threadId`). A bot-to-bot line
+    /// already named here is not drawn again.
+    public var threadId: String? = nil
     /// The channel thread no longer exists (#176).
     public var gone: Bool? = nil
     public var withBotId: String
     public var withName: String
     public var withColor: String
+    /// 2026-10-21 (parity 1C): `sent` on the sender's note, `received` on the
+    /// recipient's. Older servers send neither: see `isReceived`.
+    public var direction: String? = nil
+    /// The words a sender's note sent, cut short ("Messaged @X: text").
+    public var text: String? = nil
 }
 
 public struct Message: Codable, Hashable, Identifiable, Sendable {
@@ -369,8 +390,8 @@ public struct Message: Codable, Hashable, Identifiable, Sendable {
         /// One background routine run, upserted into the thread that asked
         /// for it and patched as the run moves. `routineRun` carries the card.
         case routineRun = "routine.run"
-        /// A bot asked to connect an app from the conversation; `connector`
-        /// carries the card (`ConnectorCard.tsx`).
+        /// A legacy connect-an-app request from a conversation. The card is
+        /// gone; such a message now renders as its own text, if any.
         case connector
         /// A turn that could not run for lack of engine access on an
         /// organization server; `access` carries the card (`AccessCard.tsx`).
@@ -443,13 +464,15 @@ public struct Message: Codable, Hashable, Identifiable, Sendable {
     /// Screen messages in the paged shape: the pixels live behind
     /// `/api/threads/:threadId/messages/:id/image` rather than inline.
     public var hasImage: Bool?
+    /// Screen and video messages: the person's message of that turn asked
+    /// for this view (shared/requested-views.ts). Drawn only with it; rows
+    /// from before 2026-10-20 have none and stay hidden.
+    public var requested: Bool? = nil
     /// Screen messages in the full shape: base64 pixels, inline.
     public var png: String?
     public var mime: String?
     /// Agent-generated images carried on a text reply, including late message patches.
     public var attachments: [MessageImageAttachment]?
-    /// `kind == .connector`: the connect-an-app card.
-    public var connector: ConnectorRequestCard? = nil
     /// `kind == .access`: why the turn could not run.
     public var access: AccessCard? = nil
     /// `kind == .goalRun`: the room goal's receipt.
@@ -621,9 +644,13 @@ public struct BotTask: Codable, Hashable, Sendable {
     /// a link or the bot's activity, never in the list, previews, unread or
     /// notifications.
     public var hidden: Bool? = nil
-    /// Out of the person's thread list: a routine run's execution or an AI
-    /// client's hidden conversation.
-    public var isHiddenFromPerson: Bool { routineRunId != nil || hidden == true }
+    /// An automatic "<routine> · Results" thread (2026-10-22): a routine's
+    /// reports now go to the person's own conversation, so this old thread is
+    /// kept but never listed, previewed or counted unread.
+    public var routineResults: Bool? = nil
+    /// Out of the person's thread list: a routine run's execution, an
+    /// automatic routine results thread or an AI client's hidden conversation.
+    public var isHiddenFromPerson: Bool { routineRunId != nil || routineResults == true || hidden == true }
     /// A confidential thread ("Fil confidentiel"): never remembered,
     /// exported or shared beyond its owner. Permanent once set; only
     /// deleting the thread ends it. Absent means an ordinary thread.
@@ -769,6 +796,10 @@ public struct QueuedSend: Codable, Hashable, Identifiable, Sendable {
 public struct Bot: Codable, Hashable, Identifiable, Sendable {
     public var id: String
     public var threadId: String
+    /// The bot's main thread (`WireBot.mainThreadId`): where a bot-to-bot
+    /// line is drawn. Absent on an older computer; the selected thread is
+    /// the fallback, as on the desktop.
+    public var mainThreadId: String? = nil
     public var name: String
     public var title: String
     public var description: String
@@ -811,6 +842,9 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
     public var approvalMode: String?
     public var autoApprove: Bool?
     public var alwaysAllow: [String]?
+    /// People and bots this bot writes to without a card (`allowedRecipients`).
+    /// Absent on an older computer: nobody is on the list.
+    public var allowedRecipients: [String]? = nil
     public var computer: String?
     /// Which cloud computer backs `computer == "cloud"`. Absent (older
     /// harnesses included) means the hosted Boat; "vps" means the user's own
@@ -851,9 +885,6 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
     public var ownerUserId: String? = nil
     /// Sections a Primary Bot manages beyond its own (owner-approved).
     public var managedSections: [String]? = nil
-    /// The bot's own Connected apps switch: false keeps the workspace's
-    /// connected apps from it. Absent means on.
-    public var composio: Bool? = nil
     // The advanced panel's reads (WP16, BA5, BA6, BA14, BA15). Absent on an
     // older computer, and each means the desktop's default.
     /// The working folder; absent is the private bot folder.
@@ -874,6 +905,9 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
     public var directGrants: [String]? = nil
     /// Ask before contacting other bots (Permissions); absent is off.
     public var approvePeerComms: Bool? = nil
+    /// Bot-to-bot conversations this viewer may read, both ends (`shared/wire.ts`
+    /// WireBotConversation). Absent: none. Read only; see `BotConversations`.
+    public var botConversations: [BotConversation]? = nil
 
     /// The look the renderers draw: the stored one, or the owl.
     public var resolvedMascotLook: CompleteMascotLook {
@@ -888,7 +922,7 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
         (AvatarFraming.clampZoom(avatarZoom), AvatarFraming.clampFocus(avatarFocusX), AvatarFraming.clampFocus(avatarFocusY))
     }
 
-    /// Routine results are ordinary tasks; only their per-run executions are hidden.
+    /// Routine runs' executions and automatic results threads are hidden.
     public var visibleTasks: [BotTask] {
         (tasks ?? []).filter { !$0.isHiddenFromPerson }
     }
@@ -1372,17 +1406,13 @@ public struct ModelCatalog: Codable, Hashable, Sendable {
 /// offer a reasoning control.
 public struct InstanceCapabilities: Codable, Hashable, Sendable {
     public var effortLevels: [String]?
-    /// The engine can mount the connected apps' tools (a bot's own switch
-    /// does nothing on an engine without it).
-    public var composioMcp: Bool?
     /// The engine takes a model-specific variant instead of an effort level.
     public var modelVariants: Bool? = nil
     /// The engine can drive the built-in browser (Works on: Browser).
     public var browserMcp: Bool? = nil
 
-    public init(effortLevels: [String]? = nil, composioMcp: Bool? = nil, modelVariants: Bool? = nil, browserMcp: Bool? = nil) {
+    public init(effortLevels: [String]? = nil, modelVariants: Bool? = nil, browserMcp: Bool? = nil) {
         self.effortLevels = effortLevels
-        self.composioMcp = composioMcp
         self.modelVariants = modelVariants
         self.browserMcp = browserMcp
     }
@@ -1479,25 +1509,22 @@ public struct ConfigDecider: Codable, Hashable, Sendable {
 /// Each one decodes on its own: an unknown or odd value is simply off.
 public struct ServerFeatures: Codable, Hashable, Sendable {
     public var browser: Bool?
-    public var connectedApps: Bool?
     public var templates: Bool?
     public var vpsComputer: Bool?
     public var boatComputer: Bool?
 
-    public init(browser: Bool? = nil, connectedApps: Bool? = nil, templates: Bool? = nil, vpsComputer: Bool? = nil, boatComputer: Bool? = nil) {
+    public init(browser: Bool? = nil, templates: Bool? = nil, vpsComputer: Bool? = nil, boatComputer: Bool? = nil) {
         self.browser = browser
-        self.connectedApps = connectedApps
         self.templates = templates
         self.vpsComputer = vpsComputer
         self.boatComputer = boatComputer
     }
 
-    private enum CodingKeys: String, CodingKey { case browser, connectedApps, templates, vpsComputer, boatComputer }
+    private enum CodingKeys: String, CodingKey { case browser, templates, vpsComputer, boatComputer }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         browser = try? c.decodeIfPresent(Bool.self, forKey: .browser)
-        connectedApps = try? c.decodeIfPresent(Bool.self, forKey: .connectedApps)
         templates = try? c.decodeIfPresent(Bool.self, forKey: .templates)
         vpsComputer = try? c.decodeIfPresent(Bool.self, forKey: .vpsComputer)
         boatComputer = try? c.decodeIfPresent(Bool.self, forKey: .boatComputer)
@@ -1527,7 +1554,6 @@ public struct BrowserEngineStatus: Codable, Hashable, Sendable {
 }
 
 public struct ConfigStatus: Codable, Sendable {
-    public var composio: ConfigFlag?
     public var box: ConfigFlag?
     public var tts: ConfigFlag?
     public var imageGen: ConfigFlag?
@@ -1841,6 +1867,16 @@ public struct RoutineSuspension: Codable, Hashable, Sendable {
     public var at: Double
 }
 
+/// Runs skipped while the person was away (`RoutineAwaySkips`).
+/// Every field is optional so a partial object cannot drop the routine.
+public struct RoutineAwaySkips: Codable, Hashable, Sendable {
+    public var count: Int?
+    public var firstAt: Double?
+    public var lastAt: Double?
+    /// Set once the person is back and the count was reported.
+    public var reportedAt: Double?
+}
+
 public struct Routine: Codable, Hashable, Identifiable, Sendable {
     public var id: String
     public var name: String
@@ -1879,6 +1915,14 @@ public struct Routine: Codable, Hashable, Identifiable, Sendable {
     public var canEdit: Bool? = nil
     /// Someone else's routine: no prompt, attachments or threads.
     public var redacted: Bool? = nil
+    /// Skip scheduled runs while the person is away. Absent means it runs.
+    public var onlyWhenPresent: Bool? = nil
+    /// Post this routine's completed result in the conversation (2026-10-22).
+    /// Absent inherits the installation default; a quiet run stays silent and
+    /// questions, approvals and errors always reach the person.
+    public var postResults: Bool? = nil
+    /// Skipped runs to report once the person is back.
+    public var awaySkips: RoutineAwaySkips? = nil
 }
 
 public struct RoutineRun: Codable, Hashable, Identifiable, Sendable {
@@ -1955,6 +1999,12 @@ public struct RoutineInput: Encodable, Sendable {
     /// id, RunAsField); nil leaves it to the server (the routine's current
     /// person, else the caller).
     public var runAs: String? = nil
+    /// "Only when I'm here". Nil leaves the stored value alone on an edit
+    /// and means off on a create.
+    public var onlyWhenPresent: Bool? = nil
+    /// Post results in the conversation. Nil leaves the stored value alone on
+    /// an edit and inherits the installation default on a create.
+    public var postResults: Bool? = nil
 
     public init(
         name: String, prompt: String, botId: String, runOn: String = "maus",
@@ -1979,6 +2029,7 @@ public struct RoutineInput: Encodable, Sendable {
         self.attachments = attachments
         self.results = results
         self.completeSchedule = completeSchedule
+        self.onlyWhenPresent = nil
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -2074,95 +2125,6 @@ public struct NotificationTarget: Equatable, Sendable {
     }
 }
 
-// MARK: - Connected apps
-
-public struct ConnectorCard: Codable, Hashable, Identifiable, Sendable {
-    public var slug: String
-    public var label: String
-    public var blurb: String
-    public var logo: String?
-    public var domain: String?
-    /// A toolkit without OAuth: it ships included, there is nothing to connect.
-    public var noAuth: Bool? = nil
-    public var id: String { slug }
-}
-
-public struct ConnectorAccount: Codable, Hashable, Identifiable, Sendable {
-    public var id: String
-    public var alias: String?
-    public var status: String
-
-    /// Composio lifecycle values include both `ACTIVE` and `INACTIVE`; an
-    /// exact normalized comparison avoids rendering the latter as connected.
-    public var isActive: Bool {
-        status.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "ACTIVE"
-    }
-}
-
-public struct ConnectorStatus: Codable, Hashable, Sendable {
-    public var connected: Bool
-    public var pending: Bool?
-    public var status: String?
-    public var accounts: [ConnectorAccount]?
-
-    public init(connected: Bool, pending: Bool? = nil, status: String? = nil, accounts: [ConnectorAccount]? = nil) {
-        self.connected = connected
-        self.pending = pending
-        self.status = status
-        self.accounts = accounts
-    }
-}
-
-public struct ConnectorCatalog: Codable, Sendable {
-    public var configured: Bool
-    public var mode: String?
-    public var source: String?
-    public var cards: [ConnectorCard]
-    /// How complete the catalog is (`CatalogPagination` in PluginsPanel.tsx);
-    /// absent on a curated catalog and on older computers.
-    public var pagination: ConnectorCatalogPagination? = nil
-}
-
-public struct ConnectorCatalogPagination: Codable, Hashable, Sendable {
-    public var items: Int
-    public var totalItems: Int?
-    public var stalled: Bool
-    /// The server's stop reason, only when the walk stalled.
-    public var reason: String?
-
-    public init(items: Int, totalItems: Int? = nil, stalled: Bool, reason: String? = nil) {
-        self.items = items
-        self.totalItems = totalItems
-        self.stalled = stalled
-        self.reason = reason
-    }
-}
-
-public struct ConnectorStatuses: Codable, Sendable {
-    public var configured: Bool
-    public var services: [String: ConnectorStatus]
-    /// `"ok"`, `"unavailable"`, or absent on a computer that predates the
-    /// field. Read it through `isAuthoritative`; nothing should compare it
-    /// directly.
-    public var credentialStore: String?
-
-    /// Whether `services` is an inventory or an admission of ignorance.
-    ///
-    /// `server/index.ts` answers an unreadable Composio credential store with
-    /// an empty map *and* `credentialStore: "unavailable"`, because failing to
-    /// read the store means we do not know what is connected — which is not
-    /// the same as knowing nothing is. An empty map arriving that way must
-    /// never be shown as "nothing is connected": every account may still be
-    /// live on the computer.
-    ///
-    /// Only that exact string withdraws the claim. `"ok"` is authoritative,
-    /// and so is a missing field — a computer old enough not to send it would
-    /// otherwise have every answer treated as unknowable.
-    public var isAuthoritative: Bool {
-        credentialStore != "unavailable"
-    }
-}
-
 /// The harness's error body. Every non-2xx response carries one.
 public struct APIErrorBody: Codable, Sendable {
     public var error: String
@@ -2245,11 +2207,9 @@ struct RoutinesResponse: Codable, Sendable {
 }
 
 struct RoutineResponse: Codable, Sendable { var routine: Routine }
-struct RoutineRunResponse: Codable, Sendable { var run: RoutineRun }
 
-struct ConnectorAuthorizationResponse: Codable, Sendable {
-    var url: String
-}
+struct RoutineAwayStateResponse: Decodable, Sendable { var state: String }
+struct RoutineRunResponse: Codable, Sendable { var run: RoutineRun }
 
 // MARK: - Server sessions (pairing with a server directly)
 
@@ -2389,6 +2349,9 @@ public struct MessageImageAttachment: Codable, Hashable, Sendable {
     /// The server's duration estimate for an audio attachment, in
     /// milliseconds; shown until the player loads real metadata.
     public var durationMs: Double?
+    /// Word times, when a computer sends them. Absent today: the settle
+    /// keeps path and mime only.
+    public var words: [VoiceNoteWord]? = nil
 }
 
 /// One voice note in Message.attachments: the parked clip's bare generated
@@ -2398,13 +2361,15 @@ public struct MessageVoiceNote: Hashable, Sendable, Identifiable {
     public var path: String
     public var mime: String?
     public var durationMs: Double?
+    public var words: [VoiceNoteWord]?
 
     public var id: String { path }
 
-    public init(path: String, mime: String? = nil, durationMs: Double? = nil) {
+    public init(path: String, mime: String? = nil, durationMs: Double? = nil, words: [VoiceNoteWord]? = nil) {
         self.path = path
         self.mime = mime
         self.durationMs = durationMs
+        self.words = words
     }
 }
 
@@ -2418,7 +2383,7 @@ extension Message {
             guard attachment.kind == "audio", let path = attachment.path,
                   !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   seen.insert(path).inserted else { return nil }
-            return MessageVoiceNote(path: path, mime: attachment.mime, durationMs: attachment.durationMs)
+            return MessageVoiceNote(path: path, mime: attachment.mime, durationMs: attachment.durationMs, words: attachment.words)
         }
     }
 }

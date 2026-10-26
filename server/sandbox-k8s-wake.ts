@@ -18,10 +18,14 @@ import { UserSandboxUnavailable } from "./user-sandbox-errors.ts";
 
 export const WAKE_URL_ENV = "SAGAX_SANDBOX_K8S_WAKE_URL";
 export const WAKE_TIMEOUT_ENV = "SAGAX_SANDBOX_K8S_WAKE_TIMEOUT_MS";
-export const DEFAULT_WAKE_TIMEOUT_MS = 8 * 60_000;
+/** 2026-10-19: a stopped AKS cluster took 7 min 52 s from the webhook to
+ * the provisioner's first answer; 8 min was one cut away from failing. */
+export const DEFAULT_WAKE_TIMEOUT_MS = 9 * 60_000;
 /** Under the 10 minute cut an engine puts on one tool call (pi) and the
  * 12 minute one of the environment's MCP proxy, so the person gets this
- * module's clear error rather than a cut connection. */
+ * module's clear error rather than a cut connection. The pod-start retries
+ * that follow share the same budget (SANDBOX_CALL_BUDGET_MS in
+ * server/user-sandbox-manager.ts). */
 export const MAX_WAKE_TIMEOUT_MS = 9 * 60_000;
 export const MIN_WAKE_TIMEOUT_MS = 30_000;
 /** At most one webhook POST in this window, whatever the callers do. */
@@ -101,6 +105,22 @@ export function provisionerUnreachable(error: unknown): boolean {
  * once the cluster is up (a timeout or a reset may have run it already). */
 export function provisionerNotReached(error: unknown): boolean {
   return gatewayStatus(error) === 503 || NOT_DELIVERED_CODES.has(errorCode(error));
+}
+
+/** The provisioner's refusal while the sandbox pod is not running yet (a
+ * cold node pool): HTTP 503 with this code. Nothing ran; the call may be sent
+ * again. */
+export const SANDBOX_STARTING_CODE = "starting";
+/** How long a call refused with `starting` keeps being sent again. A cold
+ * node pool (0 -> 1) plus the image pull took ~3 min on 2026-10-19. */
+export const SANDBOX_STARTING_RETRY_MS = 5 * 60_000;
+export const SANDBOX_STARTING_RETRY_DELAY_MS = 5_000;
+
+/** The provisioner answered that the environment is still starting. */
+export function sandboxStarting(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null)?.status;
+  const code = (error as { code?: unknown } | null)?.code;
+  return status === 503 && code === SANDBOX_STARTING_CODE;
 }
 
 export const CLUSTER_STARTING_MESSAGE = "The server environment is starting. This can take a few minutes.";

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
-import { applyAppIcon, buildIco, createAppIconStore, parseAppIconRequest, pngSize, windowIconPath } from "./app-icon.mjs";
+import { applyAppIcon, buildIco, createAppIconStore, parseAppIconRequest, pngSize, windowIconImage, windowIconPath } from "./app-icon.mjs";
 
 /** A real (tiny, flat) square PNG of `size` pixels. */
 function png(size) {
@@ -124,4 +124,15 @@ test("Windows sets every live window from the .ico; Linux from the PNG", () => {
   assert.equal(windowIconPath(saved, "win32", "/d"), "/u/icon-0.ico");
   assert.equal(windowIconPath(saved, "linux", "/d"), "/u/icon-256.png");
   assert.equal(windowIconPath(null, "win32", "/d"), "/d");
+});
+
+test("Windows falls back to the PNG when the .ico cannot be decoded, and updates the tray", () => {
+  const set = [];
+  const nativeImage = { createFromPath: (file) => ({ file, isEmpty: () => file.endsWith(".ico") }) };
+  const win = { isDestroyed: () => false, setIcon: (image) => set.push(["window", image.file]) };
+  const tray = { setIcon: (image) => set.push(["tray", image.file]) };
+  const saved = { id: "owl", png: "/u/icon-256.png", ico: "/u/icon-0.ico" };
+  applyAppIcon(saved, { platform: "win32", app: {}, windows: [win], nativeImage, defaultIconPath: "/default.png", tray });
+  assert.deepEqual(set, [["window", "/u/icon-256.png"], ["tray", "/u/icon-256.png"]]);
+  assert.equal(windowIconImage({ id: "x", png: null, ico: "/u/icon-0.ico" }, "win32", nativeImage, "/default.png").file, "/default.png");
 });

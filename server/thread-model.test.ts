@@ -73,6 +73,27 @@ describe("threads follow their bot's model", () => {
     expect(ownModel(open(), bot.id, picked.threadId)).toEqual(codex);
   });
 
+  it("a thread whose own model is only a copy of the bot's old default follows the new one (prod 2026-10-20)", () => {
+    const store = open();
+    const bot = store.createBot();
+    const copy = store.createTask(bot.id, "Copy")!;
+    const picked = store.createTask(bot.id, "Picked")!;
+    store.switchTaskModel(bot.id, copy.threadId, codex, false);
+    store.switchTaskModel(bot.id, picked.threadId, opus, false);
+    store.patchBot(bot.id, { modelSelection: codex });
+    // copy now holds the bot's default; a new default moves it, not the pick
+    store.applyModelDefault(bot.id, sonnet);
+    expect(ownModel(store, bot.id, copy.threadId)).toBeUndefined();
+    expect(runsOn(store, bot.id, copy.threadId)).toEqual(sonnet);
+    expect(ownModel(store, bot.id, picked.threadId)).toEqual(opus);
+    // the same from a thread's "make it the bot's model", in memory too
+    store.switchTaskModel(bot.id, copy.threadId, codex, false);
+    store.patchBot(bot.id, { modelSelection: codex });
+    store.switchTaskModel(bot.id, picked.threadId, opus, true);
+    expect(ownModel(store, bot.id, copy.threadId)).toBeUndefined();
+    expect(runsOn(store, bot.id, copy.threadId)).toEqual(opus);
+  });
+
   it("picking the bot's own model in a thread is following the bot", () => {
     const store = open();
     const bot = store.createBot();

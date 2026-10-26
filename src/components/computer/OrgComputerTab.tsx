@@ -74,8 +74,28 @@ export function activeComputer(bridge: DesktopBridgeStatus, place: EffectivePlac
   return { source: "server", reason: "none" };
 }
 
-export function OrgComputerTab({ bridge, place, computerOff, botName, botId, initialLocal = null, browser = null }: {
+/** Where the bot works right now for this conversation (the server's answer
+ * or the conversation's pin): the screen the tab opens on. "unknown" is an Auto
+ * place the server has not answered yet: Cloud meanwhile, so the person's Mac
+ * is never reached before it is known to be the one in use. */
+export type InUsePlace = "cloud" | "vm" | "local" | "browser" | "off" | "unknown";
+
+/** The screen the tab opens on: the destination in use, else the legacy
+ * default (Works on; Auto starts on the Mac when it is connected). */
+export function defaultScreen(bridge: DesktopBridgeStatus, place: EffectivePlace, inUse?: InUsePlace): { source: ComputerSource; browser: boolean } {
+  if (inUse === "unknown") return { source: "server", browser: false };
+  if (inUse === "cloud") return { source: "server", browser: false };
+  if (inUse === "vm" || inUse === "local") return { source: "local", browser: false };
+  if (inUse === "browser") return { source: "server", browser: true };
+  return { source: activeComputer(bridge, place).source, browser: place === "browser" };
+}
+
+export function OrgComputerTab({ bridge, place, computerOff, botName, botId, threadId, inUse, initialLocal = null, browser = null }: {
   bridge: DesktopBridgeStatus;
+  /** The conversation, so a manual pick ends when it changes. */
+  threadId?: string;
+  /** The destination the bot uses now; a change of it ends a manual pick. */
+  inUse?: InUsePlace;
   /** This bot, for its browser's dot in the picker. */
   botId?: string;
   /** The bot's Works on (Auto when unset). */
@@ -86,11 +106,18 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, ini
   /** The bot's live browser, offered as the picker's last chip. */
   browser?: ReactNode;
 }) {
-  const active = activeComputer(bridge, place);
+  const screen = defaultScreen(bridge, place, inUse);
+  const active = { ...activeComputer(bridge, place), source: screen.source };
   const choices = computerChoices(bridge);
-  const [picked, setPicked] = useState<string | null>(null);
+  // A manual pick holds until the bot's destination (or the conversation) changes.
+  const scope = `${botId ?? ""}:${threadId ?? ""}:${inUse ?? ""}`;
+  const [pick, setPick] = useState<{ scope: string; key: string } | null>(null);
+  // the pick ends for good when the scope moves (adjusting state while rendering)
+  if (pick && pick.scope !== scope) setPick(null);
+  const picked = pick && pick.scope === scope ? pick.key : null;
+  const setPicked = useCallback((key: string) => setPick({ scope, key }), [scope]);
   // a bot that works on its browser opens on it
-  const showingBrowser = browser !== null && (picked === "browser" || (picked === null && place === "browser"));
+  const showingBrowser = browser !== null && (picked === "browser" || (picked === null && screen.browser));
   const chosen = chosenComputer(choices, active.source, bridge, showingBrowser ? null : picked);
   // Works on a computer that is not connected: its screen says so.
   const source = chosen?.source ?? active.source;
@@ -293,7 +320,7 @@ function usePageVisible(): boolean {
 }
 
 /** The cloud screen's state: "starting" while the environment's cluster
- * wakes (it slept outside office hours), never an error in that window. */
+ * wakes (it slept while idle), never an error in that window. */
 export function serverScreenState(status: ServerEnvironmentStatus | null, pending: PowerAction | null): ScreenState {
   if (!status) return "starting";
   const power = powerState(status.state, pending);

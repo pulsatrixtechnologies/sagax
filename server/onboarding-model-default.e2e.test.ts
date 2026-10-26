@@ -9,6 +9,11 @@ import { waitForExit } from "./testing/cleanup.ts";
 
 const EMPTY = { instanceId: "", model: "" };
 const DEFAULT = { instanceId: "claude", model: "claude-sonnet-5" };
+// The model a NEW bot is offered to start on (GET /api/bot-defaults) is Auto:
+// the engine is auto-resolved and the model is Auto, with the concrete pick
+// kept as the fallback (docs/plans/2026-10-08-auto-model.md). The pre-seeded
+// starter keeps its concrete default, so its dispatched model is unchanged.
+const AUTO = { ...DEFAULT, auto: true as const };
 const CHOSEN = { instanceId: "claude", model: "claude-opus-5" };
 const FAKE_CLI = fileURLToPath(new URL("./testing/fake-claude-cli.ts", import.meta.url));
 
@@ -127,7 +132,7 @@ it("connecting a provider selects a blank starter and future bot defaults withou
     expect(connected.tasks.find((task: any) => task.threadId === pinned.threadId)).toMatchObject({ modelSelection: CHOSEN, followsBotModel: false });
     expect(bots.find((bot: any) => bot.id === intentional.id).modelSelection).toEqual(CHOSEN);
     expect(fixture.saved().find((bot) => bot.id === starter.id).modelSelection).toEqual(DEFAULT);
-    expect((await fixture.api("GET", "/api/bot-defaults")).modelSelection).toEqual(DEFAULT);
+    expect((await fixture.api("GET", "/api/bot-defaults")).modelSelection).toEqual(AUTO);
     expect((await fixture.control("new-bot", "--name", "New default")).bot.modelSelection).toEqual(DEFAULT);
     await send(fixture, starter.id, starter.threadId, "AUTOMATIC_FIRST_CHAT_8P");
 

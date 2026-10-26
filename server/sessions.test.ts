@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as atomic from "./atomic.ts";
 
 import {
+  ENDED_SESSION_MEMORY_MS,
   EXCHANGE_REPLAY_MS,
   formatPairingCode,
   generatePairingCode,
@@ -741,12 +742,55 @@ describe("sessions from an OpenID Connect sign-in", () => {
     store.close();
   });
 
-  it("do not survive an unclean restart, like other account sessions", () => {
+  it("survive an unclean restart only as waiting for the provider's recheck (2026-10-19)", () => {
     const path = join(dir, "oidc-unclean.json");
     const store = new SessionRegistry({ file: path, now: () => clock });
-    const issued = store.issue({ label: "Chrome", scopes: ["client"], principalId: "pr_y", idp: { iss: "https://px.example.test", sub: "01K" } });
+    const issued = store.issue({ label: "Chrome", scopes: ["client"], email: "y@example.test", principalId: "pr_y", idp: { iss: "https://px.example.test", sub: "01K" } });
+    const email = store.issue({ label: "browser", email: "person@example.test", scopes: ["client"] });
+    expect(store.needsRecheck(issued.session.id)).toBe(false);
     // no close(): the open marker stays, as after a crash
+    const reopened = new SessionRegistry({ file: path, now: () => clock, emailScopes: () => ["client"] });
+    expect(reopened.authenticate(issued.token)?.id).toBe(issued.session.id);
+    expect(reopened.needsRecheck(issued.session.id)).toBe(true);
+    // an email session still needs a clean close to come back
+    expect(reopened.authenticate(email.token)).toBeNull();
+    // nor does it act for anyone (bot-act copies, person lookups) before then
+    expect(reopened.delegate(issued.session.id)).toBeNull();
+    expect(reopened.liveWhere((s) => s.principalId === "pr_y")).toEqual([]);
+    reopened.recheckDone(issued.session.id);
+    expect(reopened.liveWhere((s) => s.principalId === "pr_y").map((s) => s.id)).toEqual([issued.session.id]);
+    expect(reopened.needsRecheck(issued.session.id)).toBe(false);
+    reopened.close();
+    const clean = new SessionRegistry({ file: path, now: () => clock });
+    expect(clean.needsRecheck(issued.session.id)).toBe(false);
+    expect(clean.authenticate(issued.token)?.id).toBe(issued.session.id);
+    clean.close();
+  });
+
+  it("do not survive an unclean restart when a session write was lost", () => {
+    const path = join(dir, "oidc-unsynced.json");
+    const store = new SessionRegistry({ file: path, now: () => clock });
+    const kept = store.issue({ label: "Chrome", scopes: ["client"], principalId: "pr_y", idp: { iss: "https://px.example.test", sub: "01K" } });
+    const revoked = store.issue({ label: "Safari", scopes: ["client"], principalId: "pr_y", idp: { iss: "https://px.example.test", sub: "01K" } });
+    const writes = vi.spyOn(atomic, "writeFileAtomic").mockImplementation(() => { throw new Error("ENOSPC"); });
+    const logger = vi.spyOn(console, "error").mockImplementation(() => {});
+    store.revokeWhere((s) => s.id === revoked.session.id);
+    writes.mockRestore(); logger.mockRestore();
+    expect(existsSync(`${path}.unsynced`)).toBe(true);
+    // crash: neither the revocation nor a clean close reached disk
     const reopened = new SessionRegistry({ file: path, now: () => clock });
+    expect(reopened.authenticate(revoked.token)).toBeNull();
+    expect(reopened.authenticate(kept.token)).toBeNull();
+    reopened.close();
+    expect(existsSync(`${path}.unsynced`)).toBe(false);
+  });
+
+  it("dropPendingRechecks ends the sessions a provider cannot confirm", () => {
+    const path = join(dir, "oidc-drop.json");
+    const store = new SessionRegistry({ file: path, now: () => clock });
+    const issued = store.issue({ label: "Chrome", scopes: ["client"], principalId: "pr_y", idp: { iss: "https://px.example.test", sub: "01K" } });
+    const reopened = new SessionRegistry({ file: path, now: () => clock });
+    expect(reopened.dropPendingRechecks()).toBe(1);
     expect(reopened.authenticate(issued.token)).toBeNull();
     reopened.close();
   });
@@ -850,5 +894,40 @@ describe("a pairing window lost to a restart (2026-10-13)", () => {
     clock += PAIRING_RESTART_HINT_MS;
     const later = restarted.exchange({ code: credential, label: "Mac", source: "b" });
     expect(later).toEqual({ ok: false, status: 401, error: "pairing code is wrong or has expired; create a new one on the server" });
+  });
+});
+
+// 2026-10-20: a refused token says why (the 401 code), across restarts.
+describe("why a session token stopped working", () => {
+  it("remembers revoked, expired and provider-ended sessions by token hash, bounded, and says unknown otherwise", () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-sessions-ended-"));
+    try {
+      let now = 1_000_000;
+      const file = join(dir, "sessions.json");
+      const registry = new SessionRegistry({ file, now: () => now });
+      const a = registry.issue({ label: "a", scopes: ["client"] });
+      const b = registry.issue({ label: "b", scopes: ["client"] });
+      const c = registry.issue({ label: "c", scopes: ["client"] });
+      registry.revoke(a.session.id);
+      registry.revokeWhere((s) => s.id === b.session.id, "idp_session_ended");
+      expect(registry.explainRefusal(a.token)).toEqual({ code: "session_revoked", sessionId: a.session.id });
+      expect(registry.explainRefusal(b.token)).toEqual({ code: "idp_session_ended", sessionId: b.session.id });
+      expect(registry.explainRefusal("sgx_sess_never")).toEqual({ code: "session_unknown" });
+      expect(registry.explainRefusal(undefined)).toEqual({ code: "session_unknown" });
+      now += SESSION_TTL_MS + 1;
+      expect(registry.explainRefusal(c.token).code).toBe("session_expired");
+      registry.list(); // prunes
+      expect(registry.explainRefusal(c.token).code).toBe("session_expired");
+      registry.close();
+      const raw = readFileSync(file, "utf8");
+      for (const token of [a.token, b.token, c.token]) expect(raw).not.toContain(token);
+      const reopened = new SessionRegistry({ file, now: () => now });
+      expect(reopened.explainRefusal(b.token).code).toBe("idp_session_ended");
+      now += ENDED_SESSION_MEMORY_MS;
+      expect(reopened.explainRefusal(b.token).code).toBe("session_unknown");
+      reopened.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -22,7 +22,8 @@ export const mask = (value: string) => (REDACTION_MARKER.test(value) ? value : `
 
 const KEY_PREFIXES: RegExp[] = [
   /\bom[dg]_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g, // desktop device and model-only credentials
-  /\bsk-(?:ant-|proj-|live-|test-)?[A-Za-z0-9_-]{16,}/g, // anthropic / openai / stripe
+  /\bsk-(?:ant-|proj-|live-|test-)?[A-Za-z0-9_-]{16,}/g, // anthropic / openai
+  /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}/g, // stripe secret and restricted keys (port de OpenMausBot #3037)
   /\bxai-[A-Za-z0-9_-]{20,}/g, // xai (grok)
   /\bgsk_[A-Za-z0-9]{40,}/g, // groq
   /\bcsk-[A-Za-z0-9]{32,}/g, // cerebras
@@ -77,7 +78,7 @@ const URL_USERINFO = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@'"]+:)([^\s/@'"«»]+)(@)/
 
 /** A key shape cut by a "…": what a title or a preview kept of a key once
  * it was shortened. Too short for KEY_PREFIXES, still part of the key. */
-const CUT_KEY = /\b(?:om[dg]_|sk-|xai-|gsk_|hf_|gh[pousr]_|github_pat_|xox[abposr]-|AKIA|AIza|npm_|eyJ)[A-Za-z0-9_-]*(?=…)/g;
+const CUT_KEY = /\b(?:om[dg]_|sk-|[sr]k_(?:live|test)_|xai-|gsk_|hf_|gh[pousr]_|github_pat_|xox[abposr]-|AKIA|AIza|npm_|eyJ)[A-Za-z0-9_-]*(?=…)/g;
 
 /** Mask the start of a key left in front of an ellipsis by a cut made
  * before any redaction (an older automatic task title, say). */

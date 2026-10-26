@@ -11,6 +11,9 @@
 //          freezes the person's New bot defaults as a template (no starter
 //          notes) and answers { link: { id, name, createdAt, path, url, reachable } }
 //   GET    /api/template-links          { links: [...] } the person's own links
+//   GET    /api/template-links/:id      { link, template: { title, description, skills, release } }
+//   PUT    /api/template-links/:id      { name?, description?, picture? } freezes
+//          the defaults again under the same link (Update the template)
 //   DELETE /api/template-links/:id      turn the link off (404 once gone)
 //   POST   /api/template-links/import   { url } -> { document } a template
 //          from a link of this server or another one (public addresses only),
@@ -25,6 +28,7 @@ import {
   publicTemplateDocument,
   TEMPLATE_LINK_PREFIX,
   templateCardHtml,
+  templateDetails,
   type TemplateLinkRecord,
   type TemplateLinks,
 } from "../template-links.ts";
@@ -124,10 +128,14 @@ export async function fetchRemoteTemplate(url: URL): Promise<unknown> {
 }
 
 export function createTemplateLinkRoutes(deps: TemplateLinkRouteDeps): RouteHandler {
-  const wire = (record: Pick<TemplateLinkRecord, "id" | "name" | "createdAt">, req: IncomingMessage) => {
+  const wire = (record: Pick<TemplateLinkRecord, "id" | "name" | "createdAt" | "updatedAt">, req: IncomingMessage) => {
     const origin = deps.origin(req).replace(/\/+$/, "");
     const path = deps.links.path(record.id);
-    return { id: record.id, name: record.name, createdAt: record.createdAt, path, url: `${origin}${path}`, reachable: deps.reachable(origin) };
+    return {
+      id: record.id, name: record.name, createdAt: record.createdAt,
+      ...(record.updatedAt ? { updatedAt: record.updatedAt } : {}),
+      path, url: `${origin}${path}`, reachable: deps.reachable(origin),
+    };
   };
   const mine = (auth: RequestAuth, record: TemplateLinkRecord) => {
     const creator = deps.creator(auth);
@@ -164,9 +172,21 @@ export function createTemplateLinkRoutes(deps: TemplateLinkRouteDeps): RouteHand
       }
     }
     const one = path.match(/^\/api\/template-links\/([A-Za-z0-9_-]{22})$/);
-    if (one && method === "DELETE") {
+    if (one && (method === "GET" || method === "PUT" || method === "DELETE")) {
       const record = deps.links.get(one[1]!);
       if (!record || !mine(auth, record)) return json(res, 404, { error: "This link does not exist." });
+      if (method === "GET") return json(res, 200, { link: wire(record, req), template: templateDetails(record.document) });
+      if (method === "PUT") {
+        const parsed = createBody.safeParse(await readBody(req, 512 * 1024));
+        if (!parsed.success) return json(res, 400, { error: "send { name?, description?, picture? }" });
+        try {
+          const updated = deps.links.update(record.id, deps.buildTemplate(parsed.data));
+          if (!updated) return json(res, 404, { error: "This link does not exist." });
+          return json(res, 200, { link: wire(updated, req), template: templateDetails(updated.document) });
+        } catch (error) {
+          return json(res, 400, { error: error instanceof Error ? error.message : "The template could not be updated." });
+        }
+      }
       deps.links.revoke(record.id);
       return json(res, 200, { ok: true });
     }

@@ -4,16 +4,23 @@
 // button of Permissions: Edit bot, Rename, Put on the desktop, Make primary
 // bot, Export the conversation (copy or download), Export the bot (.zip),
 // Archive and, in Advanced mode, the Inspector. A right click on the mascot
-// or the name opens the same menu where the pointer is.
+// or the name opens the same menu where the pointer is. 2026-10-21 (parity
+// with Grok Bot): Copy link to this bot (openmausbot://bot/<id>) and Reset
+// the history (src/lib/bot-history-reset.ts: a new conversation, the open
+// ones archived; memory, files and routines kept; routine runs,
+// confidential threads, hidden client threads and bot-to-bot threads stay).
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Archive, Bug, Check, Copy, Database, Download, FileArchive, MoreHorizontal, Pencil, PictureInPicture2, Star, UserRoundPen } from "lucide-react";
+import { Archive, Bug, Check, Copy, Database, Download, FileArchive, Link2, MoreHorizontal, Pencil, PictureInPicture2, RotateCcw, Star, UserRoundPen } from "lucide-react";
 
 import { useStore, visibleMessages, type Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { showBotArchive, showBotRename } from "@/lib/bot-capabilities";
+import { historyResetThreads } from "@/lib/bot-history-reset";
+import { copyText } from "@/lib/copy-text";
+import { botRefUrl } from "@/lib/thread-refs";
 import { archiveBlockReason, primaryBotOffer, requestBotHidden, requestPrimaryBot } from "@/lib/bot-quick-actions";
 import { viewerOwnsBot } from "@/lib/primary-bot";
 import { viewerActorId } from "@/lib/viewer";
@@ -60,6 +67,8 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data }: {
   const [copyFailed, setCopyFailed] = useState(false);
   const [zipOpen, setZipOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const close = () => onAnchor(null);
 
@@ -88,6 +97,7 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data }: {
     if (!anchor) return;
     setCopied(false);
     setCopyFailed(false);
+    setLinkCopied(false);
     menuRef.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus();
     const onDown = (event: MouseEvent) => {
       if (!(event.target instanceof Element) || !event.target.closest("[data-bot-actions-menu], [data-bot-actions-button]")) onAnchor(null);
@@ -140,6 +150,30 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data }: {
       .finally(() => setBusy(false));
   };
 
+  const copyBotLink = async () => {
+    setLinkCopied((await copyText(botRefUrl(bot.id))) === "copied");
+  };
+  const resetHistory = () => {
+    if (busy) return;
+    setBusy(true);
+    const previous = historyResetThreads(bot);
+    dispatch({
+      type: "newTask",
+      botId: bot.id,
+      onCreated: () => {
+        const at = Date.now();
+        for (const threadId of previous) dispatch({ type: "updateTask", botId: bot.id, threadId, patch: { archivedAt: at } });
+        setBusy(false);
+        setResetOpen(false);
+      },
+      onError: (message) => {
+        setBusy(false);
+        setResetOpen(false);
+        dispatch({ type: "error", message });
+      },
+    });
+  };
+
   const item = (id: string, icon: ReactNode, label: string, onClick: () => void, opts?: { disabled?: boolean; hint?: string; keepOpen?: boolean }) => (
     <button
       key={id}
@@ -179,6 +213,8 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data }: {
       disabled: !primary.allowed || busy,
       hint: primary.allowed ? undefined : t(primary.reason),
     }),
+    item("copy-bot-link", linkCopied ? <Check className="text-success" /> : <Link2 />, linkCopied ? t("botPanel.linkCopied") : t("botPanel.copyLink"), () => void copyBotLink(), { keepOpen: true }),
+    canRename && item("reset-history", <RotateCcw />, `${t("botPanel.resetHistory")}…`, () => setResetOpen(true), { disabled: busy }),
     divider("export"),
     heading("export-heading", t("chat.export.conversationHeading")),
     ...(messages.length === 0
@@ -243,6 +279,17 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data }: {
         returnFocusRef={buttonRef}
         onCancel={() => setArchiveOpen(false)}
         onConfirm={archive}
+      />
+      <ConfirmDialog
+        open={resetOpen}
+        title={t("botPanel.resetHistoryTitle", { name: bot.name })}
+        body={t("botPanel.resetHistoryBody", { name: bot.name })}
+        confirmLabel={t("botPanel.resetHistory")}
+        tone="neutral"
+        pending={busy}
+        returnFocusRef={buttonRef}
+        onCancel={() => setResetOpen(false)}
+        onConfirm={resetHistory}
       />
     </>
   );

@@ -2,12 +2,19 @@
 // held an action (shared/custom-rules.ts), in their own words, with a way
 // to edit it. Shown on the approval box, on a settled card's receipt and
 // under a step a rule answered with no card.
-import { ShieldCheck, ShieldX, ShieldAlert } from "lucide-react";
+//
+// 2026-10-21 (Grok Bot parity lot 1A): an organization admin's rule says so
+// ("Exigé par votre administrateur") and offers no edit; a rule whose words
+// change shows what changed, word by word (RuleTextDiff).
+//
+// 2026-10-21 (lot A1): a rule the model reviewer applied (examen
+// automatique) says so, with its reason in one sentence.
+import { Lock, ShieldCheck, ShieldX, ShieldAlert } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { useStore } from "@/state/store";
-import type { CustomRuleNotice as Notice, RiskClass } from "../../shared/custom-rules";
+import { ruleTextDiff, type CustomRuleNotice as Notice, type RiskClass } from "../../shared/custom-rules";
 
 export const RISK_LABEL: Record<RiskClass, LocaleKey> = {
   destructive: "customRules.risk.destructive",
@@ -22,6 +29,15 @@ export function riskList(risks: readonly RiskClass[]): string {
 
 /** The one line a notice reads as. */
 export function customRuleNoticeLine(notice: Notice): string {
+  // 2026-10-21 (Grok Bot parity A1): the model reviewer applied the rule
+  if (notice.reviewer === "model") {
+    if (notice.org) return t(notice.outcome === "denied" ? "customRules.notice.modelOrgDenied" : "customRules.notice.modelOrgHeld");
+    if (notice.outcome === "approved") return t("customRules.notice.modelApproved");
+    if (notice.outcome === "denied") return t("customRules.notice.modelDenied");
+    return t("customRules.notice.modelHeld");
+  }
+  if (notice.org && notice.outcome === "denied") return t("customRules.notice.orgDenied");
+  if (notice.org && notice.outcome === "held") return t("customRules.notice.orgHeld");
   if (notice.outcome === "approved") return t("customRules.notice.approved");
   if (notice.outcome === "denied") return t("customRules.notice.denied");
   if (notice.outcome === "held") return t("customRules.notice.held");
@@ -53,8 +69,37 @@ export function CustomRuleNoticeLine({ notice, botId, compact = false }: { notic
       <Icon size={compact ? 12 : 14} aria-hidden="true" className={`shrink-0 ${tone}`} />
       <span className="font-medium text-ink">{customRuleNoticeLine(notice)}</span>
       <span className="min-w-0 break-words">« {notice.when} »</span>
-      <EditCustomRuleLink botId={notice.botId ?? botId} />
+      {notice.org ? <OrgRuleBadge /> : <EditCustomRuleLink botId={notice.botId ?? botId} />}
+      {notice.reason && <span data-custom-rule-reason="" className="basis-full min-w-0 break-words text-ink-secondary">{notice.reason}</span>}
     </div>
+  );
+}
+
+/** "Exigé par votre administrateur": an organization rule, which nobody
+ * but an organization admin changes. */
+export function OrgRuleBadge() {
+  return (
+    <span data-org-rule="" title={t("customRules.org.locked")} className="inline-flex items-center gap-1 text-ink-tertiary">
+      <Lock size={11} aria-hidden="true" />
+      {t("customRules.org.required")}
+    </span>
+  );
+}
+
+/** What changes in a rule's words: removed words struck, added words
+ * marked. Nothing when the words are the same. */
+export function RuleTextDiff({ before, after }: { before: string; after: string }) {
+  if (before.trim() === after.trim()) return null;
+  const parts = ruleTextDiff(before.trim(), after.trim());
+  return (
+    <p data-rule-diff="" className="text-[12px] text-ink-secondary">
+      <span className="mr-1.5 text-ink-tertiary">{t("customRules.diff.label")}</span>
+      {parts.map((part, index) => part.kind === "same"
+        ? <span key={index}>{part.text}</span>
+        : part.kind === "removed"
+          ? <del key={index} data-rule-diff-removed="" className="mr-1 text-danger line-through decoration-danger/60">{part.text}</del>
+          : <mark key={index} data-rule-diff-added="" className="rounded-sm bg-success/15 px-0.5 text-ink">{part.text}</mark>)}
+    </p>
   );
 }
 

@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic, writeFileAtomicIfChanged } from "./atomic.ts";
+import { commitBotChange, keptRevocation, saveBotsFor } from "./bots-save.ts";
 import { applyHumanIds } from "./channel-membership.ts";
 import { parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
 import { ensureSections, readSections, changeEmptySection } from "./section-context.ts";
@@ -19,6 +20,7 @@ import type { BotProfilePatch } from "./bot-profile.ts";
 import { peerAllowKey, type PeerAction } from "./peer-approval-key.ts";
 import { DATA_DIR, EVENTS_DIR, NATIVE_DIR, loadBrowserProfileIdAliases } from "./config.ts";
 import * as mdb from "./message-db.ts";
+import { ThreadCache, type ThreadState } from "./thread-cache.ts";
 import { forgetBotMemoryJournal, journalFile } from "./memory-journal.ts";
 import { forgetWorkspaceUsage } from "./workspace-usage.ts";
 import { runCommand, type Command } from "./commands.ts";
@@ -46,14 +48,15 @@ import { applyReaction, normalizeReactions, type ReactionActor, type ReactionMod
 import { migratePeopleDmToThreads, PEOPLE_DM_GENERAL_TITLE } from "./people-dms.ts";
 import type {
   BotActivity, GroupDefaultResponder, GroupTask as GroupTaskRecord, MausColor,
-  ConnectorToolGrant, OptionCardData, TaskClosedBy, TaskOpenedBy, TaskUsage, WireBot, WireGroup,
+  OptionCardData, TaskClosedBy, TaskOpenedBy, TaskUsage, WireBot, WireGroup,
   WireMessage, WireTask, BotProject as BotProjectRecord,
 } from "../shared/wire.ts";
-import { CONNECTOR_SLUG_PATTERN, CONNECTOR_TOOL_NAME_PATTERN, type WireBotGrant } from "../shared/wire.ts";
+import type { WireBotGrant } from "../shared/wire.ts";
 import { sameModelSelection } from "../shared/thread-model.ts";
+import { namesEngine } from "./bot-engine.ts";
 // Re-exported under their historical names so server-side importers keep working.
 export type {
-  BotActivity, ConnectorCardData, GroupDefaultResponder, OptionCardData,
+  BotActivity, GroupDefaultResponder, OptionCardData,
   SecretRequestCardData, Surface, TaskClosedBy, TaskOpenedBy, TaskUsage,
 } from "../shared/wire.ts";
 export type { GroupTask as GroupTaskRecord, BotProject as BotProjectRecord } from "../shared/wire.ts";
@@ -118,7 +121,9 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
    * last (server/context-rebuild.ts CompactionRecord with an anchorId). They
    * are the thread's memory of its older turns and stay off the chat: the
    * person never sees a fold, only the bot's next session reads it. */
-  contextSummaries?: Array<{ id: string; at: number; summary: string; firstKeptId: string; foldedThroughId: string; anchorId: string; tokensBefore: number }>;
+  /** stale: written (or re-applied) for a stale engine session
+   * (server/stale-session.ts): the new session reads it as a pause. */
+  contextSummaries?: Array<{ id: string; at: number; summary: string; firstKeptId: string; foldedThroughId: string; anchorId: string; tokensBefore: number; stale?: true }>;
   contextFloor?: number;
   lastContextModel?: string;
   /** Who pinned this conversation's surface: "user" when a person chose it
@@ -189,7 +194,7 @@ export function toWireTask(task: TaskRecord, botModel: ModelSelection): WireTask
 const TASK_PATCH_FIELDS = [
   "title", "projectId", "modelSelection", "approvalMode", "autoApprove", "alwaysAllow",
   "unread", "lastReadMessageId", "rewound", "archivedAt", "pinned", "pinnedMessageId", "resumeCursors", "lastInstanceId", "cwd",
-  "routineRunId", "surface", "surfaceSource", "snoozedUntil", "link", "linkAuto", "appliedCompactionId", "contextSummaries", "contextFloor", "lastContextModel",
+  "routineRunId", "routineResults", "surface", "surfaceSource", "snoozedUntil", "link", "linkAuto", "appliedCompactionId", "contextSummaries", "contextFloor", "lastContextModel",
   "autoModel", "autoWorkspace", "streamSegment", "segmentDigest",
 ] as const satisfies readonly (keyof TaskRecord)[];
 export type TaskPatch = Partial<Pick<TaskRecord, typeof TASK_PATCH_FIELDS[number]>>;
@@ -353,14 +358,6 @@ function redactBotAuthored<T extends Omit<Message, "id" | "at"> & { at?: number 
     }
     out.card = card;
   }
-  if (out.connector) {
-    out.connector = {
-      ...out.connector,
-      label: redactSecretsInText(out.connector.label),
-      description: redactSecretsInText(out.connector.description),
-      error: out.connector.error ? redactSecretsInText(out.connector.error) : undefined,
-    };
-  }
   if (out.secret) {
     out.secret = {
       ...out.secret,
@@ -520,58 +517,6 @@ export type BotWireProjection = Pick<BotRecord, Exclude<keyof BotRecord, BotWire
 export type BotWireProjectionIsExact = AssertExact<Omit<WireBot, "avatarUrl" | "tasks">, BotWireProjection> & AssertSameKeys<Omit<WireBot, "avatarUrl" | "tasks">, BotWireProjection>;
 export const botWireProjectionIsExact: BotWireProjectionIsExact = true;
 
-/** Upper bounds keep a grants patch from becoming a persistence blob; they
- * sit far above any real service's tool count. */
-export const CONNECTOR_SLUGS_MAX = 64;
-export const CONNECTOR_TOOLS_PER_SERVICE_MAX = 500;
-
-/** Validate and normalize a connectorTools value at the one boundary every
- * writer shares (patchBot). Returns a canonical copy: slugs checked against
- * the service pattern, tool lists deduplicated in order, `"*"` kept as-is.
- * The legacy clear stays a JSON null at the API edge; here callers pass
- * undefined to return a bot to boolean-only behavior. */
-export function parseConnectorTools(value: unknown): { ok: true; grants: Record<string, ConnectorToolGrant> } | { ok: false; error: string } {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return { ok: false, error: "connectorTools must be an object of service slugs to tool grants" };
-  }
-  const entries = Object.entries(value as Record<string, unknown>);
-  if (entries.length > CONNECTOR_SLUGS_MAX) {
-    return { ok: false, error: `connectorTools may name at most ${CONNECTOR_SLUGS_MAX} services` };
-  }
-  const grants: Record<string, ConnectorToolGrant> = {};
-  for (const [slug, grant] of entries) {
-    if (!CONNECTOR_SLUG_PATTERN.test(slug)) {
-      return { ok: false, error: `connectorTools service slugs must be lowercase slugs (got "${slug}")` };
-    }
-    if (!grant || typeof grant !== "object" || Array.isArray(grant)) {
-      return { ok: false, error: `connectorTools.${slug} must be a grant like { tools: "*" } or { tools: ["TOOL_NAME"] }` };
-    }
-    const keys = Object.keys(grant);
-    if (keys.length !== 1 || keys[0] !== "tools") {
-      return { ok: false, error: `connectorTools.${slug} accepts only a tools field` };
-    }
-    const tools = (grant as { tools: unknown }).tools;
-    if (tools === "*") {
-      grants[slug] = { tools: "*" };
-      continue;
-    }
-    if (!Array.isArray(tools) || tools.length === 0) {
-      return { ok: false, error: `connectorTools.${slug}.tools must be "*" or a non-empty list of tool names (use {} to grant no tools)` };
-    }
-    if (tools.length > CONNECTOR_TOOLS_PER_SERVICE_MAX) {
-      return { ok: false, error: `connectorTools.${slug}.tools may list at most ${CONNECTOR_TOOLS_PER_SERVICE_MAX} tools` };
-    }
-    const names: string[] = [];
-    for (const tool of tools) {
-      if (typeof tool !== "string" || !CONNECTOR_TOOL_NAME_PATTERN.test(tool)) {
-        return { ok: false, error: `connectorTools.${slug}.tools names must be Composio tool names like GMAIL_SEND_EMAIL` };
-      }
-      if (!names.includes(tool)) names.push(tool);
-    }
-    grants[slug] = { tools: names };
-  }
-  return { ok: true, grants };
-}
 
 const BOTS_FILE = join(DATA_DIR, "bots.json");
 const GROUPS_FILE = join(DATA_DIR, "groups.json");
@@ -730,8 +675,8 @@ export function pruneRoomHolds(group: Pick<GroupRecord, "memberIds" | "holds" | 
 /** A hidden routine execution is not a conversation the person can open,
  * and an AI client's hidden conversation (`hidden`, #291) is not one they
  * read: neither lights the bot's dot. */
-function taskCountsAsBotUnread(task: { unread?: boolean; routineRunId?: string; hidden?: true; openedBy?: { botId?: string } }): boolean {
-  return Boolean(task.unread) && !task.routineRunId && task.hidden !== true;
+function taskCountsAsBotUnread(task: { unread?: boolean; routineRunId?: string; routineResults?: true; hidden?: true; openedBy?: { botId?: string } }): boolean {
+  return Boolean(task.unread) && !task.routineRunId && task.routineResults !== true && task.hidden !== true;
 }
 
 /** A thread another bot opened on this one (pair, work or an agent ask):
@@ -751,12 +696,6 @@ export function taskHiddenFromPerson(task: { routineRunId?: string; hidden?: tru
   return Boolean(task.routineRunId) || task.hidden === true;
 }
 
-/** Messages form a tree (forks appear when a message is edited); the
- * visible conversation is the path from the root to activeLeafId. */
-interface ThreadState {
-  messages: Message[];
-  activeLeafId: string | null;
-}
 
 /** A stored grant (slice 4); see server/authz.ts. */
 export type BotGrant = WireBotGrant;
@@ -788,7 +727,12 @@ export function directFromGrants(grants: readonly BotGrant[]): string[] {
 export class Store {
   bots: BotRecord[] = [];
   groups: GroupRecord[] = [];
-  private threads = new Map<string, ThreadState>();
+  /** Names of bots that carried Composio connected-app grants in an older
+   * release, found and dropped at load. The server reads this once at start
+   * to notify admins that those grants are gone and the apps must be
+   * reconnected through an engine connector. */
+  readonly legacyComposioBots: string[] = [];
+  private threads = new ThreadCache(() => this.busyThreadIds());
   private defaultSelection: () => ModelSelection;
   private completeNewBotSelection: (selection: ModelSelection) => ModelSelection;
   /** The approval level every new bot and its first thread start on. */
@@ -994,6 +938,23 @@ export class Store {
       if (JSON.stringify(migrated) === JSON.stringify(b.alwaysAllow ?? [])) continue;
       b.alwaysAllow = migrated;
       botsMigrated = true;
+    }
+    // Composio was removed. A bot record from an older release may still
+    // carry the connected-apps switch (`composio`) or per-service grants
+    // (`connectorTools`, `connectorScopes`). Drop them so they never persist
+    // or travel in an export; a bot that actually had grants is remembered
+    // so admins can be told its apps need reconnecting via an engine
+    // connector (index.ts, at start).
+    for (const b of this.bots) {
+      const legacy = b as unknown as Record<string, unknown>;
+      const hadGrants = legacy.connectorTools && typeof legacy.connectorTools === "object" && Object.keys(legacy.connectorTools as object).length > 0;
+      if ("composio" in legacy || "connectorTools" in legacy || "connectorScopes" in legacy) {
+        if (hadGrants) this.legacyComposioBots.push(b.name);
+        delete legacy.composio;
+        delete legacy.connectorTools;
+        delete legacy.connectorScopes;
+        botsMigrated = true;
+      }
     }
     const botIds = new Set(this.bots.map((b) => b.id));
     for (const g of this.groups) {
@@ -1354,6 +1315,11 @@ export class Store {
   // Many saves repeat what is already on disk (the same resume cursor, an
   // unchanged task field), so both registries skip a byte-identical write.
   // Events are still emitted by the callers either way.
+  /** Memory changes only once bots.json holds them: a failed save puts the bot back as it was. */
+  private commitBotChange(bot: BotRecord, action: string, change: () => void, onRollback?: () => void) {
+    commitBotChange(bot, action, () => this.saveBots(), change, onRollback);
+  }
+
   private saveBots(bots: BotRecord[] = this.bots, registerSections = true) {
     if (registerSections) this.rememberSections([...this.bots, ...bots].map((bot) => bot.section));
     writeFileAtomicIfChanged(BOTS_FILE, JSON.stringify(bots.map(({ busy: _busy, activity: _activity, ...bot }) => ({
@@ -1620,9 +1586,9 @@ export class Store {
   /** A thread's durable record: DB rows, legacy JSON leftovers, and the
    * per-thread event logs. Every delete path funnels here — task, group,
    * and bot deletion — so the logs cannot outlive the thread anywhere. */
-  private deleteThreadRecord(threadId: string) {
+  private deleteThreadRecord(threadId: string, beforeCommit?: () => void) {
+    mdb.deleteThread(threadId, beforeCommit);
     this.threads.delete(threadId);
-    mdb.deleteThread(threadId);
     for (const file of [
       messagesFile(threadId),
       `${messagesFile(threadId)}.imported`,
@@ -1879,31 +1845,25 @@ export class Store {
   }
 
   private thread(threadId: string): ThreadState {
-    const t = this.threads.get(threadId);
-    if (t) return t;
     // SQLite is the source of truth; a thread with no rows imports its
     // legacy messages-<threadId>.json once, inside readThread
-    return this.cacheThread(threadId, mdb.readThread(threadId, messagesFile(threadId)));
+    return this.threads.get(threadId) ?? this.threads.load(threadId, mdb.readThread(threadId, messagesFile(threadId)));
   }
 
-  /** Finish hydrating a full set of thread rows into the cache: chain any
-   * legacy (pre-branching) rows' parentId in array order, default the
-   * active leaf to the newest message, and store it. Shared by a full load
-   * and by messagesTail() when its bounded read turns out to be the whole
-   * thread anyway. */
-  private cacheThread(threadId: string, rows: mdb.ThreadRows): ThreadState {
-    const { messages, activeLeafId: storedLeaf } = rows;
-    let activeLeafId = storedLeaf;
-    // legacy rows carry no parentId — chain them in array order
-    let prev: string | null = null;
-    for (const m of messages) {
-      if (m.parentId === undefined) m.parentId = prev;
-      prev = m.id;
+  /** The conversations with a turn running, whose cached transcript stays
+   * however long ago it was read (server/thread-cache.ts). */
+  private busyThreadIds(): Set<string> {
+    const busy = new Set<string>();
+    for (const bot of this.bots) {
+      if (bot.busy) busy.add(bot.threadId);
+      for (const task of bot.tasks ?? []) if (task.busy) busy.add(task.threadId);
     }
-    if (!activeLeafId) activeLeafId = messages.at(-1)?.id ?? null;
-    const t = { messages, activeLeafId };
-    this.threads.set(threadId, t);
-    return t;
+    for (const group of this.groups) {
+      if (!group.busyBotId) continue;
+      busy.add(group.threadId);
+      for (const task of group.tasks ?? []) busy.add(task.threadId);
+    }
+    return busy;
   }
 
   messagesFor(threadId: string): Message[] {
@@ -1927,7 +1887,7 @@ export class Store {
       const tail = mdb.readThreadTail(threadId, messagesFile(threadId), limit);
       const legacyRows = tail.hasMore !== undefined && tail.messages.some((m) => m.parentId === undefined);
       if (tail.hasMore !== true || legacyRows) {
-        state = this.cacheThread(threadId, legacyRows ? mdb.readThread(threadId, messagesFile(threadId)) : tail);
+        state = this.threads.load(threadId, legacyRows ? mdb.readThread(threadId, messagesFile(threadId)) : tail);
       } else {
         return {
           messages: tail.messages,
@@ -2202,7 +2162,9 @@ export class Store {
   /** The one place a new bot's selection is decided: the caller's choice, or
    * the workspace default, completed with the workspace's new-bot defaults. */
   private newBotSelection(requested?: ModelSelection): ModelSelection {
-    return this.completeNewBotSelection(requested ?? this.defaultSelection());
+    // A choice with no engine (create_bot, an import, Auto before any engine
+    // was ready) is no choice: the workspace default, never an empty id.
+    return this.completeNewBotSelection(requested && namesEngine(requested) ? requested : this.defaultSelection());
   }
 
   createBot(
@@ -2321,10 +2283,7 @@ export class Store {
         next = { id: operation.botId, threadId: operation.threadId, name: operation.fields.name,
           title: "", description: "", soul: "", notifications: true, color: COLORS[nextBots.length % COLORS.length], unread: false,
           resumeCursors: {}, createdAt, ...operation.fields, modelSelection,
-          approvalMode: "auto", autoApprove: true, composio: false, approvePeerComms: false,
-          // No connector tools until someone grants them. An absent record
-          // would mean every tool once connected apps are turned on.
-          connectorTools: {},
+          approvalMode: "auto", autoApprove: true, approvePeerComms: false,
           // A Primary Bot's new teammate is seen by exactly the Primary Bot's audience:
           // a restricted Primary Bot never creates a bot everyone sees.
           ...(chief.visibility && chief.visibility !== "everyone" ? { visibility: structuredClone(chief.visibility) } : {}),
@@ -2382,7 +2341,10 @@ export class Store {
    * moves with it, at the same level; a thread's own model stays. */
   private withDefaultModel(bot: BotRecord): TaskRecord[] | undefined {
     return bot.tasks?.map((task) => ({
-      ...task,
+      // 2026-10-20 (prod: routines left on the old instance): a thread whose
+      // own model is the bot's old default was only a copy of it and follows
+      // the bot like the others; a model the person picked there stays
+      ...(task.modelSelection !== undefined && sameModelSelection(task.modelSelection, bot.modelSelection) ? withoutModel(task) : task),
       approvalMode: approvalModeFor(this.projectBotForTask(bot.id, task.threadId)!),
       autoApprove: task.autoApprove ?? bot.autoApprove,
       alwaysAllow: structuredClone(task.alwaysAllow ?? bot.alwaysAllow ?? []),
@@ -2502,15 +2464,6 @@ export class Store {
   patchBot(id: string, patch: Partial<BotRecord>): BotRecord | null {
     const bot = this.bot(id);
     if (!bot) return null;
-    // Grants are the one field whose shape every writer must share, so the
-    // store normalizes them itself: API patches arrive pre-validated, import
-    // paths pass {}, and an internal caller that skips the parser still
-    // lands canonical data or stops here.
-    if (patch.connectorTools !== undefined) {
-      const parsed = parseConnectorTools(patch.connectorTools);
-      if (!parsed.ok) throw new Error(parsed.error);
-      patch = { ...patch, connectorTools: parsed.grants };
-    }
     if (Object.hasOwn(patch, "toolScope")) {
       const parsed = parseToolScope(patch.toolScope);
       if (!parsed.ok) throw new Error(parsed.error);
@@ -2986,7 +2939,7 @@ export class Store {
     // The legacy mirror follows the task visible in chat, never a detached
     // routine task working in the background.
     if (!threadId || bot.threadId === threadId) bot.resumeCursors[instanceId] = cursor;
-    this.saveBots();
+    saveBotsFor("the conversation's engine session", () => this.saveBots());
     this.emit({ type: "bot", botId });
   }
 
@@ -2997,7 +2950,7 @@ export class Store {
     const task = this.taskByThread(botId, threadId);
     if (!task || task.lastInstanceId === instanceId) return;
     task.lastInstanceId = instanceId;
-    this.saveBots();
+    saveBotsFor("which engine has this conversation", () => this.saveBots());
   }
 
   setHandedMessages(botId: string, threadId: string, instanceId: string, state: HandedState) {
@@ -3007,7 +2960,7 @@ export class Store {
     const live = Object.entries(task.handedMessages ?? {})
       .filter(([id, record]) => id !== instanceId && record.session !== undefined && record.session === task.resumeCursors[id]);
     task.handedMessages = { ...Object.fromEntries(live), [instanceId]: state };
-    this.saveBots();
+    saveBotsFor("what this conversation handed its engine", () => this.saveBots());
   }
 
   /** Bank one settled turn onto its task. Called once per turn.completed;
@@ -3052,7 +3005,7 @@ export class Store {
         ? { context: { tokens: contextTokens, ...(contextWindow > 0 ? { window: contextWindow } : {}) } }
         : prev.context ? { context: prev.context } : {}),
     };
-    this.saveBots();
+    saveBotsFor("the thread's usage", () => this.saveBots());
     this.emit({ type: "bot", botId });
     return task.usage;
   }
@@ -3068,8 +3021,7 @@ export class Store {
     const bot = this.botByThread(threadId);
     const task = bot ? this.taskByThread(bot.id, threadId) : undefined;
     if (!bot || !task || task.cwd === undefined) return false;
-    delete task.cwd;
-    this.saveBots();
+    this.commitBotChange(bot, "the thread's folder", () => { delete task.cwd; });
     this.emit({ type: "bot", botId: bot.id });
     return true;
   }
@@ -3083,25 +3035,23 @@ export class Store {
     // ran elsewhere keeps its pin: it was not opened that way, and moving it
     // would lose its work and its session.
     if (opts.privateOnly && task.cwd === undefined) {
-      task.cwd = fallbackCwd ?? null;
-      this.saveBots();
+      const cwd = fallbackCwd ?? null;
+      this.commitBotChange(bot, "the thread's folder", () => { task.cwd = cwd; });
       this.emit({ type: "bot", botId });
-      return task.cwd;
+      return cwd;
     }
     if (opts.none) {
       if (task.cwd !== null) {
-        task.cwd = null;
-        this.saveBots();
+        this.commitBotChange(bot, "the thread's folder", () => { task.cwd = null; });
         this.emit({ type: "bot", botId });
       }
       return null;
     }
-    if (task.cwd === undefined) {
-      task.cwd = Object.keys(task.resumeCursors).length === 0 ? (bot.cwd ?? fallbackCwd ?? null) : null;
-      this.saveBots();
-      this.emit({ type: "bot", botId });
-    }
-    return task.cwd;
+    if (task.cwd !== undefined) return task.cwd;
+    const cwd = Object.keys(task.resumeCursors).length === 0 ? (bot.cwd ?? fallbackCwd ?? null) : null;
+    this.commitBotChange(bot, "the thread's folder", () => { task.cwd = cwd; });
+    this.emit({ type: "bot", botId });
+    return cwd;
   }
 
   /** The folder a room's member turns run in. Pins on the first turn that
@@ -3303,24 +3253,28 @@ export class Store {
     const task = this.taskByThread(botId, threadId);
     if (!bot || !task) return null;
     if (patch.projectId !== undefined && !this.project(botId, patch.projectId)) return null;
-    for (const key of TASK_PATCH_FIELDS) {
-      if (Object.prototype.hasOwnProperty.call(patch, key)) {
-        Object.assign(task, { [key]: structuredClone(patch[key]) });
+    // A revocation (a narrower approval level, fewer always-allowed tools)
+    // stays live when its save fails; a widening never does.
+    const revocation = keptRevocation(task, patch);
+    this.commitBotChange(bot, "the thread change", () => {
+      for (const key of TASK_PATCH_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(patch, key)) {
+          Object.assign(task, { [key]: structuredClone(patch[key]) });
+        }
       }
-    }
-    // "Until new activity" ends the moment the thread has something new for
-    // the person, and every unread wake funnels through patchTask — so this
-    // one hook is the whole activity alarm. A time-based snooze is left to
-    // its clock: attention overrides it on screen without clearing it.
-    if (task.snoozedUntil === 0 && patch.unread === true) task.snoozedUntil = undefined;
-    if (typeof patch.title === "string") task.title = patch.title.trim().slice(0, 80) || UNTITLED_THREAD;
-    if (Object.prototype.hasOwnProperty.call(patch, "pinned") && task.pinned !== true) delete task.pinned;
-    // Still hidden: attention belongs on the source conversation. A same-call
-    // clear of routineRunId (no-source promotion) may keep unread.
-    if (task.routineRunId || task.hidden === true) task.unread = false;
-    if (bot.threadId === threadId) this.mirrorActiveTask(bot, task);
-    bot.unread = botHasPersonUnread(bot);
-    this.saveBots();
+      // "Until new activity" ends the moment the thread has something new for
+      // the person, and every unread wake funnels through patchTask, so this
+      // one hook is the whole activity alarm. A time-based snooze is left to
+      // its clock: attention overrides it on screen without clearing it.
+      if (task.snoozedUntil === 0 && patch.unread === true) task.snoozedUntil = undefined;
+      if (typeof patch.title === "string") task.title = patch.title.trim().slice(0, 80) || UNTITLED_THREAD;
+      if (Object.prototype.hasOwnProperty.call(patch, "pinned") && task.pinned !== true) delete task.pinned;
+      // Still hidden: attention belongs on the source conversation. A same-call
+      // clear of routineRunId (no-source promotion) may keep unread.
+      if (task.routineRunId || task.hidden === true) task.unread = false;
+      if (bot.threadId === threadId) this.mirrorActiveTask(bot, task);
+      bot.unread = botHasPersonUnread(bot);
+    }, revocation && (() => Object.assign(task, revocation)));
     this.emit({ type: "bot", botId });
     return task;
   }
@@ -3400,18 +3354,16 @@ export class Store {
    * matches the new destination survive. Returns how many pins were cleared. */
   clearAutoSurfacePins(botId: string, destination: Destination): number {
     const bot = this.bot(botId);
-    if (!bot?.tasks) return 0;
-    let cleared = 0;
-    for (const task of bot.tasks) {
-      if (task.surface === undefined || task.surfaceSource !== "auto" || task.surface === destination) continue;
-      task.surface = undefined;
-      task.surfaceSource = undefined;
-      cleared++;
-    }
-    if (!cleared) return 0;
-    this.saveBots();
+    const stale = bot?.tasks?.filter((task) => task.surface !== undefined && task.surfaceSource === "auto" && task.surface !== destination) ?? [];
+    if (!bot || !stale.length) return 0;
+    this.commitBotChange(bot, "the threads' destinations", () => {
+      for (const task of stale) {
+        task.surface = undefined;
+        task.surfaceSource = undefined;
+      }
+    });
     this.emit({ type: "bot", botId });
-    return cleared;
+    return stale.length;
   }
 
   /** A person picks a model in one thread, and with updateBotDefault makes it
@@ -3434,7 +3386,11 @@ export class Store {
     const nextTasks = bot.tasks!.map((candidate, index) => candidate === task ? nextTask : others[index]!);
     const botPatch = updateBotDefault ? { modelSelection: structuredClone(selection) } : {};
     this.saveBots(this.bots.map((candidate) => candidate === bot ? { ...bot, ...botPatch, tasks: nextTasks } : candidate));
-    bot.tasks!.forEach((candidate, index) => Object.assign(candidate, nextTasks[index]));
+    bot.tasks!.forEach((candidate, index) => {
+      Object.assign(candidate, nextTasks[index]);
+      // a copy of the old default was dropped (withDefaultModel): drop it here too
+      if (!("modelSelection" in nextTasks[index]!)) delete candidate.modelSelection;
+    });
     Object.assign(bot, botPatch);
     this.emit({ type: "bot", botId });
     return task;
@@ -3519,8 +3475,20 @@ export class Store {
     if (projectId !== undefined && !this.project(botId, projectId)) return null;
     // An AI client's hidden conversation (#291) is never selected.
     if (hidden) activate = false;
+    const task = this.buildTask(bot, title, projectId, openedBy, approvalMode, ownerPrincipalId, modelSelection, hidden, cwd, confidential);
+    this.commitBotChange(bot, "the new thread", () => {
+      bot.tasks = [task, ...(bot.tasks ?? [])];
+      if (activate) this.mirrorActiveTask(bot, task);
+    });
+    this.emit({ type: "bot", botId });
+    return task;
+  }
+
+  /** A new task record, not yet in the bot's list. */
+  private buildTask(bot: BotRecord, title?: string, projectId?: string, openedBy?: TaskOpenedBy, approvalMode?: "ask" | "full",
+    ownerPrincipalId?: string, modelSelection?: ModelSelection, hidden = false, cwd?: string, confidential = false): TaskRecord {
     const createdAt = Date.now();
-    const task: TaskRecord = {
+    return {
       threadId: newId(),
       title: threadTitleFrom(title),
       createdAt,
@@ -3545,13 +3513,6 @@ export class Store {
       // thread is never briefly an ordinary one.
       ...(confidential ? { confidential: true as const } : {}),
     };
-    bot.tasks = [task, ...(bot.tasks ?? [])];
-    if (activate) {
-      this.mirrorActiveTask(bot, task);
-    }
-    this.saveBots();
-    this.emit({ type: "bot", botId });
-    return task;
   }
 
   /** Hide (or show again) an AI client's conversation (#291). A hidden
@@ -3562,22 +3523,23 @@ export class Store {
     const bot = this.bot(botId);
     const task = this.taskByThread(botId, threadId);
     if (!bot || !task) return null;
-    if (hidden) {
-      task.hidden = true;
-      task.unread = false;
-    } else {
-      delete task.hidden;
-    }
-    if (hidden && bot.threadId === threadId) {
-      const at = (candidate: TaskRecord) => candidate.updatedAt ?? candidate.createdAt;
-      const next = (bot.tasks ?? [])
-        .filter((candidate) => !taskHiddenFromPerson(candidate) && candidate.archivedAt === undefined)
-        .sort((a, b) => at(b) - at(a))[0];
-      if (next) this.mirrorActiveTask(bot, next);
-    }
-    bot.unread = botHasPersonUnread(bot);
-    this.refreshBotActivity(bot);
-    this.saveBots();
+    this.commitBotChange(bot, "the thread's visibility", () => {
+      if (hidden) {
+        task.hidden = true;
+        task.unread = false;
+      } else {
+        delete task.hidden;
+      }
+      if (hidden && bot.threadId === threadId) {
+        const at = (candidate: TaskRecord) => candidate.updatedAt ?? candidate.createdAt;
+        const next = (bot.tasks ?? [])
+          .filter((candidate) => !taskHiddenFromPerson(candidate) && candidate.archivedAt === undefined)
+          .sort((a, b) => at(b) - at(a))[0];
+        if (next) this.mirrorActiveTask(bot, next);
+      }
+      bot.unread = botHasPersonUnread(bot);
+      this.refreshBotActivity(bot);
+    });
     this.emit({ type: "bot", botId });
     return task;
   }
@@ -3608,8 +3570,7 @@ export class Store {
     const bot = this.bot(botId);
     const task = this.taskByThread(botId, threadId);
     if (!bot || !task) return null;
-    task.openedBy = structuredClone(openedBy);
-    this.saveBots();
+    this.commitBotChange(bot, "who opened the thread", () => { task.openedBy = structuredClone(openedBy); });
     this.emit({ type: "bot", botId });
     return task;
   }
@@ -3621,8 +3582,7 @@ export class Store {
     const bot = this.bot(botId);
     const task = this.taskByThread(botId, threadId);
     if (!bot || !task) return null;
-    task.parallelOf = structuredClone(parallelOf);
-    this.saveBots();
+    this.commitBotChange(bot, "the thread's link to its conversation", () => { task.parallelOf = structuredClone(parallelOf); });
     this.emit({ type: "bot", botId });
     return task;
   }
@@ -3634,7 +3594,7 @@ export class Store {
     const task = this.taskByThread(botId, threadId);
     if (!task || !Number.isFinite(at) || (task.askedAt ?? -1) >= at) return task ?? null;
     task.askedAt = at;
-    this.saveBots();
+    saveBotsFor("when you last wrote in this thread", () => this.saveBots());
     this.emit({ type: "bot", botId });
     return task;
   }
@@ -3646,10 +3606,11 @@ export class Store {
     const bot = this.bot(botId);
     const task = this.taskByThread(botId, threadId);
     if (!bot || !task) return null;
-    if (closedBy) task.closedBy = structuredClone(closedBy);
-    else if (!task.closedBy) return task;
-    else delete task.closedBy;
-    this.saveBots();
+    if (!closedBy && !task.closedBy) return task;
+    this.commitBotChange(bot, "who closed the thread", () => {
+      if (closedBy) task.closedBy = structuredClone(closedBy);
+      else delete task.closedBy;
+    });
     this.emit({ type: "bot", botId });
     return task;
   }
@@ -3658,8 +3619,7 @@ export class Store {
     const bot = this.bot(botId);
     const task = bot?.tasks?.find((t) => t.threadId === threadId);
     if (!bot || !task) return null;
-    this.mirrorActiveTask(bot, task);
-    this.saveBots();
+    this.commitBotChange(bot, "the thread switch", () => this.mirrorActiveTask(bot, task));
     this.emit({ type: "bot", botId });
     return bot;
   }
@@ -3672,11 +3632,13 @@ export class Store {
    * so a caller can later replace exactly that machine-made title — and
    * can see the peer provenance it must leave alone. */
   titleTaskFromFirstMessage(botId: string, text: string, threadId?: string): TaskRecord | null {
+    const bot = this.bot(botId);
     const task = threadId ? this.taskByThread(botId, threadId) : this.activeTask(botId);
-    if (!task || task.titleFromFirstMessage || (task.title !== UNTITLED_TASK && task.title !== UNTITLED_THREAD)) return null;
-    task.title = titleFromMessage(text);
-    task.titleFromFirstMessage = true;
-    this.saveBots();
+    if (!bot || !task || task.titleFromFirstMessage || (task.title !== UNTITLED_TASK && task.title !== UNTITLED_THREAD)) return null;
+    this.commitBotChange(bot, "the thread's title", () => {
+      task.title = titleFromMessage(text);
+      task.titleFromFirstMessage = true;
+    });
     this.emit({ type: "bot", botId });
     return task;
   }
@@ -3698,16 +3660,18 @@ export class Store {
     const bot = this.bot(botId);
     if (!bot?.tasks) return null;
     if (!bot.tasks.some((t) => t.threadId === threadId)) return null;
-    bot.tasks = bot.tasks.filter((t) => t.threadId !== threadId);
-    const visible = bot.tasks.find((task) => !task.routineRunId)
-      ?? this.createTask(botId, undefined, bot.threadId === threadId)!;
-    if (bot.threadId === threadId || this.taskByThread(botId, bot.threadId)?.routineRunId) {
-      this.mirrorActiveTask(bot, visible);
-    }
-    this.deleteThreadRecord(threadId);
-    bot.unread = botHasPersonUnread(bot);
-    this.refreshBotActivity(bot);
-    this.saveBots();
+    // The transcript rows and bots.json commit together: either failing
+    // leaves the task, its conversation and every subscriber as they were.
+    this.deleteThreadRecord(threadId, () => this.commitBotChange(bot, "the thread deletion", () => {
+      const kept = bot.tasks!.filter((t) => t.threadId !== threadId);
+      const visible = kept.find((task) => !task.routineRunId) ?? this.buildTask(bot);
+      bot.tasks = kept.includes(visible) ? kept : [visible, ...kept];
+      if (bot.threadId === threadId || this.taskByThread(botId, bot.threadId)?.routineRunId) {
+        this.mirrorActiveTask(bot, visible);
+      }
+      bot.unread = botHasPersonUnread(bot);
+      this.refreshBotActivity(bot);
+    }));
     this.emit({ type: "bot", botId });
     return bot;
   }
@@ -3723,4 +3687,10 @@ export class Store {
     if (!this.needsSeed()) return;
     this.createBot();
   }
+}
+
+/** A thread without its own model: it follows its bot's. */
+function withoutModel(task: TaskRecord): TaskRecord {
+  const { modelSelection: _copy, ...rest } = task;
+  return rest;
 }

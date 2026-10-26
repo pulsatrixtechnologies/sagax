@@ -25,9 +25,6 @@ public struct BotPatch: Encodable, Equatable, Sendable {
     public var mascotLook: MascotLook?
     /// The owl's special edition.
     public var mascotSkin: MascotSkin?
-    /// The bot's own Connected apps switch (PL6). Only an admin session may
-    /// send it: the sidecar and a client session refuse it.
-    public var composio: Bool?
     /// Archived (`hidden`): out of the sidebar, every conversation kept;
     /// restored by sending false (the desktop's Archive and Archived bots).
     public var hidden: Bool?
@@ -41,7 +38,6 @@ public struct BotPatch: Encodable, Equatable, Sendable {
         name: String? = nil,
         mascotLook: MascotLook? = nil,
         mascotSkin: MascotSkin? = nil,
-        composio: Bool? = nil,
         hidden: Bool? = nil
     ) {
         self.pinned = pinned
@@ -52,13 +48,12 @@ public struct BotPatch: Encodable, Equatable, Sendable {
         self.name = name
         self.mascotLook = mascotLook
         self.mascotSkin = mascotSkin
-        self.composio = composio
         self.hidden = hidden
     }
 
     public var isEmpty: Bool {
         pinned == nil && color == nil && notifications == nil && soul == nil && title == nil && name == nil
-            && mascotLook == nil && mascotSkin == nil && composio == nil && hidden == nil
+            && mascotLook == nil && mascotSkin == nil && hidden == nil
     }
 }
 

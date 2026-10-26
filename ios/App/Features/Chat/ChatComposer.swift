@@ -159,7 +159,7 @@ extension ChatView {
                 .accessibilityLabel(showingPlus ? "Close" : "More")
                 .accessibilityIdentifier("composer-plus")
 
-                // The field: "Ask {name}", the mic (dictation) and the white
+                // The field: "Message {name}", the mic (dictation) and the white
                 // capsule (voice mode, or send once there is something to send).
                 HStack(alignment: .bottom, spacing: 0) {
                     if voiceNote.isActive {
@@ -374,6 +374,6 @@ extension ChatView {
     var composerPrompt: String {
         if sendingMessage { return String(localized: "Sending…") }
         if dictation.isListening { return String(localized: "Listening…") }
-        return String(localized: "Ask \(current.name)")
+        return String(localized: "Message \(current.name)")
     }
 }

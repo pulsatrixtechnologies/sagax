@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { activityStepLabel, liveActivityLabel, liveActivityPhrases, phraseAt, phraseHoldMs } from "./live-activity";
+import { activityStepLabel, liveActivityLabel, liveActivityPhrases, phraseAt } from "./live-activity";
 import type { Message } from "@/state/store";
 
 const activity = (name: string, extra: Partial<NonNullable<Message["tool"]>> = {}): Message => ({
@@ -76,12 +76,10 @@ describe("liveActivityPhrases", () => {
     }
   });
 
-  it("varies plain reasoning with short, friendly phrases", () => {
+  it("leaves plain reasoning to the presence line's own phrases", () => {
     const { phase, phrases } = liveActivityPhrases();
     expect(phase).toBe("chat.activity.thinking");
-    expect(phrases).toEqual(expect.arrayContaining(["Thinking", "Mulling it over", "Chipping away", "Making progress"]));
-    for (const phrase of phrases) expect(phrase.split(" ").length).toBeLessThanOrEqual(3);
-    expect(new Set(phrases).size).toBe(phrases.length);
+    expect(phrases).toEqual(["Thinking"]);
   });
 
   it("keeps activity phrases about the activity", () => {
@@ -117,12 +115,7 @@ describe("phraseAt", () => {
     expect(orders.size).toBeGreaterThan(1);
   });
 
-  it("holds a single phrase and holds each step 4 to 6 seconds", () => {
+  it("holds a single phrase", () => {
     expect(phraseAt(["Working"], "turn-1", 5)).toBe("Working");
-    for (let step = 0; step < 50; step++) {
-      const hold = phraseHoldMs("turn-1", step);
-      expect(hold).toBeGreaterThanOrEqual(4000);
-      expect(hold).toBeLessThanOrEqual(6000);
-    }
   });
 });

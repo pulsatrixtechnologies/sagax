@@ -10,6 +10,7 @@ import { Readable } from "node:stream";
 
 import type { RemoteMcpSpec } from "./contracts.ts";
 import { guardedFetch } from "./public-fetch.ts";
+import { parseRetryAfter } from "./rate-limit-retry.ts";
 
 export type McpHttpFailure = "network" | "status" | "protocol";
 
@@ -18,13 +19,16 @@ export class McpHttpError extends Error {
   readonly status: number | undefined;
   /** The server's `WWW-Authenticate` challenge on a 401: where to sign in. */
   readonly wwwAuthenticate: string | undefined;
+  /** A 429 or 503's Retry-After, in milliseconds. */
+  readonly retryAfterMs: number | undefined;
 
-  constructor(kind: McpHttpFailure, message: string, status?: number, wwwAuthenticate?: string) {
+  constructor(kind: McpHttpFailure, message: string, status?: number, wwwAuthenticate?: string, retryAfterMs?: number) {
     super(message);
     this.name = "McpHttpError";
     this.kind = kind;
     this.status = status;
     this.wwwAuthenticate = wwwAuthenticate;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -291,7 +295,7 @@ export class RemoteMcpClient {
     }
     if (!response.ok) {
       drain(response);
-      throw new McpHttpError("status", `HTTP ${response.status}`, response.status, response.headers.get("www-authenticate") ?? undefined);
+      throw new McpHttpError("status", `HTTP ${response.status}`, response.status, response.headers.get("www-authenticate") ?? undefined, parseRetryAfter(response.headers.get("retry-after")));
     }
     const session = response.headers.get("mcp-session-id");
     if (session) this.sessionId = session;
@@ -352,7 +356,7 @@ export class RemoteMcpClient {
         .then(async (response) => {
           if (!response.ok) {
             drain(response);
-            throw new McpHttpError("status", `HTTP ${response.status}`, response.status, response.headers.get("www-authenticate") ?? undefined);
+            throw new McpHttpError("status", `HTTP ${response.status}`, response.status, response.headers.get("www-authenticate") ?? undefined, parseRetryAfter(response.headers.get("retry-after")));
           }
           await readSse(response, this.sseAbort.signal, (event) => {
             if (event.event === "endpoint") {

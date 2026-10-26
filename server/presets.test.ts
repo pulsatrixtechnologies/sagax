@@ -258,7 +258,7 @@ describe("sharing my New bot defaults as a preset", () => {
       name: "Sky", title: "Support", description: "Answers customers.", soul: "Be kind.\n", color: "blue", mascotExpression: "happy",
       // Everything below grants reach or is personal: none of it may travel.
       modelSelection: { instanceId: "claude", model: "opus" }, computer: "local", cwd: "/Users/me/secret", approvalMode: "full",
-      alwaysAllow: ["Bash(*)"], chiefOfStaff: true, managedSections: ["Ops"], peers: ["x"], composio: true, browser: true,
+      alwaysAllow: ["Bash(*)"], chiefOfStaff: true, managedSections: ["Ops"], peers: ["x"], browser: true,
       browserProfile: "work", mcpServers: ["crm"], section: "Support", approvePeerComms: true, parkDirectMessages: true, avatarCrop: "rounded",
     },
     memory: { "MEMORY.md": "- Customers first.\n", "memory/tone.md": "Warm.\n" },

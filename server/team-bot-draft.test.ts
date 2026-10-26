@@ -1,6 +1,6 @@
 // "Create a Team Bot from this conversation" (server/team-bot-draft.ts,
 // server/routes/team-bot-from-thread.ts): the draft from the bot's model or
-// the conversation, and memory carry-over as an explicit opt-in, off by default.
+// the conversation; memory never carries over (JC 2026-10-21), the pure plan helpers stay covered.
 import { IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
 import { describe, expect, it } from "vitest";
@@ -104,12 +104,12 @@ describe("team bot routes", () => {
     return { status: res.statusCode, body: JSON.parse(out) };
   }
 
-  it("drafts with the bot's model and lists the notes that may go", async () => {
+  it("drafts with the bot's model and offers none of the bot's memory", async () => {
     const { handler } = harness();
     const answer = await call(handler, "/api/bots/src/team-bot-draft", { threadId: "t1", language: "en" });
     expect(answer.status).toBe(200);
     expect(answer.body.draft).toMatchObject({ name: "Triage Desk", source: "model" });
-    expect(answer.body.memory.notes.map((note: { path: string }) => note.path)).toEqual(["MEMORY.md", "memory/clients.md"]);
+    expect(answer.body.memory).toBeUndefined();
   });
 
   it("falls back to the conversation when the model fails or is slow", async () => {
@@ -120,30 +120,17 @@ describe("team bot routes", () => {
     expect(unreadable.status).toBe(404);
   });
 
-  it("refuses a carry-over without the opt-in and writes nothing", async () => {
-    const { handler, writes } = harness();
-    const answer = await call(handler, "/api/bots/src/team-bot-carry", { threadId: "t1", newBotId: "neo", notes: ["memory/clients.md"] });
-    expect(answer.status).toBe(400);
-    expect(answer.body.code).toBe("memory_opt_in");
-    expect(writes).toEqual([]);
-  });
-
-  it("with the opt-in copies only the ticked notes and the conversation summary, linked from the index", async () => {
+  it("never carries a conversation or the bot's private memory, whatever is asked (JC 2026-10-21)", async () => {
     const { handler, writes } = harness({ generate: () => null });
-    const answer = await call(handler, "/api/bots/src/team-bot-carry", { threadId: "t1", newBotId: "neo", includeMemory: true, notes: ["memory/clients.md"] });
-    expect(answer.status).toBe(200);
-    expect(answer.body.written).toEqual(["memory/clients.md", CARRY_SUMMARY_PATH]);
-    expect(writes.map((write) => `${write.botId}:${write.path}`)).toEqual(["neo:memory/clients.md", `neo:${CARRY_SUMMARY_PATH}`, "neo:MEMORY.md"]);
-    const summary = writes.find((write) => write.path === CARRY_SUMMARY_PATH)!.text;
-    expect(summary).toContain("Morning triage");
-    expect(summary).not.toContain("Hunter2-Secret-99");
-    expect(writes.find((write) => write.path === "MEMORY.md")!.text).toContain(CARRY_SUMMARY_PATH);
-  });
-
-  it("never writes into a bot the caller may not change, nor back into the source", async () => {
-    const { handler, writes } = harness();
-    expect((await call(handler, "/api/bots/src/team-bot-carry", { threadId: "t1", newBotId: "src", includeMemory: true })).status).toBe(404);
-    expect((await call(handler, "/api/bots/src/team-bot-carry", { threadId: "t1", newBotId: "ghost", includeMemory: true })).status).toBe(404);
+    for (const body of [
+      { threadId: "t1", newBotId: "neo", notes: ["memory/clients.md"] },
+      { threadId: "t1", newBotId: "neo", includeMemory: true, notes: ["memory/clients.md"] },
+      { threadId: "t1", newBotId: "neo", includeMemory: true, summary: true },
+    ]) {
+      const answer = await call(handler, "/api/bots/src/team-bot-carry", body);
+      expect(answer.status).toBe(410);
+      expect(answer.body.code).toBe("private_memory_never");
+    }
     expect(writes).toEqual([]);
   });
 });

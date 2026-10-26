@@ -71,7 +71,14 @@ final class PushRegistrar {
         }
     }
 
-    /// Sign-out of that server: it stops pushing to this phone.
+    /// The session behind this connection changed (a new sign-in, a
+    /// recovered token): register again on the next sync.
+    func forgetRegistration(connectionID: String) {
+        registered[connectionID] = nil
+    }
+
+    /// Sign-out of that server: it stops pushing to this phone. Only on an
+    /// explicit sign-out or removal, never because a request was refused.
     func unregister(client: CompanionClient, connectionID: String) async {
         registered[connectionID] = nil
         guard let token = deviceToken else { return }

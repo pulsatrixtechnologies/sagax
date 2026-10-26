@@ -9,6 +9,8 @@ import { useMemo, useRef, useState } from "react";
 
 import { downloadText, exportCredentials, exportFileName, importCredentials, type VaultImportOutcome, type VaultItemListing } from "@/lib/credential-vault";
 import { t } from "@/lib/i18n";
+import { rememberSettingsReturn } from "@/lib/settings-return";
+import { signInAgainPath } from "@/lib/sign-in-again";
 import { MAX_VAULT_ITEMS } from "../../../shared/credential-vault";
 import {
   exportVaultItems,
@@ -161,12 +163,16 @@ export function ExportPanel({ onCancel }: { onCancel: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  /** The server asked for a recent sign-in: where "Sign in again" goes
+   * (src/lib/sign-in-again.ts), null when this server offers none. */
+  const [reauth, setReauth] = useState<{ path: string | null } | null>(null);
   const word = t("vault.transfer.exportWord");
   const ready = understood && typed.trim().toLocaleUpperCase() === word.toLocaleUpperCase();
   const run = async () => {
     setBusy(true);
     setError(null);
     setDone(null);
+    setReauth(null);
     try {
       const answer = await exportCredentials(format);
       const file = exportVaultItems(answer.items, format);
@@ -183,7 +189,8 @@ export function ExportPanel({ onCancel }: { onCancel: () => void }) {
       setTyped("");
     } catch (failure) {
       const code = (failure as { body?: { code?: unknown } })?.body?.code;
-      setError(code === "reauth_required" ? t("vault.transfer.reauth") : message(failure));
+      if (code === "reauth_required") setReauth({ path: await signInAgainPath() });
+      else setError(message(failure));
     } finally {
       setBusy(false);
     }
@@ -217,8 +224,10 @@ export function ExportPanel({ onCancel }: { onCancel: () => void }) {
       </label>
       <p className="text-[12px] text-ink-tertiary">{t("vault.transfer.exportStepUp")}</p>
       {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
+      {reauth && <p role="alert" className="text-[12px] text-danger" data-credential-export-reauth="">{reauth.path ? t("vault.transfer.reauthPulsatrix") : t("vault.transfer.reauthUnavailable")}</p>}
       {done && <p role="status" className="text-[12px] text-ink-secondary">{done}</p>}
       <div className="flex flex-wrap justify-end gap-2">
+        {reauth?.path && <button type="button" className={PILL} onClick={() => { rememberSettingsReturn("credentials"); location.assign(reauth.path!); }} data-credential-export-sign-in="">{t("security.reauth.button")}</button>}
         <button type="button" className={PRIMARY_PILL} disabled={busy || !ready} onClick={() => void run()} data-credential-export-run="">{t("vault.transfer.exportRun")}</button>
         <button type="button" className={PILL} disabled={busy} onClick={onCancel}>{done ? t("vault.transfer.close") : t("vault.settings.cancel")}</button>
       </div>

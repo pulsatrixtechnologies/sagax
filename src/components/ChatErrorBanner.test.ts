@@ -75,3 +75,14 @@ describe("ChatNotice", () => {
     }
   });
 });
+
+// 2026-10-22 (JC): no "Showing saved messages" banner with an X over the chat.
+describe("no saved-messages banner", () => {
+  it("neither the chat nor a room draws it", async () => {
+    const banners = await import("./ChatErrorBanner");
+    expect("SavedMessagesNotice" in banners).toBe(false);
+    for (const file of ["components/ChatView.tsx", "components/GroupView.tsx", "components/ChatErrorBanner.tsx"]) {
+      expect(source(file), file).not.toContain("chat.savedMessages");
+    }
+  });
+});

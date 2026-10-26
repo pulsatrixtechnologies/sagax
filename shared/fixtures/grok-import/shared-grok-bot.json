@@ -1,0 +1,16 @@
+{
+  "format": "openmaus.grok/1",
+  "source": "https://x.ai/bot/d8OshqLZvtcKDcNluPuyo",
+  "name": "Inbox Triage",
+  "description": "Sorts the inbox every weekday morning and drafts short replies for review.",
+  "instructions": "You triage the inbox. Never send anything: draft replies and leave them for the person.\n\nSummarise in three bullets.",
+  "skills": [
+    { "name": "Draft reply", "description": "Draft a short reply in the person's voice.", "body": "# Draft reply\n\nKeep it under five lines. Never send." }
+  ],
+  "routines": [
+    { "name": "Morning triage", "schedule": "Weekdays at 8:30am", "cron": "30 8 * * 1-5", "timeZone": "America/Toronto", "prompt": "Sort the inbox and list what needs the person." },
+    { "name": "On new email", "schedule": "When an email arrives from a client", "cron": "", "timeZone": "", "prompt": "Flag it." }
+  ],
+  "plugins": ["Gmail", "Google Calendar"],
+  "memories": []
+}

@@ -356,10 +356,13 @@ describe("fill_credential through the browser runtime", () => {
   });
 
   it("FOURTH B1: redacts the raw engine answer before trimming, so a cut through the value leaves no prefix", async () => {
-    const html = '<form method="post" action="/s"><input id="search" type="text"><input id="pass" type="password"></form>';
-    // The trim keeps 512 characters (mcp-trim MIN_BUDGET) of a 512 budget;
-    // the filler puts the password's first `kept` characters before that cut.
-    for (const kept of [4, 5, 8, 15]) {
+    // A long field after the password keeps the page over the budget.
+    const html = `<form method="post" action="/s"><input id="search" type="text"><input id="pass" type="password"><input id="after" type="text" value="${"z".repeat(600)}"></form>`;
+    // The trim keeps the body of a 512 budget (mcp-trim MIN_BUDGET) less the
+    // truncation banner at both ends, about 312 to 320 characters; the filler
+    // puts the password's first `kept` characters before that cut.
+    let cutThroughValue = 0;
+    for (const [room, kept] of [312, 316, 320].flatMap((r) => [4, 5, 8, 15].map((k) => [r, k] as const))) {
       const dir = mkdtempSync(join(tmpdir(), "sagax-fill-trim-"));
       cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
       const vault = new CredentialVault(dir, () => ({ kind: "key", key: Buffer.alloc(32, 8) }));
@@ -371,13 +374,14 @@ describe("fill_credential through the browser runtime", () => {
       const site = engine("https://example.test/login", { html });
       expect((await call(runtime, "trim", site.spec, "fill_credential", { credential: vaultHandle(item.id), field: "password" }, access)).isError).toBeUndefined();
       // Filler typed into an earlier field moves where the trim cuts.
-      await call(runtime, "trim", site.spec, "agent_browser_type", { selector: "@e4", text: "y".repeat(512 - kept - 46) }, access);
+      await call(runtime, "trim", site.spec, "agent_browser_type", { selector: "@e4", text: "y".repeat(room - kept - 46) }, access);
       const snapshot = await call(runtime, "trim", site.spec, "agent_browser_snapshot", {}, access);
       const text = snapshot.content[0]!.text;
-      expect(text, `kept ${kept}: the cut must fall in the password's place`).toContain('#pass value="');
+      if (text.includes('#pass value="') && !text.includes('#after')) cutThroughValue += 1;
       for (let size = 4; size <= FAKE_PASSWORD.length; size++) expect(text, `kept ${kept}`).not.toContain(FAKE_PASSWORD.slice(0, size));
     }
-  });
+    expect(cutThroughValue, "some cut must fall in the password's place").toBeGreaterThan(0);
+  }, 60_000);
 
   it("FOURTH B2: no keys into a filled field, the field loses focus, and an edited or revealed value stays hidden", async () => {
     const { vault, item, runtime, handle, access } = setup();
@@ -584,6 +588,6 @@ describe("fill_credential through the browser runtime", () => {
     const { runtime } = setup();
     const { spec } = engine("https://example.test/");
     const listed = await runtime.agentRpc("list", spec, "tools/list", {}) as { tools: Array<{ name: string }> };
-    expect(listed.tools.map((tool) => tool.name)).toEqual(["agent_browser_snapshot", "restart_browser", "fill_credential"]);
+    expect(listed.tools.map((tool) => tool.name)).toEqual(["agent_browser_snapshot", "restart_browser", "fill_credential", "request_purchase", "record_purchase"]);
   });
 });

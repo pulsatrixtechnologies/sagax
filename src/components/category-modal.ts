@@ -52,10 +52,12 @@ export function categoryChipClass(active: boolean): string {
 
 /** A row's button: Use, Connect, Add (primary); Open, Remove, Update
  * (secondary, outlined). */
-export function cardActionClass(variant: "primary" | "secondary" = "primary"): string {
+export function cardActionClass(variant: "primary" | "secondary" | "quiet" = "primary"): string {
   return cn(
     "inline-flex shrink-0 items-center justify-center rounded-full px-3.5 py-1.5 text-[12.5px] font-medium leading-[18px] disabled:opacity-50",
-    variant === "primary" ? "bg-ink text-app hover:opacity-90" : "border border-border text-ink hover:bg-hover",
+    variant === "primary" ? "bg-ink text-app hover:opacity-90"
+      : variant === "quiet" ? "bg-control text-ink hover:bg-raised-hover"
+      : "border border-border text-ink hover:bg-hover",
   );
 }
 

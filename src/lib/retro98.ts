@@ -3,7 +3,8 @@
 // app skin. Everything that draws (the retro owl assistant, its balloons and
 // dialogs, the late-90s skin layer) lives behind dynamic imports, so a device
 // that never finds the egg never downloads or runs any of it.
-import { applySkin, readSkin, type SkinId } from "./skins";
+import { applySkin, prefersDarkScheme, readSkin, readSkinTint, resolveStoredSkin, type SkinId } from "./skins";
+import { isSkinTint, readRememberedVariants, readSkinAuto, SKIN_WINDOWS_TINTS, type SkinTintId } from "./skin-families";
 
 /** Up up down down left right left right b a. */
 export const KONAMI_SEQUENCE = [
@@ -27,6 +28,7 @@ export const RETRO_SKIN: SkinId = "retro98";
 const ON_KEY = "omb.retro98.on";
 const UNLOCKED_KEY = "omb.retro98.unlocked";
 const PREVIOUS_SKIN_KEY = "omb.retro98.previousSkin";
+const PREVIOUS_TINT_KEY = "omb.retro98.previousTint";
 const TOGGLE_EVENT = "omb:retro98-toggle";
 const SIGNAL_EVENT = "omb:retro98-signal";
 
@@ -117,7 +119,15 @@ export function retroEnabled(): boolean {
 
 export interface RetroSkinSwap {
   current: () => SkinId;
-  apply: (id: SkinId) => void;
+  /** The colour or edition worn over the current skin, or null. */
+  currentTint?: () => SkinTintId | null;
+  apply: (id: SkinId, tint?: SkinTintId | null) => void;
+}
+
+/** The Windows edition last picked under Hibou 98, or null for the classic look. */
+function rememberedEdition(): SkinTintId | null {
+  const edition = readRememberedVariants().retro98;
+  return edition && (SKIN_WINDOWS_TINTS as readonly string[]).includes(edition) ? (edition as SkinTintId) : null;
 }
 
 const documentSkin: RetroSkinSwap = {
@@ -125,7 +135,9 @@ const documentSkin: RetroSkinSwap = {
     const stamped = typeof document === "undefined" ? undefined : document.documentElement.dataset.skin;
     return (stamped as SkinId | undefined) || readSkin();
   },
-  apply: applySkin,
+  currentTint: () => readSkinTint(),
+  // under Auto, the skin put back is the one the system's scheme asks for
+  apply: (id, tint) => applySkin(resolveStoredSkin(id, readSkinAuto(), prefersDarkScheme()), tint),
 };
 
 /**
@@ -140,15 +152,23 @@ export function setRetroEnabled(
   const skin = options.skin ?? documentSkin;
   if (on) {
     const current = skin.current();
-    if (current !== RETRO_SKIN) write(PREVIOUS_SKIN_KEY, current, storage);
+    if (current !== RETRO_SKIN) {
+      write(PREVIOUS_SKIN_KEY, current, storage);
+      write(PREVIOUS_TINT_KEY, skin.currentTint?.() ?? null, storage);
+    }
     write(UNLOCKED_KEY, "1", storage);
     write(ON_KEY, "1", storage);
-    skin.apply(RETRO_SKIN);
+    skin.apply(RETRO_SKIN, rememberedEdition());
   } else {
     const previous = read(PREVIOUS_SKIN_KEY, storage) as SkinId | null;
+    const previousTint = read(PREVIOUS_TINT_KEY, storage);
     write(ON_KEY, null, storage);
     write(PREVIOUS_SKIN_KEY, null, storage);
-    if (skin.current() === RETRO_SKIN) skin.apply(previous && previous !== RETRO_SKIN ? previous : readDefaultSkin());
+    write(PREVIOUS_TINT_KEY, null, storage);
+    if (skin.current() === RETRO_SKIN) {
+      const back = previous && previous !== RETRO_SKIN ? previous : readDefaultSkin();
+      skin.apply(back, isSkinTint(previousTint) ? previousTint : null);
+    }
   }
   enabled = on;
   if (options.notify !== false && typeof window !== "undefined") {

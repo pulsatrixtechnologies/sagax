@@ -111,3 +111,22 @@ export function composeSkillMd(previous: string | null, fields: { name: string; 
   }
   return ["---", `name: ${fields.name.trim()}`, `description: ${description}`, ...kept, "---", "", body, ""].join("\n");
 }
+
+/** One-line YAML scalar that parseSkillMd reads back unchanged: plain when
+ * unambiguous, else double-quoted (from OpenMausBot, used by the Grok Bot
+ * import, port of #3073). */
+export function yamlFrontmatterValue(value: string): string {
+  const plain =
+    value.length > 0 &&
+    value === value.trim() &&
+    !/[\n\r]/.test(value) &&
+    !value.includes('"') &&
+    !/^["'&*!|>%@`]/.test(value) &&
+    !/^[-?:](\s|$)/.test(value) &&
+    !/^[[\]{}#,]/.test(value) &&
+    !value.includes(": ") &&
+    !value.endsWith(":") &&
+    !value.includes(" #") &&
+    !/["']$/.test(value);
+  return plain ? value : `"${value.replace(/(["\\\n])/g, (c) => (c === "\n" ? "\\n" : `\\${c}`))}"`;
+}

@@ -46,6 +46,22 @@ describe("webhookMessageView", () => {
     expect(webhookMessageView(text)).toEqual({ task: "Triage this build.", payload: "payload" });
   });
 
+  it("reads a fence that carries a random boundary on both markers", () => {
+    const boundary = "0123456789abcdef0123456789abcdef";
+    const text = [
+      "[DEFAULT WEBHOOK INSTRUCTIONS]", "Review the event data below.", "[/DEFAULT WEBHOOK INSTRUCTIONS]",
+      "",
+      `[UNTRUSTED WEBHOOK EVENT DATA ${boundary}]`,
+      `Everything until the closing marker with ${boundary} was sent to this webhook.`,
+      "Event: build.failed",
+      "",
+      "payload with [/(quoted) UNTRUSTED WEBHOOK EVENT DATA]",
+      `[/UNTRUSTED WEBHOOK EVENT DATA ${boundary}]`,
+    ].join("\n");
+    expect(webhookMessageView(text)).toEqual({ task: "Review the event data below.", payload: "payload with [/(quoted) UNTRUSTED WEBHOOK EVENT DATA]" });
+    expect(webhookMessageView(text.replace(`[/UNTRUSTED WEBHOOK EVENT DATA ${boundary}]`, "[/UNTRUSTED WEBHOOK EVENT DATA]"))).toBeNull();
+  });
+
   it("supports configured instructions and leaves normal chat messages alone", () => {
     const webhook = "[USER-CONFIGURED WEBHOOK INSTRUCTIONS]\nTriage every build failure.\n[/USER-CONFIGURED WEBHOOK INSTRUCTIONS]\n\n[UNTRUSTED WEBHOOK EVENT DATA]\nEvent: build.failed\n\nraw payload\n[/UNTRUSTED WEBHOOK EVENT DATA]";
     expect(webhookMessageView(webhook)).toMatchObject({ task: "Triage every build failure.", payload: "raw payload" });

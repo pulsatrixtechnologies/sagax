@@ -73,6 +73,8 @@ beforeEach(() => {
     abandonHumanInput: vi.fn(),
     interrupted: vi.fn(() => false),
     withHumanAction: vi.fn(async (_session: string, _owner: string, fn: () => unknown) => fn()),
+    watch: vi.fn(() => () => {}),
+    settled: vi.fn(async () => {}),
   } as unknown as BrowserRuntime;
   live = new BrowserLive({ runtime });
   SocketFixture.instances = [];
@@ -543,6 +545,35 @@ describe("authenticated browser viewer relay", () => {
       { action: "input_keyboard", type: "keyDown", key: "a", code: "KeyA", text: "a" }, { action: "press", key: "Control+a" },
     ]);
     expect(runtime.abandonHumanInput).not.toHaveBeenCalled();
+  });
+  // An idle close would end the stream under the person watching it.
+  it("keeps the browser it shows from closing while the view is open, and starts its idle time when it closes", async () => {
+    const closeBrowser = vi.fn(async () => true);
+    runtime = new BrowserRuntime({ closeBrowser }); live = new BrowserLive({ runtime });
+    const a = await open();
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    expect(await runtime.closeIfIdle("profile-a", 10)).toBe(false);
+    a.socket.close();
+    expect(await runtime.closeIfIdle("profile-a", 10)).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    expect(await runtime.closeIfIdle("profile-a", 10)).toBe(true);
+    expect(closeBrowser).toHaveBeenCalledWith("profile-a", expect.objectContaining({ command: "/trusted/agent-browser" }));
+  });
+  it("waits out an idle close in progress before starting a view", async () => {
+    let finish!: (closed: boolean) => void;
+    runtime = new BrowserRuntime({ closeBrowser: () => new Promise<boolean>((resolve) => { finish = resolve; }) }); live = new BrowserLive({ runtime });
+    const first = await open();
+    first.socket.close();
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    const closing = runtime.closeIfIdle("profile-a", 10);
+    execute.mockClear();
+    const opening = open();
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    expect(execute).not.toHaveBeenCalled();
+    finish(true);
+    expect(await closing).toBe(true);
+    await opening;
+    expect(execute.mock.calls[0]![1]).toEqual(["stream", "status", "--json", "--no-webmcp"]);
   });
   it("still requires restart when a held modifier has not been released after a chord", async () => {
     runtime = new BrowserRuntime(); live = new BrowserLive({ runtime });

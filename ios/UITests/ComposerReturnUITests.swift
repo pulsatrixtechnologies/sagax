@@ -7,11 +7,9 @@ final class ComposerReturnUITests: XCTestCase {
     /// the arrow button on the chat bar is the only send.
     @MainActor
     func testKeyboardReturnInsertsANewlineInsteadOfSending() {
-        let app = launchPreview()
-        app.buttons["threads-toggle.preview-pepper"].tap()
-        let gmail = app.buttons["thread.preview-gmail"]
-        XCTAssertTrue(gmail.waitForExistence(timeout: 5))
-        gmail.tap()
+        continueAfterFailure = false
+        let app = ThreadPreview.launch()
+        ThreadPreview.openGmail(in: app)
 
         let input = app.descendants(matching: .any).matching(identifier: "message-input").firstMatch
         XCTAssertTrue(input.waitForExistence(timeout: 5))
@@ -28,38 +26,6 @@ final class ComposerReturnUITests: XCTestCase {
 
         XCTAssertEqual(input.value as? String, "first line\nsecond line")
         recordScreenshot("Two-line draft after tapping the keyboard's return", in: app)
-    }
-
-    @MainActor
-    private func launchPreview() -> XCUIApplication {
-        continueAfterFailure = false
-        let app = XCUIApplication()
-        app.terminate()
-        app.launchArguments = [
-            "-store-preview", "-threads-preview",
-            "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
-            "-companion.onboarding.welcomeSeen", "YES",
-            "-companion.onboarding.notificationsSeen", "YES",
-            // The compact list: its rows carry the threads toggle. The
-            // install default is the standard home (HomeUITests).
-            "-companion.prefs.rosterDensity", "compact"
-        ]
-        // threads under each bot row (#210: the default is the chat header)
-        app.launchArguments += ["-omb-threads-location", "sidebar"]
-        app.launch()
-        // The first launch after an install can restore a prewarmed scene
-        // without the preview arguments (an empty, unpaired home: "Connect
-        // computer" before the parity home, "No bots yet" since). Restart
-        // only that wrong route, once.
-        let pepper = app.buttons["threads-toggle.preview-pepper"]
-        if !pepper.waitForExistence(timeout: 10) {
-            app.terminate()
-            // threads under each bot row (#210: the default is the chat header)
-            app.launchArguments += ["-omb-threads-location", "sidebar"]
-            app.launch()
-        }
-        XCTAssertTrue(pepper.waitForExistence(timeout: 10))
-        return app
     }
 
     @MainActor

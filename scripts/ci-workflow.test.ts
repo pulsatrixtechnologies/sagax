@@ -217,29 +217,6 @@ describe("CI concurrency", () => {
     )).toBe(true);
     for (const [name, job] of Object.entries(workflow.jobs) as [string, { needs?: string | string[]; if?: string }][]) {
       if (["static", "gate"].includes(name)) continue;
-      // The one deploy job: after the control-plane checks, on main pushes only. It is
-      // not part of the merge gate.
-      if (name === "deploy-composio-broker") {
-        expect(job.needs).toEqual(["control-plane"]);
-        expect(job.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/main'");
-        expect(workflow.jobs.gate.needs).not.toContain(name);
-        // Without the Cloudflare token the deploy is skipped with a warning, not failed:
-        // every step after the token check waits on it.
-        const [check, ...rest] = job.steps as { id?: string; if?: string; env?: Record<string, string>; run?: string }[];
-        expect(check.id).toBe("token");
-        expect(check.env).toEqual({ CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN }}" });
-        expect(check.run).toContain("::warning");
-        for (const step of rest) expect(step.if?.startsWith("steps.token.outputs.present == 'true'")).toBe(true);
-        // The committed D1 database_id is a placeholder: the real one is injected
-        // from a secret right before the deploy, and without it the deploy is skipped.
-        const inject = rest.find((step) => step.id === "d1");
-        expect(inject?.env).toEqual({ D1_ID: "${{ secrets.COMPOSIO_BROKER_D1_DATABASE_ID }}" });
-        expect(inject?.run).toContain("::warning");
-        const deploy = rest.at(-1)!;
-        expect(rest.indexOf(inject!)).toBeLessThan(rest.length - 1);
-        expect(deploy.if).toBe("steps.token.outputs.present == 'true' && steps.d1.outputs.injected == 'true'");
-        continue;
-      }
       expect(job.needs).toBe("static");
       const selector = `needs.static.outputs.${["ios", "android"].includes(name) ? "mobile" : "runtime"} == 'true'`;
       // Windows, macOS and iOS jobs run on main pushes and merge groups only.

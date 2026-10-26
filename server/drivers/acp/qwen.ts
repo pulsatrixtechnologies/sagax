@@ -12,6 +12,7 @@ import { parseQwenLogLine } from "./quiet-status.ts";
 import { decodeInjectId, hostApiKey, localHost, mergeLocalInject } from "../local-inject.ts";
 import { qwenHostToolArgs, qwenHostToolEnv, sagaxMcpServerNames, withheldWorkspace } from "../host-tools.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
+import { sagaxReviewsAuto } from "../sagax-reviewer.ts";
 
 const EMPTY: ModelCatalog = { default: "", options: [] };
 
@@ -209,9 +210,11 @@ export function qwenDebugLogPath(env: Record<string, string | undefined>, sessio
  * ones, and `--yolo` approves everything. Ask sends nothing, so an older
  * CLI without the flag keeps working at the level it always had; the ACP
  * client still answers residual permission asks itself under Full. */
-export function qwenApprovalArgs(fullAuto: boolean, approvalMode: string | undefined): string[] {
+export function qwenApprovalArgs(fullAuto: boolean, approvalMode: string | undefined, sagaxReviews = false): string[] {
   if (fullAuto) return ["--yolo"];
-  if (approvalMode === "auto") return ["--approval-mode", "auto"];
+  // Sagax decides Approve for me for this bot (sagax-reviewer.ts, parity
+  // A13): edits run, everything else reaches Sagax's approval path
+  if (approvalMode === "auto") return ["--approval-mode", sagaxReviews ? "auto-edit" : "auto"];
   if (approvalMode === "edits") return ["--approval-mode", "auto-edit"];
   return [];
 }
@@ -236,7 +239,7 @@ const support: AcpSupport = {
   },
   // A raw -m only changes the model within the saved provider. ACP switches
   // the complete route and confirms it before any prompt leaves OMB.
-  spawnArgs: (config, turn) => ["--acp", ...qwenApprovalArgs(config.fullAuto, turn.approvalMode), ...qwenHostToolArgs(turn.withholdHostTools === true, sagaxMcpServerNames(turn.integrations))],
+  spawnArgs: (config, turn) => ["--acp", ...qwenApprovalArgs(config.fullAuto, turn.approvalMode, turn.approvalMode === "auto" && sagaxReviewsAuto(turn.botId)), ...qwenHostToolArgs(turn.withholdHostTools === true, sagaxMcpServerNames(turn.integrations))],
   // Qwen's live session/load returns its cached MCP clients, ignoring fresh
   // credentials. Cold-load the same conversation when those inputs change.
   restartOnMcpChange: true,

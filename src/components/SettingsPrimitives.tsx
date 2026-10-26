@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import { SWITCH_OFF, SWITCH_ON, SWITCH_THUMB_OFF, SWITCH_THUMB_ON } from "@/lib/status-tones";
 import { useCopyFeedback } from "@/lib/copy-text";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { AnchoredPopover, useAnchoredDismissRoot } from "./AnchoredPopover";
 
 export function Switch({
   checked,
@@ -71,7 +72,7 @@ export function SwitchRow({
   );
 }
 
-type CountKey = "servers" | "people" | "devices" | "backups" | "turns" | "computers" | "entries" | "workspaces" | "profiles" | "ready";
+type CountKey = "servers" | "people" | "devices" | "backups" | "turns" | "computers" | "entries" | "workspaces" | "profiles" | "ready" | "models";
 
 /** "1 person" / "3 people" for a collapsed card's summary, by the active
  * language's plural rule (French says "0 personne"). */
@@ -531,14 +532,16 @@ export function PillSelect<T extends string>({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
+  const listRef = useRef<HTMLElement | null>(null);
   const listId = useId();
   const current = options.find((option) => option.value === value);
   const close = (focusTrigger = false) => {
     setOpen(false);
     if (focusTrigger) triggerRef.current?.focus();
   };
-  usePopoverDismiss(open, rootRef, () => close(true));
+  // The list is portalled out of rootRef, so a press in it must still count as inside.
+  const dismissRoot = useAnchoredDismissRoot(rootRef, listRef);
+  usePopoverDismiss(open, dismissRoot, () => close(true));
   const focusOption = (index: number) => {
     const items = [...(listRef.current?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])];
     if (items.length === 0) return;
@@ -582,8 +585,12 @@ export function PillSelect<T extends string>({
         <ChevronDown size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" />
       </button>
       {open && (
-        <ul
-          ref={listRef}
+        <AnchoredPopover
+          as="ul"
+          anchorRef={triggerRef}
+          popoverRef={listRef}
+          align="end"
+          maxHeight={280}
           id={listId}
           role="listbox"
           aria-label={ariaLabel}
@@ -603,7 +610,7 @@ export function PillSelect<T extends string>({
               close(true);
             }
           }}
-          className="popover-surface absolute right-0 top-full z-40 mt-1 flex max-h-[280px] w-max min-w-[180px] max-w-[min(18rem,calc(100vw-2rem))] flex-col gap-0.5 overflow-y-auto rounded-xl border-[0.5px] border-border bg-elevated p-1.5"
+          className="popover-surface flex w-max min-w-[180px] max-w-[min(18rem,calc(100vw-2rem))] flex-col gap-0.5 overflow-y-auto rounded-xl border-[0.5px] border-border bg-elevated p-1.5"
         >
           {options.map((option, index) => {
             const selected = option.value === value;
@@ -633,7 +640,7 @@ export function PillSelect<T extends string>({
               </Fragment>
             );
           })}
-        </ul>
+        </AnchoredPopover>
       )}
     </div>
   );

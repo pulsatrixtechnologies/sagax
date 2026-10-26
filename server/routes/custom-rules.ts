@@ -8,6 +8,14 @@
 //                                     -> { rule }   (201)
 //   PATCH  /api/custom-rules/:id      { when?, behavior?, botId?, riskScope?, enabled? }
 //   DELETE /api/custom-rules/:id
+//   GET    /api/custom-rules/policy   -> { alwaysAllow, orgRules }: the organization's
+//                                        approval policy (server/custom-rules-org.ts)
+//
+// 2026-10-21: the list also carries the organization's rules (`org: true`),
+// which nobody changes here (403 org_rule_locked), and `orgPolicy`. While
+// the organization turned Always allow off, no allow rule is saved or
+// turned on (403 org_always_allow_off); the person's own allow rules stay
+// listed, paused.
 //
 // Every route is the caller's own: their rules, their bots. A local service,
 // a turn's token or a bot's act copy of a session is never a person here
@@ -27,6 +35,7 @@ import {
   type CustomRuleBinding,
   type RiskClass,
 } from "../../shared/custom-rules.ts";
+import { ORG_ALWAYS_ALLOW_OFF, ORG_RULE_LOCKED } from "../custom-rules-org.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface CustomRuleRouteDeps {
@@ -85,15 +94,23 @@ export function createCustomRuleRoutes(deps: CustomRuleRouteDeps): RouteHandler 
     res.setHeader("cache-control", "no-store");
 
     // each route sits beside its method guard (scripts/tool-policy/route-inventory.ts)
+    if (path === "/api/custom-rules/policy" && method !== "GET") return json(res, 405, { error: "GET only" });
+    if (path === "/api/custom-rules/policy" && method === "GET") {
+      const me = deps.manager(auth);
+      if (!me) return json(res, 403, { error: "Sign in to see your rules." });
+      return json(res, 200, { ...deps.store.orgPolicy(), orgRules: deps.store.orgRules().filter((rule) => rule.enabled).length });
+    }
     if (path === "/api/custom-rules" && method !== "GET" && method !== "POST") return json(res, 405, { error: "GET or POST only" });
     if (path === "/api/custom-rules" && method === "GET") {
       const me = deps.manager(auth);
       if (!me) return json(res, 403, { error: "Sign in to see your rules." });
       const botId = url.searchParams.get("botId") ?? undefined;
       if (botId && !ownsBot(me, botId)) return json(res, 404, { error: "no such bot" });
-      const rules = deps.store.rulesOf(me, botId)
+      const own = deps.store.ownRulesOf(me, botId)
         .sort((a, b) => Number(a.botId === null) - Number(b.botId === null) || a.createdAt - b.createdAt);
-      return json(res, 200, { rules: rules.map(view) });
+      // the organization's rules first: they win over the person's own
+      const org = deps.store.orgRules().filter((rule) => rule.enabled).sort((a, b) => a.createdAt - b.createdAt);
+      return json(res, 200, { rules: [...org, ...own].map(view), orgPolicy: deps.store.orgPolicy() });
     }
     if (path === "/api/custom-rules" && method === "POST") {
       const me = deps.manager(auth);
@@ -109,6 +126,7 @@ export function createCustomRuleRoutes(deps: CustomRuleRouteDeps): RouteHandler 
       if (body.botId !== null && !ownsBot(me, body.botId)) return json(res, 400, { error: "a rule applies to one of your bots, or to all of them" });
       const riskScope = riskScopeOf(body.riskScope);
       if (!riskScope) return json(res, 400, { error: "riskScope lists destructive, irreversible, money or external-send" });
+      if (behavior === "allow" && !deps.store.orgPolicy().alwaysAllow) return json(res, 403, ORG_ALWAYS_ALLOW_OFF);
       if (behavior === "allow" && compileRule(when, deps.home).shellFamily) return json(res, 400, SHELL_FAMILY_REFUSAL);
       const card = body.fromCard && typeof body.fromCard === "object"
         ? body.fromCard as { threadId?: unknown; requestId?: unknown }
@@ -167,6 +185,7 @@ export function createCustomRuleRoutes(deps: CustomRuleRouteDeps): RouteHandler 
       const me = deps.manager(auth);
       if (!me) return json(res, 403, { error: "Sign in to change your rules." });
       const id = item[1]!;
+      if (deps.store.isOrgRule(id)) return json(res, 403, ORG_RULE_LOCKED);
       const before = deps.store.get(me, id);
       if (!before) return json(res, 404, { error: "no such rule" });
       // a deny or ask rule removed, turned off or made to hold less loosens
@@ -190,6 +209,11 @@ export function createCustomRuleRoutes(deps: CustomRuleRouteDeps): RouteHandler 
       const riskScope = body.riskScope === undefined ? undefined : riskScopeOf(body.riskScope);
       if (riskScope === null) return json(res, 400, { error: "riskScope lists destructive, irreversible, money or external-send" });
       const nextBehavior = isCustomRuleBehavior(body.behavior) ? body.behavior : before.behavior;
+      // an allow rule saved or turned on while the organization keeps
+      // approvals one at a time
+      if (nextBehavior === "allow" && !deps.store.orgPolicy().alwaysAllow && (before.behavior !== "allow" || body.enabled === true || body.when !== undefined || body.botId !== undefined || body.riskScope !== undefined)) {
+        return json(res, 403, ORG_ALWAYS_ALLOW_OFF);
+      }
       if (guarding && nextBehavior !== "allow" && deps.stepUp && (
         body.enabled === false ||
         (nextBehavior !== before.behavior && !(before.behavior === "ask" && nextBehavior === "deny")) ||

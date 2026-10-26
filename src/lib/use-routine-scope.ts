@@ -45,7 +45,7 @@ export function routineMatchesStatus(routine: Routine, status: RoutineScopePrefs
   return !status || routineScopeStatuses(routine).includes(status);
 }
 
-export function useRoutineScope({ config, routines, runs }: { config: ConfigStatus | null | undefined; routines: Routine[]; runs: RoutineRun[] }) {
+export function useRoutineScope({ config, routines, runs, ignoreStatus = false }: { config: ConfigStatus | null | undefined; routines: Routine[]; runs: RoutineRun[]; /** The Calendar view hides the status filter, so it must not apply. */ ignoreStatus?: boolean }) {
   const principalId = config?.viewer?.principalId ?? null;
   const available = routineScopeAvailable(config);
   const [prefs, setPrefsState] = useState<RoutineScopePrefs>(() => readRoutineScopePrefs(principalId));
@@ -100,6 +100,7 @@ export function useRoutineScope({ config, routines, runs }: { config: ConfigStat
   }, [available, load]);
 
   const current = listing && listing.search === search ? listing : null;
+  const statusFilter = ignoreStatus ? undefined : prefs.status;
   const shownRoutines = useMemo(() => {
     let base: Routine[];
     if (live) {
@@ -112,14 +113,14 @@ export function useRoutineScope({ config, routines, runs }: { config: ConfigStat
     } else {
       base = current?.routines ?? [];
     }
-    return base.filter((routine) => routineMatchesStatus(routine, prefs.status));
-  }, [live, current, routines, prefs.status]);
+    return base.filter((routine) => routineMatchesStatus(routine, statusFilter));
+  }, [live, current, routines, statusFilter]);
   const shownRuns = useMemo(() => {
     const base = live ? runs : current?.runs ?? [];
-    if (!prefs.status) return base;
+    if (!statusFilter) return base;
     const ids = new Set(shownRoutines.map((routine) => routine.id));
     return base.filter((run) => ids.has(run.routineId));
-  }, [live, runs, current, prefs.status, shownRoutines]);
+  }, [live, runs, current, statusFilter, shownRoutines]);
 
   return {
     available,
@@ -135,6 +136,6 @@ export function useRoutineScope({ config, routines, runs }: { config: ConfigStat
     error: !live && error,
     reload: load,
     /** The query Clear logs sends with the page's bot filter. */
-    clearSearch: (botId: string | undefined) => routineScopeSearch({ scope, ...(teamId ? { teamId } : {}), ...(ownerId ? { ownerId } : {}), ...(botId ? { botId } : {}), ...(prefs.status ? { status: prefs.status } : {}) }),
+    clearSearch: (botId: string | undefined) => routineScopeSearch({ scope, ...(teamId ? { teamId } : {}), ...(ownerId ? { ownerId } : {}), ...(botId ? { botId } : {}), ...(statusFilter ? { status: statusFilter } : {}) }),
   };
 }

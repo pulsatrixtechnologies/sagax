@@ -167,10 +167,10 @@ export function widgetThemeFromTokens(tokens: WidgetThemeTokens): WidgetTheme {
 
 /** Read the tokens from where the widget is drawn (its skin may be a
  * subtree, like the picker's live miniatures). */
-export function readWidgetTheme(element: Element | null): WidgetTheme {
+export function readWidgetTheme(element: object | null): WidgetTheme {
   const tokens: WidgetThemeTokens = {};
   // through globalThis: the server's tests read this module without the DOM lib
-  const computed = (globalThis as { getComputedStyle?: (target: Element) => { getPropertyValue(name: string): string } }).getComputedStyle;
+  const computed = (globalThis as { getComputedStyle?: (target: object) => { getPropertyValue(name: string): string } }).getComputedStyle;
   if (element && typeof computed === "function") {
     try {
       const style = computed.call(globalThis, element);
@@ -263,15 +263,23 @@ export const WIDGET_KIT_CSS = [
   `.search{position:relative;display:block;min-width:0}.search::before{content:"";position:absolute;inset-inline-start:10px;top:50%;width:13px;height:13px;margin-top:-6.5px;background:var(--subtle-foreground);-webkit-mask:${SEARCH_MASK} center/contain no-repeat;mask:${SEARCH_MASK} center/contain no-repeat;pointer-events:none}.search .input{padding-inline-start:32px;font-size:12px}`,
   ".label{display:block;margin-bottom:4px;font-size:12px;font-weight:500;color:var(--muted-foreground)}",
   ".field{display:flex;flex-direction:column;gap:4px;min-width:0}",
-  `.checkbox{appearance:none;-webkit-appearance:none;flex-shrink:0;width:16px;height:16px;margin:0;border:1px solid var(--input);border-radius:5px;background:var(--card);cursor:pointer;display:inline-grid;place-content:center;vertical-align:middle}`,
-  `.checkbox::before{content:"";width:11px;height:11px;background:var(--primary-foreground);-webkit-mask:${CHECK_MASK} center/contain no-repeat;mask:${CHECK_MASK} center/contain no-repeat;transform:scale(0);transition:transform .12s}`,
-  ".checkbox:checked{background:var(--primary);border-color:var(--primary)}.checkbox:checked::before{transform:scale(1)}",
-  `.checkbox:focus-visible,.switch:focus-visible,.radio:focus-visible{${FOCUS}}`,
-  ".radio{appearance:none;-webkit-appearance:none;flex-shrink:0;width:16px;height:16px;margin:0;border:1px solid var(--input);border-radius:50%;background:var(--card);cursor:pointer;vertical-align:middle}.radio:checked{border:5px solid var(--primary)}",
-  ".switch{appearance:none;-webkit-appearance:none;position:relative;flex-shrink:0;width:32px;height:18px;margin:0;border-radius:999px;background:var(--input);cursor:pointer;transition:background-color .15s;vertical-align:middle}",
-  ".switch::before{content:\"\";position:absolute;top:2px;inset-inline-start:2px;width:14px;height:14px;border-radius:50%;background:var(--card);box-shadow:0 1px 2px rgb(0 0 0 / .25);transition:transform .15s}",
-  ".switch:checked{background:var(--primary)}.switch:checked::before{transform:translateX(14px);background:var(--primary-foreground)}",
-  "input[type=range]{width:100%;accent-color:var(--primary)}",
+  `input.checkbox{appearance:none;-webkit-appearance:none;flex-shrink:0;width:16px;height:16px;margin:0;border:1px solid var(--input);border-radius:5px;background:var(--card);cursor:pointer;display:inline-grid;place-content:center;vertical-align:middle}`,
+  `input.checkbox::before{content:"";width:11px;height:11px;background:var(--primary-foreground);-webkit-mask:${CHECK_MASK} center/contain no-repeat;mask:${CHECK_MASK} center/contain no-repeat;transform:scale(0);transition:transform .12s}`,
+  "input.checkbox:checked{background:var(--primary);border-color:var(--primary)}input.checkbox:checked::before{transform:scale(1)}",
+  `input.checkbox:focus-visible,input.switch:focus-visible,input.radio:focus-visible{${FOCUS}}`,
+  "input.radio{appearance:none;-webkit-appearance:none;flex-shrink:0;width:16px;height:16px;margin:0;border:1px solid var(--input);border-radius:50%;background:var(--card);cursor:pointer;vertical-align:middle}input.radio:checked{border:5px solid var(--primary)}",
+  "input.switch{appearance:none;-webkit-appearance:none;position:relative;flex-shrink:0;width:32px;height:18px;margin:0;border-radius:999px;background:var(--input);cursor:pointer;transition:background-color .15s;vertical-align:middle}",
+  "input.switch::before{content:\"\";position:absolute;top:2px;inset-inline-start:2px;width:14px;height:14px;border-radius:50%;background:var(--card);box-shadow:0 1px 2px rgb(0 0 0 / .25);transition:transform .15s}",
+  "input.switch:checked{background:var(--primary)}input.switch:checked::before{transform:translateX(14px);background:var(--primary-foreground)}",
+  "input[type=range]{width:100%;accent-color:var(--primary);touch-action:pan-y}",
+  // form rows: a label that wraps (or sits beside) a checkbox, radio or switch is
+  // one line of auto width whose text wraps normally, whatever kit class the
+  // bot put on the label; the kit control look stays on the input itself
+  "label{max-width:100%}label:has(>input[type=checkbox],>input[type=radio]),label.checkbox,label.radio,label.switch,label.check{display:flex;flex-direction:row;align-items:flex-start;gap:8px;width:auto;min-width:0;height:auto;padding:0;margin:0;border:0;background:none;cursor:pointer;white-space:normal;overflow-wrap:anywhere}",
+  "label>input[type=checkbox],label>input[type=radio]{flex-shrink:0;margin-top:2px}input[type=checkbox]:not(.checkbox):not(.switch),input[type=radio]:not(.radio){width:auto;height:auto;min-width:0;accent-color:var(--primary)}",
+  "input.input[type=checkbox],input.input[type=radio]{width:auto;min-width:0}",
+  // dragging a slider or pressing a control never selects text around it
+  "label,button,summary,input[type=range],input[type=checkbox],input[type=radio]{-webkit-user-select:none;user-select:none}body:has(input[type=range]:active){-webkit-user-select:none;user-select:none}",
   // tabs
   ".tabs{display:flex;flex-direction:column;gap:10px}",
   ".tabs-list{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:999px;background:var(--muted);width:fit-content;max-width:100%;overflow-x:auto}",

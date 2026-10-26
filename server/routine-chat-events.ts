@@ -99,6 +99,41 @@ export function recordRoutineToggle(
   });
 }
 
+/** Verbs for a routine's definition changing. A singular chip per routine. */
+export type RoutineChangeAction = "created" | "updated" | "deleted";
+
+/** The fallback line for clients that do not know the kind: no routine name,
+ * so an old client never shows a name the viewer filter would have withheld. */
+export function routineChangeText(action: RoutineChangeAction): string {
+  return action === "created" ? "Created a routine" : action === "deleted" ? "Deleted a routine" : "Updated a routine";
+}
+
+/** Record one routine a bot created, updated or deleted in `threadId`, as one
+ * named line ("Updated routine · <name>"). One line per routine, action and
+ * turn: a retry of the same change does not write a second. Returns the line. */
+export function recordRoutineChange(
+  store: RoutineToggleStore,
+  input: { threadId: string; action: RoutineChangeAction; routine: RoutineToggleItem; atMessageId?: string },
+): Message {
+  const path = store.activePath(input.threadId);
+  const turnKey = routineToggleTurnKey(path, input.atMessageId);
+  const item = cleanItem(input.routine);
+  const start = turnKey ? path.findIndex((message) => message.id === turnKey) : -1;
+  for (let index = path.length - 1; index > start; index -= 1) {
+    const message = path[index];
+    if (message.kind === "routines" && message.routineToggle?.turnKey === turnKey &&
+      message.routineToggle.action === input.action && message.routineToggle.routines.some((routine) => routine.id === item.id)) {
+      return message;
+    }
+  }
+  return store.appendMessage(input.threadId, {
+    role: "bot",
+    kind: "routines",
+    text: routineChangeText(input.action),
+    routineToggle: { action: input.action, turnKey, routines: [item] },
+  });
+}
+
 function cleanItem(routine: RoutineToggleItem): RoutineToggleItem {
   return {
     id: routine.id,

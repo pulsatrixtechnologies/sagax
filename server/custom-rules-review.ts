@@ -97,7 +97,7 @@ export function customRuleNotice(decision: CustomRuleDecision): CustomRuleNotice
   if (decision.kind === "none") {
     if (!decision.riskBlocked) return undefined;
     const { rule, missing } = decision.riskBlocked;
-    return { id: rule.id, when: rule.when, behavior: rule.behavior, botId: rule.botId, outcome: "risk", missing };
+    return { id: rule.id, when: rule.when, behavior: rule.behavior, botId: rule.botId, outcome: "risk", missing, ...(rule.org ? { org: true as const } : {}) };
   }
   const { rule } = decision;
   return {
@@ -106,6 +106,9 @@ export function customRuleNotice(decision: CustomRuleDecision): CustomRuleNotice
     behavior: rule.behavior,
     botId: rule.botId,
     outcome: decision.kind === "allow" ? "approved" : decision.kind === "deny" ? "denied" : "held",
+    // the organization admin's rule: the card says so, and the person
+    // cannot change it
+    ...(rule.org ? { org: true as const } : {}),
   };
 }
 

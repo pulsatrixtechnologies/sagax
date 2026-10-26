@@ -166,7 +166,9 @@ export function createFleetAgent(options: FleetAgentOptions): Server {
         return send(result.status, result.body);
       }
       if (method === "POST" && url.pathname === "/upgrade") {
-        const result = await act({ ...base(), action: "upgrade" });
+        const body = await readBody(req);
+        const version = text(body.version);
+        const result = await act({ ...base(), action: "upgrade", ...(version ? { version } : {}) });
         return send(result.status, result.body);
       }
       const match = /^\/workspaces\/([a-z0-9-]+)(?:\/(users|providers|suspend|resume))?$/.exec(url.pathname);

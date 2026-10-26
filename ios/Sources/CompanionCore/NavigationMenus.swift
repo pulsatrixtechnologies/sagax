@@ -151,7 +151,7 @@ public enum NewMenuItem: Hashable, Sendable {
 
 /// The desktop sidebar's rows above the account footer.
 public enum HomePlace: String, Hashable, Sendable, CaseIterable {
-    case teamMap, automations, connectedApps, templates
+    case teamMap, automations, templates
 }
 
 /// The phone's Settings list, in the desktop's nav order. "Pair devices"
@@ -310,7 +310,6 @@ public enum NavigationMenus {
             switch place {
             case .teamMap: .teamMap
             case .automations: .automations
-            case .connectedApps: .connectedApps
             case .templates: .templates
             }
         }

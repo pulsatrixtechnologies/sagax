@@ -23,6 +23,7 @@ vi.mock("@/state/store", () => ({ api: store.api, useStore: () => ({ state: stor
 vi.mock("@/lib/analytics", () => ({ emailGateDone: () => false }));
 // The gate's job is choosing; the flow itself has its own recipe.
 vi.mock("./WelcomeFlow", () => ({ WelcomeFlow: () => null }));
+vi.mock("./GuidedFirstRun", () => ({ GuidedFirstRun: () => null }));
 vi.mock("./LaunchScreen", () => ({ LaunchScreen: () => null }));
 vi.mock("@/components/Avatar", () => ({ MausAvatar: () => null }));
 // The organization's engine step decides for itself (OrgEngineSetup.tsx);
@@ -31,6 +32,7 @@ vi.mock("@/components/OrgEngineSetup", () => ({ OrgEngineSetupGate: () => null }
 import { SharedWorkspaceHint } from "./SharedWorkspaceHint";
 import { useWelcomeViewer, WelcomeGate } from "./WelcomeGate";
 import { WelcomeFlow } from "./WelcomeFlow";
+import { GuidedFirstRun } from "./GuidedFirstRun";
 import { LaunchScreen } from "./LaunchScreen";
 import { OrgEngineSetupGate } from "@/components/OrgEngineSetup";
 
@@ -100,11 +102,11 @@ afterEach(() => {
 });
 
 describe("who gets the welcome flow", () => {
-  it("opens the desktop flow for the desktop app's own window, exactly as before", () => {
+  it("opens the guided first run for the desktop app's own window", () => {
     vi.stubGlobal("window", LOCAL_PAGE);
     const { tree } = gate(LOCAL_VIEWER);
-    expect(tree?.type).toBe(WelcomeFlow);
-    expect(tree?.props).toMatchObject({ hosted: false, initialBeat: undefined, replay: false });
+    expect(tree?.type).toBe(GuidedFirstRun);
+    expect(tree?.props).toMatchObject({ initialStep: undefined, replay: false });
   });
 
   it("opens the hosted beat set for a hosted workspace's admin", () => {
@@ -113,9 +115,11 @@ describe("who gets the welcome flow", () => {
     expect(tree?.props.hosted).toBe(true);
   });
 
-  it("hands an organization server's managed profile to the flow, so its greeting asks for nothing", async () => {
+  it("gives an organization server's admin the guided first run, which asks for no profile", async () => {
     // the desktop app joined an organization server: the page is the server's
-    // (reduced bridge) and the server's answer decides, never a guess
+    // (reduced bridge) and the server's answer decides, never a guess. The
+    // lean guide collects no name or email, so a managed profile needs no
+    // special greeting here.
     vi.stubGlobal("window", REMOTE_PAGE);
     store.api.mockResolvedValueOnce({
       kind: "session", scopes: ["admin", "client"], identity: "perspicax", name: "Jean-Christophe", email: "jc@example.test",
@@ -133,11 +137,10 @@ describe("who gets the welcome flow", () => {
     expect(viewer).not.toBeNull();
     fixture.values = [];
     const { tree } = gate(viewer);
-    expect(tree?.type).toBe(WelcomeFlow);
-    expect(tree?.props.profileManaged).toEqual({ by: "perspicax", url: "https://pulsatrix.example.test/console/me", name: "Jean-Christophe", email: "jc@example.test" });
-    // a solo server's flow is unchanged
+    expect(tree?.type).toBe(GuidedFirstRun);
+    // a solo server's first run is the same guide
     fixture.values = [];
-    expect(gate({ hosted: false, canSave: true }).tree?.props.profileManaged).toBeUndefined();
+    expect(gate({ hosted: false, canSave: true }).tree?.type).toBe(GuidedFirstRun);
   });
 
   it("leaves an OMB Cloud home's first run to its engine sign-in", () => {
@@ -145,7 +148,7 @@ describe("who gets the welcome flow", () => {
     expect(quiet(gate({ hosted: false, canSave: true, cloudHome: true }).tree)).toBe(true);
     // Settings → Replay welcome tour still opens it there
     store.state = { ...store.state, welcomeOpen: true };
-    expect(gate({ hosted: false, canSave: true, cloudHome: true }).tree?.type).toBe(WelcomeFlow);
+    expect(gate({ hosted: false, canSave: true, cloudHome: true }).tree?.type).toBe(GuidedFirstRun);
   });
 
   it("gives a hosted member a note instead, and nothing that writes the workspace config", async () => {
@@ -196,8 +199,8 @@ describe("who gets the welcome flow", () => {
     // an explicit Settings replay still opens the ordinary flow, as before
     store.state = { ...store.state, welcomeOpen: true };
     const replay = gate({ hosted: false, canSave: false }).tree!;
-    expect(replay.type).toBe(WelcomeFlow);
-    expect(replay.props).toMatchObject({ hosted: false, replay: true });
+    expect(replay.type).toBe(GuidedFirstRun);
+    expect(replay.props).toMatchObject({ replay: true });
   });
 
   it("treats a hosted workspace opened inside the desktop app like a browser", () => {
@@ -233,17 +236,17 @@ describe("the launch screen before the tour", () => {
   it("goes on to the tour once no server is chosen, without waiting for the save", () => {
     vi.stubGlobal("window", DESKTOP_PAGE);
     gate(LOCAL_VIEWER).tree!.props.onSolo!();
-    expect(gate(LOCAL_VIEWER).tree?.type).toBe(WelcomeFlow);
+    expect(gate(LOCAL_VIEWER).tree?.type).toBe(GuidedFirstRun);
   });
 
   it("remembers no server: the next launch opens the tour directly", () => {
     vi.stubGlobal("window", DESKTOP_PAGE);
     store.state = { ...store.state, config: { onboarding: { ...EMPTY_ONBOARDING, launchMode: "solo" } } };
-    expect(gate(LOCAL_VIEWER).tree?.type).toBe(WelcomeFlow);
+    expect(gate(LOCAL_VIEWER).tree?.type).toBe(GuidedFirstRun);
   });
 
   it("never shows it to a browser, a hosted page or someone who finished the tour", () => {
-    expect(gate(LOCAL_VIEWER).tree?.type).toBe(WelcomeFlow);
+    expect(gate(LOCAL_VIEWER).tree?.type).toBe(GuidedFirstRun);
     vi.stubGlobal("window", REMOTE_PAGE);
     expect(gate({ hosted: true, canSave: true }).tree?.type).toBe(WelcomeFlow);
     vi.stubGlobal("window", DESKTOP_PAGE);
@@ -280,17 +283,17 @@ describe("the launch screen before the tour", () => {
     expect(store.dispatch).toHaveBeenCalledWith({ type: "toggleLaunch", open: false });
   });
 
-  it("the tour's server row opens server mode and the tour resumes on the engines beat", () => {
+  it("the server row opens server mode and the guide resumes on the engine step", () => {
     vi.stubGlobal("window", DESKTOP_PAGE);
     store.state = { ...store.state, config: { onboarding: { ...EMPTY_ONBOARDING, launchMode: "solo" } } };
     const flow = gate(LOCAL_VIEWER).tree!;
-    expect(flow.type).toBe(WelcomeFlow);
+    expect(flow.type).toBe(GuidedFirstRun);
     flow.props.onOpenServer!();
     expect(store.dispatch).toHaveBeenCalledWith({ type: "toggleLaunch", open: true, mode: "server" });
     store.state = { ...store.state, launchOpen: true, launchMode: "server" };
     gate(LOCAL_VIEWER).tree!.props.onSolo!();
     store.state = { ...store.state, launchOpen: false };
-    expect(gate(LOCAL_VIEWER).tree?.props.initialBeat).toBe("engines");
+    expect(gate(LOCAL_VIEWER).tree?.props.initialStep).toBe("engine");
   });
 });
 

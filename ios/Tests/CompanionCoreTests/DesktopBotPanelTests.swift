@@ -90,6 +90,25 @@ final class DesktopBotPanelTests: XCTestCase {
         XCTAssertNil(DesktopInlineEdit.commit(draft: "", current: "", required: false))
     }
 
+    func testPhoneEditGroupsFollowTheDesktopOrderAndKeepEverySection() {
+        XCTAssertEqual(PhoneBotEditGroup.allCases, [.instructions, .modelTools, .security, .activity])
+        // Profile's three pages moved, none dropped
+        let listed = PhoneBotEditGroup.allCases.flatMap(\.sections)
+        XCTAssertEqual(Set(listed), Set(DesktopPanelSection.allCases))
+        XCTAssertEqual(listed.count, DesktopPanelSection.allCases.count)
+        XCTAssertEqual(PhoneBotEditGroup.security.sections.suffix(2), [.visibility, .sharing])
+        XCTAssertEqual(PhoneBotEditGroup.visible([.voice]), [.modelTools])
+    }
+
+    /// Edit bot's Description (several lines, optional): a change is saved
+    /// trimmed, an emptied blurb clears, an unchanged one saves nothing.
+    func testInlineEditDescriptionKeepsLinesAndMayClear() {
+        XCTAssertEqual(DesktopInlineEdit.commit(draft: "Line 1\nLine 2\n", current: "Line 1", required: false), "Line 1\nLine 2")
+        XCTAssertEqual(DesktopInlineEdit.commit(draft: "  ", current: "Does things", required: false), "")
+        XCTAssertNil(DesktopInlineEdit.commit(draft: "Does things ", current: "Does things", required: false))
+        XCTAssertEqual(NewBotRules.descriptionLimit, 4_000)
+    }
+
     // MARK: More > Access, Works on
 
     private func config(_ json: String) throws -> ConfigStatus {
@@ -122,15 +141,15 @@ final class DesktopBotPanelTests: XCTestCase {
     }
 
     func testOddFeatureValuesReadAsOff() throws {
-        let odd = try config(#"{"features":{"browser":"yes","boatComputer":1,"connectedApps":true}}"#)
+        let odd = try config(#"{"features":{"browser":"yes","boatComputer":1,"templates":true}}"#)
         XCTAssertNil(odd.features?.browser)
-        XCTAssertEqual(odd.features?.connectedApps, true)
+        XCTAssertEqual(odd.features?.templates, true)
     }
 
     func testWebhooksListKeepsOneBotsTriggers() throws {
         let json = #"{"webhooks":[{"id":"w1","endpointId":"e","name":"Build","prompt":"p","botId":"b1","runOn":"maus","enabled":true,"createdAt":1,"updatedAt":2,"deliveryCount":3},{"id":"w2","name":"Other","botId":"b2","enabled":false,"deliveryCount":0}],"attempts":[]}"#
         let list = try JSONDecoder().decode(WebhooksResponse.self, from: Data(json.utf8))
-        XCTAssertEqual(list.of(botId: "b1"), [WebhookListing(id: "w1", name: "Build", botId: "b1", enabled: true, deliveryCount: 3)])
+        XCTAssertEqual(list.of(botId: "b1"), [WebhookListing(id: "w1", name: "Build", botId: "b1", enabled: true, deliveryCount: 3, endpointId: "e")])
     }
 
     func testPlacementDocksFrom1024() {

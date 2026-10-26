@@ -22,8 +22,11 @@ import { fullAccessNeedsConfirmation, orgFullAccessFor } from "@/lib/full-access
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { api, useStore, type Bot } from "@/state/store";
 import type { ApprovalMode } from "../../../shared/approval-mode";
+import { PROACTIVE_MODES, type ProactiveMode } from "../../../shared/proactive-mode";
 import { DEFAULT_OUTBOUND_POLICY, type OutboundPolicy } from "../../../shared/outbound";
 import { ApprovalModeSelector } from "../ApprovalModeSelector";
+import { AllowedRecipientsRow } from "./AllowedRecipientsRow";
+import { LifecycleHooksRow } from "./LifecycleHooksRow";
 import { CommandAllowlistDialog } from "../CommandAllowlistDialog";
 import { FullAccessWarning } from "../FullAccessWarning";
 import { LocalComputerAutoWarning } from "../LocalComputerAutoWarning";
@@ -73,12 +76,26 @@ export function PermissionsSection({
   const perspicaxOrg = usePerspicaxOrg();
   const viewerId = state.config?.viewer?.principalId ?? null;
   const orgFullAccess = draft ? undefined : orgFullAccessFor(perspicaxOrg, bot, viewerId);
+  // The menu shows the open conversation. The grant names that conversation
+  // so the saved level is the one still on screen after the reply.
+  const grantOrgFull = (target: string, confirm: boolean) => {
+    dispatch({
+      type: "updateBot",
+      botId: target,
+      patch: {
+        approvalMode: "full",
+        organizationFullAccess: true,
+        ...(confirm ? { confirmFullAccess: true } : {}),
+        ...(bot.id === target ? { threadId: bot.threadId } : {}),
+      },
+    });
+  };
   const setApprovalMode = (mode: ApprovalMode) => {
     if (bot.busy || mode === approvalMode) return;
     if (mode === "full" && orgFullAccess !== undefined) {
       if (orgFullAccess !== "allowed") return;
       if (fullAccessNeedsConfirmation(bot, viewerId, true)) setFullAccessTarget(bot.id);
-      else dispatch({ type: "updateBot", botId: bot.id, patch: { approvalMode: "full", organizationFullAccess: true } });
+      else grantOrgFull(bot.id, false);
       return;
     }
     if (mode === "full") {
@@ -92,6 +109,14 @@ export function PermissionsSection({
     }
     patch({ approvalMode: mode });
   };
+  // How autonomously this bot may act on its own. A level next to the approval
+  // level, not a Chief orchestrator: the server enforces it per bot
+  // (shared/proactive-mode.ts, server/proactive.ts).
+  const proactiveMode: ProactiveMode = bot.proactiveMode ?? "off";
+  const setProactiveMode = (mode: ProactiveMode) => {
+    if (bot.busy || mode === proactiveMode) return;
+    patch({ proactiveMode: mode });
+  };
   const showPrimary = canStepPrimary(state.config, bot, { draft });
   const showApproval = canEditBotField(state.config, bot, "approvalMode", { draft });
   const showContact = canEditBotField(state.config, bot, "approvePeerComms", { draft });
@@ -104,6 +129,10 @@ export function PermissionsSection({
   const showPrimaryUi = advanced && showPrimary && (draft || Boolean(bot.chiefOfStaff));
   const showContactUi = advanced && showContact;
   const showOutboundUi = advanced && showOutbound;
+  // 2026-10-21 (parité 1C): who it writes to without a card
+  const showRecipientsUi = advanced && !draft && canEditBotField(state.config, bot, "allowedRecipients");
+  const showDrafts = advanced && !draft && canEditBotField(state.config, bot, "emailDrafts");
+  const showHooks = !draft && canEditBotField(state.config, bot, "allowedRecipients");
   // the owner always manages their own bot's permission mode and rules
   const showOwnerPermissions = !draft && viewerOwnsBot(state.config, bot);
   // 2026-10-15: this bot's tool access and parallel conversations (they were
@@ -111,7 +140,7 @@ export function PermissionsSection({
   // checks the same (server/routes/bot-runtime-settings.ts).
   const showToolAccess = advanced && !draft && canEditBotField(state.config, bot, "toolScope");
   const showParallel = advanced && !draft && canEditBotField(state.config, bot, "maxConcurrentThreads");
-  if (!showPrimaryUi && !showApproval && !showContactUi && !showOutboundUi && !showOwnerPermissions && !showToolAccess && !showParallel) return null;
+  if (!showPrimaryUi && !showApproval && !showContactUi && !showRecipientsUi && !showDrafts && !showHooks && !showOutboundUi && !showOwnerPermissions && !showToolAccess && !showParallel) return null;
 
   const approvalSelector = showApproval && (
     <ApprovalModeSelector
@@ -129,7 +158,7 @@ export function PermissionsSection({
       onManageCommandAllowlist={advanced && !draft && ownerOrAdmin === true ? () => setCommandAllowlistTarget({ botId: bot.id, botName: bot.name }) : undefined}
     />
   );
-  const approvalRows = (showApproval || showContactUi) ? (
+  const approvalRows = (showApproval || showContactUi || showRecipientsUi || showHooks || showDrafts) ? (
     <>
       {showApproval && (
         <DescribedRow
@@ -141,6 +170,22 @@ export function PermissionsSection({
         >
           <ProposalStatus bot={bot} />
           {advanced && approvalSelector}
+        </DescribedRow>
+      )}
+      {showApproval && advanced && (
+        <DescribedRow
+          label={t("botPanel.permissions.proactive")}
+          help={t("botPanel.permissions.proactiveHelp")}
+          description={t(`botPanel.permissions.proactive.${proactiveMode}.hint`)}
+          rowId="proactiveMode"
+        >
+          <PillSelect<ProactiveMode>
+            value={proactiveMode}
+            ariaLabel={t("botPanel.permissions.proactive")}
+            disabled={Boolean(bot.busy)}
+            onChange={setProactiveMode}
+            options={PROACTIVE_MODES.map((mode) => ({ value: mode, label: t(`botPanel.permissions.proactive.${mode}`) }))}
+          />
         </DescribedRow>
       )}
       {showContactUi && (
@@ -158,6 +203,16 @@ export function PermissionsSection({
           />
         </DescribedRow>
       )}
+      {showRecipientsUi && <AllowedRecipientsRow key={bot.id} bot={bot} />}
+      {showDrafts && (
+        <SwitchRow
+          label={t("botPanel.emailDrafts")}
+          description={bot.emailDrafts === false ? t("botPanel.emailDrafts.off") : t("botPanel.emailDrafts.help")}
+          checked={bot.emailDrafts !== false}
+          onChange={() => patch({ emailDrafts: bot.emailDrafts === false })}
+        />
+      )}
+      {showHooks && <LifecycleHooksRow key={`hooks:${bot.id}`} botId={bot.id} />}
     </>
   ) : null;
 
@@ -244,7 +299,7 @@ export function PermissionsSection({
           setFullAccessTarget(null);
           if (!target) return;
           if (orgFullAccess !== undefined) {
-            dispatch({ type: "updateBot", botId: target, patch: { approvalMode: "full", confirmFullAccess: true, organizationFullAccess: true } });
+            grantOrgFull(target, true);
             return;
           }
           dispatch({ type: "updateBot", botId: target, patch: { approvalMode: "full", confirmFullAccess: true, applyToAllThreads: allThreads } });

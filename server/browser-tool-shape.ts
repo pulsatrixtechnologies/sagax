@@ -38,16 +38,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Remove harness-owned parameters from every advertised tool schema. */
+/** agent-browser fetches a `url` given to agent_browser_read with its own
+ * HTTP client, around the browser and its egress gate, and ignores every
+ * proxy setting; without one it reads the open tab (OpenMausBot #2930 port). */
+const READ_TOOL = "agent_browser_read";
+export const READ_OPEN_PAGE_ONLY = "agent_browser_read reads the page open in this browser. Open the address with agent_browser_open first, then call agent_browser_read without url.";
+
+export function readsAroundBrowser(params: unknown): boolean {
+  return isRecord(params) && params.name === READ_TOOL && isRecord(params.arguments) && params.arguments.url !== undefined;
+}
+
 export function slimBrowserToolList(result: unknown): unknown {
   if (!isRecord(result) || !Array.isArray(result.tools)) return result;
   const tools = (result.tools as unknown[]).map((tool) => {
     if (!isRecord(tool) || !isRecord(tool.inputSchema)) return tool;
     const schema = tool.inputSchema as NonNullable<Tool["inputSchema"]>;
+    const hidden = (name: string) => HARNESS_OWNED_BROWSER_PARAMS.has(name) || (tool.name === READ_TOOL && name === "url");
     const properties = isRecord(schema.properties)
-      ? Object.fromEntries(Object.entries(schema.properties).filter(([name]) => !HARNESS_OWNED_BROWSER_PARAMS.has(name)))
+      ? Object.fromEntries(Object.entries(schema.properties).filter(([name]) => !hidden(name)))
       : schema.properties;
     const required = Array.isArray(schema.required)
-      ? schema.required.filter((name) => typeof name !== "string" || !HARNESS_OWNED_BROWSER_PARAMS.has(name))
+      ? schema.required.filter((name) => typeof name !== "string" || !hidden(name))
       : schema.required;
     return { ...tool, inputSchema: { ...schema, ...(properties === undefined ? {} : { properties }), ...(required === undefined ? {} : { required }) } };
   });

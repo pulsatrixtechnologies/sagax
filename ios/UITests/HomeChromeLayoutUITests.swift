@@ -30,6 +30,10 @@ final class HomeChromeLayoutUITests: XCTestCase {
     private func launch(_ extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += [
+            // no pairing left by an earlier run: the demo opens only on a
+            // phone that is not paired, and a parity run of an older build
+            // could leave one (a home with no bots)
+            "-reset-pairings",
             "-demo", "-demo-clock", "1791000000",
             "-companion.prefs.updatesButton", "YES",
         ] + extra

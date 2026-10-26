@@ -10,6 +10,8 @@
 // i18n; the phones read those fields). APPROVAL_EN mirrors
 // src/locales/en.json exactly; a test holds them together.
 
+import { connectorWriteKind, type ConnectorWriteKind } from "./engine-connectors.ts";
+
 export type ApprovalTranslate = (key: string, vars?: Record<string, string | number>) => string;
 export interface ApprovalWords {
   t: ApprovalTranslate;
@@ -20,6 +22,14 @@ export interface ApprovalWords {
 export const APPROVAL_EN: Readonly<Record<string, string>> = Object.freeze({
   "approval.card.allowTo": "Allow {name} to {action}?",
   "approval.card.allowToUnnamed": "Allow this bot to {action}?",
+  "approval.connector.calendarCancel": "cancel a calendar event",
+  "approval.connector.calendarInvite": "send a calendar invitation",
+  "approval.connector.calendarRespond": "answer a calendar invitation",
+  "approval.connector.filesWrite": "write to {store}",
+  "approval.connector.mailAutoReply": "turn on an automatic reply",
+  "approval.connector.mailSend": "send an email",
+  "approval.connector.teamsChat": "start a Teams chat",
+  "approval.connector.teamsPost": "post a message in Teams",
   "approval.line.destructive": "Deletes data.",
   "approval.line.destructiveIn": "Deletes data in {product}.",
   "approval.line.execute": "Runs an action.",
@@ -78,6 +88,8 @@ export const APPROVAL_EN: Readonly<Record<string, string>> = Object.freeze({
   "approval.rule.postToRoom": "Post in {target}",
   "approval.rule.tool": "{action}, with any details",
   "approval.summary.dateRange": "{from} to {to}",
+  "approval.summary.more": "{who} and {count} more",
+  "approval.summary.to": "to {who}",
   "approval.tool.action": "an action",
   "approval.tool.changeRoutine": "change a routine",
   "approval.tool.deleteFile": "delete a file",
@@ -86,6 +98,8 @@ export const APPROVAL_EN: Readonly<Record<string, string>> = Object.freeze({
   "approval.tool.fetchWebPage": "fetch a web page",
   "approval.tool.readFile": "read a file",
   "approval.tool.runCommand": "run a command",
+  "approval.tool.runCommandCloud": "run a command on your cloud computer",
+  "approval.tool.runCommandComputer": "run a command on your computer",
   "approval.tool.scheduleRoutine": "schedule a routine",
   "approval.tool.searchWeb": "search the web",
   "approval.tool.takeAction": "take an action",
@@ -443,6 +457,58 @@ function prettyJson(args: Record<string, unknown> | undefined, text: string | un
   return text && isTechnicalText(text) ? text : undefined;
 }
 
+/** "other-write" (an engine connector's call that names no known action)
+ * keeps the generic wording; it still always asks. */
+const CONNECTOR_ACTION: Record<Exclude<ConnectorWriteKind, "other-write">, string> = {
+  "mail-send": "approval.connector.mailSend",
+  "mail-auto-reply": "approval.connector.mailAutoReply",
+  "teams-post": "approval.connector.teamsPost",
+  "teams-chat": "approval.connector.teamsChat",
+  "calendar-invite": "approval.connector.calendarInvite",
+  "calendar-cancel": "approval.connector.calendarCancel",
+  "calendar-respond": "approval.connector.calendarRespond",
+  "files-write": "approval.connector.filesWrite",
+};
+
+const RECIPIENT_KEYS = ["to", "cc", "bcc", "toRecipients", "ccRecipients", "recipients", "attendees", "requiredAttendees", "optionalAttendees", "members", "participants", "emails"];
+const SHOWN_RECIPIENTS = 3;
+
+/** One recipient as a person reads it. The address always shows: a
+ * display name is the sender's to choose ("Ana Tremblay (GOX)" can sit on
+ * anyone's address), so it only ever comes beside the address, and a name
+ * that itself looks like an address or a domain is dropped. */
+function recipientName(value: unknown): string | undefined {
+  const clean = (text: unknown) => (typeof text === "string" && text.trim() && text.length <= 120 ? text.trim().replace(/\s+/g, " ") : undefined);
+  if (typeof value === "string") return clean(value);
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const inner = record.emailAddress && typeof record.emailAddress === "object" ? record.emailAddress as Record<string, unknown> : undefined;
+  const address = [record.email, record.address, inner?.address, record.mail, record.userPrincipalName].map(clean).find(Boolean);
+  const name = [record.name, record.displayName, inner?.name].map(clean).find(Boolean);
+  if (!address) return name ? `${name} (?)` : undefined;
+  if (!name || name.toLowerCase() === address.toLowerCase() || /[@<>]|\b[\w-]+\.[a-z]{2,}\b/i.test(name)) return address;
+  return `${name} <${address}>`;
+}
+
+/** "to Ana, bo@example.com and 2 more": who a mail, a post or an
+ * invitation reaches, from the call's own arguments. */
+function recipientsOf(args: Record<string, unknown> | undefined, words: ApprovalWords): string | undefined {
+  if (!args) return undefined;
+  const names: string[] = [];
+  for (const key of RECIPIENT_KEYS) {
+    const value = args[key];
+    const list = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[;,]/) : [];
+    for (const item of list) {
+      const name = recipientName(item);
+      if (name && !names.includes(name)) names.push(name);
+    }
+  }
+  if (!names.length) return undefined;
+  const shown = names.slice(0, SHOWN_RECIPIENTS).join(", ");
+  const who = names.length > SHOWN_RECIPIENTS ? words.t("approval.summary.more", { who: shown, count: names.length - SHOWN_RECIPIENTS }) : shown;
+  return words.t("approval.summary.to", { who });
+}
+
 /** The whole reading of one permission ask. `input` is the card's full
  * JSON when the server sent it, else its (maybe truncated) subtitle. */
 export function describeApproval(
@@ -487,6 +553,18 @@ export function describeApproval(
           : undefined;
   const risk = riskFor(op, hints, builtin);
   const summary = summarizeArgs(args, text, now, words);
+  const connector = connectorWriteKind(tool);
+  if (connector && connector !== "other-write") {
+    const store = /onedrive/i.test(tool) ? "OneDrive" : "SharePoint";
+    const action = words.t(CONNECTOR_ACTION[connector], { store });
+    const who = recipientsOf(args, words);
+    const joined = [summary, who].filter(Boolean).join(", ") || undefined;
+    // a connector named for what it acts on (Grok's sharepoint, Microsoft
+    // Teams): "write to SharePoint", not "write to SharePoint in Sharepoint"
+    const last = product?.split(/\s+/).pop()?.toLowerCase();
+    const named = Boolean(last && action.toLowerCase().includes(last));
+    return { action, ...(product && !named ? { product } : {}), summary: joined, risk, server: parsed.server, argsJson };
+  }
   if (!op) {
     // a tool named for itself (flow, memory): "use flow"
     return { action: tokens.join(" ") || parsed.name, verbless: true, product, summary, risk, server: parsed.server, argsJson };
@@ -496,8 +574,10 @@ export function describeApproval(
     ? resourceRaw?.replace(/[/_-]+/g, " ").trim().toLowerCase() || undefined
     : resourcePhrase(resourceRaw, op, words);
   // run_command / exec_shell: "run a command", not "run the command action"
+  // 2026-10-20 (JC): where it runs, in the person's words: their cloud
+  // computer (sagax-environment), their own computer (sagax-desktop)
   const action = op === "run" && resource && RUN_COMMAND_NOUN.test(resource)
-    ? words.t("approval.tool.runCommand")
+    ? words.t(parsed.server === "sagax-environment" ? "approval.tool.runCommandCloud" : parsed.server === "sagax-desktop" ? "approval.tool.runCommandComputer" : "approval.tool.runCommand")
     : resource
     ? words.t(`approval.verb.${op}`, { resource })
     : words.t(`approval.verb.${op}.bare`);
@@ -542,15 +622,6 @@ const BUILTIN_ACTION: Record<string, string> = {
   tool: "approval.tool.useTool",
 };
 
-const COMPOSIO_TOOL = /^[A-Z][A-Z0-9]+_([A-Z0-9_]+)$/;
-/** A Composio slug as a verb phrase: LINEAR_CREATE_LINEAR_COMMENT is
- * "create linear comment". */
-export function composioActionPhrase(tool: string): string | undefined {
-  const match = COMPOSIO_TOOL.exec(tool);
-  if (!match) return undefined;
-  return match[1]!.replace(/_+/g, " ").trim().toLowerCase() || undefined;
-}
-
 /** The verb phrase after "wants to" / "Allow X to": Bash is "run a
  * command", mcp__…__cw_psa_schedule__query is "view the schedule in
  * ConnectWise PSA". Never the raw tool id. */
@@ -559,14 +630,11 @@ export function approvalAction(tool: string | undefined, input: string | undefin
   const builtin = BUILTIN_ACTION[tool];
   if (builtin) return words.t(builtin);
   const { server, name } = parseToolId(tool);
-  const composio = composioActionPhrase(name);
-  if (!server) return composio ?? name.replace(/_/g, " ");
-  // Composio's own slug already names the app: "in Composio" would name the broker
-  if (server === "composio" && composio) return composio;
+  if (!server) return name.replace(/_/g, " ");
   const described = describeApproval(tool, input, hints, now, words);
-  const action = described.action && described.verbless && !composio
+  const action = described.action && described.verbless
     ? words.t("approval.verb.use", { name: described.action })
-    : described.action ?? composio ?? name.replace(/_+/g, " ");
+    : described.action ?? name.replace(/_+/g, " ");
   // Sagax's own built-in servers (sagax-environment, sagax-computer) are the
   // bot itself: "run a command", not "run a command in Sagax Environment"
   const builtinServer = server.startsWith("sagax-");

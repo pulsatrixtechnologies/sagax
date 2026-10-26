@@ -49,7 +49,7 @@ describe("Settings nav groups", () => {
     expect(SECTIONS.map((entry) => entry.id)).toEqual([
       "general", "appearance", "notifications", "credentials", "security",
       "engines",
-      "organization", "computer", "usage", "pages", "backups",
+      "organization", "computer", "usage", "pages", "backups", "import",
       "updates", "experimental",
     ]);
   });

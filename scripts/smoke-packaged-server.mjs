@@ -69,6 +69,10 @@ const [port, webhookPort] = await freePorts(2);
 // Resources/server tree instead of the repo build.
 try {
   cpSync(process.env.SAGAX_SMOKE_DIST ?? join(root, "dist-server"), join(staging, "server"), { recursive: true });
+  // A package.json above the install that says "commonjs" (`npm init -y` in a
+  // home folder) once stopped the Windows server at its first import (port of
+  // OpenMausBot #2800). The smoke runs beneath one so the gate catches it.
+  writeFileSync(join(staging, "package.json"), '{"type":"commonjs"}\n');
   if (browserBundle) cpSync(resolve(browserBundle), join(staging, "browser-engine"), { recursive: true });
 } catch (error) {
   for (const directory of [staging, home]) rmSync(directory, { recursive: true, force: true });

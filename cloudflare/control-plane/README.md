@@ -586,8 +586,8 @@ Before a production deployment, an operator must:
 3. Create the D1 database, replace the all-zero `database_id`, review the pinned
    migrations, and apply them to that database. The committed `wrangler.jsonc`
    keeps the all-zero placeholder on purpose: put the real ID only in your
-   local, uncommitted copy (or inject it at deploy time from a CI secret, as the
-   composio broker deploy does), never in a commit.
+   local, uncommitted copy (or inject it at deploy time from a CI secret),
+   never in a commit.
 4. Complete Cloudflare Email Sending domain onboarding, replace the placeholder
    sender in both `EMAIL_FROM` and `allowed_sender_addresses`, and grant the
    deployment identity access to the binding. The Cloudflare session used while

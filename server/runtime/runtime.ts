@@ -14,7 +14,7 @@ import { composeEnvelope } from "./envelope.ts";
 import { assignmentLevel } from "./level.ts";
 import type { RuntimeStore } from "./store.ts";
 import { awaited, childrenSince, clip, continuations, CUT_TWICE, duration, isTerminal, loopStop, nextGuard, outwardDetail, ownsConversation, path, restartNote, wakeOwner } from "./tree.ts";
-import { DEFAULT_LIMITS, type Assignment, type Assignee, type Clock, type EndResult, type EnqueueRequest, type EnqueueResult, type EnvelopeNames,
+import { DEFAULT_LIMITS, INPUT_REMIND_REPEAT_MS, type Assignment, type Assignee, type Clock, type EndResult, type EnqueueRequest, type EnqueueResult, type EnvelopeNames,
   type EventKind, type InboxItem, type InboxKind, type Level, type Limits, type LiveEdge, type Origin, type Outcome, type Owner,
   type Reply, type Requester, type RunInput, type RunResult, type StatusView, type TurnRunner } from "./types.ts";
 
@@ -46,9 +46,17 @@ export interface BeginRequest {
   reply?: Reply;
   /** The room goal run this turn is a step of (types.ts Assignment.goalRunId). */
   goalRunId?: string;
+  /** Who the tree acts for (Assignment.person). */
+  person?: string;
 }
 
 const BRIEF_MAX = 12_000;
+/** Two trees that send the same brief to the same teammate within this
+ * window send one request: the later one joins the live one. */
+const JOIN_WINDOW_MS = 15 * 60_000;
+/** A joined request waits this long at most, then runs on its own: no wait
+ * between trees can last (or loop) forever. */
+const JOIN_WAIT_MS = 30 * 60_000;
 const RESULT_MAX = 12_000;
 const DETAIL_MAX = 400;
 
@@ -74,6 +82,9 @@ export class Runtime {
   private closing = false;
   private ticking = false;
   private readonly turns = new Map<string, LiveTurn>();
+  /** Reminders already sent per parked assignment (in memory: a restart
+   * starts the wait window over anyway, see since()). */
+  private readonly reminded = new Map<string, number>();
   /** Wall-clock activity per root seen through progress(): a turn that keeps
    * reporting tool calls keeps its tree out of the stall window without a
    * row write per call. */
@@ -165,6 +176,7 @@ export class Runtime {
       level: req.level, levelSource: "own", executions: 1, restarts: 0, createdAt: now, startedAt: now, lastActivityAt: now,
       result: "", rework: false, budgets: { since: now, requests: 0, executions: 1, wakes: 0 }, version: 1,
       ...(req.goalRunId ? { goalRunId: req.goalRunId } : {}),
+      ...(req.person ? { person: req.person } : {}),
     };
     this.store.transaction(() => {
       this.store.insert(root, { kind: "enqueued", at: now, detail: "queued: root" });
@@ -223,12 +235,14 @@ export class Runtime {
     if (req.parentId && !parent) return refuse("The requesting turn no longer exists");
     if (parent && parent.status !== "running") return refuse("The requesting turn is not running");
     const brief = clip(req.brief, BRIEF_MAX);
-    const mode = req.mode ?? "work";
     const lineage = parent ? path(this.store, parent) : [];
     const root = lineage[0];
     const target = req.assignee;
-    // Work cannot go back up its own tree: results return by themselves.
-    if (lineage.some(a => a.assignee.botId === target.botId &&
+    const mode = req.mode ?? "work";
+    // Work cannot go back up its own tree: results return by themselves. A
+    // consultation can: the teammate asks the bot that sent it the work a
+    // question and gets the answer, nothing is handed back.
+    if (mode !== "consult" && lineage.some(a => a.assignee.botId === target.botId &&
       (!a.assignee.destination.groupId || !target.destination.groupId || a.assignee.destination.groupId === target.destination.groupId))) {
       return refuse("Cannot assign work back to an ancestor; results return automatically");
     }
@@ -255,18 +269,62 @@ export class Runtime {
       reply: req.reply ?? (mode === "notify" ? "none" : "resume"), brief, ...(req.doneWhen ? { doneWhen: req.doneWhen } : {}),
       status: "queued", level, levelSource: source, executions: 0, restarts: 0, createdAt: now, lastActivityAt: now, result: "",
       rework: Boolean(req.rework), ...(req.approved !== undefined ? { approved: req.approved } : {}),
-      ...(req.batchKey !== undefined ? { batchKey: req.batchKey } : {}), version: 1,
+      ...(req.batchKey !== undefined ? { batchKey: req.batchKey } : {}), ...(req.relay ? { relay: true } : {}), version: 1,
     };
+    const person = root ? root.person : req.person;
+    if (person) node.person = person;
     if (!parent) { node.rootId = node.id; node.budgets = { since: now, requests: 0, executions: 0, wakes: 0 }; }
     const problem = this.safe("validate", () => this.runner.validate(node, parent));
     if (this.lastThrew) return refuse("The host could not validate the request now");
     if (problem) return refuse(problem);
+    const leader = parent && !req.rework ? this.joinable(node, parent) : undefined;
+    if (leader) node.joins = leader.id;
     this.store.transaction(() => {
-      this.store.insert(node, { kind: "enqueued", at: now, detail: "queued" });
+      this.store.insert(node, { kind: "enqueued", at: now, detail: leader ? `queued: joined ${leader.id}` : "queued" });
       if (root?.budgets) { root.budgets.requests += 1; this.store.update(root); }
     });
     this.touch(node, ...root ? [root] : []);
     return { ok: true, assignment: node, duplicate: false };
+  }
+
+  /** The live request of another tree this one can join: same mode, brief,
+   * teammate and room, for the same person, at the same level, sent within
+   * JOIN_WINDOW_MS, itself running its own turn. Never one in this tree. */
+  private joinable(node: Assignment, parent: Assignment): Assignment | undefined {
+    const now = this.clock.now();
+    if (!node.person) return undefined;
+    return this.store.all({ nonTerminal: true }).find(c =>
+      c.id !== node.id && c.joins === undefined && c.parentId !== undefined && c.rootId !== parent.rootId &&
+      c.mode === node.mode && c.brief === node.brief && c.assignee.botId === node.assignee.botId &&
+      c.assignee.destination.groupId === node.assignee.destination.groupId && c.level === node.level &&
+      c.person === node.person && now - c.createdAt <= JOIN_WINDOW_MS);
+  }
+
+  /** A joined request settles with its leader's answer once that one
+   * completed. A leader that is gone, ended any other way (stopped, failed,
+   * expired: its own tree's fate), or still out after JOIN_WAIT_MS leaves it
+   * to run on its own. True while it still waits or once it settled. */
+  private followLeader(n: Assignment): boolean {
+    if (n.joins === undefined) return false;
+    const leader = this.store.get(n.joins);
+    if (leader && !isTerminal(leader) && this.clock.now() - n.createdAt <= JOIN_WAIT_MS) return true;
+    if (leader?.status === "completed") {
+      n.result = leader.result;
+      if (leader.evidence) n.evidence = leader.evidence; else delete n.evidence;
+      this.settle(n, "completed", leader.outcome ?? "done", leader.outcomeDetail);
+      return true;
+    }
+    delete n.joins;
+    this.store.update(n, { kind: "admitted", at: this.clock.now(), detail: "the joined request did not answer: runs on its own" });
+    this.touch(n);
+    return false;
+  }
+
+  /** Whether a joined request still waits on a live leader (its windows are the leader's). */
+  private waitsOnLeader(n: Assignment): boolean {
+    if (n.joins === undefined || isTerminal(n)) return false;
+    const leader = this.store.get(n.joins);
+    return Boolean(leader && !isTerminal(leader) && this.clock.now() - n.createdAt <= JOIN_WAIT_MS);
   }
 
   /** Expiry and stall checks, reports, waiting→resume, admission and
@@ -291,13 +349,18 @@ export class Runtime {
     for (const snapshot of [...live].sort((a, b) => b.depth - a.depth)) {
       const n = this.store.get(snapshot.id);
       if (!n || isTerminal(n)) continue;
-      // A node that continues in place is not waiting to start: it waits
-      // for what it stopped on (a seat the host holds it for), and that
-      // wait has no clock here.
-      if (n.status === "queued" && !n.continuation && now - this.since(n.lastActivityAt) > this.limits.queueMs) {
+      if (n.status === "queued" && this.waitsOnLeader(n)) {
+        // A joined request waits on its leader, whose own windows apply.
+      } else if (n.status === "queued" && !n.continuation && now - this.since(n.lastActivityAt) > this.limits.queueMs) {
+        // A node that continues in place is not waiting to start: it waits
+        // for what it stopped on (a seat the host holds it for), and that
+        // wait has no clock here.
         this.cancelTree(n, n.executions > 0 ? "not resumed" : "never started", "failed", "expired");
       } else if (n.status === "needs_input" && this.inputExpires(n) && now - this.since(n.lastActivityAt) > this.limits.inputWaitMs) {
+        this.reminded.delete(n.id);
         this.cancelTree(n, "the person did not answer", "failed", "expired");
+      } else if (n.status === "needs_input") {
+        this.remindIfDue(n, now);
       } else if (n.status === "running") {
         const turn = this.turns.get(n.id);
         if (turn && mono - turn.activeAt > this.limits.turnStallMs) {
@@ -327,6 +390,7 @@ export class Runtime {
       if (now - anchor <= this.limits.stallMs) continue;
       const tree = this.store.all({ rootId });
       if (tree.some(n => n.status === "needs_input" || (n.status === "queued" && n.continuation !== undefined))) continue;
+      if (tree.some(n => this.waitsOnLeader(n))) continue;
       this.store.update(root, { kind: "stalled", at: now, detail: `no progress for ${duration(now - anchor)}` });
       this.cancelTree(root, `no progress for ${duration(this.limits.stallMs)}`, "failed", "stalled");
     }
@@ -360,6 +424,7 @@ export class Runtime {
       if (snapshot.status !== "queued" && snapshot.status !== "resume") continue;
       const n = this.store.get(snapshot.id);
       if (!n || (n.status !== "queued" && n.status !== "resume")) continue;
+      if (n.status === "queued" && this.followLeader(n)) continue;
       const thread = n.assignee.destination.threadId;
       // Same-conversation turns never overlap; same-room speakers take turns.
       if (busyThreads.has(thread)) continue;
@@ -572,6 +637,7 @@ export class Runtime {
     const n = this.store.get(id);
     if (!n || n.status !== "needs_input") return false;
     const now = this.clock.now();
+    this.reminded.delete(id);
     n.answer = clip(text, BRIEF_MAX); delete n.question; n.status = "queued"; n.lastActivityAt = now;
     // Time parked was charged to no window: the tree's stall window
     // restarts with the answer, not with the question.
@@ -755,6 +821,17 @@ export class Runtime {
   private renew(root: Assignment, now: number): void {
     root.lastActivityAt = now;
     if (root.budgets) root.budgets = { since: now, requests: 0, executions: 0, wakes: 0 };
+  }
+
+  /** A parked question still unanswered: remind the person after
+   * inputRemindMs, then once a day. The work keeps waiting. */
+  private remindIfDue(n: Assignment, now: number): void {
+    const waited = now - this.since(n.lastActivityAt);
+    const sent = this.reminded.get(n.id) ?? 0;
+    if (waited <= this.limits.inputRemindMs + sent * INPUT_REMIND_REPEAT_MS) return;
+    this.reminded.set(n.id, sent + 1);
+    if (this.reminded.size > 5_000) this.reminded.delete(this.reminded.keys().next().value!);
+    if (this.runner.remind) this.safe("remind", () => this.runner.remind!(n, n.question ?? "", waited));
   }
 
   /** A clock anchor, never before this boot: downtime is nobody's budget. */

@@ -52,9 +52,17 @@ async function boundedJson(response: Response, name: string): Promise<unknown> {
   } finally { await reader.cancel().catch(() => {}); }
 }
 
+/** The stdio proxy always answered 2024-11-05. Over HTTP (harness-mcp-http)
+ * the client's own version is echoed when it is one the route speaks. */
+function negotiatedVersion(params: unknown, supported: readonly string[] | undefined): string {
+  const asked = params && typeof params === "object" ? (params as { protocolVersion?: unknown }).protocolVersion : undefined;
+  return typeof asked === "string" && supported?.includes(asked) ? asked : "2024-11-05";
+}
+
 export async function harnessMcpRequest(
   frame: unknown,
   connection: { url: string; token: string; kind: HarnessMcpKind },
+  options: { protocolVersions?: readonly string[] } = {},
 ): Promise<unknown | undefined> {
   if (!frame || typeof frame !== "object" || Array.isArray(frame)) return failure(null, null, "Invalid request.", -32600);
   const message = frame as { id?: RpcId; jsonrpc?: unknown; method?: unknown; params?: unknown };
@@ -65,7 +73,7 @@ export async function harnessMcpRequest(
   if (message.method === "initialize") return {
     jsonrpc: "2.0", id,
     result: {
-      protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: `openmausbot-${connection.kind}`, version: "1" },
+      protocolVersion: negotiatedVersion(message.params, options.protocolVersions), capabilities: { tools: {} }, serverInfo: { name: `openmausbot-${connection.kind}`, version: "1" },
       ...(INSTRUCTIONS[connection.kind] ? { instructions: INSTRUCTIONS[connection.kind] } : {}),
     },
   };

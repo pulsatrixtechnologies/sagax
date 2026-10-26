@@ -66,6 +66,18 @@ describe("the model a new bot starts on", () => {
     expect(startingModel(configured, instances, { ...solo, autoOffered: false })).toEqual({ kind: "first", selection: { instanceId: "grok", model: "grok-big" } });
   });
 
+  it("keeps Auto when the resolved default is Auto and its engine works (the new-bot default)", () => {
+    // The server hands a new bot its default on Auto (autoNewBotSelection); the
+    // engine works, so the bot opens on Auto rather than pinned to one model.
+    const auto = { instanceId: "claude", model: "claude-big", auto: true as const };
+    expect(startingModel(auto, [engine("claude"), engine("grok")], solo)).toEqual({ kind: "default", selection: auto });
+  });
+
+  it("leaves an explicit pin pinned: an advanced default is never forced to Auto", () => {
+    // A template that pins a model carries no auto flag; it stays pinned.
+    expect(startingModel(configured, [engine("claude"), engine("grok")], solo)).toEqual({ kind: "default", selection: configured });
+  });
+
   it("says none works and keeps the default", () => {
     const instances = [engine("claude", {}, { authenticated: false }), engine("grok", {}, { state: "unavailable" })];
     expect(startingModel(configured, instances, solo)).toEqual({ kind: "none", selection: configured });

@@ -81,7 +81,7 @@ struct BotPanelFallback: View {
     private var addMenu: some View {
         Menu {
             ForEach(candidates, id: \.instanceId) { instance in
-                Button(instance.displayName ?? instance.instanceId) { save(BotFallbackRules.adding(instance, to: chain)) }
+                Button(HumanID.readable(instance.displayName, instance.instanceId, or: String(localized: "Removed engine"))) { save(BotFallbackRules.adding(instance, to: chain)) }
             }
         } label: {
             HStack(spacing: 6) {

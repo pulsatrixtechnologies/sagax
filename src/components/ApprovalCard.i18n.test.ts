@@ -56,10 +56,10 @@ describe("German approval cards", () => {
     // one card per request (2026-10-15): the composer's box asks, the
     // thread keeps a waiting line
     expect(markup).toContain("data-approval-waiting");
-    expect(markup).not.toContain("Darf Mochi einen Befehl ausführen?");
+    expect(markup).not.toContain("Mochi möchte einen Befehl ausführen");
     const { pending } = commandApproval();
     const strip = renderToStaticMarkup(createElement(PendingApprovalPanel, { pending, count: 1, index: 0, bot: { name: "Mochi" } as Bot }));
-    expect(strip).toContain("Darf Mochi einen Befehl ausführen?");
+    expect(strip).toContain("Mochi möchte einen Befehl ausführen");
   });
 
   it("renders a denied command approval in German", () => {
@@ -84,7 +84,7 @@ describe("German approval cards", () => {
     expect(markup).toContain('aria-label="Ausstehende Freigabe"');
     expect(markup).toContain("2 von 3");
     // the human title, not the old "command approval requested" label
-    expect(markup).toContain("Darf dieser Bot einen Befehl ausführen?");
+    expect(markup).toContain("Möchte einen Befehl ausführen");
     expect(markup).toContain('aria-label="Details zur Freigabe prüfen"');
   });
 
@@ -114,7 +114,7 @@ describe("German approval cards", () => {
       }),
     ));
 
-    expect(markup).toContain("Ausführung abbrechen");
+    expect(markup).not.toContain("Ausführung abbrechen");
     expect(markup).toContain("Ablehnen");
     expect(markup).toContain("Immer erlauben");
     expect(markup).toContain("Einmal erlauben");
@@ -172,10 +172,10 @@ describe("Brazilian Portuguese approval cards", () => {
     // one card per request (2026-10-15): the composer's box asks, the
     // thread keeps a waiting line
     expect(markup).toContain("data-approval-waiting");
-    expect(markup).not.toContain("Deixar Mochi executar um comando?");
+    expect(markup).not.toContain("Mochi quer executar um comando");
     const { pending } = commandApproval();
     const strip = renderToStaticMarkup(createElement(PendingApprovalPanel, { pending, count: 1, index: 0, bot: { name: "Mochi" } as Bot }));
-    expect(strip).toContain("Deixar Mochi executar um comando?");
+    expect(strip).toContain("Mochi quer executar um comando");
   });
 
   it("renders a denied command approval in Brazilian Portuguese", () => {
@@ -199,7 +199,7 @@ describe("Brazilian Portuguese approval cards", () => {
 
     expect(markup).toContain('aria-label="Aprovação pendente"');
     expect(markup).toContain("2 de 3");
-    expect(markup).toContain("Deixar este bot executar um comando?");
+    expect(markup).toContain("Quer executar um comando");
     expect(markup).toContain('aria-label="Detalhes da aprovação para revisar"');
   });
 
@@ -237,7 +237,7 @@ describe("Brazilian Portuguese approval cards", () => {
       }),
     ));
 
-    expect(markup).toContain("Cancelar execução");
+    expect(markup).not.toContain("Cancelar execução");
     expect(markup).toContain("Negar");
     expect(markup).toContain("Sempre permitir");
     expect(markup).toContain("Permitir uma vez");

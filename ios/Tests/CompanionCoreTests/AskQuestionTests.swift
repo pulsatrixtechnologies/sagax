@@ -158,4 +158,25 @@ final class AskQuestionTests: XCTestCase {
         XCTAssertEqual(AskQuestionAnswer.withoutPreamble(try XCTUnwrap(card.answeredText)),
                        "Q: Which model?\nA: Gemini")
     }
+
+    func testReadsBackWhatEachQuestionWasAnswered() {
+        let model = AskQuestion(question: "Which model?", options: [AskQuestionOption(label: "Gemini"), AskQuestionOption(label: "Claude")])
+        let style = AskQuestion(question: "Which style?", options: [AskQuestionOption(label: "Terse")])
+        let answer = AskQuestionAnswer.format(questions: [model, style], answers: [["Gemini", "Claude"], ["Terse"]])
+        let read = AskQuestionAnswer.byQuestion(answer, questions: [model, style])
+        XCTAssertEqual(read["Which model?"], "Gemini, Claude")
+        XCTAssertEqual(read["Which style?"], "Terse")
+        XCTAssertEqual(AskQuestionAnswer.byQuestion("Tea", questions: [model])["Which model?"], "Tea")
+    }
+
+    func testPicksInAnAnswerMatchTheDesktop() {
+        XCTAssertEqual(AskQuestionAnswer.picks(in: "Pro", labels: ["Free", "Pro"]).picked, ["Pro"])
+        let several = AskQuestionAnswer.picks(in: "Lint, only on main", labels: ["Lint", "Tests"])
+        XCTAssertEqual(several.picked, ["Lint"])
+        XCTAssertEqual(several.rest, "only on main")
+        let comma = AskQuestionAnswer.picks(in: "Yes, pause them, Tests", labels: ["Yes, pause them", "Yes", "Tests"])
+        XCTAssertEqual(comma.picked, ["Yes, pause them", "Tests"])
+        XCTAssertEqual(comma.rest, "")
+        XCTAssertEqual(AskQuestionAnswer.picks(in: "Enterprise", labels: ["Free"]).rest, "Enterprise")
+    }
 }

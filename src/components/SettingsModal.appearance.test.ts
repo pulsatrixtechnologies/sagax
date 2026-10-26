@@ -16,6 +16,10 @@ const fixture = vi.hoisted(() => ({
   setShowThreads: vi.fn(),
   setThreadsLocation: vi.fn(),
   showRunCard: true,
+  showSuggestions: true,
+  showAllHistory: false,
+  setShowSuggestions: vi.fn(),
+  setShowAllHistory: vi.fn(),
   setShowRunCard: vi.fn(),
   sidebarDensity: "comfortable" as "comfortable" | "compact" | "icons",
   setSidebarDensity: vi.fn(),
@@ -48,6 +52,12 @@ vi.mock("@/lib/thread-preferences", () => ({
   useThreadsLocationChoice: () => "header",
   setThreadsLocation: fixture.setThreadsLocation,
 }));
+vi.mock("@/lib/panel-visibility", () => ({
+  useShowSuggestions: () => fixture.showSuggestions,
+  setShowSuggestions: fixture.setShowSuggestions,
+  useShowAllHistory: () => fixture.showAllHistory,
+  setShowAllHistory: fixture.setShowAllHistory,
+}));
 vi.mock("@/lib/run-card-preferences", () => ({
   useShowRunCard: () => fixture.showRunCard,
   setShowRunCard: fixture.setShowRunCard,
@@ -71,6 +81,7 @@ vi.mock("@/lib/notification-preferences", () => {
     persistentNotifications: local("omb-notification-persistent"),
     dockBadge: local("omb-dock-badge"),
     nudgeShake: local("omb-nudge-shake"),
+    approvalChime: local("omb-approval-chime"),
     useLocalSwitch: (choice: { enabled: () => boolean }) => choice.enabled(),
   };
 });
@@ -96,6 +107,8 @@ beforeEach(() => {
   fixture.section = "appearance";
   fixture.showThreads = true;
   fixture.showRunCard = true;
+  fixture.showSuggestions = true;
+  fixture.showAllHistory = false;
   fixture.sidebarDensity = "comfortable";
   fixture.notificationSounds = true;
   fixture.nudgeSound = true;
@@ -116,10 +129,25 @@ afterEach(() => {
 const render = () => renderToStaticMarkup(createElement(SettingsModal));
 
 describe("Settings → Appearance", () => {
+  it("has the Suggestions and All history switches wired to the panel preferences", () => {
+    const html = render();
+    expect(html).toContain("Show suggestions");
+    expect(html).toContain("Show All history");
+    const suggestions = fixture.switches.find((props) => props["aria-label"] === "Show the Suggestions card in the bot panel")!;
+    expect(suggestions.checked).toBe(true);
+    suggestions.onClick!({} as never);
+    expect(fixture.setShowSuggestions).toHaveBeenCalledWith(false);
+    const history = fixture.switches.find((props) => props["aria-label"] === "Show the All history row in the bot panel")!;
+    expect(history.checked).toBe(false);
+    history.onClick!({} as never);
+    expect(fixture.setShowAllHistory).toHaveBeenCalledWith(true);
+  });
+
   it("groups skins, thread visibility, and tool-call display with preservation copy", () => {
     const html = render();
     expect(html).toContain('<option value="appearance" selected="">Appearance</option>');
-    expect(html).toContain("Midnight");
+    // the skin families (2026-10-19): Midnight is Studio's Neutral variant
+    expect(html).toContain('data-skin-family="studio"');
     // one choice for whether and where threads show (2026-10-14)
     expect(html).toContain('aria-label="Conversation threads"');
     expect(html).not.toContain('aria-label="Show threads"');
@@ -136,8 +164,8 @@ describe("Settings → Appearance", () => {
   it("is laid out as Grok Bot's pages: grey headings, compact rows, pill menus, no help text", () => {
     const html = render();
     const groups = [...html.matchAll(/data-settings-group="([^"]+)"/g)].map((match) => match[1]);
-    expect(groups).toEqual(["interface", "skin", "backgroundEffects", "conversation", "sidebar", "desktop"]);
-    for (const heading of ["Interface", "Skin", "Background effects", "Conversations", "Sidebar", "Desktop"]) expect(html).toContain(`>${heading}</h3>`);
+    expect(groups).toEqual(["interface", "skin", "backgroundEffects", "conversation", "sidebar", "mascots", "accessibility", "desktop"]);
+    for (const heading of ["Interface", "Skin", "Background effects", "Conversations", "Sidebar", "Mascots", "Accessibility", "Desktop"]) expect(html).toContain(`>${heading}</h3>`);
     // no native select on the page itself, only the narrow-window section menu
     const page = html.slice(html.indexOf('data-settings-group="interface"'));
     expect(page).not.toContain("<select");
@@ -299,7 +327,7 @@ describe("Settings → Appearance", () => {
     expect(html).not.toContain('aria-label="Choose sidebar density"');
     expect(html).not.toContain('aria-label="Show tool calls in chat"');
     expect(html).not.toContain('aria-label="Show unconfigured providers"');
-    expect(html).not.toContain("Midnight");
+    expect(html).not.toContain('data-skin-family="studio"');
   });
 
   it("makes local appearance available remotely without exposing server settings", () => {
@@ -312,7 +340,7 @@ describe("Settings → Appearance", () => {
     expect(html).not.toContain('<option value="connections">');
     expect(html).not.toContain('<option value="engines">');
     expect(html).not.toContain('<option value="backups">');
-    expect(html).toContain("Midnight");
+    expect(html).toContain('data-skin-family="studio"');
     expect(html).toContain('aria-label="Conversation threads"');
     // this computer's notification switches stay reachable from a remote page
     expect(html).toContain('<option value="notifications">Notifications</option>');
@@ -378,7 +406,7 @@ describe("Settings → Appearance", () => {
     const html = render();
     expect(html).toContain('<option value="organization" selected="">Organization</option>');
     fixture.section = "appearance";
-    expect(render()).toContain("Midnight");
+    expect(render()).toContain('data-skin-family="studio"');
   });
 });
 

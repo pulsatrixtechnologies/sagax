@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import type { TriggerSourceConfig, TriggerSourceType } from "../shared/trigger-sources.ts";
+import { TRIGGER_CATALOG_VERSION, type TriggerSourceConfig, type TriggerSourceType } from "../shared/trigger-sources.ts";
 import {
   handshakeAfterAuth,
   handshakeBeforeAuth,
@@ -265,5 +265,145 @@ describe("filters", () => {
     const sample = sampleSourceEvent(own);
     expect(sample).toMatchObject({ kind: "ci.failed", fields: { repo: "acme/web" } });
     expect(matchSourceFilters(own, sample).match).toBe(true);
+  });
+});
+
+describe("parity R5: GitHub comments, reviews, threads, assignment and updates", () => {
+  const gh = (name: string, payload: unknown) => only(normalizeSource("github", request(payload, { "x-github-event": name })));
+  const base = { repository: { full_name: "acme/api" }, sender: { login: "octocat" }, pull_request: githubPr.pull_request };
+
+  it("tells an approval, a change request and a comment review apart", () => {
+    const review = (state: string) => gh("pull_request_review", { ...base, action: "submitted", review: { state, body: "Looks good", user: { login: "hubot" } } });
+    expect(review("approved").event).toMatchObject({ kind: "pr.review_approved", text: "Looks good", fields: { reviewer: "hubot", repo: "acme/api" } });
+    expect(review("changes_requested").event.kind).toBe("pr.review_changes_requested");
+    expect(review("commented").event.kind).toBe("pr.review_commented");
+    expect(review("APPROVED").event.kind).toBe("pr.review_approved");
+    expect(review("something_new").event.kind).toBe("pr.review_submitted");
+    expect(review("constructor").event.kind).toBe("pr.review_submitted");
+  });
+  it("still runs a trigger that picked “any review” for every review outcome", () => {
+    const approved = gh("pull_request_review", { ...base, action: "submitted", review: { state: "approved", user: { login: "hubot" } } }).event;
+    expect(matchSourceFilters(config("github", { events: ["pr.review_submitted"] }), approved).match).toBe(true);
+    expect(matchSourceFilters(config("github", { events: ["pr.review_approved"] }), approved).match).toBe(true);
+    expect(matchSourceFilters(config("github", { events: ["pr.review_changes_requested"] }), approved).match).toBe(false);
+  });
+  it("normalizes a PR comment, never a plain issue comment", () => {
+    const comment = { action: "created", repository: base.repository, sender: { login: "ana" },
+      issue: { title: "Fix login", html_url: "https://github.com/acme/api/pull/7", labels: [{ name: "bug" }], pull_request: { url: "https://api.github.com/repos/acme/api/pulls/7" } },
+      comment: { body: "Can you add a test?", html_url: "https://github.com/acme/api/pull/7#issuecomment-1" } };
+    expect(gh("issue_comment", comment).event).toMatchObject({
+      kind: "pr.comment", title: "Fix login", text: "Can you add a test?", url: "https://github.com/acme/api/pull/7#issuecomment-1",
+      fields: { repo: "acme/api", sender: "ana", label: ["bug"] },
+    });
+    const onIssue = { ...comment, issue: { ...comment.issue, pull_request: undefined } };
+    expect(normalizeSource("github", request(onIssue, { "x-github-event": "issue_comment" }))).toEqual({ ignored: expect.stringContaining("issue") });
+    expect(normalizeSource("github", request({ ...comment, action: "deleted" }, { "x-github-event": "issue_comment" }))).toEqual({ ignored: expect.stringContaining("deleted") });
+  });
+  it("normalizes an inline review comment", () => {
+    const inline = { ...base, action: "created", comment: { body: "Off by one here", path: "src/a.ts", html_url: "https://github.com/acme/api/pull/7#discussion_r1", user: { login: "hubot" } } };
+    expect(gh("pull_request_review_comment", inline).event).toMatchObject({
+      kind: "pr.review_comment", text: "Off by one here", url: "https://github.com/acme/api/pull/7#discussion_r1", fields: { reviewer: "hubot", branch: "main" },
+    });
+  });
+  it("normalizes a review thread resolved and reopened", () => {
+    const thread = (action: string) => ({ ...base, action, thread: { comments: [{ body: "Rename this", user: { login: "hubot" } }] } });
+    expect(gh("pull_request_review_thread", thread("resolved")).event).toMatchObject({ kind: "pr.thread_resolved", text: "Rename this" });
+    expect(gh("pull_request_review_thread", thread("unresolved")).event.kind).toBe("pr.thread_reopened");
+  });
+  it("normalizes new commits on a PR as an update, and an issue assignment with its assignee", () => {
+    expect(gh("pull_request", { ...githubPr, action: "synchronize" }).event.kind).toBe("pr.updated");
+    const assigned = gh("issues", { action: "assigned", repository: base.repository, sender: { login: "octocat" }, assignee: { login: "ana" },
+      issue: { title: "Crash on save", html_url: "https://github.com/acme/api/issues/9", labels: [] } });
+    expect(assigned.event).toMatchObject({ kind: "issue.assigned", fields: { assignee: ["ana"], repo: "acme/api" } });
+    expect(matchSourceFilters(config("github", { catalog: 2, filters: { assignee: ["ana"] } }), assigned.event).match).toBe(true);
+    expect(matchSourceFilters(config("github", { catalog: 2, filters: { assignee: ["bob"] } }), assigned.event).match).toBe(false);
+  });
+});
+
+describe("parity R7: Sentry archived and unresolved", () => {
+  const sentry = (action: string, issue: Record<string, unknown> = {}) => only(normalizeSource("sentry", request(
+    { action, data: { issue: { title: "TypeError", level: "error", project: { slug: "web" }, ...issue } } }, { "sentry-hook-resource": "issue" },
+  ))).event;
+  it("normalizes archived (and the older ignored) and unresolved", () => {
+    expect(sentry("archived").kind).toBe("issue.archived");
+    expect(sentry("ignored").kind).toBe("issue.archived");
+    expect(sentry("unresolved").kind).toBe("issue.unresolved");
+    expect(normalizeSource("sentry", request({ action: "constructor", data: { issue: {} } }, { "sentry-hook-resource": "issue" }))).toEqual({ ignored: expect.stringContaining("constructor") });
+  });
+  it("keeps the assignee of an assignment", () => {
+    expect(sentry("assigned", { assignedTo: { type: "user", name: "Ana", email: "ana@example.com" } }).fields.assignee).toEqual(["Ana", "ana@example.com"]);
+  });
+});
+
+describe("parity R6: Linear status change and cycle completed", () => {
+  const linear = (payload: unknown) => normalizeSource("linear", request(payload));
+  const issue = { title: "Crash", team: { key: "ENG" }, state: { name: "Done" }, assignee: { name: "Ana" } };
+  it("tells a status change from another update, and a trigger on “updated” still runs for it", () => {
+    const moved = only(linear({ action: "update", type: "Issue", data: issue, updatedFrom: { stateId: "s-1", updatedAt: "x" } })).event;
+    expect(moved).toMatchObject({ kind: "issue.status_changed", fields: { status: "Done", assignee: ["Ana"], team: "ENG" } });
+    expect(matchSourceFilters(config("linear", { events: ["issue.updated"] }), moved).match).toBe(true);
+    expect(matchSourceFilters(config("linear", { events: ["issue.status_changed"], filters: { status: ["done"] } }), moved).match).toBe(true);
+    const renamed = only(linear({ action: "update", type: "Issue", data: issue, updatedFrom: { title: "Old" } })).event;
+    expect(renamed.kind).toBe("issue.updated");
+    expect(matchSourceFilters(config("linear", { events: ["issue.status_changed"] }), renamed).match).toBe(false);
+  });
+  it("normalizes a cycle that just completed, ignores other cycle updates", () => {
+    const done = only(linear({ action: "update", type: "Cycle", url: "https://linear.app/c/1", data: { name: "Sprint 12", number: 12, completedAt: "2026-10-21T00:00:00Z", team: { key: "ENG" } }, updatedFrom: { completedAt: null } })).event;
+    expect(done).toMatchObject({ kind: "cycle.completed", title: "Sprint 12", fields: { team: "ENG" }, url: "https://linear.app/c/1" });
+    expect(only(linear({ action: "update", type: "Cycle", data: { number: 4, completedAt: "2026-10-21T00:00:00Z" }, updatedFrom: { completedAt: null } })).event.title).toBe("Cycle 4");
+    expect(linear({ action: "update", type: "Cycle", data: { name: "Sprint 12" }, updatedFrom: { name: "S12" } })).toEqual({ ignored: expect.stringContaining("Cycle") });
+  });
+});
+
+describe("review fixes: legacy “every event”, bot comments, assignee identities", () => {
+  const gh = (name: string, payload: unknown) => only(normalizeSource("github", request(payload, { "x-github-event": name }))).event;
+  const prComment = (userType: string, senderType = userType) => ({
+    action: "created", repository: { full_name: "acme/api" }, sender: { login: "ci-bot[bot]", type: senderType },
+    issue: { title: "Fix login", pull_request: { url: "x" } }, comment: { body: "Coverage 80%", user: { login: "ci-bot[bot]", type: userType } },
+  });
+
+  it("keeps a trigger saved before the new events on the old set when nothing is checked", () => {
+    const comment = gh("issue_comment", prComment("User"));
+    const opened = gh("pull_request", githubPr);
+    const approved = gh("pull_request_review", { ...githubPr, action: "submitted", review: { state: "approved", user: { login: "hubot" } } });
+    const legacy = config("github");
+    expect(matchSourceFilters(legacy, comment)).toEqual({ match: false, reason: expect.stringContaining("pr.comment") });
+    expect(matchSourceFilters(legacy, opened).match).toBe(true);
+    expect(matchSourceFilters(legacy, approved).match).toBe(true);
+    expect(matchSourceFilters(config("github", { catalog: TRIGGER_CATALOG_VERSION }), comment).match).toBe(true);
+    const cycle = only(normalizeSource("linear", request({ action: "update", type: "Cycle", data: { name: "S1", completedAt: "2026-10-21" }, updatedFrom: { completedAt: null } }))).event;
+    const status = only(normalizeSource("linear", request({ action: "update", type: "Issue", data: { title: "x" }, updatedFrom: { stateId: "s" } }))).event;
+    expect(matchSourceFilters(config("linear"), cycle).match).toBe(false);
+    expect(matchSourceFilters(config("linear"), status).match).toBe(true);
+    const archived = only(normalizeSource("sentry", request({ action: "archived", data: { issue: { title: "x" } } }, { "sentry-hook-resource": "issue" }))).event;
+    expect(matchSourceFilters(config("sentry"), archived).match).toBe(false);
+    expect(matchSourceFilters(config("sentry", { catalog: TRIGGER_CATALOG_VERSION }), archived).match).toBe(true);
+    // Sources without new events are unchanged.
+    const page = only(normalizeSource("pagerduty", request({ event: { id: "e", event_type: "incident.triggered", data: { title: "x" } } }))).event;
+    expect(matchSourceFilters(config("pagerduty"), page).match).toBe(true);
+  });
+
+  it("never runs for a comment a GitHub app or bot posted, unless the trigger opts in", () => {
+    const fromBot = gh("issue_comment", prComment("Bot"));
+    const inline = gh("pull_request_review_comment", { ...githubPr, action: "created", sender: { login: "x[bot]", type: "Bot" }, comment: { body: "nit", user: { login: "x[bot]", type: "Bot" } } });
+    const own = config("github", { catalog: TRIGGER_CATALOG_VERSION });
+    expect(matchSourceFilters(own, fromBot)).toEqual({ match: false, reason: expect.stringContaining("bot") });
+    expect(matchSourceFilters(own, inline).match).toBe(false);
+    expect(matchSourceFilters({ ...own, includeBotComments: true }, fromBot).match).toBe(true);
+    expect(matchSourceFilters(own, gh("issue_comment", prComment("User", "Bot"))).match).toBe(false);
+    expect(matchSourceFilters(own, gh("issue_comment", prComment("User"))).match).toBe(true);
+  });
+
+  it("offers every identity of an assignee to the filter", () => {
+    const linear = only(normalizeSource("linear", request({ action: "update", type: "Issue", data: { title: "x", assignee: { id: "u-1", name: "Ana Roy", displayName: "ana", email: "ana@example.com" } }, updatedFrom: { stateId: "s" } }))).event;
+    expect(linear.fields.assignee).toEqual(["Ana Roy", "ana", "ana@example.com", "u-1"]);
+    for (const value of ["ana@example.com", "Ana Roy", "ana", "u-1"]) {
+      expect(matchSourceFilters(config("linear", { filters: { assignee: [value] } }), linear).match).toBe(true);
+    }
+    const sentry = only(normalizeSource("sentry", request({ action: "assigned", data: { issue: { title: "x", assignedTo: { type: "user", id: "42", name: "Ana Roy", email: "ana@example.com" } } } }, { "sentry-hook-resource": "issue" }))).event;
+    expect(sentry.fields.assignee).toEqual(["Ana Roy", "ana@example.com", "42"]);
+    expect(matchSourceFilters(config("sentry", { filters: { assignee: ["42"] } }), sentry).match).toBe(true);
+    const github = gh("issues", { action: "assigned", repository: { full_name: "a/b" }, assignee: { login: "ana", id: 7 }, issue: { title: "x" } });
+    expect(github.fields.assignee).toEqual(["ana", "7"]);
   });
 });

@@ -111,7 +111,7 @@ describe("OrgDirectory", () => {
     // no card titled with the organization's (host) name
     expect(html).not.toContain(">Example<");
   });
-  it("lists people by email, falling back to a short id", () => {
+  it("lists people by email, falling back to a plain word, never their id", () => {
     const html = render({
       org: { name: "Example" },
       people: [
@@ -123,7 +123,8 @@ describe("OrgDirectory", () => {
     }).html;
     expect(html).toContain(">jc@example.com<");
     expect(html).toContain("Owner");
-    expect(html).toContain(">pr_11111111…<");
+    expect(html).toContain(">Unknown person<");
+    expect(html).not.toContain("pr_11111111");
     expect(html).not.toContain(">pr_00000000-0000-4000-8000-00000000000a<");
   });
   it("edits the server address with a valid address only", async () => {

@@ -1,7 +1,5 @@
 // @vitest-environment happy-dom
-// The composer's controls after Grok Bot's prompt bar (JC, 2026-10-15): one +
-// that opens Attach files / Teach a task / the conversation's approval level
-// and workspace; no Send button (Enter sends; the round CTA turns into the
+// The composer's controls: one + that opens Attach files and Teach a task; no Send button (Enter sends; the round CTA turns into the
 // send arrow while something is typed, Voice otherwise, in the bot's color);
 // a grey mic that dictates into the field, with a recording pill, or opens
 // the Keys card when nothing can transcribe here.
@@ -124,7 +122,7 @@ describe("composer controls (Grok Bot's prompt bar)", () => {
     expect($("[data-composer-voice]")!.getAttribute("style") ?? "").not.toContain("--cta-fill");
   });
 
-  it("opens one + menu in groups: Attach files, Teach a task and Record a voice note, the modes, then the approval row", () => {
+  it("opens a + menu with only Attach files and Teach a task, as in the reference design", () => {
     fixture.instances = [{ instanceId: "test", driverKind: "claude", displayName: "Claude", capabilities: { agentsMcp: true } } as unknown as InstanceInfo];
     render(createElement(Composer, { bot: bot("teal") }));
     click($("[data-composer-plus]"));
@@ -132,59 +130,39 @@ describe("composer controls (Grok Bot's prompt bar)", () => {
     expect(menu.getAttribute("role")).toBe("menu");
     const items = [...menu.querySelectorAll<HTMLElement>("[data-composer-plus-item]")];
     expect(items.map((item) => [item.dataset.composerPlusGroup, item.dataset.composerPlusItem])).toEqual([
-      ["add", "attach"], ["add", "teach"], ["add", "voiceNote"], ["modes", "setup"],
+      ["add", "attach"], ["add", "teach"],
     ]);
     const labels = items.map((item) => item.querySelector(".truncate")?.textContent);
-    expect(labels).toEqual(["Attach files", "Teach a task", "Record a voice note", "Set up this bot"]);
-    // a hairline between add and the modes, and before the conversation's rows
-    expect(items[3]!.previousElementSibling?.getAttribute("role")).toBe("separator");
-    expect(menu.querySelectorAll('[role="separator"]').length).toBe(2);
-    expect(menu.querySelector('[data-composer-plus-row="approval"]')).not.toBeNull();
+    expect(labels).toEqual(["Attach files", "Teach a task"]);
+    // no voice note, setup, model or approval rows, and no separators
+    expect(menu.querySelectorAll('[role="separator"]').length).toBe(0);
+    expect(menu.querySelector("[data-composer-plus-row]")).toBeNull();
     click(menu.querySelector('[data-composer-plus-item="teach"]'));
     expect(textarea().value).toBe("/learn ");
     expect($("[data-composer-plus]")!.getAttribute("aria-expanded")).toBe("false");
   });
 
-  // JC, 2026-10-18: the model moved into the + menu; no chip, no emoji button
-  it("has no model chip and no emoji button in the bar; the + menu's Model row names the model and opens its menu", () => {
+  it("has no model chip and no emoji button in the bar; the headless picker stays for the mascot's chip", () => {
     render(createElement(Composer, { bot: bot("teal") }));
     expect(fixture.picker?.headless).toBe(true);
     expect(fixture.picker?.inComposer).toBe(true);
     expect($('[data-tour="model"]')).toBeNull();
     expect($('[aria-label="Insert an emoji"]')).toBeNull();
     expect($("[data-composer-emoji]")).toBeNull();
-    click($("[data-composer-plus]"));
-    const menu = $("[data-composer-plus-menu]")!;
-    const row = menu.querySelector<HTMLElement>('[data-composer-plus-row="model"]')!;
-    expect(row.querySelector(".truncate")?.textContent).toBe("Model");
-    expect(row.querySelector("[data-composer-model-value]")?.textContent).toBe("Opus 5.5 High");
-    expect(row.getAttribute("title")).toBe("Claude · Opus 5.5");
-    // the model row comes first among the conversation's rows, before the approval level
-    const rows = [...menu.querySelectorAll<HTMLElement>("[data-composer-plus-row]")].map((each) => each.dataset.composerPlusRow);
-    expect(rows[0]).toBe("model");
-    click(row);
-    expect(fixture.toggleModel).toHaveBeenCalledWith(row, expect.any(Function));
-    // a click inside the model menu (portalled to <body>) keeps the + menu open
-    const modelMenu = document.createElement("div");
-    modelMenu.setAttribute("data-model-menu", "");
-    const inside = document.createElement("button");
-    modelMenu.append(inside);
-    document.body.append(modelMenu);
-    flushSync(() => inside.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
-    expect($("[data-composer-plus]")!.getAttribute("aria-expanded")).toBe("true");
-    // an Escape the model menu handled does not close the + menu
-    flushSync(() => {
-      const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
-      escape.preventDefault();
-      document.dispatchEvent(escape);
-    });
-    expect($("[data-composer-plus]")!.getAttribute("aria-expanded")).toBe("true");
-    // a pick calls back: the + menu closes, and the model menu with it
-    const done = fixture.toggleModel.mock.calls[0]![1] as () => void;
-    flushSync(() => done());
-    expect($("[data-composer-plus]")!.getAttribute("aria-expanded")).toBe("false");
-    expect(fixture.closeModel).toHaveBeenCalled();
-    modelMenu.remove();
+  });
+
+  it("has no Stop button; a message that only says stop, or Escape in the empty field, stops the turn", () => {
+    const busy: Bot = { ...bot("teal"), busy: true, tasks: [{ ...bot("teal").tasks![0]!, busy: true, activity: "working" }] };
+    render(createElement(Composer, { bot: busy }));
+    expect($('[aria-label="Stop this turn"]')).toBeNull();
+    expect(host.querySelector(".lucide-square")).toBeNull();
+    type("Arrête !");
+    flushSync(() => textarea().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "interrupt", botId: "bot", threadId: "selected" });
+    expect(textarea().value).toBe("");
+    fixture.dispatch.mockClear();
+    flushSync(() => textarea().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "interrupt", botId: "bot", threadId: "selected" });
   });
 
   it("leaves Teach a task out when the bot cannot draft a skill", () => {

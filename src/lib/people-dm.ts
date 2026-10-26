@@ -2,6 +2,7 @@
 // shows it: under the other person's name and avatar, from the directory.
 import type { OrgDirectoryPerson } from "@/lib/perspicax-org";
 import { personAvatarSrc } from "@/lib/profile-management";
+import { personLabel } from "@/lib/human-label";
 
 /** Two letters for a person without a picture. */
 export function personInitials(label: string): string {
@@ -22,7 +23,7 @@ export function peopleDmPeer(
   const id = (group.humanIds ?? []).find((entry) => entry.trim().toLowerCase() !== self) ?? group.humanIds?.[0];
   if (!id) return null;
   const person = people.get(id.trim().toLowerCase());
-  const name = person?.name || person?.login || group.name || id;
+  const name = personLabel(person?.name, person?.login, group.name, id);
   const avatarUrl = personAvatarSrc(person?.avatarUrl);
   return { id, name, initials: personInitials(name), ...(avatarUrl ? { avatarUrl } : {}) };
 }

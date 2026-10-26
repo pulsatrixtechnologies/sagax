@@ -1,10 +1,24 @@
-// The two chat-widget tools of the agents catalog
+// The chat-widget tools of the agents catalog (check_widget: the ```widget
+// self-check of server/widget-check.ts; show_widget, update_widget)
 // (docs/superpowers/specs/2026-10-13-chat-widgets-design.md), spread into
 // TOOL_DEFINITIONS in agents-catalog.ts. Definitions only, like that file;
 // agents-call-cards.ts carries a call out and server/chat-widgets.ts stores
 // the result. Every word here is sent to the model on every turn and pinned
 // by agents-catalog-wire.test.ts.
 export const WIDGET_TOOL_DEFINITIONS = [
+  {
+    name: "check_widget",
+    description:
+      "Check a ```widget before you show it: pass the exact HTML of the fence. It is drawn as the chat draws it (desktop and phone width, light and dark) and you get its defects back with a small screenshot: JavaScript errors, overflow, overlapping or crushed text, hidden or too small controls, low contrast, horizontal scroll. Read the report, fix every defect and check again until it passes (3 checks per turn), then show the HTML that passed. Never show an unchecked ```widget.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        html: { type: "string", description: "The widget's HTML, CSS and JavaScript, exactly as it goes in the ```widget fence." },
+      },
+      required: ["html"],
+    },
+  },
   {
     name: "show_widget",
     description:

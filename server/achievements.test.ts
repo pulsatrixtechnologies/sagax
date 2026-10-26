@@ -12,6 +12,7 @@ import {
   activityEvents,
   createAchievementStore,
   MIN_PEOPLE_FOR_PERCENT,
+  roomPeopleCount,
   routineRunEvents,
   slashCommandName,
 } from "./achievements.ts";
@@ -395,5 +396,22 @@ describe("/api/me/achievements", () => {
       const rule = CLIENT_ALLOW.find((entry) => entry.path.test(path));
       expect(rule?.methods).toContain(method);
     }
+  });
+});
+
+describe("group.mixed (dream-team)", () => {
+  const sent = (humanIds: string[] | undefined, bots: number) =>
+    achievementRequestEvents({ method: "POST", path: "/api/groups/r/messages", status: 200 }, { group: () => ({ peopleDm: false, humans: roomPeopleCount(humanIds), bots }) }).map((event) => event.type);
+
+  it("fires for two people and two bots, and not otherwise", () => {
+    expect(sent([ADA, "pr_other"], 2)).toContain("group.mixed");
+    // a room a person's own bots made: one person, two bots
+    expect(sent([ADA], 3)).not.toContain("group.mixed");
+    expect(sent(undefined, 3)).not.toContain("group.mixed");
+    // a team entry or the same person twice is not a second person
+    expect(sent([ADA, "team:t1"], 2)).not.toContain("group.mixed");
+    expect(sent([ADA, ADA], 2)).not.toContain("group.mixed");
+    // two people, one bot
+    expect(sent([ADA, "pr_other"], 1)).not.toContain("group.mixed");
   });
 });

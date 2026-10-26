@@ -39,8 +39,11 @@ describe("isOutboundTool", () => {
       "LINEAR_CREATE_ISSUE",
       "NOTION_CREATE_PAGE",
       "GOOGLESHEETS_BATCH_UPDATE",
-      "GOOGLECALENDAR_CREATE_EVENT",
       "mcp__claude_ai_Gmail__search_threads",
+      // a reply draft sends nothing until it is sent (review of #943)
+      "mcp__claude_ai_Microsoft_365__outlook_create_reply_draft",
+      "mcp__claude_ai_Microsoft_365__outlook_create_reply_all_draft",
+      "GMAIL_CREATE_REPLY_DRAFT",
       "mcp__claude_ai_Linear__save_issue",
       "mcp__computer__click",
       "Bash",
@@ -68,6 +71,42 @@ describe("isReadOnlyTool", () => {
       "mcp__computer__click",
       "Bash",
     ]) expect(isReadOnlyTool(name), name).toBe(false);
+  });
+});
+
+describe("isOutboundTool, the engines' mail, Teams, calendar and SharePoint connectors", () => {
+  it("keeps the card for every send or write through them", () => {
+    for (const tool of [
+      "outlook_send_mail",
+      "outlook_set_vacation",
+      "teams_send_chat_message",
+      "teams_create_chat",
+      "outlook_create_event",
+      "outlook_update_event",
+      "outlook_delete_event",
+      "outlook_respond_to_event",
+      "sharepoint_upload_file",
+      "sharepoint_update_file",
+      "sharepoint_create_folder",
+      "sharepoint_move_item",
+      "sharepoint_rename_item",
+      "sharepoint_delete_item",
+    ]) {
+      expect(isOutboundTool(`mcp__claude_ai_Microsoft_365__${tool}`), tool).toBe(true);
+    }
+    expect(isOutboundTool("sharepoint__upload_file")).toBe(true);
+    // fail closed on an engine connector's unknown tool, and the same
+    // reading on the Composio path (review of #943)
+    expect(isOutboundTool("mcp__claude_ai_Microsoft_365__set_out_of_office")).toBe(true);
+    expect(isOutboundTool("onedrive__set_permissions")).toBe(true);
+    for (const slug of ["GOOGLECALENDAR_CREATE_EVENT", "OUTLOOK_CALENDAR_CREATE_EVENT", "SHAREPOINT_UPLOAD_FILE"]) expect(isOutboundTool(slug), slug).toBe(true);
+    expect(isOutboundTool("outlook__create_event")).toBe(true);
+  });
+
+  it("lets reads and drafts through them run", () => {
+    for (const tool of ["outlook_email_search", "outlook_calendar_search", "find_meeting_availability", "outlook_create_draft", "teams_list_chats", "sharepoint_search", "sharepoint_folder_search"]) {
+      expect(isOutboundTool(`mcp__claude_ai_Microsoft_365__${tool}`), tool).toBe(false);
+    }
   });
 });
 

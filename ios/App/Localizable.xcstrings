@@ -1,6 +1,1218 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Pairing code %@ %@: your computer's form shows the same when it is the one asking.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pairing code %@ %@: your computer's form shows the same when it is the one asking."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code de jumelage %@ %@ : le formulaire de votre ordinateur affiche le même quand c'est bien lui qui demande."
+          }
+        }
+      }
+    },
+    "The card could not be sealed for the computer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The card could not be sealed for the computer."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La carte n'a pas pu être scellée pour l'ordinateur."
+          }
+        }
+      }
+    },
+    "This request cannot be sealed for your computer. Ask again from the New card form.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This request cannot be sealed for your computer. Ask again from the New card form."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette demande ne peut pas être scellée pour votre ordinateur. Redemandez depuis le formulaire Nouvelle carte."
+          }
+        }
+      }
+    },
+    "This iPhone needs iOS 17 to seal a card for your computer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This iPhone needs iOS 17 to seal a card for your computer."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet iPhone a besoin d'iOS 17 pour sceller une carte pour votre ordinateur."
+          }
+        }
+      }
+    },
+    "Scan a card for your computer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan a card for your computer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanner une carte pour votre ordinateur"
+          }
+        }
+      }
+    },
+    "Your computer asks to scan a payment card. The number, the expiry and the name go to its New card form; the security code is never read.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your computer asks to scan a payment card. The number, the expiry and the name go to its New card form; the security code is never read."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre ordinateur demande de scanner une carte de paiement. Le numéro, l'expiration et le nom vont dans son formulaire Nouvelle carte ; le code de sécurité n'est jamais lu."
+          }
+        }
+      }
+    },
+    "This needs a secure connection (HTTPS or Tailscale). Type the card on your computer instead.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This needs a secure connection (HTTPS or Tailscale). Type the card on your computer instead."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il faut une connexion sécurisée (HTTPS ou Tailscale). Tapez plutôt la carte sur votre ordinateur."
+          }
+        }
+      }
+    },
+    "Send to the computer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send to the computer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer à l'ordinateur"
+          }
+        }
+      }
+    },
+    "Used %@ on this phone (always allowed).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used %@ on this phone (always allowed)."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A utilisé %@ sur ce téléphone (toujours permis)."
+          }
+        }
+      }
+    },
+    "This shortcut can send messages, pay or change things on your behalf.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This shortcut can send messages, pay or change things on your behalf."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce raccourci peut envoyer des messages, payer ou modifier des choses en votre nom."
+          }
+        }
+      }
+    },
+    "What would be sent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What would be sent"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce qui serait envoyé"
+          }
+        }
+      }
+    },
+    "The clipboard holds no text.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The clipboard holds no text."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le presse-papiers ne contient aucun texte."
+          }
+        }
+      }
+    },
+    "Due": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Due"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Échéance"
+          }
+        }
+      }
+    },
+    "Notes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes"
+          }
+        }
+      }
+    },
+    "Place": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Place"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lieu"
+          }
+        }
+      }
+    },
+    "Shortcut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shortcut"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raccourci"
+          }
+        }
+      }
+    },
+    "Text sent to the shortcut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text sent to the shortcut"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texte envoyé au raccourci"
+          }
+        }
+      }
+    },
+    "Your own bots may ask this iPhone for these. Each request shows a card here first; nothing runs in the background, and only over a secure connection (HTTPS or Tailscale).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your own bots may ask this iPhone for these. Each request shows a card here first; nothing runs in the background, and only over a secure connection (HTTPS or Tailscale)."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos propres bots peuvent demander ces outils à cet iPhone. Chaque demande affiche d'abord une carte ici ; rien ne s'exécute en arrière-plan, et seulement sur une connexion sécurisée (HTTPS ou Tailscale)."
+          }
+        }
+      }
+    },
+    "Turn any of them off in Settings > Approval rules.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn any of them off in Settings > Approval rules."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivez-en un dans Réglages > Règles d'approbation."
+          }
+        }
+      }
+    },
+    "Off on this connection: phone tools need a secure connection (HTTPS or Tailscale). On plain local Wi-Fi your answers would cross the network in clear.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off on this connection: phone tools need a secure connection (HTTPS or Tailscale). On plain local Wi-Fi your answers would cross the network in clear."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivés sur cette connexion : les outils du téléphone exigent une connexion sécurisée (HTTPS ou Tailscale). Sur le Wi-Fi local ordinaire, vos réponses traverseraient le réseau en clair."
+          }
+        }
+      }
+    },
+    "Wants to use a tool on your phone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wants to use a tool on your phone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Veut utiliser un outil de votre téléphone"
+          }
+        }
+      }
+    },
+    "Wants to use a tool on your phone. Open Sagax to answer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wants to use a tool on your phone. Open Sagax to answer."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Veut utiliser un outil de votre téléphone. Ouvrez Sagax pour répondre."
+          }
+        }
+      }
+    },
+    "This changes something on your phone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This changes something on your phone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ceci modifie quelque chose sur votre téléphone."
+          }
+        }
+      }
+    },
+    "Choose photos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose photos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisir des photos"
+          }
+        }
+      }
+    },
+    "Location": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Position"
+          }
+        }
+      }
+    },
+    "Contacts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contacts"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contacts"
+          }
+        }
+      }
+    },
+    "Reminders": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reminders"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rappels"
+          }
+        }
+      }
+    },
+    "Photos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos"
+          }
+        }
+      }
+    },
+    "Shortcuts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shortcuts"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raccourcis"
+          }
+        }
+      }
+    },
+    "Battery, network and Focus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Battery, network and Focus"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Batterie, réseau et concentration"
+          }
+        }
+      }
+    },
+    "Your exact position, once.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your exact position, once."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre position exacte, une seule fois."
+          }
+        }
+      }
+    },
+    "Your approximate position (about 100 m), once.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your approximate position (about 100 m), once."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre position approximative (à environ 100 m), une seule fois."
+          }
+        }
+      }
+    },
+    "Search “%@” in your contacts and send: %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search “%@” in your contacts and send: %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chercher « %@ » dans vos contacts et envoyer : %@."
+          }
+        }
+      }
+    },
+    "Add the reminder “%@”.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add the reminder “%@”."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter le rappel « %@ »."
+          }
+        }
+      }
+    },
+    "Read your reminders that are not done.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read your reminders that are not done."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire vos rappels non terminés."
+          }
+        }
+      }
+    },
+    "Add “%@” to your calendar, %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add “%@” to your calendar, %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter « %@ » à votre calendrier, %@."
+          }
+        }
+      }
+    },
+    "Read your calendar from %@ to %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read your calendar from %@ to %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire votre calendrier du %@ au %@."
+          }
+        }
+      }
+    },
+    "Pick up to %lld photos to send.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick up to %lld photos to send."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisir jusqu'à %lld photos à envoyer."
+          }
+        }
+      }
+    },
+    "Run your shortcut “%@”.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run your shortcut “%@”."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lancer votre raccourci « %@ »."
+          }
+        }
+      }
+    },
+    "Read the text on your clipboard.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read the text on your clipboard."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire le texte de votre presse-papiers."
+          }
+        }
+      }
+    },
+    "Read the battery, the network and whether a Focus is on.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read the battery, the network and whether a Focus is on."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire la batterie, le réseau et si un mode de concentration est actif."
+          }
+        }
+      }
+    },
+    "This version of Sagax does not know this tool. Update the app to use it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This version of Sagax does not know this tool. Update the app to use it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette version de Sagax ne connaît pas cet outil. Mettez l'app à jour pour l'utiliser."
+          }
+        }
+      }
+    },
+    "phone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "phone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "téléphone"
+          }
+        }
+      }
+    },
+    "email": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "email"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "courriel"
+          }
+        }
+      }
+    },
+    "address": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "address"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "adresse"
+          }
+        }
+      }
+    },
+    "birthday": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "birthday"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "anniversaire"
+          }
+        }
+      }
+    },
+    "organization": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "organization"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "organisation"
+          }
+        }
+      }
+    },
+    "Phone tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Phone tools"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outils du téléphone"
+          }
+        }
+      }
+    },
+    "Your own bots may ask this iPhone for these. You approve each request here, with Sagax open; nothing runs in the background.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your own bots may ask this iPhone for these. You approve each request here, with Sagax open; nothing runs in the background."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos propres bots peuvent demander ces outils à cet iPhone. Vous approuvez chaque demande ici, avec Sagax ouvert ; rien ne s'exécute en arrière-plan."
+          }
+        }
+      }
+    },
+    "Nothing is always allowed on this phone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing is always allowed on this phone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien n'est toujours permis sur ce téléphone."
+          }
+        }
+      }
+    },
+    "Always allowed on this phone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always allowed on this phone"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toujours permis sur ce téléphone"
+          }
+        }
+      }
+    },
+    "%@: add": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: add"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : ajout"
+          }
+        }
+      }
+    },
+    "%@: read": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: read"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : lecture"
+          }
+        }
+      }
+    },
+    "Scheduled update": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scheduled update"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise à jour planifiée"
+          }
+        }
+      }
+    },
+    "Last update": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last update"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dernière mise à jour"
+          }
+        }
+      }
+    },
+    "Updates the computer in this window when no Bot is using it. Files and logins stay.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updates the computer in this window when no Bot is using it. Files and logins stay."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Met à jour l'ordinateur dans cette plage quand aucun Bot ne l'utilise. Les fichiers et les connexions restent."
+          }
+        }
+      }
+    },
+    "Starts at": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starts at"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commence à"
+          }
+        }
+      }
+    },
+    "Updating now…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updating now…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise à jour en cours…"
+          }
+        }
+      }
+    },
+    "Off. Update the computer yourself when you choose.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off. Update the computer yourself when you choose."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivée. Mettez l'ordinateur à jour vous-même quand vous le voulez."
+          }
+        }
+      }
+    },
+    "Next update: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next update: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prochaine mise à jour : %@"
+          }
+        }
+      }
+    },
+    "Updated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updated"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise à jour faite"
+          }
+        }
+      }
+    },
+    "Missed: a Bot was using it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Missed: a Bot was using it"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manquée : un Bot l'utilisait"
+          }
+        }
+      }
+    },
+    "Go to conversation with %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to conversation with %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aller à la conversation avec %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ir para a conversa com %@"
+          }
+        }
+      }
+    },
+    "Preview of the conversation with %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview of the conversation with %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperçu de la conversation avec %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prévia da conversa com %@"
+          }
+        }
+      }
+    },
+    "Read the preview of %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read the preview of %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire l'aperçu de %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ler a prévia de %@"
+          }
+        }
+      }
+    },
+    "Stop the preview of %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop the preview of %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter l'aperçu de %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parar a prévia de %@"
+          }
+        }
+      }
+    },
+    "Agents in this exchange": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agents in this exchange"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agents de cet échange"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agentes desta conversa"
+          }
+        }
+      }
+    },
+    "Transcript of the exchange between Bots": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcript of the exchange between Bots"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcription de l'échange entre Bots"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcrição da conversa entre Bots"
+          }
+        }
+      }
+    },
+    "Bot conversation, read only": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bot conversation, read only"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversation entre Bots en lecture seule"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversa entre Bots, somente leitura"
+          }
+        }
+      }
+    },
+    "Go to conversation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to conversation"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aller à la conversation"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ir para a conversa"
+          }
+        }
+      }
+    },
+    "Close Chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Chat"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer la conversation"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fechar conversa"
+          }
+        }
+      }
+    },
+    "Nothing was said yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing was said yet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien n'a encore été dit."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nada foi dito ainda."
+          }
+        }
+      }
+    },
     "%lld steps done, I'm still going.": {
       "localizations": {
         "en": {
@@ -1337,6 +2549,28 @@
         }
       }
     },
+    "Copy cron expression": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy cron expression"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copier l'expression"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiar expressão"
+          }
+        }
+      }
+    },
     "Built-in Mac voices need no key, and this computer has none available. Switch the voice engine to ElevenLabs in Sagax on your computer to keep using voice.": {
       "localizations": {
         "en": {
@@ -1891,28 +3125,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Este provedor não fornece os detalhes da conta. Atualize depois que a autorização terminar."
-          }
-        }
-      }
-    },
-    "Accounts could not be re-checked": {
-      "localizations": {
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Não foi possível verificar as contas de novo"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Accounts could not be re-checked"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les comptes n'ont pas pu être revérifiés"
           }
         }
       }
@@ -3095,22 +4307,6 @@
         }
       }
     },
-    "Configure Composio on your computer first. Provider credentials are never returned to this device.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Configure d'abord Composio sur ton ordinateur. Les identifiants des fournisseurs ne sont jamais renvoyés à cet appareil."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Configure o Composio no seu computador primeiro. As credenciais do provedor nunca são devolvidas a este dispositivo."
-          }
-        }
-      }
-    },
     "Connect": {
       "localizations": {
         "pt-BR": {
@@ -3259,6 +4455,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connecté"
+          }
+        }
+      }
+    },
+    "Connected account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected account"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compte connecté"
           }
         }
       }
@@ -7755,28 +8967,6 @@
         }
       }
     },
-    "Showing what was connected last time. Your computer could not open its credential store just now, so these could not be re-checked. Nothing has been disconnected — restarting Sagax on your computer usually clears this.": {
-      "localizations": {
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mostrando o que estava conectado da última vez. O seu computador não conseguiu abrir o cofre de credenciais agora, então não foi possível verificá-las de novo. Nada foi desconectado — reiniciar o Sagax no seu computador costuma resolver."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Showing what was connected last time. Your computer could not open its credential store just now, so these could not be re-checked. Nothing has been disconnected — restarting Sagax on your computer usually clears this."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Affichage de ce qui était connecté la dernière fois. Votre ordinateur n'a pas pu ouvrir son magasin d'identifiants à l'instant, alors ces comptes n'ont pas pu être revérifiés. Rien n'a été déconnecté ; redémarrer Sagax sur votre ordinateur règle habituellement le problème."
-          }
-        }
-      }
-    },
     "Shows the steps": {
       "localizations": {
         "fr": {
@@ -10321,24 +11511,24 @@
         }
       }
     },
-    "Ask %@": {
+    "Message %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ask %@"
+            "value": "Message %@"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Demander à %@"
+            "value": "Écrire un message à %@"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pergunte a %@"
+            "value": "Mensagem para %@"
           }
         }
       }
@@ -17960,7 +19150,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toujours autoriser"
+            "value": "Toujours permettre"
           }
         },
         "pt-BR": {
@@ -18070,7 +19260,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Autoriser une fois"
+            "value": "Permettre une fois"
           }
         },
         "pt-BR": {
@@ -31441,28 +32631,6 @@
         }
       }
     },
-    "Refresh connection status": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Refresh connection status"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Actualiser l'état des connexions"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Atualizar o status das conexões"
-          }
-        }
-      }
-    },
     "Disconnect %1$@ from %2$@? Only this %2$@ account will be revoked. Your other %2$@ accounts will stay connected.": {
       "localizations": {
         "en": {
@@ -31547,72 +32715,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marketplace"
-          }
-        }
-      }
-    },
-    "Set up connected apps": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Set up connected apps"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Configurer les apps connectées"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Configurar os apps conectados"
-          }
-        }
-      }
-    },
-    "Connected apps run through your own Composio project, so your accounts and tokens stay in a project you control.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connected apps run through your own Composio project, so your accounts and tokens stay in a project you control."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les apps connectées passent par votre propre projet Composio : vos comptes et vos tokens restent dans un projet que vous contrôlez."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Os apps conectados passam pelo seu próprio projeto Composio, então suas contas e tokens ficam em um projeto que você controla."
-          }
-        }
-      }
-    },
-    "Ask the owner of this installation or an admin to add a Composio key.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ask the owner of this installation or an admin to add a Composio key."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Demandez au propriétaire de cette installation ou à un admin d'ajouter une clé Composio."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Peça ao dono desta instalação ou a um admin para adicionar uma chave do Composio."
           }
         }
       }
@@ -31837,138 +32939,6 @@
         }
       }
     },
-    "Checking connected apps…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Checking connected apps…"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vérification des apps connectées…"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Verificando os apps conectados…"
-          }
-        }
-      }
-    },
-    "Your accounts will appear here as soon as the secure connection check finishes.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your accounts will appear here as soon as the secure connection check finishes."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vos comptes apparaîtront ici dès que la vérification sécurisée sera terminée."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Suas contas aparecem aqui assim que a verificação segura de conexão terminar."
-          }
-        }
-      }
-    },
-    "Couldn’t load connected apps": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn’t load connected apps"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Impossible de charger les apps connectées"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Não foi possível carregar os apps conectados"
-          }
-        }
-      }
-    },
-    "Retry the connection check before adding another account.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Retry the connection check before adding another account."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Relancez la vérification de connexion avant d'ajouter un autre compte."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Refaça a verificação de conexão antes de adicionar outra conta."
-          }
-        }
-      }
-    },
-    "No connected apps yet": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No connected apps yet"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aucune app connectée pour l'instant"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nenhum app conectado ainda"
-          }
-        }
-      }
-    },
-    "Connect an app from Marketplace and it will appear here.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connect an app from Marketplace and it will appear here."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connectez une app depuis le Marketplace et elle apparaîtra ici."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Conecte um app pelo Marketplace e ele aparece aqui."
-          }
-        }
-      }
-    },
     "No apps found": {
       "localizations": {
         "en": {
@@ -32013,28 +32983,6 @@
         }
       }
     },
-    "Twitter/X needs your own X Developer app and Composio auth config. Use self-hosted connected apps for now.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Twitter/X needs your own X Developer app and Composio auth config. Use self-hosted connected apps for now."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Twitter/X exige votre propre app X Developer et une config d'auth Composio. Utilisez pour l'instant des apps connectées auto-hébergées."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O Twitter/X exige seu próprio app de Desenvolvedor do X e uma configuração de auth no Composio. Por enquanto, use apps conectados self-hosted."
-          }
-        }
-      }
-    },
     "Finish setup in your browser": {
       "localizations": {
         "en": {
@@ -32053,50 +33001,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Conclua a configuração no navegador"
-          }
-        }
-      }
-    },
-    "Finish setup in your browser, or disconnect the pending account below to start again": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Finish setup in your browser, or disconnect the pending account below to start again"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Terminez la configuration dans votre navigateur, ou déconnectez le compte en attente ci-dessous pour recommencer"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Conclua a configuração no navegador, ou desconecte abaixo a conta pendente para recomeçar"
-          }
-        }
-      }
-    },
-    "Authorization expired. Try again": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Authorization expired. Try again"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Autorisation expirée. Réessayez"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A autorização expirou. Tente de novo"
           }
         }
       }
@@ -32295,50 +33199,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rótulo para outra conta %@"
-          }
-        }
-      }
-    },
-    "Enter a label for the account, such as work or personal.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enter a label for the account, such as work or personal."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Saisissez un libellé pour le compte, par exemple travail ou perso."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Informe um rótulo para a conta, como trabalho ou pessoal."
-          }
-        }
-      }
-    },
-    "This app already has an account. Add a label such as work or personal to connect another.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This app already has an account. Add a label such as work or personal to connect another."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cette app a déjà un compte. Ajoutez un libellé comme travail ou perso pour en connecter un autre."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Este app já tem uma conta. Adicione um rótulo como trabalho ou pessoal para conectar outra."
           }
         }
       }
@@ -35727,6 +36587,94 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rotina: %@"
+          }
+        }
+      }
+    },
+    "Approval chime": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approval chime"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carillon d'approbation"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toque de aprovação"
+          }
+        }
+      }
+    },
+    "A distinct sound when an approval is waiting.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A distinct sound when an approval is waiting."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un son distinct quand une approbation attend."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um som distinto quando uma aprovação está esperando."
+          }
+        }
+      }
+    },
+    "Open routine %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open routine %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir la routine %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir a rotina %@"
+          }
+        }
+      }
+    },
+    "This approval needs your security key. Open Sagax to confirm. Nothing was approved yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This approval needs your security key. Open Sagax to confirm. Nothing was approved yet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette approbation exige votre clé de sécurité. Ouvrez Sagax pour confirmer. Rien n'a été approuvé."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta aprovação exige sua chave de segurança. Abra o Sagax para confirmar. Nada foi aprovado."
           }
         }
       }
@@ -41447,6 +42395,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$lld fatos percebidos da última vez %2$@."
+          }
+        }
+      }
+    },
+    "1 was already known.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 was already known."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 figurait déjà dans la mémoire."
+          }
+        }
+      }
+    },
+    "%lld were already known.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld were already known."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld figuraient déjà dans la mémoire."
+          }
+        }
+      }
+    },
+    "Last capture %@: nothing new.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last capture %@: nothing new."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dernière capture %@ : rien de nouveau."
           }
         }
       }
@@ -49525,50 +50521,6 @@
         }
       }
     },
-    "Gmail, GitHub, Slack, Notion, and hundreds more run through your own Composio project. Create a free account and copy the project API key from platform.composio.dev.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gmail, GitHub, Slack, Notion, and hundreds more run through your own Composio project. Create a free account and copy the project API key from platform.composio.dev."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gmail, GitHub, Slack, Notion et des centaines d'autres passent par votre propre projet Composio. Créez un compte gratuit et copiez la clé API du projet sur platform.composio.dev."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gmail, GitHub, Slack, Notion e centenas de outros passam pelo seu próprio projeto Composio. Crie uma conta gratuita e copie a chave de API do projeto em platform.composio.dev."
-          }
-        }
-      }
-    },
-    "Composio project key": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Composio project key"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Clé du projet Composio"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chave do projeto Composio"
-          }
-        }
-      }
-    },
     "Stored on the computer, never shown again. Paste a new key to replace it.": {
       "localizations": {
         "en": {
@@ -51747,28 +52699,6 @@
         }
       }
     },
-    "Create a free Composio account at": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Create a free Composio account at"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Créez un compte Composio gratuit sur"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Crie uma conta Composio gratuita em"
-          }
-        }
-      }
-    },
     "Open your project settings and copy the project API key (it starts with ak_).": {
       "localizations": {
         "en": {
@@ -51787,28 +52717,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abra os ajustes do projeto e copie a chave de API dele (começa com ak_)."
-          }
-        }
-      }
-    },
-    "Paste it below and save. The key is checked with Composio before it is stored.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Paste it below and save. The key is checked with Composio before it is stored."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Collez-la ci-dessous et enregistrez. La clé est vérifiée auprès de Composio avant d'être conservée."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cole abaixo e salve. A chave é verificada com o Composio antes de ser guardada."
           }
         }
       }
@@ -53657,28 +54565,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Desligado por padrão. Mostra Modelos no menu da barra lateral, para instalar uma equipe de bots pronta."
-          }
-        }
-      }
-    },
-    "Gmail, Slack, GitHub and more through your Composio project: the entry at the foot of the sidebar and the card in Settings > API keys. While off, your Claude account's connectors show in Settings > Model providers.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gmail, Slack, GitHub and more through your Composio project: the entry at the foot of the sidebar and the card in Settings > API keys. While off, your Claude account's connectors show in Settings > Model providers."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gmail, Slack, GitHub et plus par votre projet Composio : l'entrée au pied de la barre latérale et la carte dans Paramètres > Clés API. Désactivé, les connecteurs de votre compte Claude s'affichent dans Paramètres > Fournisseurs de modèles."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gmail, Slack, GitHub e mais pelo seu projeto Composio: a entrada no rodapé da barra lateral e o cartão em Configurações > Chaves de API. Desligado, os conectores da sua conta Claude aparecem em Configurações > Provedores de modelos."
           }
         }
       }
@@ -57661,28 +58547,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Conectar apps"
-          }
-        }
-      }
-    },
-    "Connected apps (Composio)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connected apps (Composio)"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Applications connectées (Composio)"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apps conectados (Composio)"
           }
         }
       }
@@ -69616,6 +70480,3768 @@
             "value": "Abre a página"
           }
         }
+      }
+    },
+    "Deleted bot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bot supprimé"
+          }
+        }
+      }
+    },
+    "Removed engine": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removed engine"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moteur retiré"
+          }
+        }
+      }
+    },
+    "Unknown person": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown person"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personne inconnue"
+          }
+        }
+      }
+    },
+    "%lld threads, %lld with news": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld threads, %2$lld with news"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld fils, %2$lld avec du nouveau"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld threads, %2$lld com novidades"
+          }
+        }
+      }
+    },
+    "Slate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slate"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ardoise"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ardósia"
+          }
+        }
+      }
+    },
+    "Perspicax's own look: navy chrome, Geist and a soft glow from the top.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perspicax's own look: navy chrome, Geist and a soft glow from the top."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le style de Perspicax : chrome marine, police Geist et une douce lueur venue du haut."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O visual do Perspicax: moldura azul-marinho, fonte Geist e um brilho suave vindo do topo."
+          }
+        }
+      }
+    },
+    "Flat and neutral with monochrome buttons. In light, your own messages are inverted.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flat and neutral with monochrome buttons. In light, your own messages are inverted."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plat et neutre, boutons monochromes. En clair, vos propres messages sont inversés."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plano e neutro, com botões monocromáticos. No claro, suas mensagens ficam invertidas."
+          }
+        }
+      }
+    },
+    "Variant": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variant"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variante"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variante"
+          }
+        }
+      }
+    },
+    "Auto (follow the phone)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto (follow the phone)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto (suit le téléphone)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automático (segue o telefone)"
+          }
+        }
+      }
+    },
+    "Paper and brass: a tinted ground where cards get brighter as they rise.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paper and brass: a tinted ground where cards get brighter as they rise."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Papier et laiton : un fond teinté où les cartes s'éclaircissent en montant."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Papel e latão: um fundo tingido em que os cartões clareiam à medida que sobem."
+          }
+        }
+      }
+    },
+    "Neutral": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neutral"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neutre"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neutro"
+          }
+        }
+      }
+    },
+    "Mode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo"
+          }
+        }
+      }
+    },
+    "Lagoon": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lagoon"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lagune"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lagoa"
+          }
+        }
+      }
+    },
+    "Blue": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bleu"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Azul"
+          }
+        }
+      }
+    },
+    "Plum": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plum"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prune"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ameixa"
+          }
+        }
+      }
+    },
+    "Brass": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brass"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laiton"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Latão"
+          }
+        }
+      }
+    },
+    "Sagax is reconnecting. Your message was not sent; try again in a moment.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax se reconnecte. Votre message n'a pas été envoyé; réessayez dans un instant."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Sagax está reconectando. Sua mensagem não foi enviada; tente de novo em instantes."
+          }
+        }
+      }
+    },
+    "Reconnecting to Sagax...": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnexion à Sagax..."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconectando ao Sagax..."
+          }
+        }
+      }
+    },
+    "Your session has ended": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre session a pris fin"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sua sessão terminou"
+          }
+        }
+      }
+    },
+    "Your account is disabled in Pulsatrix or on this Sagax server. Ask an administrator.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre compte est désactivé dans Pulsatrix ou sur ce serveur Sagax. Demandez à un administrateur."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sua conta está desativada no Pulsatrix ou neste servidor Sagax. Fale com um administrador."
+          }
+        }
+      }
+    },
+    "Your Pulsatrix sign-in has ended. Sign in again to keep using your chats here.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre connexion Pulsatrix a pris fin. Reconnectez-vous pour continuer à utiliser vos conversations ici."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seu login no Pulsatrix terminou. Entre de novo para continuar usando suas conversas aqui."
+          }
+        }
+      }
+    },
+    "This session was signed out from another device or by an administrator. Sign in again to keep using your chats here.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette session a été fermée depuis un autre appareil ou par un administrateur. Reconnectez-vous pour continuer à utiliser vos conversations ici."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta sessão foi encerrada em outro dispositivo ou por um administrador. Entre de novo para continuar usando suas conversas aqui."
+          }
+        }
+      }
+    },
+    "This session expired after a long time without use. Sign in again to keep using your chats here.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette session a expiré après une longue période sans utilisation. Reconnectez-vous pour continuer à utiliser vos conversations ici."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta sessão expirou depois de muito tempo sem uso. Entre de novo para continuar usando suas conversas aqui."
+          }
+        }
+      }
+    },
+    "This address now answers as another Sagax server. Sign in again to use it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette adresse répond maintenant comme un autre serveur Sagax. Reconnectez-vous pour l'utiliser."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este endereço agora responde como outro servidor Sagax. Entre de novo para usá-lo."
+          }
+        }
+      }
+    },
+    "This server no longer recognizes this session. Sign in again to keep using your chats here.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce serveur ne reconnaît plus cette session. Reconnectez-vous pour continuer à utiliser vos conversations ici."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este servidor não reconhece mais esta sessão. Entre de novo para continuar usando suas conversas aqui."
+          }
+        }
+      }
+    },
+    "Other answer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autre"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outra"
+          }
+        }
+      }
+    },
+    "Type your own answer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type your own answer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisissez votre propre réponse"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Digite sua própria resposta"
+          }
+        }
+      }
+    },
+    "Type your answer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type your answer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisissez votre réponse"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Digite sua resposta"
+          }
+        }
+      }
+    },
+    "Choose all that apply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose all that apply"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez toutes les réponses qui s'appliquent"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escolha todas as que se aplicam"
+          }
+        }
+      }
+    },
+    "Answered": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Answered"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Répondue"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Respondida"
+          }
+        }
+      }
+    },
+    "Closed without an answer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closed without an answer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermée sans réponse"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fechada sem resposta"
+          }
+        }
+      }
+    },
+    "Select": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélectionner"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selecionar"
+          }
+        }
+      }
+    },
+    "%lld selected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld selected"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld sélectionné(s)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld selecionado(s)"
+          }
+        }
+      }
+    },
+    "Mark as read": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark as read"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marquer comme lu"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marcar como lida"
+          }
+        }
+      }
+    },
+    "Clear selection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear selection"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer la sélection"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limpar seleção"
+          }
+        }
+      }
+    },
+    "Move %lld bots to a section": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move %lld bots to a section"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déplacer %lld Bot(s) vers une section"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mover %lld bot(s) para uma seção"
+          }
+        }
+      }
+    },
+    "Actions on the selected bots": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actions on the selected bots"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actions sur les Bots sélectionnés"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ações nos bots selecionados"
+          }
+        }
+      }
+    },
+    "Archive %lld selected bots?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive %lld selected bots?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archiver %lld Bot(s) sélectionné(s) ?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arquivar %lld bot(s) selecionado(s)?"
+          }
+        }
+      }
+    },
+    "They leave the sidebar and keep everything. Restore them any time from Archived bots.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "They leave the sidebar and keep everything. Restore them any time from Archived bots."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ils quittent la barre latérale et gardent tout. Restaurez-les quand vous voulez depuis les Bots archivés."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eles saem da barra lateral e mantêm tudo. Restaure-os quando quiser em Bots arquivados."
+          }
+        }
+      }
+    },
+    "%lld bots archived": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld bots archived"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Bot(s) archivé(s)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld bot(s) arquivado(s)"
+          }
+        }
+      }
+    },
+    "%lld more unread above": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld more unread above"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld non lu(s) de plus au-dessus"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mais %lld não lida(s) acima"
+          }
+        }
+      }
+    },
+    "Ignore the question": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignore the question"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignorer la question"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignorar a pergunta"
+          }
+        }
+      }
+    },
+    "Ignore without answering": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignore without answering"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignorer sans répondre"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignorar sem responder"
+          }
+        }
+      }
+    },
+    "Ignore, closes automatically": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignore, closes automatically"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignorer, se ferme automatiquement"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignorar, fecha automaticamente"
+          }
+        }
+      }
+    },
+    "Only when I'm here": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only when I'm here"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seulement quand je suis là"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Somente quando eu estiver aqui"
+          }
+        }
+      }
+    },
+    "While you are away (computer idle or locked), this routine skips its runs and tells you how many when you are back. A one-time routine waits for you.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "While you are away (computer idle or locked), this routine skips its runs and tells you how many when you are back. A one-time routine waits for you."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pendant votre absence (ordinateur inactif ou verrouillé), cette routine saute ses exécutions et vous dit combien à votre retour. Une routine ponctuelle vous attend."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enquanto você estiver ausente (computador inativo ou bloqueado), esta rotina pula as execuções e diz quantas quando você voltar. Uma rotina única espera por você."
+          }
+        }
+      }
+    },
+    "You are away. Routines set to run only when you are here are skipping their runs.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are away. Routines set to run only when you are here are skipping their runs."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous êtes absent. Les routines qui tournent seulement quand vous êtes là sautent leurs exécutions."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Você está ausente. As rotinas que rodam somente quando você está aqui estão pulando as execuções."
+          }
+        }
+      }
+    },
+    "Pause all": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause all"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toutes les mettre en pause"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausar todas"
+          }
+        }
+      }
+    },
+    "Resume routines": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume routines"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reprendre les routines"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retomar as rotinas"
+          }
+        }
+      }
+    },
+    "Every routine you can change stops until you resume it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every routine you can change stops until you resume it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque routine que vous pouvez modifier s'arrête jusqu'à ce que vous la repreniez."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cada rotina que você pode alterar para até você retomá-la."
+          }
+        }
+      }
+    },
+    "Routines paused while you were away": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Routines paused while you were away"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Routines mises en pause pendant votre absence"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotinas pausadas enquanto você esteve ausente"
+          }
+        }
+      }
+    },
+    "These routines run only when you are here. Run one now or mark it as seen.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These routines run only when you are here. Run one now or mark it as seen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ces routines tournent seulement quand vous êtes là. Lancez-en une maintenant ou marquez-la comme vue."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estas rotinas rodam somente quando você está aqui. Execute uma agora ou marque como vista."
+          }
+        }
+      }
+    },
+    "1 run skipped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 run skipped"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 exécution sautée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 execução ignorada"
+          }
+        }
+      }
+    },
+    "%lld runs skipped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld runs skipped"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld exécutions sautées"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld execuções ignoradas"
+          }
+        }
+      }
+    },
+    "Got it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Got it"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compris"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entendi"
+          }
+        }
+      }
+    },
+    "Leave them paused": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave them paused"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les laisser en pause"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deixá-las em pausa"
+          }
+        }
+      }
+    },
+    "Let them run": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Let them run"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les laisser s'exécuter"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deixá-las executar"
+          }
+        }
+      }
+    },
+    "Paused routine created": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused routine created"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Routine en pause créée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotina em pausa criada"
+          }
+        }
+      }
+    },
+    "This routine starts paused": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This routine starts paused"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette routine démarre en pause"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta rotina começa em pausa"
+          }
+        }
+      }
+    },
+    "%@ wants to schedule a paused routine": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wants to schedule a paused routine"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ veut planifier une routine en pause"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ quer agendar uma rotina em pausa"
+          }
+        }
+      }
+    },
+    "Triggers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Triggers"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déclencheurs"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gatilhos"
+          }
+        }
+      }
+    },
+    "Every event": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every event"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque événement"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cada evento"
+          }
+        }
+      }
+    },
+    "1 delivery": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 delivery"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 livraison"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 entrega"
+          }
+        }
+      }
+    },
+    "No delivery yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No delivery yet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune livraison pour l'instant"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhuma entrega por enquanto"
+          }
+        }
+      }
+    },
+    "Last delivery": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last delivery"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dernière livraison"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Última entrega"
+          }
+        }
+      }
+    },
+    "Signing secret stays on the computer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signing secret stays on the computer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le secret de signature reste sur l'ordinateur"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O segredo de assinatura fica no computador"
+          }
+        }
+      }
+    },
+    "%lld more unread below": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld more unread below"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld non lu(s) de plus en dessous"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mais %lld não lida(s) abaixo"
+          }
+        }
+      }
+    },
+    "Recover computer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recover computer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Récupérer l'ordinateur"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recuperar o computador"
+          }
+        }
+      }
+    },
+    "Your computer is waking. If it does not come back on its own, recover it. Files stay.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your computer is waking. If it does not come back on its own, recover it. Files stay."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre ordinateur se réveille. S'il ne revient pas de lui-même, récupérez-le. Les fichiers restent."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seu computador está acordando. Se ele não voltar sozinho, recupere-o. Os arquivos ficam."
+          }
+        }
+      }
+    },
+    "If it does not come back on its own, recover it. Files stay. Installed apps and packages are removed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If it does not come back on its own, recover it. Files stay. Installed apps and packages are removed."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "S'il ne revient pas de lui-même, récupérez-le. Les fichiers restent. Les applications et les paquets installés sont retirés."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se ele não voltar sozinho, recupere-o. Os arquivos ficam. Os aplicativos e pacotes instalados são removidos."
+          }
+        }
+      }
+    },
+    "Recover your Bots' computer?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recover your Bots' computer?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Récupérer l'ordinateur de vos bots?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recuperar o computador dos seus bots?"
+          }
+        }
+      }
+    },
+    "Recovering… This can take a few minutes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovering… This can take a few minutes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Récupération… Cela peut prendre quelques minutes."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recuperando… Isso pode levar alguns minutos."
+          }
+        }
+      }
+    },
+    "Rename this computer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename this computer"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renommer cet ordinateur"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renomear este computador"
+          }
+        }
+      }
+    },
+    "A computer's name is 1 to 120 characters.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A computer's name is 1 to 120 characters."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le nom d'un ordinateur compte de 1 à 120 caractères."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O nome de um computador tem de 1 a 120 caracteres."
+          }
+        }
+      }
+    },
+    "It leaves your list of computers. This cannot be done while it is online.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It leaves your list of computers. This cannot be done while it is online."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il quitte votre liste d'ordinateurs. Impossible tant qu'il est en ligne."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ele sai da sua lista de computadores. Não dá enquanto estiver online."
+          }
+        }
+      }
+    },
+    "A computer cannot be removed while it is online.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A computer cannot be removed while it is online."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de le retirer tant qu'il est en ligne."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não é possível removê-lo enquanto estiver online."
+          }
+        }
+      }
+    },
+    "Too many removals. Try again in a minute.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many removals. Try again in a minute."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop de retraits. Réessayez dans une minute."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retiradas demais. Tente de novo em um minuto."
+          }
+        }
+      }
+    },
+    "That computer could not be changed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That computer could not be changed."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet ordinateur n'a pas pu être modifié."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível alterar esse computador."
+          }
+        }
+      }
+    },
+    "Published pages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Published pages"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pages publiées"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Páginas publicadas"
+          }
+        }
+      }
+    },
+    "Pages your bots proposed. A page goes online only when you publish it. Revoking takes the link down at once.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pages your bots proposed. A page goes online only when you publish it. Revoking takes the link down at once."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les pages que vos bots ont proposées. Une page n'est en ligne que lorsque vous la publiez. La révoquer retire le lien tout de suite."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Páginas que seus bots propuseram. Uma página só fica no ar quando você a publica. Revogar derruba o link na hora."
+          }
+        }
+      }
+    },
+    "No page yet. Ask a bot to make you one.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No page yet. Ask a bot to make you one."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune page pour l'instant. Demandez-en une à un bot."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhuma página ainda. Peça uma a um bot."
+          }
+        }
+      }
+    },
+    "Who can see": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Who can see"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qui peut voir"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quem pode ver"
+          }
+        }
+      }
+    },
+    "Only me": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only me"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seulement moi"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Só eu"
+          }
+        }
+      }
+    },
+    "My organization": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My organization"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mon organisation"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minha organização"
+          }
+        }
+      }
+    },
+    "Anyone with the link": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anyone with the link"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toute personne qui a le lien"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualquer pessoa com o link"
+          }
+        }
+      }
+    },
+    "Copy the link": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy the link"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copier le lien"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiar o link"
+          }
+        }
+      }
+    },
+    "Delete this page and all its versions?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this page and all its versions?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer cette page et toutes ses versions?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Excluir esta página e todas as versões?"
+          }
+        }
+      }
+    },
+    "Link copied.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link copied."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lien copié."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link copiado."
+          }
+        }
+      }
+    },
+    "Not published": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not published"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non publiée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não publicada"
+          }
+        }
+      }
+    },
+    "Expired": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expired"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expirée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expirada"
+          }
+        }
+      }
+    },
+    "Revoked": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revoked"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Révoquée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revogada"
+          }
+        }
+      }
+    },
+    "Published": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Published"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Publiée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Publicada"
+          }
+        }
+      }
+    },
+    "Clear connector preferences": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear connector preferences"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer les préférences de connecteurs"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limpar as preferências de conectores"
+          }
+        }
+      }
+    },
+    "Clear connector preferences?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear connector preferences?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer les préférences de connecteurs?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limpar as preferências de conectores?"
+          }
+        }
+      }
+    },
+    "This turns every connector tool back on. Accounts stay connected.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This turns every connector tool back on. Accounts stay connected."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cela réactive chaque outil de connecteur. Les comptes restent connectés."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Isso liga de novo cada ferramenta de conector. As contas continuam conectadas."
+          }
+        }
+      }
+    },
+    "Cleared": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cleared"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacées"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limpas"
+          }
+        }
+      }
+    },
+    "Go to %@ in the voice note": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to %@ in the voice note"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aller à %@ dans le message vocal"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ir para %@ na mensagem de voz"
+          }
+        }
+      }
+    },
+    "Last seen %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last seen %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vu pour la dernière fois %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visto pela última vez %@"
+          }
+        }
+      }
+    },
+    "%lld working": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld working"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld en cours"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld em andamento"
+          }
+        }
+      }
+    },
+    "%lld on": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld on"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld actives"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ativas"
+          }
+        }
+      }
+    },
+    "Voice calls": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice calls"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appels vocaux"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chamadas de voz"
+          }
+        }
+      }
+    },
+    "Allow %@ to %@?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow %1$@ to %2$@?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autoriser %1$@ à %2$@ ?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir que %1$@ possa %2$@?"
+          }
+        }
+      }
+    },
+    "The server": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le serveur"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O servidor"
+          }
+        }
+      }
+    },
+    "Allowed once": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allowed once"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorisé une fois"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitido uma vez"
+          }
+        }
+      }
+    },
+    "Shows the whole request": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shows the whole request"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affiche toute la demande"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostra o pedido completo"
+          }
+        }
+      }
+    },
+    "New messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New messages"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveaux messages"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Novas mensagens"
+          }
+        }
+      }
+    },
+    "Pull request opened": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request opened"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request ouverte"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request aberta"
+          }
+        }
+      }
+    },
+    "Pull request updated (new commits)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request updated (new commits)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request mise à jour (nouveaux commits)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request atualizada (novos commits)"
+          }
+        }
+      }
+    },
+    "Pull request merged": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request merged"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request fusionnée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request mesclada"
+          }
+        }
+      }
+    },
+    "Pull request closed without merge": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request closed without merge"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request fermée sans fusion"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request fechada sem mesclar"
+          }
+        }
+      }
+    },
+    "Review requested": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review requested"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revue demandée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revisão solicitada"
+          }
+        }
+      }
+    },
+    "Any review submitted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Any review submitted"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toute revue soumise"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualquer revisão enviada"
+          }
+        }
+      }
+    },
+    "Review approves": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review approves"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une revue approuve"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uma revisão aprova"
+          }
+        }
+      }
+    },
+    "Review requests changes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review requests changes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une revue demande des modifications"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uma revisão pede alterações"
+          }
+        }
+      }
+    },
+    "Review comments only": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review comments only"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une revue commente seulement"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uma revisão apenas comenta"
+          }
+        }
+      }
+    },
+    "PR comment posted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PR comment posted"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commentaire de PR publié"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comentário de PR publicado"
+          }
+        }
+      }
+    },
+    "Inline review comment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inline review comment"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commentaire de revue en ligne"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comentário de revisão em linha"
+          }
+        }
+      }
+    },
+    "Review thread resolved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review thread resolved"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fil de revue résolu"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversa de revisão resolvida"
+          }
+        }
+      }
+    },
+    "Review thread reopened": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review thread reopened"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fil de revue rouvert"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversa de revisão reaberta"
+          }
+        }
+      }
+    },
+    "CI failed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CI failed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CI en échec"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CI falhou"
+          }
+        }
+      }
+    },
+    "CI succeeded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CI succeeded"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CI réussie"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CI concluída com sucesso"
+          }
+        }
+      }
+    },
+    "Issue opened": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue opened"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue ouverte"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue aberta"
+          }
+        }
+      }
+    },
+    "Push": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Push"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Push"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Push"
+          }
+        }
+      }
+    },
+    "Release published": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release published"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version publiée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release publicada"
+          }
+        }
+      }
+    },
+    "Merge request opened": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge request opened"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge request ouverte"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge request aberta"
+          }
+        }
+      }
+    },
+    "Merge request merged": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge request merged"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge request fusionnée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge request mesclada"
+          }
+        }
+      }
+    },
+    "Merge request closed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge request closed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge request fermée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge request fechada"
+          }
+        }
+      }
+    },
+    "Pipeline failed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pipeline failed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pipeline en échec"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pipeline falhou"
+          }
+        }
+      }
+    },
+    "Pipeline succeeded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pipeline succeeded"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pipeline réussi"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pipeline concluído com sucesso"
+          }
+        }
+      }
+    },
+    "@mention of the app": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@mention of the app"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@mention de l'application"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@menção ao app"
+          }
+        }
+      }
+    },
+    "Reaction added": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reaction added"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réaction ajoutée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reação adicionada"
+          }
+        }
+      }
+    },
+    "Message in a channel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message in a channel"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message dans un canal"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensagem em um canal"
+          }
+        }
+      }
+    },
+    "New message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New message"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau message"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nova mensagem"
+          }
+        }
+      }
+    },
+    "Message edited": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message edited"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message modifié"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensagem editada"
+          }
+        }
+      }
+    },
+    "Email received": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Email received"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Courriel reçu"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "E-mail recebido"
+          }
+        }
+      }
+    },
+    "Event created": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Event created"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Événement créé"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Evento criado"
+          }
+        }
+      }
+    },
+    "Event updated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Event updated"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Événement modifié"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Evento atualizado"
+          }
+        }
+      }
+    },
+    "Event cancelled": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Event cancelled"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Événement annulé"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Evento cancelado"
+          }
+        }
+      }
+    },
+    "Event starting (connector)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Event starting (connector)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Début d'événement (connecteur)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Evento começando (conector)"
+          }
+        }
+      }
+    },
+    "Issue created": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue created"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue créée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue criada"
+          }
+        }
+      }
+    },
+    "Issue resolved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue resolved"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue résolue"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue resolvida"
+          }
+        }
+      }
+    },
+    "Issue assigned": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue assigned"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue assignée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue atribuída"
+          }
+        }
+      }
+    },
+    "Issue archived": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue archived"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue archivée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue arquivada"
+          }
+        }
+      }
+    },
+    "Issue unresolved again": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue unresolved again"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue redevenue non résolue"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue voltou a não resolvida"
+          }
+        }
+      }
+    },
+    "Alert triggered": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alert triggered"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alerte déclenchée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alerta disparado"
+          }
+        }
+      }
+    },
+    "Error captured": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error captured"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erreur capturée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erro capturado"
+          }
+        }
+      }
+    },
+    "Incident triggered": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incident triggered"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incident déclenché"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incidente disparado"
+          }
+        }
+      }
+    },
+    "Incident acknowledged": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incident acknowledged"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incident pris en charge"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incidente reconhecido"
+          }
+        }
+      }
+    },
+    "Incident escalated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incident escalated"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incident escaladé"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incidente escalado"
+          }
+        }
+      }
+    },
+    "Incident reassigned": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incident reassigned"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incident réassigné"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incidente reatribuído"
+          }
+        }
+      }
+    },
+    "Incident resolved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incident resolved"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incident résolu"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incidente resolvido"
+          }
+        }
+      }
+    },
+    "Issue updated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue updated"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue modifiée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue atualizada"
+          }
+        }
+      }
+    },
+    "Issue status changed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue status changed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statut de l'issue changé"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status da issue alterado"
+          }
+        }
+      }
+    },
+    "Issue removed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue removed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue supprimée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issue removida"
+          }
+        }
+      }
+    },
+    "Comment added": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comment added"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commentaire ajouté"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comentário adicionado"
+          }
+        }
+      }
+    },
+    "Cycle completed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cycle completed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cycle terminé"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ciclo concluído"
+          }
+        }
+      }
+    },
+    "%@ is larger than %lld MB.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is larger than %lld MB."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ dépasse %lld Mo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ é maior que %lld MB."
+          }
+        }
+      }
+    },
+    "Choose a PNG, JPEG, GIF, or WebP image up to %lld MB.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a PNG, JPEG, GIF, or WebP image up to %lld MB."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez une image PNG, JPEG, GIF ou WebP d'au plus %lld Mo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escolha uma imagem PNG, JPEG, GIF ou WebP de até %lld MB."
+          }
+        }
+      }
+    },
+    "Copy version": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy version"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copier la version"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiar a versão"
+          }
+        }
+      }
+    },
+    "Requested by %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requested by %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demandé par %@"
+          }
+        }
+      }
+    },
+    "Replaced by a newer request": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replaced by a newer request"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remplacée par une demande plus récente"
+          }
+        }
+      }
+    },
+    "You signed in to %@ yourself": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You signed in to %@ yourself"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu t'es connecté toi-même à %@"
+          }
+        }
+      }
+    },
+    "Login \"%@\" allowed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Login \"%@\" allowed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identifiant « %@ » permis"
+          }
+        }
+      }
+    },
+    "always for %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "always for %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "toujours pour %@"
+          }
+        }
+      }
+    },
+    "this time": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "this time"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "cette fois"
+          }
+        }
+      }
+    },
+    "%@ can type it into that site's page but never read it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ can type it into that site's page but never read it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ peut le saisir dans la page de ce site, sans jamais le lire."
+          }
+        }
+      }
+    },
+    "Looking in your vault…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Looking in your vault…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recherche dans ton coffre…"
+          }
+        }
+      }
+    },
+    "No saved login for this site. Add one on your computer, or sign in there yourself.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No saved login for this site. Add one on your computer, or sign in there yourself."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun identifiant enregistré pour ce site. Ajoute-en un sur ton ordinateur, ou connecte-toi toi-même là-bas."
+          }
+        }
+      }
+    },
+    "In 1Password": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In 1Password"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dans 1Password"
+          }
+        }
+      }
+    },
+    "Read from 1Password only when the bot fills it, never added to chat. 1Password may ask you to approve.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read from 1Password only when the bot fills it, never added to chat. 1Password may ask you to approve."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lu dans 1Password seulement au remplissage, jamais ajouté à la conversation. 1Password peut te demander d'approuver."
+          }
+        }
+      }
+    },
+    "Card photos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Card photos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos de la carte"
+          }
+        }
+      }
+    },
+    "From Photos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From Photos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Depuis Photos"
+          }
+        }
+      }
+    },
+    "Reading the card…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading the card…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lecture de la carte…"
+          }
+        }
+      }
+    },
+    "No card was read. Try a sharper photo, or type it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No card was read. Try a sharper photo, or type it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune carte lue. Essaie une photo plus nette, ou saisis-la."
+          }
+        }
+      }
+    },
+    "Check what was read and type the security code yourself.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check what was read and type the security code yourself."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifie ce qui a été lu et saisis toi-même le code de sécurité."
+          }
+        }
+      }
+    },
+    "Shown in rosters, on the phone and to other bots. Standing instructions go in Personality.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shown in rosters, on the phone and to other bots. Standing instructions go in Personality."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affichée dans les listes, sur le téléphone et aux autres bots. Les instructions permanentes vont dans Personnalité."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exibida nas listas, no telefone e para outros bots. As instruções permanentes ficam em Personalidade."
+          }
+        }
+      }
+    },
+    "Security": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Security"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sécurité"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Segurança"
+          }
+        }
+      }
+    },
+    "Copy email address": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Copy email address" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Copier l'adresse courriel" } }
+      }
+    },
+    "Email address copied": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Email address copied" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Adresse courriel copiée" } }
+      }
+    },
+    "Waiting for the administrator to turn it on": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Waiting for the administrator to turn it on" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "En attente d'activation par l'administrateur" } }
+      }
+    },
+    "Mail received at this address only wakes a routine (Bot email trigger).": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Mail received at this address only wakes a routine (Bot email trigger)." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Le courrier reçu à cette adresse ne réveille qu'une routine (déclencheur Courriel du bot)." } }
+      }
+    },
+    "Bot email": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Bot email" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Courriel du bot" } }
+      }
+    },
+    "Waiting for the administrator to turn it on": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Waiting for the administrator to turn it on" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "En attente d'activation par l'administrateur" } }
       }
     }
   },

@@ -1,0 +1,121 @@
+{
+ "bots": [
+  {
+   "id": "katarina",
+   "threadId": "katarina-main",
+   "name": "Katarina",
+   "title": "Assistant",
+   "description": "",
+   "notifications": false,
+   "color": "purple",
+   "unread": false,
+   "busy": false,
+   "modelSelection": {
+    "instanceId": "preview",
+    "model": "preview"
+   },
+   "createdAt": 1789088400000,
+   "tasks": [
+    {
+     "threadId": "katarina-main",
+     "title": "Main",
+     "createdAt": 1789088400000,
+     "modelSelection": {
+      "instanceId": "preview",
+      "model": "preview"
+     },
+     "busy": false,
+     "activity": "idle",
+     "unread": false
+    }
+   ],
+   "messages": [
+    {
+     "id": "k1",
+     "role": "user",
+     "kind": "text",
+     "at": 1789088401000,
+     "text": "Peux-tu demander a Melonie le total de la semaine ?"
+    },
+    {
+     "id": "k2",
+     "role": "bot",
+     "kind": "text",
+     "at": 1789088402000,
+     "text": "Je lui ecris tout de suite."
+    },
+    {
+     "id": "k3",
+     "role": "bot",
+     "kind": "text",
+     "at": 1789088490000,
+     "text": "Melonie dit que le total est de 38 heures."
+    }
+   ],
+   "activeLeafId": "k3",
+   "botConversations": [
+    {
+     "threadId": "melonie-ask",
+     "otherBotId": "melonie",
+     "otherName": "Melonie",
+     "direction": "out",
+     "kind": "pair",
+     "startedAt": 1789088405000,
+     "updatedAt": 1789088410000,
+     "running": true
+    }
+   ]
+  },
+  {
+   "id": "melonie",
+   "threadId": "melonie-main",
+   "name": "Melonie",
+   "title": "Assistant",
+   "description": "",
+   "notifications": false,
+   "color": "green",
+   "unread": false,
+   "busy": false,
+   "modelSelection": {
+    "instanceId": "preview",
+    "model": "preview"
+   },
+   "createdAt": 1789088400000,
+   "tasks": [
+    {
+     "threadId": "melonie-main",
+     "title": "Main",
+     "createdAt": 1789088400000,
+     "modelSelection": {
+      "instanceId": "preview",
+      "model": "preview"
+     },
+     "busy": false,
+     "activity": "idle",
+     "unread": false
+    }
+   ],
+   "messages": [
+    {
+     "id": "e1",
+     "role": "user",
+     "kind": "text",
+     "at": 1789088405000,
+     "text": "Quel est le total de la semaine ?",
+     "parentId": null
+    },
+    {
+     "id": "e2",
+     "role": "bot",
+     "kind": "text",
+     "at": 1789088408000,
+     "text": "Le total de la semaine est de 38 heures.",
+     "parentId": null
+    }
+   ],
+   "activeLeafId": "e2"
+  }
+ ],
+ "groups": [],
+ "botQueuedMessages": {}
+}

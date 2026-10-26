@@ -8,7 +8,11 @@ metadata:
     {{- include "sandboxes.labels" . | nindent 4 }}
     app.kubernetes.io/name: sagax-sandbox-warmer
 spec:
-  replicas: {{ .Values.warmNode.replicas }}
+  {{- /* 2026-10-19 (GOX): an upgrade during the day put the scaled-up
+  warmer back to the chart's 0, the node pool fell to 0 and every routine
+  waited for a cold node. The CronJobs own the count once installed. */}}
+  {{- $live := lookup "apps/v1" "Deployment" .Values.systemNamespace "sagax-sandbox-warmer" }}
+  replicas: {{ if and $live $live.spec }}{{ $live.spec.replicas | default 0 }}{{ else }}{{ .Values.warmNode.replicas }}{{ end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: sagax-sandbox-warmer
@@ -34,6 +38,30 @@ spec:
           operator: Equal
           value: {{ .Values.warmNode.tolerationValue | quote }}
           effect: NoSchedule
+      {{- with .Values.warmNode.prepullImages }}
+      # Pull the sandbox images onto the warm node so a cold pod start does not
+      # wait on the registry. Each image must be digest-pinned and listed in
+      # admission.allowedImages.
+      initContainers:
+        {{- range $i, $img := . }}
+        - name: prepull-{{ $i }}
+          image: {{ $img | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "exit 0"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+        {{- end }}
+      {{- end }}
       containers:
         - name: pause
           image: {{ .Values.warmNode.pauseImage | quote }}

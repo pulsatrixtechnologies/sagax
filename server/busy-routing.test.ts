@@ -21,6 +21,33 @@ describe("classifyBusySend", () => {
       .toMatchObject({ mode: "parallel", sure: false, why: "independent" });
   });
 
+  it("answers a question or a request to explain inline, never as a parallel task", () => {
+    // JC's exact shape: a plain question sent while the bot is busy.
+    expect(classifyBusySend({ text: "ques qui c'est passé pourquoi l'ecan est apparu et la connexion à été coupé le shell a jamais fonctionner non plus" }))
+      .toMatchObject({ mode: "steer", sure: true, why: "question" });
+    expect(classifyBusySend({ text: "pourquoi l'écran est apparu ?" })).toMatchObject({ mode: "steer", sure: true, why: "question" });
+    expect(classifyBusySend({ text: "c'est quoi le statut en ce moment?" })).toMatchObject({ mode: "steer", why: "question" });
+    expect(classifyBusySend({ text: "What happened to the shell?" })).toMatchObject({ mode: "steer", why: "question" });
+    expect(classifyBusySend({ text: "Explique-moi ce qui vient de se passer" })).toMatchObject({ mode: "steer", why: "question" });
+    expect(classifyBusySend({ text: "tell me what you just did" })).toMatchObject({ mode: "steer", why: "question" });
+  });
+
+  it("keeps a short follow-up about the current work inline (several messages in a row)", () => {
+    expect(classifyBusySend({ text: "et le shell?" })).toMatchObject({ mode: "steer", why: "question" });
+    expect(classifyBusySend({ text: "tu as coupé la connexion toi-même" })).toMatchObject({ mode: "steer", why: "question" });
+    expect(classifyBusySend({ text: "explique-moi ça" })).toMatchObject({ mode: "steer", why: "question" });
+  });
+
+  it("keeps a genuine independent request a parallel task, even when phrased as a question", () => {
+    expect(classifyBusySend({ text: "Prépare le courriel de bienvenue pour le nouveau client", running: "Refactor" }))
+      .toMatchObject({ mode: "parallel", sure: false, why: "independent" });
+    // explicitly backgrounded work stays parallel even when it is a question
+    expect(classifyBusySend({ text: "peux-tu analyser tous les billets du mois en arrière-plan ?", running: "x" }))
+      .toMatchObject({ mode: "parallel", sure: false, why: "independent" });
+    expect(classifyBusySend({ text: "can you audit the invoices in parallel?", running: "x" }))
+      .toMatchObject({ mode: "parallel", sure: false, why: "independent" });
+  });
+
   it("names files and records, and compares keys without case", () => {
     expect(namedResources("look at ./src/a.ts and docs/x.md, ticket 12345")).toEqual(["file:src/a.ts", "file:docs/x.md", "id:12345"]);
     expect(namedResources("Bonjour, ça va ?")).toEqual([]);
@@ -44,6 +71,19 @@ describe("classifyWithoutSteer (the engine cannot take the words live)", () => {
     expect(after).toEqual({ mode: "after", by: "model" });
     expect(asked[0]).toContain("New message: Draft the onboarding email");
     expect(asked[0]).toContain("Current work: Audit the invoices");
+  });
+
+  it("queues a question inline after the running work instead of spawning a parallel task", async () => {
+    // steer verdicts become "after" here (the running turn cannot take them
+    // live), so the question is answered in the conversation, not in a task.
+    expect(await classifyWithoutSteer({ text: "pourquoi l'écran est apparu ?", running: "long deploy" }))
+      .toEqual({ mode: "after", by: "rule" });
+    expect(await classifyWithoutSteer({ text: "ques qui c'est passé le shell a jamais fonctionné", running: "long deploy" }))
+      .toEqual({ mode: "after", by: "rule" });
+    // the model is never consulted for a question the rule already settled
+    let asked = 0;
+    await classifyWithoutSteer({ text: "What happened to the shell?", running: "x", generateText: async () => { asked += 1; return "parallel"; } });
+    expect(asked).toBe(0);
   });
 
   it("falls back to parallel on no model, a failure, a timeout or a word it cannot read", async () => {

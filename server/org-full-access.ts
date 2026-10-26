@@ -126,3 +126,26 @@ export function orgFullAccessGrantRefusal(input: {
 export function orgFullAccessHolds(input: { policyAllowed: boolean; ownerPrincipalId: string; consent: unknown }): boolean {
   return input.policyAllowed && fullAccessConsentedBy(input.consent, input.ownerPrincipalId);
 }
+
+const FULL_BODY_ERROR = "send { approvalMode: \"full\", confirmFullAccess } alone";
+
+/** The Full grant body on an organization server. `threadId` names the open
+ * conversation so that conversation takes the same level. Anything else
+ * riding along is refused. */
+export function parseOrgFullAccessBody(body: Record<string, unknown>): { confirm: boolean; threadId?: string } | { error: string } {
+  const extra = Object.keys(body).filter((key) => key !== "approvalMode" && key !== "confirmFullAccess" && key !== "threadId");
+  if (body.approvalMode !== "full" || extra.length) return { error: FULL_BODY_ERROR };
+  if (body.confirmFullAccess !== undefined && typeof body.confirmFullAccess !== "boolean") return { error: FULL_BODY_ERROR };
+  if (body.threadId !== undefined && (typeof body.threadId !== "string" || !/^[\w-]{1,128}$/.test(body.threadId))) return { error: FULL_BODY_ERROR };
+  return {
+    confirm: body.confirmFullAccess === true,
+    ...(typeof body.threadId === "string" ? { threadId: body.threadId } : {}),
+  };
+}
+
+/** The open conversation follows the bot's Full grant. A missing thread is
+ * left alone. A busy one keeps the level it started the turn with. */
+export function threadFollowsFullGrant(input: { threadId?: string; knownThread: boolean; threadBusy: boolean }): string | null {
+  if (!input.threadId || !input.knownThread || input.threadBusy) return null;
+  return input.threadId;
+}

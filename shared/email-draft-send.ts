@@ -18,6 +18,11 @@
 import { parseArgs } from "./approval-describe.ts";
 import { isOutboundTool } from "./outbound.ts";
 
+/** Absent or true: this bot may write email draft cards. False turns them off. */
+export function emailDraftsEnabled(bot: { emailDrafts?: boolean } | null | undefined): boolean {
+  return bot?.emailDrafts !== false;
+}
+
 export const EMAIL_SEND_REQUEST_PREFIX = "maildraft-";
 export const EMAIL_SEND_PASS_MS = 10 * 60_000;
 const MAX_RECIPIENTS = 50;
@@ -333,11 +338,9 @@ export function connectorOwnsTool(connector: EmailConnector, tool: string): bool
   if (match) {
     const server = match[1]!.toLowerCase();
     if (match[2]!.includes("__")) return false;
-    if (server === id) return true;
-    // a connected app runs through the composio server: GMAIL_SEND_EMAIL
-    return server === "composio" && match[2]!.toLowerCase().startsWith(`${id}_`);
+    return server === id;
   }
-  // a bare connected-app action: GMAIL_SEND_EMAIL
+  // a bare engine-connector action: GMAIL_SEND_EMAIL
   return /^[A-Z0-9_]+$/.test(tool) && tool.toLowerCase().startsWith(`${id}_`);
 }
 

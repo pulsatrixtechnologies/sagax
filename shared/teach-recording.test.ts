@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseSkillMd, scanSkillText } from "./skill-md.ts";
-import { buildTeachSkill, cleanPageText, isSecretField, looksLikeSecret, sanitizeTeachUrl, teachSkillName, type TeachStep } from "./teach-recording.ts";
+import { buildTeachSkill, cleanPageText, cleanPoint, cleanWindowName, isSecretField, looksLikeSecret, sanitizeTeachUrl, teachSkillName, type TeachStep } from "./teach-recording.ts";
 
 describe("teach recording privacy", () => {
   it("treats password, one-time code, card and unknown fields as secret", () => {
@@ -73,5 +73,36 @@ describe("a recording as a skill", () => {
   it("falls back to a valid name", () => {
     expect(teachSkillName("!!!")).toBe("taught-task");
     expect(teachSkillName("Payer   la facture")).toBe("payer-la-facture");
+  });
+});
+
+describe("a recording of the whole computer (parity R7, system 11)", () => {
+  const screen: TeachStep[] = [
+    { id: "1", kind: "click", screen: true, point: { x: 0.25, y: 0.5 }, window: "Invoices - LibreOffice Calc" },
+    { id: "2", kind: "type", screen: true, secret: true, window: "Invoices - LibreOffice Calc" },
+    { id: "3", kind: "press", screen: true, key: "Enter" },
+  ];
+
+  it("replays on the computer's screen, with positions as hints only", () => {
+    const { markdown } = buildTeachSkill({ title: "Fill invoice", description: "", steps: screen });
+    expect(parseSkillMd(markdown)).toMatchObject({ name: "fill-invoice" });
+    expect(markdown).toContain("on your computer");
+    expect(markdown).toContain("about 25% from the left and 50% from the top");
+    expect(markdown).toContain(`the window "Invoices - LibreOffice Calc"`);
+    expect(markdown).toMatch(/fresh screenshot/);
+    // typed text on the screen is never recorded: the bot asks
+    expect(markdown).toMatch(/2\. .*ask the person/);
+  });
+
+  it("keeps a point inside the screen and a window name that is plain text", () => {
+    expect(cleanPoint({ x: 0.123456, y: 1.5 })).toEqual({ x: 0.123, y: 1 });
+    expect(cleanPoint({ x: "1", y: 0 })).toBeUndefined();
+    expect(cleanWindowName("Gmail\u0000 - Chrome")).toBe("Gmail - Chrome");
+    expect(cleanWindowName(`token ${"aB3".repeat(15)}`)).toBe("");
+    // a title that names a person's address or an account is never kept
+    expect(cleanWindowName("Inbox - jc@example.com - Outlook")).toBe("");
+    expect(cleanWindowName("Compte 4510 2233 8890 - Banque")).toBe("");
+    expect(cleanWindowName("Client 00123456 - CRM")).toBe("");
+    expect(cleanWindowName("Report 2026 - Calc")).toBe("Report 2026 - Calc");
   });
 });

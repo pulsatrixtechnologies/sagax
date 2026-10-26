@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { registerSecurityKey, securityKeyInBrowser, securityKeysUsable, waitForCeremony } from "./step-up-client";
-import { signInAgainPath } from "@/components/SecurityKeySettings";
+import { signInAgainPath } from "./sign-in-again";
 
 const ID = "a".repeat(43);
 const answer = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -68,10 +68,11 @@ describe("security keys in the desktop app", () => {
     expect(await waitForCeremony(ID, Date.now() - 10_000, undefined, 1)).toBe("expired");
   });
 
-  it("Sign in again goes to the server's Pulsatrix sign-in, else its sign-in page", async () => {
-    expect(await signInAgainPath(async () => answer(200, { identity: { kind: "perspicax", protocol: "oidc", issuer: "https://id.example.com", loginPath: "/auth/oidc/start" } }))).toBe("/auth/oidc/start");
-    expect(await signInAgainPath(async () => answer(200, { capabilities: {} }))).toBe("/pair");
-    expect(await signInAgainPath(async () => { throw new Error("offline"); })).toBe("/pair");
-    expect(await signInAgainPath(async () => answer(200, { identity: { kind: "perspicax", loginPath: "//evil.example.com" } }))).toBe("/pair");
+  it("Sign in again is the server's forced Pulsatrix sign-in, else nothing (an email code never counts)", async () => {
+    expect(await signInAgainPath(async () => answer(200, { identity: { kind: "perspicax", protocol: "oidc", issuer: "https://id.example.com", loginPath: "/auth/oidc/start" } }))).toBe("/auth/oidc/start?fresh=1");
+    expect(await signInAgainPath(async () => answer(200, { capabilities: {} }))).toBeNull();
+    expect(await signInAgainPath(async () => { throw new Error("offline"); })).toBeNull();
+    expect(await signInAgainPath(async () => answer(500, {}))).toBeNull();
+    expect(await signInAgainPath(async () => answer(200, { identity: { kind: "perspicax", loginPath: "//evil.example.com" } }))).toBeNull();
   });
 });

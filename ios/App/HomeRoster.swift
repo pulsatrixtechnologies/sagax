@@ -340,6 +340,10 @@ struct HomeChatRow: View {
     let stamp: String
     var status = HomeRowStatus()
     var state: MausState = .idle
+    /// Bulk selection: non-nil while rows can be picked.
+    var selection: Selection?
+
+    struct Selection: Equatable { var selected: Bool }
 
     @EnvironmentObject private var session: Session
     @ObservedObject private var people = PeopleDirectory.shared
@@ -371,6 +375,9 @@ struct HomeChatRow: View {
                 }
             }
             .frame(width: HomeMetrics.rowMascot, height: HomeMetrics.rowMascot)
+            .overlay(alignment: .bottomTrailing) {
+                if let selection { HomeSelectionMark(selected: selection.selected).offset(x: 4, y: 2) }
+            }
             .padding(.top, (HomeMetrics.rowHeight - HomeMetrics.rowMascot) / 2)
             .padding(.leading, HomeMetrics.rowLeading)
 
@@ -383,8 +390,10 @@ struct HomeChatRow: View {
             .padding(.trailing, HomeMetrics.rowTrailing)
         }
         .frame(maxWidth: .infinity, minHeight: HomeMetrics.rowHeight, maxHeight: HomeMetrics.rowHeight, alignment: .topLeading)
+        .background(selection?.selected == true ? Color.accentColor.opacity(0.12) : Color.clear)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selection?.selected == true ? .isSelected : [])
     }
 
     private var role: String {

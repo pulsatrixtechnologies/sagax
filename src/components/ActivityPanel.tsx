@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ListChecks, RefreshCw, X } from "lucide-react";
 import { useStore, type Bot } from "@/state/store";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { useCaptionChrome } from "@/components/DesktopCapabilities";
@@ -105,26 +106,26 @@ export function ActivityPanel({ bot }: { bot: Bot }) {
   };
 
   return (
-    <aside aria-label={`${bot.name} activity`} className="animate-panel-in flex h-full w-[400px] max-w-full shrink-0 flex-col border-l-[0.5px] border-hairline-weak bg-app max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-30">
+    <aside aria-label={t("botActivity.aria", { name: bot.name })} className="animate-panel-in flex h-full w-[400px] max-w-full shrink-0 flex-col border-l-[0.5px] border-hairline-weak bg-app max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-30">
       {/* 2026-10-16 (JC): Settings' type: a 13 px title, round buttons,
           grey day headings over the rows. */}
       <div {...dragProps} className={cn("flex items-center justify-between px-4 py-3", padClass)}>
         <span className="flex items-center gap-2 text-[13px] font-medium leading-[18px] text-ink">
-          <ListChecks size={16} className="text-ink-secondary" /> Activity
+          <ListChecks size={16} className="text-ink-secondary" /> {t("botActivity.title")}
         </span>
         <span className="flex items-center gap-1">
           <button
             onClick={() => void load()}
             className="ui-icon-button"
-            title="Reload"
-            aria-label="Reload activity"
+            title={t("botActivity.reload")}
+            aria-label={t("botActivity.reloadAria")}
           >
             <RefreshCw size={14} />
           </button>
           <button
             onClick={() => dispatch({ type: "toggleActivity", open: false })}
-            aria-label="Close Activity"
-            title="Close Activity"
+            aria-label={t("botActivity.close")}
+            title={t("botActivity.close")}
             className={CIRCLE_BUTTON}
           >
             <X size={18} strokeWidth={1.75} />
@@ -133,17 +134,17 @@ export function ActivityPanel({ bot }: { bot: Bot }) {
       </div>
 
       <p className="px-4 pb-2 text-[12px] leading-4 text-ink-secondary">
-        Every tool {bot.name} used and every approval it asked for, newest first.
+        {t("botActivity.intro", { name: bot.name })}
       </p>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {error && <div className="px-4 py-3 text-[13px] text-danger">couldn&apos;t load: {error}</div>}
+        {error && <div className="px-4 py-3 text-[13px] text-danger">{t("botActivity.loadError", { error })}</div>}
         {rows && rows.length === 0 && !error && (
           <div className="px-4 py-6 text-[13px] text-ink-secondary">
-            Nothing yet. Once {bot.name} runs a tool or asks for an approval, it shows up here.
+            {t("botActivity.empty", { name: bot.name })}
           </div>
         )}
-        {!rows && !error && <div className="px-4 py-6 text-[13px] text-ink-secondary">Loading…</div>}
+        {!rows && !error && <div className="px-4 py-6 text-[13px] text-ink-secondary">{t("botActivity.loading")}</div>}
         {days.map((day) => (
           <section key={day.key}>
             <h3 className="sticky top-0 bg-app px-4 pb-1 pt-3 text-[13px] font-normal leading-[18px] text-ink-secondary">
@@ -166,7 +167,7 @@ function ActivityLine({ row, current, onJump }: { row: ActivityRow; current: boo
       type="button"
       onClick={onJump}
       className="flex w-full items-start gap-3 px-4 py-2 text-left transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:outline-none motion-reduce:transition-none"
-      title={current ? row.tool : `${row.tool} — in another task; click to open it`}
+      title={current ? row.tool : t("botActivity.inOtherTask", { tool: row.tool })}
     >
       <span className="mt-[2px] shrink-0 tabular-nums text-[11px] text-ink-secondary">{formatActivityTime(row.at)}</span>
       <span className="min-w-0 flex-1">

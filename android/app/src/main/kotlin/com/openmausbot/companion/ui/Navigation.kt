@@ -32,9 +32,6 @@ sealed interface Destination {
     /** Settings → Workspace → Tasks & Routines. */
     data object Routines : Destination
 
-    /** Settings → Workspace → Connected Apps. */
-    data object ConnectedApps : Destination
-
     /** A bot's computer, watch-only. Addressed by bot id for the same reason. */
     data class Computer(val botId: String) : Destination
 
@@ -143,7 +140,6 @@ class CompanionNavigator(initial: List<Destination> = listOf(Destination.Roster)
         private const val ROSTER = "roster"
         private const val SETTINGS = "settings"
         private const val ROUTINES = "routines"
-        private const val CONNECTED_APPS = "connected-apps"
         private const val THREAD = "thread:"
         private const val COMPUTER = "computer:"
         private const val BROWSER = "browser:"
@@ -156,7 +152,6 @@ class CompanionNavigator(initial: List<Destination> = listOf(Destination.Roster)
                 Destination.Roster -> ROSTER
                 Destination.Settings -> SETTINGS
                 Destination.Routines -> ROUTINES
-                Destination.ConnectedApps -> CONNECTED_APPS
                 is Destination.Thread -> THREAD + it.threadId
                 is Destination.Computer -> COMPUTER + it.botId
                 is Destination.Browser -> BROWSER + it.botId
@@ -173,7 +168,6 @@ class CompanionNavigator(initial: List<Destination> = listOf(Destination.Roster)
                 it == ROSTER -> Destination.Roster
                 it == SETTINGS -> Destination.Settings
                 it == ROUTINES -> Destination.Routines
-                it == CONNECTED_APPS -> Destination.ConnectedApps
                 it.startsWith(THREAD) -> Destination.Thread(it.removePrefix(THREAD))
                 it.startsWith(COMPUTER) -> Destination.Computer(it.removePrefix(COMPUTER))
                 it.startsWith(BROWSER) -> Destination.Browser(it.removePrefix(BROWSER))

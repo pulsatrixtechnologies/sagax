@@ -57,9 +57,9 @@ describe("composeEnvelope: assignment with person lineage", () => {
   });
 
   it("says who waits on the reply, and to end with what was done and what stays unverified", () => {
-    expect(envelope).toContain("@Chief is resumed with your reply when your turn ends; end it with what you did and what stays unverified.");
+    expect(envelope).toContain("@Chief is resumed with your reply when your turn ends; first check what one call can check, then end it with what you did and what stays unverified.");
     expect(composeEnvelope(assignment({ reply: "poll" }), names))
-      .toContain("@Chief reads your reply from its inbox when it asks; end it with what you did and what stays unverified.");
+      .toContain("@Chief reads your reply from its inbox when it asks; first check what one call can check, then end it with what you did and what stays unverified.");
     expect(composeEnvelope(assignment({ reply: "none", mode: "notify" }), names))
       .toContain("Ownership is yours: results, failures and questions stay in this thread; @Chief is not waiting and will not be resumed.");
   });

@@ -203,6 +203,24 @@ it("coordinates a lead and its specialist from ordinary chat, returns to Clive, 
   expect(turn.system).toContain("only an actual coordinate_bots result proves that teammate participated");
 }), 45_000);
 
+it("relays a passed-on teammate reply to the person without a resume turn", () => fixture(async f => {
+  f.plan[f.chief.id] = { steps: [{ arguments: { bot_ids: [f.lead.id], message: "What is the capital of Italy?", relay: true } }], reply: "Asked Engineering", resumeReply: "must not run" };
+  f.plan[f.lead.id] = { reply: "Rome." };
+  await f.start();
+  expect((await f.wait()).status).toBe("settled");
+  await expect.poll(() => f.nodes().find((n: any) => n.botId === f.chief.id)?.status, { timeout: 15_000 }).toBe("completed");
+  // the source turn and the teammate's: no third generation
+  expect(f.evidence().map((turn: any) => turn.botId)).toEqual([f.chief.id, f.lead.id]);
+  expect(f.nodes().find((n: any) => n.botId === f.lead.id)).toMatchObject({ status: "completed", relay: true });
+  const thread = await f.messages(f.chief.activeTaskId);
+  // the teammate's words as the answer, after the chip naming who said them
+  const replied = thread.findIndex((m: any) => m.tool?.name === "Engineering lead replied");
+  const answer = thread.findIndex((m: any) => m.role === "bot" && m.kind === "text" && m.text === "Rome.");
+  expect(replied).toBeGreaterThan(-1);
+  expect(answer).toBeGreaterThan(replied);
+  expect(thread.some((m: any) => m.text === "must not run" || m.tool?.name?.startsWith("Resumed with"))).toBe(false);
+}), 45_000);
+
 it("announces a settled delegation and its resume in the parent thread", () => fixture(async f => {
   const stream = await openSse(`${f.session.info.url}/api/events`);
   try {

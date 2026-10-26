@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  CREATED_PAUSED_LINE,
   RoutineRequestError,
   RoutineRequestService,
   consequenceLine,
@@ -64,6 +65,9 @@ function harness(
     opensCard: boolean,
   ) => { ok: true } | { ok: false; status: number; error: string },
   autoApply?: DirectApplyCheck,
+  // Most cases here exercise a live routine, so they keep the setting off;
+  // "new routines start paused" below covers the default.
+  newPaused = false,
 ) {
   const clock = { now: start };
   const dir = mkdtempSync(join(tmpdir(), "omb-routine-request-"));
@@ -85,6 +89,7 @@ function harness(
     cloudReady,
     canPersist,
     autoApply,
+    newPaused: () => newPaused,
   });
   return { clock, routines, service, store };
 }
@@ -1905,6 +1910,191 @@ describe("consequenceLine", () => {
   });
 });
 
+describe("new routines start paused", () => {
+  const confirm = (service: RoutineRequestService, requestId: string, threadId = "thread-a") =>
+    service.resolve({ botId: "bot-a", threadId, requestId, behavior: "allow" });
+  const paused = () => harness(undefined, undefined, undefined, undefined, true);
+
+  it("creates a confirmed routine paused, with no pending run", async () => {
+    const { service, routines, clock } = paused();
+    const card = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal() });
+    expect(confirm(service, card.requestId)).toMatchObject({ state: "applied", action: "create" });
+    const [routine] = routines.listRoutines();
+    expect(routine).toMatchObject({ enabled: false, nextRunAt: null });
+    // Nothing runs on its own, however long it waits.
+    clock.now += 14 * 24 * 60 * 60_000;
+    expect(routines.listRoutines()[0]).toMatchObject({ enabled: false, nextRunAt: null });
+  });
+
+  it("is the service's default when no setting is passed", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-routine-paused-"));
+    tempDirs.push(dir);
+    const now = Date.parse("2026-08-28T10:00:00Z");
+    const routines = new RoutineManager({
+      file: join(dir, "routines.json"),
+      now: () => now,
+      botState: () => "busy",
+      createTask: () => null,
+      startTurn: async () => {},
+    });
+    const service = new RoutineRequestService({ store: new MemoryStore(), routines, now: () => now, timeZone: () => "UTC" });
+    const card = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal() });
+    expect(confirm(service, card.requestId)).toMatchObject({ state: "applied" });
+    expect(routines.listRoutines()[0]).toMatchObject({ enabled: false, nextRunAt: null });
+  });
+
+  it("keeps the old behaviour when the setting is off", async () => {
+    const { service, routines, store } = harness();
+    const card = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal() });
+    expect(card.nextRunAt).not.toBeNull();
+    expect(card.summary).not.toContain("Created paused");
+    expect(store.messagesFor("thread-a")[0]?.card?.subtitle).not.toContain(CREATED_PAUSED_LINE);
+    expect(confirm(service, card.requestId)).toMatchObject({ state: "applied" });
+    const [routine] = routines.listRoutines();
+    expect(routine?.enabled).toBe(true);
+    expect(routine?.nextRunAt).toBe(card.nextRunAt);
+  });
+
+  it("tells the owner on the card that the routine is created paused", async () => {
+    const { service, store } = paused();
+    const card = await service.propose({
+      botId: "bot-a",
+      threadId: "thread-a",
+      proposal: createProposal({ schedule: { type: "cron", expression: "0 9 1 * *", timeZone: "America/Toronto" } }),
+    });
+    expect(card.nextRunAt).toBeNull();
+    expect(card.summary).toContain(" · Created paused");
+    const lines = card.detail.split("\n");
+    expect(lines).toContain("Next run: None — created paused; resume it when ready");
+    expect(lines).toContain(CREATED_PAUSED_LINE);
+    expect(lines.some((line) => line.startsWith("Next 3 runs"))).toBe(false);
+    expect(lines.indexOf(CREATED_PAUSED_LINE)).toBeLessThan(lines.indexOf("Instructions:"));
+    expect(store.messagesFor("thread-a")[0]?.card?.subtitle).toBe(card.detail);
+  });
+
+  it("resumes through propose_routine_action with the next run computed", async () => {
+    const { service, routines } = paused();
+    const created = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal() });
+    confirm(service, created.requestId);
+    const routineId = routines.listRoutines()[0]!.id;
+    // The "no future run" guard lets a recurring paused routine through.
+    const resume = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: { action: "resume", routineId } });
+    expect(resume.nextRunAt).not.toBeNull();
+    expect(confirm(service, resume.requestId)).toMatchObject({ state: "applied", action: "resume" });
+    const routine = routines.listRoutines()[0]!;
+    expect(routine.enabled).toBe(true);
+    expect(routine.nextRunAt).toBe(resume.nextRunAt);
+  });
+
+  it("still refuses to resume a paused one-time routine whose time has passed", async () => {
+    const { service, routines, clock } = paused();
+    const created = await service.propose({
+      botId: "bot-a",
+      threadId: "thread-a",
+      proposal: createProposal({ schedule: { type: "once", at: "2026-08-29T09:00:00+00:00" } }),
+    });
+    confirm(service, created.requestId);
+    const routineId = routines.listRoutines()[0]!.id;
+    clock.now = Date.parse("2026-08-30T09:00:00Z");
+    await expect(service.propose({ botId: "bot-a", threadId: "thread-a", proposal: { action: "resume", routineId } }))
+      .rejects.toMatchObject({ status: 409 });
+    expect(routines.listRoutines()[0]).toMatchObject({ enabled: false, nextRunAt: null });
+  });
+
+  it("starts live when the creator explicitly enables it", async () => {
+    const { service, routines, store } = paused();
+    const card = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal({ enabled: true }) });
+    expect(card.nextRunAt).not.toBeNull();
+    expect(card.summary).not.toContain("Created paused");
+    expect(store.messagesFor("thread-a")[0]?.card?.subtitle).not.toContain(CREATED_PAUSED_LINE);
+    expect(confirm(service, card.requestId)).toMatchObject({ state: "applied", action: "create" });
+    const [routine] = routines.listRoutines();
+    expect(routine?.enabled).toBe(true);
+    expect(routine?.nextRunAt).toBe(card.nextRunAt);
+  });
+
+  it("starts paused when the creator asks for it with the setting off", async () => {
+    const { service, routines } = harness();
+    const card = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal({ enabled: false }) });
+    expect(card.nextRunAt).toBeNull();
+    expect(card.detail).toContain(CREATED_PAUSED_LINE);
+    confirm(service, card.requestId);
+    expect(routines.listRoutines()[0]).toMatchObject({ enabled: false, nextRunAt: null });
+  });
+
+  it("applies what the card showed even if the setting changes before the answer", async () => {
+    let setting = true;
+    const { routines, store, clock } = harness();
+    // A service whose setting changes between the card and the answer.
+    const flipping = new RoutineRequestService({
+      store,
+      routines,
+      now: () => clock.now,
+      timeZone: () => "UTC",
+      newPaused: () => setting,
+    });
+    const card = await flipping.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal() });
+    expect(card.detail).toContain(CREATED_PAUSED_LINE);
+    setting = false;
+    expect(confirm(flipping, card.requestId)).toMatchObject({ state: "applied" });
+    expect(routines.listRoutines()[0]).toMatchObject({ enabled: false, nextRunAt: null });
+  });
+
+  it("refuses enabled in an update's changes", async () => {
+    const { service, routines } = harness();
+    const created = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal() });
+    confirm(service, created.requestId);
+    const routineId = routines.listRoutines()[0]!.id;
+    await expect(service.propose({
+      botId: "bot-a",
+      threadId: "thread-a",
+      proposal: malformedProposal({ action: "update", routineId, changes: { enabled: false } }),
+    })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("starts a card stored before the paused flag live, even when the setting is on", async () => {
+    const { service, routines, store } = paused();
+    const card = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal() });
+    const message = store.messagesFor("thread-a")[0]!;
+    const operation = message.card?.routineRequest?.operation;
+    if (!operation || operation.action !== "create") throw new Error("expected a create card");
+    delete operation.paused;
+    expect(confirm(service, card.requestId)).toMatchObject({ state: "applied", action: "create" });
+    const [routine] = routines.listRoutines();
+    expect(routine?.enabled).toBe(true);
+    expect(routine?.nextRunAt).toEqual(expect.any(Number));
+  });
+
+  it("does not treat a paused copy as a duplicate when the creator starts one live", async () => {
+    const { service, routines } = paused();
+    const first = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal() });
+    expect(confirm(service, first.requestId)).toMatchObject({ state: "applied" });
+    const live = await service.propose({
+      botId: "bot-a",
+      threadId: "thread-b",
+      proposal: createProposal({ name: "Live copy", enabled: true }),
+    });
+    expect(live.nextRunAt).not.toBeNull();
+    expect(confirm(service, live.requestId, "thread-b")).toMatchObject({ state: "applied" });
+    const listed = routines.listRoutines();
+    expect(listed).toHaveLength(2);
+    expect(listed).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "Morning brief", enabled: false, nextRunAt: null }),
+      expect.objectContaining({ name: "Live copy", enabled: true, nextRunAt: live.nextRunAt }),
+    ]));
+  });
+
+  it("counts a paused copy as a duplicate, so a retried proposal adds nothing", async () => {
+    const { service, routines } = paused();
+    const first = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal() });
+    confirm(service, first.requestId);
+    const existing = routines.listRoutines()[0]!;
+    await expect(service.propose({ botId: "bot-a", threadId: "thread-b", proposal: createProposal({ name: "Again" }) }))
+      .rejects.toMatchObject({ status: 409, message: expect.stringContaining(`A paused routine with the same instructions and execution settings already exists (${existing.id})`) });
+    expect(routines.listRoutines()).toHaveLength(1);
+  });
+});
+
 describe("a bot's own routine changes", () => {
   // The server's rule (server/direct-apply.ts): Full access in "full-thread",
   // a guest-driven Cloud turn in "guest-thread", Ask everywhere else.
@@ -1916,6 +2106,186 @@ describe("a bot's own routine changes", () => {
     store.messagesFor(threadId).filter((message) => message.card && !message.card.answered && !message.card.dismissed);
   const undo = (service: RoutineRequestService, requestId: string, threadId = "ask-thread") =>
     service.undo({ botId: "bot-a", threadId, requestId });
+
+  it("keeps flexible timing when a daily or cron change does not mention it", async () => {
+    const { service, routines } = own();
+    const daily = routines.create({
+      botId: "bot-a",
+      name: "Morning",
+      prompt: "Check the list.",
+      schedule: {
+        type: "daily",
+        time: "09:00",
+        weekdays: [1, 2, 3, 4, 5],
+        timing: "flexible",
+        windowEarlyMinutes: 12,
+        windowLateMinutes: 4,
+      },
+    });
+    expect(await service.submit({
+      botId: "bot-a",
+      threadId: "ask-thread",
+      proposal: {
+        action: "update",
+        routineId: daily.id,
+        changes: { schedule: { type: "weekly", time: "10:00", weekdays: ["monday", "tuesday", "wednesday", "thursday", "friday"] } },
+      },
+    })).toMatchObject({ state: "applied" });
+    expect(routines.getRoutine(daily.id)?.schedule).toMatchObject({
+      type: "daily",
+      time: "10:00",
+      timing: "flexible",
+      windowEarlyMinutes: 12,
+      windowLateMinutes: 4,
+    });
+
+    const cron = routines.create({
+      botId: "bot-a",
+      name: "Clock",
+      prompt: "Check the list.",
+      schedule: {
+        type: "cron",
+        expression: "0 9 * * 1",
+        timeZone: "UTC",
+        timing: "flexible",
+        windowEarlyMinutes: 20,
+        windowLateMinutes: 0,
+      },
+    });
+    expect(await service.submit({
+      botId: "bot-a",
+      threadId: "ask-thread",
+      proposal: {
+        action: "update",
+        routineId: cron.id,
+        changes: { schedule: { type: "cron", expression: "0 10 * * 1", timeZone: "UTC" } },
+      },
+    })).toMatchObject({ state: "applied" });
+    expect(routines.getRoutine(cron.id)?.schedule).toMatchObject({
+      type: "cron",
+      expression: "0 10 * * 1",
+      timing: "flexible",
+      windowEarlyMinutes: 20,
+      windowLateMinutes: 0,
+    });
+
+    expect(await service.submit({
+      botId: "bot-a",
+      threadId: "ask-thread",
+      proposal: {
+        action: "update",
+        routineId: daily.id,
+        changes: { schedule: { type: "weekly", time: "11:00", weekdays: ["monday"], timing: "exact" } },
+      },
+    })).toMatchObject({ state: "applied" });
+    expect(routines.getRoutine(daily.id)?.schedule).not.toHaveProperty("timing");
+  });
+
+  it("previews the next exact run after the slot that already fired", async () => {
+    const { service, routines, clock } = harness(Date.parse("2026-08-17T08:00:00Z"));
+    const routine = routines.create({
+      botId: "bot-a",
+      name: "Morning",
+      prompt: "Check the list.",
+      schedule: {
+        type: "daily",
+        time: "09:00",
+        weekdays: [0, 1, 2, 3, 4, 5, 6],
+        timing: "flexible",
+        windowEarlyMinutes: 30,
+        windowLateMinutes: 0,
+      },
+    });
+    const fired = routine.nominalRunAt!;
+    expect(routine.nextRunAt).toBeLessThan(fired);
+    clock.now = routine.nextRunAt!;
+    await routines.tick();
+    expect(routines.getRoutine(routine.id)!.lastFiredNominalAt).toBe(fired);
+    expect(clock.now).toBeLessThan(fired);
+
+    const card = await service.propose({
+      botId: "bot-a",
+      threadId: "thread-a",
+      proposal: {
+        action: "update",
+        routineId: routine.id,
+        changes: {
+          schedule: {
+            type: "weekly",
+            time: "09:00",
+            weekdays: ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+            timing: "exact",
+          },
+        },
+      },
+    });
+    expect(card.nextRunAt).toBe(fired + 24 * 60 * 60 * 1000);
+    expect(card.detail).toContain("Next run:");
+    expect(service.resolve({
+      botId: "bot-a",
+      threadId: "thread-a",
+      requestId: card.requestId,
+      behavior: "allow",
+    })).toMatchObject({ state: "applied" });
+    expect(routines.getRoutine(routine.id)?.nextRunAt).toBe(card.nextRunAt);
+  });
+
+  it("applies window minutes without a timing choice on a flexible routine, and rejects them on an exact one", async () => {
+    const { service, routines } = own();
+    const flexible = routines.create({
+      botId: "bot-a",
+      name: "Morning",
+      prompt: "Check the list.",
+      schedule: {
+        type: "daily",
+        time: "09:00",
+        weekdays: [1, 2, 3, 4, 5],
+        timing: "flexible",
+        windowEarlyMinutes: 12,
+        windowLateMinutes: 4,
+      },
+    });
+    const weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday"];
+    expect(await service.submit({
+      botId: "bot-a",
+      threadId: "ask-thread",
+      proposal: {
+        action: "update",
+        routineId: flexible.id,
+        changes: { schedule: { type: "weekly", time: "09:00", weekdays, windowLateMinutes: 9 } },
+      },
+    })).toMatchObject({ state: "applied" });
+    expect(routines.getRoutine(flexible.id)?.schedule).toMatchObject({
+      timing: "flexible",
+      windowEarlyMinutes: 12,
+      windowLateMinutes: 9,
+    });
+
+    const exact = routines.create({
+      botId: "bot-a",
+      name: "Exact",
+      prompt: "Check the list.",
+      schedule: { type: "daily", time: "09:00", weekdays: [1, 2, 3, 4, 5] },
+    });
+    await expect(service.submit({
+      botId: "bot-a",
+      threadId: "ask-thread",
+      proposal: {
+        action: "update",
+        routineId: exact.id,
+        changes: { schedule: { type: "weekly", time: "09:00", weekdays, windowEarlyMinutes: 5 } },
+      },
+    })).rejects.toThrow(/window/i);
+    expect(routines.getRoutine(exact.id)?.schedule).not.toHaveProperty("windowEarlyMinutes");
+
+    await expect(service.submit({
+      botId: "bot-a",
+      threadId: "ask-thread",
+      proposal: createProposal({
+        schedule: { type: "weekly", time: "09:00", weekdays: ["monday"], windowEarlyMinutes: 5 },
+      }),
+    })).rejects.toThrow(/window/i);
+  });
 
   it("creates, updates, pauses, resumes and deletes its own routine at Ask with no open card", async () => {
     const { service, routines, store } = own();

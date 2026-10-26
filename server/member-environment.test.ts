@@ -12,6 +12,9 @@ import {
   ownEnvironmentSensitiveRead,
   ownEnvironmentTool,
   ownEnvironmentTurnOrigin,
+  ownAttachmentRead,
+  ownDestinationCall,
+  normalizedDestinationPath,
 } from "./member-environment.ts";
 import { SPAWNED_PROXIES } from "./proxy-paths.ts";
 import { USER_SANDBOX_MCP_NAME } from "./user-sandbox-routing.ts";
@@ -164,6 +167,38 @@ describe("own-environment autonomy, security review 2026-10-16", () => {
     expect(autonomy({ origin: "owner", tool: "sagax-environment__read_file", input: JSON.stringify({ path: "~/.ssh/id_rsa" }) })).toBe(true);
   });
 
+  it("#875 2026-10-22: a read of the bot's own Sagax-made workspace is a plain read, not a dotfile", () => {
+    const WS = "0f1e2d3c-4b5a-6789-0123-456789abcdef";
+    const read = (path: unknown, tool = "sagax-environment__read_file") =>
+      autonomy({ origin: "other", tool, input: JSON.stringify({ path }) });
+    // the workspace tree sits under the server data dir (~/.sagax, legacy
+    // ~/.openmausbot), whose own name begins with a dot: that data-dir dotfile
+    // is not a user credential, so a read of the bot's own work area runs
+    // unasked even on a turn that is not the owner's own (never a card).
+    for (const path of [
+      `/data/.openmausbot/workspaces/${WS}`,
+      `/data/.sagax/workspaces/${WS}/notes/today.md`,
+      `/srv/.openmausbot/task-workspaces/${WS}/${WS}/report.csv`,
+      `/home/sagax/.sagax/parallel-worktrees/${WS}/${WS}`,
+    ]) {
+      expect(ownEnvironmentSensitiveRead(JSON.stringify({ path })), path).toBe(false);
+      expect(read(path), path).toBe(true);
+      expect(read(path, "sagax-environment__list_files"), path).toBe(true);
+    }
+    // a credential path BELOW the workspace root still cards on a non-owner turn
+    for (const path of [
+      `/data/.openmausbot/workspaces/${WS}/.ssh/id_rsa`,
+      `/data/.sagax/workspaces/${WS}/.env`,
+      `/data/.sagax/workspaces/${WS}/credentials.json`,
+      `/data/.sagax/workspaces/${WS}/../.ssh/id_rsa`,
+    ]) {
+      expect(ownEnvironmentSensitiveRead(JSON.stringify({ path })), path).toBe(true);
+      expect(read(path), path).toBe(false);
+    }
+    // a write of the bot's own workspace is not a read tool: it still gates
+    expect(autonomy({ origin: "other", tool: "sagax-environment__write_file", input: JSON.stringify({ path: `/data/.sagax/workspaces/${WS}/x` }) })).toBe(false);
+  });
+
   it("re-review 2026-10-17: the Local VM's run is destructive and irreversible, like run_command", () => {
     const vm = callStepUpClasses({ tool: "other", mcpTool: "sagax-desktop__local_vm", input: JSON.stringify({ action: "run", command: "ls" }), summary: "" });
     const shell = callStepUpClasses({ tool: "other", mcpTool: "sagax-environment__run_command", input: JSON.stringify({ command: "ls" }), summary: "" });
@@ -179,5 +214,103 @@ describe("own-environment autonomy, security review 2026-10-16", () => {
     expect(gateReadOnlyTools({ name: "sagax-environment", builtin: false, spec })).toEqual([]);
     expect(gateReadOnlyTools({ name: "sagax-desktop", builtin: false, spec })).toEqual([]);
     expect(gateReadOnlyTools({ name: "data", builtin: true })).toEqual([]);
+  });
+});
+
+// 2026-10-19 (JC): "everyone should be able to run commands on their own
+// VM, PC or cloud computer". The reported case: a member's bot on his Windows
+// computer asked mcp__sagax-desktop__list_files on the attachments folder
+// and mcp__sagax-desktop__run_command, and both waited for an admin.
+describe("a member's own destinations (2026-10-19)", () => {
+  const WIN = "C:\\Users\\BOBSMI~1\\AppData\\Local\\Temp\\Sagax\\attachments";
+  const call = (tool: string, over: Partial<Parameters<typeof ownDestinationCall>[0]> = {}) => ownDestinationCall({
+    identity: "perspicax", tool, environmentPrincipalId: OWNER, ownerPrincipalId: OWNER, guestDriven: false, mountedServers: MOUNTED, ...over,
+  });
+
+  it.each([
+    ["mcp__sagax-desktop__run_command", true],
+    ["mcp__sagax-desktop__list_files", true],
+    ["mcp__sagax-desktop__read_file", true],
+    ["mcp__sagax-desktop__write_file", true],
+    ["mcp__sagax-desktop__search_files", true],
+    ["mcp__sagax-desktop__fetch_url", true],
+    ["mcp__sagax-desktop__browse", true],
+    ["mcp__sagax-desktop__local_vm", true],
+    ["sagax-desktop__run_command", true],
+    ["mcp__sagax-environment__run_command", true],
+    ["mcp__sagax-environment__write_file", true],
+    ["Bash", false],
+    ["mcp__shell__exec", false],
+    ["mcp__sagax-computer__computer_select", false],
+    ["mcp__sagax-desktop-evil__run_command", false],
+  ] as const)("%s on the owner's own destination: %s", (tool, own) => {
+    expect(call(tool)).toBe(own);
+  });
+
+  it("is never someone else's destination, a stale mount, a guest's turn or a solo server", () => {
+    expect(call("mcp__sagax-desktop__run_command", { environmentPrincipalId: "pr_other" })).toBe(false);
+    expect(call("mcp__sagax-desktop__run_command", { environmentPrincipalId: null })).toBe(false);
+    expect(call("mcp__sagax-desktop__run_command", { mountedServers: new Set([USER_SANDBOX_MCP_NAME]) })).toBe(false);
+    expect(call("mcp__sagax-desktop__run_command", { guestDriven: true })).toBe(false);
+    expect(call("mcp__sagax-desktop__run_command", { identity: "solo" })).toBe(false);
+    // the owner's id is compared folded
+    expect(call("mcp__sagax-desktop__run_command", { environmentPrincipalId: "PR_OWNER" })).toBe(true);
+  });
+
+  it("an own destination is never an admin's card, whatever the tool", () => {
+    for (const tool of ["mcp__sagax-desktop__run_command", "mcp__sagax-desktop__list_files", "mcp__sagax-environment__run_command"]) {
+      expect(memberBotAdminApproval({ tool, workspaceRoot: "/nowhere" })).toBe(true);
+      expect(memberBotAdminApproval({ tool, workspaceRoot: "/nowhere", ownDestination: true })).toBe(false);
+    }
+    expect(memberBotAdminApproval({ tool: "Bash", command: { command: "ls" }, workspaceRoot: "/nowhere" })).toBe(true);
+    expect(memberBotAdminApproval({ tool: "Bash", command: { command: "ls" }, workspaceRoot: "/nowhere", ownerRunsServerCommands: true })).toBe(false);
+  });
+
+  it("normalizes Windows paths (backslashes, 8.3 short names, case) and refuses traversal", () => {
+    expect(normalizedDestinationPath(WIN, "win32")).toBe("c:/users/bobsmi~1/appdata/local/temp/sagax/attachments");
+    expect(normalizedDestinationPath("c:/Users/BOBSMI~1/AppData/Local/Temp/Sagax/attachments/", "win32")).toBe("c:/users/bobsmi~1/appdata/local/temp/sagax/attachments");
+    expect(normalizedDestinationPath("\\\\?\\C:\\Temp\\x", "win32")).toBe("c:/temp/x");
+    expect(normalizedDestinationPath(`${WIN}\\..\\secret`, "win32")).toBeNull();
+    expect(normalizedDestinationPath("attachments\\x", "win32")).toBeNull();
+    expect(normalizedDestinationPath("/Users/Bob/Library/Caches/Sagax/attachments", "darwin")).toBe("/users/bob/library/caches/sagax/attachments");
+    expect(normalizedDestinationPath("/workspace/attachments/A", "linux")).toBe("/workspace/attachments/A");
+    expect(normalizedDestinationPath("/workspace/./attachments", "linux")).toBeNull();
+    expect(normalizedDestinationPath("~/x", "linux")).toBeNull();
+  });
+
+  const roots = [{ server: DESKTOP_BRIDGE_MCP_NAME, path: WIN, platform: "win32" as const }, { server: USER_SANDBOX_MCP_NAME, path: "/workspace/attachments", platform: "linux" as const }];
+  const read = (tool: string, args: unknown) => ownAttachmentRead({ tool, input: typeof args === "string" ? args : JSON.stringify(args), roots });
+
+  it.each([
+    ["the attachments folder itself", "mcp__sagax-desktop__list_files", { path: WIN }, true],
+    ["the unpacked .zip (reported case)", "mcp__sagax-desktop__list_files", { path: `${WIN}\\a6d1def1-fichier` }, true],
+    ["a file in it, forward slashes", "mcp__sagax-desktop__read_file", { path: "C:/Users/BOBSMI~1/AppData/Local/Temp/Sagax/attachments/a6d1def1-fichier/rapport.txt" }, true],
+    ["another case", "mcp__sagax-desktop__read_file", { path: "c:\\users\\bobsmi~1\\appdata\\local\\temp\\sagax\\attachments\\x.zip" }, true],
+    ["a search in it", "mcp__sagax-desktop__search_files", { path: WIN, pattern: "x" }, true],
+    ["the server environment's copy", "mcp__sagax-environment__read_file", { path: "/workspace/attachments/x/rapport.txt" }, true],
+    ["a traversal out of it", "mcp__sagax-desktop__read_file", { path: `${WIN}\\..\\..\\secret.txt` }, false],
+    ["a sibling folder with the same prefix", "mcp__sagax-desktop__read_file", { path: `${WIN}-evil\\x` }, false],
+    ["elsewhere on the computer", "mcp__sagax-desktop__read_file", { path: "C:\\Users\\BOBSMI~1\\Documents\\x.txt" }, false],
+    ["no path (the home folder)", "mcp__sagax-desktop__list_files", {}, false],
+    ["a relative path", "mcp__sagax-desktop__read_file", { path: "attachments/x" }, false],
+    ["a write in it", "mcp__sagax-desktop__write_file", { path: `${WIN}\\x`, content: "y" }, false],
+    ["a command in it", "mcp__sagax-desktop__run_command", { command: "unzip x.zip", cwd: WIN }, false],
+    ["the Windows root on the server environment", "mcp__sagax-environment__read_file", { path: `${WIN}\\x` }, false],
+    ["unreadable arguments", "mcp__sagax-desktop__read_file", "{not json", false],
+    ["another server's read_file", "mcp__files__read_file", { path: `${WIN}\\x` }, false],
+    ["the sandbox root on the desktop", "mcp__sagax-desktop__read_file", { path: "/workspace/attachments/x" }, false],
+  ] as const)("%s: %s", (_label, tool, args, expected) => {
+    expect(read(tool, args)).toBe(expected);
+  });
+
+  it("answers a read of the person's own attachment at any level, after the safety hold, the person's rules and the key", () => {
+    for (const mode of ["ask", "auto", "edits"] as const) {
+      expect(autoVerdict(mode, "mcp__sagax-desktop__list_files", { ownAttachmentRead: true }).source).toBe("own-attachment");
+    }
+    expect(autoVerdict("ask", "mcp__sagax-desktop__list_files", { ownAttachmentRead: true, safetyHold: true }).approve).toBeNull();
+    expect(autoVerdict("ask", "mcp__sagax-desktop__list_files", { ownAttachmentRead: true, customRule: { behavior: "ask", id: "r" } }).approve).toBeNull();
+    expect(autoVerdict("ask", "mcp__sagax-desktop__list_files", { ownAttachmentRead: true, stepUpRequired: ["destructive"] }).approve).toBeNull();
+    expect(autoVerdict("ask", "mcp__sagax-desktop__list_files", { ownAttachmentRead: true, requiresExplicitApproval: true }).approve).toBeNull();
+    expect(autoVerdict("ask", "mcp__sagax-desktop__list_files", {}).approve).toBeNull();
   });
 });

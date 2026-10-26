@@ -10,6 +10,7 @@ import { realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { memberOwnScopeTool } from "./member-tool-scope.ts";
+import { READABLE_HIDDEN_SEGMENTS } from "../shared/readable-hidden.ts";
 import { dataToolName, foreignToolSpelling } from "./sagax-internal-tools.ts";
 
 export type EngineAccessRefusal = "engine_missing" | "no_access";
@@ -107,6 +108,8 @@ export function serverCommandApproval(input: { tool?: string; command?: unknown 
 /** File tools an owner may approve for their own bot when every path stays
  * in the bot's own task workspace. */
 const WORKSPACE_FILE_TOOLS = new Set(["read", "write", "edit", "multiedit", "notebookedit", "notebookread", "glob", "grep", "ls"]);
+/** The ones that only read. */
+const READ_ONLY_FILE_TOOLS = new Set(["read", "notebookread", "glob", "grep", "ls"]);
 
 /** A path's real location: the deepest existing ancestor resolved through
  * its symlinks, then the part that does not exist yet. */
@@ -191,11 +194,27 @@ export function memberBotAdminApproval(input: {
    * one of them could have spelled is never a built-in tool
    * (sagax-internal-tools.ts foreignToolSpelling). */
   foreignMcpServers?: Iterable<string>;
+  /** 2026-10-19 (JC): the call acts on one of the owner's own destinations
+   * (their server environment, their own computer or its Local VM) mounted
+   * for this turn (member-environment.ts ownDestinationCall): the owner's
+   * card at their own level, never an admin's, whatever the tool. */
+  ownDestination?: boolean;
+  /** 2026-10-19 (prod 0.5.27): Sagax's own computer_select, mounted for this
+   * turn, choosing among the answerer's own places
+   * (member-environment.ts ownComputerChoiceCall): never an admin's. */
+  ownComputerChoice?: boolean;
+  /** 2026-10-19: the owner holds `host.commands` (given in Perspicax): the
+   * server commands of their own bots are theirs to approve. */
+  ownerRunsServerCommands?: boolean;
 }): boolean {
-  if (input.ownEnvironment) return false;
-  if (serverCommandApproval(input)) return true;
+  if (input.ownEnvironment || input.ownDestination || input.ownComputerChoice || input.ownerRunsServerCommands) return false;
   const builtin = !foreignToolSpelling(input.tool, input.foreignMcpServers ?? []);
-  if (builtin && memberOwnScopeTool(input.tool?.trim())) return false;
+  // 2026-10-19 (member admin audit): a built-in tool of the member's own
+  // scope is judged by its exact name before the shell pattern, which read
+  // `agents__offer_shell_terminal` (a card the person approves) as a shell
+  // command and sent the member's terminal offer to an admin.
+  if (!input.command && builtin && memberOwnScopeTool(input.tool?.trim())) return false;
+  if (serverCommandApproval(input)) return true;
   // 2026-10-16: the Data tools are the bot's own database, confined to its
   // own folders on an organization server (sagax-internal-tools.ts).
   if (builtin && dataToolName(input.tool)) return false;
@@ -204,12 +223,16 @@ export function memberBotAdminApproval(input: {
   if (!WORKSPACE_FILE_TOOLS.has(tool)) return true;
   if (!input.paths?.length) return true;
   const root = realLocation(input.workspaceRoot);
+  // 2026-10-19 (bot quality, cause A): a read may open the bot's own skill
+  // revisions and plugin manifests (READABLE_HIDDEN_SEGMENTS); every other
+  // dot folder, and any write into a dot folder, still waits for an admin.
+  const reads = READ_ONLY_FILE_TOOLS.has(tool);
   return !input.paths.every((path) => {
     if (typeof path !== "string" || !isAbsolute(path)) return false;
     const rel = relative(root, realLocation(path));
     if (rel === "") return true;
     if (isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`)) return false;
-    return !rel.split(sep).some((segment) => segment.startsWith("."));
+    return !rel.split(sep).some((segment) => segment.startsWith(".") && !(reads && READABLE_HIDDEN_SEGMENTS.has(segment)));
   });
 }
 

@@ -12,6 +12,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
 import { inflateSync } from "node:zlib";
+import { openGate } from "../server/browser/egress/gate.ts";
 import { browserBundlePaths, browserBundleSpec } from "../server/browser-bundle-release.ts";
 import { executableTarget } from "./prepare-cloudflared.mjs";
 import { WINDOWS_VENDOR_VERSION, verifyVendorCandidate, verifyVendorPatch } from "./build-windows-browser-vendor.mjs";
@@ -119,6 +120,7 @@ let failure;
 let fixtureRequests = 0;
 let phase = "runtime discovery";
 let closeBrowserSession;
+let closeGate;
 
 function child(command, args, childEnv) {
   const proc = spawn(command, args, { cwd: fixture, env: childEnv, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
@@ -287,10 +289,16 @@ try {
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const url = `http://127.0.0.1:${server.address().port}/`;
+  // Production browsers reach the network only through the egress gate, which refuses this fixture's port like any
+  // other loopback server. This test gate (smoke only, never shipped) allows exactly the fixture's port and nothing else.
+  const fixturePort = server.address().port;
+  const gate = await openGate({ decide: async (to, addresses) =>
+    to.port === fixturePort && addresses.every((a) => a.address === "127.0.0.1" || a.address === "::1") ? null : "smoke gate: fixture only" });
+  closeGate = () => gate.close();
   for (const name of ["alpha", "beta"]) {
     const integration = agentBrowserIntegration({ binaryPath: status.binaryPath,
       session: `omb-${name[0]}-${randomBytes(4).toString("hex")}`,
-      encryptionKey: randomBytes(32).toString("hex"), persistent: false, env });
+      encryptionKey: randomBytes(32).toString("hex"), persistent: false, env, egressPort: gate.port });
     assert.equal(resolve(integration.env.AGENT_BROWSER_EXECUTABLE_PATH ?? ""), resolve(paths.chrome), "MCP did not receive bundled Chromium");
     assert.equal(integration.env.AGENT_BROWSER_RESTORE_SAVE, "never");
     // Use the production preparation path. Guest preparation creates only
@@ -359,6 +367,7 @@ finally {
     proc.kill("SIGKILL");
   })));
   if (server?.listening) { server.closeAllConnections(); await new Promise((done) => server.close(done)); }
+  await closeGate?.().catch(() => {});
   process.removeListener("SIGINT", interrupt);
   process.removeListener("SIGTERM", interrupt);
   if (cleanupErrors.length) failure = new Error(`${failure?.message ?? "Browser test passed"}; browser cleanup failed, isolated fixture retained at ${fixture}: ${cleanupErrors.join("; ")}`);

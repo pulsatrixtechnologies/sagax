@@ -18,22 +18,6 @@ import type { ActivityOutcome, ActivityRow } from "../shared/activity.ts";
 
 export type { ActivityOutcome, ActivityRow };
 
-/** Composio toolkit slugs whose display name is not just a capitalised word. */
-const TOOLKIT_NAMES: Record<string, string> = {
-  GMAIL: "Gmail",
-  GITHUB: "GitHub",
-  GOOGLESHEETS: "Google Sheets",
-  GOOGLECALENDAR: "Google Calendar",
-  GOOGLEDRIVE: "Google Drive",
-  GOOGLEDOCS: "Google Docs",
-  HUBSPOT: "HubSpot",
-  LINKEDIN: "LinkedIn",
-  YOUTUBE: "YouTube",
-  TWITTER: "X",
-  WHATSAPP: "WhatsApp",
-  ONEDRIVE: "OneDrive",
-};
-
 /** The agent's own built-in tools, phrased as what they did. */
 const BUILTIN_LABELS: Record<string, string> = {
   Bash: "Ran a command",
@@ -65,13 +49,6 @@ function humanize(raw: string): string {
   return spaced ? spaced[0].toUpperCase() + spaced.slice(1) : raw;
 }
 
-function toolkitName(slug: string): string {
-  return TOOLKIT_NAMES[slug] ?? slug[0] + slug.slice(1).toLowerCase();
-}
-
-/** Composio names its tools TOOLKIT_ACTION_WORDS, all upper case. */
-const COMPOSIO_TOOL = /^([A-Z][A-Z0-9]+)_([A-Z0-9_]+)$/;
-
 /** Turn a raw tool name into the app it touched and the action, in words. */
 export function describeTool(name: string): { app: string | null; label: string } {
   const builtin = BUILTIN_LABELS[name];
@@ -80,7 +57,6 @@ export function describeTool(name: string): { app: string | null; label: string 
   if (name.startsWith("mcp__")) {
     const [, server = "", ...rest] = name.split("__");
     const action = rest.join("__");
-    if (server === "composio") return describeTool(action);
     if (server === "computer") return { app: "Computer", label: humanize(action) };
     if (server === "agents") return { app: "Team", label: humanize(action) };
     if (server.startsWith("claude_ai_")) {
@@ -88,9 +64,6 @@ export function describeTool(name: string): { app: string | null; label: string 
     }
     return { app: humanize(server), label: humanize(action) };
   }
-
-  const composio = COMPOSIO_TOOL.exec(name);
-  if (composio) return { app: toolkitName(composio[1]), label: humanize(composio[2]) };
 
   return { app: null, label: humanize(name) };
 }

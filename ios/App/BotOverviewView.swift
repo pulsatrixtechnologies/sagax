@@ -4,7 +4,7 @@ import SwiftUI
 /// A read-only summary of one bot: who it is, what it does, what it can
 /// reach, what it won't do, and its recent activity. No settings and no
 /// transcript live here — this mirrors the paired-safe `BotOverview` payload
-/// exactly. Shell copied from `ConnectedAppsView`.
+/// exactly.
 struct BotOverviewView: View {
     @Environment(\.themePalette) var themePalette
     let bot: Bot

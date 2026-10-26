@@ -105,3 +105,14 @@ describe("bundled verification skill", () => {
     }
   });
 });
+
+describe("bundled skill triggers", () => {
+  const adb: BundledSkill = { ...phone, manifest: { ...phone.manifest, triggerTerms: ["adb", "usb phone", "/create-verification-skill"] } };
+  it("match a trigger term as a whole word, never inside an id", () => {
+    expect(selectBundledSkills("assignment 0cb14dd1-98e6-4adb-8b34-f8bc30a83b3f", ["phoneMcp"], [adb])).toEqual([]);
+    expect(selectBundledSkills("Use adb to list devices", ["phoneMcp"], [adb])).toEqual([adb]);
+    expect(selectBundledSkills("(ADB) logs", ["phoneMcp"], [adb])).toEqual([adb]);
+    expect(selectBundledSkills("my usb phone, please", ["phoneMcp"], [adb])).toEqual([adb]);
+    expect(selectBundledSkills("run /create-verification-skill now", ["phoneMcp"], [adb])).toEqual([adb]);
+  });
+});

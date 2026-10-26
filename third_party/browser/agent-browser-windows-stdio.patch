@@ -1,8 +1,9 @@
-OpenMausBot Windows vendor revision 0.36.0-omb.1.
+Sagax Windows vendor revision 0.36.0-omb.2.
 Base: vercel-labs/agent-browser eb05921bad874cd2a1b4fa5d1149f1ed26576cae.
-Carries only the Windows handle-inheritance fix from upstream PR1781,
-commit 81a98c349d04195396ffae6898bd375ad64280de, plus modification notices
-and package-version metadata. The MCP output-reader rewrite is not included.
+Carries the Windows handle-inheritance fix from upstream PR1781,
+commit 81a98c349d04195396ffae6898bd375ad64280de, and CREATE_NO_WINDOW for the
+Chrome children (port of OpenMausBot #2891), plus modification notices and
+package-version metadata. The MCP output-reader rewrite is not included.
 
 diff --git a/cli/src/connection.rs b/cli/src/connection.rs
 --- a/cli/src/connection.rs
@@ -75,7 +76,7 @@ diff --git a/cli/Cargo.toml b/cli/Cargo.toml
  [package]
  name = "agent-browser"
 -version = "0.36.0"
-+version = "0.36.0-omb.1"
++version = "0.36.0-omb.2"
  edition = "2021"
  description = "Fast browser automation CLI for AI agents"
  license = "Apache-2.0"
@@ -87,7 +88,73 @@ diff --git a/cli/Cargo.lock b/cli/Cargo.lock
  [[package]]
  name = "agent-browser"
 -version = "0.36.0"
-+version = "0.36.0-omb.1"
++version = "0.36.0-omb.2"
  dependencies = [
   "aes-gcm",
   "async-trait",
+diff --git a/cli/src/native/cdp/chrome.rs b/cli/src/native/cdp/chrome.rs
+--- a/cli/src/native/cdp/chrome.rs
++++ b/cli/src/native/cdp/chrome.rs
+@@ -1,3 +1,4 @@
++// Modified by Sagax: no Windows console window for Chrome children.
+ use std::io::{BufRead, BufReader, Write};
+ use std::path::{Path, PathBuf};
+ use std::process::{Child, Command, Stdio};
+@@ -418,6 +419,18 @@
+     }
+ }
+ 
++/// Chrome Headless Shell is a console program on Windows: the daemon is
++/// detached, so its own creation flags never reach the Chrome it starts.
++fn chrome_command(executable: &std::ffi::OsStr) -> Command {
++    let mut command = Command::new(executable);
++    #[cfg(windows)]
++    {
++        use std::os::windows::process::CommandExt;
++        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
++    }
++    command
++}
++
+ struct ChromeArgs {
+     args: Vec<String>,
+     user_data_dir: PathBuf,
+@@ -819,7 +832,7 @@
+     #[cfg(target_os = "linux")]
+     let xvfb = maybe_start_xvfb(options);
+ 
+-    let mut cmd = Command::new(chrome_path);
++    let mut cmd = chrome_command(chrome_path.as_os_str());
+     cmd.args(&args)
+         .stdin(Stdio::null())
+         .stdout(Stdio::null())
+@@ -1732,6 +1745,29 @@
+ 
+ #[cfg(test)]
+ mod tests {
++    #[cfg(windows)]
++    #[test]
++    fn test_chrome_child_has_no_console() {
++        const PROBE: &str = "SAGAX_CHROME_CONSOLE_PROBE";
++        if std::env::var_os(PROBE).is_some() {
++            #[link(name = "kernel32")]
++            extern "system" {
++                fn GetConsoleWindow() -> isize;
++            }
++            assert_eq!(unsafe { GetConsoleWindow() }, 0, "Chrome child got a console");
++            return;
++        }
++        let me = std::env::current_exe().unwrap();
++        let out = super::chrome_command(me.as_os_str())
++            .args(["--exact", "native::cdp::chrome::tests::test_chrome_child_has_no_console", "--nocapture"])
++            .env(PROBE, "1")
++            .stdin(std::process::Stdio::null())
++            .output()
++            .unwrap();
++        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stdout));
++        assert!(String::from_utf8_lossy(&out.stdout).contains("1 passed"));
++    }
++
+     use super::*;
+     use crate::test_utils::EnvGuard;
+ 

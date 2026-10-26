@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { confidentialDataScopePath, ephemeralWorkspaceTokenPath, excludedWorkspaceAuthPath, liveDataEnginePath, portableWorkspaceConfig, redownloadedOrgLibraryPath, restoredWorkspaceConfig } from "./workspace-backup-policy.ts";
+import {
+  configSecretCounts, confidentialDataScopePath, destinationSignInFile, disposableEngineHomePath, engineCredentialPath, engineSettingsPath, ephemeralWorkspaceTokenPath, excludedWorkspaceAuthPath, liveDataEnginePath,
+  portableWorkspaceConfig, ReconnectTally, redownloadedOrgLibraryPath, restoredWorkspaceConfig, savedSignInPath, secretCategory, secretFieldName, withoutEngineSecrets, withoutRegistrySecrets,
+} from "./workspace-backup-policy.ts";
 
 describe("workspace backup data boundary", () => {
   it("exports ordinary settings only and retains destination connection sections unchanged", () => {
@@ -84,6 +87,8 @@ describe("workspace backup data boundary", () => {
     for (const path of [
       "org-github-tokens.enc",
       "org-github-tokens.enc.4242.05a7b3e0-1234-4abc-8def-0123456789ab.tmp",
+      "org-bot-secrets.enc",
+      "org-bot-secrets.enc.4242.05a7b3e0-1234-4abc-8def-0123456789ab.tmp",
     ]) expect(excludedWorkspaceAuthPath(path)).toBe(true);
     for (const path of ["org-github-tokens.enc.md", "workspaces/bot/org-github-tokens.enc", "notes/org-github-tokens.enc"]) {
       expect(excludedWorkspaceAuthPath(path)).toBe(false);
@@ -91,7 +96,7 @@ describe("workspace backup data boundary", () => {
   });
 
   it("never exports the per-turn hook token directory, and only that directory", () => {
-    for (const path of ["hook-tokens", "hook-tokens/0123456789abcdef01234567.token", "sessions.json.open"]) expect(ephemeralWorkspaceTokenPath(path)).toBe(true);
+    for (const path of ["hook-tokens", "hook-tokens/0123456789abcdef01234567.token", "sessions.json.open", "sessions.json.unsynced"]) expect(ephemeralWorkspaceTokenPath(path)).toBe(true);
     for (const path of ["hook-tokens.md", "workspaces/bot/hook-tokens/notes.md", "attachments/api.token", "sessions.json.opened", "workspaces/bot/sessions.json.open"]) expect(ephemeralWorkspaceTokenPath(path)).toBe(false);
   });
 
@@ -129,6 +134,124 @@ describe("workspace backup data boundary", () => {
       "data-scopes/t-0123456789abcdef", "data-scopes/b1/xt-0123456789abcdef/sheet.json"]) {
       expect(confidentialDataScopePath(path), path).toBe(false);
     }
+  });
+
+  it("leaves out every engine's saved sign-in in an engine home, and keeps its settings", () => {
+    for (const path of [
+      // Claude Code (CLAUDE_CONFIG_DIR) and its copies of .claude.json
+      "principals/pr_ana/claude/.credentials.json", "principals/pr_ana/claude/.credentials.json.tmp.123.456",
+      "principals/pr_ana/claude/backups/.claude.json.backup.1792350746720", "principals/pr_ana/claude/.claude.json.backup",
+      // Codex (CODEX_HOME): ChatGPT tokens or API key, MCP sign-ins
+      "principals/pr_ana/codex/auth.json", "principals/pr_ana/codex/.credentials.json", "principals/pr_ana/codex-key/auth.json",
+      // Grok Build (HOME=<dir>, GROK_HOME=<dir>/.grok)
+      "principals/pr_ana/grok/.grok/auth.json", "principals/pr_ana/grok/.grok/auth.json.lock", "principals/pr_ana/grok/.grok/mcp_credentials.json",
+      "org/grokAgent-key/.grok/auth.json",
+      // Kimi Code, pi, Gemini, Qwen, OpenCode, Hermes, Cline, Droid
+      "principals/pr_ana/kimi/credentials/kimi-code.json", "principals/pr_ana/kimi/credentials", "principals/pr_ana/piAgent-key/auth.json",
+      "principals/pr_ana/geminiAgent-key/.gemini/oauth_creds.json", "principals/pr_ana/geminiAgent-key/.gemini/google_accounts.json",
+      "principals/pr_ana/geminiAgent-key/.gemini/mcp-oauth-tokens.json", "principals/pr_ana/geminiAgent-key/.gemini/.env", "org/qwen/.qwen/oauth_creds.json",
+      "org/opencode/.local/share/opencode/auth.json", "org/opencode/.local/share/opencode/mcp-auth.json", "org/opencode/.local/share/opencode/account.json",
+      "engine-policies/hermes-solo/auth.json", "engine-policies/hermes-org/.env", "org/cline/.cline/data/secrets.json", "org/droid/.factory/auth.encrypted",
+      "org/grokAgent-key/.local/share/keyrings/login.keyring",
+      // Sagax's own signed-in marker, and other spellings on a case-insensitive disk
+      "principals/pr_ana/claude/.pulsabot-login.json", "principals/pr_ana/kimi/.pulsabot-login.json",
+      "Principals/pr_ana/codex/AUTH.json", "PRINCIPALS/pr_ana/claude/.Credentials.json",
+    ]) expect(engineCredentialPath(path), path).toBe(true);
+    for (const path of [
+      "principals/pr_ana/claude/settings.json", "principals/pr_ana/claude/.claude.json", "principals/pr_ana/claude/CLAUDE.md",
+      "principals/pr_ana/claude/skills/x/SKILL.md", "principals/pr_ana/claude/projects/-x/abc.jsonl", "principals/pr_ana/codex/config.toml",
+      "principals/pr_ana/codex/AGENTS.md", "principals/pr_ana/grok/.grok/config.toml", "principals/pr_ana/kimi/config.toml",
+      "principals/pr_ana/piAgent-key/settings.json", "principals/pr_ana/geminiAgent-key/.gemini/settings.json", "principals/pr_ana/claude/.env.example",
+      "principals/pr_ana/claude/auth.json.md", "principals/pr_ana/engine-api-keys.enc", "principals/pr_ana/claude", "principals/pr_ana",
+      // user files outside engine homes are never redacted by name
+      "workspaces/bot/auth.json", "workspaces/bot/.env", "task-workspaces/bot/thread/.credentials.json", "attachments/credentials/a.txt",
+      "principals.json", "vm-home/project/auth.json",
+    ]) expect(engineCredentialPath(path), path).toBe(false);
+  });
+
+  it("leaves out every secret Sagax keeps itself (JC 2026-10-18 « Exclure tout »), and a turn's dead bearers", () => {
+    for (const path of ["principals/pr_ana/mcp-oauth.enc", "principals/pr_ana/mcp-oauth.enc.12.0a1b-2c.tmp", "principals/pr_ana/cloud-agent-credentials.enc",
+      "principals/pr_ana/connections.enc", "principals/pr_ana/credential-vault.enc", "principals/pr_ana/engine-api-keys.enc", "principals/pr_ana/future-store.enc",
+      "marketplace-tokens.enc", "idp-revocations.enc", "Marketplace-Tokens.enc", "credential-vault.enc", "principals/pr_ana/codex/auth.json",
+      "agent-api.key", "media-proxy.key", "published-pages.key", "template-links.key", "future-signing.key", "Published-Pages.KEY",
+      "push-devices", "push-devices/pr_ana.json"]) expect(savedSignInPath(path), path).toBe(true);
+    for (const path of ["workspaces/bot/marketplace-tokens.enc", "workspaces/bot/agent-api.key", "attachments/a.key", "principals/pr_ana/claude/settings.json",
+      "principals.json", "published-pages.json", "template-links.json", "security-keys.json", "push-devices.json", "attachments/talk.key", "workspaces/w/notes/x.enc"]) expect(savedSignInPath(path), path).toBe(false);
+    // a destination keeps its own top-level ones in place
+    for (const name of ["agent-api.key", "media-proxy.key", "marketplace-tokens.enc", "push-devices"]) expect(destinationSignInFile(name), name).toBe(true);
+    for (const name of ["principals", "published-pages.json", "principals/pr_ana/connections.enc"]) expect(destinationSignInFile(name), name).toBe(false);
+    expect(ephemeralWorkspaceTokenPath("comms-tokens/abc.token")).toBe(true);
+    expect(ephemeralWorkspaceTokenPath("comms-tokens")).toBe(true);
+  });
+
+  it("leaves out an engine home's scratch and caches (Codex tmp/arg0 links)", () => {
+    for (const path of ["principals/pr_ana/codex/tmp", "principals/pr_ana/codex/tmp/arg0/codex-arg0x/apply_patch", "principals/pr_ana/codex/.tmp/x",
+      "org/cursorAgent-key/Library/Caches/cursor-compile-cache/a", "org/x/.cache/y"]) expect(disposableEngineHomePath(path), path).toBe(true);
+    for (const path of ["principals/pr_ana/codex/config.toml", "principals/pr_ana/codex/sessions/tmp/x", "tmp/x", "workspaces/bot/tmp/x",
+      "principals/pr_ana/codex"]) expect(disposableEngineHomePath(path), path).toBe(false);
+  });
+
+  it("copies Claude Code's .claude.json without its account, API key, key approvals and MCP env or headers", () => {
+    for (const path of ["principals/pr_ana/claude/.claude.json", "org/x/.claude/.claude.json", "principals/pr_ana/claude/settings.json", "principals/pr_ana/codex/config.toml",
+      "engine-policies/hermes-org/config.yaml", "principals/pr_ana/piAgent-key/.pi/agent/models.json", "org/opencode/.config/opencode/opencode.json", "org/cline/.cline/data/cline_mcp_settings.json"]) {
+      expect(engineSettingsPath(path), path).toBe(true);
+    }
+    for (const path of ["workspaces/bot/.claude.json", "workspaces/bot/settings.json", "config.json", "principals/pr_ana/claude/projects/-x/abc.jsonl"]) expect(engineSettingsPath(path), path).toBe(false);
+    const text = JSON.stringify({ theme: "dark", mcpServers: { a: { command: "x", env: { A: "FAKE_SECRET_DO_NOT_USE_1" }, headers: { Authorization: "FAKE_SECRET_DO_NOT_USE_2" } } },
+      oauthAccount: { emailAddress: "FAKE_SECRET_DO_NOT_USE_3" }, primaryApiKey: "FAKE_SECRET_DO_NOT_USE_4", customApiKeyResponses: { approved: ["FAKE_SECRET_DO_NOT_USE_5"] } });
+    const scrubbed = withoutEngineSecrets("principals/pr_ana/claude/.claude.json", text)!;
+    expect(JSON.parse(scrubbed)).toEqual({ theme: "dark", mcpServers: { a: { command: "x", env: {}, headers: {} } } });
+    expect(scrubbed).not.toContain("FAKE_SECRET");
+    expect(withoutEngineSecrets("x/.claude.json", JSON.stringify({ theme: "dark", maxTokens: 3 }))).toBeNull();
+    expect(() => withoutEngineSecrets("x/.claude.json", "not json")).toThrow();
+  });
+
+  it("strips keys, tokens and env or header values from TOML and YAML engine settings, and keeps the rest", () => {
+    const toml = [
+      'model = "gpt-5"', 'api_key_env = "MOONSHOT_API_KEY"', "", '[model."local"]', 'base_url = "http://127.0.0.1:1234/v1"', 'api_key = "FAKE_SECRET_DO_NOT_USE_1"',
+      "[mcp_servers.docs]", 'command = "docs"', 'bearer_token = "FAKE_SECRET_DO_NOT_USE_2"', 'http_headers = { "X-Key" = "FAKE_SECRET_DO_NOT_USE_3" }',
+      "[mcp_servers.docs.env]", 'TOKEN = "FAKE_SECRET_DO_NOT_USE_4"', "[ui]", 'password = """', "FAKE_SECRET_DO_NOT_USE_5", '"""', 'theme = "dark"', "",
+    ].join("\n");
+    const out = withoutEngineSecrets("principals/pr_ana/codex/config.toml", toml)!;
+    expect(out).not.toContain("FAKE_SECRET");
+    for (const kept of ['model = "gpt-5"', 'api_key_env = "MOONSHOT_API_KEY"', 'base_url = "http://127.0.0.1:1234/v1"', 'command = "docs"', "[mcp_servers.docs.env]", 'theme = "dark"']) expect(out).toContain(kept);
+    const yaml = ["model:", "  default: x", "providers:", "  local:", "    base_url: http://127.0.0.1:1234/v1", "    api_key: FAKE_SECRET_DO_NOT_USE_6",
+      "mcp_servers:", "  docs:", "    command: docs", "    env:", "      TOKEN: FAKE_SECRET_DO_NOT_USE_7", "    headers:", "      - FAKE_SECRET_DO_NOT_USE_8", "toolsets: [web]", ""].join("\n");
+    const yamlOut = withoutEngineSecrets("engine-policies/hermes-org/config.yaml", yaml)!;
+    expect(yamlOut).not.toContain("FAKE_SECRET");
+    for (const kept of ["default: x", "base_url: http://127.0.0.1:1234/v1", "command: docs", "toolsets: [ web ]"]) expect(yamlOut).toContain(kept);
+    expect(withoutEngineSecrets("x/config.toml", 'model = "x"\n')).toBeNull();
+  });
+
+  it("finds a secret word anywhere in a field name, and leaves references and counts alone", () => {
+    for (const name of ["openai_api_key", "github_token", "apiToken", "GITHUB_PAT", "db_password", "credentials", "key", "OPENAI_KEY", "groqKey", "oauthAccount", "customApiKeyResponses", "x-api-key"])
+      expect(secretFieldName(name), name).toBe(true);
+    for (const name of ["api_key_env", "bearer_token_env_var", "envKey", "apiKeyHelper", "token_url", "max_tokens", "model_auto_compact_token_limit", "sort_key", "keybindings", "monkey"])
+      expect(secretFieldName(name), name).toBe(false);
+    expect(withoutRegistrySecrets("p/.npmrc", "registry=https://r.example/\n//r.example/:_authToken=FAKE\n")).toBe("registry=https://r.example/\n");
+    expect(withoutRegistrySecrets("p/.npmrc", "registry=https://r.example/\n")).toBeNull();
+    expect(savedSignInPath("principals/pr_ana/claude/skills/gh/SKILL.md")).toBe(false);
+    expect(savedSignInPath("principals/pr_ana/codex/.config/gh/hosts.yml")).toBe(true);
+    expect(savedSignInPath("vm-home/talk.key")).toBe(false);
+    const args = JSON.parse(withoutEngineSecrets("org/claude/.mcp.json", JSON.stringify({ mcpServers: { g: { command: "docker", args: ["run", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN=FAKE_SECRET_1", "--header", "X-API-Key: FAKE_SECRET_2", "-e", "LOG_LEVEL=debug", "img"] } } }))!);
+    expect(args.mcpServers.g.args).toEqual(["run", "-e", "--header", "-e", "LOG_LEVEL=debug", "img"]);
+  });
+
+  it("counts what to reconnect by category, a person once and an engine sign-in once per engine home", () => {
+    expect(secretCategory("principals/pr_ana/claude/.credentials.json")).toBe("engines");
+    expect(secretCategory("principals/pr_ana/connections.enc")).toBe("connections");
+    expect(secretCategory("principals/pr_ana/credential-vault.enc")).toBe("credentialVault");
+    expect(secretCategory("org-github-tokens.enc")).toBe("github");
+    expect(secretCategory("push-devices/pr_ana.json")).toBe("phones");
+    expect(secretCategory("media-proxy.key")).toBeNull();
+    const tally = new ReconnectTally();
+    for (const path of ["principals/pr_ana/claude/.credentials.json", "principals/pr_ana/claude/.pulsabot-login.json", "principals/pr_ana/codex/auth.json",
+      "principals/pr_bo/claude/.credentials.json", "principals/pr_ana/connections.enc", "principals/pr_bo/connections.enc", "marketplace-tokens.enc", "agent-api.key"]) tally.path(path);
+    tally.count("providerKeys", 2);
+    expect(tally.result()).toEqual({ engines: { count: 3, people: 2 }, connections: { count: 2, people: 2 }, github: { count: 1 }, providerKeys: { count: 2 } });
+    expect(configSecretCounts({ xai: { key: "FAKE_SECRET_DO_NOT_USE_1" }, mail: { password: "FAKE_SECRET_DO_NOT_USE_2" }, language: "fr", profile: { name: "A" },
+      mcpServers: { a: { env: { A: "FAKE_SECRET_DO_NOT_USE_3" } }, b: { command: "b" } }, instances: { c: { environment: { K: "FAKE_SECRET_DO_NOT_USE_4" } }, d: { driver: "x" } } }))
+      .toEqual({ providerKeys: 3, mcp: 1 });
   });
 
   it.each(["attachments/key.txt", "workspaces/bot/notes.md", "workspaces/bot/external-runtimes.json", "vm-home/project/config.json", "config.json", "webhooks.json"])("does not redact arbitrary user file %s", (path) => {

@@ -155,17 +155,10 @@ struct BotPanelDetails: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             if showsActivity {
-                // Ongoing activities: one place, at the top, absent when
-                // nothing runs (no empty card). The server keeps them to
-                // what this person may read.
-                if let other = activity.other, !other.isEmpty {
-                    AnyView(liveSection(.other, icon: .activity, title: "Ongoing activities", items: other, showsError: false))
-                        .accessibilityIdentifier("desktop-panel-ongoing")
-                }
                 if activity.showsCodingSection {
                     AnyView(codingSection)
                 }
-                if activity.list != nil, !activity.showsCodingSection, (activity.other ?? []).isEmpty {
+                if activity.list != nil, !activity.showsCodingSection {
                     AnyView(allHistoryRow)
                 }
             }

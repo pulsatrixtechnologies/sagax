@@ -27,3 +27,15 @@ describe("single stream segments (thread mode off)", () => {
     expect(streamSegments(undefined)).toEqual([]);
   });
 });
+
+// 2026-10-22 (JC: "everything should be unified in a single chat page").
+describe("a routine results thread in the stream", () => {
+  it("is not a segment, so it never becomes the stream's home", () => {
+    const tasks = [
+      { threadId: "chat", createdAt: 1 },
+      { threadId: "results", createdAt: 2, routineResults: true as const },
+    ];
+    expect(isStreamSegment(tasks[1]!)).toBe(false);
+    expect(latestSegment(tasks)?.threadId).toBe("chat");
+  });
+});

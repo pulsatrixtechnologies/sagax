@@ -6,15 +6,14 @@ import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode 
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { SIDE_CARD, SIDE_CARD_HEADER, SIDE_CARD_ICON_BUTTON } from "@/lib/side-card";
 import { useMenuMotion } from "../MenuMotion";
 import type { DevPodContext, DevPodDefinition } from "./registry";
 
-export const POD_CARD =
-  "dev-pod pointer-events-auto rounded-2xl border-[0.5px] border-border bg-elevated text-ink shadow-sm";
+export const POD_CARD = `dev-pod ${SIDE_CARD}`;
 const MENU_ITEM =
   "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent";
-const HEADER_ICON =
-  "flex size-6 shrink-0 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-hover hover:text-ink";
+const HEADER_ICON = SIDE_CARD_ICON_BUTTON;
 
 export interface PodMenuActions {
   canMoveUp: boolean;
@@ -105,7 +104,7 @@ export function PodFrame({
         setMenuOpen(true);
       }}
     >
-      <div className="group/podhead flex min-h-[40px] items-center gap-1.5 py-1.5 pl-3 pr-1.5">
+      <div className={cn("group/podhead", SIDE_CARD_HEADER)}>
         {collapsible ? (
           <button
             type="button"

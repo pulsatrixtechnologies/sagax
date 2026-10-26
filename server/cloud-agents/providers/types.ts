@@ -13,6 +13,8 @@ export interface ProviderLaunchResult {
   latestRunId?: string;
   url?: string;
   status: string;
+  envId?: string;
+  origin?: CloudAgentRecord["origin"];
 }
 
 export interface ProviderRunSnapshot {
@@ -21,6 +23,10 @@ export interface ProviderRunSnapshot {
   error?: string;
   latestRunId?: string;
   gitBranches?: CloudAgentRecord["gitBranches"];
+  stats?: CloudAgentRecord["stats"];
+  pr?: CloudAgentRecord["pr"];
+  unread?: boolean;
+  url?: string;
 }
 
 export interface CloudAgentProviderAdapter {

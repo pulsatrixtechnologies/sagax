@@ -9,10 +9,12 @@
 import type { Message } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { autoWorkerLine } from "@/lib/auto-model";
+import { limitFailoverLineText } from "@/lib/limit-failover";
 import { failedTurnCause } from "../../shared/failed-turn";
 import { isStoppedTurnName } from "../../shared/client-cancel";
 import { localDay } from "@/lib/transcript-derivations";
 import { SANDBOX_WAKE_NOTICE, SANDBOX_WAKE_TIMEOUT_NOTICE } from "../../shared/sandbox-wake";
+import { ONE_PASSWORD_WAITING } from "../../shared/credential-vault";
 import { isQuietWorkspaceLine, parseWorkspaceLine, type WorkspaceLine } from "../../shared/workspace-line";
 import type { SelectedComputer } from "../../shared/execution-target";
 import type { LocaleKey } from "@/locales";
@@ -35,11 +37,21 @@ export function statusActivity(message: Message): { kind: "recovery" | "notice" 
   // (shared/offered-engines.ts), in the reader's language.
   const move = message.kind === "activity" ? message.tool?.engineMove : undefined;
   if (move) return { kind: "notice", text: t("model.org.engineMoved", { from: move.from, to: move.to }) };
+  // 2026-10-19: a usage limit sent the turn to another engine, or it came
+  // back (shared/limit-failover.ts), in the reader's language.
+  const limit = message.kind === "activity" ? message.tool?.limitFailover : undefined;
+  if (limit) return { kind: "recovery", text: limitFailoverLineText(limit) };
+  // 2026-10-21: a request ran on the engine that has its connector
+  // (server/connector-switch.ts), in the reader's language.
+  const switched = message.kind === "activity" ? message.tool?.connectorSwitch : undefined;
+  if (switched) return { kind: "notice", text: t("chat.connectorSwitch", { engine: switched.engine, connector: switched.connector }) };
   if (name?.startsWith("recovery:")) return { kind: "recovery", text: name.slice("recovery:".length).trim() };
   // The Kubernetes cluster of the server environments is starting
   // (server/sandbox-k8s-wake.ts): the server's fixed rows, in the person's language.
   if (name === SANDBOX_WAKE_NOTICE) return { kind: "notice", text: t("chat.sandboxWakingAsleep") };
   if (name === SANDBOX_WAKE_TIMEOUT_NOTICE) return { kind: "notice", text: t("chat.sandboxWakeTimeout") };
+  // A fill reads 1Password, which may ask the person first (parité R10).
+  if (name === ONE_PASSWORD_WAITING) return { kind: "notice", text: t("vault.onePassword.waiting") };
   // Auto changed where the bot works (shared/workspace-line.ts).
   const workspace = parseWorkspaceLine(name);
   if (workspace) return { kind: "notice", text: workspaceLineText(workspace) };

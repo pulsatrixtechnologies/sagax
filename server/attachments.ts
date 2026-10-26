@@ -8,20 +8,23 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { link, open, unlink } from "node:fs/promises";
-import { join, extname } from "node:path";
+import { basename, dirname, join, extname, resolve, sep } from "node:path";
 import { DATA_DIR } from "./config.ts";
 import { UploadContentError, assertContentMatches, checkUploadedFile } from "./upload-content-check.ts";
 
 export const ATTACHMENTS_DIR = join(DATA_DIR, "attachments");
 
-/** The spec's ceiling: a screenshot bigger than this is rejected before it
- * is ever buffered, matching the composer's existing size discipline. */
-export const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+/** The ceiling of a stored picture: one bigger than this is rejected before
+ * it is ever buffered. A phone photo (often 12 MB) fits: the copy an engine
+ * gets is scaled down at send time (server/model-image.ts), never refused for
+ * its size (2026-10-20). */
+export const IMAGE_MAX_BYTES = 32 * 1024 * 1024;
 
 /** Shared documents are deliberately smaller than Cloudflare's transport
  * ceiling. This is a local inbox, not unbounded remote storage. */
@@ -250,6 +253,21 @@ export function deleteAttachment(path: string): void {
   } catch {
     // Already gone, or never existed — nothing to reconcile.
   }
+  // the copy scaled for the model goes with its picture (server/model-image.ts)
+  try { rmSync(modelImageCopyPath(dirname(path), path), { force: true }); } catch { /* none */ }
+}
+
+/** Where the copy of a stored picture scaled for a model is kept: under
+ * `<attachments>/.model/` for a top-level attachment, beside the picture for
+ * one in a subfolder (`.office/<upload>/`, removed with that folder). Never
+ * outside the attachments folder. */
+export function modelImageCopyPath(attachmentsDir: string, sourcePath: string): string {
+  const root = resolve(attachmentsDir);
+  const source = resolve(sourcePath);
+  if (!source.startsWith(root + sep)) throw new Error("the picture is not in the attachments folder");
+  return dirname(source) === root
+    ? join(root, ".model", `${basename(source)}.fit.png`)
+    : `${source}.fit.png`;
 }
 
 /** Test-only: force the next quota check to rescan the directory instead of

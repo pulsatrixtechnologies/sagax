@@ -81,6 +81,21 @@ describe("desktop local models", () => {
     if (!refused.ok) expect(refused.error).not.toContain("10.1.2.3");
   });
 
+  it("never accepts or stores a per-endpoint API key: the key stays desktop-side only", async () => {
+    const { service, bridge } = await start();
+    bridge.online.add("pr_owner");
+    // The API key lives on the owner's desktop (electron/local-model-keys.mjs).
+    // The organization store refuses any `key` field, on the settings body...
+    expect(service.update("pr_owner", { expose: true, key: "sk-ornith" } as never).ok).toBe(false);
+    // ...on an endpoint...
+    expect(service.update("pr_owner", { endpoints: [{ id: "desk8000", label: "oMLX", baseUrl: "http://127.0.0.1:8000/v1", key: "sk-ornith" }] } as never).ok).toBe(false);
+    // ...and on a published catalog row.
+    expect(service.publish("pr_owner", { endpoints: [{ id: "desk8000", label: "oMLX", models: ["ornith"], key: "sk-ornith" }] } as never).ok).toBe(false);
+    // A clean publish still works, and no key is anywhere in the stored view.
+    expect(service.publish("pr_owner", { endpoints: [{ id: "desk8000", label: "oMLX", models: ["ornith"] }] }).ok).toBe(true);
+    expect(JSON.stringify(service.read("pr_owner"))).not.toContain("sk-ornith");
+  });
+
   it("rejects another person when sharing is off and allows them when sharing is on", async () => {
     const { service, bridge } = await start();
     const owner = "pr_owner";
@@ -296,6 +311,43 @@ describe("desktop local models", () => {
       expect(() => service.assertAvailable(owner, modelId, kind)).not.toThrow();
     }
     expect(() => service.assertAvailable(owner, "claude-sonnet-5", "claudeAgent")).not.toThrow();
+  });
+
+  it("surfaces per-endpoint probe status for the panel, without adding a non-answering server to the picker", async () => {
+    const { service, bridge } = await start();
+    const owner = "pr_owner";
+    bridge.online.add(owner);
+    expect(service.update(owner, { expose: true, endpoints: [
+      { id: "desk8002", label: "DwarfStar", baseUrl: "http://127.0.0.1:8002/v1" },
+      { id: "desk8000", label: "oMLX", baseUrl: "http://127.0.0.1:8000/v1" },
+      { id: "desk9337", label: "llama-server", baseUrl: "http://127.0.0.1:9337/v1" },
+    ] }).ok).toBe(true);
+    expect(service.publish(owner, {
+      endpoints: [{ id: "desk8002", label: "DwarfStar", models: ["qwen3"] }],
+      probes: [
+        { id: "desk8002", status: "answered" },
+        { id: "desk8000", status: "needs_key" },
+        { id: "desk9337", status: "offline" },
+      ],
+    }).ok).toBe(true);
+    const view = service.read(owner);
+    expect(view.probes).toEqual([
+      { id: "desk8002", status: "answered" },
+      { id: "desk8000", status: "needs_key" },
+      { id: "desk9337", status: "offline" },
+    ]);
+    // Only the server that answered with models reaches the picker.
+    expect(service.modelsFor(owner).map((row) => row.label)).toEqual(["DwarfStar: qwen3"]);
+    // An unknown status, or an id for an endpoint the person removed, is refused or dropped.
+    expect(service.publish(owner, { endpoints: [], probes: [{ id: "desk8002", status: "maybe" }] }).ok).toBe(false);
+    expect(service.publish(owner, { endpoints: [], probes: [{ id: "deskgone", status: "offline" }] }).ok).toBe(true);
+    expect(service.read(owner).probes).toEqual([]);
+    // An older desktop that publishes no probes leaves the picker row standing.
+    expect(service.publish(owner, { endpoints: [{ id: "desk8002", label: "DwarfStar", models: ["qwen3"] }] }).ok).toBe(true);
+    expect(service.modelsFor(owner).map((row) => row.label)).toEqual(["DwarfStar: qwen3"]);
+    // Turning expose off clears the probes with the catalog.
+    service.update(owner, { expose: false });
+    expect(service.read(owner).probes).toEqual([]);
   });
 
   it("hides an offline desktop and fails the turn as unavailable", async () => {

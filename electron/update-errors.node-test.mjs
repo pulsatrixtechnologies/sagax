@@ -56,7 +56,7 @@ test("actionable messages do not permit retrying failed native staging", async (
   assert.equal(state.retryable, false);
   assert.match(state.message, /Free some space.*Quit and reopen/);
   await coordinator.check(true);
-  coordinator.install();
+  coordinator.install({ confirmed: true });
   assert.equal(downloads, 1);
   assert.equal(installs, 0);
 });

@@ -21,6 +21,7 @@ import {
 import { Card, CommandLine, DANGER_PILL, DescribedRow, SettingsGroup, cardCount } from "./SettingsPrimitives";
 import { SettingsText } from "./SettingsLink";
 import { MacLocalControl } from "./MacLocalControl";
+import { MessagesSettings } from "./MessagesSettings";
 import { cn } from "@/lib/cn";
 import { useStore } from "@/state/store";
 import { boatComputerEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
@@ -357,11 +358,10 @@ export function cloudComputerActionPlan(
 }
 
 export function vpsComputerRemovePlan(instance: VpsComputerInventoryInstance): ComputerActionPlan {
-  const shortId = vpsComputerShortId(instance.name);
   return {
     confirmation: t("vm.confirm.removeVps", {
       subject: instance.orphaned
-        ? t("vm.confirm.orphanVps", { id: shortId })
+        ? t("vm.confirm.orphanVpsUnnamed")
         : t("vm.confirm.ownedVps", { name: instance.ownerName ?? "" }),
     }),
     request: jsonPostRequest(`/api/computers/vps/${encodeURIComponent(instance.name)}/remove`, {
@@ -495,8 +495,8 @@ export function VpsComputersCard({
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="truncate text-[13.5px] font-medium text-ink">
-                    {instance.orphaned ? t("vm.vps.orphan", { id: shortId }) : instance.ownerName}
+                  <span className="truncate text-[13.5px] font-medium text-ink" title={instance.orphaned ? shortId : undefined}>
+                    {instance.orphaned ? t("vm.vps.orphanUnnamed") : instance.ownerName}
                   </span>
                   <span
                     className={cn(
@@ -652,8 +652,8 @@ export function CloudComputersCard({
                     {state}
                   </span>
                 </div>
-                <div className="mt-1 break-all text-[11.5px] text-ink-secondary">
-                  {instance.orphaned ? t("vm.owner.gone") : t("vm.owner.owned")} · {instance.name}
+                <div className="mt-1 break-all text-[11.5px] text-ink-secondary" title={instance.name}>
+                  {instance.orphaned ? t("vm.owner.gone") : t("vm.owner.owned")}
                 </div>
                 {instance.inUse && (
                   <div className="mt-1 text-[11.5px] text-ink-secondary">{t("vm.cloud.stopFirst")}</div>
@@ -1541,7 +1541,6 @@ export function LocalComputerSection() {
   };
 
   const removeVpsComputer = async (instance: VpsComputerInventoryInstance) => {
-    const shortId = vpsComputerShortId(instance.name);
     const request = confirmComputerAction(
       vpsComputerRemovePlan(instance),
       (message) => window.confirm(message),
@@ -1557,7 +1556,7 @@ export function LocalComputerSection() {
       setAnnouncement(
         t("vm.announce.vpsRemoved", {
           subject: instance.orphaned
-            ? t("vm.announce.orphanVps", { id: shortId })
+            ? t("vm.vps.orphanUnnamed")
             : t("vm.confirm.ownedVps", { name: instance.ownerName ?? "" }),
         }),
       );
@@ -1626,6 +1625,7 @@ export function LocalComputerSection() {
       />}
 
       <MacLocalControl />
+      <MessagesSettings />
 
       {/* Scheduled update and disk saver: hidden by itself where this
           person has no computer to care for (403/409). */}

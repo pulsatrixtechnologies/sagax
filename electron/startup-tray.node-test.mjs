@@ -41,7 +41,7 @@ function fixture(options = {}) {
   let active;
   const tray = createSystemTray({ Tray, Menu: { buildFromTemplate: value => value },
     nativeImage: { createFromPath: () => ({ resize: () => ({}) }) }, iconPath,
-    getWindow: () => active, onQuit: () => calls.push("quit") });
+    getWindow: () => active, onQuit: () => calls.push("quit"), platform: "win32" });
   const splash = createStartupScreen({ BrowserWindow: Window, iconPath, platform: "win32",
     isQuitting: () => false, onQuit: () => calls.push("quit"), onHide: win => tray.hide(win),
     isHidden: () => tray.isHidden(), onShow: win => tray.windowShown(win),

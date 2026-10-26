@@ -241,6 +241,8 @@ interface Viewer extends OpenOptions {
   /** Headers are out, but the browser has not answered yet: only waiting and error events. */
   waiting: boolean;
   abort: AbortController;
+  /** Ends this view's watch: the browser is not idle while it is open. */
+  unwatch: () => void;
 }
 
 export class BrowserLive {
@@ -325,6 +327,7 @@ export class BrowserLive {
     if (viewer.closed) return;
     viewer.closed = true;
     viewer.abort.abort();
+    viewer.unwatch();
     this.viewers.delete(viewer.id);
     clearTimeout(viewer.heartbeat); clearTimeout(viewer.drainTimer);
     viewer.socket?.close();
@@ -402,9 +405,11 @@ export class BrowserLive {
   private async connect(viewer: Viewer): Promise<number> {
     // A failed launch already started this session's daemon teardown; wait
     // for it so the status probe meets a fresh daemon, not the stuck one.
-    // Checked on every attempt: a reset can start while the view waits.
+    // Checked on every attempt: a reset can start while the view waits. An
+    // idle close in progress is waited out the same way.
     const resetting = this.sessionResets.get(viewer.session);
     if (resetting) await resetting;
+    await this.runtime.settled(viewer.session);
     let status = await this.command(viewer, ["stream", "status"], STATUS_PROBE_MS);
     // A fill_credential write runs with the stream off (the stream sends
     // each command, script included): never turn it back on meanwhile.
@@ -518,8 +523,9 @@ export class BrowserLive {
     if (this.viewers.size >= 8 || [...this.viewers.values()].filter((v) => v.session === options.session).length >= 2) {
       throw new BrowserLiveError("Too many browser views are open. Close another browser panel first.", 429);
     }
-    const viewer: Viewer = { ...options, id: randomUUID(), closed: false, blocked: false, pendingActions: 0, restarting: false, pressedKeys: new Set(), pressedButtons: new Set(), waiting: false, abort: new AbortController() };
+    const viewer: Viewer = { ...options, id: randomUUID(), closed: false, blocked: false, pendingActions: 0, restarting: false, pressedKeys: new Set(), pressedButtons: new Set(), waiting: false, abort: new AbortController(), unwatch: () => {} };
     if (!this.current(viewer)) throw new BrowserLiveError("This browser view is no longer available.", 409);
+    viewer.unwatch = this.runtime.watch(viewer.session, viewer.spec);
     this.viewers.set(viewer.id, viewer);
     this.teach.orphan(viewer.owner, viewer.session, false);
     options.res.once("close", () => this.close(viewer));

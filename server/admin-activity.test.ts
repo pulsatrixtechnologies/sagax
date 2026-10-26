@@ -121,10 +121,10 @@ describe("what a row records", () => {
   });
 
   it("compares only the fields a request named", () => {
-    const before = botAuditSnapshot({ approvalMode: "ask", composio: true });
-    const after = botAuditSnapshot({ approvalMode: "auto", composio: false });
-    expect(botChangeRows({ id: "b" }, before, after, ["composio"]).map((row) => row.changed)).toEqual([["composio"]]);
-    expect(botChangeRows({ id: "b" }, before, after).map((row) => row.changed)).toEqual([["approvalMode", "composio"]]);
+    const before = botAuditSnapshot({ approvalMode: "ask", browser: true });
+    const after = botAuditSnapshot({ approvalMode: "auto", browser: false });
+    expect(botChangeRows({ id: "b" }, before, after, ["browser"]).map((row) => row.changed)).toEqual([["browser"]]);
+    expect(botChangeRows({ id: "b" }, before, after).map((row) => row.changed)).toEqual([["approvalMode", "browser"]]);
   });
 
   it("knows when more than one person signs in", () => {

@@ -30,6 +30,13 @@ The Android companion app bundles a prebuilt WebRTC library for Live calls
 includes third-party components under their own licenses, listed with the
 library.
 
+The egress gate for the bots' browser (server/browser/egress/) adapts T3 Code's
+public-only SOCKS5 proxy for HTML previews and the Linux listener-ownership
+scan of its preview port scanner, Copyright 2026 T3 Tools Inc., used under the
+MIT License (third_party/t3-code/LICENSE). It was ported from OpenMausBot
+#2930. Other files adapted from T3 Code (the Antigravity runtime, citations)
+carry the same notice in their headers.
+
 Selected provider icon paths are from Simple Icons, used under CC0 1.0.
 The Cohere provider icon path is from Lobe Icons, Copyright 2023 LobeHub,
 used under the MIT License.
@@ -46,6 +53,20 @@ quantized to int8 by Pulsatrix Technologies inc. Licenses are in
 third_party/onnxruntime-web, third_party/silero-vad, third_party/3d-speaker
 and third_party/sherpa-onnx; details and checksums in
 src/lib/voice-mode/models/NOTICE.txt.
+
+Remote support ships Tailcat 0.7.0 as a separate executable, Copyright (c)
+2020 Tailscale Inc & contributors, used under the BSD 3-Clause License
+(third_party/tailcat/LICENSE). Linux and Windows binaries are the upstream
+release assets. macOS binaries are built from that tag, which publishes no
+darwin asset.
+
+The server decodes WebP pictures with libwebp, Copyright (c) 2010, Google
+Inc., used under the BSD 3-Clause License (third_party/jsquash-webp/
+libwebp-LICENSE.txt, with its patent grant in libwebp-PATENTS.txt; v1.0.2 as
+built by the package), compiled to WebAssembly and shipped by @jsquash/webp
+1.5.0, Copyright Google Inc. and the jSquash contributors, used under the
+Apache License 2.0 (third_party/jsquash-webp/jsquash-webp-LICENSE.txt). The
+binary is embedded unmodified in server/webp-wasm.generated.ts.
 
 The browser desktop viewer bundles the unmodified noVNC 1.7.0 library,
 Copyright the noVNC authors, under MPL-2.0 and its accompanying licenses.

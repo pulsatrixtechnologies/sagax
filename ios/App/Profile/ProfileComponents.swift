@@ -370,6 +370,12 @@ enum RoutineWording {
                 let times = ListFormatter.localizedString(byJoining: wording.minutesOfDay.map { clockText(hour: $0 / 60, minute: $0 % 60) })
                 return sentence(wording.days, time: times) + zoneSuffix(wording.timeZone)
             }
+            // lists, ranges and steps ("Weekdays, 8 AM to 6 PM, at :00, :17");
+            // only what cannot be said clearly stays the raw expression
+            if let expression = schedule.expression,
+               let text = CronDescribe.describe(expression, language: CronDescribe.currentLanguage) {
+                return text + zoneSuffix(schedule.timeZone)
+            }
             return schedule.cronDisplay ?? String(localized: "Cron")
         case .once:
             guard let at = schedule.at else { return String(localized: "One time") }

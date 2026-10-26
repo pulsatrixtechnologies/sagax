@@ -65,7 +65,7 @@ describe("POST /api/internal/routine-run", () => {
   it("runs for the owner, the run-as person and an admin, and audits who", async () => {
     for (const who of [OWNER, RUN_AS, ADMIN]) {
       const t = setup(who);
-      expect((await t.call({ routineId: "r1" })).sent).toEqual([{ status: 201, body: { runId: "run-r1" } }]);
+      expect((await t.call({ routineId: "r1" })).sent).toEqual([{ status: 201, body: { runId: "run-r1", message: expect.stringContaining("Queued") } }]);
       expect(t.audits).toEqual([{ routine: "r1", run: "run-r1", by: who }]);
     }
   });

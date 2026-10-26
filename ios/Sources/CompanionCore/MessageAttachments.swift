@@ -50,7 +50,7 @@ public enum AttachmentPolicyError: Error, LocalizedError, Equatable, Sendable {
         case let .unsupportedType(name):
             return "\(name) isn't a supported file. Try PDF, text, Word, Excel, or PowerPoint."
         case let .itemTooLarge(name, limitMB):
-            return "\(name) is larger than \(limitMB) MB."
+            return String(localized: "\(name) is larger than \(limitMB) MB.")
         }
     }
 }
@@ -61,7 +61,11 @@ public enum AttachmentPolicyError: Error, LocalizedError, Equatable, Sendable {
 public enum AttachmentPolicy {
     public static let maximumItems = 4
     public static let maximumTotalBytes = 50 * 1_024 * 1_024
-    public static let maximumImageBytes = 10 * 1_024 * 1_024
+    /// Same as IMAGE_MAX_BYTES in server/attachments.ts (32 MiB since #899); the
+    /// server shrinks a large picture before the model sees it. A unit test on
+    /// the server side keeps the two numbers equal.
+    public static let maximumImageBytes = 32 * 1_024 * 1_024
+    public static var maximumImageMegabytes: Int { maximumImageBytes / (1_024 * 1_024) }
     public static let maximumFileBytes = 25 * 1_024 * 1_024
 
     public static let imageMIMETypes: Set<String> = [
@@ -116,7 +120,7 @@ public enum AttachmentPolicy {
                     throw AttachmentPolicyError.unsupportedType(name)
                 }
                 guard attachment.data.count <= maximumImageBytes else {
-                    throw AttachmentPolicyError.itemTooLarge(name: name, limitMB: 10)
+                    throw AttachmentPolicyError.itemTooLarge(name: name, limitMB: maximumImageMegabytes)
                 }
             case .file:
                 guard documentMIMETypes.contains(mime) || audioMIMETypes.contains(mime) else {

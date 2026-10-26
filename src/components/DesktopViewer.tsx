@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronLeft, ChevronRight, Clipboard, Hand, Keyboard, Maximize, Minimize, Monitor, RefreshCw, Send, X, type LucideIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clipboard, GraduationCap, Hand, Keyboard, Maximize, Minimize, Monitor, RefreshCw, Send, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import RFB from "@novnc/novnc";
 import { t } from "@/lib/i18n";
 import { useHeldMenuMotion, useMenuMotion } from "./MenuMotion";
+import { teachViewerParams } from "@/lib/computer-teach-client";
+import { ComputerTeachBanner, useComputerTeach } from "./computer/ComputerTeach";
 
 function subscribeLocation(listener: () => void) {
   window.addEventListener("hashchange", listener);
@@ -39,6 +41,10 @@ export function DesktopViewer() {
   // control (the server hands the view-only VNC password by default).
   const sandbox = target === "sandbox/me";
   const control = sandbox && params.get("control") === "1";
+  // Teach by demonstration on the whole computer (parity R7): offered when
+  // the app opened this viewer for one bot (withTeachBot).
+  const teachBot = teachViewerParams(hash);
+  const teach = useComputerTeach({ botId: teachBot?.botId ?? "", screen, connected });
   const setControl = (value: boolean) => {
     const next = new URLSearchParams(params);
     if (value) next.set("control", "1"); else next.delete("control");
@@ -169,6 +175,7 @@ export function DesktopViewer() {
           </div>
           <div className="my-1 h-px w-7 shrink-0 bg-hairline" />
           {sandbox && <ViewerTool id="control" label={t(control ? "sandboxDesktop.releaseControl" : "sandboxDesktop.takeControl")} icon={Hand} active={control} onClick={() => setControl(!control)} />}
+          {teachBot && <ViewerTool id="teach" label={t(teach.recording ? "teach.stop" : "computerTeach.start")} icon={GraduationCap} disabled={!connected || teach.busy || (sandbox && !control)} active={teach.recording} onClick={teach.recording ? teach.stop : teach.start} />}
           <ViewerTool id="keyboard" label={t("desktopViewer.keyboard")} icon={Keyboard} disabled={!connected} active={panel === "keyboard"} expanded={panel === "keyboard"} onClick={() => togglePanel("keyboard")} />
           <ViewerTool id="clipboard" label={t("desktopViewer.clipboard")} icon={Clipboard} disabled={!connected} active={panel === "clipboard"} expanded={panel === "clipboard"} onClick={() => togglePanel("clipboard")} />
           {document.fullscreenEnabled && <ViewerTool id="fullscreen" label={t(fullscreen ? "desktopViewer.exitFullscreen" : "desktopViewer.fullscreen")} icon={fullscreen ? Minimize : Maximize} onClick={() => { void toggleFullscreen(); }} />}
@@ -186,6 +193,7 @@ export function DesktopViewer() {
         <div className={connected ? "sr-only" : "pointer-events-none absolute inset-x-3 top-3 flex justify-center"}>
           <span id="status" role="status" className="max-w-full rounded-full border border-hairline bg-panel/95 px-3 py-1.5 text-center text-xs text-ink-secondary shadow-sm">{status}</span>
         </div>
+        {teachBot && <ComputerTeachBanner teach={teach} botId={teachBot.botId} botName={teachBot.botName || t("computerTeach.thisBot")} />}
         {controlError && <p role="alert" className="absolute inset-x-3 bottom-3 rounded-xl border border-hairline bg-panel p-3 text-ink">{controlError}</p>}
       </main>
 

@@ -8,10 +8,12 @@
  * server/store.ts; the wire projection is typed so a new server field
  * fails compilation until it is either declared here or explicitly listed
  * as server-private. */
+import type { LimitFailoverLine } from "./limit-failover.ts";
 import type { MeetingRequestCardData } from "./meeting-request.ts";
 import type { ParallelTaskRef, TaskParallelOf } from "./parallel-tasks.ts";
 import type { DataBroadcast } from "./data-surface.ts";
 import type { ApprovalMode } from "./approval-mode.ts";
+import type { ProactiveMode } from "./proactive-mode.ts";
 import type { ToolScope } from "./tool-scope.ts";
 import type { CommandAllowlistCandidate } from "./command-allowlist.ts";
 import type { CustomRuleCandidate, CustomRuleNotice } from "./custom-rules.ts";
@@ -27,6 +29,9 @@ import type { CwWidget } from "./cw-widgets/types.ts";
 import type { CwAction } from "./cw-widgets/actions.ts";
 import type { MessageReaction } from "./reactions.ts";
 import type { BotCatalogListing } from "./bot-catalog.ts";
+import type { RemoteSessionView } from "./remote-session.ts";
+import type { ResourceUsageView } from "./resource-usage.ts";
+import type { ConnectorSetupView } from "./connector-setup.ts";
 import type { BotPublicProfile } from "./bot-public-profile.ts";
 import type { CredentialTargetId } from "./credential-request.ts";
 import type { VaultLoginTarget, VaultRequestCardData } from "./credential-vault.ts";
@@ -39,6 +44,7 @@ import type { SkillRequestCardData } from "./skill-request.ts";
 import type { QuestionRequestCardData } from "./ask-question.ts";
 import type { RoutineRunCardData } from "./routine-run.ts";
 import type { WidgetPayload } from "./widget.ts";
+import type { AppPayload } from "./app.ts";
 import type { GroupGoalRunCardData } from "./group-goal-run.ts";
 import type { RuntimeEvent } from "./runtime-events.ts";
 import type { Notification } from "./notification.ts";
@@ -158,6 +164,11 @@ export interface WireTask {
   projectId?: string;
   /** Detached routine execution, reachable through its visible results card. */
   routineRunId?: string;
+  /** An automatic "<routine> · Results" thread (2026-10-22): kept and listed
+   * with threads shown, but never a segment of the single stream, never a row
+   * under the bot with threads hidden, never unread. New reports go to the
+   * person's own conversation instead. Only `true` is stored. */
+  routineResults?: true;
   /** A hidden conversation: an AI client (the Perspicax MCP `sagax_send`,
    * the member API) works with the bot here on the person's behalf, the way
    * Grok Bot keeps its subagents' conversations out of the chat (#291). Never
@@ -291,15 +302,6 @@ export interface InstalledPackageMetadata {
 
 /** One service's connector tool grant: `"*"` widens to every tool on the
  * service, an explicit list names exact tools. */
-export interface ConnectorToolGrant {
-  tools: "*" | string[];
-}
-
-/** Lowercased Composio service slug, e.g. `gmail`. */
-export const CONNECTOR_SLUG_PATTERN = /^[a-z0-9][a-z0-9_-]{0,80}$/;
-/** Composio tool names are upper-snake, e.g. `GMAIL_SEND_EMAIL`. */
-export const CONNECTOR_TOOL_NAME_PATTERN = /^[A-Z][A-Z0-9_]{0,127}$/;
-
 /** A bot as a client may see it. Wire form: no provider session
  * bookkeeping (resumeCursors), no elevation journal (approvalGrant), no
  * settlement receipts (lastProfileRequestId, lastTeamSetupReceipt); the
@@ -312,8 +314,42 @@ export interface WireBotGrant {
   at: number;
 }
 
+/** A bot-to-bot conversation of this bot waiting on the person
+ * (server/inter-bot-approvals.ts): never listed, its cards are answered from
+ * the conversation the person has open. */
+export interface WireWaitingApproval {
+  threadId: string;
+  /** The bot that opened it. */
+  openedByName?: string;
+  kind?: "pair" | "work";
+  /** The conversation's last change (epoch ms): a new card refreshes it. */
+  updatedAt?: number;
+}
+
+/** A conversation between this bot and another bot, named on both ends
+ * (server/inter-bot-conversations.ts). The messages are read through
+ * GET /api/threads/:threadId/messages. */
+export interface WireBotConversation {
+  threadId: string;
+  otherBotId: string;
+  otherName: string;
+  /** "in": the other bot opened it here; "out": this bot opened it there. */
+  direction: "in" | "out";
+  kind?: "pair" | "work";
+  updatedAt?: number;
+  /** When the conversation was opened: where its line sits in the chat. */
+  startedAt?: number;
+  /** The conversation is working now (a discreet indicator and a Stop). */
+  running?: boolean;
+}
+
 export interface WireBot {
   waitingForTeammates?: boolean;
+  /** Bot-to-bot conversations this viewer may read, both ends. Absent: none. */
+  botConversations?: WireBotConversation[];
+  /** Bot-to-bot conversations waiting on this viewer's approval. Absent:
+   * none. Server-derived. */
+  waitingApprovals?: WireWaitingApproval[];
   id: string;
   /** The task selected in the UI; running turns keep their own thread id. */
   threadId: string;
@@ -377,6 +413,10 @@ export interface WireBot {
    * (server/org-full-access.ts). Later grants by that person skip it. */
   fullAccessConsent?: { principalId: string; at: number };
   approvalMode?: ApprovalMode;
+  /** How autonomously this bot may act on its own (shared/proactive-mode.ts):
+   * absent/"off" = never; "propose", "read-auto" and "follow-rules" each gate
+   * a proactive step through our approval model. Never a Chief orchestrator. */
+  proactiveMode?: ProactiveMode;
   /** Tools this bot may always use without asking. */
   alwaysAllow?: string[];
   /** Speak this bot's replies aloud as they settle, without being asked. */
@@ -386,8 +426,15 @@ export interface WireBot {
   /** Whether this bot may send voice notes. Absent/true = allowed; false
    * hides the tool and refuses the route even with a voice configured. */
   voiceNotes?: boolean;
+  /** Whether this bot may write email draft cards. Absent/true = allowed;
+   * false refuses ```email fences in the prompt and the send route. */
+  emailDrafts?: boolean;
   /** Whether this bot uses native memory. Absent/true = enabled. */
   memoryEnabled?: boolean;
+  /** How far this bot's team-memory cards travel (shared/team-memory-sharing.ts):
+   * absent or "shared", every member of its section; "private", only the
+   * members who see this bot and the card's conversation or channel. */
+  teamMemorySharing?: "shared" | "private";
   /** Queue direct-chat messages behind outstanding delegated work. */
   parkDirectMessages?: boolean;
   /** true after an edit/branch-switch rewound the visible conversation. */
@@ -410,14 +457,10 @@ export interface WireBot {
   approvePeerComms?: boolean;
   /** Bot ids this bot is allowed to contact. */
   peers?: string[];
-  /** Whether this bot may use the workspace's connected apps. */
-  composio?: boolean;
-  /** Which connected-app tools this bot may call, by service slug. Absent
-   * defers to the legacy `composio` boolean above (unset/true = every tool,
-   * false = none); an explicit `{}` grants no tools. Grants never travel in
-   * shareable exports and imported bots always land with none. */
-  connectorTools?: Record<string, ConnectorToolGrant>;
-  connectorScopes?: { apps: Record<string, "read" | "write"> };
+  /** 2026-10-21 (parité 1C): who this bot writes to without a card:
+   * `bot:<id>`, `email:<address>`, `phone:+<digits>`
+   * (shared/allowed-recipients.ts). Anyone else keeps the card. */
+  allowedRecipients?: string[];
   outbound?: { policy: "ask" | "allow"; dailyCap: number };
   /** Ordered backups used only by opt-in, pre-prompt startup recovery. */
   fallback?: Array<{ instanceId: string; model: string }>;
@@ -506,8 +549,13 @@ export type CardAnswerer = (
 ) & {
   /** "call": decided by voice on a Live call, not tapped. "ai-client": answered
    * from an AI client attached to Perspicax (Claude Code, claude.ai), through
-   * the member API, by the person named (lot C.3). */
-  via?: "call" | "ai-client";
+   * the member API, by the person named (lot C.3). "primary-bot": answered
+   * by the person's Primary Bot (`bot`, its name) at the person's own
+   * request in their conversation with it (sagax_approvals, 2026-10-20).
+   * "auto-review": the model reviewer applied the person's rule (2026-10-21,
+   * server/custom-rules-model.ts; the card's customRule says which and why). */
+  via?: "call" | "ai-client" | "primary-bot" | "auto-review";
+  bot?: string;
 };
 
 export interface WireAccessCard {
@@ -572,21 +620,56 @@ export interface VoiceCallMark {
  * writes its "Disabled · 1 routine" line (server/routine-chat-events.ts). */
 export const ROUTINE_CONVERSATION_HEADER = "x-sagax-conversation";
 
-/** WireMessage.routineToggle: the routines one turn turned on or off. */
+/** WireMessage.routineToggle: a routine change this turn made, as one quiet
+ * line in the conversation. `enabled`/`disabled` group every routine a turn
+ * turned on or off into one count line ("Disabled · 5 routines"). `created`/
+ * `updated`/`deleted` (2026-10-21, JC) are a bot touching a routine's
+ * definition: one named line each ("Updated routine · <name>"), the name never
+ * a UUID (shared/human-id.ts). */
 export interface RoutineToggleEvent {
-  action: "enabled" | "disabled";
+  action: "enabled" | "disabled" | "created" | "updated" | "deleted";
   /** The user message that started the turn (the line groups by it); the
    * thread's first message id, or "", when no person spoke first. */
   turnKey: string;
-  /** In the order they changed; the name as it was then. */
+  /** In the order they changed; the name as it was then. The created/updated/
+   * deleted lines carry exactly one routine. */
   routines: Array<{ id: string; name: string; botId?: string; groupId?: string; runAs?: string }>;
+}
+
+/** A bot⇄bot chip's link to the channel. 2026-10-21 (parité 1C): which way
+ * the message went (`sent` on the sender's note, `received` on the
+ * recipient's) and, on the sender's note, the words it sent, cut short, so a
+ * preview reads "Messaged @X: text". Older notes carry neither: clients read
+ * a missing direction as sent unless the note says "Message from". */
+export interface Comm {
+  groupId: string;
+  threadId?: string;
+  withBotId: string;
+  withName: string;
+  withColor: string;
+  gone?: boolean;
+  direction?: "sent" | "received";
+  text?: string;
+}
+
+/** The longest preview a sender's note keeps of what it sent (Comm.text).
+ * The channel holds the whole message. (main #912, ported from the removed
+ * server/comms-visibility.ts onto the runtime's notes.) */
+export const COMM_PREVIEW_MAX = 280;
+
+/** One line of what a bot sent, cut short for a note's preview, by code
+ * point so an emoji is never cut in half. */
+export function commPreview(message: string): string {
+  const line = message.replace(/\s+/g, " ").trim();
+  const points = Array.from(line);
+  return points.length > COMM_PREVIEW_MAX ? `${points.slice(0, COMM_PREVIEW_MAX - 1).join("").trimEnd()}…` : line;
 }
 
 export interface WireMessage {
   roomRequest?: { id: string; phase: "request" | "result" };
   id: string;
   role: "bot" | "user";
-  kind: "text" | "options" | "activity" | "screen" | "video" | "connector" | "secret" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "routines";
+  kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines";
   text?: string;
   /** kind "routines" (2026-10-15): one compact line in the conversation
    * saying this turn turned routines on or off (server/routine-chat-events.ts).
@@ -626,7 +709,11 @@ export interface WireMessage {
    * `text` is always its readable fallback, for clients that do not know
    * the kind. */
   widget?: WidgetPayload;
-  connector?: ConnectorCardData;
+  /** app rows (kind "app"): a bot-authored live HTML surface (shared/app.ts),
+   * drawn in the sandboxed app frame and replaced in place by update_html.
+   * `text` is always its readable fallback, for clients that do not know
+   * the kind. */
+  app?: AppPayload;
   secret?: SecretRequestCardData;
   /** signin rows: the bot asked the person to sign in to a site themselves. */
   signIn?: SignInRequestCardData;
@@ -665,6 +752,13 @@ export interface WireMessage {
     /** 2026-10-18: the bot left an engine the organization no longer
      * offers and now runs on Auto (shared/offered-engines.ts). */
     engineMove?: OrgEngineMove;
+    /** 2026-10-19: a usage limit sent the turn to another engine, or it
+     * came back (shared/limit-failover.ts); drawn in the reader's language. */
+    limitFailover?: LimitFailoverLine;
+    /** 2026-10-21 (review of #943): a request ran on another engine that
+     * has the connector it needed (server/connector-switch.ts); drawn in
+     * the reader's language. */
+    connectorSwitch?: { engine: string; connector: string };
   };
   /** A bot line a "post" webhook wrote: whoever called the webhook chose
    * its words. On a Cloud home a conversation holding one is someone else's
@@ -717,6 +811,10 @@ export interface WireMessage {
   requestPending?: boolean;
   /** The last assistant text item from a settled provider turn. */
   turnTerminal?: boolean;
+  /** screen and video messages: the person's message of that turn asked
+   * for this view (shared/requested-views.ts). A client draws a screen or a
+   * video row only with it; rows from before 2026-10-20 have none. */
+  requested?: boolean;
   /** screen messages: a frame of the bot's computer (base64 image) */
   png?: string;
   mime?: string;
@@ -760,13 +858,22 @@ export interface WireMessage {
   reactions?: MessageReaction[];
   /** comm chips: "Messaged @X", linking to the bot-bot channel. */
   /** `gone` is stamped at read time when the channel thread no longer exists. */
-  comm?: { groupId: string; threadId?: string; withBotId: string; withName: string; withColor: string; gone?: boolean };
+  comm?: Comm;
   /** thread chips: "Opened thread #Title on @X". */
   /** `gone` is stamped at read time when the target thread no longer exists. */
   threadRef?: { botId: string; threadId: string; title: string; gone?: boolean };
+  /** A teammate parked on a question for the person (server park/remind,
+   * 2026-10-19): the whole question, answered from the card in place (the
+   * answer is a person's message into `threadId`, the waiting work). */
+  inputRequest?: { botId: string; threadId: string; botName: string; title?: string; question: string; reminder?: boolean; answered?: boolean };
   /** A bot's page proposal (shared/published-pages.ts): the card the person
    * reviews and publishes it from. `text` is the fallback line. */
   pagePublish?: { pageId: string; version: number; title: string };
+  /** An outward action that costs money or reaches a real person, on its
+   * approval card (parité Grok Bot V4, 59, 83): a phone call
+   * (server/outbound-calls.ts) or a purchase (server/credential-vault.ts).
+   * `text` is the fallback line. */
+  outbound?: OutboundCard;
   /** A published Data result, linked to its bot's main viewer. */
   dataResult?: { botId: string; cardId: string; title: string; kind: "table" | "chart" | "text"; sql?: string };
   /** user messages: the Data result the person was viewing when they sent
@@ -783,6 +890,13 @@ export interface WireMessage {
   queueId?: string;
   /** In-chat terminal opened on a shell-capable resource. */
   terminalEmbed?: TerminalEmbed;
+  /** A Tailcat remote-support session. The tunnel address is never on this object. */
+  remoteSession?: RemoteSessionView;
+  /** A live usage card (shared/resource-usage.ts), shown only when asked. Labels only. */
+  resourceUsage?: ResourceUsageView;
+  /** "Connect Microsoft Teams" (shared/connector-setup.ts): a sign-in page on
+   * grok.com or claude.ai, opened by the person. The row's text is its fallback. */
+  connectorSetup?: ConnectorSetupView;
 }
 
 export interface OptionCardData {
@@ -829,7 +943,13 @@ export interface OptionCardData {
   /** 2026-10-14 (bot owner permissions): the rule "Always allow" or
    * "Always deny" would save for the bot's owner: the tool, its target
    * read from the arguments, the destructive kind and plain words. */
-  ownerRule?: { tool: string; scope: Record<string, string>; destructive?: "delete" | "bulk" | "external-message"; description: string };
+  ownerRule?: {
+    tool: string; scope: Record<string, string>; destructive?: "delete" | "bulk" | "external-message"; description: string;
+    /** 2026-10-19 (JC: "Toujours permettre" on every card): the card's
+     * situation the rule also answers (server/owner-approval.ts `from`):
+     * an admin's card, a held card, a turn that is not the person's own. */
+    from?: "admin" | "hold" | "origin";
+  };
   /** The owner's rule saved when answering this card. */
   ruleSaved?: { id: string; behavior: "allow" | "ask" | "deny"; description: string };
   /** the Allow rule (an allowKey) the person saved when answering this card:
@@ -850,6 +970,15 @@ export interface OptionCardData {
    * whose owner is not an organization admin. Only an admin answers it; the
    * owner sees it waiting for an admin. Never remembered. */
   adminApproval?: boolean;
+  /** 2026-10-19: a server-level card of a bot whose owner holds
+   * host.commands, answered by that owner by hand; the right is checked
+   * again when the card is answered. */
+  serverCommandHolder?: boolean;
+  /** 2026-10-19 (PR 3): the person whose own destination (cloud computer,
+   * Local VM, own computer) this call acts on, when that is not the bot's
+   * owner: the speaker in their own conversation with a shared bot. They
+   * answer it, never an admin and never the bot's owner. */
+  destinationAnswerer?: string;
   /** The organization admins who can answer an adminApproval card (at most
    * five names), so the member's waiting line can say who. */
   adminNames?: string[];
@@ -892,6 +1021,9 @@ export interface OptionCardData {
   customRuleCandidate?: CustomRuleCandidate;
   /** The custom rule the person saved from this card. */
   customRuleSaved?: { id: string; when: string };
+  /** 2026-10-21 (lot A1b): the model reviewer is still judging this card.
+   * The notification waits. Cleared when the verdict lands or the card stays. */
+  reviewing?: boolean;
   /** An email draft waiting for its Send approval
    * (server/email-draft-send.ts). Status follows the send. */
   emailSendRequest?: EmailSendRequestCard;
@@ -955,24 +1087,6 @@ export interface LiveSettings {
   voice: string;
   readTypedReplies: boolean;
   idleMinutes: number;
-}
-
-export interface ConnectorCardData {
-  /** Composio toolkit slug. It is validated server-side before every action. */
-  slug: string;
-  label: string;
-  description: string;
-  status: "required" | "authorizing" | "connected" | "failed";
-  /** Cards created by one agent request resume together after all connect. */
-  resumeKey: string;
-  /** Account alias supplied by the agent when adding a second account. */
-  alias?: string;
-  error?: string;
-  dismissed?: boolean;
-  resumed?: boolean;
-  /** Stop ended the turn this card paused: it offers no action, and a
-   * connection made afterwards is kept but continues nothing. */
-  stopped?: boolean;
 }
 
 export interface SecretRequestCardData {
@@ -1325,3 +1439,55 @@ export type ServerFrame =
   /** The config status object spread flat into the frame; its full typing
    * is the deferred client-model extraction (see j1-phase-bc-progress). */
   | ({ kind: "config" } & Record<string, unknown>);
+
+/** One line of what a purchase buys: an article, or a flight. */
+export interface PurchaseLine {
+  name: string;
+  quantity?: number;
+  /** "12.50", the line's own price when the page shows one. */
+  price?: string;
+}
+
+export interface PurchaseFlight {
+  from: string;
+  to: string;
+  /** YYYY-MM-DD */
+  date: string;
+  flight?: string;
+  passenger?: string;
+}
+
+/** The card of an outward action (WireMessage.outbound). Never a card
+ * number, never a security code, never an id in its words. */
+export interface OutboundCard {
+  kind: "call" | "purchase";
+  /** The record the answer goes to: call_... or pay_... (never shown). */
+  id: string;
+  status: "pending" | "approved" | "denied" | "done" | "failed";
+  botName: string;
+  /** A call: the full number (the person's own card), the line it comes
+   * from, why, the exact words, the language. */
+  destination?: string;
+  from?: string;
+  /** The callback number the call says (the organization's). */
+  callback?: string;
+  purpose?: string;
+  script?: string;
+  language?: "fr" | "en";
+  /** A purchase: the shop, the amount, the card's brand and last four
+   * digits, what it buys, and once done, the receipt. */
+  merchant?: string;
+  amount?: string;
+  currency?: string;
+  cardLabel?: string;
+  items?: PurchaseLine[];
+  flights?: PurchaseFlight[];
+  orderRef?: string;
+  /** The receipt is what the bot declared, not read by Sagax from the page. */
+  declared?: boolean;
+  /** The total the shop confirmed, when it is not the approved amount. */
+  mismatchTotal?: string;
+  /** Who answered for the person (their Primary Bot). */
+  via?: string;
+  error?: string;
+}

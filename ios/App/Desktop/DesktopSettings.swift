@@ -381,7 +381,6 @@ extension IPadParityScreen {
     var parityModal: (modal: DesktopShellModel.Modal, section: DesktopSettingsSection?, tab: DesktopPluginsTab?)? {
         switch self {
         case .searchPalette, .searchPaletteQuery: (.search, nil, nil)
-        case .pluginsApps: (.plugins, nil, .apps)
         case .pluginsMcp: (.plugins, nil, .mcp)
         case .settingsGeneral, .settingsGeneralScrolled: (.settings, .general, nil)
         case .settingsOrganization: (.settings, .organization, nil)

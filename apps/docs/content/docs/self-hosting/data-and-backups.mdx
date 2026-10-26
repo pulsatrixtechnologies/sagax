@@ -97,6 +97,19 @@ copies. Shareable team templates remain separate from full backups.
 - Saved account credentials, API keys, connection settings, operating-system
   keychains, browser login/session homes, and phone pairing keys. Sign in or
   reconnect on the new machine; destination credentials remain untouched.
+- No secret at all: engine sign-ins and API keys (each person's own Claude
+  Code, Codex, Grok Build, Kimi Code, pi, Gemini, Qwen, OpenCode, Hermes or
+  other engine login on an organization server), provider keys, personal
+  connections, the credential vault, MCP sign-ins and the header and
+  environment values of MCP servers, GitHub and Git tokens, cloud agent keys,
+  trigger and webhook secrets, phone push registrations, the server's
+  signing keys, every encrypted store or key file of the app, and sign-in
+  files such as `.netrc`, `.git-credentials`, `.npmrc`, `.pypirc` or SSH
+  private keys, even in a work folder. The engines' settings, skills and sessions are included,
+  without their keys. The restore preview, and Settings > Backups after the
+  restore, list what to reconnect by category (counts only). The destination
+  keeps its own sign-ins and keys. A backup made by an older version that
+  still holds them restores without them, and its preview says so.
 - VM/container disk layers and remote Boat/VPS files. Durable mounted files
   inside the workspace data directory are included, but the VM itself is not.
 - Other fleet workspaces, downloaded tools, caches, running processes, and

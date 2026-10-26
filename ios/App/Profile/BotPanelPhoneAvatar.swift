@@ -1,6 +1,8 @@
 // The character editor the panel's mascot opens (`Edit avatar`). Same tabs
-// as the desktop popover and the iPad `BotAvatarEditor`: Bot / Generate /
-// Upload and Reset. Each choice saves at once.
+// as the desktop popover and the iPad `BotAvatarEditor`: Character /
+// Generate / Upload, drawn as the reference design's Avatar page (a centred
+// segmented pill, the big preview, the grid in one card with Reset to
+// default at its foot). Each choice saves at once.
 import CompanionCore
 import PhotosUI
 import SwiftUI
@@ -29,26 +31,33 @@ struct PhoneBotAvatarSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(spacing: 0) {
                 tabBar
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
                 ScrollView {
-                    Group {
-                        switch tab {
-                        case .bot: botTab
-                        case .generate: generateTab
-                        case .upload: uploadTab
+                    VStack(spacing: 0) {
+                        // the big preview over every tab (the reference design)
+                        BotMascotView(bot: current, size: 112, state: .idle, animated: true)
+                            .frame(height: 140)
+                            .padding(.bottom, 20)
+                            .accessibilityHidden(true)
+                        Group {
+                            switch tab {
+                            case .bot: botTab
+                            case .generate: generateTab
+                            case .upload: uploadTab
+                            }
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.top, 16)
+                    .padding(.top, 24)
                     .padding(.bottom, 40)
                 }
             }
             .background(Theme.bg)
             .overlay { if working { ProgressView().controlSize(.large) } }
-            .navigationTitle(Text("Edit avatar"))
+            .navigationTitle(Text("Avatar"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -79,51 +88,45 @@ struct PhoneBotAvatarSheet: View {
         .accessibilityIdentifier("phone-avatar-editor")
     }
 
+    /// Character / Generate / Upload as one centred segmented pill: the
+    /// chosen one sits on a raised capsule.
     private var tabBar: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 2) {
             ForEach(Tab.allCases, id: \.self) { item in
-                Button { tab = item } label: {
+                let selected = tab == item
+                Button {
+                    Haptics.selection()
+                    tab = item
+                } label: {
                     Text(title(item))
-                        .font(Theme.Font.profileLabel)
-                        .foregroundStyle(tab == item ? Theme.textPrimary : Theme.textSecondary)
-                        .padding(.horizontal, 10)
-                        .frame(height: 28)
-                        .background(tab == item ? Theme.cardRaised : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .contentShape(Rectangle())
+                        .font(Theme.Font.bodyMedium)
+                        .foregroundStyle(selected ? Theme.textPrimary : Theme.textSecondary)
+                        .padding(.horizontal, 16)
+                        .frame(height: 36)
+                        .background(selected ? Theme.cardRaised : Color.clear, in: Capsule())
+                        .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .accessibilityAddTraits(tab == item ? .isSelected : [])
+                .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
                 .accessibilityIdentifier("avatar-tab.\(item.rawValue)")
             }
-            Spacer(minLength: 0)
-            Button {
-                Haptics.selection()
-                draft = .default
-                Task { await edit(.resetLook) }
-            } label: {
-                Text("Reset")
-                    .font(Theme.Font.profileLabel)
-                    .foregroundStyle(Theme.textSecondary)
-                    .padding(.horizontal, 10)
-                    .frame(height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("character-reset")
         }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
     }
 
     private func title(_ tab: Tab) -> LocalizedStringKey {
         switch tab {
-        case .bot: "Bot"
+        case .bot: "Character"
         case .generate: "Generate"
         case .upload: "Upload"
         }
     }
 
+    /// The characters, shapes, skins and colours in one card, with Reset to
+    /// default at its foot.
     private var botTab: some View {
-        VStack(spacing: 16) {
-            BotMascotView(bot: current, size: 72, state: .idle, animated: true)
+        VStack(spacing: 0) {
             CharacterEditor(
                 draft: Binding(get: { draft }, set: { saveLook($0) }),
                 metrics: .createSheet,
@@ -131,8 +134,26 @@ struct PhoneBotAvatarSheet: View {
                 showsReset: false,
                 unlocks: session.isDemo ? .demo : session.surfaceGate.allows(.characterExtras) ? unlocks : .nothingLocked
             )
+            .padding(.bottom, 16)
+            Rectangle().fill(Theme.hairline).frame(height: 1).padding(.leading, Theme.Profile.textInset)
+            Button {
+                Haptics.selection()
+                draft = .default
+                Task { await edit(.resetLook) }
+            } label: {
+                Text("Reset to default")
+                    .font(Theme.Font.body)
+                    .foregroundStyle(Theme.accentText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Theme.Profile.textInset)
+                    .frame(height: Theme.Profile.singleRow)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("character-reset")
         }
         .frame(maxWidth: .infinity)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
     }
 
     private var generateTab: some View {

@@ -4,9 +4,11 @@
 // save through the bot patch the pane is given, so the persona editor and
 // the New bot dialog's draft write the same fields the same way.
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
-import { ImagePlus, Loader2, Trash2 } from "lucide-react";
+import { Download, ImagePlus, Loader2, Trash2 } from "lucide-react";
 
 import { useStore, type Bot } from "@/state/store";
+import { avatarFileProblem, avatarImageFrom, dragMayCarryImage, exportAvatarImage } from "@/lib/avatar-input";
+import { cn } from "@/lib/cn";
 import { imageAttachmentFromFile } from "@/lib/composer-attachments";
 import { t } from "@/lib/i18n";
 import {
@@ -45,6 +47,11 @@ export function useAvatarSources(bot: Bot, onPatch: (patch: AvatarPatch) => void
 
   const upload = async (file: File | undefined) => {
     if (!file || busy) return;
+    const problem = avatarFileProblem(file);
+    if (problem) {
+      setError(t(problem === "size" ? "botPanel.avatar.tooLarge" : "botPanel.avatar.chooseImage"));
+      return;
+    }
     setUploading(true);
     setError(null);
     try {
@@ -117,8 +124,42 @@ export function AvatarUploadPanel({ bot, busy, uploading, onUpload, onRemove, on
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const crop = bot.avatarCrop ?? "mascot";
+  const [dropping, setDropping] = useState(false);
+  const [exportFailed, setExportFailed] = useState(false);
+  const exportImage = () => {
+    if (!bot.avatarUrl) return;
+    setExportFailed(false);
+    void exportAvatarImage(bot.avatarUrl, bot.name).catch(() => setExportFailed(true));
+  };
   return (
-    <div data-avatar-upload="">
+    <div
+      data-avatar-upload=""
+      data-avatar-dropping={dropping ? "" : undefined}
+      tabIndex={-1}
+      onDragOver={(event) => {
+        if (busy || !dragMayCarryImage(event.dataTransfer)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setDropping(true);
+      }}
+      onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false); }}
+      onDrop={(event) => {
+        setDropping(false);
+        const file = avatarImageFrom(event.dataTransfer);
+        if (!file) return;
+        // preventDefault tells the chat's window drop target (ComposerAttachments) the picture is taken
+        event.preventDefault();
+        void onUpload(file);
+      }}
+      onPaste={(event) => {
+        const file = avatarImageFrom(event.clipboardData);
+        if (!file || busy) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void onUpload(file);
+      }}
+      className={cn("rounded-xl outline-none", dropping && "ring-2 ring-accent")}
+    >
       <input
         ref={fileRef}
         type="file"
@@ -152,8 +193,22 @@ export function AvatarUploadPanel({ bot, busy, uploading, onUpload, onRemove, on
             <Trash2 size={14} />
           </button>
         )}
+        {bot.avatarUrl && (
+          <button
+            type="button"
+            data-avatar-export=""
+            onClick={exportImage}
+            aria-label={t("botPanel.avatar.export")}
+            title={t("botPanel.avatar.export")}
+            className="flex size-10 items-center justify-center rounded-lg text-ink-secondary hover:bg-control hover:text-ink"
+          >
+            <Download size={14} />
+          </button>
+        )}
       </div>
-      <div className="mt-1.5 text-[11.5px] text-ink-secondary">{t("botPanel.avatar.types")}</div>
+      <div className="mt-1.5 text-[11.5px] text-ink-secondary">{t("botPanel.avatar.dropOrPaste")}</div>
+      <div className="text-[11.5px] text-ink-secondary">{t("botPanel.avatar.typesLarge")}</div>
+      {exportFailed && <div role="alert" className="mt-1 text-[11.5px] text-danger">{t("botPanel.avatar.exportFailed")}</div>}
       {crop !== "mascot" && bot.avatarUrl && <AvatarFraming bot={bot} disabled={busy} onPatch={onPatch} />}
     </div>
   );

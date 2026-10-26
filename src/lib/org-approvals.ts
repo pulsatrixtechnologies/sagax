@@ -9,6 +9,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { t } from "@/lib/i18n";
 import { api } from "@/state/store";
 import { notificationSoundsEnabled } from "./notification-preferences";
+import { notificationSoundPlan, playNotificationSound, toneReady } from "./notification-sound";
 import type { ServerFrame } from "../../shared/wire";
 
 type OrgApprovalsFrame = Extract<ServerFrame, { kind: "org.approvals" }>;
@@ -27,16 +28,19 @@ export function receiveOrgApprovalsFrame(frame: OrgApprovalsFrame, openApprovals
   loaded = true;
   emit(true);
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  const plan = notificationSoundPlan(notificationSoundsEnabled());
   for (const added of frame.added ?? []) {
     const body = [added.requestedBy ? t("organization.adminApprovals.requestedBy", { bot: added.botName, person: added.requestedBy }) : added.botName, added.summary ?? added.tool ?? ""]
       .filter(Boolean).join("\n");
     const banner = new Notification(t("organization.adminApprovals.notifyTitle", { bot: added.botName }), {
       body,
       tag: `sagax:org-approval:${added.requestId}`,
-      ...(notificationSoundsEnabled() ? {} : { silent: true }),
+      ...(plan.platformSound || (plan.tone && !toneReady()) ? {} : { silent: true }),
     });
     banner.onclick = () => { window.focus(); openApprovals(); };
   }
+  // one tone for the whole frame, not one per approval
+  if (plan.tone && (frame.added?.length ?? 0) > 0) playNotificationSound(plan.tone);
 }
 
 /** The count as the list just read it (Settings > Organization). */

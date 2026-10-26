@@ -68,7 +68,7 @@ import {
 import { LEGACY_OWL_SKINS, MASCOT_SKIN_IDS, botMascotSkin } from "../../shared/mascot-skins";
 import { MASCOT_COLOR_GROUPS, MASCOT_COLOR_HEX, MASCOT_COLOR_PALETTES } from "../../shared/mascot-colors";
 import { expressionForMood, type ShapeMood } from "./ShapeMascot";
-import { BLINK, blinkSchedule, BREATH_AMOUNT, BREATH_S, CLAY_LIGHT, EXPRESSIONS, EYE_FADE, EYE_MARGIN, FACE_DROP, HEAD, HOVER, MORPH_S, SHAPE_EXPRESSIONS, ShapeEngine, stillFrame, WANDER, type ShapeExpression } from "./shape-engine";
+import { BLINK, blinkSchedule, BREATH_AMOUNT, BREATH_S, CLAY_LIGHT, EXPRESSIONS, EYE_FADE, EYE_GAZE, EYE_LENGTH, EYE_MARGIN, EYE_ROLL, EYE_SCALE, EYE_SHIFT, EYE_SPREAD, FACE_DROP, HEAD, HOVER, MORPH_S, SHAPE_EXPRESSIONS, ShapeEngine, stillFrame, WANDER, type ShapeExpression } from "./shape-engine";
 import { MOVE_TIMING, ORBIT_RINGS, SHAPE_MOVES, SWIRL_RINGS, type RingSpec } from "./shape-moves";
 import { BODY, MOVE_RADII, RADII_COUNT, SHAPE_RADII } from "./shape-art";
 import { legOps, SHIBA_ART, SHIBA_BUST, SHIBA_BUST_MAX, SHIBA_EXPRESSIONS, SHIBA_HIPS, SHIBA_LEGS, SHIBA_PIVOTS, SHIBA_ROLES, shibaOutline, shibaParts, STANCE_HEAD, MOUTHS, mouthOps, type ShibaOp, type ShibaStance } from "./shiba-art";
@@ -472,6 +472,13 @@ function shapeEngineSwift(): string {
     `    /// When an eye turned away hides (\`EYE_FADE\`) and the body it keeps around it, R (\`EYE_MARGIN\`).`,
     `    public static let eyeFade: (hidden: Double, over: Double) = (hidden: ${lit(EYE_FADE.hidden)}, over: ${lit(EYE_FADE.over)})`,
     `    public static let eyeMargin: Double = ${lit(EYE_MARGIN)}`,
+    `    /// The eyes' size, how much of a face's roll they keep, how far apart, how long, where the face rests (R) and how far a turn moves it (\`EYE_SCALE\`, \`EYE_ROLL\`, \`EYE_SPREAD\`, \`EYE_LENGTH\`, \`EYE_SHIFT\`, \`EYE_GAZE\`).`,
+    `    public static let eyeScale: (w: Double, h: Double) = (w: ${lit(EYE_SCALE.w)}, h: ${lit(EYE_SCALE.h)})`,
+    `    public static let eyeRoll: Double = ${lit(EYE_ROLL)}`,
+    `    public static let eyeSpread: Double = ${lit(EYE_SPREAD)}`,
+    `    public static let eyeLength: Double = ${lit(EYE_LENGTH)}`,
+    `    public static let eyeShift: (x: Double, y: Double) = (x: ${lit(EYE_SHIFT.x)}, y: ${lit(EYE_SHIFT.y)})`,
+    `    public static let eyeGaze: Double = ${lit(EYE_GAZE)}`,
     "",
     "    /// The eight bodies, one radius (R) per angle, 0 up, clockwise (`SHAPE_RADII`).",
     "    public static let radii: [MascotShape: [Double]] = [",

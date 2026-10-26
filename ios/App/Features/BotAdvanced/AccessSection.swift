@@ -1,9 +1,9 @@
 // Access (BA6, bot-settings/AccessSection.tsx): the working folder,
-// connected apps, MCP servers, the built-in browser and the always-allowed
-// tools. The sidecar and a client session refuse every one of these fields
-// (where the bot runs and what it may reach stay on the computer), so the
-// phone reads them; an admin session also gets the desktop's switches.
-// Webhooks and where the bot works are set up on the computer.
+// MCP servers, the built-in browser and the always-allowed tools. The sidecar
+// and a client session refuse every one of these fields (where the bot runs
+// and what it may reach stay on the computer), so the phone reads them; an
+// admin session also gets the desktop's switches. Webhooks and where the bot
+// works are set up on the computer.
 import CompanionCore
 import SwiftUI
 
@@ -32,18 +32,6 @@ struct BotAccessSection: View {
             Text(String(localized: "Where this bot runs its shell and file tools."))
         }
         .task(id: bot.id) { await loadServers() }
-
-        Section {
-            switchRow(
-                String(localized: "Connected apps"),
-                on: current.composio != false,
-                id: "access-connected-apps"
-            ) { value in BotAccessPatch(composio: value) }
-        } footer: {
-            Text(current.composio != false
-                 ? String(localized: "Let this bot use your connected Gmail, Calendar, Slack, and other apps.")
-                 : String(localized: "Keep your connected apps unavailable to this bot."))
-        }
 
         Section {
             if let servers {

@@ -12,6 +12,7 @@ import type { BotPluginState } from "@/lib/plugin-scope";
 import { Switch } from "../SettingsPrimitives";
 import { IntegrationsManagedNotice } from "../settings/MyConnectionsSettings";
 import { PluginCard } from "./PluginParts";
+import { PluginConfigForm } from "./PluginConfigForm";
 
 export interface BotPluginCardProps {
   botName: string;
@@ -22,6 +23,8 @@ export interface BotPluginCardProps {
   onInstall: () => void;
   onToggle: (enabled: boolean) => void;
   onUninstall: () => void;
+  /** Save the plugin's configuration values for this bot (throws the refusal). */
+  onSaveConfig?: (values: Record<string, string | number | boolean>) => Promise<void>;
 }
 
 function Names({ label, names }: { label: string; names: string[] }) {
@@ -34,7 +37,7 @@ function Names({ label, names }: { label: string; names: string[] }) {
   );
 }
 
-export function BotPluginCard({ botName, view, plugin, busy, onInstall, onToggle, onUninstall }: BotPluginCardProps) {
+export function BotPluginCard({ botName, view, plugin, busy, onInstall, onToggle, onUninstall, onSaveConfig }: BotPluginCardProps) {
   const installed = plugin.installed;
   const change = view.canChange;
   const contents = plugin.contents;
@@ -64,6 +67,9 @@ export function BotPluginCard({ botName, view, plugin, busy, onInstall, onToggle
         )}
         {installed && installed.removed.length > 0 && <p className="mt-2 text-[11.5px] text-ink-secondary">{t("plugins.removed", { parts: installed.removed.join(", ") })}</p>}
         {installed && installed.declaredMcpServers.length > 0 && <p className="mt-1 text-[11.5px] text-ink-secondary">{t("plugins.declaredMcp", { names: installed.declaredMcpServers.join(", ") })}</p>}
+        {installed?.config && installed.config.fields.length > 0 && (
+          <PluginConfigForm config={installed.config} canChange={change && Boolean(onSaveConfig)} onSave={(values) => onSaveConfig ? onSaveConfig(values) : Promise.resolve()} />
+        )}
         {view.managedByAdmin
           ? <div className="mt-2"><IntegrationsManagedNotice /></div>
           : !change && <p className="mt-2 rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary">{t("plugins.readOnly")}</p>}

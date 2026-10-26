@@ -1,16 +1,20 @@
 // Plugins > Manage > Providers: per provider (Claude, ChatGPT / Codex, Grok,
 // Gemini and every other engine on this installation), its accounts and the
 // connectors it brings to bots. Claude's are read from the account
-// (HarnessConnectorsSection's request); the others say plainly that their
-// connectors do not reach bots in Sagax.
+// (HarnessConnectorsSection's request). A Grok bot on an organization server
+// sees the cloud connectors of the xAI account it runs on. Codex and Gemini still have none to pass.
+import { useCallback, useState } from "react";
 import { ExternalLink } from "lucide-react";
 
 import { openExternalLink } from "@/lib/app-links";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { accountDetail, providerGroups } from "@/lib/providers-model";
+import { accountDetail, grokProviderConfigured, providerGroups } from "@/lib/providers-model";
+import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors";
 import type { InstanceInfo } from "@/state/store";
-import { HarnessConnectorsSection } from "../HarnessConnectorsSection";
+import { HarnessConnectorsSection, type HarnessConnectorsAnswer } from "../HarnessConnectorsSection";
+import { CapabilityTags, EngineCapabilities } from "./EngineCapabilities";
+import { engineConnectorOffers, grokConnectorCapabilities } from "../../../shared/engine-connectors";
 import { InstanceProviderMark } from "../ProviderIcons";
 
 const STATUS_LINE: Record<string, LocaleKey> = {
@@ -28,9 +32,15 @@ const DETAIL_KEY: Record<Exclude<ReturnType<typeof accountDetail>, "email">, Loc
 
 export function ProvidersSection({ instances }: { instances: readonly InstanceInfo[] }) {
   const groups = providerGroups(instances);
+  const [claudeConnectors, setClaudeConnectors] = useState<HarnessConnectorsAnswer["claude"]["connectors"]>([]);
+  const onClaudeAnswer = useCallback((answer: HarnessConnectorsAnswer) => {
+    setClaudeConnectors(answer.claude.available ? answer.claude.connectors : []);
+  }, []);
+  const offers = engineConnectorOffers({ claude: claudeConnectors, grok: grokProviderConfigured(instances) });
   return (
     <section data-plugins-providers className="space-y-3">
       <p className="text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.providers.intro")}</p>
+      {groups.length > 0 && <EngineCapabilities offers={offers} />}
       {groups.length === 0 && <p className="rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary">{t("connectApps.providers.none")}</p>}
       {groups.map((group) => (
         <div key={group.id} data-provider={group.id} className="rounded-2xl border border-border bg-card px-4 py-3.5 sm:px-5">
@@ -61,11 +71,23 @@ export function ProvidersSection({ instances }: { instances: readonly InstanceIn
             })}
           </ul>
           {group.bringsConnectors ? (
-            <div className="mt-3"><HarnessConnectorsSection placement="provider" /></div>
+            <div className="mt-3"><HarnessConnectorsSection placement="provider" onAnswer={onClaudeAnswer} /></div>
           ) : (
-            <p role="status" className="mt-2 text-[12px] text-ink-secondary">
-              {STATUS_LINE[group.id] ? t(STATUS_LINE[group.id]!) : t("connectApps.providers.other", { name: group.name })}
-            </p>
+            <div className="mt-2">
+              <p role="status" className="text-[12px] text-ink-secondary">
+                {STATUS_LINE[group.id] ? t(STATUS_LINE[group.id]!) : t("connectApps.providers.other", { name: group.name })}
+              </p>
+              {group.id === "xai" && grokProviderConfigured(group.accounts) && (
+                <ul data-grok-cloud-connectors className="mt-2 space-y-1">
+                  {GROK_CLOUD_CONNECTORS.map((connector) => (
+                    <li key={connector.id} data-grok-connector={connector.id} className="flex min-w-0 items-baseline gap-2 text-[12.5px] text-ink">
+                      <span className="truncate">{connector.name}</span>
+                      <CapabilityTags capabilities={grokConnectorCapabilities(connector.id)} name={connector.name} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
         </div>
       ))}

@@ -13,6 +13,7 @@ import {
   CalendarClock,
   CircleStop,
   Compass,
+  History,
   Keyboard,
   MessageSquare,
   Network,
@@ -41,6 +42,7 @@ import { setComposerChannelMode } from "@/lib/drafts";
 import { useAllArtifacts } from "@/lib/artifacts";
 import { openArtifact } from "@/lib/artifact-events";
 import { viewerCanCreateBots } from "@/lib/viewer";
+import { requestBotHistory } from "@/lib/panel-visibility";
 import {
   buildPaletteSections,
   latestGoalRun,
@@ -71,6 +73,7 @@ const ICONS: Record<PaletteAction["kind"], LucideIcon> = {
   connectApps: Puzzle,
   settings: Settings,
   botSettings: SlidersHorizontal,
+  botHistory: History,
   goalStart: Target,
   goalStatus: Activity,
   goalStop: CircleStop,
@@ -262,6 +265,10 @@ export function CommandPalette({
         return;
       case "botSettings":
         dispatch({ type: "toggleSettings", open: true, botId: action.botId });
+        return;
+      case "botHistory":
+        dispatch({ type: "toggleSettings", open: true, botId: action.botId });
+        requestBotHistory(action.botId);
         return;
       case "goalStart":
         setComposerChannelMode(`group:${action.groupId}:${action.threadId}`, "goal");

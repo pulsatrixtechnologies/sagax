@@ -38,6 +38,16 @@ describe("buildTurnContext", () => {
     expect(native).toEqual({ turnText: "hi", resume: false });
   });
 
+  it("tells the fold of a stale session as a pause: unfinished work waits for the person", () => {
+    const out = buildTurnContext({ text: "Hello", transcript, rewound: false, fresh: false, externallyUpdated: false, replaysNatively: false, compacted: true, paused: true });
+    expect(out.resume).toBe(false);
+    expect(out.turnText).toContain("resumed after a pause");
+    expect(out.turnText).toContain("only if the user's new message asks for it");
+    expect(out.turnText).not.toContain("Continue exactly where you left off");
+    expect(out.turnText).toContain("User: my dog is named Biscuit");
+    expect(out.turnText.endsWith("Hello")).toBe(true);
+  });
+
   it("replays inline for a fresh engine with prior history — the model-switch fix", () => {
     const out = buildTurnContext({ text: "hi", transcript, rewound: false, fresh: true, externallyUpdated: false, replaysNatively: false });
     expect(out.resume).toBe(false);

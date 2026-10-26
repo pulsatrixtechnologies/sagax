@@ -112,6 +112,7 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
   const signInOpen = state.computerControl?.[bot.id]?.help?.place === "browser";
   keepNow.current = kept || signInOpen;
   const profileName = bot.browserProfile === "guest" ? t("browser.profile.temporary")
+    : bot.browserProfile === "my-chrome" ? t("settings.profiles.myChrome")
     : state.config?.browserProfiles?.find((profile) => profile.id === bot.browserProfile)?.name ?? t("browser.profile.own", { name: bot.name });
   useEffect(() => { if (showProfiles) profilesDialog.current?.showModal(); else profilesDialog.current?.close(); }, [showProfiles]);
   useEffect(() => {

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { z } from "zod";
+import type { WorkspaceBackupReconnect } from "../shared/workspace-backup.ts";
 import { WORKSPACE_BACKUP_CLIENT_KEYS } from "../shared/workspace-backup-client.ts";
 import {
   createWorkspaceBackup, stageWorkspaceBackup, commitPendingWorkspaceRestore,
@@ -21,7 +22,7 @@ const EXPIRES_MS = 60 * 60_000;
 const passwordSchema = z.string().min(12, "Use a password of at least 12 characters.").max(1024);
 const failure = (message: string, status = 400) => Object.assign(new Error(message), { status });
 type Artifact = { owner: string; kind: "download" | "upload" | "staged"; path?: string; expires: number; summary?: WorkspaceBackupSummary };
-type RestoreResult = { id?: string; restored?: boolean; safetyCopyPath?: string; clientState?: Record<string, string> };
+type RestoreResult = { id?: string; restored?: boolean; safetyCopyPath?: string; clientState?: Record<string, string>; summary?: { reconnect?: WorkspaceBackupReconnect } };
 
 /** Session-only controls remain usable while the workspace is locked. Their
  * excluded session file is not part of the snapshot or replacement. */
@@ -111,6 +112,8 @@ export function createWorkspaceBackupRoutes(options: {
         json(res, 200, {
           ...options.status(),
           lastRestoreId: options.restored.restored ? options.restored.id : null,
+          // what the last restore asks to reconnect (counts by category only)
+          lastRestoreReconnect: options.restored.restored ? options.restored.summary?.reconnect ?? null : null,
           safetyCopyPath: options.restored.safetyCopyPath ?? null,
         });
         return true;

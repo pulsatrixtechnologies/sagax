@@ -121,7 +121,6 @@ class NavigationTest {
             Destination.Roster,
             Destination.Settings,
             Destination.Routines,
-            Destination.ConnectedApps,
             Destination.Thread("thread:with:colons"),
             Destination.Computer("bot:with:colons"),
             Destination.Overview("bot:with:colons"),

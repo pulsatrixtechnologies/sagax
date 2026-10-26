@@ -1,0 +1,468 @@
+/* ── Duo-tones (2026-10-19) ───────────────────────────────────────────────
+   JC: « des variantes plus complexes ». A duo-tone is a colour variant with
+   two ends: --accent-from and --accent-to, the gradient between them
+   (--accent-gradient) painted wherever the accent is filled, and a glow in
+   both colours. Like the plain tints (styles.css, « Colour tints ») only the
+   accent family of tokens moves, so the family keeps its shapes and surfaces.
+   pnpm check:contrast measures each block over its base, and the accent's
+   pairs at both ends of the gradient (`@from`, `@to`).
+
+   Dark grounds: two bright ends with a dark mark. Light grounds: two deep
+   ends carrying white.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* No gradient unless a duo or a mood sets one: a [data-skin] context nested in
+   a tinted window (the picker's swatches) starts clean. */
+[data-skin] {
+  --accent-gradient: none;
+  --skin-swatch-image: initial;
+}
+
+/* aurore */
+[data-skin="pulsatrix"][data-skin-tint="aurore"] {
+  --accent-from: #f472b6;
+  --accent-to: #fb923c;
+  --accent-gradient: linear-gradient(135deg, #f472b6, #fb923c);
+  --skin-swatch: #f87171;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #f472b6 46%, #fb923c 100%);
+  --color-accent: #f472b6;
+  --color-accent-border: #f472b6;
+  --color-accent-text: #fbb6ce;
+  --color-accent-ink: #1f0a10;
+  --color-focus: #f472b6;
+  --color-unread: #f472b6;
+  --glyph-ripple-tint: #f472b6;
+  --color-sidebar-selected: #f472b62e;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #f472b6 16%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #fb923c 12%, transparent), transparent 68%);
+  --color-bubble-user: #3d1a2c;
+}
+
+[data-skin="midnight"][data-skin-tint="aurore"] {
+  --accent-from: #f472b6;
+  --accent-to: #fb923c;
+  --accent-gradient: linear-gradient(135deg, #f472b6, #fb923c);
+  --skin-swatch: #f87171;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #f472b6 46%, #fb923c 100%);
+  --color-accent: #f472b6;
+  --color-accent-border: #f472b6;
+  --color-accent-text: #fbb6ce;
+  --color-accent-ink: #1f0a10;
+  --color-focus: #f472b6;
+  --color-unread: #f472b6;
+  --glyph-ripple-tint: #f472b6;
+  --color-sidebar-selected: #f472b62e;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #f472b6 16%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #fb923c 12%, transparent), transparent 68%);
+}
+
+[data-skin="foundry"][data-skin-tint="aurore"] {
+  --accent-from: #f472b6;
+  --accent-to: #fb923c;
+  --accent-gradient: linear-gradient(135deg, #f472b6, #fb923c);
+  --skin-swatch: #f87171;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #f472b6 46%, #fb923c 100%);
+  --color-accent: #f472b6;
+  --color-accent-border: #f472b6;
+  --color-accent-text: #fbb6ce;
+  --color-accent-ink: #1f0a10;
+  --color-focus: #f472b6;
+  --color-unread: #f472b6;
+  --glyph-ripple-tint: #f472b6;
+  --color-sidebar-selected: #f472b62e;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #f472b6 16%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #fb923c 12%, transparent), transparent 68%);
+}
+
+[data-skin="pulsatrix-light"][data-skin-tint="aurore"] {
+  --accent-from: #be185d;
+  --accent-to: #c2410c;
+  --accent-gradient: linear-gradient(135deg, #be185d, #c2410c);
+  --skin-swatch: #e2366f;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #be185d 46%, #c2410c 100%);
+  --color-accent: #be185d;
+  --color-accent-border: #be185d;
+  --color-accent-text: #9d174d;
+  --color-accent-ink: #ffffff;
+  --color-focus: #9d174d;
+  --color-unread: #be185d;
+  --glyph-ripple-tint: #be185d;
+  --color-sidebar-selected: #f472b638;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #be185d 9%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #c2410c 7%, transparent), transparent 68%);
+  --color-bubble-user: #fde4ec;
+}
+
+[data-skin="daylight"][data-skin-tint="aurore"] {
+  --accent-from: #be185d;
+  --accent-to: #c2410c;
+  --accent-gradient: linear-gradient(135deg, #be185d, #c2410c);
+  --skin-swatch: #e2366f;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #be185d 46%, #c2410c 100%);
+  --color-accent: #be185d;
+  --color-accent-border: #be185d;
+  --color-accent-text: #9d174d;
+  --color-accent-ink: #ffffff;
+  --color-focus: #9d174d;
+  --color-unread: #be185d;
+  --glyph-ripple-tint: #be185d;
+  --color-sidebar-selected: #be185d30;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #be185d 9%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #c2410c 7%, transparent), transparent 68%);
+}
+
+[data-skin="atelier"][data-skin-tint="aurore"] {
+  --accent-from: #be185d;
+  --accent-to: #c2410c;
+  --accent-gradient: linear-gradient(135deg, #be185d, #c2410c);
+  --skin-swatch: #e2366f;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #be185d 46%, #c2410c 100%);
+  --color-accent: #be185d;
+  --color-accent-border: #be185d;
+  --color-accent-text: #9d174d;
+  --color-accent-ink: #ffffff;
+  --color-focus: #9d174d;
+  --color-unread: #be185d;
+  --glyph-ripple-tint: #be185d;
+  --color-sidebar-selected: #be185d30;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #be185d 9%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #c2410c 7%, transparent), transparent 68%);
+}
+
+
+/* ocean */
+[data-skin="pulsatrix"][data-skin-tint="ocean"] {
+  --accent-from: #60a5fa;
+  --accent-to: #2dd4bf;
+  --accent-gradient: linear-gradient(135deg, #60a5fa, #2dd4bf);
+  --skin-swatch: #38bdf8;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #60a5fa 46%, #2dd4bf 100%);
+  --color-accent: #60a5fa;
+  --color-accent-border: #60a5fa;
+  --color-accent-text: #a5d8ff;
+  --color-accent-ink: #04121c;
+  --color-focus: #60a5fa;
+  --color-unread: #60a5fa;
+  --glyph-ripple-tint: #60a5fa;
+  --color-sidebar-selected: #60a5fa2e;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #60a5fa 16%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #2dd4bf 12%, transparent), transparent 68%);
+  --color-bubble-user: #14304a;
+}
+
+[data-skin="midnight"][data-skin-tint="ocean"] {
+  --accent-from: #60a5fa;
+  --accent-to: #2dd4bf;
+  --accent-gradient: linear-gradient(135deg, #60a5fa, #2dd4bf);
+  --skin-swatch: #38bdf8;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #60a5fa 46%, #2dd4bf 100%);
+  --color-accent: #60a5fa;
+  --color-accent-border: #60a5fa;
+  --color-accent-text: #a5d8ff;
+  --color-accent-ink: #04121c;
+  --color-focus: #60a5fa;
+  --color-unread: #60a5fa;
+  --glyph-ripple-tint: #60a5fa;
+  --color-sidebar-selected: #60a5fa2e;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #60a5fa 16%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #2dd4bf 12%, transparent), transparent 68%);
+}
+
+[data-skin="foundry"][data-skin-tint="ocean"] {
+  --accent-from: #60a5fa;
+  --accent-to: #2dd4bf;
+  --accent-gradient: linear-gradient(135deg, #60a5fa, #2dd4bf);
+  --skin-swatch: #38bdf8;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #60a5fa 46%, #2dd4bf 100%);
+  --color-accent: #60a5fa;
+  --color-accent-border: #60a5fa;
+  --color-accent-text: #a5d8ff;
+  --color-accent-ink: #04121c;
+  --color-focus: #60a5fa;
+  --color-unread: #60a5fa;
+  --glyph-ripple-tint: #60a5fa;
+  --color-sidebar-selected: #60a5fa2e;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #60a5fa 16%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #2dd4bf 12%, transparent), transparent 68%);
+}
+
+[data-skin="pulsatrix-light"][data-skin-tint="ocean"] {
+  --accent-from: #1d4ed8;
+  --accent-to: #0f766e;
+  --accent-gradient: linear-gradient(135deg, #1d4ed8, #0f766e);
+  --skin-swatch: #0e7490;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #1d4ed8 46%, #0f766e 100%);
+  --color-accent: #1d4ed8;
+  --color-accent-border: #1d4ed8;
+  --color-accent-text: #1e40af;
+  --color-accent-ink: #ffffff;
+  --color-focus: #1e40af;
+  --color-unread: #1d4ed8;
+  --glyph-ripple-tint: #1d4ed8;
+  --color-sidebar-selected: #60a5fa38;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #1d4ed8 9%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #0f766e 7%, transparent), transparent 68%);
+  --color-bubble-user: #dcf0f7;
+}
+
+[data-skin="daylight"][data-skin-tint="ocean"] {
+  --accent-from: #1d4ed8;
+  --accent-to: #0f766e;
+  --accent-gradient: linear-gradient(135deg, #1d4ed8, #0f766e);
+  --skin-swatch: #0e7490;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #1d4ed8 46%, #0f766e 100%);
+  --color-accent: #1d4ed8;
+  --color-accent-border: #1d4ed8;
+  --color-accent-text: #1e40af;
+  --color-accent-ink: #ffffff;
+  --color-focus: #1e40af;
+  --color-unread: #1d4ed8;
+  --glyph-ripple-tint: #1d4ed8;
+  --color-sidebar-selected: #1d4ed830;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #1d4ed8 9%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #0f766e 7%, transparent), transparent 68%);
+}
+
+[data-skin="atelier"][data-skin-tint="ocean"] {
+  --accent-from: #1d4ed8;
+  --accent-to: #0f766e;
+  --accent-gradient: linear-gradient(135deg, #1d4ed8, #0f766e);
+  --skin-swatch: #0e7490;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #1d4ed8 46%, #0f766e 100%);
+  --color-accent: #1d4ed8;
+  --color-accent-border: #1d4ed8;
+  --color-accent-text: #1e40af;
+  --color-accent-ink: #ffffff;
+  --color-focus: #1e40af;
+  --color-unread: #1d4ed8;
+  --glyph-ripple-tint: #1d4ed8;
+  --color-sidebar-selected: #1d4ed830;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #1d4ed8 9%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #0f766e 7%, transparent), transparent 68%);
+}
+
+
+/* neon */
+[data-skin="pulsatrix"][data-skin-tint="neon"] {
+  --accent-from: #a78bfa;
+  --accent-to: #22d3ee;
+  --accent-gradient: linear-gradient(135deg, #a78bfa, #22d3ee);
+  --skin-swatch: #818cf8;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #a78bfa 46%, #22d3ee 100%);
+  --color-accent: #a78bfa;
+  --color-accent-border: #a78bfa;
+  --color-accent-text: #c4b5fd;
+  --color-accent-ink: #0d0820;
+  --color-focus: #a78bfa;
+  --color-unread: #a78bfa;
+  --glyph-ripple-tint: #a78bfa;
+  --color-sidebar-selected: #a78bfa2e;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #a78bfa 16%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #22d3ee 12%, transparent), transparent 68%);
+  --color-bubble-user: #2a1d4a;
+}
+
+[data-skin="midnight"][data-skin-tint="neon"] {
+  --accent-from: #a78bfa;
+  --accent-to: #22d3ee;
+  --accent-gradient: linear-gradient(135deg, #a78bfa, #22d3ee);
+  --skin-swatch: #818cf8;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #a78bfa 46%, #22d3ee 100%);
+  --color-accent: #a78bfa;
+  --color-accent-border: #a78bfa;
+  --color-accent-text: #c4b5fd;
+  --color-accent-ink: #0d0820;
+  --color-focus: #a78bfa;
+  --color-unread: #a78bfa;
+  --glyph-ripple-tint: #a78bfa;
+  --color-sidebar-selected: #a78bfa2e;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #a78bfa 16%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #22d3ee 12%, transparent), transparent 68%);
+}
+
+[data-skin="foundry"][data-skin-tint="neon"] {
+  --accent-from: #a78bfa;
+  --accent-to: #22d3ee;
+  --accent-gradient: linear-gradient(135deg, #a78bfa, #22d3ee);
+  --skin-swatch: #818cf8;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #a78bfa 46%, #22d3ee 100%);
+  --color-accent: #a78bfa;
+  --color-accent-border: #a78bfa;
+  --color-accent-text: #c4b5fd;
+  --color-accent-ink: #0d0820;
+  --color-focus: #a78bfa;
+  --color-unread: #a78bfa;
+  --glyph-ripple-tint: #a78bfa;
+  --color-sidebar-selected: #a78bfa2e;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #a78bfa 16%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #22d3ee 12%, transparent), transparent 68%);
+}
+
+[data-skin="pulsatrix-light"][data-skin-tint="neon"] {
+  --accent-from: #7c3aed;
+  --accent-to: #0e7490;
+  --accent-gradient: linear-gradient(135deg, #7c3aed, #0e7490);
+  --skin-swatch: #6d28d9;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #7c3aed 46%, #0e7490 100%);
+  --color-accent: #7c3aed;
+  --color-accent-border: #7c3aed;
+  --color-accent-text: #6d28d9;
+  --color-accent-ink: #ffffff;
+  --color-focus: #6d28d9;
+  --color-unread: #7c3aed;
+  --glyph-ripple-tint: #7c3aed;
+  --color-sidebar-selected: #a78bfa38;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #7c3aed 9%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #0e7490 7%, transparent), transparent 68%);
+  --color-bubble-user: #ede6fe;
+}
+
+[data-skin="daylight"][data-skin-tint="neon"] {
+  --accent-from: #7c3aed;
+  --accent-to: #0e7490;
+  --accent-gradient: linear-gradient(135deg, #7c3aed, #0e7490);
+  --skin-swatch: #6d28d9;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #7c3aed 46%, #0e7490 100%);
+  --color-accent: #7c3aed;
+  --color-accent-border: #7c3aed;
+  --color-accent-text: #6d28d9;
+  --color-accent-ink: #ffffff;
+  --color-focus: #6d28d9;
+  --color-unread: #7c3aed;
+  --glyph-ripple-tint: #7c3aed;
+  --color-sidebar-selected: #7c3aed30;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #7c3aed 9%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #0e7490 7%, transparent), transparent 68%);
+}
+
+[data-skin="atelier"][data-skin-tint="neon"] {
+  --accent-from: #7c3aed;
+  --accent-to: #0e7490;
+  --accent-gradient: linear-gradient(135deg, #7c3aed, #0e7490);
+  --skin-swatch: #6d28d9;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #7c3aed 46%, #0e7490 100%);
+  --color-accent: #7c3aed;
+  --color-accent-border: #7c3aed;
+  --color-accent-text: #6d28d9;
+  --color-accent-ink: #ffffff;
+  --color-focus: #6d28d9;
+  --color-unread: #7c3aed;
+  --glyph-ripple-tint: #7c3aed;
+  --color-sidebar-selected: #7c3aed30;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #7c3aed 9%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #0e7490 7%, transparent), transparent 68%);
+}
+
+
+/* foret */
+[data-skin="pulsatrix"][data-skin-tint="foret"] {
+  --accent-from: #4ade80;
+  --accent-to: #a3e635;
+  --accent-gradient: linear-gradient(135deg, #4ade80, #a3e635);
+  --skin-swatch: #84cc16;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #4ade80 46%, #a3e635 100%);
+  --color-accent: #4ade80;
+  --color-accent-border: #4ade80;
+  --color-accent-text: #86efac;
+  --color-accent-ink: #071a0c;
+  --color-focus: #4ade80;
+  --color-unread: #4ade80;
+  --glyph-ripple-tint: #4ade80;
+  --color-sidebar-selected: #4ade802e;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #4ade80 16%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #a3e635 12%, transparent), transparent 68%);
+  --color-bubble-user: #163522;
+}
+
+[data-skin="midnight"][data-skin-tint="foret"] {
+  --accent-from: #4ade80;
+  --accent-to: #a3e635;
+  --accent-gradient: linear-gradient(135deg, #4ade80, #a3e635);
+  --skin-swatch: #84cc16;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #4ade80 46%, #a3e635 100%);
+  --color-accent: #4ade80;
+  --color-accent-border: #4ade80;
+  --color-accent-text: #86efac;
+  --color-accent-ink: #071a0c;
+  --color-focus: #4ade80;
+  --color-unread: #4ade80;
+  --glyph-ripple-tint: #4ade80;
+  --color-sidebar-selected: #4ade802e;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #4ade80 16%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #a3e635 12%, transparent), transparent 68%);
+}
+
+[data-skin="foundry"][data-skin-tint="foret"] {
+  --accent-from: #4ade80;
+  --accent-to: #a3e635;
+  --accent-gradient: linear-gradient(135deg, #4ade80, #a3e635);
+  --skin-swatch: #84cc16;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #4ade80 46%, #a3e635 100%);
+  --color-accent: #4ade80;
+  --color-accent-border: #4ade80;
+  --color-accent-text: #86efac;
+  --color-accent-ink: #071a0c;
+  --color-focus: #4ade80;
+  --color-unread: #4ade80;
+  --glyph-ripple-tint: #4ade80;
+  --color-sidebar-selected: #4ade802e;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #4ade80 16%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #a3e635 12%, transparent), transparent 68%);
+}
+
+[data-skin="pulsatrix-light"][data-skin-tint="foret"] {
+  --accent-from: #15803d;
+  --accent-to: #4d7c0f;
+  --accent-gradient: linear-gradient(135deg, #15803d, #4d7c0f);
+  --skin-swatch: #3f8f1f;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #15803d 46%, #4d7c0f 100%);
+  --color-accent: #15803d;
+  --color-accent-border: #15803d;
+  --color-accent-text: #166534;
+  --color-accent-ink: #ffffff;
+  --color-focus: #166534;
+  --color-unread: #15803d;
+  --glyph-ripple-tint: #15803d;
+  --color-sidebar-selected: #4ade8038;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #15803d 9%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #4d7c0f 7%, transparent), transparent 68%);
+  --color-bubble-user: #e1f5df;
+}
+
+[data-skin="daylight"][data-skin-tint="foret"] {
+  --accent-from: #15803d;
+  --accent-to: #4d7c0f;
+  --accent-gradient: linear-gradient(135deg, #15803d, #4d7c0f);
+  --skin-swatch: #3f8f1f;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #15803d 46%, #4d7c0f 100%);
+  --color-accent: #15803d;
+  --color-accent-border: #15803d;
+  --color-accent-text: #166534;
+  --color-accent-ink: #ffffff;
+  --color-focus: #166534;
+  --color-unread: #15803d;
+  --glyph-ripple-tint: #15803d;
+  --color-sidebar-selected: #15803d30;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #15803d 9%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #4d7c0f 7%, transparent), transparent 68%);
+}
+
+[data-skin="atelier"][data-skin-tint="foret"] {
+  --accent-from: #15803d;
+  --accent-to: #4d7c0f;
+  --accent-gradient: linear-gradient(135deg, #15803d, #4d7c0f);
+  --skin-swatch: #3f8f1f;
+  --skin-swatch-image: linear-gradient(135deg, var(--color-app) 0 46%, #15803d 46%, #4d7c0f 100%);
+  --color-accent: #15803d;
+  --color-accent-border: #15803d;
+  --color-accent-text: #166534;
+  --color-accent-ink: #ffffff;
+  --color-focus: #166534;
+  --color-unread: #15803d;
+  --glyph-ripple-tint: #15803d;
+  --color-sidebar-selected: #15803d30;
+  --app-glow: radial-gradient(ellipse 90% 60% at 18% 0%, color-mix(in oklch, #15803d 9%, transparent), transparent 70%), radial-gradient(ellipse 80% 55% at 85% 0%, color-mix(in oklch, #4d7c0f 7%, transparent), transparent 68%);
+}
+
+
+/* Where the accent is FILLED, the gradient replaces the flat colour (the flat
+   --color-accent stays underneath as the fallback and for every glyph). Nested
+   [data-skin] contexts (the picker's swatches and miniatures) reset
+   --accent-gradient above, so a duo worn by the window never leaks into a
+   swatch of another variant. Moods (skin-ambiance.css) share these rules. */
+:is([data-skin-tint="aurore"], [data-skin-tint="ocean"], [data-skin-tint="neon"], [data-skin-tint="foret"], [data-skin-tint="cyberpunk"], [data-skin-tint="sunset"], [data-skin-tint="nordic"], [data-skin-tint="candy"]) .bg-accent {
+  background-image: var(--accent-gradient);
+}
+/* the composer's send circle (ComposerControls.tsx, CTA_DEFAULT = bg-ink) and
+   the miniature send dot: a filled accent in the duo's two colours */
+:is([data-skin-tint="aurore"], [data-skin-tint="ocean"], [data-skin-tint="neon"], [data-skin-tint="foret"], [data-skin-tint="cyberpunk"], [data-skin-tint="sunset"], [data-skin-tint="nordic"], [data-skin-tint="candy"]) [data-composer-send].bg-ink {
+  background-color: var(--color-accent);
+  background-image: var(--accent-gradient);
+  color: var(--color-accent-ink);
+}
+/* the selected row of the rail (Sidebar.tsx, SidebarThreadRow.tsx,
+   SidebarPlaces.tsx): a wash running from one colour to the other */
+:is([data-skin-tint="aurore"], [data-skin-tint="ocean"], [data-skin-tint="neon"], [data-skin-tint="foret"], [data-skin-tint="cyberpunk"], [data-skin-tint="sunset"], [data-skin-tint="nordic"], [data-skin-tint="candy"]) .bg-sidebar-selected {
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--accent-to) 14%, transparent), transparent 85%);
+}
+/* the person's own bubble: its colour, drifting a little toward the far end */
+:is([data-skin-tint="aurore"], [data-skin-tint="ocean"], [data-skin-tint="neon"], [data-skin-tint="foret"], [data-skin-tint="cyberpunk"], [data-skin-tint="sunset"], [data-skin-tint="nordic"], [data-skin-tint="candy"]) .bg-bubble-user {
+  background-image: linear-gradient(135deg, transparent 35%, color-mix(in srgb, var(--accent-to) 16%, transparent));
+}

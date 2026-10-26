@@ -9,7 +9,9 @@
 // a repository; never a title) with their repository and branch, then the
 // pull requests, branches and commits the bot's coding jobs of the window
 // produced (the server's `code`, read off their own git, gh and GitHub
-// calls), each opening in the browser. Activity is parallel work only
+// calls), each opening in the browser, in the Routines card
+// (src/lib/grouped-card.ts); a branch also has its actions
+// (CodeBranchList: commit, push, pull request, diff, archive, delete). Activity is parallel work only
 // (isParallelWork): routine runs, work handed over, the sub-agents this bot's
 // threads started, parallel tasks and jobs the bot opened on itself; never a
 // conversation's own turn, which is the chat. A running entry has a spinner,
@@ -24,12 +26,13 @@
 // list refetches when the bot's threads change (the store's event stream)
 // and polls while work runs.
 import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, History, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest, GitPullRequestClosed, Layers, Loader2, SquareTerminal } from "lucide-react";
+import { ChevronRight, History, GitCommitHorizontal, GitMerge, GitPullRequest, GitPullRequestClosed, Loader2, SquareTerminal } from "lucide-react";
 
 import { api, type Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { openExternalLink } from "@/lib/app-links";
+import { useShowAllHistory, watchBotHistoryRequests } from "@/lib/panel-visibility";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import {
   activityLive,
@@ -54,6 +57,9 @@ import { LaunchedAgentsList } from "./LaunchedAgentsList";
 import { ActivityDetailModal } from "./ActivityDetailModal";
 import { ActivityListModal } from "./ActivityListModal";
 import { useBotActivityFeed } from "@/lib/use-bot-activity-feed";
+import { GROUPED_CARD, GROUPED_ROW } from "@/lib/grouped-card";
+import { loadArchivedBranches, setBranchArchived } from "@/lib/code-branches";
+import { CodeBranchList, type BranchListActions } from "./CodeBranchList";
 
 export interface CardActions {
   onOpen: (item: BotActivityItem) => void;
@@ -126,9 +132,9 @@ function CodeRow({ kind, icon, title, subtitle, url, name }: { kind: string; ico
       </span>
     </>
   );
-  const row = "flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-1.5 text-left";
+  const row = "flex w-full min-w-0 items-center gap-3 text-left";
   return (
-    <li data-code-row={kind}>
+    <li data-code-row={kind} className={cn("hover:bg-hover", GROUPED_ROW)}>
       {url ? (
         <button
           type="button"
@@ -136,7 +142,7 @@ function CodeRow({ kind, icon, title, subtitle, url, name }: { kind: string; ico
           onClick={() => void openExternalLink(url)}
           aria-label={t("botPanel.code.openAria", { name })}
           title={url}
-          className={cn(row, "transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60")}
+          className={cn(row, "rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60")}
         >
           {body}
         </button>
@@ -158,19 +164,25 @@ function pullTitle(pull: BotCodePullRequest): string {
   return pull.number !== undefined ? t("botPanel.code.pr.numbered", { number: pull.number }) : t("botPanel.code.pr.new");
 }
 
+/** A group of code work: its grey label, then one grouped card like
+ * Routines' (src/lib/grouped-card.ts). */
 function CodeGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-1">
       <h3 className="px-1 text-[12px] leading-[17px] text-ink-tertiary">{label}</h3>
-      <ul className="-mx-2 flex flex-col" aria-label={label}>{children}</ul>
+      {children}
     </div>
   );
+}
+
+function CodeCard({ label, children }: { label: string; children: React.ReactNode }) {
+  return <ul className={GROUPED_CARD} aria-label={label}>{children}</ul>;
 }
 
 /** The Coding section's code work: pull requests, branches, commits. Each
  * group shows only when it has rows. Split out so it renders without the
  * fetching around it. */
-export function CodeWorkList({ work, now }: { work: CodingWork; now: number }) {
+export function CodeWorkList({ work, now, branchActions }: { work: CodingWork; now: number; branchActions?: BranchListActions }) {
   if (codingWorkEmpty(work)) return null;
   const common = { size: 16, strokeWidth: 1.9, "aria-hidden": true as const, className: "shrink-0 text-ink-secondary" };
   const line = (...parts: Array<string | undefined>) => parts.filter(Boolean).join(" · ");
@@ -178,6 +190,7 @@ export function CodeWorkList({ work, now }: { work: CodingWork; now: number }) {
     <div data-code-work className="flex flex-col gap-2">
       {work.pullRequests.length > 0 && (
         <CodeGroup label={t("botPanel.code.pullRequests")}>
+          <CodeCard label={t("botPanel.code.pullRequests")}>
           {work.pullRequests.map((pull) => (
             <CodeRow
               key={pull.url ?? `${pull.repo}#${pull.number}:${pull.at}`}
@@ -189,25 +202,23 @@ export function CodeWorkList({ work, now }: { work: CodingWork; now: number }) {
               name={pullTitle(pull)}
             />
           ))}
+          </CodeCard>
         </CodeGroup>
       )}
-      {work.branches.length > 0 && (
+      {(work.branches.length > 0 || (branchActions && (work.archivedBranches?.length ?? 0) > 0)) && (
         <CodeGroup label={t("botPanel.code.branches")}>
-          {work.branches.map((branch) => (
-            <CodeRow
-              key={`${branch.repo}:${branch.name}`}
-              kind="branch"
-              icon={<GitBranch {...common} />}
-              title={branch.name}
-              subtitle={line(branch.repo, t(branch.pushed ? "botPanel.code.pushed" : "botPanel.code.notPushed"), codeWorkWhen(branch.at, now))}
-              url={branch.url}
-              name={branch.name}
-            />
-          ))}
+          <CodeBranchList
+            branches={work.branches}
+            archivedBranches={branchActions ? work.archivedBranches : undefined}
+            now={now}
+            actions={branchActions}
+            label={t("botPanel.code.branches")}
+          />
         </CodeGroup>
       )}
       {work.commits.length > 0 && (
         <CodeGroup label={t("botPanel.code.commits")}>
+          <CodeCard label={t("botPanel.code.commits")}>
           {work.commits.map((commit) => (
             <CodeRow
               key={commit.sha}
@@ -219,6 +230,7 @@ export function CodeWorkList({ work, now }: { work: CodingWork; now: number }) {
               name={commit.sha.slice(0, 7)}
             />
           ))}
+          </CodeCard>
         </CodeGroup>
       )}
     </div>
@@ -228,10 +240,10 @@ export function CodeWorkList({ work, now }: { work: CodingWork; now: number }) {
 /** What Details shows for Coding and Activity, given the loaded list:
  * each section's entries, and whether it is drawn at all. Nothing loaded
  * yet (or a failed first load) draws neither. */
-export function panelSections(list: BotActivityList | null, live?: LiveView, advanced = true) {
+export function panelSections(list: BotActivityList | null, live?: LiveView, advanced = true, archived?: ReadonlySet<string>) {
   const coding = list ? codingLive(list.items, live) : [];
   // The pull requests, branches and commits are for Advanced mode only.
-  const work = list && advanced ? codingWork(list.items) : { pullRequests: [], branches: [], commits: [] };
+  const work: CodingWork = list && advanced ? codingWork(list.items, archived) : { pullRequests: [], branches: [], commits: [] };
   // Launched agents split by their work: code under Coding, the rest (a
   // dispatch run, bot-to-bot work) under Activity.
   const launchedAll = list?.launchedAgents ?? [];
@@ -276,7 +288,7 @@ export function SectionHeader({ icon, title, name, onOpenHistory }: { icon: Reac
  * keeps the history one click away. A first load that failed
  * is one quiet line; a later failed refresh keeps the last list. Split out so
  * it renders without the fetching. */
-export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunched, error = false, advanced = true }: {
+export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunched, error = false, advanced = true, archived, branchActions, showAllHistory = true }: {
   list: BotActivityList | null;
   live?: LiveView;
   actions: CardActions;
@@ -286,25 +298,21 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
   error?: boolean;
   /** Advanced mode: the Git links (pull requests, branches, commits) show. */
   advanced?: boolean;
+  /** The branches this person archived (codingBranchKey). */
+  archived?: ReadonlySet<string>;
+  /** The branches' menus (commit, push, ...); without it they have none. */
+  branchActions?: BranchListActions;
+  /** The quiet "All history" row (Settings > Appearance; hidden by default in the panel). */
+  showAllHistory?: boolean;
 }) {
-  const { coding, work, launched, launchedOther, other, showCoding, showActivity } = panelSections(list, live, advanced);
+  const { coding, work, launched, showCoding } = panelSections(list, live, advanced, archived);
   if (list === null) {
     return error ? <p role="status" data-activity-error className="px-0.5 text-[12.5px] text-ink-tertiary">{t("botPanel.coding.error")}</p> : null;
   }
   return (
     <>
-      {showActivity && (
-        <section data-bot-settings-section="activity" className="flex flex-col gap-2">
-          <SectionHeader
-            icon={<Layers size={16} aria-hidden="true" className="text-ink-secondary" />}
-            title={t("backgroundWork.title")}
-            name="other"
-            onOpenHistory={onOpenHistory}
-          />
-          {launchedOther.length > 0 && onOpenLaunched && <LaunchedAgentsList items={launchedOther} onOpen={onOpenLaunched} label={t("backgroundWork.title")} />}
-          {other.length > 0 && <ActivityList items={other} error={false} label={t("backgroundWork.title")} {...actions} />}
-        </section>
-      )}
+      {/* Work other bots do for this one is not shown here: it is seen in the
+          chat (the bot-to-bot conversation card), JC 2026-10-19. */}
       {showCoding && (
         <section data-bot-settings-section="coding" className="flex flex-col gap-2">
           <SectionHeader
@@ -315,12 +323,12 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
           />
           {launched.length > 0 && onOpenLaunched && <LaunchedAgentsList items={launched} onOpen={onOpenLaunched} />}
           {coding.length > 0 && <ActivityList items={coding} error={false} {...actions} where={codingWhere} />}
-          <CodeWorkList work={work} now={actions.now ?? Date.now()} />
+          <CodeWorkList work={work} now={actions.now ?? Date.now()} branchActions={branchActions} />
         </section>
       )}
       {/* Only when no section title opens the history: same header as
           Routines, 28px like its row. */}
-      {!showActivity && !showCoding && (
+      {!showCoding && showAllHistory && (
         <div className="flex min-h-7 items-center">
           <SectionHeader
             icon={<History size={16} aria-hidden="true" className="text-ink-secondary" />}
@@ -336,6 +344,7 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
 
 export function ActivitySection({ bot }: { bot: Bot }) {
   const advanced = useAdvancedMode();
+  const showAllHistory = useShowAllHistory();
   const feed = useBotActivityFeed(bot);
   const [open, setOpen] = useState<BotActivityItem | null>(null);
   const [all, setAll] = useState<BotActivityFilter | null>(null);
@@ -343,7 +352,23 @@ export function ActivitySection({ bot }: { bot: Bot }) {
   const error = feed.error;
   const stop = feed.stop;
   const actions: CardActions = { onOpen: setOpen, onStop: stop, stopping: feed.stopping, now: feed.now, fading: feed.live.fading };
+  // The branches this person archived from their Coding list (kept on the
+  // server per person and bot; the branches themselves stay).
+  const [archived, setArchived] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    if (!advanced) return;
+    let live = true;
+    loadArchivedBranches(bot.id).then((keys) => { if (live) setArchived(new Set(keys)); }).catch(() => {});
+    return () => { live = false; };
+  }, [bot.id, advanced]);
+  const branchActions: BranchListActions = {
+    botId: bot.id,
+    onArchive: async (key, value) => setArchived(new Set(await setBranchArchived(bot.id, key, value))),
+    onChanged: () => { void feed.refresh(); },
+  };
 
+  // The command palette's "<bot> history" opens it with the row hidden.
+  useEffect(() => watchBotHistoryRequests(bot.id, () => setAll("coding")), [bot.id]);
   useEffect(() => {
     if (feed.deepLinked) setOpen(feed.deepLinked);
   }, [feed.deepLinked]);
@@ -356,7 +381,7 @@ export function ActivitySection({ bot }: { bot: Bot }) {
 
   return (
     <>
-      <PanelSections list={list} live={feed.live} actions={actions} onOpenHistory={setAll} onOpenLaunched={openLaunched} error={error} advanced={advanced} />
+      <PanelSections list={list} live={feed.live} actions={actions} onOpenHistory={setAll} onOpenLaunched={openLaunched} error={error} advanced={advanced} archived={archived} branchActions={branchActions} showAllHistory={showAllHistory} />
       {all && (
         <ActivityListModal
           botId={bot.id}

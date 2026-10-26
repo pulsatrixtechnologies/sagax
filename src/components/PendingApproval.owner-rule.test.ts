@@ -6,12 +6,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Message } from "@/state/store";
 
-const fixture = vi.hoisted(() => ({ admin: true as boolean | null, dispatch: vi.fn() }));
+const fixture = vi.hoisted(() => ({ admin: true as boolean | null, dispatch: vi.fn(), alwaysAllow: true }));
 vi.mock("@/state/store", async (original) => ({
   ...await original<typeof import("@/state/store")>(),
   useStore: () => ({ dispatch: fixture.dispatch }),
 }));
 vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => fixture.admin }));
+vi.mock("@/lib/org-approval-policy", () => ({ useOrgApprovalPolicy: () => ({ alwaysAllow: fixture.alwaysAllow, orgRules: 0 }), noteOrgAlwaysAllowOff: () => {} }));
 
 import { pendingApprovals, PendingApprovalActions } from "./PendingApproval";
 import { approvalPill } from "./ApprovalCard";
@@ -38,30 +39,42 @@ function view(extra: Partial<NonNullable<Message["card"]>> = {}) {
 }
 const click = (result: ReturnType<typeof view>, label: string) => result.buttons.find((button) => button.props.children === label)!.props.onClick!();
 
-beforeEach(() => { fixture.admin = false; fixture.dispatch.mockReset(); });
+beforeEach(() => { fixture.admin = false; fixture.alwaysAllow = true; fixture.dispatch.mockReset(); });
 
 describe("owner rule buttons", () => {
-  it("offers Deny, Always deny, Always allow and Allow once, and no older grant", () => {
+  // 2026-10-21 (lot 1A): the organization turned Always allow off: the card
+  // offers Deny and Allow once, and says why
+  it("offers no Always allow when the organization turned it off", () => {
+    fixture.alwaysAllow = false;
     const result = view();
-    const labels = result.buttons.map((button) => button.props.children);
-    expect(labels).toEqual(expect.arrayContaining(["Deny", "Always deny", "Always allow", "Allow once"]));
-    expect(result.buttons.filter((button) => button.props.children === "Always allow")).toHaveLength(1);
+    expect(result.buttons.map((button) => button.props.children)).not.toContain("Always allow");
+    expect(result.html).toContain("data-org-always-allow-off");
   });
 
-  it("Always allow and Always deny save the rule with the answer; Allow once and Deny save nothing", () => {
+  // 2026-10-20 (JC, after Grok Bot): Deny, Always allow, Allow once; Always
+  // deny and the rule's scope live in Settings > Security
+  it("offers exactly Deny, Always allow and Allow once", () => {
+    const result = view();
+    const labels = result.buttons.map((button) => button.props.children);
+    expect(labels).toEqual(["Deny", "Always allow", "Allow once"]);
+    expect(result.html).not.toContain("Always allow keeps exactly");
+    expect(result.html).not.toContain("Cancel turn");
+  });
+
+  it("Always allow saves the rule with the answer in one click; Allow once and Deny save nothing", () => {
     const result = view();
     click(result, "Always allow");
     expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: "allow", rule: "allow", alwaysAllow: undefined }));
-    click(result, "Always deny");
-    expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: "deny", rule: "deny" }));
     click(result, "Allow once");
     expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: "allow", rule: undefined }));
     click(result, "Deny");
     expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: "deny", rule: undefined }));
   });
 
-  it("says a destructive call needs a rule of its own", () => {
-    expect(view({ ownerRule: { ...ownerRule, destructive: "delete" } }).html).toContain("only a rule made for it can allow it");
+  it("keeps the same three buttons on a destructive call, with no paragraph", () => {
+    const result = view({ ownerRule: { ...ownerRule, destructive: "delete" } });
+    expect(result.buttons.map((button) => button.props.children)).toEqual(["Deny", "Always allow", "Allow once"]);
+    expect(result.html).not.toContain("only a rule made for it can allow it");
   });
 
   it("an admin card offers no rule, and its owner only waits", () => {

@@ -84,6 +84,17 @@ export function selectDefaultModelSelection(
   return { instanceId: pick?.instanceId ?? "", model: pick ? defaultModel(pick) : "" };
 }
 
+/** A brand-new bot starts on Auto (docs/plans/2026-10-08-auto-model.md): the
+ * engine is auto-resolved (selectDefaultModelSelection) and the model is Auto,
+ * so the right model is picked per task while the concrete pick stays as the
+ * fallback any Auto-unaware path still runs. An empty selection (no engine is
+ * ready yet) has nothing to ride on and stays unset; it becomes Auto once an
+ * engine is healed in. Used only where a NEW bot's default is resolved, never
+ * on a selection the person pinned, so an explicit choice is never overridden. */
+export function autoNewBotSelection(selection: ModelSelection): ModelSelection {
+  return selection.instanceId.trim() && selection.model.trim() ? { ...selection, auto: true } : selection;
+}
+
 /** Complete a new bot's selection with the template's effort
  * (`newBotDefaults.profile.modelSelection.effort`). `defaultModelSelection`
  * is the CLI mirror of that selection; the template wins. An explicit effort

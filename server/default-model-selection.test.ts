@@ -3,7 +3,7 @@ import { transpileTs } from "./testing/transpile.ts";
 import { describe, expect, it, vi } from "vitest";
 
 import type { EngineAccess, ModelCatalog, ModelSelection, ProviderSnapshot } from "./contracts.ts";
-import { readyToRun, selectDefaultModelSelection, withNewBotEffort, type SelectableInstance } from "./default-model-selection.ts";
+import { autoNewBotSelection, readyToRun, selectDefaultModelSelection, withNewBotEffort, type SelectableInstance } from "./default-model-selection.ts";
 import { ManagedDesktopPolicy } from "./managed-policy.ts";
 
 const codex = {
@@ -291,5 +291,24 @@ describe("new bot effort default", () => {
     expect(withNewBotEffort(selection, undefined, ["high"])).toEqual(selection);
     expect(withNewBotEffort(selection, "max", ["low", "high"])).toEqual(selection);
     expect(withNewBotEffort(selection, "high", undefined)).toEqual(selection);
+  });
+});
+
+describe("a brand-new bot starts on Auto", () => {
+  it("rides Auto on the resolved engine and model, keeping the concrete pick as the fallback", () => {
+    expect(autoNewBotSelection({ instanceId: "claude", model: "claude-sonnet-5" }))
+      .toEqual({ instanceId: "claude", model: "claude-sonnet-5", auto: true });
+    // The base effort and variant stay on the fallback model.
+    expect(autoNewBotSelection({ instanceId: "codex", model: "codex-default", effort: "high" }))
+      .toEqual({ instanceId: "codex", model: "codex-default", effort: "high", auto: true });
+  });
+
+  it("leaves an unset selection alone: there is no engine for Auto to ride yet", () => {
+    expect(autoNewBotSelection({ instanceId: "", model: "" })).toEqual({ instanceId: "", model: "" });
+  });
+
+  it("is idempotent on a selection that is already Auto", () => {
+    expect(autoNewBotSelection({ instanceId: "claude", model: "claude-sonnet-5", auto: true }))
+      .toEqual({ instanceId: "claude", model: "claude-sonnet-5", auto: true });
   });
 });

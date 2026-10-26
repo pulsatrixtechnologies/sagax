@@ -4,6 +4,8 @@ import { Loader2, Trash2, X } from "lucide-react";
 import type { CommandAllowRule, CommandAllowlistResponse } from "../../shared/command-allowlist";
 import { api, useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
+import { engineLabel } from "@/lib/human-label";
+import { humanPath } from "@/lib/short-path";
 import { cn } from "@/lib/cn";
 import { ConfirmPill, FIELD, FieldRow, HelpTip, PILL, PRIMARY_PILL, SettingsGroup, DIALOG } from "./SettingsPrimitives";
 
@@ -38,7 +40,7 @@ export function CommandAllowlistDialog({ botId, botName, threadId, onClose }: {
   const exactId = useId();
   const basePath = `/api/bots/${encodeURIComponent(botId)}/command-allowlist`;
   const query = threadId ? `?threadId=${encodeURIComponent(threadId)}` : "";
-  const providerName = (id: string) => state.instances.find((instance) => instance.instanceId === id)?.displayName ?? id;
+  const providerName = (id: string) => engineLabel(state.instances.find((instance) => instance.instanceId === id)?.displayName, id);
 
   useEffect(() => {
     mounted.current = true;
@@ -167,7 +169,7 @@ export function CommandAllowlistDialog({ botId, botName, threadId, onClose }: {
             {data && !loading && (data.rules.length ? data.rules.map((rule) => <div key={rule.id} className="flex items-start gap-3 px-3.5 py-2.5">
               <div className="min-w-0 flex-1">
                 <pre tabIndex={0} className="max-h-28 overflow-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-ink">{rule.command}</pre>
-                <p className="mt-1 break-all text-[12px] leading-4 text-ink-secondary">{providerName(rule.providerInstanceId)} · <span className="font-mono">{rule.cwd}</span></p>
+                <p className="mt-1 break-all text-[12px] leading-4 text-ink-secondary">{providerName(rule.providerInstanceId)} · <span className="font-mono" title={rule.cwd}>{humanPath(rule.cwd)}</span></p>
               </div>
               <ConfirmPill
                 disabled={Boolean(saving)}

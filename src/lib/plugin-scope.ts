@@ -27,6 +27,7 @@ export function initialPluginScope(pluginsBotId: string | null, bot: { id: strin
  * `hasToken`: this bot keeps a token for the marketplace. */
 export function botScopeMarketplaces(view: BotPluginsView): Array<{
   name: string; source: string; description?: string; hasToken?: boolean;
+  visibility?: "private" | "org"; mine?: boolean;
   plugins: Array<{
     name: string; description?: string; version?: string; category?: string; installed: boolean; servers: string[]; skills: string[];
     installedVersion?: string; updateAvailable?: boolean;
@@ -37,6 +38,8 @@ export function botScopeMarketplaces(view: BotPluginsView): Array<{
     source: market.source,
     ...(market.description ? { description: market.description } : {}),
     ...(market.hasToken ? { hasToken: true } : {}),
+    ...(market.visibility ? { visibility: market.visibility } : {}),
+    ...(market.mine ? { mine: true } : {}),
     plugins: market.plugins.map((plugin) => ({
       name: plugin.name,
       ...(plugin.description ? { description: plugin.description } : {}),

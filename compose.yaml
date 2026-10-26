@@ -1,7 +1,10 @@
 name: ${COMPOSE_PROJECT_NAME:-pulsa}
 services:
   omb:
+    # Collects exited browser processes; Chrome's shared memory as on the
+    # desktop containers (docs/browser-packaging.md, "Process hygiene").
     init: true
+    shm_size: 512m
     # Built from this repository, never from the upstream image.
     build:
       context: .

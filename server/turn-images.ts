@@ -14,8 +14,9 @@ import { ATTACHMENTS_DIR, IMAGE_MAX_BYTES } from "./attachments.ts";
 import type { TurnImageInput } from "./contracts.ts";
 import { decodeAttachmentAttribute } from "./message-file.ts";
 
-/** Matches the companion composer policy. Four maximum-sized images are
- * bounded to 40 MiB before a provider is asked to ingest them. */
+/** Matches the companion composer policy. Four maximum-sized stored images
+ * are bounded here; what a provider ingests is the scaled copy that
+ * server/model-image.ts makes, each within the model's per-image limit. */
 export const TURN_IMAGE_MAX_COUNT = 4;
 export const TURN_IMAGE_MAX_BYTES = TURN_IMAGE_MAX_COUNT * IMAGE_MAX_BYTES;
 

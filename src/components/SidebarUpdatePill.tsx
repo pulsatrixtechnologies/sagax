@@ -133,7 +133,10 @@ export function UpdatePillButton({ view, wide: forcedWide = false, onOpen = open
         if (ready) onOpen();
       }}
       className={cn(
-        "sidebar-update-pill group inline-flex h-9 min-w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent text-accent-ink shadow-sm outline-none",
+        // w-9 pins the resting circle: nothing in the row can squeeze it, and
+        // it widens only to show its word (the foot rule below), pushing
+        // Connect apps left instead of floating over it
+        "sidebar-update-pill group inline-flex h-9 w-9 shrink-0 items-center justify-start overflow-hidden rounded-full bg-accent text-accent-ink shadow-sm outline-none",
         "focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
         ready ? "cursor-pointer hover:brightness-95" : "cursor-default",
       )}

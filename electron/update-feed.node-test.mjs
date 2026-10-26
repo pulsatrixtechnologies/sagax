@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { UPDATE_FEED, configureUpdateFeed, isOurReleaseUrl, readUpdatePrefs, writeUpdatePrefs } from "./update-feed.mjs";
+import { UPDATE_FEED, configureUpdateFeed, isOurReleaseUrl, readUpdatePrefs, updateChannel, writeUpdatePrefs } from "./update-feed.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -108,11 +108,13 @@ test("the feed is Sagax's GitHub repository, nothing else", () => {
 test("the pre-release opt-in is off unless saved on", () => {
   const dir = mkdtempSync(join(tmpdir(), "sagax-update-prefs-"));
   try {
-    assert.deepEqual(readUpdatePrefs(dir), { allowPrerelease: false });
+    assert.deepEqual(readUpdatePrefs(dir), { allowPrerelease: false, autoInstallWhenAway: false });
     writeUpdatePrefs(dir, { allowPrerelease: true });
-    assert.deepEqual(readUpdatePrefs(dir), { allowPrerelease: true });
-    writeUpdatePrefs(dir, { allowPrerelease: "yes" });
-    assert.deepEqual(readUpdatePrefs(dir), { allowPrerelease: false });
+    assert.deepEqual(readUpdatePrefs(dir), { allowPrerelease: true, autoInstallWhenAway: false });
+    writeUpdatePrefs(dir, { allowPrerelease: "yes", autoInstallWhenAway: true });
+    assert.deepEqual(readUpdatePrefs(dir), { allowPrerelease: false, autoInstallWhenAway: true });
+    assert.equal(updateChannel({ allowPrerelease: true }), "nightly");
+    assert.equal(updateChannel({}), "stable");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -50,6 +50,9 @@ import { AssertionReplayCache } from "./org-admin-routes.ts";
 import { compileRoutes, matchRoutes } from "./org-admin-console.ts";
 
 export const ORG_MEMBER_PREFIX = "/api/org/member/";
+/** The `act.sub` values the member API accepts: never `perspicax-mail`
+ * (that actor is the inbound mail route's alone, server/bot-inbound-mail.ts). */
+export const ORG_MEMBER_ASSERTION_ACTORS: readonly ConsoleAssertion["actor"][] = ["console", "perspicax-mcp"];
 /** The version `GET capabilities` reports. */
 export const ORG_MEMBER_API_VERSION = 1;
 export const MEMBER_WAIT_MAX_SECONDS = 120;
@@ -1273,7 +1276,7 @@ export function createOrgMemberRoutes(deps: OrgMemberRouteDeps): (req: IncomingM
   const replay = new AssertionReplayCache();
   const now = deps.now ?? Date.now;
   const compiled = compileRoutes(memberRoutes(deps).map((route) => ({ method: route.method, path: route.path, min: "employee" as const, handle: () => ({ status: 500, body: null }), member: route })));
-  return async (req, res, url) => {
+  const answer = async (req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> => {
     const path = url.pathname;
     if (path !== "/api/org/member" && !path.startsWith(ORG_MEMBER_PREFIX)) return false;
     const refuse = (status: number, code: string, message: string, extra: Record<string, unknown> = {}) => {
@@ -1342,5 +1345,21 @@ export function createOrgMemberRoutes(deps: OrgMemberRouteDeps): (req: IncomingM
       refuse(500, "server_error", "The server could not do this; its log has the details.");
     }
     return true;
+  };
+  // 2026-10-20: a throw before the route's own try (the directory, the
+  // permissions, the body read) fell through to the server's generic 500,
+  // without the member API marker and without a log line: Perspicax then
+  // reports "does not offer the member API yet" with nothing to go on.
+  // Every answer under the prefix stays marked, and the throw is logged.
+  return async (req, res, url) => {
+    try {
+      return await answer(req, res, url);
+    } catch (error) {
+      const route = url.pathname.slice(ORG_MEMBER_PREFIX.length).split("/")[0] ?? "";
+      console.error(`[org-member] ${req.method ?? "GET"} ${route}: unhandled before the route: ${error instanceof Error ? error.message : String(error)}`);
+      if (!res.headersSent) send(res, 500, { code: "server_error", message: "The server could not do this; its log has the details.", reason: "The server could not do this; its log has the details.", error: "The server could not do this; its log has the details." });
+      else if (!res.writableEnded) res.end();
+      return true;
+    }
   };
 }

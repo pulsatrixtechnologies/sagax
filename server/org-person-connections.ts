@@ -45,6 +45,9 @@ export interface OrgPersonPluginBot {
 }
 
 export interface OrgPersonConnectionsDeps {
+  /** 2026-10-19: whether this caller may act on this person (a person an
+   * admin gave people.manage never acts on an admin). Absent: yes. */
+  mayActOn?(auth: RequestAuth, principalId: string): boolean;
   /** An organization server (`SAGAX_IDENTITY=perspicax`). */
   organization: boolean;
   isAdmin(auth: RequestAuth): boolean;
@@ -139,6 +142,7 @@ export function createOrgPersonConnectionRoutes(deps: OrgPersonConnectionsDeps):
       return json(res, 403, { error: "Only an organization admin can do this.", code: "not_org_admin" });
     }
     if (!isPrincipalId(principalId) || !deps.person(principalId)) return json(res, 404, { error: "no such person" });
+    if (deps.mayActOn && !deps.mayActOn(auth, principalId)) return json(res, 403, { error: "Only an organization admin can act on an admin's connections.", code: "target_is_admin" });
     if (!revoke) {
       try {
         return json(res, 200, orgConnectionListing({

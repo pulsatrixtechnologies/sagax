@@ -17,33 +17,6 @@ final class ParityCoreModelsTests: XCTestCase {
 
     // MARK: Card kinds
 
-    func testDecodesAConnectorCard() throws {
-        let message = try decode(Message.self, #"""
-        {"id":"m1","role":"bot","kind":"connector","at":1,"text":"Connect Gmail",
-         "connector":{"slug":"gmail","label":"Gmail","description":"Read and send mail",
-                      "status":"required","resumeKey":"rk1","alias":"work"}}
-        """#)
-        XCTAssertEqual(message.kind, .connector)
-        let card = try XCTUnwrap(message.connector)
-        XCTAssertEqual(card.slug, "gmail")
-        XCTAssertEqual(card.state, .required)
-        XCTAssertEqual(card.alias, "work")
-        XCTAssertTrue(card.isPending)
-        XCTAssertEqual(try roundTrip(message), message)
-    }
-
-    func testAConnectorCardWithANewStatusStillDecodes() throws {
-        let card = try decode(ConnectorRequestCard.self, #"""
-        {"slug":"x","label":"X","description":"","status":"rate-limited","resumeKey":"k"}
-        """#)
-        XCTAssertNil(card.state)
-        XCTAssertEqual(card.status, "rate-limited")
-        let connected = try decode(ConnectorRequestCard.self, #"""
-        {"slug":"x","label":"X","description":"","status":"connected","resumeKey":"k"}
-        """#)
-        XCTAssertFalse(connected.isPending)
-    }
-
     func testDecodesAnAccessCard() throws {
         let message = try decode(Message.self, #"""
         {"id":"m2","role":"bot","kind":"access","at":2,
@@ -400,10 +373,6 @@ final class SurfaceGateTests: XCTestCase {
         XCTAssertTrue(sidecar.allows(.parallelTaskStop))
         XCTAssertFalse(SurfaceGate(scope: .sidecar, sidecarRoutes: []).allows(.parallelTaskStop))
         XCTAssertTrue(client.allows(.parallelTaskStop))
-        XCTAssertTrue(sidecar.allows(.connectorCardAuthorize))
-        XCTAssertFalse(client.allows(.connectorCardAuthorize))
-        XCTAssertTrue(sidecar.allows(.connectedApps))
-        XCTAssertFalse(client.allows(.connectedApps))
         XCTAssertTrue([sidecar, client, admin].allSatisfy { $0.allows(.createBot) })
     }
 }

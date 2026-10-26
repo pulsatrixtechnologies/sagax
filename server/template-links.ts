@@ -19,6 +19,10 @@
 // (template-links.key, 0600). Revoking deletes the record: the same token
 // then answers 404 like any made-up one, and a new link for the same
 // template gets a new id. Records live in template-links.json (0600).
+//
+// Updating a template (2026-10-21, parity with "Update the template") freezes
+// the current defaults again under the SAME link: the address people already
+// have keeps working and now opens the new version (updatedAt says when).
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -34,6 +38,8 @@ export interface TemplateLinkRecord {
   id: string;
   name: string;
   createdAt: number;
+  /** When the template behind the link was last frozen again. */
+  updatedAt?: number;
   /** Who made it (a principal id on an organization server). */
   createdBy?: string;
   document: PackageDocument;
@@ -44,6 +50,7 @@ export interface TemplateLinkSummary {
   id: string;
   name: string;
   createdAt: number;
+  updatedAt?: number;
   path: string;
 }
 
@@ -100,7 +107,12 @@ export class TemplateLinks {
         const link = entry as Partial<TemplateLinkRecord>;
         if (typeof link.id !== "string" || typeof link.name !== "string" || typeof link.createdAt !== "number") return [];
         try {
-          return [{ id: link.id, name: link.name, createdAt: link.createdAt, ...(typeof link.createdBy === "string" ? { createdBy: link.createdBy } : {}), document: publicTemplateDocument(link.document as PackageDocument) }];
+          return [{
+            id: link.id, name: link.name, createdAt: link.createdAt,
+            ...(typeof link.updatedAt === "number" ? { updatedAt: link.updatedAt } : {}),
+            ...(typeof link.createdBy === "string" ? { createdBy: link.createdBy } : {}),
+            document: publicTemplateDocument(link.document as PackageDocument),
+          }];
         } catch {
           return [];
         }
@@ -133,7 +145,24 @@ export class TemplateLinks {
   list(createdBy?: string): TemplateLinkSummary[] {
     return this.load()
       .filter((link) => createdBy === undefined || link.createdBy?.toLowerCase() === createdBy.toLowerCase())
-      .map((link) => ({ id: link.id, name: link.name, createdAt: link.createdAt, path: this.path(link.id) }));
+      .map((link) => ({ id: link.id, name: link.name, createdAt: link.createdAt, ...(link.updatedAt ? { updatedAt: link.updatedAt } : {}), path: this.path(link.id) }));
+  }
+
+  /** Freeze a new version of the template behind the same link (same id,
+   * same token). Null when the link is gone. */
+  update(id: string, document: PackageDocument, options: { now?: number } = {}): TemplateLinkRecord | null {
+    const links = this.load();
+    const index = links.findIndex((link) => link.id === id);
+    if (index === -1) return null;
+    const record: TemplateLinkRecord = {
+      ...links[index]!,
+      name: document.package.name,
+      updatedAt: options.now ?? Date.now(),
+      document: publicTemplateDocument(document),
+    };
+    links[index] = record;
+    this.save(links);
+    return record;
   }
 
   get(id: string): TemplateLinkRecord | null {
@@ -184,6 +213,19 @@ const CARD_COPY = {
     never: "Les notes de départ, les apps connectées, les clés et les choix de modèle ne font jamais partie d'un modèle partagé.",
   },
 } as const;
+
+/** What the owner's details view shows of a template: its title,
+ * description and skills, never its persona text. Pure. */
+export function templateDetails(document: PackageDocument): { title: string; description: string; skills: string[]; release: string } {
+  const pkg = document.package;
+  const preset = pkg.presets?.[0];
+  return {
+    title: preset?.name ?? pkg.name,
+    description: preset?.description || preset?.bot.description || pkg.tagline || "",
+    skills: [...(preset?.skills ?? [])],
+    release: pkg.release,
+  };
+}
 
 /** The language of the card, from Accept-Language: French or English. */
 export function cardLanguage(acceptLanguage: string | undefined): "fr" | "en" {

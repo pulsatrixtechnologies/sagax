@@ -25,17 +25,17 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
              "display", "notifications", "sound", "sounds", "mascot", "owl", "app icon", "icon", "logo"]
         case .experimental: ["early", "preview", "learn", "skill", "authoring", "browser", "templates"]
         case .connections:
-            ["keys", "api", "api key", "api keys", "connections", "composio", "xai", "mistral", "router", "openrouter",
+            ["keys", "api", "api key", "api keys", "connections", "xai", "mistral", "router", "openrouter",
              "openai", "anthropic", "provider"]
         case .myConnections:
             ["github", "mcp", "mcp servers", "connections", "connexions", "token", "oauth", "gh", "git", "my connections",
              "mes connexions", "server", "plugins"]
         case .decisionModel: ["decision", "jev", "typesafe", "routing", "auto", "rooms", "who answers"]
-        // Models and voice (2026-10-14): API keys, Connected apps and the
-        // Decision model are cards of this page
+        // Models and voice (2026-10-14): API keys and the Decision model are
+        // cards of this page
         case .engines:
             ["models", "model providers", "engines", "claude", "codex", "grok", "providers", "sign in", "subscription",
-             "keys", "api", "api key", "api keys", "connections", "composio", "connected apps", "xai", "mistral", "router",
+             "keys", "api", "api key", "api keys", "connections", "xai", "mistral", "router",
              "openrouter", "openai", "anthropic", "decision", "jev", "typesafe", "routing", "who answers", "voice", "voix"]
         case .companion: ["companion", "device", "phone", "ipad", "pair", "pairing", "mobile", "remote"]
         case .computer: ["computer", "local vm", "vm", "virtual", "desktop", "cloud computers", "vps"]
@@ -99,16 +99,14 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
     }
 }
 
-/// The Plugins modal's two tabs (`PluginsPanel.tsx`).
+/// The Plugins modal's tabs (`PluginsPanel.tsx`).
 public enum DesktopPluginsTab: String, CaseIterable, Hashable, Sendable {
-    case apps, mcp
+    case mcp
 
-    /// The tabs this pairing may open: Connected apps and the MCP list both
-    /// need the connector routes (`.connectedApps`, `.mcpServers`), which a
-    /// server's client session does not reach.
+    /// The tabs this pairing may open: the MCP list needs the connector
+    /// routes (`.mcpServers`), which a server's client session does not reach.
     public static func available(for gate: SurfaceGate) -> [DesktopPluginsTab] {
         var tabs: [DesktopPluginsTab] = []
-        if gate.allows(.connectedApps) { tabs.append(.apps) }
         if gate.allows(.mcpServers) { tabs.append(.mcp) }
         return tabs
     }
@@ -132,7 +130,6 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
     public struct Features: Decodable, Equatable, Sendable {
         public var skillAuthoring: Bool?
         public var routinesInConversation: Bool?
-        public var connectedApps: Bool?
         public var templates: Bool?
         public var browser: Bool?
         public var claudeUserMcp: Bool?
@@ -157,10 +154,6 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
         public var installable: Bool?
     }
     public struct LocalVm: Decodable, Equatable, Sendable { public var mode: String? }
-    public struct Composio: Decodable, Equatable, Sendable {
-        public var configured: Bool?
-        public var mode: String?
-    }
 
     public var profile: Profile?
     public var language: String?
@@ -173,7 +166,6 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
     public var decider: Decider?
     public var browserEngine: BrowserEngine?
     public var localVm: LocalVm?
-    public var composio: Composio?
     public var openai, anthropic, xai, openrouter, mistral, openaiCompat, vps: Flag?
 
     public init() {}
@@ -187,7 +179,6 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
         case .openrouter: openrouter?.configured == true
         case .mistral: mistral?.configured == true
         case .openaiCompat: openaiCompat?.configured == true
-        case .composio: composio?.configured == true
         case .decider: decider?.configured == true
         }
     }
@@ -195,7 +186,7 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
 
 /// The write-only keys the API keys and Decision model sections take.
 public enum DesktopAPIKeyProvider: String, CaseIterable, Hashable, Sendable {
-    case openai, anthropic, xai, openrouter, mistral, openaiCompat, composio, decider
+    case openai, anthropic, xai, openrouter, mistral, openaiCompat, decider
 
     /// The placeholder the desktop's field shows (`ApiKeys.tsx`).
     public var placeholder: String {
@@ -206,7 +197,6 @@ public enum DesktopAPIKeyProvider: String, CaseIterable, Hashable, Sendable {
         case .openrouter: "sk-or-v1-..."
         case .mistral: "Paste a Mistral API key"
         case .openaiCompat: "API key"
-        case .composio: "ak_..."
         case .decider: "Paste your TypeSafe API key"
         }
     }
@@ -238,7 +228,7 @@ public enum DesktopConfigChange: Equatable, Sendable {
 
     /// The features the Experimental and General switches may set.
     public static let switchableFeatures: Set<String> = [
-        "skillAuthoring", "routinesInConversation", "connectedApps", "templates", "browser", "claudeUserMcp",
+        "skillAuthoring", "routinesInConversation", "templates", "browser", "claudeUserMcp",
     ]
 
     /// The JSON body, or nil for a change that is out of range.

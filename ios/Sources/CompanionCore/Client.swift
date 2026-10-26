@@ -602,6 +602,10 @@ private struct InstanceCapabilityResponse: Decodable {
 
 public struct CompanionClient: Sendable {
     public static let maximumImageUploadBytes = AttachmentPolicy.maximumImageBytes
+    /// A bot's picture: the server keeps its own 10 MB cap for avatars
+    /// (BOT_AVATAR_MAX_BYTES in server/org-admin-look.ts, #945), apart from the
+    /// 32 MiB a chat image may weigh.
+    public static let maximumAvatarUploadBytes = 10 * 1_024 * 1_024
     public static let maximumFileUploadBytes = AttachmentPolicy.maximumFileBytes
     public static let maximumFileDownloadBytes = AttachmentPolicy.maximumFileBytes
 
@@ -620,6 +624,18 @@ public struct CompanionClient: Sendable {
         self.token = token
         self.session = session
         self.requestTimeout = min(max(requestTimeout, 1), 150)
+    }
+
+    /// The same client (route, URL session, timeout) with another bearer:
+    /// a fresher copy of the token found after a 401.
+    public func replacingToken(_ token: String) -> CompanionClient {
+        CompanionClient(connection: connection, token: token, session: session, requestTimeout: requestTimeout)
+    }
+
+    /// Whether this client sends exactly this bearer. Lets a late 401 from a
+    /// replaced token be told apart from one for the token in use.
+    public func sends(token candidate: String?) -> Bool {
+        token == candidate
     }
 
     // MARK: - Requests
@@ -1008,19 +1024,6 @@ public struct CompanionClient: Sendable {
         try await send(try makeRequest("GET", "/api/config"), as: ConfigStatus.self)
     }
 
-    public func connectorCatalog() async throws -> ConnectorCatalog {
-        try await send(try makeRequest("GET", "/api/connectors/catalog"), as: ConnectorCatalog.self)
-    }
-
-    /// Complete account-aware status in one request. This is the inventory
-    /// source for the phone; a catalog page is not an account list.
-    public func allConnectorStatuses() async throws -> ConnectorStatuses {
-        try await send(
-            try makeRequest("GET", "/api/connectors/connected"),
-            as: ConnectorStatuses.self
-        )
-    }
-
     /// The pixels of one screen message.
     public func image(threadId: String, messageId: String) async throws -> Data {
         let imageRequest = try makeRequest("GET", "/api/threads/\(threadId)/messages/\(messageId)/image")
@@ -1284,12 +1287,24 @@ public struct CompanionClient: Sendable {
         mime: String,
         uploadId: String? = nil
     ) async throws -> String {
+        try await uploadImage(
+            data: data, mime: mime, uploadId: uploadId,
+            maximumBytes: Self.maximumImageUploadBytes
+        )
+    }
+
+    private func uploadImage(
+        data: Data,
+        mime: String,
+        uploadId: String?,
+        maximumBytes: Int
+    ) async throws -> String {
         let normalizedMime = mime.lowercased()
         guard Self.validUploadID(uploadId) else { throw APIError.badURL }
         guard AttachmentPolicy.imageMIMETypes.contains(normalizedMime),
-              data.count <= Self.maximumImageUploadBytes
+              data.count <= maximumBytes
         else {
-            throw APIError.transport("Choose a PNG, JPEG, GIF, or WebP image up to 10 MB.")
+            throw APIError.transport(String(localized: "Choose a PNG, JPEG, GIF, or WebP image up to \(maximumBytes / (1_024 * 1_024)) MB."))
         }
         var request = try makeRequest(
             "POST",
@@ -1306,7 +1321,10 @@ public struct CompanionClient: Sendable {
     }
 
     public func uploadAvatar(data: Data, mime: String) async throws -> String {
-        let path = try await uploadImage(data: data, mime: mime)
+        let path = try await uploadImage(
+            data: data, mime: mime, uploadId: nil,
+            maximumBytes: Self.maximumAvatarUploadBytes
+        )
         let name = URL(fileURLWithPath: path).lastPathComponent
         guard !name.isEmpty, !name.contains("/") else { throw APIError.transport("The uploaded image could not be used.") }
         return "/api/attachments/\(name)"
@@ -1445,6 +1463,17 @@ public struct CompanionClient: Sendable {
 
     public func deleteRoutine(id: String) async throws {
         try await send(try makeRequest("DELETE", "/api/routines/\(id)"))
+    }
+
+    /// `GET /api/routines/away`: present, away or unknown.
+    public func routineAwayState() async throws -> String {
+        try await send(makeRequest("GET", "/api/routines/away"), as: RoutineAwayStateResponse.self).state
+    }
+
+    /// The person read the skipped-run report (`POST /api/routines/:id/away-seen`).
+    public func markRoutineAwaySeen(id: String) async throws -> Routine {
+        guard Self.validRouteID(id) else { throw APIError.badURL }
+        return try await send(try makeRequest("POST", "/api/routines/\(id)/away-seen"), as: RoutineResponse.self).routine
     }
 
     /// Make a room. The harness names it after the first member when `name`
@@ -1743,37 +1772,6 @@ public struct CompanionClient: Sendable {
         if let stepUp { body["stepUp"] = stepUp }
         let (data, response) = try await perform(try makeRequest("POST", "/api/bots/\(botId)/always-allow", body: body))
         try Self.checkStepUp(response, data)
-    }
-
-    /// Starts one more account authorization for a toolkit. Revocation is
-    /// intentionally absent: the paired-device boundary keeps that on the Mac.
-    public func authorizeConnector(slug: String, alias: String?) async throws -> URL {
-        guard Self.validConnectorSlug(slug) else { throw APIError.badURL }
-        let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let body: [String: String]?
-        if let trimmed, !trimmed.isEmpty {
-            body = ["alias": trimmed]
-        } else {
-            body = nil
-        }
-        let response = try await send(
-            try makeRequest("POST", "/api/connectors/\(slug)/authorize", body: body),
-            as: ConnectorAuthorizationResponse.self
-        )
-        guard let url = URL(string: response.url),
-              url.scheme == "https",
-              url.host != nil
-        else { throw APIError.badURL }
-        return url
-    }
-
-    /// Matches the companion's `[\w-]+` toolkit route component. JavaScript
-    /// `\w` is ASCII here; Unicode letters must not become a confusing 404.
-    private static func validConnectorSlug(_ value: String) -> Bool {
-        !value.isEmpty && value.utf8.allSatisfy {
-            (48...57).contains($0) || (65...90).contains($0) ||
-                (97...122).contains($0) || $0 == 95 || $0 == 45
-        }
     }
 
     public func toggleReaction(threadId: String, messageId: String, emoji: String) async throws -> Message {

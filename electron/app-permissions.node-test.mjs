@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { readFileSync } from "node:fs";
-import { appPermissionAllowed, appPermissionHandlers, externalMailUrl, externalOpenUrl, externalWebUrl, remoteClipboardWriteAllowed } from "./app-permissions.mjs";
+import { appPermissionAllowed, appPermissionHandlers, connectorSetupUrl, externalMailUrl, externalOpenUrl, externalWebUrl, remoteClipboardWriteAllowed } from "./app-permissions.mjs";
 
 const LOCAL_ORIGIN = "http://127.0.0.1:5199";
 const LOCAL_PAGE = "http://127.0.0.1:5199/chat?botId=bot-1";
@@ -84,6 +84,19 @@ test("both external-link entry points use the policy and IPC retains the desktop
   assert.match(main, /ipcMain\.handle\("desktop:open-external", desktopUiOnly\("desktop:open-external"/);
   assert.match(main, /shell\.openExternal\(externalWebUrl\(rawUrl\)\)/);
   assert.match(main, /shell\.openExternal\(externalOpenUrl\(url\)\)/);
+});
+
+test("a Connect card opens grok.com or claude.ai only, over https, through its own desktop-UI channel", () => {
+  assert.equal(connectorSetupUrl("https://grok.com/connectors"), "https://grok.com/connectors");
+  assert.equal(connectorSetupUrl("https://claude.ai/customize/connectors"), "https://claude.ai/customize/connectors");
+  for (const url of ["http://grok.com/connectors", "https://grok.com.evil.example/", "https://evil.example/connectors", "https://user:pw@claude.ai/", "https://grok.com:8443/", "javascript:alert(1)", "mailto:a@b.c", null, 42, "not a url"])
+    assert.throws(() => connectorSetupUrl(url));
+  const main = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
+  assert.match(main, /ipcMain\.handle\("desktop:open-connector-setup", desktopUiOnly\("desktop:open-connector-setup"/);
+  assert.match(main, /shell\.openExternal\(connectorSetupUrl\(rawUrl\)\)/);
+  const preload = readFileSync(new URL("./preload.cjs", import.meta.url), "utf8");
+  assert.match(preload, /openConnectorSetup: \(url\) => ipcRenderer\.invoke\("desktop:open-connector-setup", url\)/);
+  assert.match(preload, /BUNDLED_EXTRA = new Set\(\[[^\]]*"openConnectorSetup"/);
 });
 
 test("window.open also hands a bounded mailto: draft to the mail client, nothing else", () => {

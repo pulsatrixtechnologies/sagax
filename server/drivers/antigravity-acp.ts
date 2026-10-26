@@ -232,6 +232,7 @@ export class AntigravityAcpClient {
       runtime.executablePath,
       process.platform === "linux" ? ["--uid="] : [],
       { cwd, env: profile.environment, stdio: ["pipe", "pipe", "pipe"] },
+      "bot",
     );
     this.child.stdout!.setEncoding("utf8");
     this.child.stdout!.on("data", (chunk: string) => this.consume(chunk));

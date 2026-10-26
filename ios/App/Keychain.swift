@@ -1,9 +1,26 @@
+import CompanionCore
+
 /// Main-app compatibility facade. The implementation lives in AppShared so
 /// trusted extensions see the same credential rather than a target-private
 /// keychain item.
 enum Keychain {
-    static func save(_ token: String, for connectionId: String) throws {
-        try SagaxSharedKeychain.save(token, for: connectionId)
+    /// Save a token from a sign-in or a pairing as the one copy: the shared
+    /// group the extensions read, written in place; then the app-private
+    /// legacy copy and the copies of `duplicates` (other records of the same
+    /// server) removed, so no stale token can be picked up later.
+    static func save(_ token: String, for connectionId: String, removingDuplicates duplicates: [String] = []) throws {
+        try CompanionCredentials.commit(
+            token,
+            for: connectionId,
+            removingDuplicates: duplicates,
+            in: SagaxKeychainSlots()
+        )
+    }
+
+    /// Every other token this phone holds for these records, both groups,
+    /// for a second chance after a 401. Never throws.
+    static func candidates(for ids: [String], excluding current: String?) -> [CredentialCandidate] {
+        CompanionCredentials.candidates(ids: ids, excluding: current, in: SagaxKeychainSlots())
     }
 
     /// The stored token: nil only when there genuinely is not one.

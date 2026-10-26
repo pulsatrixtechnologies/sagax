@@ -17,7 +17,7 @@
 // down the change it records, and a turn must never fail because an audit
 // line did.
 import { randomUUID } from "node:crypto";
-import { closeSync, fstatSync, mkdirSync, openSync, readSync } from "node:fs";
+import { closeSync, fstatSync, mkdirSync, openSync, readSync, statSync } from "node:fs";
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -30,6 +30,7 @@ import {
   hashMemoryText,
   memoryOverview,
   readMemoryDoc,
+  resolveMemoryPath,
   workspaceDocPaths,
   writeMemoryDoc,
 } from "./memory-store.ts";
@@ -88,9 +89,22 @@ export function journalFile(botId: string): string {
 
 type Op = { tag: " " | "-" | "+"; line: string };
 
-function editScript(a: string[], b: string[]): Op[] {
+/** Port de OpenMausBot #3131 : the lines both versions share at the start
+ * and at the end are context as they are; only the middle that changed
+ * goes through the LCS table (a memory file usually gains or loses a few
+ * lines, so the table shrinks from the whole file squared to almost
+ * nothing). The cell cap is judged on that middle. */
+function editScript(fullA: string[], fullB: string[]): Op[] {
+  let head = 0;
+  while (head < fullA.length && head < fullB.length && fullA[head] === fullB[head]) head++;
+  let tail = 0;
+  while (tail < fullA.length - head && tail < fullB.length - head && fullA[fullA.length - 1 - tail] === fullB[fullB.length - 1 - tail]) tail++;
+  const a = fullA.slice(head, fullA.length - tail);
+  const b = fullB.slice(head, fullB.length - tail);
+  const ops: Op[] = fullA.slice(0, head).map((line) => ({ tag: " ", line }));
+  const after: Op[] = fullA.slice(fullA.length - tail).map((line) => ({ tag: " ", line }));
   if (a.length * b.length > LCS_CELL_CAP) {
-    return [...a.map((line) => ({ tag: "-" as const, line })), ...b.map((line) => ({ tag: "+" as const, line }))];
+    return [...ops, ...a.map((line) => ({ tag: "-" as const, line })), ...b.map((line) => ({ tag: "+" as const, line })), ...after];
   }
   // classic LCS lengths table, then walk back from the corner
   const rows = a.length + 1;
@@ -103,7 +117,6 @@ function editScript(a: string[], b: string[]): Op[] {
         : Math.max(table[(i + 1) * cols + j], table[i * cols + j + 1]);
     }
   }
-  const ops: Op[] = [];
   let i = 0;
   let j = 0;
   while (i < a.length && j < b.length) {
@@ -119,7 +132,7 @@ function editScript(a: string[], b: string[]): Op[] {
   }
   while (i < a.length) ops.push({ tag: "-", line: a[i++] });
   while (j < b.length) ops.push({ tag: "+", line: b[j++] });
-  return ops;
+  return ops.concat(after);
 }
 
 function splitLines(text: string): string[] {
@@ -422,13 +435,37 @@ export function revertMemoryChange(botId: string, entryId: string, opts: { threa
  * thread can have more than one member speaking on it. */
 const turnBots = new Map<string, Set<string>>();
 
+/** Size and truncated mtime at which a baseline text was read (port of
+ * OpenMausBot #2465). The same pair on a later turn means the same bytes, so
+ * the turn diff reuses the baseline instead of reading and hashing the file:
+ * the cost no longer grows with the daily logs. A same-size edit that keeps
+ * the same mtime is missed, the trade the search index already makes. */
+const baselineStats = new Map<string, Map<string, { mtimeMs: number; bytes: number }>>();
+
 function currentDocs(botId: string): Map<string, string> {
   const docs = new Map<string, string>();
   const overview = memoryOverview(botId);
+  const baseline = baselines.get(botId);
+  let stats = baselineStats.get(botId);
+  if (!stats) baselineStats.set(botId, (stats = new Map()));
   // RULES.md and docs/ are journaled like memory (server/workspace-files.ts)
   for (const path of [MEMORY_INDEX, ...overview.topics.map((t) => t.path), ...overview.logs.map((l) => l.path), ...workspaceDocPaths(botId)]) {
+    let stat: { mtimeMs: number; bytes: number } | undefined;
+    try {
+      const s = statSync(resolveMemoryPath(botId, path));
+      if (s.isFile()) stat = { mtimeMs: Math.trunc(s.mtimeMs), bytes: s.size };
+    } catch { /* unreadable: the read below decides */ }
+    const cached = stats.get(path);
+    const known = baseline?.get(path);
+    if (stat && cached && known !== undefined && cached.bytes === stat.bytes && cached.mtimeMs === stat.mtimeMs) {
+      docs.set(path, known);
+      continue;
+    }
     const doc = readMemoryDoc(botId, path);
-    if (doc.exists) docs.set(path, doc.text);
+    if (doc.exists) {
+      docs.set(path, doc.text);
+      if (stat) stats.set(path, stat); else stats.delete(path);
+    } else stats.delete(path);
   }
   return docs;
 }
@@ -528,6 +565,7 @@ export function journalTurnWrite<T>(botId: string, path: string, threadId: strin
 /** Test seam: forget every baseline and in-flight turn. */
 export function resetMemoryJournalState(): void {
   baselines.clear();
+  baselineStats.clear();
   turnBots.clear();
 }
 
@@ -536,6 +574,7 @@ export function resetMemoryJournalState(): void {
  * next time a turn looked, and would write the journal file back. */
 export function forgetBotMemoryJournal(botId: string): void {
   baselines.delete(botId);
+  baselineStats.delete(botId);
   for (const [threadId, bots] of turnBots) {
     if (!bots.delete(botId)) continue;
     if (bots.size === 0) turnBots.delete(threadId);

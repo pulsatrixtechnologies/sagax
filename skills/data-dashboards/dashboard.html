@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Dashboard</title>
+<style>
+  /* The theme tokens come from the Sagax artifact kit; the fallbacks let the
+     page still read on its own, outside the app. Light and dark both work:
+     the app sets the tokens, so there is nothing to toggle here. */
+  :root {
+    --ink: var(--color-ink, #1b1b1b);
+    --ink-2: var(--color-ink-secondary, #5b5b5b);
+    --card: var(--color-card, #ffffff);
+    --panel: var(--color-panel, #f6f6f6);
+    --line: var(--color-hairline, #e4e4e4);
+    --accent: var(--color-accent, #2f6df6);
+    --good: var(--color-success, #00ba69);
+    --bad: var(--color-danger, #e5484d);
+    --sans: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; font-family: var(--sans); color: var(--ink); background: var(--panel); }
+  h1 { font-size: 18px; margin: 0 0 2px; }
+  h2 { font-size: 14px; margin: 0; }
+  .muted { color: var(--ink-2); font-size: 12px; margin: 0; }
+  .bar-top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
+  label { font-size: 12px; color: var(--ink-2); display: inline-flex; gap: 6px; align-items: center; }
+  select { font: inherit; font-size: 13px; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+  #status { font-size: 12px; color: var(--ink-2); margin: 8px 0; }
+  #status[data-tone="error"] { color: var(--bad); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 12px 0; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .kpi .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .kpi .k { font-size: 11px; color: var(--ink-2); margin-top: 2px; }
+  .delta.up { color: var(--good); } .delta.down { color: var(--bad); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 12px 0; }
+  svg { display: block; width: 100%; height: auto; }
+  svg text { font-family: var(--sans); fill: var(--ink-2); }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--ink-2); font-weight: 600; }
+  details { margin-top: 8px; } summary { cursor: pointer; font-size: 12px; color: var(--ink-2); }
+  footer { color: var(--ink-2); font-size: 11px; margin-top: 12px; }
+</style>
+</head>
+<body>
+  <!-- Change CONFIG, QUERIES and the render* functions, the headings and the
+       embedded rows. Keep the SVG charts, the Intl formatting and the tables. -->
+  <div class="bar-top">
+    <div>
+      <h1 id="title">Sales dashboard</h1>
+      <p class="muted" id="subtitle">Revenue and units by region</p>
+    </div>
+    <label>Region
+      <select id="region-filter" aria-label="Filter the dashboard by region"><option value="__all">All regions</option></select>
+    </label>
+  </div>
+
+  <p id="status" role="status">Loading…</p>
+
+  <div class="kpis" id="kpis"></div>
+
+  <section class="card">
+    <h2 id="q-bar">Which regions sell the most?</h2>
+    <p class="muted" id="n-bar"></p>
+    <svg id="bar" viewBox="0 0 320 180" role="img" aria-label="Revenue by region, as a horizontal bar chart"></svg>
+    <details><summary>Show the numbers</summary>
+      <div class="tablewrap"><table id="bar-table"><thead><tr><th>Region</th><th>Revenue</th></tr></thead><tbody></tbody></table></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2 id="q-line">How is revenue trending?</h2>
+    <p class="muted" id="n-line"></p>
+    <svg id="line" viewBox="0 0 320 160" role="img" aria-label="Revenue over time, as a line chart"></svg>
+    <details><summary>Show the numbers</summary>
+      <div class="tablewrap"><table id="line-table"><thead><tr><th>Date</th><th>Revenue</th></tr></thead><tbody></tbody></table></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>Detail</h2>
+    <div class="tablewrap"><table id="detail"><thead><tr><th>Date</th><th>Region</th><th>Category</th><th>Units</th><th>Revenue</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <footer id="source"></footer>
+
+  <script id="embedded-data" type="application/json">
+  [
+    { "date": "2026-10-01", "region": "Quebec", "category": "Service", "units": 42, "revenue": 12800 },
+    { "date": "2026-10-01", "region": "Ontario", "category": "Service", "units": 31, "revenue": 9400 },
+    { "date": "2026-10-02", "region": "Quebec", "category": "Hardware", "units": 18, "revenue": 15200 },
+    { "date": "2026-10-02", "region": "Ontario", "category": "Service", "units": 27, "revenue": 8100 },
+    { "date": "2026-10-03", "region": "Quebec", "category": "Service", "units": 55, "revenue": 16900 },
+    { "date": "2026-10-03", "region": "West", "category": "Hardware", "units": 12, "revenue": 10400 },
+    { "date": "2026-10-04", "region": "Ontario", "category": "Hardware", "units": 22, "revenue": 18700 },
+    { "date": "2026-10-04", "region": "West", "category": "Service", "units": 19, "revenue": 5600 }
+  ]
+  </script>
+
+  <script>
+  (function () {
+    "use strict";
+
+    // 1. Where the data came from, and how to format it.
+    var CONFIG = {
+      source: "orders.csv",
+      updated: "2026-10-22",
+      currency: "CAD",
+    };
+
+    // 2. The questions, as pure functions over the filtered rows.
+    var QUERIES = {
+      byRegion: function (rows) { return groupSum(rows, "region", "revenue"); },
+      overTime: function (rows) { return groupSum(rows, "date", "revenue").sort(byKeyAsc); },
+      kpis: function (rows) {
+        var revenue = sum(rows, "revenue"), units = sum(rows, "units");
+        return [
+          { k: "Revenue", v: money(revenue) },
+          { k: "Units", v: num(units) },
+          { k: "Avg order value", v: units ? money(revenue / units) : "-" },
+          { k: "Regions", v: num(distinct(rows, "region").length) },
+        ];
+      },
+    };
+
+    var nf = new Intl.NumberFormat("en", { maximumFractionDigits: 0 });
+    var cf = new Intl.NumberFormat("en", { style: "currency", currency: CONFIG.currency, notation: "compact", maximumFractionDigits: 1 });
+    var df = new Intl.NumberFormat("en", { style: "currency", currency: CONFIG.currency, maximumFractionDigits: 0 });
+    function num(n) { return nf.format(n || 0); }
+    function money(n) { return cf.format(n || 0); }
+    function moneyFull(n) { return df.format(n || 0); }
+
+    function sum(rows, field) { return rows.reduce(function (a, r) { return a + (Number(r[field]) || 0); }, 0); }
+    function distinct(rows, field) { var s = {}; rows.forEach(function (r) { s[r[field]] = 1; }); return Object.keys(s); }
+    function groupSum(rows, key, field) {
+      var m = {}; rows.forEach(function (r) { m[r[key]] = (m[r[key]] || 0) + (Number(r[field]) || 0); });
+      return Object.keys(m).map(function (k) { return { key: k, value: m[k] }; });
+    }
+    function byKeyAsc(a, b) { return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; }
+    function byValueDesc(a, b) { return b.value - a.value; }
+    function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]; }); }
+
+    // 3. The render* functions draw SVG and tables; no chart library.
+    function renderKpis(rows) {
+      document.getElementById("kpis").innerHTML = QUERIES.kpis(rows).map(function (t) {
+        return '<div class="kpi"><div class="v">' + esc(t.v) + '</div><div class="k">' + esc(t.k) + "</div></div>";
+      }).join("");
+    }
+
+    function renderBar(rows) {
+      var data = QUERIES.byRegion(rows).sort(byValueDesc).slice(0, 6);
+      var max = Math.max.apply(null, data.map(function (d) { return d.value; }).concat([1]));
+      var rowH = 26, pad = 90, w = 320, h = Math.max(data.length * rowH + 10, 40);
+      var svg = document.getElementById("bar");
+      svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+      svg.innerHTML = data.map(function (d, i) {
+        var y = i * rowH + 8, bw = Math.round((w - pad - 60) * (d.value / max));
+        var fill = i === 0 ? "var(--accent)" : "var(--ink-2)";
+        return '<text x="0" y="' + (y + 12) + '" font-size="11">' + esc(d.key) + "</text>"
+          + '<rect x="' + pad + '" y="' + y + '" width="' + bw + '" height="16" rx="3" fill="' + fill + '"></rect>'
+          + '<text x="' + (pad + bw + 4) + '" y="' + (y + 12) + '" font-size="11" fill="var(--ink)">' + esc(money(d.value)) + "</text>";
+      }).join("");
+      fillTable("bar-table", data.map(function (d) { return [d.key, moneyFull(d.value)]; }));
+      document.getElementById("n-bar").textContent = data.length ? data[0].key + " leads with " + money(data[0].value) + "." : "";
+    }
+
+    function renderLine(rows) {
+      var data = QUERIES.overTime(rows);
+      var w = 320, h = 160, padL = 44, padB = 22, padT = 10;
+      var max = Math.max.apply(null, data.map(function (d) { return d.value; }).concat([1]));
+      var innerW = w - padL - 8, innerH = h - padB - padT;
+      var step = data.length > 1 ? innerW / (data.length - 1) : 0;
+      var pts = data.map(function (d, i) {
+        var x = padL + i * step, y = padT + innerH - (d.value / max) * innerH;
+        return { x: x, y: y };
+      });
+      var path = pts.map(function (p, i) { return (i ? "L" : "M") + p.x.toFixed(1) + " " + p.y.toFixed(1); }).join(" ");
+      var svg = document.getElementById("line");
+      var grid = "";
+      for (var g = 0; g <= 2; g++) {
+        var gy = padT + (innerH / 2) * g;
+        grid += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (w - 8) + '" y2="' + gy + '" stroke="var(--line)" stroke-width="1"></line>'
+          + '<text x="0" y="' + (gy + 3) + '" font-size="9">' + esc(cf.format(max - (max / 2) * g)) + "</text>";
+      }
+      var dots = pts.map(function (p) { return '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="2.5" fill="var(--accent)"></circle>'; }).join("");
+      svg.innerHTML = grid
+        + '<path d="' + path + '" fill="none" stroke="var(--accent)" stroke-width="2"></path>' + dots
+        + data.map(function (d, i) { return '<text x="' + (padL + i * step).toFixed(1) + '" y="' + (h - 6) + '" font-size="8" text-anchor="middle">' + esc(d.key.slice(5)) + "</text>"; }).join("");
+      fillTable("line-table", data.map(function (d) { return [d.key, moneyFull(d.value)]; }));
+      var first = data.length ? data[0].value : 0, last = data.length ? data[data.length - 1].value : 0;
+      var pct = first ? Math.round(((last - first) / first) * 100) : 0;
+      var arrow = pct >= 0 ? "▲" : "▼";
+      document.getElementById("n-line").innerHTML = data.length
+        ? 'Revenue is <span class="delta ' + (pct >= 0 ? "up" : "down") + '">' + arrow + " " + Math.abs(pct) + "%</span> across the range."
+        : "";
+    }
+
+    function renderDetail(rows) {
+      fillTable("detail", rows.slice(0, 200).map(function (r) {
+        return [r.date, r.region, r.category, num(r.units), moneyFull(r.revenue)];
+      }));
+    }
+
+    function fillTable(id, rowsOfCells) {
+      var tbody = document.querySelector("#" + id + " tbody");
+      tbody.innerHTML = rowsOfCells.map(function (cells) {
+        return "<tr>" + cells.map(function (c) { return "<td>" + esc(c) + "</td>"; }).join("") + "</tr>";
+      }).join("");
+    }
+
+    // 4. Wire the filter and draw. A region picked here steers every card.
+    var allRows = [];
+    function currentRows() {
+      var region = document.getElementById("region-filter").value;
+      return region === "__all" ? allRows : allRows.filter(function (r) { return r.region === region; });
+    }
+    function draw() {
+      var rows = currentRows();
+      renderKpis(rows); renderBar(rows); renderLine(rows); renderDetail(rows);
+    }
+    function fillRegions() {
+      var sel = document.getElementById("region-filter");
+      // Keep the first "All regions" option; replace the rest on each refresh.
+      var opts = sel.querySelectorAll("option");
+      for (var i = opts.length - 1; i >= 1; i--) opts[i].remove();
+      distinct(allRows, "region").sort().forEach(function (region) {
+        var o = document.createElement("option"); o.value = region; o.textContent = region; sel.appendChild(o);
+      });
+    }
+    function setStatus(text, tone) {
+      var el = document.getElementById("status");
+      if (!text) { el.style.display = "none"; return; }
+      el.style.display = ""; el.textContent = text; el.setAttribute("data-tone", tone || "info");
+    }
+
+    function normalize(value) {
+      var rows = Array.isArray(value) ? value : value && Array.isArray(value.rows) ? value.rows : null;
+      return rows;
+    }
+    function apply(value) {
+      var rows = normalize(value);
+      if (!rows) { setStatus("No data to show yet.", "error"); return; }
+      allRows = rows;
+      fillRegions();
+      document.getElementById("source").textContent = "Source: " + CONFIG.source + " · refreshed " + CONFIG.updated;
+      setStatus("");
+      draw();
+    }
+
+    function start() {
+      document.getElementById("region-filter").addEventListener("change", draw);
+      try {
+        // A refreshing artifact feeds data through window.sagax; a standalone
+        // page reads the rows embedded below.
+        if (window.sagax && typeof window.sagax.onData === "function") {
+          window.sagax.onData(apply);
+          if (window.sagax.data != null) return; // onData already drew it
+        }
+        var embedded = document.getElementById("embedded-data");
+        apply(JSON.parse((embedded && embedded.textContent) || "[]"));
+      } catch (err) {
+        setStatus("Could not read the data.", "error");
+      }
+    }
+    start();
+  })();
+  </script>
+</body>
+</html>

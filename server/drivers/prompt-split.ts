@@ -114,6 +114,52 @@ export function changedSectionsNote(
   return VOLATILE_SECTIONS_NOTE_PREFIX + "\n\n" + parts.join("\n\n");
 }
 
+/** The sections a turn's note describes even when their text is the same
+ * as last turn's: the mentions section names the message being sent now,
+ * and the phone-call section marks an interrupted call turn (both set
+ * SendTurnInput.mentionTurn). */
+const PER_TURN_SECTIONS: readonly string[] = ["mentions", "voice-call"];
+
+/** What a reused session should be told about its volatile half, for every
+ * driver that keeps one session per thread (2026-10-19 perf parity, point
+ * 4): only the sections added or changed since the copy the session holds,
+ * plus one line per section that went away; nothing when nothing changed.
+ * `previous` is the fingerprints (sectionFingerprints) of the copy the
+ * session holds, or undefined when unknown (a new process, a compaction, a
+ * receipt from before sections were tracked): the caller then sends the
+ * whole half, as before. On a mention turn the mentions section rides even
+ * when unchanged. Returns null when the section diff cannot describe the
+ * change (the caller falls back to the whole half), "" when nothing needs
+ * to be said. */
+export function volatileSectionsUpdate(
+  sections: readonly VolatileSection[] | undefined,
+  previous: Record<string, string> | undefined,
+  perTurnVolatile = false,
+): string | null {
+  if (!sections || !previous) return null;
+  const base = perTurnVolatile
+    ? Object.fromEntries(Object.entries(previous).filter(([id]) => !PER_TURN_SECTIONS.includes(id)))
+    : previous;
+  return changedSectionsNote(sections, base) ?? "";
+}
+
+/** The per-section change from `previous` to `current` fingerprints: the
+ * new print of each added or changed section (and of the mentions section
+ * on a mention turn), null for each section that went away. Mirrors what
+ * volatileSectionsUpdate writes into its note. */
+export function sectionDelta(
+  current: Record<string, string>,
+  previous: Record<string, string>,
+  perTurnVolatile = false,
+): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  for (const [id, print] of Object.entries(current)) {
+    if (previous[id] !== print || (perTurnVolatile && PER_TURN_SECTIONS.includes(id))) out[id] = print;
+  }
+  for (const id of Object.keys(previous)) if (current[id] === undefined) out[id] = null;
+  return out;
+}
+
 const receiptPath = (scope: string, key: string) =>
   join(DATA_DIR, "prompt-split", digest(JSON.stringify([scope, key])) + ".json");
 

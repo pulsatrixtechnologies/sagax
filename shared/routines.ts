@@ -4,6 +4,7 @@
  * frame union and every client consumer share one home; the client file
  * re-exports these under the same names. */
 import type { RoutineCronSchedule } from "./routine-schedule.ts";
+import type { RoutineWindowTiming } from "./routine-timing.ts";
 
 export interface RoutineIntervalWindow {
   start: string;
@@ -11,10 +12,10 @@ export interface RoutineIntervalWindow {
 }
 
 export type RoutineSchedule =
-  | RoutineCronSchedule
+  | (RoutineCronSchedule & RoutineWindowTiming)
   | { type: "once"; at: number }
-  | { type: "daily"; time: string; weekdays: number[] }
-  | {
+  | ({ type: "daily"; time: string; weekdays: number[] } & RoutineWindowTiming)
+  | ({
     type: "interval";
     everyMinutes: number;
     anchorAt: number;
@@ -24,11 +25,11 @@ export type RoutineSchedule =
     window?: RoutineIntervalWindow;
     /** Inclusive epoch-millisecond cutoff. Missing means never. */
     endsAt?: number;
-  };
+  } & RoutineWindowTiming);
 
 export type RoutineScheduleInput =
   | Extract<RoutineSchedule, { type: "once" | "daily" | "cron" }>
-  | {
+  | ({
     type: "interval";
     everyMinutes: number;
     anchorAt: number;
@@ -38,7 +39,7 @@ export type RoutineScheduleInput =
     window?: RoutineIntervalWindow | null;
     /** `null` explicitly removes an existing end date on updates. */
     endsAt?: number | null;
-  };
+  } & RoutineWindowTiming);
 
 export type RoutineRunOn = "maus" | "cloud";
 
@@ -69,7 +70,14 @@ export type RoutineRunStatus =
   | "completed"
   | "failed"
   | "cancelled"
-  | "missed";
+  | "missed"
+  /** The routine's pre-check found nothing to do; no turn started. */
+  | "nothing_to_report";
+
+/** Why a run started a second time by itself: its engine stalled, Sagax
+ * restarted while it ran, the provider rate-limited it or failed for a moment,
+ * or it waited for its engine's usage limit to reset. A run gets one. */
+export type RoutineRetryCause = "stalled" | "restarted" | "rate_limited" | "provider" | "usage_limit";
 
 /** The statuses both failure indicators count: a run that went wrong and has
  * not been acknowledged. One home so the sidebar dot, the errors pill, the
@@ -83,6 +91,16 @@ export function isRoutineProblemRun(run: { status: RoutineRunStatus }): boolean 
 /** The logs view's status filter: every run, the composite problem set the
  * indicators count, or one exact status. */
 export type RoutineRunStatusFilter = "all" | "problems" | RoutineRunStatus;
+
+/** Whether a run shows under a logs status filter. A completed run that had
+ * nothing for the person (`quiet`, 2026-10-22) is listed as Nothing to
+ * report, with the pre-check's quiet runs. */
+export function routineRunMatchesStatus(run: { status: RoutineRunStatus; quiet?: true }, filter: RoutineRunStatusFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "problems") return isRoutineProblemRun(run);
+  const status = run.status === "completed" && run.quiet ? "nothing_to_report" : run.status;
+  return status === filter;
+}
 
 export interface Routine {
   id: string;
@@ -105,6 +123,8 @@ export interface Routine {
   skippedRuns?: number;
   lastSkippedAt?: number;
   failureStreak?: number;
+  /** Runs that finished in the last seven days, and how many of them completed. */
+  weekRuns?: { ok: number; total: number };
   attachments?: RoutineContextAttachment[];
   sourceThreadId?: string;
   resultsThreadId?: string;
@@ -115,10 +135,22 @@ export interface Routine {
   suspended?: { reason: RoutineSuspendReason; at: number };
   /** 2026-10-16: runs only while its person is there (server/routine-away.ts). */
   onlyWhenPresent?: boolean;
+  /** 2026-10-22 (JC): whether this routine's completed runs post their
+   * result message in the person's conversation. `true` posts (as a visible
+   * report, never the prompt); `false`/absent is silent and the result lives
+   * only in Automations. Approvals, questions and errors always surface, and
+   * a NOTHING_TO_REPORT run stays silent, whichever this is. Absent on a new
+   * routine inherits the installation default (features.routinesInConversation);
+   * existing routines were migrated to true so nothing went silent. */
+  postResults?: boolean;
   /** Occurrences skipped while the person was away; `reportedAt` once they
    * are back. Cleared by POST /api/routines/:id/away-seen. */
   awaySkips?: { count: number; firstAt: number; lastAt: number; reportedAt?: number };
   nextRunAt: number | null;
+  /** Scheduled slot a flexible routine advances from. Absent for exact timing. */
+  nominalRunAt?: number;
+  /** Nominal slot already consumed. Later placement never chooses it or an earlier slot. */
+  lastFiredNominalAt?: number;
   createdAt: number;
   updatedAt: number;
   /** 2026-10-09 (GET /api/routines, server/routine-scope.ts): its bot's
@@ -167,8 +199,16 @@ export interface RoutineRun {
   startedAt?: number;
   finishedAt?: number;
   output?: string;
+  /** 2026-10-22: a completed run that had nothing for the person; nothing
+   * was posted to their conversation (server/routine-report.ts). */
+  quiet?: true;
   error?: string;
-  /** Concise, redacted question or approval reason while status is waiting. */
+  /** Set when the run used its one automatic second start, and why. */
+  retried?: RoutineRetryCause;
+  /** A queued run starts no earlier than this. */
+  retryAt?: number;
+  /** Concise, redacted question or approval reason while status is waiting,
+   * or why a queued run starts later. */
   attention?: string;
   cost?: number | null;
   denials?: string[];
@@ -201,6 +241,9 @@ export interface RoutineInput {
   /** 2026-10-16: runs only while its person is there (server/routine-away.ts). */
   onlyWhenPresent?: boolean;
   runOnStartup?: boolean;
+  /** 2026-10-22: post this routine's results in the conversation. `null`
+   * clears it back to the installation default; omission preserves it. */
+  postResults?: boolean | null;
   attachments?: RoutineContextAttachment[];
   /** Omission preserves routing; null resets it to the bot's main thread. */
   resultsThreadId?: string | null;

@@ -1,7 +1,9 @@
 /** Isolated gallery for Playwright screenshots of Connect apps and Browse
  * bots in their window (the presentational views with sample rows, no
  * server). Not shipped in the app.
- * ?view=apps|apps-section|bots|bots-in-apps&skin=<id>&lang=<code> */
+ * ?view=apps|apps-section|bots|bots-in-apps|providers&skin=<id>&lang=<code>
+ * providers: Manage > Providers with a Claude and a Grok account (the
+ * capture answers /api/me/harness-connectors itself). */
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { X } from "lucide-react";
@@ -9,6 +11,7 @@ import { ConnectAppsView } from "../components/plugins/ConnectAppsView";
 import { BotCatalogView } from "../components/bot-catalog/BotCatalogView";
 import { CATEGORY_MODAL, cardActionClass } from "../components/category-modal";
 import { ScopeToggle } from "../components/plugins/ScopeToggle";
+import { ProvidersSection } from "../components/plugins/ProvidersSection";
 import { catalogCategories, catalogSections, catalogTemplates } from "../lib/bot-catalog";
 import type { PluginFilter, PluginItem } from "../lib/plugins-model";
 import { setLocale, t } from "../lib/i18n";
@@ -54,7 +57,7 @@ function Frame({ children }: { children: React.ReactNode }) {
   );
 }
 
-const CONNECT = <button type="button" className={cardActionClass()}>Connecter</button>;
+const CONNECT = <button type="button" className={cardActionClass("quiet")}>Connecter</button>;
 const crumbToApps = [{ label: t("connectApps.title"), onSelect: () => {} }];
 
 /** Connect apps' home, or (section) Productivity opened alone with View all. */
@@ -114,7 +117,22 @@ function Bots({ inApps }: { inApps?: boolean }) {
   );
 }
 
+const PROVIDER_INSTANCES = [
+  { instanceId: "claude-main", driverKind: "claudeAgent", displayName: "Claude", access: "subscription", snapshot: { state: "available", authenticated: true, account: { email: "ana@example.com", method: "login" } } },
+  { instanceId: "grok-main", driverKind: "grokAgent", displayName: "Grok", access: "subscription", snapshot: { state: "available", authenticated: true, account: { method: "login" } } },
+  { instanceId: "codex-main", driverKind: "codex", displayName: "Codex", access: "subscription", snapshot: { state: "available", authenticated: true } },
+];
+
+function Providers() {
+  return (
+    <div data-gallery-panel className="mx-auto max-w-[560px] p-6">
+      <ProvidersSection instances={PROVIDER_INSTANCES as never} />
+    </div>
+  );
+}
+
 const VIEWS: Record<string, () => React.ReactNode> = {
+  providers: () => <Providers />,
   apps: () => <Apps />,
   "apps-section": () => <Apps section />,
   bots: () => <Bots />,

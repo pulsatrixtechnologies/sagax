@@ -4,29 +4,23 @@ import XCTest
 /// iPad I2b: the sidebar's foot as the desktop draws it now (Sidebar.tsx
 /// `places`, Gamertag.tsx) and its edge (`sidebarDragTarget`).
 final class DesktopSidebarPlacesTests: XCTestCase {
-    func testConnectedAppsAndTemplatesWaitForExperimental() {
+    func testTemplatesWaitsForExperimental() {
         let admin = SurfaceGate(scope: .serverAdmin)
         XCTAssertEqual(DesktopSidebarPlaces.visible(connected: true, gate: admin, features: nil), [])
         XCTAssertEqual(DesktopSidebarPlaces.visible(connected: true, gate: admin, features: ServerFeatures()), [])
         XCTAssertEqual(
-            DesktopSidebarPlaces.visible(connected: true, gate: admin, features: ServerFeatures(connectedApps: true)),
-            [.connectedApps]
-        )
-        XCTAssertEqual(
-            DesktopSidebarPlaces.visible(connected: true, gate: admin, features: ServerFeatures(connectedApps: true, templates: true)),
-            [.connectedApps, .templates]
+            DesktopSidebarPlaces.visible(connected: true, gate: admin, features: ServerFeatures(templates: true)),
+            [.templates]
         )
         XCTAssertFalse(DesktopSidebarPlaces.visible(connected: true, gate: admin, features: nil).contains(.teamMap))
         XCTAssertFalse(DesktopSidebarPlaces.visible(connected: true, gate: admin, features: nil).contains(.automations))
     }
 
     func testExperimentalPlacesStillNeedThePairingsGate() {
-        let features = ServerFeatures(connectedApps: true, templates: true)
+        let features = ServerFeatures(templates: true)
         let client = SurfaceGate(scope: .serverClient)
-        let places = DesktopSidebarPlaces.visible(connected: true, gate: client, features: features)
-        // Browse Bots (the place that replaced Templates) is a member's too;
-        // Connected apps stays an administrator's
-        XCTAssertEqual(places, [.templates])
+        // Browse Bots (the place that replaced Templates) is a member's too.
+        XCTAssertEqual(DesktopSidebarPlaces.visible(connected: true, gate: client, features: features), [.templates])
         let sidecar = DesktopSidebarPlaces.visible(connected: true, gate: SurfaceGate(scope: .sidecar), features: features)
         XCTAssertFalse(sidecar.contains(.templates), "the remote client hides Browse Bots")
         XCTAssertEqual(DesktopSidebarPlaces.visible(connected: false, gate: SurfaceGate(scope: .serverAdmin), features: features), [])

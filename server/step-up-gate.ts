@@ -23,6 +23,7 @@ import {
   type StepUpTarget,
 } from "../shared/step-up.ts";
 import type { OptionCardData } from "../shared/wire.ts";
+import { ORG_ALWAYS_ALLOW_OFF, answerWidens, standingGrantsAllowed } from "./custom-rules-org.ts";
 import { factsForCall } from "./custom-rules-review.ts";
 import { grantDigest, type SecurityKeys } from "./security-keys.ts";
 
@@ -43,7 +44,16 @@ export function alwaysAllowStepUpGrant(botId: string, key: string): string {
 
 const UNREADABLE = "Saved security keys could not be read, so this approval cannot be confirmed. Repair security-keys.json on the server.";
 
-export type StepUpDecision = { status: number; body: StepUpRefusal } | null;
+export type StepUpDecision = { status: number; body: StepUpRefusal | OrgAlwaysAllowRefusal } | null;
+
+/** 2026-10-21 (server/custom-rules-org.ts): the organization turned
+ * "Toujours permettre" off, so an answer that would save a standing grant is
+ * refused on every answer path (this gate is asked by each of them). */
+export type OrgAlwaysAllowRefusal = typeof ORG_ALWAYS_ALLOW_OFF & { classes: []; reason?: undefined; target?: undefined };
+
+function orgRefusal(): { status: number; body: OrgAlwaysAllowRefusal } {
+  return { status: 403, body: { ...ORG_ALWAYS_ALLOW_OFF, classes: [] } };
+}
 
 /** Null lets the Allow through; else the refusal (403) with the target a
  * client starts a step-up for. A path that cannot carry a step-up passes
@@ -67,6 +77,7 @@ export function approvalStepUp(input: {
 }): StepUpDecision {
   const { keys, person, threadId, requestId, card, behavior } = input;
   if (behavior !== "allow") return null;
+  if (answerWidens(input.answer) && !standingGrantsAllowed()) return orgRefusal();
   if (!card || card.answered || card.dismissed || card.expired) {
     // No live card to read: nothing tells what this Allow would do. For a
     // person who chose any class, it is refused, never let through.
@@ -105,6 +116,7 @@ export function alwaysAllowStepUp(input: {
   stepUp: unknown;
 }): StepUpDecision {
   const { keys, person, card } = input;
+  if (!standingGrantsAllowed()) return orgRefusal();
   if (!card) return null;
   const required = keys.required(person, stepUpClassesForCard(card, input.risks, { alwaysAllowKey: input.key }), input.policyPerson);
   if (!required.length) return null;

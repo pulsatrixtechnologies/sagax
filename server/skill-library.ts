@@ -115,6 +115,19 @@ export function mergeSkills(bundled: readonly BundledSkill[], user: readonly Bun
   return [...byId.values()];
 }
 
+/** A trigger term as a whole word: "adb" inside a UUID is not a request
+ * for the phone (it mounted the phone server at random and relaunched a
+ * pre-warmed engine, perf round 3). */
+function mentionsTerm(haystack: string, term: string): boolean {
+  const word = /[\p{L}\p{N}_]/u;
+  for (let at = haystack.indexOf(term); at !== -1 && term; at = haystack.indexOf(term, at + 1)) {
+    const before = at === 0 ? "" : haystack[at - 1]!;
+    const after = haystack[at + term.length] ?? "";
+    if ((!word.test(term[0]!) || !word.test(before)) && (!word.test(term[term.length - 1]!) || !word.test(after))) return true;
+  }
+  return false;
+}
+
 export function selectBundledSkills(
   text: string,
   capabilities: Iterable<string>,
@@ -125,7 +138,7 @@ export function selectBundledSkills(
   return skills.filter(({ manifest }) =>
     manifest.defaultEnabled &&
     manifest.requiredCapabilities.every((capability) => available.has(capability)) &&
-    manifest.triggerTerms.some((term) => haystack.includes(term.toLowerCase())),
+    manifest.triggerTerms.some((term) => mentionsTerm(haystack, term.toLowerCase())),
   );
 }
 

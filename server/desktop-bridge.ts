@@ -20,6 +20,8 @@
 // that changed hands, or another person's session holding a stolen id and
 // secret, is refused.
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { z } from "zod";
 
 import type { BotWorkplace } from "../shared/bot-workplace.ts";
@@ -59,6 +61,10 @@ export const desktopSystemInfo = z.object({
 }).strict();
 export type DesktopSystemInfo = z.infer<typeof desktopSystemInfo>;
 
+// Messages (iMessage) is intentionally not a bridge action. It runs only
+// inside the solo Sagax process on the Mac where that process runs
+// (server/imessage-mcp.ts). An organization server must not ask the
+// signed-in desktop to read or send Messages.
 export const DESKTOP_BRIDGE_ACTIONS = [
   "run_command", "read_file", "write_file", "list_files", "search_files", "fetch_url", "browse",
   "computer_tools", "computer_call", "vm_status", "vm_start", "vm_run_command", "vm_create", "stage_file",
@@ -141,13 +147,37 @@ export const DESKTOP_BRIDGE_MESSAGES = {
 
 export class DesktopBridges {
   private bridges = new Map<string, Bridge>();
+  /** The name a person gave one of their computers (Settings > Computer),
+   * by person and desktop id. It outlives the bridge's own entry, so an app
+   * restart keeps it, and with a labels file it survives a server restart. */
+  private labels = new Map<string, string>();
+  private removals = new Map<string, number[]>();
   private sessionPerson: (sessionId: string) => string | null;
   private now: () => number;
   /** `sessionPerson`: the person a live session is signed in as right now,
    * null when the session ended. */
-  constructor(sessionPerson: (sessionId: string) => string | null, now: () => number = Date.now) {
+  private labelsFile: string | undefined;
+  constructor(sessionPerson: (sessionId: string) => string | null, now: () => number = Date.now, labelsFile?: string) {
     this.sessionPerson = sessionPerson;
     this.now = now;
+    this.labelsFile = labelsFile;
+    if (!labelsFile) return;
+    try {
+      const stored = JSON.parse(readFileSync(labelsFile, "utf8")) as Record<string, unknown>;
+      for (const [key, value] of Object.entries(stored)) if (typeof value === "string" && value.length <= 120) this.labels.set(key, value);
+    } catch { /* none yet, or unreadable: no names */ }
+  }
+
+  /** Temp-and-rename, so a crash never leaves a truncated file. A failed
+   * write keeps the name for this run. */
+  private saveLabels(): void {
+    if (!this.labelsFile) return;
+    const temporary = `${this.labelsFile}.${process.pid}.tmp`;
+    try {
+      mkdirSync(dirname(this.labelsFile), { recursive: true });
+      writeFileSync(temporary, `${JSON.stringify(Object.fromEntries(this.labels))}\n`, { mode: 0o600 });
+      renameSync(temporary, this.labelsFile);
+    } catch { /* the name still holds in memory */ }
   }
   private static key(session: string, id: string) { return `${session}\n${id}`; }
 
@@ -234,10 +264,54 @@ export class DesktopBridges {
     if (!key) return [];
     this.reap();
     return [...this.bridges.values()].filter(entry => entry.person === key).map(entry => ({
-      id: entry.registration.id, name: entry.registration.name, platform: entry.registration.platform,
+      id: entry.registration.id, name: this.labels.get(`${key}\n${entry.registration.id}`) ?? entry.registration.name, platform: entry.registration.platform,
       online: this.online(entry), busy: entry.jobs.size > 0, lastSeenAt: entry.seen, capabilities: { ...entry.registration.capabilities },
       ...(entry.system ? { system: { ...entry.system } } : {}),
     }));
+  }
+
+  /** The person's computer named by `which` (its id, or its name, upper or
+   * lower case), among the ones this server knows. */
+  private pick(person: string, which: string): Bridge[] {
+    const wanted = which.trim();
+    if (!wanted) throw failure("Name the computer", 400, "computer_missing");
+    const mine = [...this.bridges.values()].filter(entry => entry.person === person);
+    const byId = mine.filter(entry => entry.registration.id === wanted);
+    const found = byId.length ? byId : mine.filter(entry => [this.labels.get(`${person}\n${entry.registration.id}`), entry.registration.name].some(name => name?.toLowerCase() === wanted.toLowerCase()));
+    if (found.length === 0) throw failure("That computer is not in your list", 404, "computer_unknown");
+    if (new Set(found.map(entry => entry.registration.id)).size > 1) throw failure("Several computers have that name; use another name or its id", 409, "computer_ambiguous");
+    return found;
+  }
+
+  /** Give a computer of the person's another name (1 to 120 characters). */
+  rename(person: string | null, which: string, name: string): { id: string; name: string } {
+    const key = normalize(person);
+    if (!key) throw failure("Sign in to this server first", 401);
+    const label = name.trim();
+    if (label.length < 1 || label.length > 120 || !NO_CONTROL.test(label)) throw failure("A computer's name is 1 to 120 characters", 400, "computer_name");
+    this.reap();
+    const id = this.pick(key, which)[0]!.registration.id;
+    this.labels.set(`${key}\n${id}`, label);
+    this.saveLabels();
+    return { id, name: label };
+  }
+
+  /** Take a computer off the person's list. Refused while it is online (it
+   * would be back on its next poll), and at most 10 a minute. */
+  remove(person: string | null, which: string): { id: string } {
+    const key = normalize(person);
+    if (!key) throw failure("Sign in to this server first", 401);
+    this.reap();
+    const found = this.pick(key, which);
+    if (found.some(entry => this.online(entry))) throw failure("A computer cannot be removed while it is online", 409, "computer_online");
+    const at = this.now();
+    const recent = (this.removals.get(key) ?? []).filter(time => at - time < 60_000);
+    if (recent.length >= 10) throw failure("Too many removals; try again in a minute", 429, "computer_rate");
+    this.removals.set(key, [...recent, at]);
+    const id = found[0]!.registration.id;
+    for (const [bridgeKey, entry] of this.bridges) if (entry.person === key && entry.registration.id === id) this.drop(bridgeKey, entry, DESKTOP_BRIDGE_MESSAGES.offline);
+    if (this.labels.delete(`${key}\n${id}`)) this.saveLabels();
+    return { id };
   }
 
   /** Every connected desktop and its person, for the organization admin
@@ -247,7 +321,7 @@ export class DesktopBridges {
   inventory(): Array<{ person: string; id: string; name: string; platform: string; online: boolean; lastSeenAt: number; localVm: boolean; version: string | null }> {
     this.reap();
     return [...this.bridges.values()].map(entry => ({
-      person: entry.person, id: entry.registration.id, name: entry.registration.name, platform: entry.registration.platform,
+      person: entry.person, id: entry.registration.id, name: this.labels.get(`${entry.person}\n${entry.registration.id}`) ?? entry.registration.name, platform: entry.registration.platform,
       online: this.online(entry), lastSeenAt: entry.seen, localVm: entry.registration.capabilities.localVm, version: entry.registration.version ?? null,
     }));
   }

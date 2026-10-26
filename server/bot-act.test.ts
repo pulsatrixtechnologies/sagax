@@ -11,7 +11,7 @@ function facts(patch: Partial<TurnFacts> = {}): TurnFacts {
 function harness(options: { mode?: "ask" | "edits" | "auto" | "full" | "custom"; session?: { id: string; scopes: Array<"admin" | "client"> } | null } = {}) {
   const performed: Array<{ actor: PerformActor; method?: string; path?: string }> = [];
   const broadcasts: Array<{ audience: string; command: string; input: Record<string, unknown> }> = [];
-  const cards: Array<{ requestId: string; summary: string; answered?: "allow" | "deny"; expired?: true }> = [];
+  const cards: Array<{ requestId: string; summary: string; rule?: unknown; answered?: "allow" | "deny"; expired?: true }> = [];
   let seq = 0;
   let now = 0;
   const gate = { release: () => undefined as void, opened: Promise.resolve() };
@@ -29,7 +29,7 @@ function harness(options: { mode?: "ask" | "edits" | "auto" | "full" | "custom";
     },
     broadcastUi: (audience, command, input) => { broadcasts.push({ audience, command, input }); },
     postCard: (input) => {
-      cards.push({ requestId: input.requestId, summary: input.summary });
+      cards.push({ requestId: input.requestId, summary: input.summary, ...(input.rule ? { rule: input.rule } : {}) });
       return { messageId: `m-${input.requestId}` };
     },
     patchCard: (_threadId, messageId, patch) => {
@@ -57,6 +57,16 @@ describe("bot act", () => {
     expect(allowed.status).toBe(200);
     expect(allowed.body).toMatchObject({ text: "ok", status: 200 });
     expect(performed).toEqual([{ actor: { kind: "person", sessionId: "wide", personKey: person, scopes: ["client"] }, method: "GET", path: "/api/bots" }]);
+  });
+
+  it("2026-10-20: a change to rules or permissions has no Always allow, a plain one keeps its own", async () => {
+    const { service, cards } = harness();
+    const base = { facts: facts(), target: { kind: "route" as const, method: "PATCH", path: "/api/bots/b2" }, threadId: "t", botId: "b", botName: "Ada", botColor: "green" };
+    const rule = { tool: "sagax_settings" as const, scope: { setting: "bot.title" }, description: "Title" };
+    await service.handlePlanned({ ...base, plan: { effect: "hold", summary: "a", stepUpClasses: ["rule-change"], rule } });
+    await service.handlePlanned({ ...base, plan: { effect: "hold", summary: "b", stepUpClasses: [], rule, noRule: true } });
+    await service.handlePlanned({ ...base, plan: { effect: "hold", summary: "c", stepUpClasses: [], rule } });
+    expect(cards.map((card) => Boolean(card.rule))).toEqual([false, false, true]);
   });
 
   it("holds a write until the answering session allows it, and a deny does not perform", async () => {
@@ -107,6 +117,17 @@ describe("bot act", () => {
     const escalated = await full.service.handle({ facts: facts(), raw: { ui: "decideRequest", input: { threadId: "t2", requestId: "r1", behavior: "allow" } }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" });
     expect(escalated.status).toBe(403);
     expect(full.performed).toHaveLength(1);
+    // widening who gets a bot's team-memory cards waits on a card at every
+    // level, even Full; narrowing to private is an ordinary write
+    const widened = await full.service.handle({ facts: facts(), raw: { method: "PATCH", path: "/api/bots/b1", body: { teamMemorySharing: "shared" } }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" });
+    expect(widened.status).toBe(200);
+    expect(widened.body.held).toBe(true);
+    expect(full.cards).toHaveLength(1);
+    expect(full.performed).toHaveLength(1);
+    const narrowed = await full.service.handle({ facts: facts(), raw: { method: "PATCH", path: "/api/bots/b1", body: { teamMemorySharing: "private" } }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" });
+    expect(narrowed.status).toBe(200);
+    expect(narrowed.body.held).toBeUndefined();
+    expect(full.performed).toHaveLength(2);
     for (const reason of [
       { automation: true },
       { guest: true },

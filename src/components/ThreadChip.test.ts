@@ -72,18 +72,12 @@ describe("ThreadChip", () => {
     ]);
   });
 
-  it("with threads hidden, the switch alone shows it, so the thread the bot was on stays unread", () => {
+  it("draws nothing when threads are off: the single stream shows no thread indicator in the chat", () => {
+    // JC 2026-10-22: Threads off (Settings > Appearance) must leave no thread
+    // row or receipt in the chat. The thread stays reachable through the bot
+    // panel and the sidebar activity list, never a chip in the single stream.
     fixture.showThreads = false;
-    let tree: ReactNode;
-    function Capture() { tree = ThreadChip({ message: receipt() }); return tree; }
-    renderToStaticMarkup(createElement(Capture));
-    findElement(tree, "data-thread-chip")!.props.onClick!();
-    expect(fixture.dispatch.mock.calls.map(([action]) => action)).toEqual([
-      { type: "switchTask", botId: "scout", threadId: "qa-245" },
-      // a thread opened by name is shown, never a fresh topic over it (#763)
-      { type: "freshTopic", botId: "scout", threadId: null },
-      { type: "revealThread", threadId: "qa-245" },
-    ]);
+    expect(renderToStaticMarkup(createElement(ThreadChip, { message: receipt() }))).toBe("");
   });
 
   it("draws nothing when the thread was deleted", () => {

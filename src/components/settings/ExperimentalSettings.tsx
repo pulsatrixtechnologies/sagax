@@ -7,17 +7,19 @@
 // (2026-10-15): one way to reach them, no second switch here.
 import { useEffect, useState } from "react";
 import { api, useStore, type ConfigStatus } from "@/state/store";
-import { browserAvailable, builtInBrowserEnabled, connectedAppsEnabled, dataWindowEnabled, decisionModelEnabled, meetingNotetakerEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
+import { browserAvailable, builtInBrowserEnabled, dataWindowEnabled, decisionModelEnabled, meetingNotetakerEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import type { LocaleKey } from "@/locales";
 import { BrowserProfilesManager } from "../BrowserProfilesManager";
+import { MyChromeSettings } from "./MyChromeSettings";
 import { BrowserUnavailableNote } from "../SettingsLink";
 import { DescribedRow, HelpTip, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { DisclosurePill } from "./AppearanceSettings";
 import { setDevPodsEnabled, useDevPodPrefs } from "../dev-pods/prefs";
+import { canEditConfig } from "@/lib/viewer";
 
-type ExperimentalFeature = "skillAuthoring" | "browser" | "connectedApps" | "decisionModel" | "dataWindow" | "meetingNotetaker";
+type ExperimentalFeature = "skillAuthoring" | "browser" | "decisionModel" | "dataWindow" | "meetingNotetaker";
 
 /** One feature: its label, and a grey "Not available on this server" line
  * with the reason on demand when the server cannot run it. */
@@ -86,7 +88,6 @@ export function ExperimentalSettings() {
   const { state, dispatch } = useStore();
   const skillAuthoring = skillAuthoringEnabled(state.config);
   const browser = builtInBrowserEnabled(state.config);
-  const connectedApps = connectedAppsEnabled(state.config);
   const decisionModel = decisionModelEnabled(state.config);
   const dataWindow = dataWindowEnabled(state.config);
   // A server that predates the Data window (Sagax 0.5.2 and earlier, e.g. an
@@ -100,6 +101,11 @@ export function ExperimentalSettings() {
   const browserInstallable = state.config?.browserEngine?.installable === true;
   const browserBlockedOnWindows = typeof window !== "undefined" && window.ogb?.platform === "win32" && !desktopBrowser && !browserInstallable;
   const profiles = state.config?.browserProfiles ?? [];
+  // The browser profiles and the "my Chrome" link write the installation
+  // (browserProfiles and more): only a viewer who may edit the config sees
+  // them. A server.experimental-only delegate keeps the feature switches,
+  // which are all this right opens (shared/permissions.ts).
+  const editConfig = canEditConfig(state.config);
   const [saving, setSaving] = useState<ExperimentalFeature | null>(null);
   const [error, setError] = useState("");
 
@@ -130,7 +136,7 @@ export function ExperimentalSettings() {
   const busy = saving !== null;
   // The dev context pods are this computer's own choice: no server round trip.
   const devPods = useDevPodPrefs().enabled;
-  const on = Number(skillAuthoring) + Number(browser) + Number(connectedApps) + Number(decisionModel) + Number(dataWindow) + Number(meetingNotetaker) + Number(devPods);
+  const on = Number(skillAuthoring) + Number(browser) + Number(decisionModel) + Number(dataWindow) + Number(meetingNotetaker) + Number(devPods);
 
   return (
     <div data-settings-card="experimental.features" className="flex flex-col gap-2">
@@ -158,18 +164,9 @@ export function ExperimentalSettings() {
           note={!desktopBrowser && browserInstallable ? t("settings.experimental.browserInstall") : undefined}
           busy={busy}
           onToggle={() => void toggle("browser", !browser)}
-          below={(browser || profiles.length > 0) && <BrowserProfilesBelow count={profiles.length} />}
+          below={editConfig && (browser || profiles.length > 0) && <BrowserProfilesBelow count={profiles.length} />}
         />
-        <div data-experimental-connected-apps="">
-          <FeatureRow
-            feature="connectedApps"
-            label={t("settings.experimental.connectedApps")}
-            ariaKey="settings.experimental.connectedAppsAria"
-            checked={connectedApps}
-            busy={busy}
-            onToggle={() => void toggle("connectedApps", !connectedApps)}
-          />
-        </div>
+        {browser && editConfig && <MyChromeSettings />}
         <FeatureRow
           feature="decisionModel"
           label={t("settings.experimental.decisionModel")}

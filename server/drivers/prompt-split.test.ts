@@ -5,9 +5,12 @@ import {
   promptHalves,
   promptSplitFingerprints,
   readPromptSplitReceipt,
+  sectionDelta,
+  sectionFingerprints,
   splitSessionPrompt,
   VOLATILE_SECTIONS_NOTE_PREFIX,
   volatileContextNote,
+  volatileSectionsUpdate,
   withContextNote,
   writePromptSplitReceipt,
 } from "./prompt-split.ts";
@@ -217,5 +220,51 @@ describe("splitSessionPrompt by section", () => {
     writePromptSplitReceipt("test-sections", key, first.receipt);
     expect(readPromptSplitReceipt("test-sections", key)?.sections).toEqual(first.receipt.sections);
     deletePromptSplitReceipt("test-sections", key);
+  });
+});
+
+describe("volatileSectionsUpdate (only what changed)", () => {
+  const memory = { id: "memory", text: "\n\nYour memory:\nlikes tea" };
+  const recent = { id: "recent", text: "\n\nRecent work: report (2h ago)" };
+  const mentions = { id: "mentions", text: "\n\nThe user tagged @Beta." };
+  const held = sectionFingerprints([memory, recent]);
+
+  it("sends only the added or changed sections, and nothing when nothing changed", () => {
+    const moved = { id: "recent", text: "\n\nRecent work: report (3h ago)" };
+    const note = volatileSectionsUpdate([memory, moved], held)!;
+    expect(note.startsWith(VOLATILE_SECTIONS_NOTE_PREFIX)).toBe(true);
+    expect(note).toContain("3h ago");
+    expect(note).not.toContain("likes tea");
+    expect(volatileSectionsUpdate([memory, recent], held)).toBe("");
+  });
+
+  it("names a section that went away instead of leaving the old copy standing", () => {
+    const note = volatileSectionsUpdate([recent], held)!;
+    expect(note).toContain('"memory"');
+    expect(note).not.toContain("Recent work");
+  });
+
+  it("re-sends the mentions section on a mention turn even when unchanged", () => {
+    const withMention = sectionFingerprints([memory, mentions]);
+    expect(volatileSectionsUpdate([memory, mentions], withMention)).toBe("");
+    const note = volatileSectionsUpdate([memory, mentions], withMention, true)!;
+    expect(note).toContain("tagged @Beta");
+    expect(note).not.toContain("likes tea");
+    // an interrupted call turn re-sends its phone-call section the same way
+    const call = { id: "voice-call", text: "\n\nPhone call: interrupted." };
+    expect(volatileSectionsUpdate([memory, call], sectionFingerprints([memory, call]), true)).toContain("interrupted");
+  });
+
+  it("asks for the whole half when the session's copy is unknown (new process, compaction)", () => {
+    expect(volatileSectionsUpdate([memory], undefined)).toBeNull();
+    expect(volatileSectionsUpdate(undefined, held)).toBeNull();
+  });
+
+  it("describes the same change as a fingerprint delta", () => {
+    const now = sectionFingerprints([{ id: "recent", text: "\n\nRecent work: other" }, mentions]);
+    expect(sectionDelta(now, held)).toEqual({ recent: now.recent, mentions: now.mentions, memory: null });
+    expect(sectionDelta(held, held)).toEqual({});
+    const tagged = sectionFingerprints([mentions]);
+    expect(sectionDelta(tagged, tagged, true)).toEqual({ mentions: tagged.mentions });
   });
 });

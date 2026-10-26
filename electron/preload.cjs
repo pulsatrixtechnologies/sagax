@@ -1,6 +1,6 @@
 // Renderer bridge. contextIsolation stays on; the renderer only ever sees
 // this narrow surface (window.ogb), never Node or ipcRenderer itself.
-const { contextBridge, ipcRenderer, webUtils } = require("electron");
+const { contextBridge, ipcRenderer, webUtils, webFrame } = require("electron");
 
 // Sandboxed preloads receive Electron's restricted `require`, which cannot
 // load sibling CommonJS files. Keep this tiny predicate inline here; main's
@@ -47,7 +47,7 @@ ipcRenderer.on("app:open-settings", (_event, section) => {
 // helpers here. Main enforces the same rule on the sensitive channels.
 const localOrigin = process.argv.find((arg) => arg.startsWith("--omb-local-origin="))?.slice("--omb-local-origin=".length) ?? null;
 const isLocalPage = !localOrigin || location.origin === localOrigin;
-const REMOTE_SAFE = new Set(["platform", "getCapabilities", "onCapabilitiesChanged", "applySkin", "setUnreadCount", "nudgeWindow", "notify", "withdrawNotification", "onNotificationClick", "systemIdle", "permStatus", "workspaces", "takeSignInReturn", "pulsatrixSignIn", "orgJoin"]);
+const REMOTE_SAFE = new Set(["platform", "windowControls", "getCapabilities", "onCapabilitiesChanged", "applySkin", "setUnreadCount", "nudgeWindow", "notify", "withdrawNotification", "onNotificationClick", "systemIdle", "permStatus", "workspaces", "takeSignInReturn", "pulsatrixSignIn", "orgJoin"]);
 // An organization server's page drawn from THIS app's bundle
 // (electron/bundled-ui.cjs) is the desktop's own UI on that server, so it
 // also gets the desktop-UI parts that hold no local data: floating bots and
@@ -64,7 +64,7 @@ const REMOTE_SAFE = new Set(["platform", "getCapabilities", "onCapabilitiesChang
 // every one of these channels again (local-origin.cjs desktopUiOnly, and
 // sharingUiOnly for the server-mode server only). Nothing that reads this
 // computer's files, screen, logins or secrets is handed to the page.
-const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "retroAssistant", "windowControls", "onOpenAppSettings", "openExternal", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf"]);
+const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "retroAssistant", "windowControls", "onOpenAppSettings", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences"]);
 let bundledPage = false;
 // main.mjs always answers this channel: a sendSync nobody answers would
 // block this page for good (a test harness must answer it too).
@@ -81,7 +81,7 @@ if (!isLocalPage) {
 // Only main can request a fresh snapshot; there is no renderer-callable method.
 const COMPANY_BACKUP_CLIENT_KEYS = [
   "omb-drafts", "omb-draft-attachments", "omb-draft-send-ids", "omb-draft-channel-modes",
-  "omb-skin", "omb-show-threads", "omb-show-run-card", "omb-show-unready-providers", "omb-send-key", "omb-color-user-bubbles", "openmausbot.sidebarDensity",
+  "omb-skin", "omb-skin-mode", "omb-skin-variants", "omb-show-threads", "omb-show-run-card", "omb-show-unready-providers", "omb-send-key", "omb-color-user-bubbles", "openmausbot.sidebarDensity",
   "openmausbot.sidebarCollapsedSections.v1", "openmausbot.sidebarSectionOrder.v1",
   "omb-analytics-opt-out", "openmausbot.remote-voice.v1",
 ];
@@ -183,6 +183,15 @@ const bridge = {
   approvals: {
     setMode: (botId, mode, options) => ipcRenderer.invoke("approvals:set-trusted-mode", botId, mode, options),
   },
+  /** Per-loopback-server API keys for local models, kept encrypted on this
+   * computer only. The renderer sets or clears a key and learns which bases
+   * have one; the key value itself never crosses back over this bridge, and
+   * never reaches the organization server. Absent on remote server pages. */
+  localModels: {
+    keyBases: () => ipcRenderer.invoke("local-models:key-bases"),
+    setKey: (base, key) => ipcRenderer.invoke("local-models:set-key", base, key),
+    clearKey: (base) => ipcRenderer.invoke("local-models:clear-key", base),
+  },
   localControl: {
     status: () => ipcRenderer.invoke("cua:linux-status"),
     enable: () => ipcRenderer.invoke("cua:linux-enable"),
@@ -254,6 +263,8 @@ const bridge = {
   /** Open a web link in the default browser. Unlike renderer window.open,
    * this remains reliable after an asynchronous API request. */
   openExternal: (url) => ipcRenderer.invoke("desktop:open-external", url),
+  /** A Connect card's sign-in page (grok.com or claude.ai only, checked by main). */
+  openConnectorSetup: (url) => ipcRenderer.invoke("desktop:open-connector-setup", url),
   /** Tell the window which skin the page wears, so the native chrome the
    * renderer cannot paint (the Windows caption-button overlay) matches. */
   applySkin: (skin) => ipcRenderer.invoke("desktop:skin", skin),
@@ -278,6 +289,30 @@ const bridge = {
       if (typeof language !== "string") return Promise.resolve(null);
       desktopLanguageCache = language;
       return ipcRenderer.invoke("desktop-language:set", language).catch(() => null);
+    },
+  },
+  /** Hardware acceleration and the spell checker, kept by main
+   * (electron/desktop-shell-preferences.mjs). get() answers at once. */
+  shellPreferences: {
+    get: () => {
+      try {
+        const value = ipcRenderer.sendSync("desktop-shell-preferences:get");
+        return value && typeof value === "object" ? value : null;
+      } catch {
+        return null;
+      }
+    },
+    set: (patch) => ipcRenderer.invoke("desktop-shell-preferences:set", patch).catch(() => null),
+    /** Settings > Appearance > Accessibility > Text size: the page's zoom
+     * (1 to 1.5), done by the window itself so viewport units stay true. */
+    setZoom: (factor) => {
+      if (typeof factor !== "number" || !Number.isFinite(factor)) return false;
+      try {
+        webFrame.setZoomFactor(Math.min(1.5, Math.max(1, factor)));
+        return true;
+      } catch {
+        return false;
+      }
     },
   },
   /** The person's custom app icon (Settings > Appearance): the page sends
@@ -343,6 +378,25 @@ const bridge = {
     ipcRenderer.on("desktop:notification-click", listener);
     return () => ipcRenderer.removeListener("desktop:notification-click", listener);
   },
+  /** The menu bar's bot list (macOS, Windows): [{id, name, color, working, unread}], at most nine. */
+  setTrayRoster: (roster, labels) => ipcRenderer.send("desktop:tray-roster", Array.isArray(roster) ? roster : [], labels && typeof labels === "object" ? labels : undefined),
+  /** A bot picked in the menu bar list or by its Cmd+Shift+N shortcut. */
+  onOpenBot: (cb) => {
+    const listener = (_event, value) => { if (value && typeof value.botId === "string") cb(value.botId); };
+    ipcRenderer.on("desktop:open-bot", listener);
+    return () => ipcRenderer.removeListener("desktop:open-bot", listener);
+  },
+  /** The bots' chord with 0 took a picture of the screen (base64 PNG), or
+   * could not (Screen Recording not granted): the page attaches it to the
+   * open bot's composer. Never sent by itself. */
+  onScreenCapture: (cb) => {
+    const listener = (_event, value) => {
+      if (value && typeof value.png === "string") cb({ png: value.png });
+      else cb({ error: value?.error === "permission" ? "permission" : "unavailable", platform: value?.platform === "darwin" ? "darwin" : value?.platform === "win32" ? "win32" : "other" });
+    };
+    ipcRenderer.on("desktop:screen-capture", listener);
+    return () => ipcRenderer.removeListener("desktop:screen-capture", listener);
+  },
   /** Presence: whether the person is at this computer ("active", "idle",
    * "locked" or "unknown") and the seconds since their last input. Safe on
    * an organization page: a state and a number, nothing else. */
@@ -405,7 +459,8 @@ const bridge = {
   setCredential: (name, value) => ipcRenderer.invoke("credential:set", name, value),
 
   /** In-app auto-update. Updates download by themselves; install is the
-   *  person's "Restart to update". State object:
+   *  person's "Restart to install": install({ confirmed: true }) from the
+   *  update dialog, otherwise main asks natively first. State object:
    *  { status: "idle"|"checking"|"downloading"|"preparing"|"downloaded"|"installing"|"handed-off"|"error",
    *    version?, percent?, message? }. onState fires immediately with the
    *    current state, then on every transition. Dormant in dev (no bridge). */
@@ -413,10 +468,19 @@ const bridge = {
     check: () => ipcRenderer.invoke("update:check"),
     download: () => ipcRenderer.invoke("update:download"),
     // An organization server's page restarts this app only on the person's click.
-    install: () => isLocalPage || navigator.userActivation?.isActive === true
-      ? ipcRenderer.invoke("update:install") : Promise.reject(new Error("Choose Restart to update.")),
+    install: (options) => isLocalPage || navigator.userActivation?.isActive === true
+      ? ipcRenderer.invoke("update:install", { confirmed: options?.confirmed === true })
+      : Promise.reject(new Error("Choose Restart to update.")),
     /** Opt in or out of pre-release versions (our GitHub releases only). */
     setPrereleases: (enabled) => ipcRenderer.invoke("update:set-prereleases", enabled === true),
+    /** The named channel: "stable" or "nightly". */
+    setChannel: (channel) => ipcRenderer.invoke("update:set-channel", channel === "nightly" ? "nightly" : "stable"),
+    /** Install a downloaded update while the person is away and no bot works. */
+    setAutoInstallAway: (enabled) => ipcRenderer.invoke("update:set-auto-install-away", enabled === true),
+    /** How many bots work now, so a restart can warn or wait for them. */
+    reportActivity: (count) => ipcRenderer.invoke("update:report-activity", Number(count) || 0),
+    /** Restart by itself once no bot works (one time). */
+    installWhenIdle: (enabled) => ipcRenderer.invoke("update:install-when-idle", enabled === true),
     onState: (cb) => {
       ipcRenderer
         .invoke("update:get-state")

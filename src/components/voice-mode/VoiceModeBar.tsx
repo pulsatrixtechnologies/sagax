@@ -31,6 +31,7 @@ import { formatCallTime, phaseLabel } from "@/lib/voice-mode/call-labels";
 
 export { formatCallTime, phaseLabel };
 import { VoiceModeSettingsPanel, type Enrollment, type VoiceModeList } from "./VoiceModeSettingsPanel";
+import { readableOr } from "../../../shared/human-id";
 
 /** The access card of a refused voice turn: shown in the speaker's own bar
  * only (the audience of every access card), never in the thread. */
@@ -257,7 +258,7 @@ export function VoiceModeBar(props: VoiceModeBarProps) {
       }
       call.interrupt();
       setPreviewing({ id: voiceId, loading: true });
-      const label = voices?.find((voice) => voice.id === voiceId)?.label ?? voiceId;
+      const label = readableOr(voices?.find((voice) => voice.id === voiceId)?.label ?? voiceId, t("ids.customVoice"));
       const unsubscribe = speaker.subscribe((snapshot) => {
         if (snapshot.status === "speaking") setPreviewing((current) => (current?.id === voiceId ? { id: voiceId, loading: false } : current));
       });

@@ -236,6 +236,29 @@ function spill(tool: string, text: string): string | undefined {
   }
 }
 
+/** Whether `text` is `value` serialized: the same data, object key order
+ * aside (a server may build the two copies differently); array order counts. */
+function sameJson(text: string, value: unknown): boolean {
+  try {
+    return sameValue(JSON.parse(text), value, 0);
+  } catch {
+    return false;
+  }
+}
+
+function sameValue(a: unknown, b: unknown, depth: number): boolean {
+  if (a === b) return true;
+  if (depth > 200 || !a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, i) => sameValue(item, b[i], depth + 1));
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length
+    && keys.every((key) => Object.hasOwn(right, key) && sameValue(left[key], right[key], depth + 1));
+}
+
 /** Rewrite one `tools/call` result in place. Returns true when anything was
  * actually trimmed, so the caller can report it on stderr. */
 function trimCallResult(result: Json, tool: string): boolean {
@@ -255,21 +278,32 @@ function trimCallResult(result: Json, tool: string): boolean {
 
   const share = Math.floor(BUDGET / textBlocks.length);
   const path = spill(tool, textBlocks.map((block) => block.text).join("\n"));
+  // The usual shape: one text block that is structuredContent serialized.
+  const structuredIsText = textBlocks.length === 1 && Boolean(result.structuredContent) && typeof result.structuredContent === "object"
+    && sameJson(textBlocks[0]!.text, result.structuredContent);
   let trimmed = false;
+  let keptValue: unknown;
   for (const block of textBlocks) {
     const outcome = trimResultText({ text: block.text, budget: share, spillPath: path, spillHint: SPILL_HINT, toolName: tool });
     if (!outcome.trimmed) continue;
     block.text = outcome.text;
+    keptValue = outcome.value;
     trimmed = true;
   }
 
   // A tool that also answers with structuredContent would otherwise hand the
-  // provider a second, full copy of everything just cut. Trim it the same way
-  // — structurally only, so it stays valid against the tool's output schema —
-  // and leave it untouched when it cannot be cut without mangling it.
+  // provider a second, full copy of everything just cut. When it is the same
+  // data as the text, it keeps exactly the records the text kept; otherwise
+  // it is trimmed the same way on its own, structurally only so it stays
+  // valid against the tool's output schema, and left untouched when it
+  // cannot be cut without mangling it.
   if (trimmed && result.structuredContent && typeof result.structuredContent === "object") {
-    const structured = trimStructured(result.structuredContent, BUDGET);
-    if (structured) result.structuredContent = structured.value as Json;
+    if (structuredIsText && keptValue && typeof keptValue === "object") {
+      result.structuredContent = keptValue as Json;
+    } else {
+      const structured = trimStructured(result.structuredContent, BUDGET);
+      if (structured) result.structuredContent = structured.value as Json;
+    }
   }
   return trimmed;
 }

@@ -35,4 +35,16 @@ describe("readUseToolCall", () => {
     expect(readUseToolCall({ variant: "UseTool" })).toBeUndefined();
     expect(readUseToolCall({ command: "ls" })).toBeUndefined();
   });
+
+  it("reads the first tool_call of grok 1.0.62, which carries no variant, by its title or meta", () => {
+    // measured 2026-10-22: tool_call rawInput is { tool_name, tool_input };
+    // only the later tool_call_update adds variant "UseTool"
+    const raw = { tool_name: "perspicax__api_list", tool_input: {} };
+    expect(readUseToolCall(raw)).toBeUndefined();
+    expect(readUseToolCall(raw, { title: "use_tool" })).toEqual({ id: "mcp__perspicax__api_list", args: {} });
+    expect(readUseToolCall(raw, { meta: { "x.ai/tool": { kind: "use_tool", name: "use_tool" } } })).toEqual({ id: "mcp__perspicax__api_list", args: {} });
+    expect(readUseToolCall(raw, { title: "Use Tool" })).toEqual({ id: "mcp__perspicax__api_list", args: {} });
+    // another tool that happens to take a tool_name stays itself
+    expect(readUseToolCall(raw, { title: "run_terminal_command" })).toBeUndefined();
+  });
 });

@@ -273,25 +273,21 @@ describe("Activity, live only", () => {
     expect(idle).not.toContain("Ongoing activities");
     expect(idle).not.toContain("No background work");
     expect(idle).not.toContain("data-activity-empty");
-    // something parallel runs: Activity only
+    // other work running (a routine, a bot-to-bot hop) is not shown here:
+    // it lives in the chat and in Automations (JC 2026-10-19)
     const busy = sections({ items: [routine, chat], subagents: [] });
-    expect(busy).toContain('data-bot-settings-section="activity"');
-    expect(busy).not.toContain('data-bot-settings-section="coding"');
-    expect(busy).toContain("data-activity-card=\"run:r1\"");
-    expect(busy).not.toContain("data-activity-card=\"thread:chat\"");
+    expect(busy).not.toContain('data-bot-settings-section="activity"');
+    expect(busy).not.toContain("data-activity-card");
   });
 
-  it("draws Ongoing activities first, above Coding, with no separate history row", () => {
+  it("draws no Ongoing activities section, Coding alone", () => {
     const code = job("thread:code", { coding: true, status: "running", endedAt: undefined });
     const items = [routine, code];
     const html = renderToStaticMarkup(createElement(PanelSections, { list: { items, subagents: [] }, live: liveOf(items), actions: { onOpen: () => {}, now: NOW }, onOpenHistory: () => {} }));
-    expect(html).toContain(">Ongoing activities<");
-    const at = (needle: string) => html.indexOf(needle);
-    expect(at('data-bot-settings-section="activity"')).toBeGreaterThan(-1);
-    expect(at('data-bot-settings-section="activity"')).toBeLessThan(at('data-bot-settings-section="coding"'));
-    expect(at('data-activity-history="all"')).toBe(-1);
-    // the cards keep their actions: open and stop
-    expect(html).toContain('data-activity-card="run:r1"');
+    expect(html).not.toContain("Ongoing activities");
+    expect(html).toContain('data-bot-settings-section="coding"');
+    expect(html).not.toContain('data-bot-settings-section="activity"');
+    expect(html).not.toContain('data-activity-card="run:r1"');
   });
 });
 
@@ -303,6 +299,19 @@ const codeJob = (id: string, over: Partial<BotActivityItem> = {}) => job(id, {
 
 describe("history and errors", () => {
   const props = (over: Partial<Parameters<typeof PanelSections>[0]> = {}) => ({ list: { items: [], subagents: [] }, live: liveOf([]), actions: { onOpen: () => {}, now: NOW }, onOpenHistory: () => {}, ...over });
+
+  it("draws no All history row when the person hid it (Settings > Appearance)", () => {
+    const html = renderToStaticMarkup(createElement(PanelSections, props({ showAllHistory: false })));
+    expect(html).not.toContain(">All history<");
+    expect(html).not.toContain('data-activity-history="all"');
+  });
+
+  it("is hidden by default in the panel: ActivitySection reads the preference", () => {
+    const source = readFileSync(new URL("./ActivitySection.tsx", import.meta.url), "utf8");
+    expect(source).toContain("showAllHistory={showAllHistory}");
+    expect(source).toContain("useShowAllHistory()");
+    expect(source).toContain("watchBotHistoryRequests(bot.id");
+  });
 
   it("keeps the history reachable through one quiet All history row when no section is drawn", () => {
     const html = renderToStaticMarkup(createElement(PanelSections, props()));
@@ -327,8 +336,8 @@ describe("history and errors", () => {
     // a section is drawn: its title opens the history, and the extra row goes
     const routine = job("run:r1", { kind: "routine", status: "running", endedAt: undefined });
     const busy = renderToStaticMarkup(createElement(PanelSections, props({ list: { items: [routine], subagents: [] }, live: liveOf([routine]) })));
-    expect(busy).toContain('data-activity-history="other"');
-    expect(busy).not.toContain('data-activity-history="all"');
+    expect(busy).not.toContain('data-activity-history="other"');
+    expect(busy).toContain('data-activity-history="all"');
     // still loading: nothing at all
     expect(renderToStaticMarkup(createElement(PanelSections, props({ list: null })))).toBe("");
   });
@@ -348,7 +357,7 @@ describe("history and errors", () => {
 });
 
 describe("Coding, code work only", () => {
-  const pr = { repo: "acme/parser", number: 42, title: "Split the lexer", url: "https://github.com/acme/parser/pull/42", action: "opened" as const, at: NOW - 3_600_000 };
+  const pr = { repo: "acme/parser", number: 42, title: "Split the lexer", url: "https://github.com/acme/parser/pull/42", action: "opened" as const, branch: "fix/lexer", at: NOW - 3_600_000 };
   const shipped = codeJob("thread:ship", {
     code: {
       folder: "/srv/repos/parser", branch: "fix/lexer", repo: "acme/parser", repoUrl: "https://github.com/acme/parser",
@@ -375,13 +384,18 @@ describe("Coding, code work only", () => {
     expect(html).toContain("acme/parser · Opened · 1 h ago");
     expect(html).toContain('data-code-link="https://github.com/acme/parser/pull/42"');
     expect(html).toContain(">Branches<");
-    expect(html).toContain("acme/parser · Pushed");
+    // a branch is a grouped card row like a routine's: status pill, where and when
+    expect(html).toContain('data-branch-status="open"');
+    expect(html).toContain("PR #42 open");
+    expect(html).toContain("acme/parser · 1 h ago");
     expect(html).toContain(">Commits<");
     expect(html).toContain("fix: split the lexer");
     expect(html).toContain("1a2b3c4 · fix/lexer · Pushed");
     // a row without a page is not a link
     const local = renderToStaticMarkup(createElement(CodeWorkList, { work: { pullRequests: [], branches: [{ name: "spike", pushed: false, at: NOW }], commits: [] }, now: NOW }));
-    expect(local).toContain("Not pushed · just now");
+    expect(local).toContain('data-branch-status="local"');
+    expect(local).toContain(">Not pushed<");
+    expect(local).toContain("just now");
     expect(local).not.toContain("data-code-link");
     expect(local).not.toContain("Pull requests");
   });
@@ -471,8 +485,7 @@ describe("launched agents by kind of work", () => {
     expect(coding).toContain("Scout: Split the lexer");
     expect(coding).not.toContain("Dispatch");
     expect(coding).not.toContain("Orion");
-    expect(activity).toContain("Dispatch");
-    expect(activity).toContain("Orion: @Cryptic · work");
+    expect(activity).toBe("");
   });
 
   it("no coding agent: the Coding section is not drawn for other launched work", () => {
@@ -550,8 +563,7 @@ describe("section headers and history", () => {
     expect(html).not.toContain(">All history<");
     expect(html).not.toContain("data-activity-see-all");
     expect(html).toContain('data-activity-history="coding"');
-    expect(html).toContain('data-activity-history="other"');
-    expect(html.indexOf('data-bot-settings-section="activity"')).toBeLessThan(html.indexOf('data-bot-settings-section="coding"'));
+    expect(html).not.toContain('data-activity-history="other"');
     expect(html).not.toContain('data-activity-history="all"');
   });
 
@@ -612,12 +624,11 @@ describe("one place for ongoing work while the bot panel is open", () => {
     const { fileURLToPath } = await import("node:url");
     const app = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../App.tsx"), "utf8");
     const screen = details + header;
-    expect(screen.split('data-activity-card="thread:w1"')).toHaveLength(2);
-    expect(screen.split(">Ongoing activities<")).toHaveLength(2);
+    expect(screen).not.toContain('data-activity-card="thread:w1"');
+    expect(screen).not.toContain("Ongoing activities");
     expect(header).toBe("");
     expect(app).not.toMatch(/data-background-work-panel|BackgroundWorkPanel/);
-    // the stop action stays in Details
-    expect(details).toContain('data-activity-stop="thread:w1"');
+    expect(details).not.toContain("data-activity-stop");
   });
 
   it("keeps the header chip as an entry point while the panel is closed", () => {

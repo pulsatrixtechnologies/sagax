@@ -99,6 +99,11 @@ final class Session: ObservableObject {
     /// Per bot, a topic made for a fresh draft whose first message has not
     /// gone through yet: a retry goes there, never into a second topic.
     var createdFreshTopics: [String: String] = [:]
+    /// Per bot, a thread the chat on screen for that bot moves to in place
+    /// (Go to message from the bot panel's Links): consumed by ChatView.
+    /// The panel only opens over that chat today; a door to it from
+    /// anywhere else needs its own way to open the chat.
+    @Published var threadSwitches: [String: ThreadSwitch] = [:]
     @Published private(set) var notificationAuthorization: UNAuthorizationStatus = .notDetermined
     /// Distinguishes a real `.notDetermined` result from the in-memory value
     /// used while notification settings are still loading at launch.
@@ -165,6 +170,20 @@ final class Session: ObservableObject {
     /// dial moves to another stored host. The keychain remains the only place
     /// it is persisted.
     private var token: String?
+    /// Why the session ended when `status` is `.unauthorized`: the server's
+    /// `code` (`session_revoked`, `idp_session_ended`...), `server_changed`,
+    /// or nil when every token this phone holds kept being refused.
+    @Published private(set) var sessionEndCode: String?
+    /// One check after a burst of 401s, shared by every request that saw one,
+    /// for the connection and token it was started for.
+    private var authRecoveryTask: Task<UnauthorizedRecovery.Outcome, Never>?
+    private var authRecoveryKey: (connectionID: String, token: String)?
+    /// When a check last found the token in use still valid: other 401s in
+    /// the next moments (a route's own refusal) start no new check.
+    private var authRecoveryValidAt: Date?
+    /// Tokens the server refused and the app moved away from: a stale copy
+    /// left in the Keychain (a save that failed) is never taken back.
+    private var refusedTokens: Set<String> = []
     /// Which of the connection's stored hosts the next attempt dials. The
     /// walk advances on address-shaped failures and the winner is promoted —
     /// and persisted — when a stream goes live.
@@ -252,6 +271,9 @@ final class Session: ObservableObject {
         NotificationCoordinator.shared.responseHandler = { [weak self] target in
             Task { @MainActor in await self?.openNotification(target) }
         }
+        NotificationCoordinator.shared.approvalHandler = { decision in
+            await NotificationApprovalRunner.run(decision)
+        }
         // APNs (PushRegistrar.swift): the server this phone is signed in to
         // gets its token; a push that wakes the app recounts the badge.
         PushRegistrar.shared.activeClient = { [weak self] in
@@ -284,16 +306,21 @@ final class Session: ObservableObject {
         }
         if (arguments.contains("-store-preview") || arguments.contains("-computer-switcher-preview")),
            let url = Bundle.main.url(
-               forResource: arguments.contains("-cards-preview") ? "CardsPreview" : arguments.contains("-images-preview") ? "ImagePreview" : arguments.contains("-chat-update-preview") ? "ChatUpdatePreview" : arguments.contains("-chat-presentation-preview") ? "ChatPresentationPreview" : arguments.contains("-roster-preview") ? "RosterPreview" : arguments.contains("-threads-preview") ? "ThreadPreview" : arguments.contains("-open-thread-preview") ? "OpenThreadPreview" : "StorePreview",
+               forResource: arguments.contains("-cards-preview") ? "CardsPreview" : arguments.contains("-images-preview") ? "ImagePreview" : arguments.contains("-chat-update-preview") ? "ChatUpdatePreview" : arguments.contains("-chat-presentation-preview") ? "ChatPresentationPreview" : arguments.contains("-roster-preview") ? "RosterPreview" : arguments.contains("-threads-preview") ? "ThreadPreview" : arguments.contains("-open-thread-preview") ? "OpenThreadPreview" : arguments.contains("-bot-conversation-preview") ? "BotConversationPreview" : "StorePreview",
                withExtension: "json"
            ),
            let data = try? Data(contentsOf: url),
            let fleet = try? JSONDecoder().decode(Fleet.self, from: data) {
+            // The tailnet host is the one this fixture pairing consented to
+            // (d4b073b3a: a tailnet route without it builds no request, and
+            // the image and voice previews said "That address doesn't look
+            // right" instead of loading).
             let preview = Connection(
                 id: "preview-current",
                 name: "Milind’s MacBook Pro",
                 host: "preview.tailnet.ts.net",
-                port: 8810
+                port: 8810,
+                allowedTailnetHost: "preview.tailnet.ts.net"
             )
             connection = preview
             if arguments.contains("-computer-switcher-preview") {
@@ -301,7 +328,8 @@ final class Session: ObservableObject {
                     id: "preview-other",
                     name: "MacBook Air",
                     host: "air.tailnet.ts.net",
-                    port: 8810
+                    port: 8810,
+                    allowedTailnetHost: "air.tailnet.ts.net"
                 )
                 registry = CompanionConnectionRegistry(
                     connections: [preview, other],
@@ -315,6 +343,11 @@ final class Session: ObservableObject {
                 let config = URLSessionConfiguration.ephemeral
                 config.protocolClasses = [ImagePreviewProtocol.self]
                 client = CompanionClient(connection: preview, token: "image-fixture-token", session: URLSession(configuration: config))
+            }
+            if arguments.contains("-bot-conversation-preview") {
+                let config = URLSessionConfiguration.ephemeral
+                config.protocolClasses = [BotConversationPreviewProtocol.self]
+                client = CompanionClient(connection: preview, token: "conversation-fixture-token", session: URLSession(configuration: config))
             }
             if arguments.contains("-voice-preview") {
                 let config = URLSessionConfiguration.ephemeral
@@ -469,6 +502,17 @@ final class Session: ObservableObject {
             return
         }
         guard let stored else {
+            // No token under this record: another record of the same server
+            // may hold one (a sign-in saved before records were merged).
+            // Adopt it rather than dropping to sign-in.
+            if let adopted = Keychain.candidates(for: registry.credentialSiblings(of: saved).map(\.id), excluding: nil).first,
+               (try? Keychain.save(adopted.token, for: saved.id, removingDuplicates: [adopted.connectionID])) != nil {
+                registry.remove(id: adopted.connectionID)
+                persistRegistry()
+                connections = registry.connections
+                configureActiveConnection(saved, token: adopted.token)
+                return
+            }
             registry.remove(id: saved.id)
             persistRegistry()
             connections = registry.connections
@@ -477,6 +521,140 @@ final class Session: ObservableObject {
         }
 
         configureActiveConnection(saved, token: stored)
+    }
+
+    /// The saved record a new sign-in or pairing replaces: the active one
+    /// when it is the same server, else any record of the same server.
+    private func existingRecord(for stored: Connection) -> Connection? {
+        let sameServer = registry.duplicates(of: stored)
+        if let active = registry.activeConnection, sameServer.contains(where: { $0.id == active.id }) {
+            return active
+        }
+        return sameServer.first ?? registry.matchingConnection(for: stored)
+    }
+
+    // MARK: - Staying signed in
+
+    /// A request was answered 401. Never a sign-out by itself: the session is
+    /// checked again in the background (`recoverAuthorization`).
+    func handleUnauthorized() {
+        guard !isDemo, client != nil, status != .unauthorized else { return }
+        if let validAt = authRecoveryValidAt, Date().timeIntervalSince(validAt) < 30 { return }
+        Task { [weak self] in _ = await self?.recoverAuthorization() }
+    }
+
+    private func cancelAuthRecovery() {
+        authRecoveryTask?.cancel()
+        authRecoveryTask = nil
+        authRecoveryKey = nil
+        authRecoveryValidAt = nil
+    }
+
+    /// Check the session after a 401, once for a whole burst. Probes the
+    /// token in use, then every other copy this phone holds for the same
+    /// server (both Keychain groups, duplicate records); adopts one that
+    /// works; signs out only on a definitive server code or after repeated
+    /// refusals with no working copy. Nothing is deleted on the server or in
+    /// the Keychain here.
+    @discardableResult
+    private func recoverAuthorization() async -> UnauthorizedRecovery.Outcome {
+        guard let connection, let token, let client else { return .undecided }
+        let connectionID = connection.id
+        if let running = authRecoveryTask {
+            // Join only a check about this very connection and token.
+            guard authRecoveryKey?.connectionID == connectionID, authRecoveryKey?.token == token else {
+                return .undecided
+            }
+            return await running.value
+        }
+        // Another record's copy only travels over a route that protects
+        // credentials (https, tailnet), and only for the same server.
+        let siblings = client.connection.activeEndpoint?.protectsCredentials == true
+            ? registry.credentialSiblings(of: connection).map(\.id) : []
+        let ids = [connectionID] + siblings
+        let refused = refusedTokens
+        let task = Task { @MainActor () -> UnauthorizedRecovery.Outcome in
+            await UnauthorizedRecovery.run(
+                current: token,
+                candidates: { Keychain.candidates(for: ids, excluding: token).filter { !refused.contains($0.token) } },
+                probe: { candidate in await client.replacingToken(candidate).probeAuthorization() },
+                sleep: { seconds in try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) }
+            )
+        }
+        authRecoveryTask = task
+        authRecoveryKey = (connectionID, token)
+        let outcome = await task.value
+        if authRecoveryTask == task {
+            authRecoveryTask = nil
+            authRecoveryKey = nil
+        }
+        // A new sign-in, a switch or a sign-out happened meanwhile: this
+        // answer is about a token no longer in use.
+        guard self.connection?.id == connectionID, self.token == token else { return .undecided }
+        switch outcome {
+        case .recovered(nil):
+            authRecoveryValidAt = Date()
+        case .undecided:
+            break
+        case let .recovered(candidate?):
+            refusedTokens.insert(token)
+            adoptToken(candidate, for: connectionID)
+        case let .signedOut(code):
+            log.error("session ended: \(code ?? "refused", privacy: .public)")
+            sessionEndCode = code
+            status = .unauthorized
+            // The stream holds the same ended session: stop it (run() also
+            // returns on its own when it was the one asking).
+            streamGeneration += 1
+            streamTask?.cancel()
+            streamTask = nil
+        }
+        return outcome
+    }
+
+    /// A fresher copy of the token works: it becomes the one copy for this
+    /// record, the record it came from (a duplicate) is dropped, and the
+    /// live client switches to it.
+    private func adoptToken(_ candidate: CredentialCandidate, for connectionID: String) {
+        log.notice("session recovered with a fresher token")
+        let duplicate = candidate.connectionID == connectionID ? [] : [candidate.connectionID]
+        do {
+            try Keychain.save(candidate.token, for: connectionID, removingDuplicates: duplicate)
+            for id in duplicate { registry.remove(id: id) }
+            if !duplicate.isEmpty {
+                persistRegistry()
+                connections = registry.connections
+            }
+        } catch {
+            // Locked Keychain: use it now, write it on the next recovery.
+            log.error("could not save the recovered token: \(error.localizedDescription, privacy: .public)")
+        }
+        token = candidate.token
+        client = client?.replacingToken(candidate.token)
+        PushRegistrar.shared.forgetRegistration(connectionID: connectionID)
+    }
+
+    /// Coming to the front: the Keychain is the one source of truth. If it
+    /// holds another token for this record than the one in memory (a sign-in
+    /// that finished elsewhere), use it before any request goes out.
+    private func adoptStoredTokenIfNewer() {
+        guard !isDemo, let connection, let current = token,
+              let stored = (try? Keychain.token(for: connection.id)) ?? nil,
+              !stored.isEmpty, stored != current, !refusedTokens.contains(stored)
+        else { return }
+        log.notice("using the token saved in the Keychain")
+        token = stored
+        client = client?.replacingToken(stored)
+        PushRegistrar.shared.forgetRegistration(connectionID: connection.id)
+        restartStream()
+    }
+
+    /// "Sign in again" on the ended-session screen: open sign-in for the same
+    /// server, keeping the saved record. A successful sign-in replaces the
+    /// token of this record; nothing is forgotten or unregistered before.
+    func signInAgain() {
+        if isDemo { exitDemo(); return }
+        beginPairing(connection?.pairedWithServer == true ? .organization : .computer)
     }
 
     /// Redeem a one-time pairing credential. On success the device token goes
@@ -513,7 +691,7 @@ final class Session: ObservableObject {
             stored.serverEnvironmentId = paired.environment.environmentId
             stored.serverScopes = paired.session.scopes
             stored.companionDeviceId = nil
-            if let existing = registry.matchingConnection(for: stored) {
+            if let existing = existingRecord(for: stored) {
                 stored.id = existing.id
             }
             try commitPairing(stored, token: paired.token)
@@ -542,7 +720,7 @@ final class Session: ObservableObject {
         if stored.endpoints?.isEmpty != false {
             stored.hosts = Array(stored.orderedHosts.prefix(8))
         }
-        if let existing = registry.matchingConnection(for: stored) {
+        if let existing = existingRecord(for: stored) {
             stored.id = existing.id
         }
         try commitPairing(stored, token: paired.token, winner: winner)
@@ -553,9 +731,14 @@ final class Session: ObservableObject {
     /// credential. Shared by companion and server pairing; `winner` is the
     /// route that answered, which a server pairing (one route) has no use for.
     private func commitPairing(_ stored: Connection, token: String, winner: CompanionEndpoint? = nil) throws {
-        try Keychain.save(token, for: stored.id)
+        // One copy of the token, in the shared group the extensions read:
+        // the legacy copy and any other record of the same server (an older
+        // sign-in with a dead token) go, so nothing stale is picked later.
+        let duplicates = registry.duplicates(of: stored).map(\.id)
+        try Keychain.save(token, for: stored.id, removingDuplicates: duplicates)
         let firstPairing = registry.connections.isEmpty
         var updatedRegistry = registry
+        for duplicate in duplicates { updatedRegistry.remove(id: duplicate) }
         updatedRegistry.upsert(stored)
         // Write the first-pair education marker before making the connection
         // restorable. If the process stops between these writes, an orphan
@@ -596,6 +779,9 @@ final class Session: ObservableObject {
         // A fresh pairing settles any restore that was still waiting on the
         // keychain — the token is in hand, so there is nothing left to retry.
         restorePending = false
+        cancelAuthRecovery()
+        sessionEndCode = nil
+        PushRegistrar.shared.forgetRegistration(connectionID: stored.id)
         connect()
     }
 
@@ -631,6 +817,8 @@ final class Session: ObservableObject {
             pairingRequested = true
         case let .chat(threadId):
             openChat(threadId: threadId)
+        case let .bot(id):
+            openBot(id: id)
         case .inbox:
             pendingInbox = true
         }
@@ -646,6 +834,17 @@ final class Session: ObservableObject {
     func openChat(threadId: String) {
         guard let chat = state.chat(forThread: threadId) else { return }
         pendingChat = chat
+    }
+
+    /// `sagax://bot/<id>`: that bot's (or room's) current conversation. An
+    /// id this phone does not know lands on the roster silently, like a
+    /// stale chat link.
+    func openBot(id: String) {
+        if let bot = state.bot(id) {
+            pendingChat = .bot(bot)
+        } else if let room = state.rooms.first(where: { $0.id == id }) {
+            pendingChat = .room(room)
+        }
     }
 
     func consumePendingChat() {
@@ -796,7 +995,10 @@ final class Session: ObservableObject {
         let wasActive = registry.activeConnectionID == id
         // A server session is ended on the server too, best effort: the
         // bearer is discarded locally either way.
-        if let token = try? Keychain.token(for: id) {
+        // A session the server already ended has nothing left to end there:
+        // its bearer is refused, so no DELETE /api/push/devices with it.
+        let sessionEnded = wasActive && status == .unauthorized
+        if !sessionEnded, let token = try? Keychain.token(for: id) {
             let client = CompanionClient(connection: forgotten, token: token)
             let endsSession = forgotten.pairedWithServer
             // that server stops pushing to this phone, then the session ends
@@ -874,6 +1076,8 @@ final class Session: ObservableObject {
         resetAttachmentCache()
         attachmentSendIDs.removeAll()
         NotificationCoordinator.shared.setBadge(0)
+        cancelAuthRecovery()
+        sessionEndCode = nil
         status = .unpaired
     }
 
@@ -887,6 +1091,8 @@ final class Session: ObservableObject {
         rotation = CandidateRotation(endpoints: saved.orderedEndpoints)
         let first = rotation.currentEndpoint.map(saved.dialing) ?? saved
         client = CompanionClient(connection: first, token: stored)
+        cancelAuthRecovery()
+        sessionEndCode = nil
         status = .connecting
     }
 
@@ -897,6 +1103,7 @@ final class Session: ObservableObject {
         streamTask = nil
         endpointRefreshTask?.cancel()
         endpointRefreshTask = nil
+        cancelAuthRecovery()
         restorePending = false
         endLinger()
         pendingNotification = nil
@@ -911,6 +1118,13 @@ final class Session: ObservableObject {
     }
 
     private func persistRegistry() {
+#if DEBUG
+        // The parity harness's fixture server is held in memory only: an
+        // endpoint update during a parity run saved it as this device's
+        // pairing (without its token), and every later launch, the demo's
+        // included, opened that dead pairing instead.
+        if ParityLaunch.current != nil { return }
+#endif
         SagaxSharedConnectionStore.saveRegistry(registry)
     }
 
@@ -931,6 +1145,7 @@ final class Session: ObservableObject {
         // purpose. Coming to the front is the moment worth retrying on: the
         // app is on screen, so the phone is in someone's hand and unlocked.
         if client == nil, restorePending { restore() }
+        adoptStoredTokenIfNewer()
         if client != nil, let pendingNotification {
             self.pendingNotification = nil
             Task { [weak self] in await self?.openNotification(pendingNotification) }
@@ -1066,6 +1281,7 @@ final class Session: ObservableObject {
                 if Task.isCancelled { return }
                 if let live, live.environmentId != expected {
                     log.error("server identity changed: \(expected, privacy: .public) is now \(live.environmentId, privacy: .public)")
+                    sessionEndCode = SessionEndReason.serverChanged
                     status = .unauthorized
                     return
                 }
@@ -1096,6 +1312,8 @@ final class Session: ObservableObject {
                         status = .live
                         // this server pushes to the phone while the app is closed
                         Task { await PushRegistrar.shared.sync() }
+                        // phone tools: what this phone offers, and any request waiting
+                        PhoneToolCenter.shared.streamOpened(self)
                         // Remember what actually carried the stream for
                         // display and legacy ordering. Typed routes retain
                         // their explicit security priority next launch.
@@ -1107,6 +1325,10 @@ final class Session: ObservableObject {
                     if streamed { foldQuietly { state.apply(frame) } } else { state.apply(frame) }
                     // people: presence and labels (#167, #172)
                     PeopleDirectory.shared.apply(frame.frame)
+                    // a bot asks this phone for a tool (Features/PhoneTools)
+                    if case let .unknown(kind) = frame.frame, kind == "phone-tools" {
+                        Task { await PhoneToolCenter.shared.refresh() }
+                    }
                     // a routine changed or ran: the account's routines badge
                     if case let .unknown(kind) = frame.frame, kind.hasPrefix("routine") {
                         Task { await AccountRowModel.shared.refresh(self) }
@@ -1140,9 +1362,27 @@ final class Session: ObservableObject {
                 log.notice("stream ended without an error")
                 status = .offline("Lost the connection.")
             } catch let error as APIError where error.isUnauthorized {
-                log.error("stream refused: unauthorized")
-                status = .unauthorized
-                return
+                // A 401 is not a sign-out by itself (a server restart, a
+                // stale copy of the token): check again, try every copy of
+                // the token this phone holds, and sign out only when the
+                // server says the session is over.
+                log.error("stream refused: unauthorized, checking the session")
+                switch await recoverAuthorization() {
+                case .recovered(.some):
+                    // A fresher token: reconnect with it now.
+                    reconnectDelay = 0
+                    continue
+                case .recovered(nil):
+                    // The token works, the stream did not: the usual
+                    // backoff below, never a tight loop.
+                    if Task.isCancelled { return }
+                    status = .offline(String(localized: "Reconnecting to Sagax..."))
+                case .signedOut:
+                    return
+                case .undecided:
+                    if Task.isCancelled { return }
+                    status = .offline(String(localized: "Reconnecting to Sagax..."))
+                }
             } catch {
                 // backgrounding cancels the stream on purpose; that is not a
                 // failure to report, and it must not be retried
@@ -1324,7 +1564,7 @@ final class Session: ObservableObject {
             )
             return .sent
         } catch let error as APIError {
-            if error.isUnauthorized { status = .unauthorized }
+            if error.isUnauthorized { handleUnauthorized() }
             if case let .status(_, message) = error { return .failed(refused: true, message: message ?? error.errorDescription) }
             return .failed(refused: false, message: nil)
         } catch {
@@ -1461,6 +1701,11 @@ final class Session: ObservableObject {
                 createdFreshTopics[startedTopic.botId] = nil
                 freshTopics[startedTopic.botId] = nil
                 startedTopics[startedTopic.botId] = startedTopic.threadId
+                // the bot picked again from now on opens the new topic, not
+                // the one under the draft
+                if let topic = state.bot(startedTopic.botId)?.projected(forThread: startedTopic.threadId) {
+                    threadSelection.rememberThread(.bot(topic), connectionID: connectionID)
+                }
             }
             // The send succeeded on the computer it was addressed to, so the
             // draft clears either way. Its queue row belongs to that computer,
@@ -1474,8 +1719,10 @@ final class Session: ObservableObject {
         } catch is CancellationError {
             return false
         } catch let error as APIError where error.isUnauthorized {
-            status = .unauthorized
-            actionError = error.localizedDescription
+            // Never a sign-out by itself: the session is checked again
+            // quietly; the draft stays for a retry.
+            handleUnauthorized()
+            actionError = String(localized: "Sagax is reconnecting. Your message was not sent; try again in a moment.")
             return false
         } catch {
             actionError = error.localizedDescription
@@ -1541,7 +1788,7 @@ final class Session: ObservableObject {
         do {
             return try await client.updateClaude(instanceId: instanceId)
         } catch let error as APIError where error.isUnauthorized {
-            status = .unauthorized
+            handleUnauthorized()
             throw error
         }
     }
@@ -1611,7 +1858,7 @@ final class Session: ObservableObject {
             guard generation == attachmentCacheGeneration, !Task.isCancelled else {
                 throw CancellationError()
             }
-            status = .unauthorized
+            handleUnauthorized()
             throw error
         } catch {
             if Task.isCancelled || generation != attachmentCacheGeneration {
@@ -1894,7 +2141,7 @@ final class Session: ObservableObject {
                 envelope: prepared.envelope
             )
         } catch let error as APIError where error.isUnauthorized {
-            status = .unauthorized
+            handleUnauthorized()
             throw error
         }
     }
@@ -2011,7 +2258,7 @@ final class Session: ObservableObject {
             let updated = try await client.setGroupPinned(groupId: room.id, pinned: pinned)
             state.apply(.room(updated))
         } catch let error as APIError where error.isUnauthorized {
-            status = .unauthorized
+            handleUnauthorized()
         } catch {
             groupPinsSupported = false
         }
@@ -2201,7 +2448,7 @@ final class Session: ObservableObject {
         do {
             return try await client.cloudDesktop(botId: bot.id).url
         } catch let error as APIError where error.isUnauthorized {
-            status = .unauthorized
+            handleUnauthorized()
             throw error
         }
     }
@@ -2807,6 +3054,30 @@ final class Session: ObservableObject {
         catch { actionError = error.localizedDescription; return nil }
     }
 
+    /// `present`, `away` or `unknown`. Nil when the computer did not answer.
+    func loadRoutineAwayState() async -> String? {
+        guard let client else { return nil }
+        return try? await client.routineAwayState()
+    }
+
+    func markRoutineAwaySeen(_ routine: Routine) async -> Routine? {
+        guard let client else { return nil }
+        do { return try await client.markRoutineAwaySeen(id: routine.id) }
+        catch { actionError = error.localizedDescription; return nil }
+    }
+
+    func loadTriggers() async -> (hooks: [WebhookListing], baseURL: String?) {
+        guard let client else { return ([], nil) }
+        guard let list = try? await client.webhooks() else { return ([], nil) }
+        return (list.webhooks, list.ingress?.baseUrl)
+    }
+
+    func setWebhookEnabled(id: String, enabled: Bool) async -> WebhookListing? {
+        guard let client else { return nil }
+        do { return try await client.setWebhookEnabled(id: id, enabled: enabled) }
+        catch { actionError = error.localizedDescription; return nil }
+    }
+
     func runRoutine(_ routine: Routine) async -> RoutineRun? {
         guard let client else { return nil }
         do { return try await client.runRoutine(id: routine.id) }
@@ -3084,6 +3355,19 @@ final class Session: ObservableObject {
         if state.bots[botIndex].threadId == threadId { state.bots[botIndex].pinnedMessageId = messageId }
     }
 
+    /// Go to message on a link of one bot (its panel's Links tab): the
+    /// link's conversation becomes the bot's selection and the chat on
+    /// screen for that bot switches to it in place, as a thread chip does,
+    /// never a second chat screen over it; then the message.
+    func showLinkMessage(_ messageId: String, botId: String, threadId: String) async {
+        if state.bot(botId)?.threadId != threadId {
+            let opened = await openThread(ThreadRef(botId: botId, threadId: threadId, title: ""), shownBotId: botId)
+            guard opened == threadId else { return }
+        }
+        threadSwitches[botId] = ThreadSwitch(threadId: threadId)
+        await jump(to: messageId, inThread: threadId)
+    }
+
     /// Scroll a conversation to one of its messages (a reply quote, the
     /// pinned banner). A message outside the loaded page is fetched around
     /// first, the way a search hit is.
@@ -3131,26 +3415,6 @@ final class Session: ObservableObject {
         }
     }
 
-    // MARK: - Connected apps
-
-    func loadConnectorCatalog() async -> ConnectorCatalog? {
-        guard let client else { return nil }
-        do { return try await client.connectorCatalog() }
-        catch { actionError = error.localizedDescription; return nil }
-    }
-
-    func loadAllConnectorStatuses() async -> ConnectorStatuses? {
-        guard let client else { return nil }
-        do { return try await client.allConnectorStatuses() }
-        catch { actionError = error.localizedDescription; return nil }
-    }
-
-    func authorizeConnector(_ slug: String, alias: String?) async -> URL? {
-        guard let client else { return nil }
-        do { return try await client.authorizeConnector(slug: slug, alias: alias) }
-        catch { actionError = error.localizedDescription; return nil }
-    }
-
     func refreshNotificationAuthorization() async {
         notificationAuthorization = await NotificationCoordinator.shared.authorizationStatus()
         notificationAuthorizationResolved = true
@@ -3184,11 +3448,18 @@ final class Session: ObservableObject {
         do {
             try await body(client)
         } catch let error as APIError where error.isUnauthorized {
-            status = .unauthorized
+            handleUnauthorized()
         } catch {
             if !quietly { actionError = error.localizedDescription }
         }
     }
+}
+
+/// A thread the chat on screen for one bot moves to (Session.threadSwitches);
+/// the token makes the same thread asked twice a change.
+struct ThreadSwitch: Equatable {
+    let threadId: String
+    let token = UUID()
 }
 
 /// A chat plus the two things a roster row shows that the record itself does

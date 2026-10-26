@@ -12,8 +12,9 @@ export type {
   RoutineContextAttachment,
   RoutineRunTrigger,
   RoutineRunStatus,
+  RoutineRetryCause,
   Routine,
   RoutineRun,
   RoutineInput,
 } from "../../shared/routines";
-export { ROUTINE_PROBLEM_STATUSES, isRoutineProblemRun, type RoutineRunStatusFilter } from "../../shared/routines";
+export { ROUTINE_PROBLEM_STATUSES, isRoutineProblemRun, routineRunMatchesStatus, type RoutineRunStatusFilter } from "../../shared/routines";

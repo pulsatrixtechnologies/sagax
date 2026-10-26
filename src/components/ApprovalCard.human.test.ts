@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
 import type { Bot, Message } from "@/state/store";
-import { ApprovalCard } from "./ApprovalCard";
+import { ApprovalCard, toolLabel } from "./ApprovalCard";
 import { RiskChip, TechnicalDetails } from "./ApprovalParts";
 import { PendingApprovalPanel, pendingApprovals, readOnlyApprovals, spokenApprovalPrompt, stepperIndex } from "./PendingApproval";
 
@@ -40,11 +40,17 @@ function ask(id: string, tool: string, input: string, extra: Record<string, unkn
 }
 
 describe("human approval card", () => {
+  it("never names Sagax's own server as a product: no 'Computer select dans Sagax Computer' (prod 0.5.27)", () => {
+    setLocale("fr");
+    expect(toolLabel("sagax-computer__computer_select")).not.toMatch(/Sagax Computer/);
+    expect(toolLabel("mcp__sagax-environment__run_command")).not.toMatch(/Sagax Environment/);
+  });
+
   it("shows a plain title, summary and risk chip in the composer's box, and hides the raw id and JSON", () => {
     setLocale("fr");
     const [pending] = pendingApprovals([ask("a", TOOL, ARGS)]);
     const html = renderToStaticMarkup(createElement(PendingApprovalPanel, { pending: pending!, count: 1, index: 0, bot }));
-    expect(html).toContain("Autoriser Cryptic à consulter l&#x27;horaire dans ConnectWise PSA ?");
+    expect(html).toContain("Cryptic veut consulter l&#x27;horaire dans ConnectWise PSA");
     expect(html).toContain("jcproulx");
     expect(html).toContain("Lecture seule");
     expect(html).not.toContain(TOOL);
@@ -83,7 +89,7 @@ describe("human approval card", () => {
     };
     const [pending] = pendingApprovals([message]);
     const html = renderToStaticMarkup(createElement(PendingApprovalPanel, { pending: pending!, count: 1, index: 0, bot }));
-    expect(html).toContain("Allow Cryptic to run a command?");
+    expect(html).toContain("Cryptic wants to run a command");
     expect(html).toContain("pnpm test");
     expect(html).toContain("Runs an action");
   });
@@ -136,10 +142,12 @@ describe("composer panel and stepper", () => {
     setLocale("fr");
     const approvals = pendingApprovals(messages);
     const html = renderToStaticMarkup(createElement(PendingApprovalPanel, { pending: approvals[0]!, count: 3, index: 0, bot, onNext: () => {} }));
-    expect(html).toContain("Autoriser Cryptic à consulter l&#x27;horaire dans ConnectWise PSA ?");
+    expect(html).toContain("Cryptic veut consulter l&#x27;horaire dans ConnectWise PSA");
     expect(html).toContain("1 sur 3");
     expect(html).toContain('aria-label="Demande précédente"');
-    expect(html).toContain("Voir la demande complète");
+    // 2026-10-20 (JC): the details are folded under one short line
+    expect(html).toContain('data-approval-preview="closed"');
+    expect(html).not.toContain("Voir la demande complète");
     expect(html).not.toContain("conditions");
     expect(html).not.toContain("PENDING");
   });

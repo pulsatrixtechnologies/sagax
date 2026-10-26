@@ -33,6 +33,10 @@ let execResponse: unknown = { exitCode: 0, stdout: "PDF_OK\n", stderr: "", timed
 let lastAttachBody: any = null;
 let attachStatus = 200;
 let attachResponse: unknown = { ok: true, name: "report.pdf", bytes: 48639 };
+let lastWidgetCheckBody: unknown = null;
+let widgetCheckResponse: unknown = { text: "Widget check passed (attempt 1).", isError: false };
+let lastHelpBody: unknown = null;
+let helpStatus = 200;
 let postCalls = 0;
 let postResponse: unknown = { ok: true, messageId: "msg-1", roomName: "Launch" };
 const DEFAULT_AGENTS = { bots: [{ id: "bot-helper", name: "Helper", model: "fake-model", busy: false }] };
@@ -221,6 +225,26 @@ beforeAll(async () => {
         lastExecBody = JSON.parse(data);
         res.writeHead(execStatus, { "content-type": "application/json" });
         res.end(JSON.stringify(execResponse));
+      });
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/internal/self-knowledge") {
+      let data = "";
+      req.on("data", (c) => (data += c));
+      req.on("end", () => {
+        lastHelpBody = JSON.parse(data);
+        res.writeHead(helpStatus, { "content-type": "application/json" });
+        res.end(JSON.stringify(helpStatus === 200 ? { text: "Sagax 0.5.29 knowledge, 2026-10-19.\n\n## Install a plugin for a bot [guide]" } : { error: "The knowledge base is not in this build." }));
+      });
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/internal/widget-check") {
+      let data = "";
+      req.on("data", (c) => (data += c));
+      req.on("end", () => {
+        lastWidgetCheckBody = JSON.parse(data);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(widgetCheckResponse));
       });
       return;
     }
@@ -668,13 +692,19 @@ describe("agents-proxy MCP surface", () => {
       "start_thread",
       "vm_exec",
       "attach_file",
+      "check_widget",
       "show_widget",
       "update_widget",
+      "show_html",
+      "update_html",
       "save_artifact",
       "update_artifact",
       "list_artifacts",
       "delete_artifact",
       "propose_page",
+      "sagax_help",
+      "sagax_settings",
+      "sagax_approvals",
       "post_to_room",
       "react_to_message",
       "remove_reaction",
@@ -682,13 +712,19 @@ describe("agents-proxy MCP surface", () => {
       "list_team_setup",
       "propose_team_setup",
       "propose_bot_deletion",
+      "archive_bot",
       "create_room",
       "manage_room",
       "request_credential",
       "request_login",
       "request_sign_in",
+      "open_connector_setup",
       "list_terminal_resources",
       "offer_shell_terminal",
+      "resource_usage",
+      "publish_remote_session",
+      "remote_session_snapshot",
+      "remote_session_exec",
       "memory_update",
       "rules_update",
       "docs_update",
@@ -739,7 +775,11 @@ describe("agents-proxy MCP surface", () => {
       "identity",
       "flow",
       "flow_action",
+      "remote_support_open",
+      "remote_support_status",
+      "remote_support_close",
       "review_write",
+      "place_phone_call",
     ]);
     const tool = (name: string) => list.result.tools.find((entry: { name: string }) => entry.name === name);
     const coordinate = tool("coordinate_bots");
@@ -820,6 +860,7 @@ describe("agents-proxy MCP surface", () => {
       "list_shared_computers",
       "assignment_status", "list_bots", "list_rooms", "list_threads",
       "list_artifacts",
+      "sagax_help",
       "list_team_setup",
       "workspace_read", "workspace_search",
       "session_search", "session_read",
@@ -870,6 +911,10 @@ describe("agents-proxy MCP surface", () => {
       "saturday",
       "sunday",
     ]);
+    expect(create.inputSchema.properties.enabled).toMatchObject({ type: "boolean" });
+    expect(create.description).toContain("created paused unless enabled is true");
+    const action = list.result.tools.find((t: { name: string }) => t.name === "propose_routine_action");
+    expect(action.inputSchema.properties.changes.properties).not.toHaveProperty("enabled");
     expect(create.inputSchema.properties).not.toHaveProperty("duration_minutes");
     expect(create.inputSchema.properties.timeout_minutes).toMatchObject({ minimum: 5, maximum: 240 });
     expect(create.inputSchema.properties.continuity).toMatchObject({ type: "boolean" });
@@ -1012,6 +1057,37 @@ describe("agents-proxy MCP surface", () => {
     expect(lastAttachBody).toEqual({ path: "clip.mp4" });
   });
 
+  it("check_widget sends the HTML and hands back the report, with the screenshot as an image", async () => {
+    const passed = await callTool("check_widget", { html: "<div class=\"card\">Ok</div>" });
+    expect(lastWidgetCheckBody).toEqual({ html: "<div class=\"card\">Ok</div>" });
+    expect(passed.result.isError).toBeFalsy();
+    expect(passed.result.content).toEqual([{ type: "text", text: "Widget check passed (attempt 1)." }]);
+    widgetCheckResponse = { text: "Widget check found 1 defect (attempt 1 of 3)", isError: true, screenshot: "AAAA" };
+    const failed = await callTool("check_widget", { html: "<p>x</p>" });
+    expect(failed.result.isError).toBe(true);
+    expect(failed.result.content).toEqual([
+      { type: "text", text: "Widget check found 1 defect (attempt 1 of 3)" },
+      { type: "image", data: "AAAA", mimeType: "image/jpeg" },
+    ]);
+    const empty = await callTool("check_widget", { html: " " });
+    expect(empty.result.isError).toBe(true);
+    widgetCheckResponse = { text: "Widget check passed (attempt 1).", isError: false };
+  });
+
+  it("sagax_help asks the server with the person's question and hands back its sections", async () => {
+    const answer = await callTool("sagax_help", { question: "Peux-tu installer un plugin ?" });
+    expect(lastHelpBody).toEqual({ question: "Peux-tu installer un plugin ?" });
+    expect(answer.result.isError).toBeFalsy();
+    expect(answer.result.content[0].text).toContain("Install a plugin for a bot");
+    const empty = await callTool("sagax_help", { question: " " });
+    expect(empty.result.isError).toBe(true);
+    helpStatus = 503;
+    const missing = await callTool("sagax_help", { question: "x" });
+    expect(missing.result.isError).toBe(true);
+    expect(missing.result.content[0].text).toContain("not in this build");
+    helpStatus = 200;
+  });
+
   it("attach_file hands a refusal to the model so it can fix the file and retry", async () => {
     attachStatus = 415;
     attachResponse = { error: "logo.svg is not a supported attachment type. Supported: images (png, jpg, gif, webp)." };
@@ -1045,7 +1121,7 @@ describe("agents-proxy MCP surface", () => {
     const list = await rpc("tools/list");
     const start = list.result.tools.find((tool: { name: string }) => tool.name === "start_thread");
     expect(start.inputSchema.required).toEqual(["title", "message"]);
-    expect(Object.keys(start.inputSchema.properties)).toEqual(["title", "message", "bot_id", "folder", "report_back", "workspace"]);
+    expect(Object.keys(start.inputSchema.properties)).toEqual(["title", "message", "bot_id", "folder", "report_back", "workspace", "read_only", "thread_id"]);
     expect(start.inputSchema.properties.bot_id).toEqual({ type: "string", enum: ["bot-asker"], description: "Leave out, or use your own bot ID. For teammates use coordinate_bots." });
     expect(start.description).toContain("Open a separate job on yourself");
     expect(start.description).toContain('use coordinate_bots for teammates (thread "new" opens a fresh thread on them)');
@@ -1645,6 +1721,31 @@ describe("agents-proxy MCP surface", () => {
     expect(res.result.content[0].text).toContain("has not been applied");
     expect(res.result.content[0].text).toContain("do not claim");
     expect(res.result.isError).toBeFalsy();
+    expect(lastRoutineRequestBody.routine).not.toHaveProperty("enabled");
+  });
+
+  it("forwards an explicit enabled choice and refuses it on an update", async () => {
+    const schedule = { type: "weekly", time: "09:00", weekdays: ["monday", "friday"] };
+    const base = { name: "Morning brief", instructions: "Summarize today's priorities.", schedule };
+    lastRoutineRequestBody = null;
+    const live = await callTool("propose_routine", { ...base, enabled: true });
+    expect(live.result.isError).toBeFalsy();
+    expect(lastRoutineRequestBody.routine.enabled).toBe(true);
+    lastRoutineRequestBody = null;
+    const pausedChoice = await callTool("propose_routine", { ...base, enabled: false });
+    expect(pausedChoice.result.isError).toBeFalsy();
+    expect(lastRoutineRequestBody.routine.enabled).toBe(false);
+    const bad = await callTool("propose_routine", { ...base, enabled: "yes" });
+    expect(bad.result.isError).toBe(true);
+    expect(bad.result.content[0].text).toContain("enabled must be true or false");
+    const update = await callTool("propose_routine_action", {
+      routine_id: "routine-1",
+      action: "update",
+      changes: { name: "Renamed", enabled: false },
+    });
+    expect(update.result.isError).toBe(true);
+    expect(update.result.content[0].text).toContain("Do not set enabled in changes");
+    expect(lastRoutineRequestBody.routine.enabled).toBe(false);
   });
 
   it("forwards for_bot_id when the routine is for another bot", async () => {
@@ -2271,7 +2372,7 @@ describe("with computer sharing off and no Chief of Staff (the defaults)", () =>
   it("shows a bot that is not a Chief none of the Chief-only tools or parameters", async () => {
     type ListedTool = { name: string; description: string; inputSchema: { properties: Record<string, unknown> } };
     const tools = new Map(((await gatedRpc("tools/list")).result.tools as ListedTool[]).map((tool) => [tool.name, tool]));
-    for (const name of ["create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "create_room", "manage_room", "retry_thread"]) {
+    for (const name of ["create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "create_room", "manage_room", "retry_thread", "sagax_approvals"]) {
       expect(tools.has(name), name).toBe(false);
     }
     for (const name of ["propose_profile", "propose_model"]) {

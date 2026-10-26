@@ -376,7 +376,6 @@ private fun PairedScreen(
                 Destination.Settings -> SettingsScreen(
                     onBack = navigator::pop,
                     onOpenRoutines = { navigator.push(Destination.Routines) },
-                    onOpenConnectedApps = { navigator.push(Destination.ConnectedApps) },
                 )
                 Destination.Routines -> TasksRoutinesScreen(
                     onBack = navigator::pop,
@@ -384,7 +383,6 @@ private fun PairedScreen(
                     // iOS appends it to the same navigation path.
                     onOpenChat = navigator::open,
                 )
-                Destination.ConnectedApps -> ConnectedAppsScreen(onBack = navigator::pop)
                 // One branch for both shapes of chat address, so a notification's thread
                 // becoming an addressed chat re-reads the same screen instead of
                 // rebuilding it.

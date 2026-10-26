@@ -4,6 +4,10 @@
 //   - answers GET /auth/oidc/start (302 to the Perspicax authorize page) and
 //     GET /auth/oidc/callback (code exchange and id_token check in
 //     server/oidc-rp.ts, then a Sagax session cookie and 302 to /);
+//     `fresh=1` on the start is "Sign in again": `prompt=login` and
+//     `max_age=0` at Perspicax. Any sign-in stamps the session's `authAt`
+//     only from the id_token's verified `auth_time` when it is recent
+//     (server/recent-sign-in.ts authAtFromAuthTime);
 //   - resolves the person by (iss, sub) through PrincipalRegistry.forSubject;
 //   - maps the `role` claim: admin -> scopes ["admin", "client"] and the
 //     organization role "admin"; manager and employee -> ["client"] and
@@ -54,6 +58,7 @@ import { ACCOUNT_REAUTH_PATH, phoneReauthReturn, webReauthReturn, type AccountRe
 import { immediateRevocations, type RevocationSink } from "./idp-revocations.ts";
 import { ACCOUNT_ERASURE_SCOPE, OidcRelyingParty, ROUTINE_DELEGATION_SCOPE, validInternalBase, validIssuer, type OidcClientKind, type OidcIdentity } from "./oidc-rp.ts";
 import type { Principal } from "./principals.ts";
+import { authAtFromAuthTime } from "./recent-sign-in.ts";
 import { cookieMaxAgeSeconds, type PublicSession, type Scope, type SessionRecord } from "./sessions.ts";
 import { labelFromUserAgent, parseCookies, serializeSessionCookie } from "./request-auth.ts";
 
@@ -273,13 +278,13 @@ export interface OidcLoginDeps {
   /** The Sagax session cookie name (server/request-auth.ts). */
   sessionCookie: string;
   forSubject: (input: { iss: string; sub: string; claims: { email?: string; name?: string; login?: string; avatar?: string }; orgRole: "admin" | "member"; teams?: { id: string; name: string; manager: boolean }[]; perspicaxRole?: "admin" | "manager" | "employee" }) => Principal;
-  /** `authAt`: the moment this interactive sign-in completed
-   * (server/recent-sign-in.ts). */
-  issueSession: (input: { label: string; scopes: Scope[]; email?: string; principalId: string; idp: NonNullable<SessionRecord["idp"]>; authAt: number }) => { token: string; session: PublicSession };
+  /** `authAt`: the provider's verified, recent `auth_time`; absent when the
+   * id_token gave none that counts (server/recent-sign-in.ts). */
+  issueSession: (input: { label: string; scopes: Scope[]; email?: string; principalId: string; idp: NonNullable<SessionRecord["idp"]>; authAt?: number }) => { token: string; session: PublicSession };
   /** Where each sign-in's refresh token is kept. */
   grants: OidcGrantKeeper;
   /** A principal-bound pairing credential for a desktop or phone sign-in. */
-  openPairing: (input: { principalId: string; scopes: Scope[]; ttlMs: number; label: string; idp: NonNullable<SessionRecord["idp"]>; authAt: number }) => { credential: string; expiresAt: number };
+  openPairing: (input: { principalId: string; scopes: Scope[]; ttlMs: number; label: string; idp: NonNullable<SessionRecord["idp"]>; authAt?: number }) => { credential: string; expiresAt: number };
   /** This server's name, for the phone's saved server. */
   serverName: () => string;
   now?: () => number;
@@ -608,9 +613,12 @@ export function createOidcLoginRoutes(deps: OidcLoginDeps) {
         fail(res, "unavailable", [], client, returnTo);
         return true;
       }
+      // "Sign in again" (`fresh=1`): Perspicax asks for the factors even
+      // with a session there (`prompt=login`, `max_age=0`).
+      const fresh = url.searchParams.get("fresh") === "1";
       let started;
       try {
-        started = await rp.start({ client, ...(returnTo ? { returnTo } : {}) });
+        started = await rp.start({ client, ...(returnTo ? { returnTo } : {}), ...(fresh ? { fresh } : {}) });
       } catch (error) {
         log(`oidc sign-in could not start: ${error instanceof Error ? error.message : String(error)}`);
         fail(res, "unavailable", [], client, returnTo);
@@ -686,10 +694,12 @@ export function createOidcLoginRoutes(deps: OidcLoginDeps) {
       return true;
     }
     const idp = { iss: identity.iss, sub: identity.sub, ...(identity.role ? { role: identity.role } : {}), grantRef };
-    // The person just went through the provider's sign-in in their browser:
-    // the only kind of moment that counts as a recent sign-in (a pairing
-    // code a bot made never does; server/recent-sign-in.ts).
-    const authAt = now();
+    // The provider's own word on when the person proved their factors, from
+    // the verified id_token, and only when recent: a silent single sign-on
+    // or an old sign-in gives a valid session that is not recent (a pairing
+    // code a bot made never is either; server/recent-sign-in.ts).
+    const authAt = authAtFromAuthTime(identity.authTime, now());
+    if (authAt === undefined) log(`oidc sign-in: no recent auth_time from the provider; the session is not a recent sign-in`);
     try {
       deps.grants.signedIn?.({
         principalId: principal.id,
@@ -707,7 +717,7 @@ export function createOidcLoginRoutes(deps: OidcLoginDeps) {
         ttlMs: OIDC_NATIVE_PAIRING_TTL_MS,
         label: client === "desktop" ? "Sagax desktop" : "Sagax phone",
         idp,
-        authAt,
+        ...(authAt !== undefined ? { authAt } : {}),
       });
       redirect(res, client === "desktop"
         ? desktopReturnLink(origin, { code: pairing.credential }, returnTo)
@@ -723,7 +733,7 @@ export function createOidcLoginRoutes(deps: OidcLoginDeps) {
         ...(principal.email ? { email: principal.email } : {}),
         principalId: principal.id,
         idp,
-        authAt,
+        ...(authAt !== undefined ? { authAt } : {}),
       });
     } catch (error) {
       deps.grants.discard(grantRef);

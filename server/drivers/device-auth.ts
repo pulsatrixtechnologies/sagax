@@ -186,12 +186,22 @@ export class DeviceAuthController {
     this.disposed = true;
     await this.cancel();
     this.flow = null;
+    // A sign-out cut short by this is still unwinding: return once it has released the credential home.
+    await this.signingOut?.catch(() => {});
   }
 
   /** Remove the sign-in the CLI stores for this server account so a
    * different account can connect. A sign-in in progress is never pulled
    * away underneath the browser completing it. */
+  private signingOut: Promise<void> | null = null;
+
   async signOut(): Promise<void> {
+    const run = this.runSignOut();
+    this.signingOut = run;
+    try { await run; } finally { if (this.signingOut === run) this.signingOut = null; }
+  }
+
+  private async runSignOut(): Promise<void> {
     const { product, account, status, logoutArgs } = this.spec;
     if (!status || !logoutArgs) throw new Error(`Signing out of ${account} is not available from here.`);
     if (this.disposed) throw new Error("This provider was removed. Refresh Settings before signing out.");

@@ -144,6 +144,20 @@ describe("a group of steps", () => {
     click(node.querySelector("button"));
     expect(node.textContent).toContain("first narration");
   });
+
+  it("drops the Worked line and shows the narration when tool calls are hidden", () => {
+    const narration: Message = { id: "n1", role: "bot", kind: "text", at: 1, text: "plain narration", turnId: "t" };
+    const node = mount(createElement(ActivityRun, { messages: [narration], elapsedMs: 401_000, renderStep, renderMessage, bare: true }));
+    expect(node.textContent).not.toContain("Worked");
+    expect(node.querySelector("[data-step-row]")).toBeNull();
+    expect(node.textContent).toContain("plain narration");
+  });
+
+  it("keeps the Worked line when tool calls show", () => {
+    const narration: Message = { id: "n2", role: "bot", kind: "text", at: 1, text: "plain narration", turnId: "t" };
+    const node = mount(createElement(ActivityRun, { messages: [narration], elapsedMs: 401_000, renderStep, renderMessage }));
+    expect(node.textContent).toContain("Worked 6m 41s");
+  });
 });
 
 describe("the turn digest", () => {

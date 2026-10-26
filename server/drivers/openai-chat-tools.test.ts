@@ -648,7 +648,7 @@ describe.each<Provider>(["openai-compat", "grok", "minimax"])("%s structured too
     expect(started?.itemId).toEqual(expect.any(String));
     expect(f.recorder.events).toContainEqual(expect.objectContaining({ type: "item.completed", itemType: "tool", itemId: started?.itemId, ok: true }));
     expect(f.recorder.events.at(-1)).toMatchObject({ type: "turn.completed", ok: true });
-    expect(f.instance.adapter.capabilities).toMatchObject({ agentsMcp: true, composioMcp: true, customMcp: true });
+    expect(f.instance.adapter.capabilities).toMatchObject({ agentsMcp: true, customMcp: true });
   });
 
   it("preserves ordinary transcript chat and leaves textual tool imitations as text", async () => {
@@ -1230,5 +1230,25 @@ describe("structured tool execution boundaries", () => {
     const pending = f.recorder.events.find((event) => event.type === "request.opened");
     if (pending) expect(await f.instance.adapter.respondToRequest(f.threadId, pending.requestId!, { behavior: "allow" })).toBe("unavailable");
     expect(f.recorder.events.filter((event) => event.type === "turn.completed")).toHaveLength(1);
+  });
+});
+
+describe("a configured MCP server that cannot mount", () => {
+  it("is skipped with a notice, and the turn runs with the remaining servers", async () => {
+    const f = await fixture((_body, response) => answer(response));
+    const broken = join(f.directory, "broken-mcp.mjs");
+    // Answers initialize with an error, as a server needing sign-in or refusing its credential (401) does.
+    writeFileSync(broken, `process.stdin.setEncoding("utf8");let b="";process.stdin.on("data",(c)=>{b+=c;let n;while((n=b.indexOf("\\n"))!==-1){const m=JSON.parse(b.slice(0,n));b=b.slice(n+1);if(m.id!==undefined)process.stdout.write(JSON.stringify({jsonrpc:"2.0",id:m.id,error:{code:-32001,message:"401 Unauthorized"}})+"\\n");}});`);
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      await f.start({ integrations: { custom: { ...f.integrations!.custom, slack: { command: process.execPath, args: [broken], env: {} } } } });
+      expect(await f.completed()).toMatchObject({ ok: true });
+    } finally { console.warn = warn; }
+    expect(f.recorder.events).toContainEqual(expect.objectContaining({ type: "runtime.notice", message: expect.stringContaining(`MCP server "slack" was skipped`) }));
+    expect(f.recorder.events.some((event) => event.type === "runtime.error")).toBe(false);
+    const names = f.requests[0].tools!.map((tool) => tool.function.name);
+    expect(names).toContain("audit_write");
+    expect(names.some((name) => name.startsWith("slack_"))).toBe(false);
   });
 });

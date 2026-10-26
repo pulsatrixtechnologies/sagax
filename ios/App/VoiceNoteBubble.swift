@@ -206,6 +206,8 @@ struct VoiceNoteBubble: View {
     /// A note the person recorded (an attached `voice-note-*.wav`): loaded
     /// through its message's file route instead of the bots' clip route.
     var recordedIn: (threadId: String, messageId: String)?
+    /// The message text, used only when the clip has no word times of its own.
+    var transcript: String? = nil
 
     @EnvironmentObject private var session: Session
     @StateObject private var player = VoiceNotePlayer()
@@ -232,7 +234,42 @@ struct VoiceNoteBubble: View {
         )
     }
 
+    private var words: [VoiceNoteWord] {
+        if let given = note.words, !given.isEmpty { return given }
+        return VoiceNoteWords.aligned(transcript: transcript, duration: duration ?? 0)
+    }
+
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            controls
+            if !words.isEmpty {
+                VoiceNoteWordWrap(spacing: 4) {
+                    ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                        let current = VoiceNoteWords.index(at: player.elapsed, in: words) == index
+                        Button {
+                            player.seek(to: word.start)
+                            if !player.isPlaying {
+                                VoiceNoteCenter.shared.claim(player)
+                                player.play()
+                            }
+                        } label: {
+                            Text(verbatim: word.text)
+                                .font(.system(size: 12.5))
+                                .foregroundStyle(current ? Theme.textPrimary : Theme.textSecondary)
+                                .padding(.horizontal, 2)
+                                .background(current ? tint.opacity(0.15) : Color.clear, in: RoundedRectangle(cornerRadius: 3))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("Go to \(word.text) in the voice note"))
+                        .accessibilityIdentifier("voice-note-word.\(index)")
+                    }
+                }
+                .accessibilityIdentifier("voice-note-words")
+            }
+        }
+    }
+
+    private var controls: some View {
         HStack(spacing: 10) {
             Button {
                 if player.isPlaying {
@@ -351,5 +388,45 @@ struct VoiceNoteBubble: View {
         guard seconds.isFinite, seconds > 0 else { return "0:00" }
         let whole = Int(seconds.rounded(.down))
         return String(format: "%d:%02d", whole / 60, whole % 60)
+    }
+}
+
+/// Words of a voice note, wrapped on the bubble's width.
+private struct VoiceNoteWordWrap: Layout {
+    var spacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 280
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var row: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                x = 0
+                y += row + spacing
+                row = 0
+            }
+            row = max(row, size.height)
+            x += size.width + spacing
+        }
+        return CGSize(width: width, height: y + row)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var row: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += row + spacing
+                row = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            row = max(row, size.height)
+            x += size.width + spacing
+        }
     }
 }

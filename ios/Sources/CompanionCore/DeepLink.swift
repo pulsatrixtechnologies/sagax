@@ -22,6 +22,9 @@ public enum CompanionURLScheme {
 public enum CompanionDeepLink: Equatable, Sendable {
     case pairing(PairingInvite)
     case chat(threadId: String)
+    /// `sagax://bot/<id>`: a bot's (or a room's) current conversation, the
+    /// link the desktop's and this app's "Copy link to this bot" make.
+    case bot(id: String)
     /// Cross-bot work that needs the person (`sagax://inbox`; `sagax://todo` is kept as an alias).
     case inbox
 
@@ -35,25 +38,27 @@ public enum CompanionDeepLink: Equatable, Sendable {
             case "inbox", "todo":
                 return .inbox
             case "chat":
-                break
+                return singleSegment(url).map { .chat(threadId: $0) }
+            case "bot":
+                return singleSegment(url).map { .bot(id: $0) }
             default:
                 return nil
             }
         }
-        guard CompanionURLScheme.accepts(url),
-              url.host?.lowercased() == "chat",
-              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              components.path.count > 1
+        return nil
+    }
+
+    /// The path is exactly one segment: the id, percent-decoded. More than
+    /// that is not a link we emitted, and an id smuggling a path separator
+    /// is not a thread or a bot; ignoring either lands the person on the
+    /// roster, which is always safe.
+    private static func singleSegment(_ url: URL) -> String? {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.path.count > 1,
+              let id = String(components.path.dropFirst()).removingPercentEncoding,
+              !id.isEmpty,
+              !id.contains("/")
         else { return nil }
-        // The path is exactly one segment: the thread id, percent-decoded.
-        // More than that is not a link we emitted, and an id smuggling a
-        // path separator is not a thread; ignoring either lands the person
-        // on the roster, which is always safe.
-        guard let threadId = String(components.path.dropFirst()).removingPercentEncoding,
-              !threadId.isEmpty,
-              !threadId.contains("/")
-        else { return nil }
-        return .chat(threadId: threadId)
+        return id
     }
 }
-

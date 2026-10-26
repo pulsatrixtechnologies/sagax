@@ -110,7 +110,21 @@ final class MessageAttachmentsTests: XCTestCase {
                 kind: .image
             ),
         ])) {
-            XCTAssertEqual($0 as? AttachmentPolicyError, .itemTooLarge(name: "huge.png", limitMB: 10))
+            XCTAssertEqual($0 as? AttachmentPolicyError, .itemTooLarge(name: "huge.png", limitMB: 32))
         }
+    }
+
+    func testImageLimitMatchesTheServer() {
+        // server/attachments.ts IMAGE_MAX_BYTES (32 MiB since #899); a server test reads this file too.
+        XCTAssertEqual(AttachmentPolicy.maximumImageBytes, 32 * 1_024 * 1_024)
+        XCTAssertEqual(AttachmentPolicy.maximumImageMegabytes, 32)
+        XCTAssertNoThrow(try AttachmentPolicy.validate([
+            PendingMessageAttachment(
+                data: Data(repeating: 0, count: 12 * 1_024 * 1_024),
+                name: "photo.jpg",
+                mime: "image/jpeg",
+                kind: .image
+            ),
+        ]))
     }
 }

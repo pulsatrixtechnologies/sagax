@@ -97,7 +97,34 @@ describe("bundledReleaseCatalog", () => {
     expect(catalog["0.5.23"]).toContain("## English");
     expect(catalog["0.5.23"]).toMatch(/Onglet Liens/);
     expect(catalog["0.5.23"]).toMatch(/Writing while a bot works/);
-    expect(Object.keys(catalog).sort()).toEqual(["0.4.0", "0.4.1", "0.4.10", "0.4.11", "0.4.12", "0.4.13", "0.4.14", "0.4.15", "0.4.16", "0.4.17", "0.4.18", "0.4.19", "0.4.2", "0.4.20", "0.4.21", "0.4.22", "0.4.3", "0.4.4", "0.4.5", "0.4.6", "0.4.7", "0.4.8", "0.4.9", "0.5.0", "0.5.1", "0.5.10", "0.5.11", "0.5.12", "0.5.13", "0.5.14", "0.5.15", "0.5.16", "0.5.17", "0.5.18", "0.5.19", "0.5.2", "0.5.20", "0.5.21", "0.5.22", "0.5.23", "0.5.3", "0.5.4", "0.5.5", "0.5.6", "0.5.7", "0.5.8", "0.5.9"]);
+    expect(catalog["0.5.24"]).toContain("## English");
+    expect(catalog["0.5.24"]).toMatch(/host\.commands/);
+    expect(catalog["0.5.24"]).toMatch(/Your own destinations, no administrator/);
+    expect(catalog["0.5.25"]).toContain("## English");
+    expect(catalog["0.5.25"]).toMatch(/Living mascots/);
+    expect(catalog["0.5.25"]).toMatch(/Your destination, your card/);
+    expect(catalog["0.6.6"]).toContain("## English");
+    expect(catalog["0.6.6"]).toMatch(/brings Sagax closer to Grok Bot/);
+    expect(catalog["0.6.7"]).toContain("## English");
+    expect(catalog["0.7.0"]).toContain("## English");
+    expect(catalog["0.7.0"]).toMatch(/Sessions à distance/);
+    expect(catalog["0.7.1"]).toContain("## English");
+    expect(catalog["0.7.1"]).toMatch(/Tailcat livré avec Sagax/);
+    expect(catalog["0.7.2"]).toContain("## English");
+    expect(catalog["0.7.2"]).toMatch(/Mémoire d.équipe/);
+    expect(catalog["0.7.3"]).toContain("## English");
+    expect(catalog["0.7.3"]).toMatch(/Connecteurs des moteurs/);
+    expect(catalog["0.7.4"]).toContain("## English");
+    expect(catalog["0.7.4"]).toMatch(/Marketplace privé par défaut/);
+    expect(catalog["0.7.5"]).toContain("## English");
+    expect(catalog["0.7.5"]).toMatch(/Retrait de Composio/);
+    expect(catalog["0.7.6"]).toContain("## English");
+    expect(catalog["0.7.6"]).toMatch(/Premier démarrage guidé/);
+    expect(catalog["0.7.7"]).toContain("## English");
+    expect(catalog["0.7.7"]).toMatch(/Traces d'utilisation par personne/);
+    expect(catalog["0.5.26"]).toMatch(/Requested by/);
+    expect(catalog["0.5.26"]).toMatch(/This run/);
+    expect(Object.keys(catalog).sort()).toEqual(["0.4.0", "0.4.1", "0.4.10", "0.4.11", "0.4.12", "0.4.13", "0.4.14", "0.4.15", "0.4.16", "0.4.17", "0.4.18", "0.4.19", "0.4.2", "0.4.20", "0.4.21", "0.4.22", "0.4.3", "0.4.4", "0.4.5", "0.4.6", "0.4.7", "0.4.8", "0.4.9", "0.5.0", "0.5.1", "0.5.10", "0.5.11", "0.5.12", "0.5.13", "0.5.14", "0.5.15", "0.5.16", "0.5.17", "0.5.18", "0.5.19", "0.5.2", "0.5.20", "0.5.21", "0.5.22", "0.5.23", "0.5.24", "0.5.25", "0.5.26", "0.5.27", "0.5.28", "0.5.29", "0.5.3", "0.5.30", "0.5.4", "0.5.5", "0.5.6", "0.5.7", "0.5.8", "0.5.9", "0.6.0", "0.6.1", "0.6.2", "0.6.3", "0.6.4", "0.6.5", "0.6.6", "0.6.7", "0.7.0", "0.7.1", "0.7.2", "0.7.3", "0.7.4", "0.7.5", "0.7.6", "0.7.7"]);
   });
 
   it("reads a version from the file name and picks the language section", () => {

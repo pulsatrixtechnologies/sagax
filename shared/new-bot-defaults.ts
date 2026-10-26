@@ -6,8 +6,8 @@ import type { ToolScope } from "./tool-scope";
 export type BotDefaultsProfile = Partial<Pick<WireBot,
   "name" | "title" | "description" | "soul" | "notifications" | "avatarUrl" | "avatarCrop" |
   "mascotBody" | "mascotSkin" | "color" | "voice" | "speakReplies" | "section" | "modelSelection" |
-  "cloudBackend" | "autoStartVps" | "approvalMode" | "alwaysAllow" | "chiefOfStaff" |
-  "managedSections" | "approvePeerComms" | "composio" | "browser" |
+  "cloudBackend" | "autoStartVps" | "approvalMode" | "proactiveMode" | "alwaysAllow" | "chiefOfStaff" |
+  "managedSections" | "approvePeerComms" | "browser" |
   "maxConcurrentThreads" | "maxParallelPerPerson" | "busySend" | "automaticRecovery"
 >> & {
   mascotExpression?: string | null;

@@ -15,7 +15,7 @@ import type { SandboxdClient, SandboxdInfo } from "./user-sandbox-client.ts";
 import { SandboxdRequestError, validSandboxdUrl } from "./user-sandbox-client.ts";
 import { sandboxKeyForPrincipal } from "./user-sandbox-spec.ts";
 import { UserSandboxUnavailable } from "./user-sandbox-errors.ts";
-import { provisionerNotReached, provisionerUnreachable, sandboxWakeSettingsFromEnv, type SandboxClusterWaker, type SandboxWakeSettings, type WakeMode } from "./sandbox-k8s-wake.ts";
+import { provisionerNotReached, provisionerUnreachable, sandboxStarting, SANDBOX_STARTING_RETRY_DELAY_MS, SANDBOX_STARTING_RETRY_MS, sandboxWakeSettingsFromEnv, type SandboxClusterWaker, type SandboxWakeSettings, type WakeMode } from "./sandbox-k8s-wake.ts";
 
 export const DEFAULT_DELETE_GRACE_MS = 72 * 3600_000;
 
@@ -29,7 +29,7 @@ export interface UserSandboxView {
   pendingDeletionAt: number | null;
   error?: string;
   /** The Kubernetes cluster of the environments is being woken (it was
-   * stopped outside office hours): since when, and for how long so far (the
+   * stopped while idle): since when, and for how long so far (the
    * screen's clock may differ from the server's). Only while a status read
    * fails during the wake window; never the webhook or another detail. */
   waking?: { since: number; elapsedMs: number };
@@ -56,6 +56,7 @@ export interface UserSandboxManagerOptions {
   stateFile: string;
   graceMs?: number;
   now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface ClusterWaitEvent {
@@ -66,6 +67,9 @@ export interface ClusterWaitEvent {
 
 export class UserSandboxManager {
   private readonly pending = new Map<string, number>();
+  /** person + bot -> last call that could wake the cluster (a bot's real
+   * use), for prewake. In memory: after a restart the first run is cold. */
+  private readonly recentUse = new Map<string, number>();
   /** One desktop open at a time per person (two at once raced on the VNC
    * password file and one failed), and the passwords of the live views
    * still open: a second view must not change them under the first. */
@@ -75,6 +79,7 @@ export class UserSandboxManager {
   private timer: ReturnType<typeof setInterval> | null = null;
   readonly graceMs: number;
   private readonly now: () => number;
+  private readonly sleep: (ms: number) => Promise<void>;
 
   private readonly options: UserSandboxManagerOptions;
 
@@ -82,6 +87,7 @@ export class UserSandboxManager {
     this.options = options;
     this.graceMs = options.graceMs ?? DEFAULT_DELETE_GRACE_MS;
     this.now = options.now ?? Date.now;
+    this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => { setTimeout(resolve, ms).unref?.(); }));
     this.load();
   }
 
@@ -119,27 +125,48 @@ export class UserSandboxManager {
         throw error;
       }
     };
-    const run = async <T>(call: () => Promise<T>): Promise<T> => {
+    // 2026-10-19 (GOX): right after a cold start the provisioner answered,
+    // then the first exec waited for a pod on a node pool scaling 0 -> 1, was
+    // cut at 90 s and taken for a provisioner gone: the routine gave up.
+    // Now a `starting` refusal is sent again, bounded, and a call that only
+    // reads or converges (status, ensure, resume...) is sent again once
+    // after a cut connection; a command (exec) only when it surely did not
+    // reach the provisioner.
+    const run = async <T>(call: () => Promise<T>, idempotent = false): Promise<T> => {
+      const calledAt = this.now();
       await ready();
-      try {
-        return await call();
-      } catch (error) {
-        if (!provisionerUnreachable(error)) throw error;
-        waker.markUnreachable();
-        if (mode !== "wake" || !provisionerNotReached(error)) throw error;
-        await ready();
-        return call();
+      if (mode === "wake") this.recentUse.set(useKey(who.principalId, who.botId), this.now());
+      const startedAt = this.now();
+      let resent = false;
+      for (;;) {
+        try {
+          return await call();
+        } catch (error) {
+          // Bounded twice: the starting window, and the whole call (wake
+          // included) stays under the engine's 10 minute cut of a tool call.
+          if (mode === "wake" && sandboxStarting(error) && this.now() - startedAt < SANDBOX_STARTING_RETRY_MS
+            && this.now() - calledAt < SANDBOX_CALL_BUDGET_MS) {
+            notify("waiting");
+            await this.sleep(SANDBOX_STARTING_RETRY_DELAY_MS);
+            continue;
+          }
+          if (!provisionerUnreachable(error)) throw error;
+          waker.markUnreachable();
+          if (mode !== "wake" || resent || !(idempotent || provisionerNotReached(error))) throw error;
+          resent = true;
+          await ready();
+        }
       }
     };
     return {
-      info: () => run(() => client.info()),
-      status: (key) => run(() => client.status(key)),
-      ensure: (key) => run(() => client.ensure(key)),
+      info: () => run(() => client.info(), true),
+      status: (key) => run(() => client.status(key), true),
+      ensure: (key) => run(() => client.ensure(key), true),
       stop: (key) => run(() => client.stop(key)),
       pause: (key) => run(() => client.pause(key)),
       resume: (key) => run(() => client.resume(key)),
-      markUsed: (key) => run(() => client.markUsed(key)),
-      stats: (key) => run(() => client.stats(key)),
+      markUsed: (key) => run(() => client.markUsed(key), true),
+      stats: (key) => run(() => client.stats(key), true),
       remove: (key, options) => run(() => client.remove(key, options)),
       exec: (key, input) => run(() => client.exec(key, input)),
       desktopStream: (key, options) => run(() => client.desktopStream(key, options)),
@@ -326,6 +353,29 @@ export class UserSandboxManager {
     } catch (error) {
       throw asUnavailable(error);
     }
+  }
+
+  /** Before a scheduled routine of this person (server/routines.ts
+   * prewake): on Kubernetes with the cluster wake, start the cluster and the
+   * person's environment now, so the run finds them up instead of spending
+   * its first ten minutes waking them. Never for Docker, never for a person
+   * signed out; best effort, never throws. True when it was asked. */
+  async prewake(principalId: string, botId?: string): Promise<boolean> {
+    if (!this.options.kubernetes || !this.options.kubernetesWaker || this.pending.has(principalId)) return false;
+    // Only for a bot that used this environment lately: a routine that never
+    // touches it must not keep the cluster up or create an environment.
+    const usedAt = this.recentUse.get(useKey(principalId, botId));
+    if (usedAt === undefined || this.now() - usedAt > PREWAKE_RECENT_USE_MS) return false;
+    try {
+      if ((this.options.backendFor?.(principalId, botId) ?? "docker") !== "kubernetes") return false;
+      await this.clientFor(principalId, botId, "wake").ensure(this.keyFor(principalId));
+    } catch (error) {
+      console.warn(`user-sandbox: prewake failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      // a prewake is not a use: it must not keep itself going
+      this.recentUse.set(useKey(principalId, botId), usedAt);
+    }
+    return true;
   }
 
   private async call<T>(work: () => Promise<T>): Promise<T> {
@@ -556,6 +606,16 @@ export class UserSandboxManager {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
   }
+}
+
+/** A whole call that waits for the cluster and then for its pod stays under
+ * the 10 minute cut an engine puts on one tool call. */
+export const SANDBOX_CALL_BUDGET_MS = 9 * 60_000 + 30_000;
+/** prewake only for a bot that used the environment this recently. */
+export const PREWAKE_RECENT_USE_MS = 7 * 24 * 3600_000;
+
+function useKey(principalId: string, botId?: string): string {
+  return `${principalId}\n${botId ?? ""}`;
 }
 
 const VNC_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";

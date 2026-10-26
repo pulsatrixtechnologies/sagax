@@ -1,5 +1,5 @@
 // Config + data dirs. One file, ~/.sagax/config.json, env fallbacks:
-//   { "xai": {"key":"xai-…"}, "composio": {"apiKey":"ak_…"}, "box": {"token":"…"},
+//   { "xai": {"key":"xai-…"}, "box": {"token":"…"},
 //     "instances": { "<instanceId>": {"driver":"grok", …} } }
 import { DEFAULT_MAX_PARALLEL_PER_PERSON, MAX_PARALLEL_PER_PERSON } from "../shared/parallel-tasks.ts";
 import { readFileSync, mkdirSync, existsSync, renameSync, statSync } from "node:fs";
@@ -11,8 +11,10 @@ import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shar
 
 import { writeFileAtomic } from "./atomic.ts";
 import { applyStoredEngineEnv } from "./engine-api-keys.ts";
+import { migrateConfigPlaintextKeys, readOnboardingEngineKey } from "./onboarding-engine-key.ts";
 import { withoutComputerEngine } from "./computer-engine-removal.ts";
 import { newBotDefaultsSchema, type NewBotDefaults } from "./new-bot-defaults.ts";
+import { loopDetectorConfigSchema, type LoopDetectorConfig } from "./loop-detector.ts";
 import { EFFORT_LEVELS, type LiveSettings } from "../shared/wire.ts";
 import { isModelVariant, type InstanceConfigMap, type ModelSelection } from "./contracts.ts";
 import { DEFAULT_WINDOW_MINUTES, MAX_WINDOW_MINUTES } from "./cache-keepwarm.ts";
@@ -21,6 +23,7 @@ import type { McpServerSpec } from "./contracts.ts";
 import type { MailSettings } from "./mail-config.ts";
 import { isRemoteMcpServer, parseStoredMcpServer, reservedMcpServerLog, reservedMcpServerName } from "./mcp-registry.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "./schema.ts";
+import { browserEgressConfigSchema, type BrowserEgressConfig } from "./browser/egress/policy.ts";
 import { currentEnvName, defaultDataDir } from "../electron/legacy-names.mjs";
 
 const optionalText = z.string().optional();
@@ -99,16 +102,19 @@ const vpsConfigSchema = z.object({
     message: "must be a simple SSH config alias",
   }).optional(),
 });
-/** Where "My Chrome" is when agent-browser cannot find it by itself: a
- * Chrome the operator already has running, on another port or machine
- * (#1396). Only browser profiles set to My Chrome attach to it. Deliberately
- * a server-owned config field, not an env-var passthrough: the ambient
+/** Attach a bot's browser to a Chrome the operator already has running,
+ * instead of agent-browser spawning its own (#1396). Deliberately a
+ * server-owned config field, not an env-var passthrough: the ambient
  * process environment must never redirect a bot's browser
  * (server/browser-live.test.ts pins this guarantee down). */
 const browserEngineConfigSchema = z.object({
   attachCdpUrl: z.string().trim().max(2048).refine((value) => value === "" || isValidCdpTarget(value), {
     message: "browserEngine.attachCdpUrl must be a CDP port (1-65535) or an http(s)/ws(s) URL",
   }).optional(),
+  /** What the bots' browsers may reach past the public internet
+   * (server/browser/egress/policy.ts, port of OpenMausBot #2930). */
+  egress: browserEgressConfigSchema.optional(),
+  idleTimeoutMinutes: z.number().int().min(1).max(60).optional(), // an unused browser closes after this (browserIdleMs)
 });
 const roomConfigSchema = z.object({
   turnTimeoutMinutes: z
@@ -156,9 +162,6 @@ const browserProfileSchema = z.object({
   // directories would otherwise collide on case-insensitive filesystems.
   id: z.string().regex(BROWSER_PROFILE_ID).refine((id) => id !== "guest", "guest is reserved"),
   name: z.string().trim().min(1).max(40),
-  /** "chrome": bots on this profile use the person's own running Chrome
-   * (My Chrome) instead of the built-in browser. Absent is built-in. */
-  browser: z.literal("chrome").optional(),
 }).strict();
 // #567 accepted mixed-case and duplicate ids. This schema exists only at the
 // persisted-data boundary so an existing config can be read and migrated;
@@ -169,7 +172,6 @@ const legacyBrowserProfileSchema = z.object({
   /** Exact #567 Electron partition identity. This is persisted only by the
    * migration boundary; config PATCH callers cannot choose or redirect it. */
   partitionId: z.string().regex(LEGACY_BROWSER_PROFILE_ID).refine((id) => id !== "guest", "guest is reserved").optional(),
-  browser: z.literal("chrome").optional(),
 }).strict();
 
 interface StoredBrowserProfileMigration {
@@ -273,7 +275,6 @@ function migrateStoredBrowserProfiles(
     const id = canonicalIds[index]!;
     const partitionId = effectivePartitions[index]!;
     const migrated: BrowserProfile = { id, name: profile.name };
-    if (profile.browser) migrated.browser = profile.browser;
     if (partitionId !== id) migrated.partitionId = partitionId;
     // Exact duplicates are inherently ambiguous. Preserve the first mapping;
     // later duplicate records get isolated ids but existing bot references
@@ -323,9 +324,6 @@ const featureConfigSchema = z.object({
    * thread. Off unless explicitly enabled. The run still starts from its own
    * instructions, but the messages stay in that chat. */
   routinesInConversation: z.boolean().optional(),
-  /** Connected apps (Composio) in the sidebar's bottom menu and in
-   * Settings. Off unless explicitly enabled (experimental). */
-  connectedApps: z.boolean().optional(),
   /** Templates in the sidebar's bottom menu (the team library). Off unless
    * explicitly enabled; a package install link still opens the library. */
   templates: z.boolean().optional(),
@@ -594,15 +592,6 @@ const appConfigSchema = z.object({
   openaiCompat: z
     .object({ key: optionalText, url: optionalText, model: optionalText, provider: optionalText })
     .optional(),
-  /** Project key used for Sessions, catalog and agent tools. userId/sessionId
-   * are non-secret local identifiers used to reuse one Composio Session. */
-  composio: z.object({
-    apiKey: optionalText,
-    userId: optionalText,
-    sessionId: optionalText,
-    /** Tools turned off for every bot, by app slug (connector-tool-switches.ts). */
-    disabledTools: z.record(z.string(), z.array(z.string())).optional(),
-  }).optional(),
   /** Historical config section name "box" (the persisted config.json key); the
    * provider is Boat now and the key is kept for compatibility. */
   box: z.object({ token: optionalText }).optional(),
@@ -704,13 +693,31 @@ const appConfigSchema = z.object({
      * context in that room reaches this (fraction below 1, or a token
      * count). Default 0.9; autoCompact: false turns it off too. */
     roomCompactAt: z.number().positive().max(10_000_000).optional(),
+    /** Hours of quiet after which a thread's engine session is not resumed
+     * but rebuilt from Sagax's summary (server/stale-session.ts; default 6,
+     * 0 turns the check off). */
+    staleSessionHours: z.number().min(0).max(24 * 365).optional(),
+    /** Saved engine session size (bytes) past which it is not resumed
+     * (default 2 MB, 0 off), once quiet for staleSessionColdMinutes.
+     * Engines that report no size: time only. */
+    staleSessionBytes: z.number().int().min(0).max(10_000_000_000).optional(),
+    /** Minutes of quiet before the size check applies (default 60). */
+    staleSessionColdMinutes: z.number().min(0).max(24 * 60 * 30).optional(),
   }).optional(),
+  /** Stops a run that repeats itself (server/loop-detector.ts). Absent
+   * fields take the defaults; `enabled: false` turns it off. */
+  loopDetector: loopDetectorConfigSchema.optional(),
   /** Memory upkeep timing, for bots with Memory upkeep switched on. */
   memory: z.object({
     /** Quiet time after a turn before its facts are captured (ms). */
     captureQuietMs: z.number().int().min(1_000).max(24 * 60 * 60_000).optional(),
     /** Local hour (0-23) after which the nightly tidy-up runs. */
     tidyHour: z.number().int().min(0).max(23).optional(),
+  }).strict().optional(),
+  /** Routines a bot creates through the approval flow. */
+  routines: z.object({
+    /** Start them paused (default true): the owner resumes them when ready. */
+    newPaused: z.boolean().optional(),
   }).strict().optional(),
   threads: threadsConfigSchema.optional(),
   /** The authorization decision log (server/decision-log.ts): days of month
@@ -814,7 +821,6 @@ export interface AppConfig {
   decisions?: { retentionDays?: number };
   billing?: { currency?: string; prices?: Record<string, { inputPerMillion: number; outputPerMillion: number; cachedInputPerMillion?: number }> };
   openaiCompat?: { key?: string; url?: string; model?: string; provider?: string };
-  composio?: { apiKey?: string; userId?: string; sessionId?: string; disabledTools?: Record<string, string[]> };
   /** Persisted under the historical config key "box" (ascii.dev renamed Box to Boat). */
   box?: { token?: string };
   /** A named host from the user's SSH config. Authentication stays with SSH. */
@@ -834,14 +840,16 @@ export interface AppConfig {
   rooms?: { turnTimeoutMinutes: number };
   mcp?: { callTimeoutMinutes?: number };
   threads?: { maxConcurrentPerBot: number; maxParallelPerPerson?: number; eventLogMaxBytes?: number; eventLogRetentionDays?: number };
-  context?: { rebuildBytes?: number; compactAt?: number; autoCompact?: boolean; autoCompactOffBots?: string[]; roomCompactAt?: number };
+  context?: { rebuildBytes?: number; compactAt?: number; autoCompact?: boolean; autoCompactOffBots?: string[]; roomCompactAt?: number; staleSessionHours?: number; staleSessionBytes?: number; staleSessionColdMinutes?: number };
+  loopDetector?: LoopDetectorConfig;
   memory?: { captureQuietMs?: number; tidyHour?: number };
+  routines?: { newPaused?: boolean };
   /** Shared preserves the historical singleton. Per-bot gives every bot a
    * separate container, durable workspace, viewer and lease. Pool runs N
    * seats shared by all conversations, with per-thread affinity (#1654). */
   localVm?: { mode?: "shared" | "per-bot" | "pool"; maxInstances?: number; idleTimeoutMinutes?: number };
   /** Opt-in product experiments. Every flag defaults to disabled. */
-  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; autoRecall?: boolean; routinesInConversation?: boolean; connectedApps?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; roomMemoryCapture?: boolean };
+  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; autoRecall?: boolean; routinesInConversation?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; roomMemoryCapture?: boolean };
   /** First-run progress; see onboardingConfigSchema. */
   onboarding?: { completedAt?: string; version?: number; reelSeen?: boolean; hintsSeen?: string[]; launchMode?: "solo" | "server"; firstTurnAt?: string };
   /** Named browser sessions any bot can be pointed at. */
@@ -849,7 +857,7 @@ export interface AppConfig {
   /** CDP target of a Chrome the operator already has running (a bare port,
    * e.g. "9333", or an http(s)/ws(s) URL). Browser profiles set to My Chrome
    * attach to it instead of looking for the person's Chrome (#1396). */
-  browserEngine?: { attachCdpUrl?: string };
+  browserEngine?: { attachCdpUrl?: string; egress?: BrowserEgressConfig; idleTimeoutMinutes?: number };
   instances?: InstanceConfigMap;
 }
 export type BrowserProfile = z.output<typeof browserProfileSchema> & {
@@ -973,8 +981,20 @@ export function foldLegacyNewBotEffort(value: JsonValue): JsonValue {
   return doc;
 }
 
+/** Composio was removed: connected apps now come only from the engines'
+ * own connectors (Claude, Grok) and the Pulsatrix MCP servers. An older
+ * config.json may still carry a top-level `composio` block (the project key
+ * and session ids); strip it before strict parsing so an existing workspace
+ * never fails to load, and so the stored key (never displayed) does not
+ * survive the next write. */
+export function stripLegacyComposioConfig(value: JsonValue): JsonValue {
+  if (!value || typeof value !== "object" || Array.isArray(value) || !("composio" in value)) return value;
+  const { composio: _removed, ...rest } = value as Record<string, JsonValue>;
+  return rest;
+}
+
 export function parseStoredConfig(value: JsonValue): AppConfig {
-  const parsed = storedAppConfigSchema.safeParse(foldLegacyNewBotEffort(value));
+  const parsed = storedAppConfigSchema.safeParse(stripLegacyComposioConfig(foldLegacyNewBotEffort(value)));
   if (!parsed.success) throw new Error(schemaIssue(parsed.error, "Invalid stored configuration"));
   return parsed.data;
 }
@@ -1148,6 +1168,14 @@ export function tidyHour(cfg: AppConfig): number {
   return cfg.memory?.tidyHour ?? DEFAULT_TIDY_HOUR;
 }
 
+/** Routines created through the approval flow start paused unless
+ * `routines.newPaused` is false. */
+export const DEFAULT_NEW_ROUTINES_PAUSED = true;
+
+export function newRoutinesPaused(cfg: AppConfig): boolean {
+  return cfg.routines?.newPaused ?? DEFAULT_NEW_ROUTINES_PAUSED;
+}
+
 export function showToolCallsEnabled(cfg: AppConfig): boolean {
   return cfg.features?.showToolCalls === true;
 }
@@ -1156,12 +1184,6 @@ export function showToolCallsEnabled(cfg: AppConfig): boolean {
  * Off by default, so scheduled work stays in a hidden thread. */
 export function routinesInConversationEnabled(cfg: AppConfig): boolean {
   return cfg.features?.routinesInConversation === true;
-}
-
-/** Connected apps (Composio) in the sidebar and Settings. Off by default
- * (experimental). */
-export function connectedAppsEnabled(cfg: AppConfig): boolean {
-  return cfg.features?.connectedApps === true;
 }
 
 /** The sidebar's Templates entry. Off by default (experimental). */
@@ -1313,6 +1335,23 @@ export function ensureDirs() {
   migrateLegacyFeatureFlags();
   migrateLegacyNewBotEffort();
   migrateGrokVoiceKey();
+  migrateOnboardingEngineKeys();
+}
+
+/** Heal an install that was onboarded by an older CLI: a provider API key
+ * written in clear into config.json is moved into the encrypted engine-key
+ * store and stripped from the file, once, before the server's first
+ * loadConfig(). Fail-safe — a key that cannot be sealed stays exactly where
+ * it is, and the move is idempotent. Solo only: an organization server keeps
+ * its shared-key semantics. The key is never logged. */
+function migrateOnboardingEngineKeys(): void {
+  if (process.env.SAGAX_IDENTITY?.trim().toLowerCase() === "perspicax") return;
+  try {
+    const moved = migrateConfigPlaintextKeys(DATA_DIR, [OPENAI_API_INSTANCE, OPENROUTER_API_INSTANCE]);
+    if (moved) console.log(`[config] sealed ${moved} onboarding API key(s): removed from config.json, kept in the encrypted store`);
+  } catch (error) {
+    console.error(`[config] could not seal onboarding API keys: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 /** What happens to a Grok voice key of an older build: it becomes the xAI
@@ -1479,8 +1518,6 @@ export function loadConfig(): AppConfig {
   if (process.env.OPENAI_COMPAT_URL !== undefined) cfg.openaiCompat.url = process.env.OPENAI_COMPAT_URL;
   if (process.env.OPENAI_COMPAT_MODEL !== undefined) cfg.openaiCompat.model = process.env.OPENAI_COMPAT_MODEL;
   if (process.env.OPENAI_COMPAT_PROVIDER !== undefined) cfg.openaiCompat.provider = process.env.OPENAI_COMPAT_PROVIDER;
-  cfg.composio = { ...cfg.composio };
-  if (process.env.COMPOSIO_API_KEY !== undefined) cfg.composio.apiKey = process.env.COMPOSIO_API_KEY;
   // BOX_TOKEN keeps its historical name; the provider is Boat.
   cfg.box = { ...cfg.box };
   if (process.env.BOX_TOKEN !== undefined) cfg.box.token = process.env.BOX_TOKEN;
@@ -1561,7 +1598,6 @@ export function syncCredentialEnv(patch: Partial<Omit<AppConfig, "threads">>): v
     [patch.openaiCompat?.key, "OPENAI_COMPAT_API_KEY"],
     [patch.openai?.key, "SAGAX_OPENAI_API_KEY"],
     [patch.openrouter?.key, "SAGAX_OPENROUTER_API_KEY"],
-    [patch.composio?.apiKey, "COMPOSIO_API_KEY"],
     [patch.box?.token, "BOX_TOKEN"],
     [patch.opencodeGo?.apiKey, "OPENCODE_API_KEY"],
     [patch.tts?.key, "SAGAX_TTS_KEY"],
@@ -1619,8 +1655,6 @@ export const WORKSPACE_CREDENTIAL_ENV = [
   "SAGAX_OPENAI_IMAGE_KEY",
   "SAGAX_CUSTOM_IMAGE_KEY",
   "SAGAX_OPENAI_LIVE_KEY",
-  "COMPOSIO_API_KEY",
-  "SAGAX_COMPOSIO_BROKER_TOKEN",
   // The key of the encrypted MCP sign-in vault (server/mcp-oauth.ts).
   "SAGAX_MCP_OAUTH_KEY",
   // Cloud Pro's included Boat, voice and decision relay tokens
@@ -1827,7 +1861,7 @@ export function saveConfig(
   // back after we have successfully recognized the legacy list.
   const storedProfiles = storedBrowserProfilesSchema.safeParse(disk.browserProfiles);
   if (storedProfiles.success) disk.browserProfiles = storedProfiles.data;
-  for (const key of ["xai", "anthropic", "mistral", "cerebras", "groq", "meta", "openai", "openrouter", "openaiCompat", "composio", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "localVm", "features", "budgets", "billing", "decisions", "onboarding", "browserEngine"] as const) {
+  for (const key of ["xai", "anthropic", "mistral", "cerebras", "groq", "meta", "openai", "openrouter", "openaiCompat", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "routines", "localVm", "features", "budgets", "billing", "decisions", "onboarding", "browserEngine"] as const) {
     const section = checkedPatch[key];
     if (!section) continue;
     const current = jsonObjectSchema.safeParse(disk[key]);
@@ -2332,6 +2366,26 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
           if (typeof merged[k] !== "string" || !(merged[k] as string).trim()) merged[k] = v;
         }
         entry.config = merged;
+      }
+    }
+    // A CLI onboarding key lives sealed in the encrypted engine-key store, no
+    // longer in clear in config.json. Put it back on this transient instance
+    // config so the driver resolves the key exactly as before. An inline key
+    // (not yet migrated) still wins; built-in provider instances carry no
+    // inline key; an organization server keeps its shared-key semantics.
+    if (
+      entry.driver === "openai-compat" &&
+      id !== OPENAI_API_INSTANCE &&
+      id !== OPENROUTER_API_INSTANCE &&
+      process.env.SAGAX_IDENTITY?.trim().toLowerCase() !== "perspicax"
+    ) {
+      const current =
+        typeof entry.config === "object" && entry.config !== null && !Array.isArray(entry.config)
+          ? (entry.config as Record<string, unknown>)
+          : {};
+      if (typeof current.key !== "string" || !current.key) {
+        const stored = readOnboardingEngineKey(DATA_DIR, id);
+        if (stored) entry.config = { ...current, key: stored };
       }
     }
   }

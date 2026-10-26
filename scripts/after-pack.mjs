@@ -5,6 +5,7 @@ import {
   executableTarget,
   verifyCloudflaredExecutable,
 } from "./prepare-cloudflared.mjs";
+import { tailcatExecutableTarget, verifyTailcatExecutable } from "./prepare-tailcat.mjs";
 import { fileURLToPath } from "node:url";
 import { verifyBrowserBundle } from "./prepare-browser.mjs";
 import { verifyWindowsNatives } from "./verify-win-natives.mjs";
@@ -71,6 +72,33 @@ async function validateCloudflared(resources, platform, required) {
   );
 }
 
+async function validateTailcat(resources, platform, arch, required) {
+  const directory = path.join(resources, "tailcat");
+  const present = await lstat(directory).then(() => true, (error) => {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  });
+  if (!present) {
+    if (!required) return;
+    throw new Error("Packaged app is missing the tailcat resource");
+  }
+  if (!arch) throw new Error(`Unsupported tailcat package architecture: ${platform}`);
+  const unixMode = platform === "win32" ? undefined : 0o755;
+  await requireRealDirectory(directory, unixMode);
+  const executable = path.join(directory, platform === "win32" ? "tailcat.exe" : "tailcat");
+  await requireRegularFile(executable, unixMode);
+  const target = tailcatExecutableTarget(await readFile(executable));
+  const expected = platform === "win32" ? `win32-${arch}` : platform === "darwin" ? `darwin-${arch}` : "linux-x64";
+  if (target !== expected) {
+    throw new Error(`Packaged ${platform} ${arch} app contains the wrong tailcat target: ${target}`);
+  }
+  verifyTailcatExecutable(executable, target);
+  await requireRegularFile(
+    path.join(resources, "licenses", "tailcat-LICENSE.txt"),
+    platform === "win32" ? undefined : 0o644,
+  );
+}
+
 // The DuckDB binding the server requires at runtime (server/data/engine.ts):
 // the pinned packages, the native binding beside its library, and on macOS
 // only this app's slice, so an Intel Mac never gets an arm64-only dylib.
@@ -118,6 +146,8 @@ export default async function afterPack(context) {
       : path.join(context.appOutDir, "resources")
   );
   await validateCloudflared(resources, context.electronPlatformName, Boolean(context.packager));
+  const packageArch = { 1: "x64", 3: "arm64" }[context.arch];
+  await validateTailcat(resources, context.electronPlatformName, packageArch, Boolean(context.packager));
   const browserRoot = path.join(resources, "browser-engine");
   const hasBrowser = await lstat(browserRoot).then(() => true, (error) => {
     if (error?.code === "ENOENT") return false;

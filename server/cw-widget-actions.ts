@@ -11,9 +11,10 @@
 import { randomUUID } from "node:crypto";
 
 import { cwSite } from "../shared/cw-widgets/links.ts";
-import { cwWidgetFromToolCall, isCwWriteTool } from "../shared/cw-widgets/tool-call.ts";
+import { cwWidgetFromToolCall, isCwViewTool, isCwWriteTool } from "../shared/cw-widgets/tool-call.ts";
 import type { CwSite, CwWidget } from "../shared/cw-widgets/types.ts";
 import { cwActionMatchesWrite, cwActionSummary, cwActionWrite, type CwAction, type CwLanguage } from "../shared/cw-widgets/actions.ts";
+import { askedForView } from "../shared/requested-views.ts";
 import { redactSecrets } from "./redact.ts";
 
 export const CW_ACTION_PASS_MS = 10 * 60_000;
@@ -35,6 +36,14 @@ export function cwToolWidget(toolName: string, inputPreview: string | undefined,
     return null;
   }
   return widget ? redactSecrets(widget) as CwWidget : null;
+}
+
+/** The widget a completed call's tool row carries: only a Perspicax view
+ * tool's (`isCwViewTool`), and only when the person's message of the turn
+ * asked for a view (`askedForView`, shared/requested-views.ts). Every other ConnectWise call keeps a plain row;
+ * a view the person asks for in words comes as a ```cw fence in the reply. */
+export function cwToolRowWidget(toolName: string, inputPreview: string | undefined, resultText: string, personText?: string): CwWidget | null {
+  return isCwViewTool(toolName) && askedForView(personText, "view") ? cwToolWidget(toolName, inputPreview, resultText) : null;
 }
 
 export function cwActionLanguage(language: string | undefined): CwLanguage {

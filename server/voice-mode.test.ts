@@ -132,6 +132,19 @@ describe("voice mode key order", () => {
 });
 
 describe("voice mode routes", () => {
+  it("refuses speech and transcription once the spend limit is reached, before any xAI call", async () => {
+    const refusal = Object.assign(new Error("spend limit reached"), { status: 409, code: "spend_cap" });
+    const { call, xai, usage } = harness({ assertWithinBudget: () => { throw refusal; } });
+    const speak = await call({ method: "POST", path: "/api/bots/b-cryptic/voice/speak", body: { text: "hello" } });
+    expect(speak.status).toBe(409);
+    expect(speak.body).toMatchObject({ code: "spend_cap" });
+    expect(xai.synthesize).not.toHaveBeenCalled();
+    expect(xai.transcribe).not.toHaveBeenCalled();
+    expect(usage).toEqual([]);
+    // status and voice list stay readable
+    expect((await call({ method: "GET", path: "/api/bots/b-cryptic/voice/status" })).status).toBe(200);
+  });
+
   it("passes other paths", async () => {
     const { call } = harness();
     expect((await call({ method: "GET", path: "/api/tts/voices" })).passed).toBe(true);

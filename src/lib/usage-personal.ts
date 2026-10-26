@@ -40,9 +40,17 @@ export function personalUsagePeriods(now = new Date()): {
   };
 }
 
+/** The whole of last month (the previous billing cycle: the calendar month,
+ * as the ledger counts), first to last day. */
+export function previousCyclePeriod(now = new Date()): { from: string; to: string } {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  return { from: day(new Date(Date.UTC(year, month - 1, 1))), to: day(new Date(Date.UTC(year, month, 0))) };
+}
+
 /** GET /api/me/usage (Sagax 0.5.4 and later); `legacy`: GET /api/usage?mine=1,
  * the same person's own turns on a 0.5.3 server, which lacks the first. */
-export function usageQuery(range: { from: string; to: string }, groupBy: "day" | "bot" | "model", legacy = false): string {
+export function usageQuery(range: { from: string; to: string }, groupBy: "day" | "bot" | "model" | "engine", legacy = false): string {
   const query = `from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}&groupBy=${groupBy}`;
   return legacy ? `/api/usage?mine=1&${query}` : `/api/me/usage?${query}`;
 }
@@ -94,4 +102,20 @@ export function formatDay(iso: string): string {
   } catch {
     return iso.slice(0, 10);
   }
+}
+
+/** The personal monthly spend limit as GET /api/me/spend-cap answers it. */
+export interface PersonalSpendCap {
+  supported: boolean;
+  minUsd: number;
+  cap: { month: string; monthlyUsd: number; spentUsd: number; percent: number; warn: boolean; exceeded: boolean } | null;
+}
+
+/** What the person typed ("25", "25,50", "$25") as dollars; null when it is
+ * not a number or under the minimum. */
+export function parseCapInput(text: string, minUsd = 1): number | null {
+  const cleaned = text.trim().replace(/[$\s]/g, "").replace(",", ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null;
+  const value = Number(cleaned);
+  return value >= minUsd ? value : null;
 }

@@ -306,6 +306,12 @@ struct BotPermissionsSection: View {
                 }
                 .accessibilityIdentifier("permissions-allowlist")
             }
+            NavigationLink {
+                ApprovalGrantsPage(botId: current.id)
+            } label: {
+                Label("Approval rules", systemImage: "checkmark.shield")
+            }
+            .accessibilityIdentifier("permissions-approval-grants")
         } footer: {
             Text("Default for new threads, routines and delegated work. When enabling Full access, you can also apply it to every existing thread.")
         }

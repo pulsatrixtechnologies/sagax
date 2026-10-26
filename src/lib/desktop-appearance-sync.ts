@@ -4,7 +4,7 @@
 // The phone's Settings > Appearance > "Same as my computer" wears this
 // computer's skin and font. An organization server keeps them in the
 // person's preferences (user-preferences-sync.ts); a personal computer has no
-// person record, so the desktop app keeps a copy of the four appearance keys
+// person record, so the desktop app keeps a copy of the appearance keys
 // at /api/me/appearance:
 //   1. at start the desktop is the authority: it saves what it wears now;
 //   2. a local change (the skin picker, the font setting, Hibou 98) is saved
@@ -35,7 +35,7 @@ export interface DesktopAppearanceSyncDeps {
   timeoutMs?: number;
 }
 
-/** The four keys as this page holds them now. */
+/** The appearance keys as this page holds them now. */
 export function readDesktopAppearance(storage: Storage): DesktopAppearance {
   const raw: Record<string, string> = {};
   for (const key of DESKTOP_APPEARANCE_KEYS) {
@@ -133,8 +133,9 @@ export async function syncDesktopAppearance(): Promise<void> {
   } catch {
     return;
   }
-  const [{ applySkin, SKIN_IDS }, { applyFont, FONT_IDS }, retro] = await Promise.all([
+  const [{ applySkin, applySkinDepth, applySkinTexture, prefersDarkScheme, resolveStoredSkin, SKIN_IDS }, { isSkinTexture, isSkinTint, writeSkinAuto }, { applyFont, FONT_IDS }, retro] = await Promise.all([
     import("./skins"),
+    import("./skin-families"),
     import("./fonts"),
     import("./retro98"),
   ]);
@@ -151,8 +152,14 @@ export async function syncDesktopAppearance(): Promise<void> {
         }
       }
       if (retroOn !== (current["omb.retro98.on"] === "1")) retro.setRetroEnabled(retroOn);
+      const auto = next["omb-skin-mode"] === "auto";
+      writeSkinAuto(auto, storage);
       const skin = SKIN_IDS.find((id) => id === next["omb-skin"]);
-      if (skin && !retroOn) applySkin(skin);
+      // a phone that does not send a tint chose a plain skin: the family's own look
+      if (skin && !retroOn) applySkin(resolveStoredSkin(skin, auto, prefersDarkScheme()), isSkinTint(next["omb-skin-tint"]) ? next["omb-skin-tint"] : null);
+      applySkinDepth(next["omb-skin-depth"] === "full" ? "full" : "accent");
+      const texture = next["omb-skin-texture"];
+      applySkinTexture(isSkinTexture(texture) ? texture : "none");
       const font = FONT_IDS.find((id) => id === (next["omb-font"] ?? "skin"));
       if (font) applyFont(font);
     },

@@ -13,7 +13,7 @@ vi.mock("@/state/store", async (original) => ({
 
 import { SecretRequestCard } from "./SecretRequestCard";
 import { matchingItems, createCredentialDraft } from "@/lib/credential-vault";
-import type { VaultItemListing } from "../../shared/credential-vault";
+import { siteAddable, vaultSiteOf, type VaultItemListing } from "../../shared/credential-vault";
 
 const card = (secret: Record<string, unknown>): Message => ({
   id: "vault-card",
@@ -57,6 +57,22 @@ describe("VaultRequestCard", () => {
     expect(view({ dismissed: true, resumed: true })).toContain("Login for example.test not shared");
     expect(view({ superseded: true })).toContain("Replaced by a newer request");
   });
+
+  it("says the person signed in themselves, with no login named", () => {
+    const html = view({ dismissed: true, resumed: true, vault: { principalId: "local", domain: "example.test", signedInSelf: true } });
+    expect(html).toContain("You signed in to example.test yourself");
+    expect(html).not.toContain("not shared");
+  });
+
+  it("says a 1Password login was allowed for this one request (parité R10)", () => {
+    const html = view({ provided: true, resumed: true, vault: { principalId: "local", domain: "example.test", itemId: "abc", itemName: "Example work", mode: "once", onePassword: true } });
+    expect(html).toContain("Example work");
+    expect(html).toContain("1Password");
+  });
+
+  it("offers to sign in yourself while pending", () => {
+    expect(view()).toContain("sign in myself instead");
+  });
 });
 
 describe("vault helpers", () => {
@@ -73,9 +89,38 @@ describe("vault helpers", () => {
       item({ id: "d", name: "Look-alike", domains: ["example.test.evil.test"] }),
     ];
     expect(matchingItems(items, { domain: "example.test" }).map((row) => row.id)).toEqual(["a"]);
-    expect(matchingItems(items, { domain: "sso.example.test" })).toEqual([]);
+    // Another address of the same site: offered after the direct matches,
+    // to be added only if the person ticks it; a look-alike never is.
+    expect(matchingItems(items, { domain: "sso.example.test" }).map((row) => row.id)).toEqual(["a"]);
+    expect(matchingItems(items, { domain: "other.test" })).toEqual([]);
+    // example.test.evil.test belongs to evil.test, never to example.test.
+    expect(matchingItems(items, { domain: "www.example.test" }).map((row) => row.id)).toEqual(["a"]);
     expect(matchingItems(items, { name: "bill" }).map((row) => row.id)).toEqual(["b"]);
     expect(matchingItems(items, { name: "example" }).map((row) => row.id)).toEqual([]);
+  });
+
+  it("knows when a chosen login needs the asked site, and what a site is", () => {
+    // Another address of the login's own site only: never a look-alike, a
+    // wildcard, a shared hosting name, plain http or an address already covered.
+    expect(siteAddable(["example.test"], "accounts.example.test")).toBe(true);
+    expect(siteAddable(["example.test", "*.example.test"], "accounts.example.test")).toBe(false);
+    expect(siteAddable(["example.test"], undefined)).toBe(false);
+    expect(siteAddable(["example.com"], "examp1e.com")).toBe(false);
+    expect(siteAddable(["example.com"], "example.com.evil.test")).toBe(false);
+    expect(siteAddable(["example.com"], "*.example.com")).toBe(false);
+    expect(siteAddable(["alice.github.io"], "www.alice.github.io")).toBe(false);
+    expect(siteAddable(["acme.okta.com"], "evil.okta.com")).toBe(false);
+    expect(siteAddable(["example.co.uk"], "login.other.co.uk")).toBe(false);
+    expect(siteAddable(["example.co.uk"], "login.example.co.uk")).toBe(true);
+    expect(vaultSiteOf("accounts.example.com")).toBe("example.com");
+    expect(vaultSiteOf("*.example.com")).toBe("example.com");
+    expect(vaultSiteOf("login.example.co.uk")).toBe("example.co.uk");
+    expect(vaultSiteOf("alice.github.io")).toBe("alice.github.io");
+    expect(vaultSiteOf("www.alice.github.io")).toBe("alice.github.io");
+    expect(vaultSiteOf("bob.github.io")).not.toBe(vaultSiteOf("alice.github.io"));
+    expect(vaultSiteOf("acme.okta.com")).toBe("acme.okta.com");
+    expect(vaultSiteOf("github.io")).toBeNull();
+    expect(vaultSiteOf("not a site")).toBeNull();
   });
 
   it("leaves empty optional fields out of a new login", () => {

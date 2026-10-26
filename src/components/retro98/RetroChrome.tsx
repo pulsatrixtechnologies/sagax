@@ -10,7 +10,6 @@ import "./retro-chrome.css";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
-import { connectedAppsEnabled } from "@/lib/feature-flags";
 import { cn } from "@/lib/cn";
 import { brand } from "@/lib/brand";
 import { APP_FULL_NAME, APP_NAME } from "@/lib/app-links";
@@ -103,7 +102,7 @@ export function RetroTop({ onNewBot }: { onNewBot?: () => void }) {
           { id: "s1", separator: true },
           { id: "routines", label: t("sidebar.nav.automations"), run: () => dispatch({ type: "showRoutines" }) },
           { id: "teamMap", label: t("sidebar.nav.teamMap"), run: () => dispatch({ type: "showTeamMap" }) },
-          ...(connectedAppsEnabled(state.config) ? [{ id: "apps", label: t("sidebar.nav.connectedApps"), run: () => dispatch({ type: "togglePlugins", open: true }) }] : []),
+          { id: "apps", label: t("sidebar.nav.connectedApps"), run: () => dispatch({ type: "togglePlugins", open: true }) },
           { id: "s2", separator: true },
           { id: "appearance", label: t("retro.cmd.appearance"), run: () => dispatch({ type: "toggleAppSettings", open: true, section: "appearance" }) },
         ],

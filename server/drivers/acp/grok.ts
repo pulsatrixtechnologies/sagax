@@ -22,6 +22,9 @@ import { grokHostToolArgs, grokOrgAgentProfile } from "../host-tools.ts";
 import { grokReadOnlyAllowRules } from "./grok-read-only-tools.ts";
 import { gateReadOnlyTools, grokApprovalGateEnabled } from "./grok-approval-gate.ts";
 import { knownGrokTools, knownGrokToolsSection, recordGrokToolUse, useToolName } from "./grok-tool-usage.ts";
+import { grokCatalogFor, grokCatalogSection, rememberGrokCatalog } from "./grok-tool-catalog.ts";
+import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors.ts";
+import { turnReachFor } from "../../turn-reach.ts";
 import { allowsTool, canUseMcpServer, narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
 import { grokAliasBase, grokToolNameProblem } from "../../mcp-tool-names.ts";
 
@@ -107,6 +110,64 @@ const SLUG = /^[a-z0-9][a-z0-9._-]*$/i;
  * config and catalog all live here. */
 export function grokHome(env: Record<string, string | undefined> = process.env): string {
   return env.GROK_HOME || harnessHome("grok", env);
+}
+
+/** Env for the xAI account's cloud connectors (hosted and managed MCP).
+ * Only an organization turn loads them: host tools are withheld, so Grok
+ * reaches every MCP tool through use_tool, and a server Sagax did not mount
+ * keeps its card. A solo turn in `--permission-mode default` can call those
+ * servers with no prompt, so they stay off. A tool selection stays off too:
+ * that turn refuses any MCP server it did not list. Gateway tools stay off
+ * on every turn. */
+export function grokCloudConnectorEnv(toolScope: unknown, withholdHostTools?: boolean, ownAccount?: boolean): {
+  GROK_MANAGED_MCPS_ENABLED?: "false";
+  GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED: "false";
+} {
+  // Review of #943 (point 5): only on the person's own xAI sign-in
+  // (harness-connectors.ts grokCloudConnectorsForTurn), never on an account
+  // that pays for someone else's turn.
+  if (toolScope !== undefined || withholdHostTools !== true || ownAccount !== true) {
+    return { GROK_MANAGED_MCPS_ENABLED: "false", GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED: "false" };
+  }
+  return { GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED: "false" };
+}
+
+/** The xAI cloud connectors this turn could reach through use_tool, named
+ * for the capability summary (grok-tool-catalog.ts) so a connector on the
+ * Connect-apps card that the person never connected on grok.com is surfaced
+ * as connectable (a one-step open_connector_setup) instead of a dead end.
+ * Only an own-account organization turn loads managed MCP at all
+ * (grokCloudConnectorsForTurn -> turn.grokCloudConnectors); on any other
+ * turn there is nothing to connect here, so the list is empty. The summary
+ * drops any of these the live catalog already carries. */
+export function grokConnectableConnectors(accountConnectors: boolean): { id: string; label: string }[] {
+  if (!accountConnectors) return [];
+  return GROK_CLOUD_CONNECTORS.map((connector) => ({ id: connector.id, label: connector.name }));
+}
+
+/** Whether Grok may load MCP servers Sagax did not mount: a config override
+ * (GROK_CONFIG, GROK_CONFIG_PATH), or an `mcp_servers` table, dotted key or
+ * assignment in GROK_HOME's config.toml or any `.grok/config.toml` from the
+ * turn's folder up (the files grokInheritedProfile reads). Errs toward yes:
+ * any line that starts with mcp_servers counts. */
+export function grokConfigDeclaresMcp(env: Record<string, string | undefined>, cwd?: string): boolean {
+  if (env.GROK_CONFIG || env.GROK_CONFIG_PATH) return true;
+  const files = [join(grokHome(env), "config.toml")];
+  if (cwd) {
+    for (let directory = resolve(cwd);;) {
+      files.push(join(directory, ".grok", "config.toml"));
+      const parent = dirname(directory);
+      if (parent === directory) break;
+      directory = parent;
+    }
+  }
+  return files.some((file) => {
+    try {
+      return /^\s*(?:\[\[?\s*)?["']?mcp_servers\b/m.test(readFileSync(file, "utf8"));
+    } catch {
+      return false;
+    }
+  });
 }
 
 /** The grok.com sign-in a turn runs on is stored. */
@@ -486,14 +547,19 @@ export function ensureGrokInjectSlug(
   return slug;
 }
 
-/** Grok 1.0.25 consumes native image blocks but advertises image:false.
+/** Grok 1.0.25 and later 1.x consume native image blocks but advertise image:false.
  * Verified with the real CLI and a loopback model: scripts/verify-grok-images.ts.
  * Keep unknown/older runtimes on the normal capability negotiation path. */
 export function grokAcceptsUnadvertisedImages(init: unknown): boolean {
   const meta = (init as { _meta?: { grokShell?: unknown; agentVersion?: unknown } } | null)?._meta;
   if (meta?.grokShell !== true || typeof meta.agentVersion !== "string") return false;
-  const version = /^1\.0\.(\d+)$/.exec(meta.agentVersion);
-  return Boolean(version && Number(version[1]) >= 25);
+  // Any 1.x release from 1.0.25 on (grok 1.0.62 on 2026-10-19). A 2.x stays
+  // unknown until scripts/verify-grok-images.ts checks it; so does a
+  // pre-release suffix.
+  const version = /^(\d+)\.(\d+)\.(\d+)$/.exec(meta.agentVersion);
+  if (!version) return false;
+  const [major, minor, patch] = version.slice(1).map(Number) as [number, number, number];
+  return major === 1 && (minor > 0 || patch >= 25);
 }
 
 /** Organization server: one turn's credentials (SendTurnInput.access). */
@@ -766,10 +832,17 @@ const support: AcpSupport = {
   // residual requests still ask. Never replace it with bypassPermissions.
   // Verified: grok 1.0.3 --help and xai-org/grok-build@37949780,
   // crates/codegen/xai-grok-pager-bin/src/main.rs:1259-1273.
-  // Approval gate (grok-approval-gate.ts), per-bot flag: an Auto turn runs
+  // Approval gate (grok-approval-gate.ts), on unless the bot opts out: an Auto turn runs
   // Grok in `default` mode, with no per-call classifier wait, and Sagax
   // holds every MCP call that is not reviewed read-only for a card.
-  approvalGate: (config, turn) => !config.fullAuto && turn.approvalMode === "auto" && grokApprovalGateEnabled(turn.botId),
+  // Solo only: MCP servers the person declared in Grok's own config.toml are
+  // not mounted by Sagax, so the gate cannot hold them, and in `default`
+  // mode Grok may call them with no prompt. Such a turn keeps Grok's own
+  // auto mode. An organization turn withholds host tools: Grok reaches any
+  // MCP tool through use_tool only, and gated-mcp-ask.ts keeps every ask
+  // that names a server Sagax did not mount as a card.
+  approvalGate: (config, turn, context) => !config.fullAuto && turn.approvalMode === "auto" && grokApprovalGateEnabled(turn.botId)
+    && (turn.withholdHostTools === true || !grokConfigDeclaresMcp(context?.env ?? process.env, context?.cwd)),
   approvalReadOnly: (server, botId) => gateReadOnlyTools(server, botId),
 
   spawnArgs: (config, turn, launch) => {
@@ -835,7 +908,7 @@ const support: AcpSupport = {
   async configureSession({ request, sessionId, turn, currentModelId, sessionModels, notice }) {
     if (turn.toolScope !== undefined) {
       const available = new Set([
-        ...(turn.integrations?.agents ? ["agents"] : []), ...(turn.integrations?.composio ? ["composio"] : []),
+        ...(turn.integrations?.agents ? ["agents"] : []),
         ...(turn.integrations?.browser ? ["browser"] : []), ...(turn.integrations?.localComputer ? ["computer"] : []),
         ...Object.keys(turn.integrations?.custom ?? {}),
       ].filter((name) => canUseMcpServer(turn.toolScope, name)));
@@ -852,6 +925,7 @@ const support: AcpSupport = {
           }
         }
         if (catalog.sessionMcpResolved === true) {
+          rememberGrokCatalog(sessionId, catalog);
           if ([...available].some((name) => !catalog.servers.some((server: { name?: string; session?: { enabled?: boolean; status?: string } }) => server.name === name && server.session?.enabled === true && server.session.status === "ready"))) {
             throw new Error("Grok could not connect a selected MCP server. No prompt was sent.");
           }
@@ -867,7 +941,7 @@ const support: AcpSupport = {
       // the bot answered that ConnectWise was not reachable. Wait, bounded
       // and best effort, until Grok resolved its servers and none is still
       // pending; on a timeout or an unreadable list the prompt goes anyway.
-      await waitForGrokMcpSettled(request, sessionId, GROK_MCP_SETTLE_MS);
+      await waitForGrokMcpSettled(request, sessionId, GROK_MCP_SETTLE_MS, (catalog) => rememberGrokCatalog(sessionId, catalog));
     }
     if (!turn.model) return;
     if (grokPinsModelInProfile(turn)) {
@@ -914,13 +988,14 @@ const support: AcpSupport = {
   transformEnv: (env) => {
     delete env.XAI_API_KEY;
   },
-  applyTurnEnv: (env, { toolScope, withholdHostTools }) => {
-    if (toolScope !== undefined || withholdHostTools === true) {
-      // The verified runtime gives these local env switches priority over
-      // account defaults, preventing an unfiltered managed gateway fallback.
-      env.GROK_MANAGED_MCPS_ENABLED = "false";
-      env.GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED = "false";
-    }
+  applyTurnEnv: (env, { toolScope, withholdHostTools, accountConnectors }) => {
+    // Cloud connectors of the signed-in xAI account reach this bot. A tool
+    // selection still turns them off (grokCloudConnectorEnv). Gateway tools
+    // stay off on every turn.
+    const cloud = grokCloudConnectorEnv(toolScope, withholdHostTools === true, accountConnectors === true);
+    if (cloud.GROK_MANAGED_MCPS_ENABLED) env.GROK_MANAGED_MCPS_ENABLED = cloud.GROK_MANAGED_MCPS_ENABLED;
+    else delete env.GROK_MANAGED_MCPS_ENABLED;
+    env.GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED = cloud.GROK_MANAGED_MCP_GATEWAY_TOOLS_ENABLED;
     if (withholdHostTools === true || (toolScope !== undefined && narrowsNativeTools(toolScope))) {
       if (env.GROK_AGENT && env.GROK_AGENT !== "grok-build") {
         throw new Error(withholdHostTools === true
@@ -964,7 +1039,21 @@ const support: AcpSupport = {
   // The tools this bot already used successfully, named once per
   // conversation (and again only when the set changes), so a first use in a
   // new conversation skips the search_tool round too.
-  volatileSection: ({ botId, serverNames }) => knownGrokToolsSection(knownGrokTools(botId, serverNames)),
+  // With Grok's own catalog of this session (read in configureSession,
+  // grok-tool-catalog.ts), the section names every ready tool instead, plus
+  // what a feature opened for this conversation (turn-reach.ts): a question
+  // about connectors needs no call, and a listed tool no search.
+  volatileSection: ({ botId, serverNames, sessionId, threadId, accountConnectors }) => {
+    const known = knownGrokTools(botId, serverNames);
+    const catalog = grokCatalogFor(sessionId);
+    // computed by the server with the speaker and payer (turn-reach.ts)
+    const reach = turnReachFor(threadId) ?? { lines: [], tools: [] };
+    // the xAI cloud connectors an own-account org turn can connect (#966),
+    // so a card connector not yet connected on grok.com is actionable
+    const connectable = grokConnectableConnectors(accountConnectors === true);
+    if (!catalog && !reach.tools.length && !reach.lines.length && !connectable.length) return knownGrokToolsSection(known);
+    return grokCatalogSection({ catalog, known, pinned: reach.tools, lines: reach.lines, connectable });
+  },
   onToolCompleted: ({ botId, rawInput }) => recordGrokToolUse(botId, useToolName(rawInput)),
 
   // grok.com sometimes takes 30-90 s to its first token. Normal silent
@@ -995,6 +1084,8 @@ export async function waitForGrokMcpSettled(
   request: (method: string, params: unknown, timeoutMs: number) => Promise<{ result?: unknown } | undefined>,
   sessionId: string,
   budgetMs: number,
+  /** the last catalog read, settled or not (grok-tool-catalog.ts) */
+  onCatalog?: (catalog: unknown) => void,
 ): Promise<boolean> {
   const deadline = Date.now() + budgetMs;
   for (;;) {
@@ -1002,6 +1093,9 @@ export async function waitForGrokMcpSettled(
     if (left <= 0) return false;
     try {
       const reply = await request("_x.ai/mcp/list", { sessionId, cache: true }, Math.min(10_000, left));
+      if (onCatalog && reply?.result) {
+        try { onCatalog(reply.result); } catch { /* bookkeeping only */ }
+      }
       if (grokMcpSettled(reply?.result)) return true;
     } catch {
       return false;

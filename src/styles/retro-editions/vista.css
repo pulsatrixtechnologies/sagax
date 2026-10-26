@@ -1,0 +1,685 @@
+/* Hibou 98, Windows Vista edition (data-skin-tint="vista"): the Aero look of
+   2007 laid over the 98 structure. Translucent black-teal glass on the title
+   bar and the window frame (a blur over the desktop, a dark gradient and its
+   reflections), a glowing red close box, glossy grey push buttons that turn
+   blue under the pointer, a dark command bar, Segoe UI 9pt (12px) with
+   smoothing, slightly rounded corners, light blue selections with a border,
+   and an aurora desktop drawn with gradients only. Every glyph is a data-URI
+   SVG drawn here; no image or font from the era is embedded. Every selector
+   starts with [data-skin="retro98"][data-skin-tint="vista"], one attribute
+   more than the rules of retro98.css, so it wins over them in any order. */
+
+/* ══ palette (measured by pnpm check:contrast as retro98+vista) ═══════════ */
+[data-skin="retro98"][data-skin-tint="vista"] {
+  --skin-swatch: #1d6b6a;   /* the aurora's teal under black glass (decorative) */
+  --color-app: #ffffff;
+  --color-panel: #f0f0f0;
+  --color-sidebar: #f0f0f0;
+  --color-sidebar-ink: #000000;
+  --color-sidebar-ink-secondary: #33373b;
+  --color-sidebar-hover: #3399ff1a;
+  --color-sidebar-selected: #3399ff40;
+  --color-sidebar-hairline: #a0a0a0;
+  --color-raised: #fcfcfc;
+  --color-raised-hover: #cce8fa;
+  --color-composer: #ffffff;
+  --color-composer-ring: #8e8f8f;
+  --color-card: #f0f0f0;
+  --color-menu: #f0f0f0;
+  --color-inset: #ffffff;
+  --color-control: #f7f7f7;
+  --color-hairline: #a0a0a0;
+
+  --color-ink: #000000;
+  --color-ink-secondary: #3a3d41;
+  --color-ink-tertiary: #3a3d41;
+
+  --color-accent: #0a62a8;
+  --color-accent-border: #3c7fb1;
+  --color-accent-text: #0a5596;
+  --color-accent-ink: #ffffff;
+  --color-focus: #000000;
+  --color-unread: var(--color-accent);
+  --color-scrollbar: #9b9b9b;
+
+  --font-sans: "Segoe UI", Tahoma, Verdana, sans-serif;
+  --radius-lg: 3px;
+  --radius-xl: 6px;
+  --color-popover-border: #6d6d6d;
+}
+
+/* ══ structure: the bevel tokens of retro98.css, redrawn as Aero ══════════
+   (`:root` first keeps this block out of the contrast script's palette parse) */
+:root[data-skin="retro98"][data-skin-tint="vista"] {
+  --r98-font: "Segoe UI", Tahoma, Verdana, sans-serif;
+  --r98-face: #f0f0f0;
+  --vi-face: #f0f0f0;
+  --vi-glass:
+    linear-gradient(180deg, rgb(255 255 255 / 0.2) 0, rgb(255 255 255 / 0.07) 46%, rgb(255 255 255 / 0) 47%),
+    linear-gradient(112deg, transparent 0 18%, rgb(255 255 255 / 0.08) 22%, transparent 30%, transparent 58%, rgb(255 255 255 / 0.06) 63%, transparent 71%),
+    linear-gradient(180deg, rgb(30 48 60 / 0.62), rgb(10 20 28 / 0.74));
+  --vi-glass-dense:
+    linear-gradient(180deg, rgb(255 255 255 / 0.2) 0, rgb(255 255 255 / 0.07) 30px, rgb(255 255 255 / 0) 31px),
+    linear-gradient(112deg, transparent 0 18%, rgb(255 255 255 / 0.08) 22%, transparent 30%, transparent 58%, rgb(255 255 255 / 0.06) 63%, transparent 71%),
+    linear-gradient(180deg, rgb(22 40 52 / 0.84), rgb(8 18 26 / 0.9));
+  --vi-sel: linear-gradient(180deg, #eaf6fd 0%, #d9f0fc 49%, #bee6fd 50%, #a7d9f5 100%);
+  --vi-sel-rim: #6db6e8;
+  --vi-button: linear-gradient(180deg, #f2f2f2 0%, #ebebeb 49%, #dddddd 50%, #cfcfcf 100%);
+  --vi-button-hover: linear-gradient(180deg, #eaf6fd 0%, #d9f0fc 49%, #bee6fd 50%, #a7d9f5 100%);
+  --vi-button-down: linear-gradient(180deg, #e5f4fc 0%, #c4e5f6 49%, #98d1ef 50%, #68b3db 100%);
+  --r98-raised: inset 0 0 0 1px #707070, inset 0 0 0 2px rgb(255 255 255 / 0.7);
+  --r98-pressed: inset 0 0 0 1px #2c628b, inset 0 1px 2px 1px rgb(0 0 0 / 0.2);
+  --r98-default: inset 0 0 0 1px #3c7fb1, inset 0 0 0 2px #9fdcfc, inset 0 0 0 3px rgb(255 255 255 / 0.5);
+  --r98-window-bevel: inset 0 0 0 1px #979797;
+  --r98-field: inset 0 1px 0 #8e8f8f, inset 0 0 0 1px #b5b8bd;
+  --r98-status: none;
+  --r98-groove: inset 0 0 0 1px #d5dfe5;
+  --r98-thin-raised: inset 0 0 0 1px #a8b8c8, inset 0 0 0 2px rgb(255 255 255 / 0.7);
+  --r98-thin-sunken: inset 0 0 0 1px #6d8aa6, inset 0 1px 2px 1px rgb(0 0 0 / 0.15);
+  --r98-tab: inset 0 0 0 1px #898c95;
+  --r98-arrow-down: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='17' height='17'%3E%3Cpath d='M5 7h7l-3.5 4z' fill='%23000'/%3E%3C/svg%3E");
+  --r98-check: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9' viewBox='0 0 9 9'%3E%3Cpath d='M1 4.5l2.5 2.5L8 1.5' fill='none' stroke='%231c4f8c' stroke-width='1.8'/%3E%3C/svg%3E");
+}
+
+/* ══ type: Segoe UI 9pt with smoothing ════════════════════════════════════ */
+[data-skin="retro98"][data-skin-tint="vista"] :where(body *:not(svg, svg *, .katex, .katex *)) {
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] body,
+[data-skin="retro98"][data-skin-tint="vista"] :where(body *:not(svg, svg *, code, pre, pre *, kbd, samp, .katex, .katex *)) {
+  -webkit-font-smoothing: antialiased !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] ::selection {
+  background: #3399ff;
+  color: #fff;
+}
+[data-skin="retro98"][data-skin-tint="vista"] :disabled {
+  color: #8d8d8d;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .text-accent,
+[data-skin="retro98"][data-skin-tint="vista"] .text-accent-text {
+  color: var(--color-accent-text) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-retro-author]::before {
+  color: #1e395b;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-retro-author][data-retro-role="user"]::before {
+  color: #8a2b14;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .chat-md a {
+  color: #0066cc !important;
+}
+
+/* ══ the desktop: an aurora over the night ════════════════════════════════ */
+[data-skin="retro98"][data-skin-tint="vista"] body {
+  background:
+    radial-gradient(ellipse 55% 28% at 28% 64%, rgb(130 230 120 / 0.75), transparent 70%),
+    radial-gradient(ellipse 48% 26% at 64% 46%, rgb(40 180 200 / 0.7), transparent 70%),
+    radial-gradient(ellipse 80% 14% at 48% 70%, rgb(210 255 160 / 0.4), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 85% 30%, rgb(30 110 170 / 0.55), transparent 70%),
+    linear-gradient(160deg, #021018 0%, #063040 38%, #0b4a3c 60%, #03141c 100%) !important;
+  background-attachment: fixed !important;
+  color: #000;
+}
+
+/* ══ the window: a black glass frame around the client area ═══════════════ */
+[data-skin="retro98"][data-skin-tint="vista"] [data-app-shell] {
+  padding: 0 5px 5px !important;
+  background: linear-gradient(180deg, rgb(26 42 54 / 0.5), rgb(8 16 24 / 0.66)) !important;
+  border-radius: 6px 6px 0 0 !important;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.8), inset 0 0 0 2px rgb(255 255 255 / 0.22) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-app-shell] > .app-shell-row,
+[data-skin="retro98"][data-skin-tint="vista"] [data-app-shell] main,
+[data-skin="retro98"][data-skin-tint="vista"] [data-sidebar],
+[data-skin="retro98"][data-skin-tint="vista"] [data-tour="composer"] {
+  background: var(--vi-face) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-top {
+  margin: 0 -5px;
+  padding: 0 5px;
+}
+
+/* title bar: glass with its reflections, white title */
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-titlebar {
+  height: 30px;
+  margin: 0 -5px;
+  padding: 0 6px 0 8px;
+  gap: 6px;
+  align-items: center;
+  border-radius: 6px 6px 0 0 !important;
+  background: var(--vi-glass);
+  backdrop-filter: blur(8px) saturate(1.4) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.3), inset 1px 0 0 rgb(255 255 255 / 0.12), inset -1px 0 0 rgb(255 255 255 / 0.12) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-titlebar-mac {
+  padding-left: 78px;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-titlebar-text {
+  font-weight: normal;
+  color: #fff;
+  text-shadow: 0 0 8px rgb(255 255 255 / 0.35), 0 1px 2px rgb(0 0 0 / 0.8) !important;
+}
+/* caption buttons hang from the top edge: min and max joined, close wider and red */
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-caption {
+  align-self: flex-start;
+  gap: 0;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-caption-btn {
+  width: 27px;
+  min-width: 27px !important;
+  height: 19px;
+  min-height: 19px !important;
+  border: 1px solid rgb(0 0 0 / 0.75) !important;
+  border-top: 0 !important;
+  margin-left: -1px;
+  background-color: transparent !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-image: var(--vi-glyph), linear-gradient(180deg, rgb(255 255 255 / 0.3) 0 46%, rgb(255 255 255 / 0.06) 50%, rgb(255 255 255 / 0.18) 100%) !important;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.3) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-caption-btn:hover {
+  background-image: var(--vi-glyph), linear-gradient(180deg, rgb(160 220 255 / 0.65) 0 46%, rgb(40 140 220 / 0.55) 50%, rgb(90 200 255 / 0.7) 100%) !important;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.45), 0 0 8px rgb(80 180 255 / 0.6) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-caption-btn:active {
+  filter: brightness(0.8);
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-min {
+  border-bottom-left-radius: 4px !important;
+  --vi-glyph: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='9'%3E%3Cpath d='M1.5 5.5h8v3h-8z' fill='%23fff' stroke='%23182630'/%3E%3C/svg%3E");
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-max {
+  --vi-glyph: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='10'%3E%3Cpath fill='%23fff' stroke='%23182630' fill-rule='evenodd' d='M.5.5h11v9H.5zM3 3.5v3.5h6V3.5z'/%3E%3C/svg%3E");
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-close {
+  width: 44px;
+  min-width: 44px !important;
+  margin-left: -1px;
+  border-bottom-right-radius: 4px !important;
+  --vi-glyph: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='11'%3E%3Cpath d='M2 1.5l8 8M10 1.5l-8 8' stroke='%23461008' stroke-width='3.6' stroke-linecap='round'/%3E%3Cpath d='M2 1.5l8 8M10 1.5l-8 8' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-image: var(--vi-glyph), linear-gradient(180deg, #eea08d 0%, #d9694f 46%, #c2341a 50%, #d24b2c 76%, #f08a66 100%) !important;
+  box-shadow: inset 0 0 0 1px rgb(255 210 190 / 0.45), 0 0 7px 1px rgb(255 90 50 / 0.45) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-close:hover {
+  background-image: var(--vi-glyph), linear-gradient(180deg, #ffbfae 0%, #f0806a 46%, #e0401c 50%, #f05a32 76%, #ffb08a 100%) !important;
+  box-shadow: inset 0 0 0 1px rgb(255 220 200 / 0.6), 0 0 12px 3px rgb(255 100 50 / 0.65) !important;
+}
+
+/* menu bar */
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-menubar {
+  height: 22px;
+  margin: 0;
+  padding: 0 3px;
+  background: linear-gradient(180deg, #fbfcfd, #eef1f4);
+  border-bottom: 1px solid #d5dae0;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-menubar-item {
+  height: 20px;
+  padding: 0 8px !important;
+  border-radius: 3px !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-menubar-item:hover {
+  background: var(--vi-sel) !important;
+  box-shadow: inset 0 0 0 1px #99c9ea !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-menubar-item.r98w-open {
+  background: linear-gradient(180deg, #e3eef6, #c9e0f0) !important;
+  box-shadow: inset 0 0 0 1px #5a9bc9, inset 0 1px 2px rgb(0 0 0 / 0.15) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-mnemonic {
+  text-decoration: none;
+}
+
+/* the drop-downs: a light menu with its icon gutter */
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-dropdown,
+[data-skin="retro98"][data-skin-tint="vista"] :is([role="menu"], .bg-menu):not(.r98-root *, [data-r98-chrome] *) {
+  padding: 2px !important;
+  border: 1px solid #979797 !important;
+  background: linear-gradient(90deg, #f1f1f1 0 26px, #e2e3e3 26px 27px, #ffffff 27px 28px, #f0f0f0 28px) !important;
+  box-shadow: 2px 2px 4px rgb(0 0 0 / 0.35) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [role="listbox"]:not(.r98-root *, [data-r98-chrome] *) {
+  padding: 1px !important;
+  border: 1px solid #979797 !important;
+  background: #fff !important;
+  box-shadow: 2px 2px 4px rgb(0 0 0 / 0.3) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-dropdown-item {
+  height: 22px;
+  min-height: 22px !important;
+  padding-right: 18px !important;
+  grid-template-columns: 30px 1fr auto;
+  border-radius: 3px !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-dropdown-item:is(:hover, :focus):not([aria-disabled="true"]),
+[data-skin="retro98"][data-skin-tint="vista"] :is([role="menuitem"], [role="option"], [role="menuitemcheckbox"], [role="menuitemradio"]):not(.r98-root *, [data-r98-chrome] *):is(:hover, :focus, [aria-selected="true"], [data-highlighted]) {
+  background: var(--vi-sel) !important;
+  color: #000 !important;
+  border-radius: 3px !important;
+  box-shadow: inset 0 0 0 1px #a8d8eb !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] :is([role="menuitem"], [role="option"], [role="menuitemcheckbox"], [role="menuitemradio"]):not(.r98-root *, [data-r98-chrome] *):is(:hover, :focus, [aria-selected="true"], [data-highlighted]) * {
+  color: #000 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-dropdown-item[aria-disabled="true"] {
+  color: #8d8d8d;
+  text-shadow: none;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-dropdown-sep {
+  height: 2px;
+  margin: 3px 2px 3px 30px;
+  border-top: 1px solid #e0e0e0;
+  border-bottom: 1px solid #fff;
+}
+
+/* the command bar: dark teal glass, icons that light up under the pointer */
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-toolbar {
+  height: 32px;
+  margin: 0 0 4px;
+  padding-left: 6px;
+  border-top: 0;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.22) 0, rgb(255 255 255 / 0.06) 48%, rgb(0 0 0 / 0) 50%),
+    linear-gradient(180deg, #4d7480 0%, #24505d 48%, #0f3540 52%, #154551 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -1px 0 #08202a !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-toolbar::before {
+  display: none;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-tool {
+  width: 28px;
+  min-width: 28px !important;
+  height: 26px;
+  border-radius: 3px !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-tool:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.4) 0, rgb(255 255 255 / 0.14) 49%, rgb(120 220 255 / 0.18) 51%, rgb(160 230 255 / 0.32) 100%) !important;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.55), 0 0 0 1px rgb(0 0 0 / 0.55) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-tool:is(:active, [aria-pressed="true"]):not(:disabled) {
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.35), rgb(40 120 160 / 0.35)) !important;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.3), inset 0 1px 3px rgb(0 0 0 / 0.6) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-tool:disabled svg {
+  filter: grayscale(1) brightness(1.6) opacity(0.45);
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-tool-sep {
+  width: 2px;
+  height: 22px;
+  margin: 0 5px;
+  box-shadow: inset 1px 0 rgb(0 0 0 / 0.45), inset -1px 0 rgb(255 255 255 / 0.2);
+}
+
+/* status bar */
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-status {
+  height: 23px;
+  margin: 4px 0 0;
+  padding: 0 2px;
+  gap: 0;
+  border-top: 1px solid #c5ccd3;
+  background: linear-gradient(180deg, #f6f8fa, #dfe5ea);
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-status-field {
+  padding: 2px 8px;
+  box-shadow: inset -1px 0 0 #c5ccd3, inset -2px 0 0 #fff !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-status-field:last-child {
+  box-shadow: none !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-led {
+  width: 10px;
+  height: 10px;
+  border-radius: 50% !important;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.4), inset 0 2px 2px rgb(255 255 255 / 0.65) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-led-on {
+  background: radial-gradient(circle at 50% 65%, #7cf05c, #22a31a);
+}
+[data-skin="retro98"][data-skin-tint="vista"] .r98w-led-off {
+  background: radial-gradient(circle at 50% 65%, #ff8a6a, #c3260f);
+}
+
+/* ══ sidebar: the navigation pane, light blue glossy selection ════════════ */
+[data-skin="retro98"][data-skin-tint="vista"] [data-sidebar] > div.flex-1 {
+  box-shadow: inset 0 0 0 1px #b5b8bd !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-sidebar] [data-sidebar-section-id]::before,
+[data-skin="retro98"][data-skin-tint="vista"] [data-sidebar] [data-sidebar-bot-row]::before {
+  border-color: transparent;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-sidebar] [data-section] > button::before {
+  content: "";
+  top: 4px;
+  border: 0;
+  background: transparent;
+  border-left: 5px solid #262626;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  width: 0;
+  height: 0;
+  transform: rotate(45deg);
+  transform-origin: 30% 50%;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-sidebar] [data-section] > button[aria-expanded="false"]::before {
+  content: "";
+  transform: none;
+  border-left-color: #fff;
+  filter: drop-shadow(0 0 0.6px #262626) drop-shadow(0 0 0.4px #262626);
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-sidebar] [data-sidebar-bot-row][aria-current] > div.min-w-0 > div:first-child,
+[data-skin="retro98"][data-skin-tint="vista"] [data-sidebar] [data-sidebar-place][aria-current] > .truncate,
+[data-skin="retro98"][data-skin-tint="vista"] [data-sidebar] button[class*="w-20"][aria-current] > span:not(:first-child) {
+  background: var(--vi-sel);
+  outline: 1px solid var(--vi-sel-rim);
+  outline-offset: -1px;
+  border-radius: 3px !important;
+  color: #000 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-sidebar] [data-sidebar-bot-row][aria-current] > div.min-w-0 > div:first-child :is(span, .text-sidebar-ink) {
+  color: #000 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-sidebar] [data-sidebar-foot-divider] {
+  height: 1px !important;
+  border: 0;
+  background: #d5dae0 !important;
+}
+
+/* ══ push buttons: glossy grey, blue under the pointer ════════════════════ */
+[data-skin="retro98"][data-skin-tint="vista"] :is(button, [role="button"], a[class*="px-"]):is(.ui-button, .ui-button-primary, .bg-elevated, .bg-raised, .bg-control, .bg-accent, .bg-card, .bg-danger, .bg-inset, .border, [class*="bg-raised/"], [class*="bg-elevated/"], [class*="bg-accent/"], [class*="bg-danger/"], [class*="bg-control/"]):not(.r98-root *, [data-r98-chrome] *, [role="tab"], [role="switch"], [role="radio"], [data-sidebar-bot-row], [data-tour="model"], [data-r98-close], [data-r98-send], .rounded-full.size-6),
+[data-skin="retro98"][data-skin-tint="vista"] [data-r98-send],
+[data-skin="retro98"][data-skin-tint="vista"] .r98-dialog-ok,
+[data-skin="retro98"][data-skin-tint="vista"] .app-docked-panel > div.h-12 button {
+  background: var(--vi-button) !important;
+  border-radius: 3px !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] :is(button, [role="button"], a[class*="px-"]):is(.ui-button, .ui-button-primary, .bg-elevated, .bg-raised, .bg-control, .bg-accent, .bg-card, .bg-danger, .bg-inset, .border, [class*="bg-raised/"], [class*="bg-elevated/"], [class*="bg-accent/"], [class*="bg-danger/"], [class*="bg-control/"]):not(.r98-root *, [data-r98-chrome] *, [role="tab"], [role="switch"], [role="radio"], [data-sidebar-bot-row], [data-tour="model"], [data-r98-close], [data-r98-send], .rounded-full.size-6):hover:not(:disabled),
+[data-skin="retro98"][data-skin-tint="vista"] :is([data-r98-send], .r98-dialog-ok, .app-docked-panel > div.h-12 button):hover:not(:disabled) {
+  background: var(--vi-button-hover) !important;
+  box-shadow: inset 0 0 0 1px #3c7fb1, inset 0 0 0 2px rgb(255 255 255 / 0.6) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] :is(button, [role="button"], a[class*="px-"]):is(.ui-button, .ui-button-primary, .bg-elevated, .bg-raised, .bg-control, .bg-accent, .bg-card, .bg-danger, .bg-inset, .border, [class*="bg-raised/"], [class*="bg-elevated/"], [class*="bg-accent/"], [class*="bg-danger/"], [class*="bg-control/"]):not(.r98-root *, [data-r98-chrome] *, [role="tab"], [role="switch"], [role="radio"], [data-sidebar-bot-row], [data-tour="model"], [data-r98-close], [data-r98-send], .rounded-full.size-6):active:not(:disabled),
+[data-skin="retro98"][data-skin-tint="vista"] :is([data-r98-send], .r98-dialog-ok):active:not(:disabled) {
+  background: var(--vi-button-down) !important;
+  box-shadow: var(--r98-pressed) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-r98-send]:disabled,
+[data-skin="retro98"][data-skin-tint="vista"] button:disabled:not(.r98-root *) {
+  color: #8d8d8d !important;
+  text-shadow: none !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-r98-send]:disabled {
+  background: #f4f4f4 !important;
+  box-shadow: inset 0 0 0 1px #adb2b5 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] :is(button, [role="button"]):is(.rounded-full, [class*="size-7"], [class*="size-8"], [class*="size-9"]):not([role="tab"], [role="switch"], .r98-root *, [data-r98-chrome] *, [data-r98-send], [data-sidebar-bot-row]):hover:not(:disabled) {
+  border-radius: 3px !important;
+  background: var(--vi-button-hover) !important;
+  box-shadow: inset 0 0 0 1px #3c7fb1, inset 0 0 0 2px rgb(255 255 255 / 0.6) !important;
+}
+
+/* ══ fields ═══════════════════════════════════════════════════════════════ */
+[data-skin="retro98"][data-skin-tint="vista"] :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], .sr-only, .hidden), textarea, select):not(.r98-root *, [data-tour="composer"] *),
+[data-skin="retro98"][data-skin-tint="vista"] [data-tour="composer"] .mention-editor,
+[data-skin="retro98"][data-skin-tint="vista"] [data-tour="model"] {
+  border-radius: 2px !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] :is(input, textarea, select, [data-tour="model"], [data-tour="composer"] .mention-editor):hover:not(:disabled, [type="checkbox"], [type="radio"], .r98-root *) {
+  box-shadow: inset 0 1px 0 #3d7bad, inset 0 0 0 1px #a4c9e3 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] :is(input, textarea):read-only:not([type="checkbox"], [type="radio"], .r98-root *),
+[data-skin="retro98"][data-skin-tint="vista"] :is(input, textarea, select):disabled:not(.r98-root *) {
+  background-color: #f4f4f4 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] select:not(.r98-root *),
+[data-skin="retro98"][data-skin-tint="vista"] [data-tour="model"] {
+  background-position: right 1px center !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-tour="model"] {
+  background-image: var(--r98-arrow-down), var(--vi-button) !important;
+  background-size: auto, 17px 100% !important;
+  background-color: #fff !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] select:focus:not(.r98-root *) {
+  color: #000 !important;
+  background-color: #fff !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] input[type="checkbox"]:not(.sr-only, .hidden, .r98-root *),
+[data-skin="retro98"][data-skin-tint="vista"] button[role="switch"] {
+  border-radius: 2px !important;
+  background: linear-gradient(135deg, #e5e5e5, #fcfcfc) center / 13px 13px no-repeat !important;
+  box-shadow: inset 0 0 0 1px #8e8f8f, inset 0 0 0 3px #f4f4f4, inset 0 0 0 4px #c9cfd5 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] input[type="checkbox"]:checked:not(.sr-only, .hidden, .r98-root *),
+[data-skin="retro98"][data-skin-tint="vista"] button[role="switch"][aria-checked="true"] {
+  background: var(--r98-check) center / 9px 9px no-repeat, linear-gradient(135deg, #e5e5e5, #fcfcfc) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] input[type="radio"]:not(.sr-only, .hidden, .r98-root *) {
+  width: 13px;
+  height: 13px;
+  border-radius: 50% !important;
+  background: linear-gradient(135deg, #e5e5e5, #fcfcfc) !important;
+  box-shadow: inset 0 0 0 1px #8e8f8f !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] input[type="radio"]:checked:not(.sr-only, .hidden, .r98-root *) {
+  background: radial-gradient(circle at 45% 40%, #c4f0ff 0 1px, #2a8ad4 2.5px, #11508c 3.5px, transparent 4px), linear-gradient(135deg, #e5e5e5, #fcfcfc) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] input[type="range"] {
+  accent-color: #3399ff;
+}
+
+/* ══ tabs, group boxes, lists, the property sheet ═════════════════════════ */
+[data-skin="retro98"][data-skin-tint="vista"] [role="tab"]:not(.r98-root *) {
+  background: linear-gradient(180deg, #f2f2f2 0%, #ebebeb 49%, #dddddd 50%, #cfcfcf 100%) !important;
+  border-radius: 3px 3px 0 0 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [role="tab"]:hover:not(.r98-root *, [aria-selected="true"]) {
+  background: var(--vi-button-hover) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [role="tab"][aria-selected="true"]:not(.r98-root *) {
+  background: #fff !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] :is(.rounded-xl, .rounded-2xl, [class*="rounded-[14px]"], .rounded-lg):is(.border, [class*="border-["], .bg-card):not(button, input, textarea, select, [role="log"] *, .r98-root *, [data-r98-chrome] *, [role="dialog"], [role="menu"], [role="listbox"], [data-tour="composer"], :has(> svg.lucide-search + input)) {
+  border-radius: 3px !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] :is(.rounded-xl, .rounded-2xl):is(.border, [class*="border-["], .bg-card):not([role="log"] *) > div:first-child:is(.font-medium, .font-semibold),
+[data-skin="retro98"][data-skin-tint="vista"] :is(.rounded-xl, .rounded-2xl):is(.border, [class*="border-["], .bg-card):not([role="log"] *) > div:first-child > div:first-child > div:first-child:is(.font-medium, .font-semibold),
+[data-skin="retro98"][data-skin-tint="vista"] [data-settings-card] > h3 > button > span:first-child {
+  background: var(--vi-face);
+  color: #003399 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-settings-card] > h3 > button svg.lucide-chevron-down {
+  border-radius: 3px !important;
+  background: var(--vi-button);
+}
+[data-skin="retro98"][data-skin-tint="vista"] [role="log"] :is(.bg-card, .bg-inset, .bg-raised, [class*="bg-raised/"], [class*="bg-inset/"]):not(button, [data-retro-author] > div > div[title], .chat-md *) {
+  background: linear-gradient(180deg, #fafbfc, #eef2f5) !important;
+  border-radius: 3px !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .chat-md th {
+  background: linear-gradient(180deg, #ffffff, #f3f5f7 50%, #e9ecef 51%, #f1f3f5) !important;
+  box-shadow: inset -1px 0 0 #d5dae0, inset 0 -1px 0 #d5dae0 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .chat-md div:has(> div > table) > div:first-child:not(:has(table)),
+[data-skin="retro98"][data-skin-tint="vista"] .chat-md :is(figure, div):has(> pre) > div:first-child:not(:has(pre)),
+[data-skin="retro98"][data-skin-tint="vista"] .chat-md div:has(> div > div > pre),
+[data-skin="retro98"][data-skin-tint="vista"] .chat-md div:has(> div > div > pre) > div:first-child {
+  background: var(--vi-face) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .chat-md tr:hover td {
+  background: #d9f0fc !important;
+  color: #000 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] hr {
+  border-top-color: #d5dae0;
+  border-bottom-color: #fff;
+}
+
+/* the docked panel: a details pane with a light header */
+[data-skin="retro98"][data-skin-tint="vista"] .app-docked-panel {
+  background: var(--vi-face) !important;
+  box-shadow: inset 0 0 0 1px #a0a0a0 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .app-docked-panel > div.h-12 {
+  height: 26px !important;
+  background: linear-gradient(180deg, #fdfdfd, #e3e9ef);
+  box-shadow: inset 0 -1px 0 #c5ccd3 !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .app-docked-panel > div.h-12[data-r98-caption]::before {
+  color: #1e395b;
+  font-weight: normal;
+}
+[data-skin="retro98"][data-skin-tint="vista"] .app-docked-panel > div.flex-1 > div:not(:first-child),
+[data-skin="retro98"][data-skin-tint="vista"] .app-docked-panel > div.flex-1 > div:nth-child(2) {
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #898c95 !important;
+}
+
+/* ══ dialogs: glass frames over a light client area ═══════════════════════ */
+[data-skin="retro98"][data-skin-tint="vista"] :is([role="dialog"][aria-modal="true"], [role="alertdialog"], dialog):not(.r98-root *) {
+  padding: 30px 6px 6px !important;
+  isolation: isolate;
+  border-radius: 7px !important;
+  background: linear-gradient(var(--vi-face), var(--vi-face)) content-box !important;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.3), 0 0 0 1px rgb(0 0 0 / 0.75), 0 6px 22px rgb(0 0 0 / 0.5) !important;
+}
+/* the blur behind the glass sits on a pseudo-element, so the dialog itself
+   never becomes a containing block for its fixed-position children */
+[data-skin="retro98"][data-skin-tint="vista"] :is([role="dialog"][aria-modal="true"], [role="alertdialog"], dialog):not(.r98-root *)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  box-sizing: border-box;
+  padding: 30px 6px 6px;
+  border-radius: inherit;
+  background: var(--vi-glass-dense);
+  backdrop-filter: blur(10px) saturate(1.4) !important;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-r98-title]::before {
+  top: 0;
+  left: 6px;
+  right: 6px;
+  height: 30px;
+  padding: 0 52px 0 4px;
+  background: transparent;
+  color: #fff;
+  font: 12px/30px var(--r98-font);
+  text-shadow: 0 0 8px rgb(255 255 255 / 0.35), 0 1px 2px rgb(0 0 0 / 0.8);
+  -webkit-font-smoothing: antialiased;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-r98-close="bar"] {
+  top: 0 !important;
+  right: 6px !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-r98-close] {
+  width: 44px !important;
+  min-width: 44px !important;
+  height: 19px !important;
+  min-height: 19px !important;
+  border: 1px solid rgb(0 0 0 / 0.75) !important;
+  border-top: 0 !important;
+  border-radius: 0 0 4px 4px !important;
+  background: linear-gradient(180deg, #eea08d 0%, #d9694f 46%, #c2341a 50%, #d24b2c 76%, #f08a66 100%) !important;
+  color: #fff !important;
+  box-shadow: inset 0 0 0 1px rgb(255 210 190 / 0.45), 0 0 7px 1px rgb(255 90 50 / 0.45) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-r98-close]:hover {
+  filter: brightness(1.15);
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-r98-close] svg {
+  width: 12px !important;
+  height: 12px !important;
+  color: #fff !important;
+  stroke-width: 3.2 !important;
+  filter: drop-shadow(0 0 1px #461008);
+}
+[data-skin="retro98"][data-skin-tint="vista"] [data-r98-close="inline"] {
+  border-top: 1px solid rgb(0 0 0 / 0.75) !important;
+  border-radius: 3px !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [role="dialog"][aria-modal="true"] > nav {
+  box-shadow: inset 0 0 0 1px #b5b8bd !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [role="dialog"][aria-modal="true"] > nav > button {
+  border-radius: 3px !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [role="dialog"][aria-modal="true"] > nav > button[aria-current] {
+  background: var(--vi-sel) !important;
+  color: #000 !important;
+  box-shadow: inset 0 0 0 1px var(--vi-sel-rim) !important;
+}
+[data-skin="retro98"][data-skin-tint="vista"] [role="tooltip"]:not(.r98-root *) {
+  border: 1px solid #767676 !important;
+  border-radius: 3px !important;
+  background: linear-gradient(180deg, #fff, #e4e5f0) !important;
+  box-shadow: 2px 2px 3px rgb(0 0 0 / 0.3) !important;
+}
+
+/* the retro assistant's own windows take a dark glass caption */
+[data-skin="retro98"][data-skin-tint="vista"] .r98-root {
+  --r98-navy: #12303b;
+  --r98-title-2: #3f6f7c;
+}
+
+/* ══ scrollbars: glossy grey thumbs on a pale track ═══════════════════════ */
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar {
+  width: 17px;
+  height: 17px;
+}
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-corner {
+  background: #f0f0f0;
+}
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-track:vertical {
+  background: linear-gradient(90deg, #e3e3e3, #f6f6f6 30%, #f0f0f0);
+}
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-track:horizontal {
+  background: linear-gradient(180deg, #e3e3e3, #f6f6f6 30%, #f0f0f0);
+}
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  border: 1px solid #9b9b9b;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.75);
+}
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-thumb:vertical {
+  background:
+    url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M0 .5h7M0 3.5h7M0 6.5h7' stroke='%23fff'/%3E%3Cpath d='M1 1.5h7M1 4.5h7M1 7.5h7' stroke='%23969696'/%3E%3C/svg%3E") center no-repeat,
+    linear-gradient(90deg, #f3f3f3 0%, #e8e8e8 49%, #d6d6d6 50%, #cbcbcb 100%);
+}
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-thumb:horizontal {
+  background:
+    url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M.5 0v7M3.5 0v7M6.5 0v7' stroke='%23fff'/%3E%3Cpath d='M1.5 1v7M4.5 1v7M7.5 1v7' stroke='%23969696'/%3E%3C/svg%3E") center no-repeat,
+    linear-gradient(180deg, #f3f3f3 0%, #e8e8e8 49%, #d6d6d6 50%, #cbcbcb 100%);
+}
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-thumb:hover {
+  border-color: #3c7fb1;
+}
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-button:vertical:start,
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-button:vertical:end,
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-button:horizontal:start,
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-button:horizontal:end {
+  width: 17px;
+  height: 17px;
+  border-radius: 3px;
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-button:vertical:start {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M3.5 0L7 4H0z' fill='%23404040'/%3E%3C/svg%3E");
+}
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-button:vertical:end {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M0 0h7L3.5 4z' fill='%23404040'/%3E%3C/svg%3E");
+}
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-button:horizontal:start {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='7'%3E%3Cpath d='M0 3.5L4 0v7z' fill='%23404040'/%3E%3C/svg%3E");
+}
+[data-skin="retro98"][data-skin-tint="vista"] ::-webkit-scrollbar-button:horizontal:end {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='7'%3E%3Cpath d='M4 3.5L0 0v7z' fill='%23404040'/%3E%3C/svg%3E");
+}

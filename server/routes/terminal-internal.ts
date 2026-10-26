@@ -26,6 +26,8 @@ export function createTerminalInternalRoutes(deps: {
   requests: ReturnType<typeof createTerminalRequestService>;
   /** The conversation belongs to this bot (connectorThread in index.ts). */
   ownsThread(botId: string, threadId: string): boolean;
+  /** A connected Tailcat session opens at once when the offer names no destination. */
+  openRemoteShell?(args: { botId: string; threadId: string }): Promise<{ hostLabel: string; messageId: string } | { error: string } | null>;
 }): InternalRouteHandler {
   return async ({ res, path, method, json, capability, readBody }) => {
     if (path !== "/api/internal/terminal/resources" && path !== "/api/internal/terminal/offer") return PASS;
@@ -42,6 +44,13 @@ export function createTerminalInternalRoutes(deps: {
     if (path === "/api/internal/terminal/offer" && method === "POST") {
       const parsed = offerBody.safeParse(await readBody());
       if (!parsed.success) return json(res, 400, { error: "Invalid terminal offer" });
+      if (!parsed.data.provider && !parsed.data.resourceId && deps.openRemoteShell) {
+        const opened = await deps.openRemoteShell({ botId: capability.botId, threadId: capability.threadId });
+        if (opened && "error" in opened) return json(res, 409, { error: opened.error });
+        if (opened && "hostLabel" in opened) {
+          return json(res, 200, { opened: true, hostLabel: opened.hostLabel, messageId: opened.messageId });
+        }
+      }
       const result = await deps.requests.submit({
         botId: capability.botId,
         threadId: capability.threadId,

@@ -47,9 +47,9 @@ describe("Preset bots in the real renderer", () => {
     const newBot = { click, evaluate, snapshot };
 
     // My New bot defaults: a name, words, a colour, a skill that is on, notes,
-    // and things a preset must never carry (approval, connected apps).
+    // and things a preset must never carry (approval level).
     await api("/api/config", "PATCH", { newBotDefaults: {
-      profile: { name: "Sky", title: "Support", soul: "Be kind and precise.\n", color: "blue", approvalMode: "auto", composio: true },
+      profile: { name: "Sky", title: "Support", soul: "Be kind and precise.\n", color: "blue", approvalMode: "auto" },
       memory: { "MEMORY.md": "- Customers first.\n" },
       skills: [{ name: "follow-up", description: "Write a short follow-up.", source: "fixture", enabled: true, warnings: [],
         text: "---\nname: follow-up\ndescription: Write a short follow-up.\n---\n\n# Follow-up\n" }],
@@ -79,7 +79,7 @@ describe("Preset bots in the real renderer", () => {
     const saved = JSON.parse(await evaluate("window.__presetText") as string);
     expect(await evaluate("window.__presetDownload")).toBe("sky-1.0.0.openmaus.json");
     expect(saved.package).toMatchObject({ id: "sky", agents: [], presets: [{ key: "new-bot-defaults", name: "Sky", skills: ["follow-up"], seed: { memory: { "MEMORY.md": "- Customers first.\n" } } }] });
-    expect(JSON.stringify(saved)).not.toMatch(/"approvalMode"|"composio"|"modelSelection"|"enabled"/);
+    expect(JSON.stringify(saved)).not.toMatch(/"approvalMode"|"modelSelection"|"enabled"/);
     await click("Done");
     await click("Close settings");
 

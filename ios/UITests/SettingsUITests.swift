@@ -324,7 +324,7 @@ final class SettingsUITests: XCTestCase {
         setSkin("black", in: app)
         XCTAssertTrue(eventually(5) { self.homeBackground(app) == 0x141414 }, "home background \(String(homeBackground(app), radix: 16))")
 
-        // Following the phone with the default pair, Black twice: Black on a
+        // setSkin(nil) writes Black fixed (the phone's own look). Black on a
         // dark simulator and on a light one alike.
         setSkin(nil, in: app)
         XCTAssertTrue(eventually(5) { self.homeBackground(app) == 0x141414 }, "home background \(String(homeBackground(app), radix: 16))")
@@ -332,20 +332,22 @@ final class SettingsUITests: XCTestCase {
 
     /// Picking a skin redraws everything at once, the page doing the picking
     /// included: no relaunch, no leaving Settings, light and dark skins alike.
+    /// A skin is a family, a variant and a mode (2026-10-19).
     @MainActor
     func testSkinsSwitchLiveInsideSettings() {
         let app = launch()
         defer { setSkin(nil, in: app) }
         openAppearance(in: app)
-        app.element("theme.mode.fixed").tap()
-        for (skin, ground) in [("lagoon", UInt32(0xDFECEB)), ("foundry", 0x100E0B), ("atelier", 0xF5F1EB), ("midnight", 0x121212)] {
-            let card = app.element("skin.fixed.\(skin)")
-            for _ in 0..<8 where !card.isHittable { app.swipeUp() }
-            XCTAssertTrue(card.waitForExistence(timeout: 5), skin)
-            card.tap()
+        for (family, variant, mode, ground) in [
+            ("atelier", "lagoon", "light", UInt32(0xDFECEB)),
+            ("atelier", "brass", "dark", 0x100E0B),
+            ("atelier", "brass", "light", 0xF5F1EB),
+            ("studio", "neutral", "dark", 0x121212),
+        ] {
+            wear(family: family, variant: variant, mode: mode, in: app)
             // the sheet's own ground, beside the cards
-            XCTAssertTrue(eventually(5) { self.pixel(app, x: 16, y: 300) == ground }, "\(skin): \(String(self.pixel(app, x: 16, y: 300), radix: 16))")
-            XCTAssertTrue(app.element("theme.mode.fixed").exists || app.element("skin.fixed.\(skin)").exists, "still on Appearance")
+            XCTAssertTrue(eventually(5) { self.pixel(app, x: 16, y: 300) == ground }, "\(family)/\(variant)/\(mode): \(String(self.pixel(app, x: 16, y: 300), radix: 16))")
+            XCTAssertTrue(app.element("skin.family.\(family)").exists, "still on Appearance")
         }
         // the root row names the skin worn now
         for _ in 0..<8 where !app.element("settings-back").firstMatch.isHittable { app.swipeDown() }
@@ -361,17 +363,16 @@ final class SettingsUITests: XCTestCase {
         let app = launch()
         defer { setSkin(nil, in: app) }
         openAppearance(in: app)
-        app.element("theme.mode.fixed").tap()
-        let daylight = app.element("skin.fixed.daylight")
-        for _ in 0..<8 where !daylight.isHittable { app.swipeUp() }
-        XCTAssertTrue(daylight.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.element("skin.fixed.retro98").exists)
+        let studio = app.element("skin.family.studio")
+        for _ in 0..<8 where !studio.isHittable { app.swipeUp() }
+        XCTAssertTrue(studio.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.element("skin.family.retro98").exists)
     }
 
     /// Opens Settings > Appearance from the home or the settings root.
     @MainActor
     private func openAppearance(in app: XCUIApplication) {
-        if app.element("theme.mode.system").exists { return }
+        if app.element("skin.family.phone").exists { return }
         if !app.element("settings-close").exists {
             // the photo opens the account menu, which holds Settings
             let open = app.element("home-account")
@@ -385,23 +386,53 @@ final class SettingsUITests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         for _ in 0..<6 where !row.isHittable { app.swipeUp() }
         row.tap()
-        XCTAssertTrue(app.element("theme.mode.system").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.element("skin.family.phone").waitForExistence(timeout: 5))
     }
 
-    /// Wears one skin (nil: follow the phone again) and closes the sheet.
+    /// Picks a family, then its variant (when it has several), then the mode.
+    @MainActor
+    private func wear(family: String, variant: String?, mode: String?, in app: XCUIApplication) {
+        let card = app.element("skin.family.\(family)")
+        for _ in 0..<8 where !card.isHittable { app.swipeUp() }
+        XCTAssertTrue(card.waitForExistence(timeout: 5), family)
+        card.tap()
+        if let variant {
+            let swatch = app.element("skin.variant.\(variant)")
+            if swatch.waitForExistence(timeout: 2) {
+                for _ in 0..<8 where !swatch.isHittable { app.swipeUp() }
+                swatch.tap()
+            }
+        }
+        if let mode {
+            let menu = app.element("theme.mode")
+            for _ in 0..<8 where !menu.isHittable { app.swipeUp() }
+            XCTAssertTrue(menu.waitForExistence(timeout: 5))
+            menu.tap()
+            // menu items can lose their identifier: fall back to the label
+            let label = ["light": "Light", "dark": "Dark", "auto": "Auto (follow the phone)"][mode] ?? mode
+            var option = app.buttons["theme.mode.\(mode)"]
+            if !option.waitForExistence(timeout: 3) { option = app.buttons[label] }
+            XCTAssertTrue(option.waitForExistence(timeout: 5), mode)
+            option.tap()
+        }
+    }
+
+    /// Wears one skin (nil: the phone's own Black again) and closes the sheet.
     @MainActor
     private func setSkin(_ skin: String?, in app: XCUIApplication) {
         openAppearance(in: app)
-        if let skin {
-            app.element("theme.mode.fixed").tap()
-            let card = app.element("skin.fixed.\(skin)")
-            for _ in 0..<8 where !card.isHittable { app.swipeUp() }
-            XCTAssertTrue(card.waitForExistence(timeout: 5))
-            card.tap()
-            for _ in 0..<8 where !app.element("settings-back").firstMatch.isHittable { app.swipeDown() }
+        let places: [String: (String, String?, String)] = [
+            "lagoon": ("atelier", "lagoon", "light"), "foundry": ("atelier", "brass", "dark"),
+            "atelier": ("atelier", "brass", "light"), "midnight": ("studio", "neutral", "dark"),
+            "daylight": ("studio", "neutral", "light"), "graphite": ("studio", "slate", "dark"),
+            "linen": ("studio", "slate", "light"), "dusk": ("studio", "plum", "dark"),
+            "pulsatrix": ("pulsatrix", nil, "dark"), "pulsatrix-light": ("pulsatrix", nil, "light"),
+            "dim": ("phone", "dim", "dark"),
+        ]
+        if let skin, let place = places[skin] {
+            wear(family: place.0, variant: place.1, mode: place.2, in: app)
         } else {
-            for _ in 0..<8 where !app.element("theme.mode.system").isHittable { app.swipeDown() }
-            app.element("theme.mode.system").tap()
+            wear(family: "phone", variant: "black", mode: nil, in: app)
         }
         for _ in 0..<8 where !app.element("settings-back").firstMatch.isHittable { app.swipeDown() }
         app.element("settings-back").firstMatch.tap()

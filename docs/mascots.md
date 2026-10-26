@@ -384,3 +384,79 @@ Trotter, Celebrate.
 `src/components/crab-moves.test.ts` (moves table, hop squash, scuttle,
 wave, the rig, the desktop mapping), `MascotLookFixtureTests` on the phone
 (palettes).
+
+## HD mascots (painted art, pilot: Shiba)
+
+A character may ship painted art beside its vector drawing. Only the Shiba
+does for now; every other character, the Trombi and the Shapes included, is
+unchanged. Settings > Appearance > Mascots > "HD mascots" ("Mascottes HD",
+"Mascotes HD"; key `sagax.hdMascots.v1`, `on` or `off`, absent is on) turns
+the art on or off for the person, everywhere, live, and travels with their
+preferences on an organization server. The row shows only while a character
+has HD art (`HD_CHARACTERS`). A bot can set it with `sagax_settings`
+(`appearance.hdMascots`).
+
+**Files.** `src/components/hd-mascots/manifest.ts` (manifest type, state
+mapping, asset choice), `shiba-hd.ts` (the Shiba's manifest),
+`HdMascot.tsx` (`HdMascot`, `HdOrVector`), `src/lib/hd-mascots-preference.ts`,
+assets in `src/assets/mascots/shiba/` built by
+`scripts/mascots/build-hd-mascot.py` from the art pack (stills from its
+transparent PNGs; loops from its opaque MP4 clips, each frame matted with
+rembg so the dog sits on any surface, soft at the fur; 256 px squares, one
+framing and feet line for every asset). Loops are animated WebP with alpha
+(WebM with alpha is not decoded by Safari, and an `<img>` needs no player);
+the walk is cut to one repeating stride, the sad clip plays once and rests
+lying down. About 4.3 MB in all.
+
+**Where it draws.** `BotAvatar` (every bot avatar of the app) and the
+desktop mascot (`ShibaRender`, `ShibaThumb`) wrap the vector Shiba in
+`HdOrVector`. Skins and the bot color do not tint painted art: they apply to
+the classic look. The skin pickers keep the vector look.
+
+**Mapping.** An app state (`MausState`) or a desktop clip and pose becomes
+a loop or a still (`HD_STATE_MAP`, `hdKeyForActivity`):
+
+| App state | HD art |
+|---|---|
+| idle, spawning | idle loop |
+| walking (desktop walk, fly, return, scuttle) | walk loop |
+| celebrate, bouncing; desktop jump, hop, dance | jump loop |
+| desktop turn, spin, backflip | turnaround loop |
+| happy, excited; desktop wag | happy loop |
+| sad | sad clip (plays once) |
+| thinking, working, writing, loading, uploading, curious, progress, orbit | thinking still |
+| sleeping, waking, drowsy, bored, powering-down | sleepy still |
+| surprised, scared, notifying, alerting, dragging | surprised still |
+| angry | angry still |
+| confused | confused still |
+| laughing | laughing still |
+| shy | love still |
+| playful | wave still |
+| proud | front view |
+| suspicious | sitting pose |
+| searching, radar | three-quarter view |
+| listening, humming, dictating, sending, receiving | neutral still |
+
+The thinking and writing indicators of the avatar and the desktop mascot
+are drawn around the mascot and stay as they are. A still breathes a little
+while motion is allowed.
+
+**Motion and size.** A loop plays only when the avatar is animated, its box
+is 48 px or more and neither the system nor Settings > Accessibility asks
+for reduced motion; otherwise the loop's still shows (`loopStill`). Under
+48 px the still is cropped to head and shoulders, as the vector bust.
+
+**Loading.** Nothing downloads until a mascot draws it (`loading="lazy"`).
+The vector Shiba fills the same box until the first asset decodes, so there
+is no blank and no layout shift; the next asset of a change of state loads
+hidden behind the shown one and swaps in once decoded. A loop that fails
+falls back on its still, a still that fails on the vector drawing, for good.
+
+**Phones.** iOS and Android keep the vector Shiba; the art and the switch
+are desktop and web only in this pilot.
+
+**Checks.** `src/components/hd-mascots/hd-mascots.test.ts` (manifest,
+mapping, asset choice, fallback, switch on and off),
+`src/components/settings/HdMascotsGroup.test.ts`. Screenshots:
+`node scripts/capture-hd-mascots.mjs --out <dir>` (gallery
+`src/gallery/hd-mascots.html`).

@@ -12,6 +12,11 @@
 // refuses to expose to phones for exactly that reason. Serving it anywhere
 // else would hand away the control plane the design just took care to
 // withhold.
+//
+// Every route but the page itself needs the per-launch control token, which
+// only the launching app and the link the sidecar prints carry (port of
+// OpenMausBot #2930): a page a bot's browser opens on this port has none.
+import { timingSafeEqual } from "node:crypto";
 import { createServer, type Server, type ServerResponse } from "node:http";
 
 import type { DeviceRegistry } from "./devices.ts";
@@ -20,9 +25,13 @@ import { lanAddresses, lanInterfaces, tailnetName, tailscaleAddress } from "./li
 import { defaultHostName } from "./mdns.ts";
 import { publicNetworks } from "./windows-network.ts";
 
+export const CONTROL_TOKEN_HEADER = "x-openmausbot-control-token";
+
 /** What the pairing page needs to render itself and act on what you click. */
 export interface ControlOptions {
   devices: DeviceRegistry;
+  /** Null until the launching app has sent it: every route but the page answers 403. */
+  controlToken: () => string | null;
   /** Where a phone connects — for display, and for the pairing instructions. */
   companionPort: number;
   /** HPKE recipient public key displayed in pairing QRs. Public by design;
@@ -100,6 +109,13 @@ export function originIsLoopback(origin: string | undefined): boolean {
   }
 }
 
+function tokenMatches(presented: string | string[] | undefined, expected: string | null): boolean {
+  if (!expected || typeof presented !== "string") return false;
+  const left = Buffer.from(presented);
+  const right = Buffer.from(expected);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
 /** Send a JSON body with its length, the only response shape this API has. */
 const json = (res: ServerResponse, status: number, body: unknown) => {
   const text = JSON.stringify(body);
@@ -150,7 +166,7 @@ const readHostedEndpoint = (
     });
   });
 
-const currentHostedUrl = (options: ControlOptions): string | null =>
+const currentHostedUrl = (options: Pick<ControlOptions, "hostedUrl">): string | null =>
   options.hostedUrl?.() ?? null;
 
 /** Every host a phone could dial for this computer, best first.
@@ -184,7 +200,7 @@ export function hostCandidates(
 /** Everything the page shows, in one object: where to connect, whether a
  * pairing window is open, and which phones are paired. Recomputed per request
  * rather than cached — addresses change when you join another network. */
-export function companionState(options: ControlOptions) {
+export function companionState(options: Omit<ControlOptions, "controlToken">) {
   const interfaces = lanInterfaces();
   const addresses = interfaces.map((entry) => entry.address);
   const tailscale = tailscaleAddress(addresses);
@@ -287,6 +303,9 @@ export function createControlServer(options: ControlOptions): Server {
       const html = page();
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-length": Buffer.byteLength(html) });
       return res.end(html);
+    }
+    if (!tokenMatches(req.headers[CONTROL_TOKEN_HEADER], options.controlToken())) {
+      return json(res, 403, { error: "forbidden: open the companion's control page from the link it printed" });
     }
     if (method === "GET" && path === "/state") return json(res, 200, companionState(options));
     if (method === "POST" && path === "/tailscale/refresh" && options.refreshTailscale) {
@@ -419,9 +438,17 @@ const ago = (at) => {
   return h < 24 ? h + " h ago" : Math.round(h / 24) + " d ago";
 };
 
+// The link the companion printed carries the control token in its fragment, which never leaves this page.
+const token = new URLSearchParams(location.hash.slice(1)).get("token") ?? "";
+history.replaceState(null, "", location.pathname);
+
 /** Call the control API and return the state it answers with. */
 async function api(path, method) {
-  const res = await fetch(path, { method: method ?? "GET" });
+  const res = await fetch(path, { method: method ?? "GET", headers: { "x-openmausbot-control-token": token } });
+  if (res.status === 403) {
+    document.querySelector("main").innerHTML = "<h1>OpenMausBot Companion</h1><p class=sub>Open this page from the link the companion printed when it started.</p>";
+    throw new Error("control token required");
+  }
   return res.json();
 }
 

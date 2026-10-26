@@ -44,6 +44,24 @@ export function isCwTool(toolName: string): boolean {
   return cwToolWords(toolName) !== null;
 }
 
+/** A Perspicax view tool (`cw_psa__show_<view>`): served only when the
+ * person's profile has "Vues interactives" on, and called only when a view
+ * was wanted. The one ConnectWise call whose result is drawn as a widget on
+ * its tool row; any other call stays an ordinary row and the bot answers in
+ * text (JC 2026-10-20: vues CW seulement sur demande). */
+export function isCwViewTool(toolName: string | undefined): boolean {
+  if (!toolName) return false;
+  const words = cwToolWords(toolName);
+  return words !== null && words[0] === "cw" && words[1] === "psa" && words[2] === "show";
+}
+
+/** The widget a stored tool row may draw: only a view tool's. Rows written
+ * before 2026-10-20 carry a widget on every ConnectWise read; they stay
+ * rows. */
+export function shownCwWidget<W>(tool: { name?: string; widget?: W } | undefined): W | undefined {
+  return tool?.widget && isCwViewTool(tool.name) ? tool.widget : undefined;
+}
+
 const READ_WORDS = new Set(["query", "get", "list", "search", "find", "read", "count", "fetch", "lookup"]);
 const WRITE_WORDS = new Set([
   "write", "create", "update", "patch", "delete", "remove", "add", "log", "book", "action", "post", "put", "set", "close", "assign",

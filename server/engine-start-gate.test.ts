@@ -168,4 +168,20 @@ describe("engine probes through execCli", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("with no window (the routine gate) keeps its limit long after boot", async () => {
+    const { instance, advance } = gate({ limit: 1, windowMs: Number.POSITIVE_INFINITY });
+    instance.beginBoot();
+    advance(24 * 60 * 60_000);
+    const first = await instance.acquire("turn", "a");
+    expect(first.gated).toBe(true);
+    let second = false;
+    const waiting = instance.acquire("turn", "b").then((slot) => { second = true; return slot; });
+    await flush();
+    expect(second).toBe(false);
+    first.release();
+    (await waiting).release();
+    expect(second).toBe(true);
+    expect(instance.stats().peak).toBe(1);
+  });
 });

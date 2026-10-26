@@ -47,12 +47,24 @@ describe("roomActivityVisible", () => {
     expect(roomActivityVisible(opened, false)).toBe(true);
   });
 
-  it("always shows a bot-to-bot comm chip", () => {
+  // JC 2026-10-22: a bot-to-bot comm chip is verbose detail, not a trace the
+  // clean chat keeps. With tool calls (the details toggle) off it goes with
+  // the other steps; a failed send still shows as a failure.
+  it("shows a bot-to-bot comm chip only when tool calls are on", () => {
     const comm = chip({
       tool: { name: "Messaged @Ada" },
       comm: { groupId: "g1", withBotId: "ada", withName: "Ada", withColor: "teal" },
     });
-    expect(roomActivityVisible(comm, false)).toBe(true);
+    expect(roomActivityVisible(comm, false)).toBe(false);
+    expect(roomActivityVisible(comm, true)).toBe(true);
+  });
+
+  it("still shows a failed comm chip with tool calls off", () => {
+    const failed = chip({
+      tool: { name: "Messaged @Ada", ok: false },
+      comm: { groupId: "g1", withBotId: "ada", withName: "Ada", withColor: "teal" },
+    });
+    expect(roomActivityVisible(failed, false)).toBe(true);
   });
 
   it("is not for text or cards", () => {

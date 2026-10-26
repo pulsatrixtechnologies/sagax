@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureDirs, NATIVE_DIR } from "../config.ts";
-import { appendNative } from "./native.ts";
+import { appendNative, withoutInlineData } from "./native.ts";
 
 beforeAll(() => ensureDirs());
 
@@ -53,5 +53,35 @@ describe("appendNative", () => {
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;
     expect(() => appendNative("t-cyclic", { dir: "in", source: "acp", msg: cyclic })).not.toThrow();
+  });
+});
+
+describe("appendNative inline data (port de OpenMausBot #3129)", () => {
+  it("logs a screenshot's and a data URL's length, never their base64", () => {
+    const base64 = "A".repeat(4096);
+    const msg = {
+      content: [
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
+        { type: "image", mimeType: "image/png", data: base64 },
+        { type: "text", text: "short" },
+        { type: "image_url", image_url: { url: `data:image/png;base64,${base64}` } },
+      ],
+    };
+    appendNative("t-native-inline", { dir: "in", source: "claude", msg });
+    const line = readFileSync(join(NATIVE_DIR, "t-native-inline.ndjson"), "utf8").trim().split("\n").at(-1)!;
+    expect(line).not.toContain(base64);
+    expect(line).toContain("[base64 data: 4096 base64 chars]");
+    expect(line).toContain("[image data: 4096 base64 chars]");
+    expect(line).toContain(`[data URL: ${base64.length + "data:image/png;base64,".length} chars]`);
+    expect(line).toContain("short");
+    // the caller's message is left as it was
+    expect(msg.content[1]).toMatchObject({ data: base64 });
+  });
+
+  it("keeps short data and fields that are not inline payloads", () => {
+    const value = { type: "base64", data: "QUJD" };
+    const plain = { data: "B".repeat(4096) };
+    expect(withoutInlineData(value)).toBe(value);
+    expect(withoutInlineData(plain)).toBe(plain);
   });
 });

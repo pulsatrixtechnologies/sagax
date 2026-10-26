@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bot as BotIcon, Loader2, Menu, Plus } from "lucide-react";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -18,10 +18,10 @@ import { GroupView } from "@/components/GroupView";
 import { PersonPanel } from "@/components/PersonPanel";
 import { SideThreadPanel } from "@/components/SideThreadPanel";
 import { ComposeToPicker } from "@/components/ComposeToPicker";
-import { PluginsPanel, preloadConnectedApps } from "@/components/PluginsPanel";
+import { PluginsPanel } from "@/components/PluginsPanel";
 import {
-  AchievementsModal, ActivityPanel, BotCatalogModal, BotSettingsDialog, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace, NewBotDialog,
-  PersonaEditorModal, preloadScreens, RemoteAgentSettingsPanel, RemoteDesktopPanel, RoutinesPage, SettingsModal, TeamMapPage, TriggersPanel,
+  AchievementsModal, ActivityPanel, ApprovalsPage, BotCatalogModal, BotSettingsDialog, CodePage, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace, NewBotDialog,
+  PersonaEditorModal, preloadScreens, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, SettingsModal, TeamMapPage, TriggersPanel,
 } from "@/components/lazy-screens";
 import { WorkspaceBackupRecovery } from "@/components/WorkspaceBackupSettings";
 import { ReleaseNotesPrompt } from "@/components/ReleaseNotesPrompt";
@@ -36,6 +36,7 @@ import { ArtifactsHost } from "@/components/artifacts/ArtifactsHost";
 import { StagedOrgImport } from "@/components/OrgImportDialog";
 import { RetroAssistantHost } from "@/components/RetroAssistantHost";
 import { AchievementToaster } from "@/components/achievements/AchievementToaster";
+import { MyChromeIndicator } from "@/components/MyChromeIndicator";
 import { reportAchievement } from "@/lib/achievements";
 import { FloatingBotsHost } from "@/components/FloatingBotsHost";
 import { FloatingWindowsHost } from "@/components/floating/FloatingWindowsHost";
@@ -47,6 +48,7 @@ import { focusComposer } from "@/lib/composer-focus";
 import { effectiveLanguage, useLanguageChoice } from "@/lib/language-preference";
 import { normalizeInboxDeepLink } from "@/lib/inbox-deep-link";
 import { openThreadVisible, pageOpenThreadTarget, type OpenThreadTarget } from "@/lib/open-thread-hash";
+import { clearLeftViewHash, watchViewHash } from "@/lib/view-hash";
 import { takeSettingsReturn } from "@/lib/settings-return";
 import { saveSidebarAttentionPinned, toggleSidebarCollapsed } from "@/lib/sidebar-preferences";
 import { botShowsUnread } from "@/lib/bot-unread";
@@ -62,6 +64,9 @@ import { useExternalChatLinks } from "@/hooks/use-external-chat-links";
 import { ChatNotice } from "@/components/ChatErrorBanner";
 import { TeamBotFromThreadHost } from "@/components/TeamBotFromThreadDialog";
 import { navigate } from "@/lib/view-transitions";
+import { useScreenCaptureToBot } from "@/hooks/use-screen-capture-to-bot";
+import { MAUS_COLORS } from "@/lib/mascot";
+import { useBotAccent } from "@/lib/bot-accent";
 
 function Shell() {
   const { state, dispatch } = useStore();
@@ -109,6 +114,18 @@ function Shell() {
     openThreadTarget.current = null;
     openNotificationTarget(dispatch, target, state, showThreads);
   }, [state.bots, state.groups, dispatch]);
+  // `#approvals` (its filters stay in the address) and `#code` (or
+  // `#code/<run>`, which then leaves the address) open their screen, at load
+  // and when the hash changes in an open tab.
+  useEffect(() => watchViewHash(dispatch), [dispatch]);
+  // leaving Approvals or Code drops its address, so the same link opens it
+  // again; only on leaving, so a link read at load keeps its filters
+  const viewHashFrom = useRef(state.activeView);
+  useEffect(() => {
+    const from = viewHashFrom.current;
+    viewHashFrom.current = state.activeView;
+    if (from !== state.activeView && (from === "approvals" || from === "code")) clearLeftViewHash(state.activeView);
+  }, [state.activeView]);
   // Back from a sign-in a Settings page asked for (Settings > Security: the
   // first key needs a fresh one): that page opens again.
   useEffect(() => {
@@ -272,19 +289,52 @@ function Shell() {
   useEffect(() => {
     window.ogb?.setUnreadCount?.(badgeCount(unreadCount, { badge: showBadge }));
   }, [unreadCount, showBadge]);
+  // The menu bar's bot list (macOS, Windows): the visible bots in the order
+  // of the Cmd+1..9 shortcuts, with their mascot color, whether they work and
+  // how many conversations are unread. A pick there opens the bot.
+  const trayRoster = useMemo(
+    () => state.bots.filter((bot) => !bot.hidden).slice(0, 9).map((bot) => ({
+      id: bot.id,
+      name: bot.name,
+      color: MAUS_COLORS[bot.color as keyof typeof MAUS_COLORS] ?? "#8E8E93",
+      working: Boolean(bot.busy),
+      unread: botShowsUnread(bot) ? 1 : 0,
+    })),
+    [state.bots],
+  );
+  // the menu's words follow the app's language (the shell has no locale files)
+  const trayLabels = {
+    bots: t("tray.bots"),
+    botsUnread: t("tray.botsUnread", { count: "{count}" }),
+    working: t("tray.working"),
+    unread: t("tray.unread"),
+    unreadMany: t("tray.unreadMany", { count: "{count}" }),
+    open: t("tray.open"),
+    quit: t("tray.quit"),
+    tooltipUnread: t("tray.tooltipUnread", { count: "{count}" }),
+    tooltipWorking: t("tray.tooltipWorking", { count: "{count}" }),
+  };
+  const trayKey = JSON.stringify([trayRoster, trayLabels]);
+  useEffect(() => {
+    window.ogb?.setTrayRoster?.(trayRoster, trayLabels);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trayKey]);
+  const botsRef = useRef(state.bots);
+  botsRef.current = state.bots;
+  // The capture key (bots' chord with 0): a picture of the screen in the
+  // open bot's composer (parity R7, system 12).
+  useScreenCaptureToBot(showThreads);
+  useEffect(() => {
+    return window.ogb?.onOpenBot?.((botId) => {
+      const target = botsRef.current.find((bot) => bot.id === botId);
+      if (target) navigate(() => openBot(dispatch, target, showThreads));
+    });
+  }, [dispatch, showThreads]);
   // Load the nudge sound now: the first nudge rings at once, even before
   // any click in the page.
   useEffect(() => {
     primeNudgeSound();
   }, []);
-
-  // Warm connected-account state as soon as the local server is available.
-  // The modal then opens with the correct Connect/Add account buttons and
-  // quietly revalidates instead of rediscovering every account from scratch.
-  useEffect(() => {
-    if (!state.connected) return;
-    void preloadConnectedApps().catch(() => {});
-  }, [state.connected]);
 
   // Settings, Routines and the other on-request screens stay out of the
   // launch bundle; fetch them once the first paint is done and the app is idle.
@@ -310,6 +360,9 @@ function Shell() {
     previousViewRef.current = state.activeView;
   }
   const mainIsTeamMap = state.activeView === "team-map";
+  const mainIsCode = state.activeView === "code";
+  const mainIsApprovals = state.activeView === "approvals";
+  const mainIsRemoteSessions = state.activeView === "remote-sessions";
   const calendarFillsMain = calendarOpen;
 
   useEffect(() => {
@@ -395,6 +448,8 @@ function Shell() {
       {/* What's new sits above the update dialog. Both are outside the layout flow. */}
       <ReleaseNotesPrompt />
       <UpdateBanner />
+      {/* A bot driving the person's own Chrome: who, where, and Stop. */}
+      <MyChromeIndicator />
       {/* The one bottom-left card at a time (only the star is left in Sagax). */}
       {/* Hibou 98 only: title bar, menus and toolbar (renders nothing otherwise) */}
       <RetroChromeSlot slot="top" onNewBot={() => setComposeOpen((open) => !open)} />
@@ -428,13 +483,19 @@ function Shell() {
       <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col" data-sidebar-follower="">
       {/* nothing answers this person on an organization server: say so above
           the conversation, with the way back to the first-run step */}
-      {org && (group || bot) && !calendarFillsMain && !mainIsTeamMap && <OrgEngineNotice />}
+      {org && (group || bot) && !calendarFillsMain && !mainIsTeamMap && !mainIsCode && !mainIsApprovals && !mainIsRemoteSessions && <OrgEngineNotice />}
       {composeOpen && (group || bot) ? (
         group ? <GroupView key={`${group.id}:${uiLocale}`} group={group} /> : bot ? <ChatView key={uiLocale} bot={bot} /> : null
       ) : calendarFillsMain ? (
         <RoutinesPage fill onBack={closeCalendar} onOpenRoom={openCalendarRoom} />
       ) : mainIsTeamMap ? (
         <TeamMapPage />
+      ) : mainIsCode ? (
+        <CodePage />
+      ) : mainIsApprovals ? (
+        <ApprovalsPage />
+      ) : mainIsRemoteSessions ? (
+        <RemoteSessionsAdminPage />
       ) : !remoteClient && localVmWorkspaceBotId ? (
         <LocalVmWorkspace
           primaryBotId={localVmWorkspaceBotId}
@@ -562,6 +623,14 @@ function Shell() {
   );
 }
 
+/** The open bot's colour as the accent, when Settings > Appearance says so. */
+function BotAccentSync() {
+  const { state } = useStore();
+  const bot = state.bots.find((candidate) => candidate.id === state.selectedId);
+  useBotAccent(bot ? MAUS_COLORS[bot.color] : null);
+  return null;
+}
+
 function Application() {
   useEffect(() => {
     initAnalytics();
@@ -577,6 +646,7 @@ function Application() {
         <GuidedTour />
         <LiveCallHost />
         <DataWindowViewSync />
+        <BotAccentSync />
       </StoreProvider>
     </DesktopCapabilitiesProvider>
   );

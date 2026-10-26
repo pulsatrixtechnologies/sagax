@@ -38,11 +38,25 @@ export function platformLabel(platform?: string): string | null {
 }
 
 /** Hands a link to the default browser through the preload bridge, falling
- * back to a new tab when the app runs in a plain browser. */
+ * back to a new tab when the app runs in a plain browser. A bridge the main
+ * process refuses for this page (desktopUiOnly) used to end in a silent
+ * rejection behind `void`, so the button did nothing: the refusal is logged
+ * and the window's own link path (setWindowOpenHandler: the default browser,
+ * web links only) takes over. When that fails too, the caller gets an error
+ * to show. */
 export async function openExternalLink(url: string): Promise<void> {
   if (window.ogb?.openExternal) {
-    await window.ogb.openExternal(url);
-    return;
+    try {
+      await window.ogb.openExternal(url);
+      return;
+    } catch (error) {
+      console.warn("desktop:open-external refused the link; trying the window's link path", error);
+    }
   }
-  window.open(url, "_blank", "noopener,noreferrer");
+  try {
+    window.open(url, "_blank", "noopener,noreferrer");
+  } catch (error) {
+    console.warn("The link could not be opened", error);
+    throw new Error(`The link could not be opened: ${url}`, { cause: error });
+  }
 }

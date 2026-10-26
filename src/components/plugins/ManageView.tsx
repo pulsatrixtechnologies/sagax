@@ -69,12 +69,11 @@ export function ManageView(props: ManageViewProps) {
   const skills = items.filter((item) => item.kind === "skill").sort((a, b) => a.name.localeCompare(b.name));
   return (
     <>
-      <PluginPageHeader titleId="plugins-title" title={t("connectApps.manage.title")} trail={trail} onBack={onBack} />
+      <PluginPageHeader titleId="plugins-title" title={t("connectApps.manage.title")} trail={trail} onBack={onBack} plainBack />
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-7 pt-4 sm:px-8" data-plugins-manage>
         {scope && <div className="mb-4">{scope}</div>}
         <section data-plugins-installed>
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <h3 className="text-[13px] font-semibold text-ink">{t("connectApps.manage.installed")}</h3>
+          <div className="mb-1 flex justify-end">
             <button type="button" onClick={onRefresh} disabled={refreshing} className="ui-icon-button disabled:opacity-50" aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")}>
               <RefreshCw size={15} className={cn(refreshing && "animate-spin")} />
             </button>
@@ -82,14 +81,14 @@ export function ManageView(props: ManageViewProps) {
           {installed.length === 0 ? (
             <p className="rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary">{t("connectApps.manage.noneInstalled")}</p>
           ) : (
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1 md:grid-cols-2">
               {shown.map((item) => (
                 <button
                   key={item.key}
                   type="button"
                   data-plugin-card={item.key}
                   onClick={() => onOpenItem(item)}
-                  className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-3 text-left hover:bg-hover"
+                  className="flex items-center gap-3 rounded-xl px-1 py-2 text-left hover:bg-ink/5"
                 >
                   <PluginIcon item={item} />
                   <span className="min-w-0 flex-1">

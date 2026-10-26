@@ -255,3 +255,58 @@ export function createMascotHotkey(deps) {
     },
   };
 }
+
+/**
+ * Global shortcuts that open a bot: Cmd+Shift+N (Ctrl+Shift+N elsewhere) for
+ * the bot in slot N of the menu bar list. One key per listed bot, no more;
+ * the keys follow the roster and are all let go when it is empty, when the
+ * person turns them off and when the app quits. `slotFor(n)` gives the
+ * accelerator of a slot (null: that slot has none, e.g. macOS screenshots).
+ *
+ * @param {object} deps
+ * @param {{ register(accelerator: string, cb: () => void): boolean; unregister(accelerator: string): void }} deps.globalShortcut
+ * @param {(slot: number) => void} deps.onSlot  a press of slot N (1 based)
+ * @param {(slot: number) => string | null} deps.slotFor
+ * @param {(line: string) => void} [deps.log]
+ */
+export function createBotHotkeys({ globalShortcut, onSlot, slotFor, log = () => {} }) {
+  /** slot -> accelerator now registered */
+  const held = new Map();
+  const release = (slot) => {
+    const accelerator = held.get(slot);
+    if (!accelerator) return;
+    try {
+      globalShortcut.unregister(accelerator);
+    } catch {
+      /* already gone */
+    }
+    held.delete(slot);
+  };
+  return {
+    /** Keep exactly slots 1..count registered. Returns the slots held. */
+    sync(count, enabled = true) {
+      const wanted = enabled ? Math.max(0, Math.min(9, Math.floor(Number(count) || 0))) : 0;
+      for (const slot of held.keys()) if (slot > wanted) release(slot);
+      for (let slot = 1; slot <= wanted; slot++) {
+        if (held.has(slot)) continue;
+        const accelerator = slotFor(slot);
+        if (!accelerator) continue;
+        let ok = false;
+        try {
+          ok = globalShortcut.register(accelerator, () => onSlot(slot)) === true;
+        } catch {
+          ok = false;
+        }
+        if (ok) held.set(slot, accelerator);
+        else log(`bot hotkey: ${accelerator} is taken by another app; not registered`);
+      }
+      return [...held.keys()].sort((a, b) => a - b);
+    },
+    get slots() {
+      return [...held.keys()].sort((a, b) => a - b);
+    },
+    dispose() {
+      for (const slot of held.keys()) release(slot);
+    },
+  };
+}

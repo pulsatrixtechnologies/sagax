@@ -220,13 +220,12 @@ final class SettingsClientTests: XCTestCase {
     }
 
     func testInstalledPluginsKeepReadableEntries() async throws {
-        respond(#"{"plugins":[{"kind":"mcp","name":"deepwiki","url":"https://mcp.deepwiki.com/mcp","domain":"mcp.deepwiki.com","enabled":true,"auth":"none","icon":"deepwiki","catalogId":"deepwiki"},{"kind":"mcp","name":"notion","url":"https://mcp.notion.com/mcp","domain":"mcp.notion.com","enabled":true,"auth":"required"},{"kind":"composio","slug":"gmail","name":"Gmail","connected":true},{"kind":"mcp"}],"count":4}"#)
+        respond(#"{"plugins":[{"kind":"mcp","name":"deepwiki","url":"https://mcp.deepwiki.com/mcp","domain":"mcp.deepwiki.com","enabled":true,"auth":"none","icon":"deepwiki","catalogId":"deepwiki"},{"kind":"mcp","name":"notion","url":"https://mcp.notion.com/mcp","domain":"mcp.notion.com","enabled":true,"auth":"required"},{"kind":"mcp"}],"count":3}"#)
         let installed = try await client().installedPlugins()
-        XCTAssertEqual(installed.plugins.count, 3)
-        XCTAssertEqual(installed.count, 4)
+        XCTAssertEqual(installed.plugins.count, 2)
+        XCTAssertEqual(installed.count, 3)
         XCTAssertTrue(installed.plugins[0].isReady)
         XCTAssertTrue(installed.plugins[1].needsSignIn)
-        XCTAssertTrue(installed.plugins[2].isReady)
         XCTAssertEqual(installed.installedURLs, ["https://mcp.deepwiki.com/mcp", "https://mcp.notion.com/mcp"])
     }
 

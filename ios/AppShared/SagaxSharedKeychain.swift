@@ -1,3 +1,4 @@
+import CompanionCore
 import Foundation
 import Security
 
@@ -40,14 +41,7 @@ enum SagaxSharedKeychain {
     /// phone is locked or the new entitlement is unavailable, the old token
     /// remains untouched and the error retains its locked-vs-missing meaning.
     static func tokenMigratingLegacyItem(for connectionID: String) throws -> String? {
-        if let shared = try token(for: connectionID) { return shared }
-        let legacyGroup = try requiredLegacyAccessGroup()
-        guard let legacy = try readToken(for: connectionID, accessGroup: legacyGroup) else {
-            return nil
-        }
-        try save(legacy, for: connectionID)
-        _ = remove(connectionID, accessGroup: legacyGroup)
-        return legacy
+        try CompanionCredentials.current(id: connectionID, in: SagaxKeychainSlots())
     }
 
     /// Remove both generations when called by the main app. Deleting the
@@ -61,6 +55,26 @@ enum SagaxSharedKeychain {
         }
         let legacyRemoved = remove(connectionID, accessGroup: legacyGroup)
         return sharedRemoved && legacyRemoved
+    }
+
+    fileprivate static func accessGroup(for slot: CredentialSlot) throws -> String {
+        switch slot {
+        case .shared: return try requiredAccessGroup()
+        case .legacy: return try requiredLegacyAccessGroup()
+        }
+    }
+
+    fileprivate static func read(_ slot: CredentialSlot, id: String) throws -> String? {
+        try readToken(for: id, accessGroup: accessGroup(for: slot))
+    }
+
+    fileprivate static func write(_ token: String, to slot: CredentialSlot, id: String) throws {
+        try save(Data(token.utf8), for: id, accessGroup: accessGroup(for: slot))
+    }
+
+    fileprivate static func delete(_ slot: CredentialSlot, id: String) {
+        guard let group = try? accessGroup(for: slot) else { return }
+        _ = remove(id, accessGroup: group)
     }
 
     private static func requiredAccessGroup() throws -> String {
@@ -150,6 +164,22 @@ enum SagaxSharedKeychain {
             identity(for: connectionID, accessGroup: accessGroup) as CFDictionary
         )
         return status == errSecSuccess || status == errSecItemNotFound
+    }
+}
+
+/// The Keychain as `CompanionCredentials` sees it: the shared group (app and
+/// extensions) and the app's own legacy group.
+struct SagaxKeychainSlots: CredentialSlots {
+    func read(_ slot: CredentialSlot, id: String) throws -> String? {
+        try SagaxSharedKeychain.read(slot, id: id)
+    }
+
+    func write(_ token: String, to slot: CredentialSlot, id: String) throws {
+        try SagaxSharedKeychain.write(token, to: slot, id: id)
+    }
+
+    func delete(_ slot: CredentialSlot, id: String) {
+        SagaxSharedKeychain.delete(slot, id: id)
     }
 }
 

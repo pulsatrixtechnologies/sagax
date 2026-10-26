@@ -3,7 +3,9 @@
 // HTTP. Every refusal the spec lists (T10) is proven by bending one thing.
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { ACCOUNT_PURGED_EVENT, accessExpiresIn, avatarVersionFromPicture, OIDC_MAX_PENDING_FLOWS, ROUTINE_DELEGATION_SCOPES, OIDC_PENDING_FLOW_TTL_MS, OidcRelyingParty, parseRetryAfter, parseTeamsClaim, validIssuer } from "./oidc-rp.ts";
+import { BOT_MAIL_ASSERTION_ACTORS } from "./bot-inbound-mail.ts";
+import { ORG_MEMBER_ASSERTION_ACTORS } from "./org-member-routes.ts";
+import { ACCOUNT_PURGED_EVENT, CONSOLE_ASSERTION_ACTORS, accessExpiresIn, avatarVersionFromPicture, OIDC_MAX_PENDING_FLOWS, ROUTINE_DELEGATION_SCOPES, OIDC_PENDING_FLOW_TTL_MS, OidcRelyingParty, parseRetryAfter, parseTeamsClaim, validIssuer } from "./oidc-rp.ts";
 import { startFakeOidcProvider, type FakeOidcProvider } from "./testing/fake-oidc-provider.ts";
 
 const REDIRECT = "http://127.0.0.1:9/auth/oidc/callback";
@@ -276,13 +278,17 @@ describe("OIDC relying party: refresh (slice 2)", () => {
     expect(refreshed.ok && refreshed.identity).toBeUndefined();
   });
 
-  it("rejects a refreshed id_token for another subject, one carrying a nonce, and a disabled person", async () => {
+  it("rejects a refreshed id_token for another subject and a disabled person; keeps the rotation but not the claims of an id_token that does not verify", async () => {
     const party = rp();
     let token = await signedInGrant(party);
     expect(await party.refresh(token, { sub: "someone-else" })).toMatchObject({ ok: false, kind: "rejected" });
     token = await signedInGrant(party);
     idp.tamper = { claims: (c) => ({ ...c, nonce: "n" }) };
-    expect(await party.refresh(token, { sub: idp.user.sub })).toMatchObject({ ok: false, kind: "rejected", error: expect.stringMatching(/nonce/) });
+    // 2026-10-20: a signing key rotated mid-deploy, a stray claim: the
+    // session keeps its rotated token, the claims are not applied
+    const unverified = await party.refresh(token, { sub: idp.user.sub });
+    expect(unverified).toMatchObject({ ok: true, note: expect.stringMatching(/nonce/) });
+    expect(unverified.ok && unverified.identity).toBeFalsy();
     idp.tamper = {};
     token = await signedInGrant(party);
     idp.disable(idp.user.sub);
@@ -307,6 +313,16 @@ describe("OIDC relying party: refresh (slice 2)", () => {
     expect((await party.refresh(token, { sub: idp.user.sub })).ok).toBe(true);
     const offline = new OidcRelyingParty({ issuer: idp.issuer, clientId: "pulsa-bot", redirectUri: REDIRECT, fetch: () => Promise.reject(new Error("ECONNREFUSED")) });
     expect(await offline.refresh("pxlr1.x", { sub: "s" })).toMatchObject({ ok: false, kind: "transient" });
+    // a page that is not a token answer, and errors about this client rather
+    // than the grant (a provider being redeployed): transient
+    for (const answer of [{ status: 200, body: "<html>maintenance</html>" }, { status: 400, body: JSON.stringify({ error: "invalid_client" }) }, { status: 401, body: JSON.stringify({ error: "unauthorized_client" }) }]) {
+      const party2 = new OidcRelyingParty({ issuer: idp.issuer, clientId: "pulsa-bot", redirectUri: REDIRECT, fetch: async (input, init) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url.endsWith("/token")) return new Response(answer.body, { status: answer.status, headers: { "content-type": answer.body.startsWith("{") ? "application/json" : "text/html" } });
+        return fetch(input, init);
+      } });
+      expect(await party2.refresh("pxlr1.x", { sub: "s" })).toMatchObject({ ok: false, kind: "transient" });
+    }
   });
 
   it("revokes a token at the provider and never throws", async () => {
@@ -445,6 +461,33 @@ describe("OIDC relying party: console assertions (slice 7)", () => {
     // the member API: both
     await expect(party.verifyConsoleAssertion(mcp(), ORIGIN, null, ["console", "perspicax-mcp"])).resolves.toMatchObject({ sub, actor: "perspicax-mcp" });
     await expect(party.verifyConsoleAssertion(assertion({ claims: (c: Bend) => ({ ...c, act: { sub: "someone" } }) }), ORIGIN, null, ["console", "perspicax-mcp"])).rejects.toMatchObject({ code: "console_assertion_act" });
+  });
+
+  it("perspicax-mail (bot inbound mail, 2026-10-21) passes only on the inbound mail route, never the admin or member API", async () => {
+    const party = rp();
+    const mail = () => assertion({ claims: (c: Bend) => ({ ...c, act: { sub: "perspicax-mail" } }) });
+    expect(CONSOLE_ASSERTION_ACTORS).toContain("perspicax-mail");
+    // the admin API (no actors given): refused
+    await expect(party.verifyConsoleAssertion(mail(), ORIGIN)).rejects.toMatchObject({ code: "console_assertion_act" });
+    // the member API's actors: refused
+    expect(ORG_MEMBER_ASSERTION_ACTORS).not.toContain("perspicax-mail");
+    await expect(party.verifyConsoleAssertion(mail(), ORIGIN, null, ORG_MEMBER_ASSERTION_ACTORS)).rejects.toMatchObject({ code: "console_assertion_act" });
+    // the inbound mail route: this actor alone
+    expect(BOT_MAIL_ASSERTION_ACTORS).toEqual(["perspicax-mail"]);
+    await expect(party.verifyConsoleAssertion(mail(), ORIGIN, null, BOT_MAIL_ASSERTION_ACTORS)).resolves.toMatchObject({ sub, actor: "perspicax-mail" });
+    await expect(party.verifyConsoleAssertion(assertion(), ORIGIN, null, BOT_MAIL_ASSERTION_ACTORS)).rejects.toMatchObject({ code: "console_assertion_act" });
+    await expect(party.verifyConsoleAssertion(assertion({ claims: (c: Bend) => ({ ...c, act: { sub: "perspicax-mcp" } }) }), ORIGIN, null, BOT_MAIL_ASSERTION_ACTORS)).rejects.toMatchObject({ code: "console_assertion_act" });
+  });
+
+  it("carries the body digest the mail relay signs (v2, S1), and refuses one that is not a SHA-256", async () => {
+    const party = rp();
+    const digest = "a".repeat(64);
+    const mail = (value: unknown) => assertion({ claims: (c: Bend) => ({ ...c, act: { sub: "perspicax-mail" }, body_sha256: value }) });
+    await expect(party.verifyConsoleAssertion(mail(digest), ORIGIN, null, BOT_MAIL_ASSERTION_ACTORS)).resolves.toMatchObject({ bodySha256: digest });
+    await expect(party.verifyConsoleAssertion(mail("A".repeat(64)), ORIGIN, null, BOT_MAIL_ASSERTION_ACTORS)).rejects.toMatchObject({ code: "console_assertion_body" });
+    await expect(party.verifyConsoleAssertion(mail(7), ORIGIN, null, BOT_MAIL_ASSERTION_ACTORS)).rejects.toMatchObject({ code: "console_assertion_body" });
+    const plain = await party.verifyConsoleAssertion(assertion(), ORIGIN);
+    expect(plain.bodySha256).toBeUndefined();
   });
 
   it.each([

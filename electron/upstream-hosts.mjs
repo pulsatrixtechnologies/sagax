@@ -116,17 +116,22 @@ export function blockedRequestPatterns() {
 
 /** Cancel every request a session makes to a blocked URL. Electron allows one
  * onBeforeRequest listener per session, and no other code in this app sets
- * one; the callback double-checks with isBlockedUrl. */
-export function installSessionBlock(session, log = () => {}) {
+ * one; the callback double-checks with isBlockedUrl. `alsoCancel` is the
+ * second rule that shares this one listener (electron/server-session.mjs:
+ * only the app window's session reaches the local server); with it, the
+ * listener sees every URL instead of the blocked patterns alone. */
+export function installSessionBlock(session, log = () => {}, alsoCancel = null) {
   if (!session?.webRequest || session.sagaxBlocked) return;
-  session.webRequest.onBeforeRequest({ urls: blockedRequestPatterns() }, (details, callback) => {
+  const listener = (details, callback) => {
     const cancel = isBlockedUrl(details.url);
     if (cancel) {
       reportBlocked(details.url);
       log(`blocked request to ${hostOf(details.url)}`);
     }
-    callback({ cancel });
-  });
+    callback({ cancel: cancel || Boolean(alsoCancel?.(details.url)) });
+  };
+  if (alsoCancel) session.webRequest.onBeforeRequest(listener);
+  else session.webRequest.onBeforeRequest({ urls: blockedRequestPatterns() }, listener);
   try {
     Object.defineProperty(session, "sagaxBlocked", { value: true });
   } catch {

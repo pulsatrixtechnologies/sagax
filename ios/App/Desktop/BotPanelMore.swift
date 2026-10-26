@@ -104,6 +104,17 @@ extension DesktopPanelGroup {
     }
 }
 
+extension PhoneBotEditGroup {
+    var title: LocalizedStringKey {
+        switch self {
+        case .instructions: "Instructions"
+        case .modelTools: "Model and tools"
+        case .security: "Security"
+        case .activity: "History and usage"
+        }
+    }
+}
+
 struct BotPanelMore: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
@@ -856,10 +867,9 @@ private struct BotPanelMemory: View {
         var line = memory.upkeep?.lastTidy.map {
             String(localized: "Last tidy-up \(BotAdvancedWording.ago($0.at)): \(BotAdvancedWording.tidySummary($0).lowercased()).")
         } ?? String(localized: "Not tidied yet.")
-        if let capture = memory.upkeep?.lastCapture, capture.noticed > 0 {
-            line += " " + (capture.noticed == 1
-                ? String(localized: "Last noticed 1 fact \(BotAdvancedWording.ago(capture.at)).")
-                : String(localized: "Last noticed \(capture.noticed) facts \(BotAdvancedWording.ago(capture.at))."))
+        if let capture = memory.upkeep?.lastCapture {
+            let receipt = BotAdvancedWording.captureReceipt(capture)
+            if !receipt.isEmpty { line += " " + receipt }
         }
         return line
     }

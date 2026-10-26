@@ -1,19 +1,17 @@
-// Plugins, main view ("Connect apps"): every app, MCP server, catalog plugin
-// and skill in one list, with search across all of them, category pills and
-// a short section per category. Installed rows open their detail page; the
-// others carry Add (nothing to sign in to) or Connect (an account). Since
-// 2026-10-16 it has Browse Bots' layout (src/components/bot-catalog/
-// BotCatalogView.tsx, src/components/category-modal.ts): title and gray
-// subtitle (Browse Bots at the right), the pills, the search with
-// "N connected", then the sections in two columns. View all opens a section
-// as its own page, in the same window, under a breadcrumb.
+// Plugins, main view ("Connect Apps"): every app, MCP server, catalog plugin
+// and skill in one list. The chrome matches Grok Bot's Connect Apps: the
+// title with "N connected" at its right, the search with Bot templates
+// beside it, All and the main categories, the rest under More, then the
+// sections in two columns. View all opens a section as its own page.
 import { useEffect, useState, type ReactNode } from "react";
-import { ChevronRight, LayoutGrid, Loader2, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, LayoutGrid, Loader2, Search } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import {
   CATEGORY_ORDER,
+  MAIN_CATEGORIES,
+  MORE_CATEGORIES,
   connectedSummary,
   mainSections,
   type PluginFilter,
@@ -31,10 +29,20 @@ export const MAIN_CHIPS: PluginFilter[] = ["all"];
 export const CATEGORY_CHIPS: PluginFilter[] = [...CATEGORY_ORDER];
 export const TYPE_FILTERS: PluginTypeFilter[] = ["any", "apps", "mcp", "skills"];
 
-/** The pills shown for these rows: All, then the categories that have one. */
+const MAIN_CATEGORY_SET = new Set<string>(MAIN_CATEGORIES);
+const MORE_CATEGORY_SET = new Set<string>(MORE_CATEGORIES);
+
+/** The pills on the row: All, then the main categories that have a row. */
 export function categoryPills(items: readonly Pick<PluginItem, "category">[], filter: PluginFilter): PluginFilter[] {
   const present = new Set<string>(items.map((item) => item.category));
-  return [...MAIN_CHIPS, ...CATEGORY_CHIPS.filter((chip) => present.has(chip) || chip === filter)];
+  return [...MAIN_CHIPS, ...CATEGORY_CHIPS.filter((chip) => MAIN_CATEGORY_SET.has(chip) && (present.has(chip) || chip === filter))];
+}
+
+/** Categories that sit in the More menu: the ones with a row, or the one
+ * that is already chosen. */
+export function moreCategoryPills(items: readonly Pick<PluginItem, "category">[], filter: PluginFilter): PluginFilter[] {
+  const present = new Set<string>(items.map((item) => item.category));
+  return CATEGORY_CHIPS.filter((chip) => MORE_CATEGORY_SET.has(chip) && (present.has(chip) || chip === filter));
 }
 
 const FILTER_KEY: Record<string, LocaleKey> = {
@@ -143,26 +151,14 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
     else onType?.(section.filter.type);
   };
 
+  const more = moreCategoryPills(items, filter);
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-plugins-main={subpage ? "section" : "home"}>
       <header className={CATEGORY_MODAL.titleBar}>
         {subpage && <Breadcrumb trail={subpage.trail} current={subpage.title} onBack={subpage.onBack} backData={{ "data-plugins-back": "" }} />}
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h2 id="plugins-title" className={CATEGORY_MODAL.title}>{subpage ? subpage.title : t("connectApps.title")}</h2>
-            {!subpage && <p className={CATEGORY_MODAL.subtitle}>{t("connectApps.subtitle")}</p>}
-          </div>
-          {!subpage && onBrowseBots && (
-            <button
-              type="button"
-              data-plugins-browse-bots
-              onClick={onBrowseBots}
-              className={CATEGORY_MODAL.outlineButton}
-            >
-              <LayoutGrid size={16} className="text-ink-secondary" aria-hidden="true" />
-              <span>{t("sidebar.browseBots")}</span>
-            </button>
-          )}
+        <div className="flex items-center justify-between gap-4">
+          <h2 id="plugins-title" className={CATEGORY_MODAL.title}>{subpage ? subpage.title : t("connectApps.title")}</h2>
+          <ConnectedButton summary={summary} onOpen={onOpenManage} />
         </div>
         {scope && <div className="mt-3">{scope}</div>}
       </header>
@@ -182,6 +178,9 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
                 {filterLabel(chip, sourceLabel)}
               </button>
             ))}
+            {more.length > 0 && (
+              <MoreCategories pills={more} filter={filter} onFilter={onFilter} sourceLabel={sourceLabel} />
+            )}
           </div>
         )}
         <div className={subpage ? "flex items-center gap-2" : "mt-3 flex items-center gap-2"}>
@@ -196,25 +195,18 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
               className={CATEGORY_MODAL.searchInput}
             />
           </label>
-          <button
-            type="button"
-            data-plugins-connected
-            onClick={onOpenManage}
-            className={CATEGORY_MODAL.outlineButton}
-            aria-label={t("connectApps.manageAria", { count: summary.count })}
-          >
-            {summary.icons.length > 0 && (
-              <span className="flex -space-x-1.5" aria-hidden="true">
-                {summary.icons.map((item) => (
-                  <span key={item.key} className="rounded-lg ring-2 ring-app">
-                    <PluginIcon item={item} className="size-5 rounded-md" />
-                  </span>
-                ))}
-              </span>
-            )}
-            <span>{t("connectApps.connectedCount", { count: summary.count })}</span>
-            <ChevronRight size={14} className="text-ink-secondary" aria-hidden="true" />
-          </button>
+          {!subpage && onBrowseBots && (
+            <button
+              type="button"
+              data-plugins-browse-bots
+              onClick={onBrowseBots}
+              className={CATEGORY_MODAL.outlineButton}
+            >
+              <LayoutGrid size={16} className="text-ink-secondary" aria-hidden="true" />
+              <span>{t("connectApps.botTemplates")}</span>
+              <ChevronRight size={14} className="text-ink-secondary" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -262,6 +254,74 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
           })
         )}
       </div>
+    </div>
+  );
+}
+
+function ConnectedButton({ summary, onOpen }: { summary: ReturnType<typeof connectedSummary>; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      data-plugins-connected
+      onClick={onOpen}
+      className="flex shrink-0 items-center gap-2 text-[13px] leading-[18px] text-ink hover:text-ink"
+      aria-label={t("connectApps.manageAria", { count: summary.count })}
+    >
+      {summary.icons.length > 0 && (
+        <span className="flex -space-x-1.5" aria-hidden="true">
+          {summary.icons.map((item) => (
+            <span key={item.key} className="rounded-md ring-2 ring-app">
+              <PluginIcon item={item} className="size-5 rounded-md" />
+            </span>
+          ))}
+        </span>
+      )}
+      <span>{t("connectApps.connectedCount", { count: summary.count })}</span>
+      <ChevronRight size={14} className="text-ink-secondary" aria-hidden="true" />
+    </button>
+  );
+}
+
+/** The categories that are not on the row, as Grok Bot's More chip. */
+function MoreCategories({ pills, filter, onFilter, sourceLabel }: {
+  pills: PluginFilter[];
+  filter: PluginFilter;
+  onFilter: (filter: PluginFilter) => void;
+  sourceLabel?: (source: string) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const chosen = pills.includes(filter);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        data-plugins-more
+        aria-pressed={chosen}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen((value) => !value)}
+        className={categoryChipClass(chosen)}
+      >
+        {t("connectApps.filter.more")}
+        <ChevronDown size={12} className="ml-1 inline" aria-hidden="true" />
+      </button>
+      {open && (
+        <div role="menu" className="absolute left-0 top-8 z-20 min-w-40 rounded-xl border border-border bg-card p-1 shadow-lg">
+          {pills.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              role="menuitem"
+              aria-pressed={filter === chip}
+              data-plugins-chip={chip}
+              onClick={() => { onFilter(chip); setOpen(false); }}
+              className="block w-full rounded-lg px-3 py-1.5 text-left text-[12.5px] text-ink hover:bg-hover"
+            >
+              {filterLabel(chip, sourceLabel)}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

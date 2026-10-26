@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  composioActionPhrase,
   outboundApp,
   outboundCalls,
   outboundSummary,
@@ -98,18 +97,5 @@ describe("parseOutboundCalls", () => {
 
   it("gives up on the whole subtitle when one block has no heading", () => {
     expect(parseOutboundCalls("Linear · Create issue\n{}\n\n\n\nGmail · Send email")).toEqual([]);
-  });
-});
-
-describe("composioActionPhrase", () => {
-  it("turns a Composio slug into a verb phrase", () => {
-    expect(composioActionPhrase("LINEAR_CREATE_LINEAR_COMMENT")).toBe("create linear comment");
-    expect(composioActionPhrase("GMAIL_SEND_EMAIL")).toBe("send email");
-  });
-
-  it("leaves other tool names alone", () => {
-    expect(composioActionPhrase("Bash")).toBeUndefined();
-    expect(composioActionPhrase("computer_batch")).toBeUndefined();
-    expect(composioActionPhrase("LINEAR")).toBeUndefined();
   });
 });

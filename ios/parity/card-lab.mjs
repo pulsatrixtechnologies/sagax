@@ -12,26 +12,21 @@
 //   receives and the saved command rules are the real ones.
 // - A parallel task is a real send with busyMode "parallel" while that turn
 //   runs.
-// - Connector, credential, option, access, owner-wait, goal-run and error
-//   rows are written into the transcript store between the two passes, the
-//   way the fixture seeds every other transcript, and are then served,
-//   patched and resumed by the server's real routes. Connected apps talk to
-//   a local stub of the managed broker (SAGAX_COMPOSIO_BROKER_URL): the
-//   sign-in link is a composio.dev address the test never loads, and the
-//   stub reports "connected" once the test says so.
+// - Credential, option, access, owner-wait, goal-run and error rows are
+//   written into the transcript store between the two passes, the way the
+//   fixture seeds every other transcript, and are then served, patched and
+//   resumed by the server's real routes.
 //
 // Hooks, on the fixture's front (the computer double):
-//   GET  /__parity/cards              -> lab ids, engine answers, broker record
+//   GET  /__parity/cards              -> lab ids, engine answers
 //   POST /__parity/cards/asks         {asks:[{tool,input}]} -> {requestIds}
 //   POST /__parity/cards/parallel     {title} -> {threadId}
-//   POST /__parity/cards/connect      {slug} -> the broker reports it connected
 //
 // For the composer tests (WP3) the holding engine also lists a lab slash
 // command (FAKE_CLAUDE_COMMANDS) and records every prompt it is sent
 // (FAKE_CLAUDE_PROMPTS, served as `prompts`), and a room ("Lab Room") is led
 // by Room Lab on the same engine, so a room turn holds still too.
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer as createHttpServer } from "node:http";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -39,7 +34,6 @@ import { DatabaseSync } from "node:sqlite";
 
 export const CARD_LAB = process.env.PARITY_CARDS === "1";
 
-const BROKER_TOKEN = "a".repeat(64);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const lab = {
@@ -51,41 +45,16 @@ const lab = {
   sockets: [],
   answers: {},
   asks: [],
-  broker: { authorizes: [], connected: [] },
 };
 
-// ── managed connected-apps broker stub ──────────────────────────────────
+// The managed connected-apps broker has been removed. These exports stay as
+// no-ops so the fixture server keeps loading without starting a broker.
 export function startCardLabBroker() {
-  const server = createHttpServer((req, res) => {
-    const url = new URL(req.url ?? "/", "http://broker");
-    const send = (status, body) => {
-      res.writeHead(status, { "content-type": "application/json" });
-      res.end(JSON.stringify(body));
-    };
-    if (req.headers.authorization !== `Bearer ${BROKER_TOKEN}`) return send(401, { error: "unauthorized" });
-    if (req.method === "GET" && url.pathname === "/v1/connectors") {
-      const services = {};
-      for (const slug of (url.searchParams.get("services") ?? "").split(",").filter(Boolean)) {
-        const connected = lab.broker.connected.includes(slug);
-        services[slug] = { connected, pending: !connected, status: connected ? "ACTIVE" : "INITIATED" };
-      }
-      return send(200, { services });
-    }
-    const authorize = url.pathname.match(/^\/v1\/connectors\/([\w-]+)\/authorize$/);
-    if (req.method === "POST" && authorize) {
-      lab.broker.authorizes.push(authorize[1]);
-      return send(200, { url: `https://connect.composio.dev/link/parity-${authorize[1]}` });
-    }
-    return send(404, { error: "not in the parity broker" });
-  });
-  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => {
-    server.unref();
-    resolve(server.address().port);
-  }));
+  return Promise.resolve(null);
 }
 
-export function cardLabServerEnv(brokerPort) {
-  return { SAGAX_COMPOSIO_BROKER_URL: `http://127.0.0.1:${brokerPort}`, SAGAX_COMPOSIO_BROKER_TOKEN: BROKER_TOKEN };
+export function cardLabServerEnv() {
+  return {};
 }
 
 /** The engine instance whose turns hold still while the lab asks. */
@@ -266,7 +235,7 @@ export async function cardLabHook(req, res, url, base, api) {
       const prompts = existsSync(lab.promptsPath)
         ? readFileSync(lab.promptsPath, "utf8").split("\n").filter(Boolean)
         : [];
-      send(200, { bots: lab.bots, room: lab.room, answers: lab.answers, asks: lab.asks, broker: lab.broker, prompts });
+      send(200, { bots: lab.bots, room: lab.room, answers: lab.answers, asks: lab.asks, prompts });
     } else if (req.method === "POST" && url.pathname === "/__parity/cards/asks") {
       const body = await readJson(req);
       await ensureTurn(base, api);
@@ -289,10 +258,6 @@ export async function cardLabHook(req, res, url, base, api) {
       }
       if (!threadId) throw new Error("no parallel task opened");
       send(200, { threadId });
-    } else if (req.method === "POST" && url.pathname === "/__parity/cards/connect") {
-      const body = await readJson(req);
-      if (body.slug && !lab.broker.connected.includes(body.slug)) lab.broker.connected.push(body.slug);
-      send(200, { connected: lab.broker.connected });
     } else {
       send(404, { error: "no such card lab hook" });
     }

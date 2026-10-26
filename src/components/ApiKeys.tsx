@@ -9,7 +9,7 @@ import { useMenuMotion } from "./MenuMotion";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 
-export type ConfigSection = "composio" | "box" | "opencodeGo" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "xai" | "mistral" | "cerebras" | "groq" | "meta" | "elevenlabs" | "fishAudio" | "openaiImage" | "customImage";
+export type ConfigSection = "box" | "opencodeGo" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "xai" | "mistral" | "cerebras" | "groq" | "meta" | "elevenlabs" | "fishAudio" | "openaiImage" | "customImage";
 /** Sections whose key can be tried against the provider from the server. */
 export type TestableProvider = "anthropic" | "openai" | "openrouter" | "openaiCompat" | "xai" | "mistral" | "cerebras" | "groq" | "meta";
 
@@ -24,10 +24,6 @@ const SECTIONS: Record<
     included?: (config: ConfigStatus) => boolean;
   }
 > = {
-  composio: {
-    body: (v) => ({ composio: { apiKey: v } }),
-    flag: (c) => c.composio.configured,
-  },
   box: {
     body: (v) => ({ box: { token: v } }),
     flag: (c) => c.box.configured && c.box.included !== true,
@@ -65,8 +61,7 @@ const SECTIONS: Record<
 
 // Provider keys have no desktop-shell slot yet and go through the server's
 // own 0600 config, the same place they live on a hosted server.
-const ELECTRON_CREDENTIAL: Partial<Record<ConfigSection, "composioApiKey" | "boxToken" | "opencodeGoApiKey" | "ttsKey" | "fishAudioKey" | "openaiImageApiKey" | "customImageApiKey">> = {
-  composio: "composioApiKey",
+const ELECTRON_CREDENTIAL: Partial<Record<ConfigSection, "boxToken" | "opencodeGoApiKey" | "ttsKey" | "fishAudioKey" | "openaiImageApiKey" | "customImageApiKey">> = {
   box: "boxToken",
   opencodeGo: "opencodeGoApiKey",
   elevenlabs: "ttsKey",
@@ -93,14 +88,6 @@ const CREDENTIALS: Record<
     noteKey?: LocaleKey;
   }
 > = {
-  composio: {
-    labelKey: "keys.composio.label",
-    placeholder: "ak_…",
-    descriptionKey: "keys.composio.desc",
-    href: "https://platform.composio.dev",
-    linkLabelKey: "keys.composio.link",
-    optional: true,
-  },
   box: {
     labelKey: "keys.boat.label",
     placeholderKey: "keys.boat.placeholder",

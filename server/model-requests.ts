@@ -175,6 +175,8 @@ export class ModelRequestService {
     selection: unknown;
     reason: unknown;
     from?: { botId: string; name: string; color: string };
+    /** 2026-10-20: the person asked their Primary Bot for this now (server/index.ts primaryAskedProposal). */
+    primaryAsked?: boolean;
   }): { requestId: string; messageId: string; title: string; summary: string; detail: string } {
     return this.prepare(args);
   }
@@ -225,7 +227,7 @@ export class ModelRequestService {
       before,
     };
     const copy = modelCardCopy({ targetName, crossBot, before, selection, reason, capabilityLines });
-    const grant = submitted ? this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null : null;
+    const grant = submitted ? (args.primaryAsked ? "primary-bot" as const : this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null) : null;
     const automatic = grant !== null;
     const persistence = this.canPersist?.(args.botId, args.threadId, !automatic);
     if (persistence && !persistence.ok) throw new ModelRequestError(persistence.error, persistence.status);

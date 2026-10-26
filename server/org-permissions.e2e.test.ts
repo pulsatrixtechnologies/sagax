@@ -11,8 +11,12 @@
 //   PM-4  a profile without bots.create or sharing.grants: creating a bot and
 //         sharing one answer 403 with the key; the viewer says why
 //   PM-5  engines.manage opens the engines (full rows, settings) but never an
-//         engine's program path (host.shell stays an admin's); unknown and
-//         admin-only keys from Perspicax are ignored
+//         engine's program path (that is host.shell); unknown keys and
+//         server.link from Perspicax are ignored
+//   PM-6  server.settings, host.shell, backup.workspace and people.manage
+//         open their screens (2026-10-19); never the sign-in lists, the
+//         operator's profile, the interim attach window, tool grants, a
+//         restore, or an admin's session
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -81,7 +85,7 @@ async function bobWith(permissions: string[] | undefined): Promise<Auth> {
     ...idp.personOf(user),
     ...(user === BOB && permissions ? { permissions } : {}),
   }));
-  const expected = (permissions ?? MEMBER_DEFAULT_PERMISSIONS).filter((key) => !["host.shell", "server.settings", "nope.key"].includes(key));
+  const expected = (permissions ?? MEMBER_DEFAULT_PERMISSIONS).filter((key) => !["server.link", "nope.key"].includes(key));
   return waitFor(async () => {
     const auth = await signIn(BOB);
     const viewer = (await api("GET", "/api/config", auth)).body.viewer;
@@ -227,17 +231,168 @@ posixOnly("Perspicax organization: the permission matrix", () => {
     expect(closed.status, closed.text).toBe(403);
     expect(closed.body).toMatchObject({ error: "forbidden", permission: "engines.manage" });
     expect(((await api("GET", "/api/instances", bob)).body.instances as Array<Record<string, unknown>>).find((row) => row.instanceId === "codex")?.cli).toBeUndefined();
-    bob = await bobWith([...MEMBER_DEFAULT_PERMISSIONS, "engines.manage", "host.shell", "server.settings", "nope.key"]);
+    bob = await bobWith([...MEMBER_DEFAULT_PERMISSIONS, "engines.manage", "server.link", "nope.key"]);
     const viewer = (await api("GET", "/api/config", bob)).body.viewer;
     expect(viewer.permissions).toContain("engines.manage");
-    expect(viewer.permissions).not.toContain("host.shell");
+    // server.link stays an admin's whatever the list says
+    expect(viewer.permissions).not.toContain("server.link");
     expect(viewer.permissions).not.toContain("nope.key");
     expect(log).toContain('unknown permission "nope.key" ignored');
     expect(((await api("GET", "/api/instances", bob)).body.instances as Array<Record<string, unknown>>).find((row) => row.instanceId === "codex")?.cli).toBe(FAKE_CODEX_LOGIN);
     const program = await api("PATCH", "/api/instances/codex", bob, { cli: "/bin/sh" });
     expect(program.status, program.text).toBe(403);
     expect(program.body).toMatchObject({ error: "forbidden", permission: "host.shell", field: "cli" });
-    // an admin-only route stays closed whatever the list says
+    // without server.settings the settings stay closed
     expect((await api("PUT", "/api/config", bob, { profile: { name: "x" } })).status).toBe(403);
   }, 60_000);
+
+  it("PM-6 (2026-10-19): the four admin keys an admin gives in Perspicax open their screens, never what makes admins", async () => {
+    // nothing given: every one of them closed, naming its key
+    let bob = await bobWith(undefined);
+    const closed: Array<[string, string, unknown, string]> = [
+      // 2026-10-22 (JC): the config write opens to server.settings OR the
+      // separate server.experimental key; a member with neither is refused,
+      // named by the primary key server.settings.
+      ["PATCH", "/api/config", { language: "fr" }, "server.settings"],
+      ["PATCH", "/api/org/settings", { allowVaultExport: false }, "server.settings"],
+      ["GET", "/api/mcp/servers", undefined, "host.shell"],
+      ["GET", "/api/org/approvals", undefined, "host.shell"],
+      ["GET", "/api/workspace-backup/status", undefined, "backup.workspace"],
+      ["GET", "/api/auth/sessions", undefined, "people.manage"],
+    ];
+    for (const [method, path, body, key] of closed) {
+      const refused = await api(method, path, bob, body);
+      expect(refused.status, `${method} ${path}`).toBe(403);
+      expect(refused.body.permission, `${method} ${path}`).toBe(key);
+    }
+    expect((await api("GET", "/api/config", bob)).body.viewer.capabilities).toMatchObject({ editConfig: false, manageComputers: false, manageBackups: false });
+
+    bob = await bobWith([...MEMBER_DEFAULT_PERMISSIONS, "server.settings", "host.shell", "backup.workspace", "people.manage"]);
+    expect((await api("GET", "/api/config", bob)).body.viewer.capabilities).toMatchObject({ editConfig: true, manageKeys: true, manageComputers: true, manageBackups: true });
+    // server.settings: the settings, never who is an admin
+    const language = await api("PATCH", "/api/config", bob, { language: "fr" });
+    expect(language.status, language.text).toBe(200);
+    for (const field of ["signIn", "profile", "organization"]) {
+      const refused = await api("PATCH", "/api/config", bob, { [field]: field === "signIn" ? { admins: ["bob@example.test"], members: [] } : field === "profile" ? { name: "x", email: "bob@example.test" } : {} });
+      expect(refused.status, field).toBe(403);
+      expect(refused.body).toMatchObject({ code: "admin_only_field", field });
+    }
+    // nor an address the server connects to, in any block
+    const addresses: Array<[Record<string, unknown>, string]> = [
+      [{ decider: { baseUrl: "https://attacker.example.test" } }, "decider.baseUrl"],
+      [{ tts: { baseUrl: "https://attacker.example.test" } }, "tts.baseUrl"],
+      [{ imageGen: { customUrl: "https://attacker.example.test" } }, "imageGen.customUrl"],
+      [{ browserEngine: { attachCdpUrl: "http://127.0.0.1:9333" } }, "browserEngine.attachCdpUrl"],
+      [{ openai: { url: "https://attacker.example.test" } }, "openai.url"],
+    ];
+    for (const [patch, field] of addresses) {
+      const refused = await api("PATCH", "/api/config", bob, patch);
+      expect(refused.status, field).toBe(403);
+      expect(refused.body, field).toMatchObject({ code: "admin_only_field", field, error: "Only an organization admin can change an address the server connects to." });
+    }
+    // nor a provider key of the server (JC 2026-10-19), in any block
+    const providerKeys: Array<[Record<string, unknown>, string]> = [
+      [{ openrouter: { key: "sk-test" } }, "openrouter.key"],
+      [{ openai: { key: "sk-test" } }, "openai.key"],
+      [{ anthropic: { key: "sk-test" } }, "anthropic.key"],
+      [{ tts: { key: "tts-test" } }, "tts.key"],
+      [{ tts: { fishKey: "tts-test" } }, "tts.fishKey"],
+      [{ composio: { apiKey: "ck-test" } }, "composio.apiKey"],
+      [{ decider: { key: "dk-test" } }, "decider.key"],
+    ];
+    for (const [patch, field] of providerKeys) {
+      const refused = await api("PATCH", "/api/config", bob, patch);
+      expect(refused.status, field).toBe(403);
+      expect(refused.body, field).toMatchObject({ code: "admin_only_field", field, error: "Only an organization admin can change a provider key of the server." });
+    }
+    expect((await api("PATCH", "/api/config", alice, { openrouter: { key: "sk-test" } })).status).toBe(200);
+    expect((await api("PATCH", "/api/config", alice, { tts: { baseUrl: "https://tts.example.test" } })).status).toBe(200);
+    for (const [patch, field] of [[{ vps: { sshAlias: "host-shell-box" } }, "vps"], [{ box: { token: "x" } }, "box"], [{ features: { vpsComputer: true } }, "features.vpsComputer"]] as const) {
+      const refused = await api("PATCH", "/api/config", bob, patch);
+      expect(refused.status, field).toBe(403);
+      expect(refused.body, field).toMatchObject({ code: "admin_only_field", field });
+    }
+    const config = (await api("GET", "/api/config", bob)).body;
+    expect(config.profile?.email ?? "").toBe("");
+    const policy = await api("PATCH", "/api/org/settings", bob, { allowVaultExport: false });
+    expect(policy.status, policy.text).toBe(200);
+    expect((await api("PATCH", "/api/org/settings", alice, { allowVaultExport: true })).status).toBe(200);
+    const window = await api("PATCH", "/api/org/settings", bob, { interimAttachDays: 5 });
+    expect(window.status).toBe(403);
+    expect(window.body).toMatchObject({ code: "admin_only_field", field: "interimAttachDays" });
+    // tool grants stay an admin's
+    expect((await api("GET", "/api/tool-grants", bob)).status).toBe(403);
+    // host.shell: the server's own MCP servers, the admin approvals queue
+    expect((await api("GET", "/api/mcp/servers", bob)).status).toBe(200);
+    expect((await api("GET", "/api/org/approvals", bob)).status).toBe(200);
+    // backup.workspace: status and export, never a restore
+    const backupStatus = await api("GET", "/api/workspace-backup/status", bob);
+    expect(backupStatus.status, backupStatus.text).toBe(200);
+    expect((await api("POST", "/api/workspace-backup/restore", bob, {})).status).toBe(403);
+    expect((await api("POST", "/api/workspace-backup/upload", bob, {})).status).toBe(403);
+    // people.manage: sessions, never an admin's
+    const listed = await api("GET", "/api/auth/sessions", bob);
+    expect(listed.status, listed.text).toBe(200);
+    const aliceId = (await api("GET", "/api/auth/session", alice)).body.principalId as string;
+    const bobId = (await api("GET", "/api/auth/session", bob)).body.principalId as string;
+    const rows = listed.body.sessions as Array<{ id: string; principalId?: string; scopes?: string[] }>;
+    const aliceSession = rows.find((row) => row.principalId === aliceId);
+    expect(aliceSession).toBeTruthy();
+    const refused = await api("DELETE", `/api/auth/sessions/${aliceSession!.id}`, bob);
+    expect(refused.status).toBe(403);
+    expect(refused.body.code).toBe("target_is_admin");
+    expect((await api("GET", "/api/org/people/" + aliceId + "/connections", bob)).body.code).toBe("target_is_admin");
+    // an admin's bot: never forced by a delegate
+    const aliceBot = await api("POST", "/api/bots", alice, { name: "Vault" });
+    expect(aliceBot.status, aliceBot.text).toBe(201);
+    const forced = await api("POST", `/api/org/bots/${aliceBot.body.bot.id}/force-stop`, bob, {});
+    expect(forced.status).toBe(403);
+    expect(forced.body.code).toBe("target_is_admin");
+    expect((await api("POST", `/api/org/bots/${aliceBot.body.bot.id}/force-stop`, alice, {})).status).toBe(200);
+    // security review: a webhook would run an admin's bot as her
+    const hook = await api("POST", "/api/webhooks", bob, { name: "x", prompt: "y", botId: aliceBot.body.bot.id });
+    expect(hook.status).toBe(403);
+    expect(hook.body.code).toBe("target_is_admin");
+    // nor a provider endpoint, the OpenAI-compatible engines or a host switch
+    for (const [body, field] of [[{ anthropic: { url: "http://127.0.0.1:9" } }, "anthropic.url"], [{ openaiCompat: [] }, "openaiCompat"], [{ features: { sharedComputers: true } }, "features.sharedComputers"]] as const) {
+      const refused = await api("PATCH", "/api/config", bob, body);
+      expect(refused.status, field).toBe(403);
+      expect(refused.body.field).toBe(field);
+    }
+    // the custom domain feeds pairing links: an admin's
+    expect((await api("POST", "/api/settings/custom-domain", bob, { domain: "evil.example" })).status).toBe(403);
+    // another member's session: his to end (a second sign-in of his own here)
+    const second = await signIn(BOB);
+    const mine = ((await api("GET", "/api/auth/sessions", bob)).body.sessions as Array<{ id: string; principalId?: string }>)
+      .filter((row) => row.principalId === bobId);
+    expect(mine.length).toBeGreaterThan(1);
+    const secondId = (await api("GET", "/api/auth/session", second)).body.id as string | undefined;
+    const target = mine.find((row) => row.id !== secondId && row.id !== undefined)!;
+    expect((await api("DELETE", `/api/auth/sessions/${target.id}`, second)).status).toBe(200);
+    // the admin is unchanged
+    expect((await api("GET", "/api/tool-grants", alice)).status).toBe(200);
+  }, 90_000);
+
+  it("PM-7 (2026-10-22, JC): server.experimental alone flips the experiments and nothing else", async () => {
+    const bob = await bobWith([...MEMBER_DEFAULT_PERMISSIONS, "server.experimental"]);
+    // the section's capability is off (it is not server.settings), yet the
+    // experiment switches write through
+    const caps = (await api("GET", "/api/config", bob)).body.viewer.capabilities;
+    expect(caps).toMatchObject({ editConfig: false, manageKeys: false });
+    const okFeature = await api("PATCH", "/api/config", bob, { features: { dataWindow: true } });
+    expect(okFeature.status, okFeature.text).toBe(200);
+    expect(okFeature.body.features?.dataWindow).toBe(true);
+    // nothing else: a plain setting, an address, a host-reaching feature
+    for (const [patch, field] of [
+      [{ language: "fr" }, "language"],
+      [{ profile: { name: "x" } }, "profile"],
+      [{ features: { vpsComputer: true } }, "features.vpsComputer"],
+      [{ features: { dataWindow: true }, language: "fr" }, "language"],
+    ] as const) {
+      const refused = await api("PATCH", "/api/config", bob, patch);
+      expect(refused.status, field).toBe(403);
+      expect(refused.body.code, field).toBe("admin_only_field");
+      expect(refused.body.field, field).toBe(field);
+    }
+  }, 90_000);
 });

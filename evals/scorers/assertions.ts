@@ -31,8 +31,14 @@ function volatileInstructions(prompt: string, messages: WorldSnapshot["threads"]
     const content = envelope?.message?.content;
     if (envelope?.type !== "user" || envelope.message?.role !== "user" || typeof content !== "string") return "";
     if (messages.some(message => message.role === "user" && message.text === content)) return "";
-    const prefix = "<system-reminder>\nThis part of your instructions changed since this session started. It replaces the earlier copy:\n\n";
-    if (!content.startsWith(prefix)) return "";
+    // The whole volatile half, or only its changed sections (server/drivers/prompt-split.ts).
+    const prefix = [
+      "<system-reminder>\nThis part of your instructions changed since this session started. It replaces the earlier copy:\n\n",
+      // a new Claude process: its prompt file is the stable half, this is the rest (port of OpenMausBot #3164)
+      "<system-reminder>\nThis part of your instructions changes from turn to turn, so it arrives here instead of in the system prompt. It replaces any earlier copy:\n\n",
+      "<system-reminder>\nContext from Sagax updated since your last copy. Each section below replaces its earlier copy; sections not listed here are unchanged:\n\n",
+    ].find((candidate) => content.startsWith(candidate));
+    if (!prefix) return "";
     const closing = "\n</system-reminder>";
     const end = content.indexOf(closing, prefix.length);
     if (end === -1) return "";

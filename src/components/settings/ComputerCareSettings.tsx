@@ -9,6 +9,7 @@ import { activeLocale, t } from "@/lib/i18n";
 import { formatBytes } from "@/lib/server-environment";
 import type { LocaleKey } from "@/locales";
 import { DescribedRow, PILL, PillSelect, SettingsGroup, SwitchRow } from "../SettingsPrimitives";
+import { ComputerRecoverRow } from "./ComputerRecoverRow";
 
 export interface MaintenanceSchedule {
   enabled: boolean;
@@ -198,6 +199,7 @@ export function ComputerCareSettings() {
 
   return (
     <SettingsGroup title={t("computerCare.title")} groupId="computerCare">
+      <ComputerRecoverRow />
       <div data-settings-card="computer.maintenance" className="px-3.5 py-2.5">
         <SwitchRow
           label={t("computerCare.update.title")}

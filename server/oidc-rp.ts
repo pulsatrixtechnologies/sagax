@@ -206,8 +206,16 @@ export type CallbackOutcome =
   /** `client` (and `purpose`, `returnTo`) are known once the pending flow was found. */
   | { ok: false; code: string; error: string; client?: OidcClientKind; purpose?: OidcFlowPurpose; returnTo?: string };
 
-/** OAuth errors that mean the grant is gone for good (RFC 6749 5.2, RFC 8707). */
-const REJECTED_GRANT_ERRORS = new Set(["invalid_grant", "invalid_client", "unauthorized_client", "invalid_target", "unsupported_grant_type"]);
+/** OAuth errors that mean this grant is gone for good (RFC 6749 5.2). Only
+ * `invalid_grant` names the grant itself; `invalid_client`,
+ * `unauthorized_client`, `invalid_target` and `unsupported_grant_type` name
+ * this server's client registration, the same for every person, and come
+ * from a provider being redeployed or reconfigured: they are transient
+ * (2026-10-20, JC: no sign-out for a Perspicax deploy). */
+const REJECTED_GRANT_ERRORS = new Set(["invalid_grant"]);
+/** Errors about this server's client registration: transient for a deploy's
+ * length (IDP_CLIENT_REFUSED_GRACE_MS), a refusal after. */
+const CLIENT_REFUSED_ERRORS = new Set(["invalid_client", "unauthorized_client", "invalid_target", "unsupported_grant_type"]);
 
 /** Default and cap of an access token's life when `expires_in` is missing or
  * out of range (seconds). */
@@ -224,10 +232,10 @@ export function accessExpiresIn(value: unknown): number {
 export type RefreshOutcome =
   /** `accessToken` (memory only, never kept on disk) and its `expiresIn` in
    * seconds: slice 5 exchanges it for per-turn Perspicax MCP tokens. */
-  | { ok: true; refreshToken: string; identity?: OidcIdentity; accessToken?: string; expiresIn?: number }
+  | { ok: true; refreshToken: string; identity?: OidcIdentity; accessToken?: string; expiresIn?: number; note?: string }
   /** `rejected`: the provider ended the grant (or answered something that
    * cannot be trusted); `transient`: try again later. */
-  | { ok: false; kind: "rejected" | "transient"; error: string; rateLimited?: true; retryAfterMs?: number };
+  | { ok: false; kind: "rejected" | "transient"; error: string; rateLimited?: true; retryAfterMs?: number; clientRefused?: true };
 
 /** A Retry-After Perspicax did not send, or sent unreadable, counts as this. */
 export const RETRY_AFTER_DEFAULT_MS = 60_000;
@@ -502,14 +510,22 @@ export interface ConsoleAssertion {
    * the readable reasons of the admin API follow it. */
   locale?: string;
   /** Who presents it for the person (`act.sub`): `console` (the Perspicax
-   * console) or `perspicax-mcp` (an AI client attached to Perspicax, the
-   * member API of 2026-10-09). */
+   * console), `perspicax-mcp` (an AI client attached to Perspicax, the
+   * member API of 2026-10-09) or `perspicax-mail` (the mail relay delivering
+   * a mail to one of the person's bots, 2026-10-21). */
   actor: ConsoleAssertionActor;
+  /** `body_sha256`: lowercase hex SHA-256 of the exact request body, when
+   * the signer binds the assertion to it (the mail relay must, contract v2
+   * of 2026-10-21; the route compares it). Absent otherwise. */
+  bodySha256?: string;
 }
 
 /** The actors a console assertion may name. The admin API accepts only the
- * console; the member API (server/org-member-routes.ts) accepts both. */
-export const CONSOLE_ASSERTION_ACTORS = ["console", "perspicax-mcp"] as const;
+ * console; the member API (server/org-member-routes.ts) accepts the console
+ * and `perspicax-mcp`; `perspicax-mail` (the Perspicax mail relay,
+ * 2026-10-21) is accepted by `POST /api/org/inbound-mail` alone
+ * (server/bot-inbound-mail.ts). */
+export const CONSOLE_ASSERTION_ACTORS = ["console", "perspicax-mcp", "perspicax-mail"] as const;
 export type ConsoleAssertionActor = typeof CONSOLE_ASSERTION_ACTORS[number];
 
 export interface VerifyConsoleAssertionInput extends JwsCheck {
@@ -558,7 +574,11 @@ export async function verifyConsoleAssertion(input: VerifyConsoleAssertionInput)
   const serverId = stringClaim(claims.server_id, 256) ?? null;
   if (input.serverId && serverId !== input.serverId) throw new OidcError(`${kind}_server`, "The console assertion is meant for another linked server.");
   const locale = typeof claims.locale === "string" && /^[A-Za-z]{2}([-_][A-Za-z0-9]{2,8})?$/.test(claims.locale) ? claims.locale : undefined;
-  return { iss: input.issuer, sub, jti, iat, exp, serverId, role: role as ConsoleAssertion["role"], teams, ...(locale ? { locale } : {}), actor: actor as ConsoleAssertionActor };
+  if (claims.body_sha256 !== undefined && (typeof claims.body_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(claims.body_sha256))) {
+    throw new OidcError(`${kind}_body`, "The assertion's body digest is not a SHA-256.");
+  }
+  const bodySha256 = typeof claims.body_sha256 === "string" ? claims.body_sha256 : undefined;
+  return { iss: input.issuer, sub, jti, iat, exp, serverId, role: role as ConsoleAssertion["role"], teams, ...(locale ? { locale } : {}), actor: actor as ConsoleAssertionActor, ...(bodySha256 ? { bodySha256 } : {}) };
 }
 
 /** An issuer URL the server may talk to: https, or http on this machine
@@ -764,7 +784,7 @@ export class OidcRelyingParty {
 
   /** Begin a sign-in: remember state, nonce and PKCE verifier, and return
    * the authorization URL and the browser binding. */
-  async start(options: { client?: OidcClientKind; returnTo?: string; purpose?: OidcFlowPurpose; principalId?: string; subject?: { iss: string; sub: string }; sessionId?: string } = {}): Promise<StartedFlow> {
+  async start(options: { client?: OidcClientKind; returnTo?: string; purpose?: OidcFlowPurpose; principalId?: string; subject?: { iss: string; sub: string }; sessionId?: string; fresh?: boolean } = {}): Promise<StartedFlow> {
     const purpose = options.purpose ?? "signin";
     let expect: RoutineDelegationExpectation | undefined;
     if (purpose === "routines" || purpose === "reauth") {
@@ -813,8 +833,10 @@ export class OidcRelyingParty {
     // account's own delegation).
     if (expect) url.searchParams.set("login_hint", expect.subject.sub);
     // 2026-10-18: a sign-in again, never an existing session at the
-    // provider (OIDC Core 3.1.2.1); the callback checks auth_time.
-    if (purpose === "reauth") {
+    // provider (OIDC Core 3.1.2.1); the callback checks auth_time. The same
+    // for "Sign in again" (`fresh`, 2026-10-19), whose session counts as a
+    // recent sign-in only from a recent auth_time (server/recent-sign-in.ts).
+    if (purpose === "reauth" || (purpose === "signin" && options.fresh)) {
       url.searchParams.set("prompt", "login");
       url.searchParams.set("max_age", "0");
     }
@@ -970,11 +992,15 @@ export class OidcRelyingParty {
       if ((got.status === 400 || got.status === 401) && oauthError && REJECTED_GRANT_ERRORS.has(oauthError)) {
         return { ok: false, kind: "rejected", error: `the identity provider refused the refresh (${oauthError})` };
       }
-      return { ok: false, kind: "transient", error: `the identity provider answered HTTP ${got.status}${oauthError ? ` (${oauthError})` : ""}` };
+      return { ok: false, kind: "transient", error: `the identity provider answered HTTP ${got.status}${oauthError ? ` (${oauthError})` : ""}`, ...(oauthError && CLIENT_REFUSED_ERRORS.has(oauthError) ? { clientRefused: true as const } : {}) };
     }
-    const next = typeof got.body?.refresh_token === "string" && got.body.refresh_token ? got.body.refresh_token : undefined;
-    if (!next) return { ok: false, kind: "rejected", error: "the identity provider returned no refresh token" };
+    const rotated = typeof got.body?.refresh_token === "string" && got.body.refresh_token ? got.body.refresh_token : undefined;
     const accessToken = typeof got.body?.access_token === "string" && got.body.access_token ? got.body.access_token : undefined;
+    // A 200 that is not a token answer (a proxy's page while the provider is
+    // redeployed) is no refusal: try again later. A token answer without a
+    // new refresh token keeps the one sent (RFC 6749 6: rotation is optional).
+    if (!rotated && !accessToken) return { ok: false, kind: "transient", error: "the identity provider answered without a token" };
+    const next = rotated ?? refreshToken;
     const access = accessToken ? { accessToken, expiresIn: accessExpiresIn(got.body?.expires_in) } : {};
     const idToken = got.body?.id_token;
     if (idToken === undefined) return { ok: true, refreshToken: next, ...access };
@@ -991,9 +1017,17 @@ export class OidcRelyingParty {
       if (identity.sub !== expect.sub) throw new OidcError("id_token_sub", "The refreshed id_token names another subject.");
       return { ok: true, refreshToken: next, identity, ...access };
     } catch (error) {
-      // The rotation already happened: the new token must not live on.
-      if (discovery.revocationEndpoint) this.revoke(next, "refresh_token", "a refreshed id_token that did not verify");
-      return { ok: false, kind: "rejected", error: error instanceof Error ? error.message : String(error) };
+      const message = error instanceof Error ? error.message : String(error);
+      if (error instanceof OidcError && error.code === "id_token_sub") {
+        // Another person's identity on this grant: never kept.
+        if (rotated && discovery.revocationEndpoint) this.revoke(rotated, "refresh_token", "a refreshed id_token that named another subject");
+        return { ok: false, kind: "rejected", error: message };
+      }
+      // 2026-10-20: the id_token on a refresh is optional; the refresh token
+      // came from the token endpoint itself. One that does not verify (a
+      // signing key Perspicax rotated during a deploy, its keys unreachable
+      // for a moment) costs this refresh its claims, never the session.
+      return { ok: true, refreshToken: next, ...access, note: `the refreshed id_token was ignored (${message})` };
     }
   }
 

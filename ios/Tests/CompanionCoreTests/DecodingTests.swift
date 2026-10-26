@@ -143,6 +143,29 @@ final class DecodingTests: XCTestCase {
         XCTAssertFalse(fleet.groups.isEmpty)
     }
 
+    /// Every bundled preview fleet the UI tests launch (`-threads-preview`,
+    /// `-open-thread-preview`, ...) must decode: a fixture that stops
+    /// decoding silently drops the app to the unpaired home.
+    func testEveryPreviewFleetDecodes() throws {
+        let app = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("App")
+        for name in ["StorePreview", "ThreadPreview", "OpenThreadPreview", "RosterPreview", "CardsPreview",
+                     "ImagePreview", "ChatUpdatePreview", "ChatPresentationPreview"] {
+            let data = try Data(contentsOf: app.appendingPathComponent("\(name).json"))
+            do {
+                let fleet = try JSONDecoder().decode(Fleet.self, from: data)
+                XCTAssertFalse(fleet.bots.isEmpty && fleet.groups.isEmpty, "\(name) has no chats")
+            } catch {
+                XCTFail("\(name).json no longer decodes as a Fleet: \(error)")
+            }
+        }
+        let pages = try Data(contentsOf: app.appendingPathComponent("ThreadPreviewPages.json"))
+        XCTAssertNoThrow(try JSONDecoder().decode([String: ThreadPage].self, from: pages))
+    }
+
     func testOldAndNewAvatarProfilesDecodeTogether() throws {
         let oldBot = try XCTUnwrap(decode(Fleet.self, "bots-full").bots.first)
         XCTAssertNil(oldBot.avatarUrl)
@@ -257,79 +280,6 @@ final class DecodingTests: XCTestCase {
         XCTAssertEqual(fleet.groups.first?.section, "Research")
         XCTAssertNil(try decode(Fleet.self, "bots-full").bots.first?.section,
                      "older computers that omit sections remain compatible")
-    }
-
-    func testDecodesMultipleConnectedAccountsAndNoAuthToolkit() throws {
-        let payload = #"""
-        {
-          "configured": true,
-          "services": {
-            "gmail": {
-              "connected": true,
-              "pending": false,
-              "status": "ACTIVE",
-              "accounts": [
-                {"id": "ca_work", "alias": "Work", "status": "ACTIVE"},
-                {"id": "ca_personal", "status": "INACTIVE"}
-              ]
-            },
-            "weather": {
-              "connected": true,
-              "pending": false,
-              "status": "ACTIVE",
-              "accounts": []
-            },
-            "slack": {
-              "connected": false,
-              "pending": true
-            }
-          }
-        }
-        """#
-        let statuses = try JSONDecoder().decode(ConnectorStatuses.self, from: Data(payload.utf8))
-        let gmail = try XCTUnwrap(statuses.services["gmail"])
-        XCTAssertEqual(gmail.accounts?.map(\.id), ["ca_work", "ca_personal"])
-        XCTAssertEqual(gmail.accounts?.first?.alias, "Work")
-        XCTAssertNil(gmail.accounts?.last?.alias)
-        XCTAssertTrue(try XCTUnwrap(gmail.accounts?.first).isActive)
-        XCTAssertFalse(try XCTUnwrap(gmail.accounts?.last).isActive)
-
-        let noAuth = try XCTUnwrap(statuses.services["weather"])
-        XCTAssertTrue(noAuth.connected)
-        XCTAssertEqual(noAuth.accounts?.isEmpty, true)
-
-        let pending = try XCTUnwrap(statuses.services["slack"])
-        XCTAssertEqual(pending.pending, true)
-        XCTAssertNil(pending.accounts)
-    }
-
-    func testAnUnreadableCredentialStoreIsNotAnEmptyInventory() throws {
-        func statuses(_ json: String) throws -> ConnectorStatuses {
-            try JSONDecoder().decode(ConnectorStatuses.self, from: Data(json.utf8))
-        }
-
-        // The one answer that withdraws its own authority: an empty map the
-        // server explicitly labels as "we could not read the store".
-        let unreadable = try statuses(#"{"configured":false,"credentialStore":"unavailable","services":{}}"#)
-        XCTAssertTrue(unreadable.services.isEmpty)
-        XCTAssertFalse(unreadable.isAuthoritative)
-
-        // The three ways of still being authoritative. Each is asserted
-        // separately because a rule that only recognised the case above would
-        // pass a test that only checked the case above — and every one of
-        // these would then start hiding accounts that really are gone.
-        XCTAssertTrue(
-            try statuses(#"{"configured":true,"credentialStore":"ok","services":{}}"#).isAuthoritative,
-            "an empty list from a readable store really does mean nothing is connected"
-        )
-        XCTAssertTrue(
-            try statuses(#"{"configured":true,"services":{}}"#).isAuthoritative,
-            "a computer older than the field would otherwise have every answer treated as unknowable"
-        )
-        XCTAssertTrue(
-            try statuses(#"{"configured":false,"credentialStore":"Unavailable","services":{}}"#).isAuthoritative,
-            "only the exact string server/index.ts writes withdraws the claim; anything else is as unknown as an absent field"
-        )
     }
 
     func testOneMalformedBotDoesNotHideTheRestOfTheFleet() throws {

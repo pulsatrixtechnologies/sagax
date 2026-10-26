@@ -215,11 +215,11 @@ describe("the send key in hints", () => {
     flushSync(() => setSendKey("mod-enter"));
     expect(host.querySelector('button[aria-label="Send message"]')?.getAttribute("title")).toBe("Send (Ctrl+Enter)");
 
-    // A busy composer keeps the plain placeholder (JC, 2026-10-09): the chip
-    // or sheet shown on send says what the key does then, not the placeholder.
+    // A busy composer keeps naming the bot: the chip or sheet shown on send
+    // says what the key does then, not the placeholder.
     type(textarea(), "");
     render(createElement(Composer, { bot: { ...bot, busy: true, tasks: [{ ...bot.tasks![0]!, busy: true }] } }));
-    expect(textarea().placeholder).toBe("Write a message…");
+    expect(textarea().placeholder).toBe(`Message ${bot.name}`);
   });
 
   it.each([

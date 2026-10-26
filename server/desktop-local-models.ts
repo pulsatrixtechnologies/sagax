@@ -8,7 +8,7 @@ import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { createServer } from "node:http";
 import { join } from "node:path";
 
-import { isDesktopHostId, normalizeLoopbackBase, SEED_ENDPOINTS, type LoopbackEndpoint } from "../shared/desktop-local-models.ts";
+import { isDesktopHostId, LOOPBACK_PROBE_STATUSES, normalizeLoopbackBase, SEED_ENDPOINTS, type LoopbackEndpoint, type LoopbackProbe, type LoopbackProbeStatus } from "../shared/desktop-local-models.ts";
 import { localModelLabels, localModelUnavailable } from "../shared/local-model-engines.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { personForDesktopGrant } from "./desktop-model-grant.ts";
@@ -61,6 +61,8 @@ export interface DesktopLocalModelView {
   share: boolean;
   endpoints: LoopbackEndpoint[];
   published: PublishedEndpoint[];
+  /** The desktop's last probe outcome per endpoint (Settings panel only). */
+  probes: LoopbackProbe[];
   connected: boolean;
 }
 
@@ -85,6 +87,29 @@ function parseDetails(value: unknown, models: readonly string[]): PublishedEndpo
     const raw = row.contextLength;
     const contextWindow = typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 && raw <= 100_000_000 ? raw : undefined;
     out[row.id] = { ...(name && name !== row.id ? { name } : {}), ...(contextWindow ? { contextWindow } : {}) };
+  }
+  return out;
+}
+
+/** Validate the optional per-endpoint probe list a desktop publishes for the
+ * Settings panel. `undefined` means an older desktop that sends none (leave
+ * the stored probes untouched elsewhere). Only ids the person still keeps are
+ * kept; an unknown status fails the whole catalog. */
+function parseProbes(value: unknown, endpoints: readonly LoopbackEndpoint[]): LoopbackProbe[] | null | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > 20) return null;
+  const allowed = new Set(endpoints.map((row) => row.id));
+  const seen = new Set<string>();
+  const out: LoopbackProbe[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+    const row = item as Record<string, unknown>;
+    if (Object.keys(row).some((name) => name !== "id" && name !== "status")) return null;
+    if (typeof row.id !== "string" || typeof row.status !== "string") return null;
+    if (!LOOPBACK_PROBE_STATUSES.includes(row.status as LoopbackProbeStatus)) return null;
+    if (!allowed.has(row.id) || seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push({ id: row.id, status: row.status as LoopbackProbeStatus });
   }
   return out;
 }
@@ -180,6 +205,9 @@ export class DesktopLocalModels {
   private bridges: BridgeClient;
   private people = new Map<string, PersonSettings>();
   private published = new Map<string, { endpoints: PublishedEndpoint[] }>();
+  // Per-endpoint probe outcomes for the Settings panel. In memory only, like
+  // `published`; never fed to the picker (modelsFor/overlay ignore it).
+  private probes = new Map<string, LoopbackProbe[]>();
   private hostMeta = new Map<string, { person: string; endpointId: string }>();
   private server: Server | null = null;
   private port = 0;
@@ -236,11 +264,13 @@ export class DesktopLocalModels {
     const stored = key ? this.people.get(key) : undefined;
     const settings = stored ?? defaultSettings();
     const pub = key && settings.expose ? this.published.get(key) : undefined;
+    const probes = key && settings.expose ? this.probes.get(key) : undefined;
     return {
       expose: settings.expose,
       share: settings.share,
       endpoints: settings.endpoints.map((row) => ({ ...row })),
       published: (pub?.endpoints ?? []).filter((row) => settings.endpoints.some((endpoint) => endpoint.id === row.id)),
+      probes: (probes ?? []).filter((row) => settings.endpoints.some((endpoint) => endpoint.id === row.id)).map((row) => ({ ...row })),
       connected: key ? this.bridges.connected(key) : false,
     };
   }
@@ -272,7 +302,7 @@ export class DesktopLocalModels {
       endpoints = assigned.endpoints;
     }
     this.people.set(key, { expose, share, endpoints });
-    if (!expose) this.published.delete(key);
+    if (!expose) { this.published.delete(key); this.probes.delete(key); }
     this.save();
     this.syncPerson(key);
     return { ok: true, value: this.read(key) };
@@ -290,12 +320,12 @@ export class DesktopLocalModels {
     }
     const settings = key ? this.people.get(key) : undefined;
     if (!settings?.expose) {
-      if (key) this.published.delete(key);
+      if (key) { this.published.delete(key); this.probes.delete(key); }
       return { ok: true };
     }
     if (!body || typeof body !== "object" || Array.isArray(body)) return { ok: false, error: "Invalid local model catalog." };
     const record = body as Record<string, unknown>;
-    if (Object.keys(record).some((name) => name !== "endpoints")) return { ok: false, error: "Invalid local model catalog." };
+    if (Object.keys(record).some((name) => name !== "endpoints" && name !== "probes")) return { ok: false, error: "Invalid local model catalog." };
     if (!Array.isArray(record.endpoints) || record.endpoints.length > 20) return { ok: false, error: "Invalid local model catalog." };
     const allowed = new Set(settings.endpoints.map((row) => row.id));
     const endpoints: PublishedEndpoint[] = [];
@@ -317,7 +347,10 @@ export class DesktopLocalModels {
       const saved = settings.endpoints.find((endpoint) => endpoint.id === row.id);
       endpoints.push({ id: row.id, label: cleanLabel(row.label, saved?.label ?? ""), models, ...(row.anthropic === true ? { anthropic: true } : {}), ...(details ? { details } : {}) });
     }
+    const allowedProbes = parseProbes(record.probes, settings.endpoints);
+    if (allowedProbes === null) return { ok: false, error: "Invalid local model catalog." };
     this.published.set(key, { endpoints });
+    if (allowedProbes) this.probes.set(key, allowedProbes);
     return { ok: true };
   }
 

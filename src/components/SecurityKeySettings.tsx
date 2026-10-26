@@ -5,8 +5,9 @@
 // `api` runs that step-up and sends the change again.
 //
 // 2026-10-18 (JC): the first key needs a fresh sign-in; the page says so
-// before the person tries and offers it (Sign in again, then back here,
-// src/lib/settings-return.ts). In the desktop app the key is asked in the
+// before the person tries and offers it (Sign in again: the forced
+// Pulsatrix sign-in of src/lib/sign-in-again.ts, then back here,
+// src/lib/settings-return.ts; nothing on a server without it). In the desktop app the key is asked in the
 // system browser (electron/security-key-browser.mjs): the page waits for it
 // and can stop waiting. Laid out as the other pages (grey headings over
 // cards of rows, SettingsPrimitives).
@@ -14,9 +15,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { KeyRound, Trash2 } from "lucide-react";
 
 import { activeLocale, t } from "@/lib/i18n";
-import { fetchEnvironmentDescriptor } from "@/lib/environment-descriptor";
-import { pulsatrixLoginPath, type EnvironmentDescriptor } from "@/lib/session";
 import { rememberSettingsReturn } from "@/lib/settings-return";
+import { signInAgainPath } from "@/lib/sign-in-again";
 import { StepUpError, registerSecurityKey, securityKeyInBrowser, securityKeysUsable } from "@/lib/step-up-client";
 import { api } from "@/state/store";
 import type { LocaleKey } from "@/locales";
@@ -54,19 +54,6 @@ function code(error: unknown): string | undefined {
   return typeof body?.code === "string" ? body.code : undefined;
 }
 
-/** Where "Sign in again" goes: this server's Pulsatrix sign-in, else its
- * sign-in page. The desktop app opens the Pulsatrix one in the system
- * browser (electron/main.mjs guardNavigation) and keeps this page. */
-export async function signInAgainPath(load: () => Promise<Response> = () => fetchEnvironmentDescriptor()): Promise<string> {
-  try {
-    const response = await load();
-    if (response.ok) return pulsatrixLoginPath(await response.json() as EnvironmentDescriptor) ?? "/pair";
-  } catch {
-    /* unreachable: the sign-in page says why */
-  }
-  return "/pair";
-}
-
 export function SecurityKeySettings() {
   const [state, setState] = useState<SecurityKeysState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +64,8 @@ export function SecurityKeySettings() {
   const [inBrowser, setInBrowser] = useState(false);
   /** The sign-in this page asked for is under way (desktop: in the browser). */
   const [signingIn, setSigningIn] = useState(false);
+  /** Where "Sign in again" goes; null: no Pulsatrix sign-in on this server. */
+  const [againPath, setAgainPath] = useState<string | null | undefined>(undefined);
   const waiting = useRef<AbortController | null>(null);
   const usable = securityKeysUsable();
 
@@ -90,6 +79,13 @@ export function SecurityKeySettings() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => () => waiting.current?.abort(), []);
+  const needsSignIn = Boolean(state?.needsSignIn);
+  useEffect(() => {
+    if (!needsSignIn) return;
+    let live = true;
+    void signInAgainPath().then((path) => { if (live) setAgainPath(path); });
+    return () => { live = false; };
+  }, [needsSignIn]);
 
   const run = async (work: () => Promise<SecurityKeysState | void>) => {
     setBusy(true);
@@ -136,11 +132,12 @@ export function SecurityKeySettings() {
 
   const stopWaiting = () => waiting.current?.abort();
 
-  const signInAgain = () => void (async () => {
+  const signInAgain = () => {
+    if (!againPath) return;
     setSigningIn(true);
     rememberSettingsReturn("security");
-    location.assign(await signInAgainPath());
-  })();
+    location.assign(againPath);
+  };
 
   const remove = (id: string) => void run(() => api<SecurityKeysState>(`/api/security-keys/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify({}) }));
 
@@ -183,10 +180,10 @@ export function SecurityKeySettings() {
         ) : state?.needsSignIn ? (
           <DescribedRow
             label={t("security.reauth.title")}
-            description={signingIn ? t("security.reauth.waiting") : t("security.reauth.hint")}
+            description={signingIn ? t("security.reauth.waiting") : againPath === null ? t("security.reauth.unavailable") : t("security.reauth.hintPulsatrix")}
             rowId="security-keys-reauth"
           >
-            <button type="button" className={PRIMARY_PILL} disabled={signingIn} onClick={signInAgain}>{t("security.reauth.button")}</button>
+            {againPath !== null && <button type="button" className={PRIMARY_PILL} disabled={signingIn || !againPath} onClick={signInAgain}>{t("security.reauth.button")}</button>}
           </DescribedRow>
         ) : (
           <DescribedRow

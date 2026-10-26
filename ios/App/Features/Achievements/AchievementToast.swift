@@ -1,7 +1,11 @@
 // The unlock banner (AchievementToaster.tsx): a rarity badge with the icon,
 // "Achievement unlocked" and the points, the name, the reward, and a close
 // button. It sits in a window of its own above every sheet, so a banner is
-// seen wherever the person is, and lets touches through elsewhere.
+// seen wherever the person is. While it shows, that window keeps every
+// touch: the card and its button take their own, a touch anywhere else
+// closes the banner, and nothing reaches the app under it (JC 2026-10-19:
+// the close button and a touch on the card went through to what was
+// behind). Once the banner is gone the window lets everything through.
 //
 // `achievementsHost()` on the app's root drives the store: the first read
 // and `app.opened` for each pairing, a reload whenever the app comes back
@@ -92,13 +96,16 @@ final class AchievementToastWindow {
     }
 }
 
-/// Touches land on the banner only; everywhere else they go to the app.
-/// Always transparent: `ThemeUIKit.apply` leaves it out of the windows it
-/// paints with the skin.
+/// While a banner shows, every touch lands in this window (the banner's
+/// backdrop and card); between banners, none does. A SwiftUI hosting view
+/// answers `hitTest` with itself for its buttons too, so telling the card
+/// from the empty area by the view that was hit let the close button's
+/// touches through to the app. Always transparent: `ThemeUIKit.apply`
+/// leaves it out of the windows it paints with the skin.
 final class PassthroughWindow: UIWindow {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        guard let hit = super.hitTest(point, with: event), hit !== rootViewController?.view else { return nil }
-        return hit
+        guard AchievementStore.shared.toast != nil else { return nil }
+        return super.hitTest(point, with: event)
     }
 }
 
@@ -106,17 +113,31 @@ private struct AchievementToastLayer: View {
     @ObservedObject private var store = AchievementStore.shared
 
     var body: some View {
-        VStack {
-            if let item = store.toast {
-                AchievementToastView(item: item, keys: Set(store.snapshot?.rewards ?? [])) { store.dismissToast() }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 6)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+        ZStack(alignment: .top) {
+            if store.toast != nil {
+                // Outside the card: a touch closes the banner and goes no
+                // further. Nearly clear, so the app still shows under it.
+                Color.black.opacity(0.001)
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .onTapGesture { store.dismissToast() }
+                    .accessibilityElement()
+                    .accessibilityLabel(Text("Dismiss"))
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityIdentifier("achievement-toast-backdrop")
             }
-            Spacer(minLength: 0)
+            VStack {
+                if let item = store.toast {
+                    AchievementToastView(item: item, keys: Set(store.snapshot?.rewards ?? [])) { store.dismissToast() }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 6)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: 520)
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: 520)
-        .frame(maxWidth: .infinity)
         .animation(.spring(response: 0.42, dampingFraction: 0.86), value: store.toast)
     }
 }
@@ -179,6 +200,9 @@ struct AchievementToastView: View {
         .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: max(Theme.Metric.cardRadius, 4), style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: max(Theme.Metric.cardRadius, 4), style: .continuous).strokeBorder(tint.opacity(0.5), lineWidth: 1))
         .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+        // the card's own touches stop here: never on to the backdrop or the app
+        .contentShape(RoundedRectangle(cornerRadius: max(Theme.Metric.cardRadius, 4), style: .continuous))
+        .onTapGesture {}
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("achievement-toast")
     }

@@ -12,6 +12,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { itemCreator, itemDescription, itemName, type BotCatalogDetail, type CatalogItem } from "@/lib/bot-catalog";
+import { ChatMarkdown } from "../ChatMarkdown";
 import { CatalogMascot, itemLook, nameColor } from "./BotCatalogView";
 
 export type CatalogTab = "soul" | "memories" | "skills" | "routines" | "integrations";
@@ -42,7 +43,9 @@ function TabBody({ tab, content }: { tab: CatalogTab; content: CatalogDetailCont
   const none = <p className="text-[13px] text-ink-tertiary" data-catalog-tab-empty="">{t(TAB_KEYS[tab].none)}</p>;
   if (tab === "soul") {
     return content.soul.trim()
-      ? <div className="whitespace-pre-wrap break-words text-[13px] leading-[20px] text-ink" data-catalog-soul="">{content.soul}</div>
+      // Markdown, drawn as in the chat; inert: nothing in a bot's
+      // instructions runs code or reaches the network from this view.
+      ? <div className="min-w-0 break-words text-[13.5px] leading-[21px] text-ink" data-catalog-soul=""><ChatMarkdown text={content.soul} inert /></div>
       : none;
   }
   if (tab === "memories") {
@@ -128,8 +131,8 @@ export function BotCatalogDetailView({ item, content, loading, tab, onTab, onBac
   const name = itemName(item);
   const template = item.kind === "template" ? item.template : null;
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" data-bot-catalog-detail={item.key}>
-      <div className="shrink-0 px-6 pr-14 pt-5 sm:px-8">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain" data-bot-catalog-detail={item.key}>
+      <div className="shrink-0 px-6 pr-14 pt-5 sm:px-8" data-catalog-header="">
         <button type="button" onClick={onBack} className="-ml-1.5 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[12.5px] text-ink-secondary hover:bg-hover hover:text-ink" data-catalog-back="">
           <ChevronLeft size={14} aria-hidden="true" />{t("botCatalog.back")}
         </button>
@@ -154,10 +157,16 @@ export function BotCatalogDetailView({ item, content, loading, tab, onTab, onBac
         </div>
       </div>
       {preview !== undefined ? (
-        <div className="mx-6 mb-6 mt-6 border-t border-hairline-weak pt-5 text-left sm:mx-8" data-catalog-preview="">{preview}</div>
+        <div className="mx-6 mb-6 mt-6 shrink-0 border-t border-hairline-weak pt-5 text-left sm:mx-8" data-catalog-preview="">{preview}</div>
       ) : (<>
-      <div className="mx-6 mb-6 mt-6 flex min-h-[260px] flex-col gap-4 border-t border-hairline-weak pt-5 sm:mx-8 sm:flex-row">
-        <div role="tablist" aria-label={t("botCatalog.tabsAria")} aria-orientation="vertical" className="flex shrink-0 flex-col gap-0.5 sm:w-[210px]">
+      <div className="mx-6 mt-6 flex shrink-0 flex-col gap-4 border-t border-hairline-weak pt-5 sm:mx-8 sm:min-h-[260px] sm:flex-row sm:items-start sm:gap-6" data-catalog-tabs-layout="">
+        <div
+          role="tablist"
+          aria-label={t("botCatalog.tabsAria")}
+          aria-orientation="vertical"
+          data-catalog-tablist=""
+          className="-mx-6 flex shrink-0 gap-1 overflow-x-auto px-6 pb-1 sm:sticky sm:top-0 sm:mx-0 sm:w-[210px] sm:flex-col sm:gap-0.5 sm:overflow-visible sm:px-0 sm:pb-0"
+        >
           {CATALOG_TABS.map((id) => {
             const n = count(content, id);
             return (
@@ -168,24 +177,27 @@ export function BotCatalogDetailView({ item, content, loading, tab, onTab, onBac
                 aria-selected={tab === id}
                 data-catalog-tab={id}
                 onClick={() => onTab(id)}
-                className={cn("flex items-start gap-2 rounded-lg px-2.5 py-2 text-left", tab === id ? "bg-selected" : "hover:bg-hover")}
+                className={cn(
+                  "flex shrink-0 items-start gap-2 rounded-lg px-2.5 py-2 text-left sm:w-full",
+                  tab === id ? "bg-selected" : "hover:bg-hover",
+                )}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] font-medium leading-[18px] text-ink">{t(TAB_KEYS[id].label)}</span>
-                  <span className="block text-[11.5px] leading-[16px] text-ink-secondary">{t(TAB_KEYS[id].hint)}</span>
+                  <span className="block whitespace-nowrap text-[13px] font-medium leading-[18px] text-ink sm:whitespace-normal">{t(TAB_KEYS[id].label)}</span>
+                  <span className="hidden text-[11.5px] leading-[16px] text-ink-secondary sm:block">{t(TAB_KEYS[id].hint)}</span>
                 </span>
-                {n !== null && <span className="shrink-0 text-[11.5px] tabular-nums text-ink-tertiary">{n}</span>}
+                {n !== null && <span className="shrink-0 text-[11.5px] leading-[18px] tabular-nums text-ink-tertiary" data-catalog-tab-count="">{n}</span>}
               </button>
             );
           })}
         </div>
-        <div role="tabpanel" className="min-w-0 flex-1 rounded-xl border border-hairline-weak bg-panel p-4" data-catalog-tabpanel={tab}>
+        <div role="tabpanel" className="min-w-0 flex-1 rounded-xl border border-hairline-weak bg-panel p-4 sm:px-5 sm:py-4" data-catalog-tabpanel={tab}>
           {content ? <TabBody tab={tab} content={content} /> : (
             <p className="text-[13px] text-ink-secondary">{loading ? t("botCatalog.loading") : t("botCatalog.loadError")}</p>
           )}
         </div>
       </div>
-      <p className="mx-6 mb-6 -mt-3 text-[11.5px] text-ink-tertiary sm:mx-8">{t("botCatalog.readOnlyNote")}</p>
+      <p className="mx-6 mb-6 mt-4 shrink-0 text-[11.5px] leading-[16px] text-ink-tertiary sm:mx-8" data-catalog-readonly="">{t("botCatalog.readOnlyNote")}</p>
       </>)}
     </div>
   );

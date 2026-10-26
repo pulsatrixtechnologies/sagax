@@ -25,6 +25,8 @@ export type SidebarMascotDriver = {
 type Entry = {
   driver: SidebarMascotDriver;
   gaze: { x: number; y: number };
+  /** At rest and already told so: the loop leaves it alone until the pointer comes back. */
+  resting: boolean;
 };
 
 let sidebarEl: HTMLElement | null = null;
@@ -49,35 +51,51 @@ function tick(now: number) {
   const sidebarRect = sidebarEl.getBoundingClientRect();
   const active = !reduced && pointerInside && pointer !== null;
 
+  // the loop runs only while something moves: the pointer is in the sidebar,
+  // or a gaze is still easing back to rest. Once every avatar rests it stops
+  // (it used to run at display rate forever, rewriting every avatar's face).
+  let moving = false;
   for (const entry of entries.values()) {
     const box = entry.driver.getBox();
     if (!box) {
-      entry.driver.onRest();
+      if (!entry.resting) entry.driver.onRest();
+      entry.resting = true;
       continue;
     }
     if (!active || !pointer) {
+      if (entry.resting) continue;
       entry.gaze = smoothGaze(entry.gaze, { x: 0, y: 0 }, dt, 10);
       if (Math.abs(entry.gaze.x) < 0.002 && Math.abs(entry.gaze.y) < 0.002) {
         entry.driver.onRest();
         entry.gaze = { x: 0, y: 0 };
+        entry.resting = true;
       } else {
         entry.driver.onGaze(entry.gaze, 0);
+        moving = true;
       }
       if (entry.driver.leanTarget) entry.driver.leanTarget.style.transform = "";
       continue;
     }
 
+    entry.resting = false;
     const norm = gazeNormForAvatar(box, pointer.x, pointer.y, sidebarRect);
     const overRow = pointerInRect(pointer.x, pointer.y, box, 10);
     const intensity = overRow ? 1 : pointerInRect(pointer.x, pointer.y, sidebarRect, 0) ? 0.55 : 0;
+    const before = entry.gaze;
     entry.gaze = smoothGaze(entry.gaze, norm, dt);
     entry.driver.onGaze(entry.gaze, intensity);
+    // a still pointer: the loop sleeps once every gaze has reached it (a move wakes it)
+    if (dt === 0 || Math.abs(entry.gaze.x - before.x) > 0.0005 || Math.abs(entry.gaze.y - before.y) > 0.0005) moving = true;
     const lean = entry.driver.leanTarget && intensity > 0 ? hoverLean(norm, intensity) : null;
     if (entry.driver.leanTarget) {
       entry.driver.leanTarget.style.transform = lean ? leanTransform(lean) : "";
     }
   }
 
+  if (!moving) {
+    lastTs = 0;
+    return;
+  }
   schedule();
 }
 
@@ -96,6 +114,11 @@ function onPointerMove(event: PointerEvent) {
   schedule();
 }
 
+function onScroll() {
+  lastTs = 0;
+  schedule();
+}
+
 function onPointerLeave() {
   pointerInside = false;
   schedule();
@@ -107,6 +130,8 @@ function ensureListeners() {
   bound = true;
   sidebarEl.addEventListener("pointermove", onPointerMove, { passive: true });
   sidebarEl.addEventListener("pointerleave", onPointerLeave);
+  // a wheel scroll moves the avatars under a still pointer: wake the loop so the gazes follow
+  sidebarEl.addEventListener("scroll", onScroll, { passive: true, capture: true });
   if (typeof window !== "undefined") {
     window.addEventListener("blur", onPointerLeave);
   }
@@ -117,6 +142,7 @@ export function attachSidebarMascotRoot(el: HTMLElement | null) {
   if (sidebarEl && bound) {
     sidebarEl.removeEventListener("pointermove", onPointerMove);
     sidebarEl.removeEventListener("pointerleave", onPointerLeave);
+    sidebarEl.removeEventListener("scroll", onScroll, { capture: true });
     window.removeEventListener("blur", onPointerLeave);
     bound = false;
   }
@@ -126,7 +152,7 @@ export function attachSidebarMascotRoot(el: HTMLElement | null) {
 
 export function registerSidebarMascot(driver: SidebarMascotDriver): () => void {
   const id = Symbol("sidebar-mascot");
-  entries.set(id, { driver, gaze: { x: 0, y: 0 } });
+  entries.set(id, { driver, gaze: { x: 0, y: 0 }, resting: true });
   schedule();
   return () => {
     entries.delete(id);

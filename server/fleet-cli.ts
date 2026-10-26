@@ -4,9 +4,10 @@
 // a shell command from user input. The fleet agent (fleet-agent.ts) reuses
 // the same planner and executor over a Unix socket.
 import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { posix } from "node:path";
 import { writeFileAtomic } from "./atomic.ts";
+import { releaseVersion } from "./environment.ts";
 import { unstableInstallWarning } from "./service-unit.ts";
 import {
   applySignIn,
@@ -61,6 +62,8 @@ export interface FleetInput {
   userAction?: "add" | "remove";
   email?: string;
   chatOnly?: boolean;
+  /** fleet upgrade: the exact release to install; defaults to this CLI's own. */
+  version?: string;
   /** This CLI's own entry and node, for the template unit. */
   node: string;
   script: string;
@@ -297,6 +300,12 @@ function failed(io: FleetIo, what: string, output: string): number {
   return 1;
 }
 
+/** The entry behind a global bin link (where the package really lives). */
+function resolvedEntry(script: string): string {
+  try { return realpathSync(script); }
+  catch { return script; }
+}
+
 export function loadRegistry(layout: FleetLayout, deps: FleetDeps): FleetRegistry {
   const text = deps.readText(layout.registryFile);
   if (text === null) throw new Error(`no fleet on this server yet: run \`openmausbot fleet init --domain your.domain\` first`);
@@ -405,8 +414,11 @@ export function planFleetAction(input: FleetInput, deps: FleetDeps): FleetStep[]
       const registry = loadRegistry(layout, deps);
       return deletePlan({ registry, slug: input.slug, keepData: input.keepData, layout }).steps;
     }
-    case "upgrade":
-      return upgradePlan({ registry: loadRegistry(layout, deps) });
+    case "upgrade": {
+      const version = input.version ?? releaseVersion();
+      if (!input.version && !/^\d+\.\d+\.\d+/.test(version)) throw new Error(`this CLI does not know its own release (${version}); pass --to X.Y.Z`);
+      return upgradePlan({ registry: loadRegistry(layout, deps), version, node: input.node, script: resolvedEntry(input.script), layout });
+    }
     case "list":
       return [];
   }

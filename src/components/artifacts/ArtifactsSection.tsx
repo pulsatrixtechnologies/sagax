@@ -15,6 +15,7 @@ import { ConfirmDialog } from "../ConfirmDialog";
 import { ArtifactFrame } from "./ArtifactFrame";
 import { dockArtifactWindow, popOutArtifact } from "./artifact-windows";
 import type { ArtifactSummary } from "../../../shared/artifacts";
+import { AnchoredPopover } from "@/components/AnchoredPopover";
 
 const ICON_BUTTON = "flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-40";
 
@@ -146,10 +147,12 @@ export function useArtifactActions(list: ArtifactList, onError: (text: string) =
 export function ArtifactRow({ artifact, actions, now }: { artifact: ArtifactSummary; actions: ArtifactActions; now?: number }) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuElRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!menu) return;
     const onPointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && !menuRef.current?.contains(event.target)) setMenu(false);
+      if (event.target instanceof Node && !menuRef.current?.contains(event.target) && !menuElRef.current?.contains(event.target)) setMenu(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -192,11 +195,11 @@ export function ArtifactRow({ artifact, actions, now }: { artifact: ArtifactSumm
         <Star size={14} aria-hidden="true" fill={artifact.favorite ? "currentColor" : "none"} />
       </button>
       <div ref={menuRef} className="relative">
-        <button type="button" aria-label={t("artifacts.moreAria", { title: artifact.title })} title={t("artifacts.moreAria", { title: artifact.title })} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((value) => !value)} className={ICON_BUTTON}>
+        <button ref={menuButtonRef} type="button" aria-label={t("artifacts.moreAria", { title: artifact.title })} title={t("artifacts.moreAria", { title: artifact.title })} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((value) => !value)} className={ICON_BUTTON}>
           <MoreHorizontal size={14} aria-hidden="true" />
         </button>
         {menu && (
-          <div role="menu" aria-label={artifact.title} className="absolute right-0 top-full z-30 mt-1 flex w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] shadow-lg popover-surface">
+          <AnchoredPopover anchorRef={menuButtonRef} popoverRef={menuElRef} role="menu" aria-label={artifact.title} align="end" className="flex w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] shadow-lg popover-surface">
             <button type="button" role="menuitem" onClick={() => { setMenu(false); actions.open(artifact); }} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink hover:bg-hover">
               <AppWindow size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" /> {t("artifacts.open")}
             </button>
@@ -214,7 +217,7 @@ export function ArtifactRow({ artifact, actions, now }: { artifact: ArtifactSumm
             <button type="button" role="menuitem" onClick={() => { setMenu(false); actions.remove(artifact); }} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-danger hover:bg-hover">
               <Trash2 size={14} className="shrink-0" aria-hidden="true" /> {t("artifacts.delete")}
             </button>
-          </div>
+          </AnchoredPopover>
         )}
       </div>
     </li>

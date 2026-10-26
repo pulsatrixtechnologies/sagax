@@ -15,6 +15,7 @@ import {
   reachablePeers,
   renderRoster,
   resolveTeammate,
+  uniquePeerName,
   roomPeerRosterSystemPrompt,
   roomRosterLine,
   teammateAvailabilityPrompt,
@@ -411,9 +412,25 @@ describe("teammate availability stays out of the cached prompt half", () => {
 
   it("still gives every roster line the id the comms tools take", () => {
     const { peer, chief } = prompts({ busy: true });
-    expect(peer.stable).toContain("- Quill — Writer [id: writer]");
+    // the bounded coordinator's roster names a unique teammate without it
+    expect(peer.stable).toContain("- Quill — Writer\n");
+    expect(peerRosterSystemPrompt(team({ busy: true }), false)).toContain("- Quill — Writer [id: writer]");
     expect(chief.stable).toContain("- Quill — Writer: Drafts concise copy [id: writer]");
     expect(chief.stable).toContain("- Patch — Engineer [id: coder]");
+  });
+
+  it("lets coordinate_bots take a unique name: the id only where the name is ambiguous (perf round 4)", () => {
+    const bots: RosterMember[] = [
+      { id: "writer", name: "Quill", title: "Writer" },
+      { id: "coder", name: "Patch", title: "Engineer" },
+      { id: "coder2", name: "patch", title: "Engineer" },
+    ];
+    const text = peerRosterSystemPrompt(bots, true);
+    expect(text).toContain("- Quill — Writer\n");
+    expect(text).not.toContain("[id: writer]");
+    expect(text).toContain("- Patch — Engineer [id: coder]");
+    expect(text).toContain("- patch — Engineer [id: coder2]");
+    expect(text).toContain("Use coordinate_bots with a teammate's name as the roster shows it (its id when the roster shows one)");
   });
 
   it("says nothing for an empty team and caps the names it lists", () => {
@@ -564,5 +581,20 @@ describe("an ordinary bot offered create_bot (2026-10-17, server/bot-creation.ts
       expect(creator).toContain("For team configuration, send a self-contained request to a reachable Primary Bot");
       expect(creator).toContain("[TEAM ROSTER]");
     }
+  });
+});
+
+describe("uniquePeerName", () => {
+  const peers = [
+    { id: "1", name: "Beta" },
+    { id: "2", name: "beta " },
+    { id: "3", name: "Max" },
+    { id: "4", name: "Scout]" },
+  ];
+  it("names a teammate without its id only when that name alone resolves", () => {
+    expect(uniquePeerName(peers[2]!, peers)).toBe(true);
+    expect(uniquePeerName(peers[0]!, peers)).toBe(false);
+    expect(uniquePeerName(peers[3]!, peers)).toBe(false);
+    expect(uniquePeerName({ id: "5", name: "  " }, [{ id: "5", name: "  " }])).toBe(false);
   });
 });

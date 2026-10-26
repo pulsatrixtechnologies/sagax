@@ -3,21 +3,8 @@ import XCTest
 final class GeneratedImageUITests: XCTestCase {
     @MainActor
     func testAgentImageLoadsAndOpensFullScreen() {
-        let app = XCUIApplication()
-        app.terminate()
-        app.launchArguments = ["-store-preview", "-threads-preview", "-images-preview",
-            "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
-            "-companion.onboarding.welcomeSeen", "YES",
-            "-companion.onboarding.notificationsSeen", "YES",
-            // The compact list carries the threads toggle (the default is the standard home).
-            "-companion.prefs.rosterDensity", "compact"]
-        // threads under each bot row (#210: the default is the chat header)
-        app.launchArguments += ["-omb-threads-location", "sidebar"]
-        app.launch()
-        let toggle = app.buttons["threads-toggle.preview-pepper"]
-        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
-        toggle.tap()
-        app.buttons["thread.preview-gmail"].tap()
+        let app = ThreadPreview.launch(["-images-preview"])
+        ThreadPreview.openGmail(in: app)
         let image = app.buttons["Image: screenshot.png"]
         let appeared = image.waitForExistence(timeout: 5)
         record("Agent image in transcript", app)
@@ -27,10 +14,12 @@ final class GeneratedImageUITests: XCTestCase {
         expectation(for: loaded, evaluatedWith: image)
         waitForExpectations(timeout: 10)
         image.tap()
-        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.otherElements["Image canvas"].waitForExistence(timeout: 10))
+        // full screen is the conversation's lightbox (FindQuoteLightboxUITests)
+        let close = app.buttons["lightbox-close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["lightbox-image"].waitForExistence(timeout: 10))
         record("Agent image full screen", app)
-        app.buttons["Done"].tap()
+        close.tap()
         XCTAssertTrue(image.waitForExistence(timeout: 5))
     }
 

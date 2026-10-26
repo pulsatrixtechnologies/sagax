@@ -56,6 +56,8 @@ export interface HandoffView {
   continuation?: { note: string; handoffPath?: string; count: number };
   /** A root that is one step of a room goal run: that run's id. */
   goalRunId?: string;
+  /** The requester only passes it on: its reply goes to the person as is (Assignment.relay). */
+  relay?: boolean;
 }
 
 /** A person's or a routine's own turn, as a root (one per request). */
@@ -70,6 +72,10 @@ export interface BeginTurnRequest {
   origin?: WorkOrigin;
   /** A room goal run's step: the run's id (HandoffView.goalRunId). */
   goalRunId?: string;
+  /** Who the tree acts for (a principal id, or the solo owner): harness-set,
+   * never shown. Two trees join one request only for the same known person
+   * (runtime Assignment.person). */
+  person?: string;
 }
 
 /** How a host-run turn ended. `cap` continues the same node in place (a
@@ -91,7 +97,10 @@ export interface HandoffOpener {
 }
 
 export interface HandoffOptions {
-  mode?: Mode;
+  /** "auto" (main 2026-10-19, consultation of the requester): a
+   * consultation when the target is up the requester's own tree, else work.
+   * A consultation may go back up its tree; work may not. */
+  mode?: Mode | "auto";
   reply?: Reply;
   /** Where the host put the work: the teammate's standing thread, or a
    * (new) work thread, which is the default. The host picks the thread;
@@ -104,6 +113,9 @@ export interface HandoffOptions {
   /** A room brief shown once per call. */
   requestBatchKey?: string;
   doneWhen?: string;
+  /** The requester only passes it on: its reply goes to the person as is
+   * (Assignment.relay). Only a direct thread relays: a room shows every reply. */
+  relay?: boolean;
 }
 
 export type RoomAddress = Pick<HandoffView, "groupId" | "threadId" | "botId">;
@@ -139,6 +151,11 @@ export interface CoordinatorHost {
    * engine settles. For a root (no parentId) this is the person's own
    * conversation continuing: person-visible, never internal. */
   run(node: HandoffView, resumed: boolean, signal: AbortSignal, composed: ComposedTurn): Promise<HostTurnResult>;
+  /** A resume whose settled children all only relay (HandoffView.relay):
+   * show their replies to the person as the answer, in the requester's
+   * conversation, and return true; the requester then runs no turn. False
+   * (or absent) runs the resume as usual. */
+  relay?(node: HandoffView, replies: HandoffView[]): boolean;
   /** A settled child, to its requester; a root the runtime ended, alone. */
   report(child: HandoffView, parent?: HandoffView): void;
   changed(groupIds: ReadonlySet<string>, directThreadIds: ReadonlySet<string>): void;
@@ -146,9 +163,13 @@ export interface CoordinatorHost {
   names(node: HandoffView, parent?: HandoffView): EnvelopeNames;
   /** A teammate ended its turn on a question for the person: show it where
    * the work was asked for. `restored` is the restart's re-park, which shows
-   * it again only if the first showing never happened. For a root parked on
-   * its own cards, the cards already show; show nothing more. */
+   * it again only if the first showing never happened (or no card for it is
+   * still open). For a root parked on its own cards, the cards already show;
+   * show nothing more. */
   park(node: HandoffView, question: string, restored?: boolean): void;
+  /** Still parked (runtime inputRemindMs, then daily): the same question
+   * again, in full, where the person reads. The work keeps waiting. */
+  remind?(node: HandoffView, question: string, waitedMs: number): void;
   /** The permission level the target thread will actually run with, after
    * the host applied any delegated level, and its engine kind. Recorded on
    * the assignment so the envelope states the truth (invariant I6). For a
@@ -170,14 +191,18 @@ export interface Coordinator {
   node(id: string): HandoffView | undefined;
   has(id: string): boolean;
   all(): HandoffView[];
+  /** all() without the ended nodes. Ended rows only grow, so a caller that
+   * asks about live work (most do, on every broadcast) reads these. */
+  active(): HandoffView[];
   children(id: string): HandoffView[];
   /** Hand work on from a running node: the requester's own root (its turn's
    * generation, begun by beginTurn) or a teammate's node (`parentId`). Every
    * turn has a root since PR 4 (direct) and PR 5 (rooms): a generation with
-   * none is refused. Throws an Error whose message is the typed refusal the
+   * none is refused. `joined`: the request joined another tree's identical
+   * live request for the same person (runtime Assignment.joins). Throws an Error whose message is the typed refusal the
    * caller shows the model. */
   enqueue(source: RoomAddress, generation: string, parentId: string | undefined, target: RoomAddress, text: string,
-    options?: HandoffOptions): { node: HandoffView; duplicate: boolean };
+    options?: HandoffOptions): { node: HandoffView; duplicate: boolean; joined?: boolean };
   /** One assignment with its children and inbox (assignment_status). */
   status(id: string): StatusView | undefined;
   /** Undelivered inbox items for a polling requester, marked delivered. */
@@ -203,6 +228,9 @@ export interface Coordinator {
   cancelRoom(groupId: string, threadId?: string, reason?: string, status?: "failed" | "cancelled"): void;
   cancelDirect(threadId: string, reason?: string): void;
   activeDirect(threadId: string): boolean;
+  /** Every thread activeDirect is true for, read once: a bot's whole thread
+   * list asks this instead of one store read per thread (port de OpenMausBot #3126). */
+  activeDirectThreads(): Set<string>;
   assignerOf(threadId: string): HandoffView | undefined;
   outstandingDirect(threadId: string): HandoffView[];
   liveEdges(): LiveHandoffEdge[];
@@ -224,11 +252,11 @@ export interface Coordinator {
    * true when the assignment took the text as its answer and the host must
    * not start an ordinary turn. */
   answer(threadId: string, text: string): boolean;
+  /** Whether this thread's assignment is parked on a question for the person. */
+  awaitingAnswer(threadId: string): boolean;
   /** A thread turned confidential or a confidential thread was deleted
    * (docs/confidential-threads.md): its teammate work keeps no words of it. */
   forgetThread(threadId: string): { removed: number; scrubbed: number };
-  /** Whether this thread's assignment is parked on a question for the person. */
-  awaitingAnswer(threadId: string): boolean;
 }
 
 export interface CoordinatorOptions {

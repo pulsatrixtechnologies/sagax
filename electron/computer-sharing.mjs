@@ -1,3 +1,4 @@
+import { createAuthBackoff } from "./auth-backoff.mjs";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -231,8 +232,12 @@ export function createComputerSharing({ file, fetch: fetchImpl, environments, cu
     const signal = live.abort.signal;
     const call = (action, body = {}) => request(env, `/api/shared-computers/${grant.id}/${action}`, body, signal, grant.secret);
     const gate = () => requireGrant(env, grant);
+    // 2026-10-20: a server that refuses this desktop's session is asked again
+    // less and less often (up to every 10 minutes), never every 5 seconds.
+    const backoff = createAuthBackoff();
     void (async () => {
       while (!signal.aborted) {
+        let wait = 5000;
         try {
           await gate();
           if (grant.cloud) {
@@ -255,6 +260,7 @@ export function createComputerSharing({ file, fetch: fetchImpl, environments, cu
           }, signal, grant.secret);
           if (signal.aborted) break;
           status.set(env.id, { connected: true });
+          backoff.reset();
           changed();
           while (!signal.aborted) {
             await gate();
@@ -324,8 +330,9 @@ export function createComputerSharing({ file, fetch: fetchImpl, environments, cu
           // needs Connect to my Cloud; anything else is waiting for it.
           if (!signal.aborted) status.set(env.id, { connected: false, error: error.message, ...(grant.cloud ? { problem: error.problem ?? (error.status === 401 || error.status === 403 ? "connect-first" : "waiting") } : {}) });
           changed();
+          wait = backoff.next(error);
         }
-        try { await delay(5000, undefined, { signal }); } catch { break; }
+        try { await delay(wait, undefined, { signal }); } catch { break; }
       }
     })().catch(() => {});
   };

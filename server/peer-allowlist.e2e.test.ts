@@ -269,8 +269,11 @@ describe("peer allow-list", () => {
       // 1. an ordinary bot is finally told who its teammates are
       const systemPrompt = String(dump.systemPrompt);
       expect(systemPrompt).toContain("[TEAM ROSTER]");
-      expect(systemPrompt).toContain(`- Quill — General assistant [id: ${quill.id}]`);
-      expect(systemPrompt).toContain(`- Patch — General assistant [id: ${patch.id}]`);
+      // unique names: coordinate_bots resolves them, so no uuid to copy
+      // (perf round 4); an ambiguous name keeps its id (peer-roster.test.ts)
+      expect(systemPrompt).toContain("- Quill — General assistant\n");
+      expect(systemPrompt).toContain("- Patch — General assistant\n");
+      expect(systemPrompt).not.toContain(`[id: ${quill.id}]`);
       // Who is busy is its own line, outside the roster (peer-roster.test.ts
       // pins that it sits in the volatile half).
       expect(systemPrompt).toContain("Team availability: every teammate is available.");
@@ -374,7 +377,7 @@ describe("peer allow-list", () => {
       await expect.poll(() => readDump(boundDump)()?.systemPrompt, { timeout: 10_000 }).toBeTruthy();
 
       const systemPrompt = String(readDump(boundDump)()!.systemPrompt);
-      expect(systemPrompt).toContain(`- Near — General assistant [id: ${near.id}]`);
+      expect(systemPrompt).toContain("- Near — General assistant\n");
       // the roster can never name a peer this bot's own coordinate_bots would refuse
       expect(systemPrompt).not.toContain("Farside");
     } finally {

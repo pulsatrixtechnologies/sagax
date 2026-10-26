@@ -20,6 +20,11 @@
 #
 # HOME is the /data volume, so engine CLI logins (~/.claude, ~/.codex, ...) and
 # Sagax's own state (/data/.openmausbot, kept for existing volumes) persist across container restarts.
+#
+# A plain `docker run` of either image wants `--init --shm-size=512m`, as the
+# compose files set: the bots' browsers leave exited processes for an init to
+# collect, and Chrome needs shared memory (docs/browser-packaging.md, "Process
+# hygiene").
 
 # node:24-trixie-slim as of 2026-10-06 (Node 24.21.0). Rebuild to pick a
 # newer tag; apt-get upgrade still applies Debian patches on top.
@@ -47,6 +52,13 @@ RUN arch="$(node -p 'process.arch === "arm64" ? "arm64" : "x64"')" \
   && node --input-type=module -e "import { stageDuckdb } from './scripts/prepare-duckdb.mjs'; await stageDuckdb({ root: process.cwd(), targets: [{ platform: 'linux', arch: '$arch' }] });" \
   && mv "dist-native/duckdb/linux-$arch" dist-native/duckdb/linux \
   && chmod -R go-w dist-native/duckdb
+# Tailcat 0.7.0 for the technician side. One arch-independent path for the
+# runtime stage. The container does not download it again.
+RUN node scripts/prepare-tailcat.mjs --current \
+  && arch="$(node -p 'process.arch')" \
+  && mkdir -p dist-native/tailcat/linux \
+  && cp "dist-native/tailcat/linux-${arch}/tailcat" dist-native/tailcat/linux/tailcat \
+  && chmod 0755 dist-native/tailcat/linux/tailcat
 RUN pnpm build:server && pnpm exec vite build
 
 FROM node:24-trixie-slim@sha256:173f125896c3b47ddf056734c7ea789d04595a6a08769a8f78e0df642781fb66
@@ -54,9 +66,12 @@ FROM node:24-trixie-slim@sha256:173f125896c3b47ddf056734c7ea789d04595a6a08769a8f
 # a t64 suffix for its 64-bit time_t transition): agent-browser --with-deps
 # invokes sudo even as root, and this image deliberately does not ship sudo.
 # git + curl: agent CLIs shell out to git; curl backs the healthcheck
+# openssh-client: `tailcat ssh` and `tailcat cp` exec the system ssh client
+# (tailcat is its ProxyCommand), so a Tailcat remote session's shell,
+# inventory, screen and files need it on the server.
 RUN apt-get update \
   && apt-get upgrade -y --no-install-recommends \
-  && apt-get install -y --no-install-recommends ca-certificates curl git \
+  && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client \
     libstdc++6 \
     python3.13=3.13.5-2+deb13u5 python3.13-venv=3.13.5-2+deb13u5 \
     libxcb-shm0 libx11-xcb1 libx11-6 libxcb1 libxext6 libxrandr2 \
@@ -149,9 +164,13 @@ RUN node /app/engines/harden-image-deps.mjs --root /opt/sagax-engines --root /us
     /root/.npm /root/.cache /tmp/*
 # DuckDB and resvg change on a version bump, not per commit: beneath the app files.
 COPY --from=build --chown=maus:maus /src/dist-native/duckdb/linux ./duckdb
+COPY --from=build --chmod=0755 /src/dist-native/tailcat/linux/tailcat /usr/local/bin/tailcat
 # The app itself last: a code change rebuilds only these layers.
 COPY --from=build --chown=maus:maus /src/dist-server ./dist-server
 COPY --from=build --chown=maus:maus /src/dist ./dist
+# Licence terms and notices ship with the code (T3 Code, MIT: the bots' browser egress gate).
+COPY --from=build --chown=maus:maus /src/NOTICE /src/LICENSE /src/LICENSE-APACHE /src/LICENSE-POLYFORM-NC.md ./licenses/
+COPY --from=build --chown=maus:maus /src/third_party/t3-code/LICENSE ./licenses/t3-code-LICENSE.txt
 # Keep the baked-in browser outside both root's private home and /data,
 # which may be an existing mounted volume. Session state still lives in HOME.
 #  OMB_DUCKDB_DIR: the DuckDB binding tree the server requires (no node_modules here).

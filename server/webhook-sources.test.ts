@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthFailureLimiter, listenWebhookIngress, triggerSourceSetup, type WebhookIngress } from "./webhook-ingress.ts";
+import { TRIGGER_CATALOG_VERSION } from "../shared/trigger-sources.ts";
 import { WebhookManager } from "./webhooks.ts";
 
 const dirs: string[] = [];
@@ -101,7 +102,7 @@ describe("typed triggers in the manager", () => {
     expect(first).toMatchObject({ kind: "delivered", results: [{ runId: "run-1", duplicate: false }] });
     const prompt = queued[0]!.prompt;
     expect(prompt.startsWith("[USER-CONFIGURED TRIGGER INSTRUCTIONS]\nReview the pull request\n[/USER-CONFIGURED TRIGGER INSTRUCTIONS]")).toBe(true);
-    const open = prompt.match(/\[UNTRUSTED GITHUB EVENT DATA ([a-f0-9]{12})\]/);
+    const open = prompt.match(/\[UNTRUSTED GITHUB EVENT DATA ([a-f0-9]{32})\]/);
     expect(open).not.toBeNull();
     expect(prompt.trimEnd().endsWith(`[/UNTRUSTED GITHUB EVENT DATA ${open![1]}]`)).toBe(true);
     // the payload cannot close the fence early
@@ -301,5 +302,28 @@ describe("typed triggers on the webhook-only listener", () => {
     expect(await response.json()).toEqual({ challenge: "ch-42" });
     const unsigned = await fetch(`${ingress.baseUrl}/sources/${created.webhook.endpointId}`, { method: "POST", headers: { "content-type": "application/json" }, body });
     expect(unsigned.status).toBe(401);
+  });
+});
+
+describe("event catalog version (review of #942)", () => {
+  it("stamps a trigger saved now with the current catalog, keeps an explicit older one, and exports it", () => {
+    const { manager } = harness();
+    const fresh = manager.create({ name: "x", prompt: "", botId: "b1", source: { type: "github" } });
+    expect(fresh.webhook.source).toMatchObject({ catalog: TRIGGER_CATALOG_VERSION });
+    const old = manager.create({ name: "y", prompt: "", botId: "b1", source: { type: "github", catalog: 1 } });
+    expect(old.webhook.source?.catalog).toBe(1);
+    const kept = manager.create({ name: "z", prompt: "", botId: "b1", source: { type: "github", includeBotComments: true } });
+    expect(kept.webhook.source?.includeBotComments).toBe(true);
+    expect(manager.create({ name: "w", prompt: "", botId: "b1", source: { type: "sentry", includeBotComments: true } }).webhook.source?.includeBotComments).toBeUndefined();
+  });
+
+  it("does not run a legacy “every event” trigger for a PR comment", () => {
+    const { manager, queued } = harness();
+    const created = manager.create({ name: "PRs", prompt: "p", botId: "b1", source: { type: "github", catalog: 1 } });
+    const body = JSON.stringify({ action: "created", repository: { full_name: "acme/api" }, sender: { login: "ana", type: "User" }, issue: { title: "t", pull_request: {} }, comment: { body: "hi", user: { login: "ana", type: "User" } } });
+    const delivery = { ...github(created.signingSecret!, body, "d-9"), headers: { ...github(created.signingSecret!, body, "d-9").headers, "x-github-event": "issue_comment" } };
+    expect(manager.receiveSource(created.webhook.endpointId, delivery)).toMatchObject({ kind: "delivered", results: [{ ignored: true }] });
+    expect(queued).toHaveLength(0);
+    expect(manager.listAttempts().at(-1)).toMatchObject({ outcome: "ignored", reason: "Event “pr.comment” is not selected" });
   });
 });

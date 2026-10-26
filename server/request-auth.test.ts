@@ -6,8 +6,11 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  BROWSER_SIGN_IN,
   clearSessionCookie,
   capabilitiesForAuth,
+  fromBrowser,
+  loopbackBrowserRefused,
   clientBotPatchViolation,
   clientSessionIsComputerOwner,
   companionBotFieldViolation,
@@ -26,6 +29,7 @@ import {
   requestSource,
   requiredScope,
   routePermission,
+  routePermissions,
   PERMISSION_ROUTES,
   readWorkerRelayToken,
   resolveLoopbackTrust,
@@ -104,6 +108,10 @@ describe("request source for the lockout", () => {
 describe("scopes", () => {
   it("lets a person read their own Claude connectors; only an admin turns them off", () => {
     expect(requiredScope("GET", "/api/me/harness-connectors")).toBe("client");
+    // A member sees the images a bot's Markdown renders, not only downloads.
+    expect(requiredScope("GET", "/api/threads/t-1/messages/m-1/file")).toBe("client");
+    expect(requiredScope("POST", "/api/threads/t-1/messages/m-1/file")).toBe("client");
+    expect(requiredScope("DELETE", "/api/threads/t-1/messages/m-1/file")).toBe("admin");
     expect(requiredScope("PUT", "/api/me/harness-connectors")).toBe("admin");
     expect(requiredScope("PUT", "/api/harness-connectors/settings")).toBe("admin");
   });
@@ -126,6 +134,8 @@ describe("scopes", () => {
       ["GET", "/api/config"], ["GET", "/api/webhooks"], ["POST", "/api/tts/speak"],
       ["GET", "/api/auth/session"], ["POST", "/api/auth/stream-ticket"], ["POST", "/api/auth/logout"],
       ["GET", "/api/bots/x/slack-management"], // a link to Admin, read-only
+      ["GET", "/api/bots/x/inbound-mail"], // the bot's own email address (Perspicax relay), read-only
+      ["PUT", "/api/bots/x/inbound-mail"], // its owner changes it (the handler checks the owner)
       ["POST", "/api/bots/x/direct-grants"],
       ["POST", "/api/bots"], ["DELETE", "/api/bots/x"], // a member's own bots: the handler checks role and owner
       ["POST", "/api/bots/x/primary"], ["DELETE", "/api/bots/x/primary"], // the owner's own Primary Bot, both ways
@@ -138,6 +148,13 @@ describe("scopes", () => {
       ["GET", "/api/threads/t/files"], ["GET", `/api/threads/t/files/${"a1".repeat(12)}`],
       // the person a bot asks to sign in answers its card
       ["POST", "/api/bots/x/sign-in-cards/m/done"], ["POST", "/api/bots/x/sign-in-cards/m/cancel"],
+      // 2026-10-22 (JC): a webhook runs on the bot's own computer, so its
+      // owner creates and manages it without the server-settings right; the
+      // handler (webhookDelegateRefusal, webhookExecTargetAdminOnly) keeps the
+      // limits (an admin's bot, a Microsoft trigger, a server run target).
+      ["POST", "/api/webhooks"], ["POST", "/api/webhooks/w/rotate"],
+      ["POST", "/api/webhooks/w/test"], ["POST", "/api/webhooks/w/reveal"],
+      ["PATCH", "/api/webhooks/w"], ["DELETE", "/api/webhooks/w"],
     ] as const) expect(requiredScope(method, path), `${method} ${path}`).toBe("client");
     for (const [method, path] of [
       ["POST", "/api/cli-test"], ["GET", "/api/cli-candidates"], ["PATCH", "/api/instances/claude"],
@@ -150,9 +167,13 @@ describe("scopes", () => {
       ["POST", "/api/bots/x/computer/exec"], ["POST", "/api/bots/x/computer/join"], ["POST", "/api/local-computer/run"],
       ["POST", "/api/bots/x/local-computer/join"], ["POST", "/api/bots/x/local-computer/screenshot"],
       ["GET", "/api/computers/boxes"], ["POST", "/api/computers/boxes/bx_23456789/delete"],
-      ["POST", "/api/webhooks"], ["POST", "/api/webhooks/w/rotate"], ["POST", "/api/bots/x/skills"], ["PATCH", "/api/bots/x/skills/s"],
+      ["POST", "/api/bots/x/skills"], ["PATCH", "/api/bots/x/skills/s"],
       ["PATCH", "/api/bots/x/model"], ["POST", "/api/teams/import"], ["GET", "/api/teams/scout"],
       ["GET", "/api/bots/x/memory"], ["PUT", "/api/bots/x/memory"], ["PUT", "/api/section-context"], ["GET", "/api/threads/t/events"],
+      // shared team memory: direct reads and writes stay admin; a member only
+      // answers the team-memory card of their own team (the respond routes)
+      ["GET", "/api/team-memory"], ["POST", "/api/team-memory"],
+      ["PATCH", "/api/team-memory/entry_1"], ["DELETE", "/api/team-memory/entry_1"],
       ["GET", "/api/mcp/servers"], ["POST", "/api/mcp/servers"], ["POST", "/api/connectors/slack/authorize"],
       ["POST", "/api/bots/x/slack-management"], ["GET", "/api/bots/x/slack-management/extra"],
       ["PUT", "/api/config"], ["POST", "/api/auth/pairing"], ["GET", "/api/auth/sessions"], ["DELETE", "/api/auth/sessions/abc"],
@@ -402,14 +423,15 @@ describe("resolveRequestAuth", () => {
     expect(gate("GET", "/api/usage.csv").auth?.kind).toBe("session");
     // a solo server (no orgDirectory) never opens it
     expect(gate("GET", "/api/usage", {})).toMatchObject({ auth: null, error: "forbidden: this session lacks the admin scope" });
-    // a route no permission opens keeps the scope refusal
-    expect(gate("PUT", "/api/config")).toMatchObject({ auth: null, error: "forbidden: this session lacks the admin scope" });
-    expect(gate("PUT", "/api/config").permission).toBeUndefined();
+    // a route no permission opens keeps the scope refusal (2026-10-19: tool
+    // grants change admin rights)
+    expect(gate("GET", "/api/tool-grants")).toMatchObject({ auth: null, error: "forbidden: this session lacks the admin scope" });
+    expect(gate("GET", "/api/tool-grants").permission).toBeUndefined();
     held.add("engines.manage");
     expect(gate("PATCH", "/api/instances/codex").auth?.kind).toBe("session");
     expect(gate("POST", "/api/instances/codex/install").auth?.kind).toBe("session");
-    // never the CLI test, which runs a program
-    expect(gate("POST", "/api/cli-test").auth).toBeNull();
+    // never the CLI test, which runs a program: that is host.shell
+    expect(gate("POST", "/api/cli-test")).toMatchObject({ auth: null, permission: "host.shell" });
   });
 
   it("maps admin-scope routes to permissions only with the organization directory", () => {
@@ -422,7 +444,29 @@ describe("resolveRequestAuth", () => {
     expect(routePermission("PUT", "/api/skills-library/my-skill", org)).toBe("skills.library");
     expect(routePermission("POST", "/api/instances/claude-accounts", org)).toBe("engines.manage");
     expect(routePermission("POST", "/api/instances/claude/leftover-files/remove", org)).toBeNull();
-    expect(routePermission("PUT", "/api/mcp/servers/x", org)).toBeNull();
+    // 2026-10-19: the four admin keys an admin gives in Perspicax
+    expect(routePermission("PUT", "/api/mcp/servers/x", org)).toBe("host.shell");
+    // 2026-10-22 (JC): the config write opens to EITHER server.settings OR the
+    // separate server.experimental key (no implication). A refusal names the
+    // primary (server.settings); routePermissions lists both.
+    expect(routePermission("PATCH", "/api/config", org)).toBe("server.settings");
+    expect(routePermission("PUT", "/api/config", org)).toBe("server.settings");
+    expect([...routePermissions("PATCH", "/api/config", org)!]).toEqual(["server.settings", "server.experimental"]);
+    expect(routePermission("PATCH", "/api/org/settings", org)).toBe("server.settings");
+    // 2026-10-22 (JC): webhooks are no longer gated behind server.settings;
+    // a normal owner creates and manages one on the bot's own computer.
+    expect(routePermission("POST", "/api/webhooks", org)).toBeNull();
+    expect(routePermission("PATCH", "/api/webhooks/w", org)).toBeNull();
+    expect(routePermission("POST", "/api/webhooks/w/rotate", org)).toBeNull();
+    expect(routePermission("GET", "/api/workspace-backup/status", org)).toBe("backup.workspace");
+    expect(routePermission("POST", "/api/workspace-backup/export", org)).toBe("backup.workspace");
+    expect(routePermission("DELETE", "/api/auth/sessions/abc", org)).toBe("people.manage");
+    // never what changes admin rights
+    expect(routePermission("POST", "/api/workspace-backup/restore", org)).toBeNull();
+    expect(routePermission("POST", "/api/workspace-backup/upload", org)).toBeNull();
+    expect(routePermission("POST", "/api/workspace-backup/preview", org)).toBeNull();
+    expect(routePermission("GET", "/api/tool-grants", org)).toBeNull();
+    expect(routePermission("POST", "/api/org/interim-people/attach", org)).toBeNull();
     expect(routePermission("GET", "/api/usage", {})).toBeNull();
     // every route a permission opens is admin scope to begin with
     for (const [method, path] of [["GET", "/api/usage"], ["GET", "/api/admin-activity"], ["GET", "/api/marketplaces"], ["GET", "/api/skills-library"], ["PATCH", "/api/instances/codex"]] as const) {
@@ -852,9 +896,9 @@ describe("loopback trust: owner on one person's machine, service on a shared wor
   it("defaults to service on a hosted workspace, owner elsewhere, and lets the operator choose", () => {
     const pick = (env: NodeJS.ProcessEnv, flags: { desktopManaged?: boolean; hostedWorkspace?: boolean } = {}) =>
       resolveLoopbackTrust({ env, desktopManaged: false, hostedWorkspace: false, ...flags });
-    expect(pick({})).toEqual({ trust: "owner", reason: "self-hosted default" });
-    expect(pick({}, { hostedWorkspace: true })).toEqual({ trust: "service", reason: "hosted workspace" });
-    expect(pick({ SAGAX_LOOPBACK_TRUST: "service" })).toEqual({ trust: "service", reason: "SAGAX_LOOPBACK_TRUST" });
+    expect(pick({})).toEqual({ trust: "owner", reason: "self-hosted default", localBrowsers: false });
+    expect(pick({}, { hostedWorkspace: true })).toEqual({ trust: "service", reason: "hosted workspace", localBrowsers: false });
+    expect(pick({ SAGAX_LOOPBACK_TRUST: "service" })).toEqual({ trust: "service", reason: "SAGAX_LOOPBACK_TRUST", localBrowsers: false });
     expect(pick({ SAGAX_LOOPBACK_TRUST: " Service " }).trust).toBe("service");
     const forced = pick({ SAGAX_LOOPBACK_TRUST: "owner" }, { hostedWorkspace: true });
     expect(forced.trust).toBe("owner");
@@ -871,8 +915,8 @@ describe("loopback trust: owner on one person's machine, service on a shared wor
 
   it("is always service on an OMB Cloud home, where a local request is only ever a process on the machine", () => {
     const pick = (env: NodeJS.ProcessEnv) => resolveLoopbackTrust({ env, desktopManaged: false, hostedWorkspace: false, cloudHome: true });
-    expect(pick({})).toEqual({ trust: "service", reason: "OMB Cloud home" });
-    expect(pick({ SAGAX_LOOPBACK_TRUST: "service" })).toEqual({ trust: "service", reason: "OMB Cloud home" });
+    expect(pick({})).toEqual({ trust: "service", reason: "OMB Cloud home", localBrowsers: false });
+    expect(pick({ SAGAX_LOOPBACK_TRUST: "service" })).toEqual({ trust: "service", reason: "OMB Cloud home", localBrowsers: false });
     const forced = pick({ SAGAX_LOOPBACK_TRUST: "owner" });
     expect(forced.trust).toBe("service");
     expect(forced.warning).toMatch(/ignored on an OMB Cloud home/);
@@ -972,5 +1016,109 @@ describe("organization sharing routes (SAGAX_IDENTITY=perspicax, slice 3)", () =
     expect(requiredScope("DELETE", "/api/bots/aurora/direct-grants/pr_00000000-0000-4000-8000-000000000001")).toBe("client");
     expect(requiredScope("DELETE", "/api/bots/aurora/direct-grants/someone")).toBe("admin");
     expect(requiredScope("POST", "/api/bots/aurora/direct-grants")).toBe("client");
+  });
+});
+
+describe("a browser on this machine is not the owner", () => {
+  let dir: string;
+  let sessions: SessionRegistry;
+  const cookieName = "omb_session_8799_env";
+  // What Chrome sends: Sec-Fetch-* on every request to a loopback address, Origin on every WebSocket handshake.
+  const page = { host: "127.0.0.1:8799", "sec-fetch-site": "cross-site", "sec-fetch-mode": "no-cors", "sec-fetch-dest": "empty" };
+  const navigation = { host: "127.0.0.1:8799", "sec-fetch-site": "none", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document", "sec-fetch-user": "?1" };
+  const socket = { host: "127.0.0.1:8799", origin: "http://localhost:3000", upgrade: "websocket", connection: "Upgrade" };
+  const ownUi = { host: "127.0.0.1:8799", origin: "http://127.0.0.1:8799", "sec-fetch-site": "same-origin", "sec-fetch-mode": "cors", "sec-fetch-dest": "empty" };
+  const check = (headers: Record<string, string>, path = "/api/bots", method = "GET", options: { desktopToken?: string; trust?: "owner" | "service"; localBrowsers?: boolean } = {}) =>
+    resolveRequestAuth(request(headers, method), {
+      sessions, cookieName, streamPath: "/api/events", url: new URL(path, "http://x"),
+      ...(options.desktopToken !== undefined ? { loopbackMutationToken: options.desktopToken, companionMutationToken: "relay-secret" } : {}),
+      ...(options.trust ? { loopbackTrust: options.trust } : {}),
+      ...(options.localBrowsers ? { trustLocalBrowser: true } : {}),
+    });
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "omb-auth-browser-"));
+    sessions = new SessionRegistry({ file: join(dir, "sessions.json") });
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("tells a browser request from a command-line one", () => {
+    for (const headers of [page, navigation, socket, ownUi, { host: "localhost", "sec-fetch-dest": "image" }]) expect(fromBrowser(request(headers)), JSON.stringify(headers)).toBe(true);
+    const programs: Record<string, string>[] = [
+      { host: "127.0.0.1:8799" }, { host: "127.0.0.1:8799", origin: "http://127.0.0.1:8799" }, { host: "127.0.0.1:8799", upgrade: "websocket" },
+      { host: "127.0.0.1:8799", "x-openmausbot-cli": "1" },
+      // Node's fetch.
+      { host: "127.0.0.1:8799", "sec-fetch-mode": "cors", "accept-language": "*", "user-agent": "node" },
+    ];
+    for (const headers of programs) {
+      expect(fromBrowser(request(headers)), JSON.stringify(headers)).toBe(false);
+    }
+  });
+
+  it("refuses a self-hosted server's browser on loopback, reads included, and says how to sign in", () => {
+    for (const headers of [page, navigation, socket, ownUi]) {
+      for (const [method, path] of [["GET", "/api/bots"], ["GET", "/api/config"], ["GET", "/api/auth/session"], ["POST", "/api/auth/pairing"], ["GET", "/api/desktop-viewer/local/shared/websockify"]]) {
+        const refused = check(headers, path, method);
+        expect(refused.auth, `${method} ${path}`).toBeNull();
+        expect(refused.status).toBe(401);
+        expect(refused.error).toBe(BROWSER_SIGN_IN);
+      }
+    }
+    expect(check({ host: "127.0.0.1:8799" }).auth).toEqual({ kind: "loopback", scopes: ["admin", "client"] });
+  });
+
+  it("refuses it under service trust too, where it would otherwise get the service routes", () => {
+    expect(check(page, "/api/health", "GET", { trust: "service" }).auth).toBeNull();
+    expect(check({ host: "127.0.0.1:8799" }, "/api/health", "GET", { trust: "service" }).auth?.kind).toBe("loopback");
+  });
+
+  it("lets the desktop app's own window in with its owner header, on http and WebSocket alike", () => {
+    const desktop = { desktopToken: "owner-token-123" };
+    const owner = { "x-openmausbot-desktop-owner": "owner-token-123" };
+    expect(check({ ...ownUi, ...owner }, "/api/bots", "GET", desktop).auth?.kind).toBe("loopback");
+    expect(check({ ...ownUi, ...owner }, "/api/bots/bot-1", "PATCH", desktop).auth?.kind).toBe("loopback");
+    expect(check({ ...socket, origin: "http://127.0.0.1:8799", ...owner }, "/api/desktop-viewer/local/shared/websockify", "GET", desktop).auth?.kind).toBe("loopback");
+    for (const headers of [ownUi, page, socket, { ...ownUi, "x-openmausbot-desktop-owner": "owner-token-999" }]) {
+      expect(check(headers, "/api/bots", "GET", desktop).status, JSON.stringify(headers)).toBe(401);
+    }
+    // Before the desktop app has sent its capability, nothing a browser sends matches.
+    expect(check({ ...ownUi, "x-openmausbot-desktop-owner": "" }, "/api/bots", "GET", { desktopToken: "" }).auth).toBeNull();
+    // The app's main process and the companion send no Sec-Fetch-*.
+    expect(check({ host: "127.0.0.1:8799" }, "/api/bots", "GET", desktop).auth?.kind).toBe("loopback");
+    const relay = { host: "127.0.0.1:8799", "x-openmausbot-companion": "1", "x-openmausbot-companion-device": "phone-1", "x-openmausbot-companion-auth": "relay-secret" };
+    expect(check(relay, "/api/bots/b/messages", "POST", desktop).auth?.kind).toBe("loopback");
+  });
+
+  it("refuses a browser the owner view of a published page, unless it is the desktop window or a dev server", () => {
+    expect(loopbackBrowserRefused(request(ownUi), {})).toBe(true);
+    expect(loopbackBrowserRefused(request(page), { loopbackMutationToken: "owner-token-123" })).toBe(true);
+    expect(loopbackBrowserRefused(request({ ...ownUi, "x-openmausbot-desktop-owner": "owner-token-123" }), { loopbackMutationToken: "owner-token-123" })).toBe(false);
+    expect(loopbackBrowserRefused(request({ ...ownUi, "x-openmausbot-desktop-owner": "" }), { loopbackMutationToken: "" })).toBe(true);
+    expect(loopbackBrowserRefused(request(page), { trustLocalBrowser: true })).toBe(false);
+    expect(loopbackBrowserRefused(request({ host: "127.0.0.1:8799" }), {})).toBe(false);
+  });
+
+  it("still admits a browser that signed in", () => {
+    const { code } = sessions.openPairing({ scopes: ["admin", "client"] });
+    const paired = sessions.exchange({ code, label: "This browser", source: "127.0.0.1" });
+    if (!paired.ok) throw new Error(paired.error);
+    const signedIn = check({ ...ownUi, cookie: `${cookieName}=${paired.token}` });
+    expect(signedIn.auth?.kind).toBe("session");
+  });
+
+  it("trusts local browsers only on a development server that asked for it", () => {
+    expect(check(page, "/api/bots", "GET", { localBrowsers: true }).auth).toEqual({ kind: "loopback", scopes: ["admin", "client"] });
+    // The desktop owner header is still required for desktop mutations.
+    expect(check(page, "/api/bots/bot-1", "PATCH", { localBrowsers: true, desktopToken: "owner-token-123" }).status).toBe(403);
+    const pick = (env: NodeJS.ProcessEnv, flags: { fromSource?: boolean; desktopManaged?: boolean; hostedWorkspace?: boolean } = {}) =>
+      resolveLoopbackTrust({ env, desktopManaged: false, hostedWorkspace: false, ...flags });
+    const dev = { SAGAX_DEV_TRUST_LOCAL_BROWSER: "1" };
+    expect(pick(dev, { fromSource: true })).toMatchObject({ trust: "owner", localBrowsers: true, warning: expect.stringMatching(/development only/) });
+    expect(pick(dev, { fromSource: false })).toMatchObject({ localBrowsers: false, warning: expect.stringMatching(/ignored/) });
+    expect(pick(dev, { fromSource: true, desktopManaged: true })).toMatchObject({ localBrowsers: false, warning: expect.stringMatching(/ignored/) });
+    expect(pick(dev, { fromSource: true, hostedWorkspace: true })).toMatchObject({ trust: "service", localBrowsers: false });
+    expect(pick({ ...dev, SAGAX_LOOPBACK_TRUST: "service" }, { fromSource: true }).localBrowsers).toBe(false);
+    expect(pick({ SAGAX_DEV_TRUST_LOCAL_BROWSER: "true" }, { fromSource: true })).toEqual({ trust: "owner", reason: "self-hosted default", localBrowsers: false });
+    expect(resolveLoopbackTrust({ env: dev, desktopManaged: false, hostedWorkspace: false, cloudHome: true, fromSource: true }).localBrowsers).toBe(false);
   });
 });

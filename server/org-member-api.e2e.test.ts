@@ -27,7 +27,8 @@
 //       shows; get_agent reads its profile; only its owner or an admin pins
 //       or deletes it; delete_agent archives it and keeps it on disk
 import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -193,6 +194,8 @@ posixOnly("Perspicax AI clients: the Sagax member API", () => {
         slow: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "slow", FAKE_CLAUDE_GATE_DIR: gates }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
         hold: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json"), FAKE_CLAUDE_RELEASE: join(gates, "release") }, config: { cli: FAKE_CLAUDE, fullAuto: false } },
         ask: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "ask-dump.json"), FAKE_CLAUDE_RELEASE: join(gates, "ask-release") }, config: { cli: FAKE_CLAUDE, fullAuto: false } },
+        // a Claude Code recent enough for --restricted (a confined turn)
+        mail: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_RELEASE: join(gates, "mail-release"), FAKE_CLAUDE_DUMP: join(home, "mail-dump.json"), FAKE_CLAUDE_VERSION: "2.1.290" }, config: { cli: FAKE_CLAUDE, fullAuto: false } },
       },
     }));
     await start();
@@ -207,6 +210,7 @@ posixOnly("Perspicax AI clients: the Sagax member API", () => {
     bots.atlas = await createBot(alice, "Atlas", "claude");
     bots.vega = await createBot(alice, "Vega", "hold");
     bots.lyra = await createBot(alice, "Lyra", "ask");
+    bots.mira = await createBot(alice, "Mira", "mail");
     const routine = await api("POST", "/api/routines", alice, { name: "Daily digest", botId: bots.atlas.id, prompt: "Write the digest.", enabled: false,
       schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 86_400_000 } });
     expect(routine.status, routine.text).toBe(201);
@@ -552,4 +556,88 @@ posixOnly("Perspicax AI clients: the Sagax member API", () => {
     expect(rows.find((row) => row.action === "agents.delete_agent" && row.after?.outcome === "ok")).toMatchObject({ target: { kind: "bot", id }, actor: { kind: "person", name: "Alice" } });
     expect(rows.some((row) => row.action === "agents.temporary.pinned")).toBe(true);
   }, 90_000);
+
+  it("M10: bot email (contract v2): only the inbound mail route takes perspicax-mail; body signed; owner checked; a confined run, once", async () => {
+    const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+    const mailAssertion = (user: FakeOidcUser, body: unknown, actor = "perspicax-mail") => ({
+      bearer: idp.consoleAssertion({ sub: user.sub, aud: BASE, role: "employee", teams: [], claims: (c) => ({ ...c, act: { sub: actor }, body_sha256: sha(JSON.stringify(body)) }) }),
+    });
+    const mail = (botId: string, key = "1") => ({
+      version: 1, botId, messageId: "<m10@mail.example.com>", dedupeKey: sha(`m10-${key}`), receivedAt: new Date().toISOString(),
+      from: { address: "ana@example.com", name: "Ana" }, to: "mira@bots.example.org",
+      subject: "Facture M10", text: "Corps secret M10", truncated: false,
+      auth: { spf: "pass", dkim: "pass", verified: true }, attachments: [],
+    });
+    const deliver = (user: FakeOidcUser, body: unknown, actor?: string) => api("POST", "/api/org/inbound-mail", mailAssertion(user, body, actor), body);
+    const mira = bots.mira!;
+    // the member and admin APIs refuse the mail relay's actor
+    expect((await member("GET", "bots", ALICE, undefined, "perspicax-mail")).body.code).toBe("assertion_invalid");
+    expect((await api("GET", "/api/org/admin/capabilities", mailAssertion(ALICE, {}))).status).toBe(401);
+    // the inbound route refuses every other actor, and a body the assertion does not sign
+    const mcp = await deliver(ALICE, mail(mira.id), "perspicax-mcp");
+    expect(mcp.status).toBe(401);
+    expect(mcp.headers.get("x-sagax-mail-api")).toBe("1");
+    const unsigned = await api("POST", "/api/org/inbound-mail", mailAssertion(ALICE, mail(mira.id, "other")), mail(mira.id));
+    expect(unsigned.status).toBe(401);
+    // Bob's bot is not Alice's
+    expect((await deliver(ALICE, mail(bots.orion!.id))).body).toEqual({ error: "not_owner" });
+    expect((await deliver(ALICE, mail("bot_nobody"))).body).toEqual({ error: "no_bot" });
+    const none = await deliver(ALICE, mail(mira.id));
+    expect(none.status, none.text).toBe(202);
+    expect(none.body).toEqual({ triggers: 0, delivered: 0, duplicate: 0, ignored: 0, reason: "no_trigger" });
+    // a botmail trigger: no secret, no setup
+    const created = await api("POST", "/api/webhooks", alice, { name: "Mail", prompt: "Lis le courriel.", botId: mira.id, enabled: true, source: { type: "botmail", events: [], filters: { subject: ["facture"] } } });
+    expect(created.status, created.text).toBe(201);
+    expect(created.body.sourceSetup).toBeUndefined();
+    expect(created.body.webhook.signingSecretSet).toBeUndefined();
+    const delivered = await deliver(ALICE, mail(mira.id, "2"));
+    expect(delivered.body).toEqual({ triggers: 1, delivered: 1, duplicate: 0, ignored: 0 });
+    const again = await deliver(ALICE, mail(mira.id, "2"));
+    expect(again.body).toEqual({ triggers: 1, delivered: 0, duplicate: 1, ignored: 0 });
+    // S2: the mail-woken run is confined: no shell (--restricted), Ask, the mail fenced
+    const dumpFile = join(home, "mail-dump.json");
+    const confined = await waitFor(async () => (existsSync(dumpFile) ? JSON.parse(readFileSync(dumpFile, "utf8")) : null), 30_000);
+    expect(confined.argv).toContain("--restricted");
+    expect(JSON.stringify(confined.argv)).not.toContain("bypassPermissions");
+    expect(confined.argv[confined.argv.indexOf("--permission-mode") + 1]).toBe("default");
+    // second review: the confined run hands no work on, on any server: no
+    // teammate (ask, delegate, coordinate), no room, no parallel task
+    const comms = { bearer: confined.mcpConfig.mcpServers.agents.env.SAGAX_COMMS_TOKEN as string };
+    for (const [path, body] of [
+      ["/api/internal/delegate-bot", { toBotId: bots.atlas!.id, message: "Lance le script." }],
+      ["/api/internal/ask-bot", { toBotId: bots.atlas!.id, message: "Lance le script.", depth: 0 }],
+      ["/api/internal/coordinate-bots", { tasks: [{ toBotId: bots.atlas!.id, message: "Lance le script." }] }],
+      ["/api/internal/post-to-room", { message: "Lance le script." }],
+      ["/api/internal/threads", { title: "Script", message: "Lance le script." }],
+    ] as const) {
+      const refused = await api("POST", path, comms, body);
+      expect(refused.status, `${path} ${refused.text}`).toBe(403);
+      expect(refused.body.code, path).toBe("botmail_confined");
+    }
+    writeFileSync(join(gates, "mail-release"), "");
+    // the owner opts in: the next mail's run gets the bot's usual tools
+    const opted = await api("PATCH", `/api/webhooks/${created.body.webhook.id}`, alice, { source: { type: "botmail", events: [], filters: { subject: ["facture"] }, allowFullTools: true } });
+    expect(opted.status, opted.text).toBe(200);
+    rmSync(dumpFile, { force: true });
+    expect((await deliver(ALICE, mail(mira.id, "3"))).body).toMatchObject({ delivered: 1 });
+    // the new run is a new conversation, so a new engine process
+    const full = await waitFor(async () => {
+      const dump = existsSync(dumpFile) ? JSON.parse(readFileSync(dumpFile, "utf8")) : null;
+      return dump && dump.pid !== confined.pid ? dump : null;
+    }, 30_000);
+    expect(full.argv).not.toContain("--restricted");
+    // the profile row: this fake Perspicax has no address route (an older one): nothing to show
+    const address = await api("GET", `/api/bots/${mira.id}/inbound-mail`, alice);
+    expect(address.status, address.text).toBe(200);
+    expect(address.body).toEqual({ available: false, address: null, enabled: false, canChange: false });
+    // one audit row per delivery: the full sender (JC decision 3), never the subject or text
+    const rows = await waitFor(async () => {
+      const audit = await api("GET", "/api/org/admin/audit?category=webhook", { bearer: idp.consoleAssertion({ sub: ALICE.sub, aud: BASE, role: "admin" }) });
+      const found = ((audit.body.rows ?? []) as Array<any>).filter((row) => row.action === "bot-mail.delivered");
+      return found.length >= 4 ? found : null;
+    }, 10_000);
+    expect(rows[0]).toMatchObject({ target: { kind: "bot", id: mira.id }, actor: { kind: "person", via: "perspicax-mail" }, after: { sender: "ana@example.com" } });
+    expect(JSON.stringify(rows)).not.toMatch(/Facture M10|Corps secret/);
+    expect(log).not.toMatch(/Corps secret M10/);
+  }, 120_000);
 });

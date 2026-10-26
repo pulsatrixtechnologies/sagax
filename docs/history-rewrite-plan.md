@@ -103,11 +103,9 @@ seulement dans le fichier privé d'expressions, jamais ici) :
 - les chaînes `<PRIVATE_REPO_NAME>` restantes (nom du dépôt privé) dans les specs
   de `docs/superpowers/`, `server/routes/account.ts` et
   `src/components/PulsatrixMark.tsx` → `<PRIVATE_REPO_NAME>`;
-- les deux `database_id` wrangler (D1) présents sur `main`, dans
-  `cloudflare/composio-broker/wrangler.jsonc` et
-  `cloudflare/control-plane/wrangler.jsonc` → `<D1_DATABASE_ID_BROKER>` et
-  `<D1_DATABASE_ID_CONTROL_PLANE>`, remplacés par l'UUID tout à zéro que le
-  README du control-plane documente déjà.
+- le `database_id` wrangler (D1) présent sur `main`, dans
+  `cloudflare/control-plane/wrangler.jsonc` → `<D1_DATABASE_ID_CONTROL_PLANE>`,
+  remplacé par l'UUID tout à zéro que le README du control-plane documente déjà.
 - les identifiants de vulnérabilités ouvertes exposés par #452 (corps,
   commentaires, messages de commit, fichiers) et par `.trivyignore` (ainsi que
   les tests et le code de `main` qui les citent) : une classe

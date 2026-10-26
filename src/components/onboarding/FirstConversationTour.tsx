@@ -14,11 +14,10 @@ import { t } from "@/lib/i18n";
 import { api, useStore } from "@/state/store";
 import { Spotlight } from "./Spotlight";
 
-const COPY: Record<SpotlightId, { key: "onboarding.spot.composer" | "onboarding.spot.model" | "onboarding.spot.approval" | "onboarding.spot.connector"}> = {
+const COPY: Record<SpotlightId, { key: "onboarding.spot.composer" | "onboarding.spot.model" | "onboarding.spot.approval"}> = {
   "spot.composer": { key: "onboarding.spot.composer" },
   "spot.model": { key: "onboarding.spot.model" },
   "spot.approval": { key: "onboarding.spot.approval" },
-  "spot.connector": { key: "onboarding.spot.connector" },
 };
 
 export function FirstConversationTour({ quiet = false }: { quiet?: boolean }) {
@@ -57,9 +56,6 @@ export function FirstConversationTour({ quiet = false }: { quiet?: boolean }) {
     approvalVisible: Boolean(
       bot?.messages.some((m) => m.kind === "options" && m.card?.requestId && m.card.tool && !m.card.answered && !m.card.dismissed),
     ),
-    connectorVisible: Boolean(
-      bot?.messages.some((m) => m.kind === "connector" && m.connector && !m.connector.dismissed && m.connector.status !== "connected"),
-    ),
   };
 
   const dismiss = useCallback(() => {
@@ -85,7 +81,7 @@ export function FirstConversationTour({ quiet = false }: { quiet?: boolean }) {
     const next = nextSpotlight(observation, seen, active);
     if (next !== active) setActive(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eligible, seen, active, dismiss, observation.replyStarted, observation.replyFinished, observation.approvalVisible, observation.connectorVisible]);
+  }, [eligible, seen, active, dismiss, observation.replyStarted, observation.replyFinished, observation.approvalVisible]);
 
   if (!eligible || !active || !bot || cardAnswered(active, observation)) return null;
   const copy = COPY[active];

@@ -4,7 +4,6 @@ const screenshotNames = [
   'computer-panel',
   'approval-card',
   'marketplace',
-  'composio-multi-account',
   'context-menu',
   'app-settings',
   'ubuntu-computer-panel',

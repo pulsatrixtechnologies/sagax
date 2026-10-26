@@ -9,6 +9,7 @@ import { t } from "@/lib/i18n";
 import { personAvatarSrc } from "@/lib/profile-management";
 import { PERSON_AVATAR_EVENT } from "@/lib/person-avatars";
 import type { OrgGithubTokenPublic } from "../../shared/org-github-tokens";
+import { personLabel } from "@/lib/human-label";
 
 export interface PerspicaxOrg {
   org: { name: string; identity: { kind: "perspicax"; issuer: string; serverId?: string } };
@@ -82,6 +83,7 @@ export function useOrgPeople(): Map<string, OrgDirectoryPerson> {
     void loadOrgPeople().then((value) => { if (alive) setPeople(value); });
     // A photo changed (src/lib/person-avatars.ts): read the directory again.
     const reload = () => { void loadOrgPeople(true).then((value) => { if (alive) setPeople(value); }); };
+    if (typeof window === "undefined") return () => { alive = false; };
     window.addEventListener(PERSON_AVATAR_EVENT, reload);
     return () => { alive = false; window.removeEventListener(PERSON_AVATAR_EVENT, reload); };
   }, []);
@@ -92,11 +94,11 @@ export function useOrgPeople(): Map<string, OrgDirectoryPerson> {
  * avatar from the directory, else the id the room stores. */
 export function channelHumanRow(id: string, people: ReadonlyMap<string, OrgDirectoryPerson>): { id: string; label: string; detail?: string; avatarUrl?: string } {
   const person = people.get(id.trim().toLowerCase());
-  if (!person) return { id, label: id };
+  if (!person) return { id, label: personLabel(id) };
   const avatarUrl = personAvatarSrc(person.avatarUrl);
   return {
     id,
-    label: person.name || person.login || id,
+    label: personLabel(person.name, person.login, id),
     ...(person.email && person.email !== person.name ? { detail: person.email } : {}),
     ...(avatarUrl ? { avatarUrl } : {}),
   };

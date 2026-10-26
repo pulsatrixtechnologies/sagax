@@ -171,6 +171,22 @@ describe("bot activity API", () => {
     expect(body.item!.children).toEqual([expect.objectContaining({ kind: "subagent", botName: "Echo", title: "Write the tests", threadId: "t-echo-alice", status: "running" })]);
   });
 
+  it("keeps a quiet pre-check out of the list and does not call it a failure", async () => {
+    const quiet = {
+      id: "run-quiet", routineId: "rquiet", routineName: "Poll", botId: "pepper", status: "nothing_to_report",
+      target: "bot", runOn: "auto", scheduledFor: NOW - 1_000, finishedAt: NOW - 500, manual: false, createdAt: NOW - 1_000,
+      quietReason: "No change",
+    } as unknown as RoutineRun;
+    const base = await serve(deps({
+      runs: (botId) => [...runs, quiet].filter((run) => run.botId === botId),
+    }));
+    const alice = await get(base, "/api/bots/pepper/activity", "alice");
+    expect(alice.body.items!.map((item) => item.id)).not.toContain("run:run-quiet");
+    const detail = await get(base, "/api/bots/pepper/activity/item?runId=run-quiet", "alice");
+    expect(detail.status).toBe(200);
+    expect(detail.body.item).toMatchObject({ id: "run:run-quiet", status: "finished" });
+  });
+
   it("answers another person's thread exactly like a missing one", async () => {
     const base = await serve();
     expect((await get(base, "/api/bots/pepper/activity/item?threadId=t-bob", "alice")).status).toBe(404);

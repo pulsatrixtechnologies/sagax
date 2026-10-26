@@ -98,7 +98,7 @@ jobs:
     # shard. The cap catches a hang, not normal suite growth: 0.5.0 brought
     # a shard to 17 minutes of tests plus setup, so Ubuntu has 30. By 0.5.10
     # a balanced Windows shard ran about 31 minutes of tests, and shard 1
-    # also runs the broker and Electron step: 35 cancelled it mid-suite, so
+    # also runs the Electron step: 35 cancelled it mid-suite, so
     # Windows and macOS have 45.
     timeout-minutes: ${{ matrix.os == 'ubuntu-latest' && 30 || 45 }}
     steps:
@@ -131,9 +131,9 @@ jobs:
         env:
           SAGAX_VITEST_RETRY_LOG: ${{ runner.temp }}/vitest-retries.jsonl
         run: node scripts/testing/ci-retry-summary.mjs
-      - name: Broker and Electron unit tests
+      - name: Electron unit tests
         if: matrix.shard == 1
-        run: pnpm broker:test && pnpm test:electron
+        run: pnpm test:electron
 
   behavior-evals:
     needs: static
@@ -387,75 +387,6 @@ jobs:
       - run: pnpm control-plane:check
       - run: pnpm control-plane:test
       - run: pnpm control-plane:dry-run
-
-  deploy-composio-broker:
-    # Only deploys on push to upstream main. PRs run the control-plane tests
-    # but do not deploy: the wiring is exercised end-to-end only by a merged
-    # commit, so an unreviewed branch can never push to production. Closes
-    # the deploy gap that left #1914's broker fix (45cc2cf) sitting in
-    # source without reaching Cloudflare.
-    needs: [control-plane]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    name: deploy composio broker (Cloudflare Worker)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      # A repo without the secret (a fork, or before the token is created)
-      # skips the deploy with a warning instead of failing every main push.
-      - id: token
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning title=Composio broker not deployed::CLOUDFLARE_API_TOKEN is not set, so the broker Worker was not deployed."
-          fi
-      - if: steps.token.outputs.present == 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - if: steps.token.outputs.present == 'true'
-        uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
-      - if: steps.token.outputs.present == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-      - if: steps.token.outputs.present == 'true'
-        run: pnpm install --frozen-lockfile
-      # The committed wrangler.jsonc carries an all-zero D1 database_id
-      # placeholder. Inject the real one from a repo secret right before the
-      # deploy, and refuse to deploy against the placeholder.
-      # A missing or malformed secret skips the deploy with a warning, the
-      # same way a missing token does, so the placeholder is never deployed.
-      - name: Inject the broker D1 database_id from a secret
-        id: d1
-        if: steps.token.outputs.present == 'true'
-        env:
-          D1_ID: ${{ secrets.COMPOSIO_BROKER_D1_DATABASE_ID }}
-        run: |
-          if ! printf '%s' "$D1_ID" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' || [ "$D1_ID" = "00000000-0000-0000-0000-000000000000" ]; then
-            echo "::warning title=Composio broker not deployed::COMPOSIO_BROKER_D1_DATABASE_ID is not set or is not a D1 database UUID, so the broker Worker was not deployed."
-            exit 0
-          fi
-          f=cloudflare/composio-broker/wrangler.jsonc
-          sed -i "s/\"database_id\": \"00000000-0000-0000-0000-000000000000\"/\"database_id\": \"$D1_ID\"/" "$f"
-          if grep -q '00000000-0000-0000-0000-000000000000' "$f"; then
-            echo "::error::database_id placeholder was not replaced in $f"
-            exit 1
-          fi
-          echo "injected=true" >> "$GITHUB_OUTPUT"
-      - name: Deploy the composio broker Worker via Wrangler
-        if: steps.token.outputs.present == 'true' && steps.d1.outputs.injected == 'true'
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          # Mirrors the local `pnpm broker:deploy` script so CI is the same
-          # command a developer runs by hand. The token is created in the
-          # Cloudflare dashboard with Workers Scripts:Edit on the broker
-          # account; store it as the CLOUDFLARE_API_TOKEN repo secret.
-          command: deploy --config cloudflare/composio-broker/wrangler.jsonc
 
   ui-smoke:
     needs: static

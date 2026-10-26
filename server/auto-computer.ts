@@ -184,20 +184,30 @@ export function autoComputerToolRefusal(
     : "Call computer_select with target this_computer or local_vm before using the tools on the person's computer.";
 }
 
-/** The system guidance an Auto turn gets (provider text only). */
+/** The standing rules of an Auto bot (JC 2026-10-15). They ride in the
+ * system prompt's volatile "workplace" section (server/system-prompt.ts):
+ * a reused engine session gets them once, not appended to every message
+ * (2026-10-20 perf parity, round 4: 2,300 characters per message, about
+ * 800 tokens written to the cache on every turn of an organization bot).
+ * Nothing here changes from one turn to the next; where a turn starts and
+ * what it can reach is the per-message line (autoComputerGuidance). */
+export const AUTO_COMPUTER_RULES = [
+  "This bot's Workspace is Auto: you choose where each task or step runs with the computer_select tool (target this_computer, browser, cloud or local_vm, plus a short reason). Each message's <workplace> line says where that turn starts and what is available now. Your choice holds for the next tool calls of this turn and you can switch again mid-task; each new message starts over from the default (the person's computer when it is connected).",
+  "- this_computer: anything on the person's own machine: their files and folders, their apps, their local network and printers, devices plugged in (USB, camera), Docker on their computer, local dev servers (localhost), their VPN.",
+  "- browser: pure web work (read a site, search, fill a web form) with the built-in browser, when nothing on their machine is needed.",
+  "- cloud: work that must keep running while the person is away from their computer (a routine, their computer offline or asleep, a long job), and heavy tasks.",
+  "- local_vm: isolated or risky work on their machine (try an install, run untrusted code) in the Local VM, including seeing and driving that VM's desktop (local_vm action use); creating one asks them on their computer first.",
+  "Sub-agents: start_thread (on yourself) and create_agent take a workspace too, chosen by the same rule: one can run in the cloud while another works on the person's computer or in the Local VM.",
+  "computer_select only moves the shell, files and desktop tools (sagax-environment, sagax-desktop). Connector and Sagax tools (ConnectWise, Pulsatrix memory and flow, agents, search, other MCP servers) run on the server wherever you are: they need no computer and no computer_select.",
+  "The person's own words win: \"sur mon Mac\", \"sur mon ordinateur\", \"on my computer\", \"localement\", \"locally\" mean this_computer; \"dans une VM\", \"in a VM\" mean local_vm; \"dans le cloud\", \"in the cloud\", \"sur le serveur\", \"on the server\" mean cloud. Call computer_select only when a step needs a place other than the one you are on (not to confirm it). Never work around a refusal: a place they did not allow (their computer for routines, the browser turned off) stays closed; if the place they asked for is unavailable, say why (the tool's answer) instead of quietly working elsewhere. Use computer_select, not select_computer, for this.",
+].join("\n");
+
+/** The per-message line of an Auto turn (provider text only): where this
+ * turn starts and what it can reach now. The rules are AUTO_COMPUTER_RULES. */
 export function autoComputerGuidance(state: AutoComputerState, desktopConnected: boolean): string {
   const available = AUTO_COMPUTER_TARGETS.filter((target) => autoComputerUnavailable(state, target, desktopConnected) === null);
   const start = state.selected ? autoComputerLabel(state.selected) : "no computer";
-  return [
-    `<workplace>This bot's Workspace is Auto: you choose where each task or step runs with the computer_select tool (target this_computer, browser, cloud or local_vm, plus a short reason). This turn starts on ${start}; available now: ${available.join(", ") || "none"}. Your choice holds for the next tool calls of this turn and you can switch again mid-task; each new message starts over from the default (the person's computer when it is connected).`,
-    "- this_computer: anything on the person's own machine: their files and folders, their apps, their local network and printers, devices plugged in (USB, camera), Docker on their computer, local dev servers (localhost), their VPN.",
-    "- browser: pure web work (read a site, search, fill a web form) with the built-in browser, when nothing on their machine is needed.",
-    "- cloud: work that must keep running while the person is away from their computer (a routine, their computer offline or asleep, a long job), and heavy tasks.",
-    "- local_vm: isolated or risky work on their machine (try an install, run untrusted code) in the Local VM, including seeing and driving that VM's desktop (local_vm action use); creating one asks them on their computer first.",
-    "Sub-agents: start_thread (on yourself) and create_agent take a workspace too, chosen by the same rule: one can run in the cloud while another works on the person's computer or in the Local VM.",
-    "computer_select only moves the shell, files and desktop tools (sagax-environment, sagax-desktop). Connector and Sagax tools (ConnectWise, Pulsatrix memory and flow, agents, search, other MCP servers) run on the server wherever you are: they need no computer and no computer_select.",
-    "The person's own words win: \"sur mon Mac\", \"sur mon ordinateur\", \"on my computer\", \"localement\", \"locally\" mean this_computer; \"dans une VM\", \"in a VM\" mean local_vm; \"dans le cloud\", \"in the cloud\", \"sur le serveur\", \"on the server\" mean cloud. Call computer_select only when a step needs a place other than the one you are on (not to confirm it). Never work around a refusal: a place they did not allow (their computer for routines, the browser turned off) stays closed; if the place they asked for is unavailable, say why (the tool's answer) instead of quietly working elsewhere. Use computer_select, not select_computer, for this.</workplace>",
-  ].join("\n");
+  return `<workplace>This bot's Workspace is Auto (computer_select; its rules are in the Workspace part of your Sagax context). This turn starts on ${start}; available now: ${available.join(", ") || "none"}.</workplace>`;
 }
 
 /** Where one Auto turn starts. */

@@ -140,6 +140,23 @@ final class ProfileClientTests: XCTestCase {
         XCTAssertEqual(ProfileRequestStub.capturedBody, bytes)
     }
 
+    /// A bot's picture keeps the server's own 10 MB cap, below the 32 MiB a
+    /// chat image may weigh; the refusal names 10 MB and sends nothing.
+    func testUploadAvatarRefusesMoreThanTheAvatarCapBeforeAnyRequest() async {
+        XCTAssertEqual(CompanionClient.maximumAvatarUploadBytes, 10 * 1_024 * 1_024)
+        XCTAssertLessThan(CompanionClient.maximumAvatarUploadBytes, CompanionClient.maximumImageUploadBytes)
+        do {
+            _ = try await client.uploadAvatar(
+                data: Data(repeating: 0, count: CompanionClient.maximumAvatarUploadBytes + 1),
+                mime: "image/png"
+            )
+            XCTFail("an 11 MB picture is above the avatar cap")
+        } catch {
+            XCTAssertTrue("\(error)".contains("10 MB"), "\(error)")
+            XCTAssertNil(ProfileRequestStub.capturedRequest)
+        }
+    }
+
     func testUploadAvatarRefusesANonImageBeforeAnyRequest() async {
         do {
             _ = try await client.uploadAvatar(data: Data("hello".utf8), mime: "text/plain")

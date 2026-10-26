@@ -85,6 +85,10 @@ describe("computer routes", () => {
     expect(requiredScope("GET", "/api/computer/status")).toBe("client");
     expect(requiredScope("POST", "/api/computer/update")).toBe("client");
     expect(requiredScope("POST", "/api/computer/reset")).toBe("client");
+    // the phone's scheduled update (parity R7, O2): read and set, never the disk saver
+    expect(requiredScope("GET", "/api/computer/maintenance")).toBe("client");
+    expect(requiredScope("PUT", "/api/computer/maintenance")).toBe("client");
+    expect(requiredScope("POST", "/api/computer/disk-saver")).toBe("admin");
     expect(requiredScope("POST", "/api/me/server-environment/update", { orgDirectory: true })).toBe("client");
     expect(requiredScope("POST", "/api/me/server-environment/update")).toBe("admin");
   });
@@ -129,5 +133,45 @@ describe("computer routes", () => {
     expect(calls).toEqual([`status ${ADA}`, `update ${ADA}`]);
     expect((await fetch(`${(await serve(person(), { organization: () => true })).base}/status`)).status).toBe(403);
     expect(await (await fetch(`${(await serve(person(ADA), { organization: () => true })).base}/status`)).json()).toMatchObject({ configured: false });
+  });
+
+  it("refuses an update while a bot works, while the scheduled one runs, and a second one at once (parity R7 review)", async () => {
+    const claimed = new Set<string>();
+    let busy = false;
+    let releaseUpdate: () => void = () => {};
+    const guard = {
+      claim: (key: string) => { if (claimed.has(key)) return false; claimed.add(key); return true; },
+      release: (key: string) => { claimed.delete(key); },
+      busy: async () => busy,
+    };
+    const calls: string[] = [];
+    const owner = await serve({ kind: "loopback", scopes: ["admin", "client"] }, {
+      updateGuard: guard,
+      local: {
+        status: async () => ({ configured: true, state: "running", diskState: "normal", workspaceBytes: 1 }),
+        update: () => { calls.push("update"); return new Promise((done) => { releaseUpdate = () => done({ configured: true, state: "running", diskState: "normal", workspaceBytes: 1 }); }); },
+        reset: async () => ({ configured: true, state: "running", diskState: "normal", workspaceBytes: 0 }),
+      },
+    });
+    busy = true;
+    const working = await owner.post("update");
+    expect(working.status).toBe(409);
+    expect(await working.json()).toMatchObject({ code: "computer_busy" });
+    expect(claimed.size).toBe(0);
+    busy = false;
+    // the scheduled update holds the computer
+    claimed.add("local");
+    expect(await (await owner.post("update")).json()).toMatchObject({ code: "computer_updating" });
+    claimed.delete("local");
+    // two at once: the second is refused, the first still lands
+    const first = owner.post("update");
+    await new Promise((done) => setTimeout(done, 30));
+    const second = await owner.post("update");
+    expect(second.status).toBe(409);
+    expect(await second.json()).toMatchObject({ code: "computer_updating" });
+    releaseUpdate();
+    expect((await first).status).toBe(200);
+    expect(calls).toEqual(["update"]);
+    expect(claimed.size).toBe(0);
   });
 });

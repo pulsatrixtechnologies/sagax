@@ -68,6 +68,7 @@ import { BrowserScreen, OrgComputerTab, ScreenPicker } from "./computer/OrgCompu
 import { BrowserPanel, type BrowserSignIn } from "./BrowserPanel";
 import { browserAvailable, builtInBrowserEnabled } from "@/lib/feature-flags";
 import { browserTeachPending, onBrowserTeachRequest } from "@/lib/teach-request";
+import { withTeachBot } from "@/lib/computer-teach-client";
 
 import { useDesktopBridgeStatus } from "@/lib/desktop-bridge";
 
@@ -1020,7 +1021,8 @@ export function ComputerPanel({
       if (!viewerUrl) throw new LocalizedPanelError("computer.err.noDesktopLink");
 
       if (window.ogb?.desktopViewer) {
-        const opened = await window.ogb.desktopViewer.open(viewerUrl, t("computer.viewerTitle", { name: bot.name }), bot.id);
+        // the app's own viewer offers Teach on this bot's computer (parity R7)
+        const opened = await window.ogb.desktopViewer.open(withTeachBot(viewerUrl, bot), t("computer.viewerTitle", { name: bot.name }), bot.id);
         if (!opened) throw new LocalizedPanelError("computer.err.openDesktop");
       } else if (fallbackTab) {
         fallbackTab.location.replace(viewerUrl);
@@ -1606,6 +1608,8 @@ export function ComputerPanel({
         computerOff={livePlace === "off"}
         botName={bot.name}
         botId={bot.id}
+        threadId={bot.threadId}
+        inUse={livePlace === "auto" ? (autoSurfaceCurrent ? (autoSurface.surface ?? "unknown") : "unknown") : livePlace}
         browser={browserOffered ? <>
           {signInHelp?.place === "browser" && <div className="mb-3">{signInBanner()}</div>}
           <BrowserPanel bot={bot} signIn={signInRequest} />

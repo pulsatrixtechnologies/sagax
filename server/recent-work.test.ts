@@ -40,6 +40,16 @@ describe("botThreads", () => {
       { threadId: "dm-them", where: 'room "DM"', title: null, private: true },
     ]);
   });
+
+  it("leaves out a routine run's execution task and its automatic results thread (2026-10-22)", () => {
+    const run = { threadId: "run-1", title: "Report · Oct 22", createdAt: 2, routineRunId: "r1", resumeCursors: {} } as TaskRecord;
+    const results = { threadId: "res-1", title: "Report · Results", createdAt: 2, routineResults: true, resumeCursors: {} } as TaskRecord;
+    const withRuns = { ...me, tasks: [...me.tasks, run, results] };
+    const ids = botThreads(store, withRuns, "Milind").map((thread) => thread.threadId);
+    expect(ids).not.toContain("run-1");
+    expect(ids).not.toContain("res-1");
+    expect(ids).toContain("t-inv");
+  });
 });
 
 describe("recentWorkLines + recentWorkPrompt", () => {

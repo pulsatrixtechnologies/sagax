@@ -24,7 +24,6 @@ export function turnStdioMcpServers(turn: SendTurnInput): TurnStdioMcpServer[] {
     if (server) servers.push({ name, command: server.command, args: server.args, env: server.env ?? {} });
   };
   add("agents", turn.integrations?.agents);
-  add("composio", turn.integrations?.composio);
   add("browser", turn.integrations?.browser);
   add("data", turn.integrations?.data);
   // The bot's computer: host and sandbox Cua connections expose Cua Driver's

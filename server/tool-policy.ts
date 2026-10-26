@@ -31,7 +31,7 @@ const plain = (route: string) => route.replace(/\\\//g, "/").replace(/\\(.)/g, "
 const ADMIN_AREA = /^\^?\/api\/(org|admin|business|billing|usage|license|fleet|operator|engines|providers|keys|sso|scim|audit)(\b|[-/])/;
 const ADMIN_PART = /\/(admin|billing|rights|roles|members|invites?|secrets?|keys?|tokens?|credentials?|wipe|reset|purge|export|import|transfer|owner)(\b|\/|\$|\)|$)/;
 const DESTRUCTIVE = /\/(delete|remove|wipe|purge|reset|revoke|archive)(\b|\/|\$|\)|$)/;
-const BILLING = /\/(billing|usage|invoices?|subscription|payments?|checkout|credits)(\b|\/|\$|\)|$)/;
+const BILLING = /\/(billing|usage|spend-cap|invoices?|subscription|payments?|checkout|credits)(\b|\/|\$|\)|$)/;
 
 /** The default classification of a route (generate.ts): GET reads; a DELETE,
  * a deletion verb, org/admin/billing/credentials are admin; everything else,

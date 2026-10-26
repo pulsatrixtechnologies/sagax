@@ -2,6 +2,8 @@
 // functions, no request: when the transcript does not say it, the answer is
 // nothing (never a guess dressed as data).
 import { parseGithubUrl } from "@/lib/github-refs";
+import { isOpaqueId, sagaxFolder } from "../../../shared/human-id";
+import { sagaxFolderLabel } from "@/lib/short-path";
 import type { Message } from "@/state/store";
 import { toolKind } from "./detector";
 
@@ -164,8 +166,20 @@ export function devOutputs(messages: readonly Message[]): DevOutput[] {
   return outputs;
 }
 
-/** The last folder segment for a compact label ("/Users/me/sagax" → "sagax"). */
+/** The last folder segment for a compact label ("/Users/me/sagax" →
+ * "sagax"), never an id: a folder Sagax made and named after the bot or the
+ * conversation reads as what it is (sagaxFolderLabel), another id segment
+ * gives way to the nearest readable one above it. */
 export function folderLabel(path: string): string {
+  const sagax = sagaxFolder(path);
+  if (sagax) return [...sagax.rest].reverse().find((part) => !isOpaqueId(part)) ?? sagaxFolderLabel(sagax.kind);
   const parts = path.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean);
-  return parts.at(-1) ?? path;
+  const readable = [...parts].reverse().find((part) => !isOpaqueId(part));
+  return readable ?? (parts.length ? sagaxFolderLabel("bot") : path);
+}
+
+/** A branch Sagax made for a parallel task is named after the conversation
+ * id (sagax/parallel-<id>): it reads as a parallel task's branch. */
+export function isParallelTaskBranch(branch: string): boolean {
+  return /^sagax\/parallel-[\w-]+$/.test(branch);
 }

@@ -92,7 +92,12 @@ export type RunnerEvent =
 export type RunnerCommand =
   | { seq: number; kind: "followup"; data: { text: string; mode: FollowupMode } }
   | { seq: number; kind: "approve"; data: { approval_id: string; option: string } }
-  | { seq: number; kind: "stop"; data: Record<string, never> };
+  | { seq: number; kind: "stop"; data: Record<string, never> }
+  /** An admin extended the run's duration: what this Pod has left now. */
+  | { seq: number; kind: "limits"; data: { max_duration_sec: number } };
+
+/** The hard cap of a run (Perspicax: 12 h). */
+export const RUN_HARD_MAX_SEC = 12 * 3600;
 
 export interface BundleResult {
   status: "received" | "pushed" | "refused";
@@ -263,6 +268,11 @@ export function parseCommands(raw: unknown): { commands: RunnerCommand[]; lastSe
       out.push({ seq, kind: "approve", data: { approval_id: data.approval_id, option: data.option } });
     } else if (c.kind === "stop") {
       out.push({ seq, kind: "stop", data: {} });
+    } else if (c.kind === "limits") {
+      const sec = data.max_duration_sec;
+      if (typeof sec === "number" && Number.isSafeInteger(sec) && sec >= 1 && sec <= RUN_HARD_MAX_SEC) {
+        out.push({ seq, kind: "limits", data: { max_duration_sec: sec } });
+      }
     }
   }
   return { commands: out.sort((a, b) => a.seq - b.seq), lastSeq };

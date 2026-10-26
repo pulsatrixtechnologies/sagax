@@ -101,7 +101,7 @@ describe("buildDiagnosticsReport", () => {
 
   it("masks JSON credential fields and cookies in updater HTTP dumps", () => {
     const redacted = redactSecretsInLine([
-      '{"SAGAX_COMPOSIO_BROKER_TOKEN":"opaque-broker-value","password":"opaque-password-value"}',
+      '{"SAGAX_XAI_API_KEY":"opaque-broker-value","password":"opaque-password-value"}',
       '{"Cookie":"session=private-cookie; tracking=private-tracker"}',
       "Cookie: session=private-session; tracking=private-tracking",
     ].join("\n"));
@@ -155,7 +155,6 @@ describe("buildDiagnosticsReport", () => {
       appInfo,
       configSummary: {
         xai: { key: "xai-real-secret" },
-        composio: { apiKey: "ak_live_abcdef123456789" },
         vps: { sshAlias: "" },
         profile: { name: "Ada" },
         instances: [{ driver: "claudeAgent", environment: { TOKEN: "hunter2" } }],
@@ -164,7 +163,6 @@ describe("buildDiagnosticsReport", () => {
       logTail: "",
     });
     expect(report).not.toContain("xai-real-secret");
-    expect(report).not.toContain("ak_live_abcdef123456789");
     expect(report).not.toContain("hunter2");
     expect(report).not.toContain("driver");
     expect(report).not.toContain("environment");

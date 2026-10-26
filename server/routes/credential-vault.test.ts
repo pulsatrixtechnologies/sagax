@@ -29,6 +29,10 @@ async function serve(options: {
   exportGate?: Parameters<typeof createCredentialVaultRoutes>[0]["exportGate"];
   importGate?: Parameters<typeof createCredentialVaultRoutes>[0]["importGate"];
   exportBlocked?: () => boolean;
+  browser?: Parameters<typeof createCredentialVaultRoutes>[0]["browser"];
+  purchaseStepUp?: Parameters<typeof createCredentialVaultRoutes>[0]["purchaseStepUp"];
+  resumeFails?: boolean;
+  onePassword?: OnePassword;
 } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "sagax-vault-routes-"));
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
@@ -42,13 +46,16 @@ async function serve(options: {
     ...(options.exportGate ? { exportGate: options.exportGate } : {}),
     ...(options.importGate ? { importGate: options.importGate } : {}),
     ...(options.exportBlocked ? { exportBlocked: options.exportBlocked } : {}),
-    onePassword: new OnePassword({ env: {}, exec: async () => { throw new Error("absent"); }, organization: () => false }),
+    ...(options.browser ? { browser: options.browser } : {}),
+    ...(options.purchaseStepUp ? { purchaseStepUp: options.purchaseStepUp } : {}),
+    onePassword: options.onePassword ?? new OnePassword({ env: {}, exec: async () => { throw new Error("absent"); }, organization: () => false }),
     principal: () => options.principal === undefined ? LOCAL_VAULT_PRINCIPAL : options.principal,
     botExists: (id) => id === "bot-a",
     cards: {
       find: (_botId, threadId, messageId) => cards.get(`${threadId}:${messageId}`) ?? null,
       patch: (_botId, threadId, messageId, secret) => { cards.set(`${threadId}:${messageId}`, secret); },
       resume: (_botId, threadId, messageId, outcome, prompt) => {
+        if (options.resumeFails) return false;
         const card = cards.get(`${threadId}:${messageId}`)!;
         cards.set(`${threadId}:${messageId}`, { ...card, ...(outcome === "provided" ? { provided: true } : { dismissed: true }), resumed: true });
         resumed.push({ messageId, outcome, prompt });
@@ -141,6 +148,99 @@ describe("credential vault routes", () => {
     expect(resumed.at(-1)).toMatchObject({ outcome: "dismissed" });
   });
 
+  it("adds the asked site to a login only when the person ticks it, with Always, for another address of its own site (port of OpenMausBot #2929's card save target)", async () => {
+    const { call, cards, vault, audits, resumed } = await serve();
+    const id = (await call("POST", "/api/me/credentials", login)).body.item.id as string;
+    const card = (key: string, domain: string) => cards.set(`t1:${key}`, vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain }));
+    // Not ticked: the login keeps its sites, the bot is allowed, its fill there will be refused.
+    card("s1", "accounts.example.test");
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/s1/grant", { threadId: "t1", itemId: id, mode: "once" })).status).toBe(200);
+    expect(vault.item(LOCAL_VAULT_PRINCIPAL, id)!.domains).toEqual(["example.test"]);
+    // Ticked with a one-time grant: refused, nothing is added for good.
+    card("s2", "accounts.example.test");
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/s2/grant", { threadId: "t1", itemId: id, mode: "once", addSite: true })).body).toMatchObject({ code: "add_site_once" });
+    // A look-alike, a wildcard, a shared hosting name: never added, whatever the card says.
+    for (const domain of ["examp1e.test", "example.test.evil.test", "*.example.test", "evil.github.io"]) {
+      cards.set("t1:bad", { ...vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "x.test" }), vault: { principalId: LOCAL_VAULT_PRINCIPAL, domain } });
+      const refused = await call("POST", "/api/bots/bot-a/vault-cards/bad/grant", { threadId: "t1", itemId: id, mode: "always", addSite: true });
+      expect(refused.status, domain).toBe(400);
+    }
+    expect(vault.item(LOCAL_VAULT_PRINCIPAL, id)!.domains).toEqual(["example.test"]);
+    // Ticked with Always on another address of the same site: added, audited without the site.
+    card("s3", "accounts.example.test");
+    const added = await call("POST", "/api/bots/bot-a/vault-cards/s3/grant", { threadId: "t1", itemId: id, mode: "always", addSite: true });
+    expect(added.status).toBe(200);
+    expect(vault.item(LOCAL_VAULT_PRINCIPAL, id)!.domains).toEqual(["example.test", "accounts.example.test"]);
+    expect(audits.at(-1)).toMatchObject({ action: "credentials.grant", detail: { addedSite: true } });
+    expect(JSON.stringify(audits)).not.toContain("accounts.example.test");
+    expect(resumed.at(-1)!.prompt).toContain("accounts.example.test");
+    expect(JSON.stringify(resumed)).not.toContain(FAKE_PASSWORD);
+    // A card that names no site, or a new login, has nothing to add.
+    cards.set("t1:s4", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", name: "Example" }));
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/s4/grant", { threadId: "t1", itemId: id, mode: "always", addSite: true })).status).toBe(400);
+    card("s5", "login.example.test");
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/s5/grant", { threadId: "t1", mode: "always", addSite: true, item: { kind: "login", name: "N", password: FAKE_PASSWORD, domains: ["example.test"] } })).status).toBe(400);
+  });
+
+  it("lets the person sign in themselves: the browser is armed first, emptied at Done, and the bot resumes with no handle and no value", async () => {
+    const calls: string[] = [];
+    let armRefusal: string | null = "A bot ran a script in this browser";
+    let clearRefusal: string | null = "Give the browser back to the bot";
+    let armed = false;
+    const browser = {
+      armForPerson: async (botId: string, threadId: string) => { calls.push(`arm:${botId}:${threadId}`); if (!armRefusal) armed = true; return armRefusal; },
+      clearAfterPerson: async (botId: string, threadId: string) => { calls.push(`clear:${botId}:${threadId}`); return clearRefusal; },
+      armedForPerson: async () => armed,
+      endForPerson: async (botId: string, threadId: string) => { calls.push(`end:${botId}:${threadId}`); armed = false; },
+    };
+    const { call, cards, resumed, vault, audits } = await serve({ browser });
+    const id = (await call("POST", "/api/me/credentials", login)).body.item.id as string;
+    cards.set("t1:p1", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "example.test" }));
+    cards.set("t1:p2", vaultRequestCard({ principalId: "pr_someone_else", botName: "Ada", domain: "example.test" }));
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/p2/self-start", { threadId: "t1" })).status).toBe(403);
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/p2/signed-in", { threadId: "t1" })).status).toBe(403);
+    // Done before the browser was armed: refused, nothing settles.
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/p1/signed-in", { threadId: "t1" })).body).toMatchObject({ code: "not_armed" });
+    // A browser where a bot ran a script is refused until it restarts.
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/p1/self-start", { threadId: "t1" })).body).toMatchObject({ code: "browser_not_clean" });
+    armRefusal = null;
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/p1/self-start", { threadId: "t1" })).body).toEqual({ armed: true });
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/p1/self-status", { threadId: "t1" })).body).toEqual({ armed: true });
+    // Done while the person still holds the browser: nothing settles.
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/p1/signed-in", { threadId: "t1" })).body).toMatchObject({ code: "browser_busy" });
+    expect(resumed).toHaveLength(0);
+    clearRefusal = null;
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/p1/signed-in", { threadId: "t1" })).body).toEqual({ signedIn: true });
+    expect(calls).toEqual(["arm:bot-a:t1", "arm:bot-a:t1", "clear:bot-a:t1", "clear:bot-a:t1", "end:bot-a:t1"]);
+    expect(cards.get("t1:p1")).toMatchObject({ dismissed: true, resumed: true, vault: { signedInSelf: true } });
+    expect(resumed.at(-1)!.prompt).toContain("signed in to example.test themselves");
+    expect(resumed.at(-1)!.prompt).not.toContain("cred_");
+    expect(audits.at(-1)).toEqual({ action: "credentials.signed_in", detail: { botId: "bot-a" } });
+    expect(vault.granted(LOCAL_VAULT_PRINCIPAL, id, "bot-a", "t1")).toBe(false);
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/p1/signed-in", { threadId: "t1" })).status).toBe(409);
+  });
+
+  it("ends a person's own sign-in when a login is granted from the card instead", async () => {
+    const ended: string[] = [];
+    const { call, cards } = await serve({ browser: { armForPerson: async () => null, clearAfterPerson: async () => null, armedForPerson: async () => true, endForPerson: async (botId, threadId) => { ended.push(`${botId}:${threadId}`); } } });
+    const id = (await call("POST", "/api/me/credentials", login)).body.item.id as string;
+    cards.set("t1:g1", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "example.test" }));
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/g1/self-start", { threadId: "t1" })).status).toBe(200);
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/g1/grant", { threadId: "t1", itemId: id, mode: "once" })).status).toBe(200);
+    expect(ended).toEqual(["bot-a:t1"]);
+  });
+
+  it("marks a card signed in only once the bot was resumed, and refuses without a browser", async () => {
+    const failing = await serve({ resumeFails: true, browser: { armForPerson: async () => null, clearAfterPerson: async () => null, armedForPerson: async () => true, endForPerson: async () => {} } });
+    failing.cards.set("t1:q1", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "example.test" }));
+    expect((await failing.call("POST", "/api/bots/bot-a/vault-cards/q1/signed-in", { threadId: "t1" })).status).toBe(409);
+    expect(failing.cards.get("t1:q1")!.vault!.signedInSelf).toBeUndefined();
+    expect(failing.audits.some((row) => row.action === "credentials.signed_in")).toBe(false);
+    const none = await serve();
+    none.cards.set("t1:q2", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "example.test" }));
+    expect((await none.call("POST", "/api/bots/bot-a/vault-cards/q2/self-start", { threadId: "t1" })).body).toMatchObject({ code: "no_browser" });
+  });
+
   it("refuses a caller with no person, and keeps the routes member scope and off for agents", async () => {
     const { call } = await serve({ principal: null });
     expect((await call("POST", "/api/me/credentials/list", {})).status).toBe(403);
@@ -182,11 +282,13 @@ describe("request_login internal route", () => {
     const vault = new CredentialVault(dir, () => ({ kind: "key", key: Buffer.alloc(32, 6) }));
     const item = vault.create(LOCAL_VAULT_PRINCIPAL, login);
     const posted: SecretRequestCardData[] = [];
+    const ended: string[] = [];
     const routes = [createCredentialVaultInternalRoutes({
       vault,
       principalForThread: () => LOCAL_VAULT_PRINCIPAL,
       botName: () => "Ada",
       postCard: (_botId, _threadId, secret) => { posted.push(secret); return `m${posted.length}`; },
+      endPersonSignIn: async (botId, threadId) => { ended.push(`${botId}:${threadId}`); },
     })];
     const ask = async (body: Record<string, unknown>) => {
       let answer: { status: number; body: unknown } | null = null;
@@ -204,6 +306,8 @@ describe("request_login internal route", () => {
     const first = await ask({ domain: "example.test", reason: "to read the invoice" });
     expect(first.status).toBe(201);
     expect(posted[0]).toMatchObject({ target: "vaultLogin", vault: { domain: "example.test", principalId: LOCAL_VAULT_PRINCIPAL } });
+    // A newer card replaces the open one: a person's own sign-in begun from it ends.
+    expect(ended).toEqual(["bot-a:t1"]);
     vault.grant(LOCAL_VAULT_PRINCIPAL, item.id, { botId: "bot-a", mode: "always" });
     const second = await ask({ domain: "example.test" });
     expect(second).toMatchObject({ status: 200, body: { granted: [{ handle: vaultHandle(item.id), name: "Example", domains: ["example.test"], fields: ["username", "password", "totp"] }] } });
@@ -277,6 +381,31 @@ describe("import and export routes", () => {
     expect(exports).toEqual([{ action: "credentials.export", detail: { format: "bitwarden-json", count: 1, referencesLeftOut: 0, notInFormat: 0 } }]);
   });
 
+  it("answers a purchase only with the security key when the person chose money (parity A12, #648 and #932)", async () => {
+    let refuse = true;
+    const asked: Array<{ detail: Record<string, unknown>; stepUp: unknown }> = [];
+    const { call, vault } = await serve({
+      purchaseStepUp: (_auth, detail, stepUp) => {
+        asked.push({ detail, stepUp });
+        return refuse ? { status: 403, body: { code: "step_up_required", target: { kind: "settings", action: "purchase.allow", detail } } } : null;
+      },
+    });
+    const saved = vault.create(LOCAL_VAULT_PRINCIPAL, { kind: "card", name: "Shop card", card: { pan: "4242424242424242", cvv: "123", expMonth: 12, expYear: 2030, holder: "Ada Lovelace" } });
+    const opened = vault.openPurchase(LOCAL_VAULT_PRINCIPAL, { botId: "bot-a", threadId: "thread-1", pageUrl: "https://shop.example.test/pay", amount: "4", currency: "USD", cardId: saved.id });
+    const path = `/api/me/credentials/purchases/${opened.listing.id}/answer`;
+    const refused = await call("POST", path, { decision: "once" });
+    expect(refused.status).toBe(403);
+    expect(refused.body).toMatchObject({ code: "step_up_required", target: { action: "purchase.allow" } });
+    expect(refused.text).not.toContain("4242424242424242");
+    // nothing was answered: the purchase still waits
+    expect(vault.pendingPurchases(LOCAL_VAULT_PRINCIPAL).map((row) => row.id)).toEqual([opened.listing.id]);
+    refuse = false;
+    const answered = await call("POST", path, { decision: "once", stepUp: "ceremony-id" });
+    expect(answered.status).toBe(200);
+    expect(asked.at(-1)).toEqual({ detail: { purchaseId: opened.listing.id, decision: "once" }, stepUp: "ceremony-id" });
+    expect(vault.pendingPurchases(LOCAL_VAULT_PRINCIPAL)).toEqual([]);
+  });
+
   it("refuses every export when the organization turned exports off, before the gate, and says so in the list (2026-10-18)", async () => {
     let blocked = true;
     let gateAsked = 0;
@@ -309,5 +438,131 @@ describe("import and export routes", () => {
       expect(requiredScope("GET", path)).toBe("admin");
       for (const row of TOOL_POLICY_ROWS.filter((entry) => entry.route === path)) expect(row).toMatchObject({ tier: "admin", defaultEnabled: false });
     }
+  });
+});
+
+describe("1Password per request on the card (parité R10, ligne 82)", () => {
+  // Fake 1Password: two items for example.test, one for elsewhere.test. No
+  // value is ever listed; a read would be `item get`, which this test never
+  // answers.
+  const fakeOp = (reads: string[][]) => new OnePassword({
+    env: { HOME: "/tmp" },
+    organization: () => false,
+    locate: async () => "/opt/homebrew/bin/op",
+    exec: async (_binary, args) => {
+      reads.push(args);
+      if (args[0] === "--version") return "2.30.0";
+      if (args[0] === "account") return JSON.stringify([{ url: "my.1password.example" }]);
+      if (args[0] === "item" && args[1] === "list") {
+        return JSON.stringify([
+          { id: "aaaa1111", title: "Example work", category: "LOGIN", vault: { id: "vlt1", name: "Travail" }, urls: [{ href: "https://example.test/login" }] },
+          { id: "bbbb2222", title: "Example admin", category: "LOGIN", vault: { id: "vlt2", name: "Perso" }, urls: [{ href: "https://admin.example.test" }] },
+          { id: "cccc3333", title: "Elsewhere", category: "LOGIN", vault: { id: "vlt1", name: "Travail" }, urls: [{ href: "https://elsewhere.test" }] },
+        ]);
+      }
+      throw new Error("unexpected 1Password call");
+    },
+  });
+
+  it("lists the site's 1Password items by name and vault, never a value", async () => {
+    const reads: string[][] = [];
+    const { call, cards } = await serve({ onePassword: fakeOp(reads) });
+    cards.set("t1:m1", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "example.test" }));
+    const listed = await call("POST", "/api/bots/bot-a/vault-cards/m1/onepassword", { threadId: "t1" });
+    expect(listed.status).toBe(200);
+    expect(listed.body.available).toBe(true);
+    expect(listed.body.items.map((item: { title: string }) => item.title)).toEqual(["Example work", "Example admin"]);
+    expect(listed.body.items[0]).toMatchObject({ vaultName: "Travail", domains: ["example.test"] });
+    expect(reads.some((args) => args.includes("--reveal") || args[1] === "get")).toBe(false);
+  });
+
+  it("allows one request from a 1Password item, reusing its reference", async () => {
+    const { call, cards, resumed, vault } = await serve({ onePassword: fakeOp([]) });
+    cards.set("t1:m1", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "example.test" }));
+    cards.set("t1:m2", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "example.test" }));
+    const once = await call("POST", "/api/bots/bot-a/vault-cards/m1/grant", { threadId: "t1", mode: "once", onePassword: { vaultId: "vlt1", itemId: "aaaa1111" } });
+    expect(once.status).toBe(200);
+    expect(once.body.item).toMatchObject({ name: "Example work", source: "1password" });
+    const id = once.body.item.id as string;
+    expect(vault.granted(LOCAL_VAULT_PRINCIPAL, id, "bot-a", "t1")).toBe(true);
+    expect(vault.granted(LOCAL_VAULT_PRINCIPAL, id, "bot-a", "t2")).toBe(false);
+    expect(cards.get("t1:m1")).toMatchObject({ provided: true, vault: { itemName: "Example work", mode: "once", onePassword: true } });
+    expect(resumed[0]!.prompt).toContain("1Password");
+    // the item's own title never reaches the bot
+    expect(resumed[0]!.prompt).not.toContain("Example work");
+    const again = await call("POST", "/api/bots/bot-a/vault-cards/m2/grant", { threadId: "t1", mode: "once", onePassword: { vaultId: "vlt1", itemId: "aaaa1111" } });
+    expect(again.body.item.id).toBe(id);
+    expect(vault.list(LOCAL_VAULT_PRINCIPAL)).toHaveLength(1);
+  });
+
+  it("refuses an item of another site, a forged id or an unavailable 1Password", async () => {
+    const { call, cards } = await serve({ onePassword: fakeOp([]) });
+    cards.set("t1:m1", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "example.test" }));
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/m1/grant", { threadId: "t1", mode: "once", onePassword: { vaultId: "vlt1", itemId: "cccc3333" } })).status).toBe(404);
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/m1/grant", { threadId: "t1", mode: "once", onePassword: { vaultId: "../x", itemId: "aaaa1111" } })).status).toBe(404);
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/m1/grant", { threadId: "t1", mode: "always", addSite: true, onePassword: { vaultId: "vlt1", itemId: "aaaa1111" } })).status).toBe(400);
+    const off = await serve();
+    off.cards.set("t1:m1", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "example.test" }));
+    expect((await off.call("POST", "/api/bots/bot-a/vault-cards/m1/onepassword", { threadId: "t1" })).body).toMatchObject({ available: false, items: [] });
+    expect((await off.call("POST", "/api/bots/bot-a/vault-cards/m1/grant", { threadId: "t1", mode: "once", onePassword: { vaultId: "vlt1", itemId: "aaaa1111" } })).status).toBe(409);
+  });
+
+  it("allows a 1Password item once only, from the card or Settings (review of #954)", async () => {
+    const { call, cards, vault } = await serve({ onePassword: fakeOp([]) });
+    cards.set("t1:m1", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "example.test" }));
+    const always = await call("POST", "/api/bots/bot-a/vault-cards/m1/grant", { threadId: "t1", mode: "always", onePassword: { vaultId: "vlt1", itemId: "aaaa1111" } });
+    expect(always.body).toMatchObject({ code: "onepassword_once_only" });
+    const once = await call("POST", "/api/bots/bot-a/vault-cards/m1/grant", { threadId: "t1", mode: "once", onePassword: { vaultId: "vlt1", itemId: "aaaa1111" } });
+    const id = once.body.item.id as string;
+    cards.set("t1:m2", vaultRequestCard({ principalId: LOCAL_VAULT_PRINCIPAL, botName: "Ada", domain: "example.test" }));
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/m2/grant", { threadId: "t1", mode: "always", itemId: id })).body).toMatchObject({ code: "onepassword_once_only" });
+    expect((await call("POST", `/api/me/credentials/${id}/grants`, { botId: "bot-a", mode: "always" })).body).toMatchObject({ code: "onepassword_once_only" });
+    expect(vault.list(LOCAL_VAULT_PRINCIPAL)[0]!.grants).toEqual([expect.objectContaining({ mode: "once" })]);
+  });
+
+  it("a 1Password grant is one sign-in: it ends a minute after its first fill (review of #954)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-vault-single-"));
+    cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+    let now = 1_000_000;
+    const vault = new CredentialVault(dir, () => ({ kind: "key", key: Buffer.alloc(32, 5) }), () => now);
+    const item = vault.create(LOCAL_VAULT_PRINCIPAL, { kind: "login", name: "Example work", domains: ["example.test"] }, { source: "1password", onePassword: { via: "cli", vaultId: "vlt1", itemId: "aaaa1111" } });
+    vault.grant(LOCAL_VAULT_PRINCIPAL, item.id, { botId: "bot-a", mode: "once", threadId: "t1", singleUse: true });
+    const read = async () => "fake-1p-value";
+    const fill = (field: "username" | "password") => vault.resolveForFill(LOCAL_VAULT_PRINCIPAL, { handle: vaultHandle(item.id), field, botId: "bot-a", threadId: "t1", pageUrl: "https://example.test/login" }, read);
+    expect((await fill("username")).ok).toBe(true);
+    now += 30_000;
+    expect((await fill("password")).ok).toBe(true);
+    now += 31_000;
+    expect(await fill("password")).toMatchObject({ ok: false, code: "not_granted" });
+  });
+
+  it("ignores an Always saved on a 1Password item before, and never names the item to the bot (re-review of #954)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-vault-legacy-"));
+    cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+    const now = 2_000_000;
+    const vault = new CredentialVault(dir, () => ({ kind: "key", key: Buffer.alloc(32, 5) }), () => now);
+    const item = vault.create(LOCAL_VAULT_PRINCIPAL, { kind: "login", name: "Secret Payroll Portal", domains: ["example.test"] }, { source: "1password", onePassword: { via: "cli", vaultId: "vlt1", itemId: "aaaa1111" } });
+    // an Always written by an earlier version, straight into the store
+    (vault as unknown as { mutate(p: string, f: (items: Record<string, { grants: unknown[] }>) => void): void }).mutate(LOCAL_VAULT_PRINCIPAL, (items) => {
+      items[item.id]!.grants.push({ botId: "bot-a", mode: "always", grantedAt: now });
+    });
+    expect(vault.granted(LOCAL_VAULT_PRINCIPAL, item.id, "bot-a", "t1")).toBe(false);
+    const read = async () => null;
+    const fill = (pageUrl: string) => vault.resolveForFill(LOCAL_VAULT_PRINCIPAL, { handle: vaultHandle(item.id), field: "password", botId: "bot-a", threadId: "t1", pageUrl }, read);
+    const refused = await fill("https://example.test/login");
+    expect(refused).toMatchObject({ ok: false, code: "not_granted" });
+    expect(JSON.stringify(refused)).not.toContain("Payroll");
+    vault.grant(LOCAL_VAULT_PRINCIPAL, item.id, { botId: "bot-a", mode: "once", threadId: "t1", singleUse: true });
+    for (const [url, code] of [["https://other.test/", "wrong_origin"], ["https://example.test/login", "no_value"]] as const) {
+      const answer = await fill(url);
+      expect(answer).toMatchObject({ ok: false, code });
+      expect(JSON.stringify(answer)).not.toContain("Payroll");
+    }
+  });
+
+  it("only the person the card was made for sees its 1Password items", async () => {
+    const { call, cards } = await serve({ onePassword: fakeOp([]) });
+    cards.set("t1:m2", vaultRequestCard({ principalId: "pr_someone_else", botName: "Ada", domain: "example.test" }));
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/m2/onepassword", { threadId: "t1" })).status).toBe(403);
   });
 });

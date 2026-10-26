@@ -122,9 +122,10 @@ export function createAppIconStore(userData, { fsImpl = fs, now = () => Date.now
 /**
  * Put an icon on screen. `saved` null restores the default. macOS sets the
  * Dock tile (null hands it back to the bundle's own icon, Liquid Glass
- * included); Windows and Linux set every window, so the taskbar follows.
+ * included); Windows and Linux set every window, so the taskbar follows,
+ * and the notification-area icon (`tray`) when there is one.
  */
-export function applyAppIcon(saved, { platform, app, windows, nativeImage, defaultIconPath, defaultDockIcon = null }) {
+export function applyAppIcon(saved, { platform, app, windows, nativeImage, defaultIconPath, defaultDockIcon = null, tray = null }) {
   if (platform === "darwin") {
     if (!app?.dock) return "none";
     if (saved?.png) app.dock.setIcon(nativeImage.createFromPath(saved.png));
@@ -133,10 +134,26 @@ export function applyAppIcon(saved, { platform, app, windows, nativeImage, defau
     else app.dock.setIcon(defaultDockIcon ?? null);
     return "dock";
   }
-  const source = platform === "win32" ? (saved?.ico ?? saved?.png) : saved?.png;
-  const image = nativeImage.createFromPath(source ?? defaultIconPath);
+  const image = windowIconImage(saved, platform, nativeImage, defaultIconPath);
   for (const win of windows) if (win && !win.isDestroyed?.()) win.setIcon(image);
+  if (tray) tray.setIcon(image);
   return "windows";
+}
+
+/**
+ * The image Windows and Linux windows (and the tray) wear. Windows reads the
+ * .ico; when that file cannot be decoded (Electron then hands back an empty
+ * image, and setIcon(empty) silently keeps the old icon) the largest PNG
+ * stands in, and the app's own icon is the last resort.
+ */
+export function windowIconImage(saved, platform, nativeImage, defaultIconPath) {
+  const candidates = platform === "win32" ? [saved?.ico, saved?.png] : [saved?.png];
+  for (const source of candidates) {
+    if (!source) continue;
+    const image = nativeImage.createFromPath(source);
+    if (!image?.isEmpty?.()) return image;
+  }
+  return nativeImage.createFromPath(defaultIconPath);
 }
 
 /** The icon path new windows open with (Windows, Linux). */

@@ -15,6 +15,7 @@ enum AttentionPrefs {
     static let badgeKey = "companion.prefs.appBadge"
     static let nudgeSoundKey = "companion.prefs.nudgeSound"
     static let nudgeHapticKey = "companion.prefs.nudgeHaptic"
+    static let approvalChimeKey = "companion.prefs.approvalChime"
 
     static var settings: AttentionSettings {
         let defaults = UserDefaults.standard
@@ -22,8 +23,16 @@ enum AttentionPrefs {
             sound: NotificationSounds.isEnabled,
             badge: defaults.object(forKey: badgeKey) as? Bool ?? true,
             nudgeSound: defaults.object(forKey: nudgeSoundKey) as? Bool ?? true,
-            nudgeHaptic: defaults.object(forKey: nudgeHapticKey) as? Bool ?? true
+            nudgeHaptic: defaults.object(forKey: nudgeHapticKey) as? Bool ?? true,
+            approvalChime: defaults.object(forKey: approvalChimeKey) as? Bool ?? true
         )
+    }
+}
+
+/// The approval banner's own sound. On unless this phone turned it off.
+enum ApprovalChime {
+    static var isEnabled: Bool {
+        UserDefaults.standard.object(forKey: AttentionPrefs.approvalChimeKey) as? Bool ?? true
     }
 }
 
@@ -144,6 +153,7 @@ struct NotificationsSettingsView: View {
     @AppStorage(AttentionPrefs.badgeKey) private var badge = true
     @AppStorage(AttentionPrefs.nudgeSoundKey) private var nudgeSound = true
     @AppStorage(AttentionPrefs.nudgeHapticKey) private var nudgeHaptic = true
+    @AppStorage(AttentionPrefs.approvalChimeKey) private var approvalChime = true
 
     var body: some View {
         SettingsPage(title: "Notifications") {
@@ -163,6 +173,16 @@ struct NotificationsSettingsView: View {
                         }
                     })),
                     identifier: "settings-notification-sounds"
+                )
+                CardHairline(leadingInset: SettingsMetrics.rowInset)
+                SettingsRow(
+                    title: "Approval chime",
+                    subtitle: "A distinct sound when an approval is waiting.",
+                    accessory: .toggle(Binding(get: { approvalChime }, set: { value in
+                        approvalChime = value
+                        Task { await PushRegistrar.shared.sync() }
+                    })),
+                    identifier: "settings-approval-chime"
                 )
                 CardHairline(leadingInset: SettingsMetrics.rowInset)
                 SettingsRow(

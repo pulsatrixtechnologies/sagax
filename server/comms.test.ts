@@ -610,7 +610,6 @@ describe("routine comms e2e on the job runtime (fake ACP fleet)", () => {
         title: "Product designer",
         description: "Design and review the user experience.",
         section: "Launch",
-        composio: false,
         // Sagax: a bot made through the team setup card starts on Approve for me
         approvalMode: "auto",
         approvePeerComms: false,

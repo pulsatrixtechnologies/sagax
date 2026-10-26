@@ -101,6 +101,12 @@ function GithubCard({ data, onChanged }: { data: MyConnections; onChanged: () =>
             {!locked && <button type="button" className="ui-button" disabled={busy} onClick={() => void run(disconnectGithub)}>{t("myConnections.github.disconnect")}</button>}
           </div>
         )}
+        {github.state === "connected" && github.orgAccessUrl && (
+          <div><button type="button" className="ui-button" data-github-org-access onClick={() => void openExternalLink(github.orgAccessUrl!)}>{t("myConnections.github.orgAccess")}</button></div>
+        )}
+        {github.state === "connected" && github.fineGrained && (
+          <p role="status" className="text-[12px] leading-relaxed text-warning" data-github-fine-grained>{t("myConnections.github.fineGrained", { login: github.login })}</p>
+        )}
         {github.state === "pending" && (
           <div className="flex flex-col gap-2" data-github-code>
             <span className="text-ink-secondary">{t("myConnections.github.typeCode")}</span>

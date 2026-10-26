@@ -39,6 +39,7 @@ export function emailSendErrorText(failure: unknown): string {
     if (failure.body?.code === "no_mail_connector") return t("rich.email.noConnector");
     if (failure.body?.code === "invalid_draft") return t("rich.email.invalid", { detail: failure.message });
     if (failure.body?.code === "email_draft_owner_only") return t("rich.email.ownerOnly");
+    if (failure.body?.code === "email_drafts_off") return t("rich.email.draftsOff");
   }
   return failure instanceof Error ? failure.message : String(failure);
 }
@@ -118,12 +119,14 @@ function HeaderRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function EmailCardComponent({ draft: written, pending = false, threadId, botId }: {
+function EmailCardComponent({ draft: written, pending = false, threadId, botId, draftsEnabled = true }: {
   draft: EmailDraft;
   pending?: boolean;
   /** The conversation and bot the draft is in: without them there is no send. */
   threadId?: string;
   botId?: string;
+  /** False: this bot's drafts are off. The card stays, Send does not. */
+  draftsEnabled?: boolean;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const { copied, copy } = useCopyFeedback();
@@ -136,7 +139,7 @@ function EmailCardComponent({ draft: written, pending = false, threadId, botId }
   // a reload even when the person edited it before sending
   const { state: send, ask } = useDraftSend(threadId, botId, emailDraftKey(written));
   const locked = send !== null && send.status !== "failed" && send.status !== "denied";
-  const canSend = Boolean(threadId) && !pending && draft.to.length > 0;
+  const canSend = draftsEnabled && Boolean(threadId) && !pending && draft.to.length > 0;
   const field = (key: "to" | "cc" | "bcc", value: string) => setEdited({ ...draft, [key]: splitAddresses(value) });
 
   const copyRich = () => {
@@ -152,8 +155,10 @@ function EmailCardComponent({ draft: written, pending = false, threadId, botId }
       <header className="flex items-center gap-2 border-b border-hairline/30 bg-raised/30 px-3 py-2 text-[12px] text-ink-secondary">
         <Mail size={14} aria-hidden="true" />
         <span className="font-medium text-ink">{t("rich.email.title")}</span>
+        {draft.to.length > 0 && <span data-email-created-for className="min-w-0 truncate">{t("rich.email.createdFor", { who: draft.to.join(", ") })}</span>}
         {pending && <span className="ms-auto text-[11px]">{t("rich.pending")}</span>}
       </header>
+      {!draftsEnabled && <p role="status" data-email-drafts-off className="border-b border-hairline/30 px-3 py-2 text-[12px] text-ink-secondary">{t("rich.email.draftsOff")}</p>}
       {editing ? (
         <div className="flex flex-col gap-1.5 border-b border-hairline/30 px-3 py-2" data-email-editor>
           {(["to", "cc", "bcc"] as const).map((key) => (
@@ -287,5 +292,5 @@ function escapeHtml(value: string): string {
 }
 
 export const EmailCard = memo(EmailCardComponent, (previous, next) =>
-  previous.pending === next.pending && previous.threadId === next.threadId && previous.botId === next.botId
+  previous.pending === next.pending && previous.threadId === next.threadId && previous.botId === next.botId && previous.draftsEnabled === next.draftsEnabled
   && JSON.stringify(previous.draft) === JSON.stringify(next.draft));

@@ -21,6 +21,45 @@ export function resultBudget(env: NodeJS.ProcessEnv = process.env): number {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : DEFAULT_RESULT_BUDGET;
 }
 
+/** The budget for one bot-owned server: its own `resultBudget` (from the
+ * MCP server editor; 0 = never trim), else the app-wide one above. A tool
+ * that returns big structured documents needs more than the default; a
+ * shopping search needs less. */
+export function serverResultBudget(
+  name: string,
+  perServer: Readonly<Record<string, number>> | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const own = perServer && Object.hasOwn(perServer, name) ? perServer[name] : undefined;
+  if (typeof own === "number" && Number.isFinite(own) && own >= 0) return Math.floor(own);
+  return resultBudget(env);
+}
+
+/** Whether `name` has a positive result limit of its own. Only then is an
+ * unselected URL server gated: without one it keeps its native transport,
+ * as it always has (gateServer's `gateRemote`). */
+export function hasOwnResultBudget(name: string, perServer: Readonly<Record<string, number>> | undefined): boolean {
+  const own = perServer && Object.hasOwn(perServer, name) ? perServer[name] : undefined;
+  return typeof own === "number" && Number.isFinite(own) && own >= 1;
+}
+
+/** How a driver gates one MCP server of a turn. A server the person added
+ * (`owned`) gets its own result limit (MCP server editor, Result size
+ * limit), else the app-wide one; a URL server keeps its native connection
+ * unless its own limit was set, which must then hold, so it is gated even
+ * unselected. Anything else is left alone. */
+export function customServerGate(
+  name: string,
+  owned: boolean,
+  perServer: Readonly<Record<string, number>> | undefined,
+  env?: NodeJS.ProcessEnv,
+): { budget: number; gateRemote: boolean } {
+  return {
+    budget: owned ? serverResultBudget(name, perServer, env) : 0,
+    gateRemote: owned && hasOwnResultBudget(name, perServer),
+  };
+}
+
 /** Where a thread's oversized results are kept so the bot can read them back.
  * Under the app's data directory, not the user's project folder: these are
  * the harness's spill, and it sweeps them after a day. */
@@ -169,6 +208,9 @@ export function gateServer(input: {
    * call not in readOnly waits for an approval card. Mounts the gate always;
    * never returns null, so an approval-gated server can never run ungated. */
   approval?: { socket: string; token: string; readOnly: readonly string[] };
+  /** Gate a URL server even without a selection: the person set a result
+   * limit for this server (hasOwnResultBudget), so it must hold. */
+  gateRemote?: boolean;
 }): { command: string; args: string[]; env: Record<string, string> } | null {
   const { name, server, budget } = input;
   const parsed = parseToolScope(input.toolScope);
@@ -178,7 +220,7 @@ export function gateServer(input: {
   const approval = input.approval;
   if (approval && (!approval.socket || !approval.token)) throw new Error("An approval gate needs its socket and token.");
   if (budget <= 0 && !scoped && !aliased && !approval) return null;
-  if (!scoped && !aliased && !approval && remoteMcpSpec(server)) return null;
+  if (!scoped && !aliased && !approval && input.gateRemote !== true && remoteMcpSpec(server)) return null;
   // The directory is the remote proxy's; it sits inside the gate, which
   // knows to look through call_tool at the tool underneath.
   const directory = input.directory === true && remoteMcpSpec(server) !== undefined;

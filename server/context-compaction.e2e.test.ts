@@ -232,3 +232,33 @@ it.each([
     expect(f.turns().at(-1).resumed).toBe(false);
   }
 }, false, { FAKE_CLAUDE_CONTEXT_TOKENS: String(tokens) }), 90_000);
+
+it("never resumes a stale engine session: a new one from the summary, unfinished work left to the person", () => fixture(async f => {
+  await f.send("FIRST_EXCHANGE the project is Atlas");
+  await f.send("SECOND_EXCHANGE keep verbatim");
+  await f.send("PENDING_WORK sign me in to GitHub");
+  const oldSession = f.task().resumeCursors.claude;
+  expect(oldSession).toBeTruthy();
+  // About a second of quiet is enough for this check.
+  await f.api("/api/config", { context: { staleSessionHours: 0.0003 } }, "PATCH");
+  await new Promise(resolve => setTimeout(resolve, 1_500));
+  await f.send("Hello");
+  const hello = f.turns().at(-1);
+  expect(hello.resumed).toBe(false);
+  const prompt = String(hello.prompt.message.content);
+  expect(prompt).toContain("resumed after a pause");
+  expect(prompt).not.toContain("Continue exactly where you left off");
+  expect(prompt).toContain("Earlier conversation summary");
+  expect(prompt).toContain("FIRST_EXCHANGE");
+  expect(prompt).toContain("PENDING_WORK");
+  expect(f.task().resumeCursors.claude).not.toBe(oldSession);
+  // Invisible: no chat row.
+  expect((await f.messages()).filter(m => m.kind === "compaction")).toHaveLength(0);
+  expect(f.folds()).toHaveLength(1);
+  // Back on the default: the new session is resumed as usual.
+  await f.api("/api/config", { context: { staleSessionHours: 6 } }, "PATCH");
+  const newSession = f.task().resumeCursors.claude;
+  await f.send("And the next step?");
+  expect(f.task().resumeCursors.claude).toBe(newSession);
+  expect(String(f.turns().at(-1).prompt.message.content)).not.toContain("Earlier conversation summary");
+}), 90_000);

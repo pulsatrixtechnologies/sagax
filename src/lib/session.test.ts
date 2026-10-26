@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  BROWSER_SIGN_IN_FAILED, cloudOwnerOf, markSignInCredentialSpent, pairWithCode, previewSignInPerson, signInCredentialSpent, signInPreviewSupported, isConnected, isOwnerOrAdmin, previewBrowserSignIn, pulsatrixLoginPath, readSessionState, reasonWorthShowing, SERVICE_TRUST_REASON, signInWithBrowserGrant,
+  BROWSER_SIGN_IN_FAILED, cloudOwnerOf, markSignInCredentialSpent, pairWithCode, previewSignInPerson, signInCredentialSpent, signInPreviewSupported, isConnected, isOwnerOrAdmin, previewBrowserSignIn, pulsatrixLoginPath, readSessionState, reasonWorthShowing, resolveSessionState, signInScreenDue, SERVICE_TRUST_REASON, signInWithBrowserGrant,
   takeBrowserSignInFromLocation, takeInvitedEmailFromLocation, takePairingCodeFromLocation, takeSignInErrorFromLocation, type EnvironmentDescriptor,
 } from "./session";
+import { UNKNOWN_SESSION_RETRIES } from "../../shared/session-refusal";
 
 describe("what the pair page says about why it was shown", () => {
   it("stays quiet for the ordinary no-session case and repeats anything else", () => {
@@ -178,5 +179,59 @@ describe("previewing a Sagax Business return credential (2026-10-13, desktop 0.5
     markSignInCredentialSpent("ABCD-EFGH-JKLM");
     expect(signInCredentialSpent("ABCD-EFGH-JKLM")).toBe(false);
     vi.unstubAllGlobals();
+  });
+});
+
+// 2026-10-20 (JC: signed out only when the session is revoked, the account
+// disabled or after 30 days without use): the web app and the desktop's
+// server window decide at boot from /api/auth/session.
+describe("whether the sign-in screen shows: silent retries, definitive codes only", () => {
+  const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  const scripted = (answers: Array<Response | Error>) => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      const next = answers[Math.min(calls, answers.length - 1)]!;
+      calls += 1;
+      if (next instanceof Error) throw next;
+      return next.clone();
+    }) as unknown as typeof fetch;
+    return { fetchImpl, calls: () => calls };
+  };
+  const instant = { sleep: async () => {}, random: () => 0.5 };
+  const session = { kind: "session", id: "s1", label: "web", scopes: ["client"], expiresAt: 1 };
+
+  it("redéploiement Sagax : 503 et réseau coupé sont réessayés en silence, puis la session revient", async () => {
+    const server = scripted([new TypeError("fetch failed"), reply(503, { code: "idp_recheck_pending" }), reply(502, {}), reply(200, session)]);
+    const state = await resolveSessionState({ fetchImpl: server.fetchImpl, ...instant });
+    expect(state).toMatchObject({ kind: "session", id: "s1" });
+    expect(server.calls()).toBe(4);
+  });
+
+  it("a session this server does not know is retried; the sign-in screen only if it persists", async () => {
+    const back = scripted([reply(401, { code: "session_unknown" }), reply(200, session)]);
+    expect(await resolveSessionState({ fetchImpl: back.fetchImpl, ...instant })).toMatchObject({ kind: "session" });
+    const gone = scripted([reply(401, { code: "session_unknown" })]);
+    expect(await resolveSessionState({ fetchImpl: gone.fetchImpl, ...instant })).toMatchObject({ kind: "unauthenticated", code: "session_unknown" });
+    expect(gone.calls()).toBe(UNKNOWN_SESSION_RETRIES);
+    // an older server's 401 without a code: the same
+    const older = scripted([reply(401, { error: "unauthorized" })]);
+    expect(await resolveSessionState({ fetchImpl: older.fetchImpl, ...instant })).toMatchObject({ kind: "unauthenticated" });
+    expect(older.calls()).toBe(UNKNOWN_SESSION_RETRIES);
+  });
+
+  it("révocation -> déconnexion : a definitive code shows the sign-in screen at once", async () => {
+    for (const code of ["session_revoked", "session_expired", "idp_session_ended", "principal_disabled", "sign_in_required"]) {
+      const server = scripted([reply(401, { code, error: "x" })]);
+      expect(await resolveSessionState({ fetchImpl: server.fetchImpl, ...instant })).toMatchObject({ kind: "unauthenticated", code });
+      expect(server.calls()).toBe(1);
+    }
+  });
+
+  it("a server that stays down opens the app after the budget (it keeps reconnecting), never the sign-in screen", async () => {
+    const down = scripted([new TypeError("fetch failed")]);
+    const state = await resolveSessionState({ fetchImpl: down.fetchImpl, unreachableBudgetMs: 10_000, ...instant });
+    expect(state.kind).toBe("unreachable");
+    expect(signInScreenDue(state, 99)).toBe(false);
+    expect(down.calls()).toBeGreaterThan(2);
   });
 });

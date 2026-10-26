@@ -21,21 +21,23 @@
 // plugins, servers, apps, skills and marketplaces. Other screens link here
 // or choose among them for one bot; keys stay in Settings > API keys.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Loader2, TriangleAlert, X } from "lucide-react";
+import { ExternalLink, Loader2, X } from "lucide-react";
 
 import { api, ApiError, useStore } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { managedConnectorUnavailableReason } from "../../shared/connector-availability";
+import { readableOr } from "../../shared/human-id";
 import { isWhopServer } from "@/lib/whop-integration";
 import { skillsLibraryEnabled } from "@/lib/feature-flags";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { viewerCan } from "@/lib/viewer";
 import { permissionMissingText } from "@/lib/permissions";
-import { connectorToolRows, loadConnectorTools, saveDisabledTools, toggledDisabledTools, type ConnectorToolsInventory } from "@/lib/connector-tool-switches";
 import type { SkillsLibrarySkillWire } from "../../shared/wire";
-import { WHOP_KEY, buildPluginItems, marketplacePluginKey, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
+import { WHOP_KEY, buildPluginItems, isGrokConnector, marketplacePluginKey, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
+import { GROK_CLOUD_CONNECTORS, GROK_CONNECTORS_URL } from "../../shared/grok-cloud-connectors";
+import { grokProviderConfigured } from "@/lib/providers-model";
+import { openExternalLink } from "@/lib/app-links";
 import {
   addMarketplace as addBotMarketplace,
   installPlugin as installBotPlugin,
@@ -44,10 +46,12 @@ import {
   removeMarketplace as removeBotMarketplace,
   removeMarketplaceToken as removeBotMarketplaceToken,
   setMarketplaceToken as setBotMarketplaceToken,
+  setPluginConfig as setBotPluginConfig,
   setPluginEnabled as setBotPluginEnabled,
   uninstallPlugin as uninstallBotPlugin,
   updateMarketplace as updateBotMarketplace,
   type BotPluginsView,
+  type MarketplaceVisibility,
 } from "@/lib/my-connections";
 import { botPluginState, botScopeMarketplaces, initialPluginScope, marketplaceRoute, pluginScopeBot, workspaceMarketplaceTokens, type PluginScope } from "@/lib/plugin-scope";
 import {
@@ -66,16 +70,6 @@ import {
 import { IntegrationsManagedNotice, MyConnectionsSettings } from "./settings/MyConnectionsSettings";
 import { useServerMode } from "./ServerModeSettings";
 import { ProvidersSection } from "./plugins/ProvidersSection";
-import { requestSettingsCard } from "./SettingsPrimitives";
-import {
-  botsMissingConnectedApps,
-  botsWithLimitedServiceTools,
-  connectorActionLabel,
-  disconnectAccountConfirmation,
-  hasUsableConnectedApps,
-  useConnectedApps,
-  type ConnectedApps,
-} from "./plugins/connected-apps";
 import { ConnectAppsView, sectionTitle } from "./plugins/ConnectAppsView";
 import type { Crumb } from "./Breadcrumb";
 import { CATEGORY_MODAL, cardActionClass } from "./category-modal";
@@ -85,12 +79,12 @@ import { ManageView } from "./plugins/ManageView";
 import { MarketplacesSection } from "./plugins/MarketplacesSection";
 import { OrgSourcesAccess, showOrgSourcesAccess } from "./plugins/OrgSourcesAccess";
 import { PluginStatusLabel } from "./plugins/PluginParts";
+import { pluginShareLink } from "@/lib/plugin-link";
+import { DataCenterDialog, type DataCenter } from "./plugins/DataCenterDialog";
 import { AddAccountButton, PluginDetailView, SignInButton, type DetailAccount, type PluginDetailProps } from "./plugins/PluginDetailView";
 import { SkillPage } from "./plugins/SkillPage";
 import { ScopeToggle } from "./plugins/ScopeToggle";
 import { BotPluginCard } from "./plugins/BotPluginCard";
-
-export * from "./plugins/connected-apps";
 
 interface MarketplaceListing {
   name: string;
@@ -101,6 +95,10 @@ interface MarketplaceListing {
   bots?: number;
   /** a token is saved for it: the bot scope's bot, or everyone's (an admin's) in the workspace list; never the token */
   hasToken?: boolean;
+  /** "private" (the person who added it) or "org" (shared with everyone) */
+  visibility?: MarketplaceVisibility;
+  /** this viewer added it, so may change its visibility */
+  mine?: boolean;
   plugins: Array<{
     name: string; description?: string; version?: string; category?: string; installed: boolean; servers: string[]; skills: string[];
     installedVersion?: string; updateAvailable?: boolean;
@@ -109,6 +107,8 @@ interface MarketplaceListing {
 
 interface FeaturedListing {
   id: string; name: string; description: string; url: string; domain: string; auth: string; installed?: boolean; site?: string; category?: string; iconUrl?: string;
+  /** the provider's data centers (Add asks which one first) */
+  regions?: DataCenter[];
 }
 
 /** One page of the panel's window. The window keeps a stack of them (the
@@ -147,16 +147,60 @@ function useClaudeConnectorCount(): number {
 export function pluginSourceLabel(source: string): string {
   if (source === "manual") return t("connectApps.source.manual");
   if (source === "catalog") return t("connectApps.source.catalog");
-  if (source === "composio") return t("connectApps.source.composio");
+  if (source === "grok") return t("connectApps.source.grok");
   if (source === "local") return t("connectApps.skill.createdLocally");
   return source;
+}
+
+/** Opens grok.com/connectors; the sentence to show when no path opens it. */
+export async function openGrokConnectors(): Promise<string | null> {
+  try {
+    await openExternalLink(GROK_CONNECTORS_URL);
+    return null;
+  } catch {
+    return t("connectorSetup.blocked");
+  }
+}
+
+/** "Manage on Grok": the only thing a Grok connector row offers. Sagax
+ * neither connects it nor reads its account state. */
+export function GrokConnectorAction() {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      <button type="button" data-grok-manage onClick={() => void openGrokConnectors().then(setError)} className={cn(cardActionClass("quiet"), "inline-flex items-center gap-1")}>
+        <ExternalLink size={12} /> {t("connectApps.providers.manage", { provider: "Grok" })}
+      </button>
+      {error && <span role="alert" className="text-[11.5px] text-danger">{error}</span>}
+    </span>
+  );
+}
+
+/** The row action of an xAI connector, or undefined for any other row. */
+export function grokRowAction(item: PluginItem): ReactNode | undefined {
+  return isGrokConnector(item) ? <GrokConnectorAction /> : undefined;
+}
+
+/** The detail page of an xAI connector: managed on Grok, not connected here. */
+export function grokConnectorDetail(item: PluginItem): Omit<PluginDetailProps, "onBack" | "onClose"> {
+  return {
+    item,
+    subtitle: "grok.com/connectors",
+    busy: false,
+    accounts: [],
+    accountAction: <GrokConnectorAction />,
+    accountExtra: <p className="mt-2 text-[12px] text-ink-secondary">{t("connectApps.grok.detail")}</p>,
+    details: [
+      { label: t("connectApps.detail.source"), value: pluginSourceLabel("grok") },
+      { label: t("connectApps.detail.accountsCount"), value: t("connectApps.grok.description") },
+    ],
+  };
 }
 
 export function PluginsPanel() {
   const { state, dispatch } = useStore();
   const remoteClient = window.ogb?.remoteClient?.active === true;
   const dialogRef = useRef<HTMLDivElement>(null);
-  const apps = useConnectedApps();
   const mcp = useMcpServers();
   const [stack, setStack] = useState<Page[]>([{ page: "main" }]);
   const page = stack[stack.length - 1]!;
@@ -185,10 +229,10 @@ export function PluginsPanel() {
   // answers 403 to anyone else).
   const orgAdmin = perspicaxOrg?.viewerRole === "admin";
   const [featured, setFeatured] = useState<FeaturedListing[] | null>(null);
+  const [dataCenterFor, setDataCenterFor] = useState<{ item: PluginItem; regions: DataCenter[]; defaultUrl: string } | null>(null);
   const [skills, setSkills] = useState<SkillsLibrarySkillWire[] | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
-  const [aliasDraft, setAliasDraft] = useState("");
   const [mcpAccountDraft, setMcpAccountDraft] = useState<{ server: string; label: string } | null>(null);
   const [marketplaces, setMarketplaces] = useState<MarketplaceListing[] | null>(null);
   const [marketBusy, setMarketBusy] = useState<string | null>(null);
@@ -204,26 +248,6 @@ export function PluginsPanel() {
   const scope: PluginScope = scopeChoice === "bot" && scopeBot ? "bot" : "workspace";
   const [botView, setBotView] = useState<BotPluginsView | null>(null);
   const [botBusy, setBotBusy] = useState<string | null>(null);
-  const [appTools, setAppTools] = useState<DetailContext["appTools"]>({ inventory: null, loading: false, saving: false });
-  const loadAppTools = useCallback(() => {
-    setAppTools((current) => ({ ...current, loading: true, error: undefined }));
-    loadConnectorTools()
-      .then((inventory) => setAppTools((current) => ({ ...current, inventory, loading: false })))
-      .catch((cause) => setAppTools((current) => ({ ...current, loading: false, error: cause instanceof Error ? cause.message : String(cause) })));
-  }, []);
-  const toggleAppTool = (slug: string, tool: string, enabled: boolean) => {
-    const inventory = appTools.inventory;
-    if (!inventory) return;
-    const next = toggledDisabledTools(inventory.disabledTools[slug], tool, enabled);
-    setAppTools((current) => ({ ...current, saving: true, error: undefined }));
-    saveDisabledTools(slug, next)
-      .then((disabledTools) => setAppTools((current) => ({
-        ...current,
-        saving: false,
-        inventory: current.inventory ? { ...current.inventory, disabledTools } : current.inventory,
-      })))
-      .catch((cause) => setAppTools((current) => ({ ...current, saving: false, error: cause instanceof Error ? cause.message : String(cause) })));
-  };
 
   const loadFeatured = useCallback(() => api("/api/plugins/search")
     .then((result) => setFeatured(result.featured ?? []))
@@ -341,30 +365,27 @@ export function PluginsPanel() {
     () => (scope === "bot" ? (botView ? botScopeMarketplaces(botView) : null) : marketplaces),
     [scope, botView, marketplaces],
   );
+  const grokConfigured = grokProviderConfigured(state.instances);
   const items = useMemo(() => buildPluginItems({
-    cards: apps.cards,
-    status: apps.status,
     servers: mcp.servers,
     featured,
     skills,
     marketplaces: shownMarketplaces,
     whop: { description: t("whop.description"), server: mcp.whopServer?.name, connected: mcp.whopConnected },
-    // Until the catalog answers, assume apps can be connected (no flicker).
-    composioUsable: apps.cards === null || apps.configured,
-  }), [apps.cards, apps.status, apps.configured, mcp.servers, featured, skills, shownMarketplaces, mcp.whopServer?.name, mcp.whopConnected]);
+    grok: grokConfigured ? { connectors: GROK_CLOUD_CONNECTORS, description: t("connectApps.grok.description") } : null,
+  }), [mcp.servers, featured, skills, shownMarketplaces, mcp.whopServer?.name, mcp.whopConnected, grokConfigured]);
   // For a bot, only marketplace plugins: apps, servers and skills are the
   // workspace's (a bot chooses among them in its own Access).
   const scopedItems = useMemo(() => (scope === "bot" ? items.filter((item) => item.kind === "plugin") : items), [scope, items]);
 
   const refreshAll = () => {
-    void apps.loadConnectionInventory(true);
     void mcp.load(true);
     void loadFeatured();
     void loadSkills();
     void loadMarketplaces();
     void loadBotView();
   };
-  const refreshing = apps.refreshing || mcp.busy === "load";
+  const refreshing = mcp.busy === "load";
 
   const openItem = (item: PluginItem) => {
     if (item.kind === "skill") {
@@ -376,14 +397,19 @@ export function PluginsPanel() {
     push({ page: "detail", key });
   };
 
-  const installFeatured = async (item: PluginItem) => {
+  const installFeatured = async (item: PluginItem, region?: string) => {
+    const listing = featured?.find((entry) => entry.id === item.id);
+    if (region === undefined && listing?.regions?.length) {
+      setDataCenterFor({ item, regions: listing.regions, defaultUrl: listing.url });
+      return;
+    }
     setInstalling(item.id);
     setPanelError(null);
     try {
-      const result = await api("/api/plugins/install", { method: "POST", body: JSON.stringify({ id: item.id }) });
+      const result = await api("/api/plugins/install", { method: "POST", body: JSON.stringify({ id: item.id, ...(region ? { region } : {}) }) });
       await mcp.load();
       await loadFeatured();
-      if (typeof result.authorizationUrl === "string") await apps.openConnectUrl(result.authorizationUrl);
+      if (typeof result.authorizationUrl === "string") await openExternalLink(result.authorizationUrl);
       if (typeof result.name === "string") showDetail(`mcp:${result.name}`);
     } catch (cause) {
       setPanelError(cause instanceof Error ? cause.message : String(cause));
@@ -420,12 +446,20 @@ export function PluginsPanel() {
     setBotView(view);
     if (workspaceMarkets) await loadMarketplaces();
   };
-  const addMarketplace = (source: string, ref: string, token?: string) => marketAction("add", async () => {
+  const addMarketplace = (source: string, ref: string, visibility: MarketplaceVisibility, token?: string) => marketAction("add", async () => {
     if (marketRoute === "bot" && scopeBotId) {
-      await afterBotMarket(await addBotMarketplace(scopeBotId, source, { ...(ref ? { ref } : {}), ...(token ? { token } : {}) }));
+      await afterBotMarket(await addBotMarketplace(scopeBotId, source, { ...(ref ? { ref } : {}), ...(token ? { token } : {}), visibility }));
       return;
     }
-    const result = await api("/api/marketplaces", { method: "POST", body: JSON.stringify({ source, ...(ref ? { ref } : {}), ...(token ? { token } : {}) }) });
+    const result = await api("/api/marketplaces", { method: "POST", body: JSON.stringify({ source, ...(ref ? { ref } : {}), ...(token ? { token } : {}), visibility }) });
+    setMarketplaces(result.marketplaces ?? []);
+    void loadBotView();
+  });
+  // Change a marketplace's visibility (the workspace Marketplaces page, for
+  // a marketplace the viewer added). The server refuses org-wide to anyone
+  // who may not share, and private-to-others is simply not found.
+  const setMarketplaceVisibility = (name: string, visibility: MarketplaceVisibility) => void marketAction(`refresh:${name}`, async () => {
+    const result = await api(`/api/marketplaces/${encodeURIComponent(name)}/visibility`, { method: "PUT", body: JSON.stringify({ visibility }) });
     setMarketplaces(result.marketplaces ?? []);
     void loadBotView();
   });
@@ -516,6 +550,10 @@ export function PluginsPanel() {
         onInstall={() => installForBot(item.id)}
         onToggle={(enabled) => toggleForBot(item.id, enabled)}
         onUninstall={() => uninstallForBot(item.id)}
+        onSaveConfig={async (values) => {
+          if (!scopeBotId) return;
+          setBotView(await setBotPluginConfig(scopeBotId, item.id, values));
+        }}
       />
     );
   };
@@ -575,6 +613,8 @@ export function PluginsPanel() {
   };
 
   const renderAction = (item: PluginItem) => {
+    const grokAction = grokRowAction(item);
+    if (grokAction !== undefined) return grokAction;
     if (item.key === WHOP_KEY) return <WhopAction mcp={mcp} />;
     if (item.kind === "plugin") {
       if (scope === "bot") {
@@ -582,7 +622,7 @@ export function PluginsPanel() {
         // switch and install date stay, server/bot-plugins.ts)
         if (!botView?.canChange || (item.installed && !item.updateAvailable)) return null;
         return (
-          <button type="button" {...(item.installed ? { "data-bot-plugin-update": item.id } : { "data-bot-plugin-add": item.id })} disabled={botBusy !== null} onClick={() => installForBot(item.id)} className={cn(cardActionClass(item.installed ? "secondary" : "primary"), "min-w-[76px]")}>
+          <button type="button" {...(item.installed ? { "data-bot-plugin-update": item.id } : { "data-bot-plugin-add": item.id })} disabled={botBusy !== null} onClick={() => installForBot(item.id)} className={cn(cardActionClass(item.installed ? "secondary" : "quiet"), "min-w-[76px]")}>
             {botBusy === `install:${item.id}` ? <Loader2 size={13} className="mx-auto animate-spin" /> : t(item.installed ? "connectApps.plugin.update" : "connectApps.action.add")}
           </button>
         );
@@ -596,85 +636,30 @@ export function PluginsPanel() {
         );
       }
       return (
-        <button type="button" disabled={installing !== null} onClick={() => void installPlugin(item)} className={cn(cardActionClass(), "min-w-[76px]")}>
+        <button type="button" disabled={installing !== null} onClick={() => void installPlugin(item)} className={cn(cardActionClass("quiet"), "min-w-[76px]")}>
           {installing === item.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : t("connectApps.action.add")}
         </button>
       );
     }
     if (item.kind === "featured") {
       return (
-        <button type="button" disabled={installing !== null} onClick={() => void installFeatured(item)} className={cn(cardActionClass(), "min-w-[76px]")}>
+        <button type="button" disabled={installing !== null} onClick={() => void installFeatured(item)} className={cn(cardActionClass("quiet"), "min-w-[76px]")}>
           {installing === item.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : t(item.action === "connect" ? "connectApps.action.connect" : "connectApps.action.add")}
         </button>
       );
     }
-    if (item.kind !== "app" || item.installed) return null;
-    return <AppActionButton apps={apps} slug={item.id} />;
+    return null;
   };
 
   const renderBelow = (item: PluginItem) => {
     if (item.key === WHOP_KEY) return <WhopBelow mcp={mcp} />;
-    if (item.kind !== "app") return null;
-    return <AppBelow apps={apps} item={item} draft={aliasDraft} onDraft={setAliasDraft} />;
+    return null;
   };
-
-  // Only worth saying once an app is actually connected and reachable.
-  const botsWithoutApps = hasUsableConnectedApps(apps.configured, apps.inventoryPhase, apps.stale, apps.status)
-    ? botsMissingConnectedApps(state.bots, state.instances)
-    : [];
-  const appsError = apps.error ? (typeof apps.error === "string" ? apps.error : t(apps.error.key)) : null;
-  const errorBanner = (
-    <>
-      {(panelError || appsError) && <div role="alert" className="mx-6 mt-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger sm:mx-8">{panelError ?? appsError}</div>}
-      {panelNotice && <div role="status" className="mx-6 mt-2 rounded-lg bg-warning/10 px-3 py-2 text-[12px] text-warning sm:mx-8">{panelNotice}</div>}
-    </>
-  );
 
   const notices = (
     <>
-      {apps.stale && (
-        // Say which of the two things is true. Silence here is what makes a
-        // remembered list indistinguishable from a confirmed one.
-        <div className="mx-6 mt-3 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[12.5px] text-warning sm:mx-8">
-          <TriangleAlert size={14} className="mt-px shrink-0" />
-          <span>{t("connectors.stale")}</span>
-        </div>
-      )}
-      {botsWithoutApps.length > 0 && (
-        <div className="mx-6 mt-3 rounded-xl bg-inset px-4 py-3 text-[12.5px] leading-relaxed text-ink-secondary sm:mx-8">
-          <span className="font-medium text-ink">{t("connectors.perBot.title")}</span>{" "}
-          {t("connectors.perBot.body")}
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {botsWithoutApps.map((candidate) => (
-              <button
-                key={candidate.id}
-                type="button"
-                onClick={() => dispatch({ type: "updateBot", botId: candidate.id, patch: { composio: true } })}
-                className="rounded-full bg-control px-2.5 py-1 text-[11.5px] font-medium text-ink hover:bg-raised-hover"
-              >
-                {t("connectors.perBot.allow", { name: candidate.name })}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {apps.configured && !remoteClient && apps.source === "curated" && apps.mode === "self-hosted" && (
-        <div className="mx-6 mt-3 text-[12px] text-ink-secondary sm:mx-8">
-          {t("connectors.featuredBefore")}{" "}
-          <button
-            className="underline underline-offset-2 hover:text-ink"
-            onClick={() => {
-              close();
-              requestSettingsCard("connections.apps");
-              dispatch({ type: "toggleAppSettings", open: true, section: "connectedApps" });
-            }}
-          >
-            {t("connectors.updateKey")}
-          </button>{" "}
-          {t("connectors.featuredAfter")}
-        </div>
-      )}
-      {errorBanner}
+      {panelError && <div role="alert" className="mx-6 mt-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger sm:mx-8">{panelError}</div>}
+      {panelNotice && <div role="status" className="mx-6 mt-2 rounded-lg bg-warning/10 px-3 py-2 text-[12px] text-warning sm:mx-8">{panelNotice}</div>}
     </>
   );
 
@@ -708,7 +693,7 @@ export function PluginsPanel() {
   };
   const trail: Crumb[] = stack.slice(0, -1).map((entry, depth) => ({ label: pageLabel(entry), onSelect: () => popTo(depth) }));
   // An item that went away (uninstalled, or removed elsewhere) leaves its page.
-  const detailMissing = page.page === "detail" && !detailItem && mcp.servers !== null && apps.cards !== null && skills !== null && shownMarketplaces !== null;
+  const detailMissing = page.page === "detail" && !detailItem && mcp.servers !== null && skills !== null && shownMarketplaces !== null;
   // A skill deleted or renamed elsewhere leaves its page too.
   const skillMissing = page.page === "skill" && Boolean(page.name) && skills !== null && !skills.some((entry) => entry.name === page.name);
   useEffect(() => {
@@ -787,6 +772,8 @@ export function PluginsPanel() {
           onAdd={addMarketplace}
           onRefresh={refreshMarketplace}
           onRemove={removeMarketplace}
+          onSetVisibility={marketRoute === "workspace" ? setMarketplaceVisibility : undefined}
+          canChooseVisibility={marketRoute !== null}
           disabled={marketRoute === null}
           removeKeepsInstalls={marketRoute === "bot"}
           tokens={marketTokens}
@@ -804,14 +791,9 @@ export function PluginsPanel() {
   } else if (page.page === "detail" && detailItem) {
     content = (
       <PluginDetailView
-        {...detailProps(detailItem, { apps, mcp, aliasDraft, setAliasDraft, mcpAccountDraft, setMcpAccountDraft, bots: state.bots, instances: state.instances,
+        {...detailProps(detailItem, { mcp, mcpAccountDraft, setMcpAccountDraft,
           items, marketplaces: shownMarketplaces, installing, openItem, uninstallPlugin: (item) => void uninstallPlugin(item), updatePlugin: (item) => void updatePlugin(item),
-          appTools, loadAppTools, toggleAppTool, canSwitchAppTools: ownerOrAdmin !== false,
-          scope, botCard: botCard(detailItem),
-          openBotAccess: (botId) => {
-            close();
-            dispatch({ type: "toggleSettings", open: true, botId, section: "access" });
-          } })}
+          scope, botCard: botCard(detailItem) })}
         onBack={back}
         trail={trail}
       />
@@ -829,7 +811,7 @@ export function PluginsPanel() {
       <ConnectAppsView
         items={scopedItems}
         scope={scopeControl}
-        loading={apps.cards === null || mcp.servers === null || (scope === "bot" && botView === null)}
+        loading={mcp.servers === null || (scope === "bot" && botView === null)}
         search={search}
         onSearch={setSearch}
         filter={page.page === "section" ? page.filter ?? "all" : filter}
@@ -891,101 +873,20 @@ export function PluginsPanel() {
           {content}
         </div>
       </div>
+      {dataCenterFor && (
+        <DataCenterDialog
+          name={dataCenterFor.item.name}
+          regions={dataCenterFor.regions}
+          defaultUrl={dataCenterFor.defaultUrl}
+          onCancel={() => setDataCenterFor(null)}
+          onChoose={(region) => {
+            const { item } = dataCenterFor;
+            setDataCenterFor(null);
+            void installFeatured(item, region);
+          }}
+        />
+      )}
     </div>
-  );
-}
-
-/** Connect / Continue / Add account on a connected app's row. */
-function AppActionButton({ apps, slug }: { apps: ConnectedApps; slug: string }) {
-  const serviceStatus = apps.status[slug];
-  const failed = Boolean(serviceStatus?.status && /^(expired|failed)$/i.test(serviceStatus.status));
-  const pending = serviceStatus?.pending && !failed;
-  const accounts = serviceStatus?.accounts ?? [];
-  const busy = apps.busySlug === slug;
-  const unavailable = Boolean(managedConnectorUnavailableReason(apps.mode, slug));
-  // Dimmed only when connecting cannot work right now, and then it says why.
-  const why = unavailable ? t("connectors.selfHostOnlyReason")
-    : !apps.configured ? t("connectApps.unavailable.noKey")
-    : apps.inventoryPhase === "loading" ? t("connectApps.unavailable.checking")
-    : apps.inventoryPhase === "error" ? t("connectApps.unavailable.error")
-    : undefined;
-  return (
-    <button
-      type="button"
-      disabled={busy || why !== undefined}
-      title={why}
-      onClick={() => apps.primaryAction(slug)}
-      className={cn(cardActionClass(), "min-w-[76px]")}
-    >
-      {unavailable ? t("connectors.selfHostOnly") : busy ? <Loader2 size={13} className="mx-auto animate-spin" /> : connectorActionLabel(apps.inventoryPhase, {
-        busy,
-        included: false,
-        canContinue: Boolean(pending && apps.pendingUrl(slug)),
-        pending,
-        hasAccounts: accounts.length > 0,
-        failed,
-      })}
-    </button>
-  );
-}
-
-/** Under an app's row: the link of a sign-in in flight, or the name of the
- * account about to be connected. */
-function AppBelow({ apps, item, draft, onDraft }: { apps: ConnectedApps; item: PluginItem; draft: string; onDraft: (value: string) => void }) {
-  const slug = item.id;
-  const serviceStatus = apps.status[slug];
-  const failed = /^(expired|failed)$/i.test(serviceStatus?.status ?? "");
-  const url = serviceStatus?.pending && !failed ? apps.pendingUrl(slug) : null;
-  return (
-    <>
-      {url && (
-        <a href={url} target="_blank" rel="noopener noreferrer" onClick={(event) => {
-          if (!apps.pendingUrl(slug)) {
-            event.preventDefault();
-            void apps.connect(slug);
-          }
-        }} className="ml-[52px] mt-1 inline-block text-[12px] text-accent-text underline underline-offset-2">
-          {t("connectors.openAuthorizationPage")}
-        </a>
-      )}
-      {apps.aliasSlug === slug && !item.installed && (
-        <AliasForm apps={apps} slug={slug} name={item.name} draft={draft} onDraft={onDraft} hasAccounts={Boolean(serviceStatus?.accounts?.length)} />
-      )}
-    </>
-  );
-}
-
-/** The name of the account about to be connected (every account has one). */
-function AliasForm({ apps, slug, name, draft, onDraft, hasAccounts }: {
-  apps: ConnectedApps; slug: string; name: string; draft: string; onDraft: (value: string) => void; hasAccounts: boolean;
-}) {
-  const busy = apps.busySlug === slug;
-  return (
-    <form
-      className="ml-[52px] mt-2 flex items-center gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const alias = draft.trim();
-        if (!alias) {
-          apps.setError({ key: "connectors.aliasRequired" });
-          return;
-        }
-        void apps.connect(slug, alias).then(() => onDraft(""));
-      }}
-    >
-      <input
-        autoFocus
-        value={draft}
-        maxLength={64}
-        onChange={(event) => onDraft(event.target.value)}
-        placeholder={t("connectors.aliasPlaceholder")}
-        aria-label={hasAccounts ? t("connectors.aliasAriaAnother", { service: name }) : t("connectors.aliasAriaNew", { service: name })}
-        className="min-w-0 flex-1 rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink placeholder:text-ink-secondary focus:border-border-strong focus:outline-none"
-      />
-      <button type="submit" disabled={busy || !draft.trim()} className="rounded-lg bg-accent px-3 py-2 text-[12px] font-medium text-accent-ink disabled:opacity-40">
-        {t("connectors.action.continue")}
-      </button>
-    </form>
   );
 }
 
@@ -1012,16 +913,10 @@ function botCountLabel(item: PluginItem, view: BotPluginsView | null): string {
 }
 
 interface DetailContext {
-  apps: ConnectedApps;
   mcp: ReturnType<typeof useMcpServers>;
-  aliasDraft: string;
-  setAliasDraft: (value: string) => void;
   /** "+ Add another account" on an MCP server: the name being typed */
   mcpAccountDraft: { server: string; label: string } | null;
   setMcpAccountDraft: (value: { server: string; label: string } | null) => void;
-  bots: ReturnType<typeof useStore>["state"]["bots"];
-  instances: ReturnType<typeof useStore>["state"]["instances"];
-  openBotAccess: (botId: string) => void;
   items: PluginItem[];
   marketplaces: MarketplaceListing[] | null;
   installing: string | null;
@@ -1031,92 +926,19 @@ interface DetailContext {
   /** the plugin "For <bot>" (absent: no bot in reach) */
   botCard: ReactNode;
   updatePlugin: (item: PluginItem) => void;
-  /** a connected app's tools and the workspace's switches */
-  appTools: { inventory: ConnectorToolsInventory | null; loading: boolean; error?: string; saving: boolean };
-  loadAppTools: () => void;
-  toggleAppTool: (slug: string, tool: string, enabled: boolean) => void;
-  /** only an admin turns an app's tools on or off */
-  canSwitchAppTools: boolean;
 }
 
 type DetailBase = Omit<PluginDetailProps, "onBack" | "onClose">;
 
 function detailProps(item: PluginItem, context: DetailContext): DetailBase {
-  if (item.kind === "app") return appDetail(item, context);
-  if (item.kind === "plugin") return pluginDetail(item, context);
-  return mcpDetail(item, context);
-}
-
-function appDetail(item: PluginItem, { apps, aliasDraft, setAliasDraft, bots, instances, openBotAccess, appTools, loadAppTools, toggleAppTool, canSwitchAppTools }: DetailContext): DetailBase {
-  const slug = item.id;
-  const serviceStatus = apps.status[slug];
-  const accounts = serviceStatus?.accounts ?? [];
-  const busy = apps.busySlug === slug;
-  const limited = botsWithLimitedServiceTools(bots, instances, slug);
-  const rows: DetailAccount[] = accounts.length
-    ? accounts.map((account) => ({
-      id: account.id,
-      label: account.alias || account.id,
-      detail: `${account.alias ? `${account.id} · ` : ""}${account.status.toLowerCase()}`,
-      status: /^active$/i.test(account.status) ? "connected" : /^(initiated|initializing)$/i.test(account.status) ? "pending" : "needs_auth",
-      onRemove: () => {
-        if (!window.confirm(disconnectAccountConfirmation(item.name, account))) return;
-        apps.disconnectAccount(slug, account.id);
-      },
-      removeLabel: t("connectors.disconnectAria", { account: account.alias || account.id, service: item.name }),
-    }))
-    : [{ id: "default", label: t("connectApps.detail.noAccountNeeded"), status: "connected" }];
-  return {
-    item,
-    subtitle: item.domain ?? slug,
-    busy,
-    onUninstall: accounts.length ? () => {
-      if (!window.confirm(t("connectApps.detail.uninstallAppConfirm", { name: item.name }))) return;
-      void apps.removeService(slug);
-    } : undefined,
-    accounts: rows,
-    accountAction: accounts.length ? <AddAccountButton label={t("connectApps.detail.addAccount")} disabled={busy || !apps.configured} onClick={() => apps.setAliasSlug(slug)} /> : null,
-    accountExtra: (
-      <>
-        {apps.aliasSlug === slug && !serviceStatus?.pending && (
-          <AliasForm apps={apps} slug={slug} name={item.name} draft={aliasDraft} onDraft={setAliasDraft} hasAccounts={accounts.length > 0} />
-        )}
-        {serviceStatus?.pending && (
-          <div className="mt-2 flex items-center justify-between gap-2 text-[12px] text-ink-secondary">
-            <span>{apps.pendingUrl(slug) ? t("connectors.finishSetup") : t("connectors.finishSetupOrDisconnect")}</span>
-            <AppActionButton apps={apps} slug={slug} />
-          </div>
-        )}
-        {limited.length > 0 && (
-          <div className="mt-2 text-[11.5px] leading-relaxed text-ink-secondary">
-            <span>{t("connectors.grants.limited", { count: limited.length })}</span>{" "}
-            {limited.slice(0, 4).map((candidate, index) => (
-              <span key={candidate.id}>
-                {index > 0 && ", "}
-                <button type="button" onClick={() => openBotAccess(candidate.id)} className="font-medium text-ink underline underline-offset-2 hover:text-accent-text">
-                  {candidate.name}
-                </button>
-              </span>
-            ))}
-            {limited.length > 4 && <span>{t("connectors.grants.more", { count: limited.length - 4 })}</span>}
-          </div>
-        )}
-      </>
-    ),
-    tools: accounts.length ? {
-      list: appTools.inventory ? connectorToolRows(appTools.inventory, slug) : null,
-      loading: appTools.loading || appTools.saving,
-      error: appTools.error,
-      onToggle: canSwitchAppTools && !appTools.saving ? (tool, enabled) => toggleAppTool(slug, tool, enabled) : undefined,
-      note: t("connectApps.detail.appToolsNote"),
-      onLoad: loadAppTools,
-    } : undefined,
-    details: [
-      { label: t("connectApps.detail.source"), value: pluginSourceLabel("composio") },
-      { label: t("connectApps.detail.transport"), value: t("connectApps.transport.composio") },
-      { label: t("connectApps.detail.accountsCount"), value: String(accounts.length) },
-    ],
-  };
+  if (isGrokConnector(item)) return grokConnectorDetail(item);
+  if (item.kind === "plugin") {
+    const marketplace = item.id.split("@")[1];
+    const source = context.marketplaces?.find((entry) => entry.name === marketplace)?.source;
+    return { ...pluginDetail(item, context), link: pluginShareLink({ kind: "plugin", marketplaceSource: source }) };
+  }
+  const server = context.mcp.servers?.find((candidate) => candidate.name === item.id);
+  return { ...mcpDetail(item, context), link: pluginShareLink({ kind: "mcp", serverUrl: server && "url" in server ? server.url : undefined }) };
 }
 
 function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccountDraft }: DetailContext): DetailBase {
@@ -1178,8 +1000,8 @@ function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccountDraft 
     onTest: () => void mcp.test(server),
     testing: mcp.busy === `test:${name}`,
     enabled: { value: server.enabled, onToggle: () => void mcp.toggle(server), label: t("mcp.toggleAria", { name, state: t(server.enabled ? "mcp.state.off" : "mcp.state.on") }) },
-    accounts: [account, ...others.map((other): DetailAccount => {
-      const label = other.label ?? other.id;
+    accounts: [account, ...others.map((other, index): DetailAccount => {
+      const label = readableOr(other.label ?? other.id, t("ids.accountN", { n: index + 2 }));
       return {
         id: other.id,
         label,

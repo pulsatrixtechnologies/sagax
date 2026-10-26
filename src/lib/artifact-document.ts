@@ -7,6 +7,7 @@
 import { buildWidgetDocument } from "@/lib/rich-blocks";
 import type { WidgetTheme } from "@/lib/widget-kit";
 import { ARTIFACT_DATA_MESSAGE } from "../../shared/artifacts";
+import { ARTIFACT_ERROR_MESSAGE } from "./artifact-frame";
 
 // written as escapes: the raw characters end a line inside a regex literal
 const LINE_SEPARATOR = new RegExp("\\u2028", "g");
@@ -27,7 +28,8 @@ export function artifactBridge(initial: unknown, at: number | null): string {
   return `<script>(function(){var handlers=[];var api={data:${scriptJson(initial)},updatedAt:${at === null ? "null" : String(at)},onData:function(fn){if(typeof fn!=="function")return;handlers.push(fn);if(api.data!==null&&api.data!==undefined){try{fn(api.data,api.updatedAt);}catch(e){console.error(e);}}}};`
     + `Object.defineProperty(window,"sagax",{value:api,writable:false,configurable:false});`
     + `addEventListener("message",function(event){if(event.source!==parent)return;var m=event.data;if(!m||m.type!==${JSON.stringify(ARTIFACT_DATA_MESSAGE)})return;api.data=m.data;api.updatedAt=typeof m.at==="number"?m.at:null;`
-    + `for(var i=0;i<handlers.length;i++){try{handlers[i](api.data,api.updatedAt);}catch(e){console.error(e);}}try{dispatchEvent(new CustomEvent("sagax:data",{detail:api.data}));}catch(e){}});})();</script>`;
+    + `for(var i=0;i<handlers.length;i++){try{handlers[i](api.data,api.updatedAt);}catch(e){console.error(e);}}try{dispatchEvent(new CustomEvent("sagax:data",{detail:api.data}));}catch(e){}});`
+    + `addEventListener("error",function(){try{parent.postMessage({type:${JSON.stringify(ARTIFACT_ERROR_MESSAGE)}},"*");}catch(e){}});})();</script>`;
 }
 
 export function buildArtifactDocument(html: string, theme: WidgetTheme | "light" | "dark", font: string, data: { value: unknown; at: number } | undefined): string {

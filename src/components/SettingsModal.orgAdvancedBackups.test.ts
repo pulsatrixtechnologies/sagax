@@ -13,7 +13,7 @@ const fixture = vi.hoisted(() => ({ config: { rooms: { turnTimeoutMinutes: 7 }, 
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
   api: vi.fn(async () => ({ approvals: [] })),
-  useStore: () => ({ state: { config: fixture.config }, dispatch: vi.fn() }),
+  useStore: () => ({ state: { config: fixture.config, bots: [] }, dispatch: vi.fn() }),
 }));
 
 const org = (viewerRole: "admin" | "member", state: "ok" | "missing" = "ok"): PerspicaxOrg => ({
@@ -47,10 +47,10 @@ describe("Settings > Organization (Perspicax)", () => {
     }
     expect(html).toContain("Nothing is waiting.");
     expect(html).toMatch(/id="room-turn-timeout"[^>]*value="7"/);
-    // no help paragraphs, no native select
+    // no help paragraphs, no native select (the admin's Team secrets form, #932, is its own group and has two)
     expect(html).not.toContain("Nothing runs on the Sagax server itself");
     expect(html).not.toContain("Applies to every bot turn in a group");
-    expect(html).not.toContain("<select");
+    expect(html.replace(/<div data-settings-card="organization\.teamSecrets">.*?<\/section><\/div>/s, "")).not.toContain("<select");
   });
 
   it("shows a member the organization only, and a broken link in the warning color", async () => {

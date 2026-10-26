@@ -64,14 +64,14 @@ describe("a list the person picks one row from", () => {
     expect(group.getAttribute("aria-label")).toBe("Dinner tonight");
     expect(group.getAttribute("aria-required")).toBe("true");
     expect(radios().map((radio) => radio.textContent)).toEqual([
-      "Butter chicken with naanRich, creamy, classic comfort food45 min",
-      "Grilled veggie bowl with quinoaLight, healthy, quick to prepare20 min",
-      "Margherita pizzaEasy, crowd-pleasing, order-in friendlyOrder in",
+      "AButter chicken with naanRich, creamy, classic comfort food45 min",
+      "BGrilled veggie bowl with quinoaLight, healthy, quick to prepare20 min",
+      "CMargherita pizzaEasy, crowd-pleasing, order-in friendlyOrder in",
     ]);
     expect(checked()).toEqual(["false", "false", "false"]);
     expect(radios().map((radio) => radio.tabIndex)).toEqual([0, -1, -1]);
     // the empty ring leads each row; nothing here is a plain list row or a button
-    for (const radio of radios()) expect(radio.firstElementChild!.className).toContain("shadow-[inset_0_0_0_1.5px_var(--color-ink-tertiary)]");
+    for (const radio of radios()) expect(radio.firstElementChild!.className).toContain("border-ink/[0.14] bg-ink/[0.06]");
     expect(find('[role="listitem"]')).toBeNull();
     expect(host.querySelectorAll('[role="radiogroup"] button')).toHaveLength(0);
   });
@@ -82,7 +82,7 @@ describe("a list the person picks one row from", () => {
     await press(radios()[1]!.querySelector<HTMLElement>("div div")!);
     expect(checked()).toEqual(["false", "true", "false"]);
     expect(radios()[1]!.className).toContain("bg-inset");
-    expect(radios()[1]!.firstElementChild!.className).toContain("shadow-[inset_0_0_0_5.5px_var(--color-accent)]");
+    expect(radios()[1]!.firstElementChild!.className).toContain("bg-ink/[0.16]");
     expect(radios().map((radio) => radio.tabIndex)).toEqual([-1, 0, -1]);
     expect(fetchMock).not.toHaveBeenCalled();
 

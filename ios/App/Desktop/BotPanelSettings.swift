@@ -189,6 +189,7 @@ struct BotPanelPermissions: View {
     @State private var levelOpen = false
     @State private var confirmingFull = false
     @State private var allowlist = false
+    @State private var grants = false
 
     private var canEdit: Bool { session.surfaceGate.allows(.botAccessEdit) }
     private var level: ApprovalLevel { ApprovalLevel.of(approvalMode: bot.approvalMode, autoApprove: bot.autoApprove) }
@@ -261,6 +262,12 @@ struct BotPanelPermissions: View {
                     .padding(.top, 12)
                     .accessibilityIdentifier("desktop-panel-allowlist")
                 }
+                Button { grants = true } label: {
+                    Text("Approval rules").panelText(13, 19.5).foregroundStyle(theme.inkSecondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 12)
+                .accessibilityIdentifier("desktop-panel-approval-grants")
             }
             if session.surfaceGate.allows(.botOutbound) {
                 AnyView(BotPanelOutbound(bot: bot))
@@ -276,6 +283,10 @@ struct BotPanelPermissions: View {
         }
         .sheet(isPresented: $allowlist) {
             NavigationStack { CommandAllowlistPage(bot: bot) }
+                .environmentObject(session)
+        }
+        .sheet(isPresented: $grants) {
+            NavigationStack { ApprovalGrantsPage(botId: bot.id, showsDone: true) }
                 .environmentObject(session)
         }
     }

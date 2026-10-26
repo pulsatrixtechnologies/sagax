@@ -16,6 +16,13 @@ export interface TerminalAccess {
   /** The bot is this person's own. A personal environment opens for one's
    * own bot; an admin may also open their own environment for another bot. */
   ownsBot: boolean;
+  /** 2026-10-19: the person holds `host.commands` (given by an admin in
+   * Perspicax): the server's hosts open for them too. */
+  serverHosts?: boolean;
+  /** 2026-10-19: the conversation is this person's own (they talk to the
+   * bot in it, whoever owns the bot): their own environments open from it.
+   * Set by terminal-requests.ts, which knows the conversation. */
+  ownsConversation?: boolean;
 }
 
 export interface TerminalListContext {

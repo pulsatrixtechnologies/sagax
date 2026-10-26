@@ -101,7 +101,8 @@ describe("QuestionCard", () => {
     expect(markup).toContain("Model");
     expect(markup).toContain("Style");
     expect(markup).toContain("0 of 2 answered");
-    expect(markup).toContain('placeholder="Type your own answer"');
+    // free text sits behind the "Other" row, so the card reads like JC's capture
+    expect(markup).toContain(">Other<");
   });
 
   it("offers no free text on an options-only question", () => {
@@ -132,27 +133,34 @@ describe("QuestionCard", () => {
       message({ answered: "answer", answeredText: "The user answered your questions.\n\nQ: Which model?\nA: Claude Opus 5" }),
     );
     expect(markup).toContain("A: Claude Opus 5");
-    expect(markup).not.toContain('role="radiogroup"');
+    // the card stays, its rows no longer answer
+    expect(markup).toContain('data-ask-card="settled"');
+    expect(markup).not.toContain('aria-keyshortcuts=');
+    expect(markup).not.toContain("Submit");
   });
 
   it("makes a short single question the title, in plain ink", () => {
     const single = message({ questionRequest: { version: 1, questions: [questionRequest.questions[1]!] } });
     const markup = render(single);
-    expect(markup).toMatch(/text-\[15px\] font-semibold leading-6 text-ink"><bdi dir="auto">Which style should it write in\?</);
+    expect(markup).toMatch(/text-\[14px\] font-semibold leading-5 text-ink"><bdi dir="auto">Which style should it write in\?</);
     expect(markup).not.toContain("text-accent-text\"><bdi");
   });
 
-  it("puts the options in one rounded group, each keyed by a letter", () => {
+  it("draws the options as plain rows in the bubble's fill, each keyed by a letter", () => {
     const question = { question: "Which article?", options: [{ label: "A new analytical piece on reasoning models and what they change" }, { label: "Chip race" }, { label: "Blackwell" }] };
     const markup = render(message({ questionRequest: { version: 1, questions: [question] } }));
-    expect(markup).toContain("divide-y divide-ink/[0.12] overflow-hidden rounded-2xl border border-ink/[0.12]");
+    // the card: the bubble's fill, 16px corners and padding, no outline
+    expect(markup).toContain("rounded-2xl bg-card p-4");
+    expect(markup).not.toContain("ring-1");
+    expect(markup).not.toContain("divide-y");
     expect(markup).toMatch(/role="radio" aria-checked="false" aria-keyshortcuts="A" class=/);
-    expect(markup).toMatch(/aria-keyshortcuts="C"/);
-    expect(markup).toMatch(/rounded-md text-\[12px\] font-medium[^"]*">A</);
-    expect(markup).toMatch(/break-words text-\[15px\] leading-6 text-ink \[unicode-bidi:plaintext\]">A new analytical piece/);
-    // no radio circles and a separate field under the group
-    expect(markup).not.toContain("rounded-full border-");
-    expect(markup).toContain('placeholder="Type your own answer"');
+    expect(markup).toMatch(/aria-keyshortcuts="D"/); // C is the last option, D is "Other"
+    // the 22px key: a lighter square with a hairline
+    expect(markup).toMatch(/size-\[22px\][^"]*rounded-md border[^"]*border-ink\/\[0\.14\] bg-ink\/\[0\.06\] text-ink-secondary">A</);
+    expect(markup).toMatch(/break-words text-\[13\.5px\] leading-5 text-ink \[unicode-bidi:plaintext\]">A new analytical piece/);
+    // no filled buttons, no field until "Other" is picked
+    expect(markup).not.toContain("bg-accent");
+    expect(markup).not.toContain("<textarea");
   });
 
   it("maps letter keys to options and ignores anything else", () => {
@@ -172,14 +180,14 @@ describe("QuestionCard", () => {
     expect(markup).not.toContain("Type your own answer");
   });
 
-  it("folds an answered card into one line, with the full answer behind Details", () => {
+  it("keeps an answered card, the chosen rows marked and the others dimmed", () => {
     const markup = render(message({
       answered: "answer",
       answeredText: "The user answered your questions.\n\nQ: Which model should Hazelnut run on by default?\nA: Claude Opus 5\n\nQ: Which style should it write in?\nA: Terse",
     }));
     expect(markup).toContain('data-ask-card="settled"');
-    expect(markup).toContain("Model: Claude Opus 5 · Style: Terse");
-    expect(markup).toContain("Details");
+    expect(markup.match(/aria-checked="true"/g)?.length).toBe(2);
+    expect(markup.match(/opacity-45/g)?.length).toBe(2);
     expect(markup).not.toContain("Submit");
     expect(markup).not.toContain("The user answered your questions.");
   });
@@ -187,8 +195,8 @@ describe("QuestionCard", () => {
   it("says a question nobody answered was closed, not answered", () => {
     const markup = render(message({ answered: "unavailable" }));
     expect(markup).toContain("Closed without an answer");
-    expect(markup).not.toContain('role="radiogroup"');
-    expect(markup).not.toContain("Details");
+    expect(markup).not.toContain('aria-checked="true"');
+    expect(markup).not.toContain("aria-keyshortcuts=");
   });
 
   it("renders nothing for a card that carries no questions", () => {

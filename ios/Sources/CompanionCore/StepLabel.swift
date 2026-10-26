@@ -445,13 +445,6 @@ public enum StepLabel {
     private static let sentTo = StepRegex.make(#"^Sent to (.+?)(?: · (.+))?$"#)
     private static let postedIn = StepRegex.make(#"^Posted in (.+)$"#)
     private static let replied = StepRegex.make(#"^(.+) replied(?: · (.+))?$"#)
-    private static let composio = StepRegex.make(#"^[A-Z][A-Z0-9]+_([A-Z0-9_]+)$"#)
-
-    static func composioPhrase(_ tool: String) -> String? {
-        guard let match = StepRegex.match(composio, tool), let words = match[1] else { return nil }
-        let phrase = words.replacingOccurrences(of: #"_+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces).lowercased()
-        return phrase.isEmpty ? nil : phrase
-    }
 
     static func parseArgs(_ text: String?) -> [String: Any]? {
         guard let text, text.range(of: #"^\s*\{"#, options: .regularExpression) != nil,
@@ -479,7 +472,7 @@ public enum StepLabel {
             return StepReading(label: kindLabel(kind, phase, args, nameOf: nameOf, words: words), target: kindTarget(kind, args, tool))
         }
         if let mcp = mcpLabel(name: name, input: tool.input ?? tool.summary, phase: phase, words: words) { return mcp }
-        let display = composioPhrase(name) ?? name.replacingOccurrences(of: #"_+"#, with: " ", options: .regularExpression)
+        let display = name.replacingOccurrences(of: #"_+"#, with: " ", options: .regularExpression)
         var summary: String?
         if let text = tool.summary, text != tool.name, text.trimmingCharacters(in: .whitespaces).range(of: #"^[\[{]"#, options: .regularExpression) == nil {
             summary = oneLine(text)

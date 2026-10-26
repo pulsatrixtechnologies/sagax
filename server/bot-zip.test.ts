@@ -82,7 +82,7 @@ function richBot(fx: ReturnType<typeof fixture>) {
     avatarUrl: avatar, avatarCrop: "circle", mascotLook: { character: "owl" } as BotRecord["mascotLook"],
     modelSelection: { instanceId: "fixture", model: "fixture-model", effort: "high" }, approvalMode: "auto", autoApprove: true,
     alwaysAllow: ["Bash"], computer: "local", browser: true, cwd: tmpdir(), mcpServers: ["docs"], speakReplies: true, voice: "alloy", voiceNotes: false,
-    memoryUpkeep: false, connectorTools: { github: { tools: "*" } }, connectorScopes: { apps: { github: "read" } }, notifications: false,
+    memoryUpkeep: false, notifications: false,
     playbooks: [{ key: "digest", name: "Digest", summary: "Weekly digest", triggers: ["digest"], instructions: "Summarize." }],
     projects: [{ id: "p1", name: "Q4" }],
   });
@@ -251,17 +251,17 @@ describe("bot zip round trip", () => {
     if (inspected.kind !== "zip") throw new Error("zip expected");
     const exported = inspected.reader.json("webhooks.json") as Array<Record<string, unknown>>;
     expect(exported.find((hook) => hook.name === "Mail")!.source).toEqual({
-      type: "email", events: ["email.received"], filters: { sender: ["*@partner.example"] }, rateLimitPerMinute: 5,
+      type: "email", events: ["email.received"], filters: { sender: ["*@partner.example"] }, catalog: 1, rateLimitPerMinute: 5,
       poller: { kind: "imap", host: "imap.example.com", mailbox: "INBOX", intervalMinutes: 10 },
     });
-    expect(exported.find((hook) => hook.name === "Teams")!.source).toEqual({ type: "teams", events: [], filters: {}, tenantId: "t-1", graph: { connector: "ms365", resource: "teams/1/channels/2/messages" } });
+    expect(exported.find((hook) => hook.name === "Teams")!.source).toEqual({ type: "teams", events: [], filters: {}, catalog: 1, tenantId: "t-1", graph: { connector: "ms365", resource: "teams/1/channels/2/messages" } });
     const text = JSON.stringify(exported);
     for (const secret of ["whsec_SIGNING_SECRET", "whsec_PENDING", "f".repeat(64), "sub-SECRET", "pollerCursor", "me@example.com", "acct-abcdef"]) expect(text).not.toContain(secret);
     const result = await importBotZip(fx.host, inspected, { ownerPrincipalId: "pr_00000000-0000-4000-8000-000000000001", asMember: false, conversations: false, sharing: false });
     inspected.reader.close();
     const copies = fx.webhooks.hooks.filter((hook) => hook.botId === result.botId);
     expect(copies.find((hook) => hook.name === "Mail")).toMatchObject({ enabled: false, source: { type: "email", poller: { kind: "imap", host: "imap.example.com" } } });
-    expect(copies.find((hook) => hook.name === "Alerts")).toMatchObject({ enabled: false, source: { type: "pagerduty", filters: { urgency: ["high"] } } });
+    expect(copies.find((hook) => hook.name === "Alerts")).toMatchObject({ enabled: false, source: { type: "pagerduty", filters: { urgency: ["high"] }, catalog: 1 } });
     expect(JSON.stringify(copies)).not.toContain("whsec_SIGNING_SECRET");
     expect(result.warnings).toEqual(expect.arrayContaining([
       "Trigger Mail needs the user name and password before it is turned on.",
@@ -290,12 +290,104 @@ describe("bot zip round trip", () => {
     expect(manifest).toMatchObject({ format: "sagax.bot", version: 1, appVersion: "0.4.15-test", bot: { id: source.id, name: "Atlas" } });
     expect(manifest.marketplaces).toEqual([{ name: "acme", source: "acme/private-tools", needsToken: true }]);
     expect(manifest.mcpServers).toEqual([{ name: "docs", transport: "http", url: "https://mcp.example.com/docs", valueNames: ["Authorization"] }]);
-    expect(manifest.connectedApps).toEqual(["github"]);
     expect(manifest.redacted).toBeGreaterThanOrEqual(2);
     const text = Buffer.concat(inspected.reader.under("").map((name) => inspected.reader.read(name))).toString("utf8");
     expect(text).not.toContain("sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789");
     expect(text).not.toContain("abcdef1234567890");
     inspected.reader.close();
+  });
+});
+
+describe("bot zip: no sign-in or key file (JC 2026-10-18 « Exclure tout »)", () => {
+  it("leaves out sign-in files, keys and sealed stores of the desk and the work folders, and keeps a Keynote document", async () => {
+    const fx = fixture();
+    const source = richBot(fx);
+    const desk = workspaceDir(source.id);
+    const work = join(DATA_DIR, "task-workspaces", source.id, source.threadId);
+    mkdirSync(join(desk, ".ssh"), { recursive: true });
+    mkdirSync(work, { recursive: true });
+    const marker = "FAKE_SECRET_DO_NOT_USE";
+    for (const [dir, name] of [[desk, ".netrc"], [desk, ".git-credentials"], [desk, "server.pem"], [desk, "vault.enc"], [desk, "tls.key"], [desk, ".env"], [join(desk, ".ssh"), "config"],
+      [work, "id_ed25519"], [work, ".pypirc"], [work, ".npmrc"]] as const) writeFileSync(join(dir, name), name === ".npmrc" ? `//r.example/:_authToken=${marker}\n` : `${marker} ${name}`);
+    writeFileSync(join(desk, ".env.example"), "API_KEY=\n");
+    writeFileSync(join(desk, "talk.key"), Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("KEYNOTE")]));
+    const inspected = inspectBotZip(await exportToFile(fx.host, source.id));
+    if (inspected.kind !== "zip") throw new Error("zip expected");
+    const names = inspected.reader.under("");
+    const text = Buffer.concat(names.map((name) => inspected.reader.read(name))).toString("latin1");
+    expect(text.includes(marker)).toBe(false);
+    expect(names).toContain("workspace/talk.key");
+    expect(names).toContain("workspace/.env.example");
+    inspected.reader.close();
+  });
+});
+
+describe("bot zip: team memory sharing", () => {
+  const OWNER = "pr_00000000-0000-4000-8000-000000000001";
+  /** Export, then import as an admin or a member; the copy. */
+  const roundTrip = async (fx: ReturnType<typeof fixture>, botId: string, asMember: boolean, edit?: (document: any) => void) => {
+    const plan = planBotZip(fx.host, botId, { conversations: false, sharing: false });
+    const record = plan.files.find((entry) => entry.name === "bot.json")!;
+    const document = JSON.parse(String(record.data));
+    if (edit) {
+      edit(document);
+      record.data = `${JSON.stringify(document, null, 2)}\n`;
+      record.size = Buffer.byteLength(String(record.data));
+    }
+    const chunks: Buffer[] = [];
+    await writeBotZip(plan, (chunk) => { chunks.push(chunk); });
+    const file = join(temp(), "copy.sagaxbot.zip");
+    writeFileSync(file, Buffer.concat(chunks));
+    const inspected = inspectBotZip(file);
+    try {
+      const result = await importBotZip(fx.host, inspected, { ownerPrincipalId: OWNER, asMember, conversations: false, sharing: false });
+      return { exported: document.settings as Record<string, unknown>, copy: fx.store.bot(result.botId)! };
+    } finally {
+      if (inspected.kind === "zip") inspected.reader.close();
+    }
+  };
+
+  it("an invalid stored value exports as private, and import and duplication succeed", async () => {
+    const fx = fixture({ organization: true });
+    const source = fx.store.createBot({ name: "Corrupt" }, { seedMessages: false });
+    // a hand edit or a future option: never written by the API
+    fx.store.patchBot(source.id, { teamMemorySharing: "everyone" } as unknown as Partial<BotRecord>);
+    for (const asMember of [false, true]) {
+      const { exported, copy } = await roundTrip(fx, source.id, asMember);
+      expect(exported.teamMemorySharing, `exported, asMember ${asMember}`).toBe("private");
+      expect(copy.teamMemorySharing, `imported, asMember ${asMember}`).toBe("private");
+      // a duplicate of the copy: export and import again
+      const again = await roundTrip(fx, copy.id, asMember);
+      expect(again.copy.teamMemorySharing, `duplicated, asMember ${asMember}`).toBe("private");
+    }
+  });
+
+  it("shared and absent leave no field; private stays private", async () => {
+    const fx = fixture();
+    const absent = fx.store.createBot({ name: "Absent" }, { seedMessages: false });
+    const shared = fx.store.createBot({ name: "Shared" }, { seedMessages: false });
+    fx.store.patchBot(shared.id, { teamMemorySharing: "shared" });
+    const kept = fx.store.createBot({ name: "Kept" }, { seedMessages: false });
+    fx.store.patchBot(kept.id, { teamMemorySharing: "private" });
+    for (const bot of [absent, shared]) {
+      const { exported, copy } = await roundTrip(fx, bot.id, false);
+      expect("teamMemorySharing" in exported, bot.name).toBe(false);
+      expect(copy.teamMemorySharing, bot.name).toBeUndefined();
+    }
+    const { exported, copy } = await roundTrip(fx, kept.id, true);
+    expect(exported.teamMemorySharing).toBe("private");
+    expect(copy.teamMemorySharing).toBe("private");
+  });
+
+  it("an archive that carries an unknown value still imports, as private", async () => {
+    const fx = fixture();
+    const source = fx.store.createBot({ name: "Older archive" }, { seedMessages: false });
+    for (const value of ["everyone", "", 7]) {
+      const { copy } = await roundTrip(fx, source.id, false, (document) => { document.settings = { ...document.settings, teamMemorySharing: value }; });
+      expect(copy.teamMemorySharing, JSON.stringify(value)).toBe("private");
+    }
+    const { copy } = await roundTrip(fx, source.id, false, (document) => { document.settings = { ...document.settings, teamMemorySharing: "shared" }; });
+    expect(copy.teamMemorySharing).toBeUndefined();
   });
 });
 

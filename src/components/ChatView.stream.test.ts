@@ -112,12 +112,15 @@ describe("the single stream in the main chat", () => {
     }
   });
 
-  it("points at activity in the topic under a fresh one", () => {
+  // JC 2026-10-22: threads off = one unified conversation, so no cross-topic
+  // "new activity" pill surfaces at the top; the topic is reached by reading
+  // back (PreviousTopicsLine), never a banner.
+  it("draws no earlier-topic activity pill for the topic under a fresh one", () => {
     preferences.setShowThreads(false);
     fixture.fresh = { bot: { threadId: "now", auto: false } };
     try {
       const markup = render({ ...bot, tasks: bot.tasks!.map((task) => task.threadId === "now" ? { ...task, unread: true } : task) });
-      expect(markup).toContain('data-earlier-topic-activity="now"');
+      expect(markup).not.toContain("data-earlier-topic-activity");
     } finally {
       fixture.fresh = {};
     }
@@ -141,6 +144,36 @@ describe("the single stream in the main chat", () => {
     expect(markup).not.toContain('data-stream-segment="conf"');
     expect(markup.indexOf('data-stream-segment="first"')).toBeLessThan(markup.indexOf('data-topic-divider="now"'));
     expect(markup.indexOf('data-topic-divider="now"')).toBeLessThan(markup.indexOf("Live answer"));
+  });
+
+  it("draws a bot answer flat like Grok Bot: no card, no bubble shape", () => {
+    preferences.setShowThreads(false);
+    const markup = render(bot);
+    // the bubble wrapper that holds the bot's answer
+    const end = markup.indexOf(">Live answer<");
+    const marker = markup.lastIndexOf('data-chat-bubble="true"', end);
+    const start = markup.indexOf('class="', marker) + 'class="'.length;
+    const cls = markup.slice(start, markup.indexOf('"', start));
+    expect(cls).toContain("text-ink");
+    expect(cls).not.toContain("bg-card");
+    expect(cls).not.toContain("rounded-[18px]");
+    expect(cls).not.toContain("bg-bubble-user");
+  });
+
+  it("draws the topic divider as Grok Bot's quiet New topic marker, not the topic's title and time", () => {
+    preferences.setShowThreads(false);
+    fixture.focus = { threadId: "first", messageId: "old", nonce: 1, consumed: false };
+    let markup = "";
+    try {
+      markup = render(bot);
+    } finally {
+      fixture.focus = null;
+    }
+    // one generic "New topic" label, the topic name only as the hover tooltip
+    expect(markup).toContain('title="Backups">New topic<');
+    // never the old titled, timestamped divider ("New topic: Backups · 00:00")
+    expect(markup).not.toContain("New topic: Backups");
+    expect(markup).not.toMatch(/New topic\b[^<]*·/);
   });
 
   it("waits for the live topic to be read back to its start", () => {
@@ -198,10 +231,12 @@ describe("the single stream in the main chat", () => {
     expect(markup).toContain('data-stream-earlier="zero"');
   });
 
-  it("points at an earlier topic that has something new", () => {
+  // The unified conversation never raises a pill for an earlier topic that
+  // has something new (JC 2026-10-22): it is read back in place, not jumped to.
+  it("draws no earlier-topic activity pill for an earlier topic that has something new", () => {
     preferences.setShowThreads(false);
     const markup = render({ ...bot, tasks: bot.tasks!.map((task) => task.threadId === "first" ? { ...task, unread: true } : task) });
-    expect(markup).toContain('data-earlier-topic-activity="first"');
+    expect(markup).not.toContain("data-earlier-topic-activity");
     expect(render(bot)).not.toContain("data-earlier-topic-activity");
   });
 });

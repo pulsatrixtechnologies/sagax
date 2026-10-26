@@ -37,8 +37,29 @@ export const CLAUDE_HOST_TOOLS: readonly string[] = [
   "EnterWorktree", "ExitWorktree", "Workflow", "DesignSync",
 ];
 
-export function claudeDisallowedTools(configured: readonly string[] | undefined, withhold: boolean): string[] {
+/** Claude Code built-ins a Sagax turn never uses, removed from every turn
+ * (2026-10-19 perf parity: about 4,000 prompt tokens a turn). Each one
+ * either duplicates a Sagax feature the bot must use instead (Cron* and
+ * ScheduleWakeup: routines; ListAgents: the agents tools, which it shadows;
+ * PushNotification: Sagax notifications) or reaches a claude.ai service the
+ * Sagax turn is not part of (RemoteTrigger, PublishPlugin,
+ * ShareOnboardingGuide, DesignSync, ReportFindings). Names an older or newer
+ * CLI lacks are ignored by the CLI. */
+export const CLAUDE_UNUSED_TOOLS: readonly string[] = [
+  "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "ListAgents", "PushNotification",
+  "RemoteTrigger", "PublishPlugin", "ShareOnboardingGuide", "DesignSync", "ReportFindings",
+];
+
+/** Claude Code commands that only drive the tools above (/loop schedules a
+ * wakeup or a cron, /schedule a remote trigger): hidden from the command
+ * list, since a Sagax turn could not run them. Sagax routines do this. */
+export const CLAUDE_UNUSED_COMMANDS: ReadonlySet<string> = new Set(["loop", "schedule"]);
+
+/** `explicitTools`: the turn already names its built-ins (--tools), so the
+ * unused ones are off without a deny rule. */
+export function claudeDisallowedTools(configured: readonly string[] | undefined, withhold: boolean, explicitTools = false): string[] {
   const merged = new Set(configured ?? []);
+  if (!explicitTools) for (const tool of CLAUDE_UNUSED_TOOLS) merged.add(tool);
   if (withhold) for (const tool of CLAUDE_HOST_TOOLS) merged.add(tool);
   return [...merged];
 }
@@ -148,7 +169,7 @@ export function piHostToolArgs(withhold: boolean): string[] {
 
 /** Sagax MCP tools a withheld turn may still call. A title that merely
  * starts with "mcp" is not one of them. */
-const SAGAX_MCP_TITLE = /^mcp__(?:agents|browser|composio|computer)(?:__|$)/i;
+const SAGAX_MCP_TITLE = /^mcp__(?:agents|browser|computer)(?:__|$)/i;
 
 /** An ACP `session/request_permission` that would act on this machine.
  * A command, a file change, a move or a delete is declined whatever its
@@ -190,10 +211,10 @@ export function withheldWorkspace(): string {
 /** The MCP server names Sagax passes an ACP engine for a turn (the same
  * names as acp/core.ts mcpServersFor, before a tool scope filter). */
 export function sagaxMcpServerNames(integrations: {
-  agents?: unknown; composio?: unknown; browser?: unknown; localComputer?: unknown; custom?: Record<string, unknown>;
+  agents?: unknown; browser?: unknown; localComputer?: unknown; custom?: Record<string, unknown>;
 } | undefined): string[] {
   const names = [
-    ...(integrations?.agents ? ["agents"] : []), ...(integrations?.composio ? ["composio"] : []),
+    ...(integrations?.agents ? ["agents"] : []),
     ...(integrations?.browser ? ["browser"] : []), ...(integrations?.localComputer ? ["computer"] : []),
     ...Object.keys(integrations?.custom ?? {}),
   ];

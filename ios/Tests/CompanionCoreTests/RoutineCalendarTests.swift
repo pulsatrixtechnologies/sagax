@@ -49,7 +49,7 @@ final class RoutineCalendarTests: XCTestCase {
         XCTAssertEqual(items.map { $0.routine?.id }, ["daily", "interval", "once"])
         XCTAssertEqual(items.map(\.date), [local(2026, 10, 5, 9, 30), local(2026, 10, 5, 11), local(2026, 10, 5, 14, 5)])
         XCTAssertEqual(items.map(\.durationMinutes), [30, 30, 30])
-        XCTAssertTrue(items.allSatisfy { $0.id.hasPrefix("next-") && $0.canMove })
+        XCTAssertTrue(items.allSatisfy { $0.id.hasPrefix("plan-") && $0.canMove })
         XCTAssertEqual(RoutineCalendar.day(day, routines: routines, runs: [], botId: "other", calendar: toronto), [])
     }
 
@@ -60,13 +60,13 @@ final class RoutineCalendarTests: XCTestCase {
         for minute in 0..<14 { runs.append(run("old\(minute)", routine: "gone", at: local(2026, 10, 5, 1, minute))) }
         runs.append(run("live", routine: "gone", at: local(2026, 10, 5, 0, 30), status: "running"))
         let items = RoutineCalendar.day(day, routines: [daily], runs: runs, calendar: toronto)
-        XCTAssertEqual(items.filter { $0.routine?.id == "daily" }.map(\.id), ["run-r0"])
-        XCTAssertFalse(items.first { $0.id == "run-r0" }!.canMove)
-        // 12 newest finished receipts of the deleted routine, and the active one
-        XCTAssertEqual(items.filter { $0.run?.routineId == "gone" }.count, 13)
-        XCTAssertNotNil(items.first { $0.id == "run-live" })
-        XCTAssertNil(items.first { $0.id == "run-old0" })
-        XCTAssertNil(items.first { $0.id == "run-old1" })
+        // The calendar shows plans only: the receipt is a plain occurrence,
+        // no run, no status; runs of a deleted routine do not show.
+        XCTAssertEqual(items.map(\.routine?.id), ["daily"])
+        XCTAssertNil(items[0].run)
+        // the receipt logic itself stays for the list
+        let all = RoutineCalendar.items(routines: [daily], runs: runs, from: day, to: RoutineCalendar.addDays(day, 1, calendar: toronto), calendar: toronto)
+        XCTAssertEqual(all.filter { $0.run?.routineId == "gone" }.count, 13)
     }
 
     func testCronOccurrencesStartAtTheSchedulersNextRun() throws {

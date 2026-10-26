@@ -18,6 +18,27 @@ function sandboxChart(file) {
 }
 
 describe("production image sources", () => {
+  // The bots' browsers (docs/browser-packaging.md, "Process hygiene"): an
+  // init collects the browser processes whose parents exit, and Chrome gets
+  // shared memory.
+  it("runs every compose service of the server image with an init and Chrome's shared memory", () => {
+    for (const file of ["compose.yaml", "deploy/docker-compose.yml", "deploy/podman/compose.yaml"]) {
+      const text = read(file);
+      expect(text, file).toMatch(/^\s+init: true$/m);
+      expect(text, file).toMatch(/^\s+shm_size: 512m$/m);
+    }
+  });
+
+  // `tailcat ssh` and `tailcat cp` exec the system ssh client with tailcat as
+  // its ProxyCommand: without openssh-client in the runtime image every remote
+  // session shell, inventory, screenshot and file transfer fails on the server.
+  it("ships the ssh client tailcat execs for remote sessions", () => {
+    const dockerfile = read("Dockerfile");
+    const runtime = dockerfile.slice(dockerfile.lastIndexOf("\nFROM "));
+    expect(runtime).toMatch(/apt-get install -y --no-install-recommends[^\n]*\bopenssh-client\b/);
+    expect(runtime).toContain("/usr/local/bin/tailcat");
+  });
+
   it("defaults the image to the full set and exports the build args", () => {
     const dockerfile = read("Dockerfile");
     expect(dockerfile).toContain("ARG ENGINE_SET=all");
@@ -27,6 +48,8 @@ describe("production image sources", () => {
     expect(dockerfile).not.toMatch(/FROM\s+\S*distroless/);
     expect(dockerfile).toContain("apt-get upgrade -y --no-install-recommends");
     expect(dockerfile).toContain("scripts/harden-image-deps.mjs");
+    // The server image has Hermes: its pip overlay is never skipped.
+    expect(dockerfile).not.toContain("--no-venv");
     expect(dockerfile).toContain("scripts/hermes-python.mjs");
     expect(dockerfile).toContain("install-chrome-for-testing.mjs");
     expect(dockerfile).toContain("libstdc++6");

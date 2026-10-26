@@ -60,6 +60,27 @@ describe("ApprovalCard decided by voice", () => {
   it("says nothing extra for a tap", () => {
     expect(renderToStaticMarkup(createElement(ApprovalCard, { message: bash("allow") }))).not.toContain("by voice");
   });
+
+  it("says automatic review is in progress while the reviewer has the card (lot A1b)", () => {
+    const message: Message = {
+      id: "reviewing",
+      role: "bot",
+      kind: "options",
+      at: 1,
+      card: {
+        title: "Approval needed",
+        subtitle: "pnpm test",
+        options: ["Allow", "Deny"],
+        requestId: "r-review",
+        tool: "Bash",
+        reviewing: true,
+      },
+    };
+    const html = renderToStaticMarkup(createElement(ApprovalCard, { message }));
+    expect(html).toContain("Automatic review in progress");
+    expect(html).toContain('data-auto-review="pending"');
+    expect(openRequestHtml(message)).toContain("Automatic review in progress");
+  });
 });
 
 describe("ApprovalCard routine proposals", () => {
@@ -411,7 +432,7 @@ describe("ApprovalCard tool-call kinds", () => {
 
   it("speaks a verb phrase when the driver only knows the ACP kind", () => {
     const html = openRequestHtml(kindMessage("other"), bot);
-    expect(html).toContain("Allow Scout to take an action?");
+    expect(html).toContain("Scout wants to take an action");
     expect(html).not.toContain("wants to other");
   });
 
@@ -429,13 +450,13 @@ describe("ApprovalCard tool-call kinds", () => {
     ];
     for (const [tool, phrase] of cases) {
       const html = openRequestHtml(kindMessage(tool), bot);
-      expect(html).toContain(`Allow Scout to ${phrase}?`);
+      expect(html).toContain(`Scout wants to ${phrase}`);
     }
   });
 
   it("reads grammatically when no tool is known", () => {
     const html = openRequestHtml(kindMessage(undefined));
-    expect(html).toContain("Allow this bot to take an action?");
+    expect(html).toContain("Wants to take an action");
     expect(html).not.toContain("Allow this bot to an action");
   });
 
@@ -558,13 +579,6 @@ describe("ApprovalCard outbound holds", () => {
     expect(html).toContain("Create linear comment ×2");
   });
 
-  it("phrases a Composio slug on a plain permission card as words", () => {
-    const message = outboundMessage();
-    message.card!.outboundRequest = undefined;
-    message.card!.tool = "mcp__composio__LINEAR_CREATE_LINEAR_COMMENT";
-    const html = openRequestHtml(message, bot);
-    expect(html).toContain("Allow Kiwi to create linear comment?");
-  });
 });
 
 describe("ApprovalCard for a change that applied on its own", () => {
@@ -601,6 +615,15 @@ describe("ApprovalCard for a change that applied on its own", () => {
     expect(markup).not.toContain("30 14 * * 3");
     expect(markup).not.toContain("Waiting for your confirmation");
     expect(markup).not.toContain("schedule_routine");
+  });
+
+  it("says a routine created paused was created paused", () => {
+    const markup = render(routineCard(
+      { ...createRoutineOperation, paused: true },
+      { name: "Backlog review" },
+    ));
+    expect(markup).toContain("Scout created a paused routine: Backlog review");
+    expect(markup).not.toContain("scheduled a routine");
   });
 
   it("never shows a cron expression that has no plain name", () => {
@@ -674,7 +697,8 @@ describe("a card waiting for an organization admin (2026-10-08)", () => {
       card: { title: "Approval needed", subtitle: "agents__vm_exec", options: ["Allow", "Deny"], requestId: "r-admin", requestType: "permission", tool: "other", adminApproval: true, adminNames: ["Alice"] },
     } as unknown as Message;
     const html = renderToStaticMarkup(createElement(ApprovalCard, { bot: { name: "Sprout" }, message }));
-    expect(html).toContain("This command runs on the server: waiting for an admin to approve it.");
+    expect(html).toContain("This command runs on the organization&#x27;s server: waiting for an admin to approve it.");
+    expect(html).toContain("On the bot&#x27;s own computer (its server environment, Local VM or cloud computer) it needs no admin.");
     expect(html).toContain("An admin (Alice) sees it in Settings &gt; Organization.");
   });
   it("tells the admin whose request it is", () => {

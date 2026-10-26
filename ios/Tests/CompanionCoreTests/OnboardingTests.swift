@@ -250,15 +250,25 @@ final class OnboardingTests: XCTestCase {
         XCTAssertNil(pending)
     }
 
-    func testRevokedPairingAlwaysShowsRecovery() {
+    func testRevokedPairingShowsRecoveryUntilSignInIsAsked() {
+        XCTAssertEqual(
+            CompanionOnboardingRouter.route(for: .init(
+                pairingState: .revoked,
+                hasSeenWelcome: false,
+                pairingRequested: false,
+                hasPendingPairingInvite: false
+            )),
+            .revoked
+        )
+        // "Sign in again" keeps the ended record and opens sign-in over it.
         XCTAssertEqual(
             CompanionOnboardingRouter.route(for: .init(
                 pairingState: .revoked,
                 hasSeenWelcome: false,
                 pairingRequested: true,
-                hasPendingPairingInvite: true
+                hasPendingPairingInvite: false
             )),
-            .revoked
+            .pairing
         )
     }
 }

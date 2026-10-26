@@ -1,6 +1,6 @@
 // Settings > General laid out as Grok Bot's (0.5.6, JC): grey headings
-// (Account, Appearance, System) over cards of compact rows, Theme and
-// Language as pill menus, Updates on a page of its own, and General >
+// (Account, Appearance, System) over cards of compact rows, Language as a
+// pill menu (the skin is chosen in Appearance only, 2026-10-19), Updates on a page of its own, and General >
 // Advanced described by what it holds today.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -53,12 +53,14 @@ describe("Settings > General, Grok Bot's layout", () => {
     expect(html).toMatch(/<h3[^>]*text-ink-secondary[^>]*>System<\/h3>/);
   });
 
-  it("Theme and Language are borderless pill menus, not native selects, with no help line", () => {
+  it("Language is a borderless pill menu, not a native select, with no help line; the skin is chosen in Appearance only", () => {
     const html = render();
     const appearance = html.slice(html.indexOf('data-settings-group="appearance"'), html.indexOf('data-settings-group="system"'));
-    expect(appearance).toContain('data-settings-row="theme"');
+    // one option, one place (2026-10-19): the skin, its variant and Light,
+    // Dark or Auto live in Appearance > Skin, not in a General Theme menu
+    expect(appearance).not.toContain('data-settings-row="theme"');
     expect(appearance).toContain('data-settings-row="language"');
-    expect(appearance.match(/data-pill-select/g)).toHaveLength(2);
+    expect(appearance.match(/data-pill-select/g)).toHaveLength(1);
     expect(appearance).not.toContain("<select");
     expect(appearance).toContain('aria-haspopup="listbox"');
     expect(html).not.toContain("Follows your system language");
@@ -90,7 +92,7 @@ describe("Settings > General, Grok Bot's layout", () => {
     const page = render();
     expect(page).toContain('data-settings-card="updates"');
     expect(page).toContain("Check for updates");
-    expect(page).toContain('aria-label="Offer pre-release versions"');
+    expect(page).toContain("Update channel");
   });
 
   it("describes General > Advanced by what it holds today, and hides it when it would be empty", () => {
@@ -109,7 +111,7 @@ describe("Settings > General, Grok Bot's layout", () => {
     expect(html).toContain(">Compte</h3>");
     expect(html).toContain(">Apparence</h3>");
     expect(html).toContain(">Système</h3>");
-    expect(html).toContain(">Thème</div>");
+    expect(html).not.toContain(">Thème</div>");
     expect(html).toContain(">Visites guidées</div>");
     expect(html).toContain('<option value="updates">Mises à jour</option>');
     expect(html).not.toMatch(/[–—]/);
@@ -125,7 +127,11 @@ describe("Settings search after the move", () => {
     }
   });
   it("finds the rows General holds now", () => {
-    for (const query of ["theme", "thème", "language", "langue", "micro", "tour", "account", "copy email", "diagnostic", "tool access"]) {
+    for (const query of ["theme", "thème", "dark", "sombre", "variante"]) {
+      expect(sectionMatches(section("appearance"), query), query).toBe(true);
+      expect(sectionMatches(section("general"), query), query).toBe(false);
+    }
+    for (const query of ["language", "langue", "micro", "tour", "account", "copy email", "diagnostic", "tool access"]) {
       expect(sectionMatches(section("general"), query), query).toBe(true);
     }
   });

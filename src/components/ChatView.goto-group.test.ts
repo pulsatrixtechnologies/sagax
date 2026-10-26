@@ -43,6 +43,12 @@ vi.mock("./DesktopCapabilities", async (importOriginal) => ({
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("./ModelPicker", () => ({ ModelPicker: () => createElement("span") }));
 vi.mock("./ApprovalModeSelector", () => ({ ApprovalModeSelector: () => createElement("span") }));
+vi.mock("@/lib/thread-preferences", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/thread-preferences")>(),
+  // These cases exercise threads-on chip grouping (ThreadChip now hides
+  // receipts when threads are off; see ThreadChip.test.ts).
+  useShowThreads: () => true,
+}));
 
 const { ChatView } = await import("./ChatView");
 afterAll(() => {

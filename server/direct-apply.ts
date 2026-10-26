@@ -10,7 +10,9 @@
 // changes to the bot itself and stay Full access only.
 
 /** Why a change applied without a person. Also the decision log's source. */
-export type DirectApply = "full-access" | "self";
+/** "primary-bot" (2026-10-20): the person asked their own Primary Bot for
+ * this change in this turn's message; it applies like Full access. */
+export type DirectApply = "full-access" | "self" | "primary-bot";
 
 /** Server-owned and decided per request, never from request input. */
 export type DirectApplyCheck = (botId: string, threadId: string, targetBotId: string) => DirectApply | null;

@@ -158,6 +158,11 @@ export type RuntimeEvent = RuntimeEventBase &
          * Used for exact-command grants; never reconstructed from a display
          * summary, tool title, or argv. Absent when either value is unknown. */
         command?: { command: string; cwd: string };
+        /** 2026-10-21 (parité R10, ligne 80): the app of this Mac a screen
+         * action acts on, as the SERVER read it (server/computer-app.ts),
+         * set only by the bus's publish gate; the bus drops any value an
+         * adapter put there. */
+        screenApp?: { label: string; bundleId: string; team: string };
         /** Absolute paths a file tool's permission request touches (Claude's
          * Read, Write, Edit, ...: file_path, notebook_path, or path, which
          * defaults to the working folder), resolved against the turn's
@@ -198,6 +203,13 @@ export type RuntimeEvent = RuntimeEventBase &
         /** A permission ask's full arguments as redacted JSON, for the
          * card's collapsed technical details (summary stays one line). */
         input?: string;
+        /** An engine's own connector call (Grok's use_tool to a server Sagax
+         * did not mount, server/drivers/acp/connector-ask.ts). */
+        engineConnector?: boolean;
+        /** The driver read this ask as outward-facing (a send, an engine
+         * connector call that is not plainly a read): the outbound guard
+         * holds it and no session-wide allow is offered (review of #943). */
+        outbound?: boolean;
       }
     | {
         type: "request.resolved";
@@ -221,7 +233,12 @@ export type RuntimeEvent = RuntimeEventBase &
     // transient error or a legacy provider's diagnostic during cancellation.
     // `claudeUpdate: true` narrows a setup failure to "this Claude Code is
     // too old for the model": the UI offers to run `claude update` for them.
-    | { type: "runtime.error"; message: string; setup?: boolean; terminal?: boolean; claudeUpdate?: boolean }
+    | { type: "runtime.error"; message: string; setup?: boolean; terminal?: boolean; claudeUpdate?: boolean;
+      /** The engine went silent and the turn was stopped as stuck. */
+      stalled?: boolean;
+      /** A usage limit refused the turn: epoch ms when it resets, when the
+       * engine said (server/limit-failover-host.ts). */
+      limitResetsAt?: number }
     /** Something the person should know that did not fail the turn — for
      * example, a saved model the engine no longer offers was replaced. */
     | { type: "runtime.notice"; message: string }

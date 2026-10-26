@@ -9,7 +9,7 @@
 // endpoint, because EventSource cannot set headers. Failed exchanges are
 // counted per source: five in a minute lock that source out for ten.
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { writeFileAtomic } from "./atomic.ts";
@@ -114,15 +114,43 @@ const sessionSchema = z.object({
    * extends it. A file that still contains one is ignored. */
   ephemeral: z.literal(true).optional(),
   /** When the person last proved themselves interactively for this session:
-   * an OpenID Connect sign-in or an email code they typed (2026-10-18).
-   * Never set by a pairing code, an invite link, a bot-act copy, an act-as
-   * session or a renewal: those prove a credential, not the person at the
-   * keyboard. The "sign-in younger than 15 minutes" gates read this, never
+   * the verified, recent `auth_time` of an OpenID Connect sign-in
+   * (2026-10-18; from `auth_time` since 2026-10-19). Never set by an email
+   * code (a bot reading the mailbox can type it), a pairing code, an invite
+   * link, a bot-act copy, an act-as session or a renewal: those prove a
+   * credential, not the person at the keyboard. The "sign-in younger than 15 minutes" gates read this, never
    * `createdAt` (server/recent-sign-in.ts). */
   authAt: z.number().optional(),
 });
 
-const fileSchema = z.object({ version: z.literal(1), sessions: z.array(sessionSchema) });
+/** Why a session stopped authenticating, as the 401 `code` a client reads
+ * (2026-10-20). `session_unknown` (no trace of the token) is the only one a
+ * client may retry: a server just restarted from an older copy, a request
+ * that raced a deploy. Every other code is definitive. */
+export const SESSION_END_CODES = ["session_revoked", "session_expired", "idp_session_ended", "principal_disabled"] as const;
+export type SessionEndCode = typeof SESSION_END_CODES[number];
+export type SessionRefusalCode = SessionEndCode | "session_unknown";
+
+/** How long and how many ended sessions are remembered (by token hash), so a
+ * later request with that token is told why. Past either bound it reads as
+ * `session_unknown`. */
+export const ENDED_SESSION_MEMORY_MS = 35 * 24 * 60 * 60_000;
+export const ENDED_SESSION_MEMORY_MAX = 2_000;
+
+const endedSchema = z.object({
+  tokenHash: z.string().length(64),
+  id: z.string().min(1).max(64),
+  code: z.enum(SESSION_END_CODES),
+  at: z.number(),
+});
+type EndedSession = z.infer<typeof endedSchema>;
+
+const fileSchema = z.object({
+  version: z.literal(1),
+  sessions: z.array(sessionSchema),
+  // Older files have none; a damaged list is dropped, never the sessions.
+  ended: z.array(endedSchema).max(ENDED_SESSION_MEMORY_MAX * 2).optional().catch(undefined),
+});
 
 export type SessionRecord = z.infer<typeof sessionSchema>;
 
@@ -287,6 +315,17 @@ export class SessionRegistry {
   private readonly startedAt: number;
   private readonly options: SessionStoreOptions;
   private readonly openMarker: string;
+  /** Present while sessions.json may be behind memory: a write failed and no
+   * later write succeeded. Written with a plain create (no temp file, no
+   * rename), so it lands even when the atomic write of the registry did not;
+   * removed by the next successful write. */
+  private readonly unsyncedMarker: string;
+  /** "Sign in with Pulsatrix" sessions restored after an unclean restart:
+   * not served until the identity provider confirms them again
+   * (IdpSessionManager.recheck). Memory only. */
+  private readonly recheck = new Set<string>();
+  /** Ended sessions by token hash (2026-10-20): why a token stopped working. */
+  private ended = new Map<string, EndedSession>();
   private closed = false;
   /** Set on an OMB Cloud home (requireAdmin): only admin scope, anywhere. */
   private adminOnly: string | null = null;
@@ -298,7 +337,9 @@ export class SessionRegistry {
     this.now = options.now ?? Date.now;
     this.startedAt = this.now();
     this.openMarker = `${options.file}.open`;
+    this.unsyncedMarker = `${options.file}.unsynced`;
     const unclean = existsSync(this.openMarker);
+    const unsynced = existsSync(this.unsyncedMarker);
     try {
       mkdirSync(dirname(options.file), { recursive: true, mode: 0o700 });
       // Establish the guard before accepting any persisted bearer. Even if
@@ -308,11 +349,18 @@ export class SessionRegistry {
     } catch {
       throw new Error("Could not establish safe session storage.");
     }
-    this.load(!unclean);
+    this.load(!unclean, unclean && !unsynced);
     this.revalidateEmailSessions();
   }
 
-  private load(restoreAccounts: boolean): void {
+  /** After an unclean stop (a crash, an out-of-memory kill, a stop that
+   * outran its grace period) email and portal sessions still end: only a
+   * clean close proves their revocations reached disk. A "Sign in with
+   * Pulsatrix" session is kept when no write was lost (no unsynced marker),
+   * and only as "to recheck": the provider must refresh its grant before it
+   * is served again, so a logout or a disabled account that the crash hid is
+   * still caught (2026-10-19, JC signed out after every pulsabot restart). */
+  private load(restoreAccounts: boolean, restoreProviderSessions = false): void {
     if (!existsSync(this.options.file)) return;
     let raw: unknown;
     try {
@@ -321,7 +369,87 @@ export class SessionRegistry {
       return; // unreadable: start empty rather than refuse to boot; pairing again is cheap
     }
     const parsed = fileSchema.safeParse(raw);
-    if (parsed.success) this.sessions = parsed.data.sessions.filter(session => !session.ephemeral && (restoreAccounts || (session.email === undefined && session.userId === undefined && session.idp === undefined)));
+    if (!parsed.success) return;
+    // The email on a provider session is a label: its membership is the
+    // provider's (revalidateEmailSessions skips it too).
+    const providerOnly = (session: SessionRecord) => session.idp !== undefined && session.userId === undefined && session.membershipAuthority === undefined;
+    const now = this.now();
+    for (const entry of parsed.data.ended ?? []) {
+      if (now - entry.at < ENDED_SESSION_MEMORY_MS) this.ended.set(entry.tokenHash, entry);
+    }
+    // Dropped here (account sessions after an unclean stop) are not
+    // remembered as ended: they read as unknown, which clients retry.
+    const dropped: SessionRecord[] = [];
+    this.sessions = parsed.data.sessions.filter((session) => {
+      if (session.ephemeral) return false;
+      if (restoreAccounts || (session.email === undefined && session.userId === undefined && session.idp === undefined)) return true;
+      if (!restoreProviderSessions || !providerOnly(session)) {
+        dropped.push(session);
+        return false;
+      }
+      this.recheck.add(session.id);
+      return true;
+    });
+    if (dropped.length) {
+      console.warn(`sessions: ${dropped.length} account session(s) ended after an unclean stop${restoreProviderSessions ? "" : " (a session write had failed before it)"}`);
+    }
+  }
+
+  /** Keep why this session ended, by its token hash, bounded. */
+  private remember(session: Pick<SessionRecord, "tokenHash" | "id" | "ephemeral">, code: SessionEndCode, at = this.now()): void {
+    if (session.ephemeral) return;
+    this.ended.delete(session.tokenHash);
+    this.ended.set(session.tokenHash, { tokenHash: session.tokenHash, id: session.id, code, at });
+    while (this.ended.size > ENDED_SESSION_MEMORY_MAX) {
+      const oldest = this.ended.keys().next().value;
+      if (oldest === undefined) break;
+      this.ended.delete(oldest);
+    }
+  }
+
+  /** Why `token` does not authenticate (2026-10-20): the code of the 401 and
+   * the session id it named, when this server remembers it. Never the token
+   * or its hash. */
+  explainRefusal(token: string | undefined): { code: SessionRefusalCode; sessionId?: string } {
+    if (!token) return { code: "session_unknown" };
+    const hash = sha256(token);
+    const now = this.now();
+    const live = this.sessions.find((s) => sameDigest(s.tokenHash, hash));
+    if (live) {
+      if (live.expiresAt <= now) return { code: "session_expired", sessionId: live.id };
+      return { code: "session_revoked", sessionId: live.id };
+    }
+    const ended = this.ended.get(hash);
+    if (ended && now - ended.at < ENDED_SESSION_MEMORY_MS) return { code: ended.code, sessionId: ended.id };
+    return { code: "session_unknown" };
+  }
+
+  /** Whether a restored "Sign in with Pulsatrix" session still waits for its
+   * provider recheck before it may be served. */
+  needsRecheck(sessionId: string): boolean {
+    return this.recheck.has(sessionId);
+  }
+
+  /** The provider confirmed this session after a restart. */
+  recheckDone(sessionId: string): void {
+    this.recheck.delete(sessionId);
+  }
+
+  /** End every session still waiting for a recheck (a server without a
+   * provider to ask). Returns how many. */
+  dropPendingRechecks(): number {
+    const ids = [...this.recheck];
+    if (!ids.length) return 0;
+    this.revokeWhere((session) => this.recheck.has(session.id));
+    return ids.length;
+  }
+
+  private markUnsynced(): void {
+    try {
+      writeFileSync(this.unsyncedMarker, "A session write failed; account sessions end after an unclean restart.\n", { mode: 0o600 });
+    } catch {
+      /* the open marker alone still ends account sessions after a crash */
+    }
   }
 
   private syncDirectory(): void {
@@ -338,8 +466,18 @@ export class SessionRegistry {
     const dir = dirname(this.options.file);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const sessions = this.sessions.filter((session) => !session.ephemeral);
-    writeFileAtomic(this.options.file, JSON.stringify({ version: 1, sessions }, null, 2) + "\n", { mode: 0o600 });
-    this.syncDirectory();
+    const now = this.now();
+    const ended = [...this.ended.values()].filter((entry) => now - entry.at < ENDED_SESSION_MEMORY_MS);
+    try {
+      writeFileAtomic(this.options.file, JSON.stringify({ version: 1, sessions, ...(ended.length ? { ended } : {}) }, null, 2) + "\n", { mode: 0o600 });
+      this.syncDirectory();
+    } catch (error) {
+      this.markUnsynced();
+      throw error;
+    }
+    if (existsSync(this.unsyncedMarker)) {
+      try { unlinkSync(this.unsyncedMarker); } catch { /* stays conservative */ }
+    }
   }
 
   /** Call after HTTP/stream shutdown. A failed close leaves the open marker,
@@ -372,7 +510,10 @@ export class SessionRegistry {
     if (expired.length) {
       const durable = expired.some((s) => !s.ephemeral);
       this.sessions = this.sessions.filter((s) => s.expiresAt > now);
-      for (const s of expired) this.forget(s.id);
+      for (const s of expired) {
+        this.remember(s, "session_expired", now);
+        this.forget(s.id);
+      }
       if (durable) this.persist();
     }
   }
@@ -385,6 +526,7 @@ export class SessionRegistry {
   }
 
   private forget(sessionId: string): void {
+    this.recheck.delete(sessionId);
     this.lastSeenWrites.delete(sessionId);
     for (const [hash, ticket] of this.tickets) if (ticket.sessionId === sessionId) this.tickets.delete(hash);
     for (const listener of this.onRevoked) listener(sessionId);
@@ -647,7 +789,10 @@ export class SessionRegistry {
     if (!revoked.length) return;
     const ids = new Set(revoked.map((session) => session.id));
     this.sessions = this.sessions.filter((session) => !ids.has(session.id));
-    for (const session of revoked) this.forget(session.id);
+    for (const session of revoked) {
+      this.remember(session, "session_revoked");
+      this.forget(session.id);
+    }
     try {
       this.persist();
     } catch {
@@ -707,10 +852,11 @@ export class SessionRegistry {
     return this.sessions.filter((s) => !s.ephemeral).map(publicSession);
   }
 
-  revoke(id: string): boolean {
+  revoke(id: string, code: SessionEndCode = "session_revoked"): boolean {
     const removed = this.sessions.find((s) => s.id === id);
     if (!removed) return false;
     this.sessions = this.sessions.filter((s) => s.id !== id);
+    this.remember(removed, code);
     this.forget(id);
     if (!removed.ephemeral) this.persist();
     return true;
@@ -718,11 +864,12 @@ export class SessionRegistry {
 
   /** Revoke every session the predicate picks, fire the revocation listeners
    * for each and persist once. Returns the revoked ids. */
-  revokeWhere(pick: (session: Readonly<SessionRecord>) => boolean): string[] {
+  revokeWhere(pick: (session: Readonly<SessionRecord>) => boolean, code: SessionEndCode = "session_revoked"): string[] {
     const gone = this.sessions.filter((s) => pick(s));
     if (!gone.length) return [];
     const ids = new Set(gone.map((s) => s.id));
     this.sessions = this.sessions.filter((s) => !ids.has(s.id));
+    for (const session of gone) this.remember(session, code);
     try {
       this.persist();
     } catch {
@@ -748,7 +895,8 @@ export class SessionRegistry {
   /** Live durable sessions the predicate picks (copies). Bot-act copies are excluded. */
   liveWhere(pick: (session: SessionRecord) => boolean): SessionRecord[] {
     const now = this.now();
-    return this.sessions.filter((s) => !s.ephemeral && s.expiresAt > now && !this.personal(s.scopes) && pick(s)).map((s) => structuredClone(s));
+    // A session still waiting for its provider recheck acts for no one.
+    return this.sessions.filter((s) => !s.ephemeral && s.expiresAt > now && !this.recheck.has(s.id) && !this.personal(s.scopes) && pick(s)).map((s) => structuredClone(s));
   }
 
   /** A 60-second copy of one live session, for one bot action. Same scopes,
@@ -757,7 +905,7 @@ export class SessionRegistry {
    * an expired session, or a session this registry refuses as personal. */
   delegate(sessionId: string): { token: string; session: PublicSession } | null {
     const source = this.sessions.find((s) => s.id === sessionId && s.expiresAt > this.now());
-    if (!source || source.ephemeral || this.personal(source.scopes)) return null;
+    if (!source || source.ephemeral || this.recheck.has(source.id) || this.personal(source.scopes)) return null;
     const now = this.now();
     const token = `sgx_sess_${randomBytes(32).toString("base64url")}`;
     const record: SessionRecord = {

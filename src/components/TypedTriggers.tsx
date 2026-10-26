@@ -23,6 +23,7 @@ import {
   TRIGGER_RATE_LIMIT_DEFAULT,
   TRIGGER_RATE_LIMIT_MAX,
   TRIGGER_SOURCES,
+  triggerEveryEvent,
   type GraphConnectorOption,
   type TriggerAutomationStatus,
   type TriggerFilterKey,
@@ -32,6 +33,7 @@ import {
   type TriggerSourceType,
 } from "../../shared/trigger-sources";
 import type { WebhookTrigger, WebhookTriggerInput } from "@/lib/webhooks";
+import { useBotInboundMail, type BotInboundMail } from "@/lib/bot-inbound-mail";
 import { api, useStore, type Bot } from "@/state/store";
 
 import { Switch } from "./SettingsPrimitives";
@@ -63,9 +65,45 @@ export interface TypedDraft {
   pollerLead?: string;
   /** Write only: the poller's password or the ICS link. Memory only. */
   pollerSecret?: string;
+  /** GitHub: also run for comments posted by an app or bot. */
+  includeBotComments?: boolean;
+  /** Bot email (S2): the owner's opt-in to the bot's usual tools. */
+  allowFullTools?: boolean;
 }
 
 export const EMPTY_TYPED_DRAFT: TypedDraft = { events: [], filters: {}, signingSecret: "", tenantId: "", rateLimit: "" };
+
+/** The source's name: a brand as written, or for bot email (2026-10-21)
+ * the translated "Bot email". */
+export function typedSourceLabel(type: TriggerSourceType): string {
+  return type === "botmail" ? t("triggers.source.botmail") : TRIGGER_SOURCES[type].label;
+}
+
+/** Bot email: the bot's own address (from the Perspicax relay) with a Copy
+ * button, where other sources show their URL. Nothing while loading. */
+export function BotMailAddressLine({ mail }: { mail: BotInboundMail | null }) {
+  const [copied, setCopied] = useState(false);
+  if (!mail) return null;
+  const address = mail.available ? mail.address : null;
+  if (!address) return <p data-botmail-no-address="" className="text-[11px] text-ink-secondary">{t("triggers.botmail.noAddress")}</p>;
+  const copy = () => void copyText(address).then((result) => {
+    if (result !== "copied") return;
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1_600);
+  });
+  return (
+    <div data-botmail-address="">
+      <div className="text-[11px] text-ink-secondary">{t("triggers.botmail.address")}</div>
+      <div className="mt-1 flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-lg bg-inset px-2 py-1 font-mono text-[10.5px] text-ink">{address}</code>
+        <button type="button" onClick={copy} className="flex shrink-0 items-center gap-1 rounded-lg border border-hairline/50 px-2 py-1 text-[11px] font-medium text-ink hover:bg-raised">
+          {copied ? <Check size={12} className="text-success" /> : <Copy size={12} />}{t(copied ? "triggers.copied" : "triggers.botmail.copy")}
+        </button>
+      </div>
+      {!mail.enabled && <p className="mt-1 text-[11px] text-ink-secondary">{t("botPanel.email.pending")}</p>}
+    </div>
+  );
+}
 
 export function typedEventLabel(kind: string): string {
   return t(`triggers.event.${kind.replace(/\./g, "_")}` as LocaleKey);
@@ -88,6 +126,8 @@ export function typedSourceConfig(type: TriggerSourceType, draft: TypedDraft): T
     if (values.length) filters[key] = values;
   }
   const config: TriggerSourceConfig = { type, events: draft.events.filter((kind) => definition.events.includes(kind)), filters };
+  if (type === "github" && draft.includeBotComments) config.includeBotComments = true;
+  if (type === "botmail" && draft.allowFullTools) config.allowFullTools = true;
   const rate = Number(draft.rateLimit);
   if (draft.rateLimit.trim() && Number.isInteger(rate) && rate >= 1 && rate <= TRIGGER_RATE_LIMIT_MAX) config.rateLimitPerMinute = rate;
   if (GRAPH_TYPES.has(type) && draft.tenantId.trim()) config.tenantId = draft.tenantId.trim();
@@ -141,8 +181,14 @@ export function typedTriggerInput(type: TriggerSourceType, draft: TypedDraft, ba
 }
 
 export function draftFromConfig(config: TriggerSourceConfig): TypedDraft {
+  // A trigger saved before the current catalog with nothing checked runs
+  // for the old set only: show those checked, so saving keeps them.
+  const every = triggerEveryEvent(config.type, config.catalog);
+  const legacy = !config.events.length && every.length < TRIGGER_SOURCES[config.type].events.length;
   return {
-    events: [...config.events],
+    events: legacy ? [...every] : [...config.events],
+    ...(config.includeBotComments ? { includeBotComments: true } : {}),
+    ...(config.allowFullTools ? { allowFullTools: true } : {}),
     filters: Object.fromEntries(Object.entries(config.filters).map(([key, values]) => [key, (values ?? []).join(", ")])),
     signingSecret: "",
     tenantId: config.tenantId ?? "",
@@ -315,6 +361,7 @@ export function TypedSourceFields({
   onChange,
   creating,
   pollerSecretSet,
+  botId,
 }: {
   type: TriggerSourceType;
   draft: TypedDraft;
@@ -322,9 +369,14 @@ export function TypedSourceFields({
   creating: boolean;
   /** Editing a trigger whose poller credential is already stored. */
   pollerSecretSet?: boolean;
+  /** Bot email: the bot whose address the builder shows. */
+  botId?: string;
 }) {
   const definition = TRIGGER_SOURCES[type];
   const deferred = new Set(definition.deferredFilters ?? []);
+  const contains = new Set(definition.containsFilters ?? []);
+  const relay = definition.secretMode === "relay";
+  const mail = useBotInboundMail(relay && creating ? botId : null);
   const toggleEvent = (kind: string) =>
     onChange({ ...draft, events: draft.events.includes(kind) ? draft.events.filter((value) => value !== kind) : [...draft.events, kind] });
   return (
@@ -370,10 +422,25 @@ export function TypedSourceFields({
                 maxLength={1_000}
               />
               {deferred.has(key) && <span className="mt-0.5 block text-[10.5px] text-ink-tertiary">{t("triggers.typed.deferred", { provider: definition.label })}</span>}
+              {contains.has(key) && <span className="mt-0.5 block text-[10.5px] text-ink-tertiary">{t("triggers.typed.contains")}</span>}
             </label>
           ))}
         </div>
       </fieldset>
+      {type === "github" && (
+        <div className="flex items-start justify-between gap-3">
+          <span className="min-w-0">
+            <span className="block text-[11.5px] font-medium text-ink-secondary">{t("triggers.typed.botComments")}</span>
+            <span className="mt-0.5 block text-[10.5px] text-ink-tertiary">{t("triggers.typed.botCommentsHelp")}</span>
+          </span>
+          <Switch
+            checked={Boolean(draft.includeBotComments)}
+            aria-label={t("triggers.typed.botComments")}
+            data-typed-bot-comments
+            onClick={() => onChange({ ...draft, includeBotComments: !draft.includeBotComments })}
+          />
+        </div>
+      )}
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="block">
           <span className="mb-1 block text-[11px] text-ink-secondary">{t("triggers.typed.rateLimit")}</span>
@@ -396,7 +463,27 @@ export function TypedSourceFields({
         )}
       </div>
       <ConnectionFields type={type} draft={draft} onChange={onChange} secretSet={pollerSecretSet} />
-      {creating && (definition.secretMode === "provided" ? (
+      {type === "botmail" && (
+        <div className="flex items-start justify-between gap-3">
+          <span className="min-w-0">
+            <span className="block text-[11.5px] font-medium text-ink-secondary">{t("triggers.botmail.fullTools")}</span>
+            <span className="mt-0.5 block text-[10.5px] text-warning">{t("triggers.botmail.fullToolsHelp")}</span>
+          </span>
+          <Switch
+            checked={Boolean(draft.allowFullTools)}
+            aria-label={t("triggers.botmail.fullTools")}
+            data-botmail-full-tools=""
+            onClick={() => onChange({ ...draft, allowFullTools: !draft.allowFullTools })}
+          />
+        </div>
+      )}
+      {relay && (
+        <div className="space-y-2">
+          <p data-botmail-relay="" className="flex items-center gap-1.5 text-[11px] text-ink-secondary"><ShieldCheck size={12} aria-hidden="true" />{t("triggers.botmail.relay")}</p>
+          {creating && <BotMailAddressLine mail={mail} />}
+        </div>
+      )}
+      {creating && !relay && (definition.secretMode === "provided" ? (
         <label className="block">
           <span className="mb-1 block text-[11px] text-ink-secondary">{t("triggers.typed.secretProvided", { provider: definition.label })}</span>
           <input
@@ -520,6 +607,8 @@ export function TypedTriggerRow({
     setNotice(t("triggers.typed.saved"));
   });
   const automation = automationText(webhook.automation);
+  const relay = definition.secretMode === "relay";
+  const mail = useBotInboundMail(relay ? webhook.botId : null);
 
   return (
     <li data-trigger-row={webhook.id} data-trigger-source={source.type}>
@@ -531,7 +620,7 @@ export function TypedTriggerRow({
         )}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5 text-[13.5px] font-medium text-ink">
-            <span className="shrink-0 rounded-md bg-raised px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-secondary">{definition.label}</span>
+            <span className="shrink-0 rounded-md bg-raised px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-secondary">{typedSourceLabel(source.type)}</span>
             <span className="truncate">{webhook.name}</span>
             <ArrowRight size={13} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
             <span className="truncate">{bot?.name ?? t("triggers.deletedBot")}</span>
@@ -545,7 +634,7 @@ export function TypedTriggerRow({
                 ? t("triggers.received", { count: webhook.deliveryCount, when: relativeTime(webhook.lastReceivedAt) })
                 : t("triggers.neverReceived")}
             </span>
-            {!webhook.signingSecretSet && !source.poller && <span className="text-warning">· {t("triggers.typed.secretMissing")}</span>}
+            {!relay && !webhook.signingSecretSet && !source.poller && <span className="text-warning">· {t("triggers.typed.secretMissing")}</span>}
             {source.poller && webhook.pollerCredentialsSet === false && <span className="text-warning">· {t("triggers.poller.secretMissing")}</span>}
             {automation && (
               <span data-typed-automation={webhook.automation?.state} className={automation.tone === "error" ? "text-danger" : automation.tone === "ok" ? "text-success" : "text-ink-secondary"}>
@@ -579,6 +668,12 @@ export function TypedTriggerRow({
       <details className="group/advanced px-3.5 pb-2.5" open={Boolean(setup)}>
         <summary className="cursor-pointer text-[12px] font-medium text-ink-secondary hover:text-ink">{t("triggers.advanced")}</summary>
         <div className="mt-3 space-y-3 pb-2 text-[11.5px] leading-relaxed text-ink-secondary">
+          {relay ? (
+            <section data-typed-setup className="space-y-2 rounded-xl border border-accent-border/30 bg-inset/60 px-3 py-2.5">
+              <p>{t("triggers.setup.botmail")}</p>
+              <BotMailAddressLine mail={mail} />
+            </section>
+          ) : <>
           <section data-typed-setup className="rounded-xl border border-accent-border/30 bg-inset/60 px-3 py-2.5">
             <div className="mb-1.5 font-medium text-ink">{t("triggers.typed.setupTitle", { provider: definition.label })}</div>
             <p>{source.graph ? t("triggers.setup.graphAuto", { connector: source.graph.connector }) : source.poller ? t("triggers.setup.pollerAuto") : t(`triggers.setup.${source.type}` as LocaleKey)}</p>
@@ -627,6 +722,7 @@ export function TypedTriggerRow({
               </button>
             )}
           </section>
+          </>}
 
           <p>
             <span className="font-medium text-ink">{t("triggers.typed.events")}:</span>{" "}

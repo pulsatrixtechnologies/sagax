@@ -2,6 +2,15 @@ import XCTest
 import CompanionCore
 
 final class CwWidgetsTests: XCTestCase {
+    func testOnlyAViewToolDrawsItsWidget() {
+        XCTAssertTrue(CwWidgets.isViewTool("mcp__perspicax_x__cw_psa__show_schedule"))
+        XCTAssertTrue(CwWidgets.isViewTool("cw_psa__show_tickets"))
+        XCTAssertFalse(CwWidgets.isViewTool("mcp__perspicax_x__cw_psa__find_schedule_entries"))
+        XCTAssertFalse(CwWidgets.isViewTool("cw_psa__query"))
+        XCTAssertFalse(CwWidgets.isViewTool("show_widget"))
+        XCTAssertFalse(CwWidgets.isViewTool(nil))
+    }
+
     func testParsesATicketAndDropsAForeignLink() throws {
         let source = """
         {"family":"ticket","view":"card","records":[{"id":48213,"summary":"Imprimante","status":"En cours","link":"https://evil.example/steal","notes":[{"text":"Bonjour","internal":true}]}]}

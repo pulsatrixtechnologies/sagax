@@ -224,8 +224,33 @@ function GoalRunMenu({ entries }: { entries: MenuEntry[] }) {
   );
 }
 
+export interface GoalHistoryItem {
+  id: string;
+  goal: string;
+  status: string;
+}
+
+/** Where this goal sits among the room's goal cards. Null when it is the only one. */
+export function goalRunPlace(
+  messages: ReadonlyArray<{ id: string; kind?: string; goalRun?: { goal?: string; status: string } | null }>,
+  messageId: string,
+): { position: number; total: number; earlier: GoalHistoryItem[] } | null {
+  const goals = messages.filter((message) => message.kind === "goal.run" && message.goalRun);
+  const index = goals.findIndex((message) => message.id === messageId);
+  if (index < 0 || goals.length < 2) return null;
+  return {
+    position: index + 1,
+    total: goals.length,
+    earlier: goals.slice(0, index).map((message) => ({
+      id: message.id,
+      goal: message.goalRun?.goal?.trim() || "",
+      status: message.goalRun?.status ?? "",
+    })),
+  };
+}
+
 /** One live card per goal-driven room run, patched in place by the server. */
-export function GoalRunCard({ message, onStop, onRunAgain }: { message: Message } & GoalRunActions) {
+export function GoalRunCard({ message, onStop, onRunAgain, history }: { message: Message; history?: { position: number; total: number; earlier: GoalHistoryItem[] } | null } & GoalRunActions) {
   const [expanded, setExpanded] = useState(false);
   const [announce, setAnnounce] = useState("");
   const run = message.goalRun;
@@ -303,6 +328,16 @@ export function GoalRunCard({ message, onStop, onRunAgain }: { message: Message 
               <h3 className={cn("mt-0.5 text-[13.5px] font-semibold text-ink", expanded ? "whitespace-pre-wrap break-words" : "truncate")}>
                 {goal || t("goalRun.untitled")}
               </h3>
+              {history && history.total > 1 && (
+                <p className="text-[11.5px] text-ink-tertiary" data-goal-run-position>
+                  {t("goalRun.position", { position: history.position, total: history.total })}
+                </p>
+              )}
+              {!expanded && goalText.length > 180 && (
+                <button type="button" data-goal-run-full className="mt-0.5 text-[12px] text-ink-secondary hover:text-ink" onClick={() => setExpanded(true)}>
+                  {t("goalRun.showFull")}
+                </button>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {primary && (
@@ -341,6 +376,19 @@ export function GoalRunCard({ message, onStop, onRunAgain }: { message: Message 
           <p className="mt-1 text-[11.5px] text-ink-tertiary">
             {t("goalRun.coordinating", { name: run.coordinatorName })}
           </p>
+          {history && history.earlier.length > 0 && (
+            <details className="mt-2" data-goal-run-history>
+              <summary className="cursor-pointer text-[12px] text-ink-secondary">{t("goalRun.history")}</summary>
+              <ol className="mt-1 flex flex-col gap-1">
+                {history.earlier.map((item) => (
+                  <li key={item.id} className="text-[12px] text-ink-secondary">
+                    <span className="text-ink-tertiary">{item.status}</span>
+                    {item.goal ? ` ${item.goal}` : ""}
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
           {expanded && (
             <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11.5px] text-ink-secondary" data-goal-run-details>
               <dt className="text-ink-tertiary">{t("goalRun.started")}</dt>

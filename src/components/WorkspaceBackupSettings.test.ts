@@ -93,6 +93,29 @@ describe("Settings full backups", () => {
     for (const text of ["Validated backup", "0.1.71", "Bots", "Threads", "Messages", "Fixture warning", "External CLI sign-ins"]) expect(preview).toContain(text);
   });
 
+  it("lists what to reconnect, by category with counts only, in the preview and after the restore", async () => {
+    const reconnect = { engines: { count: 3, people: 2 }, credentialVault: { count: 1, people: 1 }, github: { count: 2 }, phones: { count: 1 } };
+    const preview = renderToStaticMarkup(createElement(WorkspaceBackupSummaryView, { summary: { ...summary, reconnect } }));
+    expect(preview).toContain("data-backup-reconnect");
+    expect(preview).toContain("Reconnect after the restore");
+    expect(preview).toContain("This backup holds no secret");
+    expect(preview).toContain("Engine sign-ins (Claude, Codex, Grok and the others), each person for themselves: 3 (people: 2)");
+    expect(preview).toContain("Credential vaults: 1 (people: 1)");
+    expect(preview).toContain("GitHub and Git tokens: 2");
+    expect(preview).toContain('data-reconnect="phones"');
+    expect(preview).not.toContain('data-reconnect="mcp"');
+    // the engines line comes first, in the app's order
+    expect(preview.indexOf('data-reconnect="engines"')).toBeLessThan(preview.indexOf('data-reconnect="github"'));
+    // an archive made before the list: no list
+    expect(renderToStaticMarkup(createElement(WorkspaceBackupSummaryView, { summary }))).not.toContain("data-backup-reconnect");
+    // after the restore, Settings > Backups says it again from the server's receipt
+    fixture.api.mockResolvedValueOnce({ busy: false, lastRestoreId: "stage", lastRestoreReconnect: reconnect });
+    render(); fixture.effects[0](); await flush();
+    const html = render().html;
+    expect(html).toContain("Reconnect after your last restore");
+    expect(html).toContain("GitHub and Git tokens: 2");
+  });
+
   it("exports encrypted state by POST and downloads without putting the password in a URL or storage", async () => {
     await ready();
     storage.set("omb-drafts", "private draft"); storage.set("auth-token", "not exported"); storage.set("omb-webhook-credentials", "not exported either");

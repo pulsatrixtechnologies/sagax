@@ -27,6 +27,7 @@ import {
 } from "@/lib/cw-widgets";
 import type { CwAction, CwBillable } from "../../../shared/cw-widgets/actions.ts";
 import { filterSortTickets } from "../../../shared/cw-widgets/ticket.ts";
+import { shownCwWidget } from "../../../shared/cw-widgets/tool-call.ts";
 import { safeCwLink } from "../../../shared/cw-widgets/links.ts";
 import { safeWebsite } from "../../../shared/cw-widgets/company.ts";
 import type {
@@ -738,6 +739,7 @@ function CwWidgetViewComponent({
 }
 
 export const CwWidgetView = memo(CwWidgetViewComponent);
+export { shownCwWidget };
 
 /** Widgets on a tool run, drawn even when the tool chips stay folded. */
 export function CwActivityWidgets({
@@ -749,7 +751,7 @@ export function CwActivityWidgets({
   threadId?: string;
   botId?: string;
 }) {
-  const widgets = messages.flatMap((message) => (message.tool?.widget ? [{ key: message.id, widget: message.tool.widget }] : []));
+  const widgets = messages.flatMap((message) => (shownCwWidget(message.tool) ? [{ key: message.id, widget: message.tool!.widget! }] : []));
   if (!widgets.length) return null;
   return (
     <div className="flex w-full max-w-[min(94%,780px)] flex-col gap-2">

@@ -11,7 +11,7 @@ import { activeLocale, t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import * as shared from "../../shared/approval-describe";
 import { parseArgs, parseToolId } from "@/lib/approval-describe";
-import { readMcpGatewayCall, type McpGatewayCall } from "../../shared/mcp-gateway-call";
+import { readMcpGatewayCall, readUseToolCall, type McpGatewayCall } from "../../shared/mcp-gateway-call";
 
 export type StepPhase = "running" | "done" | "failed";
 
@@ -38,7 +38,7 @@ type Kind =
   | "coordinate" | "ask" | "delegate" | "sendTo" | "checkDelegation"
   | "whosAround" | "rooms" | "postRoom" | "startThread" | "closeThread" | "listThreads"
   | "memory" | "memorySearch" | "readConversations" | "routine" | "skill"
-  | "attachFile" | "react" | "card" | "voiceNote" | "readResult";
+  | "attachFile" | "react" | "card" | "voiceNote" | "readResult" | "phone";
 
 /** Claude and ACP built-ins, by their exact name. */
 const BUILTIN: Record<string, Kind> = {
@@ -94,6 +94,8 @@ const BARE: Record<string, Kind> = {
   react_to_message: "react", remove_reaction: "react",
   create_options_card: "card",
   send_voice_note: "voiceNote",
+  // the person's own iPhone (server/drivers/agents-phone-tools.ts): approved there
+  phone_tool: "phone",
   tool_result_read: "readResult",
   todo_write: "todo",
 };
@@ -112,6 +114,9 @@ const GATEWAY_PRODUCTS: Array<[RegExp, string]> = [
 ];
 
 const TARGET_MAX = 80;
+
+/** phone_tool's tools (shared/phone-tools.ts PHONE_TOOLS), each with its words. */
+const PHONE_TOOL_LABELS = new Set(["location", "contacts", "reminders", "calendar", "photos", "shortcut", "clipboard", "status"]);
 
 function oneLine(text: string, max = TARGET_MAX): string {
   const flat = text.replace(/\s+/g, " ").trim();
@@ -218,6 +223,10 @@ function kindTarget(kind: Kind, args: Record<string, unknown> | undefined, tool:
     case "memorySearch":
     case "readConversations":
       return oneLine(str(args, "query", "q") ?? "") || undefined;
+    case "phone": {
+      const tool = str(args, "tool");
+      return tool && PHONE_TOOL_LABELS.has(tool) ? t(`step.phone.tool.${tool}` as LocaleKey) : undefined;
+    }
     case "postRoom":
     case "startThread":
       return oneLine(str(args, "title", "room", "room_name") ?? "") || undefined;
@@ -316,6 +325,22 @@ function serverSentence(name: string): string | undefined {
   return undefined;
 }
 
+/** Grok's meta tools, as rows stored before the driver named the tool a
+ * use_tool ran (grok 1.0.62 titles them `use_tool` and `search_tool`, or
+ * "Use Tool" and "Search Tool"): a use_tool reads as the MCP tool it ran,
+ * a search_tool as looking for a tool, never "Used use tool". */
+function grokMetaTool(tool: StepTool, phase: StepPhase): StepReading | undefined {
+  const meta = tool.name.trim().toLowerCase().replace(/\s+/g, "_");
+  if (meta === "search_tool") {
+    const args = parseArgs(tool.input) ?? parseArgs(tool.summary);
+    return { label: t(`step.toolSearch.${phase}` as LocaleKey), target: oneLine(str(args, "query", "q") ?? "") || undefined };
+  }
+  if (meta !== "use_tool") return undefined;
+  const call = readUseToolCall(tool.input ?? tool.summary, { title: "use_tool" });
+  const named = call ? mcpLabel({ ...tool, name: call.id, input: JSON.stringify(call.args), summary: undefined }, phase) : undefined;
+  return named ?? { label: t(`step.useTool.${phase}` as LocaleKey) };
+}
+
 /** True when the name is already a sentence (a server row), not a tool id. */
 function isSentence(name: string): boolean {
   return /\s/.test(name.trim());
@@ -325,6 +350,8 @@ function isSentence(name: string): boolean {
 export function readStep(tool: StepTool, nameOf?: StepNameOf): StepReading {
   const phase = stepPhase(tool);
   const name = tool.name.trim();
+  const meta = grokMetaTool(tool, phase);
+  if (meta) return meta;
   const sentence = serverSentence(name);
   if (sentence) return { label: sentence };
   if (isSentence(name)) return { label: name };
@@ -340,8 +367,7 @@ export function readStep(tool: StepTool, nameOf?: StepNameOf): StepReading {
   if (kind) return { label: kindLabel(kind, phase, args, nameOf), target: kindTarget(kind, args, tool) };
   const mcp = mcpLabel(tool, phase);
   if (mcp) return mcp;
-  const composio = shared.composioActionPhrase(name);
-  const display = composio ?? name.replace(/_+/g, " ");
+  const display = name.replace(/_+/g, " ");
   const summary = tool.summary && tool.summary !== tool.name && !/^[[{]/.test(tool.summary.trim()) ? oneLine(tool.summary) : undefined;
   return { label: t(`step.use.${phase}` as LocaleKey, { name: display }), target: summary };
 }

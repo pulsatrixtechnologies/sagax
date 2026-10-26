@@ -276,6 +276,17 @@ export class VoiceCall {
   private lastCut: PlaybackCut | null = null;
   /** the answer's text so far, as last handed to replyProgress */
   private replyText = "";
+  /** The chosen xAI voice, pinned for the session: once a concrete voice is
+   * read it stays, so a settings read that momentarily reports none (a default
+   * fallback, the preference sync writing the server's value, a race) never
+   * switches the voice mid-call. A deliberate change to another concrete
+   * voice still takes effect (JC 2026-10-22: voice switched at random). */
+  private sessionVoice = "";
+  /** The full text of the answer replyDone last finished. A late streaming
+   * update that redelivers that same text after it is done is never spoken a
+   * second time; cleared when a new turn starts (JC 2026-10-22: voice
+   * repeated the same answer twice). */
+  private answered: string | null = null;
   /** the last utterance sent, and whether the bot has spoken since */
   /** the last utterance sent; `earlyCut`: its turn ended early (contour,
    * meaning or punctuation on the short window), so words within
@@ -513,7 +524,7 @@ export class VoiceCall {
   async prefetchFiller(text: string): Promise<void> {
     if (!text.trim() || this.fillerCache.has(text) || this.closed) return;
     const speech = this.o.speech ?? this.speechSocket?.speak ?? streamVoiceModeSpeech;
-    const spoken = await speech(this.o.botId, text, this.o.voice(), this.o.threadId(), new AbortController().signal);
+    const spoken = await speech(this.o.botId, text, this.voiceSettings(), this.o.threadId(), new AbortController().signal);
     if (!spoken || this.closed) return;
     this.fillerCache.set(text, { bytes: await readPcm(spoken.body), sampleRate: spoken.sampleRate });
   }
@@ -553,10 +564,14 @@ export class VoiceCall {
   replyProgress(text: string): void {
     if (this.state.phase === "held" || this.state.phase === "ended") return;
     if (this.turn && this.turn.sentAt !== undefined && this.turn.firstTokenAt === undefined && text.trim()) this.turn.firstTokenAt = this.now();
-    this.reply ??= this.sentences();
     // the call says at most four sentences, and stops at a question; what
     // was already kept is never taken back (a stream fed less starts over)
     const kept = spokenAnswer(text).text;
+    // A finished answer whose final text streams in once more (a late
+    // streaming update after replyDone) opens no fresh stream: it is done,
+    // and speaking it again would repeat the whole answer.
+    if (this.reply === null && this.answered !== null && this.answered === kept) return;
+    this.reply ??= this.sentences();
     this.replyText = this.replyText.startsWith(kept) && this.reply?.position ? this.replyText : kept;
     this.applyTtsLead(this.reply.feed(this.replyText), this.replyText.slice(this.reply.position));
   }
@@ -571,6 +586,8 @@ export class VoiceCall {
     // the answer is done: its utterance ends (text.done)
     this.applyTtsLead(rest, "", true);
     this.leadSent = null;
+    // remember it, so a late streaming update of the same text is not spoken again
+    this.answered = kept;
     if (!this.player.busy) return Promise.resolve(true);
     return new Promise((resolve) => this.speechWaiters.push(resolve));
   }
@@ -607,6 +624,23 @@ export class VoiceCall {
   /** The streaming voice speaks from the first clause, no character wait. */
   private get streaming(): boolean {
     return this.speechSocket?.streaming === true;
+  }
+
+  /** The voice settings for this call, with the chosen voice pinned for the
+   * session (sessionVoice). Every utterance reads the voice through here, so
+   * the voice id never changes from a per-utterance re-resolution: a settings
+   * read that momentarily reports no voice keeps the one already chosen. */
+  private voiceSettings(): VoiceModeSettings {
+    const live = this.o.voice();
+    if (live.voice) this.sessionVoice = live.voice;
+    const voice = live.voice || this.sessionVoice;
+    return voice === live.voice ? live : { ...live, voice };
+  }
+
+  /** The call's language (what the bar's panel picked, or "auto"), so the
+   * app's own spoken lines stay consistent with the answer. */
+  get language(): string {
+    return this.voiceSettings().language;
   }
 
   private sentences(): SentenceStream {
@@ -657,7 +691,7 @@ export class VoiceCall {
     const speech = opts?.more
       ? (socket?.begin ?? this.o.speech ?? streamVoiceModeSpeech)
       : (this.o.speech ?? socket?.speak ?? streamVoiceModeSpeech);
-    let audio = speech(this.o.botId, text, this.o.voice(), this.o.threadId(), controller.signal);
+    let audio = speech(this.o.botId, text, this.voiceSettings(), this.o.threadId(), controller.signal);
     // the first sentence of an answer: when its first audio bytes arrive
     if (first) audio = audio.then((spoken) => (spoken ? { ...spoken, body: firstChunk(spoken.body, () => { turn!.ttsFirstByteAt ??= this.now(); }) } : spoken));
     const sentence: Sentence = {
@@ -669,7 +703,7 @@ export class VoiceCall {
     };
     if (opts?.more) sentence.open = () => this.openSentence === sentence;
     sentence.audio.catch(() => {});
-    this.player.speed = this.o.voice().speed;
+    this.player.speed = this.voiceSettings().speed;
     if (holdSpeculativePlayback({ speculative: this.speculated !== null, endpointConfirmed: this.endpointConfirmed }) && !opts?.filler) {
       this.held.push(sentence);
     } else {
@@ -947,7 +981,7 @@ export class VoiceCall {
     const pitch = this.turns.prosody && probability >= 0.3 ? estimatePitch(frame) : null;
     // a voice, speed or language change reopens the warm socket while idle,
     // so the next clause does not pay the reconnect before its first audio
-    this.speechSocket?.retune(this.o.voice());
+    this.speechSocket?.retune(this.voiceSettings());
     const playback = this.player.level();
     const echo = this.guard.update(level, playback);
     // lingering: the speakers can still be returning the bot after playback
@@ -1211,7 +1245,7 @@ export class VoiceCall {
       case "cancel-speech": {
         // what played by the audio clock, plus what the bot had written but
         // not yet handed to the voice: the person heard none of that
-        const played = this.player.playback(this.o.voice().speed);
+        const played = this.player.playback(this.voiceSettings().speed);
         const unwritten = this.unsentReply();
         const cut: PlaybackCut = { heard: played.heard, unheard: [played.unheard, unwritten].filter(Boolean).join(" ") };
         if (cut.heard || cut.unheard) this.lastCut = cut;
@@ -1222,6 +1256,7 @@ export class VoiceCall {
         void this.player.cancel();
         this.reply = null;
         this.replyText = "";
+        this.answered = null;
         this.leadSent = null;
         if (this.bargeIn) {
           this.bargeIn.cancelledAt = this.now();
@@ -1262,6 +1297,7 @@ export class VoiceCall {
         // last one's utterance, if it never got its end, ends now
         this.reply = null;
         this.replyText = "";
+        this.answered = null;
         this.endOpenReply();
         this.player.resetLedger();
         return;
@@ -1397,6 +1433,7 @@ export class VoiceCall {
       this.player.resetLedger();
       this.reply = null;
       this.replyText = "";
+      this.answered = null;
       this.leadSent = null;
     }
     const utteranceId = this.newId();
@@ -1469,6 +1506,7 @@ export class VoiceCall {
     this.lastSent = { text: stripFillers(text), endedAt: this.turn.endedAt, botSpoke: false };
     this.reply = null;
     this.replyText = "";
+    this.answered = null;
     this.endOpenReply();
     this.player.resetLedger();
     this.armCue(this.turn);

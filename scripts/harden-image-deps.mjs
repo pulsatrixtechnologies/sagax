@@ -237,8 +237,14 @@ export function patchPipTrees(root, patches = PIP_RUNTIME_PATCHES, { runPip, dep
 
 export function parseArgs(argv) {
   const roots = [];
+  let noVenv = false;
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === "--root") {
+    if (argv[i] === "--no-venv") {
+      // An image without Hermes (deploy/run: Claude Code and Codex only):
+      // the npm overlay still runs; a venv found anyway is an error, so a
+      // Python tree never ships without its pinned fixes.
+      noVenv = true;
+    } else if (argv[i] === "--root") {
       const value = argv[++i];
       if (!value) throw new Error("--root needs a directory");
       roots.push(value);
@@ -246,20 +252,24 @@ export function parseArgs(argv) {
       throw new Error(`unknown argument: ${argv[i]}`);
     }
   }
-  return { roots };
+  return { roots, noVenv };
 }
 
 async function main() {
-  const { roots } = parseArgs(process.argv.slice(2));
-  if (roots.length === 0) throw new Error("usage: node scripts/harden-image-deps.mjs --root <dir>...");
+  const { roots, noVenv } = parseArgs(process.argv.slice(2));
+  if (roots.length === 0) throw new Error("usage: node scripts/harden-image-deps.mjs [--no-venv] --root <dir>...");
   const npmApplied = [];
   const pipApplied = [];
   for (const root of roots) {
     npmApplied.push(...await patchNpmTree(root));
-    if (findVenvPips(root).length === 0) continue;
+    const venvs = findVenvPips(root);
+    if (noVenv && venvs.length > 0) {
+      throw new Error(`pip overlay: --no-venv but a venv was found under ${root}`);
+    }
+    if (venvs.length === 0) continue;
     pipApplied.push(...patchPipTrees(root));
   }
-  if (PIP_RUNTIME_PATCHES.length > 0 && pipApplied.length === 0) {
+  if (!noVenv && PIP_RUNTIME_PATCHES.length > 0 && pipApplied.length === 0) {
     throw new Error("pip overlay: no venv found under --root");
   }
   for (const row of npmApplied) {

@@ -9,12 +9,11 @@
 //   one-shot cannot run, the draft is drawn from the thread title and the
 //   excerpt (source "excerpt"); the person edits either before anything is
 //   created.
-// - Memory carry-over is an explicit opt-in, off by default: without
-//   `includeMemory: true` nothing of the source bot's memory and nothing of
-//   the conversation goes into the new bot (carryOverPlan). With it, only
-//   the notes the person ticked, plus a summary of the conversation
-//   (memory/conversation-carry-over.md, drafted by the compaction summary
-//   helper), each shown to them before they confirm.
+// - Since 2026-10-21 (JC: a copy, never the private memory) nothing of the
+//   conversation and nothing of the bot's own memory is written into the new
+//   bot. POST /api/bots/:id/team-bot-carry answers 410 private_memory_never.
+//   carryOverPlan stays the pure description of that refusal (includeMemory
+//   is ignored by the route) and is covered by the tests.
 //
 // Pure; covered by team-bot-draft.test.ts.
 import { redactSecretsInText } from "./redact.ts";

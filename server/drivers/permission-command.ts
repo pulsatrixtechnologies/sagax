@@ -32,6 +32,25 @@ export function permissionPaths(tool: unknown, input: unknown, cwd: string | und
   return raw.map((path) => (path.includes("\0") ? "invalid" : path.startsWith("~") || !cwd ? path : resolve(cwd, path)));
 }
 
+/** The tool input with its file path fields made absolute against the
+ * engine's cwd (a Claude tool may name a working-folder file by its
+ * relative path, server/workspace.ts): what Sagax shows on a card, scopes
+ * an "Always allow" rule with and records as a written file. Anything that
+ * is not a relative path field of a file tool is left as it was. */
+export function withAbsolutePaths(tool: unknown, input: unknown, cwd: string | undefined): unknown {
+  if (!cwd || typeof tool !== "string" || !PATH_TOOLS.has(tool.toLowerCase())) return input;
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+  const fields = input as Record<string, unknown>;
+  let out: Record<string, unknown> | null = null;
+  for (const key of ["file_path", "notebook_path", "path"]) {
+    const value = fields[key];
+    if (typeof value !== "string" || !value.trim() || value.includes("\0") || value.startsWith("~") || isAbsolute(value)) continue;
+    out ??= { ...fields };
+    out[key] = resolve(cwd, value);
+  }
+  return out ?? input;
+}
+
 export function permissionLaunchCwd(cwd: string): string | undefined {
   try { return realpathSync(cwd); } catch { return undefined; }
 }

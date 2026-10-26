@@ -142,3 +142,33 @@ export function chosenComputer(choices: ComputerChoice[], source: "server" | "lo
   const current = currentDesktop(status);
   return choices.find((choice) => choice.source === "local" && choice.desktopId === current?.id) ?? null;
 }
+
+/** Settings > Computer > Other computers: the answer's code says why a
+ * rename or a removal was refused (server/desktop-bridge.ts). */
+export class ComputerChangeError extends Error {
+  constructor(message: string, readonly code: string | undefined) {
+    super(message);
+  }
+}
+
+async function changeComputer(action: "rename" | "remove", body: Record<string, string>, fetchImpl: typeof fetch): Promise<void> {
+  const response = await fetchImpl(`/api/me/desktop-bridge/computers/${action}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (response.ok) return;
+  const answer = await response.json().catch(() => ({})) as { error?: unknown; code?: unknown };
+  throw new ComputerChangeError(typeof answer.error === "string" ? answer.error : `computer ${action} ${response.status}`, typeof answer.code === "string" ? answer.code : undefined);
+}
+
+/** Give one of the person's computers another name (1 to 120 characters). */
+export function renameComputer(id: string, name: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+  return changeComputer("rename", { computer: id, name }, fetchImpl);
+}
+
+/** Take one of the person's computers off the list; refused while it is online. */
+export function removeComputer(id: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+  return changeComputer("remove", { computer: id }, fetchImpl);
+}

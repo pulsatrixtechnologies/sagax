@@ -259,6 +259,8 @@ export class ProfileRequestService {
     changes: unknown;
     reason: unknown;
     from?: { botId: string; name: string; color: string };
+    /** 2026-10-20: the person asked their Primary Bot for this now (server/index.ts primaryAskedProposal). */
+    primaryAsked?: boolean;
   }): { requestId: string; messageId: string; title: string; summary: string; detail: string } {
     return this.prepare(args);
   }
@@ -326,10 +328,10 @@ export class ProfileRequestService {
     };
 
     const copy = profileCardCopy({ name: targetName, crossBot }, snapshot, before, finalChanges, reason);
-    const grant = submitted ? this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null : null;
+    const grant = submitted ? (args.primaryAsked ? "primary-bot" as const : this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null) : null;
     // A new working folder widens what the bot's tools read and write
     // without asking, so below Full access it keeps today's card.
-    const automatic = grant === "full-access" || (grant === "self" && finalChanges.cwd === undefined);
+    const automatic = grant === "full-access" || ((grant === "self" || grant === "primary-bot") && finalChanges.cwd === undefined);
     const persistence = this.canPersist?.(args.botId, args.threadId, !automatic);
     if (persistence && !persistence.ok) {
       throw new ProfileRequestError(persistence.error, persistence.status);

@@ -12,10 +12,13 @@
 // connection, then the organization's GitHub tokens. When the git host
 // refuses an add or a refresh, the parent says so (`needsToken`) and the
 // field opens there.
-import { useEffect, useState } from "react";
-import { KeyRound, Loader2, Plus, RefreshCw, Store, Trash2 } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { KeyRound, Loader2, Lock, Plus, RefreshCw, Store, Trash2, Users } from "lucide-react";
 
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+
+export type MarketplaceVisibility = "private" | "org";
 
 export interface MarketplaceSummary {
   name: string;
@@ -27,6 +30,58 @@ export interface MarketplaceSummary {
   bots?: number;
   /** the bot scope's bot keeps a token for it (never the token) */
   hasToken?: boolean;
+  /** "private" (the person who added it) or "org" (shared with everyone) */
+  visibility?: MarketplaceVisibility;
+  /** this viewer added it, so may change its visibility */
+  mine?: boolean;
+}
+
+/** Private (me) vs Organisation (everyone): two pills, like the scope toggle. */
+function VisibilityChoice({ value, onChange, disabled }: { value: MarketplaceVisibility; onChange: (value: MarketplaceVisibility) => void; disabled?: boolean }) {
+  const option = (choice: MarketplaceVisibility, label: string, icon: ReactNode) => (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={value === choice}
+      disabled={disabled}
+      data-marketplace-visibility-option={choice}
+      onClick={() => onChange(choice)}
+      className={cn(
+        "flex h-7 min-w-0 items-center gap-1.5 rounded-full px-3 text-[12px] transition-colors disabled:opacity-40",
+        value === choice ? "bg-accent text-accent-ink" : "text-ink-secondary hover:bg-hover hover:text-ink",
+      )}
+    >
+      {icon}
+      <span className="truncate">{label}</span>
+    </button>
+  );
+  return (
+    <div role="radiogroup" aria-label={t("connectApps.market.visibility.aria")} data-marketplace-visibility={value}
+      className="flex w-fit max-w-full items-center gap-0.5 rounded-full border border-border p-0.5">
+      {option("private", t("connectApps.market.visibility.private"), <Lock size={12} aria-hidden="true" />)}
+      {option("org", t("connectApps.market.visibility.org"), <Users size={12} aria-hidden="true" />)}
+    </div>
+  );
+}
+
+/** The scope badge shown on each row. Clickable for a marketplace the viewer
+ * owns when `onToggle` is given; a plain pill otherwise. */
+function VisibilityBadge({ visibility, onToggle, disabled }: { visibility: MarketplaceVisibility; onToggle?: () => void; disabled?: boolean }) {
+  const isOrg = visibility === "org";
+  const label = isOrg ? t("connectApps.market.visibility.orgBadge") : t("connectApps.market.visibility.privateBadge");
+  const icon = isOrg ? <Users size={11} aria-hidden="true" /> : <Lock size={11} aria-hidden="true" />;
+  const className = cn(
+    "flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]",
+    isOrg ? "bg-accent/15 text-accent" : "bg-hover text-ink-secondary",
+  );
+  if (!onToggle) return <span className={className} data-marketplace-scope={visibility}>{icon}{label}</span>;
+  return (
+    <button type="button" disabled={disabled} onClick={onToggle} data-marketplace-scope={visibility}
+      className={cn(className, "transition-colors hover:text-ink disabled:opacity-40")}
+      title={isOrg ? t("connectApps.market.visibility.makePrivate") : t("connectApps.market.visibility.makeOrg")}>
+      {icon}{label}
+    </button>
+  );
 }
 
 /** The token per marketplace: this bot's (bot scope) or everyone's (an
@@ -39,15 +94,19 @@ export interface MarketplaceTokenControls {
   onRemove: (name: string) => Promise<boolean>;
 }
 
-export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefresh, onRemove, disabled, removeKeepsInstalls, tokens, needsToken }: {
+export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefresh, onRemove, onSetVisibility, canChooseVisibility, disabled, removeKeepsInstalls, tokens, needsToken }: {
   marketplaces: MarketplaceSummary[] | null;
   /** "add", or the name being refreshed or removed */
   busy: string | null;
   error: string | null;
-  /** `token`: tried first and kept for this bot or for everyone */
-  onAdd: (source: string, ref: string, token?: string) => Promise<boolean>;
+  /** `visibility`: who sees it (default private); `token`: tried first and kept */
+  onAdd: (source: string, ref: string, visibility: MarketplaceVisibility, token?: string) => Promise<boolean>;
   onRefresh: (name: string) => void;
   onRemove: (name: string) => void;
+  /** change a marketplace's visibility (shown on rows the viewer owns) */
+  onSetVisibility?: (name: string, visibility: MarketplaceVisibility) => void;
+  /** show the Private/Organisation choice on the add form */
+  canChooseVisibility?: boolean;
   disabled?: boolean;
   /** removing from one bot takes its plugins with it: installs never block */
   removeKeepsInstalls?: boolean;
@@ -59,6 +118,7 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
 }) {
   const [source, setSource] = useState("");
   const [ref, setRef] = useState("");
+  const [visibility, setVisibility] = useState<MarketplaceVisibility>("private");
   const [token, setToken] = useState("");
   /** the marketplace whose token field is open, or "add" */
   const [tokenFor, setTokenFor] = useState<string | null>(tokens && needsToken ? needsToken : null);
@@ -86,10 +146,11 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
         onSubmit={(event) => {
           event.preventDefault();
           if (!source.trim()) return;
-          void onAdd(source.trim(), ref.trim()).then((ok) => {
+          void onAdd(source.trim(), ref.trim(), visibility).then((ok) => {
             if (ok) {
               setSource("");
               setRef("");
+              setVisibility("private");
             }
           });
         }}
@@ -114,14 +175,22 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
           {busy === "add" ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} {t("connectApps.market.add")}
         </button>
       </form>
+      {canChooseVisibility && (
+        <div className="mt-2 flex flex-wrap items-center gap-2" data-marketplace-add-visibility="">
+          <span className="text-[12px] text-ink-secondary">{t("connectApps.market.visibility.label")}</span>
+          <VisibilityChoice value={visibility} onChange={setVisibility} disabled={disabled || busy !== null} />
+          <span className="text-[11.5px] text-ink-secondary">{visibility === "org" ? t("connectApps.market.visibility.orgHint") : t("connectApps.market.visibility.privateHint")}</span>
+        </div>
+      )}
       {tokens && tokenFor === "add" && source.trim() && (
         <div className="mt-2 flex flex-col gap-1.5 rounded-lg bg-inset px-3 py-2" data-marketplace-add-token="">
           <p className="text-[12px] text-ink-secondary">{forEveryone ? t("plugins.tokenOfferWorkspace") : t("plugins.tokenOffer")}</p>
           {tokenForm(t("plugins.addWithToken"), "add", (value) => {
-            void onAdd(source.trim(), ref.trim(), value).then((ok) => {
+            void onAdd(source.trim(), ref.trim(), visibility, value).then((ok) => {
               if (ok) {
                 setSource("");
                 setRef("");
+                setVisibility("private");
                 setToken("");
                 setTokenFor(null);
               }
@@ -151,6 +220,13 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
                       {" · "}{t("connectApps.market.pluginCount", { count: market.plugins.length, installed })}
                     </div>
                   </div>
+                  {market.visibility && (
+                    <VisibilityBadge
+                      visibility={market.visibility}
+                      disabled={disabled || busy !== null}
+                      {...(onSetVisibility && market.mine ? { onToggle: () => onSetVisibility(market.name, market.visibility === "org" ? "private" : "org") } : {})}
+                    />
+                  )}
                   {tokens && market.hasToken && <span className="rounded-full bg-hover px-2 py-0.5 text-[11px] text-ink-secondary" data-marketplace-has-token="">{t("plugins.tokenSaved")}</span>}
                   {tokens && (
                     <button type="button" disabled={disabled || busy !== null} data-marketplace-token-open={market.name}

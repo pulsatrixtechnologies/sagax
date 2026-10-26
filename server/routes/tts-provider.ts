@@ -16,6 +16,8 @@ export const TTS_PROVIDERS = ["elevenlabs", "fish", "system", "chatterbox", "xai
 export type TtsProvider = (typeof TTS_PROVIDERS)[number];
 
 export interface TtsProviderRouteDeps {
+  /** 2026-10-19: a person an admin gave server.settings in Perspicax. */
+  delegate?: (auth: RequestAuth) => boolean;
   /** The engine in use now. */
   current(): TtsProvider;
   /** Another provider-settings write is in flight. */
@@ -31,7 +33,7 @@ export function createTtsProviderRoutes(deps: TtsProviderRouteDeps): RouteHandle
   return async ({ req, res, path, method, auth, json, readBody }) => {
     if (path !== "/api/tts/provider") return PASS;
     if (method !== "PUT") return json(res, 405, { error: "PUT only" });
-    if (auth.kind === "loopback" ? auth.trust === "service" : !auth.scopes.includes("admin")) {
+    if (auth.kind === "loopback" ? auth.trust === "service" : !auth.scopes.includes("admin") && !deps.delegate?.(auth)) {
       return json(res, 403, { error: "forbidden: only this computer's owner or an admin can change the voice engine" });
     }
     const body = await readBody(req) as unknown;

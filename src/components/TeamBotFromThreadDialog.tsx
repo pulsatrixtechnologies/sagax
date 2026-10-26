@@ -4,13 +4,14 @@
 // 1. The draft: name, role, description and instructions, written by the
 //    conversation's own bot model from the conversation
 //    (POST /api/bots/:id/team-bot-draft, server/team-bot-draft.ts); editable.
-// 2. What carries over: the source bot's plugins and connectors, one box
-//    each, ticked; and its memory, OFF by default. Ticking memory lists
-//    exactly what goes (each note, and the conversation summary) before
-//    anything is created.
-// 3. Create: the ordinary POST /api/bots, then the instructions, the
-//    connectors, the plugins (/api/bots/:id/plugins/install) and, only when
-//    opted in, the memory (POST /api/bots/:source/team-bot-carry).
+// 2. What carries over (JC 2026-10-21: a copy, never the private memory):
+//    the source bot's persona (the instructions start from it), its rules,
+//    its plugins and connectors (one box each, ticked) and its team, whose
+//    shared memory the copy then reads. Never this conversation, other
+//    conversations or the bot's own memory, which is its owner's.
+// 3. Create: the ordinary POST /api/bots, then the instructions and the
+//    team, the rules (/api/bots/:id/rules), the connectors and the plugins
+//    (/api/bots/:id/plugins/install).
 // 4. Publish: the existing Team Bot path. On an organization server the new
 //    bot's Sharing opens (grants through Perspicax); on this computer alone,
 //    the new bot opens. The app adds no multi-person view of its own.
@@ -25,38 +26,56 @@ import { viewerCanCreateBots } from "@/lib/viewer";
 import { api, useStore, type Bot } from "@/state/store";
 
 export interface TeamBotDraft { name: string; title: string; description: string; instructions: string; source: "model" | "excerpt" }
-interface DraftAnswer { draft: TeamBotDraft; memory: { notes: Array<{ path: string; bytes: number }>; summaryPath: string } }
-interface SourcePlugin { key: string; name: string; marketplace: string; enabled: boolean }
+interface DraftAnswer { draft: TeamBotDraft }
+interface SourcePlugin {
+  key: string;
+  name: string;
+  marketplace: string;
+  enabled: boolean;
+  config?: { fields: Array<{ key: string; sensitive: boolean }>; values: Record<string, string | number | boolean> };
+}
+interface RuleSetWire { id: string; name: string | null; enabled: boolean; text: string; hash: string }
 
-/** The dialog's starting choices: plugins and connectors ticked, memory
- * off (an explicit opt-in), every note ticked once memory is on. Pure. */
-export function initialCarryChoices(input: { plugins: readonly SourcePlugin[]; connectors: readonly string[]; notes: ReadonlyArray<{ path: string }> }) {
+/** The dialog's starting choices: plugins, connectors and rules ticked.
+ * There is no memory choice: a copy never takes the bot's own memory. Pure. */
+export function initialCarryChoices(input: { plugins: readonly SourcePlugin[]; connectors: readonly string[] }) {
   return {
     plugins: new Set(input.plugins.filter((plugin) => plugin.enabled).map((plugin) => plugin.key)),
     connectors: new Set(input.connectors),
-    includeMemory: false,
-    notes: new Set(input.notes.map((note) => note.path)),
-    summary: true,
+    rules: true,
   };
 }
 
-/** What memory goes, as the list the person reads before confirming.
- * Nothing at all unless memory is ticked. Pure. */
-export function memoryGoing(choices: { includeMemory: boolean; notes: ReadonlySet<string>; summary: boolean }, summaryPath: string): string[] {
-  if (!choices.includeMemory) return [];
-  return [...[...choices.notes].sort(), ...(choices.summary ? [summaryPath] : [])];
+/** The instructions the copy starts from: the source bot's persona when it
+ * has one, else the draft written from the conversation. Pure. */
+export function startingInstructions(sourceSoul: string | undefined, drafted: string): string {
+  return sourceSoul?.trim() ? sourceSoul : drafted;
 }
 
-/** The carry request: present only when memory was ticked. Pure. */
-export function carryRequest(choices: { includeMemory: boolean; notes: ReadonlySet<string>; summary: boolean }, threadId: string, newBotId: string) {
-  if (!choices.includeMemory) return null;
-  return { threadId, newBotId, includeMemory: true as const, notes: [...choices.notes], summary: choices.summary };
+/** The non-secret configuration that follows a plugin. A secret field is
+ * never stored here and never copied. Null when there is nothing to send. Pure. */
+export function pluginConfigCarry(plugin: { config?: { fields: readonly { key: string; sensitive: boolean }[]; values: Readonly<Record<string, string | number | boolean>> } }): Record<string, string | number | boolean> | null {
+  const config = plugin.config;
+  if (!config) return null;
+  const values: Record<string, string | number | boolean> = {};
+  for (const field of config.fields) {
+    if (field.sensitive) continue;
+    const value = config.values[field.key];
+    if (value === undefined || value === "") continue;
+    values[field.key] = value;
+  }
+  return Object.keys(values).length ? values : null;
 }
 
-function noteLabel(path: string, summaryPath: string): string {
-  if (path === summaryPath) return t("teamBotFromThread.memory.summary");
-  if (path === "MEMORY.md") return t("teamBotFromThread.memory.index");
-  return path.replace(/^memory\//, "").replace(/\.md$/, "");
+/** The rule writes that make the copy's rules the source's: a set the copy
+ * already has (same id) gets its text and switch, another is added. Pure. */
+export function ruleCopies(source: readonly RuleSetWire[], target: readonly RuleSetWire[]) {
+  return source.filter((set) => set.text.trim()).map((set) => {
+    const same = target.find((candidate) => candidate.id === set.id);
+    return same
+      ? { kind: "update" as const, id: same.id, text: set.text, hash: same.hash, enabled: set.enabled, changeSwitch: same.enabled !== set.enabled }
+      : { kind: "add" as const, name: set.name ?? set.id, text: set.text, enabled: set.enabled };
+  });
 }
 
 function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThreadRequest; onClose: () => void }) {
@@ -64,10 +83,10 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
   const source = state.bots.find((bot) => bot.id === request.botId);
   const { servers } = useMcpServers();
   const dialogRef = useRef<HTMLDivElement>(null);
-  const [answer, setAnswer] = useState<DraftAnswer | null>(null);
   const [plugins, setPlugins] = useState<SourcePlugin[] | null>(null);
   const [form, setForm] = useState<TeamBotDraft | null>(null);
-  const [choices, setChoices] = useState(() => initialCarryChoices({ plugins: [], connectors: [], notes: [] }));
+  const [choices, setChoices] = useState(() => initialCarryChoices({ plugins: [], connectors: [] }));
+  const [drafted, setDrafted] = useState("");
   const [stage, setStage] = useState<"drafting" | "ready" | "creating" | "done">("drafting");
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -86,10 +105,10 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
       api<{ plugins: SourcePlugin[] }>(`/api/bots/${request.botId}/plugins`).then((listing) => listing.plugins).catch(() => [] as SourcePlugin[]),
     ]).then(([draft, installed]) => {
       if (cancelled) return;
-      setAnswer(draft);
-      setForm(draft.draft);
+      setDrafted(draft.draft.instructions);
+      setForm({ ...draft.draft, instructions: startingInstructions(source?.soul, draft.draft.instructions) });
       setPlugins(installed);
-      setChoices((current) => ({ ...initialCarryChoices({ plugins: installed, connectors: [], notes: draft.memory.notes }), connectors: current.connectors }));
+      setChoices((current) => ({ ...initialCarryChoices({ plugins: installed, connectors: [] }), connectors: current.connectors }));
       setStage("ready");
     }).catch((cause) => {
       if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
@@ -108,7 +127,7 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
     return () => { if (opener?.isConnected) opener.focus(); };
   }, []);
 
-  const toggle = (key: "plugins" | "connectors" | "notes", value: string) => setChoices((current) => {
+  const toggle = (key: "plugins" | "connectors", value: string) => setChoices((current) => {
     const next = new Set(current[key]);
     if (next.has(value)) next.delete(value);
     else next.add(value);
@@ -130,7 +149,8 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
         }),
       });
       bot = response.bot;
-      const patched = await api<{ bot: Bot }>(`/api/bots/${bot.id}`, { method: "PATCH", body: JSON.stringify({ soul: form.instructions }) });
+      // the same team: its shared memory follows the copy
+      const patched = await api<{ bot: Bot }>(`/api/bots/${bot.id}`, { method: "PATCH", body: JSON.stringify({ soul: form.instructions, ...(source.section ? { section: source.section } : {}) }) });
       bot = { ...bot, ...patched.bot };
     } catch (cause) {
       if (bot) await api(`/api/bots/${bot.id}`, { method: "DELETE" }).catch(() => undefined);
@@ -152,14 +172,33 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
         await api(`/api/bots/${bot.id}/plugins/install`, { method: "POST", body: JSON.stringify({ marketplace: plugin.marketplace, plugin: plugin.name }), timeoutMs: 120_000 });
       } catch (cause) {
         notes.push(t("teamBotFromThread.warn.plugin", { name: plugin.name, reason: cause instanceof Error ? cause.message : String(cause) }));
+        continue;
+      }
+      const values = pluginConfigCarry(plugin);
+      if (!values) continue;
+      try {
+        await api(`/api/bots/${bot.id}/plugins/${encodeURIComponent(plugin.key)}/config`, { method: "PUT", body: JSON.stringify({ values }) });
+      } catch (cause) {
+        notes.push(t("teamBotFromThread.warn.config", { name: plugin.name, reason: cause instanceof Error ? cause.message : String(cause) }));
       }
     }
-    const carry = carryRequest(choices, request.threadId, bot.id);
-    if (carry) {
+    if (choices.rules) {
       try {
-        await api(`/api/bots/${request.botId}/team-bot-carry`, { method: "POST", body: JSON.stringify(carry), timeoutMs: 60_000 });
+        const [from, to] = await Promise.all([
+          api<{ sets: RuleSetWire[] }>(`/api/bots/${request.botId}/rules`),
+          api<{ sets: RuleSetWire[] }>(`/api/bots/${bot.id}/rules`),
+        ]);
+        for (const copy of ruleCopies(from.sets, to.sets)) {
+          if (copy.kind === "update") {
+            await api(`/api/bots/${bot.id}/rules/sets/${copy.id}/text`, { method: "PUT", body: JSON.stringify({ text: copy.text, expectedHash: copy.hash }) });
+            if (copy.changeSwitch) await api(`/api/bots/${bot.id}/rules/sets/${copy.id}`, { method: "PATCH", body: JSON.stringify({ enabled: copy.enabled }) });
+          } else {
+            const added = await api<{ set: RuleSetWire }>(`/api/bots/${bot.id}/rules/sets`, { method: "POST", body: JSON.stringify({ name: copy.name, text: copy.text }) });
+            if (!copy.enabled) await api(`/api/bots/${bot.id}/rules/sets/${added.set.id}`, { method: "PATCH", body: JSON.stringify({ enabled: false }) });
+          }
+        }
       } catch (cause) {
-        notes.push(t("teamBotFromThread.warn.memory", { reason: cause instanceof Error ? cause.message : String(cause) }));
+        notes.push(t("teamBotFromThread.warn.rules", { reason: cause instanceof Error ? cause.message : String(cause) }));
       }
     }
     dispatch({ type: "botAdded", bot });
@@ -177,8 +216,7 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
     else dispatch({ type: "select", id: created.id });
   };
 
-  const summaryPath = answer?.memory.summaryPath ?? "memory/conversation-carry-over.md";
-  const going = memoryGoing(choices, summaryPath);
+  const sourceName = source?.name ?? "";
   const field = "mt-1 w-full rounded-lg border border-hairline/50 bg-inset px-3 py-2 text-[13.5px] text-ink disabled:opacity-60";
   const busy = stage === "creating";
   const canCreate = viewerCanCreateBots(state.config);
@@ -226,7 +264,10 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
               <label className="block text-[12.5px] text-ink-secondary">{t("teamBotFromThread.description")}
                 <input value={form.description} maxLength={300} onChange={(event) => setForm({ ...form, description: event.target.value })} className={field} />
               </label>
-              <label className="block text-[12.5px] text-ink-secondary">{t("teamBotFromThread.instructions")}
+              <label className="block text-[12.5px] text-ink-secondary">{source?.soul?.trim() ? t("teamBotFromThread.persona", { name: sourceName }) : t("teamBotFromThread.instructions")}
+                {source?.soul?.trim() && drafted.trim() && form.instructions !== drafted && (
+                  <button type="button" data-teambot-use-draft onClick={() => setForm({ ...form, instructions: drafted })} className="ml-2 text-[12px] text-accent hover:underline">{t("teamBotFromThread.useDraft")}</button>
+                )}
                 <textarea value={form.instructions} rows={7} maxLength={8000} onChange={(event) => setForm({ ...form, instructions: event.target.value })} className={`${field} font-mono text-[12.5px]`} />
               </label>
 
@@ -249,34 +290,13 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
                 </div>
               </div>
 
-              <div data-teambot-carry-memory className="rounded-xl border border-hairline/50 px-4 py-3">
-                <label className="flex items-start gap-2 text-[13px]">
-                  <input type="checkbox" data-teambot-include-memory className="mt-0.5 size-4 accent-accent" checked={choices.includeMemory}
-                    onChange={(event) => setChoices({ ...choices, includeMemory: event.target.checked })} />
-                  <span>
-                    <span className="block font-medium">{t("teamBotFromThread.memory.include")}</span>
-                    <span className="mt-0.5 block text-[12px] leading-relaxed text-ink-secondary">{t("teamBotFromThread.memory.hint")}</span>
-                  </span>
+              <div data-teambot-carry-rules className="flex flex-col gap-1 rounded-xl border border-hairline/50 px-4 py-3">
+                <label className="flex items-center gap-1.5 text-[12.5px]">
+                  <input type="checkbox" data-teambot-carry-rules-box className="size-3.5 accent-accent" checked={choices.rules} onChange={(event) => setChoices({ ...choices, rules: event.target.checked })} />
+                  {t("teamBotFromThread.rules", { name: sourceName })}
                 </label>
-                {choices.includeMemory && (
-                  <div className="mt-2 pl-6">
-                    <div className="text-[12px] font-medium text-ink-secondary">{t("teamBotFromThread.memory.going")}</div>
-                    <div className="mt-1 flex flex-col gap-1">
-                      {(answer?.memory.notes ?? []).map((note) => (
-                        <label key={note.path} className="flex items-center gap-1.5 text-[12.5px]">
-                          <input type="checkbox" className="size-3.5 accent-accent" checked={choices.notes.has(note.path)} onChange={() => toggle("notes", note.path)} />
-                          {noteLabel(note.path, summaryPath)}
-                          <span className="text-ink-tertiary">· {Math.max(1, Math.round(note.bytes / 1024))} KB</span>
-                        </label>
-                      ))}
-                      <label className="flex items-center gap-1.5 text-[12.5px]">
-                        <input type="checkbox" className="size-3.5 accent-accent" checked={choices.summary} onChange={(event) => setChoices({ ...choices, summary: event.target.checked })} />
-                        {noteLabel(summaryPath, summaryPath)}
-                      </label>
-                    </div>
-                    {going.length === 0 && <p className="mt-1 text-[12px] text-ink-secondary">{t("teamBotFromThread.memory.nothing")}</p>}
-                  </div>
-                )}
+                {source?.section && <p className="text-[12px] text-ink-secondary">{t("teamBotFromThread.teamMemory", { team: source.section })}</p>}
+                <p data-teambot-private-memory className="text-[12px] text-ink-secondary">{t("teamBotFromThread.privateMemory", { name: sourceName })}</p>
               </div>
               <p className="flex items-start gap-2 text-[12px] leading-relaxed text-ink-secondary">
                 <ShieldCheck size={14} className="mt-0.5 shrink-0 text-success" />

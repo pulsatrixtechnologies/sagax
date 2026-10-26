@@ -25,6 +25,7 @@ function isStoppedNotice(message: { kind: string }): boolean {
 /** The "On your computer" line: stored, never drawn, so never the preview
  * (isHiddenStatusActivity in activity-runs.ts). */
 function isHiddenWorkspaceLine(message: { kind: string }): boolean {
+  if ((message.kind === "screen" || message.kind === "video") && !(message as { requested?: boolean }).requested) return true; // a view nobody asked for is not drawn (shared/requested-views.ts)
   return message.kind === "activity" && isQuietWorkspaceLine((message as { tool?: { name?: string } }).tool?.name);
 }
 

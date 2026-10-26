@@ -32,7 +32,7 @@ export type RunStatus = "ok" | "failed" | "skipped" | "running";
 export function runStatus(status: RoutineRun["status"]): RunStatus {
   if (status === "completed") return "ok";
   if (status === "failed") return "failed";
-  if (status === "cancelled" || status === "missed") return "skipped";
+  if (status === "cancelled" || status === "missed" || status === "nothing_to_report") return "skipped";
   return "running";
 }
 
@@ -44,6 +44,7 @@ export function runReason(run: Pick<RoutineRun, "status" | "error">, locale: Con
   }
   if (run.status === "cancelled") return { reason: "cancelled", label: locale === "fr" ? "Exécution annulée" : "The run was cancelled" };
   if (run.status === "missed") return { reason: "missed", label: locale === "fr" ? "Exécution manquée (serveur arrêté ou occupé)" : "The run was missed (server stopped or busy)" };
+  if (run.status === "nothing_to_report") return { reason: "nothing_to_report", label: locale === "fr" ? "Rien à signaler" : "Nothing to report" };
   return { reason: null, label: null };
 }
 

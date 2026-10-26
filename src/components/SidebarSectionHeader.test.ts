@@ -25,6 +25,8 @@ describe("SidebarSectionHeader", () => {
     // sentence case (as upstream), a 12px regular label, no chevron
     expect(html).toContain(">Work</span>");
     expect(html).toContain("text-[12px] font-normal");
+    expect(html).toContain("h-[30px]");
+    expect(html).toContain("leading-4");
     expect(html).not.toContain("lucide-chevron");
     expect(html).not.toContain("uppercase");
   });

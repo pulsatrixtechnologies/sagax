@@ -15,26 +15,12 @@ export interface BotOverview {
   reaches: string[];
   wont: string[];
   recent: Array<{ at: number; summary: string }>;
-  /** Per-service connector tool grants, for read-only display. Absent when
-   * the bot carries no grants record — then composio alone decides. */
-  grants?: BotOverviewGrant[];
   /** Optional setup ideas, each pointing at the relevant settings section.
    * These are customization suggestions, not requirements for chatting. */
   setup: SetupStep[];
 }
 
-/** One service's tool grants as a client should summarize them. Mirrors the
- * levels the web grant editor already renders (connector-grants.ts): "all"
- * is a whole-service wildcard, "partial" is an exact list whose size is
- * toolCount, "none" is a service granted nothing. */
-export interface BotOverviewGrant {
-  slug: string;
-  level: "all" | "partial" | "none";
-  /** Granted tool count; 0 unless level is "partial". */
-  toolCount: number;
-}
-
-export type SetupStepId = "identity" | "soul" | "folder" | "apps" | "schedule";
+export type SetupStepId = "identity" | "soul" | "folder" | "schedule";
 export type SetupStepSection = "details" | "soul" | "access" | "routines";
 
 export interface SetupStep {
@@ -59,8 +45,6 @@ export interface OverviewFacts {
     | "approvalMode"
     | "approvePeerComms"
     | "peers"
-    | "composio"
-    | "connectorTools"
     | "browser"
     | "chiefOfStaff"
     | "managedSections"
@@ -75,12 +59,11 @@ export interface OverviewFacts {
   runs: Array<{ routineId: string; status: string; finishedAt?: number; startedAt?: number; scheduledFor: number }>;
   webhooks: Array<{ name: string; enabled: boolean }>;
   skills: Array<{ name: string; description: string; enabled: boolean }>;
-  engine: { agentsMcp?: boolean; composioMcp?: boolean; browserMcp?: boolean; computerMcp?: boolean } | null;
+  engine: { agentsMcp?: boolean; browserMcp?: boolean; computerMcp?: boolean } | null;
   browserEnabled?: boolean;
   /** This server is a Cloud home (cloud-home.ts): it has no "this computer"
    * of the person's and no Local VM. */
   cloudHome?: boolean;
-  connectedApps: { configured: boolean; authoritative: boolean; services: string[] };
   sectionPeers: number;
   timeZone: string;
   recent: Array<{ at: number; summary: string }>;
@@ -184,52 +167,6 @@ function doesLines(facts: OverviewFacts): string[] {
   return lines;
 }
 
-/** The connected-apps facts for the route: reads the inventory only when a
- * connector is configured and the credential store was readable, and treats
- * a failing read (connector down, token rejected) as "unverified" rather
- * than letting it fail the whole Overview. `read` is injected so the
- * fallback is unit-testable without a live connector. */
-export async function connectedAppsFacts(
-  configured: boolean,
-  availability: "configured" | "unconfigured" | "unreadable",
-  read: () => Promise<Record<string, { connected: boolean }>>,
-): Promise<OverviewFacts["connectedApps"]> {
-  let authoritative = availability !== "unreadable";
-  let services: string[] = [];
-  if (configured && authoritative) {
-    try {
-      services = Object.entries(await read())
-        .filter(([, state]) => state.connected)
-        .map(([slug]) => slug);
-    } catch {
-      authoritative = false;
-    }
-  }
-  return { configured, authoritative, services };
-}
-
-/** Whether this bot could use connected apps at all: apps on for the bot,
- * a connector configured, and an engine that mounts the Composio MCP. */
-function couldUseApps(facts: OverviewFacts): boolean {
-  return facts.bot.composio !== false && facts.connectedApps.configured && Boolean(facts.engine?.composioMcp);
-}
-
-/** Summarize a bot's connectorTools record for the Overview. Undefined in,
- * undefined out: a bot with no record keeps legacy all-tools behavior and
- * the field stays off the wire. An explicit record — even an empty one —
- * becomes a (possibly empty) list, sorted by slug so both phones and the
- * web dialog render it in one deterministic order. */
-export function grantsSummary(connectorTools: BotRecord["connectorTools"]): BotOverviewGrant[] | undefined {
-  if (connectorTools === undefined) return undefined;
-  return Object.entries(connectorTools)
-    .map(([slug, grant]): BotOverviewGrant => {
-      if (grant.tools === "*") return { slug, level: "all", toolCount: 0 };
-      if (grant.tools.length > 0) return { slug, level: "partial", toolCount: grant.tools.length };
-      return { slug, level: "none", toolCount: 0 };
-    })
-    .sort((a, b) => (a.slug < b.slug ? -1 : 1));
-}
-
 function computerReach(computer: BotRecord["computer"], cloudHome = false): string | null {
   // A Cloud home never offers either; say so rather than list a preference
   // that every task there refuses.
@@ -255,16 +192,6 @@ function reachesLines(facts: OverviewFacts): string[] {
   const computer = computerReach(facts.bot.computer, facts.cloudHome);
   if (computer) lines.push(computer);
   lines.push(facts.bot.cwd ? `Works in ${facts.bot.cwd}.` : "Works in its private workspace.");
-  const apps = facts.connectedApps;
-  // Only a bot that could actually use apps gets an apps line here. When it
-  // could, the inventory decides: verified and non-empty → list them;
-  // unverified → say so rather than guess either way.
-  if (couldUseApps(facts) && apps.authoritative && apps.services.length > 0) {
-    const count = apps.services.length;
-    lines.push(`Can use ${count} connected app${count === 1 ? "" : "s"}: ${apps.services.join(", ")}.`);
-  } else if (couldUseApps(facts) && !apps.authoritative) {
-    lines.push("Connected apps could not be checked.");
-  }
   if (facts.browserEnabled && facts.engine?.browserMcp && facts.bot.browser !== false && facts.bot.computer !== "off") lines.push("Has the built-in browser.");
   if (facts.engine?.agentsMcp && facts.sectionPeers > 0 && facts.bot.peers?.length !== 0) {
     const scope = facts.bot.chiefOfStaff && facts.bot.managedSections?.length ? "its allowed teams" : "its section";
@@ -284,13 +211,6 @@ function wontLines(facts: OverviewFacts): string[] {
   if (mode === "custom") lines.push("Command approvals follow the provider's custom configuration.");
   if (facts.bot.peers?.length === 0) lines.push("Cannot initiate contact with other bots.");
   else if (mode !== "full" && facts.bot.approvePeerComms) lines.push("Asks before contacting other bots.");
-  // "Has no connected apps." is definite when apps are off for this bot,
-  // not configured, or unsupported by its engine — no inventory needed. Only
-  // the "configured but nothing connected" case rests on the inventory, so
-  // only that case requires it to be authoritative.
-  if (!couldUseApps(facts) || (facts.connectedApps.authoritative && facts.connectedApps.services.length === 0)) {
-    lines.push("Has no connected apps.");
-  }
   if (facts.bot.computer === "off") lines.push("Can't use a computer.");
   if (!facts.routines.some((routine) => routine.enabled)) lines.push("Won't act on a schedule.");
   if (mode !== "full") lines.push("Profile proposal cards require your approval.");
@@ -309,7 +229,6 @@ export function buildBotOverview(facts: OverviewFacts): BotOverview {
     reaches: reachesLines(facts),
     wont: wontLines(facts),
     recent: facts.recent,
-    grants: grantsSummary(facts.bot.connectorTools),
     setup: setupSteps(facts),
   };
 }
@@ -321,7 +240,6 @@ const DEFAULT_BOT_NAMES = /^(new bot|bot|untitled)(\s*\d+)?$/i;
 export function setupSteps(facts: OverviewFacts): SetupStep[] {
   const named = facts.bot.name.trim() !== "" && !DEFAULT_BOT_NAMES.test(facts.bot.name.trim());
   const described = facts.bot.title.trim() !== "" || facts.bot.description.trim() !== "";
-  const apps = facts.connectedApps;
   const routines = facts.routines.some((routine) => routine.enabled);
   const webhooks = facts.webhooks.some((webhook) => webhook.enabled);
   const steps: SetupStep[] = [
@@ -329,16 +247,6 @@ export function setupSteps(facts: OverviewFacts): SetupStep[] {
     { id: "soul", label: "Write its standing instructions", done: (facts.bot.soul ?? "").trim() !== "", section: "soul" },
     { id: "folder", label: "Choose a working folder", done: Boolean(facts.bot.cwd), section: "access" },
   ];
-  // Apps only count as a step when this bot could use them at all; a
-  // bot on an engine without connected apps is not "missing" them.
-  if (couldUseApps(facts)) {
-    steps.push({
-      id: "apps",
-      label: "Connect the apps it needs",
-      done: apps.authoritative && apps.services.length > 0,
-      section: "access",
-    });
-  }
   steps.push({ id: "schedule", label: "Add a schedule or a trigger", done: routines || webhooks, section: "routines" });
   return steps;
 }

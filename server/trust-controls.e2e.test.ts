@@ -140,7 +140,7 @@ afterAll(async () => {
 });
 
 // Sagax: a bot a member cannot see answers 404 (its existence is not named); 403 and 404 both refuse.
-it("keeps activity, shared memory and policy changes admin-only", async () => {
+it("keeps activity, direct shared-memory edits and policy changes admin-only; a member reviews only through the card", async () => {
   const b = await bot("Trust authority");
   expect((await api("GET", `/api/bots/${b.id}/activity`)).status).toBe(200);
   expect((await api("GET", `/api/bots/${b.id}/activity`, undefined, member)).status).toBeOneOf([403, 404]);
@@ -282,7 +282,7 @@ it("keeps accepted facts through a replacement review and rejects autonomous res
   expect((await api("POST", "/api/team-memory?section=", { kind: "term", name: "Human", detail: "approved by admin" })).status).toBe(201);
 });
 
-it("does not publish instruction-bearing autonomous places or terms until admin review", async () => {
+it("does not publish instruction-bearing autonomous places or terms until a team member or an admin confirms the card", async () => {
   const b = await bot("Untrusted team context");
   const token = await mint(b.id, b.threadId, "agents");
   for (const kind of ["place", "term"]) {

@@ -1,15 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { appKey, buildPluginItems, categoryFromTags, connectedSummary, installedPlugins, mainSections, matchesFilter, matchesType } from "./plugins-model";
+import { GROK_CLOUD_CONNECTORS } from "../../shared/grok-cloud-connectors";
+import { appKey, buildPluginItems, isGrokConnector, categoryFromTags, connectedSummary, installedPlugins, mainSections, matchesFilter, matchesType } from "./plugins-model";
 
 const sources = {
-  cards: [
-    { slug: "slack", label: "Slack", blurb: "Post updates", logo: null, domain: "slack.com", categories: ["collaboration & communication"] },
-    { slug: "notion", label: "Notion", blurb: "Pages", logo: null, domain: "notion.so", categories: ["productivity"] },
-    { slug: "weather", label: "Weather", blurb: "Forecasts", logo: null, domain: null, noAuth: true },
-    { slug: "bitwarden", label: "Bitwarden", blurb: "Vault", logo: null, domain: "bitwarden.com", categories: ["password managers"] },
-  ],
-  status: { slack: { connected: true, accounts: [{ id: "a1", status: "ACTIVE" }] } },
   servers: [
     { name: "docs", enabled: true, url: "https://mcp.example.com/mcp", auth: "required" },
     { name: "notes", enabled: false, command: "npx" },
@@ -25,9 +19,6 @@ describe("the Plugins panel's one list", () => {
   it("reads every source into rows with the right button and status", () => {
     const items = buildPluginItems(sources);
     const byKey = Object.fromEntries(items.map((item) => [item.key, item]));
-    expect(byKey["app:slack"]).toMatchObject({ installed: true, status: "connected", action: null, category: "communication" });
-    expect(byKey["app:notion"]).toMatchObject({ installed: false, action: "connect", category: "productivity" });
-    expect(byKey["app:weather"]).toMatchObject({ installed: true, status: "connected" });
     expect(byKey["mcp:docs"]).toMatchObject({ installed: true, status: "needs_auth", source: "manual" });
     expect(byKey["mcp:notes"]).toMatchObject({ status: "off" });
     expect(byKey["featured:linear"]).toMatchObject({ action: "connect", category: "code", domain: "linear.app", recommended: true });
@@ -36,7 +27,7 @@ describe("the Plugins panel's one list", () => {
     expect(byKey["skill:release-notes"]).toMatchObject({ source: "local", installed: true });
   });
 
-  it("files apps under the categories their catalog tags give, Other without a tag", () => {
+  it("files a catalog tag under its category, Other without a tag", () => {
     expect(categoryFromTags(["password managers"])).toBe("passwords");
     expect(categoryFromTags(["design & creative tools"])).toBe("design");
     expect(categoryFromTags(["developer tools"])).toBe("code");
@@ -50,14 +41,12 @@ describe("the Plugins panel's one list", () => {
     expect(categoryFromTags(["ai"])).toBe("other");
     expect(categoryFromTags([])).toBe("other");
     expect(categoryFromTags(undefined)).toBe("other");
-    const byKey = Object.fromEntries(buildPluginItems(sources).map((item) => [item.key, item]));
-    // no tag: Other, never a guess from the name
-    expect(byKey["app:weather"]!.category).toBe("other");
   });
 
-  it("keeps Connected apps, MCP servers and Skills as a type filter, not category chips", () => {
+  it("keeps MCP servers and Skills as a type filter, not category chips", () => {
     const items = buildPluginItems(sources);
-    expect(items.filter((item) => matchesType(item, "apps")).map((item) => item.kind)).toEqual(["app", "app", "app", "app"]);
+    // no connected-app rows: the standalone account catalog is gone
+    expect(items.filter((item) => matchesType(item, "apps"))).toEqual([]);
     expect(new Set(items.filter((item) => matchesType(item, "mcp")).map((item) => item.kind))).toEqual(new Set(["mcp", "featured"]));
     expect(items.filter((item) => matchesType(item, "skills")).map((item) => item.key)).toEqual(["skill:release-notes"]);
     // a category never lists skills
@@ -68,19 +57,19 @@ describe("the Plugins panel's one list", () => {
   it("shows sections per category, one list for a search across apps and skills", () => {
     const items = buildPluginItems(sources);
     const sections = mainSections(items, "", "all");
-    expect(sections.map((section) => section.id)).toEqual(["recommended", "passwords", "productivity", "communication", "code", "mcp", "skills", "other"]);
+    expect(sections.map((section) => section.id)).toEqual(["recommended", "code", "mcp", "skills"]);
     const search = mainSections(items, "notes", "all");
     expect(search).toHaveLength(1);
     expect(search[0]!.items.map((item) => item.key).sort()).toEqual(["mcp:notes", "skill:release-notes"]);
-    expect(mainSections(items, "", "passwords")[0]!.items.map((item) => item.id)).toEqual(["bitwarden"]);
   });
 
   it("counts connected plugins for the header, skills apart", () => {
     const items = buildPluginItems(sources);
-    expect(installedPlugins(items).map((item) => item.key)).toEqual(["mcp:docs", "mcp:notes", "app:slack", "app:weather"]);
+    expect(installedPlugins(items).map((item) => item.key)).toEqual(["mcp:docs", "mcp:notes"]);
     const summary = connectedSummary(items);
-    expect(summary.count).toBe(2);
-    expect(summary.icons.map((item) => item.key)).toEqual(["app:slack", "app:weather"]);
+    // docs needs auth, notes is off: nothing is connected yet
+    expect(summary.count).toBe(0);
+    expect(summary.icons).toEqual([]);
   });
 });
 
@@ -132,12 +121,7 @@ describe("Whop, an MCP server connected like an app", () => {
 
 
 describe("one row per app across sources", () => {
-  const asanaLogo = "https://logos.example.test/asana.svg";
   const merged = {
-    cards: [
-      { slug: "asana", label: "Asana", blurb: "Tasks", logo: asanaLogo, domain: null, categories: ["productivity"] },
-      { slug: "notion", label: "Notion", blurb: "Pages", logo: "https://logos.example.test/notion.svg", domain: null, categories: ["productivity"] },
-    ],
     featured: [
       { id: "asana", name: "Asana", description: "Read and update tasks", url: "https://mcp.asana.com/sse", domain: "mcp.asana.com", site: "asana.com", category: "productivity", auth: "oauth" },
       { id: "atlassian", name: "Atlassian", description: "Jira and Confluence", url: "https://mcp.atlassian.com/v1/mcp", domain: "mcp.atlassian.com", site: "atlassian.com", category: "productivity", auth: "oauth" },
@@ -151,45 +135,47 @@ describe("one row per app across sources", () => {
     expect(appKey("Café (beta)")).toBe("cafe");
   });
 
-  it("shows Asana once, as the connected app with its real logo, still recommended", () => {
-    const items = buildPluginItems(merged);
-    const asana = items.filter((item) => appKey(item.name) === "asana");
-    expect(asana).toHaveLength(1);
-    expect(asana[0]).toMatchObject({ key: "app:asana", logo: asanaLogo, recommended: true, merged: ["featured:asana"] });
-    const sections = mainSections(items, "", "all");
-    for (const section of sections) {
-      expect(section.items.filter((item) => appKey(item.name) === "asana").length).toBeLessThanOrEqual(1);
-    }
-    expect(sections.find((section) => section.id === "recommended")!.items.map((item) => item.key)).toContain("app:asana");
-  });
-
-  it("offers the MCP server when connected apps cannot be connected here, with the app's logo", () => {
-    const items = buildPluginItems({ ...merged, composioUsable: false });
-    const asana = items.filter((item) => appKey(item.name) === "asana");
-    expect(asana).toHaveLength(1);
-    expect(asana[0]).toMatchObject({ key: "featured:asana", logo: asanaLogo, action: "connect" });
-  });
-
-  it("keeps what is installed and drops the offers of the same app", () => {
-    const items = buildPluginItems(merged);
-    const notion = items.filter((item) => appKey(item.name) === "notion");
-    expect(notion.map((item) => item.key)).toEqual(["mcp:Notion MCP"]);
-    // the installed server borrows the app's logo and category
-    expect(notion[0]).toMatchObject({ installed: true, logo: "https://logos.example.test/notion.svg", category: "productivity" });
-  });
-
   it("draws a catalog server with its provider's site, not its MCP host", () => {
     const atlassian = buildPluginItems(merged).find((item) => item.key === "featured:atlassian")!;
     expect(atlassian.domain).toBe("atlassian.com");
   });
+
+  it("lists the xAI account connectors, including Exchange, X and Microsoft Teams", () => {
+    const items = buildPluginItems({ grok: { connectors: GROK_CLOUD_CONNECTORS, description: "Managed on Grok" } });
+    const names = items.filter((item) => item.source === "grok").map((item) => item.name);
+    expect(names).toEqual(expect.arrayContaining(["Outlook (Exchange)", "X", "Microsoft Teams"]));
+    const found = mainSections(items, "exchange", "all");
+    expect(found[0]!.items.map((item) => item.key)).toEqual(["grok:outlook"]);
+    expect(items.find((item) => item.key === "grok:microsoft-teams")).toMatchObject({ kind: "app", installed: false, status: "available", category: "communication", action: null });
+  });
+
+  it("has no xAI rows when no Grok provider is set up", () => {
+    expect(buildPluginItems({ grok: null }).some((item) => item.source === "grok")).toBe(false);
+  });
+});
+
+describe("the list has no standalone connected-app rows", () => {
+  it("renders MCP servers, the catalog, skills and Grok connectors, and never a connected-app account row", () => {
+    const items = buildPluginItems({
+      servers: [{ name: "docs", enabled: true, url: "https://mcp.example.com/mcp", auth: "connected" }],
+      featured: [{ id: "linear", name: "Linear", description: "Issues", url: "https://mcp.linear.app/mcp", domain: "linear.app", auth: "oauth" }],
+      skills: [{ name: "release-notes", description: "Writes notes", source: "local-import", enabled: true }],
+      grok: { connectors: GROK_CLOUD_CONNECTORS, description: "Managed on Grok" },
+    });
+    // the MCP server, the catalog listing and the skill are all present
+    expect(items.find((item) => item.key === "mcp:docs")).toMatchObject({ kind: "mcp", status: "connected" });
+    expect(items.find((item) => item.key === "featured:linear")).toMatchObject({ kind: "featured", action: "connect" });
+    expect(items.find((item) => item.key === "skill:release-notes")).toMatchObject({ kind: "skill" });
+    // every app row is a Grok cloud connector; none is a standalone account
+    const apps = items.filter((item) => item.kind === "app");
+    expect(apps.length).toBeGreaterThan(0);
+    expect(apps.every((item) => item.source === "grok" && isGrokConnector(item))).toBe(true);
+  });
 });
 
 describe("the connected count", () => {
-  it("counts connected apps, servers, Whop, marketplace plugins and Claude connectors", () => {
+  it("counts servers, Whop, marketplace plugins and Claude connectors", () => {
     const items = buildPluginItems({
-      cards: [{ slug: "slack", label: "Slack", blurb: "", logo: null, domain: null }],
-      // an app connected that the catalog does not list is counted too
-      status: { slack: { connected: true }, gong: { connected: true, accounts: [{ id: "a", status: "ACTIVE" }] } },
       servers: [
         { name: "docs", enabled: true, url: "https://mcp.example.com/mcp", auth: "connected" },
         { name: "off", enabled: false, command: "npx" },
@@ -199,10 +185,9 @@ describe("the connected count", () => {
       whop: { description: "Whop", server: "biz", connected: true },
       marketplaces: [{ name: "kit", plugins: [{ name: "notes", installed: true, servers: ["kit-notes"], skills: [] }] }],
     });
-    expect(items.find((item) => item.key === "app:gong")).toMatchObject({ installed: true, status: "connected" });
     const summary = connectedSummary(items, 3);
-    // slack, gong, docs, Whop, the kit plugin (its server folds under it), and 3 Claude connectors
-    expect(summary.count).toBe(8);
-    expect(connectedSummary(items).count).toBe(5);
+    // docs, Whop, the kit plugin (its server folds under it), and 3 Claude connectors
+    expect(summary.count).toBe(6);
+    expect(connectedSummary(items).count).toBe(3);
   });
 });

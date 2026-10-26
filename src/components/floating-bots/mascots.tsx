@@ -19,7 +19,10 @@ import type { TrombiPose } from "@/components/retro-assistant/Trombi";
 import { SkinnedTrombi } from "@/components/skin-fx/SkinnedTrombi";
 import { BUNBU_EARFLOP_CLIP, BunbuMascot, type BunbuAction, type BunbuMood } from "@/components/BunbuMascot";
 import { ShibaMascot } from "@/components/ShibaMascot";
-import { SHIBA_MOVE_TIMING, shibaMoveFor, type ShibaMove } from "@/components/shiba-moves";
+import { HdOrVector } from "@/components/hd-mascots/HdMascot";
+import { hdKeyForActivity, hdManifestFor } from "@/components/hd-mascots/manifest";
+import { useHdMascots } from "@/lib/hd-mascots-preference";
+import { SHIBA_BARKS, SHIBA_MOVE_TIMING, shibaMoveFor, type ShibaMove } from "@/components/shiba-moves";
 import { playShibaBark } from "@/lib/shiba-bark";
 import { readFloatingBotPrefs } from "@/lib/floating-bots";
 import { GrumpMascot } from "@/components/GrumpMascot";
@@ -428,19 +431,35 @@ function useShibaClipMove(activity: MascotActivity): FxMoveRequest | null {
   return last.current.request;
 }
 
+/** The HD art has no rig to ring the bark sound: it rings at the bark's own beats. */
+function useHdBark(activity: MascotActivity, hd: boolean): void {
+  useEffect(() => {
+    if (!hd || activity !== "bark") return;
+    const timers = SHIBA_BARKS.map((at) => setTimeout(barkIfWanted, at * 1000));
+    return () => timers.forEach(clearTimeout);
+  }, [activity, hd]);
+}
+
 function ShibaRender({ color, look, size, activity, pose, frame, fps, onHitTest }: MascotRenderProps) {
+  useHdBark(activity, useHdMascots() && hdManifestFor("shiba") !== null);
   const own = useShibaClipMove(activity);
   const fx = useClipFx(activity);
   const move = own ?? fx;
   return (
     <Motion25D size={size} frame={frame} fps={fps} onHitTest={onHitTest} transform={shibaMotionTransform}>
-      <ShibaMascot skin={look.skins.shiba} color={color} size={size * 0.9} mood={bunbuMoodFor(activity, pose)} expression={shapeExpressionForClip(activity)} detail="full" move={move} activity={shibaHeldFor(activity, pose)} rig onBark={barkIfWanted} label={null} />
+      <HdOrVector character="shiba" hdKey={hdKeyForActivity(activity, pose)} size={size * 0.9} label={null}>
+        <ShibaMascot skin={look.skins.shiba} color={color} size={size * 0.9} mood={bunbuMoodFor(activity, pose)} expression={shapeExpressionForClip(activity)} detail="full" move={move} activity={shibaHeldFor(activity, pose)} rig onBark={barkIfWanted} label={null} />
+      </HdOrVector>
     </Motion25D>
   );
 }
 
 function ShibaThumb({ color, look, size }: MascotThumbProps) {
-  return <ShibaMascot skin={look.skins.shiba} color={color} size={size} animated={false} label={null} />;
+  return (
+    <HdOrVector character="shiba" hdKey={{ still: "neutral" }} size={size} animated={false} label={null}>
+      <ShibaMascot skin={look.skins.shiba} color={color} size={size} animated={false} label={null} />
+    </HdOrVector>
+  );
 }
 
 /* -------------------------------------------------------------- Grump */

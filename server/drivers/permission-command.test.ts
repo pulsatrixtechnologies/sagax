@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { permissionPaths } from "./permission-command.ts";
+import { permissionPaths, withAbsolutePaths } from "./permission-command.ts";
 
 describe("permissionPaths", () => {
   const cwd = resolve("/data/task-workspaces/bot-1/thread-1");
@@ -22,5 +22,22 @@ describe("permissionPaths", () => {
   it("names nothing for any other tool", () => {
     expect(permissionPaths("Bash", { command: "ls", path: "/" }, cwd)).toBeUndefined();
     expect(permissionPaths("WebFetch", { url: "https://example.test" }, cwd)).toBeUndefined();
+  });
+});
+
+describe("withAbsolutePaths", () => {
+  const cwd = "/data/task-workspaces/bot/thread";
+  it("resolves a file tool's relative path against the engine cwd, leaving the input itself untouched", () => {
+    const input = { file_path: "notes.txt", content: "x" };
+    expect(withAbsolutePaths("Write", input, cwd)).toEqual({ file_path: "/data/task-workspaces/bot/thread/notes.txt", content: "x" });
+    expect(input.file_path).toBe("notes.txt");
+    expect(withAbsolutePaths("Read", { file_path: "out/report.md" }, cwd)).toEqual({ file_path: "/data/task-workspaces/bot/thread/out/report.md" });
+  });
+  it("keeps absolute, home and invalid paths, other tools and an unknown cwd as they were", () => {
+    const absolute = { file_path: "/etc/hosts" };
+    expect(withAbsolutePaths("Read", absolute, cwd)).toBe(absolute);
+    expect(withAbsolutePaths("Read", { file_path: "~/x" }, cwd)).toEqual({ file_path: "~/x" });
+    expect(withAbsolutePaths("Bash", { command: "cat notes.txt" }, cwd)).toEqual({ command: "cat notes.txt" });
+    expect(withAbsolutePaths("Read", { file_path: "notes.txt" }, undefined)).toEqual({ file_path: "notes.txt" });
   });
 });

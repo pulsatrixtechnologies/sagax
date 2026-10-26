@@ -314,7 +314,9 @@ describe("org admin API: the console routes (2026-10-08)", () => {
     expect(got.body.permissionGroups.map((group: { id: string }) => group.id)).toContain("bots");
     const keys = got.body.permissions.map((row: { key: string }) => row.key);
     expect(keys).toEqual(expect.arrayContaining(["bots.create", "usage.view", "host.shell"]));
-    expect(got.body.permissions.find((row: { key: string }) => row.key === "host.shell")).toMatchObject({ adminOnly: true, memberDefault: false, adminOnlyReason: { en: expect.any(String), fr: expect.any(String) } });
+    expect(got.body.permissions.find((row: { key: string }) => row.key === "server.link")).toMatchObject({ adminOnly: true, memberDefault: false, adminOnlyReason: { en: expect.any(String), fr: expect.any(String) } });
+    // 2026-10-19: delegable in Perspicax
+    expect(got.body.permissions.find((row: { key: string }) => row.key === "host.shell")).toMatchObject({ adminOnly: false, memberDefault: false });
     expect(got.body.permissions.find((row: { key: string }) => row.key === "bots.create")).toMatchObject({ adminOnly: false, memberDefault: true, label: { en: "Create and own bots" } });
   });
 

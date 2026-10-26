@@ -87,6 +87,43 @@ describe("openmausbot fleet", () => {
     expect(rooted.calls).toEqual([]);
   });
 
+  it("upgrades to the pinned release of the scoped package: this CLI's own by default, or --to", async () => {
+    const workspace: FleetWorkspace = { slug: "acme", host: "acme.agentada.cc", port: 8810, webhookPort: 8811, status: "running", createdAt: "" };
+    const previous = process.env.SAGAX_RELEASE_VERSION;
+    process.env.SAGAX_RELEASE_VERSION = "0.7.1";
+    try {
+      const dry = io();
+      expect(await runFleetCommand({ ...base, action: "upgrade", dryRun: true }, dry.io, machine({ root: true, files: withRegistry({ acme: workspace }) }).deps)).toBe(0);
+      const plan = dry.out.join("\n");
+      expect(plan).toContain("npm install -g @pulsatrixtechnologies/sagax@0.7.1");
+      expect(plan).toContain("/usr/lib/node_modules/@pulsatrixtechnologies/sagax/cli.js serve ");
+      expect(plan).not.toMatch(/npm install -g (?!@pulsatrixtechnologies\/sagax@\d)/);
+      expect(plan).not.toContain("@latest");
+
+      const rooted = machine({ root: true, files: withRegistry({ acme: workspace }) });
+      expect(await runFleetCommand({ ...base, action: "upgrade", version: "0.8.0" }, io().io, rooted.deps)).toBe(0);
+      expect(rooted.calls.filter((call) => call.startsWith("run "))).toEqual([
+        "run npm install -g @pulsatrixtechnologies/sagax@0.8.0",
+        "run systemctl daemon-reload",
+        "run systemctl restart openmausbot@acme.service",
+      ]);
+
+      const refused = machine({ root: true, files: withRegistry({ acme: workspace }) });
+      const bad = io();
+      expect(await runFleetCommand({ ...base, action: "upgrade", version: "latest" }, bad.io, refused.deps)).toBe(2);
+      expect(bad.err.join("\n")).toContain("exact release version");
+      expect(refused.calls.filter((call) => call.startsWith("run "))).toEqual([]);
+
+      process.env.SAGAX_RELEASE_VERSION = "unknown";
+      const unknown = io();
+      expect(await runFleetCommand({ ...base, action: "upgrade" }, unknown.io, machine({ root: true, files: withRegistry({ acme: workspace }) }).deps)).toBe(2);
+      expect(unknown.err.join("\n")).toContain("--to X.Y.Z");
+    } finally {
+      if (previous === undefined) delete process.env.SAGAX_RELEASE_VERSION;
+      else process.env.SAGAX_RELEASE_VERSION = previous;
+    }
+  });
+
   it("refuses an npx cache as the unit's script and asks for the domain", async () => {
     const { deps } = machine({ root: true });
     const bad = io();

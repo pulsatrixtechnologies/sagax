@@ -12,6 +12,8 @@
 //          marketplace too when the caller may remove it (an admin, or who added it) and nothing uses it
 //   POST   /api/bots/:id/plugins/install { marketplace, plugin }     install or update
 //   PATCH  /api/bots/:id/plugins/:key { enabled }
+//   PUT    /api/bots/:id/plugins/:key/config { values }   the plugin's declared
+//          fields (server/plugin-config.ts); a secret field answers 400 sensitive_field
 //   DELETE /api/bots/:id/plugins/:key
 //
 // Reads need use on the bot; every change needs its owner or manage (an
@@ -23,6 +25,7 @@
 // change answers 403 `org_integrations_admin_only`, even on their own bot.
 import type { BotPluginError, BotPlugins, MarketplacePolicy } from "../bot-plugins.ts";
 import { INTEGRATIONS_ADMIN_ONLY } from "../person-integrations.ts";
+import type { MarketplaceViewer, MarketplaceVisibility } from "../plugin-marketplaces.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -33,6 +36,12 @@ export interface BotPluginRouteDeps<B extends { id: string }> {
   mayChange: (auth: RequestAuth, bot: B) => boolean;
   /** Who acts: their own GitHub connection reads a private marketplace. */
   actor: (auth: RequestAuth) => string | undefined;
+  /** Who is asking: a private marketplace is listed to its author only.
+   * Absent: unfiltered (a solo server, or a test fixture). */
+  viewer?: (auth: RequestAuth) => MarketplaceViewer;
+  /** May this caller share a marketplace with the whole organization? Org-wide
+   * is admins only (mirror of routes/marketplaces.ts); absent: allowed. */
+  mayShareOrgWide?: (auth: RequestAuth) => boolean;
   /** An admin manages this person's plugins (never an organization admin). */
   managedByAdmin?: (auth: RequestAuth) => boolean;
   /** May remove a marketplace from the one list (the workspace's managers). */
@@ -44,7 +53,7 @@ export interface BotPluginRouteDeps<B extends { id: string }> {
   changed?: (bot: B, action: string, detail: Record<string, unknown>, auth: RequestAuth) => void;
 }
 
-const ROUTE = /^\/api\/bots\/([\w-]+)\/plugins(?:\/(marketplaces|install)(?:\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})(?:\/(update|token))?)?|\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63}))?$/;
+const ROUTE = /^\/api\/bots\/([\w-]+)\/plugins(?:\/(marketplaces|install)(?:\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})(?:\/(update|token))?)?|\/([A-Za-z0-9][A-Za-z0-9._-]{0,63}@[A-Za-z0-9][A-Za-z0-9._-]{0,63})(\/config)?)?$/;
 const TOKEN = /^[\x21-\x7e]{8,4096}$/;
 
 function tokenField(value: unknown): string | null | undefined {
@@ -62,13 +71,17 @@ export function createBotPluginRoutes<B extends { id: string }>(deps: BotPluginR
     if (!path.startsWith("/api/bots/") || !path.includes("/plugins")) return PASS;
     const match = ROUTE.exec(decodeURIComponent(path));
     if (!match) return PASS;
-    const [, botId, section, name, update, key] = match;
+    const [, botId, section, name, update, key, config] = match;
     const bot = deps.bot(botId!);
     if (!bot || !deps.mayRead(auth, bot)) return json(res, 404, { error: "no such bot" });
     res.setHeader("cache-control", "private, no-store");
     const managedByAdmin = deps.managedByAdmin?.(auth) === true;
+    const marketViewer = deps.viewer?.(auth) ?? { seesAll: true };
+    /** A private marketplace that is not this viewer's does not exist to them. */
+    const marketplaceUnreachable = (marketName: string) =>
+      typeof deps.plugins.canAccessMarketplace === "function" && !deps.plugins.canAccessMarketplace(marketName, marketViewer);
     const listing = () => ({
-      marketplaces: deps.plugins.listMarketplaces(bot.id),
+      marketplaces: deps.plugins.listMarketplaces(bot.id, marketViewer),
       plugins: deps.plugins.listPlugins(bot.id),
       policy: deps.policy() ?? { mode: "any" },
       engine: { loadsPlugins: deps.engineLoadsPlugins(bot) },
@@ -95,9 +108,16 @@ export function createBotPluginRoutes<B extends { id: string }>(deps: BotPluginR
         if (!source.trim() || source.length > 500) return json(res, 400, { error: "send { source: owner/repo or an https git URL }", code: "invalid_source" });
         const token = tokenField(body?.token);
         if (token === null) return json(res, 400, { error: "The token must be one line of printable characters.", code: "invalid_token" });
-        const added = await deps.plugins.addMarketplace(bot.id, { source, ...(ref ? { ref } : {}), ...(token ? { token } : {}) }, actor);
+        const visibility = body?.visibility === "private" || body?.visibility === "org" ? body.visibility as MarketplaceVisibility : undefined;
+        if (visibility === "org" && deps.mayShareOrgWide && !deps.mayShareOrgWide(auth)) {
+          return json(res, 403, { error: "Only an administrator can share a marketplace with the whole organization.", code: "marketplace_org_admin_only" });
+        }
+        const added = await deps.plugins.addMarketplace(bot.id, { source, ...(ref ? { ref } : {}), ...(token ? { token } : {}), ...(visibility ? { visibility } : {}) }, actor);
         deps.changed?.(bot, "plugin.marketplace_add", { marketplace: added.name, source: added.source }, auth);
         return json(res, 201, { marketplace: added, ...listing() });
+      }
+      if (section === "marketplaces" && name && marketplaceUnreachable(name)) {
+        return json(res, 404, { error: "No marketplace with that name.", code: "not_found" });
       }
       if (section === "marketplaces" && name && update === "token") {
         if (method === "DELETE") {
@@ -128,9 +148,16 @@ export function createBotPluginRoutes<B extends { id: string }>(deps: BotPluginR
         const marketplace = typeof body?.marketplace === "string" ? body.marketplace : "";
         const plugin = typeof body?.plugin === "string" ? body.plugin : "";
         if (!marketplace || !plugin) return json(res, 400, { error: "send { marketplace, plugin }", code: "invalid_plugin" });
+        if (marketplaceUnreachable(marketplace)) return json(res, 404, { error: "No marketplace with that name.", code: "not_found" });
         const installed = await deps.plugins.install(bot.id, { marketplace, plugin }, actor);
         deps.changed?.(bot, "plugin.install", { plugin: installed.key, removed: installed.removed }, auth);
         return json(res, 201, { plugin: installed, ...listing() });
+      }
+      if (key && config) {
+        if (method !== "PUT") return json(res, 405, { error: "PUT only" });
+        const plugin = await deps.plugins.setPluginConfig(bot.id, key, body?.values);
+        deps.changed?.(bot, "plugin.config", { plugin: key, fields: Object.keys(plugin.config?.values ?? {}) }, auth);
+        return json(res, 200, { plugin, ...listing() });
       }
       if (key) {
         if (method === "PATCH") {

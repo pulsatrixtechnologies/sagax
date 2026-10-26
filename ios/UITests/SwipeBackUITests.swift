@@ -12,10 +12,10 @@ final class SwipeBackUITests: XCTestCase {
 
         edgeSwipeUntilPopped(in: app)
 
-        // The roster's thread toggle only exists on Home, so this is the
-        // proof the swipe performed a pop rather than a sideways scroll.
+        // Pepper's row only exists on Home, so this is the proof the swipe
+        // performed a pop rather than a sideways scroll.
         XCTAssertTrue(
-            app.buttons["threads-toggle.preview-pepper"].waitForExistence(timeout: 10),
+            ThreadPreview.row(app).waitForExistence(timeout: 10),
             "an edge swipe on a conversation should pop back to Home"
         )
         recordScreenshot("Home after edge swipe", in: app)
@@ -33,7 +33,7 @@ final class SwipeBackUITests: XCTestCase {
         center.press(forDuration: 0.05, thenDragTo: right)
 
         assertOnThread("Triage Gmail", in: app)
-        assertGone(app.buttons["threads-toggle.preview-pepper"], in: app)
+        assertGone(ThreadPreview.row(app), in: app)
 
         // Vertical scrolling in the transcript keeps working.
         app.swipeUp()
@@ -48,16 +48,16 @@ final class SwipeBackUITests: XCTestCase {
         // recognizer's delegate stays armed while the stack sits at its root,
         // and the classic failure of re-arming this gesture is a stack that
         // no longer pushes or pops. (A raw edge drag started on the roster
-        // itself lands on real content — rows that open threads — so the
+        // itself lands on real content (rows that open chats), so the
         // root guard is proven by cycling, not by dragging across Home.)
         openConversation(in: app)
         edgeSwipeUntilPopped(in: app)
-        XCTAssertTrue(app.buttons["threads-toggle.preview-pepper"].waitForExistence(timeout: 10))
+        XCTAssertTrue(ThreadPreview.row(app).waitForExistence(timeout: 10))
 
         openConversation(in: app)
         edgeSwipeUntilPopped(in: app)
         XCTAssertTrue(
-            app.buttons["threads-toggle.preview-pepper"].waitForExistence(timeout: 10),
+            ThreadPreview.row(app).waitForExistence(timeout: 10),
             "the second swipe pop should land on Home exactly like the first"
         )
         recordScreenshot("Home after two back-to-back swipe pops", in: app)
@@ -92,51 +92,14 @@ final class SwipeBackUITests: XCTestCase {
     @MainActor
     private func launchPreview() -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication()
-        // Xcode may prelaunch the app after installing an updated build.
-        // Restart it so Session initializes with the offline fixture flags.
-        app.terminate()
-        app.launchArguments = [
-            "-store-preview", "-threads-preview",
-            "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
-            "-companion.onboarding.welcomeSeen", "YES",
-            "-companion.onboarding.notificationsSeen", "YES",
-            // The compact list, whatever an earlier run saved (the install
-            // default is now the standard home); Pepper's threads open from
-            // its "› 3".
-            "-companion.prefs.rosterDensity", "compact"
-        ]
-        // threads under each bot row (#210: the default is the chat header)
-        app.launchArguments += ["-omb-threads-location", "sidebar"]
-        app.launch()
-        // Simulator installation can restore an unpaired, prewarmed scene
-        // without the preview arguments once. Restart only that wrong route.
-        if app.buttons["Connect computer"].exists {
-            app.terminate()
-            // threads under each bot row (#210: the default is the chat header)
-            app.launchArguments += ["-omb-threads-location", "sidebar"]
-            app.launch()
-        }
-        XCTAssertTrue(app.buttons["threads-toggle.preview-pepper"].waitForExistence(timeout: 10))
-        return app
+        return ThreadPreview.launch()
     }
 
     @MainActor
     private func openConversation(in app: XCUIApplication) {
-        // On a fresh launch the bot row is collapsed, so expand it first.
-        // After a swipe pop the roster still carries that expanded state —
-        // tapping the toggle again would collapse it — and the bot row
-        // itself reopens the remembered thread, the same route
-        // ThreadNavigationUITests takes after tapping Back.
-        let gmail = app.buttons["thread.preview-gmail"]
-        if gmail.waitForExistence(timeout: 2) {
-            gmail.tap()
-        } else {
-            let toggle = app.buttons["threads-toggle.preview-pepper"]
-            toggle.tap()
-            XCTAssertTrue(gmail.waitForExistence(timeout: 5))
-            gmail.tap()
-        }
+        // Pepper's row reopens her remembered thread; Gmail whatever an
+        // earlier run left her on.
+        ThreadPreview.openGmail(in: app)
         assertOnThread("Triage Gmail", in: app)
     }
 

@@ -1,7 +1,7 @@
 // The interactive cards' actions (feature parity package WP2). Each one is
 // the desktop renderer's (store.tsx `decideRequest`, `dismissCard`,
-// `stopParallelTask`, SecretRequestCard and ConnectorCard): the requests live
-// in CompanionCore (Client+Cards.swift), the rules in CardActions.swift.
+// `stopParallelTask`, SecretRequestCard): the requests live in CompanionCore
+// (Client+Cards.swift), the rules in CardActions.swift.
 import Foundation
 import CompanionCore
 
@@ -137,30 +137,6 @@ extension Session {
 
     func dismissSecretCard(_ message: Message, in chat: Chat) async -> String? {
         await cardRequest(message, in: chat) { try await $0.dismissSecretCard(botId: $1, messageId: message.id, threadId: chat.threadId) }
-    }
-
-    // MARK: Connector card
-
-    func authorizeConnectorCard(_ message: Message, in chat: Chat) async throws -> URL {
-        guard let client = computerClient, let botId = cardBotId(message, in: chat) else {
-            throw APIError.transport("This computer is offline.")
-        }
-        return try await client.authorizeConnectorCard(botId: botId, messageId: message.id, threadId: chat.threadId)
-    }
-
-    /// Whether the app is connected now (the computer resumes the task once
-    /// it is). Nil when the check itself failed.
-    func connectorCardStatus(_ message: Message, in chat: Chat) async -> Bool? {
-        guard let client = computerClient, let botId = cardBotId(message, in: chat) else { return nil }
-        return try? await client.connectorCardStatus(botId: botId, messageId: message.id, threadId: chat.threadId).connected
-    }
-
-    func resumeConnectorCard(_ message: Message, in chat: Chat) async -> String? {
-        await cardRequest(message, in: chat) { try await $0.resumeConnectorCard(botId: $1, messageId: message.id, threadId: chat.threadId) }
-    }
-
-    func dismissConnectorCard(_ message: Message, in chat: Chat) async {
-        _ = await cardRequest(message, in: chat) { try await $0.dismissConnectorCard(botId: $1, messageId: message.id, threadId: chat.threadId) }
     }
 
     /// A card request whose failure the card shows itself (the desktop's

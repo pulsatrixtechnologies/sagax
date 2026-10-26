@@ -9,6 +9,9 @@
 #   docker compose up -d --build                        # or build from source
 services:
   omb:
+    # Graceful shutdown drains turns (5 s) then cleans up (6 s) before the
+    # session registry closes; Docker's default 10 s would SIGKILL it first.
+    stop_grace_period: 30s
     build:
       context: ..
       args:
@@ -21,6 +24,11 @@ services:
     # prebuilt on every main push; `docker compose up --build` builds from source instead
     image: ghcr.io/milind-soni/openmausbot:latest
     restart: unless-stopped
+    # The bots' browsers (docs/browser-packaging.md, "Process hygiene"): an
+    # init collects the browser processes whose parents exit, and Chrome
+    # gets the shared memory OMB's desktop containers give it.
+    init: true
+    shm_size: 512m
     volumes:
       - data:/data
     ports:

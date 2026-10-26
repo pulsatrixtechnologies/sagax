@@ -7,6 +7,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 
 import type { BeginTurnRequest, ComposedTurn, CoordinatorHost, HandoffOpener, HandoffOptions, HandoffView, HostTurnResult } from "./coordinator.ts";
@@ -241,6 +242,89 @@ describe("RuntimeCoordinator: the requesting turn and its tree", () => {
     expect(w.host.reports).toHaveLength(1);
   });
 
+  it("relay: a resume carrying only relayed replies runs no turn; the host shows them and the root completes", async () => {
+    const w = world((node) => node.botId === "builder" ? { ok: true, text: "Rome." } : undefined);
+    const relayed: Array<{ node: HandoffView; replies: HandoffView[] }> = [];
+    w.host.relay = (node, replies) => { relayed.push({ node, replies }); return true; };
+    begun(w, chief, "gen-1", "Ask builder");
+    const { node } = w.coordinator.enqueue(chief, "gen-1", undefined, builder, "Capital of Italy?", { relay: true });
+    expect(node.relay).toBe(true);
+    w.coordinator.tick();
+    await flush();
+    ended(w, "gen-1");
+    w.coordinator.tick();
+    await flush();
+    expect(w.host.runs.map(r => r.resumed)).toEqual([false]);
+    expect(relayed).toHaveLength(1);
+    expect(relayed[0]!.node.id).toBe("gen-1");
+    expect(relayed[0]!.replies.map(r => r.result)).toEqual(["Rome."]);
+    expect(w.coordinator.node("gen-1")).toMatchObject({ status: "completed", result: "Rome." });
+  });
+
+  it("relay: a failed reply, a host that declines, a room or a mix with ordinary work still runs the resume turn", async () => {
+    const cases: Array<{ script: Script; accept: boolean; extra?: boolean; room?: boolean }> = [
+      { script: (n) => n.botId === "builder" ? { ok: false, text: "provider down" } : undefined, accept: true },
+      { script: () => undefined, accept: false },
+      { script: () => undefined, accept: true, extra: true },
+      { script: () => undefined, accept: true, room: true },
+    ];
+    for (const c of cases) {
+      const w = world(c.script);
+      let asked = 0;
+      w.host.relay = () => { asked += 1; return c.accept; };
+      const target = c.room ? inRoom("builder", "g2", "room-2") : builder;
+      begun(w, chief, "gen-1", "Ask");
+      const { node } = w.coordinator.enqueue(chief, "gen-1", undefined, target, "Q", { relay: true });
+      expect(Boolean(node.relay)).toBe(!c.room);
+      if (c.extra) send(w, chief, "gen-1", undefined, tester, "Test it");
+      w.coordinator.tick();
+      await flush();
+      ended(w, "gen-1");
+      w.coordinator.tick();
+      await flush();
+      // the requester reviews: one resume turn, whatever the host was asked
+      expect(w.host.runs.filter(r => r.resumed)).toHaveLength(1);
+      // the host is only asked when every reply relays and completed
+      expect(asked).toBe(c === cases[1] ? 1 : 0);
+    }
+  });
+
+  it("active() is all() without the ended nodes, with the same views", async () => {
+    const w = world();
+    const ended_ = new Set(["completed", "failed", "cancelled"]);
+    const same = () => expect(w.coordinator.active()).toEqual(w.coordinator.all().filter(n => !ended_.has(n.status)));
+    const { node } = send(w, chief, "gen-1", undefined, builder, "Build it");
+    same(); expect(w.coordinator.active().map(n => n.id)).toEqual(["gen-1", node.id]);
+    ended(w, "gen-1"); w.coordinator.tick(); await flush();
+    same(); expect(w.coordinator.active().map(n => n.id)).toEqual(["gen-1"]);
+    w.coordinator.tick(); await flush();
+    expect(w.coordinator.all()).toHaveLength(2);
+    expect(w.coordinator.active()).toEqual([]);
+  });
+
+  it("active() never reads an ended row: one that no longer parses stops all(), not active()", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "runtime-coordinator-active-"));
+    try {
+      const w = world(hold, {}, dir);
+      send(w, chief, "gen-1", undefined, tester, "Test it");
+      ended(w, "gen-1"); w.coordinator.tick(); await flush();
+      w.coordinator.tick(); await flush();
+      expect(w.coordinator.all().map(n => n.status)).toEqual(["completed", "completed"]);
+      const { node } = send(w, chief, "gen-2", undefined, builder, "Build it");
+      ended(w, "gen-2"); w.coordinator.tick();
+      // The settled tree's rows go bad on disk; nothing live reads them.
+      const db = new DatabaseSync(join(dir, "runtime.db"));
+      db.prepare("UPDATE assignments SET json = 'not json' WHERE root_id = ?").run("gen-1");
+      db.close();
+      expect(() => w.coordinator.all()).toThrow(/invalid JSON/);
+      expect(w.coordinator.active().map(n => [n.id, n.status])).toEqual([["gen-2", "waiting"], [node.id, "running"]]);
+      expect(w.coordinator.outstandingDirect("chief-chat").map(n => n.id)).toEqual([node.id]);
+      w.coordinator.close();
+    } finally {
+      await removeTempDir(dir);
+    }
+  });
+
   it("a failed requesting turn keeps its accepted work and says so in its result; an unknown or settled id is logged and ignored", async () => {
     const w = world();
     const { node } = send(w, chief, "gen-1", undefined, builder, "Build it");
@@ -300,6 +384,42 @@ describe("RuntimeCoordinator: refusals in the legacy words", () => {
     expect(() => send(w, builder, "gen-1", node.id, chief, "Approve it")).toThrow("Cannot assign work back to an ancestor; results return automatically");
     expect(() => send(w, builder, "gen-1", node.id, { ...chief, threadId: "chief-other" }, "Approve it")).toThrow(/back to an ancestor/);
     await w.host.release(node.id, { ok: true, text: "done" });
+  });
+
+  it("lets a teammate consult an ancestor: auto reads a question up the tree as a consultation, work stays refused", async () => {
+    const w = world(hold);
+    const { node } = send(w, chief, "gen-1", undefined, builder, "Build it");
+    w.coordinator.tick();
+    const ask = (mode: "work" | "consult" | "auto", threadId = "chief-consult") => w.coordinator.enqueue(builder, "gen-1", node.id,
+      { ...chief, threadId }, "Which column order?", { mode });
+    expect(() => ask("work")).toThrow("Cannot assign work back to an ancestor; results return automatically");
+    const asked = ask("auto");
+    expect(w.coordinator.children(node.id).find(c => c.id === asked.node.id)).toBeDefined();
+    w.coordinator.tick(); await flush();
+    expect(w.host.runs.find(r => r.node.id === asked.node.id)?.text).toBeTruthy();
+    expect(w.coordinator.node(asked.node.id)?.status).toBe("completed");
+    expect(ask("consult")).toMatchObject({ duplicate: true, node: { id: asked.node.id } });
+    await w.host.release(node.id, { ok: true, text: "done" });
+  });
+
+  it("a request another tree of the same person already sent joins it; only a completed answer is shared", async () => {
+    const w = world(hold);
+    const as = (source: RoomAddress, generation: string, threadId: string, person?: string) => {
+      begun(w, source, generation, "Ship the CSV export", person ? { person } : {});
+      return w.coordinator.enqueue(source, generation, undefined, { ...builder, threadId }, "Poll: free tomorrow?", { mode: "work" });
+    };
+    const first = as(chief, "gen-1", "builder-work", "pr_a");
+    // Another person, or nobody known: never joined.
+    expect(as({ botId: "o1", threadId: "o1-chat" }, "gen-o1", "builder-from-o1", "pr_b").joined).toBeUndefined();
+    expect(as({ botId: "o2", threadId: "o2-chat" }, "gen-o2", "builder-from-o2").joined).toBeUndefined();
+    const second = as({ botId: "other", threadId: "other-chat" }, "gen-2", "builder-from-other", "pr_a");
+    expect(second.joined).toBe(true);
+    w.coordinator.tick(); await flush();
+    expect(w.host.runs.map(r => r.node.id)).not.toContain(second.node.id);
+    // The leader failed (its own tree's fate): the joined request runs on its own.
+    await w.host.release(first.node.id, { ok: false, text: "engine down" });
+    w.coordinator.tick(); await flush();
+    expect(w.host.runs.map(r => r.node.id)).toContain(second.node.id);
   });
 
   it("refuses a second assignment to a teammate that completed one, unless it is rework", async () => {
@@ -475,6 +595,8 @@ describe("RuntimeCoordinator: read models", () => {
     expect(w.coordinator.activeDirect("builder-work")).toBe(true);
     expect(w.coordinator.activeDirect("chief-chat")).toBe(true);
     expect(w.coordinator.activeDirect("room-1")).toBe(false);
+    // one read for every thread (port de OpenMausBot #3126) agrees with the per-thread read
+    expect([...w.coordinator.activeDirectThreads()].sort()).toEqual(["builder-work", "chief-chat"]);
     expect(w.coordinator.assignerOf("builder-work")).toMatchObject({ id: "gen-1", status: "source" });
     expect(w.coordinator.assignerOf("chief-chat")).toBeUndefined();
     expect(w.coordinator.outstandingDirect("chief-chat").map(n => n.id).sort()).toEqual([b.id, r.id].sort());
@@ -503,6 +625,9 @@ describe("RuntimeCoordinator: read models", () => {
     ]);
     expect(w.coordinator.activeDirect("builder-work")).toBe(true);
     expect(w.coordinator.assignerOf("tester-work")).toMatchObject({ id: b.id, status: "waiting" });
+    for (const thread of ["builder-work", "chief-chat", "tester-work", "room-1"]) {
+      expect(w.coordinator.activeDirectThreads().has(thread), thread).toBe(w.coordinator.activeDirect(thread));
+    }
   });
 
   it("sharedRequest batches one call's room recipients and nothing else", () => {

@@ -1,58 +1,31 @@
 ---
 title: Connected apps
-description: Give bots secure, user-authorized tools for Gmail, GitHub, Slack, Notion, and hundreds more.
+description: Give bots secure, user-authorized tools through engine-provided connectors and Pulsatrix MCP.
 icon: PlugZap
 ---
 
-Open **Connected apps** from the sidebar, choose a service, and complete its authorization in your normal browser. Sagax turns the resulting connection into tools that supported agent engines can use.
+Sagax gives bots tools in two ways: the connectors your agent engine provides, and Pulsatrix MCP servers your workspace mounts. Both complete their authorization in your normal browser or in the engine's own account, and no provider key is ever written into bot prompts or the renderer.
 
-<ProductScreenshot name="docs-connected-apps" alt="The clean Sagax connected-app marketplace" caption="Search the marketplace or review every account from the Connected tab." />
+<ProductScreenshot name="docs-connected-apps" alt="The clean Sagax connected-app marketplace" caption="Review every account and its status from the Connected tab." />
 
-## Official packaged app
+## Engine-provided connectors
 
-The signed desktop app registers its own installation with Sagax's managed connected-apps service. You do **not** need to find or paste a Composio key.
+A Claude bot uses the connectors on the person's own Claude subscription, and a Grok bot uses the connectors managed on the person's own xAI account. You authorize each connector once with the engine, in the browser, and the bot can then use it:
 
-1. Open **Connected apps**.
-2. Search for Gmail, GitHub, Slack, Notion, or another toolkit.
-3. Select **Connect**.
-4. Finish OAuth in the browser window that opens.
-5. Return to the app and ask a bot to use the service.
+1. Sign in to the engine the bot runs on (Claude or Grok/xAI).
+2. Authorize the connector you want on that account.
+3. Return to Sagax and ask a bot to use the service.
 
-The installation identity is stored using Electron's operating-system-backed secure storage. Provider OAuth tokens remain with Composio and are not written into bot prompts or the renderer.
+The authorization stays with the engine. Sagax never holds the provider's OAuth tokens.
 
-## Self-hosted or source builds
+## Pulsatrix MCP
 
-The managed service is a convenience for official packaged builds. A source build can use your own Composio project and `COMPOSIO_API_KEY`; see [Self-hosted Composio](./self-hosted-composio.mdx).
-
-You can also use your own Composio project in the packaged app. Open **App Settings → API keys**, find **Composio project key**, and paste its project key. A saved project key takes priority over the managed service for the marketplace, connection management, and bot tools. Clear the key to return to the managed service.
-
-## Connect X (Twitter)
-
-Composio does not provide managed credentials for its `twitter` toolkit. To connect an X account:
-
-1. Create an app in the X Developer Portal.
-2. Create a `twitter` auth config in your Composio project using that app's credentials.
-3. Save the project's key in **App Settings → API keys**, under **Composio project key**.
-4. Return to **Connected apps** and connect **X (Twitter)**.
-
-The official managed Sagax service keeps X disabled until it owns an appropriate X OAuth app. Older Sagax tasks that refer to the connector as `x` continue to work; Sagax translates that alias to Composio's `twitter` toolkit automatically.
+Workspace tools that are not engine connectors come from Pulsatrix MCP servers. A mounted MCP server exposes its own tools to the bots that are allowed to reach it, under the same approval rules as any other outward call.
 
 ## Multiple accounts
 
-Connect more than one account for the same toolkit and give each a clear alias such as `work`, `personal`, or `client-acme`. When several accounts could perform an action, Sagax requires explicit selection instead of silently replacing the first connection.
-
-## Limit which tools a bot may use
-
-Connecting a service makes its tools available to the workspace; it does not hand every bot every tool. Open a bot's settings on the desktop and, under **Connected apps**, choose per service whether that bot gets **all tools**, an **exact list** of tools, or **no tools**.
-
-By default every bot keeps all tools on the apps it can see — nothing changes when you upgrade or connect a new app until you assign a grant. Once a bot has any grant, services missing from its list grant it nothing. Imported bots and shareable packages always land with no grants.
-
-Phones show each bot's grants read-only in its profile under **App tools**. Editing happens on the computer; a paired phone can never change grants.
+Connect more than one account for the same service and give each a clear alias such as `work`, `personal`, or `client-acme`. When several accounts could perform an action, Sagax requires explicit selection instead of silently replacing the first connection.
 
 ## Disconnecting
 
-Disconnecting an account revokes the upstream grant. It does not only hide the account in the local UI. Other accounts for the same toolkit remain connected.
-
-<Callout type="info" title="No Connect key">
-  Current official builds provision connected apps automatically. A Composio project key is only needed when you deliberately run the integration yourself.
-</Callout>
+Disconnecting an account revokes the upstream grant on the engine. It does not only hide the account in the local UI. Other accounts for the same service remain connected.

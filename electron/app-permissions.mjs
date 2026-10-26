@@ -208,6 +208,16 @@ export function externalWebUrl(rawUrl) {
   return url.toString();
 }
 
+// A "Connect Microsoft Teams" card (shared/connector-setup.ts) opens only
+// the engines' connector pages: grok.com or claude.ai, https, no port, no
+// credentials. Checked here again, whatever the page sent (defense in depth).
+const CONNECTOR_SETUP_HOSTS = new Set(["grok.com", "claude.ai"]);
+export function connectorSetupUrl(rawUrl) {
+  const url = new URL(externalWebUrl(rawUrl));
+  if (url.protocol !== "https:" || url.port || !CONNECTOR_SETUP_HOSTS.has(url.hostname)) throw new Error("Only grok.com or claude.ai connector pages can be opened here");
+  return url.toString();
+}
+
 // A mailto: link (an email draft's "Open in mail app") goes to the OS mail
 // client, which only pre-fills a draft; nothing is sent without the person.
 // Bounded so a hostile page cannot hand the OS an unbounded URL.

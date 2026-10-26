@@ -24,6 +24,12 @@ vi.mock("./SidebarProfileMenu", async (original) => ({
     return createElement("span", { "data-test-account": avatarOnly ? "avatar" : "row", "aria-haspopup": "menu" });
   },
 }));
+const flags = vi.hoisted(() => ({ connectedApps: true }));
+vi.mock("@/lib/feature-flags", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/feature-flags")>(),
+  connectedAppsEnabled: () => flags.connectedApps,
+}));
+
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
   return {
@@ -103,6 +109,11 @@ describe("Primary Bot at the top", () => {
     expect(grid).toContain(">nova</span>");
     expect(grid).toContain('data-testid="primary-bot-badge"');
     expect(grid).toMatch(/data-bot-role-tag=""[^>]*><span[^>]*>Chef de cabinet</);
+    // Grok Bot's pinned tile: 95px, 10px corners, 12px name
+    expect(grid).toContain("w-[95px]");
+    expect(grid).toContain("rounded-[10px]");
+    expect(grid).toContain("text-[12px]");
+    expect(grid).toContain('data-sidebar-tile-labels=""');
     expect(html).not.toContain('data-sidebar-bot-row="nova"');
     expect(html).toContain('data-sidebar-bot-row="atlas"');
   });
@@ -122,6 +133,8 @@ describe("sections", () => {
     const html = render();
     expect(html).toContain('data-section="Mon équipe"');
     expect(html).not.toContain('data-section="My team"');
+    setLocale("en");
+    expect(render()).toContain('data-section="My Team"');
     // any other name stays as typed
     expect(html).toContain('data-section="Ops"');
   });

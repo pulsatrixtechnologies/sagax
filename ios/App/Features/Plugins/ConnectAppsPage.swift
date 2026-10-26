@@ -15,8 +15,7 @@
 // The phone keeps its own presentation (a navigation stack of lists); the
 // names, groupings and order are the desktop's. Writes the desktop gives an
 // admin (MCP servers, marketplaces, the skills library) show only to an
-// administering pairing; the Composio setup card and the MCP trust notice
-// are gone (#197).
+// administering pairing; the MCP trust notice is gone (#197).
 import CompanionCore
 import SwiftUI
 import UIKit
@@ -28,7 +27,6 @@ final class ConnectAppsModel: ObservableObject {
     @Published private(set) var servers: [MCPServerListing] = []
     @Published private(set) var disabledTools: [String: [String]] = [:]
     @Published private(set) var marketplaces: [Marketplace] = []
-    @Published private(set) var statuses: [String: ConnectorStatus] = [:]
     @Published private(set) var probes: [String: MCPProbe] = [:]
     @Published private(set) var probing: Set<String> = []
     @Published private(set) var claudeConnectors = 0
@@ -38,11 +36,8 @@ final class ConnectAppsModel: ObservableObject {
     @Published var filter: ConnectAppFilter = .all
     @Published var type: ConnectAppTypeFilter = .any
 
-    private var cards: [ConnectorCard] = []
-    private var categories: [String: [String]] = [:]
     private var featured: [PluginListing] = []
     private var skills: [LibrarySkill] = []
-    private var composioUsable = true
 
     var sections: [ConnectApps.Section] {
         ConnectApps.sections(items, query: query, filter: filter, type: type, extraSources: marketplaces.map(\.name))
@@ -54,25 +49,16 @@ final class ConnectAppsModel: ObservableObject {
 
     func load(_ session: Session) async {
         guard let client = session.settingsClient else { loading = false; return }
-        async let catalog = try? client.connectorCatalog()
-        async let cardCategories = try? client.connectorCategories()
         async let servers = try? client.mcpServers()
         async let disabled = try? client.mcpDisabledTools()
         async let page = try? client.searchPlugins()
         async let skills = try? client.skillsLibrary()
         async let markets = try? client.marketplaces()
-        let loadedCatalog = await catalog
-        cards = loadedCatalog?.cards ?? []
-        composioUsable = loadedCatalog?.configured ?? false
-        categories = await cardCategories ?? [:]
         self.servers = await servers?.servers ?? []
         disabledTools = await disabled ?? [:]
         featured = await page?.featured ?? []
         self.skills = await skills ?? []
         marketplaces = await markets ?? []
-        if !cards.isEmpty, let answer = try? await client.connectorStatuses(services: cards.map(\.slug)) {
-            statuses = answer.services
-        }
         rebuild()
         loading = false
         // the claude.ai connectors count in "N connected"; that answer can
@@ -84,15 +70,13 @@ final class ConnectAppsModel: ObservableObject {
 
     private func rebuild() {
         items = ConnectApps.items(ConnectAppSources(
-            cards: cards, cardCategories: categories, status: statuses,
             servers: servers.map { ConnectAppServer(name: $0.name, enabled: $0.enabled ?? true, url: $0.url, command: $0.command, auth: $0.auth, managedBy: $0.managedBy, source: $0.source) },
             featured: featured.map { ConnectAppFeatured(id: $0.id, name: $0.name, description: $0.description, url: $0.url, domain: $0.domain, auth: $0.auth, installed: $0.installed, iconUrl: $0.iconUrl) },
-            skills: skills, marketplaces: marketplaces, composioUsable: composioUsable
+            skills: skills, marketplaces: marketplaces
         ))
     }
 
     func server(_ name: String) -> MCPServerListing? { servers.first { $0.name == name } }
-    func card(_ slug: String) -> ConnectorCard? { cards.first { $0.slug == slug } }
     func skill(_ name: String) -> LibrarySkill? { skills.first { $0.name == name } }
 
     // MARK: Actions
@@ -112,13 +96,6 @@ final class ConnectAppsModel: ObservableObject {
     /// Add or Connect on a row.
     func act(_ item: ConnectAppItem, alias: String?, session: Session) async {
         switch item.kind {
-        case .app:
-            await run(item.key, session) { client in
-                let url = try await client.authorizeConnector(slug: item.id, alias: alias)
-                if !(await UIApplication.shared.open(url)) {
-                    message = String(localized: "The authorization page could not be opened. Try again after checking your browser restrictions.")
-                }
-            }
         case .featured:
             await run(item.key, session) { client in
                 let result = try await client.installPlugin(id: item.id, trust: false)
@@ -168,18 +145,9 @@ final class ConnectAppsModel: ObservableObject {
             let parts = item.id.split(separator: "@", maxSplits: 1).map(String.init)
             guard parts.count == 2 else { return }
             await run(item.key, session) { try await $0.setMarketplacePlugin(marketplace: parts[1], plugin: parts[0], installed: false) }
-        case .app:
-            let accounts = statuses[item.id]?.accounts ?? []
-            await run(item.key, session) { client in
-                for account in accounts { try await client.disconnectConnectorAccount(slug: item.id, accountId: account.id) }
-            }
         case .featured, .skill:
             break
         }
-    }
-
-    func disconnect(_ slug: String, account: ConnectorAccount, session: Session) async {
-        await run("app:\(slug)", session) { try await $0.disconnectConnectorAccount(slug: slug, accountId: account.id) }
     }
 
     func setSkill(_ name: String, enabled: Bool, session: Session) async {
@@ -297,7 +265,6 @@ enum ConnectAppsWords {
     static func type(_ type: ConnectAppTypeFilter) -> String {
         switch type {
         case .any: String(localized: "All types")
-        case .apps: String(localized: "Connected apps")
         case .mcp: String(localized: "MCP servers")
         case .skills: String(localized: "Skills")
         case let .source(name): name
@@ -330,7 +297,6 @@ enum ConnectAppsWords {
         switch source {
         case "manual": String(localized: "Added manually")
         case "catalog": String(localized: "Sagax plugin catalog")
-        case "composio": String(localized: "Connected apps (Composio)")
         case "local": String(localized: "Created locally")
         default: source
         }
@@ -405,8 +371,6 @@ struct ConnectAppsMain: View {
     var botTemplates: (() -> Void)? = nil
     let push: (ConnectAppsRoute) -> Void
     @State private var expanded: Set<ConnectApps.SectionID> = []
-    @State private var aliasFor: ConnectAppItem?
-    @State private var aliasDraft = ""
 
     var body: some View {
         ThemedList {
@@ -465,17 +429,6 @@ struct ConnectAppsMain: View {
         .searchable(text: $model.query, prompt: Text(String(localized: "Search across apps and skills")))
         .refreshable { await model.load(session) }
         .accessibilityIdentifier("connect-apps")
-        .alert(String(localized: "Connect"), isPresented: Binding(get: { aliasFor != nil }, set: { if !$0 { aliasFor = nil } })) {
-            TextField(String(localized: "work, personal..."), text: $aliasDraft)
-            Button(String(localized: "Cancel"), role: .cancel) {}
-            Button(String(localized: "Connect")) {
-                guard let item = aliasFor else { return }
-                let alias = aliasDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                Task { await model.act(item, alias: alias.isEmpty ? nil : String(alias.prefix(64)), session: session) }
-            }
-        } message: {
-            Text(String(localized: "A label for the account, such as work or personal."))
-        }
     }
 
     /// "N connected >" with up to four icons: opens Manage.
@@ -516,7 +469,7 @@ struct ConnectAppsMain: View {
                     }
                 }
                 Section(String(localized: "Filter by type")) {
-                    let types: [ConnectAppTypeFilter] = [.any, .apps, .mcp, .skills] + model.marketplaces.map { .source($0.name) }
+                    let types: [ConnectAppTypeFilter] = [.any, .mcp, .skills] + model.marketplaces.map { .source($0.name) }
                     ForEach(types, id: \.self) { type in
                         filterButton(ConnectAppsWords.type(type), selected: model.type == type) { model.type = type }
                     }
@@ -564,12 +517,7 @@ struct ConnectAppsMain: View {
     }
 
     private func act(_ item: ConnectAppItem) {
-        if item.kind == .app, item.action == .connect {
-            aliasDraft = ""
-            aliasFor = item
-        } else {
-            Task { await model.act(item, alias: nil, session: session) }
-        }
+        Task { await model.act(item, alias: nil, session: session) }
     }
 }
 
@@ -689,6 +637,7 @@ struct ConnectAppsManage: View {
         if session.surfaceGate.allows(.myConnections) {
             YourConnectionsSection()
         }
+        SlackConnectionsSection()
         if session.canAdminister {
             // Add manually and Paste config need a keyboard and secrets: they
             // stay on the computer; the marketplaces work from here.
@@ -780,8 +729,6 @@ struct ConnectAppDetail: View {
     let push: (ConnectAppsRoute) -> Void
     @State private var toolsOpen = false
     @State private var confirmingUninstall = false
-    @State private var aliasFor: ConnectAppItem?
-    @State private var aliasDraft = ""
 
     /// The page's item. A catalog entry ("featured:<id>") is rebuilt under
     /// its server's key once Add installs it: follow it there.
@@ -832,7 +779,6 @@ struct ConnectAppDetail: View {
             }
             switch item.kind {
             case .mcp: mcpSections(item)
-            case .app: appSections(item)
             case .plugin: pluginSections(item)
             case .featured, .skill: EmptyView()
             }
@@ -873,31 +819,14 @@ struct ConnectAppDetail: View {
                 Task { await model.uninstall(item, session: session) }
             }
         }
-        // Connect on an app asks for the account's label, as its row does
-        .alert(String(localized: "Connect"), isPresented: Binding(get: { aliasFor != nil }, set: { if !$0 { aliasFor = nil } })) {
-            TextField(String(localized: "work, personal..."), text: $aliasDraft)
-            Button(String(localized: "Cancel"), role: .cancel) {}
-            Button(String(localized: "Connect")) {
-                guard let item = aliasFor else { return }
-                let alias = aliasDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                Task { await model.act(item, alias: alias.isEmpty ? nil : String(alias.prefix(64)), session: session) }
-            }
-        } message: {
-            Text(String(localized: "A label for the account, such as work or personal."))
-        }
     }
 
     private func act(_ item: ConnectAppItem) {
-        if item.kind == .app, item.action == .connect {
-            aliasDraft = ""
-            aliasFor = item
-        } else {
-            Task { await model.act(item, alias: nil, session: session) }
-        }
+        Task { await model.act(item, alias: nil, session: session) }
     }
 
     private func canUninstall(_ item: ConnectAppItem) -> Bool {
-        item.installed && item.kind != .featured && (session.canAdminister || item.kind == .app)
+        item.installed && item.kind != .featured && session.canAdminister
     }
 
     /// Added (installed, nothing to do) or the blue Add / Connect.
@@ -1033,41 +962,6 @@ struct ConnectAppDetail: View {
         if let error = server.authError, !error.isEmpty { return error }
         let keys = (server.isRemote ? server.headerKeys : server.envKeys) ?? []
         return keys.isEmpty ? String(localized: "No sign-in needed") : keys.joined(separator: ", ")
-    }
-
-    @ViewBuilder
-    private func appSections(_ item: ConnectAppItem) -> some View {
-        let accounts = model.statuses[item.id]?.accounts ?? []
-        Section {
-            if accounts.isEmpty {
-                Text(String(localized: "No account needed")).foregroundStyle(Theme.textSecondary)
-            }
-            ForEach(accounts) { account in
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(verbatim: account.alias ?? account.id)
-                        Text(verbatim: account.isActive ? String(localized: "Connected") : account.status.capitalized)
-                            .font(.footnote)
-                            .foregroundStyle(account.isActive ? Theme.success : Theme.textSecondary)
-                    }
-                    Spacer()
-                }
-                .swipeActions {
-                    Button(String(localized: "Disconnect"), role: .destructive) {
-                        Task { await model.disconnect(item.id, account: account, session: session) }
-                    }
-                    .accessibilityIdentifier("connect-apps-disconnect.\(account.id)")
-                }
-                .accessibilityIdentifier("connect-apps-account.\(account.id)")
-            }
-            if item.installed {
-                Button(String(localized: "Add another account")) {
-                    Task { await model.act(item, alias: "account \(accounts.count + 1)", session: session) }
-                }
-            }
-        } header: {
-            Text(String(localized: "Accounts"))
-        }
     }
 
     @ViewBuilder

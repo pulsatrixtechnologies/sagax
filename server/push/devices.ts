@@ -71,6 +71,7 @@ export const registrationSchema = z.object({
     sound: z.boolean().optional(),
     badge: z.boolean().optional(),
     nudgeSound: z.boolean().optional(),
+    approvalChime: z.boolean().optional(),
   }).strict().optional(),
 }).strict();
 
@@ -84,7 +85,12 @@ const fileSchema = z.object({
     environment: z.enum(["sandbox", "production"]),
     appVersion: z.string(),
     deviceName: z.string(),
-    settings: z.object({ sound: z.boolean(), badge: z.boolean(), nudgeSound: z.boolean() }),
+    settings: z.object({
+      sound: z.boolean(),
+      badge: z.boolean(),
+      nudgeSound: z.boolean(),
+      approvalChime: z.boolean().optional(),
+    }),
     registeredAt: z.number(),
     updatedAt: z.number(),
   })),
@@ -119,7 +125,11 @@ export function createPushDeviceStore(dataDir: string, now: () => number = Date.
       if (!PERSON.test(person)) continue;
       try {
         const parsed = fileSchema.parse(JSON.parse(readFileSync(join(dir, name), "utf8")));
-        if (parsed.devices.length) people.set(person, parsed.devices);
+        const devices = parsed.devices.map((device) => ({
+          ...device,
+          settings: { ...DEFAULT_DEVICE_SETTINGS, ...device.settings, approvalChime: device.settings.approvalChime !== false },
+        }));
+        if (devices.length) people.set(person, devices);
       } catch (error) {
         // a damaged file costs that person their pushes until the phone registers again
         console.warn(`push: ${name} in push-devices could not be read (${error instanceof Error ? error.message : String(error)}); ignored`);

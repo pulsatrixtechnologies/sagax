@@ -1305,8 +1305,10 @@ const MAY_LINK_THREAD = /#|openmausbot|sagax/i;
 const NO_THREAD_REFS: ThreadRefsValue = { threads: [] };
 
 /** Render message Markdown with math, protected code, scoped attachments, and mentions. */
-function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION_PEERS, everyone = false, youtubeSendToBot, delivered, inert = false }: {
+function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION_PEERS, everyone = false, youtubeSendToBot, delivered, inert = false, emailDrafts = true }: {
   text: string; message?: MessageAttachmentContext; botId?: string;
+  /** False when this bot's email drafts are turned off. */
+  emailDrafts?: boolean;
   /** Markdown inside a declarative chat widget (src/components/widget):
    * nothing in it runs code, reaches the network on its own or offers a
    * write. An HTML ```widget, ```artifact or ```cw fence shows as code and a
@@ -1404,14 +1406,14 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
           }
         }
         const email = kind === "email" || !kind ? parseEmailBlock(code, lang) : null;
-        if (email) return <EmailCard draft={email} pending={pending} threadId={threadId} botId={botId} />;
+        if (email) return <EmailCard draft={email} pending={pending} threadId={threadId} botId={botId} draftsEnabled={emailDrafts} />;
         if (kind === "widget") {
           const page = parseArtifactPage(code);
           // a YouTube page is the video itself: the player, not a page card
           const pageVideo = page?.url && !pending ? youtubeVideoId(page.url) : null;
           if (pageVideo) return <YouTubeMiniPlayer videoId={pageVideo} message={scopedMessage} onSendToBot={youtubeSendToBot} />;
           if (page) return <ArtifactCard page={page} pending={pending} />;
-          return <WidgetFrame code={code} pending={pending} />;
+          return <WidgetFrame code={code} pending={pending} imperfect={lang.trim().toLowerCase() === "widget-imperfect"} />;
         }
         if (kind === "chart") return <ChartBlock code={code} pending={pending} />;
         if (kind === "csv" && !pending) {
@@ -1663,6 +1665,7 @@ export const ChatMarkdown = memo(ChatMarkdownComponent, (previous, next) => (
   && previous.message?.messageId === next.message?.messageId
   && previous.youtubeSendToBot === next.youtubeSendToBot
   && previous.botId === next.botId
+  && previous.emailDrafts === next.emailDrafts
   && previous.inert === next.inert
   && sameDelivered(previous.delivered, next.delivered)
 ));

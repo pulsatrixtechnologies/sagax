@@ -8,7 +8,7 @@ import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { cn } from "@/lib/cn";
 import { DEV_WINDOW } from "../detector";
 import { registerDevPod, type DevPodContext } from "../registry";
-import { currentBranch, folderLabel } from "../sources";
+import { currentBranch, folderLabel, isParallelTaskBranch } from "../sources";
 
 export interface EnvironmentData {
   place: EffectivePlace;
@@ -39,6 +39,12 @@ export function environmentData(ctx: Pick<DevPodContext, "bot" | "task" | "messa
 const ROW = "flex min-h-[28px] items-center gap-2";
 const ROW_ICON = "shrink-0 text-ink-secondary";
 const MINI_BUTTON = "flex size-6 shrink-0 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-hover hover:text-ink";
+
+/** The branch as a person reads it: Sagax's parallel-task branches are named
+ * after an id, so they read as what they are (the name stays in the tooltip). */
+export function environmentBranchLabel(branch: string): string {
+  return isParallelTaskBranch(branch) ? t("folder.parallelBranch") : branch;
+}
 
 function EnvironmentBody({ data, ctx }: { data: EnvironmentData; ctx: DevPodContext }) {
   const openSection = (section: "worksOn" | "access") =>
@@ -73,7 +79,7 @@ function EnvironmentBody({ data, ctx }: { data: EnvironmentData; ctx: DevPodCont
         <div className={ROW} data-env-branch="">
           <GitBranch size={14} strokeWidth={1.75} aria-hidden="true" className={ROW_ICON} />
           <span className="sr-only">{t("devPods.environment.branch")}</span>
-          <code className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink" title={data.branch}>{data.branch}</code>
+          <code className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink" title={data.branch}>{environmentBranchLabel(data.branch)}</code>
         </div>
       )}
     </div>

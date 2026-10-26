@@ -296,6 +296,11 @@ export function safetyRejectArmed(requestId: string): void {
   safetySettleRequest(requestId, "deny", "user");
 }
 
+/** Whether a card waits under a safety hold (never replaced, 2026-10-20). */
+export function safetyIsArmed(requestId: string): boolean {
+  return armed.has(requestId);
+}
+
 export function safetyForgetArmed(requestId: string): void {
   armed.delete(requestId);
 }

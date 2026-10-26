@@ -1,6 +1,10 @@
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
-import { GithubConnect, githubAuthorizedFetch, githubGitEnvironment, githubOrigins, githubSandboxArgv } from "./github-connect.ts";
+import { GithubConnect, githubAuthorizedFetch, githubGitEnvironment, githubOrigins, githubSandboxArgv, githubTokenKind } from "./github-connect.ts";
 import type { GithubConnection } from "./person-connections.ts";
 
 function fakeGithub(options: { pendingPolls?: number; deny?: boolean } = {}) {
@@ -101,15 +105,117 @@ describe("where the token goes", () => {
   it("writes gh and git credentials in the environment from variables, never the argv", () => {
     const set = githubSandboxArgv({ token: "gho_secret", login: "octo" });
     expect(set.argv.join(" ")).not.toContain("gho_secret");
-    expect(set.env).toEqual({ SAGAX_GH_TOKEN: "gho_secret", SAGAX_GH_LOGIN: "octo" });
-    expect(set.argv[2]).toContain(".config/gh/hosts.yml");
+    expect(set.env).toEqual({ SAGAX_GH_MODE: "set", SAGAX_GH_TOKEN: "gho_secret", SAGAX_GH_LOGIN: "octo" });
+    expect(set.argv[2]).toContain("$HOME/.config/gh\"; hosts=\"$dir/hosts.yml");
     expect(set.argv[2]).toContain("umask 077");
-    expect(githubSandboxArgv(null).env).toEqual({});
+    expect(githubSandboxArgv(null).env).toEqual({ SAGAX_GH_MODE: "remove" });
+    expect(githubSandboxArgv(null, { token: "gho_old", login: "octo" }).argv.join(" ")).not.toContain("gho_old");
     expect(() => githubSandboxArgv({ token: "t", login: "bad;rm" })).toThrow();
   });
 
   it("lets only a loopback stand-in replace github.com", () => {
     expect(githubOrigins({ SAGAX_GITHUB_WEB_ORIGIN: "http://127.0.0.1:9000" }).web).toBe("http://127.0.0.1:9000");
     expect(githubOrigins({ SAGAX_GITHUB_WEB_ORIGIN: "https://evil.example" }).web).toBe("https://github.com");
+  });
+});
+
+// The script itself, run in a throwaway HOME: what gh and git find after.
+describe("Sagax's GitHub sync in the server environment", () => {
+  const run = (home: string, connection: { token: string; login: string } | null, previous?: { token: string; login: string }) => {
+    const { argv, env } = githubSandboxArgv(connection, previous);
+    const result = spawnSync(argv[0]!, argv.slice(1), { env: { PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: "1", ...env }, encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+    return result.stdout.trim();
+  };
+  const withHome = (body: (home: string, hosts: string, creds: string) => void) => {
+    const home = mkdtempSync(join(tmpdir(), "sagax-gh-"));
+    try { body(home, join(home, ".config/gh/hosts.yml"), join(home, ".git-credentials")); } finally { rmSync(home, { recursive: true, force: true }); }
+  };
+  // What gh auth login writes (gh 2.40 and later): the person's own sign-in.
+  const personLogin = "github.com:\n    users:\n        jc:\n            oauth_token: gho_person\n    git_protocol: https\n    oauth_token: gho_person\n    user: jc\n";
+
+  it("never overwrites a gh auth login the person made, and takes Sagax's git line out", () => withHome((home, hosts, creds) => {
+    mkdirSync(join(home, ".config/gh"), { recursive: true });
+    writeFileSync(hosts, personLogin);
+    writeFileSync(creds, "https://jc:gho_sagax@github.com\nhttps://jc:own@gitlab.example\n");
+    expect(run(home, { token: "gho_sagax", login: "jc" })).toBe("sagax-github-kept-person-login");
+    expect(readFileSync(hosts, "utf8")).toBe(personLogin);
+    expect(readFileSync(creds, "utf8")).toBe("https://jc:own@gitlab.example\n");
+    // Every later turn too.
+    expect(run(home, { token: "gho_sagax", login: "jc" })).toBe("sagax-github-kept-person-login");
+    expect(readFileSync(hosts, "utf8")).toBe(personLogin);
+  }));
+
+  it("writes its own file when there is none, refreshes it, and yields once the person signs in", () => withHome((home, hosts) => {
+    expect(run(home, { token: "gho_one", login: "jc" })).toBe("sagax-github-ready");
+    expect(readFileSync(hosts, "utf8")).toContain("oauth_token: gho_one");
+    expect(existsSync(join(home, ".config/gh/.sagax-managed"))).toBe(true);
+    expect(run(home, { token: "gho_two", login: "jc" })).toBe("sagax-github-ready");
+    expect(readFileSync(hosts, "utf8")).toContain("oauth_token: gho_two");
+    writeFileSync(hosts, personLogin); // gh auth login, 32 seconds later
+    expect(run(home, { token: "gho_two", login: "jc" })).toBe("sagax-github-kept-person-login");
+    expect(readFileSync(hosts, "utf8")).toBe(personLogin);
+    expect(existsSync(join(home, ".config/gh/.sagax-managed"))).toBe(false);
+  }));
+
+  it("adopts a file it wrote before the marker existed by its token, never another token", () => withHome((home, hosts) => {
+    mkdirSync(join(home, ".config/gh"), { recursive: true });
+    const legacy = "github.com:\n    oauth_token: gho_one\n    user: jc\n    git_protocol: https\n";
+    writeFileSync(hosts, legacy);
+    expect(run(home, { token: "gho_one", login: "jc" })).toBe("sagax-github-ready");
+    writeFileSync(hosts, legacy.replace("gho_one", "gho_other"));
+    rmSync(join(home, ".config/gh/.sagax-managed"));
+    expect(run(home, { token: "gho_one", login: "jc" })).toBe("sagax-github-kept-person-login");
+  }));
+
+  it("still knows its own file after gh rewrote it into the multi-account layout", () => withHome((home, hosts, creds) => {
+    run(home, { token: "gho_one", login: "jc" });
+    const migrated = "github.com:\n    users:\n        jc:\n            oauth_token: gho_one\n    git_protocol: https\n    oauth_token: gho_one\n    user: jc\n";
+    writeFileSync(hosts, migrated);
+    // A new Sagax token (reconnect): the replaced one marks the file as Sagax's.
+    expect(run(home, { token: "gho_two", login: "jc" }, { token: "gho_one", login: "jc" })).toBe("sagax-github-ready");
+    writeFileSync(hosts, migrated.replaceAll("gho_one", "gho_two"));
+    // Rotation without the replaced one at hand: the noted SHA-256 is enough.
+    expect(run(home, { token: "gho_three", login: "jc" })).toBe("sagax-github-ready");
+    expect(readFileSync(hosts, "utf8")).toContain("oauth_token: gho_three");
+    expect(readFileSync(creds, "utf8")).toBe("https://jc:gho_three@github.com\n");
+    writeFileSync(hosts, migrated.replaceAll("gho_one", "gho_three"));
+    expect(run(home, null, { token: "gho_three", login: "jc" })).toBe("sagax-github-removed");
+    expect(existsSync(hosts)).toBe(false);
+    expect(readFileSync(creds, "utf8")).toBe("");
+  }));
+
+  it("keeps the person's own lines in git's credential store", () => withHome((home, _hosts, creds) => {
+    writeFileSync(creds, "https://jc:gho_mine@github.com\nhttps://jc:own@gitlab.example\n");
+    expect(run(home, null)).toBe("sagax-github-removed");
+    expect(readFileSync(creds, "utf8")).toBe("https://jc:gho_mine@github.com\nhttps://jc:own@gitlab.example\n");
+    run(home, { token: "gho_one", login: "jc" });
+    expect(readFileSync(creds, "utf8")).toBe("https://jc:gho_mine@github.com\nhttps://jc:own@gitlab.example\nhttps://jc:gho_one@github.com\n");
+  }));
+
+  it("takes out only its own sign-in on disconnect", () => withHome((home, hosts) => {
+    run(home, { token: "gho_one", login: "jc" });
+    expect(run(home, null, { token: "gho_one", login: "jc" })).toBe("sagax-github-removed");
+    expect(existsSync(hosts)).toBe(false);
+    mkdirSync(join(home, ".config/gh"), { recursive: true });
+    writeFileSync(hosts, personLogin);
+    expect(run(home, null, { token: "gho_one", login: "jc" })).toBe("sagax-github-kept-person-login");
+    expect(run(home, null)).toBe("sagax-github-kept-person-login");
+    expect(readFileSync(hosts, "utf8")).toBe(personLogin);
+  }));
+
+  it("tells a fine-grained token, which reaches one owner only, from the others", () => {
+    expect(githubTokenKind("github_pat_abc")).toBe("fine_grained");
+    expect(githubTokenKind("ghp_abc")).toBe("classic");
+    expect(githubTokenKind("gho_abc")).toBe("oauth");
+    expect(githubTokenKind("ghu_abc")).toBe("app_user");
+    const connect = new GithubConnect({ clientId: () => undefined, save: () => undefined });
+    const base = { login: "jc", via: "token" as const, connectedAt: 1 };
+    expect(connect.status("jc", { ...base, token: "github_pat_x" } as GithubConnection)).toMatchObject({ state: "connected", fineGrained: true });
+    expect(connect.status("jc", { ...base, token: "gho_x" } as GithubConnection)).not.toHaveProperty("fineGrained");
+    // Signed in through the OAuth App: GitHub's page to grant it each organization.
+    const app = new GithubConnect({ clientId: () => "Iv1.abc", save: () => undefined });
+    expect(app.status("jc", { ...base, via: "device", token: "gho_x" } as GithubConnection)).toMatchObject({ orgAccessUrl: "https://github.com/settings/connections/applications/Iv1.abc" });
+    expect(app.status("jc", { ...base, token: "ghp_x" } as GithubConnection)).not.toHaveProperty("orgAccessUrl");
   });
 });

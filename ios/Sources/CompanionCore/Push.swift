@@ -37,15 +37,18 @@ public struct PushDeviceSettings: Codable, Equatable, Hashable, Sendable {
     public var sound: Bool
     public var badge: Bool
     public var nudgeSound: Bool
+    /// Distinct sound on an approval banner. On unless this phone said otherwise.
+    public var approvalChime: Bool
 
-    public init(sound: Bool = true, badge: Bool = true, nudgeSound: Bool = true) {
+    public init(sound: Bool = true, badge: Bool = true, nudgeSound: Bool = true, approvalChime: Bool = true) {
         self.sound = sound
         self.badge = badge
         self.nudgeSound = nudgeSound
+        self.approvalChime = approvalChime
     }
 
     public init(_ attention: AttentionSettings) {
-        self.init(sound: attention.sound, badge: attention.badge, nudgeSound: attention.nudgeSound)
+        self.init(sound: attention.sound, badge: attention.badge, nudgeSound: attention.nudgeSound, approvalChime: attention.approvalChime)
     }
 }
 
@@ -133,6 +136,14 @@ public struct PushPayload: Equatable, Sendable {
     public var senderName: String?
     public var senderId: String?
     public var avatarUrl: String?
+    /// The approval Allow or Deny answers. Absent on a question or a message.
+    public var requestId: String?
+    /// `approval` or `question` when `kind` is approval.
+    public var prompt: String?
+    /// Allow must open Sagax: the person's security key signs it.
+    public var needsKey: Bool
+    public var routineRunId: String?
+    public var routineName: String?
     /// Milliseconds since 1970.
     public var at: Double?
 
@@ -160,6 +171,19 @@ public struct PushPayload: Equatable, Sendable {
         } else {
             avatarUrl = nil
         }
+        requestId = string("requestId")
+        prompt = string("prompt")
+        if let flag = userInfo["needsKey"] as? Bool {
+            needsKey = flag
+        } else if let flag = userInfo["needsKey"] as? NSNumber {
+            needsKey = flag.boolValue
+        } else if let flag = userInfo["needsKey"] as? String {
+            needsKey = flag == "1" || flag == "true"
+        } else {
+            needsKey = false
+        }
+        routineRunId = string("routineRunId")
+        routineName = string("routineName")
         at = (userInfo["at"] as? NSNumber)?.doubleValue
     }
 

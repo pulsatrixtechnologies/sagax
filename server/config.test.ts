@@ -30,9 +30,10 @@ import { cacheUntilConfigChanges,
   threadEventLogMaxBytes,
   threadEventLogRetentionDays,
   showToolCallsEnabled,
+  newRoutinesPaused,
   routinesInConversationEnabled,
-  connectedAppsEnabled,
   templatesEnabled, vpsComputerEnabled, boatComputerEnabled, decisionModelEnabled, dataWindowEnabled, routineGroupSettingsEnabled,
+  stripLegacyComposioConfig,
   saveConfig,
   skillAuthoringEnabled,
   sharedComputersEnabled,
@@ -547,16 +548,13 @@ describe("configuration boundaries", () => {
     expect(browserEngineAttachCdpUrl({ browserEngine: { attachCdpUrl: "" } })).toBeNull();
   });
 
-  it("keeps a browser profile's My Chrome choice through saving, loading and migration, and nothing else", () => {
-    const mine = { id: "profile-mine", name: "Mine", browser: "chrome" };
-    expect(parseConfigPatch({ browserProfiles: [mine, { id: "profile-work", name: "Work" }] })).toEqual({ browserProfiles: [mine, { id: "profile-work", name: "Work" }] });
-    expect(parseStoredConfig({ browserProfiles: [mine] }).browserProfiles).toEqual([mine]);
-    // A legacy profile migrated to its canonical id keeps the choice too.
-    expect(parseStoredConfig({ browserProfiles: [{ id: "Mine", name: "Mine", browser: "chrome" }] }).browserProfiles)
-      .toEqual([{ id: "mine", name: "Mine", browser: "chrome", partitionId: "Mine" }]);
-    for (const browser of ["edge", "firefox", "", true]) {
-      expect(() => parseConfigPatch({ browserProfiles: [{ ...mine, browser }] })).toThrow("browserProfiles.0.browser");
+  it("takes browserEngine.idleTimeoutMinutes as whole minutes up to the engine's own hour", () => {
+    for (const value of [1, 10, 60]) {
+      expect(parseStoredConfig({ browserEngine: { idleTimeoutMinutes: value } })).toEqual({ browserEngine: { idleTimeoutMinutes: value } });
+      expect(parseConfigPatch({ browserEngine: { idleTimeoutMinutes: value } })).toEqual({ browserEngine: { idleTimeoutMinutes: value } });
     }
+    for (const value of [0, 61, 2.5, -1, "10"]) expect(() => parseConfigPatch({ browserEngine: { idleTimeoutMinutes: value } })).toThrow();
+    expect(parseConfigPatch({ browserEngine: { attachCdpUrl: "9333", idleTimeoutMinutes: 5 } })).toEqual({ browserEngine: { attachCdpUrl: "9333", idleTimeoutMinutes: 5 } });
   });
 
   it("accepts a persisted global room turn timeout and supplies the legacy default", () => {
@@ -679,9 +677,6 @@ describe("configuration boundaries", () => {
       features: { routinesInConversation: true },
     });
     expect(routinesInConversationEnabled({ features: { routinesInConversation: true } })).toBe(true);
-    expect(connectedAppsEnabled({})).toBe(false);
-    expect(parseConfigPatch({ features: { connectedApps: true } })).toEqual({ features: { connectedApps: true } });
-    expect(connectedAppsEnabled({ features: { connectedApps: true } })).toBe(true);
   });
 
   it("keeps the sidebar's Templates entry off unless the experimental option is on", () => {
@@ -705,6 +700,15 @@ describe("configuration boundaries", () => {
     expect(routineGroupSettingsEnabled({})).toBe(false);
     expect(parseConfigPatch({ features: { routineGroupSettings: true } })).toEqual({ features: { routineGroupSettings: true } });
     expect(routineGroupSettingsEnabled({ features: { routineGroupSettings: true } })).toBe(true);
+  });
+
+  it("starts approval-flow routines paused unless routines.newPaused is false", () => {
+    expect(newRoutinesPaused({})).toBe(true);
+    expect(newRoutinesPaused({ routines: {} })).toBe(true);
+    expect(newRoutinesPaused({ routines: { newPaused: true } })).toBe(true);
+    expect(newRoutinesPaused({ routines: { newPaused: false } })).toBe(false);
+    expect(parseConfigPatch({ routines: { newPaused: false } })).toEqual({ routines: { newPaused: false } });
+    expect(() => parseConfigPatch({ routines: { newPaused: "no" } })).toThrow(/newPaused/);
   });
 
   it("keeps tool-call chips off by default and accepts an explicit opt-in", () => {
@@ -784,6 +788,24 @@ describe("a config.json saved with a byte order mark", () => {
 });
 
 describe("saving the newer sections", () => {
+  it("persists routines.newPaused across later saves", () => {
+    const path = join(DATA_DIR, "config.json");
+    mkdirSync(DATA_DIR, { recursive: true });
+    writeFileSync(path, JSON.stringify({ xai: { key: "xai-fixture" } }));
+    try {
+      saveConfig({ routines: { newPaused: false } });
+      saveConfig({ budgets: { monthlyUsd: 10 } });
+      const disk = JSON.parse(readFileSync(path, "utf8"));
+      expect(disk.routines).toEqual({ newPaused: false });
+      expect(disk.xai).toEqual({ key: "xai-fixture" });
+      expect(newRoutinesPaused(parseStoredConfig(disk))).toBe(false);
+      saveConfig({ routines: { newPaused: true } });
+      expect(newRoutinesPaused(loadConfig())).toBe(true);
+    } finally {
+      rmSync(path, { force: true });
+    }
+  });
+
   it("persists the Anthropic key, the spend limit and the price list, section by section", () => {
     const path = join(DATA_DIR, "config.json");
     mkdirSync(DATA_DIR, { recursive: true });
@@ -1329,7 +1351,7 @@ describe("saving OpenCode provider keys", () => {
     }
     expect(refused("OPENCODE_API_KEY")).toContain("OpenCode API key box");
     // Names this server keeps for itself or another engine would never reach OpenCode.
-    for (const name of ["OPENCODE_SERVER_KEY", "SAGAX_CLOUD_BOAT_TOKEN", "SAGAX_LICENSE_KEY", "BOX_TOKEN", "COMPOSIO_API_KEY",
+    for (const name of ["OPENCODE_SERVER_KEY", "SAGAX_CLOUD_BOAT_TOKEN", "SAGAX_LICENSE_KEY", "BOX_TOKEN",
       "OPENAI_COMPAT_API_KEY", "XAI_API_KEY", "MISTRAL_API_KEY", "CURSOR_API_KEY", "FACTORY_API_KEY"]) {
       expect(refused(name)).toBe(`Sagax keeps ${name} for itself, so OpenCode can't be given it here. Put this key in opencode.json instead.`);
     }
@@ -1492,6 +1514,76 @@ describe("Grok voice key migration (2026-10-14)", () => {
   });
 });
 
+describe("onboarding engine key migration", () => {
+  const path = join(DATA_DIR, "config.json");
+  const SECRET = "witness-plaintext-not-a-secret";
+  const readDisk = () => JSON.parse(readFileSync(path, "utf8"));
+
+  beforeEach(() => {
+    mkdirSync(DATA_DIR, { recursive: true });
+    rmSync(path, { force: true });
+    rmSync(join(DATA_DIR, "onboarding-engine-keys.enc"), { force: true });
+    rmSync(join(DATA_DIR, "mcp-oauth.key"), { force: true });
+    delete process.env.SAGAX_IDENTITY;
+  });
+  afterEach(() => {
+    for (const name of ["config.json", "onboarding-engine-keys.enc", "mcp-oauth.key"]) rmSync(join(DATA_DIR, name), { force: true });
+    delete process.env.SAGAX_IDENTITY;
+    vi.restoreAllMocks();
+  });
+
+  it("seals a plaintext API key out of config.json at startup, then the driver still reads it", () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    writeFileSync(path, JSON.stringify({
+      instances: { "api-0a1b2c3d": { driver: "openai-compat", displayName: "Prov", config: { url: "https://x.test/v1", key: SECRET, model: "m" } } },
+      defaultModelSelection: { instanceId: "api-0a1b2c3d", model: "m" },
+    }), { mode: 0o600 });
+
+    ensureDirs();
+
+    // config.json no longer holds the key…
+    expect(readDisk().instances["api-0a1b2c3d"].config).toEqual({ url: "https://x.test/v1", model: "m" });
+    expect(readFileSync(path, "utf8")).not.toContain(SECRET);
+    // …the sealed store does, and the running driver gets it back…
+    expect(readFileSync(join(DATA_DIR, "onboarding-engine-keys.enc"), "utf8")).not.toContain(SECRET);
+    if (process.platform !== "win32") expect(statSync(join(DATA_DIR, "onboarding-engine-keys.enc")).mode & 0o777).toBe(0o600);
+    const live = instanceConfigs(loadConfig())["api-0a1b2c3d"]!.config as { key?: string };
+    expect(live.key).toBe(SECRET);
+    // …the log says what moved, never the value…
+    expect(log.mock.calls.map((call) => String(call[0])).join("\n")).not.toContain(SECRET);
+    // …and a second boot leaves the healed file untouched.
+    const written = readFileSync(path, "utf8");
+    ensureDirs();
+    expect(readFileSync(path, "utf8")).toBe(written);
+  });
+
+  it("leaves a built-in provider instance and a key-free config untouched", () => {
+    const disk = JSON.stringify({
+      instances: {
+        openai: { driver: "openai-compat", config: { apiKeyEnv: "SAGAX_OPENAI_API_KEY", url: "https://api.openai.com/v1" } },
+        codex: { driver: "codex" },
+      },
+    });
+    writeFileSync(path, disk, { mode: 0o600 });
+    ensureDirs();
+    expect(readFileSync(path, "utf8")).toBe(disk);
+    expect(instanceConfigs(loadConfig()).openai!.config).not.toHaveProperty("key");
+  });
+
+  it("does not run on an organization server", () => {
+    process.env.SAGAX_IDENTITY = "perspicax";
+    const disk = JSON.stringify({
+      instances: { "api-0a1b2c3d": { driver: "openai-compat", config: { url: "https://x.test/v1", key: SECRET } } },
+    });
+    writeFileSync(path, disk, { mode: 0o600 });
+    ensureDirs();
+    // The org server keeps its shared-key semantics: nothing moved, nothing injected.
+    expect(readFileSync(path, "utf8")).toBe(disk);
+    const live = instanceConfigs(loadConfig())["api-0a1b2c3d"]!.config as { key?: string };
+    expect(live.key).toBe(SECRET);
+  });
+});
+
 describe("legacy feature flag migration", () => {
   const path = join(DATA_DIR, "config.json");
   const readDisk = () => JSON.parse(readFileSync(path, "utf8"));
@@ -1573,7 +1665,6 @@ describe("credential env preference", () => {
     "SAGAX_FISH_AUDIO_API_KEY",
     "SAGAX_XAI_VOICE_KEY",
     "SAGAX_OPENAI_IMAGE_KEY",
-    "COMPOSIO_API_KEY",
   ] as const;
   let saved: Record<string, string | undefined>;
 
@@ -1916,17 +2007,14 @@ describe("credential env preference", () => {
   it("syncCredentialEnv keeps process.env in step with a credential save", () => {
     process.env.XAI_API_KEY = "boot-injected";
     process.env.BOX_TOKEN = "boot-injected";
-    process.env.COMPOSIO_API_KEY = "boot-injected";
     syncCredentialEnv({
       xai: { key: "just-saved" },
-      composio: { apiKey: "ak_just_saved" },
       box: { token: "" },
       profile: { name: "Ada" },
     });
     // a saved value replaces the boot-time one; a cleared value drops it;
     // untouched sections change nothing
     expect(process.env.XAI_API_KEY).toBe("just-saved");
-    expect(process.env.COMPOSIO_API_KEY).toBe("ak_just_saved");
     expect(process.env.BOX_TOKEN).toBeUndefined();
     expect(process.env.SAGAX_TTS_KEY).toBeUndefined();
     expect(process.env.SAGAX_FISH_AUDIO_API_KEY).toBeUndefined();
@@ -2190,7 +2278,13 @@ describe("changedInstanceIds", () => {
   it("replaces nothing for sections no driver reads", () => {
     expect(reloaded({ onboarding: { hintsSeen: ["tour.composer"] } })).toEqual([]);
     expect(reloaded({ profile: {}, language: "de", tts: {}, features: {} })).toEqual([]);
-    expect(reloaded({ box: { token: "boat" }, composio: { apiKey: "c" }, budgets: { monthlyUsd: 5 } })).toEqual([]);
+    expect(reloaded({ box: { token: "boat" }, budgets: { monthlyUsd: 5 } })).toEqual([]);
+  });
+
+  it("drops a legacy top-level composio block so an old config.json still loads", () => {
+    expect(stripLegacyComposioConfig({ xai: { key: "x" }, composio: { apiKey: "ak" } } as never))
+      .toEqual({ xai: { key: "x" } });
+    expect(parseStoredConfig({ composio: { apiKey: "ak", userId: "u" }, profile: { name: "Ada" } } as never).profile?.name).toBe("Ada");
   });
   // An instance on its own address is injected no workspace key, yet its
   // driver still reads the saved one from the env syncCredentialEnv keeps.
@@ -2204,7 +2298,7 @@ describe("changedInstanceIds", () => {
     const compat = (env: Record<string, string>) => changedInstanceIds(engineLaunches(fleet, {}), engineLaunches(fleet, env));
     expect(compat({ OPENAI_COMPAT_URL: "https://compat.example/v1" })).toEqual(["openaiCompat"]);
     expect(compat({ SAGAX_OPENAI_API_KEY: "o" })).toEqual(["openai"]);
-    expect(compat({ BOX_TOKEN: "boat", COMPOSIO_API_KEY: "c" })).toEqual([]);
+    expect(compat({ BOX_TOKEN: "boat" })).toEqual([]);
   });
   it("names an engine that was added or removed", () => {
     expect(changedInstanceIds({ a: { driver: "fake" } }, { b: { driver: "fake" } })).toEqual(["a", "b"]);

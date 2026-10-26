@@ -38,11 +38,15 @@ extension ChatView {
                         .padding(.trailing, 8)
                         .transition(.opacity)
                 }
+                if let threads = headerThreadCount {
+                    threadsButton(count: threads)
+                        .padding(.trailing, 8)
+                }
                 chatMoreButton
             }
             ChatNameCapsule(chat: current, state: mascotState) { openProfile() }
-                // narrower beside the dev pods button, so the two never meet
-                .frame(maxWidth: devPodsAvailable ? 170 : 230)
+                // narrower beside the dev pods or threads button, so they never meet
+                .frame(maxWidth: devPodsAvailable || headerThreadCount != nil ? 170 : 230)
                 .contextMenu { nameCapsuleMenu }
                 .accessibilityLabel(Text(PeopleDirectory.shared.name(current, session: session)))
                 // The thread is no longer drawn in the header; VoiceOver
@@ -62,6 +66,63 @@ extension ChatView {
     /// The "..." at the top right (Grok Bot iOS 1.14): the profile, the
     /// computer (it had its own button before), the threads the name's
     /// long press offers, then sharing and the bot's id.
+    /// A bot's threads, one touch away from its chat whatever Settings say
+    /// (the desktop keeps its activity picker above the chat with threads
+    /// hidden; JC 2026-10-19: a new thread, one the bot opened in parallel
+    /// or a new topic, was announced but could not be reached). Nil below
+    /// two threads: the chat on screen is then all there is.
+    var headerThreadCount: Int? {
+        guard case let .bot(bot) = current else { return nil }
+        let live = session.state.bot(bot.id) ?? bot
+        let count = live.threadGroups(queuedThreadIds: session.state.queuedThreadIds).reduce(0) { $0 + $1.tasks.count }
+        return count >= 2 ? count : nil
+    }
+
+    /// Sibling threads that want a look: working, waiting on the person,
+    /// unread, queued. Drawn as a dot on the threads button.
+    var threadsNeedingAttention: Int {
+        guard case let .bot(bot) = current else { return 0 }
+        let live = session.state.bot(bot.id) ?? bot
+        let queued = session.state.queuedThreadIds
+        return (live.tasks ?? []).filter { task in
+            task.threadId != threadId && !task.isHiddenFromPerson && (task.unread == true || task.busy == true
+                || task.activity == "working" || task.activity == "waiting-on-you" || queued.contains(task.threadId))
+        }.count
+    }
+
+    /// The threads button: the thread list (TaskManagerView), where one
+    /// touch switches this chat.
+    func threadsButton(count: Int) -> some View {
+        let attention = threadsNeedingAttention
+        return Button {
+            Haptics.selection()
+            showingTasks = true
+        } label: {
+            Image(systemName: "square.stack")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .frame(width: Theme.Metric.glassLarge, height: Theme.Metric.glassLarge)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .themeGlass(Circle())
+        .chatGlassRim(Circle())
+        .overlay(alignment: .topTrailing) {
+            if attention > 0 {
+                Circle()
+                    .fill(Theme.unreadDot)
+                    .frame(width: 10, height: 10)
+                    .offset(x: -2, y: 2)
+                    .allowsHitTesting(false)
+            }
+        }
+        .accessibilityLabel(Text("All threads"))
+        .accessibilityValue(Text(attention > 0
+            ? String(localized: "\(count) threads, \(attention) with news")
+            : String(localized: "\(count) threads")))
+        .accessibilityIdentifier("chat-threads")
+    }
+
     var chatMoreButton: some View {
         Menu {
             chatMoreItems

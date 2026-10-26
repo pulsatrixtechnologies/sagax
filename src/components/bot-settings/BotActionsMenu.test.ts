@@ -51,9 +51,9 @@ describe("bot actions menu", () => {
     expect(document.querySelector("[data-bot-actions-menu]")).toBeNull();
   });
 
-  it("offers Edit bot, Rename, the desktop, primary bot, export, archive and the Inspector", () => {
+  it("offers Edit bot, Rename, the desktop, primary bot, the bot's link, reset, export, archive and the Inspector", () => {
     open();
-    expect(items()).toEqual(["edit-bot", "rename", "put-on-desktop", "make-primary", "export-zip", "archive", "inspector"]);
+    expect(items()).toEqual(["edit-bot", "rename", "put-on-desktop", "make-primary", "copy-bot-link", "reset-history", "export-zip", "archive", "inspector"]);
     // no messages yet: the conversation export says so instead of offering nothing
     expect(document.querySelector("[data-bot-actions-menu]")?.textContent).toContain("No messages to export yet.");
   });
@@ -79,6 +79,27 @@ describe("bot actions menu", () => {
     expect(onAnchor).toHaveBeenCalledWith(null);
     act(() => { (document.querySelector("[data-menu-item=rename]") as HTMLElement).click(); });
     expect(onRename).toHaveBeenCalled();
+  });
+
+  it("resets the history after asking: a new conversation, then the open ones archived", () => {
+    const withThreads = { ...bot, threadId: "t1", tasks: [
+      { threadId: "t1", title: "a", createdAt: 1 },
+      { threadId: "t2", title: "routine", createdAt: 2, routineRunId: "r1" },
+      { threadId: "t3", title: "b", createdAt: 3 },
+      { threadId: "t4", title: "work", createdAt: 4, openedBy: { botId: "other", name: "Other" } },
+      { threadId: "t5", title: "client", createdAt: 5, hidden: true },
+    ] } as unknown as Bot;
+    open({ bot: withThreads });
+    act(() => { (document.querySelector("[data-menu-item=reset-history]") as HTMLElement).click(); });
+    expect(document.body.textContent).toContain("Reset Atlas's history?");
+    expect(document.body.textContent).toContain("Memory, files, routines");
+    act(() => { ([...document.querySelectorAll("button")].find((button) => button.textContent === "Reset the history") as HTMLElement).click(); });
+    const created = fixture.dispatch.mock.calls.find(([action]) => action.type === "newTask")?.[0];
+    expect(created).toMatchObject({ type: "newTask", botId: "atlas" });
+    expect(fixture.dispatch.mock.calls.some(([action]) => action.type === "updateTask")).toBe(false);
+    act(() => { created.onCreated(); });
+    const archived = fixture.dispatch.mock.calls.filter(([action]) => action.type === "updateTask").map(([action]) => action.threadId);
+    expect(archived).toEqual(["t1", "t3"]);
   });
 
   it("asks before archiving, and archiving the last bot is blocked with the reason", () => {

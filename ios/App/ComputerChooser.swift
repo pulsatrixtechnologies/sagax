@@ -110,32 +110,10 @@ struct ComputerChooser: View {
     }
 
     /// The host name under Other VMs, and a menu when several desktops are online.
+    /// Rename is the same route as Settings > Other computers.
     @ViewBuilder
     static func provenance(bridge: PersonDesktopBridge?, chosen: ComputerChoice?, pick: @escaping (String) -> Void, secondary: Color) -> some View {
-        let desktops = bridge?.computerChoices().filter { $0 != .cloud } ?? []
-        if let chosen, chosen != .cloud, !desktops.isEmpty {
-            if desktops.count > 1 {
-                Menu {
-                    ForEach(desktops, id: \.key) { desktop in
-                        Button(desktop.name ?? String(localized: "Computer")) { pick(desktop.key) }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(verbatim: chosen.name ?? String(localized: "Computer"))
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .font(.system(size: 12))
-                    .foregroundStyle(secondary)
-                }
-                .accessibilityIdentifier("computer-vm-menu")
-            } else {
-                Text(verbatim: chosen.name ?? String(localized: "Computer"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(secondary)
-                    .accessibilityIdentifier("computer-vm-name")
-            }
-        }
+        ComputerProvenance(bridge: bridge, chosen: chosen, pick: pick, secondary: secondary)
     }
 
     let items: [Item]
@@ -187,3 +165,91 @@ struct ComputerChooser: View {
         .accessibilityIdentifier("computer-choice.\(item.key)")
     }
 }
+
+/// The host under the picker, with Rename for the computer on screen.
+private struct ComputerProvenance: View {
+    @EnvironmentObject private var session: Session
+    let bridge: PersonDesktopBridge?
+    let chosen: ComputerChoice?
+    let pick: (String) -> Void
+    let secondary: Color
+    @State private var names: [String: String] = [:]
+    @State private var renaming = false
+    @State private var draft = ""
+    @State private var failure: String?
+
+    private var desktops: [ComputerChoice] {
+        bridge?.computerChoices().filter { $0 != .cloud } ?? []
+    }
+
+    var body: some View {
+        if let chosen, chosen != .cloud, !desktops.isEmpty {
+            HStack(spacing: 8) {
+                if desktops.count > 1 {
+                    Menu {
+                        ForEach(desktops, id: \.key) { desktop in
+                            Button(label(desktop)) { pick(desktop.key) }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(verbatim: label(chosen))
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .font(.system(size: 12))
+                        .foregroundStyle(secondary)
+                    }
+                    .accessibilityIdentifier("computer-vm-menu")
+                } else {
+                    Text(verbatim: label(chosen))
+                        .font(.system(size: 12))
+                        .foregroundStyle(secondary)
+                        .accessibilityIdentifier("computer-vm-name")
+                }
+                Button(String(localized: "Rename")) { begin() }
+                    .font(.system(size: 12))
+                    .accessibilityIdentifier("computer-vm-rename")
+            }
+            .alert("Rename this computer", isPresented: $renaming) {
+                TextField(String(localized: "Name"), text: $draft)
+                Button(String(localized: "Save")) { Task { await save() } }
+                Button(String(localized: "Cancel"), role: .cancel) {}
+            }
+            .alert(String(localized: "Other computers"), isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+                Button(String(localized: "OK"), role: .cancel) {}
+            } message: {
+                Text(verbatim: failure ?? "")
+            }
+        }
+    }
+
+    private func label(_ choice: ComputerChoice) -> String {
+        guard let id = choice.desktopId else { return choice.name ?? String(localized: "Computer") }
+        return names[id] ?? choice.name ?? String(localized: "Computer")
+    }
+
+    private func begin() {
+        guard let chosen, let id = chosen.desktopId else { return }
+        draft = names[id] ?? chosen.name ?? ""
+        renaming = true
+    }
+
+    private func save() async {
+        guard let chosen, let id = chosen.desktopId, let client = session.settingsClient else { return }
+        let next = draft
+        guard let name = OtherComputers.name(next) else {
+            failure = String(localized: "A computer's name is 1 to 120 characters.")
+            return
+        }
+        do {
+            try await client.renameDesktopComputer(id: id, name: name)
+            names[id] = name
+        } catch let error as ComputerChangeFailure {
+            failure = error.message
+        } catch {
+            failure = error.localizedDescription
+        }
+    }
+}
+
+

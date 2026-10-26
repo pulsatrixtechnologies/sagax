@@ -1,7 +1,7 @@
 import { t } from "./i18n";
 
 export interface FeatureFlagConfig {
-  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; routinesInConversation?: boolean; llmThreadTitles?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean };
+  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; routinesInConversation?: boolean; llmThreadTitles?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; roomMemoryCapture?: boolean };
   browserEngine?: { kind: "engine" | "unavailable"; reason?: string; installable?: boolean; installing?: boolean; installError?: string };
 }
 
@@ -45,6 +45,20 @@ export function skillReviewSteps(config: FeatureFlagConfig | null | undefined): 
   const raw = config?.features?.skillReviewSteps;
   const value = typeof raw === "number" && Number.isFinite(raw) ? Math.round(raw) : DEFAULT_SKILL_REVIEW_STEPS;
   return Math.min(MAX_SKILL_REVIEW_STEPS, Math.max(MIN_SKILL_REVIEW_STEPS, value));
+}
+
+/** The engines bots on this server use that cannot run the skill review,
+ * by name: it needs a quick background model call and the agents tools,
+ * the same two the server checks (server/index.ts, createSkillReview). */
+export function skillReviewUnavailableEngines(
+  bots: ReadonlyArray<{ modelSelection?: { instanceId?: string } }>,
+  instances: ReadonlyArray<{ instanceId: string; displayName: string; capabilities?: { backgroundText?: boolean; agentsMcp?: boolean } }>,
+): string[] {
+  const used = new Set(bots.map((bot) => bot.modelSelection?.instanceId).filter(Boolean));
+  return [...new Set(instances
+    .filter((instance) => used.has(instance.instanceId))
+    .filter((instance) => instance.capabilities?.backgroundText !== true || instance.capabilities?.agentsMcp !== true)
+    .map((instance) => instance.displayName))];
 }
 
 /** The review threshold the person typed, or null when it is not a whole
@@ -145,4 +159,11 @@ export function llmThreadTitlesEnabled(config: FeatureFlagConfig | null | undefi
 /** The skills library is available unless explicitly switched off. */
 export function skillsLibraryEnabled(config: FeatureFlagConfig | null | undefined): boolean {
   return config?.features?.skillsLibrary !== false;
+}
+
+/** Learn from group chats: memory upkeep also reads a member bot's room
+ * turns. Off until switched on (a bot's Memory settings) — mirrors the
+ * server's roomMemoryCaptureEnabled. */
+export function roomMemoryCaptureEnabled(config: FeatureFlagConfig | null | undefined): boolean {
+  return config?.features?.roomMemoryCapture === true;
 }

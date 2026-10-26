@@ -206,7 +206,7 @@ export function incidentText(incident: Incident, count: IncidentCount): string {
       "1. If the cause is something only the person can fix — a sign-in, a missing credential, an unanswered question, a setting — say so here in one or two plain sentences and stop.",
       engineEmpty
         ? `2. Otherwise call retry_thread with bot_id "${incident.bot.id}" and thread_id "${incident.threadId}" once to resume that thread; if the same empty response comes back, lower ${incident.bot.name}'s reasoning effort or switch its model before any further retry. Use coordinate_bots with a corrected brief instead when the request itself needs to change.`
-        : `2. Otherwise call retry_thread with bot_id "${incident.bot.id}" and thread_id "${incident.threadId}" to resume that thread; use coordinate_bots with a corrected brief instead when the request itself needs to change.`,
+        : `2. Otherwise call retry_thread with bot_id "${incident.bot.id}" and thread_id "${incident.threadId}" to resume that thread where it stopped; use coordinate_bots with a corrected brief instead when the request itself needs to change.`,
       "3. Report in one or two sentences what failed and what you did. Never retry the same thread more than twice.",
     ].join("\n")
     : "Retries for that thread are used up. Do not retry it again: say in one or two plain sentences what is blocking and what the person should do, then stop.");

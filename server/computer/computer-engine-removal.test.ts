@@ -163,16 +163,16 @@ describe("moving saved bots off the engine", () => {
     expect(reloaded.bot(custom.id)).toMatchObject({ approvalMode: "ask", autoApprove: false, alwaysAllow: [] });
     expect(reloaded.taskByThread(custom.id, custom.threadId)).toMatchObject({ approvalMode: "ask", autoApprove: false, alwaysAllow: [] });
     expect(moves.find(move => move.botId === custom.id)?.askNow).toBe(true);
-    // A level the new engine has as well carries across, as on any switch.
+    // A level the new engine has as well carries across, as on any switch (Full included, #2697).
     expect(reloaded.bot(full.id)).toMatchObject({ approvalMode: "full", alwaysAllow: ["Bash(ls:*)"] });
-    expect(reloaded.taskByThread(full.id, full.threadId)?.approvalMode).toBe("full");
+    expect(reloaded.taskByThread(full.id, full.threadId)).toMatchObject({ approvalMode: "full", alwaysAllow: ["Bash(ls:*)"] });
     expect(moves.find(move => move.botId === full.id)?.askNow).toBe(false);
     expect(reloaded.bot(auto.id)?.approvalMode).toBe("auto");
     expect(reloaded.taskByThread(auto.id, auto.threadId)?.approvalMode).toBe("auto");
     expect(moves.find(move => move.botId === auto.id)?.askNow).toBe(false);
   });
 
-  it("keeps the level of a conversation on another engine when the bot's own level goes back to Ask", () => {
+  it("keeps the bot's Full and the level of a conversation on another engine when the bot moves", () => {
     const store = new Store(newBotDefault);
     // The first conversation has no level of its own: it follows the bot's.
     const bot = store.createBot({ modelSelection: { instanceId: "computer", model: "claude-fable-5" } }, { seedMessages: false });
@@ -196,11 +196,11 @@ describe("moving saved bots off the engine", () => {
     // It is the bot's open conversation, so it still hears what moved: the
     // bot's own engine and level, not its own.
     expect(moves).toEqual([
-      { botId: bot.id, threadId: elsewhere, scope: "bot-only", cloud: false, noComputer: false, askNow: true },
+      { botId: bot.id, threadId: elsewhere, scope: "bot-only", cloud: false, noComputer: false, askNow: false },
     ]);
   });
 
-  it("tells a moved conversation that follows the bot's level that it is now Ask", () => {
+  it("leaves a moved conversation that follows the bot's level at Full, with nothing to ask", () => {
     const store = new Store(newBotDefault);
     const bot = store.createBot({ modelSelection: { instanceId: "computer", model: "claude-fable-5" } }, { seedMessages: false });
     // As above: a thread with no level of its own, which Sagax never starts with.
@@ -212,8 +212,8 @@ describe("moving saved bots off the engine", () => {
 
     const moves = store.retireInstances(removed, replacement, noBoat);
 
-    expect(moves.find(move => move.threadId === first)).toMatchObject({ scope: "conversation", askNow: true });
-    expect(new Store(newBotDefault).projectBotForTask(bot.id, first)).toMatchObject({ approvalMode: "ask" });
+    expect(moves.find(move => move.threadId === first)).toMatchObject({ scope: "conversation", askNow: false });
+    expect(new Store(newBotDefault).projectBotForTask(bot.id, first)).toMatchObject({ approvalMode: "full" });
   });
 
   it("keeps a bot on Auto when the new engine can't use a computer, and says so", () => {

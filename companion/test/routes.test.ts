@@ -136,6 +136,8 @@ describe("what the app may do", () => {
     ["POST", "/api/routine-runs/run_1/seen"],
     ["POST", "/api/bots/bot_123/secret-cards/msg_2/resume"],
     ["POST", "/api/bots/bot_123/secret-cards/msg_2/dismiss"],
+    ["POST", "/api/bots/bot_123/sign-in-cards/msg_3/done"],
+    ["POST", "/api/bots/bot_123/sign-in-cards/msg_3/cancel"],
   ];
 
   for (const [method, path] of calls) {
@@ -303,6 +305,8 @@ describe("what it may not", () => {
     expect(allowed("DELETE", "/api/connectors/slack/accounts/ca_123")).toBe(false);
     expect(allowed("DELETE", "/api/connectors/slack/accounts/../gmail")).toBe(false);
     expect(allowed("POST", "/api/bots/bot_123/secret-cards/msg_2/provided")).toBe(false);
+    expect(allowed("POST", "/api/bots/bot_123/sign-in-cards/msg_3/resume")).toBe(false);
+    expect(allowed("GET", "/api/bots/bot_123/sign-in-cards/msg_3/done")).toBe(false);
     // A room's PATCH crosses for pinning and renaming; the harness holds a
     // companion request to the member fields (clientGroupPatchViolation).
     expect(allowed("PATCH", "/api/groups/room-1")).toBe(true);

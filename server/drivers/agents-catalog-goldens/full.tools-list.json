@@ -185,17 +185,34 @@
             "maxLength": 4000,
             "description": "Question or task for these teammates; later requests in the same conversation can build on earlier ones. Send separate requests when responsibilities differ."
           },
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Optional one line for the person about why this goes to them (shown as a chip)."
+          },
           "rework": {
             "type": "boolean",
             "description": "True only to send concrete work again to someone whose request already finished or failed: a correction, a re-check or a retry."
           },
-          "mode": {
+          "thread": {
             "type": "string",
             "enum": [
-              "work",
-              "consult"
+              "standing",
+              "new"
             ],
-            "description": "consult: a question only, allowed to the bot that sent you this work. Default: consult for that bot, else work."
+            "description": "standing (default): the one work thread this conversation has with each teammate. new: open a new thread on the teammate for this, its own history and run; its result still returns here."
+          },
+          "reply": {
+            "type": "string",
+            "enum": [
+              "resume",
+              "none"
+            ],
+            "description": "resume (default): the result resumes you. none: a one-way notice that is never awaited; nothing comes back and nothing resumes you."
+          },
+          "consult": {
+            "type": "boolean",
+            "description": "True for a question: the teammate answers from what it knows, acting on nothing, and you are resumed with the answer; allowed even to the bot that sent you this work. Leave out for work (a question to the bot that sent you this work is a consultation anyway)."
           },
           "relay": {
             "type": "boolean",
@@ -227,9 +244,9 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "bot_id": {
+          "id": {
             "type": "string",
-            "description": "One reachable teammate id from list_bots or list_room_targets."
+            "description": "The assignment id (a coordinate_bots receipt's requestId, or a delegation id from list_threads). Omit to list every outstanding assignment of this conversation."
           },
           "title": {
             "type": "string",
@@ -247,17 +264,18 @@
             ],
             "description": "now wakes an idle recipient at once or moves this to the front of its queue. It never interrupts a running turn. Default normal. At most 10 now sends per sender per hour; past that it is delivered as normal."
           }
-        },
-        "required": [
-          "bot_id",
-          "title",
-          "message"
-        ]
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
       }
     },
     {
       "name": "list_bots",
-      "description": "List the other bots (agents) you may contact in your own team and any additional teams the owner has explicitly allowed you to coordinate, with their team, model and current status. Call this to discover exact teammate IDs before assigning work or requesting advice through your available coordination tools.",
+      "description": "List the other bots (agents) you may contact in your own team and any additional teams the owner has explicitly allowed you to coordinate, with their team, model and current status. Call this to discover exact teammate IDs before assigning work or asking advice with coordinate_bots.",
       "inputSchema": {
         "type": "object",
         "properties": {}
@@ -339,7 +357,7 @@
     },
     {
       "name": "start_thread",
-      "description": "Open a separate job on yourself with its own history and run, without switching the person's selected conversation. Use only when the user requests independent jobs (for example one review per pull request). Give a short specific title and complete instructions; you can open at most five per turn. This is not a teammate handoff: use coordinate_bots for teammates and their automatic replies. Self-opened jobs cannot recursively open more jobs. If refused, do not retry; explain what remains.",
+      "description": "Open a separate job on yourself: one conversation with its own history and its own run, shown to the person as a row under you, without switching the person's selected conversation. Use it only when the user requests independent jobs (for example one review per pull request, \"review each pull request\" — one thread per pull request) instead of doing them inside this conversation. The title becomes the row's name, so make it short and specific, and write it as #Title when you mention it to the person; give complete instructions, since the run will not see this conversation. You can open at most five per turn; a self-opened job cannot open more jobs. This is not a teammate handoff: use coordinate_bots for teammates (thread \"new\" opens a fresh thread on them) and their automatic replies. If a call is refused, do not retry it: say what you still wanted opened.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -361,11 +379,11 @@
           },
           "folder": {
             "type": "string",
-            "description": "Optional: the name of one of that bot's existing folders to file the thread under. Leave out unless the person named one."
+            "description": "Optional: the name of one of your existing folders to file the thread under. Leave out unless the person named one."
           },
           "report_back": {
             "type": "boolean",
-            "description": "Optional, on yourself only: true runs it as a parallel task of this conversation. The person sees its live card here and its result is posted back here as a reply when it finishes. Use it when the person asks for something unrelated while you are busy, so both run at once."
+            "description": "Optional: true runs it as a parallel task of this conversation. The person sees its live card here and its result is posted back here as a reply when it finishes. Use it when the person asks for something unrelated while you are busy, so both run at once."
           },
           "workspace": {
             "type": "string",
@@ -375,15 +393,15 @@
               "cloud",
               "local_vm"
             ],
-            "description": "Optional, on yourself, when your Workspace is Auto: where that thread works (this_computer = their files and apps, browser = web only, cloud = keeps running while they are away, local_vm = isolated). A place not allowed or offline falls back."
+            "description": "Optional, when your Workspace is Auto: where that thread works (this_computer = their files and apps, browser = web only, cloud = keeps running while they are away, local_vm = isolated). A place not allowed or offline falls back."
           },
           "read_only": {
             "type": "boolean",
-            "description": "On yourself: read-only (starts in Ask)."
+            "description": "Optional: read-only (the thread starts in Ask)."
           },
           "thread_id": {
             "type": "string",
-            "description": "On yourself: resume your earlier thread by id."
+            "description": "Optional: resume your earlier thread by id instead of opening a new one."
           }
         },
         "required": [
@@ -1273,6 +1291,30 @@
             "description": "Optional short, non-sensitive reason."
           }
         }
+      }
+    },
+    {
+      "name": "request_sign_in",
+      "description": "Ask the person to sign in to a website themselves, in the browser or on the computer you are using now. Use it when a page needs a login you do not have in the vault (request_login), or a one-time code, CAPTCHA or other step only they can do. They get a card and a notification, sign in where you work, and press Done. Never ask for a password or code in chat. After calling it, end your turn; Sagax resumes you when they finish or decline, and then check you are signed in.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "site": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "The page to sign in on: its address, or the domain, such as example.com."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 240,
+            "description": "One short sentence, in your words, on what the sign-in is for."
+          }
+        },
+        "required": [
+          "site"
+        ]
       }
     },
     {
@@ -2218,6 +2260,10 @@
             "required": [
               "type"
             ]
+          },
+          "run_on_startup": {
+            "type": "boolean",
+            "description": "Repeating routines only: also run once each time Sagax starts, besides the schedule, for a computer often off when it is due. Defaults to false."
           },
           "enabled": {
             "type": "boolean",

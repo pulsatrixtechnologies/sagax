@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import type { RuntimeEvent } from "../contracts.ts";
 import type { Message } from "../store.ts";
-import { TurnStops, stoppedTurnOutcome } from "./turn-outcome.ts";
+import { TurnStops, outwardActions, stoppedTurnOutcome, turnEvidence } from "./turn-outcome.ts";
 
 const event = (fields: Record<string, unknown>): RuntimeEvent =>
   ({ eventId: "e", provider: "fake", threadId: "t1", createdAt: "", ...fields }) as unknown as RuntimeEvent;
@@ -104,5 +104,71 @@ describe("stoppedTurnOutcome", () => {
     const body = stoppedTurnOutcome({ reason: `upstream HTTP 502: ${"<html>".repeat(500)}`, activities: [] });
     expect(body.length).toBeLessThanOrEqual(601);
     expect(body.startsWith("Upstream HTTP 502:")).toBe(true);
+  });
+});
+
+/** An activity row as the fold writes it: a tool row has an item id and,
+ * once settled, its outcome; a harness chip has neither. */
+const row = (tool: NonNullable<Message["tool"]>, extra: Partial<Message> = {}): Message =>
+  ({ id: `m-${Math.random()}`, role: "bot", kind: "activity", at: 1, tool, ...extra }) as Message;
+const call = (name: string, ok: boolean, fields: Partial<NonNullable<Message["tool"]>> = {}) => row({ name, ok, itemId: `i-${Math.random()}`, ...fields });
+
+// The restart policy (docs/runtime-contract.md §5) asks what a cut turn
+// already did outward; one classifier answers, from the rows the turn left.
+describe("outwardActions", () => {
+  it("names the sends, posts and payments a turn completed, once each, in order", () => {
+    const rows = [call("GMAIL_SEND_EMAIL", true), call("GMAIL_FETCH_EMAILS", true), call("mcp__composio__SLACK_SEND_MESSAGE", true),
+      call("GMAIL_SEND_EMAIL", true), call("COMPOSIO_PROXY_EXECUTE", true), call("Read", true), call("mcp__agents__coordinate_bots", true)];
+    expect(outwardActions(rows)).toEqual(["GMAIL_SEND_EMAIL", "mcp__composio__SLACK_SEND_MESSAGE", "COMPOSIO_PROXY_EXECUTE"]);
+  });
+
+  it("reads a commit, a push or a payment out of a shell command, by any engine's name for the shell", () => {
+    expect(outwardActions([call("Bash", true, { input: '{\n  "command": "git add -A && git commit -m \\"export\\""\n}' })])).toEqual(["git commit"]);
+    expect(outwardActions([call("shell", true, { summary: "git push origin main" })])).toEqual(["git push"]);
+    expect(outwardActions([call("mcp__dev-tools__exec", true, { input: "stripe charge create --amount 500" })])).toEqual(["charge"]);
+    expect(outwardActions([call("COMPOSIO_REMOTE_BASH_TOOL", true, { input: "git commit -am x && git push" })])).toEqual(["git commit", "git push"]);
+    // a read of the words is not a push; a non-shell tool's input is not a command
+    expect(outwardActions([call("Bash", true, { input: "git log --oneline | grep pushed" })])).toEqual([]);
+    expect(outwardActions([call("Read", true, { input: "docs/git push.md" })])).toEqual([]);
+    expect(outwardActions([call("Bash", true, { input: "echo hi" })])).toEqual([]);
+  });
+
+  it("counts nothing that failed, and nothing but a bot's tool rows", () => {
+    const user = { id: "u", role: "user", kind: "text", at: 1, text: "git push it" } as Message;
+    const said = { id: "s", role: "bot", kind: "text", at: 1, text: "I ran GMAIL_SEND_EMAIL" } as Message;
+    expect(outwardActions([call("GMAIL_SEND_EMAIL", false), call("Bash", false, { input: "git push" }), user, said])).toEqual([]);
+    expect(outwardActions([])).toEqual([]);
+  });
+});
+
+// Every HostTurnResult carries what the harness saw of the execution: the
+// runtime's continuation guard reads the ok count and the error tails.
+describe("turnEvidence", () => {
+  it("counts ok tool calls, keeps the last three errors oldest first with a failed tool's first output line, and the outward actions", () => {
+    const rows = [
+      call("Bash", true, { output: "ok" }),
+      call("Bash", false, { output: "fatal: not a git repository\n(or any of the parent directories)" }),
+      row({ name: "error: upstream HTTP 500: boom", ok: false }),
+      call("Edit", false),
+      call("Read", false, { output: "\nENOENT: no such file" }),
+      call("GMAIL_SEND_EMAIL", true),
+      row({ name: "Resuming after a restart", ok: true }),
+    ];
+    expect(turnEvidence(rows)).toEqual({
+      toolCalls: 5, okToolCalls: 2,
+      errors: ["error: upstream HTTP 500: boom", "Edit", "Read: ENOENT: no such file"],
+      outward: ["GMAIL_SEND_EMAIL"],
+    });
+  });
+
+  it("clips an error text to 200 characters, and carries no outward field when nothing was done outward", () => {
+    const long = `Bash: ${"x".repeat(400)}`;
+    const evidence = turnEvidence([call("Bash", false, { output: long.slice(6) }), call("Read", true)]);
+    expect(evidence.errors).toHaveLength(1);
+    expect(evidence.errors![0]!.length).toBe(200);
+    expect(evidence.errors![0]!.startsWith("Bash: xxx")).toBe(true);
+    expect(evidence).toMatchObject({ toolCalls: 2, okToolCalls: 1 });
+    expect(evidence.outward).toBeUndefined();
+    expect(turnEvidence([])).toEqual({ toolCalls: 0, okToolCalls: 0, errors: [] });
   });
 });

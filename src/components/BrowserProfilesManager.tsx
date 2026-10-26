@@ -9,6 +9,7 @@ import { MY_CHROME_PROFILE, myChromeCall } from "@/lib/my-chrome";
 import { canEditConfig } from "@/lib/viewer";
 import { useServerFeature } from "@/lib/server-features";
 import { featureMissingOnServer } from "@/lib/server-route";
+import { SignedInSites } from "./SignedInSites";
 
 /** Browser-panel and workspace settings share one editor. The server owns
  * session routing and erasure; this UI never handles cookies or partitions. */
@@ -168,6 +169,8 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
   const inputClass = "min-w-0 flex-1 rounded-md border border-hairline/40 bg-inset px-2.5 py-2 text-[13px] text-ink outline-none focus:border-accent disabled:opacity-50";
   const buttonClass = "shrink-0 rounded-md bg-control px-2.5 py-2 text-[12px] text-ink hover:bg-raised-hover disabled:opacity-50";
   const selected = currentBot?.browserProfile ?? "";
+  const selectedProfile = profiles.find((profile) => profile.id === selected);
+  const usersOf = (profileId: string) => bots.filter((candidate) => candidate.browserProfile === profileId).map((candidate) => candidate.name);
   return (
     <div className="flex min-w-0 flex-col gap-3" aria-busy={busy}>
       {currentBot && (
@@ -190,6 +193,9 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
           <p className="text-[11px] leading-relaxed text-ink-secondary">
             {currentBot.busy ? t("settings.profiles.stopToSwitch") : selected === "guest" ? t("settings.profiles.temporaryHint") : selected === MY_CHROME_PROFILE ? (shellBotIds.includes(currentBot.id) ? t("settings.profiles.myChromeShell") : t("settings.profiles.myChromeHint")) : t("settings.profiles.sharedHint")}
           </p>
+          {(selected === "" || selectedProfile) && (
+            <SignedInSites key={`${currentBot.id}:${selected}`} target={{ bot: currentBot.id }} sharedBy={selected ? usersOf(selected) : [currentBot.name]} disabled={locked} />
+          )}
         </div>
       )}
       <details open={!currentBot} className="min-w-0">
@@ -204,7 +210,7 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
           {!profiles.length && <p className="text-[12px] text-ink-secondary">{t(personalMode ? "settings.profiles.personalEmpty" : "settings.profiles.sharedEmpty")}</p>}
           <div className="divide-y divide-hairline/30">
             {profiles.map((profile) => {
-              const users = bots.filter((candidate) => candidate.browserProfile === profile.id).map((candidate) => candidate.name);
+              const users = usersOf(profile.id);
               const blocked = browserProfileDeletionBlockReason(bots, profile.id);
               return (
                 <div key={profile.id} className="flex flex-col gap-1 py-2">
@@ -224,6 +230,9 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
                     )}
                   </div>
                   <p className="break-words pl-6 text-[11px] text-ink-secondary">{users.length ? t("settings.profiles.usedBy", { names: users.join(", ") }) : t("settings.profiles.notInUse")}</p>
+                  <div className="flex min-w-0 flex-col gap-2 pl-6 pt-1">
+                    <SignedInSites target={{ profile: profile.id }} sharedBy={users} disabled={locked} />
+                  </div>
                 </div>
               );
             })}

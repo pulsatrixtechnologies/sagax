@@ -76,4 +76,13 @@ describe("browser profile manager", () => {
     expect(picker).toContain(">My bank</option>");
     expect(picker).toContain(">Work</option>");
   });
+
+  it("lists the bot's own browser's signed-in sites, and none for a temporary browser", () => {
+    fixture.bots = [{ ...bot, browserProfile: undefined }];
+    const own = renderToStaticMarkup(createElement(BrowserProfilesManager, { bot: fixture.bots[0] }));
+    expect(own).toContain("Signed-in sites");
+    fixture.bots = [{ ...bot, browserProfile: "guest" }];
+    const guest = renderToStaticMarkup(createElement(BrowserProfilesManager, { bot: fixture.bots[0] }));
+    expect(guest.match(/Signed-in sites/g)?.length ?? 0).toBeLessThan(own.match(/Signed-in sites/g)!.length);
+  });
 });

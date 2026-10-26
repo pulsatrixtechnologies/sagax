@@ -311,6 +311,15 @@ export interface WireTask {
   cwd?: string | null;
 }
 
+/** One thread's keep-warm window as a client shows it. Times are epoch ms. */
+export interface CacheKeepWarmStatus {
+  state: "warm" | "stopped";
+  until?: number;
+  nextPingAt?: number;
+  last?: { at: number; read: number; write: number; costUsd: number | null };
+  stopped?: string;
+}
+
 /** A lightweight organizational label within one bot. */
 export interface BotProject {
   id: string;
@@ -784,11 +793,24 @@ export interface Comm {
   text?: string;
 }
 
+/** The longest preview a sender's note keeps of what it sent (Comm.text).
+ * The channel holds the whole message. (main #912, ported from the removed
+ * server/comms-visibility.ts onto the runtime's notes.) */
+export const COMM_PREVIEW_MAX = 280;
+
+/** One line of what a bot sent, cut short for a note's preview, by code
+ * point so an emoji is never cut in half. */
+export function commPreview(message: string): string {
+  const line = message.replace(/\s+/g, " ").trim();
+  const points = Array.from(line);
+  return points.length > COMM_PREVIEW_MAX ? `${points.slice(0, COMM_PREVIEW_MAX - 1).join("").trimEnd()}…` : line;
+}
+
 export interface WireMessage extends WaitLineField {
   roomRequest?: { id: string; phase: "request" | "result" };
   id: string;
   role: "bot" | "user";
-  kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";
+  kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "signin" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";
   text?: string;
   /** kind "routines" (2026-10-15): one compact line in the conversation
    * saying this turn turned routines on or off (server/routines/routine-chat-events.ts).
@@ -839,6 +861,8 @@ export interface WireMessage extends WaitLineField {
    * the kind. */
   app?: AppPayload;
   secret?: SecretRequestCardData;
+  /** signin rows: the bot asked the person to sign in to a site themselves. */
+  signIn?: SignInRequestCardData;
   /** One idempotently updated status card for a routine run. */
   routineRun?: RoutineRunCardData;
   /** 2026-11-05: what a bot's finished turn elsewhere (a hand-off, a
@@ -1023,7 +1047,7 @@ export interface WireMessage extends WaitLineField {
    * not know it ignore it. */
   routedBy?: { provider: "jev"; probability: number };
   /** Set on the user-role line another bot delivered into this bot's own
-   * conversation (ask_bot, start_thread). `incident`: the line is
+   * conversation (coordinate_bots, start_thread). `incident`: the line is
    * Sagax's Team incidents report about that bot's broken run in
    * `threadId` (server/peers/incidents.ts), not its words; `notified`: that
    * failure already buzzed the person (a run that could not start, a
@@ -1375,6 +1399,45 @@ export interface SecretRequestCardData {
   error?: string;
   /** target vaultLogin only: what the bot asked for and what the person chose. */
   vault?: VaultRequestCardData;
+  /** Stop ended the turn this card paused: it offers no entry, and a key
+   * saved afterwards is kept but continues nothing. */
+  stopped?: boolean;
+}
+
+/** A bot asked the person to sign in to a website themselves
+ * (shared/sign-in-request.ts): they type the password into the page, in the
+ * place the bot works. The bot never sees the password. A login kept in the
+ * person's credential vault goes through request_login instead. */
+export interface SignInRequestCardData {
+  /** The page to open, an http(s) address. */
+  url: string;
+  /** Its host, the card's headline. */
+  site: string;
+  /** The bot's own words: why it needs the sign-in. */
+  reason?: string;
+  /** Where the login has to happen: the place the asking turn worked in. */
+  place: Surface;
+  done?: boolean;
+  cancelled?: boolean;
+  /** A newer request for the same site in this conversation replaced this
+   * card; it no longer offers Done or Cancel. */
+  superseded?: boolean;
+  resumed?: boolean;
+  error?: string;
+  /** Stop ended the turn this card paused: it offers no Done or Cancel,
+   * and an answer given afterwards is kept but continues nothing. */
+  stopped?: boolean;
+}
+
+/** The open sign-in request a bot's computer plea stands for, so whichever
+ * panel shows the plea can settle that card. */
+export interface ComputerHelpRef {
+  /** The asking bot: a team computer's plea reaches every member's panel. */
+  botId: string;
+  threadId: string;
+  messageId: string;
+  site: string;
+  place: Surface;
 }
 
 /** Who answers a room message nobody was @mentioned in. `auto` asks the
@@ -1435,6 +1498,10 @@ export interface GroupTask {
 export interface WireGroup {
   /** Computed from the usage ledger, not stored in groups.json. */
   usage?: GroupThreadUsage | null;
+  /** transient: each member's context in the active thread, from its last
+   * turn there (server/room-context.ts), and whether its next turn there
+   * was asked to start compacted. Absent until a member reports one. */
+  memberContext?: Record<string, { tokens: number; window: number; compactRequested?: true }> | null;
   id: string;
   /** The active task's thread. Direct-message channels stay single-threaded. */
   threadId: string;
@@ -1523,6 +1590,26 @@ export interface WireGroup {
   /** A direct-message channel's turn ceiling. Null on the wire means the
    * global group limit. Channel conversations store theirs on each task. */
   turnTimeoutMinutes?: number | null;
+  /** Members the person stopped in this room ("stop @Bot"), by bot id.
+   * A held member gets no turn until it is @mentioned again or resumed.
+   * Room-wide, persisted (server/room-holds.ts). */
+  holds?: Record<string, RoomHold>;
+  /** Room messages addressed to a member while it was held, by bot id;
+   * its next turn is shown them, then they are cleared. */
+  heldMessages?: Record<string, RoomHeldMessage[]>;
+}
+
+/** One member's hold in a room: when the person stopped it, and whether the
+ * room has already said so (the held line is written once per hold). */
+export interface RoomHold {
+  at: number;
+  noted?: boolean;
+}
+
+/** A room message that reached a member while it was held. */
+export interface RoomHeldMessage {
+  threadId: string;
+  messageId: string;
 }
 
 // ── live wire frames ───────────────────────────────────────────────────
@@ -1617,7 +1704,7 @@ export type ServerFrame =
    * one progress line until its first screen frame. `place` names a cloud
    * computer (absent: a Local VM). */
   | { kind: "computer"; botId: string; state: "provisioning" | "waking" | "ready"; place?: "cloud" }
-  | { kind: "computer-control"; botId: string; held: boolean; helpReason: string | null }
+  | { kind: "computer-control"; botId: string; held: boolean; helpReason: string | null; help?: ComputerHelpRef | null }
   /** A bot's data sheet changed (a card added, updated, failed, removed; a
    * table loaded). Whole sheet each time: see shared/data-surface.ts. */
   | DataBroadcast

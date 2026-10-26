@@ -6,7 +6,7 @@ import type { HarnessClient } from "./agents-client.ts";
 function harness(body: Record<string, unknown>, ok = true) {
   const api = vi.fn<HarnessClient["api"]>(async () => ({}));
   const apiResponse = vi.fn<HarnessClient["apiResponse"]>(async () => ({ ok, status: ok ? 200 : 403, body }));
-  const context: ToolCallContext = { botId: "bot-1", threadId: "thread-1", depth: 0, externalRuntime: false, coordinating: false, sharedComputers: false, client: { api, apiResponse } };
+  const context: ToolCallContext = { botId: "bot-1", threadId: "thread-1", depth: 0, externalRuntime: false, sharedComputers: false, client: { api, apiResponse } };
   return { apiResponse, context };
 }
 

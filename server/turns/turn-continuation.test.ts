@@ -2,7 +2,6 @@ import { transpileTs } from "../testing/transpile.ts";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import vm from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RuntimeEvent } from "../contracts.ts";

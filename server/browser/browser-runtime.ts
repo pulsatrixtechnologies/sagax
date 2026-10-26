@@ -1,5 +1,6 @@
 import { killCliTree, spawnCli } from "../procs.ts";
-import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, OBSERVE_PAGE_SCRIPT, parsePageState, READ_OPEN_PAGE_ONLY, readsAroundBrowser, shapeBrowserToolResult, slimBrowserToolList, stripHarnessOwnedArguments, type PageState } from "./browser-tool-shape.ts";
+import { scrubHeldSecrets } from "../../shared/redact.ts";
+import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, OBSERVE_PAGE_SCRIPT, parsePageState, READ_OPEN_PAGE_ONLY, readsAroundBrowser, scrubBrowserResult, shapeBrowserToolResult, slimBrowserToolList, stripHarnessOwnedArguments, type PageState } from "./browser-tool-shape.ts";
 import { randomBytes } from "node:crypto";
 import { aimOf, FILL_CREDENTIAL_TOOL, FILL_CREDENTIAL_TOOL_SPEC, formPostsOnly, formStaysOnOrigin, LOGIN_MODE, parseEvalArray, parseEvalObject, parseFillArguments, parseProbe, parseWrite, probeScript, problemText, SecretRedactor, writeScript, type FillRequest, type LoginRequest } from "../vault/credential-fill.ts";
 import { noteFilledSecret } from "../vault/filled-secret-guard.ts";
@@ -70,11 +71,17 @@ export function browserRuntimeEnv(overrides: Record<string, string | undefined>)
 export const BROWSER_VIEWPORT = { width: 1280, height: 720 } as const;
 export const BROWSER_VIEWPORT_ARGS = ["set", "viewport", String(BROWSER_VIEWPORT.width), String(BROWSER_VIEWPORT.height)] as const;
 
+/** A session attached to a Chrome that is already running: the person's own
+ * (My Chrome), found automatically or at a configured address. */
+export function attachesToChrome(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(env.AGENT_BROWSER_CDP || env.AGENT_BROWSER_AUTO_CONNECT);
+}
+
 /** Only a headless browser this server launches is OMB's to size. A browser
  * attached over CDP is someone's own Chrome, and a headed window is the
  * user's to size. */
 export function ownsBrowserViewport(env: NodeJS.ProcessEnv): boolean {
-  return env.AGENT_BROWSER_HEADLESS === "1" && !env.AGENT_BROWSER_CDP;
+  return env.AGENT_BROWSER_HEADLESS === "1" && !attachesToChrome(env);
 }
 
 export class TransportError extends Error {}
@@ -208,6 +215,50 @@ const FIELD_NAMES: Record<VaultFillField, string> = {
 
 function toolText(text: string, isError = false): { content: Array<{ type: "text"; text: string }>; isError?: true } {
   return { content: [{ type: "text", text }], ...(isError ? { isError: true as const } : {}) };
+}
+
+/** One timed browser action, logged with SAGAX_BROWSER_TIMING=1. Times are in
+ * milliseconds. `inFlight` counts this session's browser work already running
+ * when the action started: the engine runs one command per session, so the
+ * action waited behind it. */
+export interface BrowserTiming {
+  session: string;
+  tool: string;
+  outcome: "ok" | "error";
+  totalMs: number;
+  /** Transport handshake and page sizing; the first call launches the browser here. */
+  launchMs?: number;
+  engineMs?: number;
+  /** Page reads: the snapshot after agent_browser_open, or the text before and after a page action. */
+  observeMs?: number;
+  /** Text the model receives, after shaping; the frame's base64 for a preview frame. */
+  chars?: number;
+  inFlight: number;
+}
+
+export function formatBrowserTiming(timing: BrowserTiming): string {
+  const parts = [`browser timing: ${timing.tool} ${timing.outcome}`];
+  const phases: Array<[string, number | undefined]> = [
+    ["total", timing.totalMs], ["launch", timing.launchMs], ["engine", timing.engineMs], ["observe", timing.observeMs],
+  ];
+  for (const [label, value] of phases) {
+    if (value !== undefined) parts.push(`${label}=${Math.round(value)}ms`);
+  }
+  if (timing.chars !== undefined) parts.push(`chars=${timing.chars}`);
+  parts.push(`inflight=${timing.inFlight}`, `session=${timing.session}`);
+  return parts.join(" ");
+}
+
+/** The text a tool result hands the model, in characters. */
+function resultChars(result: unknown): number {
+  const content = (result as { content?: unknown } | null)?.content;
+  if (!Array.isArray(content)) return 0;
+  let chars = 0;
+  for (const item of content) {
+    const text = (item as { text?: unknown } | null)?.text;
+    if (typeof text === "string") chars += text.length;
+  }
+  return chars;
 }
 
 /** An error the engine answered: the action ran and failed (a page that
@@ -394,6 +445,9 @@ interface Gate {
   ready: boolean;
   releasing: boolean;
   agents: number;
+  /** Agent actions whose command reached the engine. A refused call or a
+   * preview frame counts in `agents` but leaves the page as it was. */
+  dispatched: number;
   humans: number;
   uncertain: boolean;
   /** The agent call that lost its transport (a timeout, a crash), while it is
@@ -490,6 +544,10 @@ export class BrowserRuntime {
   private egressNotice?: (session: string) => string | null;
   /** Values filled into each session, hidden from every later result. */
   readonly redactor = new SecretRedactor();
+  /** Held secrets (a filled login's password, a fresh one-time code) out of
+   * every tool result before the bot reads it. */
+  private scrub: (text: string) => string;
+  private onTiming?: (timing: BrowserTiming) => void;
   /** Sessions where a person is signing in themselves (armForPerson until
    * Done): kept apart from the redactor, which a restart forgets. */
   /** The clock of a person's sign-in (PERSON_SIGN_IN_MS), for tests. */
@@ -508,7 +566,7 @@ export class BrowserRuntime {
   /** One line when a signature cannot be attached. The page still opens. */
   private signatureFailureLogged = false;
 
-  constructor({ closeBrowser, applyViewport, pauseStream, egressNotice, now, signNavigation, ...options }: Partial<BrowserRuntime["options"]> & { closeBrowser?: CloseBrowser; applyViewport?: ApplyViewport; pauseStream?: PauseStream; egressNotice?: (session: string) => string | null; now?: () => number; signNavigation?: SignBrowserNavigation } = {}) {
+  constructor({ closeBrowser, applyViewport, pauseStream, egressNotice, now, signNavigation, scrub, onTiming, ...options }: Partial<BrowserRuntime["options"]> & { closeBrowser?: CloseBrowser; applyViewport?: ApplyViewport; pauseStream?: PauseStream; egressNotice?: (session: string) => string | null; now?: () => number; signNavigation?: SignBrowserNavigation; scrub?: (text: string) => string; onTiming?: (timing: BrowserTiming) => void } = {}) {
     this.now = now ?? Date.now;
     this.egressNotice = egressNotice;
     this.signNavigation = signNavigation;
@@ -516,12 +574,29 @@ export class BrowserRuntime {
     this.closeBrowser = closeBrowser ?? (async () => false);
     this.applyViewport = applyViewport;
     this.pauseStream = pauseStream;
+    this.scrub = scrub ?? scrubHeldSecrets;
+    this.onTiming = onTiming;
+  }
+
+  private timed<T>(session: string, tool: string, phases: Partial<BrowserTiming>, fn: () => Promise<T>): Promise<T> {
+    if (!this.onTiming) return fn();
+    const onTiming = this.onTiming;
+    const started = performance.now();
+    const inFlight = this.gate(session).agents;
+    const report = (outcome: BrowserTiming["outcome"]) => onTiming({ session, tool, outcome, totalMs: performance.now() - started, ...phases, inFlight });
+    return fn().then((result) => {
+      report((result as { isError?: unknown } | null)?.isError === true ? "error" : "ok");
+      return result;
+    }, (error: unknown) => {
+      report("error");
+      throw error;
+    });
   }
 
   private gate(session: string): Gate {
     let gate = this.gates.get(session);
     if (!gate) {
-      gate = { owner: null, ready: false, releasing: false, agents: 0, humans: 0, uncertain: false, lostCall: null, closing: false, exclusive: false, changed: new Set(), watchers: 0, calls: 0, lastUsed: Date.now(), idleClosed: false };
+      gate = { owner: null, ready: false, releasing: false, agents: 0, dispatched: 0, humans: 0, uncertain: false, lostCall: null, closing: false, exclusive: false, changed: new Set(), watchers: 0, calls: 0, lastUsed: Date.now(), idleClosed: false };
       this.gates.set(session, gate);
     }
     return gate;
@@ -566,9 +641,18 @@ export class BrowserRuntime {
     // one-time code or an API key may be on screen. Until a restart.
     if (this.redactor.hasTaint(session)) throw new Error("Frames of this browser are off since a saved login was filled in it.");
     if (this.gate(session).agents > 0) throw new Error("The browser is busy with an agent action.");
-    return this.withAgentAction(session, capture);
+    const phases: Partial<BrowserTiming> = {};
+    return this.timed(session, "preview_frame", phases, () => this.withAgentAction(session, async () => {
+      const frame = await capture();
+      const png = (frame as { png?: unknown } | null)?.png;
+      if (typeof png === "string") phases.chars = png.length;
+      return frame;
+    }));
   }
 
+  /** One MCP request from the bot's turn. Every tool result it answers,
+   * the runtime's own recovery notes included, loses the values Sagax filled
+   * in this session and any held secret on the way out. */
   async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, credentials?: CredentialFillAccess): Promise<unknown> {
     if (method === "tools/call" && toolNameOf(params) === "agent_browser_set_headers" && signatureHeaderSet(params)) {
       return toolText("The visit signature is not a header a tool sets. A saved login uses request_login, and the value stays hidden.", true);
@@ -587,7 +671,7 @@ export class BrowserRuntime {
       // A value Sagax filled never comes back to a bot, whatever tool reads the page.
       const redacted = this.redactor.redact(session, await this.agentRpcUnredacted(session, spec, method, params, beforeDispatch, credentials));
       if (method !== "tools/call") return redacted;
-      const result = withNotice(redacted, this.egressNotice?.(session) ?? null);
+      const result = withNotice(scrubBrowserResult(redacted, this.scrub), this.egressNotice?.(session) ?? null);
       if (!gate.idleClosed) return result;
       gate.idleClosed = false;
       const content = (result as { content?: unknown } | null)?.content;
@@ -638,7 +722,10 @@ export class BrowserRuntime {
       beforeDispatch?.(); // A turn revoked during the check receives no result.
       return url === null ? stillBusyToolError(lostCall) : recoveredResult(lostCall, url);
     }
+    const phases: Partial<BrowserTiming> = {};
     const invoke = async () => {
+      const launchStarted = performance.now();
+      let dispatched = false;
       const entry = this.connect(session, spec);
       await entry.client.ready;
       beforeDispatch?.();
@@ -652,6 +739,7 @@ export class BrowserRuntime {
         beforeDispatch?.();
         if (this.gate(session).owner !== null) throw new Error(BROWSER_CONTROL_REFUSAL);
       }
+      phases.launchMs = performance.now() - launchStarted;
       try {
         if (method === "tools/call" && toolName === FILL_CREDENTIAL_TOOL) {
           return await this.fillCredential(session, spec, entry.client, params, beforeDispatch, credentials);
@@ -740,6 +828,7 @@ export class BrowserRuntime {
         // The same read also learns what the page's sensitive fields hold
         // (shared/sensitive-fields.ts), so an action costs no extra call.
         const observePage = async (): Promise<PageState | null> => {
+          const observeStarted = performance.now();
           try {
             const observed = await entry.client.rpc("tools/call", {
               name: "agent_browser_eval", arguments: { script: OBSERVE_PAGE_SCRIPT_WITH_SENSITIVE, timeoutMs: 5_000 },
@@ -749,6 +838,8 @@ export class BrowserRuntime {
           } catch (error) {
             if (error instanceof TransportError) throw error;
             return null;
+          } finally {
+            phases.observeMs = (phases.observeMs ?? 0) + performance.now() - observeStarted;
           }
         };
         let before: PageState | null = null;
@@ -757,6 +848,8 @@ export class BrowserRuntime {
           beforeDispatch?.();
           if (this.gate(session).owner !== null) throw new Error(BROWSER_CONTROL_REFUSAL);
         }
+        const engineStarted = performance.now();
+        if (method === "tools/call") { dispatched = true; gate.dispatched++; }
         let result: unknown;
         // A screenshot draws the page's sensitive fields as discs, then puts
         // them back: a style only, the page keeps every value.
@@ -768,6 +861,7 @@ export class BrowserRuntime {
           releaseKeys?.();
           if (masking) await this.unmaskSensitiveFields(entry.client);
         }
+        phases.engineMs = performance.now() - engineStarted;
         beforeDispatch?.(); // A turn revoked while the tool ran receives no result.
         if (method === "tools/list") {
           const tools = withRestartTool(slimBrowserToolList(result));
@@ -802,6 +896,7 @@ export class BrowserRuntime {
           beforeDispatch?.();
           if (this.gate(session).owner !== null) throw new Error(BROWSER_CONTROL_REFUSAL);
           let observation: unknown;
+          const observeStarted = performance.now();
           try {
             observation = await entry.client.rpc("tools/call", {
               name: "agent_browser_snapshot", arguments: { compact: true },
@@ -811,6 +906,8 @@ export class BrowserRuntime {
             // Transport failures still engage the uncertainty/recovery gate.
             if (error instanceof TransportError) throw error;
             observation = { isError: true, content: [] };
+          } finally {
+            phases.observeMs = (phases.observeMs ?? 0) + performance.now() - observeStarted;
           }
           observation = this.redactor.redact(session, observation);
           beforeDispatch?.();
@@ -830,7 +927,9 @@ export class BrowserRuntime {
             ...(!observed ? { isError: true } : {}),
           };
         }
-        return shapeBrowserToolResult(result, { toolName, budget: this.options.resultBudget });
+        const shaped = shapeBrowserToolResult(result, { toolName, budget: this.options.resultBudget });
+        phases.chars = resultChars(shaped);
+        return shaped;
       }
       catch (error) {
         // An MCP timeout cannot prove the independent daemon stopped an
@@ -845,10 +944,11 @@ export class BrowserRuntime {
         }
         throw error;
       }
+      finally { if (dispatched) gate.dispatched--; }
     };
     if (method !== "tools/call") return invoke();
     try {
-      return await this.withAgentAction(session, invoke);
+      return await this.timed(session, toolName ?? "unknown", phases, () => this.withAgentAction(session, invoke));
     } catch (error) {
       if (error instanceof Error && error.message === BROWSER_INTERRUPTED) return stuckBrowserToolError();
       // The call that lost its transport: a tool result that says what is
@@ -1336,8 +1436,9 @@ export class BrowserRuntime {
     }
   }
 
-  /** Resolves true when the grant had to wait for the bot's own browser
-   * action to finish: the page may have changed since the person aimed. */
+  /** Resolves true when the grant had to wait for a bot command the engine
+   * received: the page may have changed since the person aimed. A wait for a
+   * refused call or a preview frame is not one, so the person's input stands. */
   async take(session: string, owner: string): Promise<boolean> {
     if (!owner) throw new Error("Browser control requires an owner.");
     const gate = this.gate(session);
@@ -1345,7 +1446,7 @@ export class BrowserRuntime {
     if (gate.owner !== null && gate.owner !== owner) throw new Error("Another person controls this browser.");
     gate.owner = owner; // synchronous: no new agent work slips in while draining.
     gate.ready = false;
-    const waited = gate.agents > 0;
+    const waited = gate.dispatched > 0;
     await new Promise<void>((resolve, reject) => {
       const finish = (error?: Error) => {
         clearTimeout(timer);

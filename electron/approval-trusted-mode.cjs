@@ -16,8 +16,9 @@ function trustedApprovalModeRequest(requestId, botId, mode, acknowledgeLocalAuto
     throw new Error("invalid bot id for trusted approval mode");
   }
   if (!APPROVAL_MODES.has(mode)) throw new Error("invalid trusted approval mode");
+  // Every level but Custom may go to the bot and all of its threads at once.
   if (typeof allThreads !== "boolean" || (allThreads && (threadId !== undefined || threadOnly ||
-    modelSelection !== undefined || updateBotDefault !== undefined || (mode !== "full" && mode !== "ask")))) {
+    modelSelection !== undefined || updateBotDefault !== undefined || mode === "custom"))) {
     throw new Error("invalid all-threads approval selection");
   }
   if (typeof threadOnly !== "boolean" || (threadOnly && (threadId === undefined || modelSelection !== undefined || updateBotDefault !== undefined))) {

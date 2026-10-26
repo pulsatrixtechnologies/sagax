@@ -395,10 +395,11 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // Proactive wakes gather events for 30 s; a suite shortens the window.
   if (/^\d+$/.test(parentEnv.SAGAX_PROACTIVE_GATHER_MS ?? "")) childEnv.SAGAX_PROACTIVE_GATHER_MS = parentEnv.SAGAX_PROACTIVE_GATHER_MS;
   // The fake engine's own knobs (mode, replies, tool calls) are the one thing
-  // a caller may script into the child: FAKE_CLAUDE_* crosses, nothing else.
+  // a caller may script into the child: FAKE_CLAUDE_* crosses, and the Codex
+  // fake's background-call knobs (FAKE_CODEX_TEXT_*); nothing else.
   for (const [key, value] of Object.entries(parentEnv)) {
     // FAKE_CLAUDE_DUMP stays the launcher's: assertions read fixtureDumpPath.
-    if (key.startsWith("FAKE_CLAUDE_") && key !== "FAKE_CLAUDE_DUMP" && value) childEnv[key] = value;
+    if ((key.startsWith("FAKE_CLAUDE_") || key.startsWith("FAKE_CODEX_TEXT_")) && key !== "FAKE_CLAUDE_DUMP" && value) childEnv[key] = value;
   }
   // Per-step turn path timing on stderr (server/turns/turn-trace.ts). Off
   // unless the parent sets it; no test change.
@@ -444,6 +445,8 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // The credential vault answers loopback on a headless server only when
   // the operator opts in (server/routes/credential-vault.ts vaultPrincipalFor).
   if (parentEnv.SAGAX_CREDENTIAL_VAULT_LOOPBACK === "1") childEnv.SAGAX_CREDENTIAL_VAULT_LOOPBACK = "1";
+  // One log line per browser call and preview frame (server/browser-runtime.ts).
+  if (parentEnv.SAGAX_BROWSER_TIMING === "1") childEnv.SAGAX_BROWSER_TIMING = "1";
   // Live calls against server/testing/fake-openai-live.ts only: a loopback
   // URL, and a key that only ever reaches that fake.
   const liveUrl = parentEnv.SAGAX_OPENAI_LIVE_URL?.trim() ?? "";

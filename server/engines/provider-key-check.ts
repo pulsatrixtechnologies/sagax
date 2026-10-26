@@ -7,13 +7,13 @@
 // test double.
 import { azureDeployments, azureOpenAIEndpoint } from "../../shared/azure-openai.ts";
 
-export type ProviderKeyKind = "anthropic" | "openai" | "openrouter" | "openaiCompat" | "xai" | "mistral" | "cerebras" | "groq";
+export type ProviderKeyKind = "anthropic" | "openai" | "openrouter" | "openaiCompat" | "xai" | "mistral" | "cerebras" | "groq" | "meta";
 
 export type ProviderKeyVerdict =
   | { ok: true; check: "authentication" | "models"; models: string[] }
   | { ok: false; reason: "rejected" | "unreachable" | "unexpected"; status?: number };
 
-export const PROVIDER_KEY_KINDS: readonly ProviderKeyKind[] = ["anthropic", "openai", "openrouter", "openaiCompat", "xai", "mistral", "cerebras", "groq"];
+export const PROVIDER_KEY_KINDS: readonly ProviderKeyKind[] = ["anthropic", "openai", "openrouter", "openaiCompat", "xai", "mistral", "cerebras", "groq", "meta"];
 
 const DEFAULT_URLS: Record<ProviderKeyKind, string> = {
   anthropic: "https://api.anthropic.com",
@@ -24,6 +24,7 @@ const DEFAULT_URLS: Record<ProviderKeyKind, string> = {
   mistral: "https://api.mistral.ai/v1",
   cerebras: "https://api.cerebras.ai/v1",
   groq: "https://api.groq.com/openai/v1",
+  meta: "https://api.meta.ai/v1",
 };
 
 const MAX_MODELS = 5;

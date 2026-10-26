@@ -90,6 +90,7 @@ export function buildNotification(
     group?: { id: string; name: string };
     title?: string;
     requestId?: string;
+    site?: string;
     needsKey?: boolean;
     routineRunId?: string;
     routineName?: string;
@@ -113,8 +114,8 @@ export function buildNotification(
       ? `${who} needs approval`
       : kind === "question"
         ? `${who} has a question`
-        : kind === "takeover"
-          ? `${who} needs your hands`
+        : kind === "sign-in"
+          ? `${who} needs you to sign in to ${extra?.site ?? "a website"}`
           : kind === "routine-failed"
             ? `${who}'s routine failed`
             : kind === "routine-deferred"
@@ -200,6 +201,7 @@ export function deliverableNotification(
     group?: { id: string; name: string };
     title?: string;
     requestId?: string;
+    site?: string;
     needsKey?: boolean;
     routineRunId?: string;
     routineName?: string;

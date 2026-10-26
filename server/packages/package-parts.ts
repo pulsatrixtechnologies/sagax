@@ -90,7 +90,8 @@ export const roomReleaseValues = (room: PackageRoom): Record<RoomPart, unknown> 
 });
 
 /** One normal form for a routine's timing on both sides, so an untouched
- * routine compares equal: absent cap → null, absent overlap → "skip". */
+ * routine compares equal: absent cap → null, absent overlap → "skip". Run on
+ * startup appears only when set, so installs from before it keep their hash. */
 export function scheduleValue(routine: {
   runOn: string;
   schedule: unknown;
@@ -98,6 +99,7 @@ export function scheduleValue(routine: {
   timeoutMinutes?: number | null;
   overlap?: string | null;
   continuity?: boolean | null;
+  runOnStartup?: boolean | null;
 }) {
   return {
     runOn: routine.runOn,
@@ -106,6 +108,7 @@ export function scheduleValue(routine: {
     timeoutMinutes: routine.timeoutMinutes ?? null,
     overlap: routine.overlap ?? "skip",
     continuity: routine.continuity === true,
+    ...(routine.runOnStartup === true ? { runOnStartup: true } : {}),
   };
 }
 

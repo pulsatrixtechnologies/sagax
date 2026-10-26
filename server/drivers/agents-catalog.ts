@@ -51,7 +51,14 @@ import * as transcriptsTools from "./agents-tools/transcripts.ts";
 
 /** Which tools a turn is shown. The harness decides each of these when it
  * builds the integration (server/index.ts agentsIntegration); the server
- * still authenticates and scopes every call, so this is presentation only. */
+ * still authenticates and scopes every call, so this is presentation only.
+ *
+ * Every turn that may hand work on gets the same teamwork tools
+ * (docs/runtime-contract.md §9): a person's chat, a room turn, a routine or
+ * webhook run, a Cloud guest's turn and a standing external runtime all see
+ * coordinate_bots and assignment_status. What differs between turns is
+ * features (skills, shared computers, voice, memory, Cloud home) and role
+ * (Primary Bot). */
 export interface CatalogProfile {
   /** A standing process outside any turn: peer tools and polling only. */
   externalRuntime: boolean;
@@ -95,6 +102,9 @@ export interface CatalogProfile {
   memoryEnabled?: boolean;
   /** A room turn in a group whose shared memory is on (server/memory/group-memory.ts). */
   groupMemory?: boolean;
+  /** A room turn (SAGAX_ROOM_TURN): it changes no teamwork tool (one tool
+   * surface), only keeps place_phone_call out of rooms. Absent is off. */
+  room?: boolean;
   /** The bot is its person's Primary Bot (bot.chiefOfStaff). Only then
    * are the Primary-Bot-only tools and parameters shown; the server refuses them
    * to every other bot. */
@@ -103,7 +113,7 @@ export interface CatalogProfile {
    * but may create bots for its person is shown create_bot (without the
    * Primary Bot's suggestion). Absent is off, so the wire goldens stay. */
   createBots?: boolean;
-  /** Written into start_thread's schema in a coordinating turn. */
+  /** Written into start_thread's schema: the only bot_id it accepts. */
   botId: string;
   /** The agent-to-agent tools (server/agent-api.ts), in direct turns. */
   agentApi?: boolean;
@@ -129,7 +139,10 @@ export interface CatalogProfile {
 }
 
 /** The profile a spawned proxy was given. Everything is off unless the
- * harness says "1". */
+ * harness says "1". SAGAX_ROOM_TURN and SAGAX_OWN_THREAD_CREATION no longer
+ * change the teamwork tools: one tool surface (SAGAX_ROOM_TURN only keeps
+ * place_phone_call out of a room). SAGAX_EXTERNAL_RUNTIME narrows it to
+ * the peer tools. */
 export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
   const externalRuntime = env.SAGAX_EXTERNAL_RUNTIME === "1";
   return {
@@ -150,6 +163,7 @@ export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
     cloudHome: false,
     memoryEnabled: env.SAGAX_MEMORY_ENABLED !== "0",
     groupMemory: env.SAGAX_GROUP_MEMORY === "1",
+    ...(env.SAGAX_ROOM_TURN === "1" ? { room: true } : {}),
     chief: env.SAGAX_CHIEF_OF_STAFF === "1",
     createBots: env.SAGAX_CREATE_BOTS === "1",
     botId: env.SAGAX_BOT_ID ?? "",
@@ -414,7 +428,9 @@ export function compactToolsFromEnv(env: Record<string, string | undefined>): { 
 
 /** Deferred only in a coordinating turn, where it opens a separate job on
  * the bot itself and only when the person asked for one; elsewhere the
- * threads prompt presents it as the way to hand a teammate a job. */
+ * threads prompt presents it as the way to hand a teammate a job. The one
+ * tool surface sets no `coordinating` on the catalog profile, so the agents
+ * proxy defers it nowhere unless a caller says so. */
 const DEFERRED_WHEN_COORDINATING: ReadonlySet<string> = new Set(["start_thread"]);
 
 /** #2037: SAGAX_DEFER_KNOWN_USE, set by the Claude driver when native tool
@@ -528,6 +544,9 @@ export function availableTools(profile: CatalogProfile) {
 
 function catalogTools(profile: CatalogProfile) {
   const core = coreCatalogTools(profile);
+  // A standing external runtime keeps the peer surface only (agents-proxy):
+  // the teammates, the one hand-off tool and its status, which it long-polls.
+  if (profile.externalRuntime) return core.filter((tool) => EXTERNAL_TOOL_NAMES.has(tool.name));
   const base = [
     ...core,
     // video on every engine, including a turn whose host shell is withheld
@@ -546,7 +565,7 @@ function catalogTools(profile: CatalogProfile) {
     ...(profile.openapiTools?.length && !profile.externalRuntime ? profile.openapiTools.map(openApiToolDefinition) : []),
     ...(profile.vaultHttp && !profile.externalRuntime ? [VAULT_HTTP_TOOL] : []),
   ];
-  if (!profile.agentApi || profile.externalRuntime) return base;
+  if (!profile.agentApi) return base;
   return [...base, ...AGENT_API_TOOLS.filter((tool) => profile.chief || (tool.name !== "create_agent" && tool.name !== "delete_agent"))];
 }
 
@@ -578,8 +597,7 @@ export function knownAgentToolName(name: string): boolean {
 export const REMOTE_SESSION_TOOL_NAMES: ReadonlySet<string> = new Set(["publish_remote_session", "remote_session_snapshot", "remote_session_exec"]);
 
 function coreCatalogTools(profile: CatalogProfile) {
-  const TOOLS = toolDefinitions(profile.externalRuntime);
-  const BOT_SCOPED_TOOLS = TOOLS.filter((tool) =>
+  const BOT_SCOPED_TOOLS = TOOL_DEFINITIONS.filter((tool) =>
     (profile.botId === WATCHER_OPTIONS_CARD_BOT_ID || !WATCHER_TOOL_NAMES.has(tool.name)) &&
     (profile.memoryEnabled !== false || (tool.name !== "memory_update" && tool.name !== "memory_log")) &&
     (tool.name !== "group_memory_update" || profile.groupMemory === true));

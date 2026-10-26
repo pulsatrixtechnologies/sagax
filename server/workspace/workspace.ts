@@ -62,7 +62,8 @@ export async function holdBotMemoryPlain(botId: string, holder: string): Promise
 
 /** MCP support does not imply native filesystem tools or a local working directory. */
 export function supportsWorkspaceFiles(driverKind: string): boolean {
-  return engineWorksInFiles(driverKind);
+return engineWorksInFiles(driverKind);
+
 }
 
 /** Default task files are private to the thread, outside the bot's shared
@@ -671,6 +672,11 @@ export type MemoryLogResult =
   | { ok: true; file: string; line: string }
   | { ok: false; code: "invalid"; error: string };
 
+/** The workspace-relative daily log a line written at `now` goes to. */
+export function memoryLogPath(now: Date = new Date()): string {
+  return `memory/${MEMORY_LOG_DIR}/${memoryDate(now)}.md`;
+}
+
 /** Append one timestamped line to today's memory/log/YYYY-MM-DD.md. The
  * time is the machine's own, the way a person would note it; the day is
  * the file name. Same scrub and same modes as every other memory write. */
@@ -684,8 +690,8 @@ export function appendMemoryLog(botId: string, text: string, opts: MemoryUpdateO
   const line = `- ${pad(now.getHours())}:${pad(now.getMinutes())}${SEP}${source ? `from ${source}${SEP}` : ""}${normaliseEntryText(redactSecretsInText(text))}`;
   const dir = join(ensureWorkspace(botId), "memory", MEMORY_LOG_DIR);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const file = `${memoryDate(now)}.md`;
-  const path = join(dir, file);
+  const relativePath = memoryLogPath(now);
+  const path = join(dir, relativePath.slice(`memory/${MEMORY_LOG_DIR}/`.length));
   let current = "";
   try {
     current = readMemoryText(path);
@@ -695,7 +701,6 @@ export function appendMemoryLog(botId: string, text: string, opts: MemoryUpdateO
     // first line of the day
   }
   writeFileAtomic(path, `${current}${current && !current.endsWith("\n") ? "\n" : ""}${line}\n`, { mode: 0o600 });
-  const relativePath = `memory/${MEMORY_LOG_DIR}/${file}`;
   indexWrittenMemoryFile(botId, relativePath);
   return { ok: true, file: relativePath, line };
 }

@@ -68,7 +68,7 @@ export interface RoutineRequestDefinition {
   continuity?: boolean;
   /** Skip by default, or keep at most one scheduled run waiting. */
   overlap?: "skip" | "queue";
-  /** 2026-10-26: run only when something changes (shared/routine-watch.ts). */
+/** 2026-10-26: run only when something changes (shared/routine-watch.ts). */
   watch?: RoutineWatchPrecheck;
   /** 2026-10-28: the bot's folder it sits in (shared/routine-folders.ts). */
   folder?: string;
@@ -84,6 +84,8 @@ export interface RoutineRequestDefinition {
   requiresComputer?: boolean;
   /** Reasoning effort for runs only; absent follows the bot. */
   effort?: EffortLevel;
+  /** Also run once each time Sagax starts. Repeating routines only. */
+  runOnStartup?: boolean;
 }
 
 export type RoutineRequestChanges =

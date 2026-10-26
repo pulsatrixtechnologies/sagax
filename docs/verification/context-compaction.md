@@ -19,7 +19,32 @@ The API fixture launches the shared isolated server and fake engine. It uses
 `POST /api/bots/:id/compact` with `{ "threadId": "owned-thread-id" }`; this uses
 normal turn admission, returns 202, and completes through that thread's ordinary
 busy/idle state. The route accepts no agent-written summary or file path.
-There is not yet a dedicated manual-compaction button in the app.
+From 80% of a known window, the bot's 1:1 header shows the figure with a
+**Compact now** button that calls this route (hidden again once a compaction
+record is newer than the last reply).
+
+## Rooms
+
+A room turn never resumes a stored session: every turn re-sends the room's
+bounded recent transcript. What grows is the warm provider process a driver
+keeps between one bot's consecutive turns in a room (Claude's idle reuse).
+Each settled room turn records that bot's last measured prompt for the room's
+thread (in memory, like the warm process itself) and the room wire carries it
+as `memberContext`. From 80% the roster avatar gets a mark and a line under
+the header offers **Compact now**: `POST /api/groups/:id/members/:botId/compact`
+(202; 409 before a reading, 404 for a non-member). It runs nothing; the bot's
+next turn in that room starts with the existing `sessionReset`, so a fresh
+provider session gets the same bounded transcript every turn gets. Before a
+room turn, a bot at or above `context.roomCompactAt` (default `0.9`, read like
+`compactAt`) is compacted the same way without asking; `autoCompact: false`
+turns that off, but not the button. Either way the room shows an activity line.
+
+```sh
+pnpm exec vitest run server/room-context.e2e.test.ts server/room-context.test.ts src/lib/context-warning.test.ts
+```
+
+The fixture proves a warm process is kept below the threshold or with
+automatic compaction off, and replaced after Compact now and above 90%.
 
 Evidence covers:
 

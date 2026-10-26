@@ -57,7 +57,9 @@ export function browserProfileDirectory(session: string, dataDir = DATA_DIR): st
   return join(browserProfilesRoot(dataDir), createHash("sha256").update(session).digest("hex").slice(0, 32));
 }
 
-function browserSessionsDirectory(env: NodeJS.ProcessEnv): string {
+/** Where agent-browser keeps saved session state (`--restore`) for this
+ * HOME and namespace: `~/.agent-browser[/namespaces/<name>/state]/sessions`. */
+export function browserSessionsDirectory(env: NodeJS.ProcessEnv): string {
   const namespace = env.AGENT_BROWSER_NAMESPACE;
   if (namespace && !/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(namespace)) throw new Error("Invalid browser namespace.");
   const home = (process.platform === "win32" ? env.USERPROFILE : env.HOME) || homedir();
@@ -196,6 +198,30 @@ async function closeOnce(binaryPath: string, env: NodeJS.ProcessEnv, session: st
   // agent-browser binary gave one, so a stale file naming a reused pid, even
   // one another bot's engine now runs under, kills nothing.
   return tree ? stopBrowserProcesses(tree) : false;
+}
+
+/** Run one engine command in a session's running browser and return its
+ * answer's `data`, or null when the session's daemon is not running. The
+ * launch-free inventory answers first, so a stopped session is never
+ * launched just to be asked; `env` is the session's own launch environment,
+ * so even a daemon that exits in between comes back exactly as the bot's. */
+export async function inRunningBrowser(binaryPath: string, env: NodeJS.ProcessEnv, args: string[], timeoutMs = 15_000): Promise<Record<string, unknown> | null> {
+  const session = env.AGENT_BROWSER_SESSION;
+  if (!session || !/^[A-Za-z0-9_.-]{1,96}$/.test(session)) return null;
+  const controlEnv = daemonControlEnv(env);
+  if (!controlEnv) throw new Error("The managed browser configuration was changed. Restore it to an empty JSON object.");
+  const deadline = Date.now() + timeoutMs;
+  const sessions = await runningBrowserSessions(binaryPath, controlEnv, deadline);
+  if (!sessions) throw new Error("The browser engine did not say which browsers are running.");
+  if (!sessions.includes(session)) return null;
+  const answer = await runBrowserCommand(binaryPath, env, [...args, "--json", "--no-webmcp"], deadline, true);
+  try {
+    const result = JSON.parse(answer.output);
+    if (answer.ok && result?.success === true && result.data && typeof result.data === "object") return result.data;
+  } catch { /* reported below */ }
+  // A daemon that was closing when the inventory listed it is stopped now.
+  if (!(await runningBrowserSessions(binaryPath, controlEnv, Date.now() + 5_000))?.includes(session)) return null;
+  throw new Error("The browser did not answer. Try again when the bot has finished.");
 }
 
 /** Where agent-browser 0.37 writes `<session>.pid`: AGENT_BROWSER_SOCKET_DIR,
@@ -618,7 +644,8 @@ const PROFILE_CACHE_ARG = `--disk-cache-size=${64 * 1024 * 1024}`;
 
 /** The MCP server a turn mounts so the bot gets browser tools. One isolated,
  * auto-restored session per browser profile (or per bot), page-provided
- * WebMCP tools off, and only the core tool set. */
+ * WebMCP tools off, and only the core tool set. A profile set to My Chrome
+ * attaches to the person's own running Chrome instead (`attach`). */
 export function agentBrowserIntegration(input: {
   binaryPath: string;
   session: string;
@@ -629,14 +656,18 @@ export function agentBrowserIntegration(input: {
   env?: NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
   arch?: string;
-  /** CDP target of a Chrome already running elsewhere. Callers must source
-   * this only from this workspace's own config (browserEngineAttachCdpUrl),
-   * never from the ambient process environment — the curated env below
-   * otherwise never forwards AGENT_BROWSER_CDP at all (#1396). */
+  /** Use the person's own running Chrome (a profile set to My Chrome):
+   * agent-browser's auto-connect finds it (Chrome's DevToolsActivePort, then
+   * ports 9222/9229), or `cdpUrl` names it. Callers source this only from
+   * this workspace's own config, never from the ambient process environment,
+   * which the curated env below never forwards (#1396). */
+  attach?: { cdpUrl?: string };
+  /** The workspace's configured CDP target (browserEngineAttachCdpUrl): the
+   * same as `attach: { cdpUrl }`. Never from the ambient environment. */
   attachCdpUrl?: string;
   /** The egress gate port a launched Chrome connects through
    * (server/browser/egress, port of OpenMausBot #2930); without one the
-   * browser connects nowhere. Ignored when attaching to a Chrome over CDP. */
+   * browser connects nowhere. Ignored when attaching to a running Chrome. */
   egressPort?: number;
   /** A meeting browser: WebRTC media may use UDP outside the gate. */
   meetingMedia?: boolean;
@@ -650,10 +681,6 @@ export function agentBrowserIntegration(input: {
     // global flags. The environment keeps page-provided tools disabled in
     // those commands too, and avoids changing browser launch settings later.
     AGENT_BROWSER_NO_WEBMCP: "1",
-    // This is a restore *name*, not a boolean. Use a fixed-length identity:
-    // upstream looks up name prefixes, not an exact daemon-session filename.
-    AGENT_BROWSER_RESTORE: browserRestoreKey(input.session),
-    AGENT_BROWSER_RESTORE_SAVE: input.persistent === false ? "never" : "auto",
     AGENT_BROWSER_ENCRYPTION_KEY: input.encryptionKey,
     // OMB owns launch settings. A user's unrelated native CLI config must not
     // inject a shared Chrome profile or a different saved-state path.
@@ -669,15 +696,28 @@ export function agentBrowserIntegration(input: {
   // kept a headed launch config still comes back headless instead of failing
   // every launch until it is killed by hand (#1383).
   const displayless = (input.platform ?? process.platform) === "linux" && !sourceEnv.DISPLAY && !sourceEnv.WAYLAND_DISPLAY;
-  if (input.headless !== false || displayless) {
-    env.AGENT_BROWSER_HEADLESS = "1";
-    env.AGENT_BROWSER_HEADED = "0";
-  }
-  if (input.attachCdpUrl) env.AGENT_BROWSER_CDP = input.attachCdpUrl;
-  else {
+  // main's single CDP target (browserEngineAttachCdpUrl) is the attach case
+  // with a named target.
+  const attach = input.attach ?? (input.attachCdpUrl ? { cdpUrl: input.attachCdpUrl } : undefined);
+  if (attach) {
+    // The person's Chrome keeps its own sign-ins. Restoring would copy this
+    // session's saved cookies into it, and saving would copy every cookie of
+    // their real profile into OMB's store, so neither happens.
+    if (attach.cdpUrl) env.AGENT_BROWSER_CDP = attach.cdpUrl;
+    else env.AGENT_BROWSER_AUTO_CONNECT = "1";
+    env.AGENT_BROWSER_RESTORE_SAVE = "never";
+  } else {
+    // This is a restore *name*, not a boolean. Use a fixed-length identity:
+    // upstream looks up name prefixes, not an exact daemon-session filename.
+    env.AGENT_BROWSER_RESTORE = browserRestoreKey(input.session);
+    env.AGENT_BROWSER_RESTORE_SAVE = input.persistent === false ? "never" : "auto";
+    if (input.headless !== false || displayless) {
+      env.AGENT_BROWSER_HEADLESS = "1";
+      env.AGENT_BROWSER_HEADED = "0";
+    }
     Object.assign(env, agentBrowserEgressEnv(input.egressPort ?? 0, input.platform ?? process.platform, input.meetingMedia === true));
     // A saved session (a bot's own browser or a shared profile) keeps its Chrome profile. The temporary browser,
-    // meetings and My Chrome (attached over CDP, never launched here) are not saved, so they get none.
+    // meetings and My Chrome (attached, never launched here) are not saved, so they get none.
     if (input.persistent !== false) {
       env.AGENT_BROWSER_PROFILE = browserProfileDirectory(input.session, input.dataDir);
       // Chrome's default disk cache is several hundred megabytes per profile.

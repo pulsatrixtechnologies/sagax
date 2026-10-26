@@ -86,11 +86,6 @@ export interface ControlClient {
    * every gated tools/call asks fresh, and may be held open by the harness
    * for up to CONTROL_WAIT_MS while the computer is busy. */
   state(fresh?: boolean): Promise<ControlState>;
-  /** Surface the bot's plea in the app. Returns its expiry id, or null when
-   * the harness could not be told. */
-  requestHelp(reason: string): Promise<string | null>;
-  /** Close only the unanswered plea opened by this client. */
-  expireHelp(requestId: string): Promise<void>;
   readonly configured: boolean;
 }
 
@@ -147,36 +142,6 @@ export function createControlClient(options?: {
       cached = await read();
       cachedAt = Date.now();
       return cached;
-    },
-    async requestHelp(reason: string): Promise<string | null> {
-      if (!configured) return null;
-      try {
-        const res = await fetchImpl(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ reason }),
-          signal: AbortSignal.timeout(2_000),
-        });
-        if (!res.ok) return null;
-        const body: any = await res.json().catch(() => null);
-        return typeof body?.requestId === "string" && body.requestId ? body.requestId : null;
-      } catch {
-        return null;
-      }
-    },
-    async expireHelp(requestId: string): Promise<void> {
-      if (!configured || !requestId) return;
-      try {
-        await fetchImpl(url, {
-          method: "DELETE",
-          headers,
-          body: JSON.stringify({ requestId }),
-          signal: AbortSignal.timeout(2_000),
-        });
-      } catch {
-        // Best effort: the harness also clears the in-memory request on
-        // release/restart, and an unavailable harness cannot show the card.
-      }
     },
   };
 }

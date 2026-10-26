@@ -55,6 +55,10 @@ describe("provider key rows", () => {
     expect(groq).toContain('value=""');
     expect(groq).not.toContain("Connected");
     expect(groq).not.toContain(">Test<");
+    const meta = render(createElement(ApiKeyRow, { section: "meta", testProvider: "meta" }));
+    expect(meta).toContain("Meta Model API key");
+    expect(meta).toContain("LLM|…");
+    expect(meta).toContain('type="password"');
   });
 
   it("saves on paste instead of a Save button, and keeps key effects in view", () => {

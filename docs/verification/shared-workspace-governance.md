@@ -28,7 +28,7 @@ prompt or dialog: visibility is access control and the log is a record.
   - rooms need every bot visible; teams need a visible bot or room;
   - bots reach teammates only with exactly the same audience
     (`peerAllowed` in `server/peers/peer-roster.ts`, used by rosters, `list_bots`,
-    asks, delegations, @mentions and the Chief's team);
+    asks, delegations, `coordinate_bots` hand-offs, @mentions and the Chief's team);
   - admins, the owner on this machine and a session-less local service see
     everything; members never receive a bot's audience list.
 - **Admin activity log.** `server/activity/admin-activity.ts`. Each successful admin
@@ -102,7 +102,7 @@ above passed. Before that rebase (main `0bb37982` plus #1708),
 `server/direct-coordination.e2e.test.ts`, `server/auth/request-auth.test.ts`,
 `server/decision-log.test.ts`, `server/decision-log-wiring.test.ts`,
 `server/card-answerers.e2e.test.ts`, `server/peer-allowlist.e2e.test.ts`,
-`server/runtime/runtime.test.ts`, `server/chief-of-staff.test.ts`,
+`server/runtime/runtime.test.ts`, `server/runtime-coordinator.test.ts`, `server/chief-of-staff.test.ts`,
 `server/thread-capacity-api.test.ts`, `server/cli-service-trust.e2e.test.ts`
 and the Settings/People/session UI tests passed on macOS.
 `server/hosted-access.test.ts` passed except once for its 8-second licence

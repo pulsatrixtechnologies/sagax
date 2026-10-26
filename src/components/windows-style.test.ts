@@ -54,7 +54,7 @@ describe("AboutDialog", () => {
     setLocale("fr");
     const fr = renderToStaticMarkup(createElement(AboutDialog, { open: true, onClose: () => {} }));
     expect(fr).toContain(">Licence<");
-    expect(fr).toContain("Basé sur OpenMausBot");
+    expect(fr).toContain("Basé sur Sagax");
     expect(renderToStaticMarkup(createElement(AboutDialog, { open: false, onClose: () => {} }))).toBe("");
   });
 });

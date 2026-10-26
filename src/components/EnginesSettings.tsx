@@ -38,6 +38,8 @@ import { VoiceProviderOptions } from "./settings/VoiceProviderOptions";
 import { MicrophonePermissionRow, MicrophoneSettings } from "./settings/MicrophoneSettings";
 import { LiveCallInstallationSettings } from "./LiveCallSettings";
 import { ApiKeyRow, VpsConnection } from "./ApiKeys";
+import { useOfferedInstances } from "@/lib/offered-instances";
+import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
 
 interface ProbeResult {
   ok: boolean;
@@ -526,6 +528,7 @@ export function VoiceSettingsPage() {
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-voice-page="">
       <VoiceProviderSettings />
+
       {/* this computer's microphone: everyone's, whoever edits the installation */}
       <div data-settings-card="connections.audio">
         <SettingsGroup title={t("settings.audio.title")} groupId="audio">

@@ -97,8 +97,20 @@
 //                      fresh each run: a one-shot prompt containing a marker
 //                      gets that reply (first match wins), before
 //                      FAKE_CLAUDE_TEXT_FILE is consulted.
+//   FAKE_CLAUDE_CACHE_READ_TOKENS cache_read_input_tokens each ordinary
+//                      turn's model calls report (default 2).
+//   FAKE_CLAUDE_PING_DUMP path: a keep-warm ping (one-shot json run with
+//                      --fork-session) writes {argv, env, prompt, mcpConfig,
+//                      settings, systemPrompt} here, read while its private
+//                      files still exist.
+//   FAKE_CLAUDE_PING_USAGE JSON usage for a keep-warm ping's result
+//                      (default: a warm read of 150000, write of 40).
+//   FAKE_CLAUDE_PING_RESULT raw json result for a keep-warm ping, verbatim.
 //   FAKE_CLAUDE_TEXT_DUMP like FAKE_CLAUDE_DUMP, but for one-shot text runs,
 //                      so they never overwrite a turn's dump mid-test.
+//   FAKE_CLAUDE_TEXT_LOG path of a JSON-lines file every one-shot prompt is
+//                      appended to, for a test that needs one step's prompt
+//                      when later background steps overwrite the dump.
 //   FAKE_CLAUDE_TEXT_HANG when set, the one-shot text mode never replies —
 //                      the caller's abort signal is the only way it ends,
 //                      which is exactly what its tests need to prove.
@@ -497,9 +509,10 @@ if (["text", "json"].includes(argAfter("--output-format") ?? "")) {
     }));
     process.exit(0);
   }
-  // Memory upkeep's background one-shots (on for every bot) never overwrite
-  // the shared turn dump a test reads; FAKE_CLAUDE_TEXT_DUMP still records them.
-  const upkeepCall = /You are the (?:CAPTURE|TIDY|ORGANIZE) step of a memory system/.test(prompt);
+// Memory upkeep's background one-shots (on for every bot) and the
+  // automatic skill review never overwrite the shared turn dump a test
+  // reads; FAKE_CLAUDE_TEXT_DUMP still records them.
+  const upkeepCall = /You are the (?:CAPTURE|TIDY|ORGANIZE) step of a memory system|You are the SKILL REVIEW step/.test(prompt);
   const oneShotDump = process.env.FAKE_CLAUDE_TEXT_DUMP ?? (upkeepCall ? undefined : process.env.FAKE_CLAUDE_DUMP);
   if (oneShotDump) {
     writeDumpAtomic(
@@ -507,6 +520,7 @@ if (["text", "json"].includes(argAfter("--output-format") ?? "")) {
       JSON.stringify({ pid: process.pid, argv, env: process.env, cwd: process.cwd(), prompt, mcpConfig: null }, null, 2),
     );
   }
+  if (process.env.FAKE_CLAUDE_TEXT_LOG) appendFileSync(process.env.FAKE_CLAUDE_TEXT_LOG, `${JSON.stringify({ prompt })}\n`);
   if (process.env.FAKE_CLAUDE_TEXT_HANG) {
     // a repeating timer keeps the loop alive without settling the
     // top-level await, which Node would otherwise treat as fatal
@@ -651,6 +665,16 @@ const promptText = (raw: JsonValue): string => {
   const prompt = splitLaunchNote(raw).prompt;
   const m = prompt && typeof prompt === "object" && !Array.isArray(prompt) ? (prompt as { message?: { content?: unknown } }).message : undefined;
   return typeof m?.content === "string" ? m.content : "";
+};
+/** A steered message as the reply names it: its words, and one `[image]`
+ * per native image block, so a test can see the pictures were folded in. */
+const steeredText = (prompt: JsonValue): string => {
+  const m = prompt && typeof prompt === "object" && !Array.isArray(prompt) ? (prompt as { message?: { content?: unknown } }).message : undefined;
+  if (!Array.isArray(m?.content)) return promptText(prompt);
+  return m.content
+    .map((block: { type?: unknown; text?: unknown }) => block?.type === "image" ? "[image]" : typeof block?.text === "string" ? block.text.trim() : "")
+    .filter(Boolean)
+    .join(" ");
 };
 
 /** A message the finished turn could not fold runs as the next turn — once
@@ -1304,7 +1328,10 @@ const playReply = (prompt: JsonValue, mcpNote: string) => {
   // is in flight (after its tool_use, before its tool_result).
   const compactMidTool = process.env.FAKE_CLAUDE_COMPACT === "1" && turnsPlayed >= 2 && process.env.FAKE_CLAUDE_COMPACT_AT === "tool";
   if (process.env.FAKE_CLAUDE_COMPACT === "1" && turnsPlayed >= 2 && !compactMidTool) compactNow();
-  const usage = { input_tokens: 10, cache_read_input_tokens: 2, output_tokens: 5 };
+  // FAKE_CLAUDE_CACHE_READ_TOKENS: a big cached context on each model call
+  // (keep-warm arms only above 50k), default 2.
+  const cacheRead = Number(process.env.FAKE_CLAUDE_CACHE_READ_TOKENS);
+  const usage = { input_tokens: 10, cache_read_input_tokens: Number.isSafeInteger(cacheRead) && cacheRead > 0 ? cacheRead : 2, output_tokens: 5 };
   if (scriptedToolCalls) {
     // scripted calls come first, each settled before the reply text
     // A call with `parent` is a sub-agent's (parent_tool_use_id); the
@@ -1533,7 +1560,7 @@ process.stdin.on("data", (c) => {
       // behind any queued message whose turn has not been announced yet
       if (process.env.FAKE_CLAUDE_LATE_STEER_GATE) lateSteers.push(prompt);
       else {
-        steered.push(promptText(prompt));
+        steered.push(steeredText(prompt));
         steeredMessages.push(prompt);
       }
       // the model reads the steered words and calls a tool about them

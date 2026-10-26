@@ -18,7 +18,7 @@ import { t } from "@/lib/i18n";
 import { api, useStore, type Action, type Bot } from "@/state/store";
 import { useCaptionChrome } from "@/components/DesktopCapabilities";
 import { cn } from "@/lib/cn";
-import { transitionComputerControlLease } from "@/lib/computer-control";
+import { parseComputerHelp, transitionComputerControlLease } from "@/lib/computer-control";
 import {
   initialLocalVmWorkspaceSlots,
   nativeViewOverlayIntersects,
@@ -42,6 +42,7 @@ type WorkspaceDispatch = (action: Action) => void;
 const controlSnapshotSchema = z.object({
   held: z.boolean(),
   helpReason: z.string().nullable(),
+  help: z.unknown().optional().transform(parseComputerHelp),
   owned: z.boolean().optional(),
   acquired: z.boolean().optional(),
   released: z.boolean().optional(),
@@ -104,6 +105,7 @@ function dispatchControl(
     botId,
     held: snapshot.held,
     helpReason: snapshot.helpReason,
+    help: snapshot.help ?? null,
   });
 }
 

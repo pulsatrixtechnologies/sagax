@@ -8,8 +8,14 @@ import { readHandoffs } from "./testing/handoff-rows.ts";
 
 const TOKEN = "external-runtime-busy-fixture-0123456789abcdef";
 
+// An idle external caller consults a peer that is busy (docs/runtime-contract.md
+// §2 admission, §9). A consultation is coordinate_bots(consult: true) on
+// the runtime: the person's approval is asked once, before anything is
+// queued; the row then waits for the peer's slot, runs when it frees, and
+// the gateway reads the answer through assignment_status. Its own engine
+// never runs. Both orders of "busy" and "approval" end the same way.
 it.each(["already busy", "became busy during approval"])(
-  "drains an idle external caller's ask when the peer %s, without losing or repeating approval",
+  "queues an idle external caller's ask behind a peer that is %s, without losing or repeating approval",
   async scenario => {
     const scratch = mkdtempSync(join(tmpdir(), "omb-external-busy-"));
     const gate = join(scratch, "finish-peer");
@@ -36,14 +42,17 @@ it.each(["already busy", "became busy during approval"])(
       const peerThread = peer.activeTaskId;
       const messages = async (threadId: string): Promise<any[]> => (await api("GET", `/api/threads/${threadId}/messages?limit=100`)).messages;
       const sourceCards = async () => (await messages(sourceThread)).filter(message => ["ask_bot", "delegate_bot"].includes(message.card?.tool));
-      const peerRequests = async () => (await messages(peerThread)).filter(message => message.role === "user" && message.peerAsk?.botId === source.id);
+      /** The runtime's request line in the peer's work thread, attributed to the gateway. */
+      const peerRequests = async (threadId: string) => (await messages(threadId))
+        .filter(message => message.roomRequest?.phase === "request" && message.from?.botId === source.id);
       const sourceState = async () => (await api("GET", "/api/bots?messages=0")).bots.find((bot: any) => bot.id === source.id);
-      const receipt = (id: string) => api("GET", `/api/internal/delegations/${id}`, undefined, true);
+      const receipt = (id: string) => api("GET", `/api/internal/assignment-status?id=${id}`, undefined, true);
+      const row = (id: string) => readHandoffs(session.info.dataDir).find(node => node.id === id);
       const withholdAfterRevocation = async (id: string) => {
         await api("PATCH", `/api/bots/${source.id}`, { peers: [] });
-        const response = await fetch(`${session.info.url}/api/internal/delegations/${id}`, { headers: { authorization: `Bearer ${TOKEN}` } });
+        const response = await fetch(`${session.info.url}/api/internal/assignment-status?id=${id}`, { headers: { authorization: `Bearer ${TOKEN}` } });
         expect(response.status).toBe(403);
-        expect(await response.json()).toEqual({ error: "Result withheld: team access changed while the teammate was working" });
+        expect(await response.json()).toMatchObject({ error: "Result withheld: team access changed while the teammate was working" });
         await api("PATCH", `/api/bots/${source.id}`, { peers: [peer.id], acknowledgePeerScope: true });
       };
       // Lot 3: the ask is a runtime consultation on the caller's poll root.

@@ -1464,8 +1464,11 @@ export interface AppState {
   deletingBots: Record<string, true>;
   /** who is driving each bot's computer: held = the person has the wheel
    * (the bot's hands are refused server-side); helpReason = the bot's open
-   * plea for the person to take over */
-  computerControl: Record<string, { held: boolean; helpReason: string | null }>;
+   * plea for the person to take over; help = the sign-in card it stands for */
+  computerControl: Record<string, { held: boolean; helpReason: string | null; help?: import("../../../shared/wire").ComputerHelpRef | null }>;
+  /** A sign-in card's Open: the Computer panel goes to the place the bot
+   * works, the Browser tab already in the person's control. */
+  signInFocus: { botId: string; messageId: string; url: string; site: string; place: import("../../../shared/wire").Surface; requestId: number; consumed: boolean } | null;
   /** Each bot's data sheet (cards and loaded tables, never rows), loaded
    * when its Data tab first opens and replaced whole by every `data` frame.
    * The grid pages rows itself, so a sheet stays small. */
@@ -1614,7 +1617,7 @@ export type Action =
       bots: Bot[];
       groups: Group[];
       sections?: string[];
-      computerControl: Record<string, { held: boolean; helpReason: string | null }>;
+      computerControl: Record<string, { held: boolean; helpReason: string | null; help?: import("../../../shared/wire").ComputerHelpRef | null }>;
       botQueuedMessages?: AppState["pendingQueued"];
       /** the conversation open on this device last launch, for the first hydrate */
       resumeId?: string;
@@ -1822,7 +1825,9 @@ export type Action =
    * plain send falls back to the removed row's parent. */
   | { type: "optimisticMessageRemoved"; threadId: string; sendId: string; restoreLeafId?: string | null }
   | { type: "computerStart"; botId: string; start: ComputerStart | null }
-  | { type: "computerControl"; botId: string; held: boolean; helpReason: string | null }
+  | { type: "computerControl"; botId: string; held: boolean; helpReason: string | null; help?: import("../../../shared/wire").ComputerHelpRef | null }
+  | { type: "openSignIn"; botId: string; messageId: string; url: string; site: string; place: import("../../../shared/wire").Surface }
+  | { type: "signInFocusConsumed"; requestId: number }
   /** A whole sheet from the server: a `data` frame or the first GET. */
   /** threadId: a confidential thread's own sheet (dataSheetKey). */
   | { type: "dataSheet"; sheet: DataSheet; tables?: DataTable[]; threadId?: string }
@@ -2592,6 +2597,7 @@ export const initialState: AppState = {
   computerStarts: {},
   deletingBots: {},
   computerControl: {},
+  signInFocus: null,
   dataSheets: {},
   dataTables: {},
   dataView: null,

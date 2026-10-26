@@ -110,11 +110,13 @@ describe("Codex generateMemoryText (fake CLI)", () => {
     await removeTempDir(scratch);
   });
 
-  it("is offered only as the background variant: no titles, compaction or permission review", async () => {
+  it("is offered only as the background variant: no titles or compaction; Sagax's own permission review stays", async () => {
     const codex = await create();
     expect(codex.generateMemoryText).toBeTypeOf("function");
     expect(codex.generateText).toBeUndefined();
-    expect(codex.reviewPermission).toBeUndefined();
+    // Sagax keeps the Codex permission reviewer (reviewCodexPermission), which
+    // upstream's driver does not have; it is separate from the text variants.
+    expect(codex.reviewPermission).toBeTypeOf("function");
   });
 
   it("asks the cheapest listed model in an empty folder, with no MCP and the prompt only on stdin", async () => {

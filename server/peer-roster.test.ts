@@ -252,7 +252,7 @@ describe("peerRosterSystemPrompt", () => {
 
     expect(prompt).toContain("- Quill — Writer [id: writer]");
     expect(prompt).toContain("- Patch — Engineer [id: coder]");
-    expect(prompt).toContain("coordinate_bots with a teammate's bot id");
+    expect(prompt).toContain("coordinate_bots with a teammate's name as the roster shows it (its id when the roster shows one)");
     expect(prompt).toContain("consult: true");
     // one surface: the legacy tool names are not what a bot is taught
     expect(prompt).not.toMatch(/\b(delegate_bot|ask_bot|send_to_bot|check_delegation|wait_delegation)\b/);
@@ -388,7 +388,8 @@ describe("teammate availability stays out of the cached prompt half", () => {
       teamAvailabilityPart(members),
     ]);
     return {
-      peer: build(peerRosterSystemPrompt(peers), peers),
+      // as index.ts builds it: coordinate_bots resolves a unique name
+      peer: build(peerRosterSystemPrompt(peers, true), peers),
       chief: build(chiefOfStaffSystemPrompt("chief", bots, true), chiefTeam),
     };
   };

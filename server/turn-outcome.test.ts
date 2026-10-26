@@ -117,8 +117,9 @@ const call = (name: string, ok: boolean, fields: Partial<NonNullable<Message["to
 describe("outwardActions", () => {
   it("names the sends, posts and payments a turn completed, once each, in order", () => {
     const rows = [call("GMAIL_SEND_EMAIL", true), call("GMAIL_FETCH_EMAILS", true), call("mcp__composio__SLACK_SEND_MESSAGE", true),
-      call("GMAIL_SEND_EMAIL", true), call("COMPOSIO_PROXY_EXECUTE", true), call("Read", true), call("mcp__agents__coordinate_bots", true)];
-    expect(outwardActions(rows)).toEqual(["GMAIL_SEND_EMAIL", "mcp__composio__SLACK_SEND_MESSAGE", "COMPOSIO_PROXY_EXECUTE"]);
+      call("GMAIL_SEND_EMAIL", true), call("Read", true), call("mcp__agents__coordinate_bots", true)];
+    // Composio's generic proxy is gone from Sagax (#1014): shared/outbound.ts no longer names it.
+    expect(outwardActions(rows)).toEqual(["GMAIL_SEND_EMAIL", "mcp__composio__SLACK_SEND_MESSAGE"]);
   });
 
   it("reads a commit, a push or a payment out of a shell command, by any engine's name for the shell", () => {

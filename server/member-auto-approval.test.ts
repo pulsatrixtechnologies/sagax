@@ -38,9 +38,13 @@ describe("memberRoomTurnLevel (a Primary Bot's handoff in a room)", () => {
     expect(memberRoomTurnLevel("edits", true)).toBe("edits");
   });
 
-  it("is what the server's room turns apply to a member's bot (index.ts roomTurnApprovalMode)", () => {
+  it("is what the server's room turns apply to a member's bot (index.ts roomTurnApprovalMode, through roomTurnLevel)", () => {
     const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
-    const start = source.indexOf("function roomTurnApprovalMode(");
+    // the room turn and the coordinator's recorded level share one rule
+    const outer = source.indexOf("function roomTurnApprovalMode(");
+    expect(outer).toBeGreaterThan(-1);
+    expect(source.slice(outer, source.indexOf("\n}\n", outer))).toMatch(/return roomTurnLevel\(bot, threadId, source\);/);
+    const start = source.indexOf("function roomTurnLevel(");
     const body = source.slice(start, source.indexOf("\n}\n", start));
     expect(start).toBeGreaterThan(-1);
     expect(body).toMatch(/if \(memberOwnedInOrg\(bot\)\) return memberRoomTurnLevel\(level, memberAutoApprovalAllowed\(cfg\.organization\)\);/);

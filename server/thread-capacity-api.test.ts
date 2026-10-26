@@ -396,6 +396,11 @@ describe("per-bot thread capacity through an isolated HTTP fixture", () => {
       const launched = await dump(started.threadId);
       return { runId: run.id as string, threadId: started.threadId as string, token: launched.mcpConfig.mcpServers.agents.env.SAGAX_COMMS_TOKEN as string };
     };
+    // Each delegator sends its own words: the runtime joins the same request
+    // from another tree of the same person (one request per bot, the
+    // orchestration bench's S15), which would share the first answer instead
+    // of holding a second hand-off at capacity.
+    let probe = 0;
     const delegate = async (turn: { threadId: string; token: string }) => {
       const response = await fetch(`${fixture.info.url}/api/internal/coordinate-bots`, {
         method: "POST",
@@ -403,7 +408,7 @@ describe("per-bot thread capacity through an isolated HTTP fixture", () => {
           authorization: `Bearer ${turn.token}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ botIds: [target.botId], message: "Delegated slot probe" }),
+        body: JSON.stringify({ botIds: [target.botId], message: `Delegated slot probe ${++probe}` }),
       });
       const result = { status: response.status, body: await response.json() as any };
       // The evidence records the authorization result, never the bearer.

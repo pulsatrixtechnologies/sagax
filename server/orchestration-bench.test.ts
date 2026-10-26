@@ -95,9 +95,17 @@ function coordination(dataDir = ":memory:", holdBots: string[] = []) {
   return { coordinator, runs, reports, held };
 }
 const origin = { kind: "user" as const, request: "Who is free tomorrow?" };
-type Origin = typeof origin;
-type Enqueue = (source: RoomAddress, generation: string, parentId: string | undefined, target: RoomAddress, key: string, text: string,
-  approvalGranted?: boolean, rework?: boolean, sourceText?: string, requestBatchKey?: string, workOrigin?: Origin, mode?: string, person?: string) => { node: HandoffView; duplicate: boolean };
+type World = ReturnType<typeof coordination>;
+/** Hands work from `source`: from its own node `parentId`, or from its own
+ * root `generation`, which the host begins first (index.ts startTurn). */
+function enqueue(w: World, source: RoomAddress, generation: string, parentId: string | undefined, target: RoomAddress, text: string,
+  opts: { mode?: "work" | "consult" | "auto"; person?: string; sourceText?: string } = {}): { node: HandoffView; duplicate: boolean } {
+  if (!parentId && !w.coordinator.has(generation)) {
+    w.coordinator.beginTurn({ id: generation, address: source, brief: opts.sourceText ?? origin.request, level: "ask", origin,
+      ...(opts.person ? { person: opts.person } : {}) });
+  }
+  return w.coordinator.enqueue(source, generation, parentId, target, text, opts.mode ? { mode: opts.mode } : {});
+}
 
 // ── Perspicax ──────────────────────────────────────────────────────────
 
@@ -191,17 +199,15 @@ describe("orchestration bench (cause C)", () => {
       const w = coordination(":memory:", ["builder"]);
       const chief: RoomAddress = { botId: "chief", threadId: "chief-chat" };
       const builder: RoomAddress = { botId: "builder", threadId: "builder-work" };
-      const enqueue = w.coordinator.enqueue.bind(w.coordinator) as Enqueue;
-      const { node } = enqueue(chief, "gen-1", undefined, builder, "builder", "Build the export", false, false, "Ship it", undefined, origin);
+      const { node } = enqueue(w, chief, "gen-1", undefined, builder, "Build the export", { sourceText: "Ship it" });
       w.coordinator.tick(); await flush();
-      const asked = enqueue(builder, "gen-b", node.id, { botId: "chief", threadId: "chief-consult" }, "chief", "Which column order do you want?",
-        false, false, "", undefined, origin, "consult");
+      const asked = enqueue(w, builder, "gen-1", node.id, { botId: "chief", threadId: "chief-consult" }, "Which column order do you want?", { mode: "consult" });
       w.coordinator.tick(); await flush(); await flush();
       const consulted = w.runs.some(r => r.id === asked.node.id && r.botId === "chief");
       const answered = w.reports.some(r => r.child.id === asked.node.id && r.child.status === "completed");
       // Work still never goes back up the tree.
       let workRefused = false;
-      try { enqueue(builder, "gen-b", node.id, chief, "chief", "Do the export yourself", false, false, "", undefined, origin, "work"); } catch { workRefused = true; }
+      try { enqueue(w, builder, "gen-1", node.id, chief, "Do the export yourself", { mode: "work" }); } catch { workRefused = true; }
       return consulted && answered && workRefused;
     });
   });
@@ -211,8 +217,7 @@ describe("orchestration bench (cause C)", () => {
       const dir = tempDir();
       const first = coordination(dir, ["builder"]);
       const chief: RoomAddress = { botId: "chief", threadId: "chief-chat" };
-      const { node } = (first.coordinator.enqueue.bind(first.coordinator) as Enqueue)(chief, "gen-1", undefined,
-        { botId: "builder", threadId: "builder-work" }, "builder", "Build it", false, false, "Ship it", undefined, origin);
+      const { node } = enqueue(first, chief, "gen-1", undefined, { botId: "builder", threadId: "builder-work" }, "Build it", { sourceText: "Ship it" });
       first.coordinator.tick(); await flush();
       first.coordinator.close();
       const second = coordination(dir);
@@ -250,13 +255,12 @@ describe("orchestration bench (cause C)", () => {
   it("S15: two coordinators broadcast the same request to 8 bots", async () => {
     await scenario("S15 one request per bot", async () => {
       const w = coordination();
-      const enqueue = w.coordinator.enqueue.bind(w.coordinator) as Enqueue;
       const bots = Array.from({ length: 8 }, (_, i) => `bot-${i + 1}`);
       for (const coordinator of ["coordinator-a", "coordinator-b"]) {
         const source: RoomAddress = { botId: coordinator, threadId: `${coordinator}-chat` };
         for (const botId of bots) {
-          enqueue(source, `gen-${coordinator}`, undefined, { botId, threadId: `${botId}-from-${coordinator}` }, botId,
-            "Poll: are you free tomorrow 9-12? Answer yes or no.", false, false, "Who is free tomorrow?", undefined, origin, "work", "pr_alex");
+          enqueue(w, source, `gen-${coordinator}`, undefined, { botId, threadId: `${botId}-from-${coordinator}` },
+            "Poll: are you free tomorrow 9-12? Answer yes or no.", { mode: "work", person: "pr_alex", sourceText: "Who is free tomorrow?" });
         }
       }
       w.coordinator.tick(); await flush(); await flush();

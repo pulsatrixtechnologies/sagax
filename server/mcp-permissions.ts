@@ -61,6 +61,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("connectors:setup", "read", "open_connector_setup"),
   p("delegation:check", "read", "check_delegation"),
   p("delegation:wait", "read", "wait_delegation"),
+  // the runtime's read of a hand-off (docs/runtime-contract.md §9)
+  p("assignment:status", "read", "assignment_status"),
   p("sessions:search", "read", "session_search"),
   p("sessions:read", "read", "session_read"),
   p("topics:recall", "read", "recall_topic"),
@@ -124,6 +126,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("rules:update", "own", "rules_update"),
   p("docs:update", "own", "docs_update"),
   p("credentials:login", "own", "request_login"),
+  // a sign-in request card for the speaker in this conversation
+  p("credentials:signin", "own", "request_sign_in"),
   p("computers:select", "own", "select_computer"),
   p("pairing:manage", "own", "manage_pairing"),
   // Dispatch
@@ -261,7 +265,7 @@ export const ROLE_OVERRIDES: Partial<Record<McpRole, Record<string, McpScope | n
   // team setup could create bots under Full access, and a bot's rules and
   // docs are lasting instructions untrusted text must not write.
   service: {
-    "vm:exec": null, "actions:invoke": null, "pairing:manage": null, "credentials:login": null,
+    "vm:exec": null, "actions:invoke": null, "pairing:manage": null, "credentials:login": null, "credentials:signin": null,
     "teamsetup:propose": null, "rules:update": null, "docs:update": null,
   },
 };

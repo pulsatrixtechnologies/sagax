@@ -787,7 +787,7 @@ describe("agents-proxy MCP surface", () => {
     expect(coordinate.description).toContain("consult true asks a question");
     expect(coordinate.description).toContain('reply "none" is a one-way notice');
     expect(coordinate.description).toContain("never call assignment_status in the same turn");
-    expect(Object.keys(coordinate.inputSchema.properties)).toEqual(["group_id", "bot_ids", "message", "reason", "rework", "thread", "reply", "consult", "done_when"]);
+    expect(Object.keys(coordinate.inputSchema.properties)).toEqual(["group_id", "bot_ids", "message", "reason", "rework", "thread", "reply", "consult", "relay", "done_when"]);
     expect(coordinate.inputSchema.properties.thread.enum).toEqual(["standing", "new"]);
     expect(coordinate.inputSchema.properties.reply.enum).toEqual(["resume", "none"]);
     expect(coordinate.inputSchema.properties.consult.type).toBe("boolean");
@@ -2246,20 +2246,19 @@ describe("standing external runtime", () => {
   });
   afterAll(async () => { if (external) await waitForExit(external, { signal: "SIGTERM" }); });
 
-  it("sees the same one tool surface as every turn: the switches it sets change nothing", async () => {
-    // The server's allow-list, not the catalog, decides what a standing
-    // capability may call (docs/runtime-contract.md §9).
+  it("advertises only the peer tools, never act, even when unrelated feature flags are set", async () => {
+    // A standing process outside any turn keeps the peer surface only
+    // (catalogProfileFromEnv: SAGAX_EXTERNAL_RUNTIME); it never gets act.
     const list = await externalRpc("tools/list");
-    // the main child is a Chief's turn; this one is not, so only the role differs
-    const chiefOnly = ["create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "create_room", "manage_room", "retry_thread"];
-    const everyTurn = (await rpc("tools/list")).result.tools.filter((tool: any) => !chiefOnly.includes(tool.name));
-    const names = list.result.tools.map((tool: any) => tool.name);
-    expect(names).toEqual(everyTurn.map((tool: any) => tool.name));
-    const teamwork = ["list_room_targets", "coordinate_bots", "assignment_status", "list_bots", "list_rooms", "list_threads", "close_thread", "start_thread", "post_to_room"];
-    for (const name of teamwork) {
+    expect(list.result.tools.map((tool: any) => tool.name)).toEqual(["coordinate_bots", "assignment_status", "list_bots"]);
+    const everyTurn = (await rpc("tools/list")).result.tools;
+    for (const name of ["coordinate_bots", "assignment_status", "list_bots"]) {
       expect(list.result.tools.find((tool: any) => tool.name === name), name).toEqual(everyTurn.find((tool: any) => tool.name === name));
     }
     expect(JSON.stringify(list.result.tools)).not.toMatch(/Brief synchronous consultation|BLOCKING status tool|same turn as delegate_bot/);
+    for (const name of ["start_thread", "create_bot", "request_credential", "memory_update", "skill_manage", "shared_computer", "tool_result_read", "act", "post_to_room"]) {
+      expect((await externalCall(name, {})).error).toMatchObject({ code: -32602, message: `Unknown tool: ${name}` });
+    }
     const roster = (await externalCall("list_bots", {})).result.content[0].text;
     expect(roster).toContain("Use coordinate_bots for concrete work");
     expect(roster).not.toMatch(/\b(delegate_bot|ask_bot)\b/);
@@ -2433,7 +2432,7 @@ describe("coordinate_bots arguments", () => {
       lastCoordinateBody = null;
       const res = await callTool("coordinate_bots", args);
       expect(res.result.isError, JSON.stringify(args)).toBe(true);
-      expect(res.result.content[0].text).toContain('thread ("standing" or "new"), reply ("resume" or "none"), consult (true or false) and done_when are optional');
+      expect(res.result.content[0].text).toContain('thread ("standing" or "new"), reply ("resume" or "none"), consult (true or false), relay (true or false) and done_when are optional');
       expect(lastCoordinateBody).toBeNull();
     }
   });
@@ -2460,7 +2459,7 @@ describe("coordinate_bots arguments", () => {
     });
     expect(res.result.isError).toBe(true);
     const text = res.result.content[0].text;
-    for (const field of ["bot_ids", "message", "group_id", "reason", "rework", "thread", "reply", "consult", "done_when"]) {
+    for (const field of ["bot_ids", "message", "group_id", "reason", "rework", "thread", "reply", "consult", "relay", "done_when"]) {
       expect(text).toContain(field);
     }
     expect(text).toContain("botIds");

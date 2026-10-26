@@ -6,7 +6,7 @@ exposes to a bot or an AI client. The machine-readable form is the registry in
 `server/mcp/mcp-permissions.ts`; `server/mcp/mcp-permissions.test.ts` fails when a
 catalog tool has no permission.
 
-Totals: capabilities 161, covered 161, gaps 0.
+Totals: capabilities 163, covered 163, gaps 0.
 
 Sources read: the agents tool catalog, the internal routes it calls
 (`/api/internal/*`), the member API (`docs/org-member-api.md`), and the
@@ -48,6 +48,7 @@ Reading the table:
 | resources:usage | sagax | `resource_usage` | `resources:usage` | covered |
 | connectors:setup | sagax | `open_connector_setup` | `connectors:setup` | covered |
 | delegation:check | sagax | `check_delegation` | `delegation:check` | covered |
+| assignment:status | sagax | `assignment_status` | `assignment:status` | covered |
 | delegation:wait | sagax | `wait_delegation` | `delegation:wait` | covered |
 | sessions:search | sagax | `session_search` | `sessions:search` | covered |
 | sessions:read | sagax | `session_read` | `sessions:read` | covered |
@@ -148,6 +149,7 @@ Reading the table:
 | tasks:update | sagax | `task_list` | `tasks:update` | covered |
 | phone:tool | sagax | `phone_tool` | `phone:tool` | covered |
 | github:connect | sagax | `connect_github` | `github:connect` | covered |
+| credentials:signin | sagax | `request_sign_in` | `credentials:signin` | covered |
 | computers:select | sagax | `select_computer` | `computers:select` | covered |
 | computers:use | sagax | `shared_computer` | `computers:use` | covered |
 | vm:exec | sagax | `vm_exec` | `vm:exec` | covered |

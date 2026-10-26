@@ -77,6 +77,19 @@ function quietWhite(background: string, min: number): string {
   return contrastRatio(best, background) >= min ? best : WHITE;
 }
 
+/** Black mixed into `background`, from 20% up, until white clears AA on it and on every mention chip over it. */
+function mentionSafeInset(background: string): string {
+  const mentions = Object.values(MAUS_COLORS);
+  const clears = (inset: string) =>
+    contrastRatio(WHITE, inset) >= BUBBLE_TEXT_MIN &&
+    mentions.every((mention) => contrastRatio(WHITE, mentionChipBackground(mention, inset)) >= BUBBLE_TEXT_MIN);
+  for (let weight = 0.2; weight < 1; weight += 0.02) {
+    const inset = mixSrgb("#000000", background, weight);
+    if (clears(inset)) return inset;
+  }
+  return "#000000";
+}
+
 function darkInkOn(fill: string): string {
   return contrastRatio(INK, fill) >= BUBBLE_TEXT_MIN ? INK : WHITE;
 }
@@ -88,9 +101,9 @@ export function userBubbleTone(color: MausColor): UserBubbleTone {
   let tertiary = quietWhite(background, BUBBLE_TEXT_MIN);
   if (contrastRatio(tertiary, background) > contrastRatio(secondary, background)) tertiary = secondary;
   // A chip well, darker than the fill so it separates, still dark enough for white.
-  let inset = mixSrgb("#000000", background, 0.2);
-  if (contrastRatio(WHITE, inset) < BUBBLE_TEXT_MIN) inset = background;
-  if (contrastRatio(secondary, inset) < BUBBLE_TEXT_MIN) inset = background;
+  // Mention chips tint this well with any bot's color (`mentionChipBackground`), and
+  // Sagax's palette holds light swatches, so deepen it until white clears AA on every chip.
+  const inset = mentionSafeInset(background);
   const panel = mixSrgb(inset, background, 0.45);
   // Hover fills lift a little, but not so far that white text drops under AA.
   let raised = mixSrgb(WHITE, background, 0.1);

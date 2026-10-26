@@ -57,11 +57,13 @@ describe("room speaker names", () => {
     ]);
     expect(html.match(/data-bot-color="blue"/g)).toHaveLength(1);
     expect(html.match(/data-bot-color="orange"/g)).toHaveLength(1);
-    expect(html).toContain('class="text-[11px] font-medium bot-identity" data-bot-color="blue"');
+    // Sagax's cluster label: 12px regular in the bot's identity tone
+    expect(html).toContain('class="text-[12px] font-normal leading-4 bot-identity" data-bot-color="blue"');
     expect(html).toContain(">Ada<");
     expect(html).toContain(">Kai<");
-    expect(html).toContain("var(--identity-blue)");
-    expect(html).toContain("var(--identity-orange)");
+    // the name wears the skin's identity tone through .bot-identity (styles.css);
+    // Sagax's avatars keep their own mascot fill (no readable avatar tint)
+    expect(html).toContain('class="text-[12px] font-normal leading-4 bot-identity" data-bot-color="orange"');
     expect(html).not.toContain('data-bot-color="blue">still me');
     // the person's side stays the skin bubble, with no name label
     expect(html).toContain("bg-bubble-user");

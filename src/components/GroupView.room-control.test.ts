@@ -63,9 +63,10 @@ describe("a member's room reply", () => {
     ];
     render(transcript(messages));
     expect(host.textContent).toContain("Fixed: the title now reads Launch.");
-    expect(host.textContent).toContain("Worked for");
+    // Sagax draws the fold as its quiet step row, "Worked 8s" (ActivityRun)
+    expect(host.textContent).toContain("Worked 8s");
     expect(host.textContent).not.toContain("Good, correct layer id");
-    const toggle = [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Worked for"))!;
+    const toggle = [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Worked 8s"))!;
     flushSync(() => toggle.click());
     expect(host.textContent).toContain("Good, correct layer id");
     // the notes open above the answer
@@ -76,7 +77,7 @@ describe("a member's room reply", () => {
     render(transcript([ask, note("n1", "I'll check my own work history…", 2_000), note("n2", "Good, correct layer id…", 3_000)]));
     expect(host.textContent).toContain("I'll check my own work history");
     expect(host.textContent).toContain("Good, correct layer id");
-    expect(host.textContent).not.toContain("Worked for");
+    expect(host.textContent).not.toContain("Worked");
   });
 });
 

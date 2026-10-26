@@ -97,7 +97,7 @@ import { ManageMembersPanel } from "./ManageMembersPanel";
 import { GroupAvatarStack, GroupPanel, PanelSection } from "./GroupPanel";
 import { NudgeLine } from "./NudgeLine";
 import { ConversationRoutineToggle } from "./RoutineToggleLine";
-import { groupActivityRuns, isHiddenStatusActivity, isStatusActivity, type ActivityTranscriptItem } from "@/lib/activity-runs";
+import { groupActivityRuns, isHiddenStatusActivity, isStatusActivity, roomTurnFolds, type ActivityTranscriptItem } from "@/lib/activity-runs";
 import { collapseBotExchanges, commIsBotDm, startsNewStretch, visibleEdge, type ExchangeRun } from "@/lib/bot-exchange";
 import { foldCollapsedEntry, voiceCallPlan, voiceCallVisibleSpan } from "@/lib/voice-call-transcript";
 import { VoiceCallCard } from "./VoiceCallCard";
@@ -508,11 +508,20 @@ export const Transcript = memo(function Transcript({
   // Bot-to-bot lines become one chip per run first. A shared room's replies
   // to people stay inline; only a pair channel, a peer line, or a room
   // request collapses.
+  // A settled member turn reads as its final message: its working notes fold
+  // into one reversible row above it, so teammates never take a note for the
+  // answer.
+  const folds = useMemo(() => roomTurnFolds(messages), [messages]);
+  const showDigests = showToolCallsEnabled(state.config);
   const items = useMemo(() => {
     const plan = voiceCallPlan(transcript);
     const seen = new Set<string>();
+    // A digest that draws nothing is no row either, so the reply after it
+    // still opens its speaker's cluster and carries the name.
     const visible = withoutDeadThreadChips(messages, owners).filter((message) =>
-      message.kind !== "activity" || (!isHiddenStatusActivity(message) && roomActivityVisible(message, showToolCalls)));
+      !folds.hiddenIds.has(message.id) &&
+      (message.kind !== "digest" || showDigests) &&
+      (message.kind !== "activity" || (!isHiddenStatusActivity(message) && roomActivityVisible(message, showToolCalls))));
     const collapsed = collapseBotExchanges(visible, {
       pairChannel,
       members: members.map((member) => ({ id: member.id, name: member.name, color: member.color })),
@@ -544,7 +553,7 @@ export const Transcript = memo(function Transcript({
     // tool steps are already out; a folded run with Tool calls off draws nothing.
     return collapseGotoLines(listed, (item) =>
       item.kind === "run" && !showToolCalls && !item.messages.some((step) => shownCwWidget(step.tool))) as RoomItem[];
-  }, [messages, showToolCalls, pairChannel, members, transcript, owners]);
+  }, [messages, showToolCalls, showDigests, folds, pairChannel, members, transcript, owners]);
   const windowIds = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   // Seen by: each participant once, under the last line they have read.
   const seen = useMemo(() => {
@@ -895,6 +904,7 @@ export const Transcript = memo(function Transcript({
             )
           ) : null;
         if (!row) return divider && <div key={m.id} className="contents">{divider}</div>;
+        const fold = folds.byTerminalId.get(m.id);
         return (
           <div key={m.id} className="contents">
             {newDay && <TranscriptDate at={m.at} />}
@@ -904,6 +914,32 @@ export const Transcript = memo(function Transcript({
                 <ClusterLabel bot={memberOf(m.from.botId)} name={m.from.name} color={m.from.color} />
               )}
               {person && newCluster && <RoomPersonLabel name={person.name} initials={person.initials} avatarUrl={person.avatarUrl} personId={person.personId} onOpen={(personId) => dispatch({ type: "openPersonPanel", personId })} />}
+              {fold && (
+                <ActivityRun
+                  messages={fold.messages}
+                  elapsedMs={fold.elapsedMs}
+                  focusedId={focusedId}
+                  nameOf={botNames(state.bots)}
+                  renderStep={() => null}
+                  renderMessage={(note) => (
+                    <div className="contents" data-mid={note.id}>
+                      <RoomTextMessage
+                        group={group}
+                        message={note}
+                        members={members}
+                        transcript={transcript}
+                        emerging={false}
+                        eager={false}
+                        mine={false}
+                        joinsAbove={false}
+                        joinsBelow={false}
+                        onReply={onReply}
+                        reactionSelf={reactionSelf}
+                      />
+                    </div>
+                  )}
+                />
+              )}
               {row}
               {seen.has(m.id) && <SeenByRow faces={seen.get(m.id)!} end={mine} time={formatTime} />}
             </div>

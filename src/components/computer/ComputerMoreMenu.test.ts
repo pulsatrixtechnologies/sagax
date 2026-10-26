@@ -38,8 +38,11 @@ describe("computer panel layout", () => {
 
   it("merges Take control and Open live desktop into one main button", () => {
     expect(source.match(/data-computer-open-desktop/g)).toHaveLength(1);
-    // Take control stays only on the bot's help request card
-    expect(source.match(/t\("computer\.takeControl"\)/g)).toHaveLength(1);
+    // Take control stays only on the bot's help request card, which is now the
+    // sign-in request banner (SignInRequestCard), not a row of the panel
+    expect(source.match(/t\("computer\.takeControl"\)/g)).toBeNull();
+    const card = readFileSync(new URL("../SignInRequestCard.tsx", import.meta.url), "utf8");
+    expect(card.match(/t\("computer\.takeControl"\)/g)).toHaveLength(1);
     for (const id of ["two-desktops", "sleep", "works-on", "delete-vm"]) expect(source).toContain(`id: "${id}"`);
   });
 

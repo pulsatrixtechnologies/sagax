@@ -184,7 +184,8 @@ describe("MemoryUpkeepCard", () => {
     const on = render(createElement(MemoryUpkeepCard, { enabled: true, status: null, tidying: false, onToggle: noop, onTidy: noop, rooms }));
     expect(on).toContain("Learn from group chats");
     expect(on).toContain("fewer people can see than the bot never feeds its memory");
-    expect(on).toContain('aria-label="Learn from group chats"');
+    // Sagax's SwitchRow: the switch is named by the label that wraps it
+    expect(on).toMatch(/<label[^>]*>(?:(?!<\/label>).)*Learn from group chats(?:(?!<\/label>).)*role="switch"/s);
     const failed = render(createElement(MemoryUpkeepCard, { enabled: true, status: null, tidying: false, onToggle: noop, onTidy: noop, rooms: { ...rooms, error: "Could not save the group chat setting." } }));
     expect(failed).toContain('role="alert"');
     const off = render(createElement(MemoryUpkeepCard, { enabled: false, status: null, tidying: false, onToggle: noop, onTidy: noop, rooms }));
@@ -196,9 +197,12 @@ describe("MemoryUpkeepCard", () => {
     const line = "can't make the background model call this needs, so it won't learn anything from group chats";
     const cannot = render(createElement(MemoryUpkeepCard, { enabled: true, status: { enabled: true, modelSteps: false }, tidying: false, onToggle: noop, onTidy: noop, rooms }));
     expect(cannot).toContain(line);
-    // the line sits with the group chat switch, before the card's own note
-    expect(cannot.indexOf(line)).toBeLessThan(cannot.indexOf("can't make the quick background model call upkeep uses"));
-    expect(cannot).not.toContain("Claude and chat-model engines");
+    // the line sits with the group chat switch (Sagax keeps the card's own
+    // "limited" note under the upkeep switch, above it)
+    expect(cannot.indexOf(line)).toBeGreaterThan(cannot.indexOf("Learn from group chats"));
+    expect(cannot.indexOf(line)).toBeGreaterThan(cannot.indexOf("can't make the quick background model call upkeep uses"));
+    // Sagax keeps its own limited note (botPanel.memory.noSteps), once
+    expect(cannot.split("can't make the quick background model call upkeep uses").length).toBe(2);
     const can = render(createElement(MemoryUpkeepCard, { enabled: true, status: { enabled: true, modelSteps: true }, tidying: false, onToggle: noop, onTidy: noop, rooms }));
     expect(can).toContain("Learn from group chats");
     expect(can).not.toContain(line);

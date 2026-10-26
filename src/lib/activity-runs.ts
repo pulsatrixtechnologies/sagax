@@ -160,6 +160,34 @@ function assistantTurnFolds(messages: Message[]): {
   return { byAnchorId, hiddenIds };
 }
 
+/** A room's settled turns, folded above their final message: in a room every
+ * member's working notes would otherwise read as one reply each (teammates
+ * took them for the answer). Keyed by the final (terminal) message, which
+ * stays in the transcript; the notes leave the room's rows and open from
+ * one "Worked" row above it. A turn still running keeps every line. */
+export function roomTurnFolds(messages: Message[]): {
+  byTerminalId: Map<string, { messages: Message[]; elapsedMs: number }>;
+  hiddenIds: Set<string>;
+} {
+  const { byAnchorId, hiddenIds } = assistantTurnFolds(messages);
+  const notes = new Map<string, Message[]>();
+  const terminals = new Map<string, string>();
+  for (const message of messages) {
+    if (hiddenIds.has(message.id) && message.turnId) {
+      const list = notes.get(message.turnId) ?? [];
+      list.push(message);
+      notes.set(message.turnId, list);
+    }
+    if (message.role === "bot" && message.kind === "text" && message.turnId && message.turnTerminal) terminals.set(message.turnId, message.id);
+  }
+  const byTerminalId = new Map<string, { messages: Message[]; elapsedMs: number }>();
+  for (const fold of byAnchorId.values()) {
+    const terminalId = terminals.get(fold.turnId);
+    if (terminalId) byTerminalId.set(terminalId, { messages: notes.get(fold.turnId) ?? [], elapsedMs: fold.elapsedMs });
+  }
+  return { byTerminalId, hiddenIds };
+}
+
 /** How long a stretch of steps ran: from the first start to the last end.
  * Undefined while a step still runs or when nothing says. */
 function stepSpan(messages: Message[]): number | undefined {

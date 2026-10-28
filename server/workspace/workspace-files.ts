@@ -16,6 +16,7 @@ import { lstatSync, readdirSync, realpathSync, statSync, type Stats } from "node
 import { dirname, join, sep } from "node:path";
 
 import { readAtRestSync } from "../encryption/content-at-rest.ts";
+import { formatFileBytes } from "../../shared/format-bytes.ts";
 import { READABLE_HIDDEN_SEGMENTS } from "../../shared/readable-hidden.ts";
 
 import { RULE_SETS_DIR, RULES_FILE, RULES_MAX_BYTES, RULES_MAX_LINES, effectiveRulesText, listRuleSets } from "../rules/rule-sets.ts";
@@ -102,9 +103,7 @@ export function listDocs(botId: string): DocSummary[] {
 }
 
 export function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return formatFileBytes(bytes);
 }
 
 /** The per-turn documents index: never the documents themselves. Empty when

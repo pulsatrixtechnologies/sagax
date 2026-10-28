@@ -1,4 +1,5 @@
 import { isCitationAttachment, serializeCitation, type CitationAttachment } from "./citations.ts";
+import { formatFileBytes } from "../../shared/format-bytes.ts";
 export { dataContextFor, withPageContext, type DataContext, type DataViewContext } from "../../shared/data-context.ts";
 
 // What is attached to the next message: text too long for the input or a
@@ -744,9 +745,7 @@ export function pasteSummary(a: { lines: number; size: number }): string {
 }
 
 export function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return formatFileBytes(bytes);
 }
 
 /** The prompt the bot receives: what was typed, then one block per

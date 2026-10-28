@@ -16,6 +16,9 @@ import { botActClasses } from "../../shared/step-up.ts";
  * the organization). Never "anything this bot does". */
 export type ActRuleCandidate = { tool: "sagax_settings" | "sagax_act"; scope: Record<string, string>; description: string };
 
+/** Not shared/canonical-json.ts. A missing field stays in the digest as
+ * null (`{"dropped":null}`). The package form omits it. Stored rules
+ * compare this digest, so the two must not be swapped. */
 function canonical(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value ?? null);
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;

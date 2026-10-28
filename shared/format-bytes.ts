@@ -2,6 +2,14 @@
  * keeps its own wording. `formatBytes` is the locale ladder ("1,5 Ko").
  * The memory adapter supplies memoryText and stops at kilobytes. */
 
+/** Composer chips and the docs index: "512 B", "1.5 KB", "2.0 MB".
+ * A gibibyte stays in megabytes ("1024.0 MB"). Not formatArchiveBytes. */
+export function formatFileBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /** Archive trees: "512 B", "1.5 KB", "2.0 MB", "1.0 GB". */
 export function formatArchiveBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

@@ -20,6 +20,7 @@ import {
   RULES_TEMPLATE,
   docSummary,
   docsIndexPrompt,
+  formatSize,
   isForgotten,
   loadRules,
   readWorkspaceText,
@@ -164,6 +165,11 @@ describe("rules_update", () => {
 });
 
 describe("docs/", () => {
+  it("prints a file size the same way as a composer chip, and stops at megabytes", () => {
+    expect(formatSize(1536)).toBe("1.5 KB");
+    expect(formatSize(1024 ** 3)).toBe("1024.0 MB");
+  });
+
   it("summarises a document by its first heading, else its first line", () => {
     expect(docSummary("---\ntitle: x\n---\n\n# Onboarding\n\nSteps")).toBe("Onboarding");
     expect(docSummary("<!-- c -->\nPrice list for 2026\n")).toBe("Price list for 2026");

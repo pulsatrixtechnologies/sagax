@@ -502,6 +502,10 @@ export interface OrgUsageAggregate {
   /** 2026-10-08: the engine instance the turns ran on (the ledger row's
    * instanceId), null when the row did not know it. */
   engine: string | null;
+  /** The settled model, never the bot's current selection. */
+  model: string | null;
+  /** The person whose credentials paid; null when not recorded. */
+  payerPrincipalId: string | null;
   ownerPrincipalId: string | null;
   speaker: OrgUsageSpeaker;
   turns: number;
@@ -535,7 +539,7 @@ function speakerKey(speaker: OrgUsageSpeaker): string {
 
 const ACCESS_KINDS = new Set<string>(ACCESS_VIAS);
 
-/** Rows grouped by (UTC day, bot, speaker), filtered by `visible` (the
+/** Rows grouped by (UTC day, bot, speaker, engine, model, payer), filtered by `visible` (the
  * caller's reach), oldest day first, at most `max` groups. */
 export function aggregateOrgUsage(
   rows: readonly UsageRow[],
@@ -550,7 +554,11 @@ export function aggregateOrgUsage(
     if (!visible({ speaker, ownerPrincipalId })) continue;
     const day = row.at.slice(0, 10);
     const engine = typeof row.instanceId === "string" && row.instanceId && row.instanceId !== "unknown" ? row.instanceId : null;
-    const key = `${day}|${row.botId}|${speakerKey(speaker)}|${engine ?? ""}`;
+    const model = typeof row.model === "string" && row.model.trim() && row.model !== "unknown" ? row.model : null;
+    const payerPrincipalId = typeof row.payerPrincipalId === "string" && row.payerPrincipalId ? row.payerPrincipalId : null;
+    // JSON keeps a model or principal containing a separator distinct.
+    const payer = payerPrincipalId?.toLowerCase() ?? (row.access === "org-key" ? "~org" : null);
+    const key = JSON.stringify([day, row.botId, speakerKey(speaker), engine, model, payer]);
     let group = groups.get(key);
     if (!group) {
       if (groups.size >= max) {
@@ -558,7 +566,7 @@ export function aggregateOrgUsage(
         continue;
       }
       group = {
-        day, botId: row.botId, botName: row.botName || row.botId, engine, ownerPrincipalId, speaker,
+        day, botId: row.botId, botName: row.botName || row.botId, engine, model, payerPrincipalId, ownerPrincipalId, speaker,
         turns: 0, input: 0, output: 0, cachedInput: 0, costUsd: null, estimatedUsd: null,
         access: { subscription: 0, "owner-key": 0, "speaker-key": 0, "org-key": 0, server: 0, unknown: 0 },
       };

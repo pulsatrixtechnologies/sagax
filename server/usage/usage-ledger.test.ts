@@ -278,9 +278,11 @@ describe("organization admin usage (slice 7)", () => {
       base({ trigger: { kind: "user", principalId: P1 }, access: "org-key", ownerPrincipalId: P2 }),
       base({ trigger: { kind: "user", principalId: P1 }, access: "bogus" as never, ownerPrincipalId: P2 }),
     ];
-    const [row] = aggregateOrgUsage(rows, () => true).rows;
+    const all = aggregateOrgUsage(rows, () => true).rows;
     // every key the Perspicax console reads is still there (sagax-usage.tsx)
-    expect(row!.access).toEqual({ subscription: 1, "owner-key": 0, "speaker-key": 1, "org-key": 1, server: 0, unknown: 1 });
+    const totals = Object.fromEntries(Object.keys(all[0]!.access).map((via) => [via, all.reduce((n, r) => n + r.access[via as keyof typeof r.access], 0)]));
+    expect(totals).toEqual({ subscription: 1, "owner-key": 0, "speaker-key": 1, "org-key": 1, server: 0, unknown: 1 });
+    expect(all.map((r) => [r.payerPrincipalId, r.access["org-key"], r.access.unknown])).toEqual([[P1, 0, 0], [null, 1, 0], [null, 0, 1]]);
   });
 
   it("groups by day, bot and speaker with the access split, and filters by reach", () => {
@@ -305,6 +307,26 @@ describe("organization admin usage (slice 7)", () => {
     expect(narrowed.rows.map((r) => r.speaker.kind)).toEqual(["person", "person"]);
     // the row cap truncates
     expect(aggregateOrgUsage(rows, () => true, 2)).toMatchObject({ truncated: true });
+  });
+
+  it("keeps settled models and payers apart without changing totals or reach", () => {
+    const rows = [
+      base({ trigger: { kind: "user", principalId: P1 }, model: "small", payerPrincipalId: P1, costUsd: 0.1 }),
+      base({ trigger: { kind: "user", principalId: P1 }, model: "large", payerPrincipalId: P1, costUsd: 0.2, costSource: "estimated" }),
+      base({ trigger: { kind: "user", principalId: P1 }, model: "small", payerPrincipalId: P2, costUsd: 0.3 }),
+      base({ trigger: { kind: "user", principalId: P1 }, model: "small", payerPrincipalId: P1.toUpperCase(), costUsd: 0.4 }),
+      base({ trigger: { kind: "user", principalId: P2 }, model: "private", payerPrincipalId: P2, costUsd: 9 }),
+    ];
+    const visible = aggregateOrgUsage(rows, ({ speaker }) => speaker.kind === "person" && speaker.principalId === P1);
+    expect(visible).toEqual({ truncated: false, rows: [
+      expect.objectContaining({ model: "small", payerPrincipalId: P1, turns: 2, costUsd: 0.5, estimatedUsd: null }),
+      expect.objectContaining({ model: "large", payerPrincipalId: P1, turns: 1, costUsd: 0.2, estimatedUsd: 0.2 }),
+      expect.objectContaining({ model: "small", payerPrincipalId: P2, turns: 1, costUsd: 0.3, estimatedUsd: null }),
+    ] });
+    expect(visible.rows.reduce((n, r) => n + (r.costUsd ?? 0), 0)).toBe(1);
+    const old = aggregateOrgUsage([base({ model: "unknown", payerPrincipalId: undefined })], () => true).rows;
+    expect(old[0]).toMatchObject({ model: null, payerPrincipalId: null, turns: 1 });
+    expect(aggregateOrgUsage(rows, () => true, 2).truncated).toBe(true);
   });
 
   it("reads YYYY-MM-DD ranges: 30 days by default, at most 92, never reversed", () => {

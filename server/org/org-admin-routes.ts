@@ -303,6 +303,8 @@ export function wireUsageRow(row: OrgUsageAggregate, person: (principalId: strin
     estimatedUsd: row.estimatedUsd,
     access: row.access,
     engine: row.engine,
+    model: row.model,
+    payerPrincipalId: row.payerPrincipalId,
   };
 }
 

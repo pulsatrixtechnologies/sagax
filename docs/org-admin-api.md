@@ -916,8 +916,13 @@ Each test has 10 s. Audited `connections.test`.
 
 ## Usage and cost
 
-`GET usage` (above) carries `engine` on each row; the console groups by
-engine, person, bot or day and exports CSV from the rows it holds.
+`GET usage` (above) carries the settled `engine`, `model` and
+`payerPrincipalId` on each row. Model and payer are separate aggregation
+dimensions alongside UTC day, bot, speaker and engine, so regrouping and payer
+filters preserve the ledger totals. A missing model or payer stays `null`;
+the bot's current model or owner never fills it. Existing visibility applies
+before aggregation and the existing row limit still reports `truncated`.
+`estimatedUsd` is the estimated part of `costUsd`, not an additional charge.
 
 ## Logs
 

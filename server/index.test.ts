@@ -8878,44 +8878,71 @@ describe("harness HTTP API", () => {
     // can set it, so the shipped default is reported off and never written
     expect(untouched.features?.sharedComputers).toBeUndefined();
 
-    const saved = await api("PATCH", "/api/config", {
-      features: { skillAuthoring: false },
-    });
-    expect(saved.status).toBe(200);
-    expect(saved.body.features).toEqual({ browser: false, skillAuthoring: false, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false });
-
-    const disk = JSON.parse(readFileSync(join(home, ".sagax", "config.json"), "utf8"));
-    // Earlier browser coverage may have persisted its own toggle. Opting out
-    // of skill authoring must preserve those sibling settings, not erase them.
-    expect(disk.features).toEqual({ ...untouched.features, skillAuthoring: false });
-
-    // the opt-out survives patches to sibling flags
-    const tools = await api("PATCH", "/api/config", { features: { showToolCalls: true } });
-    expect(tools.status).toBe(200);
-    expect(tools.body.features).toEqual({ browser: false, skillAuthoring: false, skillsLibrary: true, showToolCalls: true, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false });
-
-    // Templates is an experimental opt-in, persisted like its siblings
-    const templates = await api("PATCH", "/api/config", { features: { templates: true } });
-    expect(templates.status).toBe(200);
-    expect(templates.body.features.templates).toBe(true);
-    expect(templates.body.features.showToolCalls).toBe(true);
-    expect((await api("PATCH", "/api/config", { features: { templates: false } })).body.features.templates).toBe(false);
-
-    // an opted-out workspace refuses the skill routes a turn would otherwise reach
-    const bot = (await api("POST", "/api/bots", {})).body.bot;
     try {
-      const token = await mintTestCapability(BASE, bot.id, bot.threadId, { skillAuthoring: true });
-      const listing = await fetch(
-        `${BASE}/api/internal/skills?fromBotId=${encodeURIComponent(bot.id)}&fromThreadId=${encodeURIComponent(bot.threadId)}`,
-        { headers: { authorization: `Bearer ${token}` } },
-      );
-      expect(listing.status).toBe(403);
-      expect((await listing.json() as { error: string }).error).toBe("skill authoring is not enabled in Settings");
-    } finally {
-      await api("DELETE", `/api/bots/${bot.id}`);
-    }
+      const saved = await api("PATCH", "/api/config", {
+        features: { skillAuthoring: false },
+      });
+      expect(saved.status).toBe(200);
+      expect(saved.body.features).toEqual({ browser: false, skillAuthoring: false, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false });
 
-    await api("PATCH", "/api/config", { features: { skillAuthoring: true, showToolCalls: false } });
+      const disk = JSON.parse(readFileSync(join(home, ".sagax", "config.json"), "utf8"));
+      // Earlier browser coverage may have persisted its own toggle. Opting out
+      // of skill authoring must preserve those sibling settings, not erase them.
+      expect(disk.features).toEqual({ ...untouched.features, skillAuthoring: false });
+
+      // the opt-out survives patches to sibling flags
+      const tools = await api("PATCH", "/api/config", { features: { showToolCalls: true } });
+      expect(tools.status).toBe(200);
+      expect(tools.body.features).toEqual({ browser: false, skillAuthoring: false, skillsLibrary: true, showToolCalls: true, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false });
+
+      // Templates is an experimental opt-in, persisted like its siblings
+      const templates = await api("PATCH", "/api/config", { features: { templates: true } });
+      expect(templates.status).toBe(200);
+      expect(templates.body.features.templates).toBe(true);
+      expect(templates.body.features.showToolCalls).toBe(true);
+      expect((await api("PATCH", "/api/config", { features: { templates: false } })).body.features.templates).toBe(false);
+
+      // An opted-out workspace still lets a turn read its skills (discovery is
+      // independent of authoring), but refuses to stage a write, even when the
+      // turn's own capability allows authoring.
+      const bot = (await api("POST", "/api/bots", {})).body.bot;
+      try {
+        const token = await mintTestCapability(BASE, bot.id, bot.threadId, { skillAuthoring: true });
+        const listing = await fetch(
+          `${BASE}/api/internal/skills?fromBotId=${encodeURIComponent(bot.id)}&fromThreadId=${encodeURIComponent(bot.threadId)}`,
+          { headers: { authorization: `Bearer ${token}` } },
+        );
+        expect(listing.status).toBe(200);
+        const page = await listing.json() as {
+          skills: unknown[]; total: number; offset: number; nextOffset: number | null; incomplete: unknown; staged: unknown[];
+        };
+        expect(Array.isArray(page.skills)).toBe(true);
+        expect(typeof page.total).toBe("number");
+        expect(page.offset).toBe(0);
+        expect(page.nextOffset === null || typeof page.nextOffset === "number").toBe(true);
+        expect(page).toHaveProperty("incomplete");
+        expect(Array.isArray(page.staged)).toBe(true);
+
+        const stage = await fetch(`${BASE}/api/internal/skills/stage`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            fromBotId: bot.id,
+            fromThreadId: bot.threadId,
+            action: "create",
+            source: "conversation",
+            gist: "Use opted-out-skill safely.",
+            skill_md: "---\nname: opted-out-skill\ndescription: Use opted-out-skill safely.\n---\n\n# opted-out-skill\n\nDo the reviewed thing.\n",
+          }),
+        });
+        expect(stage.status).toBe(403);
+        expect((await stage.json() as { error: string }).error).toBe("skill authoring is not enabled in Settings");
+      } finally {
+        await api("DELETE", `/api/bots/${bot.id}`);
+      }
+    } finally {
+      await api("PATCH", "/api/config", { features: { skillAuthoring: true, showToolCalls: false, templates: false } });
+    }
   });
 
   it("refuses to delete a bot while it owns an active channel turn", async () => {

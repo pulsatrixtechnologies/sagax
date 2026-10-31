@@ -11998,7 +11998,7 @@
   "capabilities.received.prompt": "dans le prompt",
   "capabilities.received.indexCap": "(index {kb} Ko, {max} max)",
   "capabilities.received.indexCut": "L'index des compétences du prompt est plein : {omitted} laissées de côté (plafond {kb} Ko, {max} compétences).",
-  "capabilities.received.indexPartial": "La recherche dans les plugins est partielle, car sa limite de lecture est atteinte. Les dossiers des plugins activés peuvent contenir d'autres références.",
+  "capabilities.received.indexPartial": "La recherche dans les plugins est partielle. Les dossiers des plugins activés peuvent contenir d'autres références.",
   "capabilities.received.none": "aucun sur {engine}",
   "capabilities.received.claudeAccountOnly": "compte Claude seulement",
   "capabilities.received.grokAccountOnly": "compte Grok seulement",

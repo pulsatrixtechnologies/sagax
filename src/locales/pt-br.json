@@ -2611,5 +2611,6 @@
   "routines.rename.empty": "Uma rotina precisa de um nome.",
   "routines.rename.hint": "Clique duas vezes para renomear",
   "bulkEdit.mixedOpen": "These fields differ across the selected bots: {fields}. Controls start empty for them; only what you set is written.",
-  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot."
+  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot.",
+  "capabilities.received.indexPartial": "A descoberta de plugins está incompleta. Pode haver outras referências nas pastas dos plugins ativados."
 }

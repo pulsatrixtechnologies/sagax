@@ -11998,7 +11998,7 @@
   "capabilities.received.prompt": "in the prompt",
   "capabilities.received.indexCap": "(index {kb} KB, {max} max)",
   "capabilities.received.indexCut": "The skills index of the prompt is full: {omitted} left out (cap {kb} KB, {max} skills).",
-  "capabilities.received.indexPartial": "Plugin discovery is partial because its scan budget was reached. Additional references may exist in enabled plugin folders.",
+  "capabilities.received.indexPartial": "Plugin discovery is partial. Additional references may exist in enabled plugin folders.",
   "capabilities.received.none": "none on {engine}",
   "capabilities.received.claudeAccountOnly": "Claude account only",
   "capabilities.received.grokAccountOnly": "Grok account only",

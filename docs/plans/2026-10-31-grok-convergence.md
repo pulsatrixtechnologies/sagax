@@ -80,6 +80,41 @@ existing skill/workspace scope tests, including the organization room MCP
 fixture with different owner and speaker libraries.
 Fixtures own temporary data and fake engines. No user app data is involved.
 
+The partial-scan receipt is also exercised in the existing Capabilities
+gallery with `?partial=1`, at 700 px dark and 390 px light in French. The
+before/after captures are in
+[`../screenshots/grok-convergence/`](../screenshots/grok-convergence/README.md).
+
+## Delegated follow-up briefs
+
+Grok CLI inspected the UI and Claude CLI inspected runtime delivery on
+2026-10-31. Their reports refine the later lots; they do not establish
+runtime or visual parity with Grok Bot. Claude also regenerated the stale
+internal help index for this lot using the repository generator.
+
+The next UI PR should address Pages and chat together. `ChatView.tsx`
+currently mounts the Page surface in an absolute overlay, and
+`open-page.ts` keeps the conversation mounted below it. Reuse that retained
+conversation as a visible side pane on wide screens. Preserve page context
+on send, scroll restoration, comments, annotations, versions, sharing,
+separate windows, themes and conversation split views. `composer-placeholder.ts`
+needs the open page's title. Acceptance includes keyboard/focus, narrow
+screens and opening from the chat, Library and a separate window. Capture
+both products before deciding the final pane proportions.
+
+The next reliability PR should first reproduce a provider-limit failure
+after `delegate_bot` has queued work. The legacy `turn.completed` subscriber
+in `server/index.ts` calls `discardDelegations` on a failed turn, while
+`limit-failover-host.ts` may resend the request on another engine. Whether
+that sequence loses work has not been demonstrated; verify subscriber order
+and reproduce it before changing cancellation behavior. Keep intentional
+Stop semantics: queued children are cancelled, running children report, and
+the stopped requester is not resumed. Acceptance covers exactly one child
+dispatch/result, reconnect, one restart during a tool call and concurrent
+sends. Preserve `oneWay`, `relay`, `joins`, `done_when`, person-scoped
+credentials and existing organization rules. Migrate remaining legacy
+delivery paths to the runtime incrementally after those reproductions.
+
 ## References
 
 - [Grok Bot changelog](https://x.ai/changelog/bot)

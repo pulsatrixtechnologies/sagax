@@ -25,6 +25,15 @@ describe("engineReceipt: what each engine receives", () => {
     expect([...ENGINES_WITHOUT_FILES].sort()).toEqual(["cerebras", "grok", "groq", "minimax", "mistral", "openai-compat"]);
   });
 
+  it("API engines receive managed skills only with their retrieval tools, never plugin files or Flow", () => {
+    for (const kind of ENGINES_WITHOUT_FILES) {
+      expect(engineReceipt(kind, "skill", { customMcp: true, skillDiscovery: true, skills: true }).skills).toBe("prompt");
+      expect(engineReceipt(kind, "skill", { customMcp: false, skillDiscovery: false, skills: true }).nothing).toBe(true);
+      expect(engineReceipt(kind, "plugin", { customMcp: true, skillDiscovery: true, skills: true }).nothing).toBe(true);
+      expect(engineReceipt(kind, "flow", { customMcp: true, skillDiscovery: true, skills: true }).nothing).toBe(true);
+    }
+  });
+
   it("MCP follows customMcp: mounted by an engine with files, proxied by Sagax for one without", () => {
     expect(engineReceipt("claudeAgent", "mcp", { customMcp: true, mcp: true })).toEqual({ mcp: "mounted", nothing: false });
     expect(engineReceipt("codex", "mcp", { customMcp: true, mcp: true })).toEqual({ mcp: "mounted", nothing: false });

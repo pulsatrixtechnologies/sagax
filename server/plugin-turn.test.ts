@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { BotPluginError, type GitRunner } from "./bot-plugins.ts";
 import { botPluginsWithMarketplaces } from "./testing/plugin-stores.ts";
-import { claudePluginDirs, pluginTurnFiles, pluginTurnPrompt } from "./plugin-turn.ts";
+import { claudePluginDirs, pluginTurnFiles, pluginTurnInventory, pluginTurnPrompt } from "./plugin-turn.ts";
 
 const dirs: string[] = [];
 const temp = () => {
@@ -99,5 +99,46 @@ describe("plugin skills and commands on a turn", () => {
     const prompt = pluginTurnPrompt({ driverKind: "pi", files });
     expect(prompt).toContain("/workspace/sagax-plugins/packing/skills/ship/SKILL.md");
     expect(prompt).not.toContain(root);
+  });
+
+  it("discovers commands and agents even after more than forty skills", () => {
+    const root = temp();
+    for (let i = 0; i < 45; i++) write(root, `skills/skill-${i}/SKILL.md`, `---\nname: skill-${i}\ndescription: Verify\n---\nCheck.`);
+    write(root, "commands/track.md", "Track the parcel");
+    write(root, "agents/clerk.md", "Read the label");
+    const files = pluginTurnFiles([root]);
+    expect(files).toHaveLength(47);
+    expect(files.some((file) => file.kind === "command")).toBe(true);
+    expect(files.some((file) => file.kind === "agent")).toBe(true);
+  });
+
+  it("bounds the work across all plugins and explicitly marks a partial inventory", () => {
+    const roots = [temp(), temp()];
+    for (const root of roots) for (let i = 0; i < 300; i++) write(root, `skills/skill-${i}/SKILL.md`, `---\nname: skill-${i}\ndescription: Verify\n---\nCheck.`);
+    const inventory = pluginTurnInventory(roots, (dir) => `plugins/${roots.indexOf(dir)}`);
+    expect(inventory.files).toHaveLength(512);
+    expect(inventory.truncated).toBe(true);
+    expect(inventory.files.every((file) => !file.path.includes("\\"))).toBe(true);
+  });
+
+  it("bounds bytes read across the selected plugin files", () => {
+    const root = temp();
+    for (let i = 0; i < 15; i++) write(root, `skills/big-${i}/SKILL.md`, `---\nname: big-${i}\ndescription: Verify\n---\n${"x".repeat(200_000)}`);
+    const inventory = pluginTurnInventory([root]);
+    expect(inventory.files.length).toBeLessThan(15);
+    expect(inventory.truncated).toBe(true);
+  });
+
+  it("reports a partial inventory when one reference exceeds the per-file limit", () => {
+    const root = temp();
+    write(root, "skills/oversized/SKILL.md", "x".repeat(256 * 1024 + 1));
+    expect(pluginTurnInventory([root])).toEqual({ files: [], truncated: true });
+  });
+
+  it("charges empty roots against the same global work budget", () => {
+    const root = temp();
+    const inventory = pluginTurnInventory(Array.from({ length: 2000 }, () => root));
+    expect(inventory.files).toEqual([]);
+    expect(inventory.truncated).toBe(true);
   });
 });

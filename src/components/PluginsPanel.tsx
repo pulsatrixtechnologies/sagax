@@ -711,7 +711,7 @@ export function PluginsPanel() {
     if (!what) return { row: null };
     const row = { label: t("capabilities.detail.engines"), value: enginesLine(what.form, what.parts) };
     const engine = botCapabilities.data?.engine;
-    const warn = scopeBot && engine && engineGetsNothing(engine.kind, what.form, what.parts);
+    const warn = scopeBot && engine && engineGetsNothing(engine.kind, what.form, { ...what.parts, skillDiscovery: Boolean(botCapabilities.data?.promptIndex) });
     return {
       row,
       notice: warn ? (

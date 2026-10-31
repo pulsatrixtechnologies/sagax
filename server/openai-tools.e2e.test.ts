@@ -88,7 +88,7 @@ it.each(["openaiCompat", "groq"] as const)("%s runs structured MCP calls through
     res.writeHead(200, { "content-type": "text/event-stream" });
     if (toolResult) {
       res.end(frame({ content: ["allow", "selected"].includes(scenario) ? "The artifact was created." : "The operation was denied." }, "stop") + "data: [DONE]\n\n");
-    } else if (["text", "ordinary", "scope-empty", "tools-off"].includes(scenario)) {
+    } else if (["text", "ordinary", "skill-read-off", "skill-list-off", "scope-empty", "tools-off"].includes(scenario)) {
       res.end(frame({ content: scenario === "text" ? JSON.stringify(call) : "Hello from the fixture." }, "stop") + "data: [DONE]\n\n");
     } else {
       // Arguments arrive across events, and are only valid JSON when joined.
@@ -131,7 +131,9 @@ it.each(["openaiCompat", "groq"] as const)("%s runs structured MCP calls through
     await api("POST", `/api/instances/${instanceId}/refresh-models`, {});
     const mcpScript = join(fixture.info.dataDir, "fixture-mcp.mjs");
     writeFileSync(mcpScript, MCP_FIXTURE);
-    for (const mode of ["allow", "deny", "cancel", "text", "ordinary", "selected", "scope-empty", "tools-off"]) {
+    await api("PATCH", "/api/config", { features: { skillsLibrary: true } });
+    await api("POST", "/api/me/skills-library", { text: "---\nname: managed-review\ndescription: Review the synthetic artifact.\n---\nUse the fixture checklist.\n" });
+    for (const mode of ["allow", "deny", "cancel", "text", "ordinary", "selected", "skill-read-off", "skill-list-off", "scope-empty", "tools-off"]) {
       scenario = mode;
       const artifact = join(fixture.info.dataDir, `${mode}-artifact.txt`);
       const startupMarker = join(fixture.info.dataDir, `${mode}-mcp-started.txt`);
@@ -154,6 +156,9 @@ it.each(["openaiCompat", "groq"] as const)("%s runs structured MCP calls through
       if (mode === "selected" || mode === "scope-empty") {
         await api("PATCH", `/api/bots/${bot.id}`, { toolScope: { allow: mode === "selected" ? [`mcp:${mode}:write_file`] : [] } });
       }
+      if (mode === "skill-read-off" || mode === "skill-list-off") await api("PATCH", `/api/bots/${bot.id}`, {
+        toolScope: { deny: [`mcp:agents:${mode === "skill-read-off" ? "workspace_read" : "skills_list"}`] },
+      });
       const memoryDirectory = join(fixture.info.dataDir, "workspaces", bot.id);
       mkdirSync(memoryDirectory, { recursive: true });
       writeFileSync(join(memoryDirectory, "MEMORY.md"), "# Memory\n- Fixture prefers concise replies.\n");
@@ -175,6 +180,11 @@ it.each(["openaiCompat", "groq"] as const)("%s runs structured MCP calls through
       }
       const messages = await control(["messages", "--bot", bot.id, "--task", bot.activeTaskId, "--limit", "20"]);
       const first = delivered(requests[before]!);
+      const managedSkills = !["selected", "skill-read-off", "skill-list-off", "scope-empty", "tools-off"].includes(mode);
+      expect(first.all.includes("capability-skills/me/skills/managed-review/SKILL.md"), mode).toBe(managedSkills);
+      const receipt = await api("GET", `/api/bots/${bot.id}/capabilities`);
+      expect(receipt.items.find((item: any) => item.key === "skill:me:managed-review")?.engine.skills, mode).toBe(managedSkills ? "prompt" : "none");
+      expect(Boolean(receipt.promptIndex), mode).toBe(managedSkills);
       expectMemoryInTurn(requests[before]!, "Write the verification artifact if a structured tool is requested.");
       if (mode === "ordinary") {
         // the earlier modes' bots are this bot's teammates
@@ -241,6 +251,7 @@ it.each(["openaiCompat", "groq"] as const)("%s runs structured MCP calls through
         await control(["send-channel", "--channel", group.id, "--text", "Greet this room."]);
         expect((await control(["wait", "--channel", group.id, "--timeout", "20"])).status).toBe("settled");
         const room = delivered(requests.at(-1)!);
+        expect(room.all.includes("managed-review/SKILL.md")).toBe(managedSkills);
         expectMemoryInTurn(requests.at(-1)!, `Greet this room.\n\n(Reply to the conversation above as API tool ${mode}.)`);
         expect(room.all).not.toContain("File locations for this bot");
         expect(room.all).not.toContain("update it with your file tools");

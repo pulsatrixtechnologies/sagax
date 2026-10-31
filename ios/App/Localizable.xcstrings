@@ -211,6 +211,12 @@
         "fr": { "stringUnit": { "state": "translated", "value": "Rôle inconnu" } }
       }
     },
+    "Plugin discovery is partial. Additional references may exist in enabled plugin folders.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Plugin discovery is partial. Additional references may exist in enabled plugin folders." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "La recherche dans les plugins est partielle. Les dossiers des plugins activés peuvent contenir d'autres références." } }
+      }
+    },
     "The skills index is full: %lld skills left out of the prompt.": {
       "localizations": {
         "en": { "stringUnit": { "state": "translated", "value": "The skills index is full: %lld skills left out of the prompt." } },

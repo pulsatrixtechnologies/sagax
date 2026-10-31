@@ -187,18 +187,24 @@ export function resolveWorkspaceFile(botId: string, input: unknown, opts: { read
 
 /** An installed plugin of the bot, readable as `plugins/<name>/...`. */
 export interface ReadablePlugin { name: string; dir: string }
+export interface ReadableLibrarySkill { name: string; file: string }
 
 /** The file a bot's own read names: its workspace first (hidden revision
  * and manifest folders included), else `plugins/<name>/<file>` inside one of
  * its installed plugins, with the same proofs (no traversal, no link out,
  * a regular file). */
-export function resolveOwnReadable(botId: string, input: unknown, plugins: readonly ReadablePlugin[] = [], personalSkillsRoot?: string): { path: string; absolute: string; stat: Stats } {
+export function resolveOwnReadable(botId: string, input: unknown, plugins: readonly ReadablePlugin[] = [], personalSkillsRoot?: string, librarySkills: readonly ReadableLibrarySkill[] = []): { path: string; absolute: string; stat: Stats } {
   // Only these server-environment mounts have absolute aliases. Their
   // authority is the current turn's selected folders, never caller input.
   const aliased = typeof input === "string"
     ? input.replace(/^\/workspace\/sagax-plugins\//, "plugins/").replace(/^\/workspace\/sagax-capability-skills\/me\//, "capability-skills/me/")
     : input;
   const shown = normaliseWorkspacePath(aliased, { readHidden: true });
+  if (shown.startsWith("skill-library/")) {
+    const skill = librarySkills.find((candidate) => shown === `skill-library/${candidate.name}/SKILL.md`);
+    if (!skill) throw new WorkspacePathError(`no such file: ${shown}`, 404);
+    return resolveWorkspaceFile(botId, shown, { root: dirname(skill.file), prefix: `skill-library/${skill.name}/` });
+  }
   if (shown.startsWith("plugins/")) {
     const match = /^plugins\/([^/]+)\/./.exec(shown);
     const plugin = match ? plugins.find((candidate) => candidate.name === match[1]) : undefined;
@@ -214,8 +220,8 @@ export function resolveOwnReadable(botId: string, input: unknown, plugins: reado
 
 /** A text file of the workspace for workspace_read: up to
  * WORKSPACE_READ_MAX_BYTES from `offset` (bytes), refusing binary files. */
-export function readWorkspaceText(botId: string, input: unknown, offset = 0, plugins: readonly ReadablePlugin[] = [], personalSkillsRoot?: string): { path: string; text: string; bytes: number; offset: number; nextOffset: number | null } {
-  const file = resolveOwnReadable(botId, input, plugins, personalSkillsRoot);
+export function readWorkspaceText(botId: string, input: unknown, offset = 0, plugins: readonly ReadablePlugin[] = [], personalSkillsRoot?: string, librarySkills: readonly ReadableLibrarySkill[] = []): { path: string; text: string; bytes: number; offset: number; nextOffset: number | null } {
+  const file = resolveOwnReadable(botId, input, plugins, personalSkillsRoot, librarySkills);
   const buffer = readAtRestSync(file.absolute);
   if (buffer.subarray(0, 8192).includes(0)) throw new WorkspacePathError(`${file.path} is not a text file`);
   const start = Math.max(0, Math.min(Math.trunc(offset) || 0, buffer.length));

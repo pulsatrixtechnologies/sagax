@@ -344,7 +344,7 @@ struct PhoneBotCapabilities: View {
                     receiptLine("Not served", receipt.notServed)
                 }
                 if let index = list.promptIndex, index.cuts {
-                    ProfileFooter(text: "The skills index is full: \(index.omitted) skills left out of the prompt.")
+                    ProfileFooter(text: index.incomplete ? "Plugin discovery is partial. Additional references may exist in enabled plugin folders." : "The skills index is full: \(index.omitted) skills left out of the prompt.")
                 }
                 ProfileSectionLabel(text: "Capabilities")
                     .padding(.top, Theme.Profile.cardGap + 4)

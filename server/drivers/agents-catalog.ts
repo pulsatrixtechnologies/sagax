@@ -1505,8 +1505,11 @@ const toolDefinitions = (externalRuntime: boolean) => [
   {
     name: "skills_list",
     description:
-      "List this bot's imported skills (enabled and disabled) and any staged skill writes still waiting for the user's decision. Enabled rows include description and SKILL.md path so you can load a skill shortened or left out of the prompt index. Use this before skill_manage to avoid duplicate names. Listing does not enable anything.",
-    inputSchema: { type: "object", additionalProperties: false, properties: {} },
+      "Search this turn's bot, Me and plugin skills, commands and agents. Enabled rows include descriptions and workspace_read paths. Listing changes nothing. Use nextOffset to continue.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {
+      query: { type: "string", maxLength: 200, description: "Name, description, source or scope." },
+      offset: { type: "integer", minimum: 0, description: "Previous nextOffset; default 0." },
+    } },
   },
   {
     name: "skill_manage",
@@ -1755,7 +1758,6 @@ export const CLAIM_TOOLS = [
 });
 if (CLAIM_TOOLS.map((tool) => tool.name).join() !== CLAIM_TOOL_NAMES.join()) throw new Error("CLAIM_TOOLS and CLAIM_TOOL_NAMES disagree");
 
-const SKILL_TOOL_NAMES = new Set(["skills_list", "skill_manage"]);
 // A workspace with computer sharing off refuses the routes behind these two,
 // so they must not be advertised at all: a model that sees a tool it cannot
 // use spends turns discovering that.
@@ -1844,7 +1846,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "propose_routine", "propose_routine_action", "list_routines", "run_routine",
   "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_bot_deletion", "archive_bot",
   "propose_team_memory", "propose_page", "page_comments", "create_room", "manage_room", "create_bot",
-  "add_mcp_server", "skill_manage", "skills_list", "rules_update", "docs_update",
+  "add_mcp_server", "skill_manage", "rules_update", "docs_update",
   "launch_cloud_agent", "list_cloud_agents", "get_cloud_agent", "cancel_cloud_agent", "archive_cloud_agent",
   "cloud_agent_follow_up", "cloud_agent_transcript", "find_cloud_agent_by_pr", "list_cloud_agent_artifacts",
   "save_artifact", "update_artifact", "delete_artifact", "list_artifacts",
@@ -2073,7 +2075,7 @@ function coreCatalogTools(profile: CatalogProfile) {
     (tool.name !== "group_memory_update" || profile.groupMemory === true));
   const AUTHORING_TOOLS = profile.skillAuthoring
     ? BOT_SCOPED_TOOLS
-    : BOT_SCOPED_TOOLS.filter((tool) => !SKILL_TOOL_NAMES.has(tool.name));
+    : BOT_SCOPED_TOOLS.filter((tool) => tool.name !== "skill_manage");
   const SHAREABLE_TOOLS = profile.sharedComputers
     ? AUTHORING_TOOLS
     : AUTHORING_TOOLS.filter((tool) => !SHARED_COMPUTER_TOOL_NAMES.has(tool.name));

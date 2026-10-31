@@ -15800,7 +15800,8 @@
       "model.auto.chain.waiting": "c63718427ba64777e7f43ff9be70ef8a9bacd9a226121ab22199d2bde0cb7174",
       "model.effect.payer.me": "2744ccd10c7533bd736ad890f9dd5cab2adb27b07d500b9493f29cdc420cb2e0",
       "providers.organizationUpdate": "bf54c7267840d3a7b02cff84bb9f343f450b5fb035a3f83b904f821095a1b477",
-      "model.effect.model.pending": "3254b3941bbac6cf879e97cd19cbb05c892e282e606180bb4318e90490432783"
+      "model.effect.model.pending": "3254b3941bbac6cf879e97cd19cbb05c892e282e606180bb4318e90490432783",
+      "capabilities.received.indexPartial": "6b8e0929488731dd57825832bf3496aa5f8687e9cdb7f4e721c8cf8253a379ee"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

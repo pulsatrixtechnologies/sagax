@@ -4,8 +4,8 @@
 // the skills section of the turn prompt: a name, a short description and an
 // absolute path. Bodies never ride the prompt. Hooks and LSP stay out of discovery, and a secret file is
 // not listed. Nothing here is executed.
-import { lstatSync, readdirSync, readFileSync, type Dirent } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { closeSync, lstatSync, openSync, opendirSync, readSync, type Dirent } from "node:fs";
+import { join, posix, relative, sep } from "node:path";
 
 import { redactSecretsInText } from "../shared/redact.ts";
 import { parseSkillMd } from "../shared/skill-md.ts";
@@ -20,7 +20,10 @@ export interface PluginTurnFile {
 const SKIP_DIRS = new Set(["hooks", "bin", "monitors", ".git", "node_modules", ".claude-plugin", "credentials", "secrets"]);
 const FOLDER_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const COMMAND_NAME = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,80}$/;
-const MAX_FILES = 40;
+const SCAN_MAX_FILES = 512;
+const SCAN_MAX_ENTRIES = 4096;
+const SCAN_MAX_BYTES = 2 * 1024 * 1024;
+interface ScanBudget { entries: number; bytes: number; truncated: boolean }
 const MAX_DEPTH = 3;
 const MAX_BYTES = 256 * 1024;
 const DESC_MAX = 240;
@@ -44,11 +47,21 @@ function clip(text: string, fallback: string): string {
   return (cleaned || fallback).slice(0, DESC_MAX);
 }
 
-function readText(path: string): string | null {
+function readText(path: string, budget: ScanBudget): string | null {
+  let fd: number | undefined;
   try {
-    return readFileSync(path, "utf8");
+    const remaining = Math.min(MAX_BYTES, SCAN_MAX_BYTES - budget.bytes);
+    const buffer = Buffer.alloc(remaining + 1);
+    fd = openSync(path, "r");
+    const bytes = readSync(fd, buffer, 0, buffer.length, 0);
+    budget.bytes += bytes;
+    if (bytes > remaining) { budget.truncated = true; return null; }
+    return buffer.subarray(0, bytes).toString("utf8");
   } catch {
+    budget.truncated = true;
     return null;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
 }
 
@@ -78,17 +91,26 @@ function commandDescription(text: string, fallback: string): string {
   return fallback;
 }
 
-function consider(dir: string, base: string, folder: "skills" | "commands" | "agents", depth: number, out: PluginTurnFile[]): void {
-  if (out.length >= MAX_FILES || depth > MAX_DEPTH) return;
+function consider(dir: string, base: string, folder: "skills" | "commands" | "agents", depth: number, out: PluginTurnFile[], budget: ScanBudget): void {
+  if (depth > MAX_DEPTH) return;
   let entries: Dirent<string>[];
   try {
-    entries = readdirSync(dir, { withFileTypes: true, encoding: "utf8" });
+    const handle = opendirSync(dir);
+    entries = [];
+    try {
+      let entry: Dirent<string> | null;
+      while ((entry = handle.readSync()) !== null) {
+        if (budget.entries >= SCAN_MAX_ENTRIES) { budget.truncated = true; break; }
+        budget.entries++;
+        entries.push(entry);
+      }
+    } finally { handle.closeSync(); }
   } catch {
     return;
   }
   entries.sort((a, b) => a.name.localeCompare(b.name));
   for (const entry of entries) {
-    if (out.length >= MAX_FILES) return;
+    if (out.length >= SCAN_MAX_FILES) { budget.truncated = true; return; }
     if (entry.isSymbolicLink()) continue;
     const path = join(dir, entry.name);
     let stat: ReturnType<typeof lstatSync>;
@@ -100,15 +122,16 @@ function consider(dir: string, base: string, folder: "skills" | "commands" | "ag
     if (stat.isSymbolicLink()) continue;
     if (stat.isDirectory()) {
       if (SKIP_DIRS.has(entry.name) || depth + 1 > MAX_DEPTH) continue;
-      consider(path, base, folder, depth + 1, out);
+      consider(path, base, folder, depth + 1, out, budget);
       continue;
     }
-    if (!stat.isFile() || stat.size > MAX_BYTES || isSecretFile(entry.name)) continue;
+    if (!stat.isFile() || isSecretFile(entry.name)) continue;
     const rel = relative(base, path);
     if (rel.split(sep).length > MAX_DEPTH) continue;
     if (folder === "skills") {
       if (entry.name !== "SKILL.md") continue;
-      const text = readText(path);
+      if (stat.size > MAX_BYTES || budget.bytes + stat.size > SCAN_MAX_BYTES) { budget.truncated = true; continue; }
+      const text = readText(path, budget);
       if (text === null) continue;
       const parsed = parseSkillMd(text);
       const parent = rel.split(sep).slice(0, -1).pop() ?? "";
@@ -122,7 +145,8 @@ function consider(dir: string, base: string, folder: "skills" | "commands" | "ag
     if (!entry.name.endsWith(".md") || rel === "README.md") continue;
     const name = rel.slice(0, -3).split(sep).join(":");
     if (!COMMAND_NAME.test(name)) continue;
-    const text = readText(path);
+    if (stat.size > MAX_BYTES || budget.bytes + stat.size > SCAN_MAX_BYTES) { budget.truncated = true; continue; }
+    const text = readText(path, budget);
     if (text === null) continue;
     if (folder === "agents") {
       const declared = text.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1]?.match(/^name:\s*["']?([^"'\r\n]+?)["']?\s*$/m)?.[1];
@@ -134,7 +158,11 @@ function consider(dir: string, base: string, folder: "skills" | "commands" | "ag
   }
 }
 
-function walk(root: string, folder: "skills" | "commands" | "agents", out: PluginTurnFile[]): void {
+function walk(root: string, folder: "skills" | "commands" | "agents", out: PluginTurnFile[], budget: ScanBudget): void {
+  // Empty/missing roots cost probes too. Otherwise thousands of empty
+  // installs could bypass the global directory-entry and byte budgets.
+  if (budget.entries >= SCAN_MAX_ENTRIES) { budget.truncated = true; return; }
+  budget.entries++;
   const base = join(root, folder);
   let stat: ReturnType<typeof lstatSync>;
   try {
@@ -143,27 +171,34 @@ function walk(root: string, folder: "skills" | "commands" | "agents", out: Plugi
     return;
   }
   if (stat.isSymbolicLink() || !stat.isDirectory()) return;
-  consider(base, base, folder, 1, out);
+  consider(base, base, folder, 1, out, budget);
 }
 
 /** Skills, then commands, then agents, stable by path. A disabled plugin is absent because
  * its folder is not in `dirs`. Symlinks are skipped and never resolved. */
 export function pluginTurnFiles(dirs: readonly string[], pathForDir?: (dir: string) => string): PluginTurnFile[] {
+  return pluginTurnInventory(dirs, pathForDir).files;
+}
+
+/** One global work budget across all selected plugins. A partial inventory
+ * must be reported by prompt/list callers; pagination is not a scan bound. */
+export function pluginTurnInventory(dirs: readonly string[], pathForDir?: (dir: string) => string): { files: PluginTurnFile[]; truncated: boolean } {
   const files: PluginTurnFile[] = [];
+  const budget: ScanBudget = { entries: 0, bytes: 0, truncated: false };
   for (const dir of dirs) {
+    if (files.length >= SCAN_MAX_FILES || budget.entries >= SCAN_MAX_ENTRIES) { budget.truncated = true; break; }
     const start = files.length;
-    walk(dir, "skills", files);
-    walk(dir, "commands", files);
-    walk(dir, "agents", files);
+    walk(dir, "skills", files, budget);
+    walk(dir, "commands", files, budget);
+    walk(dir, "agents", files, budget);
     if (pathForDir) {
       const shown = pathForDir(dir);
-      for (const file of files.slice(start)) file.path = join(shown, relative(dir, file.path));
+      for (const file of files.slice(start)) file.path = posix.join(shown, relative(dir, file.path).split(sep).join("/"));
     }
-    if (files.length >= MAX_FILES) break;
   }
   const order = { skill: 0, command: 1, agent: 2 } as const;
   files.sort((a, b) => (a.kind === b.kind ? a.path < b.path ? -1 : a.path > b.path ? 1 : 0 : order[a.kind] - order[b.kind]));
-  return files.slice(0, MAX_FILES);
+  return { files, truncated: budget.truncated };
 }
 
 /** Claude loads the folders themselves. Other engines get the file index. */

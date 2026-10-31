@@ -14,6 +14,24 @@ Before claiming a server or conversation change works, follow
 [`docs/verification/README.md`](docs/verification/README.md). Always launch an
 isolated fixture; never verify mutations against the user's live app or data.
 
+## Scoped skill discovery (2026-10-31)
+
+The turn, preview, Capabilities `promptIndex` and `skills_list` share
+`scopedSkillInventory` and `server/skill-discovery.ts`. Its aggregate prompt
+budget includes Me and plugin references; native Claude plugins stay native.
+`skills_list` reads independently of skill authoring and pages by stable
+scoped identity. Never restore the plugin scanner's silent 40-file cutoff.
+Keep disabled descriptions and staged gists out of discovery, and derive
+Me from the turn speaker.
+API bot/Me/Library indexes require both allowed retrieval tools; tools-off
+gets no managed index. Preserve native file paths separately from aliases.
+The plugin scan has a global work budget and reports a partial inventory
+explicitly in the prompt, list and receipt, never as an exhaustive catalog.
+`workspace_read` also resolves exact `skill-library/<name>/SKILL.md` aliases,
+rechecking the current enabled assignment, integrity and shadow winner.
+Contract, preserved strengths and subsequent lots:
+[`docs/plans/2026-10-31-grok-convergence.md`](docs/plans/2026-10-31-grok-convergence.md).
+
 ## Peer completion: done_when and no ack-as-done (2026-10-30, #1818)
 
 `coordinate_bots` accepts optional `done_when`. Structured clauses the harness

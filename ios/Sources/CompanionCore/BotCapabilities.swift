@@ -38,16 +38,18 @@ public struct BotCapabilityList: Decodable, Hashable, Sendable {
         public var skills: Int
         public var maxSkills: Int
         public var omitted: Int
+        public var incomplete: Bool
 
-        private enum CodingKeys: String, CodingKey { case bytes, maxBytes, skills, maxSkills, omitted }
+        private enum CodingKeys: String, CodingKey { case bytes, maxBytes, skills, maxSkills, omitted, incomplete }
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             func int(_ key: CodingKeys) -> Int { (try? c.decode(Int.self, forKey: key)) ?? 0 }
             bytes = int(.bytes); maxBytes = int(.maxBytes); skills = int(.skills); maxSkills = int(.maxSkills); omitted = int(.omitted)
+            incomplete = (try? c.decode(Bool.self, forKey: .incomplete)) ?? false
         }
 
         /// The index left skills out: the screens say so.
-        public var cuts: Bool { omitted > 0 }
+        public var cuts: Bool { incomplete || omitted > 0 || bytes > maxBytes || skills > maxSkills }
     }
 
     public var engine: Engine

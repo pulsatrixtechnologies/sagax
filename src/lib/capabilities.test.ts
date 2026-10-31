@@ -46,7 +46,7 @@ describe("capabilities (desktop)", () => {
     // a plugin for everyone: its servers and library skills
     expect(enginesLine("plugin", { mcp: true, skills: true, indexOnly: true })).toBe("Claude: everything · Codex: everything · Grok: server · API: server");
     expect(enginesLine("mcp", { mcp: true })).toBe("Claude: everything · Codex: everything · Grok: everything · API: everything");
-    expect(enginesLine("skill", { skills: true, indexOnly: true })).toBe("Claude: everything · Codex: everything · Grok: nothing · API: nothing");
+    expect(enginesLine("skill", { skills: true, indexOnly: true })).toBe("Claude: everything · Codex: everything · Grok: everything · API: everything");
     expect(receiptWords({ skills: "prompt", mcp: "none", nothing: false })).toBe("skills");
   });
 
@@ -54,6 +54,8 @@ describe("capabilities (desktop)", () => {
     expect(engineGetsNothing("grok", "plugin", { skills: true, commands: true })).toBe(true);
     expect(engineGetsNothing("codex", "plugin", { skills: true })).toBe(false);
     expect(engineGetsNothing("grok", "plugin", { mcp: true, skills: true, indexOnly: true })).toBe(false);
+    expect(engineGetsNothing("openai-compat", "skill", { skills: true, skillDiscovery: false })).toBe(true);
+    expect(engineGetsNothing("openai-compat", "skill", { skills: true, skillDiscovery: true })).toBe(false);
     // nothing brought (contents not read yet): no warning
     expect(engineGetsNothing("grok", "plugin", {})).toBe(false);
   });
@@ -66,5 +68,6 @@ describe("capabilities (desktop)", () => {
     expect(indexCut(capabilityFixture().promptIndex)).toBe(true);
     expect(indexCut({ bytes: 1_000, maxBytes: 4_000, skills: 3, maxSkills: 30, omitted: 0 })).toBe(false);
     expect(indexCut(undefined)).toBe(false);
+    expect(indexCut({ bytes: 100, maxBytes: 4_000, skills: 0, maxSkills: 30, omitted: 0, incomplete: true })).toBe(true);
   });
 });

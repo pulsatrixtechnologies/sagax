@@ -49,7 +49,7 @@ import { open as openFileHandle, rm as removeDirectory } from "node:fs/promises"
 import { hostname, userInfo } from "node:os";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { ToolResults, TOOL_RESULT_MAX_CHARS } from "./tool-results.ts";
-import { basename, dirname, join, sep } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 import { authorizeExternalRuntime, externalRuntimeIsActive, type ExternalRuntimeGrant } from "./external-runtime.ts";
 
 import { z } from "zod";
@@ -678,9 +678,8 @@ import {
   removeSkill,
   setSkillEnabled,
   skillPackageStamps,
-  skillsSystemPrompt,
-  skillsPromptIndex,
-  enabledSkillFile,
+  syncSkillLinks,
+  resolvedSkillFiles,
   expandSkillCommandTurnText,
   skillCommandInline,
   stageSkillWrite,
@@ -1138,8 +1137,9 @@ import { createAccountRoutes, type PerspicaxDeletion } from "./routes/account.ts
 import { ACCOUNT_REAUTH_PATH, AccountReauth, perspicaxDeletion } from "./account-reauth.ts";
 import { createRegistrySearch } from "./plugin-registry.ts";
 import { BotPluginError, BotPlugins, marketplaceAllowed, migrateBotMarketplaces, marketplacePolicySchema, normalizePolicyEntry, parseGitSource, readPluginContents, type MarketplacePolicy, type PluginContents } from "./bot-plugins.ts";
-import { pluginTurnFiles, pluginTurnPrompt } from "./plugin-turn.ts";
-import { engineServerMcp, perspicaxServerName, personalMcpPrecheck, serverMcpAsPerson, turnPluginPromptDirs } from "./turn-mounts.ts";
+import { pluginTurnInventory } from "./plugin-turn.ts";
+import { orderedSkillDiscovery, skillDiscoveryAvailable, skillDiscoveryIndex, skillDiscoveryPage, type DiscoveredSkill } from "./skill-discovery.ts";
+import { engineServerMcp, perspicaxServerName, personalMcpPrecheck, serverMcpAsPerson } from "./turn-mounts.ts";
 import { resolveBotCapabilities, type CapabilityInputs, type InstallationServerInput } from "./capabilities.ts";
 import { createBotCapabilitiesRoutes, type BotCapabilitiesAnswer } from "./routes/bot-capabilities.ts";
 import type { BotCapabilities } from "../shared/capabilities.ts";
@@ -1158,7 +1158,7 @@ import { fileInsideRoots } from "./imessage-db.ts";
 import { chooseHookTarget, commandWithFiles, dispatchLifecycleHooks, lifecycleEvent, type HookRun, type HookTarget } from "./lifecycle-hooks.ts";
 import { spawnPcHook } from "./lifecycle-hook-exec.ts";
 import { GithubConnect, githubGitEnvironment, githubSandboxArgv, githubTokenKind } from "./github-connect.ts";
-import { SANDBOX_PLUGINS_DIR, syncPluginsToSandbox } from "./sandbox-plugins.ts";
+import { syncPluginsToSandbox } from "./sandbox-plugins.ts";
 import { OrgGithubTokens } from "./org-github-tokens.ts";
 import { GithubCredentials, LOCAL_OWNER, ORG_OWNER } from "./github-credentials.ts";
 import { OrgBotSecrets } from "./org-bot-secrets.ts";
@@ -8885,19 +8885,44 @@ function personalSkillInputs(bot: { id: string; ownerUserId?: unknown }, princip
   const organizationNames = new Set(listBotSkills(store.bot(bot.id)!).filter((skill) => skill.enabled && skill.source.startsWith("org:")).map((skill) => skill.name));
   return personalSkills.list(person).map((skill) => ({ ...skill, shadowed: organizationNames.has(skill.name) }));
 }
-function scopedSkillsPrompt(bot: BotRecord, principal?: string): string {
-  const names = new Set(personalSkillInputs(bot, principal).filter((skill) => skill.enabled && !skill.shadowed).map((skill) => skill.name));
-  return skillsSystemPrompt(bot.id, skillsLibraryEnabled(cfg) ? (store.bot(bot.id)?.assignedSkills ?? bot.assignedSkills) : undefined, names);
-}
-/** The same enabled skills and commands, for a workspace engine that is not Claude. Claude uses --plugin-dir instead. */
-function pluginSkillsForTurn(bot: { id: string; ownerUserId?: unknown }, instance: { driverKind: string } | undefined, principal?: string): string {
-  if (!instance) return "";
-  const folders = scopedPluginFolders(bot, principal).filter((plugin) => plugin.scope !== "organization" || installationPlugins.enabledPlugins().some((copy) => copy.dir === plugin.dir));
-  const dirs = turnPluginPromptDirs(instance.driverKind, folders.map((plugin) => plugin.dir));
+/** The same verified sources and scope winners feed the prompt, receipt and
+ * read-only discovery. Internal callers pass the active speaker explicitly. */
+function scopedSkillInventory(bot: BotRecord, instance: { driverKind: string } | null | undefined, principal?: string): { rows: DiscoveredSkill[]; incomplete: boolean } {
   const person = IDENTITY.kind === "perspicax" ? principal ?? effectiveBotOwner(bot) : localPrincipalId();
-  const personal = supportsWorkspaceFiles(instance.driverKind) && skillsLibraryEnabled(cfg) && person ? personalSkills.prompt(person, IDENTITY.kind === "perspicax", new Set(personalSkillInputs(bot, principal).filter((skill) => skill.shadowed).map((skill) => skill.name))) : "";
-  const shownPaths = IDENTITY.kind === "perspicax" ? new Map(folders.map((plugin) => [plugin.dir, `${SANDBOX_PLUGINS_DIR}/${plugin.name}`])) : undefined;
-  return personal + (dirs.length ? pluginTurnPrompt({ driverKind: instance.driverKind, files: pluginTurnFiles(dirs, shownPaths ? (dir) => shownPaths.get(dir)! : undefined) }) : "");
+  const personal = person ? personalSkillInputs(bot, person).filter((skill) => !skill.shadowed) : [];
+  const personalNames = new Set(personal.filter((skill) => skill.enabled).map((skill) => skill.name));
+  const assigned = skillsLibraryEnabled(cfg) ? (store.bot(bot.id)?.assignedSkills ?? bot.assignedSkills) : undefined;
+  const rows: DiscoveredSkill[] = resolvedSkillFiles(bot.id, assigned).filter((skill) => !personalNames.has(skill.name)).map((skill) => {
+    const file = skill.file;
+    const local = file ? relative(workspaceDir(bot.id), file) : "";
+    const library = Boolean(file && (local === ".." || local.startsWith(".." + sep)));
+    const scope = skill.source.startsWith("org:") ? "organization" : library ? "library" : "bot";
+    return { id: `${scope}:skill:${skill.name}`, name: skill.name, kind: "skill", scope,
+      source: scope, enabled: skill.enabled && Boolean(file), editable: skill.editable,
+      ...(skill.enabled && file ? { description: skill.description, ...(IDENTITY.kind !== "perspicax" ? { filePath: file } : {}), path: library ? `skill-library/${skill.name}/SKILL.md` : local.split(sep).join("/") } : {}) };
+  });
+  for (const skill of personal) rows.push({ id: `person:skill:${skill.name}`, name: skill.name, kind: "skill", scope: "person", source: "Me",
+    enabled: skill.enabled, ...(skill.enabled ? { description: skill.description, filePath: join(IDENTITY.kind === "perspicax" ? "/workspace/sagax-capability-skills/me" : personalSkills.root(person), "skills", skill.name, "SKILL.md"), path: `capability-skills/me/skills/${skill.name}/SKILL.md` } : {}) });
+  if (instance && supportsWorkspaceFiles(instance.driverKind)) {
+    const folders = scopedPluginFolders(bot, person).filter((plugin) => plugin.scope !== "organization" || instance.driverKind === "claudeAgent" || installationPlugins.enabledPlugins().some((copy) => copy.dir === plugin.dir));
+    const byDir = new Map(folders.map((folder) => [folder.dir, folder]));
+    const byName = new Map(folders.map((folder) => [folder.name, folder]));
+    const inventory = pluginTurnInventory(folders.map((plugin) => plugin.dir), (dir) => `plugins/${byDir.get(dir)!.name}`);
+    for (const file of inventory.files) {
+      const plugin = byName.get(file.path.split("/")[1]!)!;
+      rows.push({ id: `${plugin.scope}:plugin:${plugin.name}:${file.kind}:${file.path}`, name: file.name, kind: file.kind,
+        scope: plugin.scope, source: plugin.name, enabled: true, description: file.description, path: file.path, filePath: IDENTITY.kind === "perspicax" ? file.path.replace(/^plugins\//, "/workspace/sagax-plugins/") : join(plugin.dir, ...file.path.split("/").slice(2)),
+        ...(instance.driverKind === "claudeAgent" ? { native: true } : {}) });
+    }
+    return { rows: orderedSkillDiscovery(rows), incomplete: inventory.truncated };
+  }
+  return { rows: orderedSkillDiscovery(rows), incomplete: false };
+}
+function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | null | undefined, principal?: string, managedTools = true): string {
+  const names = new Set(personalSkillInputs(bot, principal).filter((skill) => skill.enabled && !skill.shadowed).map((skill) => skill.name));
+  syncSkillLinks(bot.id, { excludeNames: names });
+  const inventory = scopedSkillInventory(bot, instance, principal);
+  return skillDiscoveryIndex(inventory.rows, inventory.incomplete && instance?.driverKind !== "claudeAgent", managedTools).text;
 }
 // ── a bot's capabilities: one resolved list (server/capabilities.ts) ──
 /** Everything a bot receives on top of its engine, for the person looking
@@ -8987,7 +9012,7 @@ function botCapabilitiesAs(
   const inputs: CapabilityInputs = {
     organization,
     bot: { id: bot.id, name: bot.name, ...(bot.mcpServers ? { mcpServers: bot.mcpServers } : {}), perspicaxProfiles: [...(bot.perspicax?.profiles ?? [])], ...(bot.assignedSkills ? { assignedSkills: bot.assignedSkills } : {}) },
-    engine: { instanceId: instance.instanceId, kind, label: instance.displayName ?? kind, customMcp: instance.adapter.capabilities.customMcp === true },
+    engine: { instanceId: instance.instanceId, kind, label: instance.displayName ?? kind, customMcp: instance.adapter.capabilities.customMcp === true, agentsMcp: skillDiscoveryAvailable(instance.adapter.capabilities.agentsMcp === true, bot.toolScope) },
     botPlugins: botPlugins.listPlugins(bot.id).map((plugin) => {
       const folder = botPlugins.installedFolder(bot.id, plugin);
       let contents: PluginContents = { skills: [], commands: [], agents: [] };
@@ -9040,7 +9065,7 @@ function botCapabilitiesAs(
       : listSkills(bot.id).map((skill) => ({ name: skill.name, description: skill.description, enabled: skill.enabled, origin: "private" as const, source: skill.source })),
     librarySkills: Object.values(readSkillLibraryIndex()).map((skill) => ({ name: skill.name, source: skill.source })),
     skillsLibrary: library,
-    ...(supportsWorkspaceFiles(kind) ? { promptIndex: skillsPromptIndex(bot.id, library ? bot.assignedSkills : undefined) } : {}),
+    ...(supportsWorkspaceFiles(kind) || skillDiscoveryAvailable(instance.adapter.capabilities.agentsMcp === true, bot.toolScope) ? { promptIndex: (() => { const inventory = scopedSkillInventory(bot, instance, principal); return skillDiscoveryIndex(inventory.rows, inventory.incomplete && kind !== "claudeAgent", skillDiscoveryAvailable(instance.adapter.capabilities.agentsMcp === true, bot.toolScope)).metrics; })() } : {}),
     roles: {
       catalog: organization ? (perspicaxDirectory?.profileCatalog() ?? []) : [],
       held: sub && perspicaxDirectory ? perspicaxDirectory.profilesOf(sub) : null,
@@ -9391,7 +9416,7 @@ function previewSystemPrompt(bot: BotRecord) {
     { id: "rules", label: "Rules (RULES.md)", text: rulesSystemPrompt(bot.id, { writes: agentsMounted }) },
     { id: "memory", label: "Memory", text: memoryPromptFor(bot, { managedWrites: agentsMounted, fileTools: Boolean(privateWorkspace) }) },
     { id: "docs", label: "Documents index", text: docsIndexPrompt(bot.id, { tools: agentsMounted ? "agents" : privateWorkspace ? "files" : "none" }) },
-    { id: "skills", label: "Skills index", text: privateWorkspace ? scopedSkillsPrompt(bot) + pluginSkillsForTurn(bot, instance) : "" },
+    { id: "skills", label: "Skills index", text: privateWorkspace || skillDiscoveryAvailable(agentsMounted, bot.toolScope) ? scopedSkillsPrompt(bot, instance, undefined, skillDiscoveryAvailable(agentsMounted, bot.toolScope)) : "" },
   ], instance?.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : undefined);
   const totalBytes = built.sections.reduce((n, s) => n + s.bytes, 0);
   return {
@@ -23619,7 +23644,7 @@ async function startTurn(
         { id: "docs", label: "Documents index", text: docsIndexPrompt(bot.id, { tools: integrations.agents ? "agents" : worksInWorkspace ? "files" : "none" }) },
         // liveBot was captured before awaited setup work; an assignment PUT
         // in that window must still reach this turn's prompt.
-        { id: "skills", label: "Skills index", text: privateWorkspace ? scopedSkillsPrompt(bot, orgSpeakerPrincipal(bot, speaker)) + pluginSkillsForTurn(bot, instance, orgSpeakerPrincipal(bot, speaker)) : "" },
+        { id: "skills", label: "Skills index", text: privateWorkspace || skillDiscoveryAvailable(Boolean(integrations.agents), toolScope) ? scopedSkillsPrompt(bot, instance, orgSpeakerPrincipal(bot, speaker), skillDiscoveryAvailable(Boolean(integrations.agents), toolScope)) : "" },
         { id: "skill-instructions", label: "Skill instructions", text: skillInstructions },
         { id: "playbooks", label: "Playbooks", text: packagePlaybooks },
         { id: "webhook", label: "Webhook provenance", text: opts?.automationSource === "webhook" ? WEBHOOK_PROMPT : "" },
@@ -26803,6 +26828,15 @@ async function runGroupMemberTurn(
     return true;
   }
   const internalGeneration = beginInternalCapabilityGeneration(threadId);
+  const roomRoutine = !roomSpeakerId && roomRoutineSpeaker(threadId) !== null;
+  const roomPrincipal = sandboxPrincipalForTurn({
+    botOwnerPrincipalId: effectiveBotOwner(bot),
+    routine: roomRoutine,
+    speakerPrincipalId: roomSpeakerId,
+    roomCreatorPrincipalId: group.createdBy ?? group.humanIds?.[0],
+  });
+  turnSpeakers.set(threadId, roomAccessSpeaker);
+  turnSpeakerPrincipals.set(threadId, roomPrincipal ?? "");
   if (roomGuestConfined) guestDrivenTurns.set(threadId, internalGeneration);
   // A room turn is never provably the owner's alone (server/lending-memory.ts).
   if (CLOUD_HOME) noteForeignTurn(bot.id, threadId, internalGeneration);
@@ -26892,13 +26926,6 @@ async function runGroupMemberTurn(
   if (roomAttachmentsHold) await roomAttachmentsHold;
   // Organization server: where this room turn's tools run (the person whose
   // message it answers), and their own attachments pointed there.
-  const roomRoutine = !roomSpeakerId && roomRoutineSpeaker(threadId) !== null;
-  const roomPrincipal = sandboxPrincipalForTurn({
-    botOwnerPrincipalId: effectiveBotOwner(bot),
-    routine: roomRoutine,
-    speakerPrincipalId: roomSpeakerId,
-    roomCreatorPrincipalId: group.createdBy ?? group.humanIds?.[0],
-  });
   let roomPlace = decideWorkplace({ desktopTargeted: false, routine: roomRoutine, principal: roomPrincipal, personAsked: Boolean(roomSpeakerId) });
   // (solo: no principal; an attached archive still gets its manifest)
   const roomPlaced = latestUser && !cardContinuation && !latestInBurst && (IDENTITY.kind !== "perspicax" || latestUser.sender?.id?.trim().toLowerCase() === roomPlace.principal)
@@ -26973,7 +27000,7 @@ async function runGroupMemberTurn(
   // one bot can never own two provider processes.
   const readyBot = store.bot(bot.id);
   if (!readyBot) return false;
-  toolScopeForTurn(readyBot.id);
+  const roomToolScope = toolScopeForTurn(readyBot.id);
   const readyGroup = store.group(group.id);
   const stillOwnsThread = readyGroup?.dm
     ? readyGroup.threadId === threadId
@@ -27466,7 +27493,7 @@ async function runGroupMemberTurn(
     })() },
     // readyBot was captured before awaited setup work; an assignment PUT in
     // that window must still reach this turn's prompt.
-    { id: "skills", label: "Skills index", text: workspace ? scopedSkillsPrompt(bot, roomPrincipal ?? undefined) + pluginSkillsForTurn(bot, instance, roomPrincipal ?? undefined) : "" },
+    { id: "skills", label: "Skills index", text: workspace || skillDiscoveryAvailable(Boolean(integrations.agents), roomToolScope) ? scopedSkillsPrompt(bot, instance, roomPrincipal ?? "", skillDiscoveryAvailable(Boolean(integrations.agents), roomToolScope)) : "" },
     { id: "skill-instructions", label: "Skill instructions", text: renderSkillInstructions(selectedSkills, { includeRoot: Boolean(workspace) }) },
     { id: "playbooks", label: "Playbooks", text: installedPlaybookInstructions(text, bot.playbooks) },
   ], roomStable || instance.driverKind === "claudeAgent"
@@ -27641,7 +27668,7 @@ async function runGroupMemberTurn(
         ...(engineCommand ? { harnessCommand: { name: engineCommand.command.name, args: engineCommand.args, ...(engineCommand.command.path ? { path: engineCommand.command.path } : {}) } } : {}),
         images: await fitTurnImagesForModel(turnImages, { language: languageOfPerson(roomSpeakerId) }),
         approvalMode: engineTurnLevel(readyBot, threadId, auditFullAccessTurn(readyBot, threadId, turnApprovalMode)),
-        toolScope: toolScopeForTurn(readyBot.id),
+        toolScope: roomToolScope,
         ...(roomGuestConfined ? { guestConfined: true, confinedWhy: confinedWhy(threadId) } : {}),
         system: roomSystem.text,
         systemStable: roomSystem.stable,
@@ -31112,7 +31139,7 @@ function turnConnectorsFor(bot: BotRecord, instance: Parameters<typeof withholdH
     } catch { /* unreadable: none listed */ }
   }
   const plugins = (pluginDirsFor(bot, instance, person).pluginDirs ?? []).map((dir) => basename(dir));
-  if (!plugins.length && pluginSkillsForTurn(bot, instance, person)) plugins.push(...scopedPluginFolders(bot, person).filter((plugin) => plugin.scope !== "organization").map((plugin) => plugin.name));
+  if (!plugins.length && supportsWorkspaceFiles(instance.driverKind)) plugins.push(...scopedPluginFolders(bot, person).filter((plugin) => plugin.scope !== "organization").map((plugin) => plugin.name));
   return turnConnectorsRecord({
     at: Date.now(),
     mounted: Object.keys(integrations.custom ?? {}),
@@ -44127,8 +44154,17 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
           // Its own files, skill revisions and installed plugins (2026-10-19):
           // on an organization server this is the bot's only file read.
           const person = IDENTITY.kind === "perspicax" ? turnSpeakerPrincipals.get(internalCapability.threadId) ?? "" : localPrincipalId();
+          // Resolve assignment, review state, integrity and scope winner again
+          // on every read. An old discovery result grants no continuing access.
+          const librarySkills = url.searchParams.get("path")?.startsWith("skill-library/") && skillsLibraryEnabled(cfg)
+            ? (() => {
+              const name = /^skill-library\/([a-z0-9-]+)\/SKILL.md$/.exec(url.searchParams.get("path") ?? "")?.[1];
+              if (!name || personalSkillInputs(internalSender, person).some((skill) => skill.enabled && !skill.shadowed && skill.name === name)) return [];
+              const skill = resolvedSkillFiles(internalSender.id, internalSender.assignedSkills).find((entry) => entry.name === name);
+              return skill?.file && relative(workspaceDir(internalSender.id), skill.file).startsWith(".." + sep) ? [{ name, file: skill.file }] : [];
+            })() : [];
           const read = readWorkspaceText(internalSender.id, url.searchParams.get("path") ?? "", Number(url.searchParams.get("offset") ?? 0),
-            scopedPluginFolders(internalSender, person), skillsLibraryEnabled(cfg) && person ? personalSkills.root(person) : undefined);
+            scopedPluginFolders(internalSender, person), skillsLibraryEnabled(cfg) && person ? personalSkills.root(person) : undefined, librarySkills);
           markWorkspaceUse(internalSender.id, [read.path]);
           return json(res, 200, read);
         } catch (error) {
@@ -45411,24 +45447,17 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         });
       }
       if (method === "GET" && path === "/api/internal/skills") {
-        if (!personalFeatureOn("skillAuthoring", skillAuthoringEnabled(cfg), vaultPrincipalForThread(internalCapability.threadId))) return json(res, 403, { error: "skill authoring is not enabled in Settings" });
-        if (!internalCapability.skillAuthoring) {
-          return json(res, 403, { error: "skill authoring is not enabled for this turn" });
-        }
         const from = internalSender;
-        const fromThreadId = internalCapability.threadId;
-        if (!connectorThread(from.id, fromThreadId)) {
-          return json(res, 403, { error: "source conversation does not belong to sender" });
-        }
-        const assigned = skillsLibraryEnabled(cfg) ? from.assignedSkills : undefined;
+        if (!connectorThread(from.id, internalCapability.threadId)) return json(res, 403, { error: "source conversation does not belong to sender" });
+        const query = url.searchParams.get("query") ?? "";
+        const offset = Number(url.searchParams.get("offset") ?? 0);
+        if (query.length > 200 || !Number.isSafeInteger(offset) || offset < 0) return json(res, 400, { error: "query must be at most 200 characters and offset a nonnegative integer" });
+        const person = IDENTITY.kind === "perspicax" ? turnSpeakerPrincipals.get(internalCapability.threadId) ?? "" : localPrincipalId();
+        const instance = runningTurnInstance(from, internalCapability.threadId);
+        const inventory = scopedSkillInventory(from, instance, person);
         return json(res, 200, {
-          // Enabled skills carry path so skills_list can point the model at
-          // SKILL.md when the prompt index shortened or omitted a row (#1748).
-          skills: listBotSkills(from).map((skill) => {
-            if (!skill.enabled) return skill;
-            const path = enabledSkillFile(from.id, skill.name, assigned);
-            return path ? { ...skill, path } : skill;
-          }),
+          ...skillDiscoveryPage(inventory.rows, query, offset),
+          incomplete: inventory.incomplete,
           staged: listStagedSkillWrites(from.id).map(stagedSkillListing),
         });
       }

@@ -1574,10 +1574,17 @@ export function skillsPromptIndex(botId: string, assignedLibrary?: readonly stri
  * copy, or the library file for an assigned library skill. The same path
  * the prompt index names, so a `/name` turn points at exactly that file. */
 export function enabledSkillFile(botId: string, name: string, assignedLibrary?: readonly string[]): string | null {
-  const skill = resolveBotSkills(botId, assignedLibrary).find((entry) => entry.name === name && entry.enabled);
-  if (!skill) return null;
-  const entry = readManifest(botId)[name];
-  return entry ? join(skillTarget(workspaceDir(botId), name, entry), "SKILL.md") : librarySkillFilePath(name);
+  return resolvedSkillFiles(botId, assignedLibrary).find((entry) => entry.name === name)?.file ?? null;
+}
+
+/** Verify the selected library once, rather than re-reading and hashing the
+ * entire library separately for every row of a discovery response. */
+export function resolvedSkillFiles(botId: string, assignedLibrary?: readonly string[]): Array<SkillListing & { file: string | null }> {
+  const manifest = readManifest(botId);
+  return resolveBotSkills(botId, assignedLibrary).map((skill) => {
+    const entry = manifest[skill.name];
+    return { ...skill, file: skill.enabled ? entry ? join(skillTarget(workspaceDir(botId), skill.name, entry), "SKILL.md") : librarySkillFilePath(skill.name) : null };
+  });
 }
 
 /** The reviewed SKILL.md text of one enabled skill (the bot's own copy, or

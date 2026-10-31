@@ -288,6 +288,16 @@ describe("resolveBotCapabilities", () => {
     expect(byKey(list, "plugin:installation:docs@market")).toMatchObject({ state: "on", scope: "installation", mounts: ["docs"], brings: { mcpServers: ["docs"], skills: ["docs-skill"] } });
   });
 
+  it("keeps a managed library skill visible on API engines even when its plugin files are not served", () => {
+    const input = inputs({ ...ENGINES[2]!, agentsMcp: true });
+    input.skillsLibrary = true;
+    input.bot.assignedSkills = ["docs-skill"];
+    input.skills.push({ name: "docs-skill", description: "Review docs", enabled: true, origin: "library", source: "market" });
+    const list = resolveBotCapabilities(input, { mayChange: true });
+    expect(byKey(list, "skill:installation:docs-skill")).toMatchObject({ state: "on", engine: { skills: "prompt", nothing: false } });
+    expect(byKey(list, "plugin:installation:docs@market")?.engine.skills).toBe("none");
+  });
+
   it("deleting a plugin MCP and recreating its name manually never gives the replacement to the old plugin", () => {
     const input = inputs(ENGINES[0]!);
     input.installationServers = input.installationServers.filter((server) => server.name !== "docs");

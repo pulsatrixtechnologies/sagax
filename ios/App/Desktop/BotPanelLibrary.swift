@@ -676,7 +676,7 @@ struct BotPanelCapabilities: View {
             receiptLine("Servers and tools", receipt.servers)
             receiptLine("Not served", receipt.notServed)
             if let index = list.promptIndex, index.cuts {
-                Text("The skills index is full: \(index.omitted) skills left out of the prompt.")
+                Text(index.incomplete ? "Plugin discovery is partial. Additional references may exist in enabled plugin folders." : "The skills index is full: \(index.omitted) skills left out of the prompt.")
                     .font(theme.font(12)).foregroundStyle(theme.inkSecondary)
             }
         }

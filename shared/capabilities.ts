@@ -107,14 +107,15 @@ export interface BotCapabilities {
   engine: { kind: string; label: string };
   items: Capability[];
   /** the skills index of the prompt (#1748): bytes and count, caps, omitted */
-  promptIndex?: { bytes: number; maxBytes: number; skills: number; maxSkills: number; omitted: number };
+  promptIndex?: { bytes: number; maxBytes: number; skills: number; maxSkills: number; omitted: number; incomplete?: boolean };
 }
 
 export const CAPABILITIES_PATH = (botId: string) => `/api/bots/${encodeURIComponent(botId)}/capabilities`;
 
 /** Engines with no local folder of their own (server/workspace.ts
  * supportsWorkspaceFiles): API engines, whose turn is a chat request. They
- * read no file, so neither a skill nor a plugin reaches them. */
+ * have no native file tools. Managed skill discovery can still reach them
+ * through agents MCP; plugin distribution is a separate engine decision. */
 export const ENGINES_WITHOUT_FILES: readonly string[] = ["grok", "openai-compat", "minimax", "mistral", "cerebras", "groq"];
 
 export function engineWorksInFiles(driverKind: string): boolean {
@@ -135,6 +136,8 @@ export interface EngineParts {
   /** skills read only through the prompt index (a library skill: no native
    * link, so Claude reads it from the prompt too) */
   indexOnly?: boolean;
+  /** Managed skills_list/workspace_read is actually mounted for the turn. */
+  skillDiscovery?: boolean;
 }
 
 const CLAUDE = "claudeAgent";
@@ -150,7 +153,8 @@ const GROK_KINDS = new Set(["grok", "grokAgent"]);
  *   skills, commands and agents named in the turn prompt with their path
  *   (server/plugin-turn.ts), and the bot's skills in the skills index.
  * - Engines without files (`grok`, `openai-compat`, `minimax`, `mistral`,
- *   `cerebras`, `groq`) get nothing of a plugin, a skill or Flow.
+ *   `cerebras`, `groq`) receive a managed skill index when its retrieval
+ *   tools are mounted. Plugins and Flow keep their existing engine scope.
  * - MCP follows `customMcp`: an engine with files connects to the servers
  *   itself (mounted); one without files gets their tools through Sagax
  *   (proxied, server/drivers/chat-mcp-tools.ts).
@@ -162,7 +166,7 @@ export function engineReceipt(driverKind: string, form: CapabilityForm, parts: E
   const fileReceipt = (): Receipt => {
     if (form === "flow") return claude ? "native" : "none";
     if (claude) return parts.indexOnly ? "prompt" : "native";
-    return files ? "prompt" : "none";
+    return files || (form === "skill" && parts.skillDiscovery) ? "prompt" : "none";
   };
   if (form === "plugin" || form === "skill" || form === "flow") {
     if (parts.skills) out.skills = fileReceipt();

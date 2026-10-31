@@ -49,6 +49,12 @@ describe("Bot panel > Capabilities", () => {
     expect(quiet).not.toContain("is full");
   });
 
+  it("distinguishes a partial plugin scan from a known number of omitted references", () => {
+    const text = visible(render({ data: capabilityFixture({ promptIndex: { bytes: 900, maxBytes: 4_000, skills: 2, maxSkills: 30, omitted: 0, incomplete: true } }) }));
+    expect(text).toContain("Plugin discovery is partial");
+    expect(text).not.toContain("0 left out");
+  });
+
   it("opens a line on its detail: what it brings, who installed it, what the engine gets", () => {
     const text = visible(render({ openAll: true }));
     expect(text).toContain("notion-search");

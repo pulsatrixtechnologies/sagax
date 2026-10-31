@@ -274,7 +274,7 @@ export function CapabilitiesBody({ botName, data, error = null, actionError = nu
         {cut && index && (
           <p role="note" data-capabilities-index-cut="" className="flex items-start gap-1.5 rounded-xl bg-warning/10 px-3 py-2 text-[12px] leading-[17px] text-warning">
             <TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
-            {t("capabilities.received.indexCut", { omitted: index.omitted, kb: kilobytes(index.maxBytes), max: index.maxSkills })}
+            {index.incomplete ? t("capabilities.received.indexPartial") : t("capabilities.received.indexCut", { omitted: index.omitted, kb: kilobytes(index.maxBytes), max: index.maxSkills })}
           </p>
         )}
       </section>}

@@ -1795,11 +1795,19 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
   }
   if (name === "skills_list") {
     const query = new URLSearchParams({ fromBotId: BOT_ID, fromThreadId: THREAD_ID });
+    if (args.query !== undefined) {
+      if (typeof args.query !== "string" || args.query.length > 200) return { text: "query must be a string of at most 200 characters.", isError: true };
+      query.set("query", args.query);
+    }
+    if (args.offset !== undefined) {
+      if (typeof args.offset !== "number" || !Number.isSafeInteger(args.offset) || args.offset < 0) return { text: "offset must be a nonnegative integer.", isError: true };
+      query.set("offset", String(args.offset));
+    }
     const r = await api(`/api/internal/skills?${query.toString()}`);
     const skills = Array.isArray(r.skills) ? r.skills : [];
     const staged = Array.isArray(r.staged) ? r.staged : [];
-    if (!skills.length && !staged.length) {
-      return { text: "This bot has no imported skills and nothing staged. Use skill_manage action=\"create\" for a user-requested skill, then follow its applied or pending result." };
+    if (!skills.length && !staged.length && r.incomplete !== true) {
+      return { text: typeof r.total === "number" && r.total > 0 ? `No references at this offset. ${r.total} match; start at offset 0.` : "No matching skills or plugin references, and nothing staged." };
     }
     const live = skills.length
       ? skills.map((skill) => {
@@ -1817,7 +1825,8 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
         const path = typeof row.path === "string" ? row.path.trim() : "";
         const descPart = description ? `: ${description}` : "";
         const pathPart = path ? ` Read ${JSON.stringify(path)}.` : "";
-        return `- ${row.name} (${status}, ${kind})${descPart}${pathPart}`;
+        const origin = typeof row.scope === "string" ? ` [${row.scope}: ${row.source}; ${row.kind}; ${row.id}]` : "";
+        return `- ${row.name} (${status}, ${kind})${descPart}${pathPart}${origin}`;
       }).join("\n")
       : "(none)";
     const pending = staged.length
@@ -1828,7 +1837,9 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
         return `- ${row.action} ${row.name}`;
       }).join("\n")
       : "(none)";
-    return { text: `Imported skills:\n${live}\n\nStaged (waiting for the user's decision):\n${pending}` };
+    const partial = r.incomplete === true ? "\nPlugin discovery is partial: not every reference could be indexed. More files may exist in enabled plugin folders; inspect those folders with your native file tools." : "";
+    const page = typeof r.total === "number" ? `\nDiscovered matches: ${r.total}. Offset: ${r.offset}. ${typeof r.nextOffset === "number" ? `Continue with skills_list offset=${r.nextOffset}${typeof args.query === "string" ? ` query=${JSON.stringify(args.query)}` : ""}.` : "End of discovered results."}` : "";
+    return { text: `Imported skills and plugin references:\n${live}${page}${partial}\n\nStaged (waiting for the user's decision):\n${pending}` };
   }
   if (name === "skill_manage") {
     if (args.action !== "create" && args.action !== "update") {

@@ -18,6 +18,7 @@ import { engineServerMcp, perspicaxServerName, withoutHostCommands, personalMcpP
 import { pluginMcpPrecheck, selectPluginScopes } from "./capability-plugin-mounts.ts";
 import {
   engineReceipt,
+  engineWorksInFiles,
   type BotCapabilities,
   type Capability,
   type CapabilityReason,
@@ -96,7 +97,7 @@ export interface CapabilityInputs<S extends Record<string, McpServerSpec> = Reco
   /** readable name of the organization (Perspicax), for "From <org>" */
   organizationName?: string;
   bot: { id: string; name: string; mcpServers?: string[]; perspicaxProfiles: string[]; assignedSkills?: string[] };
-  engine: { instanceId: string; kind: string; label: string; customMcp: boolean };
+  engine: { instanceId: string; kind: string; label: string; customMcp: boolean; agentsMcp?: boolean };
 
   // plugins
   botPlugins: BotPluginInput[];
@@ -170,7 +171,7 @@ const has = (list: readonly string[] | undefined) => Boolean(list && list.length
 export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: CapabilityViewer): BotCapabilities {
   const engine = inputs.engine;
   const kind = engine.kind;
-  const receipt = (form: Capability["form"], parts: Omit<EngineParts, "customMcp">) => engineReceipt(kind, form, { customMcp: engine.customMcp, ...parts });
+  const receipt = (form: Capability["form"], parts: Omit<EngineParts, "customMcp">) => engineReceipt(kind, form, { customMcp: engine.customMcp, skillDiscovery: engine.agentsMcp === true, ...parts });
   const items: Capability[] = [];
   const push = (item: Capability) => {
     // a capability the engine receives nothing of is not served, whatever
@@ -289,7 +290,7 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
     const ownedSkills = [...new Set(plugin.skills)].filter((name) => skillOwners.get(name) === plugin.key);
     const on = servers.filter((name) => serverItems.get(name)!.state === "on");
     const skills = ownedSkills.filter((name) => skillByName.get(name)?.origin === "library" && skillByName.get(name)!.source === plugin.marketplace && skillByName.get(name)!.enabled);
-    for (const name of ownedSkills) pluginSkills.add(name);
+    if (engineWorksInFiles(kind)) for (const name of ownedSkills) pluginSkills.add(name);
     const needs = servers.map((name) => serverItems.get(name)!).find((row) => row.state === "to_connect" || row.connect);
     const complete = plugin.folder && dirs.has(plugin.folder.dir);
     let state: CapabilityState = complete || on.length || skills.length ? "on" : needs?.state === "to_connect" ? "to_connect" : "off";

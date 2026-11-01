@@ -59,8 +59,6 @@ cpSync(join(root, "dist-server"), join(out, "dist-server"), { recursive: true })
 cpSync(join(root, "dist"), join(out, "dist"), { recursive: true });
 if (existsSync(join(root, "skills"))) cpSync(join(root, "skills"), join(out, "skills"), { recursive: true });
 cpSync(join(root, "LICENSE"), join(out, "LICENSE"));
-cpSync(join(root, "LICENSE-POLYFORM-NC.md"), join(out, "LICENSE-POLYFORM-NC.md"));
-cpSync(join(root, "LICENSE-APACHE"), join(out, "LICENSE-APACHE"));
 if (existsSync(join(root, "NOTICE"))) copyFileSync(join(root, "NOTICE"), join(out, "NOTICE"));
 
 // The bin lives next to the bundle so serverEntry() finds index.js by path.
@@ -77,7 +75,7 @@ writeFileSync(
       forkVersion: version,
       baseVersion: app.baseVersion ?? app.version,
       description: "Run the Sagax server anywhere and pair your devices to it",
-      license: "SEE LICENSE IN LICENSE",
+      license: "Apache-2.0",
       type: "module",
       bin: { [BIN]: "cli.js" },
       // Never bundled, so npm installs them beside the server: DuckDB (the
@@ -85,7 +83,7 @@ writeFileSync(
       // npm picks per platform from their optional packages. The server
       // loads them through nativeRequire (server/data/engine.ts).
       dependencies: Object.fromEntries(NATIVE_DEPENDENCIES.map((name) => [name, pinned(name)])),
-      files: ["cli.js", "dist-server", "dist", "skills", "LICENSE", "LICENSE-POLYFORM-NC.md", "LICENSE-APACHE", "NOTICE", "README.md"],
+      files: ["cli.js", "dist-server", "dist", "skills", "LICENSE", "NOTICE", "README.md"],
       engines: { node: ">=24" },
       repository: { type: "git", url: `git+${REPOSITORY}.git` },
       homepage: `${REPOSITORY}#readme`,

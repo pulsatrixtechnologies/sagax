@@ -1,11 +1,10 @@
 # Contribution terms
 
 Sagax is owned by Pulsatrix Technologies inc. and licensed under the
-PolyForm Noncommercial License 1.0.0 (see [LICENSE](LICENSE)), with
-commercial licenses offered separately by Pulsatrix Technologies inc.
+Apache License 2.0 (see [LICENSE](LICENSE)).
 
-To keep that possible, every contribution from someone outside Pulsatrix
-Technologies inc. needs a signed contributor agreement before it is merged.
+Every contribution from someone outside Pulsatrix Technologies inc. needs a
+signed contributor agreement before it is merged.
 By that agreement, you confirm that you wrote the contribution or have the
 right to submit it, and you grant Pulsatrix Technologies inc. a perpetual,
 worldwide, non-exclusive, royalty-free, irrevocable license to use, copy,

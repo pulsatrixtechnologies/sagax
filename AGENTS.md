@@ -8523,7 +8523,7 @@ it after an upstream merge instead of renaming by hand.
   `server/fleet.ts`. The rebrand script re-applies the image, the native copy
   and the signing names after a merge, and reports `npx openmausbot` or
   `npm install -g openmausbot` in the docs for a person to replace.
-- Legal and history: `LICENSE-APACHE`, the OpenMausBot lines of `NOTICE`, the README attribution,
+- Legal and history: the OpenMausBot lines of `NOTICE`, the README attribution,
   About's "Based on OpenMausBot" in every language, CONTRIBUTING's licensing
   note, the upstream pull requests a port names ("port of OpenMausBot #N"),
   "Where work goes" and "Upstream sync" below.

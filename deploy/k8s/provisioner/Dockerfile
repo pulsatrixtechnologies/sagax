@@ -30,7 +30,7 @@ RUN useradd --uid 1001 --create-home --home-dir /data --shell /usr/sbin/nologin 
   && install -d -o maus -g maus -m 0750 /run/sagax-sandboxd
 WORKDIR /app
 COPY --from=build --chown=maus:maus /src/dist-server/sandboxd.js ./dist-server/sandboxd.js
-COPY --from=build --chown=maus:maus /src/NOTICE /src/LICENSE /src/LICENSE-APACHE /src/LICENSE-POLYFORM-NC.md ./licenses/
+COPY --from=build --chown=maus:maus /src/NOTICE /src/LICENSE ./licenses/
 USER maus
 ENV NODE_ENV=production
 CMD ["node", "dist-server/sandboxd.js"]

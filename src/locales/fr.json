@@ -8526,7 +8526,7 @@
   "about.version": "Version {version}",
   "about.docs": "Documentation",
   "about.license": "Licence",
-  "about.copyright": "© 2026 Pulsatrix Technologies inc. Gratuit pour un usage non commercial (PolyForm Noncommercial 1.0.0).",
+  "about.copyright": "© 2026 Pulsatrix Technologies inc. Open source sous licence Apache 2.0.",
   "about.basedOn": "Basé sur OpenMausBot {version}",
   "shortcuts.title": "Raccourcis clavier",
   "shortcuts.close": "Fermer les raccourcis clavier",

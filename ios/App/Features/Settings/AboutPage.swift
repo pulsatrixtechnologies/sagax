@@ -59,7 +59,7 @@ struct AboutPage: View {
                 CardHairline(leadingInset: SettingsMetrics.rowInset)
                 SettingsRow(title: "License", accessory: .chevron, identifier: "about-license") { link = AboutLinks.license }
             }
-            SettingsFooter(text: "© 2026 Pulsatrix Technologies inc. Free for noncommercial use (PolyForm Noncommercial 1.0.0).")
+            SettingsFooter(text: "© 2026 Pulsatrix Technologies inc. Open source under the Apache License 2.0.")
         }
         .navigationDestination(isPresented: $showingReleaseNotes) { ReleaseNotesPage() }
         .sheet(item: Binding(get: { link.map(IdentifiedURL.init) }, set: { link = $0?.url })) { item in

@@ -50,7 +50,7 @@ import {
   type ThreadFile,
 } from "@/lib/chat-files";
 import { filePreviewKind, loadTextPreview } from "@/lib/file-preview";
-import { AttachmentPreviewDialog, canonicalDownloadFilename, type PreviewImage } from "../AttachmentPreview";
+import { AttachmentPreviewDialog, canonicalDownloadFilename, startMessageFileDownload, type PreviewImage } from "../AttachmentPreview";
 import { HoverCard, type AnchorProps } from "../LinkHoverCard";
 import { AnchoredPopover } from "@/components/AnchoredPopover";
 
@@ -94,62 +94,37 @@ export function copyablePath(path: string): string | null {
 }
 
 export async function downloadThreadFile(threadId: string, file: ThreadFile): Promise<void> {
-  const response = await fetch(threadFileUrl(threadId, file.id));
-  if (!response.ok) {
+  const url = threadFileUrl(threadId, file.id);
+  // Verify current authorization and availability without buffering the file.
+  // The browser download manager then streams the opaque same-origin GET.
+  const response = await fetch(url, {
+    headers: file.size === 0 ? undefined : { range: "bytes=0-0" },
+  });
+  const emptyRange = response.status === 416 && response.headers.get("content-range") === "bytes */0";
+  if (!response.ok && !emptyRange) {
     const body = await response.json().catch(() => null) as { error?: string } | null;
     throw new Error(body?.error ?? t("attach.downloadFailed"));
   }
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = canonicalDownloadFilename({
+  await response.body?.cancel().catch(() => undefined);
+  const name = canonicalDownloadFilename({
     contentDisposition: response.headers.get("content-disposition"),
     fallback: file.name,
     source: file.name,
-    mime: blob.type || response.headers.get("content-type"),
+    mime: response.headers.get("content-type"),
   });
-  link.style.display = "none";
-  document.body.append(link);
-  try {
-    link.click();
-  } finally {
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-  }
+  startMessageFileDownload(url, name);
 }
 
-/** One video or audio file, fetched on open (the server bounds the size),
- * played from a blob URL, and gone when the dialog closes. */
+/** One video or audio file streamed from its opaque authorized URL. Native
+ * media range requests make seek independent of the full file size. */
 export function MediaPreviewDialog({ threadId, file, kind, onClose }: { threadId: string; file: ThreadFile; kind: "video" | "audio"; onClose: () => void }) {
-  const [src, setSrc] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   useLayoutEffect(() => {
     closeRef.current = onClose;
   }, [onClose]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let created: string | null = null;
-    void fetch(threadFileUrl(threadId, file.id), { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(t("attach.downloadFailed"));
-        const mime = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-        if (!mime.startsWith(`${kind}/`)) throw new Error(t(kind === "video" ? "attach.videoUnavailable" : "attach.audioUnavailable"));
-        created = URL.createObjectURL(new Blob([await response.arrayBuffer()], { type: mime }));
-        if (controller.signal.aborted) URL.revokeObjectURL(created);
-        else setSrc(created);
-      })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("attach.downloadFailed"));
-      });
-    return () => {
-      controller.abort();
-      if (created) URL.revokeObjectURL(created);
-    };
-  }, [threadId, file.id, kind]);
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -185,15 +160,50 @@ export function MediaPreviewDialog({ threadId, file, kind, onClose }: { threadId
         </header>
         <div className="flex min-h-[160px] items-center justify-center p-4">
           {error ? (
-            <p role="alert" className="text-[13px] text-white/70">{error}</p>
-          ) : !src ? (
-            <span role="status" className="flex items-center gap-2 text-[13px] text-white/60">
-              <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" /> {t("botPanel.files.previewLoading")}
-            </span>
+            <div className="flex flex-col items-center gap-3 text-center">
+              <p role="alert" className="text-[13px] text-white/70">{error}</p>
+              <button
+                type="button"
+                onClick={() => void downloadThreadFile(threadId, file).catch((reason: unknown) =>
+                  setError(reason instanceof Error ? reason.message : t("attach.downloadFailed")))}
+                className="flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 text-[13px] text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              >
+                <Download size={15} aria-hidden="true" /> {t("attach.download")}
+              </button>
+            </div>
           ) : kind === "video" ? (
-            <video src={src} controls playsInline className="max-h-[75vh] max-w-full rounded-lg" aria-label={file.name} />
+            <div className="relative flex min-h-[160px] w-full items-center justify-center">
+              <video
+                src={threadFileUrl(threadId, file.id, true)}
+                controls
+                playsInline
+                preload="metadata"
+                className="max-h-[75vh] max-w-full rounded-lg"
+                aria-label={file.name}
+                onLoadedMetadata={() => setLoading(false)}
+                onCanPlay={() => setLoading(false)}
+                onWaiting={() => setLoading(true)}
+                onPlaying={() => setLoading(false)}
+                onError={() => { setLoading(false); setError(t("attach.videoUnavailable")); }}
+              />
+              {loading && <span role="status" className="pointer-events-none absolute flex items-center gap-2 rounded-full bg-black/70 px-3 py-2 text-[13px] text-white/75"><LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" /> {t("botPanel.files.previewLoading")}</span>}
+            </div>
           ) : (
-            <audio src={src} controls className="w-full max-w-md" aria-label={file.name} />
+            <div className="relative flex min-h-[80px] w-full items-center justify-center">
+              <audio
+                src={threadFileUrl(threadId, file.id, true)}
+                controls
+                preload="metadata"
+                className="w-full max-w-md"
+                aria-label={file.name}
+                onLoadedMetadata={() => setLoading(false)}
+                onCanPlay={() => setLoading(false)}
+                onWaiting={() => setLoading(true)}
+                onPlaying={() => setLoading(false)}
+                onError={() => { setLoading(false); setError(t("attach.audioUnavailable")); }}
+              />
+              {loading && <span role="status" className="pointer-events-none absolute flex items-center gap-2 rounded-full bg-black/70 px-3 py-2 text-[13px] text-white/75"><LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" /> {t("botPanel.files.previewLoading")}</span>}
+            </div>
           )}
         </div>
       </div>

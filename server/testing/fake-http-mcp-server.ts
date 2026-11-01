@@ -39,6 +39,8 @@ export interface FakeHttpMcpOptions {
   callError?: (params: unknown) => { code: number; message: string } | undefined;
   /** answer each tools/call only after this many milliseconds */
   callDelayMs?: number;
+  /** Execute the call, then lose its SSE reply (a write with an unknown result). */
+  dropCallReply?: boolean;
   /** answer each tools/call as an event stream that first says the tool
    * list changed, as a server does after it adds or removes tools */
   listChangedOnCall?: boolean;
@@ -271,6 +273,10 @@ export async function startFakeHttpMcp(options: FakeHttpMcpOptions = {}): Promis
       }
       if (transport === "sse") {
         res.writeHead(202).end();
+        if (options.dropCallReply && frame.method === "tools/call") {
+          for (const stream of streams) stream.end();
+          return;
+        }
         if (options.askOnCall && frame.method === "tools/call") {
           const { waiting, frame: request } = ask();
           for (const stream of streams) stream.write(request);

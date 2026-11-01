@@ -175,6 +175,19 @@ const BY_CODE: Readonly<Record<string, LocaleKey>> = {
   bot_payer_owner_only: "serverError.botPayerOwnerOnly",
   bot_restore_owner_only: "serverError.botRestoreOwnerOnly",
   bot_place_owner_only: "serverError.botPlaceOwnerOnly",
+  // Capabilities lot 4: Perspicax owns the organization's capabilities.
+  // A validation or conflict keeps Perspicax's own sentence (it names the field).
+  org_capabilities_sign_in: "serverError.orgCapabilitiesSignIn",
+  org_capabilities_admin: "serverError.orgCapabilitiesAdmin",
+  org_capabilities_link: "serverError.orgCapabilitiesLink",
+  org_capabilities_unreachable: "serverError.orgCapabilitiesUnreachable",
+  org_capabilities_unknown: "serverError.orgCapabilitiesUnknown",
+  org_capabilities_local: "serverError.orgCapabilitiesLocal",
+  org_capability_unknown: "serverError.orgCapabilityUnknown",
+  org_capability_imposed: "serverError.orgCapabilityImposed",
+  org_capability_off: "serverError.orgCapabilityOff",
+  org_capability_not_member: "serverError.orgCapabilityNotMember",
+  org_setting_in_perspicax: "serverError.orgSettingInPerspicax",
 };
 
 /** The sentence, in the app's language, for a refusal body that carries one

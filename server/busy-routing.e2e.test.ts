@@ -192,14 +192,24 @@ posixOnly("busy sends routed by the bot e2e", () => {
     // a correction cannot join a turn that takes no words live: it waits too
     const correction = await auto(bot, "actually only the paid ones");
     expect(correction.body.queued).toBe(true);
-    // independent: a parallel task right away
+    // 2026-11-01: an engine with no one-shot model (Grok over ACP) gives
+    // the bot no say, and the guess is the running work's one follow-up,
+    // never a second session answering beside it
     const independent = await auto(bot, "Draft the onboarding email for the new client");
     expect(independent.status).toBe(202);
-    expect(independent.body.parallel).toMatchObject({ state: expect.stringMatching(/running|queued/) });
-    expect((await tasks(bot.id)).filter((task) => task.parallelOf)).toHaveLength(1);
+    expect(independent.body.queued).toBe(true);
+    expect((await tasks(bot.id)).filter((task) => task.parallelOf)).toHaveLength(0);
     writeFileSync(acpGate, "go");
-    await waitFor(async () => (await getBot(bot.id)).busy === false && (await messages(bot.threadId)).some((m) => m.role === "user" && m.text === "Ensuite, envoie le rapport au client"), "the queue to drain");
-    expect(stderr).toMatch(/\[busy-route\] .* parallel \((rule|model|default), no live steer\)/);
+    await waitFor(async () => (await getBot(bot.id)).busy === false && (await messages(bot.threadId)).some((m) => m.role === "user" && m.text === "Draft the onboarding email for the new client"), "the queue to drain");
+    // the three waiting lines were answered by one follow-up turn
+    const rows = await messages(bot.threadId);
+    const firstWaiting = rows.findIndex((m) => m.role === "user" && m.text === "Ensuite, envoie le rapport au client");
+    expect(rows.slice(firstWaiting).filter((m) => m.role === "user").map((m) => m.text)).toEqual([
+      "Ensuite, envoie le rapport au client", "actually only the paid ones", "Draft the onboarding email for the new client",
+    ]);
+    await waitFor(async () => (await messages(bot.threadId)).slice(firstWaiting).some((m) => m.role === "bot" && m.kind === "text"), "the follow-up's answer");
+    expect((await messages(bot.threadId)).slice(firstWaiting).filter((m) => m.role === "bot" && m.kind === "text")).toHaveLength(1);
+    expect(stderr).toMatch(/\[busy-route\] .* after \(default, no live steer\)/);
   }, 90_000);
 
   it("a send that names no mode still joins the running turn (API, older builds)", async () => {

@@ -67,9 +67,14 @@ describe("ask-before-contacting-bots flag on the turn (#1819)", () => {
     const text = peerContactPrompt({ canContact: true, asksBeforeContact: false });
     expect(text).toMatch(/Ask before contacting bots: off/);
     expect(text).toMatch(/coordinate_bots/);
+    expect(text).toMatch(/send_to_bot/);
+    expect(text).toMatch(/post_to_room/);
     expect(text).toMatch(/immediately/);
     expect(text).toMatch(/Do not ask the person first/);
     expect(text).toMatch(/ask_choice/);
+    // Coordinating turns replace ask_bot / delegate_bot.
+    expect(text).not.toMatch(/\bask_bot\b/);
+    expect(text).not.toMatch(/\bdelegate_bot\b/);
     expect(text).not.toMatch(/[–—]/);
   });
 
@@ -77,7 +82,11 @@ describe("ask-before-contacting-bots flag on the turn (#1819)", () => {
     const text = peerContactPrompt({ canContact: true, asksBeforeContact: true });
     expect(text).toMatch(/Ask before contacting bots: on/);
     expect(text).toMatch(/Sagax shows its own card/);
+    expect(text).toMatch(/coordinate_bots/);
+    expect(text).toMatch(/send_to_bot/);
     expect(text).toMatch(/Do not also ask the person/);
+    expect(text).not.toMatch(/\bask_bot\b/);
+    expect(text).not.toMatch(/\bdelegate_bot\b/);
     expect(text).not.toMatch(/immediately/);
     expect(text).not.toMatch(/[–—]/);
   });

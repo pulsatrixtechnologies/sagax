@@ -103,6 +103,8 @@ import { DiscoverView } from "./plugins/DiscoverView";
 import { AccountsView, type AccountService } from "./plugins/AccountsView";
 import { SourcesView } from "./plugins/SourcesView";
 import { OrgSourcesAccess } from "./plugins/OrgSourcesAccess";
+import { OrgCapabilitiesAdmin, OrgCapabilitiesForMe } from "./plugins/OrgCapabilitiesSection";
+import { setMine } from "@/lib/org-capabilities";
 import { connectorGroups, type ClaudeUnavailable, type HarnessConnectorStatus } from "./plugins/HarnessConnectorGroups";
 import { BotsForView, botServersAfter, botUsesServers } from "./plugins/BotsForView";
 import { PublishedPagesSettings } from "./PublishedPages";
@@ -323,7 +325,8 @@ export function PluginsPanel() {
   };
   // the bot's one resolved list (lot 1b): its engine, its organization Flow
   // and Roles for Installed, read again after each change of its plugins
-  const capabilityRevision = useMemo(() => ({ botView, personalView, skills, marketplaces }), [botView, personalView, skills, marketplaces]);
+  const orgRevision = state.config?.orgCapabilities?.revision;
+  const capabilityRevision = useMemo(() => ({ botView, personalView, skills, marketplaces, orgRevision }), [botView, personalView, skills, marketplaces, orgRevision]);
   const botCapabilities = useBotCapabilities(scopeBotId, { revision: capabilityRevision });
   const [botBusy, setBotBusy] = useState<string | null>(null);
 
@@ -711,7 +714,7 @@ export function PluginsPanel() {
     if (!what) return { row: null };
     const row = { label: t("capabilities.detail.engines"), value: enginesLine(what.form, what.parts) };
     const engine = botCapabilities.data?.engine;
-    const warn = scopeBot && engine && engineGetsNothing(engine.kind, what.form, what.parts);
+    const warn = scopeBot && engine && engineGetsNothing(engine.kind, what.form, { ...what.parts, skillDiscovery: Boolean(botCapabilities.data?.promptIndex) });
     return {
       row,
       notice: warn ? (
@@ -1181,6 +1184,10 @@ export function PluginsPanel() {
           resolved={scope === "bot" ? botCapabilities.data : undefined}
           resolvedError={scope === "bot" && !botCapabilities.data ? botCapabilities.error : null}
           onRetryResolved={() => void botCapabilities.reload()}
+          onToggleOrganization={(item, next) => {
+            if (!item.orgDeclaration) return;
+            void setMine(item.orgDeclaration, next).then(() => botCapabilities.reload(), (failure) => setPanelError(readableError(failure)));
+          }}
           botName={scopeBot?.name}
           organization={scope === "bot" && botCapabilities.data ? organizationRows(botCapabilities.data.items) : []}
           skills={scope === "bot" ? [] : privateSkills(items)}
@@ -1212,13 +1219,15 @@ export function PluginsPanel() {
       )}
           forms={scope === "workspace" ? (
             <>
+              {/* lot 4: the organization's declarations, owned by Perspicax */}
+              {orgHere && <OrgCapabilitiesAdmin />}
               {mcp.restricted && mcp.policy && <p role="status" className="mb-3 text-[12.5px] leading-relaxed text-ink-secondary">{t("policy.mcpRestricted", { organization: mcp.policy.organizationName })}</p>}
               <McpMessages mcp={mcp} />
               <McpReservedServers mcp={mcp} />
               <McpImportForm mcp={mcp} />
               {mcp.editing === "new" && <div className="mb-4"><McpServerEditor mcp={mcp} /></div>}
             </>
-          ) : undefined}
+          ) : scope === "me" && perspicaxOrg !== null ? <OrgCapabilitiesForMe key={orgRevision ?? ""} /> : undefined}
         />
       )}
       discover={(

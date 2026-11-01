@@ -155,6 +155,7 @@ describe("redactSecretsInText", () => {
       [`gh token ${"gh" + "p_"}${alpha}`, /ghp_/],
       [`fine-grained ${"github_" + "pat_"}11ABCDEFG0${alpha}`, /github_pat_/],
       [`slack ${"xox" + "b-"}${"123456789012"}-${"1234567890123"}-${alpha.slice(0, 24)}`, /xoxb-/],
+      [`slack app ${"xa" + "pp-"}1-A0123456789-${"1234567890123"}-${alpha.slice(0, 24)}`, /xapp-|A0123456789/],
       [`aws ${"AKIA" + "IOSFODNN7EXAMPLE"} and more`, /IOSFODNN7EXAMPLE/],
       [`google ${"AIza" + "SyA-"}${alpha.slice(0, 32)}`, /AIza/],
       [`npm ${"npm" + "_"}${alpha}`, /npm_[a-z]/],
@@ -289,5 +290,24 @@ describe("redactSecretsInText", () => {
     const once = redactSecrets(input);
 
     expect(redactSecrets(once)).toEqual(once);
+  });
+});
+
+describe("redactSecrets: Slack app-level tokens (upstream #4065)", () => {
+  it("masks an xapp- token", () => {
+    const token = `${"xa" + "pp-"}1-A0123456789-1234567890123-abcdef0123456789`;
+    expect(redactSecrets(`SLACK_APP_TOKEN: ${token}`)).not.toContain(token);
+  });
+});
+
+describe("redactSecrets: GitLab tokens and Basic credentials (upstream #3926, #3985)", () => {
+  it("masks GitLab personal, deploy and runner tokens", () => {
+    for (const token of [`${"glp" + "at-"}0123456789abcdefABCD`, `${"gld" + "t-"}0123456789abcdefABCD`, `${"glr" + "tr-"}0123456789abcdefABCD`]) {
+      expect(redactSecrets(`token ${token}`)).not.toContain(token);
+    }
+  });
+  it("masks Basic credentials after an Authorization header only", () => {
+    expect(redactSecrets("Authorization: Basic dXNlcjpwYXNzd29yZA==")).not.toContain("dXNlcjpwYXNzd29yZA==");
+    expect(redactSecrets("Basic configuration of the router")).toBe("Basic configuration of the router");
   });
 });

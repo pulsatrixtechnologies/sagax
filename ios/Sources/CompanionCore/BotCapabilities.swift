@@ -38,16 +38,18 @@ public struct BotCapabilityList: Decodable, Hashable, Sendable {
         public var skills: Int
         public var maxSkills: Int
         public var omitted: Int
+        public var incomplete: Bool
 
-        private enum CodingKeys: String, CodingKey { case bytes, maxBytes, skills, maxSkills, omitted }
+        private enum CodingKeys: String, CodingKey { case bytes, maxBytes, skills, maxSkills, omitted, incomplete }
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             func int(_ key: CodingKeys) -> Int { (try? c.decode(Int.self, forKey: key)) ?? 0 }
             bytes = int(.bytes); maxBytes = int(.maxBytes); skills = int(.skills); maxSkills = int(.maxSkills); omitted = int(.omitted)
+            incomplete = (try? c.decode(Bool.self, forKey: .incomplete)) ?? false
         }
 
         /// The index left skills out: the screens say so.
-        public var cuts: Bool { omitted > 0 }
+        public var cuts: Bool { incomplete || omitted > 0 || bytes > maxBytes || skills > maxSkills }
     }
 
     public var engine: Engine
@@ -130,6 +132,8 @@ public struct BotCapability: Decodable, Hashable, Identifiable, Sendable {
     public var description: String?
     public var sourceLabel: String
     public var sourceVersion: String?
+    public var sourcePack: String?
+    public var promptIndex: BotCapabilityList.PromptIndex?
     public var scope: Scope
     public var state: State
     public var enabled: Bool
@@ -143,11 +147,17 @@ public struct BotCapability: Decodable, Hashable, Identifiable, Sendable {
     public var reason: String?
     public var installedBy: String?
     public var id: String { key }
+    /// The installed signed pack, readable: never its digest as text (no
+    /// identifier on screen). The digest stays behind the Copy action.
+    public var signedPackLabel: String? {
+        guard sourcePack != nil else { return nil }
+        return sourceVersion.map { "Signed pack, version \($0)" } ?? "Signed pack"
+    }
 
-    private struct Source: Decodable { var label: String?; var version: String? }
+    private struct Source: Decodable { var label: String?; var version: String?; var pack: String? }
     private struct Connect: Decodable { var reason: String? }
     private enum CodingKeys: String, CodingKey {
-        case key, form, name, description, source, scope, state, enabled, canToggle, updateAvailable, brings, engine, connect, reason, installedBy
+        case key, form, name, description, source, scope, state, enabled, canToggle, updateAvailable, brings, engine, connect, reason, installedBy, promptIndex
     }
 
     public init(from decoder: Decoder) throws {
@@ -162,6 +172,8 @@ public struct BotCapability: Decodable, Hashable, Identifiable, Sendable {
         let source = try? c.decode(Source.self, forKey: .source)
         sourceLabel = source?.label ?? ""
         sourceVersion = source?.version.flatMap { $0.isEmpty ? nil : $0 }
+        sourcePack = source?.pack.flatMap { $0.isEmpty ? nil : $0 }
+        promptIndex = try? c.decodeIfPresent(BotCapabilityList.PromptIndex.self, forKey: .promptIndex)
         enabled = (try? c.decode(Bool.self, forKey: .enabled)) ?? false
         canToggle = (try? c.decode(Bool.self, forKey: .canToggle)) ?? false
         updateAvailable = (try? c.decode(Bool.self, forKey: .updateAvailable)) ?? false

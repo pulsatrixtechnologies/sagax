@@ -154,7 +154,7 @@ final class HomeMenusUITests: XCTestCase {
         XCTAssertTrue(eventually { self.bot(named: "Orion")?["hidden"] as? Bool == true }, "archived on the server")
 
         app.swipeDown()
-        app.buttons["home-account"].tap()
+        app.buttons["home-apps"].tap()
         let archived = app.buttons["account-menu.archivedBots"]
         XCTAssertTrue(archived.waitForExistence(timeout: 5))
         archived.tap()
@@ -169,7 +169,7 @@ final class HomeMenusUITests: XCTestCase {
     @MainActor
     func testTheAccountMenuOpensSettingsAndAbout() {
         let app = launch()
-        app.buttons["home-account"].tap()
+        app.buttons["home-apps"].tap()
         for id in ["settings", "about", "help"] {
             XCTAssertTrue(app.buttons["account-menu.\(id)"].waitForExistence(timeout: 5), id)
         }
@@ -183,7 +183,7 @@ final class HomeMenusUITests: XCTestCase {
     @MainActor
     func testReleaseNotesOpenFromTheAccountMenuWithAVersionPicker() {
         let app = launch()
-        app.buttons["home-account"].tap()
+        app.buttons["home-apps"].tap()
         let notes = app.buttons["account-menu.releaseNotes"]
         XCTAssertTrue(notes.waitForExistence(timeout: 5))
         XCTAssertLessThan(notes.frame.minY, app.buttons["account-menu.about"].frame.minY)
@@ -213,7 +213,7 @@ final class HomeMenusUITests: XCTestCase {
     @MainActor
     func testTeamMapAndAutomationsSitUnderSettingsInTheAccountMenu() {
         let app = launch()
-        app.buttons["home-account"].tap()
+        app.buttons["home-apps"].tap()
         let settings = app.buttons["account-menu.settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         let map = app.buttons["account-menu.teamMap"]

@@ -11,8 +11,9 @@
 //   records, to route_message `after` (it waits for this turn, then runs).
 // - The engine cannot steer, or the steer is refused: the server decides
 //   (classifyBusySend, then the bot's own tool-free model for a request
-//   only the default classified) between a parallel task and the queue.
-//   Never an error, never a chooser.
+//   only the default classified) between a parallel task and the queue;
+//   without an answer, the queue (2026-11-01). Never an error, never a
+//   chooser.
 //
 // Pure helpers and the in-memory handle registry live here; index.ts owns the
 // routes and the turn machinery.
@@ -123,7 +124,10 @@ export function parseBusyClassification(answer: string): "parallel" | "after" | 
  * a parallel task or the queue (a correction waits: it applies to the
  * running work, which it cannot join). The heuristic decides what it is
  * sure of; the model (bounded, optional) decides the rest; the default is
- * parallel. Never throws. */
+ * the queue: the running work's one follow-up, which the safe-point pause
+ * starts at once (2026-11-01). A parallel task guessed without the bot's
+ * say was a second session answering beside the running turn, and the
+ * person read the same things answered twice. Never throws. */
 export async function classifyWithoutSteer(input: {
   text: string;
   running: string;
@@ -145,7 +149,7 @@ export async function classifyWithoutSteer(input: {
       // timed out or failed: the default below
     }
   }
-  return { mode: "parallel", by: "default" };
+  return { mode: "after", by: "default" };
 }
 
 /** Clean resource keys a bot named: trimmed, lower case, bounded. */

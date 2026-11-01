@@ -4,6 +4,7 @@ import { gunzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { acceptsGzip, gzipTunnelReplies, sendTunnelJson, varyOnEncoding } from "./tunnel-gzip.ts";
+import * as shared from "../../shared/tunnel-gzip.ts";
 
 const big = JSON.stringify({ text: "x".repeat(4000) });
 const small = JSON.stringify({ ok: true });
@@ -56,8 +57,12 @@ describe("tunnel gzip (port of OpenMausBot #3009)", () => {
     expect(varyOnEncoding("accept-encoding")).toBe("accept-encoding");
     expect(varyOnEncoding("*")).toBe("*");
   });
-  it("keeps the companion copy identical", () => {
-    const here = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
-    expect(here("../../companion/src/tunnel-gzip.ts")).toBe(here("./tunnel-gzip.ts"));
+  it("re-exports the shared module from the harness and the companion", () => {
+    expect(gzipTunnelReplies).toBe(shared.gzipTunnelReplies);
+    expect(sendTunnelJson).toBe(shared.sendTunnelJson);
+    const companion = readFileSync(new URL("../../companion/src/tunnel-gzip.ts", import.meta.url), "utf8");
+    const harness = readFileSync(new URL("./tunnel-gzip.ts", import.meta.url), "utf8");
+    expect(companion).toContain("../../shared/tunnel-gzip.ts");
+    expect(harness).toContain("../../shared/tunnel-gzip.ts");
   });
 });

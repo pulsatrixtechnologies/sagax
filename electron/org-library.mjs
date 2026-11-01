@@ -3,6 +3,8 @@ import fs from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
 
+import { parseOrgLibraryCatalog as parseSharedOrgLibraryCatalog } from "../shared/org-library-catalog.ts";
+
 // The organization library channel in Electron main (contract 60 §5). Admin
 // advertises capabilities.library; the session carries a small pointer; the
 // catalog and each release's bytes come from fixed routes with their own caps.
@@ -16,29 +18,21 @@ export const LIBRARY_REPORT_MAX_BYTES = 64 * 1024;
 /** The newest package document version this desktop reads (shared/package-format.ts PACKAGE_VERSION). */
 export const LIBRARY_FORMAT_SUPPORTED = 2;
 const LIBRARY_ROUTE = /^\/api\/desktop\/library(?:\/blobs\/[a-f0-9]{64}|\/report)?$/;
-const CATALOG_MAX_ENTRIES = 100, CATALOG_MAX_RELEASE_BYTES = 64 * 1024 * 1024, WITHDRAWN_MAX = 50, NOTES_MAX = 4_000, REPORT_MAX_ENTRIES = 100;
+const CATALOG_MAX_RELEASE_BYTES = 64 * 1024 * 1024, REPORT_MAX_ENTRIES = 100;
 const REPORT_DEBOUNCE_MS = 5_000, RETRY_BASE_MS = 50_000, CATALOG_RETRY_MAX_MS = 30 * 60_000, BLOB_RETRY_MAX_MS = 60 * 60_000, RATE_LIMIT_PAUSE_MS = 10 * 60_000;
 const DAY = 24 * 60 * 60_000, BLOB_KEEP_MS = 7 * DAY;
 const HEX64 = /^[a-f0-9]{64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SEMVER = /^(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})$/;
-const REF = /^[a-z][a-z0-9-]{1,30}\/[a-z0-9][a-z0-9-]{0,79}$/;
 const APP_VERSION = /^[0-9A-Za-z][0-9A-Za-z.+-]{0,39}$/;
 const BLOB_NAME = /^([a-f0-9]{64})\.json$/, OWNED_BLOB_FILE = /^[a-f0-9]{64}\.json(?:\.[0-9a-f-]{36}\.tmp)?$/;
 const STATES = new Set(["installed", "failed", "removed", "withdrawn"]);
 const REASONS = new Set(["blob_unavailable", "invalid_package", "import_failed", "newer_app_required", "connection_refused_by_policy", "removed_locally", "withdrawn_by_publisher"]);
 export const LIBRARY_STATE_MESSAGE = "openmausbot:managed-library-state";
 
-// The portal label rule of managed-desktop.mjs, and typed: a regex alone would accept ["…"].
-// oxlint-disable-next-line no-control-regex
-const safeText = (value, max) => typeof value === "string" && value.length > 0 && value.length <= max && !/[\x00-\x1f\x7f]/.test(value);
-// Release notes may hold newlines, nothing else below 0x20.
-// oxlint-disable-next-line no-control-regex
-const notesText = value => typeof value === "string" && value.length <= NOTES_MAX && !/[\x00-\x09\x0b-\x1f\x7f]/.test(value);
 const matches = (pattern, value) => typeof value === "string" && pattern.test(value);
 const count = value => Number.isSafeInteger(value) && value >= 0;
 const record = value => Boolean(value) && typeof value === "object" && !Array.isArray(value);
-const oneOf = (values, value) => typeof value === "string" && values.includes(value);
 export const sha256Hex = bytes => createHash("sha256").update(bytes).digest("hex");
 
 /** capabilities.library from GET /api/public/config: an Admin without it never sees a library request. */
@@ -58,48 +52,9 @@ export function libraryRouteLimits(route) {
   return { method: "GET", maxBytes: LIBRARY_BLOB_MAX_BYTES, timeoutMs: 60_000 };
 }
 
-function parseRelease(value) {
-  if (value === null) return null;
-  if (!record(value) || !matches(SEMVER, value.version) || !matches(HEX64, value.sha256) || !Number.isSafeInteger(value.sizeBytes) || value.sizeBytes < 1 ||
-      value.sizeBytes > LIBRARY_BLOB_MAX_BYTES || !Number.isSafeInteger(value.formatVersion) || value.formatVersion < 1 || !count(value.publishedAt) || !notesText(value.notes)) return undefined;
-  const { version, sha256, sizeBytes, formatVersion, publishedAt, notes } = value;
-  return { version, sha256, sizeBytes, formatVersion, publishedAt, notes };
-}
-function parseEntry(value) {
-  if (!record(value)) return null;
-  const { packageId, ref, name, tagline, kind, publisher, mode, offAction, withdrawnReleases, contents, scanFindings } = value;
-  const release = parseRelease(value.release);
-  if (!matches(UUID, packageId) || !matches(REF, ref) || !safeText(name, 100) || !safeText(tagline, 160) || !oneOf(["team", "library"], kind) ||
-      !record(publisher) || !matches(UUID, publisher.organizationId) || !safeText(publisher.name, 100) || typeof publisher.self !== "boolean" ||
-      !oneOf(["required", "available", "off"], mode) || !oneOf(["keep", "remove"], offAction) || release === undefined ||
-      !Array.isArray(withdrawnReleases) || withdrawnReleases.length > WITHDRAWN_MAX || !withdrawnReleases.every(item => record(item) && matches(SEMVER, item.version) && matches(HEX64, item.sha256)) ||
-      !record(contents) || !["bots", "skills", "presets", "rooms", "routines", "connections"].every(key => count(contents[key])) ||
-      !Array.isArray(contents.botNames) || contents.botNames.length > 12 || !contents.botNames.every(bot => safeText(bot, 100)) || !count(scanFindings)) return null;
-  return { packageId, ref, name, tagline, kind, publisher: { organizationId: publisher.organizationId, name: publisher.name, self: publisher.self }, mode, offAction, release,
-    withdrawnReleases: withdrawnReleases.map(({ version, sha256 }) => ({ version, sha256 })),
-    contents: { bots: contents.bots, skills: contents.skills, presets: contents.presets, rooms: contents.rooms, routines: contents.routines, connections: contents.connections, botNames: [...contents.botNames] },
-    scanFindings };
-}
-/** GET /api/desktop/library (contract §5.3). Takes the parsed JSON, its text or its bytes.
- * Unknown fields are ignored and a malformed entry is dropped; a malformed
- * envelope, or another organization's catalog, returns null so the caller keeps
- * the last good one. A formatVersion above 2 stays listed ("update the app") and
- * is never fetched. */
-export function parseOrgLibraryCatalog(input, { organizationId } = {}) {
-  let value = input;
-  if (typeof input === "string" || input instanceof Uint8Array) {
-    try { value = JSON.parse(typeof input === "string" ? input : new TextDecoder("utf-8", { fatal: true }).decode(input)); } catch { return null; }
-  }
-  if (!record(value) || value.format !== "openmaus.org-library" || value.version !== 1 || !count(value.libraryVersion) || !record(value.organization) ||
-      !matches(UUID, value.organization.id) || !safeText(value.organization.name, 100) || !Array.isArray(value.packages) || value.packages.length > CATALOG_MAX_ENTRIES) return null;
-  if (organizationId !== undefined && value.organization.id !== organizationId) return null;
-  const seen = new Set(), packages = [];
-  for (const item of value.packages) {
-    const entry = parseEntry(item);
-    if (entry && !seen.has(entry.packageId)) { seen.add(entry.packageId); packages.push(entry); }
-  }
-  return { format: "openmaus.org-library", version: 1, libraryVersion: value.libraryVersion, organization: { id: value.organization.id, name: value.organization.name },
-    ...(value.truncated === true ? { truncated: true } : {}), packages };
+/** GET /api/desktop/library (contract §5.3). shared/org-library-catalog.ts. */
+export function parseOrgLibraryCatalog(input, options = {}) {
+  return parseSharedOrgLibraryCatalog(input, options);
 }
 /** Install report entries (contract §5.5), each parsed on its own like Admin's: a bad one is dropped. */
 export function parseLibraryReportEntries(value) {

@@ -14,7 +14,7 @@
 //
 // The listing is kept as `<attachments>/.archives/<upload>.json` (a folder
 // the quota scan and the attachment routes never look into).
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import {
@@ -70,6 +70,44 @@ export async function prepareArchiveUpload(path: string, options: { extractHere:
     renameSync(partial, target);
   }
   return manifest;
+}
+
+const UUID_SUFFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** A process can stop while the archive extractor owns its private atomic
+ * destination. Under the upload session lock, remove only partial folders
+ * belonging to this exact generated archive and torn manifest temp files. */
+export function recoverArchiveUpload(path: string): void {
+  const file = basename(path);
+  if (!UPLOAD_NAME.test(file) || !archiveKind(path)) return;
+  const extracted = localExtractedPath(path);
+  const parent = dirname(extracted);
+  const partialPrefix = `${basename(extracted)}.partial-`;
+  try {
+    for (const entry of readdirSync(parent, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !entry.name.startsWith(partialPrefix)) continue;
+      if (!UUID_SUFFIX.test(entry.name.slice(partialPrefix.length))) continue;
+      rmSync(join(parent, entry.name), { recursive: true, force: true });
+    }
+  } catch { /* no extracted folder parent */ }
+  const manifestDir = manifestsDir(dirname(path));
+  const manifestPrefix = `${file}.json.`;
+  try {
+    for (const entry of readdirSync(manifestDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.startsWith(manifestPrefix) || !entry.name.endsWith(".tmp")) continue;
+      const pid = entry.name.slice(manifestPrefix.length, -4);
+      if (/^\d+$/.test(pid)) rmSync(join(manifestDir, entry.name), { force: true });
+    }
+  } catch { /* no manifest directory */ }
+}
+
+/** Called under the upload session lock after an unused upload is canceled,
+ * so an in-flight extraction cannot recreate its family after cleanup. */
+export function removeArchiveUpload(path: string): void {
+  if (!UPLOAD_NAME.test(basename(path)) || !archiveKind(path)) return;
+  recoverArchiveUpload(path);
+  rmSync(join(manifestsDir(dirname(path)), `${basename(path)}.json`), { force: true });
+  rmSync(localExtractedPath(path), { recursive: true, force: true });
 }
 
 /** The stored manifest of one upload (`<uuid>.<ext>`), or null. */

@@ -55,6 +55,7 @@ import { githubGitEnvironment } from "./github-connect.ts";
 import { WORKSPACE_SCOPE as WORKSPACE_TOKEN_KEY } from "./github-credentials.ts";
 import type { MarketplaceCredentialView } from "../shared/github-credentials.ts";
 import { applyPluginConfig, checkPluginConfig, readConfigValues, readPluginConfigFields, writeConfigValues, type PluginConfigField, type PluginConfigValue } from "./plugin-config.ts";
+import { invalidatePluginMetaCache, pluginMetadataCacheRoot, rebuildPluginMetaCache } from "./plugin-metadata-cache.ts";
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const BOT_ID = /^[\w-]{1,80}$/;
@@ -140,6 +141,22 @@ export function normalizePolicyEntry(entry: string): string {
     return `${wildcard[1]!.toLowerCase()}/*`;
   }
   return parseGitSource(text).id;
+}
+
+/** Capabilities lot 4: the effective marketplace rule of a linked server.
+ * Perspicax's policy, when set, replaces the historical one: `any`, or
+ * `list` = the sources of its enabled allowed marketplaces (owner/repo,
+ * owner/*, public HTTPS). A null policy (never set in Perspicax) or an
+ * absent one (an older Perspicax) keeps the historical rule unchanged:
+ * null is never read as `any`. Pure. */
+export function effectiveMarketplacePolicy(
+  perspicax: { mode: "any" | "list" } | null | undefined,
+  marketplaces: ReadonlyArray<{ source: string; enabled: boolean }> | undefined,
+  historical: MarketplacePolicy | undefined,
+): MarketplacePolicy | undefined {
+  if (!perspicax) return historical;
+  if (perspicax.mode === "any") return { mode: "any" };
+  return { mode: "list", allow: [...new Set((marketplaces ?? []).filter((market) => market.enabled).map((market) => market.source.trim()).filter(Boolean))] };
 }
 
 export function marketplaceAllowed(policy: MarketplacePolicy | undefined, source: GitSource): boolean {
@@ -468,6 +485,19 @@ export const runGit: GitRunner = (args, options) => new Promise((resolvePromise,
 
 export interface BotPluginsOptions {
   dataDir: string;
+  /** Lot 5: per-bot capability config store. When present and migrated,
+   * plugin state and config values read/write here; plugin file trees stay
+   * under bot-plugins/<bot>/plugins/. A write through the store also marks
+   * the source migrated so a bot created after boot is readable at once. */
+  capabilityStore?: {
+    present(id: string): boolean;
+    hasMigrated(id: string, sourceId: string): boolean;
+    markMigrated(id: string, sourceId: string): void;
+    plugins(id: string): PluginState;
+    setPlugins(id: string, state: PluginState): void;
+    pluginValues(id: string): CapabilityPluginValues;
+    setPluginValues(id: string, values: CapabilityPluginValues): void;
+  };
   /** Another capability scope uses the same installs and update logic,
    * with its own validated ids, folder and state store (personal state is
    * encrypted in capabilities.enc). Nothing writes state.json there. */
@@ -562,6 +592,10 @@ export class BotPlugins {
 
   private read(botId: string): PluginState {
     if (this.options.storage) return stateSchema.parse(this.options.storage.read(botId));
+    const store = this.options.capabilityStore;
+    if (store?.present(botId) && store.hasMigrated(botId, "bot-plugins-state")) {
+      return stateSchema.parse(store.plugins(botId));
+    }
     return readStateFile(join(this.root(botId), "state.json")) ?? { version: 2, plugins: {} };
   }
 
@@ -570,8 +604,15 @@ export class BotPlugins {
       this.options.storage.write(botId, stateSchema.parse(state));
       return;
     }
+    const parsed = stateSchema.parse(state);
+    const store = this.options.capabilityStore;
+    if (store) {
+      store.setPlugins(botId, parsed);
+      if (!store.hasMigrated(botId, "bot-plugins-state")) store.markMigrated(botId, "bot-plugins-state");
+      return;
+    }
     mkdirSync(this.root(botId), { recursive: true, mode: 0o700 });
-    writeFileAtomic(join(this.root(botId), "state.json"), JSON.stringify(stateSchema.parse(state), null, 2));
+    writeFileAtomic(join(this.root(botId), "state.json"), JSON.stringify(parsed, null, 2));
   }
 
   private validId(id: string): boolean {
@@ -580,12 +621,26 @@ export class BotPlugins {
   }
 
   private values(id: string): CapabilityPluginValues {
-    return this.options.storage?.values(id) ?? readConfigValues(this.configFile(id));
+    if (this.options.storage) return this.options.storage.values(id);
+    const store = this.options.capabilityStore;
+    if (store?.present(id) && store.hasMigrated(id, "bot-plugins-config")) {
+      return store.pluginValues(id);
+    }
+    return readConfigValues(this.configFile(id));
   }
 
   private writeValues(id: string, values: CapabilityPluginValues): void {
-    if (this.options.storage) this.options.storage.writeValues(id, values);
-    else writeConfigValues(this.configFile(id), values);
+    if (this.options.storage) {
+      this.options.storage.writeValues(id, values);
+      return;
+    }
+    const store = this.options.capabilityStore;
+    if (store) {
+      store.setPluginValues(id, values);
+      if (!store.hasMigrated(id, "bot-plugins-config")) store.markMigrated(id, "bot-plugins-config");
+      return;
+    }
+    writeConfigValues(this.configFile(id), values);
   }
 
   private withLock<T>(botId: string, work: () => Promise<T>): Promise<T> {
@@ -736,6 +791,9 @@ export class BotPlugins {
       all[key] = checked.values;
       this.writeValues(botId, all);
       applyPluginConfig(dir, fields, checked.values);
+      // The values are written into the plugin's files: refresh discovery
+      // metadata now rather than leaving every turn on the bounded scan.
+      try { rebuildPluginMetaCache(pluginMetadataCacheRoot(this.options.dataDir), dir); } catch { /* turn reports partial on miss */ }
       return { key, ...listedPlugin(record), config: { fields, values: checked.values } };
     });
   }
@@ -805,7 +863,9 @@ export class BotPlugins {
       const mine = Object.entries(state.plugins).filter(([, plugin]) => plugin.marketplace === name);
       if (!record && !mine.length) throw new BotPluginError("No marketplace with that name.", "not_found", 404);
       for (const [key, plugin] of mine) {
-        rmSync(this.pluginDir(botId, plugin.marketplace, plugin.name), { recursive: true, force: true });
+        const dir = this.pluginDir(botId, plugin.marketplace, plugin.name);
+        invalidatePluginMetaCache(pluginMetadataCacheRoot(this.options.dataDir), dir);
+        rmSync(dir, { recursive: true, force: true });
         delete state.plugins[key];
       }
       if (mine.length) this.write(botId, state);
@@ -890,6 +950,9 @@ export class BotPlugins {
       };
       this.writeHookBundle(botId, key, result.hooks, result.hookFiles);
       this.write(botId, state);
+      // Exhaustive discovery metadata for API and file engines. Built only on
+      // install/update; the turn hot path never rewalks the tree.
+      try { rebuildPluginMetaCache(pluginMetadataCacheRoot(this.options.dataDir), target); } catch { /* turn reports partial on miss */ }
       return { key, ...listedPlugin(state.plugins[key]!) };
     });
   }
@@ -992,7 +1055,9 @@ export class BotPlugins {
       const state = this.read(botId);
       const record = state.plugins[key];
       if (!record) throw new BotPluginError("No plugin with that name on this bot.", "not_found", 404);
-      rmSync(this.pluginDir(botId, record.marketplace, record.name), { recursive: true, force: true });
+      const dir = this.pluginDir(botId, record.marketplace, record.name);
+      invalidatePluginMetaCache(pluginMetadataCacheRoot(this.options.dataDir), dir);
+      rmSync(dir, { recursive: true, force: true });
       rmSync(this.hookDir(botId, key), { recursive: true, force: true });
       delete state.plugins[key];
       this.write(botId, state);
@@ -1210,6 +1275,12 @@ export class BotPlugins {
   forgetBot(botId: string): void {
     if (!this.validId(botId)) return;
     try { this.options.tokens?.forgetBot(botId); } catch { /* the folder still goes */ }
+    // Read before the reset below so their discovery metadata goes too.
+    let installed: Array<{ marketplace: string; name: string }> = [];
+    try { installed = Object.values(this.read(botId).plugins); } catch { /* nothing readable to forget */ }
+    for (const plugin of installed) {
+      try { invalidatePluginMetaCache(pluginMetadataCacheRoot(this.options.dataDir), this.pluginDir(botId, plugin.marketplace, plugin.name)); } catch { /* invalid name: no cache */ }
+    }
     if (this.options.storage) {
       this.write(botId, { version: 2, plugins: {} });
       this.writeValues(botId, {});

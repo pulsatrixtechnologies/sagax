@@ -253,11 +253,11 @@ try {
       // the screenshot first: the check walks every point of 32 drawings and takes a while, a move would be over
       await page.locator("[data-shot]").screenshot({ path: file });
       report = await page.evaluate(CHECK);
-      if (report.length >= 32) break;
+      if (report.length >= 40) break;
     }
     shrink(file);
     const bad = report.filter((r) => r.error || r.eyeOut > 0 || r.gaps.length > 0 || r.stemOut);
-    if (report.length < 32) failures.push(`${scene.name}: only ${report.length} shapes on the page`);
+    if (report.length < 40) failures.push(`${scene.name}: only ${report.length} shapes on the page`);
     for (const r of bad) failures.push(`${scene.name}: ${r.shape} ${r.error ?? `eyes out ${r.eyeOut}/${r.eyePoints}, slices apart ${r.gaps.length}/${r.slices}, stem out ${r.stemOut}`}`);
     let diff = null;
     const reference = join(referenceDir, `${scene.name}.png`);

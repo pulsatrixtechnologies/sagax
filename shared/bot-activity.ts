@@ -8,11 +8,10 @@
 import type { BotLaunchedAgentItem } from "./bot-launched-agents.ts";
 import type { WireAccessCard } from "./wire.ts";
 
-export type BotActivityKind = "session" | "routine" | "hop" | "subagent";
+export type { BotActivityStatus } from "./bot-activity-status.ts";
+import type { BotActivityStatus } from "./bot-activity-status.ts";
 
-/** running: a turn is in flight; waiting: it waits for a person (an
- * approval, a question); queued: not started yet. */
-export type BotActivityStatus = "running" | "waiting" | "queued" | "finished" | "failed" | "stopped";
+export type BotActivityKind = "session" | "routine" | "hop" | "subagent";
 
 export interface BotActivityActor {
   kind: "person" | "bot" | "routine";

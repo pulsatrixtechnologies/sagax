@@ -269,6 +269,10 @@ on its own.
 
 ## Update
 
+People should not see errors during a short restart: Caddy holds requests while
+the process drains, and clients show Reconnecting and resume the stream
+([Invisible deploys](zero-downtime-deploy.md)).
+
 - **Paths A and C with the service above:** choose the new release, then run
   these commands from the administrator shell, replacing `X.Y.Z`:
 
@@ -280,7 +284,8 @@ on its own.
 
   Check that the build succeeded before starting. A service restart by itself
   does not update the checkout. For a foreground server, check out the release
-  the same way, then run `pnpm omb serve --tunnel`.
+  the same way, then run `pnpm omb serve --tunnel`. Prefer `systemctl restart`
+  (SIGTERM) over a hard kill so the drain and Caddy hold can run.
 - **Path B:** `cd sagax && git pull && cd deploy && docker compose up -d --build`.
 
 Routines and queued work survive a restart. A teammate turn running at that moment runs again once at the next start, told to check what it already did, and the bot that asked for it is told. A person's own turn and a running routine are not run again: the conversation says it was interrupted. Update between runs where you can.

@@ -49,6 +49,10 @@ describe("agents catalog: the agent-to-agent tools", () => {
     expect(schema("send_prompt").mode!.enum).toEqual(["fire_and_forget", "blocking", "async"]);
     expect(schema("send_prompt").on_busy!.enum).toEqual(["supersede", "reject", "queue"]);
     expect(schema("send_prompt").priority!.enum).toEqual(["now", "normal"]);
+    expect(schema("send_prompt").thread_id).toMatchObject({ type: "string" });
+    expect(schema("await_turn").timeout_ms!.maximum).toBe(55_000);
+    expect(schema("await_turn").timeout_ms!.minimum).toBe(0);
+    expect(schema("await_turn").cursor).toMatchObject({ type: "string" });
     expect(schema("find_agents").status!.enum).toEqual(["running", "idle"]);
     expect(schema("create_agent").idle_hours!.maximum).toBe(720);
   });

@@ -355,7 +355,7 @@ export function TeamMapPage() {
   return (
     <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-app text-ink">
       {(macInset || browser) && <div className="content-topbar-strip" />}
-      <header {...dragProps} className="content-topbar flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-hairline/40 px-6 py-4 max-md:pl-12">
+      <header {...dragProps} className="content-topbar flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-hairline/40 px-6 py-4 max-sm:pl-12">
         <div>
           <div className="flex items-center gap-2.5">
             <Network size={18} className="text-ink-secondary" />

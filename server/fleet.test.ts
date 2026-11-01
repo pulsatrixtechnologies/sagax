@@ -88,6 +88,8 @@ describe("rendered files", () => {
     expect(running).toContain("reverse_proxy 127.0.0.1:8811");
     expect(running).toContain("reverse_proxy 127.0.0.1:8810 {");
     expect(running).toContain("flush_interval -1");
+    expect(running).toContain("lb_try_duration 25s");
+    expect(running).toContain("health_uri /healthz");
     expect(caddySite({ host: "acme.agentada.cc", port: 8810, webhookPort: 8811, status: "suspended" })).toContain('respond "This workspace is suspended." 503');
     for (const status of ["provisioning", "error", "retained"] as const) {
       expect(caddySite({ host: "acme.agentada.cc", port: 8810, webhookPort: 8811, status })).toContain("503");

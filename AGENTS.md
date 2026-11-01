@@ -14,6 +14,131 @@ Before claiming a server or conversation change works, follow
 [`docs/verification/README.md`](docs/verification/README.md). Always launch an
 isolated fixture; never verify mutations against the user's live app or data.
 
+## Agents catalog budget (#1703, 2026-11-01)
+
+The agents `tools/list` wire is pinned and size-budgeted by
+`server/drivers/agents-catalog-wire.test.ts`. Default listing stays the full
+catalog (Grok, Codex and Pi discover by name, #1314). Measured provider
+limits: 128 tools per request (chat-completions), 150_000 UTF-8 bytes soft
+ceiling for an agents listing (`AGENTS_CATALOG_BYTES_SOFT_CEILING`). The +2%
+ratchet around `BUDGET_BASELINE` still catches accidental growth; raise the
+baseline on purpose when a tool lands, do not shorten descriptions only to
+squeeze under the old cap.
+
+Growth path: `SAGAX_CATALOG_GROUPS=1` lists the chat-turn core plus
+`list_tool_groups`, `load_tool_group` and `use_tool`
+(`server/drivers/agents-catalog-budget.ts`). Every other tool stays reachable
+by group. Claude already has deferred rare tools and the find_tool bridge;
+Codex merges families. Prefer groups or an existing lazy path before cutting
+copy. Margin per profile is printed by the wire-size tests.
+
+## Native resumable attachments (2026-10-31)
+
+The iOS composer and Share extension use `CompanionCore/AttachmentUpload.swift`
+against the existing authenticated `phase=status|chunk|commit|cancel` routes.
+Keep each attachment UUID through retry, validate durable offsets and receipts,
+and send cleanup from an independent Task with the original connection. The
+server decides whether a committed file is still referenced. Native drafts and
+upload states live in `Session`, keyed by connection/thread; pending or failed
+chips hold Send, and removal also forgets an obsolete failed-send retry.
+`AttachmentTransferJournal.swift` persists protected files, draft text,
+offsets, receipts and accepted send envelopes. App Group shares hand off via
+`AppShared/SagaxSharedTransfers.swift`; the containing app resumes on foreground.
+Use a cross-process lease and cancellation tombstone. Replays preserve the
+exact body, SendOptions and sendId, including reply/page/busy routing. Never
+restore a total 90-second upload deadline or purge durable jobs with temporary
+ShareInbox copies. Picker files are app-owned protected copies. Two
+transfers each read at most 4 MiB. Preserve 32 items, the 200 MiB image aggregate,
+32/90 MiB shared/solo images, 250 MiB ordinary files and 1 GiB videos.
+Transient failures (network, 408/409/425/429, 5xx) retry in place after
+1/3/8 s, re-reading the durable offset; local file changes and definitive
+4xx refusals do not. A refused outbox delivery is removed (server cancel
+sent, composer draft kept) rather than replayed. `SagaxTransferActivity`
+holds an expiring-activity assertion (app and extension) while a transfer
+runs; past it, the journal resumes on foreground or reconnect.
+Quick Look uses message-scoped URLSession disk downloads; automatic thumbnails
+keep their separate buffered ceiling. Tests: `AttachmentUploadTests`,
+`MessageAttachmentsTests`, `ShareClientTests`, `DemoFilesTests`. Evidence and
+physical limits: `docs/plans/grok-convergence-media-evidence.md` (iOS section).
+
+## Scoped skill discovery and API plugin delivery (2026-10-31)
+
+The turn, preview, Capabilities `promptIndex` and `skills_list` share
+`scopedSkillInventory` and `server/skill-discovery.ts`. The prompt renders
+it per capability (`server/capability-prompt.ts`, lot 3: 4,000 bytes and 30
+files each, whole-file omission); native Claude plugins stay native.
+`skills_list` reads independently of skill authoring and pages by stable
+scoped identity. Never restore the plugin scanner's silent 40-file cutoff.
+Keep disabled descriptions and staged gists out of discovery, and derive
+Me from the turn speaker.
+API engines always receive the whole files in their prompt within the same
+per-capability budget (Q8 C, say then fill, 2026-11-01), read through the
+same checks as `workspace_read`: with both retrieval tools allowed they are
+named by alias and the tools reach the rest; tools off, they are named by
+file name and the prompt is all they get. File engines keep path delivery.
+Preserve native file paths separately from aliases. The
+organization's Flow reaches every engine (lot 3). Plugin hooks and LSP stay
+out of non-Claude discovery; say so rather than claiming they execute.
+The live plugin scan stays bounded per turn; durable metadata under
+`DATA_DIR/plugin-metadata/` (built on install/update/config, dropped on
+remove; a file or directory stamp change is a miss) keeps references beyond
+that bound discoverable through `skills_list`. A miss uses the bounded scan,
+is partial only when that scan stopped early, and queues one rebuild after
+the turn; never rebuild inside the turn. `workspace_read` uses the same
+selected plugin folders as discovery (Flow included on every engine). A partial or unreadable inventory is explicit in the
+prompt, list and receipt.
+`workspace_read` also resolves exact `skill-library/<name>/SKILL.md` and
+`plugins/<name>/...` aliases, rechecking the current enabled assignment,
+integrity and shadow winner. Engine switch and failover keep the same
+selected skill bytes and per-person dependencies when the backup engine can
+use the same retrieval tools.
+Contract, preserved strengths and subsequent lots:
+[`docs/plans/2026-10-31-grok-convergence.md`](docs/plans/2026-10-31-grok-convergence.md).
+Lot 2 evidence: [`docs/plans/grok-convergence-engines-evidence.md`](docs/plans/grok-convergence-engines-evidence.md).
+
+## make_video runs on xAI's Videos API (2026-11-01)
+
+`server/video-provider.ts` (wire), `video-generation.ts` (durable jobs),
+`video-credentials.ts` (personal key, then the org key only with the
+`xaiImage` grant, never a payer switch), `video-status.ts` (the one row per
+job: progress, receipts, replaced by the MP4) and `routes/video-internal.ts`.
+The journal is written before the billable POST and never holds prompts,
+keys or signed URLs. Never resubmit an unacknowledged POST; retry resumes the
+same request_id. Restart resumes pending/downloading only. Unknown poll
+states stay pending. Tests: `server/video-*.test.ts` and the two
+`video-generation*.e2e.test.ts` (loopback xAI stand-in, SIGKILL restart).
+Evidence: `docs/plans/grok-convergence-media-evidence.md`.
+
+## One request, one root; every teammate path on the runtime (2026-10-31, lot 3)
+
+A usage limit's backup turn continues the root the failed turn opened
+(`Runtime.continueHost`, `Coordinator.continueRoot`, found durably by
+`requestRoot` through `Assignment.request`), never a second root; Stop is
+final for a request waiting on a reset. A resume that fails on the same
+limit after every teammate reported is reopened and runs again with the same
+results (`continueHost` "resumed"), never a resend of the request (that
+dispatched its work twice). Invariant I11: one request, one tree. A
+requester that reworks the same brief stops after three reworks; one
+requesting turn hands out at most 64 pieces of work (`MAX_REWORKS`,
+`MAX_REQUESTS_PER_REQUESTER`).
+Routine and webhook run turns coordinate on the runtime (`coordinate_bots`);
+the run waits on that work (`awaitsTeammates`, a pure store read safe from
+the routine manager's constructor) and stays waiting across a restart; a
+failed, requeued, cancelled, timed-out or orphaned run (the routine
+`interruptTurn` hook) stops awaiting it, so nothing resumes it. Honest run
+endings read `handedOutOutcome`. `delegate_bot` and `ask_bot` (chat, routine
+thread, external) are runtime work or consult; `send_to_bot` is a one-way
+notice; an external call that needs peer review waits queued (`reviewHolds`);
+the aside lane folds into a live turn or becomes a consultation; a step
+cap's `Continue:` thread is `enqueueContinuation`. Room goal worker turns
+run via `runGoalWorkerOnRuntime` / `enqueueGoalAssignment` (lead turns stay
+on the sequential step; same-bot self-assign falls back there). The legacy
+ledger and aside queue are gone. Still off the runtime: `run_with_engine`
+(receipt drawer). Tests:
+`server/runtime-delivery-convergence.e2e.test.ts` (checks invariants over
+the server's `runtime.db`), `server/runtime/runtime.test.ts`. Evidence and
+route table: `docs/plans/grok-convergence-runtime-evidence.md`.
+
 ## Peer completion: done_when and no ack-as-done (2026-10-30, #1818)
 
 `coordinate_bots` accepts optional `done_when`. Structured clauses the harness
@@ -64,6 +189,19 @@ request, issue, or push against the original OpenMausBot project
 repository. Do not add an upstream remote with push access.
 
 More specific `AGENTS.md` files override this note within their directories.
+
+## Bot models page (2026-11-01, #1675)
+
+Settings > Models opens with **Bot models**: the person's own bots (no admin
+gate for own bots), grouped by sidebar section. Each row edits engine/model
+in place (same `ModelPicker` / `setModel` path as the bot panel), effort, who
+pays, and shows backups plus a warning when the engine is signed out, expired
+or unavailable. Bulk change selects a section or several bots, then confirms
+a summary before writing. Defaults for new bots sit at the top on a solo
+server. Works without a model turn. Org allowed-engines rules still apply.
+DOM tests: `BotModelsSettings.dom.test.ts`. Captures:
+`docs/screenshots/bot-models-page/`. iOS has no Models settings area yet, so
+the page is desktop/web only.
 
 ## One flat model picker and dispatch preview (2026-10-30)
 
@@ -350,8 +488,10 @@ Avancé or Géré dans Grok. A text that sends the person somewhere names a tab
 that exists: Capabilities > Discover, Installed, Providers, Pages, Sources.
 Grok's cloud connectors are listed from Grok's own catalog and say « Non
 vérifiable » (Sagax cannot check them). `plugins.claudeOnly` says what a
-non-Claude engine really gets (skills and commands in the prompt on an
-engine with files, nothing yet on Grok and API engines).
+non-Claude engine really gets (skills, commands and agents, the
+organization's Flow included, in the prompt index on a file engine; on Grok
+and API engines, when skills_list and workspace_read are allowed, whole
+files in the prompt and those tools for the rest; hooks/LSP stay on Claude).
 
 ## Capabilities: personal references and complete plugins (lot 2, 2026-10-30)
 
@@ -431,12 +571,16 @@ sheet). Keep these rules, covered by `server/capabilities.test.ts`,
   `key` is stable and never shown; no id in a name.
 - One engine matrix, `engineReceipt` (shared/capabilities.ts), for the
   resolver and the texts: Claude loads plugins whole (`--plugin-dir`:
-  native) and is the only engine the organization's Flow reaches (C-3);
-  other engines with files read plugin skills, commands and agents from
-  the turn prompt (server/plugin-turn.ts); engines without files
-  (`ENGINES_WITHOUT_FILES`, which `supportsWorkspaceFiles` now reads) get
-  nothing of a plugin, a skill or Flow; MCP is `mounted` by an engine with
-  files, `proxied` by Sagax for one without, `none` without `customMcp`.
+  native); other engines with files read plugin skills, commands and
+  agents through the turn's per-capability file index; engines without
+  files (`ENGINES_WITHOUT_FILES`, which `supportsWorkspaceFiles` reads)
+  always receive whole instruction files from the same selected scopes
+  (`server/capability-prompt.ts`, Q8 C): named by alias with those tools
+  for the rest when `skills_list` and `workspace_read` are allowed
+  (`skillDiscovery`), by file name when the tools are off. The organization's Flow reaches every
+  engine through this contract (lot 3). MCP is `mounted` by an
+  engine with files, `proxied` by Sagax for one without, `none` without
+  `customMcp`.
 - An installed plugin record is historical, not proof of ownership. Fold
   an installation MCP server or library skill into a plugin only when its
   current `source` matches the marketplace and exactly one record claims
@@ -449,7 +593,7 @@ sheet). Keep these rules, covered by `server/capabilities.test.ts`,
   `engineMcpServers` / `mcpServersAsPerson`), `personalMcpPrecheck` (the
   person's own servers, `mountPersonalMcp`), `perspicaxServerName`,
   `turnPluginDirs` and `turnPluginPromptDirs` (`pluginDirsFor`,
-  `pluginSkillsForTurn`). The test "a turn mounts exactly what the list
+  `turnCapabilityPrompt`). The test "a turn mounts exactly what the list
   says" checks, for Claude, Codex and Grok, that the MCP names and plugin
   folders a turn gets equal the list's capabilities that are on (or
   imposed) and received. Change one, change both through these functions.
@@ -464,13 +608,17 @@ sheet). Keep these rules, covered by `server/capabilities.test.ts`,
   (`guard_off`). An installation server that needs a sign-in is still
   mounted (state on, `connect.reason: sign_in`); a personal one is not
   (`to_connect`). A plugin "Everyone" folds its servers into its row.
-- `promptIndex` (#1748): the skills index's bytes and count, its caps
-  (`INDEX_MAX_BYTES`, `INDEX_MAX_SKILLS`) and what it left out, from
-  `skillsPromptIndex` (server/skills.ts), the same computation as the
-  prompt without touching links or the log. The prompt shortens
-  descriptions under the byte cap before omitting any enabled skill;
-  only `INDEX_MAX_SKILLS` drops an id. `skills_list` returns description
-  and SKILL.md path for enabled skills so a shortened row stays loadable.
+- `promptIndex` reports the exact prompt bytes, file count and omissions
+  per capability (`Capability.promptIndex`) and in aggregate, from
+  `capabilityPrompt` fed by `scopedSkillInventory`: 4,000 bytes and 30
+  files per capability, whole instruction files for chat engines, paths
+  for file engines, whole-file omission (never a cut file). Oversized files
+  do not prevent smaller files or another capability from being served.
+  Preview and receipts do not touch native links.
+- Linked Flow has one row `flow:organization:pulsatrix-flow`, combining
+  product and tenant instructions and the installed signed pack digest.
+  An official GitHub `pulsatrix-flow@pulsatrix` installation is an alias,
+  never a second mount and never a way around the organization's Flow switch.
 - Grok's account connectors are a static catalog: `unverifiable`, never
   "connected".
 
@@ -495,40 +643,77 @@ plaintext `state.json` or `config.json`. Credential selections use a
 selection. Forgetting that scope removes plugins and their values while
 preserving the person's other capabilities and GitHub connection.
 
-## Proactive bots, wired for real (2026-10-30)
+## Capabilities: three config stores (lot 5, 2026-11-01)
 
-A bot's proactive mode (`proactiveMode`, Edit bot > Permissions > Proactive,
-`sagax_settings` `bot.proactiveMode`, default `follow-rules` since #1742) now
-acts on the events Sagax already receives (`server/proactive-wake.ts`,
-`ProactiveWaker`), none invented: a bot email no routine took (the mail
-route's `unhandled`), a one-bot calendar entry coming due
-(`deliverCalendarCall`), a failed routine or webhook run (`onRunFailed`),
-another bot's post in a room that names the bot (post_to_room), and a
-webhook that posts to the chat (`delivery: "post"`). off: nothing. propose:
-a proposal card in the bot's one conversation (`card.proactiveProposal`, no
-model call), answered on `POST /api/bots/:id/proactive/:proposalId` (server/routes/proactive-proposals.ts)
-`{accept}` (client-scoped, companion-allowed; options[0] accepts,
-`shared/proactive-proposal.ts`), the yes starting the wake at the bot's
-level; proposals in `proactive-proposals.json` (0600, 3 days). read-auto and
-follow-rules: a background run (`RoutineManager.enqueueProactive`,
-`run.proactive {mode, hops, sources, confined?, accepted?}`, its own hidden
-task, reported into the one conversation only when it has something,
-`routineEffectivePostResults`); read-auto runs at Ask unless the bot is
-Full (`proactiveReadAutoTurn` in `approvalModeForTurn`); a mail wake is
-confined like a mail-woken run (`botmailConfined`) with `BOTMAIL_RUN_RULES`.
-Guards: the simple filter `proactiveRelevance` (a successful run, a post
-that does not name the bot: no model), the wake on the fast model when there
-is one (`voicePickForTurn`, #1694), never on its own wake (`ownWake`), a
-chain of bots stops at `PROACTIVE_MAX_HOPS` (3), events within 30 s make one
-wake and a wake is at most every 2 min and 12 an hour
-(`PROACTIVE_WAKE_BUDGET`), one Events line per wake (`runtime.notice`, the
-labels and the reason, never the content). Every turn's system prompt has a
-"Proactive" section (`proactivePrompt`). iOS draws the proposal card until
-it is answered (`FlatQuestionCardView`, `ProactiveProposalRules`) and sets
-the mode in Permissions (phone and iPad panel, `ProactiveMode`). Tests: `server/proactive-wake.test.ts`,
-`server/proactive-wake.e2e.test.ts` (`SAGAX_PROACTIVE_GATHER_MS`),
-`server/bot-inbound-mail.test.ts`, `src/components/OptionCard.test.ts`,
-`shared/proactive-proposal.test.ts`, `ProactiveModeTests.swift`.
+Eleven legacy capability config files become three stores. Inventory and
+deprecation window: `shared/capability-stores.ts`
+(`CAPABILITY_STORE_INVENTORY`, `CAPABILITY_ROUTE_DEPRECATION` until
+2027-11-01). Design and file map: `docs/migration/capabilities-stores.md`.
+
+- Bot: `bot-capabilities/<botId>/capabilities.json`
+  (`server/bot-capability-store.ts`). Absorbs
+  `bot-plugins/<bot>/state.json` and `plugins/config.json`. Plugin source
+  trees stay under `bot-plugins/<bot>/plugins/`.
+- Person: `principals/<pid>/capabilities.enc` (lot 2). Legacy
+  `connections.enc` is backed up and retired after verify.
+- Installation: `installation-capabilities.enc`
+  (`server/installation-capability-store.ts`, vault key, AAD
+  `sagax installation-capabilities v1`). Absorbs marketplaces state,
+  skills-library index, org-flow and org-capabilities state, and
+  `config.json` mcpServers. Org and marketplace GitHub tokens stay in
+  `github-credentials.enc` (`migrateGithubCredentials`); lot 5 only marks
+  those sources migrated.
+
+Migration at boot: `migrateCapabilitiesStores`
+(`server/capabilities-store-migration.ts`), same shape as
+`migrateGithubCredentials` (backup `.capabilities-l5.bak`, write new,
+verify, retire to `.migrated`). Idempotent; crash-safe; sealing and person
+isolation preserved. Bridge:
+`server/installation-capability-bridge.ts`. Optional `capabilityStore` on
+`BotPlugins` and `installationStore` on `PluginMarketplaces`.
+The installation store holds the ORGANIZATION's library index only
+(`skills-library/`): `server/skill-library.ts` consults the bridge for
+that root alone (`installationLibraryBridge`). A person's Me library
+(`PersonalSkills.root`, `principals/<pid>/capability-skills/index.json`)
+and every other root stay on disk under their own directory; never route a
+per-person or per-bot root through the installation bridge (2026-11-01:
+two persons' Me skills collided and leaked into the room prompt). The
+one-time repair `skills-library-person-split` returns entries a dev build
+misplaced. Regression: `server/skill-library.test.ts` ("library roots"),
+`server/org-harness-commands.e2e.test.ts` (two persons, Me skills and
+personal MCP secrets apart from each other and from the installation).
+
+Canonical routes: `GET /api/me/capabilities`,
+`GET /api/installation/capabilities` (plus the lot 1 resolved
+`GET /api/bots/:id/capabilities`). Legacy `/api/me/connections`,
+`/api/marketplaces`, `/api/skills-library` and related fragments stay as
+aliases with `Deprecation` / `Link` / `Warning` headers
+(`server/capability-route-deprecation.ts`). Tests:
+`server/capabilities-store-migration.test.ts`,
+`server/capability-route-deprecation.test.ts`. Bot package store shape:
+`docs/bot-package.md`.
+
+## Proactive bots, wired for real (2026-10-30; on/off 2026-11-01)
+
+A bot's proactive mode is a single per-bot on/off switch (`proactiveMode`,
+Edit bot > Permissions > Proactive, `sagax_settings` `bot.proactiveMode`,
+default `proactive`). Legacy `propose` / `read-auto` / `follow-rules` all
+read as `proactive`. When on, the bot wakes on the events Sagax already
+receives (`server/proactive-wake.ts`, `ProactiveWaker`): a bot email no
+routine took, a one-bot calendar entry coming due, a failed routine or
+webhook run, another bot's post that names the bot, and a webhook that
+posts to the chat. Off: no wakes. On: a background run
+(`RoutineManager.enqueueProactive`, `run.proactive`) at the bot's usual
+approval level and rules; before a write from a wake, a dry run is
+recorded on the wake, then ordinary approval runs it. The proactive layer
+adds no extra approval card; org Ask/Deny and person isolation stay.
+Leftover proposal cards from older modes are still answerable
+(`POST /api/bots/:id/proactive/:proposalId`, `ProactiveProposalRules`).
+Guards: `proactiveRelevance`, fast model when there is one, never on its
+own wake, `PROACTIVE_MAX_HOPS` (3), wake budget, one Events line per wake.
+iOS sets the mode in Permissions (`ProactiveMode`: `off` | `proactive`).
+Tests: `server/proactive-wake.test.ts`, `server/proactive-wake.e2e.test.ts`,
+`shared/proactive-mode.test.ts`, `ProactiveModeTests.swift`.
 
 ## A reply shows as it is written (2026-10-29)
 
@@ -596,18 +781,19 @@ fails or reaches its limit gives way to the next one silently
 serve Settings. Telephony (Perspicax Voice) is untouched. Gallery
 `src/gallery/voice-providers.html`, captures `node scripts/capture-voice-providers.mjs`.
 
-## Edit routine, redone (2026-10-29)
+## Edit routine, Grok-simple (2026-11-01)
 
 The routine editor (`EventEditor`, `kind === "routine"`) is titled "Edit
 routine" (or "New routine"). The name sits up top with a one-line summary:
 the schedule sentence, where results go and who it runs as. Sections follow
-(`EditorSection`): When (the schedule in words, or "When a webhook
-arrives"), What (bot, instructions, attachments) and Where results go
-(compact rows `ResultsDestination compact` and `RunAsField compact`, their
-help behind a `HelpTip`, where it runs). Then More options, folded with a
-summary: run limit, overlap, auto-pause, continuity, only when I'm here,
-mail alias, post results. Nothing of the old modal is gone. The
-instructions use `MarkdownEditor compact expandable`: the five everyday
+(`EditorSection`): What (instructions, attachments), When (repeat picker +
+one time / essentials; webhook panel when triggered), Where (bot, run-as,
+where it runs, post results). Then More options, folded by default and
+remembered per person (`sagax.routineEditorMore.v1`): time zone, next-runs
+preview, Add a time, timing (exact/flexible), clock-change note, watch
+fields, interval days/window/end, run limit, overlap, auto-pause,
+continuity, only when I'm here, mail alias. Every option stays reachable.
+The instructions use `MarkdownEditor compact expandable`: the five everyday
 buttons even in Advanced mode, Preview as one toggle and Full screen. Save
 and Cancel stay in the sticky footer. "Not saved" shows on a change (a
 snapshot of the fields), and closing over one asks first. A call keeps its
@@ -622,9 +808,11 @@ lists the bot's webhooks: a row opens its routine, or Automations >
 Webhooks for a webhook of its own. The routine's page keeps no Configuration tab: its summary (trigger, next
 run, bot) opens this editor, read-only (`fieldset disabled`, no Save, its
 owner named) for a routine the person cannot change. A run opened from the
-bot panel's routine page opens in a large modal (`RunDetailModal`), not in
-the narrow panel. Gallery `src/gallery/routine-editor.html`, captures
-`node scripts/capture-routine-editor.mjs`.
+bot panel's routine page opens as an exchange sheet in the chat column
+(`RoutineRunExchange`), same shape as a person-to-bot chat. Edit and create
+use the side panel (`presentation="panel"`). Gallery
+`src/gallery/routines-in-sidebar.html`, captures
+`node scripts/capture-routines-in-sidebar.mjs`.
 
 ## A routine's schedule in words (2026-10-29)
 
@@ -1335,6 +1523,25 @@ own Grok or Claude account even when the bot's engine brings none
 bot's default. A refusal tells the bot not to offer the card again. A part's
 successful connector call proves the card of the conversation it came from.
 
+## No repeats, no backlog, no endless re-planning (2026-11-01)
+
+A bot repeated itself and answered late. The rules that keep it from doing so:
+- Every engine that takes words live (Claude, Codex, pi, the OpenAI-compatible
+  API engines) says when its running turn read them (`steer.received` with the
+  `steerId`); the handoff then never offers them to the next turn again.
+- Lines one person left waiting behind a running turn, 1:1 or room, drain as
+  ONE follow-up turn whatever the gap (`WAITING_LINES_COALESCE_WINDOW_MS` in
+  server/admission.ts). Senders and provenance never merge; a room group stays
+  bounded by `DRAIN_COALESCE_MAX_ITEMS`. Tests:
+  `server/drain-coalescing-golden.test.ts`.
+- Text one turn already wrote (whitespace aside) is not written again in that
+  turn (server/turn-reply-repeats.ts); the next turn starts clean. Test:
+  `server/turn-reply-repeat.e2e.test.ts`.
+- A requester reworks the same brief at most `MAX_REWORKS` (3) times and hands
+  out at most `MAX_REQUESTS_PER_REQUESTER` (64) pieces of work over its life;
+  past either, enqueue is a typed `budget` refusal telling it to report
+  (server/runtime/runtime.ts). The window budgets still renew on progress.
+
 ## The person can always write (2026-10-29)
 
 The composer's box is never disabled by a pending approval: the card waits
@@ -1587,21 +1794,28 @@ classes and variables. Same CSP and sandbox. Tests:
 `ios/Tests/CompanionCoreTests/ContentThemeTests.swift`. Captures:
 `scripts/capture-bot-content-theme.ts`, docs/screenshots/bot-content-theme.
 
-## Page view (2026-10-28)
+## Page view (2026-10-28; lot 5 layout 2026-10-31, stage default after native audit)
 
 A page a bot proposes shows in the conversation as a card with a live,
 scaled-down drawing of its top and its icon, title and "Page"
-(`PagePublishCard`). A click opens it over the conversation as a full panel
-(`PageSurface` in src/components/PageViewer.tsx, src/lib/open-page.ts): round
-× top left, the title pill (click to rename, Enter saves), « ⋯ » and Share
-top right. The conversation stays mounted under the panel, so closing it
-returns to the same place. Every earlier tool (versions, annotate, present,
-edit, comments, decline) is in « ⋯ ». The app's own preview takes `bare=1`
-(no banner inside the app), `theme=light|dark` and `y=<n>`: its frame runs a
-small script that scrolls to `y` and posts `sagax-page-scroll` with a number
-to the app, so a new version the bot proposes is drawn in place at the same
-place. A reading link never takes these. Sandbox, CSP and isolation are
-unchanged.
+(`PagePublishCard`). A click opens it in the conversation frame
+(`PageSurface` in src/components/PageViewer.tsx, src/lib/open-page.ts,
+src/lib/page-chat-layout.ts): Back to chat (×) top left, the title pill
+(click to rename, Enter saves), « ⋯ » and Share top right. Default surface
+for published HTML pages is **stage** (measured Grok Bot 0.78.1 HTML/file
+artifacts and Sagax 0.8.23 iOS): the page covers the mounted conversation and
+the composer docks on the page (`data-page-stage-chat=docked`). The chat
+column stays mounted underneath (`inert` while covered) so closing returns
+to the same scroll. Optional **Show conversation** in « ⋯ » switches to
+beside when the ChatView host is wide enough (host ResizeObserver, not the
+window; Sagax richer control / Grok canvas chat-pane analogue). Hide
+conversation returns to stage. Split-view side chats never host the panel.
+Every earlier tool (versions, annotate, present, edit, comments, decline)
+is in « ⋯ ». The app's own preview takes `bare=1` (no banner inside the
+app), `theme=light|dark` and `y=<n>`: its frame runs a small script that
+scrolls to `y` and posts `sagax-page-scroll` with a number to the app, so a
+new version the bot proposes is drawn in place at the same place. A reading
+link never takes these. Sandbox, CSP and isolation are unchanged.
 
 Share is one popover (src/components/PageShare.tsx), the only place a page's
 sharing is chosen (open page, Settings > Published pages, the Library):
@@ -1614,16 +1828,31 @@ person and the invited people and teams' people (`pageReadable`,
 `teamsOf`). A page not shared yet is published by the person's gesture there.
 No admin: a member shares their own page within the organization's policy.
 
-While a page is open the conversation's composer floats over it, with the
-bot's state or newest answer in one line above it ("On it", then its
-reply). A message sent then carries `dataContext.page` `{ pageId, title,
-version? }` (shared/data-context.ts `withPageContext`): the app draws it as a
-chip over the words, and the server keeps it only for the sender's own page
-of that bot (`ownPageContext` in server/index.ts) and gives the model a
-`<page-context>` envelope with the page's current source (cut at 96 KB, data
-never instructions). The bot revises it with propose_page and page_id, from
-any topic of the same bot and person. Tests: `shared/data-context.test.ts`,
-`server/data-context.test.ts`, `src/components/PageComposerParts.test.ts`.
+While a page is open, the visible empty composer stays Message <botname>
+(measured). Message about the page title (`composer.placeholder.page`) is
+the stage-chat aria-label only. A message sent then carries
+`dataContext.page` `{ pageId, title, version? }` (shared/data-context.ts
+`withPageContext`): the app draws it as a chip over the words, and the
+server keeps it only for the sender's own page of that bot (`ownPageContext`
+in server/index.ts) and gives the model a `<page-context>` envelope with the
+page's current source (cut at 96 KB, data never instructions). The bot
+revises it with propose_page and page_id, from any topic of the same bot and
+person. An older card that a newer version replaced says "Updated below"
+(also when the thread already names a newer version than the mounted card)
+and opens the latest page. Tests: `shared/data-context.test.ts`,
+`server/data-context.test.ts`, `src/components/PageComposerParts.test.ts`,
+`src/lib/page-chat-layout.test.ts`, `src/lib/composer-placeholder.test.ts`,
+`src/components/ChatView.page-layout.dom.test.ts`,
+`src/components/ChatView.page-real.dom.test.ts` (the real ChatView,
+Composer, PageSurface and cards: stage cover, docked composer, context
+sent, Back to chat with scroll place and focus on the opener, Escape from
+the empty docked composer, optional side conversation and its host-width
+fallback, split sections, exchange sheet, v1 card refresh),
+`src/components/PublishedPages.card-refresh.dom.test.ts`. The composer dock
+moves onto the page and back: `useComposerDockPad(ref, pageStage)` must
+re-observe it. Captures: `node scripts/capture-page-chat-real.mjs`
+(gallery `src/gallery/page-chat-real.html`, real ChatView; `--tree` serves
+another checkout for before shots), `docs/screenshots/grok-convergence/real-chatview/`.
 
 No page is ever drawn in a window inside Sagax. From the bot's Library
 (Pinned, This week; « … » Open, Share…, Pin or Unpin, Delete…), Settings >
@@ -1632,8 +1861,10 @@ its own system window (src/lib/page-windows.ts): the artifact window bridge
 with the id `page:<pageId>`, one window per page, its place kept; a browser
 gets a new tab. That window draws the same PageSurface (×, title, Share, « ⋯ »)
 and asks the page again every 5 s for the bot's new version. Tests:
-`src/lib/page-windows.test.ts`, `src/components/bot-settings/LibraryTab.test.ts`. Tests: `server/published-pages.test.ts` (app's own look),
+`src/lib/page-windows.test.ts`, `src/components/bot-settings/LibraryTab.test.ts`.
+Tests: `server/published-pages.test.ts` (app's own look),
 `src/components/PageViewer.surface.dom.test.ts`, `src/lib/open-page.test.ts`.
+Lot 5 evidence: `docs/plans/grok-convergence-interface-evidence.md`.
 
 ## Settings split: Account, Security, Vault, Models, Voice (2026-10-28)
 
@@ -3876,48 +4107,72 @@ Approve for me never answer it). Keep these rules, covered by
   gets -32601.
 - The answer goes on the same session with the speaker's own token.
 
-## Pulsatrix Flow compute (sagax-flow, 2026-10-14)
+## Pulsatrix Flow compute (signed pack, lot 3, 2026-10-30)
 
-`flow` and `flow_action` are Perspicax's tools, relayed through the
-`perspicax_<profile>` servers; Sagax does not implement them. The
-deterministic arithmetic of the marketplace plugin `pulsatrix-flow`
-(`px_flow.py`, `px_flow_action.py`) is native: `server/flow-tools.ts`, the
-`sagax-flow` server (`flow_free_slots`, `flow_time_block`, `flow_overlaps`,
-`flow_stats`, `flow_age_buckets`, `flow_group_units`, `flow_filter`,
-`flow_member_load`). Mapping of the whole plugin:
-`docs/migration/flow-plugin-mapping.md`. Keep these rules, covered by
-`server/flow-tools.test.ts` and `server/org-mcp.e2e.test.ts`:
+`flow`, `flow_action` and the eight compute tools (`flow_free_slots`,
+`flow_time_block`, `flow_overlaps`, `flow_stats`, `flow_age_buckets`,
+`flow_group_units`, `flow_filter`, `flow_member_load`) belong to Perspicax
+and its signed Python pack. Sagax only relays the selected
+`perspicax_<profile>` tools under the current speaker's turn capability.
+There is no local `sagax-flow` server, copied schema or TypeScript arithmetic.
+Older packs advertise no compute tools; no local fallback invents support.
+Mapping: `docs/migration/flow-plugin-mapping.md`.
 
-- Pure functions of their arguments. No organization fact (time zone,
-  hours, holidays, midnight split time, boards, people, client rules) is
-  built in or copied from the plugin's library; the caller passes it.
-- Mounted only on a turn where a Perspicax profile server is mounted
-  (`perspicaxTurnIntegration`), answered inside the workplace stdio proxy
-  (`flowToolsRequest`), with no capability and no call to the server.
-- Every tool is read only: Claude pre-allows `mcp__sagax-flow`, Grok's rules
-  and gate accept it only for the harness's own proxy path
-  (`isFlowToolsServer`), Codex mounts it as a workplace proxy.
+The pack's `flow_compute_tools.json` owns the schemas;
+`px_flow_compute.py` owns the pure calculations, with arguments for time
+zone, working hours, holidays, midnight split and data. The profile and
+active pack determine availability. The host adds pack provenance to the
+answer. Existing read-only treatment stays limited to harness-owned
+Perspicax bridges (`PERSPICAX_FLOW_COMPUTE_TOOLS` is permission vocabulary,
+not an implementation). No write tool receives that permission.
+Tests: `server/org-mcp.e2e.test.ts` proves forwarding as the speaker and
+absence of the old mount; Grok read-only/gate tests reject impostor proxies.
+Python parity and runner tests live in the Flow and Perspicax repositories.
 
-## Pulsatrix Flow for every member (2026-10-26)
+## Pulsatrix Flow installation (lot 3, 2026-10-30)
 
-On a server linked to Perspicax, `server/org-flow-plugins.ts` installs the
-Flow plugins Perspicax declares in the directory (`flow_plugins`) from its
-private marketplace, with a member's short marketplace token, and loads the
-sanitized copy (no hooks) on the Claude turns of active members' bots
-(`pluginDirsFor`). Keep these rules, covered by
-`server/org-flow-plugins.test.ts`:
+`server/org-flow-plugins.ts` downloads the private manifest and archives
+with the installation's live link token (`PerspicaxDirectory.linkBearer`),
+without a member sign-in or Claude CLI. The guard declaration remains
+required: `enabled` and `guard: "enforce"`; off/shadow removes the copies.
+Only the linked issuer's marketplace and archive paths receive the token,
+redirects are refused, and the token is never written to disk or status.
+Manifest name, declared plugin/version, SHA-256 and archive identity must
+agree. `ZipReader` rejects traversal, links and oversized archives. Staged
+sanitized copies keep executable scripts and replace the prior copy only
+after validation; a failed download/update preserves the usable old copy.
+Tests: `server/org-flow-plugins.test.ts` (real HTTP/ZIP, no CLI).
 
-- The Flow guard is Perspicax's: install and load only while the declaration
-  says `enabled` and `guard: "enforce"` (`guarded`); anything else takes the
-  copy out and loads nothing. Never re-add hooks to the copy to make up for
-  it, and never install from another source.
-- The token lives only in the environment of the one `claude plugin`
-  command (`TOKEN_ENV`, read by `headers-helper.cjs`); never on disk, never
-  in a status or a log line. The commands get `ENV_KEEP` plus the `env`
-  option, nothing else of the server's environment.
-- The marketplace must be served from the issuer's origin and the token
-  audience must be `<issuer>/flow/marketplace` (`refusal`).
-- Docs: `docs/self-hosting.md`, "Pulsatrix Flow for every member".
+`RemoteMcpClient` discards a closed legacy SSE endpoint. The next operation
+opens a stream and repeats initialize/initialized once, sharing concurrent
+handshakes. An interrupted request fails once and is never replayed. The
+opening request's signal stops controlling the persistent stream once its
+endpoint has arrived. Tests: `server/mcp-http.test.ts`.
+
+## Organization capability declarations (lot 4, 2026-11-01)
+
+Perspicax owns the organization's capability declarations, allowed
+marketplaces and marketplace policy (`/api/v1/pulsabot/capabilities`). The
+linked directory carries `capabilities` (with sealed configuration on that
+channel only), `capability_marketplaces` and
+`capability_marketplace_policy`. Null policy keeps this server's historical
+`organization.pluginMarketplaces` rule; it is never read as `any`.
+
+Sagax installs once under `DATA_DIR/org-capabilities` (`server/org-capabilities.ts`):
+a plugin whole (hooks stripped), a skill as one linked folder, an MCP
+declaration kept in memory. Offered: off until the person turns it on in
+their Me state (`capabilities.enc` `orgCapabilities`). Imposed: on, not
+removable by a member. Organization wins over Me then This bot for the same
+mount. A Flow mount name or a `flow_plugins` plugin stays a single identity
+(`state: "flow"`, never mounted twice).
+
+Admin writes from Plugins > Sources / Installed (Organization scope) go
+through this server's link with the admin's live sign-in token
+(`server/routes/org-capabilities.ts`). A member's own switch is
+`/api/me/org-capabilities`. No Capabilities tab in the bot panel: the
+resolved list lives in Plugins > Installed (JC, 2026-11-01). Form mirror:
+`shared/org-capability-form.ts`. Tests: `server/org-capabilities.test.ts`,
+`server/routes/org-capabilities.test.ts`, `shared/org-capability-form.test.ts`.
 
 ## Organization memory signals (2026-10-11)
 
@@ -6348,7 +6603,7 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
 - Attachments of the CURRENT message are the speaker's only when the first
   message naming them is theirs; small text ones are inlined, all are copied
   where the tools run at the first tool call, and the tag names that path.
-- Archives (zip, tar, tar.gz, 7z; 90 MB per file): the server only LISTS
+- Archives (zip, tar, tar.gz, 7z; 250 MB per file): the server only LISTS
   them (`server/attachment-archives.ts`); they are unpacked where the bot
   works, next to the copy, at the first tool call (python3 in the server
   environment, `extract_archive` on the desktop, `electron/archive-extract.mjs`;
@@ -6362,6 +6617,35 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   download the zip or open a browser to read it. Tests:
   `electron/archive-extract.node-test.mjs`, `server/attachment-archives.test.ts`,
   `server/archive-attachments.e2e.test.ts`, `server/desktop-bridge.e2e.test.ts`.
+- Large conversation files: documents and audio stop at 250 MB, videos at
+  1 GB, shared images at 32 MB and solo images at 90 MB. Pictures in one
+  message share 200 MiB and at most 32 images on every host
+  (`IMAGE_AGGREGATE_MAX_BYTES`/`MESSAGE_IMAGE_MAX_COUNT` in
+  `server/attachments.ts`, mirrored in `src/lib/composer-attachments.ts`,
+  enforced by `server/turn-images.ts` and refused before upload by
+  `startAttachmentUpload` with a composer notice). Other files keep no
+  message count. `attach_file` copies use the same per-kind ceilings. The exact-message
+  POST may resolve a visible file to `/api/threads/<thread>/files/<opaque>`;
+  it never returns the host path. Every GET checks current thread and person
+  access again. Downloads and image, audio or video previews support one
+  standard byte Range with `Accept-Ranges`, `Content-Range`, 206 and 416.
+  `openMessageFile().stream()` decrypts only the intersecting 64 KiB chunks.
+  The web app gives large downloads to the browser and gives video or audio
+  elements the opaque preview URL, so neither path builds a whole-file Blob.
+  PDF and old-server compatibility previews keep their separate 25 MB shared
+  and 90 MB solo memory limits, with Save a copy always visible. Provider
+  media through `server/media-proxy.ts` forwards Range and seek headers up to
+  1 GB per response, applies downstream backpressure, stops upstream on
+  client close, and times out missing upstream headers. Range responses
+  carry `Cache-Control: no-transform` (the companion sidecar keeps it), so
+  Caddy's `encode`, Cloudflare and other proxies never compress a body whose
+  Content-Length and Content-Range describe stored bytes; Caddy already skips
+  206. Tests:
+  `server/thread-files.e2e.test.ts`, `server/attachments-resume-org.e2e.test.ts`,
+  `server/media-proxy.test.ts`, `src/components/AttachmentGallery.test.ts`,
+  `src/components/bot-settings/FilesSection.media.dom.test.ts`,
+  `server/turn-images.test.ts`, `src/lib/attachment-uploads.test.ts`,
+  `companion/test/proxy-response.test.ts`.
 - The desktop never reads or writes the app's own data, its cookies or the
   person's credential stores through the bridge.
 
@@ -6687,7 +6971,9 @@ connectors and My MCP servers only.
 Library > Capabilities opens the server's one resolved list on the iPhone
 and iPad (`BotCapabilityList`, `ios/Sources/CompanionCore/BotCapabilities.swift`).
 It shows scope, state, source and the engine's receipt summary, including
-skills omitted by the prompt index. Keys and bot ids never appear. Unknown
+whole files omitted by the prompt budget. Each capability shows its own
+file/byte budget, and Flow shows the loaded pack and its version (lot 3), in
+this same list: no new tab. Keys and bot ids never appear. Unknown
 future fields and values remain decodable. The view's identity follows the
 bot, so a different bot creates a fresh state model.
 
@@ -7168,7 +7454,10 @@ exported and read by older builds, no client reads it). Rules, covered by
   correction or a dependency or a file or record named by the running
   request too means `after`) decides what it is sure of, else the bot's
   tool-free model (`busyClassifyEngine`, same gates as a segment digest,
-  6 s), else `parallel`. Never an error, never a chooser. A turn being
+  6 s), else the queue (2026-11-01: was `parallel`; an engine with no
+  one-shot model, Grok over ACP, gave the bot no say and every unsure line
+  became a second session answering beside the running turn). Never an
+  error, never a chooser. A turn being
   stopped keeps the words for the next turn, as before. Log lines start
   with `[busy-route]`.
 - One line per resource: a parallel task may name the files or records it
@@ -7584,6 +7873,20 @@ storage) is off, "1" is on, any other stored value is off, so whoever turned
 threads on keeps them. Do not seed the key at first run or in onboarding;
 leave it unset. The phone apps share the default (`SidebarPrefs.showThreadsDefault
 = false`) and the rule (section "One conversation: THE rule").
+
+## Sidebar by window width (2026-11-01)
+
+Below 640px (`sm`) the sidebar is a drawer (`AppSidebar.tsx`: menu button,
+scrim; drawer classes are `max-sm:` only). From 640 to 767px it is the icons
+rail automatically; from 768px (`md`) the person's density. The automatic rail
+is drawn by `effectiveSidebarDensity` and never saved: no edge, no "full
+sidebar" toggle, ⌘B inert there; widening restores the saved density. Keep JS
+breakpoints (`SIDEBAR_DRAWER_BELOW`, `SIDEBAR_AUTO_RAIL_BELOW`) equal to the
+Tailwind ones, and room for the drawer button with `sm:` (not `md:`). The rail
+foot (`SidebarRailFoot`) is the wide foot stacked: update, routines, round
+apps grid, avatar. Tests: `src/components/AppSidebar.layout.dom.test.ts`;
+captures `node scripts/capture-sidebar-rail.mjs` (gallery
+`src/gallery/app-shell-sidebar.html`).
 
 ## Sidebar sections are personal
 

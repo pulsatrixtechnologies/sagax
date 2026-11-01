@@ -41,7 +41,7 @@ function sha256Hex(text: string): string {
 /** Move a per-bot skill directory into its archive slot. Same-volume moves
  * rename; a cross-device fallback copies recursively and verifies the
  * SKILL.md hash before the copy counts as the archive. */
-function archiveSkillDirectory(source: string, archive: string, expectSha256: string): void {
+export function archiveSkillDirectory(source: string, archive: string, expectSha256: string): void {
   mkdirSync(dirname(archive), { recursive: true, mode: 0o700 });
   // Every source directory gets its own slot: the same sha256 can be
   // reinstalled after its manifest entry was cleared, so a collision takes

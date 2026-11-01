@@ -22,4 +22,8 @@ export interface RoutineRunCardData {
   /** 2026-10-26: this failure paused the routine after this many failed
    * runs in a row (shared/routine-auto-pause.ts); the notice offers Resume. */
   autoPausedAfter?: number;
+  /** 2026-11-01: completed, but not all of it went right (RoutineRun.problems). */
+  problems?: string;
+  /** 2026-11-01: why a queued or waiting run has not gone on yet. */
+  attention?: string;
 }

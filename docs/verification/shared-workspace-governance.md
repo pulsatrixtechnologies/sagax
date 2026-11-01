@@ -102,7 +102,7 @@ above passed. Before that rebase (main `0bb37982` plus #1708),
 `server/direct-coordination.e2e.test.ts`, `server/request-auth.test.ts`,
 `server/decision-log.test.ts`, `server/decision-log-wiring.test.ts`,
 `server/card-answerers.e2e.test.ts`, `server/peer-allowlist.e2e.test.ts`,
-`server/delegations.test.ts`, `server/chief-of-staff.test.ts`,
+`server/runtime/runtime.test.ts`, `server/chief-of-staff.test.ts`,
 `server/thread-capacity-api.test.ts`, `server/cli-service-trust.e2e.test.ts`
 and the Settings/People/session UI tests passed on macOS.
 `server/hosted-access.test.ts` passed except once for its 8-second licence

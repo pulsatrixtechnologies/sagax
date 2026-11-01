@@ -13,7 +13,9 @@ makes a PR easy to merge. Read it once before opening anything; it's short on pu
   will do. New runtime dependencies need a reason in the PR description.
 - **Keep it green.** The local gates below must pass. Server changes need tests (see below).
 - **UI changes need screenshots.** Before/after images in the PR body; video for anything animated.
-  Match the existing palette and tone in [`src/styles.css`](src/styles.css).
+  Prefer MP4 or WebP over large GIFs. Do not park PR-only media under tracked `docs/`
+  (see [`docs/pr-assets.md`](docs/pr-assets.md)). Match the existing palette and tone in
+  [`src/styles.css`](src/styles.css).
 
 ## Dev setup
 
@@ -141,7 +143,10 @@ how chat routine proposals failed in the field hours after 0.1.38 shipped (#544)
 - The agents tools live in `server/drivers/agents-catalog.ts`, and their serialized `tools/list`
   is pinned byte for byte and size-budgeted by `server/drivers/agents-catalog-wire.test.ts`.
   After changing one on purpose, run that file once with `UPDATE_AGENTS_CATALOG_GOLDENS=1`,
-  review the golden diff, and move its `BUDGET_BASELINE` by hand.
+  review the golden diff, and move its `BUDGET_BASELINE` by hand. Stay under the soft ceiling
+  in `agents-catalog-budget.ts` (150_000 bytes, 128 tools). When a profile approaches that
+  ceiling, use `SAGAX_CATALOG_GROUPS=1` (or an existing lazy path) rather than shortening
+  descriptions only to pass the +2% ratchet (#1703).
 
 ## Translations
 
@@ -331,6 +336,6 @@ dies at link time. `server/testing/fakes-self-contained.test.ts` enforces it.
 - [ ] New server behavior has a test; driver changes keep the contract tests green
 - [ ] No `dist-server/` churn, no lockfile churn beyond your actual dependency change
 - [ ] macOS-only code is platform-gated; nothing breaks the packaged app
-- [ ] UI changes include before/after screenshots
+- [ ] UI changes include before/after screenshots (PR body or cited docs paths; see docs/pr-assets.md)
 
 By contributing you agree to the contribution terms above and in [CLA.md](CLA.md).

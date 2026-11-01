@@ -106,3 +106,25 @@ export function SidebarFoot({ places, onOpenApps }: { places?: SidebarMenuItem[]
     </div>
   );
 }
+
+/** The rail's foot (icons density, chosen or automatic at medium widths):
+ * the wide foot's row stacked in the 80px column. The same pieces, so
+ * nothing the wide foot reaches is lost: a waiting update and the active
+ * routines (each only when there is one), the round apps-grid button, then
+ * the avatar (its menu holds Settings, Approvals, Code and the rest). The
+ * name has no room; it is the avatar's accessible name and tooltip. */
+export function SidebarRailFoot({ places, onOpenApps }: { places?: SidebarMenuItem[]; onOpenApps: () => void }) {
+  const apps = useConnectedApps();
+  return (
+    <>
+      <div data-sidebar-rail-foot="" className="flex flex-col items-center gap-2 pt-1">
+        <SidebarUpdatePill layout="compact" />
+        <SidebarRoutinesBadge />
+        <FootConnectApps apps={apps} onOpen={onOpenApps} />
+      </div>
+      <div data-sidebar-account-rail="" className="flex h-10 items-center justify-center">
+        <SidebarProfileMenu avatarOnly places={places} />
+      </div>
+    </>
+  );
+}

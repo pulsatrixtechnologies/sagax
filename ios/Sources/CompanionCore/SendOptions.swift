@@ -1,7 +1,7 @@
 // Per-send options the desktop composer sets beside the text.
 import Foundation
 
-public struct SendOptions: Hashable, Sendable {
+public struct SendOptions: Codable, Hashable, Sendable {
     /// Quote this message (`replyToId`): a flat reference for the inline
     /// quote, unrelated to branch ancestry.
     public var replyToId: String?

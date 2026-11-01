@@ -803,12 +803,17 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
           title={name}
           data-menu-opened={open || undefined}
           className={cn(
-            "relative flex size-9 items-center justify-center rounded-full transition-[filter]",
+            // the rail's avatar: the keyboard ring the wide pill has
+            "relative flex size-9 items-center justify-center rounded-full transition-[filter] [button:focus-visible:not([data-pointer-focus])>&]:ring-2 [button:focus-visible:not([data-pointer-focus])>&]:ring-focus",
             open ? "ring-2 ring-accent/60" : "hover:brightness-90",
           )}
         >
           {avatar(36)}
           <WhenOpen open={open} onOpen={() => setMenuOpened(true)} />
+          {/* the wide pill's place-attention dot, on the rail's avatar */}
+          {placeAttention && !open && !noteworthy && (
+            <span data-testid="footer-attention" aria-hidden="true" className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-sidebar bg-danger" />
+          )}
           {noteworthy && (
             <span
               title={noteworthy.label}

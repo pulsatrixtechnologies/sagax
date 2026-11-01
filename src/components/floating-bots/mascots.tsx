@@ -277,13 +277,13 @@ function ShapeRender({ color, look, size, activity, pose, frame, fps, onHitTest 
   const own = useShapeClipMove(activity);
   return (
     <Motion25D size={size} frame={frame} fps={fps} onHitTest={onHitTest}>
-      <ShapeMascot shape={look.shape} skin={look.skins.shape} color={color} size={size * 0.8} mood={shapeMoodForClip(activity, pose)} expression={shapeExpressionForClip(activity)} detail="full" move={own ?? fx} label={null} />
+      <ShapeMascot shape={look.shape} skin={look.skins.shape} color={color} size={size * 0.8} mood={shapeMoodForClip(activity, pose)} expression={shapeExpressionForClip(activity)} detail="full" move={own ?? fx} avatarDef={look.avatarDef} label={null} />
     </Motion25D>
   );
 }
 
 function ShapeThumb({ color, look, size }: MascotThumbProps) {
-  return <ShapeMascot shape={look.shape} skin={look.skins.shape} color={color} size={size} animated={false} label={null} />;
+  return <ShapeMascot shape={look.shape} skin={look.skins.shape} color={color} size={size} animated={false} avatarDef={look.avatarDef} label={null} />;
 }
 
 /* ------------------------------------------------------------- Trombi */

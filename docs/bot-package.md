@@ -24,7 +24,7 @@ goes in, what comes out), `server/routes/bot-zip.ts` (HTTP),
 | `bot-folder/**` | the rest of the bot's own folder (`RULES.md` and the like) |
 | `workspace/**` | the bot's desk: `MEMORY.md`, `memory/` (topics, `log/`, `archive.md`), `docs/`, `skills/` and every other file it keeps |
 | `skills.json` | each skill's source, hash, review warnings and enabled state |
-| `plugins/state.json` | its marketplaces (source, ref) and installed plugins with their enable flags |
+| `plugins/state.json` | portable plugin enable flags and marketplace refs (exported from the bot capability store; see below) |
 | `plugins/marketplaces/<name>/marketplace.json` | each marketplace's catalogue |
 | `plugins/files/<marketplace>/<plugin>/**` | the installed plugins (already without hooks, MCP, LSP and `bin/`): skills, commands, agents |
 | `routines.json` | the bot's routines (not room goals) |
@@ -135,3 +135,28 @@ pick.
 A bot's own plugins reach its turns: Claude loads each enabled plugin with
 `--plugin-dir` (skills, commands, agents); every other workspace engine
 gets their paths in the turn prompt (`server/plugin-turn.ts`).
+
+## Capability store shape (lot 5)
+
+On disk, bot capability **config** lives in one file per bot:
+
+`DATA_DIR/bot-capabilities/<botId>/capabilities.json`
+
+(`server/bot-capability-store.ts`). It holds plugin enable state, plugin
+config values, assigned library skills, and a `migrated` list. The zip
+still uses the portable `plugins/state.json` path so older packages import;
+export fills that entry from the bot store (or from the legacy
+`bot-plugins/<bot>/state.json` before migration). Plugin **content** trees
+stay under `bot-plugins/<bot>/plugins/` and travel as
+`plugins/files/...` in the zip.
+
+Person and installation capability config are not in the zip:
+
+- Person: `principals/<pid>/capabilities.enc` (never exported).
+- Installation: `installation-capabilities.enc` (marketplaces, org skills
+  library, org Flow, org declarations, installation MCP). A marketplace
+  the bot uses is reattached to the installation's one list on import, as
+  before.
+
+Migration of the eleven legacy config files into these three stores:
+`docs/migration/capabilities-stores.md`.

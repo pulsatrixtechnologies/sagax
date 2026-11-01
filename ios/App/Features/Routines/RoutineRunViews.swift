@@ -248,24 +248,67 @@ struct RoutineRunDetailView: View {
         }
     }
 
-    // The result first, rendered as Markdown.
+    // The run as a bot-to-bot exchange (2026-11-01): the routine hands the
+    // bot its instruction, the bot answers with the result, the way a
+    // bot-to-bot conversation reads (BotConversationPage). Steps and what
+    // it ran with stay below.
     @ViewBuilder
     private var result: some View {
         if run.redacted == true {
             Section { Text("Someone else's run: status and timing only.").foregroundStyle(Theme.textSecondary) }
         } else if reported, let output = run.output {
             Section {
-                MarkdownText(source: output)
-                    .textSelection(.enabled)
-                    .accessibilityIdentifier("routine-run-result")
+                exchange(output: output)
             } header: {
-                Text("Result")
+                Text(verbatim: "\(run.routineName) ⇄ \(bot?.name ?? String(localized: "Bot"))")
+                    .accessibilityIdentifier("routine-run-exchange-title")
             }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
         } else if run.quiet == true {
             Section { Text("Nothing for you this time; nothing was posted.").foregroundStyle(Theme.textSecondary) }
         } else if run.status == "running" {
             Section { Label("Working; the result shows here when it is done.", systemImage: "hourglass").foregroundStyle(Theme.textSecondary) }
         }
+    }
+
+    /// The routine's instruction on the person's side, the bot's reply on
+    /// its own with its mascot and name.
+    private func exchange(output: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let prompt = run.prompt ?? routine?.prompt, !prompt.isEmpty {
+                VStack(alignment: .trailing, spacing: 4) {
+                    Label { Text(verbatim: run.routineName) } icon: { Image(systemName: "clock") }
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.textSecondary)
+                        .labelStyle(.titleAndIcon)
+                    HStack(spacing: 0) {
+                        Spacer(minLength: Theme.Chat.bubbleTrailingGap)
+                        ExchangeBubble(text: RoutineRunExchange.instructionPreview(prompt), paint: nil)
+                            .lineLimit(6)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("routine-run-instruction")
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                if let bot {
+                    HStack(spacing: 6) {
+                        BotMascotView(bot: bot, size: 16, state: .idle, animated: false)
+                        Text(verbatim: bot.name)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.readable(MausPalette.color(bot.color)))
+                    }
+                }
+                HStack(spacing: 0) {
+                    ExchangeBubble(text: output, paint: nil)
+                    Spacer(minLength: Theme.Chat.bubbleTrailingGap)
+                }
+                .accessibilityIdentifier("routine-run-result")
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder

@@ -34,6 +34,16 @@ import { sendTunnelJson } from "./tunnel-gzip.ts";
 import { CompanionViewerRelay } from "./viewer-relay.ts";
 import { createSseScrubber, isJson, scrub } from "./wire.ts";
 
+/** How long a phone may wait while the harness restarts on this machine.
+ * Matches Caddy's lb_try_duration (docs/zero-downtime-deploy.md). */
+export const HARNESS_RESTART_HOLD_MS = 25_000;
+
+/** True when the harness is gone mid-restart (connection refused/reset). */
+export function isHarnessRestartError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === "ECONNREFUSED" || code === "ECONNRESET";
+}
+
 /** What the forwarding handler needs from the process around it. */
 export interface ProxyOptions {
   /** Where the harness is listening on loopback. */
@@ -151,10 +161,17 @@ const PRIVATE_RESPONSE_HEADERS = {
  * is enabled. Never let chat JSON, images, audio, pairing responses, or even
  * authorization failures become shared cache entries. These values override
  * anything the loopback harness supplied. */
-const privateHeaders = (headers: IncomingMessage["headers"] = {}): IncomingMessage["headers"] => ({
-  ...headers,
-  ...PRIVATE_RESPONSE_HEADERS,
-});
+const privateHeaders = (headers: IncomingMessage["headers"] = {}): IncomingMessage["headers"] => {
+  const out: IncomingMessage["headers"] = { ...headers, ...PRIVATE_RESPONSE_HEADERS };
+  // A ranged media body must reach the device as the stored bytes: keep the
+  // harness's no-transform so a CDN in front of the tunnel never compresses
+  // a response whose Content-Length and Content-Range describe those bytes.
+  const upstream = headers["cache-control"];
+  if (typeof upstream === "string" && /\bno-transform\b/i.test(upstream)) {
+    out["cache-control"] = `${PRIVATE_RESPONSE_HEADERS["cache-control"]}, no-transform`;
+  }
+  return out;
+};
 
 const sendJson = (res: ServerResponse, status: number, body: unknown): void => {
   if (res.headersSent) {
@@ -743,7 +760,7 @@ export function createProxyHandler(options: ProxyOptions) {
     }, headersTimeoutMs);
     headersDeadline.unref?.();
 
-    upstream.on("error", () => {
+    upstream.on("error", (error) => {
       clearTimeout(headersDeadline);
       // Headers already went out — a stream, or a piped body — or the
       // response is finished and this is a socket dying afterwards. There is
@@ -753,6 +770,12 @@ export function createProxyHandler(options: ProxyOptions) {
       // the socket is the only honest signal, and one a client recovers from.
       if (res.headersSent || res.writableEnded) {
         res.destroy();
+        return;
+      }
+      // A restart: 503 so the phone shows Reconnecting and retries with its
+      // cursor, never a hard error toast for a sub-30 s outage.
+      if (!timedOut && isHarnessRestartError(error)) {
+        sendJson(res, 503, { error: "Sagax is restarting. Reconnecting…" });
         return;
       }
       sendJson(

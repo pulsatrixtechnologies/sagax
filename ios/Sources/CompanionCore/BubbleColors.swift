@@ -37,6 +37,11 @@ public enum BubbleColors {
         return (fill, accentInk(on: fill))
     }
 
+    /// Black, the default skin, is the Grok look (2026-11-01): the person's
+    /// bubble is a neutral grey a step lighter than the bot's, as in Grok
+    /// Bot. Every other skin keeps the accent and bot-colour rule below.
+    public static func keepsNeutralBubbles(_ skin: SkinID) -> Bool { skin == .black }
+
     /// The person's bubble in a bot's colour (a 1:1 with that bot, 2026-10-28):
     /// the bot's colour exactly, with the accent button's ink, so a skin with a neutral accent
     /// (Midnight's near white) no longer leaves it white. Nil for a name that

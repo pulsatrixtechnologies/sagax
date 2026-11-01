@@ -1,4 +1,4 @@
-// Bot panel > Capabilities (lot 1b): the bot's resolved list, a switch only
+// The resolved capability list (lot 1b), shown in Plugins > Installed: a switch only
 // where the list says the person may change it, "What <bot> receives", the
 // index cap when it cuts, and never an id on screen.
 import { createElement } from "react";
@@ -17,7 +17,26 @@ const visible = (html: string) => html.replace(/<[^>]+>/g, " ");
 
 beforeEach(() => setLocale("en"));
 
-describe("Bot panel > Capabilities", () => {
+describe("Resolved capability list", () => {
+  it("shows each capability's budget and the installed signed pack, readable, on its detail", () => {
+    const data = capabilityFixture();
+    data.items[0]!.promptIndex = { bytes: 1_000, maxBytes: 4_000, skills: 2, maxSkills: 30, omitted: 1 };
+    data.items[0]!.source.pack = `sha256:${"a".repeat(64)}`;
+    data.items[0]!.source.version = "0.20.14";
+    const html = render({ data, openAll: true });
+    const text = visible(html);
+    expect(text).toContain("Prompt budget");
+    expect(text).toContain("2/30 files");
+    expect(text).toContain("1 omitted");
+    // no identifier on screen: the readable signed pack with its version;
+    // the digest only behind the tooltip and the Copy action
+    expect(text).toContain("Signed pack, version 0.20.14");
+    expect(text).not.toContain("sha256:");
+    expect(html).toContain(`title="${data.items[0]!.source.pack}"`);
+    expect(html).toContain('aria-label="Copy the pack digest"');
+    data.items[0]!.source.version = undefined;
+    expect(visible(render({ data, openAll: true }))).toContain("Signed pack ");
+  });
   it("lists one line per capability with its form, scope and state", () => {
     const html = render();
     expect(html.match(/data-capability="/g)?.length).toBe(8);
@@ -47,6 +66,12 @@ describe("Bot panel > Capabilities", () => {
     expect(text).toContain("The skills index of the prompt is full: 2 left out");
     const quiet = visible(render({ data: capabilityFixture({ promptIndex: { bytes: 900, maxBytes: 4_000, skills: 2, maxSkills: 30, omitted: 0 } }) }));
     expect(quiet).not.toContain("is full");
+  });
+
+  it("distinguishes a partial plugin scan from a known number of omitted references", () => {
+    const text = visible(render({ data: capabilityFixture({ promptIndex: { bytes: 900, maxBytes: 4_000, skills: 2, maxSkills: 30, omitted: 0, incomplete: true } }) }));
+    expect(text).toContain("Plugin discovery is partial");
+    expect(text).not.toContain("0 left out");
   });
 
   it("opens a line on its detail: what it brings, who installed it, what the engine gets", () => {

@@ -33,6 +33,11 @@ describe("the managed Caddy", () => {
     expect(file).toContain("reverse_proxy 127.0.0.1:18800");
     expect(file).toContain("flush_interval -1");
     expect(file).toContain("admin off");
+    // Upstream hold during a single-process restart (docs/zero-downtime-deploy.md).
+    expect(file).toContain("lb_try_duration 25s");
+    expect(file).toContain("lb_try_interval 250ms");
+    expect(file).toContain("health_uri /healthz");
+    expect(file).toContain("unhealthy_status 502 503");
   });
 
   it("resolves SAGAX_CADDY_PATH, then the pinned download, then PATH", () => {

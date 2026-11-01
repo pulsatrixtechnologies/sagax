@@ -8,7 +8,7 @@
 // refuses), the organization's limit governs.
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { monthToDateSpend } from "./spend.ts";
+import { monthToDateSpend } from "./spend-month.ts";
 
 export const MIN_PERSONAL_CAP_USD = 1;
 const WARN_AT_PERCENT = 80;

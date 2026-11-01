@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { DesktopBridges, desktopBridgeCapability, resolveBotWorkplace, type DesktopBridgeRegistration } from "./desktop-bridge.ts";
+import { DesktopBridges, desktopBridgeCapability, desktopBridgeOperation, resolveBotWorkplace, type DesktopBridgeRegistration } from "./desktop-bridge.ts";
 import { localVmDesktopSpec } from "./container-computer.ts";
 import { desktopToolOperation, handleDesktopBridgeMcp } from "./desktop-bridge-tools.ts";
 import { DEFAULT_BOT_WORKPLACE, parseBotWorkplace, serializeBotWorkplace } from "../shared/bot-workplace.ts";
@@ -55,6 +55,11 @@ describe("where a turn's tools run (organization server)", () => {
     expect(parseBotWorkplace(undefined)).toEqual({ place: "computer", routines: false, network: "all" });
     expect(parseBotWorkplace("{bad")).toEqual({ place: "computer", routines: false, network: "all" });
     expect(parseBotWorkplace(serializeBotWorkplace({ place: "server", routines: true, network: "lan" }))).toEqual({ place: "server", routines: true, network: "lan" });
+  });
+
+  it("accepts staged file offsets through the 1 GB video ceiling", () => {
+    expect(desktopBridgeOperation.safeParse({ action: "stage_file", name: "clip.mp4", content: "eA==", offset: 250 * 1024 * 1024 }).success).toBe(true);
+    expect(desktopBridgeOperation.safeParse({ action: "stage_file", name: "clip.mp4", content: "eA==", offset: 1024 * 1024 * 1024 + 1 }).success).toBe(false);
   });
 });
 

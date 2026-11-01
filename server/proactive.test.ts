@@ -4,6 +4,7 @@ import { PROACTIVE_MODES } from "../shared/proactive-mode.ts";
 import {
   classifyProactiveActionKind,
   decideProactiveStep,
+  proactiveDryRunSummary,
   ProactiveBudget,
   ProactiveEngine,
   DEFAULT_PROACTIVE_BUDGET,
@@ -22,7 +23,7 @@ describe("server classification of a proactive step (server-enforced, never a cl
     }
   });
 
-  it("fails an unknown or ambiguous step to a write, so the unknown always cards", () => {
+  it("fails an unknown or ambiguous step to a write", () => {
     for (const tool of ["mcp__weird__frobnicate", "run_command", "write_file", undefined, ""]) {
       expect(classifyProactiveActionKind({ tool })).toBe("write");
     }
@@ -31,7 +32,6 @@ describe("server classification of a proactive step (server-enforced, never a cl
   it("classifies a shell step by its command line, not by a caller flag", () => {
     expect(classifyProactiveActionKind({ tool: "run_command", command: "git status" })).toBe("read");
     expect(classifyProactiveActionKind({ tool: "run_command", command: "rm -rf /" })).toBe("write");
-    // A caller cannot mislabel a send as read-only: the tool name decides.
     expect(classifyProactiveActionKind({ tool: "GMAIL_SEND_EMAIL", readOnlyHint: true } as never)).toBe("write");
   });
 });
@@ -41,77 +41,53 @@ const covers = (v: boolean) => () => v;
 describe("the server decision, derived from the stored bot", () => {
   it("OFF: a bot never observes and never acts", () => {
     const d = decideProactiveStep({ bot: { proactiveMode: "off" }, action: { tool: "GMAIL_FETCH_EMAILS" }, coveredByRules: covers(true) });
-    expect(d).toMatchObject({ mayObserve: false, disposition: "blocked", execute: false, card: false, propose: false });
+    expect(d).toMatchObject({ mayObserve: false, disposition: "blocked", execute: false, dryRun: false });
   });
 
-  it("PROPOSE: proposes, and executes nothing — not a read, not a write", () => {
-    const read = decideProactiveStep({ bot: { proactiveMode: "propose" }, action: { tool: "GMAIL_FETCH_EMAILS" }, coveredByRules: covers(true) });
-    expect(read).toMatchObject({ mayObserve: true, disposition: "propose", execute: false, propose: true, card: false });
-    const write = decideProactiveStep({ bot: { proactiveMode: "propose" }, action: { tool: "GMAIL_SEND_EMAIL" }, coveredByRules: covers(true) });
-    expect(write).toMatchObject({ mayObserve: true, disposition: "propose", execute: false, propose: true, card: false });
+  it("PROACTIVE: runs a read itself", () => {
+    const read = decideProactiveStep({ bot: { proactiveMode: "proactive" }, action: { tool: "GMAIL_FETCH_EMAILS" }, coveredByRules: covers(false) });
+    expect(read).toMatchObject({ disposition: "auto", execute: true, dryRun: false, kind: "read" });
   });
 
-  it("READ-AUTO: runs a read itself, cards any write with a dry run", () => {
-    const read = decideProactiveStep({ bot: { proactiveMode: "read-auto" }, action: { tool: "GMAIL_FETCH_EMAILS" }, coveredByRules: covers(true) });
-    expect(read).toMatchObject({ disposition: "auto", execute: true, card: false });
-    const write = decideProactiveStep({ bot: { proactiveMode: "read-auto" }, action: { tool: "GMAIL_SEND_EMAIL" }, coveredByRules: covers(true) });
-    expect(write).toMatchObject({ disposition: "card", execute: false, card: true, dryRun: true });
+  it("PROACTIVE: a write records a dry run then executes through the ordinary approval path (no extra card)", () => {
+    const write = decideProactiveStep({ bot: { proactiveMode: "proactive" }, action: { tool: "GMAIL_SEND_EMAIL" }, coveredByRules: covers(false) });
+    expect(write).toMatchObject({ disposition: "defer", execute: true, dryRun: true, kind: "write" });
+    // covered or not: the proactive layer still defers; ordinary approval decides
+    const covered = decideProactiveStep({ bot: { proactiveMode: "proactive" }, action: { tool: "GMAIL_SEND_EMAIL" }, coveredByRules: covers(true) });
+    expect(covered).toMatchObject({ disposition: "defer", execute: true, dryRun: true });
   });
 
-  it("FOLLOW-RULES: a write passes only when the bot's own rules cover it, else it cards", () => {
-    const covered = decideProactiveStep({ bot: { proactiveMode: "follow-rules" }, action: { tool: "GMAIL_SEND_EMAIL" }, coveredByRules: covers(true) });
-    expect(covered).toMatchObject({ disposition: "defer", execute: true, card: false });
-    const notCovered = decideProactiveStep({ bot: { proactiveMode: "follow-rules" }, action: { tool: "GMAIL_SEND_EMAIL" }, coveredByRules: covers(false) });
-    expect(notCovered).toMatchObject({ disposition: "defer", execute: false, card: true, dryRun: true });
-    // A read still runs itself (#875: no card for a read).
-    const read = decideProactiveStep({ bot: { proactiveMode: "follow-rules" }, action: { tool: "GMAIL_FETCH_EMAILS" }, coveredByRules: covers(false) });
-    expect(read).toMatchObject({ disposition: "auto", execute: true, card: false });
-  });
-
-  it("#875: a read-only step never opens a card in any acting mode", () => {
-    for (const mode of ["read-auto", "follow-rules"] as const) {
-      const d = decideProactiveStep({ bot: { proactiveMode: mode }, action: { tool: "mcp__cw_psa__find_tickets" }, coveredByRules: covers(false) });
-      expect(d.card).toBe(false);
-      expect(d.execute).toBe(true);
-    }
-  });
-
-  it("a proactive write WITHOUT a covering rule always cards, in every acting mode", () => {
+  it("legacy propose, read-auto and follow-rules decide as proactive", () => {
     for (const mode of ["propose", "read-auto", "follow-rules"] as const) {
-      const d = decideProactiveStep({ bot: { proactiveMode: mode }, action: { tool: "STRIPE_CREATE_CHARGE" }, coveredByRules: covers(false) });
-      expect(d.execute).toBe(false);
-      // Propose uses a proposal card; the other two an approval card. Either way a person decides.
-      expect(d.card || d.propose).toBe(true);
+      const write = decideProactiveStep({ bot: { proactiveMode: mode }, action: { tool: "GMAIL_SEND_EMAIL" }, coveredByRules: covers(false) });
+      expect(write).toMatchObject({ disposition: "defer", execute: true, dryRun: true });
     }
   });
 
-  it("is server-enforced: an unknown stored mode fails closed to off, whatever the client sent", () => {
+  it("is server-enforced: an unknown stored mode fails closed to off", () => {
     const d = decideProactiveStep({ bot: { proactiveMode: "chief" }, action: { tool: "GMAIL_FETCH_EMAILS" }, coveredByRules: covers(true) });
     expect(d).toMatchObject({ disposition: "blocked", execute: false });
   });
 
-  it("#938 intact: a covered write passes the WHOLE request through, never an emptied scope", () => {
-    // Follow-rules with a standing Always-allow (coveredByRules true) runs the
-    // step exactly as the bot would normally: we never narrow or split it.
+  it("#938 intact: a deferred write passes the WHOLE request through", () => {
     const action = { tool: "GMAIL_SEND_EMAIL", request: { to: "a@b.c", body: "hi", scope: "full-request" } };
-    const d = decideProactiveStep({ bot: { proactiveMode: "follow-rules" }, action, coveredByRules: covers(true) });
+    const d = decideProactiveStep({ bot: { proactiveMode: "proactive" }, action, coveredByRules: covers(true) });
     expect(d.execute).toBe(true);
     expect(d.forwardedRequest).toBe(action.request);
   });
 
-  it("never executes a write unprompted: for every mode, a write with no covering rule is held", () => {
+  it("never returns auto for a write in any mode", () => {
     for (const mode of PROACTIVE_MODES) {
       const d = decideProactiveStep({ bot: { proactiveMode: mode }, action: { tool: "GMAIL_SEND_EMAIL" }, coveredByRules: covers(false) });
-      expect(d.execute).toBe(false);
+      expect(d.disposition).not.toBe("auto");
     }
   });
 
-  it("at Full access, a read-auto write goes the ordinary approval path, no card of its own (2026-10-28)", () => {
-    const full = decideProactiveStep({ bot: { proactiveMode: "read-auto" }, approvalLevel: "full", action: { tool: "MAIL_SEND_MESSAGE" }, coveredByRules: covers(true) });
-    expect(full).toMatchObject({ disposition: "defer", execute: true, card: false });
-    // an organization rule or the outbound guard still stops it on that path
-    const held = decideProactiveStep({ bot: { proactiveMode: "read-auto" }, approvalLevel: "full", action: { tool: "MAIL_SEND_MESSAGE" }, coveredByRules: covers(false) });
-    expect(held).toMatchObject({ disposition: "defer", execute: false, card: true });
+  it("summarizes a dry run without leaking a long command whole", () => {
+    expect(proactiveDryRunSummary({ tool: "GMAIL_SEND_EMAIL" })).toBe("GMAIL_SEND_EMAIL");
+    expect(proactiveDryRunSummary({ tool: "Bash", command: "echo hi" })).toBe("Bash: echo hi");
+    const long = "x".repeat(200);
+    expect(proactiveDryRunSummary({ tool: "Bash", command: long }).length).toBeLessThan(140);
   });
 });
 
@@ -135,7 +111,7 @@ describe("the proactive budget bounds the loop (no runaway)", () => {
       expect(budget.mayInitiate("b")).toBe(true);
       budget.noteInitiate("b");
     }
-    expect(budget.mayInitiate("b")).toBe(false); // runaway loop stopped here
+    expect(budget.mayInitiate("b")).toBe(false);
     now += 61 * 60_000;
     expect(budget.mayInitiate("b")).toBe(true);
   });
@@ -159,11 +135,11 @@ describe("the proactive budget bounds the loop (no runaway)", () => {
   });
 });
 
-describe("the engine ties the budget to the decision (the drop-in call a loop or trigger makes)", () => {
+describe("the engine ties the budget to the decision", () => {
   function engine(now: () => number) {
     const bots = new Map<string, { proactiveMode?: unknown }>([
       ["off", { proactiveMode: "off" }],
-      ["auto", { proactiveMode: "read-auto" }],
+      ["on", { proactiveMode: "proactive" }],
     ]);
     return new ProactiveEngine({
       bot: (id) => bots.get(id),
@@ -178,20 +154,18 @@ describe("the engine ties the budget to the decision (the drop-in call a loop or
     const d = e.consider("off", { tool: "GMAIL_FETCH_EMAILS" });
     expect(d.acted).toBe(false);
     expect(d.decision.disposition).toBe("blocked");
-    // an off bot cost nothing: a later acting bot still has its whole budget
     now += 2000;
-    expect(e.consider("auto", { tool: "GMAIL_SEND_EMAIL" }).acted).toBe(true);
+    expect(e.consider("on", { tool: "GMAIL_SEND_EMAIL" }).acted).toBe(true);
   });
 
   it("stops initiating once the budget is spent (bounded, server-side)", () => {
     let now = 1_000;
     const e = engine(() => now);
-    expect(e.consider("auto", { tool: "GMAIL_SEND_EMAIL" }).acted).toBe(true);
+    expect(e.consider("on", { tool: "GMAIL_SEND_EMAIL" }).acted).toBe(true);
     now += 1_100;
-    expect(e.consider("auto", { tool: "GMAIL_SEND_EMAIL" }).acted).toBe(true);
+    expect(e.consider("on", { tool: "GMAIL_SEND_EMAIL" }).acted).toBe(true);
     now += 1_100;
-    // third within the window: budget refuses it, nothing is decided
-    const third = e.consider("auto", { tool: "GMAIL_SEND_EMAIL" });
+    const third = e.consider("on", { tool: "GMAIL_SEND_EMAIL" });
     expect(third.acted).toBe(false);
     expect(third.reason).toBe("budget");
   });
@@ -199,10 +173,20 @@ describe("the engine ties the budget to the decision (the drop-in call a loop or
   it("holds a bot to its minimum interval between cycles", () => {
     let now = 5_000;
     const e = engine(() => now);
-    expect(e.consider("auto", { tool: "GMAIL_FETCH_EMAILS" }).acted).toBe(true);
-    // too soon: refused on cadence, not on the decision
-    const soon = e.consider("auto", { tool: "GMAIL_FETCH_EMAILS" });
-    expect(soon.acted).toBe(false);
-    expect(soon.reason).toBe("cadence");
+    expect(e.consider("on", { tool: "GMAIL_FETCH_EMAILS" }).acted).toBe(true);
+    expect(e.consider("on", { tool: "GMAIL_FETCH_EMAILS" }).acted).toBe(false);
+    now += 1_100;
+    expect(e.consider("on", { tool: "GMAIL_FETCH_EMAILS" }).acted).toBe(true);
+  });
+
+  it("decideStep gates without spending budget (a wake's per-tool check)", () => {
+    let now = 1_000;
+    const e = engine(() => now);
+    const first = e.decideStep("on", { tool: "GMAIL_SEND_EMAIL" });
+    expect(first).toMatchObject({ dryRun: true, execute: true });
+    const second = e.decideStep("on", { tool: "GMAIL_SEND_EMAIL" });
+    expect(second).toMatchObject({ dryRun: true, execute: true });
+    // budget still free for a real consider
+    expect(e.consider("on", { tool: "GMAIL_FETCH_EMAILS" }).acted).toBe(true);
   });
 });

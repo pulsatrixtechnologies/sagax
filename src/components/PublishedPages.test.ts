@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { pageFrameSandbox } from "../../shared/published-pages";
+import { pageCardOpenVersion, pageCardStatusWithThreadLatest } from "@/lib/page-chat-layout";
 import { expiryFromHours, pageCardState, previewSrc, publishBody } from "./PublishedPages";
 
 describe("published page card", () => {
@@ -39,5 +40,17 @@ describe("the page card's line (2026-10-28)", () => {
     expect(pageCardState({ status: "draft", currentVersion: null, versions: [v(1), v(2)] } as never, 1)).toBe("superseded");
     expect(pageCardState({ status: "draft", currentVersion: null, versions: [v(1, "declined")] } as never, 1)).toBe("declined");
     expect(pageCardState({ status: "revoked", currentVersion: null, versions: [v(1)] } as never, 1)).toBe("revoked");
+  });
+
+  it("opens the latest page from an Updated-below card", () => {
+    expect(pageCardOpenVersion(pageCardState({ status: "draft", currentVersion: null, versions: [v(1), v(2)] } as never, 1), 1)).toBeUndefined();
+    expect(pageCardOpenVersion(pageCardState({ status: "published", currentVersion: 2, versions: [v(1, "published"), v(2, "published")] } as never, 2), 2)).toBe(2);
+  });
+
+  it("a thread-newer version marks Updated below before the summary catches up", () => {
+    const stale = pageCardState({ status: "draft", currentVersion: null, versions: [v(1)] } as never, 1);
+    expect(stale).toBe("draft");
+    expect(pageCardStatusWithThreadLatest(stale, 1, 2)).toBe("superseded");
+    expect(pageCardOpenVersion(pageCardStatusWithThreadLatest(stale, 1, 2), 1)).toBeUndefined();
   });
 });

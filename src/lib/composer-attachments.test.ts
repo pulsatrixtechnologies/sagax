@@ -32,6 +32,10 @@ import {
   fileMaxBytes,
   imageMaxBytes,
   setAttachmentHostShared,
+  assertImageFitsMessage,
+  IMAGE_AGGREGATE_MAX_BYTES,
+  MESSAGE_IMAGE_MAX_COUNT,
+  type Attachment,
 } from "./composer-attachments";
 
 describe("the viewed Data result and the words", () => {
@@ -667,7 +671,7 @@ describe("private document intake", () => {
   it("rejects oversized audio before uploading", async () => {
     const fetch = vi.spyOn(globalThis, "fetch");
     try {
-      const file = new File([new Uint8Array(25 * 1024 * 1024 + 1)], "large.opus", { type: "audio/opus" });
+      const file = { name: "large.opus", type: "audio/opus", size: 250 * 1024 * 1024 + 1 } as File;
       await expect(fileAttachmentFromFile(file)).rejects.toMatchObject({ status: 413 });
       expect(fetch).not.toHaveBeenCalled();
     } finally {
@@ -675,17 +679,28 @@ describe("private document intake", () => {
     }
   });
 
-  it("#1098: a solo server takes documents and pictures up to 90 MB; a shared host keeps 25 and 32", async () => {
+  it("shares a 200 MB picture budget per message without counting other files", () => {
+    const MB = 1024 * 1024;
+    const picture = (index: number, size: number): Attachment => ({ kind: "image", id: `i${index}`, path: "", name: `p${index}.png`, size, mime: "image/png" });
+    const video: Attachment = { kind: "file", id: "v", path: "", name: "clip.mp4", size: 900 * MB };
+    expect([IMAGE_AGGREGATE_MAX_BYTES, MESSAGE_IMAGE_MAX_COUNT]).toEqual([200 * MB, 32]);
+    const six = Array.from({ length: 6 }, (_, index) => picture(index, 30 * MB));
+    expect(() => assertImageFitsMessage({ name: "next.png", size: 20 * MB }, [...six, video])).not.toThrow();
+    expect(() => assertImageFitsMessage({ name: "next.png", size: 20 * MB + 1 }, six)).toThrow(/total at most 200 MB/);
+    const many = Array.from({ length: 32 }, (_, index) => picture(index, 1));
+    expect(() => assertImageFitsMessage({ name: "next.png", size: 1 }, many)).toThrow(/at most 32 images/);
+    expect(() => assertImageFitsMessage({ name: "next.png", size: 1 }, many.slice(1))).not.toThrow();
+  });
+
+  it("keeps the higher solo image limit and gives both hosts 250 MB documents", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
       path: "/private/attachments/report.pdf", name: "report.pdf", bytes: 3,
     }), { status: 201, headers: { "content-type": "application/json" } }));
-    const report = { name: "report.pdf", type: "application/pdf", size: 60 * 1024 * 1024 } as File;
+    const report = new File(["pdf"], "report.pdf", { type: "application/pdf" });
     try {
-      expect(fileMaxBytes()).toBe(25 * 1024 * 1024);
-      await expect(fileAttachmentFromFile(report)).rejects.toMatchObject({ status: 413 });
-      expect(fetch).not.toHaveBeenCalled();
+      expect([fileMaxBytes(), imageMaxBytes()]).toEqual([250 * 1024 * 1024, 32 * 1024 * 1024]);
       setAttachmentHostShared(false);
-      expect([fileMaxBytes(), imageMaxBytes()]).toEqual([ARCHIVE_MAX_BYTES, ARCHIVE_MAX_BYTES]);
+      expect([fileMaxBytes(), imageMaxBytes()]).toEqual([ARCHIVE_MAX_BYTES, 90 * 1024 * 1024]);
       await fileAttachmentFromFile(report);
       expect(fetch).toHaveBeenCalledTimes(1);
     } finally {
@@ -694,7 +709,7 @@ describe("private document intake", () => {
     }
   });
 
-  it("uploads archives with their listing, and refuses one over 90 MB with a clear error", async () => {
+  it("uploads archives with their listing and refuses one over 250 MB", async () => {
     const archive = { kind: "zip", status: "ok", files: 2, totalBytes: 12, entries: [{ path: "a.txt", size: 6 }, { path: "b/c.txt", size: 6 }], truncated: false, skippedCount: 0 };
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
       path: "/private/attachments/0b5a3c1e-1111-4222-8333-444455556666.zip", name: "project.zip", bytes: 3, archive,
@@ -707,10 +722,9 @@ describe("private document intake", () => {
       await fileAttachmentFromFile(new File([new Uint8Array([1])], "src.tar.gz", { type: "application/x-gzip" }));
       expect(fetch).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ headers: { "content-type": "application/gzip" } }));
       fetch.mockClear();
-      // 30 MB is fine for an archive, over the 25 MB document ceiling
-      const big = { name: "big.zip", type: "application/zip", size: 30 * 1024 * 1024 } as File;
-      const huge = { name: "huge.zip", type: "application/zip", size: 91 * 1024 * 1024 } as File;
-      await expect(fileAttachmentFromFile(huge)).rejects.toThrow("huge.zip is 91.0 MB; archives can be at most 90 MB");
+      const big = new File(["zip"], "big.zip", { type: "application/zip" });
+      const huge = { name: "huge.zip", type: "application/zip", size: 251 * 1024 * 1024 } as File;
+      await expect(fileAttachmentFromFile(huge)).rejects.toThrow("huge.zip is 251.0 MB; archives can be at most 250 MB");
       expect(fetch).not.toHaveBeenCalled();
       expect(huge.size).toBeGreaterThan(ARCHIVE_MAX_BYTES);
       await fileAttachmentFromFile(big);

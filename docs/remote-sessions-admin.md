@@ -6,28 +6,29 @@ signing requirements, and exactly what must be tested on a real machine. The
 per OS persistence mechanics live in the Pulsatrix Assist helper repo, in
 `docs/remote-control-service.md`; this note is the Sagax and Perspicax side.
 
-## Status: what works today vs designed but not wired
+## Status (2026-11-01)
 
-Works today (this PR, safe to use):
-- The Remote Sessions page: listing (active and history), filters, search, the
+Unattended access is always enabled server-side. It is not a mode and cannot
+be disabled. There is no `SAGAX_UNATTENDED_ACCESS` flag and no "not enabled on
+this server" gate. Safeguards that stay part of the design (and are not
+toggles for turning unattended off): org consent at host install, visible
+banner/tray on the host, non-disableable audit, expiry, revoke.
+
+Works today:
+- The Remote Sessions admin page (org-wide listing for admins; a person sees
+  only their own sessions): listing (active and history), filters, search, the
   redacted log view, End session, and the live-session revoke path that cuts
-  the tunnel (End on a connected session).
+  the tunnel.
 - Org isolation and the admin vs owner visibility rules on the page and routes.
+- Enrolled hosts: list, open unattended, revoke.
+- Personal endpoint attach and live place selection live in the bot's Computer
+  tab (not a separate full-window page for the person).
 
-Designed but NOT wired yet (gated OFF, do not rely on in prod):
-- The persistent host service install ("Sagax Remote Control") and its CLI.
-- Revoke uninstalling the host service and invalidating the Perspicax `--allow`
-  (today revoke only marks consent, cuts any live tunnel, and writes an audit
-  line; it does not uninstall the remote service).
-- Expiry and consent enforcement at (re)connect time.
-
-Because of this, unattended access is gated behind a server flag
-`unattendedEnabled` that is FALSE by default (env `SAGAX_UNATTENDED_ACCESS=1`).
-While it is off: recording consent (grant) and opening an enrolled host return
-501 "not available", the page shows a "not enabled" note, and no one can turn
-the dangerous path on by mistake. Revoking is never behind the flag (M2 of the
-2026-10-26 review): a host enrolled before the flag was cut can always be
-revoked. See the TODO at the bottom.
+Host-side wiring that still lives in pulsatrix-assist (see RESULT notes when
+a Sagax change needs a host change):
+- The persistent host service install ("Sagax Remote Control") CLI dispatch.
+- Revoke uninstalling the host service and invalidating the Perspicax `--allow`.
+- Expiry and consent enforcement at (re)connect time on the host.
 
 ## Enrolled hosts (2026-10-26)
 
@@ -42,7 +43,7 @@ of the host's own key, never a hostname or a serial: E3).
   seen and the state (enrolled, expired, revoked). The `host_id` is only in the
   name's tooltip and behind the Copy button, never in the text.
 - "Unattended access" (`POST /api/admin/remote-sessions/hosts/<host_id>/open`)
-  shows on an enrolled host only when `SAGAX_UNATTENDED_ACCESS=1`. Any person
+  shows on an enrolled host. Any person
   who reaches this server may open (no admin approval, decision 2026-10-26).
   Sagax makes a client key for that session only (as for a coded open), sends
   `remote_support_open` with `host_id` and the public nodekey, follows
@@ -173,9 +174,6 @@ any tunnel client:
   `call_ref`, the reference of the phone call or ticket that records the
   person's consent, kept in the Perspicax session journal.
 
-This does not turn unattended access on: `SAGAX_UNATTENDED_ACCESS` stays off by
-default and the grant and revoke routes are unchanged.
-
 ## Flow skill wording (to mirror into the Flow skill)
 
 > Enabling unattended access on a client host is done with the end user present
@@ -233,9 +231,10 @@ someone logs in (the daemon keeps running). Linux limit: Wayland needs a portal
 and may block headless capture; a headless server is shell only (shell, files
 and facts, no screen or control).
 
-## TODO before enabling unattended (gate stays OFF until all done)
+## Host-side follow-ups (pulsatrix-assist)
 
-From the security review of PR #981:
+From the security review of PR #981. Sagax no longer gates these behind a
+server flag (2026-11-01); they still need to land in the helper:
 
 1. Route the helper CLI: wire `cmd/pulsatrix-assist/main.go` to
    `service.Dispatch` (install / status / uninstall are implemented and tested
@@ -250,5 +249,4 @@ From the security review of PR #981:
 5. Decide signed consent attestation (org signed token) vs free text
    `--consent-recorded-by`, and enforce the chosen form.
 
-Only after 1 to 5 land should `unattendedEnabled` (env `SAGAX_UNATTENDED_ACCESS`)
-be turned on, and only on a server with signed and notarized helper builds.
+Ship signed and notarized helper builds for unattended hosts.

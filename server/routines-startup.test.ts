@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
@@ -142,13 +142,13 @@ it("recovers queued/due work and resumes an interrupted routine once, without it
     expect(Boolean(recoveredPeer.busy)).toBe(false);
     await expect.poll(async () => {
       const current = (await api("GET", "/api/bots")).bots.find((bot: { id: string }) => bot.id === reusedPeer.id);
+      // handed to the job runtime: the request line it shows in the thread
       return current.messages.some((message: { role: string; text?: string }) =>
-        message.role === "user" && message.text?.includes("This later user request must survive the restart"));
+        message.text?.includes("This later user request must survive the restart"));
     }, { timeout: 15_000 }).toBe(true);
-    await expect.poll(
-      () => JSON.parse(readFileSync(join(dataDir, "delegations.json"), "utf8")),
-      { timeout: 10_000 },
-    ).toEqual({});
+    // The old queue is handed to the job runtime once and retired.
+    expect(existsSync(join(dataDir, "delegations.json"))).toBe(false);
+    expect(existsSync(join(dataDir, "delegations.json.migrated"))).toBe(true);
     const scheduledRun = runs.find((run) => run.routineId === scheduled.id)!;
     const wait = await runControlOmb(["wait", "--bot", scheduledBot.id, "--task", scheduledRun.threadId!, "--url", url]);
     const messages = await runControlOmb(["messages", "--bot", scheduledBot.id, "--task", scheduledRun.threadId!, "--url", url]);

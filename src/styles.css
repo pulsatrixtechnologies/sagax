@@ -3730,3 +3730,80 @@ select optgroup {
    survives a React render, unlike a class added beside the row's own. */
 [data-settings-filtering] [data-settings-search-miss] { display: none; }
 [data-settings-search-hit] { background: var(--color-selected); }
+
+/* Computer screen calm asleep / waking (2026-11-01, Grok Bot style). */
+.computer-sleep-zzz {
+  position: absolute;
+  left: calc(100% - 4px);
+  top: -2px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  pointer-events: none;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--color-ink);
+  text-shadow:
+    -1px -1px 0 var(--color-card),
+    1px -1px 0 var(--color-card),
+    -1px 1px 0 var(--color-card),
+    1px 1px 0 var(--color-card);
+}
+.computer-sleep-zzz span {
+  display: block;
+  opacity: 0.85;
+  animation: computer-sleep-zzz 3.6s ease-out infinite;
+}
+.computer-sleep-zzz span:nth-child(1) { font-size: 11px; }
+.computer-sleep-zzz span:nth-child(2) { font-size: 14px; animation-delay: 1.2s; }
+.computer-sleep-zzz span:nth-child(3) { font-size: 18px; animation-delay: 2.4s; }
+@keyframes computer-sleep-zzz {
+  0% { opacity: 0; transform: translate(0, 4px); }
+  20% { opacity: 0.9; }
+  100% { opacity: 0; transform: translate(6px, -10px); }
+}
+:root[data-reduced-motion] .computer-sleep-zzz span { animation: none; opacity: 0.85; transform: none; }
+:root[data-reduced-motion] .computer-sleep-zzz span:nth-child(1) { transform: translate(0, 0); }
+:root[data-reduced-motion] .computer-sleep-zzz span:nth-child(2) { transform: translate(4px, -4px); }
+:root[data-reduced-motion] .computer-sleep-zzz span:nth-child(3) { transform: translate(8px, -8px); }
+@media (prefers-reduced-motion: reduce) {
+  .computer-sleep-zzz span { animation: none; opacity: 0.85; transform: none; }
+  .computer-sleep-zzz span:nth-child(1) { transform: translate(0, 0); }
+  .computer-sleep-zzz span:nth-child(2) { transform: translate(4px, -4px); }
+  .computer-sleep-zzz span:nth-child(3) { transform: translate(8px, -8px); }
+}
+
+.computer-waking-text[data-waking-shimmer] {
+  background: linear-gradient(
+    90deg,
+    var(--color-ink) 0%,
+    var(--color-ink-secondary) 40%,
+    var(--color-ink) 80%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: computer-waking-shimmer 1.8s ease-in-out infinite;
+}
+@keyframes computer-waking-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+:root[data-reduced-motion] .computer-waking-text[data-waking-shimmer] {
+  animation: none;
+  background: none;
+  color: var(--color-ink);
+  -webkit-background-clip: unset;
+  background-clip: unset;
+}
+@media (prefers-reduced-motion: reduce) {
+  .computer-waking-text[data-waking-shimmer] {
+    animation: none;
+    background: none;
+    color: var(--color-ink);
+    -webkit-background-clip: unset;
+    background-clip: unset;
+  }
+}

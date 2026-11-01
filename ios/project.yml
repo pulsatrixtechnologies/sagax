@@ -72,8 +72,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.pulsatrix.sagax
-        MARKETING_VERSION: "0.8.23"
-        CURRENT_PROJECT_VERSION: "100"
+        MARKETING_VERSION: "0.8.24"
+        CURRENT_PROJECT_VERSION: "102"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1,2"
         # The catalog lives in App/, which is already a source path.
@@ -299,8 +299,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.pulsatrix.sagax.share
-        MARKETING_VERSION: "0.8.23"
-        CURRENT_PROJECT_VERSION: "100"
+        MARKETING_VERSION: "0.8.24"
+        CURRENT_PROJECT_VERSION: "102"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1,2"
         APPLICATION_EXTENSION_API_ONLY: YES
@@ -336,9 +336,10 @@ targets:
             NSExtensionActivationRule:
               NSExtensionActivationSupportsText: true
               NSExtensionActivationSupportsWebURLWithMaxCount: 1
-              NSExtensionActivationSupportsImageWithMaxCount: 4
-              NSExtensionActivationSupportsFileWithMaxCount: 4
-              NSExtensionActivationSupportsAttachmentsWithMaxCount: 4
+              NSExtensionActivationSupportsImageWithMaxCount: 32
+              NSExtensionActivationSupportsFileWithMaxCount: 32
+              NSExtensionActivationSupportsAttachmentsWithMaxCount: 32
+              NSExtensionActivationSupportsMovieWithMaxCount: 32
 
   # A push with `mutable-content` runs here while the app is closed: it
   # draws the bot's mascot (or downloads the picture it chose) and donates
@@ -376,8 +377,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.pulsatrix.sagax.notification
-        MARKETING_VERSION: "0.8.23"
-        CURRENT_PROJECT_VERSION: "100"
+        MARKETING_VERSION: "0.8.24"
+        CURRENT_PROJECT_VERSION: "102"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1,2"
         APPLICATION_EXTENSION_API_ONLY: YES
@@ -456,8 +457,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.pulsatrix.sagax.widgets
-        MARKETING_VERSION: "0.8.23"
-        CURRENT_PROJECT_VERSION: "100"
+        MARKETING_VERSION: "0.8.24"
+        CURRENT_PROJECT_VERSION: "102"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1,2"
         APPLICATION_EXTENSION_API_ONLY: YES

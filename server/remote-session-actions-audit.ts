@@ -34,6 +34,9 @@ export interface RemoteSessionActionEvent {
   reason?: string;
   /** remote_host.revoked: when, in UTC (ISO-8601 with Z), beside `at`. */
   atUtc?: string;
+  /** unattended.open: scope and rights of the open. */
+  scope?: string;
+  rights?: string;
   /** exec: the command line, already safe to store (redacted again here). */
   command?: string;
   readOnly?: boolean;

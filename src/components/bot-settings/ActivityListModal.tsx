@@ -16,7 +16,7 @@ import { api } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { activityStatusActive, historyItems, loadBotActivity, type BotActivityFilter, type BotActivityItem, type HistoryStatus } from "@/lib/bot-activity";
-import { ActivityList } from "./ActivitySection";
+import { ActivityList } from "./ActivityList";
 import { DIALOG } from "../SettingsPrimitives";
 import { ActivityDetailPane, WIDE_PX } from "./ActivityDetailModal";
 import { ActivityWindow, activityChip, useElementWidth } from "./ActivityWindow";

@@ -349,6 +349,31 @@ describe("preparing a harness response for a device", () => {
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(clip.subarray(2, 4));
   });
 
+  it("relays a ranged window of a large conversation video and keeps no-transform", async () => {
+    const window = Uint8Array.from([0xaa, 0xbb, 0xcc]);
+    respond = (res) => {
+      res.writeHead(206, {
+        "content-type": "video/mp4",
+        "content-length": String(window.byteLength),
+        "content-range": "bytes 1073741821-1073741823/1073741824",
+        "accept-ranges": "bytes",
+        "cache-control": "private, no-store, no-transform",
+      });
+      res.end(window);
+    };
+
+    const response = await fetch(`http://127.0.0.1:${sidecarPort}/api/threads/thread-1/files/0123456789abcdef01234567?preview=1`, {
+      headers: { authorization: `Bearer ${TOKEN}`, range: "bytes=-3" },
+    });
+    expect(companionRange).toBe("bytes=-3");
+    expect(response.status).toBe(206);
+    expect(response.headers.get("content-range")).toBe("bytes 1073741821-1073741823/1073741824");
+    expect(response.headers.get("accept-ranges")).toBe("bytes");
+    expect(response.headers.get("cache-control")).toBe("private, no-store, no-transform");
+    expect(response.headers.get("cdn-cache-control")).toBe("no-store");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(window);
+  });
+
   it("does not forward a non-canonical Range header", async () => {
     respond = (res) => {
       res.writeHead(200, { "content-type": "audio/mpeg", "content-length": String(6) });

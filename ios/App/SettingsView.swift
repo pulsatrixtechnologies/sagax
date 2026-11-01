@@ -133,17 +133,29 @@ private struct SettingsRootPage: View {
     @EnvironmentObject private var model: SettingsModel
     @EnvironmentObject private var navigator: SettingsNavigator
     @State private var query = ""
+    @State private var searching = false
 
     var body: some View {
         // The search shares the header row with the X: same height (the
         // button's 42), centred on one line.
         SettingsPage(
             leading: close.map { .close($0) } ?? .back,
-            contentTop: SettingsMetrics.headerInset + GlassCircleButton.Size.sheet.rawValue + 17,
-            trailingFills: true,
+            contentTop: SettingsMetrics.headerInset + GlassCircleButton.Size.sheet.rawValue + 37,
+            trailingFills: searching,
             trailing: {
-                SettingsSearchField(prompt: "Search", text: $query, identifier: "settings-search",
-                                    rowHeight: GlassCircleButton.Size.sheet.rawValue)
+                // Grok Bot's sheet has the X alone (2026-11-01): search waits
+                // behind a round button at the other corner, then takes the row.
+                if searching {
+                    SettingsSearchField(prompt: "Search", text: $query, identifier: "settings-search",
+                                        rowHeight: GlassCircleButton.Size.sheet.rawValue, autoFocus: true) {
+                        withAnimation(.snappy(duration: 0.2)) { searching = false }
+                    }
+                } else {
+                    GlassCircleButton(systemImage: "magnifyingglass", size: .sheet, accessibilityLabel: "Search") {
+                        withAnimation(.snappy(duration: 0.2)) { searching = true }
+                    }
+                    .accessibilityIdentifier("settings-search-open")
+                }
             }
         ) {
             if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -235,7 +247,7 @@ private struct SettingsRootPage: View {
         case .quickReplies: navigator.routes = bots; navigator.sheet = .quickReplies
         case .walkieVoice: navigator.routes = bots; navigator.sheet = .walkieVoice
         case .about: navigator.routes = [.about]
-        case .credentials: navigator.routes = privacy + [.vault]
+        case .credentials: navigator.routes = [.vault]
         case .securityKeys: navigator.routes = privacy + [.securityKeys]
         case .bots: navigator.routes = bots
         case .myEngines: navigator.routes = bots + [.myEngines]

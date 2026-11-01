@@ -20,6 +20,15 @@
 // All lengths are in R (the circle's radius) until frame() turns them into
 // the 0..100 box (shape-art.ts BODY).
 import type { MascotShape } from "../../shared/mascot-look";
+import type { ShapeAvatarDef } from "../../shared/shape-avatar-def";
+import {
+  blendOutlines,
+  liveOutlineFromDef,
+  radiiFromOutlinePoints,
+  smoothClosedOutline,
+  type LiveShapeOutline,
+  type OutlinePoint,
+} from "../../shared/shape-avatar-outline";
 import { blendRadii, BODY, clamp01, easeInOut, easeOutQuint, FACE_ANCHOR, GEOMETRY, lerp, RAD, radiusToward, SHAPE_RADII, smoothClosed, stemPath, toBox, type Radii } from "./shape-art";
 import { moveAt, moveLength, moveWeight, ringAt, type MovePose, type RibbonDraw, type RingDraw, type ShapeMove } from "./shape-moves";
 
@@ -62,24 +71,8 @@ export const EYE_SHIFT = { x: 0.1, y: 0.2 } as const;
 
 /* --------------------------------------------------------- expressions */
 
-/** One eye: width and height (R), a tilt (degrees, clockwise) and how open it is (0..1). */
-export interface EyeShape {
-  w: number;
-  h: number;
-  tilt: number;
-  open: number;
-}
-
-/** A face: where it looks (degrees, on top of the head's own turn) and its two eyes. */
-export interface Expression {
-  yaw: number;
-  pitch: number;
-  roll: number;
-  /** Half the angle between the two eyes on the head, degrees. */
-  split: number;
-  left: EyeShape;
-  right: EyeShape;
-}
+export type { EyeShape, Expression } from "./shape-expression";
+import type { EyeShape, Expression } from "./shape-expression";
 
 const eye = (w: number, h: number, tilt = 0, open = 1): EyeShape => ({ w, h, tilt, open });
 const both = (yaw: number, pitch: number, roll: number, split: number, shape: EyeShape, right: EyeShape = shape): Expression => ({ yaw, pitch, roll, split, left: shape, right });
@@ -440,6 +433,15 @@ export interface ShapeState {
   shape: MascotShape;
   expression: ShapeExpression;
   color: string;
+  /** Path-based body from a portable avatarDef (v2.1). */
+  avatarDef?: ShapeAvatarDef;
+}
+
+/** Live outline cache for a path-bodied avatarDef. */
+export function outlineForState(state: ShapeState): LiveShapeOutline | null {
+  if (!state.avatarDef) return null;
+  const live = liveOutlineFromDef(state.avatarDef);
+  return live.pathBody ? live : null;
 }
 
 function eyesPath(eyes: PlacedEye[]): string {
@@ -457,6 +459,17 @@ export function stillFrame(state: ShapeState): ShapeFrame {
   return gazeFrame(state, 0, 0);
 }
 
+function pathBodyInputs(state: ShapeState): Pick<FrameInputs, "radii" | "rest" | "outline"> | null {
+  const live = outlineForState(state);
+  if (!live) return null;
+  const radii = radiiFromOutlinePoints(live.points);
+  return {
+    radii,
+    rest: radii,
+    outline: { path: live.path, points: live.points, face: live.face, morphing: false },
+  };
+}
+
 /** Gaze toward normalized pointer (-1..1); optional rigid lean on the whole body (sidebar). */
 export function gazeFrame(
   state: ShapeState,
@@ -466,10 +479,12 @@ export function gazeFrame(
   open = { left: 1, right: 1 },
 ): ShapeFrame {
   const gaze = hoverGaze(nx, ny);
+  const path = pathBodyInputs(state);
+  const radii = path?.radii ?? SHAPE_RADII[state.shape];
   return composeFrame({
     shape: state.shape,
-    radii: SHAPE_RADII[state.shape],
-    rest: SHAPE_RADII[state.shape],
+    radii,
+    rest: path?.rest ?? SHAPE_RADII[state.shape],
     face: EXPRESSIONS[state.expression],
     gaze: { ...gaze, roll: 0 },
     open,
@@ -478,7 +493,8 @@ export function gazeFrame(
     eyes: 1,
     pose: null,
     t: 0,
-    stem: state.shape === "pumpkin" ? 1 : 0,
+    stem: state.shape === "pumpkin" && !path ? 1 : 0,
+    outline: path?.outline,
   });
 }
 
@@ -497,6 +513,8 @@ interface FrameInputs {
   t: number;
   /** How much of the pumpkin's stem shows (0 for every other body). */
   stem: number;
+  /** Path body: exact silhouette (and morph points). When set, frame.body prefers path. */
+  outline?: { path: string; points: OutlinePoint[]; face: OutlinePoint; morphing: boolean };
 }
 
 /** Whether a body wears the pumpkin's stem (1) or not (0). */
@@ -523,7 +541,10 @@ export function bodyDepth(radii: Radii): number {
 }
 
 function composeFrame(input: FrameInputs): ShapeFrame {
-  const placed = input.eyes > 0.02 ? solveEyes(input.radii, input.face, input.gaze, input.open, FACE_ANCHOR[input.shape]) : [];
+  const faceAnchor: Point = input.outline
+    ? [((input.outline.face[0] - BODY.center[0]) / BODY.unit), ((input.outline.face[1] - BODY.center[1]) / BODY.unit)]
+    : FACE_ANCHOR[input.shape];
+  const placed = input.eyes > 0.02 ? solveEyes(input.radii, input.face, input.gaze, input.open, faceAnchor) : [];
   const shown = placed.map((e) => {
     // eyes fading out with a move shrink to nothing about their middle
     const s = clamp01(input.eyes);
@@ -561,8 +582,13 @@ function composeFrame(input: FrameInputs): ShapeFrame {
   const rings = (pose?.pose.rings ?? []).map(({ spec, opacity }) => ringAt(spec, input.t, opacity * w, [x, y]));
   const ribbonsNow = (pose?.pose.ribbons ?? []).map((ribbon) => ({ ...ribbon, opacity: ribbon.opacity * w }));
   const marks = (pose?.pose.marks ?? []).map((mark) => ({ d: smoothClosed(mark.points.map((p) => toBox(p))), opacity: round3(mark.opacity * w) })).filter((mark) => mark.opacity > 0.001);
+  // Path body: exact silhouette when settled; resampled smooth ring while morphing.
+  const polarBody = smoothClosed(input.radii.map((r, i) => toBox([r * Math.sin((i / input.radii.length) * Math.PI * 2), -r * Math.cos((i / input.radii.length) * Math.PI * 2)])));
+  const bodyPath = input.outline
+    ? (input.outline.morphing ? smoothClosedOutline(input.outline.points) : input.outline.path)
+    : polarBody;
   return {
-    body: smoothClosed(input.radii.map((r, i) => toBox([r * Math.sin((i / input.radii.length) * Math.PI * 2), -r * Math.cos((i / input.radii.length) * Math.PI * 2)]))),
+    body: bodyPath,
     eyes: eyesPath(shown),
     eyeShapes,
     motion: { x: x * BODY.unit, y: y * BODY.unit, rot, sx, sy },
@@ -593,6 +619,7 @@ export class ShapeEngine {
   private start: number;
   private state: ShapeState;
   private fromRadii: Radii;
+  private fromOutline: OutlinePoint[] | null;
   private shapeAt = -Infinity;
   private fromFace: Expression;
   private faceAt = -Infinity;
@@ -612,7 +639,9 @@ export class ShapeEngine {
     this.seed = seed;
     this.state = state;
     this.start = now;
-    this.fromRadii = SHAPE_RADII[state.shape];
+    const live = outlineForState(state);
+    this.fromRadii = live ? radiiFromOutlinePoints(live.points) : SHAPE_RADII[state.shape];
+    this.fromOutline = live ? live.points : null;
     this.fromFace = EXPRESSIONS[state.expression];
     this.fromColor = state.color;
     this.fromStem = stemOf(state.shape);
@@ -620,8 +649,12 @@ export class ShapeEngine {
 
   /** The current shape, expression and color; a change slides over MORPH_S from what shows now. */
   set(next: ShapeState, now: number): void {
-    if (next.shape !== this.state.shape) {
+    const shapeChanged = next.shape !== this.state.shape
+      || (next.avatarDef?.id ?? "") !== (this.state.avatarDef?.id ?? "")
+      || JSON.stringify(next.avatarDef?.body) !== JSON.stringify(this.state.avatarDef?.body);
+    if (shapeChanged) {
       this.fromRadii = this.radiiNow(now);
+      this.fromOutline = this.outlinePointsNow(now);
       this.fromStem = this.stemNow(now);
       this.shapeAt = now;
     }
@@ -668,9 +701,29 @@ export class ShapeEngine {
     return this.move !== null && now - this.move.at <= moveLength(this.move.id);
   }
 
+  private targetOutline(): LiveShapeOutline | null {
+    return outlineForState(this.state);
+  }
+
+  private targetRadii(): Radii {
+    const live = this.targetOutline();
+    return live ? radiiFromOutlinePoints(live.points) : SHAPE_RADII[this.state.shape];
+  }
+
+  private outlinePointsNow(now: number): OutlinePoint[] | null {
+    const to = this.targetOutline();
+    const k = easeOutQuint((now - this.shapeAt) / MORPH_S);
+    if (!this.fromOutline && !to) return null;
+    const from = this.fromOutline ?? (to ? to.points : null);
+    const dest = to?.points ?? this.fromOutline;
+    if (!from || !dest) return null;
+    return k >= 1 ? dest : blendOutlines(from, dest, k);
+  }
+
   private radiiNow(now: number): Radii {
     const k = easeOutQuint((now - this.shapeAt) / MORPH_S);
-    return k >= 1 ? SHAPE_RADII[this.state.shape] : blendRadii(this.fromRadii, SHAPE_RADII[this.state.shape], k);
+    const to = this.targetRadii();
+    return k >= 1 ? to : blendRadii(this.fromRadii, to, k);
   }
 
   /** How much of the pumpkin's stem shows: it grows in and out with a change of shape. */
@@ -731,6 +784,17 @@ export class ShapeEngine {
       eyes = lerp(1, p.eyes ?? 1, weight);
       pose = { pose: p, weight };
     }
+    const live = this.targetOutline();
+    const outlinePts = this.outlinePointsNow(now);
+    const morphK = easeOutQuint((now - this.shapeAt) / MORPH_S);
+    const outline = live && outlinePts
+      ? {
+          path: live.path,
+          points: outlinePts,
+          face: live.face,
+          morphing: morphK < 1 || !!this.fromOutline,
+        }
+      : undefined;
     return composeFrame({
       shape: this.state.shape,
       radii,
@@ -743,7 +807,8 @@ export class ShapeEngine {
       eyes,
       pose,
       t,
-      stem,
+      stem: live ? 0 : stem,
+      outline: outline && morphK >= 1 && !this.move ? { ...outline, morphing: false } : outline,
     });
   }
 }

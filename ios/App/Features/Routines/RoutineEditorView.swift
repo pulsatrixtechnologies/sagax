@@ -800,7 +800,8 @@ struct RoutineEditorView: View {
         for url in urls {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            guard let data = try? Data(contentsOf: url) else { continue }
+            // read off the main thread: a large file from Files froze the editor
+            guard let data = await Task.detached(priority: .userInitiated, operation: { try? Data(contentsOf: url) }).value else { continue }
             let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
             added(await session.uploadRoutineAttachment(data: data, name: url.lastPathComponent, mime: mime, image: false))
         }

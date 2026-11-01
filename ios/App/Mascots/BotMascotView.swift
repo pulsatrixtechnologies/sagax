@@ -64,7 +64,10 @@ struct BotMascotView: View {
             guard crop != .mascot, bot.avatarUrl != nil else { return }
             let data = await session.avatarData(for: bot)
             guard !Task.isCancelled else { return }
-            guard let data, let decoded = Self.decode(data) else {
+            // every frame of an animated avatar is decoded at once: not on the main thread
+            let decoded = await Task.detached(priority: .userInitiated) { data.flatMap(Self.decode) }.value
+            guard !Task.isCancelled else { return }
+            guard let decoded else {
                 failed = true
                 return
             }
@@ -81,7 +84,7 @@ struct BotMascotView: View {
     }
 
     /// An animated GIF or WebP becomes an animated `UIImage`; everything else a still.
-    private static func decode(_ data: Data) -> UIImage? {
+    nonisolated private static func decode(_ data: Data) -> UIImage? {
         if let animation = AnimatedImageDecoder.decode(data) {
             let frames = animation.frames.map { UIImage(cgImage: $0) }
             if let animated = UIImage.animatedImage(with: frames, duration: animation.duration) {

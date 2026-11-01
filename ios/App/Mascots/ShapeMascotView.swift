@@ -29,6 +29,8 @@ struct ShapeMascotView: View {
     var mood: ShapeMood = .idle
     /// A face of its own, over the mood's.
     var expression: ShapeExpression?
+    /// Path-based body (v2.1); object shapes also resolve presets when nil.
+    var avatarDef: ShapeAvatarDef? = nil
     /// Off draws a still frame (thumbnails, lists).
     var animated = false
     /// Plays the Shapes moves asked for (`OwlMascotHandle.shape(_:)`).
@@ -51,12 +53,13 @@ struct ShapeMascotView: View {
         // a flat skin bounces while working (shape-mascot.css), even small
         let bouncing = active && skin == .outline && mood == .working
         let face = expression ?? ShapeEngineData.moodExpression[mood] ?? .neutral
-        let state = ShapeEngineState(shape: shape, expression: face, color: ShapeArt.hex(color))
+        let resolvedDef = ShapeAvatarPresets.avatarDef(for: shape, avatarDef: avatarDef)
+        let state = ShapeEngineState(shape: shape, expression: face, color: ShapeArt.hex(color), avatarDef: resolvedDef)
         TimelineView(.animation(minimumInterval: moving ? nil : ShapeVolumeData.idleFrame, paused: !(live || bouncing))) { timeline in
             Canvas { context, canvas in
                 let now = timeline.date.timeIntervalSinceReferenceDate
                 let drawn = live ? player.frame(state, mood: mood, now: now)
-                    : (ShapeFrames.still(shape, face, color: state.color), ShapeVolume.grounded(ShapeVolume.rest, shape))
+                    : (ShapeFrames.still(shape, face, color: state.color, avatarDef: resolvedDef), ShapeVolume.grounded(ShapeVolume.rest, shape))
                 ShapeRenderer.draw(in: &context, canvas: canvas, box: size, frame: drawn.0, pose: drawn.1, shape: shape, skin: skin, hex: state.color,
                                    eyes: ShapeVolume.eyeStyle(mood), bounce: bouncing ? now : nil)
             }
@@ -230,9 +233,9 @@ enum ShapeRenderer {
         let detail = ShapeVolumeDetail.of(Double(box))
         // the one drawing: a plain body bends with the resting turn; a skin's own art is drawn on the outline at rest
         guard let drawing = ShapeVolume.drawShape(frame, pose, detail: detail, style: style, bend: solid) else { return }
-        let bodyPath = CGMutablePath()
-        drawing.outline.add(to: bodyPath)
-        let body = Path(bodyPath)
+        let body = Path(drawing.fillPath)
+        let evenOdd = FillStyle(eoFill: drawing.pathD != nil)
+        let extras = drawing.extras.map { Path(SVGPath.parse($0)) }
 
         // a move's motion (breath, drift, a move's turn) carries the whole body
         var moved = ctx
@@ -241,7 +244,8 @@ enum ShapeRenderer {
         for t in drawing.slices {
             var c = moved
             c.concatenate(t)
-            c.fill(body, with: .color(Color(hex: sideFill)))
+            c.fill(body, with: .color(Color(hex: sideFill)), style: evenOdd)
+            for extra in extras { c.fill(extra, with: .color(Color(hex: sideFill))) }
         }
         var face = moved
         face.concatenate(drawing.face)
@@ -258,9 +262,10 @@ enum ShapeRenderer {
         if let glow = paint.glow {
             var g = faceBody
             g.addFilter(.blur(radius: 2.4))
-            g.fill(body, with: .color(Color(hex: glow)))
+            g.fill(body, with: .color(Color(hex: glow)), style: evenOdd)
         }
-        faceBody.fill(body, with: .color(Color(hex: fill)))
+        faceBody.fill(body, with: .color(Color(hex: fill)), style: evenOdd)
+        for extra in extras { faceBody.fill(extra, with: .color(Color(hex: fill))) }
         if let edge = ink.edge {
             // a near-white or near-black face keeps its silhouette: one hairline, on the face only
             var c = faceBody
@@ -275,7 +280,7 @@ enum ShapeRenderer {
             ])
             let bounds = body.boundingRect
             let center = CGPoint(x: bounds.minX + 0.32 * bounds.width, y: bounds.minY + 0.26 * bounds.height)
-            faceBody.fill(body, with: .radialGradient(g, center: center, startRadius: 0, endRadius: 0.75 * max(bounds.width, bounds.height)))
+            faceBody.fill(body, with: .radialGradient(g, center: center, startRadius: 0, endRadius: 0.75 * max(bounds.width, bounds.height)), style: evenOdd)
         }
         if let stroke = paint.stroke {
             faceBody.stroke(body, with: .color(Color(hex: stroke)), style: StrokeStyle(lineWidth: paint.strokeWidth, lineJoin: .round))
@@ -293,8 +298,14 @@ enum ShapeRenderer {
     /// A flat skin (Outline): the eyes cut through the body, the bounce while working.
     private static func drawFlat(in ctx: GraphicsContext, frame: ShapeFrame, skin: ShapeSkin, hex: String, bounce time: Double?) {
         let paint = ShapeArt.paint(skin, hex: hex)
-        let outline = CGMutablePath()
-        ShapeMath.smoothClosedPath(frame.body, into: outline)
+        let outline: CGPath = {
+            if let path = frame.bodyPath, !frame.pathMorphing {
+                return SVGPath.parse(path)
+            }
+            let path = CGMutablePath()
+            ShapeMath.smoothClosedPath(frame.body, into: path)
+            return path
+        }()
         let eyes = CGMutablePath()
         for eye in frame.eyes { ShapeMath.smoothClosedPath(eye, into: eyes) }
         let body = Path(outline)

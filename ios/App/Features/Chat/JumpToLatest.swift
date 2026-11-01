@@ -37,6 +37,12 @@ final class BottomFollow: ObservableObject {
         observations.append(view.observe(\.contentOffset, options: [.new]) { [weak self] scroll, _ in
             MainActor.assumeIsolated { self?.check(scroll) }
         })
+        // LazyVStack grows contentSize as rows appear. While following, pin
+        // to the end so open/stream/settle still land on the newest message.
+        observations.append(view.observe(\.contentSize, options: [.new]) { [weak self] scroll, _ in
+            MainActor.assumeIsolated { self?.pinToBottomIfFollowing(scroll) }
+        })
+        pinToBottomIfFollowing(view)
     }
 
     private func distance(_ scroll: UIScrollView) -> CGFloat {
@@ -47,6 +53,18 @@ final class BottomFollow: ObservableObject {
     /// The at-end check of `onScroll`: reaching the end re-arms the follow.
     private func check(_ scroll: UIScrollView) {
         if !following, distance(scroll) <= Self.threshold { following = true }
+    }
+
+    private func pinToBottomIfFollowing(_ scroll: UIScrollView) {
+        guard following else { return }
+        let inset = scroll.adjustedContentInset
+        let visible = scroll.bounds.height - inset.top - inset.bottom
+        guard scroll.contentSize.height > visible else { return }
+        let y = scroll.contentSize.height - scroll.bounds.height + inset.bottom
+        let target = CGPoint(x: scroll.contentOffset.x, y: max(-inset.top, y))
+        if abs(scroll.contentOffset.y - target.y) > 0.5 {
+            scroll.setContentOffset(target, animated: false)
+        }
     }
 
     /// An upward drag away from the end breaks the follow, like an upward

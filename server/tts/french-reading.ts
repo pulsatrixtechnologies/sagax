@@ -3,39 +3,16 @@
 // "18 octobre 2026"), prices, percentages, decimals, short ordinals and
 // titles. A sentence that
 // is already words is unchanged. Applied when the call's language is French
-// (`fr` or `fr-*`), or automatic and the text looks French (an accent, or
-// more French function words than English ones), on the streaming speech
-// paths.
+// (`fr` or `fr-*`), or automatic and the text looks French
+// (shared/looks-french.ts), on the streaming speech paths.
+
+import { looksFrench } from "../../shared/looks-french.ts";
+
+export { looksFrench };
 
 /** True when this call should be read as French. */
 export function readsFrench(language: string): boolean {
   return language.toLowerCase().split("-")[0] === "fr";
-}
-
-/** French function words that are not English words. */
-const FRENCH_WORDS = new Set([
-  "le", "la", "les", "un", "une", "des", "du", "de", "et", "est", "pas", "je", "tu", "il", "elle", "nous", "vous", "ils",
-  "elles", "que", "qui", "quoi", "pour", "avec", "dans", "sur", "mais", "ou", "oui", "non", "merci", "bonjour",
-  "ce", "cette", "ces", "mon", "ma", "mes", "ton", "ta", "son", "sa", "ses", "au", "aux", "c'est", "j'ai",
-  "votre", "notre", "leur", "très", "bien", "aussi", "demain", "aujourd'hui", "heures", "rendez-vous",
-]);
-const ENGLISH_WORDS = new Set([
-  "the", "and", "is", "are", "was", "you", "your", "we", "it", "this", "that", "with", "for", "from", "have", "has",
-  "not", "but", "can", "will", "what", "which", "who", "when", "where", "how", "of", "to", "in", "at", "be", "do", "yes",
-  "thanks", "hello", "today", "tomorrow", "my",
-]);
-
-/** The text reads as French: an accented letter, or more French function
- * words than English ones (at least two). Unsure: false. */
-export function looksFrench(text: string): boolean {
-  if (/[àâçéèêëîïôûùüÿœ]/i.test(text)) return true;
-  let fr = 0;
-  let en = 0;
-  for (const word of text.toLowerCase().match(/[a-zà-ÿœ'-]+/g) ?? []) {
-    if (FRENCH_WORDS.has(word)) fr += 1;
-    if (ENGLISH_WORDS.has(word)) en += 1;
-  }
-  return fr >= 2 && fr > en;
 }
 
 /** Read this text as French: a French call, or an automatic one whose text

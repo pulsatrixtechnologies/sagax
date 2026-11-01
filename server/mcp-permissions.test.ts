@@ -57,7 +57,7 @@ describe("mcp permission registry", () => {
       "remote_support_open", "remote_support_status", "remote_support_close",
       // mcp/sagax_tools.rs
       "list_agents", "find_agents", "create_agent", "send_prompt", "await_turn", "read_transcript", "read_transcript_page", "read_latest_page", "read_latest_page_with_threads", "read_transcript_cold",
-      "sagax_bots", "sagax_send", "sagax_thread", "sagax_routine_run", "sagax_approve", "sagax_nudge",
+      "sagax_bots", "sagax_send", "sagax_thread", "sagax_routine_run", "sagax_routine_update", "sagax_approve", "sagax_nudge",
       // per-profile tools, both separators
       "cw_psa__query", "cw_psa__write", "cw_psa__action", "edr__read_action", "cw_psa__find_tickets", "twilio_lookups__Bucket_write", "cw_psa-query",
       // memory v2 draft behind a switch (Perspicax #326)

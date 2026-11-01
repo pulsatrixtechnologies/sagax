@@ -1244,11 +1244,11 @@ const toolDefinitions = (externalRuntime: boolean) => [
   {
     name: "list_routines",
     description:
-      "This bot's routines a page at a time, with the current time and timezone for relative dates. Read every page (offset) before counting; routine_id gives one in full. Only when asked about routines.",
+      "This bot's routines a page at a time, with the current time and timezone for relative dates. Read every page (offset) before counting; routine_id gives one in full (also accepts an owned webhook id from the Webhooks list, and a sibling bot's routine id when you can reach that bot). Short rows include webhookId when the routine starts from a delivery. Only when asked about routines.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
-      properties: { offset: { type: "integer" }, routine_id: { type: "string", minLength: 1, description: "Routine id from list_routines." } },
+      properties: { offset: { type: "integer" }, routine_id: { type: "string", minLength: 1, description: "Routine id from list_routines, or that routine's owned webhook id." } },
     },
   },
   {
@@ -1299,7 +1299,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   {
     name: "propose_routine_action",
     description:
-      "Prepare a user-requested change to one of this bot's existing routines. Use list_routines first to get the routine id. If the user asks to change ANOTHER bot's routine and that bot is in your section, call list_bots and pass that bot's id as for_bot_id; the routine keeps its owner and every run keeps that bot's engine and permissions." + SELF_CHANGE_OUTCOME,
+      "Prepare a user-requested change to one of this bot's existing routines (pause, resume, update name/instructions/schedule, delete, rotate webhook key). Use list_routines first to get the routine id. Follows this bot's Ask or Auto mode. The person's own AI client (Perspicax member API) edits without a proposal card via sagax_routine_update. If the user asks to change ANOTHER bot's routine and that bot is in your section, call list_bots and pass that bot's id as for_bot_id; the routine keeps its owner and every run keeps that bot's engine and permissions." + SELF_CHANGE_OUTCOME,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -1389,6 +1389,34 @@ const toolDefinitions = (externalRuntime: boolean) => [
         quote: PERSON_QUOTE,
       },
       required: ["model_selection", "reason"],
+    },
+  },
+  {
+    name: "generate_shape_avatar",
+    description:
+      "Build a portable Shape mascot definition (geometry JSON only) from a short description and apply it to this bot's look. "
+      + "Use when the person asks to make a mascot that looks like an object (mug, pad, bulb, speech bubble, plant, can, book, rocket, …). "
+      + "Colour stays the bot's colour. The definition is validated before it is stored."
+      + SELF_CHANGE_OUTCOME,
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        direction: {
+          type: "string",
+          maxLength: 400,
+          description: "What the silhouette should look like, for example \"a friendly coffee mug\".",
+        },
+        apply: {
+          type: "boolean",
+          description: "When true (default), save the definition on this bot's mascotLook. When false, only return the JSON.",
+        },
+        definition: {
+          type: "object",
+          additionalProperties: true,
+          description: "Optional ready-made definition JSON to validate and apply instead of generating from direction.",
+        },
+      },
     },
   },
   {
@@ -1505,8 +1533,11 @@ const toolDefinitions = (externalRuntime: boolean) => [
   {
     name: "skills_list",
     description:
-      "List this bot's imported skills (enabled and disabled) and any staged skill writes still waiting for the user's decision. Enabled rows include description and SKILL.md path so you can load a skill shortened or left out of the prompt index. Use this before skill_manage to avoid duplicate names. Listing does not enable anything.",
-    inputSchema: { type: "object", additionalProperties: false, properties: {} },
+      "Search this turn's bot, Me and plugin skills, commands and agents. Enabled rows include descriptions and workspace_read paths. Listing changes nothing. Use nextOffset to continue.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {
+      query: { type: "string", maxLength: 200, description: "Name, description, source or scope." },
+      offset: { type: "integer", minimum: 0, description: "Previous nextOffset; default 0." },
+    } },
   },
   {
     name: "skill_manage",
@@ -1657,24 +1688,26 @@ const AGENT_API_TOOLS = [
   },
   {
     name: "send_prompt",
-    description: "Send a prompt to an agent: it lands in the agent's one chat with its person, your name on it, and runs at the agent's own approval level. mode fire_and_forget (default) and async return a handle once accepted (async also tells you when the turn ends); blocking waits up to timeout_ms. After a timeout, resume with await_turn and the handle: never re-send. An empty reply with finished=true means the agent said nothing. on_busy: queue (default) waits its turn, reject refuses, supersede stops the running turn you started (and any approval it waits on), never someone else's. Optional priority now wakes an idle agent at once or moves the prompt to the front of its queue, and never interrupts a running turn; past 10 now sends an hour it is delivered as normal.",
+    description: "Send a prompt to an agent: it lands in the agent's one chat with its person, your name on it, and runs at the agent's own approval level. mode fire_and_forget (default) and async return a handle once accepted (async also tells you when the turn ends); blocking waits up to timeout_ms but returns still_working under the ~55 s ceiling with the handle so you resume via await_turn. The answer carries thread_id and expires_at (ms; a handle lasts 7 days): keep thread_id, it outlives the handle. After a timeout, resume with await_turn and the handle: never re-send. An empty reply with finished=true means the agent said nothing. on_busy: queue (default) waits its turn, reject refuses with retryable busy (turn_state and options in details), supersede stops the running turn you started (and any approval it waits on), never someone else's. Refusals use the unified envelope with retryable true|false. Optional priority now wakes an idle agent at once or moves the prompt to the front of its queue, and never interrupts a running turn; past 10 now sends an hour it is delivered as normal.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       agent_id: AGENT_ID,
       prompt: { type: "string", minLength: 1, maxLength: 32000 },
       mode: { type: "string", enum: ["fire_and_forget", "blocking", "async"] },
-      timeout_ms: { type: "integer", minimum: 1000, maximum: 600000, description: "Blocking wait; default 120000." },
-      on_busy: { type: "string", enum: ["supersede", "reject", "queue"] },
+      timeout_ms: { type: "integer", minimum: 1000, maximum: 600000, description: "Blocking wait budget; the live wait is capped at 55000 so the handle returns. Default 120000." },
+      on_busy: { type: "string", enum: ["supersede", "reject", "queue"], description: "queue (default) waits its turn; reject answers 409 busy (retryable) with turn_state; supersede stops a turn you started." },
       priority: { type: "string", enum: ["now", "normal"], description: "now wakes an idle recipient at once or moves this to the front of its queue. It never interrupts a running turn. Default normal. At most 10 now sends per sender per hour; past that it is delivered as normal." },
       files: { type: "array", maxItems: 8, items: { type: "string" }, description: "Workspace-relative paths, 25 MiB each; copied to the agent's workspace." },
+      thread_id: { type: "string", description: "Optional: continue one of your conversations with this agent (the thread_id a turn answer gave)." },
     }, required: ["agent_id", "prompt"] },
   },
   {
     name: "await_turn",
-    description: "Wait for an agent's turn: with the handle send_prompt or send_to_bot gave (copy it exactly), that turn; without one, the in-flight turn of your conversation, else its last message. On bad_handle, call await_turn without a handle, or read_latest_page with the thread_id send_prompt returned. Never re-send the prompt.",
+    description: "Wait for an agent's turn under a caller-chosen timeout_ms (0 to 55000, default 45000): with the handle send_prompt or send_to_bot gave (copy it exactly), that turn; without one, the in-flight turn of your conversation, else its last message. When the wait ends and the turn is not done, the answer is still_working (not an error): thread_id, progress.summary, progress.steps, wait_cursor, recommended_wait_ms. Pass wait_cursor as cursor on the next call so steps are not repeated. An expired handle (or one from another of your sessions) on a conversation you can read answers that turn anyway (handle null, recovered_from). Refusals: handle_expired, handle_session_mismatch, handle_agent_mismatch, bad_handle (altered); then read_latest_page with agent_id and the thread_id send_prompt returned, which needs no handle. Never re-send the prompt.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       agent_id: AGENT_ID,
       handle: { type: "string", description: "Copy the handle send_prompt returned, exactly." },
-      timeout_ms: { type: "integer", minimum: 0, maximum: 600000, description: "Default 120000." },
+      timeout_ms: { type: "integer", minimum: 0, maximum: 55000, description: "Caller-chosen wait, capped under engine ceilings. Default 45000." },
+      cursor: { type: "string", description: "Optional: the wait_cursor from a previous still_working answer so progress.steps continue without duplicates." },
     }, required: ["agent_id"] },
   },
   {
@@ -1695,9 +1728,10 @@ const AGENT_API_TOOLS = [
   },
   {
     name: "read_latest_page",
-    description: "Read the newest entries of the transcript; page back with next_cursor. Do not poll: use await_turn.",
+    description: "Read the newest entries of the transcript; page back with next_cursor. With thread_id (a turn answer carries it) it reads that one conversation: the handle-free way to get a turn's result, even after its handle expired. Do not poll: use await_turn.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       agent_id: AGENT_ID, limit: { type: "integer", minimum: 1, maximum: 200, description: "Default 20." }, cursor: AGENT_CURSOR,
+      thread_id: { type: "string", description: "Optional: one of your conversations with this agent, the thread_id a turn answer gave." },
     }, required: ["agent_id"] },
   },
   {
@@ -1755,7 +1789,6 @@ export const CLAIM_TOOLS = [
 });
 if (CLAIM_TOOLS.map((tool) => tool.name).join() !== CLAIM_TOOL_NAMES.join()) throw new Error("CLAIM_TOOLS and CLAIM_TOOL_NAMES disagree");
 
-const SKILL_TOOL_NAMES = new Set(["skills_list", "skill_manage"]);
 // A workspace with computer sharing off refuses the routes behind these two,
 // so they must not be advertised at all: a model that sees a tool it cannot
 // use spends turns discovering that.
@@ -1844,7 +1877,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "propose_routine", "propose_routine_action", "list_routines", "run_routine",
   "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_bot_deletion", "archive_bot",
   "propose_team_memory", "propose_page", "page_comments", "create_room", "manage_room", "create_bot",
-  "add_mcp_server", "skill_manage", "skills_list", "rules_update", "docs_update",
+  "add_mcp_server", "skill_manage", "rules_update", "docs_update",
   "launch_cloud_agent", "list_cloud_agents", "get_cloud_agent", "cancel_cloud_agent", "archive_cloud_agent",
   "cloud_agent_follow_up", "cloud_agent_transcript", "find_cloud_agent_by_pr", "list_cloud_agent_artifacts",
   "save_artifact", "update_artifact", "delete_artifact", "list_artifacts",
@@ -2073,7 +2106,7 @@ function coreCatalogTools(profile: CatalogProfile) {
     (tool.name !== "group_memory_update" || profile.groupMemory === true));
   const AUTHORING_TOOLS = profile.skillAuthoring
     ? BOT_SCOPED_TOOLS
-    : BOT_SCOPED_TOOLS.filter((tool) => !SKILL_TOOL_NAMES.has(tool.name));
+    : BOT_SCOPED_TOOLS.filter((tool) => tool.name !== "skill_manage");
   const SHAREABLE_TOOLS = profile.sharedComputers
     ? AUTHORING_TOOLS
     : AUTHORING_TOOLS.filter((tool) => !SHARED_COMPUTER_TOOL_NAMES.has(tool.name));

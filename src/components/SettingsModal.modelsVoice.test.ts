@@ -131,6 +131,7 @@ describe("Settings > Models and voice", () => {
 
   it("keeps models and voice choices while retiring duplicate account and key views", async () => {
     const models = await page();
+    expect(models).toContain("data-bot-models-page");
     expect(models).toContain("data-auto-model-explainer");
     expect(models).toContain("data-open-providers");
     expect(models).toContain('data-settings-card="connections.image"');

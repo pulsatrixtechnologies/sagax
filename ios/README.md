@@ -114,7 +114,7 @@ ios/
     Discovery.swift              NWBrowser for _openmausbot._tcp
     Keychain.swift               the device token
     Mascots/                     the Sagax characters (owl, shapes, Trombi, Bunbu, Shiba, Grump, Ogre, Frog), the picture crop,
-                                 group faces, and a DEBUG gallery (-mascotGallery owl|shape|trombi|group)
+                                 group faces, and a DEBUG gallery (-mascotGallery owl|shape|trombi|group|motion|live-activity)
     PairingView.swift            QR handoff, discovery, address and code fallback
     Onboarding/                  welcome (three ways in), organization sign-in, shared page chrome
     Demo/                        demo launch options, drawn computer screen, home banner
@@ -276,20 +276,37 @@ the host computer remain unreachable through the companion.
   the SQLite transcript store and opens the exact task,
   branch, and message; the roster's "+" creates the same basic bot the desktop
   endpoint creates, then opens it.
-- **Share-sheet files cross one narrow boundary.** Images are limited to 10 MiB
-  each, supported documents to 25 MiB each, and the computer accepts at most
-  512 MiB of attachments in total before asking the user to clear space. The
-  extension copies temporary
-  provider files into its App Group before asynchronous work, uploads raw bytes
-  through the same paired connection, and sends only the Mac-local generated
-  path to the selected destination. Each share keeps a stable random upload ID,
-  so retrying a dropped route reuses the same file instead of making duplicates.
-  The Mac stores the file with a generated name and owner-only permissions; the
-  iPhone's temporary sandbox URL is never sent.
-  Keep the Share sheet open until it says **Sent**. This version does not hand a
-  partially uploaded file to a background transfer service if iOS closes the
-  extension; abandoned temporary copies are purged on the next share or app
-  foreground.
+- **Files stay with their draft.** Attach up to 32 items. Images share a
+  200 MiB message budget, with 32 MiB per image on a shared host and 90 MiB on
+  a solo host. Documents, archives and audio fit up to 250 MiB each; MP4,
+  WebM and QuickTime videos fit up to 1 GiB each. The server's attachment
+  store has its own 8 GiB capacity and gives a visible error when full.
+  Photo Library accepts photos and videos; Choose File accepts supported
+  documents, archives, audio and video. Files from providers are copied into
+  the app's protected temporary storage before their URLs expire.
+  Upload starts on intake and shows acknowledged progress, remove/cancel
+  and Retry on the same chip. Pending or failed uploads hold Send. Leaving
+  and reopening the conversation restores its protected, file-backed draft,
+  including after app relaunch. Two transfers run at once, each reading one
+  4 MiB chunk.
+  Retry keeps its UUID and asks the computer for the last confirmed offset
+  or completed receipt. Removing a completed unused attachment asks the
+  server to clean it; files already used in a transcript stay intact.
+- **Share-sheet files use the same resumable transport.** The extension
+  copies provider files into its protected App Group, uploads bounded chunks
+  and sends the generated server path to the selected destination. The
+  iPhone's sandbox URL is never sent. Send first saves the files, destination,
+  UUIDs and retry-safe message in the App Group. The Share sheet can finish
+  directly or hand off with **Finish in Sagax**. Reopening the containing app
+  resumes accepted jobs after extension termination or suspension. There is
+  no total upload deadline; each chunk retains its bounded network timeout.
+  A cross-process lease prevents the sheet and app from delivering together.
+  A lost message receipt replays the same body, options and sendId. Explicit
+  Cancel leaves a tombstone so a recovery worker cannot resurrect the job.
+  Temporary provider copies can be purged without removing durable jobs.
+  Quick Look and system sharing download larger files directly
+  to protected storage; text previews read at most 2 MiB. Automatic transcript
+  thumbnails retain their separate 25 MiB buffered-download ceiling.
 
 ## Limits in this version
 

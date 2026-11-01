@@ -6,6 +6,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
   MESSAGE_FILE_MAX_BYTES,
+  MESSAGE_VIDEO_MAX_BYTES,
   messageFileDisposition,
   messageFileDownloadName,
   messageAttachmentName,
@@ -16,6 +17,7 @@ import {
   messageFolderEntryName,
   openMessageFile,
   openMessageFolderEntry,
+  statMessageFile,
 } from "./message-file.ts";
 
 const referencesAttachment = (text: string, requested: string) => messageAttachmentName(text, requested) !== null;
@@ -307,7 +309,7 @@ describe("message-linked files", () => {
     }
   });
 
-  it("serves message-authorized video formats without changing the file ceiling", async () => {
+  it("serves message-authorized video formats through the 1 GiB streaming ceiling", async () => {
     for (const [extension, mime] of [
       ["mp4", "video/mp4"], ["m4v", "video/x-m4v"],
       ["webm", "video/webm"], ["mov", "video/quicktime"],
@@ -319,8 +321,17 @@ describe("message-linked files", () => {
     }
     const large = join(workspace, "large.mp4");
     writeFileSync(large, "x");
-    truncateSync(large, MESSAGE_FILE_MAX_BYTES + 1);
+    truncateSync(large, MESSAGE_VIDEO_MAX_BYTES);
+    const atLimit = await openMessageFile(large, [workspace]);
+    expect(atLimit.bytes).toBe(MESSAGE_VIDEO_MAX_BYTES);
+    const tail = atLimit.stream({ start: MESSAGE_VIDEO_MAX_BYTES - 4, end: MESSAGE_VIDEO_MAX_BYTES - 1 });
+    const chunks: Buffer[] = [];
+    for await (const chunk of tail) chunks.push(Buffer.from(chunk));
+    expect(Buffer.concat(chunks)).toEqual(Buffer.alloc(4));
+
+    truncateSync(large, MESSAGE_VIDEO_MAX_BYTES + 1);
     await expect(openMessageFile(large, [workspace])).rejects.toMatchObject({ status: 413 });
+    await expect(statMessageFile(large, [workspace])).resolves.toBeNull();
   });
 
   it("refuses traversal and a symlink that resolves outside the allowed root", async () => {
@@ -335,15 +346,21 @@ describe("message-linked files", () => {
     await expect(openMessageFile("escape.md", [workspace])).rejects.toMatchObject(refusal);
   });
 
-  it("accepts only regular files no larger than the phone download ceiling", async () => {
+  it("accepts only regular files no larger than the durable file ceiling", async () => {
     await expect(openMessageFile(".", [workspace]))
       .rejects.toMatchObject({ status: 400 });
 
     const large = join(workspace, "large.pdf");
     writeFileSync(large, "x");
+    truncateSync(large, MESSAGE_FILE_MAX_BYTES);
+    const atLimit = await openMessageFile("large.pdf", [workspace]);
+    expect(atLimit.bytes).toBe(MESSAGE_FILE_MAX_BYTES);
+    await atLimit.handle.close();
+
     truncateSync(large, MESSAGE_FILE_MAX_BYTES + 1);
     await expect(openMessageFile("large.pdf", [workspace]))
       .rejects.toMatchObject({ status: 413 });
+    await expect(statMessageFile("large.pdf", [workspace])).resolves.toBeNull();
   });
 
   it("lists the regular files directly inside a linked folder", async () => {
@@ -352,6 +369,8 @@ describe("message-linked files", () => {
     writeFileSync(join(folder, "b.png"), "png");
     writeFileSync(join(folder, "a.md"), "# a");
     writeFileSync(join(folder, "nested", "deep.txt"), "not listed");
+    writeFileSync(join(folder, "huge.pdf"), "x");
+    truncateSync(join(folder, "huge.pdf"), MESSAGE_FILE_MAX_BYTES + 1);
 
     await expect(openMessageFile("Posts/2026-10-07_News/", [workspace]))
       .rejects.toMatchObject({ status: 400, code: "directory" });

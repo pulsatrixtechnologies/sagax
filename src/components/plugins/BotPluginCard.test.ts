@@ -78,6 +78,8 @@ describe("For <bot> on a plugin's page", () => {
     const html = card({ ...view, canChange: false, engine: { loadsPlugins: false } });
     expect(html).toContain("Only the bot&#x27;s owner, or someone who manages it");
     expect(html).toContain("This engine does not load plugins itself.");
+    expect(html).toContain("skills_list and workspace_read");
+    expect(html).toContain("Organization Flow stays Claude-only.");
     expect(html).not.toContain("data-bot-plugin-install=\"");
     expect(html).not.toContain("data-bot-plugin-uninstall");
   });

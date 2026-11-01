@@ -130,11 +130,13 @@ describe("independent bot tasks through the isolated control surface", () => {
     const requestId = queued.body.receipts[0].requestId;
     // The receipt is the sender's honest answer at send time: nothing has
     // been delivered yet.
+    // Peer is busy on its approval card (maxConcurrentThreads: 1): the
+    // receipt is honest about the live turn ahead of this handoff.
     expect(queued.body.receipts).toEqual([{
       botId: peer.id,
       botName: "Mailbox Peer",
       outcome: "queued",
-      detail: "sent to \"@Mailbox Chief · work\"; it runs after anything still running there",
+      detail: "queued behind a live turn; priority now does not interrupt it",
       requestId: expect.any(String),
       threadId: expect.any(String),
     }]);
@@ -290,7 +292,6 @@ describe("independent bot tasks through the isolated control surface", () => {
     const delegated = await internal(token, "POST", "/api/internal/delegate-bot", { toBotId: peer.id, message: "RELEASE_CHECKS: run the release checks." });
     expect(delegated.status).toBe(200);
     expect(delegated.body).toMatchObject({ queued: true, taskId: expect.any(String) });
-    // the delegation starts once the Chief's turn ends
     writeFileSync(modelFile(models[0], "gate"), "finish");
     const unanswered = await permission(models[1], "unanswered-delegated", { command: "npm run release-check" });
     const peerCard = async () => {
@@ -310,23 +311,12 @@ describe("independent bot tasks through the isolated control surface", () => {
     writeFileSync(`${modelFile(models[1], "gate")}.tmp`, ending);
     renameSync(`${modelFile(models[1], "gate")}.tmp`, modelFile(models[1], "gate"));
     const note = "[Sagax: nobody answered the approval for “Bash: npm run release-check” in time, so it did not run.";
-    const runMessages = async () => (await api("GET", `/api/threads/${await runThread()}/messages?limit=100`)).body.messages as any[];
-    if (ending === "finish") {
-      const replied = async () => (await runMessages())
-        .find((message: any) => message.kind === "text" && message.text?.startsWith("@Delegated Peer replied to the delegated task:"))?.text as string | undefined;
-      await expect.poll(replied, { timeout: 20_000 }).toBeTruthy();
-      expect((await replied())!.startsWith(`@Delegated Peer replied to the delegated task:\n\n${note}`)).toBe(true);
-    } else {
-      // A failed turn reports only its failure: the note rides on it, to
-      // the delegating bot it wakes. Its chip shows the cause's one line.
-      const failed = async () => (await runMessages())
-        .find((message: any) => message.tool?.name?.startsWith("Delegation to @Delegated Peer failed"))?.tool as { name: string; ok: boolean } | undefined;
-      await expect.poll(failed, { timeout: 20_000 }).toBeTruthy();
-      expect(await failed()).toMatchObject({ ok: false });
-      expect((await failed())!.name).toBe("Delegation to @Delegated Peer failed — Delegated turn did not finish — Fixture turn failed. Before it stopped it made 1 tool call: Bash ×1.");
-      const woken = async () => JSON.stringify((await dump(models[0])).prompt);
-      await expect.poll(woken, { timeout: 20_000 }).toContain(JSON.stringify(`${note} Do not report it as done; it needs the person's approval.]`).slice(1, -1));
-    }
+    // The delegation runs on the job runtime (lot 3): whether the teammate's
+    // turn finished or failed, its report carries the note, and it resumes
+    // the routine run that asked, which reads it.
+    const woken = async () => JSON.stringify((await dump(models[0])).prompt);
+    // (the report quotes it as evidence: its opening bracket is escaped)
+    await expect.poll(woken, { timeout: 20_000 }).toContain(note.slice(1));
   }, 60_000);
 
   it("tells a room's coordinator that a member's approval went unanswered, so the step did not run", async () => {
@@ -574,16 +564,17 @@ describe("independent bot tasks through the isolated control surface", () => {
     expect((await api("POST", `/api/bots/${botId}/messages/${userA.id}/edit`, { threadId: taskB, text: "wrong task" })).status).toBe(404);
     expect((await api("POST", `/api/bots/${botId}/active-branch`, { threadId: taskB, messageId: userA.id })).status).toBe(404);
 
-    // Changing the profile model moves the named idle task (A, which
-    // follows the bot) and never the independently configured sibling.
-    // A change that names no thread lands on the bot's one conversation, the
-    // newest segment (#1586, routeThreadId), here B: the app names A.
+    // Changing the profile model (PATCH /api/bots/:id with modelSelection)
+    // is the bot's default: every thread follows it, including an earlier
+    // thread-specific pick (store.patchBot + withoutModel, 2026-10-30).
+    // Naming threadId only selects which conversation the app was looking
+    // at; it does not keep a sibling on its own model.
     await tool("switch_task", { target_type: "bot", target_id: botId, task_id: taskA });
     const legacyModel = models.at(-1)!;
     expect((await api("PATCH", `/api/bots/${botId}`, { threadId: taskA, modelSelection: { instanceId: "claude", model: legacyModel } })).status).toBe(200);
     const final = await botState(botId);
     expect(final.tasks.find((task: any) => task.taskId === taskA).modelSelection.model).toBe(legacyModel);
-    expect(final.tasks.find((task: any) => task.taskId === taskB).modelSelection.model).toBe(models[1]);
+    expect(final.tasks.find((task: any) => task.taskId === taskB).modelSelection.model).toBe(legacyModel);
   }, 45_000);
 
   it("cancels a detached routine on its captured provider after an idle sibling changes the default", async () => {

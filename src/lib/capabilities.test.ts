@@ -42,18 +42,21 @@ describe("capabilities (desktop)", () => {
 
   it("says what each engine gets of a capability (the Engines line)", () => {
     // a plugin for this bot: skills, commands, agents (no MCP: C-1)
-    expect(enginesLine("plugin", { commands: true })).toBe("Claude: everything · Codex: everything · Grok: nothing · API: nothing");
+    // Q8 C: Grok and API engines receive the files inline too
+    expect(enginesLine("plugin", { commands: true })).toBe("Claude: everything · Codex: everything · Grok: everything · API: everything");
     // a plugin for everyone: its servers and library skills
-    expect(enginesLine("plugin", { mcp: true, skills: true, indexOnly: true })).toBe("Claude: everything · Codex: everything · Grok: server · API: server");
+    expect(enginesLine("plugin", { mcp: true, skills: true, indexOnly: true })).toBe("Claude: everything · Codex: everything · Grok: everything · API: everything");
     expect(enginesLine("mcp", { mcp: true })).toBe("Claude: everything · Codex: everything · Grok: everything · API: everything");
-    expect(enginesLine("skill", { skills: true, indexOnly: true })).toBe("Claude: everything · Codex: everything · Grok: nothing · API: nothing");
+    expect(enginesLine("skill", { skills: true, indexOnly: true })).toBe("Claude: everything · Codex: everything · Grok: everything · API: everything");
     expect(receiptWords({ skills: "prompt", mcp: "none", nothing: false })).toBe("skills");
   });
 
   it("warns before an install only when the bot's engine would get nothing", () => {
-    expect(engineGetsNothing("grok", "plugin", { skills: true, commands: true })).toBe(true);
+    expect(engineGetsNothing("grok", "plugin", { skills: true, commands: true })).toBe(false);
     expect(engineGetsNothing("codex", "plugin", { skills: true })).toBe(false);
     expect(engineGetsNothing("grok", "plugin", { mcp: true, skills: true, indexOnly: true })).toBe(false);
+    expect(engineGetsNothing("openai-compat", "skill", { skills: true, skillDiscovery: false })).toBe(false);
+    expect(engineGetsNothing("openai-compat", "skill", { skills: true, skillDiscovery: true })).toBe(false);
     // nothing brought (contents not read yet): no warning
     expect(engineGetsNothing("grok", "plugin", {})).toBe(false);
   });
@@ -66,5 +69,6 @@ describe("capabilities (desktop)", () => {
     expect(indexCut(capabilityFixture().promptIndex)).toBe(true);
     expect(indexCut({ bytes: 1_000, maxBytes: 4_000, skills: 3, maxSkills: 30, omitted: 0 })).toBe(false);
     expect(indexCut(undefined)).toBe(false);
+    expect(indexCut({ bytes: 100, maxBytes: 4_000, skills: 0, maxSkills: 30, omitted: 0, incomplete: true })).toBe(true);
   });
 });

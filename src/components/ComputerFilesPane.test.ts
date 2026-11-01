@@ -158,19 +158,23 @@ describe("recent file actions", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("downloads through the exact shared message and preserves the original URL", async () => {
+  it("resolves the exact shared message to an opaque browser download", async () => {
     const href = "file:///workspace/release%20notes%231.md";
-    vi.mocked(fetch).mockResolvedValue(new Response("Sample report", {
-      headers: { "content-type": "text/plain", "content-disposition": 'attachment; filename="release.md"' },
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      downloadUrl: "/api/threads/thread%20%2F%201/files/0123456789abcdef01234567",
+      previewUrl: "/api/threads/thread%20%2F%201/files/0123456789abcdef01234567?preview=1",
+      name: "release.md",
+      mime: "text/plain",
+      bytes: 13,
+    }), {
+      headers: { "content-type": "application/json" },
     }));
-    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fixture");
-    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     const download = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     render(bot([reply("message / 1", `[report](${href})`), digest(["/workspace/release notes#1.md"])], { threadId: "thread / 1" }));
     saveButton("release notes#1.md")!.click();
-    await vi.waitFor(() => expect(container.textContent).toContain("Downloaded"));
+    await vi.waitFor(() => expect(container.textContent).toContain("Download started"));
     expect(fetch).toHaveBeenCalledWith("/api/threads/thread%20%2F%201/messages/message%20%2F%201/file", expect.objectContaining({
-      method: "POST", body: JSON.stringify({ path: href, listFolder: true }),
+      method: "POST", body: JSON.stringify({ path: href, location: true }),
     }));
     expect(download).toHaveBeenCalledOnce();
   });

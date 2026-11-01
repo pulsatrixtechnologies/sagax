@@ -217,14 +217,16 @@ struct PageSurfaceView: View {
             }
             Button(String(localized: "Reload"), systemImage: "arrow.clockwise") { redraw() }
         } label: {
+            // AXe reads the Menu's label Button; put the name on the label
+            // itself so VoiceOver and UI tests see "More" / page-more.
             Image(systemName: "ellipsis")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .frame(width: 40, height: 40)
                 .themeGlass(Circle())
+                .accessibilityLabel(Text(String(localized: "More")))
+                .accessibilityIdentifier("page-more")
         }
-        .accessibilityLabel(Text(String(localized: "More")))
-        .accessibilityIdentifier("page-more")
     }
 
     private func versionsSheet(_ page: PublishedPageSummary) -> some View {

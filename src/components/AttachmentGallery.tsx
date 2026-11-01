@@ -4,7 +4,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { Check, ChevronDown, ChevronUp, Download, FileText, Film, LoaderCircle, Music, Play, RotateCcw, X } from "lucide-react";
-import { attachmentBasename, fileMaxBytes, soloAttachmentCeilings, type TranscriptFileAttachment, type TranscriptImageAttachment } from "@/lib/composer-attachments";
+import { attachmentBasename, bufferedPreviewMaxBytes as fileMaxBytes, soloAttachmentCeilings, VIDEO_MAX_BYTES, type TranscriptFileAttachment, type TranscriptImageAttachment } from "@/lib/composer-attachments";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { isVoiceNoteName } from "@/lib/voice-note";
@@ -17,6 +17,7 @@ import {
   AttachmentThumbnail,
   previewImage,
   requestMessageFile,
+  requestMessageFileLocation,
   safeDownloadFilename,
   useLocalFileSave,
   type MessageAttachmentContext,
@@ -177,13 +178,28 @@ export function MessageAttachmentGallery({ text, attachments = NO_GENERATED_ATTA
   return <AttachmentGallery images={attached.images} files={files} message={message} eager={eager} className={className} />;
 }
 
-/** A server-provided MIME is required as well as the filename hint. Old
- * servers can still download a video but never turn arbitrary bytes into UI. */
+export type MessageVideoSource =
+  | { kind: "stream"; src: string }
+  | { kind: "blob"; blob: Blob };
+
+/** A server-provided MIME is required as well as the filename hint. Current
+ * servers return an opaque GET that <video> streams with byte ranges. The
+ * bounded Blob branch is compatibility for an older paired server only. */
 export async function loadMessageVideo(
   file: GalleryFile,
   message: MessageAttachmentContext,
   signal: AbortSignal,
-): Promise<Blob> {
+): Promise<MessageVideoSource> {
+  try {
+    const location = await requestMessageFileLocation(file.path, message, signal);
+    const mime = location.mime.split(";", 1)[0]?.trim().toLowerCase();
+    if (!mime || !["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"].includes(mime) || location.bytes > VIDEO_MAX_BYTES) {
+      throw new Error(t("attach.videoUnavailable"));
+    }
+    return { kind: "stream", src: location.previewUrl };
+  } catch (error) {
+    if ((error as { code?: unknown } | null)?.code !== "streaming_location_unavailable") throw error;
+  }
   const response = await requestMessageFile(file.path, message, signal);
   const mime = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   if (!mime || !["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"].includes(mime)) {
@@ -213,11 +229,11 @@ export async function loadMessageVideo(
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
-  return new Blob(chunks, { type: mime });
+  return { kind: "blob", blob: new Blob(chunks, { type: mime }) };
 }
 
 function VideoAttachment({ file, message }: { file: GalleryFile; message: MessageAttachmentContext }) {
-  const [preview, setPreview] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ src: string; owned: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const request = useRef<AbortController | null>(null);
@@ -226,7 +242,7 @@ function VideoAttachment({ file, message }: { file: GalleryFile; message: Messag
   useEffect(() => () => request.current?.abort(), []);
   useEffect(() => {
     if (preview) videoRef.current?.focus();
-    return () => { if (preview) URL.revokeObjectURL(preview); };
+    return () => { if (preview?.owned) URL.revokeObjectURL(preview.src); };
   }, [preview]);
 
   const load = async () => {
@@ -237,12 +253,18 @@ function VideoAttachment({ file, message }: { file: GalleryFile; message: Messag
     setError("");
     setPreview(null);
     try {
-      const blob = await loadMessageVideo(file, message, controller.signal);
-      if (!controller.signal.aborted) setPreview(URL.createObjectURL(blob));
+      const source = await loadMessageVideo(file, message, controller.signal);
+      if (!controller.signal.aborted) {
+        setPreview(source.kind === "stream"
+          ? { src: source.src, owned: false }
+          : { src: URL.createObjectURL(source.blob), owned: true });
+      }
     } catch (reason) {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("attach.videoUnavailable"));
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setError(reason instanceof Error ? reason.message : t("attach.videoUnavailable"));
+      }
     } finally {
-      if (!controller.signal.aborted) setLoading(false);
       if (request.current === controller) request.current = null;
     }
   };
@@ -262,14 +284,22 @@ function VideoAttachment({ file, message }: { file: GalleryFile; message: Messag
         {preview && !error ? (
           <video
             ref={videoRef}
-            src={preview}
+            src={preview.src}
             tabIndex={0}
             controls
             playsInline
             preload="metadata"
             aria-label={t("attach.previewVideo", { name: file.name })}
             className="max-h-full max-w-full"
-            onError={() => setError(t("attach.videoUnavailable"))}
+            onLoadedMetadata={() => setLoading(false)}
+            onCanPlay={() => setLoading(false)}
+            onWaiting={() => setLoading(true)}
+            onPlaying={() => setLoading(false)}
+            onError={() => {
+              setLoading(false);
+              setPreview(null);
+              setError(t("attach.videoUnavailable"));
+            }}
           />
         ) : (
           <button
@@ -282,8 +312,14 @@ function VideoAttachment({ file, message }: { file: GalleryFile; message: Messag
           >
             {loading ? <LoaderCircle size={24} className="animate-spin" /> : <Play size={24} />}
             <span className="text-[12px]">{loading ? t("attach.videoLoading") : error ? t("chat.retry") : t("attach.loadVideo")}</span>
-            {!error && !loading && <span className="text-[10.5px]">{t(soloAttachmentCeilings() ? "attach.videoHintSolo" : "attach.videoHint")}</span>}
+            {!error && !loading && <span className="text-[10.5px]">{t("attach.videoHint")}</span>}
           </button>
+        )}
+        {preview && loading && !error && (
+          <span role="status" className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/25 text-white">
+            <LoaderCircle size={24} className="animate-spin motion-reduce:animate-none" />
+            <span className="sr-only">{t("attach.videoLoading")}</span>
+          </span>
         )}
         {(preview || loading || error) && (
           <button type="button" aria-label={t("attach.closeVideo")} onClick={close} className="absolute right-2 top-2 flex size-7 items-center justify-center rounded-full bg-panel/90 text-ink-secondary hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">

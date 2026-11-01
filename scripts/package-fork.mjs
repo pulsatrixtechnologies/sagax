@@ -80,7 +80,8 @@ const result = spawnSync("pnpm", args, {
 if (result.status !== 0) process.exit(result.status ?? 1);
 
 // The notes travel with the update: write docs/releases/<fork>.md into the
-// feed electron-builder just wrote, as its releaseNotes.
+// feed electron-builder just wrote, as its releaseNotes. embedFeeds fails if
+// that feed is missing; both latest-mac.yml and latest.yml must be published.
 const feed = join(root, "release", target === "win" ? "latest.yml" : "latest-mac.yml");
 const embedded = embedFeeds({ root, version: fork, feeds: [feed] });
 if (!embedded.ok) {

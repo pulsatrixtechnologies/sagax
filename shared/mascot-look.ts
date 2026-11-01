@@ -33,16 +33,19 @@
  * the choice made before. Absent means the owl, as every bot had before.
  */
 import { z } from "zod";
+import { shapeAvatarDefSchema, type ShapeAvatarDef } from "./shape-avatar-def.ts";
 
 export const MASCOT_CHARACTERS = ["owl", "crab", "shape", "trombi", "bunbu", "shiba", "grump", "ogre", "frog"] as const;
 export type MascotCharacter = (typeof MASCOT_CHARACTERS)[number];
 
 /**
- * The shapes, in the picker's order (2026-10-28): the bloub network's bodies
- * (shared/mascot-geometry.json, MIT, see NOTICE) and our pumpkin. The
- * first eight keep the ids older builds and the server already know (bean is
- * the pebble, pill the capsule, pick the triangle, drop the teardrop), so a
- * stored look keeps its place; the others are new ids.
+ * The shapes, in the picker's order (2026-10-28, objects 2026-11-01): the
+ * bloub network's bodies (shared/mascot-geometry.json, MIT, see NOTICE), our
+ * pumpkin, and eight object silhouettes (pad, cup, bulb, say, sprout, tin,
+ * tome, ship) with portable JSON definitions (shared/shape-avatar-def.ts).
+ * The first eight keep the ids older builds and the server already know
+ * (bean is the pebble, pill the capsule, pick the triangle, drop the
+ * teardrop), so a stored look keeps its place; the others are new ids.
  */
 export const MASCOT_SHAPES = [
   "circle",
@@ -77,8 +80,21 @@ export const MASCOT_SHAPES = [
   "nibble",
   "shield",
   "bubble",
+  // object silhouettes (shape-engine v2, 2026-11-01): our own portable defs
+  "pad",
+  "cup",
+  "bulb",
+  "say",
+  "sprout",
+  "tin",
+  "tome",
+  "ship",
 ] as const;
 export type MascotShape = (typeof MASCOT_SHAPES)[number];
+
+/** Object-shaped bodies that also ship a portable JSON definition. */
+export const OBJECT_MASCOT_SHAPES = ["pad", "cup", "bulb", "say", "sprout", "tin", "tome", "ship"] as const;
+export type ObjectMascotShape = (typeof OBJECT_MASCOT_SHAPES)[number];
 
 /**
  * Shapes from earlier sets: a stored look keeps working, on the nearest
@@ -463,6 +479,12 @@ export const mascotLookSchema = z
     character: z.enum(MASCOT_CHARACTERS),
     style: z.enum(["2d", "3d"]).optional(),
     shape: z.preprocess((value) => (typeof value === "string" && Object.hasOwn(LEGACY_SHAPES, value) ? LEGACY_SHAPES[value] : value), z.enum(MASCOT_SHAPES)).optional(),
+    /**
+     * A person's own Shape avatar definition (imported or generated). Geometry
+     * only; validated by shapeAvatarDefSchema. When set on character "shape",
+     * the renderer prefers it over the catalog body for that bot.
+     */
+    avatarDef: shapeAvatarDefSchema.optional(),
     skins: z
       .object({
         shape: z.preprocess(legacy(LEGACY_SHAPE_SKINS), z.enum(SHAPE_SKINS)).optional(),
@@ -480,6 +502,7 @@ export const mascotLookSchema = z
   .strict();
 
 export type MascotLook = z.infer<typeof mascotLookSchema>;
+export type { ShapeAvatarDef };
 
 export const DEFAULT_MASCOT_LOOK: MascotLook = Object.freeze({ character: "owl" }) as MascotLook;
 
@@ -517,13 +540,17 @@ export function botMascotLook(value: unknown): MascotLook {
 }
 
 /** The look with every choice filled in. */
-export function completeMascotLook(value: unknown): Required<Omit<MascotLook, "skins">> & { skins: { shape: ShapeSkin; trombi: TrombiSkin; bunbu: BunbuSkin; shiba: ShibaSkin; grump: GrumpSkin; ogre: OgreSkin; frog: FrogSkin; crab: CrabSkin } } {
+export function completeMascotLook(value: unknown): Required<Omit<MascotLook, "skins" | "avatarDef">> & {
+  skins: { shape: ShapeSkin; trombi: TrombiSkin; bunbu: BunbuSkin; shiba: ShibaSkin; grump: GrumpSkin; ogre: OgreSkin; frog: FrogSkin; crab: CrabSkin };
+  avatarDef?: ShapeAvatarDef;
+} {
   const look = botMascotLook(value);
   return {
     character: look.character,
     style: look.style ?? "2d",
     shape: look.shape ?? "circle",
     skins: { shape: look.skins?.shape ?? "plain", trombi: look.skins?.trombi ?? "classic", bunbu: look.skins?.bunbu ?? "plain", shiba: look.skins?.shiba ?? "plain", grump: look.skins?.grump ?? "plain", ogre: look.skins?.ogre ?? "plain", frog: look.skins?.frog ?? "plain", crab: look.skins?.crab ?? "plain" },
+    ...(look.avatarDef ? { avatarDef: look.avatarDef } : {}),
   };
 }
 

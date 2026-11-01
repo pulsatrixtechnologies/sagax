@@ -38,6 +38,8 @@ const GOAL_COPY = {
 >;
 
 const DEFERRED = { label: "routines.status.deferred" as const, tone: "text-warning" };
+/** 2026-11-01: completed, but not all of it went right. */
+const WITH_PROBLEMS = { label: "routines.status.completedWithProblems" as const, tone: "text-warning" };
 
 function compactDetail(value: string | undefined): string {
   const clean = value?.replace(/\s+/g, " ").trim() ?? "";
@@ -86,11 +88,14 @@ export function RoutineRunCard({
     ) : null;
   }
 
+  const withProblems = run.status === "completed" && Boolean(run.problems?.trim());
   const copy = run.goalStatus
     ? GOAL_COPY[run.goalStatus]
-    : run.status === "queued" && run.deferredAt != null
-      ? DEFERRED
-      : COPY[run.status];
+    : withProblems
+      ? WITH_PROBLEMS
+      : run.status === "queued" && run.deferredAt != null
+        ? DEFERRED
+        : COPY[run.status];
   const statusLabel = t(copy.label);
   const reported = run.status === "completed" && (!run.goalStatus || run.goalStatus === "completed");
   // A report is the bot's words, whole; an error stays one short line.
@@ -98,7 +103,7 @@ export function RoutineRunCard({
   const detail = report ? "" : compactDetail(
     run.status === "failed" || run.status === "missed"
       ? (routineRunError(run.error) ?? run.summary)
-      : (run.summary ?? routineRunError(run.error)),
+      : (run.summary ?? run.attention ?? routineRunError(run.error)),
   );
   const review = run.goalStatus === "needs-input";
   const actionLabel = review ? t("routines.post.review") : t("routines.post.openRun");
@@ -114,9 +119,10 @@ export function RoutineRunCard({
       {(report || detail) && <div className="w-fit max-w-[min(42rem,88%)] rounded-2xl bg-card px-4 py-2.5 text-[14px] leading-relaxed text-ink">
         {report ? <ChatMarkdown text={report} inert /> : <p className="whitespace-pre-wrap">{detail}</p>}
       </div>}
-      <div className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-1 text-[11.5px] text-ink-secondary", (report || detail) && "mt-1")}>
+      {withProblems && <p data-routine-problems className="mt-1 max-w-[min(42rem,88%)] whitespace-pre-wrap px-1 text-[12px] leading-relaxed text-warning">{run.problems!.trim()}</p>}
+      <div className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-1 text-[11.5px] text-ink-secondary", (report || detail || withProblems) && "mt-1")}>
         <span className="truncate">{t("routines.post.routine", { name: run.routineName })}</span>
-        {!reported && <>
+        {(!reported || withProblems) && <>
           <span aria-hidden="true">·</span>
           <span aria-live="polite" className={cn("inline-flex items-center gap-1 font-medium", copy.tone)}>
             {run.status === "running" && !run.goalStatus && <Loader2 aria-hidden="true" className="size-3 animate-spin" />}

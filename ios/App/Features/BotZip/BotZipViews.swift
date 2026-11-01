@@ -208,7 +208,8 @@ struct BotZipImportSheet: View {
         do {
             let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             guard size <= BotZipRules.maximumBytes else { failure = String(localized: "The file is larger than 512 MB."); return }
-            let data = try Data(contentsOf: url)
+            // up to 512 MB: read off the main thread (it froze the sheet)
+            let data = try await Task.detached(priority: .userInitiated) { try Data(contentsOf: url, options: .mappedIfSafe) }.value
             let result = try await client.uploadBotZip(data)
             staged = result
             name = result.preview.importName

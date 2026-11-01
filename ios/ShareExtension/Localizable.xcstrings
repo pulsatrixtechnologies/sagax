@@ -1,0 +1,160 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Finish in Sagax": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish in Sagax"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminer dans Sagax"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Concluir no Sagax"
+          }
+        }
+      }
+    },
+    "An attachment is waiting to resume. Open its conversation to retry.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An attachment is waiting to resume. Open its conversation to retry."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une pièce jointe attend la reprise. Ouvrez sa conversation pour réessayer."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um anexo está aguardando a retomada. Abra a conversa para tentar de novo."
+          }
+        }
+      }
+    },
+    "A shared file is waiting for its paired computer. Open Sagax to reconnect.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A shared file is waiting for its paired computer. Open Sagax to reconnect."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un fichier partagé attend son ordinateur jumelé. Ouvrez Sagax pour vous reconnecter."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um arquivo compartilhado está aguardando o computador pareado. Abra o Sagax para reconectar."
+          }
+        }
+      }
+    },
+    "A shared file is waiting to resume. Open Sagax again to retry.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A shared file is waiting to resume. Open Sagax again to retry."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un fichier partagé attend la reprise. Ouvrez Sagax de nouveau pour réessayer."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um arquivo compartilhado está aguardando a retomada. Abra o Sagax de novo para tentar."
+          }
+        }
+      }
+    },
+    "Uploading %lld%%": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uploading %lld%%"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléversement %lld%%"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviando %lld%%"
+          }
+        }
+      }
+    },
+    "A shared file could not be sent: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A shared file could not be sent: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un fichier partagé n'a pas pu être envoyé : %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível enviar um arquivo compartilhado: %@"
+          }
+        }
+      }
+    },
+    "Sagax is already sending this share. You can close this sheet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax is already sending this share. You can close this sheet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax envoie déjà ce partage. Vous pouvez fermer cette fenêtre."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Sagax já está enviando este compartilhamento. Você pode fechar esta janela."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

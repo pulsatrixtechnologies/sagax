@@ -19,7 +19,7 @@ import { t } from "@/lib/i18n";
 import { api, type Bot, type Group } from "@/state/store";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import { loadBotActivityDetail, type BotActivityDetail, type BotActivityStatus } from "@/lib/bot-activity";
-import { routineAutoPausedText, routineDateTime, routineRunError, routineRunLabel, routineRunTone } from "@/lib/routine-display";
+import { routineAutoPausedText, routineDateTime, routineQueuePosition, routineRunError, routineRunLabel, routineRunTone } from "@/lib/routine-display";
 import { formatUsd } from "@/lib/usage";
 import { ChatMarkdown } from "../ChatMarkdown";
 import { waitingSources } from "../bot-settings/ActivityDetailModal";
@@ -86,8 +86,11 @@ function Fold({ id, label, count, defaultOpen = false, children }: { id: string;
   );
 }
 
-export function RoutineRunDetail({ run, routine, bots, groups = [], viewerPrincipalId, now = Date.now(), wide = false, detail = null, detailError = false, waiting = [], onOpenThread, editable = true, canRunAgain = false, inFlight = false, working = false, canContinue = false, onReply, onStop, onRunAgain, onResume, onContinue, onOpenRoutine, onLogs, renderConversation, error }: {
+export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewerPrincipalId, now = Date.now(), wide = false, detail = null, detailError = false, waiting = [], onOpenThread, editable = true, canRunAgain = false, inFlight = false, working = false, canContinue = false, onReply, onStop, onRunAgain, onResume, onContinue, onOpenRoutine, onLogs, renderConversation, error }: {
   run: RoutineRun;
+  /** Every run the viewer sees: a queued run shows its place in its bot's
+   * queue (2026-11-01). */
+  runs?: readonly RoutineRun[];
   /** Null: the routine was deleted since (the run stays, #1567). */
   routine: Routine | null;
   bots: Bot[];
@@ -122,6 +125,10 @@ export function RoutineRunDetail({ run, routine, bots, groups = [], viewerPrinci
   error?: string;
 }) {
   const status = runActivityStatus(run);
+  // 2026-11-01: completed, but not all of it went right.
+  const problems = run.status === "completed" && run.problems?.trim() ? run.problems.trim() : "";
+  const queue = runs ? routineQueuePosition(run, runs) : null;
+  const queuePlace = queue && queue.count > 1 ? t("routineRun.queuePosition", { position: queue.position, count: queue.count }) : "";
   const live = ["queued", "running", "waiting"].includes(run.status);
   const bot = bots.find((candidate) => candidate.id === run.botId);
   const isRoomGoal = run.target === "room-goal";
@@ -170,7 +177,7 @@ export function RoutineRunDetail({ run, routine, bots, groups = [], viewerPrinci
         className="px-0 pb-0 pr-0 pt-0 [&_h2]:sr-only"
       />
       <div data-run-meta className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-ink-secondary">
-        {(run.quiet || run.goalStatus || run.retried || run.status === "missed") && <><span data-run-state-label className={cn("font-medium", routineRunTone(run))}>{routineRunLabel(run)}</span><span aria-hidden="true">·</span></>}
+        {(run.quiet || run.goalStatus || run.retried || run.status === "missed" || problems) && <><span data-run-state-label className={cn("font-medium", routineRunTone(run))}>{routineRunLabel(run)}</span><span aria-hidden="true">·</span></>}
         <time dateTime={new Date(run.scheduledFor).toISOString()}>{routineDateTime(run.scheduledFor)}</time>
         <span aria-hidden="true">·</span>
         <span>{t(`routines.trigger.${run.triggerSource ?? (run.manual ? "manual" : "schedule")}`)}</span>
@@ -184,7 +191,8 @@ export function RoutineRunDetail({ run, routine, bots, groups = [], viewerPrinci
   const attention = (
     <>
       {waitingItems.length > 0 && <div data-run-waiting><WaitingOnYou items={waitingItems} threadId={threadId ?? ""} botFor={(id) => bots.find((candidate) => candidate.id === id)} onCancel={() => onStop?.()} onOpenThread={onOpenThread} /></div>}
-      {run.status === "queued" && run.attention && <div data-run-deferred className="rounded-xl border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-[12.5px] text-accent-text"><span className="font-medium">{t("routineRun.deferred")}</span> · {run.attention}</div>}
+      {run.status === "queued" && (run.attention || queuePlace) && <div data-run-deferred className="rounded-xl border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-[12.5px] text-accent-text"><span className="font-medium">{t("routineRun.deferred")}</span>{run.attention && <> · {run.attention}</>}{queuePlace && <> · <span data-run-queue-position>{queuePlace}</span></>}</div>}
+      {problems && <div data-run-problems role="status" className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warning"><CircleAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" /><span className="min-w-0 whitespace-pre-wrap"><span className="font-medium">{t("routines.status.completedWithProblems")}</span>{"\n"}{problems}</span></div>}
       {run.status !== "waiting" && errorText && <div data-run-error role="alert" className="flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-danger"><CircleAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" /><span className="min-w-0 whitespace-pre-wrap">{errorText}</span></div>}
       {run.autoPaused && <div data-run-auto-paused className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-[12.5px] text-warning"><span className="font-medium">{routineAutoPausedText(run.autoPaused.failures)}</span>{onResume && <button type="button" data-routine-resume onClick={onResume} disabled={working} className="inline-flex items-center gap-1 rounded-md bg-warning/15 px-2 py-0.5 font-medium hover:bg-warning/25 disabled:opacity-50"><CirclePlay size={11} aria-hidden="true" />{t("routines.autoPause.resume")}</button>}</div>}
       {detail?.note && run.status !== "waiting" && !errorText && <p className="rounded-lg bg-warning/10 px-3 py-2 text-[12.5px] text-ink">{detail.note}</p>}

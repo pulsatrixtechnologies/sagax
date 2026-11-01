@@ -24,8 +24,12 @@
 // Every action is the signed-in person's own (the server takes the person
 // from the session); nothing here names a bot or another person.
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { Check, ChevronDown, Cpu, Globe, HardDrive, Info, Laptop, MemoryStick, Server, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Cpu, Ellipsis, Globe, HardDrive, Info, Laptop, MemoryStick, Monitor, Server, type LucideIcon } from "lucide-react";
 
+import { hostPlaceKey, parseHostPlaceKey, remoteHostPlaces } from "../../../shared/remote-bot-hosts";
+import type { UnattendedHostRow } from "../../../shared/remote-unattended-host";
+import type { RemoteSessionView } from "../../../shared/remote-session";
+import { PLACE_LABEL_MAX } from "../../../shared/place-labels";
 import { chosenComputer, computerChoices, currentDesktop, type DesktopBridgeStatus } from "@/lib/desktop-bridge";
 import {
   desktopLocalVm, installChoices, localVmProblemKey, localVmView, runtimeSummaryKey,
@@ -33,13 +37,16 @@ import {
 } from "@/lib/desktop-local-vm";
 import { t } from "@/lib/i18n";
 import { orgComputerFor, type EffectivePlace } from "@/lib/place";
+import { placeLabel, savePlaceLabel, usePlaceLabels } from "@/lib/place-labels";
 import { reportScreenDot, SCREEN_DOT_CLASS, SCREEN_DOT_LABEL_KEY, screenDot, useScreenDots, type ScreenDot } from "@/lib/screen-status";
 import {
   formatBytes, loadServerEnvironment, loadServerEnvironmentStats, powerServerEnvironment, powerState,
   type PowerAction, type ServerEnvironmentStats, type ServerEnvironmentStatus,
 } from "@/lib/server-environment";
+import type { Bot } from "@/state/store";
 import { SandboxDesktopView } from "../SandboxDesktopView";
-import { ComputerScreen, type ScreenAction } from "./ComputerScreen";
+import { RemoteScreenCard } from "../remote-session/RemoteScreenCard";
+import { ComputerScreen, type ScreenAction, type ScreenControls } from "./ComputerScreen";
 import { SandboxDesktopModal } from "./SandboxDesktopModal";
 
 const STATS_REFRESH_MS = 5_000;
@@ -90,7 +97,7 @@ export function defaultScreen(bridge: DesktopBridgeStatus, place: EffectivePlace
   return { source: activeComputer(bridge, place).source, browser: place === "browser" };
 }
 
-export function OrgComputerTab({ bridge, place, computerOff, botName, botId, threadId, inUse, initialLocal = null, browser = null }: {
+export function OrgComputerTab({ bridge, place, computerOff, botName, botId, bot = null, threadId, inUse, initialLocal = null, browser = null, remoteHosts = [], remoteSessions = [], onPickRemoteHost }: {
   bridge: DesktopBridgeStatus;
   /** The conversation, so a manual pick ends when it changes. */
   threadId?: string;
@@ -98,6 +105,8 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, thr
   inUse?: InUsePlace;
   /** This bot, for its browser's dot in the picker. */
   botId?: string;
+  /** The bot (mascot on asleep / waking screens). */
+  bot?: Bot | null;
   /** The bot's Works on (Auto when unset). */
   place: EffectivePlace;
   computerOff: boolean; botName: string;
@@ -105,29 +114,50 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, thr
   initialLocal?: DesktopLocalVmStatus | null;
   /** The bot's live browser, offered as the picker's last chip. */
   browser?: ReactNode;
+  /** Enrolled hosts attached to this bot (Computer place dropdown, 2026-11-01). */
+  remoteHosts?: UnattendedHostRow[];
+  /** Connected sessions for this bot; ended ones never become places. */
+  remoteSessions?: RemoteSessionView[];
+  /** Selecting a host place: open/focus so the bot works on that host. */
+  onPickRemoteHost?: (hostId: string) => void;
 }) {
   const screen = defaultScreen(bridge, place, inUse);
   const active = { ...activeComputer(bridge, place), source: screen.source };
   const choices = computerChoices(bridge);
+  const labels = usePlaceLabels();
+  const hostPlaces = remoteHostPlaces(
+    remoteHosts.map((row) => row.hostId),
+    remoteHosts,
+  );
   // A manual pick holds until the bot's destination (or the conversation) changes.
   const scope = `${botId ?? ""}:${threadId ?? ""}:${inUse ?? ""}`;
   const [pick, setPick] = useState<{ scope: string; key: string } | null>(null);
   // the pick ends for good when the scope moves (adjusting state while rendering)
   if (pick && pick.scope !== scope) setPick(null);
   const picked = pick && pick.scope === scope ? pick.key : null;
-  const setPicked = useCallback((key: string) => setPick({ scope, key }), [scope]);
+  const setPicked = useCallback((key: string) => {
+    setPick({ scope, key });
+    const hostId = parseHostPlaceKey(key);
+    if (hostId) onPickRemoteHost?.(hostId);
+  }, [scope, onPickRemoteHost]);
+  const pickedHostId = parseHostPlaceKey(picked);
+  const showingHost = pickedHostId !== null;
+  const hostRow = showingHost ? remoteHosts.find((row) => row.hostId === pickedHostId) : undefined;
+  const hostSession = showingHost
+    ? remoteSessions.find((row) => row.state === "connected" && hostRow?.hostname && (row.hostname ?? "").trim().toLowerCase() === hostRow.hostname.trim().toLowerCase()) ?? null
+    : null;
   // a bot that works on its browser opens on it
-  const showingBrowser = browser !== null && (picked === "browser" || (picked === null && screen.browser));
-  const chosen = chosenComputer(choices, active.source, bridge, showingBrowser ? null : picked);
+  const showingBrowser = !showingHost && browser !== null && (picked === "browser" || (picked === null && screen.browser));
+  const chosen = chosenComputer(choices, active.source, bridge, showingBrowser || showingHost ? null : picked);
   // Works on a computer that is not connected: its screen says so.
   const source = chosen?.source ?? active.source;
   const desktop = chosen?.source === "local" ? bridge.desktops.find((entry) => entry.id === chosen.desktopId) ?? null : currentDesktop(bridge);
-  const worksOnKey = active.source === "server" ? "server" : chosenComputer(choices, "local", bridge, null)?.key ?? null;
+  const worksOnKey = showingHost ? hostPlaceKey(pickedHostId!) : active.source === "server" ? "server" : chosenComputer(choices, "local", bridge, null)?.key ?? null;
   const [details, setDetails] = useState(false);
   const caption = t("computer.screenOf", { name: botName });
   const dots = useScreenDots();
   // The cloud's dot while another screen is shown: one read, no polling.
-  const serverShown = !showingBrowser && source === "server";
+  const serverShown = !showingBrowser && !showingHost && source === "server";
   const serverKnown = dots.server !== undefined;
   useEffect(() => {
     if (serverShown || serverKnown) return;
@@ -135,40 +165,90 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, thr
     loadServerEnvironment().then((status) => { if (alive) reportScreenDot("server", serverDot(status, null)); }).catch(() => {});
     return () => { alive = false; };
   }, [serverShown, serverKnown]);
+  const pickerItems: ScreenPickerItem[] = [
+    ...choices.map((choice): ScreenPickerItem => {
+      const technical = choice.source === "server" ? t("orgComputer.choice.cloud") : choice.name;
+      return {
+        key: choice.key,
+        technical,
+        label: placeLabel(choice.key, technical),
+        icon: choice.source === "server" ? Server : Laptop,
+        here: choice.key === worksOnKey,
+        dot: dots[choice.key] ?? "offline",
+      };
+    }),
+    ...hostPlaces.map((host): ScreenPickerItem => {
+      const key = hostPlaceKey(host.hostId);
+      const technical = host.label;
+      return {
+        key,
+        technical,
+        label: placeLabel(key, technical),
+        icon: Monitor,
+        here: worksOnKey === key,
+        dot: host.state === "enrolled"
+          ? (remoteSessions.some((row) => row.state === "connected" && (row.hostname ?? "").trim().toLowerCase() === host.label.trim().toLowerCase()) ? "online" : "asleep")
+          : "offline",
+      };
+    }),
+    ...(browser !== null ? [{
+      key: "browser",
+      technical: t("computer.view.browser"),
+      label: placeLabel("browser", t("computer.view.browser")),
+      icon: Globe,
+      dot: (botId ? dots[`browser:${botId}`] : undefined) ?? "offline" as ScreenDot,
+    }] : []),
+  ];
+  void labels; // subscribe so renames re-render
+  const showPicker = choices.length > 1 || browser !== null || hostPlaces.length > 0;
+  const cloudName = placeLabel("server", t("orgComputer.choice.cloud"));
+  const desktopName = desktop ? placeLabel(`desktop:${desktop.id}`, desktop.name) : t("computerScreen.computer");
+  const hostName = hostRow
+    ? placeLabel(hostPlaceKey(hostRow.hostId), hostRow.hostname ?? t("remoteSessionsAdmin.hosts.unnamed"))
+    : t("botRemoteHosts.place");
   return (
-    <div className="flex flex-col gap-3" data-org-computer={source === "server" ? "user-sandbox" : "user-desktop"} data-works-on={place}>
-      {(choices.length > 1 || browser !== null) && (
+    <div className="flex flex-col gap-3" data-org-computer={showingHost ? "remote-host" : source === "server" ? "user-sandbox" : "user-desktop"} data-works-on={place} data-remote-host={pickedHostId ?? undefined}>
+      {showPicker && (
         <ScreenPicker
-          items={[
-            ...choices.map((choice): ScreenPickerItem => ({
-              key: choice.key,
-              label: choice.source === "server" ? t("orgComputer.choice.cloud") : choice.name,
-              icon: choice.source === "server" ? Server : Laptop,
-              here: choice.key === worksOnKey,
-              dot: dots[choice.key] ?? "offline",
-            })),
-            ...(browser !== null ? [{ key: "browser", label: t("computer.view.browser"), icon: Globe, dot: (botId ? dots[`browser:${botId}`] : undefined) ?? "offline" }] : []),
-          ]}
-          chosen={showingBrowser ? "browser" : chosen?.key ?? null}
+          items={pickerItems}
+          chosen={showingHost ? hostPlaceKey(pickedHostId!) : showingBrowser ? "browser" : chosen?.key ?? null}
           onPick={setPicked}
+          onRename={(key, label) => savePlaceLabel(key, label)}
         />
       )}
-      {showingBrowser
+      {showingHost
+        ? (botId && hostSession
+          ? <div data-remote-host-screen=""><RemoteScreenCard botId={botId} view={hostSession} /></div>
+          : (
+            <div data-remote-host-pending="">
+              <ComputerScreen
+                source="remote"
+                state="off"
+                caption={caption}
+                bot={bot}
+                computerName={hostName}
+                controls={{ play: pickedHostId ? () => onPickRemoteHost?.(pickedHostId) : undefined }}
+              />
+            </div>
+          ))
+        : showingBrowser
         ? <BrowserScreen>{browser}</BrowserScreen>
         : source === "server"
-        ? <ServerComputerScreen caption={caption} />
+        ? <ServerComputerScreen caption={caption} bot={bot} computerName={cloudName} />
         : (
           <LocalComputerScreen
             // a new computer starts over: its own status, frames and errors
             key={chosen?.key ?? "current"}
             bridge={bridge}
+            bot={bot}
+            computerName={desktopName}
             desktopId={chosen?.source === "local" ? chosen.desktopId : undefined}
             caption={chosen?.source === "local" ? `${caption} · ${chosen.name}` : caption}
             initial={initialLocal}
           />
         )}
-      {computerOff && !showingBrowser && <p role="note" className="-mt-1 text-center text-[12px] text-ink-secondary">{t("computer.phase.off")}</p>}
-      {!showingBrowser && <div className="flex flex-col gap-1.5">
+      {computerOff && !showingBrowser && !showingHost && <p role="note" className="-mt-1 text-center text-[12px] text-ink-secondary">{t("computer.phase.off")}</p>}
+      {!showingBrowser && !showingHost && <div className="flex flex-col gap-1.5">
         <button type="button" onClick={() => setDetails((open) => !open)} aria-expanded={details} data-usage-toggle
           className="flex items-center gap-1 self-start text-[12px] text-ink-secondary hover:text-ink">
           <Info size={12} aria-hidden="true" />
@@ -184,7 +264,10 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, thr
 /** One chip of a screen picker. */
 export interface ScreenPickerItem {
   key: string;
+  /** Shown name (person's label when set). */
   label: string;
+  /** Technical name for tooltip / Copy / rename placeholder. */
+  technical?: string;
   icon: LucideIcon;
   /** The bot works here: said in the dot's label and the tooltip. */
   here?: boolean;
@@ -215,18 +298,28 @@ export function ScreenStatusDot({ dot, here = false }: { dot?: ScreenDot; here?:
  * arrows, Home and End move, Enter or Space pick, Escape and Tab close, and
  * focus comes back to the button. The list stays in the page while closed
  * (hidden), so a screen reader never meets a half-built one. */
-export function ScreenPicker({ items, chosen, onPick }: { items: ScreenPickerItem[]; chosen: string | null; onPick: (key: string) => void }) {
+export function ScreenPicker({ items, chosen, onPick, onRename }: {
+  items: ScreenPickerItem[];
+  chosen: string | null;
+  onPick: (key: string) => void;
+  /** Inline rename (F2 / … / right-click). Null or blank clears the label. */
+  onRename?: (key: string, label: string | null) => void;
+}) {
   const [open, setOpen] = useState(false);
   const chosenIndex = Math.max(0, items.findIndex((item) => item.key === chosen));
   const [active, setActive] = useState(chosenIndex);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const renameInput = useRef<HTMLInputElement>(null);
   const id = useId();
   const current = items[chosenIndex];
 
   const close = useCallback((refocus: boolean) => {
     setOpen(false);
+    setRenaming(null);
     if (refocus) trigger.current?.focus({ preventScroll: true });
   }, []);
   const show = (index: number) => {
@@ -234,20 +327,36 @@ export function ScreenPicker({ items, chosen, onPick }: { items: ScreenPickerIte
     setOpen(true);
   };
   const pick = (index: number) => {
+    if (renaming) return;
     const item = items[index];
     close(true);
     if (item) onPick(item.key);
   };
+  const beginRename = (item: ScreenPickerItem) => {
+    if (!onRename) return;
+    setRenaming(item.key);
+    setDraft(item.label);
+    setOpen(true);
+  };
+  const commitRename = () => {
+    if (!renaming || !onRename) return;
+    const key = renaming;
+    const value = draft.trim();
+    setRenaming(null);
+    onRename(key, value || null);
+  };
+  const cancelRename = () => setRenaming(null);
 
   useEffect(() => {
     if (!open) return;
-    list.current?.focus({ preventScroll: true });
+    if (renaming) renameInput.current?.focus({ preventScroll: true });
+    else list.current?.focus({ preventScroll: true });
     const outside = (event: PointerEvent) => {
       if (event.target instanceof Node && !root.current?.contains(event.target)) close(false);
     };
     window.addEventListener("pointerdown", outside);
     return () => window.removeEventListener("pointerdown", outside);
-  }, [open, close]);
+  }, [open, close, renaming]);
 
   const onTriggerKey = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -256,10 +365,12 @@ export function ScreenPicker({ items, chosen, onPick }: { items: ScreenPickerIte
     }
   };
   const onListKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (renaming) return;
     const last = items.length - 1;
     const move: Record<string, number> = { ArrowDown: Math.min(active + 1, last), ArrowUp: Math.max(active - 1, 0), Home: 0, End: last };
     if (event.key in move) { event.preventDefault(); setActive(move[event.key]!); return; }
     if (event.key === "Enter" || event.key === " ") { event.preventDefault(); pick(active); return; }
+    if (event.key === "F2" && onRename && items[active]) { event.preventDefault(); beginRename(items[active]!); return; }
     if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); return; }
     if (event.key === "Tab") close(false);
   };
@@ -271,7 +382,9 @@ export function ScreenPicker({ items, chosen, onPick }: { items: ScreenPickerIte
     <div ref={root} className="relative max-w-full self-center" data-computer-picker="">
       <button ref={trigger} type="button" aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-list`}
         aria-label={t("orgComputer.choice.button", { name: current.here ? t("orgComputer.choice.worksHere", { name: current.label }) : current.label })}
-        title={current.here ? t("orgComputer.choice.worksHere", { name: current.label }) : current.label}
+        title={current.technical && current.technical !== current.label
+          ? `${current.label} (${current.technical})`
+          : current.here ? t("orgComputer.choice.worksHere", { name: current.label }) : current.label}
         data-computer-picker-button="" data-computer-current={current.key}
         onClick={() => (open ? close(false) : show(chosenIndex))} onKeyDown={onTriggerKey}
         className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-control px-3 py-1 text-[12.5px] text-ink transition-colors hover:bg-raised-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
@@ -281,19 +394,58 @@ export function ScreenPicker({ items, chosen, onPick }: { items: ScreenPickerIte
         <ChevronDown size={12} aria-hidden="true" className={open ? "rotate-180 text-ink-secondary" : "text-ink-secondary"} />
       </button>
       <div ref={list} id={`${id}-list`} role="listbox" aria-label={t("orgComputer.choice.label")} tabIndex={-1} hidden={!open}
-        aria-activedescendant={open ? optionId(active) : undefined} onKeyDown={onListKey}
+        aria-activedescendant={open && !renaming ? optionId(active) : undefined} onKeyDown={onListKey}
         className="absolute left-1/2 top-full z-30 mt-1 flex w-max min-w-[180px] max-w-[min(280px,90vw)] -translate-x-1/2 flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] shadow-lg outline-none popover-surface">
         {items.map((item, index) => {
           const selected = item.key === current.key;
           const Icon = item.icon;
+          const technical = item.technical ?? item.label;
+          if (renaming === item.key) {
+            return (
+              <div key={item.key} id={optionId(index)} role="option" aria-selected={selected} data-computer-choice={item.key} data-computer-renaming=""
+                className="flex items-center gap-2 rounded-lg bg-raised-hover px-2.5 py-1.5 text-ink">
+                <Icon size={13} aria-hidden="true" />
+                <input
+                  ref={renameInput}
+                  data-computer-rename-input=""
+                  value={draft}
+                  maxLength={PLACE_LABEL_MAX}
+                  placeholder={technical}
+                  aria-label={t("computerScreen.renamePlaceholder")}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); commitRename(); }
+                    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelRename(); }
+                  }}
+                  onBlur={() => commitRename()}
+                  className="min-w-0 flex-1 rounded-md border border-hairline/60 bg-card px-1.5 py-0.5 text-[13px] text-ink outline-none focus:ring-1 focus:ring-accent/60"
+                />
+              </div>
+            );
+          }
           return (
             <div key={item.key} id={optionId(index)} role="option" aria-selected={selected} data-computer-choice={item.key}
-              title={item.here ? t("orgComputer.choice.worksHere", { name: item.label }) : item.label}
-              onPointerDown={(event) => event.preventDefault()} onClick={() => pick(index)} onPointerEnter={() => setActive(index)}
+              title={technical !== item.label ? `${item.label} · ${technical}` : item.here ? t("orgComputer.choice.worksHere", { name: item.label }) : item.label}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => pick(index)}
+              onPointerEnter={() => setActive(index)}
+              onContextMenu={(event) => { if (!onRename) return; event.preventDefault(); beginRename(item); }}
               className={`flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 ${index === active && open ? "bg-raised-hover" : ""} ${selected ? "text-ink" : "text-ink-secondary"}`}>
               <Icon size={13} aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate">{item.label}</span>
               <ScreenStatusDot dot={item.dot} here={item.here} />
+              {onRename && (
+                <button
+                  type="button"
+                  data-computer-rename=""
+                  aria-label={t("computerScreen.rename")}
+                  title={t("computerScreen.rename")}
+                  onClick={(event) => { event.stopPropagation(); beginRename(item); }}
+                  className="rounded p-0.5 text-ink-tertiary hover:bg-raised hover:text-ink"
+                >
+                  <Ellipsis size={13} aria-hidden="true" />
+                </button>
+              )}
               {selected ? <Check size={13} aria-hidden="true" /> : <span aria-hidden="true" className="w-[13px]" />}
             </div>
           );
@@ -349,7 +501,12 @@ export function retryStartsCluster(status: ServerEnvironmentStatus | null): bool
 }
 
 /** The person's server environment on the screen. */
-export function ServerComputerScreen({ caption, initial = null }: { caption: string; initial?: ServerEnvironmentStatus | null }) {
+export function ServerComputerScreen({ caption, initial = null, bot = null, computerName }: {
+  caption: string;
+  initial?: ServerEnvironmentStatus | null;
+  bot?: Bot | null;
+  computerName?: string;
+}) {
   const visible = usePageVisible();
   const [status, setStatus] = useState<ServerEnvironmentStatus | null>(initial);
   const [pending, setPending] = useState<PowerAction | null>(null);
@@ -408,13 +565,13 @@ export function ServerComputerScreen({ caption, initial = null }: { caption: str
   useEffect(() => { if (status) reportScreenDot("server", serverDot(status, pending)); }, [status, pending]);
 
   const busy = pending !== null || !status;
+  // Asleep / waking use the calm mascot copy; keep technical text for error / not configured.
   const message = !status ? undefined
     : !status.configured ? t("serverEnvironment.notConfigured")
     : state === "error" ? t("computerScreen.serverUnavailable")
-    : state === "off" ? t("computerScreen.serverOff")
     : undefined;
   const hint = waking && wakingSeen ? wakingHint(wakingSeen.elapsedMs + Math.max(0, Date.now() - wakingSeen.at)) : undefined;
-  const controls = {
+  const controls: ScreenControls = {
     play: status?.configured && power === "off" && state !== "starting" ? () => void act("start") : undefined,
     resume: power === "paused" ? () => void act("resume") : undefined,
     pause: power === "running" ? () => void act("pause") : undefined,
@@ -422,9 +579,10 @@ export function ServerComputerScreen({ caption, initial = null }: { caption: str
   };
   // While the large window has control, the square shows no second live
   // view (one VNC stream, and the window's passwords stay the valid ones).
+  // Open pill on ComputerScreen opens the window; no second Take control pill.
   const live = takeover
     ? <div data-sandbox-takeover-open className="flex h-full w-full items-center justify-center p-4 text-center text-[12px] text-ink-secondary">{t("sandboxDesktop.inWindow")}</div>
-    : <SandboxDesktopView embedded onConnected={() => void load()} onTakeControl={() => setTakeover(true)} />;
+    : <SandboxDesktopView embedded onConnected={() => void load()} />;
   return (
     <>
       <ComputerScreen
@@ -434,10 +592,13 @@ export function ServerComputerScreen({ caption, initial = null }: { caption: str
         message={message}
         hint={hint}
         busy={busy}
+        bot={bot}
+        computerName={computerName ?? t("orgComputer.choice.cloud")}
+        onOpen={state === "running" || state === "paused" ? () => setTakeover(true) : undefined}
         // An error screen already says what failed: no second line under it.
         error={state === "error" ? undefined : error || undefined}
         live={live}
-        actions={state === "error" ? [{ label: t("computerScreen.retry"), onClick: () => void (retryStartsCluster(status) ? act("start") : load()) }] : []}
+        actions={state === "error" ? [{ label: t("computerScreen.retry"), onClick: () => void (retryStartsCluster(status) ? act("start") : load()) }] : !status?.configured ? [] : []}
         controls={controls}
       />
       {takeover && (
@@ -486,10 +647,12 @@ export function useDesktopLocalVm(connected: boolean, initial: DesktopLocalVmSta
   return { status, pending, error, act, refresh, visible };
 }
 
-export function LocalComputerScreen({ bridge, caption, initial = null, desktopId }: {
+export function LocalComputerScreen({ bridge, caption, initial = null, desktopId, bot = null, computerName }: {
   bridge: DesktopBridgeStatus; caption: string; initial?: DesktopLocalVmStatus | null;
   /** The computer the person picked by name; their current one without it. */
   desktopId?: string;
+  bot?: Bot | null;
+  computerName?: string;
 }) {
   const desktop = desktopId ? bridge.desktops.find((entry) => entry.id === desktopId && entry.online) ?? null : currentDesktop(bridge);
   const connected = Boolean(desktop?.capabilities?.localVm);
@@ -525,14 +688,16 @@ export function LocalComputerScreen({ bridge, caption, initial = null, desktopId
     for (const choice of installChoices(desktop?.platform)) actions.push({ label: t(`localVm.install.${choice}`), onClick: () => void vm.act("install", { choice }), primary: actions.length === 0 });
   } else if (view.repair) {
     actions.push({ label: t("localVm.repair"), onClick: setUp, primary: true });
-  } else if (view.canPlay && view.state !== "running") {
+  } else if (view.canPlay && view.state !== "running" && view.problem) {
+    // Setup / problem cases keep a primary button. A plain off VM wakes by
+    // clicking the calm asleep screen (controls.play), Grok Bot style.
     actions.push({ label: t(view.problem === "missing" ? "localVm.setupOneClick" : "computerScreen.play"), onClick: setUp, primary: true });
   }
   const message = view.state === "starting" && setup?.state === "running"
     ? setupProgress(setup.steps)
     : view.problem
       ? `${t(localVmProblemKey(view.problem), { product: runtime.product, folder: vm.status?.vm?.folder ?? "" })}${setup?.state === "error" && setup.error && view.problem === "setup_failed" ? ` ${setup.error}` : ""}`
-      : view.state === "off" ? t("computerScreen.localOff") : undefined;
+      : undefined;
   return (
     <>
       <ComputerScreen
@@ -542,6 +707,8 @@ export function LocalComputerScreen({ bridge, caption, initial = null, desktopId
         message={message}
         busy={vm.pending !== null}
         error={vm.error || undefined}
+        bot={bot}
+        computerName={computerName ?? desktop?.name ?? t("computerScreen.computer")}
         actions={actions}
         live={frame ? <img src={frame} alt={caption} className="h-full w-full object-contain" /> : undefined}
         controls={{

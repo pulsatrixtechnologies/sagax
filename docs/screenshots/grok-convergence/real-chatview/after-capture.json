@@ -1,0 +1,424 @@
+[
+  {
+    "file": "after-desktop-dark-chat.png",
+    "tree": "this worktree",
+    "name": "desktop-dark-chat",
+    "skin": "pulsatrix",
+    "width": 1338,
+    "height": 809,
+    "open": false,
+    "scrollBefore": 471,
+    "v1CardState": "superseded",
+    "errors": []
+  },
+  {
+    "file": "after-desktop-dark-stage.png",
+    "tree": "this worktree",
+    "name": "desktop-dark-stage",
+    "skin": "pulsatrix",
+    "width": 1338,
+    "height": 809,
+    "open": "stage",
+    "send": true,
+    "close": true,
+    "scrollBefore": 795,
+    "v1CardState": "superseded",
+    "layout": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "chatColumn": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "chatInert": true,
+      "cover": true,
+      "beside": false,
+      "surfaceMode": "stage",
+      "docks": 1,
+      "dock": {
+        "x": 0,
+        "y": 747,
+        "width": 1338,
+        "height": 62
+      },
+      "dockOnPage": true,
+      "stageChat": "docked",
+      "placeholder": "Message Scout",
+      "ariaLabel": "Message about \"Synthetic monthly report\"",
+      "closeLabel": "Back to chat"
+    },
+    "sent": {
+      "text": "Tighten the summary.",
+      "dataContext": {
+        "page": {
+          "pageId": "galleryRealPage01",
+          "title": "Synthetic monthly report"
+        }
+      }
+    },
+    "escapeClosed": true,
+    "afterClose": {
+      "scrollTop": 1077,
+      "focus": "page card v1",
+      "dockInChat": true
+    },
+    "closedFile": "after-desktop-dark-stage-closed.png",
+    "errors": []
+  },
+  {
+    "file": "after-desktop-light-stage.png",
+    "tree": "this worktree",
+    "name": "desktop-light-stage",
+    "skin": "daylight",
+    "width": 1338,
+    "height": 809,
+    "open": "stage",
+    "scrollBefore": 795,
+    "v1CardState": "superseded",
+    "layout": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "chatColumn": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "chatInert": true,
+      "cover": true,
+      "beside": false,
+      "surfaceMode": "stage",
+      "docks": 1,
+      "dock": {
+        "x": 0,
+        "y": 747,
+        "width": 1338,
+        "height": 62
+      },
+      "dockOnPage": true,
+      "stageChat": "docked",
+      "placeholder": "Message Scout",
+      "ariaLabel": "Message about \"Synthetic monthly report\"",
+      "closeLabel": "Back to chat"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-desktop-dark-beside.png",
+    "tree": "this worktree",
+    "name": "desktop-dark-beside",
+    "skin": "pulsatrix",
+    "width": 1338,
+    "height": 809,
+    "open": "beside",
+    "scrollBefore": 795,
+    "v1CardState": "superseded",
+    "besideOffered": true,
+    "layout": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 922,
+        "height": 809
+      },
+      "chatColumn": {
+        "x": 922,
+        "y": 0,
+        "width": 416,
+        "height": 809
+      },
+      "chatInert": false,
+      "cover": false,
+      "beside": true,
+      "surfaceMode": "beside",
+      "docks": 1,
+      "dock": {
+        "x": 923,
+        "y": 711,
+        "width": 415,
+        "height": 98
+      },
+      "dockOnPage": false,
+      "stageChat": null,
+      "placeholder": "Message Scout",
+      "ariaLabel": "Message Scout",
+      "closeLabel": "Back to chat"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-desktop-dark-stage-fr.png",
+    "tree": "this worktree",
+    "name": "desktop-dark-stage-fr",
+    "skin": "pulsatrix",
+    "width": 1338,
+    "height": 809,
+    "open": "stage",
+    "lang": "fr",
+    "scrollBefore": 795,
+    "v1CardState": "superseded",
+    "layout": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "chatColumn": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "chatInert": true,
+      "cover": true,
+      "beside": false,
+      "surfaceMode": "stage",
+      "docks": 1,
+      "dock": {
+        "x": 0,
+        "y": 747,
+        "width": 1338,
+        "height": 62
+      },
+      "dockOnPage": true,
+      "stageChat": "docked",
+      "placeholder": "Écrire un message à Scout",
+      "ariaLabel": "Message à propos de « Rapport mensuel synthétique »",
+      "closeLabel": "Retour au chat"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-w700-dark-stage.png",
+    "tree": "this worktree",
+    "name": "w700-dark-stage",
+    "skin": "pulsatrix",
+    "width": 700,
+    "height": 809,
+    "open": "stage",
+    "close": true,
+    "scrollBefore": 795,
+    "v1CardState": "superseded",
+    "layout": {
+      "viewport": {
+        "width": 700,
+        "height": 809
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 700,
+        "height": 809
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 700,
+        "height": 809
+      },
+      "chatColumn": {
+        "x": 0,
+        "y": 0,
+        "width": 700,
+        "height": 809
+      },
+      "chatInert": true,
+      "cover": true,
+      "beside": false,
+      "surfaceMode": "stage",
+      "docks": 1,
+      "dock": {
+        "x": 0,
+        "y": 743,
+        "width": 700,
+        "height": 66
+      },
+      "dockOnPage": true,
+      "stageChat": "docked",
+      "placeholder": "Message Scout",
+      "ariaLabel": "Message about \"Synthetic monthly report\"",
+      "closeLabel": "Back to chat"
+    },
+    "escapeClosed": true,
+    "afterClose": {
+      "scrollTop": 795,
+      "focus": "page card v1",
+      "dockInChat": true
+    },
+    "closedFile": "after-w700-dark-stage-closed.png",
+    "errors": []
+  },
+  {
+    "file": "after-w390-light-stage.png",
+    "tree": "this worktree",
+    "name": "w390-light-stage",
+    "skin": "daylight",
+    "width": 390,
+    "height": 844,
+    "open": "stage",
+    "send": true,
+    "close": true,
+    "scrollBefore": 778,
+    "v1CardState": "superseded",
+    "layout": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "chatColumn": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "chatInert": true,
+      "cover": true,
+      "beside": false,
+      "surfaceMode": "stage",
+      "docks": 1,
+      "dock": {
+        "x": 0,
+        "y": 738,
+        "width": 390,
+        "height": 106
+      },
+      "dockOnPage": true,
+      "stageChat": "docked",
+      "placeholder": "Message Scout",
+      "ariaLabel": "Message about \"Synthetic monthly report\"",
+      "closeLabel": "Back to chat"
+    },
+    "sent": {
+      "text": "Tighten the summary.",
+      "dataContext": {
+        "page": {
+          "pageId": "galleryRealPage01",
+          "title": "Synthetic monthly report"
+        }
+      }
+    },
+    "escapeClosed": true,
+    "afterClose": {
+      "scrollTop": 1086,
+      "focus": "page card v1",
+      "dockInChat": true
+    },
+    "closedFile": "after-w390-light-stage-closed.png",
+    "errors": []
+  },
+  {
+    "file": "after-w390-dark-stage.png",
+    "tree": "this worktree",
+    "name": "w390-dark-stage",
+    "skin": "pulsatrix",
+    "width": 390,
+    "height": 844,
+    "open": "stage",
+    "scrollBefore": 778,
+    "v1CardState": "superseded",
+    "layout": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "chatColumn": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "chatInert": true,
+      "cover": true,
+      "beside": false,
+      "surfaceMode": "stage",
+      "docks": 1,
+      "dock": {
+        "x": 0,
+        "y": 738,
+        "width": 390,
+        "height": 106
+      },
+      "dockOnPage": true,
+      "stageChat": "docked",
+      "placeholder": "Message Scout",
+      "ariaLabel": "Message about \"Synthetic monthly report\"",
+      "closeLabel": "Back to chat"
+    },
+    "errors": []
+  }
+]

@@ -4,7 +4,6 @@
 // runs the call in the sandbox of the person the turn's capability names
 // (the speaker, or the bot owner for routines).
 import { pathToFileURL } from "node:url";
-import { FLOW_TOOLS, FLOW_TOOLS_MCP_NAME, callFlowTool } from "./flow-tools.ts";
 
 const MAX_INPUT_BYTES = 2_097_152;
 const MAX_OUTPUT_BYTES = 16_777_216;
@@ -65,30 +64,6 @@ export async function userSandboxProxyRequest(frame: unknown, connection: { url:
   }
 }
 
-/** Pulsatrix Flow's compute ("sagax-flow", server/flow-tools.ts), answered
- * in this process: pure functions of the arguments, so no capability, no
- * call to the server, and a slow call only holds up this turn's own proxy. */
-export function flowToolsRequest(frame: unknown, clock: () => number = Date.now): unknown | undefined {
-  if (!frame || typeof frame !== "object" || Array.isArray(frame)) return failure(null, null, "Invalid request.", -32600);
-  const message = frame as { id?: RpcId; jsonrpc?: unknown; method?: unknown; params?: unknown };
-  const id = message.id ?? null;
-  if (message.jsonrpc !== "2.0" || typeof message.method !== "string" || (id !== null && typeof id !== "number" && typeof id !== "string")) return failure(null, null, "Invalid request.", -32600);
-  if (!Object.hasOwn(message, "id")) return undefined;
-  if (message.method === "initialize") return {
-    jsonrpc: "2.0", id,
-    result: { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: FLOW_TOOLS_MCP_NAME, version: "1" } },
-  };
-  if (message.method === "ping") return { jsonrpc: "2.0", id, result: {} };
-  if (message.method === "tools/list") return { jsonrpc: "2.0", id, result: { tools: FLOW_TOOLS } };
-  if (message.method !== "tools/call") return failure(id, message.method, "Method not found.", -32601);
-  const params = (message.params ?? {}) as { name?: unknown; arguments?: unknown };
-  try {
-    return { jsonrpc: "2.0", id, result: callFlowTool(params.name, params.arguments, clock()) };
-  } catch {
-    return failure(id, message.method, "The computation failed. Check the arguments and try again.");
-  }
-}
-
 /** The tool server name of a person's own MCP server command relayed to
  * their server environment (server/sandbox-stdio-mcp.ts): every frame goes
  * through as is, notifications included. */
@@ -142,7 +117,6 @@ function run(): void {
   restorePrefixedEnvironment(process.env);
   const named = process.env.SAGAX_TOOL_SERVER;
   const personal = named === PERSONAL_STDIO_TOOL_SERVER;
-  const flow = named === FLOW_TOOLS_MCP_NAME;
   const connection = {
     url: process.env.SAGAX_HARNESS_URL ?? "", token: process.env.SAGAX_SANDBOX_TOKEN ?? "",
     server: named && Object.hasOwn(PROXIED_TOOL_SERVERS, named) ? named as ProxiedToolServer : "sagax-environment" as const,
@@ -172,9 +146,7 @@ function run(): void {
         continue;
       }
       pending++;
-      const relayed = flow
-        ? Promise.resolve(flowToolsRequest(frame))
-        : personal ? personalStdioRelayRequest(frame, connection) : userSandboxProxyRequest(frame, connection);
+      const relayed = personal ? personalStdioRelayRequest(frame, connection) : userSandboxProxyRequest(frame, connection);
       void relayed.then(output).finally(() => { pending--; });
     }
     if (input.length > MAX_INPUT_BYTES) { process.stdin.destroy(); process.exitCode = 1; }

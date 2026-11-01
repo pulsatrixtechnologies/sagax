@@ -186,10 +186,15 @@ describe("saveBotAttachment for a file a turn saved outside its folders", () => 
     await expect(saveBotAttachment({ path: DESIGNS, ...turn })).rejects.toMatchObject({ status: 400 });
     writeFileSync(join(DESIGNS, "bundle.zip"), "PK");
     await expect(saveBotAttachment({ path: join(DESIGNS, "bundle.zip"), ...turn })).rejects.toMatchObject({ status: 415 });
+    // Sparse files: the per-kind transport ceilings, not the old 25 MB one.
     const big = join(DESIGNS, "big.mp4");
     writeFileSync(big, "x");
-    truncateSync(big, 25 * 1024 * 1024 + 1);
+    truncateSync(big, 1024 * 1024 * 1024 + 1);
     await expect(saveBotAttachment({ path: big, ...turn })).rejects.toMatchObject({ status: 413 });
+    const report = join(DESIGNS, "big.pdf");
+    writeFileSync(report, "x");
+    truncateSync(report, 250 * 1024 * 1024 + 1);
+    await expect(saveBotAttachment({ path: report, ...turn })).rejects.toMatchObject({ status: 413 });
     await expect(saveBotAttachment({ path: "nope.pdf", ...turn })).rejects.toMatchObject({ status: 404 });
     await expect(saveBotAttachment({ path: join(DESIGNS, "nope.pdf"), ...turn })).rejects.toMatchObject({ status: 404 });
   });

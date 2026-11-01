@@ -146,13 +146,15 @@ describe("a routine's page (2026-10-29: its runs, then its Configuration, as clo
     return renderToStaticMarkup(createElement(EventDetails, { item, bots: [bot], onClose: vi.fn(), onEdit: vi.fn(), onDuplicate: vi.fn(), onCallChanged: vi.fn(), onOpenRoom: vi.fn() }));
   }
 
-  it("opens on the run history, its summary opening the configuration (one place, the editor), wide on a desktop and one column under 720 px", () => {
+  it("opens on the run history in a docked side panel (Grok Bot style), its summary opening the configuration", () => {
     const html = details();
     expect(html).toContain("data-routine-detail");
     expect(html).toContain("data-routine-summary");
     expect(html).not.toContain('data-routine-view="configuration"');
-    expect(html).toContain("min-[720px]:w-[min(92vw,760px)]");
-    expect(html).toContain("max-w-[560px]");
+    expect(html).toContain('data-event-details="routine"');
+    expect(html).toContain("absolute inset-y-0 right-0");
+    expect(html).toContain("max-w-[min(100vw,560px)]");
+    expect(html).toContain('aria-modal="false"');
     // the instructions live in the editor: the page leads with what happened
     expect(html).not.toContain("Read the board.");
   });

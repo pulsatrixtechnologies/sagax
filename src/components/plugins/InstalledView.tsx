@@ -70,6 +70,9 @@ export interface InstalledViewProps {
   resolvedError?: string | null;
   onRetryResolved?: () => void;
   botName?: string;
+  /** lot 4: the person's own switch of an offered organization capability
+   * (their Me state, all their bots). Absent: no switch. */
+  onToggleOrganization?: (item: Capability, next: boolean) => void;
 }
 
 function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNode }) {
@@ -81,7 +84,7 @@ function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNo
   );
 }
 
-export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, onAddServer, onPasteConfig, addDisabled, onNewSkill, forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "" }: InstalledViewProps) {
+export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, onAddServer, onPasteConfig, addDisabled, onNewSkill, forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization }: InstalledViewProps) {
   const tools = onAddServer || onPasteConfig || onNewSkill;
   return (
     <div data-plugins-installed-tab>
@@ -105,7 +108,9 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
         </div>
       )}
       {forms}
-      {resolved !== undefined && <CapabilitiesBody botName={botName} data={resolved} error={resolvedError} onRetry={onRetryResolved} switchable={() => false} showReceived={false}
+      {resolved !== undefined && <CapabilitiesBody botName={botName} data={resolved} error={resolvedError} onRetry={onRetryResolved} showReceived={false}
+        switchable={(item) => Boolean(onToggleOrganization && item.scope === "organization" && item.orgDeclaration && item.canToggle)}
+        onToggle={(item, next) => onToggleOrganization?.(item, next)}
         rowActions={(item) => {
           const plugin = botPluginKey(item);
           const server = installationServerName(item);
@@ -264,7 +269,7 @@ function EntryMenu({ name, actions, updateWaiting }: { name: string; actions: En
 /** The organization's Flow or a Perspicax Role on the bot: its name, its
  * source, and what the organization or the Role says (imposed, held, not
  * held). Read only here: Flow is set by the organization, a Role in the
- * bot's editor (Bot panel > Capabilities switches it). */
+ * bot's editor. */
 function OrganizationRow({ item }: { item: Capability }) {
   const name = capabilityName(item);
   const role = item.form === "role";

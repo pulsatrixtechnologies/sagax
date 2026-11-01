@@ -939,7 +939,11 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     await recorder.until((e) => e.type === "turn.completed");
 
     const failure = recorder.events.find((e: any) => e.type === "runtime.error") as any;
-    expect(failure).toMatchObject({ message: "Not logged in \u00b7 Please run /login", setup: true });
+    expect(failure).toMatchObject({
+      message: expect.stringMatching(/^Claude's sign-in has expired\. Reconnect Claude/),
+      setup: true,
+    });
+    expect(failure.message).toContain("Not logged in");
     // the CLI's instruction must not also land as something the bot said
     expect(recorder.events.some((e: any) => e.type === "item.completed" && e.itemType === "assistant_text")).toBe(false);
     expect(recorder.events.some((e: any) => e.type === "content.delta")).toBe(false);
@@ -970,7 +974,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(await recorder.until(event => event.type === "turn.completed"))
       .toMatchObject({ ok: false, stopReason: "auth_required" });
     expect(recorder.events.find(event => event.type === "runtime.error"))
-      .toMatchObject({ message: "Not logged in · Please run /login", setup: true });
+      .toMatchObject({ message: expect.stringMatching(/^Claude's sign-in has expired\. Reconnect Claude/), setup: true });
   });
 
   it("recovers a later sign-out in a retained process without counting earlier turns as new work", async () => {
@@ -1006,7 +1010,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     });
     await recorder.until((event) => event.type === "turn.completed");
     expect(recorder.events.find((event) => event.type === "runtime.error")).toMatchObject({
-      message: "Not logged in · Please run /login", setup: true,
+      message: expect.stringMatching(/^Claude's sign-in has expired\. Reconnect Claude/), setup: true,
     });
     expect(recorder.events.at(-1)).toMatchObject({ type: "turn.completed", ok: false, stopReason: "auth_required" });
     await expect.poll(() => {

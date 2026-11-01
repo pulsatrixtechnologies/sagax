@@ -1,9 +1,10 @@
-// Opening a published page: the one way (2026-10-28, after four fixes in two
-// days that each patched one path while another broke).
+// Opening a published page: the one way (2026-10-28; lot 5 layout 2026-10-31).
 //
-//   openPage(page)            over its conversation (the full panel), when
-//                             that conversation is on screen; else in a
-//                             window of its own
+//   openPage(page)            in its conversation frame, when that
+//                             conversation is on screen; else in a window
+//                             of its own. ChatView lays the panel beside the
+//                             chat on desktop and full screen on a phone
+//                             (src/lib/page-chat-layout.ts).
 //   openPage(page, "window")  in a window of its own (src/lib/page-windows.ts)
 //
 // Every place that opens a page calls openPage: the card in the chat, the
@@ -14,14 +15,14 @@
 // then serves the page in whichever window it lands in.
 //
 // The panel: one at a time per app window. The conversation stays mounted
-// under it, so closing the page puts the person back exactly where they were
-// in the conversation. A ChatView says it can host the panel for its bot
-// (registerPagePanelHost); without a host on screen, asking for the panel
-// would have shown nothing (the Library of a bot whose conversation is not
-// on screen), so the page opens in its own window instead. Each page also
-// keeps the place its reader last scrolled to (only a number, in memory for
-// this window), so a page the bot changes, or a page opened again, is drawn
-// at the same place.
+// (beside the page on desktop, under it on a phone), so closing the page
+// puts the person back exactly where they were. A ChatView says it can host
+// the panel for its bot (registerPagePanelHost); without a host on screen,
+// asking for the panel would have shown nothing (the Library of a bot whose
+// conversation is not on screen), so the page opens in its own window
+// instead. Each page also keeps the place its reader last scrolled to (only
+// a number, in memory for this window), so a page the bot changes, or a page
+// opened again, is drawn at the same place.
 import { useEffect, useSyncExternalStore } from "react";
 
 import { openPageInOwnWindow } from "./page-windows";

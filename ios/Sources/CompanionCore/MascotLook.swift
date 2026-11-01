@@ -198,6 +198,8 @@ public enum MascotShape: String, CaseIterable, Codable, Sendable {
     case pumpkin, egg, gem, wedge, diamond, star, clover, flower, blossom
     case cat, ghost, jellyfish, axolotl, puff, pin, marker, sprite
     case flask, tube, potion, chomp, nibble, shield, bubble
+    // Object silhouettes (shape-engine v2, 2026-11-01): portable JSON defs on desktop.
+    case pad, cup, bulb, say, sprout, tin, tome, ship
 
     /// `LEGACY_SHAPES`: ids from earlier sets (and the phone's own old ids)
     /// land on the nearest shape.
@@ -390,15 +392,18 @@ public struct MascotLook: Codable, Hashable, Sendable {
     public var style: MascotStyle?
     public var shape: MascotShape?
     public var skins: Skins?
+    /// Portable Shape geometry (`shared/shape-avatar-def.ts`). Optional; colour stays separate.
+    public var avatarDef: ShapeAvatarDef?
 
     /// The owl, what every bot wore before characters existed.
     public static let owl = MascotLook(character: .owl)
 
-    public init(character: MascotCharacter, style: MascotStyle? = nil, shape: MascotShape? = nil, skins: Skins? = nil) {
+    public init(character: MascotCharacter, style: MascotStyle? = nil, shape: MascotShape? = nil, skins: Skins? = nil, avatarDef: ShapeAvatarDef? = nil) {
         self.character = character
         self.style = style
         self.shape = shape
         self.skins = skins
+        self.avatarDef = avatarDef
     }
 
     private struct Key: CodingKey {
@@ -417,7 +422,7 @@ public struct MascotLook: Codable, Hashable, Sendable {
 
     private static func strict(_ decoder: Decoder) throws -> MascotLook {
         let container = try decoder.container(keyedBy: Key.self)
-        let allowed: Set<String> = ["character", "style", "shape", "skins"]
+        let allowed: Set<String> = ["character", "style", "shape", "skins", "avatarDef"]
         guard container.allKeys.allSatisfy({ allowed.contains($0.stringValue) }) else { throw Malformed() }
         func optional<T: Decodable>(_ type: T.Type, _ key: String) throws -> T? {
             let k = Key(key)
@@ -443,7 +448,15 @@ public struct MascotLook: Codable, Hashable, Sendable {
             )
             skins = read.isEmpty ? nil : read
         }
-        return MascotLook(character: character, style: style, shape: shape, skins: skins)
+        // Invalid avatarDef is dropped; the look still loads (cosmetic only).
+        var avatarDef: ShapeAvatarDef?
+        if container.contains(Key("avatarDef")), !(try container.decodeNil(forKey: Key("avatarDef"))) {
+            if let raw = try? container.decode(ShapeAvatarDef.self, forKey: Key("avatarDef")),
+               case let .ok(valid) = ShapeAvatarValidator.check(raw) {
+                avatarDef = valid
+            }
+        }
+        return MascotLook(character: character, style: style, shape: shape, skins: skins, avatarDef: avatarDef)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -451,6 +464,7 @@ public struct MascotLook: Codable, Hashable, Sendable {
         try container.encode(character, forKey: Key("character"))
         try container.encodeIfPresent(style, forKey: Key("style"))
         try container.encodeIfPresent(shape, forKey: Key("shape"))
+        try container.encodeIfPresent(avatarDef, forKey: Key("avatarDef"))
         if let skins, !skins.isEmpty {
             var nested = container.nestedContainer(keyedBy: Key.self, forKey: Key("skins"))
             try nested.encodeIfPresent(skins.shape, forKey: Key("shape"))
@@ -477,7 +491,8 @@ public struct MascotLook: Codable, Hashable, Sendable {
             grumpSkin: skins?.grump ?? .plain,
             ogreSkin: skins?.ogre ?? .plain,
             frogSkin: skins?.frog ?? .plain,
-            crabSkin: skins?.crab ?? .plain
+            crabSkin: skins?.crab ?? .plain,
+            avatarDef: avatarDef
         )
     }
 }
@@ -495,8 +510,9 @@ public struct CompleteMascotLook: Hashable, Sendable {
     public var ogreSkin: OgreSkin
     public var frogSkin: FrogSkin
     public var crabSkin: CrabSkin
+    public var avatarDef: ShapeAvatarDef?
 
-    public init(character: MascotCharacter, style: MascotStyle = .flat, shape: MascotShape = .circle, shapeSkin: ShapeSkin = .plain, trombiSkin: TrombiSkin = .classic, bunbuSkin: BunbuSkin = .plain, shibaSkin: ShibaSkin = .plain, grumpSkin: GrumpSkin = .plain, ogreSkin: OgreSkin = .plain, frogSkin: FrogSkin = .plain, crabSkin: CrabSkin = .plain) {
+    public init(character: MascotCharacter, style: MascotStyle = .flat, shape: MascotShape = .circle, shapeSkin: ShapeSkin = .plain, trombiSkin: TrombiSkin = .classic, bunbuSkin: BunbuSkin = .plain, shibaSkin: ShibaSkin = .plain, grumpSkin: GrumpSkin = .plain, ogreSkin: OgreSkin = .plain, frogSkin: FrogSkin = .plain, crabSkin: CrabSkin = .plain, avatarDef: ShapeAvatarDef? = nil) {
         self.character = character
         self.style = style
         self.shape = shape
@@ -508,12 +524,13 @@ public struct CompleteMascotLook: Hashable, Sendable {
         self.ogreSkin = ogreSkin
         self.frogSkin = frogSkin
         self.crabSkin = crabSkin
+        self.avatarDef = avatarDef
     }
 
     /// Back to a stored look, every choice explicit (what the editor saves,
     /// as the desktop's editor does: every character's skin).
     public var stored: MascotLook {
-        MascotLook(character: character, style: style, shape: shape, skins: .init(shape: shapeSkin, trombi: trombiSkin, bunbu: bunbuSkin, shiba: shibaSkin, grump: grumpSkin, ogre: ogreSkin, frog: frogSkin, crab: crabSkin))
+        MascotLook(character: character, style: style, shape: shape, skins: .init(shape: shapeSkin, trombi: trombiSkin, bunbu: bunbuSkin, shiba: shibaSkin, grump: grumpSkin, ogre: ogreSkin, frog: frogSkin, crab: crabSkin), avatarDef: avatarDef)
     }
 
     /// The colour a character wears where the bot gives none it can use:

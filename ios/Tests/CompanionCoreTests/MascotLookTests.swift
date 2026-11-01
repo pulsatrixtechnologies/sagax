@@ -96,6 +96,8 @@ final class MascotLookTests: XCTestCase {
         XCTAssertEqual(MascotShape.allCases.map(\.rawValue), [
             "circle", "bean", "squircle", "pill", "pick", "hexagon", "cloud", "drop", "pumpkin", "egg", "gem", "wedge", "diamond", "star", "clover", "flower",
             "blossom", "cat", "ghost", "jellyfish", "axolotl", "puff", "pin", "marker", "sprite", "flask", "tube", "potion", "chomp", "nibble", "shield", "bubble",
+            // object silhouettes (shape-engine v2, 2026-11-01)
+            "pad", "cup", "bulb", "say", "sprout", "tin", "tome", "ship",
         ])
         // the rest of the lists are checked against the desktop's own in MascotLookFixtureTests
         XCTAssertEqual(ShapeSkin.allCases.first, .plain)

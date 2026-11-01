@@ -79,6 +79,7 @@ describe("what the app may do", () => {
     ["PATCH", "/api/bots/bot_123/profile"],
     ["PATCH", "/api/bots/bot_123/model"],
     ["POST", "/api/bots/bot_123/avatar/generate"],
+    ["POST", "/api/bots/bot_123/shape-avatar/generate"],
     ["POST", "/api/bots/bot_123/computer/join"],
     ["POST", "/api/bots/bot_123/secret-cards/message_1/provide"],
     ["POST", "/api/bots/bot_123/computer/control"],

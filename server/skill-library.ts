@@ -3,7 +3,7 @@
 // UI can use the same manifests; today enabled built-ins are selected by their
 // declared trigger terms and mounted capabilities.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { mkdirSync, rmSync } from "node:fs";
@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { DATA_DIR } from "./config.ts";
+import { installationCapabilityBridge, type InstallationCapabilityBridge } from "./installation-capability-bridge.ts";
 import { isSkillName, parseSkillMd, SKILL_FILE_MAX_BYTES } from "../shared/skill-md.ts";
 import type { SkillPackageStamp } from "./skills.ts";
 
@@ -254,10 +255,33 @@ type SkillLibraryIndexRead =
   | { index: Record<string, SkillLibraryEntry> }
   | { error: string };
 
+/** Lot 5 moved the organization's library index (skills-library/index.json)
+ * into the sealed installation store. Only that root reads and writes it
+ * there. Every other root is a person's Me library
+ * (principals/<pid>/capability-skills, server/personal-skills.ts) and keeps
+ * its own index.json under the person's directory: one person's skills
+ * never reach the installation index or another person's. */
+function installationLibraryBridge(root: string): InstallationCapabilityBridge | null {
+  const bridge = installationCapabilityBridge();
+  if (!bridge || resolve(root) !== resolve(skillsLibraryRoot())) return null;
+  return bridge.hasMigrated("skills-library-index") ? bridge : null;
+}
+
 /** A missing index is a legitimate empty library; an index that exists but
  * cannot be read or validated is not, and writers must refuse rather than
  * replace it and strand every stored skill. */
 function readSkillLibraryIndexState(root: string): SkillLibraryIndexRead {
+  const bridge = installationLibraryBridge(root);
+  if (bridge) {
+    try {
+      const result = skillLibraryIndexSchema.safeParse(bridge.read().skillsLibrary);
+      return result.success
+        ? { index: result.data }
+        : { error: "the skills library index is invalid" };
+    } catch {
+      return { error: "the skills library index could not be read" };
+    }
+  }
   try {
     const parsed: unknown = JSON.parse(readFileSync(libraryIndexPath(root), "utf8"));
     const result = skillLibraryIndexSchema.safeParse(parsed);
@@ -276,6 +300,13 @@ export function readSkillLibraryIndex(root: string = skillsLibraryRoot()): Recor
 }
 
 function writeSkillLibraryIndex(root: string, index: Record<string, SkillLibraryEntry>): void {
+  const bridge = installationLibraryBridge(root);
+  if (bridge) {
+    bridge.patch((document) => {
+      document.skillsLibrary = index;
+    });
+    return;
+  }
   mkdirSync(root, { recursive: true, mode: 0o700 });
   writeFileAtomic(libraryIndexPath(root), `${JSON.stringify(index, null, 2)}\n`, { mode: 0o600 });
 }

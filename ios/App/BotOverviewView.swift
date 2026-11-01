@@ -113,6 +113,8 @@ struct BotOverviewView: View {
                 .listRowBackground(Theme.parity(Color(uiColor: .secondarySystemGroupedBackground), Theme.card))
             }
         }
+        // Grok Bot's grouped inset cards (2026-11-01)
+        .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(Theme.parity(Color(uiColor: .systemGroupedBackground), Theme.bg))
         .navigationTitle("What \(bot.name) does")

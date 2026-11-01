@@ -73,6 +73,33 @@ final class BotCapabilitiesTests: XCTestCase {
         XCTAssertTrue(BotCapabilityReceipt(empty).isEmpty)
     }
 
+    func testPartialPluginDiscoveryAndLegacyIndexes() throws {
+        let partial = try JSONDecoder().decode(BotCapabilityList.self, from: Data(#"{"promptIndex":{"bytes":900,"maxBytes":4000,"skills":2,"maxSkills":30,"omitted":0,"incomplete":true}}"#.utf8))
+        XCTAssertEqual(partial.promptIndex?.incomplete, true)
+        XCTAssertEqual(partial.promptIndex?.cuts, true)
+        let legacy = try JSONDecoder().decode(BotCapabilityList.self, from: Data(#"{"promptIndex":{"bytes":900,"maxBytes":4000,"skills":2,"maxSkills":30,"omitted":0}}"#.utf8))
+        XCTAssertEqual(legacy.promptIndex?.incomplete, false)
+        XCTAssertEqual(legacy.promptIndex?.cuts, false)
+    }
+
+    func testPerCapabilityBudgetAndLoadedPackRemainIndependentFromTheAggregate() throws {
+        let json = #"{"promptIndex":{"bytes":4200,"maxBytes":8000,"skills":31,"maxSkills":60,"omitted":6},"items":[{"key":"flow:organization:pulsatrix-flow","form":"flow","name":"Pulsatrix Flow","state":"imposed","source":{"label":"Perspicax","version":"0.20.15","pack":"sha256:fixture"},"engine":{"skills":"prompt","nothing":false},"promptIndex":{"bytes":3980,"maxBytes":4000,"skills":30,"maxSkills":30,"omitted":6}},{"key":"skill:me:packing","form":"skill","name":"Packing","state":"on","engine":{"skills":"prompt","nothing":false}}]}"#
+        let list = try JSONDecoder().decode(BotCapabilityList.self, from: Data(json.utf8))
+        XCTAssertEqual(list.promptIndex?.bytes, 4200)
+        XCTAssertEqual(list.items[0].promptIndex?.bytes, 3980)
+        XCTAssertEqual(list.items[0].promptIndex?.maxBytes, 4000)
+        XCTAssertEqual(list.items[0].promptIndex?.skills, 30)
+        XCTAssertEqual(list.items[0].promptIndex?.omitted, 6)
+        XCTAssertEqual(list.items[0].sourceVersion, "0.20.15")
+        XCTAssertEqual(list.items[0].sourcePack, "sha256:fixture")
+        XCTAssertEqual(list.items[0].signedPackLabel, "Signed pack, version 0.20.15")
+        XCTAssertFalse(list.items[0].signedPackLabel?.contains("sha256") ?? true)
+        XCTAssertNil(list.items[1].signedPackLabel)
+        XCTAssertNil(list.items[1].promptIndex)
+        XCTAssertNil(list.items[1].sourcePack)
+        XCTAssertEqual(BotCapabilityReceipt(list).skillsAndCommands, ["Pulsatrix Flow", "Packing"])
+    }
+
     func testUnknownReceiptsNeverInventAReceivedCapability() throws {
         let json = #"{"engine":{"kind":"future","label":"Future"},"items":[{"key":"plugin:bot:future","form":"plugin","name":"Future","state":"on","engine":{"skills":"teleported","nothing":false}},{"key":"plugin:bot:mixed","form":"plugin","name":"Mixed","state":"on","engine":{"skills":"teleported","mcp":"mounted","nothing":false}},{"key":"plugin:bot:missing","form":"plugin","name":"Missing","state":"on"}]}"#
         let list = try JSONDecoder().decode(BotCapabilityList.self, from: Data(json.utf8))

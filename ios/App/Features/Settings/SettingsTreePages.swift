@@ -45,9 +45,10 @@ struct SettingsTreeCards: View {
         }
     }
 
-    /// The few labels the sub-pages keep; the root has none.
+    /// The few labels the pages keep: the root's "Bot", as Grok Bot's sheet.
     private static func label(_ page: SettingsPageID, _ card: [SettingsItem]) -> LocalizedStringKey? {
         switch (page, card.first) {
+        case (.root, .bots?): "Bot"
         case (.bots, .quickReplies?): "Conversation"
         case (.privacySecurity, .presence?): "Privacy"
         default: nil
@@ -86,9 +87,12 @@ struct SettingsTreeRow: View {
         case .organization:
             SettingsRow(title: "Organization", accessory: .chevron, height: 44.33, identifier: "settings-organization") { navigator.sheet = .organization }
         case .bots:
-            SettingsRow(title: "Bots", accessory: .chevron, height: 44.33, identifier: "settings-bots") { navigator.push(.bots) }
+            SettingsRow(title: "Permissions and bot settings", subtitle: "Auto-review, time zone, computer and more", accessory: .chevron,
+                        identifier: "settings-bots", textTop: 13.4) { navigator.push(.bots) }
         case .connectApps:
-            SettingsRow(title: "Capabilities", subtitle: "Tools and skills for Sagax", accessory: .chevron,
+            // Grok Bot's "Connect apps" (2026-11-01): plugins, with the tools
+            // and skills they resolve to
+            SettingsRow(title: "Connect apps", subtitle: "Plugins, tools and skills", accessory: .chevron,
                         identifier: "settings-plugins", textTop: 13.4) { navigator.push(.plugins) }
         case .publishedPages:
             SettingsRow(title: "Published pages", accessory: .chevron, height: 44, identifier: "settings-pages") { navigator.push(.pages) }
@@ -172,7 +176,8 @@ struct SettingsTreeRow: View {
         case .securityKeys:
             SettingsRow(title: "Security keys", accessory: .chevron, height: 44, identifier: "settings-security-keys") { navigator.push(.securityKeys) }
         case .vault:
-            SettingsRow(title: "Vault", accessory: .chevron, height: 44, identifier: "settings-vault") { navigator.push(.vault) }
+            SettingsRow(title: "Vault", subtitle: "Logins, cards and contact info your bots can use", accessory: .chevron,
+                        identifier: "settings-vault", textTop: 13.4) { navigator.push(.vault) }
         case .presence, .readReceipts:
             EmptyView()  // drawn as their own cards by SettingsTreeCards
         // About

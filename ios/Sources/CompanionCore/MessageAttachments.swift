@@ -14,6 +14,11 @@ public struct PendingMessageAttachment: Identifiable, Hashable, Sendable {
     public let name: String
     public let mime: String
     public let kind: Kind
+    /// Large picker representations stay on disk. `data` is used only by
+    /// bounded native producers (camera, clipboard and recorded voice).
+    private let ownedFile: OwnedAttachmentFile?
+    public var fileURL: URL? { ownedFile?.url }
+    public let bytes: Int
 
     public init(
         id: UUID = UUID(),
@@ -27,9 +32,62 @@ public struct PendingMessageAttachment: Identifiable, Hashable, Sendable {
         self.name = name
         self.mime = mime
         self.kind = kind
+        self.ownedFile = nil
+        self.bytes = data.count
     }
 
-    public var bytes: Int { data.count }
+    public init(id: UUID = UUID(), fileURL: URL, bytes: Int, name: String, mime: String, kind: Kind, removeWhenReleased: Bool = false) {
+        self.id = id
+        self.data = Data()
+        self.name = name
+        self.mime = mime
+        self.kind = kind
+        self.bytes = bytes
+        self.ownedFile = OwnedAttachmentFile(url: fileURL, removeWhenReleased: removeWhenReleased)
+    }
+
+    /// Copy a provider URL while its security scope/callback is alive. Count
+    /// bytes actually read, including providers whose file grows during copy.
+    public static func copyingFile(_ source: URL, id: UUID = UUID(), name: String, mime: String, kind: Kind, maximumBytes: Int) throws -> Self {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("SagaxAttachmentDrafts", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let target = directory.appendingPathComponent(id.uuidString)
+        guard FileManager.default.createFile(atPath: target.path, contents: nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        #if os(iOS)
+        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: target.path)
+        #endif
+        do {
+            let input = try FileHandle(forReadingFrom: source)
+            defer { try? input.close() }
+            let output = try FileHandle(forWritingTo: target)
+            defer { try? output.close() }
+            var count = 0
+            while let chunk = try input.read(upToCount: 64 * 1_024), !chunk.isEmpty {
+                try Task.checkCancellation()
+                guard chunk.count <= maximumBytes - count else {
+                    throw AttachmentPolicyError.itemTooLarge(name: name, limitMB: maximumBytes / (1_024 * 1_024))
+                }
+                try output.write(contentsOf: chunk)
+                count += chunk.count
+            }
+            guard count > 0 else { throw CocoaError(.fileReadCorruptFile) }
+            return Self(id: id, fileURL: target, bytes: count, name: name, mime: mime, kind: kind, removeWhenReleased: true)
+        } catch {
+            try? FileManager.default.removeItem(at: target)
+            throw error
+        }
+    }
+}
+
+private final class OwnedAttachmentFile: Hashable, @unchecked Sendable {
+    let url: URL
+    let removeWhenReleased: Bool
+    init(url: URL, removeWhenReleased: Bool) { self.url = url; self.removeWhenReleased = removeWhenReleased }
+    static func == (lhs: OwnedAttachmentFile, rhs: OwnedAttachmentFile) -> Bool { lhs.url == rhs.url }
+    func hash(into hasher: inout Hasher) { hasher.combine(url) }
+    deinit { if removeWhenReleased { try? FileManager.default.removeItem(at: url) } }
 }
 
 public enum AttachmentPolicyError: Error, LocalizedError, Equatable, Sendable {
@@ -42,13 +100,13 @@ public enum AttachmentPolicyError: Error, LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .tooManyItems:
-            return "Attach up to 4 items at a time."
+            return String(localized: "Attach up to 32 items at a time.")
         case .totalTooLarge:
-            return "Those attachments are larger than 50 MB together."
+            return String(localized: "Those images are larger than 200 MB together.")
         case .invalidName:
             return "That file doesn't have a valid filename."
         case let .unsupportedType(name):
-            return "\(name) isn't a supported file. Try PDF, text, Word, Excel, or PowerPoint."
+            return String(localized: "\(name) isn't a supported file. Try an image, document, archive, audio, or video file.")
         case let .itemTooLarge(name, limitMB):
             return String(localized: "\(name) is larger than \(limitMB) MB.")
         }
@@ -59,14 +117,21 @@ public enum AttachmentPolicyError: Error, LocalizedError, Equatable, Sendable {
 /// Keeping the policy in CompanionCore prevents either entry point from
 /// accepting an attachment that the authenticated upload route will reject.
 public enum AttachmentPolicy {
-    public static let maximumItems = 4
-    public static let maximumTotalBytes = 50 * 1_024 * 1_024
+    public static let maximumItems = 32
+    public static let maximumTotalBytes = 200 * 1_024 * 1_024
     /// Same as IMAGE_MAX_BYTES in server/attachments.ts (32 MiB since #899); the
     /// server shrinks a large picture before the model sees it. A unit test on
     /// the server side keeps the two numbers equal.
     public static let maximumImageBytes = 32 * 1_024 * 1_024
     public static var maximumImageMegabytes: Int { maximumImageBytes / (1_024 * 1_024) }
-    public static let maximumFileBytes = 25 * 1_024 * 1_024
+    public static let maximumSoloImageBytes = 90 * 1_024 * 1_024
+    public static let maximumFileBytes = 250 * 1_024 * 1_024
+    public static let maximumVideoBytes = 1_024 * 1_024 * 1_024
+    public static let videoMIMETypes: Set<String> = ["video/mp4", "video/webm", "video/quicktime"]
+    public static let archiveMIMETypes: Set<String> = [
+        "application/zip", "application/x-zip-compressed", "application/x-tar", "application/gzip",
+        "application/x-gzip", "application/x-gtar", "application/x-compressed-tar", "application/x-7z-compressed",
+    ]
 
     public static let imageMIMETypes: Set<String> = [
         "image/png", "image/jpeg", "image/gif", "image/webp",
@@ -88,7 +153,10 @@ public enum AttachmentPolicy {
 
     /// Recorded voice notes (VoiceNoteRecording): WAV only, the one audio
     /// type the phone makes. The upload route accepts it like the desktop's.
-    public static let audioMIMETypes: Set<String> = ["audio/wav"]
+    public static let audioMIMETypes: Set<String> = [
+        "audio/wav", "audio/x-wav", "audio/wave", "audio/opus", "audio/ogg", "audio/mpeg",
+        "audio/mp4", "audio/x-m4a", "audio/aac", "audio/flac", "audio/x-flac", "audio/webm",
+    ]
 
     public static func normalizedMIME(_ value: String) -> String {
         value.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: true)
@@ -100,13 +168,20 @@ public enum AttachmentPolicy {
     public static func kind(forMIME value: String) -> PendingMessageAttachment.Kind? {
         let mime = normalizedMIME(value)
         if imageMIMETypes.contains(mime) { return .image }
-        if documentMIMETypes.contains(mime) || audioMIMETypes.contains(mime) { return .file }
+        if documentMIMETypes.contains(mime) || audioMIMETypes.contains(mime)
+            || videoMIMETypes.contains(mime) || archiveMIMETypes.contains(mime) { return .file }
         return nil
     }
 
-    public static func validate(_ attachments: [PendingMessageAttachment]) throws {
+    public static func itemLimit(mime: String, sharedHost: Bool = true) -> Int {
+        let normalized = normalizedMIME(mime)
+        if imageMIMETypes.contains(normalized) { return sharedHost ? maximumImageBytes : maximumSoloImageBytes }
+        return videoMIMETypes.contains(normalized) ? maximumVideoBytes : maximumFileBytes
+    }
+
+    public static func validate(_ attachments: [PendingMessageAttachment], sharedHost: Bool = true) throws {
         guard attachments.count <= maximumItems else { throw AttachmentPolicyError.tooManyItems }
-        guard attachments.reduce(0, { $0 + $1.data.count }) <= maximumTotalBytes else {
+        guard attachments.filter({ $0.kind == .image }).reduce(0, { $0 + $1.bytes }) <= maximumTotalBytes else {
             throw AttachmentPolicyError.totalTooLarge
         }
 
@@ -119,15 +194,17 @@ public enum AttachmentPolicy {
                 guard imageMIMETypes.contains(mime) else {
                     throw AttachmentPolicyError.unsupportedType(name)
                 }
-                guard attachment.data.count <= maximumImageBytes else {
-                    throw AttachmentPolicyError.itemTooLarge(name: name, limitMB: maximumImageMegabytes)
+                let limit = itemLimit(mime: mime, sharedHost: sharedHost)
+                guard attachment.bytes > 0, attachment.bytes <= limit else {
+                    throw AttachmentPolicyError.itemTooLarge(name: name, limitMB: limit / (1_024 * 1_024))
                 }
             case .file:
-                guard documentMIMETypes.contains(mime) || audioMIMETypes.contains(mime) else {
+                guard kind(forMIME: mime) == .file else {
                     throw AttachmentPolicyError.unsupportedType(name)
                 }
-                guard attachment.data.count <= maximumFileBytes else {
-                    throw AttachmentPolicyError.itemTooLarge(name: name, limitMB: 25)
+                let limit = itemLimit(mime: mime, sharedHost: sharedHost)
+                guard attachment.bytes > 0, attachment.bytes <= limit else {
+                    throw AttachmentPolicyError.itemTooLarge(name: name, limitMB: limit / (1_024 * 1_024))
                 }
             }
         }

@@ -29,8 +29,9 @@ struct ScreenShot: View {
         .task {
             guard image == nil else { return }
             let data: Data?
-            if let inline = message.png, let decoded = Data(base64Encoded: inline) {
-                data = decoded
+            if let inline = message.png {
+                // a few hundred KB of base64 per frame: off the main thread
+                data = await Task.detached(priority: .userInitiated) { Data(base64Encoded: inline) }.value
             } else if message.hasImage == true {
                 data = await session.image(threadId: threadId, messageId: message.id)
             } else {

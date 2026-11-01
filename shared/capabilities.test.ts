@@ -16,13 +16,25 @@ describe("engineReceipt: what each engine receives", () => {
     }
   });
 
-  it("engines without files receive nothing of a plugin or a skill", () => {
+  it("engines without files receive a plugin's and a skill's files in the prompt, tools on or off (Q8 C)", () => {
     for (const kind of ["grok", "openai-compat", "minimax", "mistral", "cerebras", "groq"]) {
       expect(engineWorksInFiles(kind), kind).toBe(false);
-      expect(engineReceipt(kind, "plugin", { customMcp: true, ...plugin }), kind).toEqual({ skills: "none", commands: "none", agents: "none", nothing: true });
-      expect(engineReceipt(kind, "skill", { customMcp: true, skills: true }).nothing, kind).toBe(true);
+      expect(engineReceipt(kind, "plugin", { customMcp: true, ...plugin }), kind).toEqual({ skills: "prompt", commands: "prompt", agents: "prompt", nothing: false });
+      expect(engineReceipt(kind, "skill", { customMcp: true, skills: true }).skills, kind).toBe("prompt");
     }
     expect([...ENGINES_WITHOUT_FILES].sort()).toEqual(["cerebras", "grok", "groq", "minimax", "mistral", "openai-compat"]);
+  });
+
+  it("API engines receive skills, plugin files and the organization's Flow with or without retrieval tools", () => {
+    for (const kind of ENGINES_WITHOUT_FILES) {
+      for (const skillDiscovery of [true, false]) {
+        expect(engineReceipt(kind, "skill", { customMcp: skillDiscovery, skillDiscovery, skills: true }).skills).toBe("prompt");
+        expect(engineReceipt(kind, "plugin", { customMcp: true, skillDiscovery, ...plugin }), kind).toEqual({
+          skills: "prompt", commands: "prompt", agents: "prompt", nothing: false,
+        });
+        expect(engineReceipt(kind, "flow", { customMcp: true, skillDiscovery, skills: true }).skills).toBe("prompt");
+      }
+    }
   });
 
   it("MCP follows customMcp: mounted by an engine with files, proxied by Sagax for one without", () => {
@@ -33,10 +45,11 @@ describe("engineReceipt: what each engine receives", () => {
     expect(engineReceipt("grok", "role", { customMcp: true, mcp: true })).toEqual({ mcp: "proxied", tools: "proxied", nothing: false });
   });
 
-  it("the organization's Flow reaches Claude only (C-3)", () => {
+  it("the organization's Flow reaches every engine (lot 3, Q8 C)", () => {
     expect(engineReceipt("claudeAgent", "flow", { customMcp: true, ...plugin }).skills).toBe("native");
-    expect(engineReceipt("codex", "flow", { customMcp: true, ...plugin }).nothing).toBe(true);
-    expect(engineReceipt("grok", "flow", { customMcp: true, ...plugin }).nothing).toBe(true);
+    expect(engineReceipt("codex", "flow", { customMcp: true, ...plugin }).skills).toBe("prompt");
+    expect(engineReceipt("grok", "flow", { customMcp: true, ...plugin }).skills).toBe("prompt");
+    expect(engineReceipt("grok", "flow", { customMcp: true, skillDiscovery: true, ...plugin }).skills).toBe("prompt");
   });
 
   it("a skill: native on Claude, from the prompt elsewhere; a library skill from the prompt everywhere", () => {

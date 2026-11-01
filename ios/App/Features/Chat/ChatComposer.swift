@@ -23,7 +23,8 @@ extension ChatView {
         let replyAtSend = session.surfaceGate.allows(.replyQuote) ? replyTo : nil
         guard !text.isEmpty || !outgoingAttachments.isEmpty || !pastesAtSend.isEmpty || !citationsAtSend.isEmpty,
               !preparingAttachments,
-              !sendingMessage
+              !sendingMessage,
+              session.attachmentUploadsReady(outgoingAttachments)
         else { return }
         // The bot cannot answer now (SendState.swift): nothing goes out, the
         // draft stays, and the state is asked again.
@@ -144,33 +145,17 @@ extension ChatView {
         }
     }
 
-    /// A round + and a glass pill with dictation and send inside it.
+    /// One glass capsule, as in Grok Bot (2026-11-01): the + at its leading
+    /// end, the field, then dictation and the white voice / send capsule.
     var composer: some View {
         VStack(spacing: 6) {
             composerAccessories
 
-            HStack(alignment: .bottom, spacing: Theme.Chat.composerGap) {
-                // "+": 44 pt glass circle. Attachments, threads, slash
+            HStack(alignment: .bottom, spacing: 0) {
+                // "+" inside the capsule. Attachments, threads, slash
                 // commands and the rest live in the sheet it opens.
-                Button {
-                    dictation.stop()
-                    composerFocused = false
-                    withAnimation(.snappy(duration: 0.28)) { showingPlus.toggle() }
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 20.5, weight: .medium))
-                        .foregroundStyle(showingPlus ? Theme.primaryInk : Theme.textPrimary)
-                        .rotationEffect(.degrees(showingPlus ? 45 : 0))
-                        .frame(width: Theme.Metric.glassLarge, height: Theme.Metric.glassLarge)
-                        .background(Circle().fill(showingPlus ? Theme.primaryFill : Color.clear))
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .themeGlass(Circle())
-                .chatGlassRim(Circle())
-                .disabled(preparingAttachments || sendingMessage)
-                .accessibilityLabel(showingPlus ? "Close" : "More")
-                .accessibilityIdentifier("composer-plus")
+                composerPlusButton
+                    .padding(.leading, 6)
 
                 // The field: "Message {name}", the mic (dictation) and the white
                 // capsule (voice mode, or send once there is something to send).
@@ -192,7 +177,7 @@ extension ChatView {
                         .lineLimit(1...5)
                         .font(Theme.Font.body)
                         .foregroundStyle(Theme.textPrimary)
-                        .padding(.leading, 16.6)
+                        .padding(.leading, 4)
                         .padding(.top, 12.35)
                         .padding(.bottom, 13.65)
                         .focused($composerFocused)
@@ -256,12 +241,12 @@ extension ChatView {
                         .padding(.bottom, (Theme.Metric.glassLarge - Theme.Chat.voiceCapsule.height) / 2)
                     }
                 }
-                .frame(minHeight: Theme.Metric.glassLarge)
-                // 22 pt corners: a capsule at one line that keeps its
-                // corners as the draft grows, the way Messages does.
-                .themeGlass(RoundedRectangle(cornerRadius: 22, style: .continuous), interactive: false)
-                .chatGlassRim(RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
+            .frame(minHeight: Theme.Metric.glassLarge)
+            // 22 pt corners: a capsule at one line that keeps its
+            // corners as the draft grows, the way Messages does.
+            .themeGlass(RoundedRectangle(cornerRadius: 22, style: .continuous), interactive: false)
+            .chatGlassRim(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         // One margin on both sides, inside the safe area (the container
         // already keeps a landscape bar clear of the sensor housing, so
@@ -278,6 +263,29 @@ extension ChatView {
         .task(id: heldSends.isEmpty) {
             if !heldSends.isEmpty { await power.load(botIds: [], threadId: nil, groupId: nil, session: session) }
         }
+    }
+
+    /// The + at the capsule's leading end: a plain glyph, a filled disc
+    /// with an x while the menu is open.
+    var composerPlusButton: some View {
+        Button {
+            dictation.stop()
+            composerFocused = false
+            withAnimation(.snappy(duration: 0.28)) { showingPlus.toggle() }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(showingPlus ? Theme.primaryInk : Theme.textPrimary)
+                .rotationEffect(.degrees(showingPlus ? 45 : 0))
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(showingPlus ? Theme.primaryFill : Color.clear))
+                .frame(width: 36, height: Theme.Metric.glassLarge)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(preparingAttachments || sendingMessage)
+        .accessibilityLabel(showingPlus ? "Close" : "More")
+        .accessibilityIdentifier("composer-plus")
     }
 
     // MARK: - Voice note
@@ -359,7 +367,7 @@ extension ChatView {
             id: UUID(), data: clip.wav, name: clip.name, mime: VoiceNoteRecording.mime, kind: .file
         )
         do {
-            try AttachmentPolicy.validate(attachments + [note])
+            try AttachmentPolicy.validate(attachments + [note], sharedHost: session.surfaceGate.organization)
         } catch {
             attachmentError = error.localizedDescription
             return
@@ -383,7 +391,10 @@ extension ChatView {
             }
             attachments.append(note)
             if let heard, !heard.isEmpty { draft = Dictation.draft(base: draft, transcript: heard) }
-            await Task.yield()
+            let notesToSend = attachments
+            session.keepAttachmentDraft(notesToSend, threadId: chatAtSend.threadId)
+            guard await session.finishAttachmentUploads(notesToSend), threadId == chatAtSend.threadId,
+                  attachments.map(\.id) == notesToSend.map(\.id) else { return }
             submit()
         }
     }

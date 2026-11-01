@@ -165,13 +165,20 @@ struct CharacterEditor: View {
                 ForEach(shapeLines.indices, id: \.self) { line in
                     row(count: shapeLines[line].count, pitch: metrics.pitch, height: metrics.pitch) { index in
                         let shape = shapeLines[line][index]
-                        thumbnail(look: edited { $0.shape = shape }, skin: .none, size: metrics.cell, selected: draft.complete.shape == shape, label: Text(verbatim: shape.rawValue)) {
+                        thumbnail(look: edited { $0.shape = shape; $0.avatarDef = ShapeAvatarPresets.byShape(shape) }, skin: .none, size: metrics.cell, selected: draft.complete.shape == shape, label: Text(verbatim: shape.rawValue)) {
                             var next = draft.complete
                             if let color = MascotShape.pickedColor(shape, from: next.shape, skin: next.shapeSkin) { draft.color = color }
                             next.shape = shape
+                            // Object shapes carry their path preset; polar catalog clears a custom def.
+                            next.avatarDef = ShapeAvatarPresets.byShape(shape)
                             draft.look = next.stored
                         }
                     }
+                }
+                if section == .shape {
+                    ShapeAvatarEditorPanel(draft: $draft)
+                        .padding(.top, 12)
+                        .padding(.horizontal, Theme.Metric.rowInset)
                 }
             }
 

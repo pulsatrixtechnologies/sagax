@@ -49,7 +49,7 @@ export function orgXaiKeyAllowed(media: OrgXaiMedia, input: OrgXaiMediaInput): b
 
 const REFUSAL: Record<OrgXaiMedia, string> = {
   voice: "Your organization has not given you its xAI voice (read aloud and voice notes). Ask an admin to give it to you in Perspicax.",
-  image: "Your organization has not given you image generation on its xAI key. Ask an admin to give it to you in Perspicax.",
+  image: "Your organization has not given you image and video generation on its xAI key. Ask an admin to give it to you in Perspicax.",
 };
 
 /** The 403 body of a refused use. Never names or hints at the key. */

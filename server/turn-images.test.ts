@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { extractTurnImages } from "./turn-images.ts";
+import { extractTurnImages, TURN_IMAGE_MAX_BYTES, TURN_IMAGE_MAX_COUNT } from "./turn-images.ts";
 
 const IDS = [
   "123e4567-e89b-42d3-a456-426614174000",
@@ -101,6 +101,15 @@ describe("turn image admission", () => {
     expect(() => extractTurnImages(source, { attachmentsDir: root, maxBytes: 7 })).toThrow(
       "Attached images exceed 0 MB total",
     );
+  });
+
+  it("admits more than four pictures under the shared 200 MiB message budget", () => {
+    expect([TURN_IMAGE_MAX_COUNT, TURN_IMAGE_MAX_BYTES]).toEqual([32, 200 * 1024 * 1024]);
+    const root = store();
+    const paths = IDS.map((_, index) => image(root, index));
+    const source = paths.map((path) => `<attached-image path="${path}" />`).join("\n\n");
+
+    expect(extractTurnImages(source, { attachmentsDir: root }).images).toHaveLength(5);
   });
 
   it("does not admit a symlink carrying an attachment-shaped name", () => {

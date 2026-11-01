@@ -12,7 +12,7 @@
 //   send      a typed command reaches only the bot it names, verbatim, in a
 //             1:1 and in a group
 import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -125,6 +125,7 @@ async function start() {
       SAGAX_PERSPICAX_DIRECTORY_SECONDS: "5",
       SAGAX_ANTHROPIC_API_KEY: ORG_KEY,
       SAGAX_ORG_NAME: "Acme",
+      SAGAX_PERSONAL_MCP_ALLOW_PRIVATE: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -169,7 +170,16 @@ posixOnly("Perspicax organization: engine slash commands per speaker", () => {
     prompts = join(home, "prompts.jsonl");
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
-        claude: { driver: "claudeAgent", environment: { FAKE_CLAUDE_COMMANDS_LOG: probes, FAKE_CLAUDE_PROMPTS: prompts }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        claude: { driver: "claudeAgent", environment: {
+          FAKE_CLAUDE_COMMANDS_LOG: probes, FAKE_CLAUDE_PROMPTS: prompts,
+          FAKE_CLAUDE_DUMP: join(home, "discovery-prompt.json"),
+          FAKE_CLAUDE_MCP_DUMP: join(home, "discovery-tools.json"),
+          FAKE_CLAUDE_MCP_TEXT_LIMIT: "4000",
+          FAKE_CLAUDE_MCP_CALLS: JSON.stringify([
+            { server: "agents", tool: "skills_list", arguments: {}, when: "discovery fixture" },
+            { server: "agents", tool: "workspace_read", arguments: { path: "capability-skills/me/skills/packing-list/SKILL.md" }, when: "discovery fixture" },
+          ]),
+        }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
       },
     }));
     await start();
@@ -208,6 +218,73 @@ posixOnly("Perspicax organization: engine slash commands per speaker", () => {
     await idp?.close();
     if (home) removeTempDir(home);
   });
+
+  it("uses the room speaker's Me skills in the prompt, discovery and actual tool read", async () => {
+    const skill = (description: string, instructions: string) => `---\nname: packing-list\ndescription: ${description}\n---\n${instructions}\n`;
+    const aliceSkill = await api("POST", "/api/me/skills-library", people.alice, { text: skill("Alice packing", "ALICE_ONLY_INSTRUCTIONS") });
+    expect(aliceSkill.status, aliceSkill.text).toBe(201);
+    const bobSkill = await api("POST", "/api/me/skills-library", people.bob, { text: skill("Bob packing", "BOB_ONLY_INSTRUCTIONS") });
+    expect(bobSkill.status, bobSkill.text).toBe(201);
+    const replies = async () => ((await api("GET", `/api/threads/${room.threadId}/messages`, people.bob)).body.messages as Array<{ role: string; kind: string }>).filter((message) => message.role === "bot" && message.kind === "text");
+    const before = (await replies()).length;
+    const sent = await api("POST", `/api/groups/${room.id}/messages`, people.bob, { text: "@Yara discovery fixture" });
+    expect(sent.status, sent.text).toBe(202);
+    await waitFor(async () => (await replies()).length > before, 30_000);
+    const prompt = JSON.parse(readFileSync(join(home, "discovery-prompt.json"), "utf8")).systemPrompt as string;
+    expect(prompt).toContain("Bob packing");
+    expect(prompt).not.toContain("Alice packing");
+    const tools = JSON.parse(readFileSync(join(home, "discovery-tools.json"), "utf8")).calls as Array<{ tool: string; ok: boolean; text: string }>;
+    expect(tools.map((call) => [call.tool, call.ok])).toEqual([["skills_list", true], ["workspace_read", true]]);
+    expect(tools[0]!.text).toContain("Bob packing");
+    expect(tools[0]!.text).not.toContain("Alice packing");
+    expect(tools[1]!.text).toContain("BOB_ONLY_INSTRUCTIONS");
+    expect(tools[1]!.text).not.toContain("ALICE_ONLY_INSTRUCTIONS");
+  }, 60_000);
+
+  it("keeps each person's Me skills and MCP servers apart from the other person and from the installation store", async () => {
+    // Me skills: Bob sees and removes only his; Alice's stays whole.
+    const mine = await api("GET", "/api/me/skills-library", people.bob);
+    expect(mine.status, mine.text).toBe(200);
+    expect(mine.body.skills.map((skill: { name: string; description: string }) => [skill.name, skill.description])).toEqual([["packing-list", "Bob packing"]]);
+    const hers = await api("GET", "/api/me/skills-library", people.alice);
+    expect(hers.body.skills.map((skill: { name: string; description: string }) => [skill.name, skill.description])).toEqual([["packing-list", "Alice packing"]]);
+    const removed = await api("DELETE", "/api/me/skills-library/packing-list", people.bob);
+    expect(removed.status, removed.text).toBe(200);
+    expect((await api("GET", "/api/me/skills-library", people.bob)).body.skills).toEqual([]);
+    const still = await api("GET", "/api/me/skills-library/packing-list", people.alice);
+    expect(still.status, still.text).toBe(200);
+    expect(still.body.text).toContain("ALICE_ONLY_INSTRUCTIONS");
+    // the organization's library (installation store) never lists a Me skill
+    const org = await api("GET", "/api/skills-library", people.alice);
+    expect(org.status, org.text).toBe(200);
+    expect(org.text).not.toContain("packing-list");
+    const bobAgain = await api("POST", "/api/me/skills-library", people.bob, { text: "---\nname: packing-list\ndescription: Bob packing\n---\nBOB_ONLY_INSTRUCTIONS\n" });
+    expect(bobAgain.status, bobAgain.text).toBe(201);
+    // Personal MCP servers and their secret: the person's sealed store only.
+    const added = await api("POST", "/api/me/mcp/servers", people.alice, { name: "alice-tools", url: "http://127.0.0.1:9/mcp", token: "alice-secret-0001" });
+    expect(added.status, added.text).toBe(201);
+    expect(added.text).not.toContain("alice-secret-0001");
+    const bobServers = await api("GET", "/api/me/capabilities", people.bob);
+    expect(bobServers.status, bobServers.text).toBe(200);
+    expect(bobServers.text).not.toContain("alice-tools");
+    const aliceServers = await api("GET", "/api/me/capabilities", people.alice);
+    expect(aliceServers.text).toContain("alice-tools");
+    expect(aliceServers.text).not.toContain("alice-secret-0001");
+    const data = join(home, ".sagax");
+    expect(readFileSync(join(data, "config.json"), "utf8")).not.toContain("alice-tools");
+    const plaintextHits: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (entry.isFile()) {
+          try { if (readFileSync(path).includes("alice-secret-0001")) plaintextHits.push(path); } catch { /* vanished */ }
+        }
+      }
+    };
+    walk(data);
+    expect(plaintextHits).toEqual([]);
+  }, 60_000);
 
   it("lists each person's own subscription commands, cached apart; keys share the server's", async () => {
     const groupPath = (botId: string) => `/api/bots/${botId}/harness-commands?groupId=${room.id}&threadId=${room.threadId}`;

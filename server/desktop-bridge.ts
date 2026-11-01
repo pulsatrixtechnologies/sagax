@@ -85,7 +85,8 @@ export const desktopBridgeOperation = z.object({
   path: z.string().max(4096).optional(),
   content: z.string().max(1_500_000).optional(),
   encoding: z.enum(["utf8", "base64"]).optional(),
-  offset: z.number().int().min(0).max(100 * 1024 * 1024).optional(),
+  /** stage_file can carry the server's largest accepted video in chunks. */
+  offset: z.number().int().min(0).max(1024 * 1024 * 1024).optional(),
   max_bytes: z.number().int().min(1).max(1_000_000).optional(),
   command: z.string().max(100_000).optional(),
   cwd: z.string().max(4096).optional(),

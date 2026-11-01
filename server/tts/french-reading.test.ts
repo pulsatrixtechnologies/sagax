@@ -57,7 +57,8 @@ describe("French reading for the voice", () => {
     expect(looksFrench("C'est 25 $ pour le 1er mois.")).toBe(true);
     expect(looksFrench("Le billet est fermé demain")).toBe(true);
     expect(looksFrench("Dr Smith will see you at 2pm, it is 25 $.")).toBe(false);
-    expect(looksFrench("OK")).toBe(false);
+    // Short texts count as French (shared/looks-french.ts): they never break a French thread.
+    expect(looksFrench("OK")).toBe(true);
     expect(readsFrenchText("auto", "Votre rendez-vous est à 14h30.")).toBe(true);
     expect(readsFrenchText("auto", "Dr Smith will see you.")).toBe(false);
     expect(readsFrenchText("en", "Votre rendez-vous est à 14h30.")).toBe(false);

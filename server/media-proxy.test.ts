@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   initMediaProxy,
+  MAX_MEDIA_PROXY_BYTES,
+  mediaProxyPath,
   mintMediaProxyToken,
   needsMediaProxy,
   rewriteHlsPlaylist,
@@ -111,9 +113,13 @@ describe("streamProxiedMedia over HLS", () => {
   let upstreamBase = "";
   let proxyBase = "";
   const seen: Array<{ path: string; range?: string }> = [];
+  let endlessClosed = false;
+  let slowClosed = false;
 
   beforeEach(async () => {
     seen.length = 0;
+    endlessClosed = false;
+    slowClosed = false;
     upstream = createServer((req, res) => {
       seen.push({ path: req.url ?? "", range: req.headers.range });
       if (req.url?.startsWith("/hls/index.m3u8")) {
@@ -132,6 +138,41 @@ describe("streamProxiedMedia over HLS", () => {
         res.end(Buffer.from([0x47, 1, 2, 3]));
         return;
       }
+      if (req.url === "/video.mp4") {
+        const total = 1024 * 1024 * 1024;
+        const match = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range ?? "");
+        if (!match || Number(match[1]) >= total) {
+          res.writeHead(416, { "content-range": `bytes */${total}`, "accept-ranges": "bytes" });
+          res.end();
+          return;
+        }
+        const start = Number(match[1]);
+        const end = Math.min(total - 1, match[2] ? Number(match[2]) : start + 31);
+        const bytes = Buffer.from(Array.from({ length: end - start + 1 }, (_, index) => (start + index) % 251));
+        res.writeHead(206, {
+          "content-type": "video/mp4",
+          "content-length": String(bytes.length),
+          "content-range": `bytes ${start}-${end}/${total}`,
+          "accept-ranges": "bytes",
+        });
+        res.end(bytes);
+        return;
+      }
+      if (req.url === "/oversized.mp4") {
+        res.writeHead(200, { "content-type": "video/mp4", "content-length": String(MAX_MEDIA_PROXY_BYTES + 1) });
+        res.write("x");
+        return;
+      }
+      if (req.url === "/endless.mp4") {
+        res.writeHead(200, { "content-type": "video/mp4", "accept-ranges": "bytes" });
+        const timer = setInterval(() => res.write(Buffer.alloc(64 * 1024, 0x44)), 2);
+        res.on("close", () => { clearInterval(timer); endlessClosed = true; });
+        return;
+      }
+      if (req.url === "/slow.mp4") {
+        res.on("close", () => { slowClosed = true; });
+        return;
+      }
       res.writeHead(404);
       res.end();
     });
@@ -146,7 +187,14 @@ describe("streamProxiedMedia over HLS", () => {
         res.end();
         return;
       }
-      void streamProxiedMedia(body.u, res, req.headers.range, { threadId: body.t, policy: LAB });
+      void streamProxiedMedia(body.u, res, req.headers.range, {
+        threadId: body.t,
+        policy: LAB,
+        ...(body.u.endsWith("/slow.mp4") ? { headerTimeoutMs: 30 } : {}),
+      }).catch(() => {
+        if (!res.headersSent) res.writeHead(502, { "content-type": "text/plain" });
+        if (!res.writableEnded) res.end();
+      });
     });
     await new Promise<void>((r) => proxy.listen(0, "127.0.0.1", r));
     proxyBase = `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`;
@@ -183,5 +231,49 @@ describe("streamProxiedMedia over HLS", () => {
     const res = await fetch(`${proxyBase}/api/media/proxy/${mintMediaProxyToken(`${upstreamBase}/hls/play`, "t")}`);
     expect(res.headers.get("content-type")).toBe("application/vnd.apple.mpegurl");
     expect(await res.text()).toMatch(/^#EXTM3U\n#EXTINF:4.0,\n\/api\/media\/proxy\//);
+  });
+
+  it("forwards a 1 GiB video's byte range and preserves seek headers", async () => {
+    const path = mediaProxyPath(mintMediaProxyToken(`${upstreamBase}/video.mp4`, "t"));
+    const start = 1024 * 1024 * 1024 - 16;
+    const response = await fetch(proxyBase + path, { headers: { range: `bytes=${start}-` } });
+    expect(response.status).toBe(206);
+    expect(response.headers.get("accept-ranges")).toBe("bytes");
+    expect(response.headers.get("content-range")).toBe(`bytes ${start}-${start + 15}/${1024 * 1024 * 1024}`);
+    expect(response.headers.get("content-length")).toBe("16");
+    expect(response.headers.get("cache-control")).toBe("private, no-transform");
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(Buffer.from(Array.from({ length: 16 }, (_, index) => (start + index) % 251)));
+    expect(seen.at(-1)).toEqual({ path: "/video.mp4", range: `bytes=${start}-` });
+  });
+
+  it("preserves an upstream 416 so a player learns the media size", async () => {
+    const path = mediaProxyPath(mintMediaProxyToken(`${upstreamBase}/video.mp4`, "t"));
+    const response = await fetch(proxyBase + path, { headers: { range: `bytes=${1024 * 1024 * 1024}-` } });
+    expect(response.status).toBe(416);
+    expect(response.headers.get("content-range")).toBe(`bytes */${1024 * 1024 * 1024}`);
+    expect(response.headers.get("accept-ranges")).toBe("bytes");
+  });
+
+  it("rejects an oversized declared response before streaming its body", async () => {
+    const path = mediaProxyPath(mintMediaProxyToken(`${upstreamBase}/oversized.mp4`, "t"));
+    const response = await fetch(proxyBase + path);
+    expect(response.status).toBe(502);
+    expect(await response.text()).toBe("");
+  });
+
+  it("stops the upstream body when the player cancels", async () => {
+    const path = mediaProxyPath(mintMediaProxyToken(`${upstreamBase}/endless.mp4`, "t"));
+    const response = await fetch(proxyBase + path);
+    const reader = response.body!.getReader();
+    expect((await reader.read()).value?.byteLength).toBeGreaterThan(0);
+    await reader.cancel();
+    await expect.poll(() => endlessClosed, { timeout: 5_000 }).toBe(true);
+  });
+
+  it("times out an upstream that never sends headers and closes its socket", async () => {
+    const path = mediaProxyPath(mintMediaProxyToken(`${upstreamBase}/slow.mp4`, "t"));
+    const response = await fetch(proxyBase + path);
+    expect(response.status).toBe(502);
+    await expect.poll(() => slowClosed, { timeout: 5_000 }).toBe(true);
   });
 });

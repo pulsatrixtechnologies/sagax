@@ -13,6 +13,7 @@ import {
   pasteSummary,
   type Attachment,
   type PasteAttachment,
+  type FileAttachment,
 } from "@/lib/composer-attachments";
 import { AttachmentPreviewDialog, previewImage, type PreviewImage } from "./AttachmentPreview";
 import { ArchiveContents } from "./ArchiveContents";
@@ -36,6 +37,8 @@ export function ComposerAttachments({
   onNotice,
   onPendingChange,
   uploadImage,
+  uploadFile,
+  onRetry,
 }: {
   items: Attachment[];
   onAdd: (attachments: Attachment[]) => void;
@@ -47,14 +50,16 @@ export function ComposerAttachments({
   onNotice: (notice: string | null) => void;
   onPendingChange?: (pending: boolean) => void;
   uploadImage: (file: File) => Promise<Attachment | null>;
+  uploadFile?: (file: File) => Promise<FileAttachment | null | "handled">;
+  onRetry?: (id: string) => void;
 }) {
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview] = useState<PreviewImage | null>(null);
   // dragenter/dragleave fire once per element crossed, so the overlay
   // tracks depth rather than the last event it happened to see
   const depth = useRef(0);
-  const callbacks = useRef({ onAdd, onNotice, onPendingChange, allowImages, uploadImage });
-  callbacks.current = { onAdd, onNotice, onPendingChange, allowImages, uploadImage };
+  const callbacks = useRef({ onAdd, onNotice, onPendingChange, allowImages, uploadImage, uploadFile });
+  callbacks.current = { onAdd, onNotice, onPendingChange, allowImages, uploadImage, uploadFile };
   const pendingDrops = useRef(new Set<symbol>());
 
   useEffect(() => {
@@ -93,6 +98,7 @@ export function ComposerAttachments({
           allowImages: callbacks.current.allowImages,
           getPath: pathForFile,
           uploadImage: callbacks.current.uploadImage,
+          uploadFile: callbacks.current.uploadFile,
         });
         if (attachments.length) callbacks.current.onAdd(attachments);
         if (message) callbacks.current.onNotice(message);
@@ -199,8 +205,9 @@ export function ComposerAttachments({
                   )}
                 </button>
                 <div className="mt-1 truncate text-[10.5px] text-ink-tertiary">
-                  {a.uploading ? "Uploading…" : formatSize(a.size)}
+                  {a.uploading ? t("composer.upload.progress", { percent: a.uploadProgress ?? 0 }) : a.uploadError ? t("composer.upload.failed") : formatSize(a.size)}
                 </div>
+                <UploadState attachment={a} onRetry={onRetry} />
               </Chip>
             ) : a.archive ? (
               <Chip key={a.id} label="ARCHIVE" title={a.name} onRemove={() => onRemove(a.id)}>
@@ -221,7 +228,8 @@ export function ComposerAttachments({
                   <FileIcon size={16} className="shrink-0 text-ink-secondary" />
                   <div className="min-w-0">
                     <div className="truncate text-[12px] text-ink">{a.name}</div>
-                    <div className="text-[10.5px] text-ink-tertiary">{formatSize(a.size)}</div>
+                    <div className="text-[10.5px] text-ink-tertiary">{a.uploading ? t("composer.upload.progress", { percent: a.uploadProgress ?? 0 }) : formatSize(a.size)}</div>
+                    <UploadState attachment={a} onRetry={onRetry} />
                   </div>
                 </div>
               </Chip>
@@ -232,6 +240,15 @@ export function ComposerAttachments({
       {preview && <AttachmentPreviewDialog image={preview} onClose={() => setPreview(null)} />}
     </>
   );
+}
+
+function UploadState({ attachment, onRetry }: { attachment: FileAttachment | Extract<Attachment, { kind: "image" }>; onRetry?: (id: string) => void }) {
+  if (attachment.uploading) return <progress className="mt-1 h-1 w-full accent-accent" max={100} value={attachment.uploadProgress ?? 0} aria-label={t("composer.upload.progress", { percent: attachment.uploadProgress ?? 0 })} />;
+  if (!attachment.uploadError) return null;
+  return <div className="mt-1 text-[10.5px] text-ink-secondary" role="status">
+    <span className="line-clamp-2" title={attachment.uploadError}>{attachment.uploadError}</span>
+    <button type="button" className="mt-1 rounded px-1 py-1 text-accent-text underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60" onClick={() => onRetry?.(attachment.id)}>{t("composer.upload.retry")}</button>
+  </div>;
 }
 
 function Chip({

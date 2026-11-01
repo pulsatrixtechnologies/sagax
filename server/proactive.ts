@@ -1,21 +1,18 @@
 // The server-side enforcement of a bot's proactive mode (shared/proactive-mode.ts).
 //
-// This is where the mechanism adapted from OpenMausBot's proactive routines
-// (#3314) is bound to our approval model. Upstream let a workspace "Chief"
-// watch the day through one default routine; we keep only the mechanism — a
-// bot notices a read-only condition and then initiates a step — and gate every
-// step here, per bot, with no Chief and no global watch.
+// A bot notices a read-only condition and then initiates a step. Every step
+// is gated here, per bot: reads may run; writes record a dry run and then
+// follow the bot's ordinary approval level and rules (Ask / Auto / Full,
+// org Ask/Deny, standing rules). The proactive layer never adds an extra
+// approval card of its own.
 //
 // Two jobs:
 //  1. Classify a step read vs write on the server, from the real tool or
 //     command, never from a flag a caller sent. Anything not plainly read-only
-//     is a write, so the unknown always cards.
-//  2. Decide the step from the bot's STORED mode. A write never executes from
-//     the proactive layer itself: read-auto always cards it (with a dry run),
-//     follow-rules hands it to the bot's ordinary approval path (which cards it
-//     unless a standing rule the person set already covers it), and propose
-//     offers everything through a proposal card. Only a read ever runs on its
-//     own (#875: a read opens no card).
+//     is a write.
+//  2. Decide the step from the bot's STORED mode. Off blocks. Proactive
+//     runs a read; a write gets a dry run recorded then defers to the
+//     ordinary approval path.
 //
 // The loop is bounded by ProactiveBudget: a minimum interval between cycles and
 // a cap on initiations per rolling window, per bot, so a bot cannot run away.
@@ -109,9 +106,8 @@ export function classifyProactiveActionKind(action: ProactiveActionInput): Proac
 export interface ProactiveDecisionInput {
   /** The stored bot; only its proactiveMode is read here. */
   bot: { proactiveMode?: unknown };
-  /** 2026-10-28: the level the turn runs at (approvalModeForTurn). At
-   * Full access a "read-auto" write takes the ordinary approval path
-   * (proactiveGate), and `coveredByRules` then answers for that path. */
+  /** The level the turn runs at (approvalModeForTurn). Passed through for
+   * callers; the gate always defers writes to that ordinary path. */
   approvalLevel?: string;
   action: ProactiveActionInput & {
     /** The full request the bot prepared, forwarded unchanged when a step
@@ -119,7 +115,8 @@ export interface ProactiveDecisionInput {
     request?: unknown;
   };
   /** The bot's ordinary approval path: does a standing rule the person set
-   * already cover this exact step? Only consulted for a deferred write. */
+   * already cover this exact step? Kept for callers that still consult it;
+   * a deferred write always executes through that path (dry run recorded). */
   coveredByRules: () => boolean;
 }
 
@@ -128,16 +125,12 @@ export interface ProactiveDecision {
   mayObserve: boolean;
   disposition: ProactiveDisposition;
   kind: ProactiveActionKind;
-  /** Run the step now with no card. True only for a read, or a deferred write
-   * a standing rule already covers (same as a normal action). */
+  /** Run the step now through the ordinary path (reads, or writes after
+   * their dry run is recorded). Never an extra proactive-layer card. */
   execute: boolean;
-  /** Open our approval card before executing. */
-  card: boolean;
-  /** Offer the step through a proposal card; execute nothing until a yes. */
-  propose: boolean;
-  /** A carded or proposed write is previewed as a dry run first. */
+  /** A write is previewed as a dry run first (recorded on the wake). */
   dryRun: boolean;
-  /** The request forwarded to the executor or the card, unchanged. */
+  /** The request forwarded to the executor, unchanged. */
   forwardedRequest: unknown;
 }
 
@@ -152,8 +145,6 @@ export function decideProactiveStep(input: ProactiveDecisionInput): ProactiveDec
     disposition,
     kind,
     execute: false,
-    card: false,
-    propose: false,
     dryRun: false,
     forwardedRequest: input.action.request,
   } satisfies ProactiveDecision;
@@ -161,22 +152,28 @@ export function decideProactiveStep(input: ProactiveDecisionInput): ProactiveDec
   switch (disposition) {
     case "blocked":
       return base;
-    case "propose":
-      // Everything is offered; nothing runs. A write is previewed as a dry run.
-      return { ...base, propose: true, dryRun: kind === "write" };
     case "auto":
       // Reads only ever reach here.
       return { ...base, execute: true };
-    case "card":
-      return { ...base, card: true, dryRun: true };
-    case "defer": {
-      // A write handed to the ordinary approval path: it runs only if the
-      // person's own standing rule covers it, otherwise it cards with a dry
-      // run. The request is forwarded whole (never an emptied scope: #938).
-      const covered = input.coveredByRules();
-      return covered ? { ...base, execute: true } : { ...base, card: true, dryRun: true };
-    }
+    case "defer":
+      // A write: record a dry run, then hand the whole request to the
+      // ordinary approval path (no extra card from this layer). coveredByRules
+      // is consulted by that path, not here.
+      void input.coveredByRules;
+      return { ...base, execute: true, dryRun: true };
   }
+}
+
+/** A short dry-run line for the wake report: what the write would do. */
+export function proactiveDryRunSummary(action: ProactiveActionInput): string {
+  const tool = typeof action.tool === "string" ? action.tool.trim() : "";
+  const command = typeof action.command === "string" ? action.command.trim() : "";
+  if (!tool) return "write action (unclassified)";
+  if (command) {
+    const short = command.length > 120 ? `${command.slice(0, 117)}...` : command;
+    return `${tool}: ${short}`;
+  }
+  return tool;
 }
 
 export interface ProactiveBudgetOptions {
@@ -245,6 +242,8 @@ export interface ProactiveEngineDeps {
   bot(botId: string): { proactiveMode?: unknown } | undefined;
   /** The bot's ordinary approval path (see decideProactiveStep). */
   coveredByRules(botId: string, action: ProactiveActionInput): boolean;
+  /** Optional: the turn's approval level, for decideProactiveStep. */
+  approvalLevel?(botId: string): string | undefined;
   budget?: ProactiveBudget;
 }
 
@@ -258,11 +257,10 @@ export interface ProactiveConsideration {
   decision: ProactiveDecision;
 }
 
-/** The drop-in a future observe loop or a trigger handler calls for one bot
- * and one candidate step. It gates the step through the per-bot mode and keeps
- * the loop bounded, so nothing here can run away or weaken the approval model.
- * It is deliberately NOT a Chief: it holds no roster and watches no workspace,
- * it only answers, per bot, "may this one step start, and how". */
+/** The drop-in an observe loop or a wake's tool step calls for one bot and
+ * one candidate step. It gates the step through the per-bot mode and keeps
+ * the loop bounded. It holds no roster and watches no workspace; it only
+ * answers, per bot, "may this one step start, and how". */
 export class ProactiveEngine {
   private readonly deps: ProactiveEngineDeps;
   private readonly budget: ProactiveBudget;
@@ -280,7 +278,13 @@ export class ProactiveEngine {
       decision: decideProactiveStep({ bot: bot ?? {}, action, coveredByRules: () => false }),
     });
     if (!bot) return blocked("gone");
-    const decision = decideProactiveStep({ bot, action, coveredByRules: () => this.deps.coveredByRules(botId, action) });
+    const approvalLevel = this.deps.approvalLevel?.(botId);
+    const decision = decideProactiveStep({
+      bot,
+      action,
+      coveredByRules: () => this.deps.coveredByRules(botId, action),
+      ...(approvalLevel ? { approvalLevel } : {}),
+    });
     // Off costs nothing: it never touches the budget.
     if (decision.disposition === "blocked") return { acted: false, reason: "off", decision };
     if (!this.budget.mayCycle(botId)) return { acted: false, reason: "cadence", decision };
@@ -288,6 +292,18 @@ export class ProactiveEngine {
     this.budget.noteCycle(botId);
     this.budget.noteInitiate(botId);
     return { acted: true, decision };
+  }
+
+  /** Decide one step during an already-started wake (no budget spend). */
+  decideStep(botId: string, action: ProactiveDecisionInput["action"]): ProactiveDecision {
+    const bot = this.deps.bot(botId) ?? {};
+    const approvalLevel = this.deps.approvalLevel?.(botId);
+    return decideProactiveStep({
+      bot,
+      action,
+      coveredByRules: () => this.deps.coveredByRules(botId, action),
+      ...(approvalLevel ? { approvalLevel } : {}),
+    });
   }
 
   forget(botId: string): void {

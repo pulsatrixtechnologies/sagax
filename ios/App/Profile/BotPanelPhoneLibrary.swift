@@ -2,8 +2,10 @@
 // (`bot-settings/LibraryTab.tsx`): the bot's files only, no sub-tabs. Skills
 // live on the Personas page; the bot's Claude Code plugins open from a link
 // under the files where the pairing forwards them
-// (`BotLibraryView.pluginsLink`, CompanionCore), and the bot's capabilities
-// (its resolved list, `PhoneBotCapabilities` below) from a link beside them.
+// (`BotLibraryView.pluginsLink`, CompanionCore). The bot's resolved
+// capabilities list (`PhoneBotCapabilities` below) lives inside that Plugins
+// sheet (Installed), not as its own Library button: the bot panel stays
+// Details, Library and Computer (JC, 2026-11-01).
 import CompanionCore
 import SwiftUI
 
@@ -17,7 +19,6 @@ struct PhoneBotLibrary: View {
 
     @State private var view: BotLibraryView = .files
     @State private var showingPlugins = false
-    @State private var showingCapabilities = false
 
     private var views: [BotLibraryView] { BotLibraryView.visible(gate: session.surfaceGate) }
 
@@ -31,17 +32,7 @@ struct PhoneBotLibrary: View {
             case .skills: AnyView(PhoneLibrarySkills(bot: bot))
             case .plugins: AnyView(PhoneBotPlugins(bot: bot))
             }
-            if BotCapabilityRules.reachable(gate: session.surfaceGate) {
-                Button { showingCapabilities = true } label: {
-                    Label("Capabilities", systemImage: "square.stack.3d.up")
-                        .font(Theme.Profile.labelFont)
-                        .foregroundStyle(Theme.textSecondary)
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, Theme.Profile.cardMargin)
-                .accessibilityIdentifier("library-open-capabilities")
-            }
-            if BotLibraryView.pluginsLink(gate: session.surfaceGate) {
+            if BotLibraryView.pluginsLink(gate: session.surfaceGate) || BotCapabilityRules.reachable(gate: session.surfaceGate) {
                 Button { showingPlugins = true } label: {
                     Label("Plugins", systemImage: "puzzlepiece.extension")
                         .font(Theme.Profile.labelFont)
@@ -54,9 +45,6 @@ struct PhoneBotLibrary: View {
         }
         .sheet(isPresented: $showingPlugins) {
             NavigationStack { ScrollView { PhoneBotPlugins(bot: bot).padding(.vertical, 16) }.navigationTitle(Text("Plugins")) }
-        }
-        .sheet(isPresented: $showingCapabilities) {
-            NavigationStack { ScrollView { PhoneBotCapabilities(bot: bot).id(bot.id).padding(.vertical, 16) }.navigationTitle(Text("Capabilities")) }
         }
     }
 
@@ -141,83 +129,95 @@ struct PhoneBotPlugins: View {
 
     private var canChange: Bool { listing?.canChange == true }
 
+    private var showsPlugins: Bool { BotLibraryView.pluginsLink(gate: session.surfaceGate) }
+
     var body: some View {
         VStack(spacing: 0) {
-            if let listing {
-                if !listing.loadsPlugins {
-                    ProfileFooter(text: "This bot's engine does not load Claude Code plugins.")
-                        .padding(.bottom, 12)
-                }
-                ProfileSectionLabel(text: "Installed")
-                ProfileCard {
-                    if listing.plugins.isEmpty {
-                        quiet(Text("No plugins on this bot yet."))
-                    }
-                    ForEach(Array(listing.plugins.enumerated()), id: \.element.id) { index, plugin in
-                        if index > 0 { ProfileDivider(leading: Theme.Profile.textInset) }
-                        installedRow(plugin)
-                    }
-                }
-                ForEach(listing.marketplaces) { market in
-                    ProfileSectionLabel(text: LocalizedStringKey(market.name))
-                        .padding(.top, Theme.Profile.cardGap + 4)
-                    ProfileCard {
-                        ForEach(Array(market.plugins.enumerated()), id: \.element.id) { index, plugin in
-                            if index > 0 { ProfileDivider(leading: Theme.Profile.textInset) }
-                            marketRow(market, plugin)
-                        }
-                        if market.plugins.isEmpty { quiet(Text("This marketplace lists no plugins.")) }
-                        if canChange {
-                            ProfileDivider(leading: Theme.Profile.textInset)
-                            Button(role: .destructive) {
-                                run("market:\(market.name)") { client in try await client.removeBotPluginMarketplace(botId: bot.id, name: market.name) }
-                            } label: {
-                                Text("Remove marketplace")
-                                    .font(Theme.Font.body)
-                                    .foregroundStyle(Theme.destructiveMenu)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.leading, Theme.Profile.textInset)
-                                    .frame(height: Theme.Profile.row)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(busy != nil)
-                        }
-                    }
-                }
-                if canChange {
-                    ProfileSectionLabel(text: "Add a marketplace")
-                        .padding(.top, Theme.Profile.cardGap + 4)
-                    ProfileCard {
-                        HStack(spacing: 8) {
-                            TextField(String(localized: "owner/repo, https://github.com/…"), text: $source)
-                                .font(Theme.Font.body)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .accessibilityIdentifier("plugins-source")
-                            Button(String(localized: "Add")) {
-                                let text = source.trimmingCharacters(in: .whitespacesAndNewlines)
-                                run("add") { client in
-                                    let next = try await client.addBotPluginMarketplace(botId: bot.id, source: text)
-                                    source = ""
-                                    return next
-                                }
-                            }
-                            .disabled(busy != nil || source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-                        .padding(.horizontal, Theme.Profile.textInset)
-                        .frame(minHeight: Theme.Profile.row)
-                    }
-                }
-            } else if let problem {
-                ProfileCard { quiet(Text(verbatim: problem)) }
-            } else {
-                ProgressView().frame(maxWidth: .infinity).padding(30)
+            // Resolved list for this bot (Plugins > Installed on the web).
+            if BotCapabilityRules.reachable(gate: session.surfaceGate) {
+                PhoneBotCapabilities(bot: bot).id(bot.id)
+                    .padding(.bottom, Theme.Profile.cardGap)
             }
-            if let problem, listing != nil {
-                ProfileFooter(text: LocalizedStringKey(problem))
+            if showsPlugins {
+                if let listing {
+                    if !listing.loadsPlugins {
+                        ProfileFooter(text: "This bot's engine does not load Claude Code plugins.")
+                            .padding(.bottom, 12)
+                    }
+                    ProfileSectionLabel(text: "Installed")
+                    ProfileCard {
+                        if listing.plugins.isEmpty {
+                            quiet(Text("No plugins on this bot yet."))
+                        }
+                        ForEach(Array(listing.plugins.enumerated()), id: \.element.id) { index, plugin in
+                            if index > 0 { ProfileDivider(leading: Theme.Profile.textInset) }
+                            installedRow(plugin)
+                        }
+                    }
+                    ForEach(listing.marketplaces) { market in
+                        ProfileSectionLabel(text: LocalizedStringKey(market.name))
+                            .padding(.top, Theme.Profile.cardGap + 4)
+                        ProfileCard {
+                            ForEach(Array(market.plugins.enumerated()), id: \.element.id) { index, plugin in
+                                if index > 0 { ProfileDivider(leading: Theme.Profile.textInset) }
+                                marketRow(market, plugin)
+                            }
+                            if market.plugins.isEmpty { quiet(Text("This marketplace lists no plugins.")) }
+                            if canChange {
+                                ProfileDivider(leading: Theme.Profile.textInset)
+                                Button(role: .destructive) {
+                                    run("market:\(market.name)") { client in try await client.removeBotPluginMarketplace(botId: bot.id, name: market.name) }
+                                } label: {
+                                    Text("Remove marketplace")
+                                        .font(Theme.Font.body)
+                                        .foregroundStyle(Theme.destructiveMenu)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.leading, Theme.Profile.textInset)
+                                        .frame(height: Theme.Profile.row)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(busy != nil)
+                            }
+                        }
+                    }
+                    if canChange {
+                        ProfileSectionLabel(text: "Add a marketplace")
+                            .padding(.top, Theme.Profile.cardGap + 4)
+                        ProfileCard {
+                            HStack(spacing: 8) {
+                                TextField(String(localized: "owner/repo, https://github.com/…"), text: $source)
+                                    .font(Theme.Font.body)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .accessibilityIdentifier("plugins-source")
+                                Button(String(localized: "Add")) {
+                                    let text = source.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    run("add") { client in
+                                        let next = try await client.addBotPluginMarketplace(botId: bot.id, source: text)
+                                        source = ""
+                                        return next
+                                    }
+                                }
+                                .disabled(busy != nil || source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
+                            .padding(.horizontal, Theme.Profile.textInset)
+                            .frame(minHeight: Theme.Profile.row)
+                        }
+                    }
+                } else if let problem {
+                    ProfileCard { quiet(Text(verbatim: problem)) }
+                } else {
+                    ProgressView().frame(maxWidth: .infinity).padding(30)
+                }
+                if let problem, listing != nil {
+                    ProfileFooter(text: LocalizedStringKey(problem))
+                }
             }
         }
-        .task(id: bot.id) { await load() }
+        .task(id: bot.id) {
+            guard showsPlugins else { return }
+            await load()
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("library-plugins")
     }
@@ -344,7 +344,7 @@ struct PhoneBotCapabilities: View {
                     receiptLine("Not served", receipt.notServed)
                 }
                 if let index = list.promptIndex, index.cuts {
-                    ProfileFooter(text: "The skills index is full: \(index.omitted) skills left out of the prompt.")
+                    ProfileFooter(text: index.incomplete ? "Plugin discovery is partial. Additional references may exist in enabled plugin folders." : "Prompt budgets omit \(index.omitted) whole instruction files.")
                 }
                 ProfileSectionLabel(text: "Capabilities")
                     .padding(.top, Theme.Profile.cardGap + 4)
@@ -406,6 +406,23 @@ struct PhoneBotCapabilities: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: name).font(Theme.Font.body).foregroundStyle(Theme.textPrimary).lineLimit(1)
                 CapabilityText.detail(item).font(Theme.Profile.labelFont).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                if let index = item.promptIndex {
+                    Text("Prompt: \(index.skills)/\(index.maxSkills) files, \(index.bytes)/\(index.maxBytes) bytes; \(index.omitted) omitted")
+                        .font(Theme.Profile.labelFont).foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let pack = item.sourcePack, let label = item.signedPackLabel {
+                    HStack(spacing: 6) {
+                        Text(verbatim: label).font(Theme.Profile.labelFont).foregroundStyle(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button { PlatformBridge.copyToPasteboard(pack) } label: {
+                            Image(systemName: "doc.on.doc").font(Theme.Profile.labelFont)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Theme.textSecondary)
+                        .accessibilityLabel("Copy the pack digest")
+                    }
+                }
                 (Text(CapabilityText.state(item.state))
                  + (CapabilityText.reason(item.reason).map { Text(verbatim: " · ") + Text($0) } ?? Text(verbatim: "")))
                     .font(Theme.Profile.labelFont)

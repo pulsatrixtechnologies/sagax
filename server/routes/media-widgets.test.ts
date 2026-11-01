@@ -44,6 +44,12 @@ describe("media proxy route without a session", () => {
         res.end("SEGMENT");
         return;
       }
+      if (req.url === "/broken.mp4") {
+        res.writeHead(200, { "content-type": "video/mp4" });
+        res.write("PARTIAL");
+        setTimeout(() => res.destroy(), 10);
+        return;
+      }
       res.writeHead(404);
       res.end();
     });
@@ -136,6 +142,13 @@ describe("media proxy route without a session", () => {
     const logged = spies.flatMap((spy) => spy.mock.calls.flat().map(String)).join("\n");
     expect(logged).not.toContain(token.split(".")[1]);
     expect(logged).not.toContain(upstreamUrl);
+  });
+
+  it("breaks a started response when upstream truncates it", async () => {
+    const path = mediaProxyPath(mintMediaProxyToken(`${upstreamUrl}/broken.mp4`, "thread-1"));
+    const response = await fetch(appUrl + path);
+    expect(response.status).toBe(200);
+    await expect(response.arrayBuffer()).rejects.toThrow();
   });
 });
 

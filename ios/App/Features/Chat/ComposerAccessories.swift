@@ -193,9 +193,15 @@ extension ChatView {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(attachments) { attachment in
-                        PendingAttachmentChip(attachment: attachment) {
-                            guard !preparingAttachments, !sendingMessage else { return }
+                        PendingAttachmentChip(attachment: attachment, uploadState: session.attachmentUploadState(attachment.id), retry: {
+                            session.startAttachmentUpload(attachment, retry: true)
+                        }) {
+                            guard !sendingMessage else { return }
+                            session.removeAttachmentUpload(attachment)
                             attachments.removeAll { $0.id == attachment.id }
+                            for failure in power.failedSends(threadId) where failure.attachments.contains(where: { $0.id == attachment.id }) {
+                                power.forget(failure)
+                            }
                             attachmentError = nil
                         }
                     }

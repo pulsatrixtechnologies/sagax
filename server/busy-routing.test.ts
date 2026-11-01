@@ -86,12 +86,17 @@ describe("classifyWithoutSteer (the engine cannot take the words live)", () => {
     expect(asked).toBe(0);
   });
 
-  it("falls back to parallel on no model, a failure, a timeout or a word it cannot read", async () => {
-    expect(await classifyWithoutSteer({ text: "Draft the onboarding email", running: "x" })).toEqual({ mode: "parallel", by: "default" });
-    expect(await classifyWithoutSteer({ text: "Draft the onboarding email", running: "x", generateText: async () => { throw new Error("down"); } })).toEqual({ mode: "parallel", by: "default" });
-    expect(await classifyWithoutSteer({ text: "Draft the onboarding email", running: "x", generateText: async () => "maybe" })).toEqual({ mode: "parallel", by: "default" });
+  // 2026-11-01 (reported: replies repeated, handled late): with no decision from
+  // the bot (an engine without a one-shot model, such as Grok over ACP, or
+  // one that failed), the guess was a parallel task, a second session that
+  // answered beside the running turn. The words now join the running work's
+  // one follow-up turn, which the safe-point pause starts at once.
+  it("falls back to the running work's follow-up on no model, a failure, a timeout or a word it cannot read", async () => {
+    expect(await classifyWithoutSteer({ text: "Draft the onboarding email", running: "x" })).toEqual({ mode: "after", by: "default" });
+    expect(await classifyWithoutSteer({ text: "Draft the onboarding email", running: "x", generateText: async () => { throw new Error("down"); } })).toEqual({ mode: "after", by: "default" });
+    expect(await classifyWithoutSteer({ text: "Draft the onboarding email", running: "x", generateText: async () => "maybe" })).toEqual({ mode: "after", by: "default" });
     const started = Date.now();
-    expect(await classifyWithoutSteer({ text: "Draft the onboarding email", running: "x", timeoutMs: 50, generateText: () => new Promise(() => {}) })).toEqual({ mode: "parallel", by: "default" });
+    expect(await classifyWithoutSteer({ text: "Draft the onboarding email", running: "x", timeoutMs: 50, generateText: () => new Promise(() => {}) })).toEqual({ mode: "after", by: "default" });
     expect(Date.now() - started).toBeLessThan(2_000);
     expect(parseBusyClassification("parallel")).toBe("parallel");
     expect(parseBusyClassification("I would say steer")).toBeNull();

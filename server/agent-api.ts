@@ -110,6 +110,19 @@ export function agentPromptWithFiles(prompt: string, staged: readonly string[], 
 export const TIMEOUT_MS_MIN = 1_000;
 export const TIMEOUT_MS_MAX = 600_000;
 export const TIMEOUT_MS_DEFAULT = 120_000;
+/**
+ * await_turn waits: engines and relays often cut a tool call at ~60 s.
+ * Return a structured still_working result under that ceiling so the caller
+ * can resume with the same handle (and wait_cursor) instead of an error.
+ * Pattern matches PHONE_TOOL_CALL_WAIT_MS in shared/phone-tools.ts.
+ */
+export const AWAIT_TIMEOUT_MS_MIN = 0;
+export const AWAIT_TIMEOUT_MS_DEFAULT = 45_000;
+export const AWAIT_TIMEOUT_MS_MAX = 55_000;
+/** Suggested timeout_ms on the next await_turn when the turn is still going. */
+export const AWAIT_RECOMMENDED_WAIT_MS = 45_000;
+/** How many recent steps a still_working answer carries. */
+export const AWAIT_STEPS_MAX = 32;
 export const PAGE_LIMIT_MAX = 200;
 export const PAGE_LIMIT_DEFAULT = 20;
 export const COLD_PAGE_SIZE = 50;
@@ -133,6 +146,12 @@ export const HANDLE_TTL_MS = 7 * 24 * 3_600_000;
 const POLL_MS = 400;
 /** Idle looks in a row that end a wait with no words (a turn that said nothing or failed). */
 const IDLE_LOOKS_DONE = 3;
+/** Refusal codes a caller can usefully retry (same args or after a short wait). */
+const RETRYABLE_REFUSAL_CODES = new Set([
+  "busy",
+  "rate_limited",
+  "server_error",
+]);
 
 export type SendMode = "fire_and_forget" | "blocking" | "async";
 export type OnBusy = "supersede" | "reject" | "queue";
@@ -249,7 +268,18 @@ export interface Refusal {
 export const isRefusal = (value: unknown): value is Refusal =>
   Boolean(value) && typeof value === "object" && typeof (value as Refusal).code === "string" && typeof (value as Refusal).status === "number" && typeof (value as Refusal).message === "string";
 
-export const refuse = (status: number, code: string, message: string, extra?: Record<string, unknown>): Refusal => ({ status, code, message, ...(extra ? { extra } : {}) });
+/** Whether a refusal's code is worth retrying (busy, rate limit, transient). */
+export const isRetryableRefusal = (code: string): boolean => RETRYABLE_REFUSAL_CODES.has(code);
+
+export const refuse = (status: number, code: string, message: string, extra?: Record<string, unknown>): Refusal => {
+  const retryable = typeof extra?.retryable === "boolean" ? extra.retryable : isRetryableRefusal(code);
+  return {
+    status,
+    code,
+    message,
+    extra: { ...extra, retryable },
+  };
+};
 
 export interface AuditEntry {
   tool: AgentToolName | string;
@@ -301,14 +331,34 @@ export interface AgentApiDeps {
   sleep?(ms: number): Promise<void>;
 }
 
+/** One visible step of a turn (tool name or note), for still_working progress. */
+export interface TurnStep {
+  cursor: string;
+  kind: "tool" | "note" | "text";
+  text: string;
+  at: number;
+}
+
+export interface TurnProgress {
+  summary: string;
+  turn_state: TurnState;
+  steps: TurnStep[];
+  steps_total: number;
+}
+
 export interface TurnResult {
   handle: string;
   agent_id: string;
   thread_id: string;
   finished: boolean;
-  status: "finished" | "running" | "waiting_for_approval" | "queued";
+  status: "finished" | "running" | "waiting_for_approval" | "queued" | "still_working";
   /** The agent's words in this turn; empty with finished=true means it said nothing. */
   reply: string;
+  /** When finished is false after a wait: progress so far and where to resume. */
+  progress?: TurnProgress;
+  /** Pass as cursor on the next await_turn so steps are not repeated. */
+  wait_cursor?: string | null;
+  recommended_wait_ms?: number;
 }
 
 // ── validation ────────────────────────────────────────────────────────
@@ -374,6 +424,12 @@ function compareKeys(a: CursorKey, b: CursorKey): number {
   return a.at - b.at || (a.threadId < b.threadId ? -1 : a.threadId > b.threadId ? 1 : 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
+/** The claims inside a turn handle. Decision (audit 2026-10-29, B8): the
+ * handle is opaque by contract. It is HMAC signed (never forged) and stays
+ * base64url readable, because nothing in it is secret (the agent, the
+ * conversation, the caller's own key) and a readable body costs nothing; but
+ * its layout is not an interface and may change. Every value a caller needs
+ * comes back as a result field: agent_id, thread_id and expires_at. */
 interface HandleBody {
   /** agent id */
   a: string;
@@ -418,27 +474,47 @@ export function signTurnHandle(secret: Buffer, input: {
  * age; await_turn adds other_agent and other_caller after a valid body. */
 export type BadHandleReason = "signature" | "format" | "age" | "other_agent" | "other_caller";
 
+/** The machine code of each refusal (audit 2026-10-29, Part A): a client
+ * tells "expired" from "not yours" from "broken" by the code alone.
+ * `details.family` stays `bad_handle` for a client that matched that code. */
+export const BAD_HANDLE_CODE: Record<BadHandleReason, string> = {
+  signature: "bad_handle",
+  format: "bad_handle",
+  age: "handle_expired",
+  other_agent: "handle_agent_mismatch",
+  other_caller: "handle_session_mismatch",
+};
+
 export type VerifyHandleResult =
   | { ok: true; body: HandleBody }
-  | { ok: false; reason: Exclude<BadHandleReason, "other_agent" | "other_caller"> };
+  /** age: the signature held, so the body is authentic and comes back. */
+  | { ok: false; reason: "age"; body: HandleBody }
+  | { ok: false; reason: "signature" | "format" };
 
 const BAD_HANDLE_HINT =
-  "Call await_turn without a handle, or read_latest_page with the thread_id send_prompt returned.";
+  "Call read_latest_page with the agent_id and the thread_id send_prompt returned (it needs no handle), or await_turn without a handle.";
 
 const BAD_HANDLE_MESSAGE: Record<BadHandleReason, string> = {
   signature: `That handle's signature does not match (it was altered or truncated). ${BAD_HANDLE_HINT}`,
   format: `That handle is not a turn handle. ${BAD_HANDLE_HINT}`,
-  age: `That handle expired. ${BAD_HANDLE_HINT}`,
+  age: `That handle expired (a handle lasts ${HANDLE_TTL_MS / 3_600_000} hours, see expires_at in send_prompt's answer). ${BAD_HANDLE_HINT}`,
   other_agent: `That handle was issued for a different agent. ${BAD_HANDLE_HINT}`,
-  other_caller: `That handle was issued for a different caller. ${BAD_HANDLE_HINT}`,
+  other_caller: `That handle was issued to another caller or session. ${BAD_HANDLE_HINT}`,
 };
 
-export function badHandleRefusal(reason: BadHandleReason): Refusal {
-  return refuse(400, "bad_handle", BAD_HANDLE_MESSAGE[reason], {
-    details: { reason },
+/** The refusal of a handle. `threadId` is passed only when the handle was
+ * authentic (its signature held) and names a conversation this caller may
+ * read: the one-call recovery is then read_latest_page with it. */
+export function badHandleRefusal(reason: BadHandleReason, threadId?: string | null): Refusal {
+  return refuse(400, BAD_HANDLE_CODE[reason], BAD_HANDLE_MESSAGE[reason], {
+    details: { reason, family: "bad_handle", ...(threadId ? { thread_id: threadId } : {}) },
+    ...(threadId ? { thread_id: threadId } : {}),
     hint: BAD_HANDLE_HINT,
   });
 }
+
+/** When a handle stops being valid (ms since the epoch). */
+export const handleExpiresAt = (issuedAt: number): number => issuedAt + HANDLE_TTL_MS;
 
 export function verifyHandle(secret: Buffer, handle: string, now: number): VerifyHandleResult {
   if (typeof handle !== "string" || !handle.startsWith("turn_") || handle.length > 1_200) {
@@ -456,7 +532,7 @@ export function verifyHandle(secret: Buffer, handle: string, now: number): Verif
     if (typeof body.a !== "string" || typeof body.t !== "string" || typeof body.i !== "number" || typeof body.c !== "string") {
       return { ok: false, reason: "format" };
     }
-    if (now - body.i > HANDLE_TTL_MS) return { ok: false, reason: "age" };
+    if (now - body.i > HANDLE_TTL_MS) return { ok: false, reason: "age", body };
     return { ok: true, body };
   } catch {
     return { ok: false, reason: "format" };
@@ -560,22 +636,25 @@ function pageBefore(entries: readonly TranscriptEntry[], before: CursorKey | nul
 
 // ── turns ─────────────────────────────────────────────────────────────
 
+/** Index of the prompt that anchors a handle, or -1 when it is not in the transcript yet. */
+function turnAnchorIndex(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }): number {
+  if (anchor.id) {
+    const byId = messages.findIndex((message) => message.id === anchor.id);
+    if (byId >= 0) return byId;
+  }
+  // A queued prompt is stored when its turn starts: the newest user line
+  // at or after the handle's time is the prompt.
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]!;
+    if (message.at < anchor.at - 1_000) break;
+    if (message.role === "user") return index;
+  }
+  return -1;
+}
+
 /** The agent's words after the anchor, and whether its turn has ended. */
 function turnReply(messages: readonly StoredMessage[], anchor: { id: string | null; at: number }): { reply: string; sawAnchor: boolean } {
-  let start = -1;
-  if (anchor.id) start = messages.findIndex((message) => message.id === anchor.id);
-  if (start < 0) {
-    // A queued prompt is stored when its turn starts: the newest user line
-    // at or after the handle's time is the prompt.
-    for (let index = messages.length - 1; index >= 0; index--) {
-      const message = messages[index]!;
-      if (message.at < anchor.at - 1_000) break;
-      if (message.role === "user") {
-        start = index;
-        break;
-      }
-    }
-  }
+  const start = turnAnchorIndex(messages, anchor);
   if (start < 0) return { reply: "", sawAnchor: false };
   const texts: string[] = [];
   for (const message of messages.slice(start + 1)) {
@@ -586,8 +665,56 @@ function turnReply(messages: readonly StoredMessage[], anchor: { id: string | nu
   return { reply: joined.length > REPLY_MAX_CHARS ? `${joined.slice(0, REPLY_MAX_CHARS)}\n[...]` : joined, sawAnchor: true };
 }
 
-function statusWord(state: TurnState): TurnResult["status"] {
-  return state === "waiting" ? "waiting_for_approval" : state === "queued" ? "queued" : state === "running" ? "running" : "finished";
+/** Visible steps of the turn after the anchor, optionally after a wait_cursor. */
+function turnSteps(
+  threadId: string,
+  messages: readonly StoredMessage[],
+  anchor: { id: string | null; at: number },
+  after: CursorKey | null,
+): TurnStep[] {
+  const start = turnAnchorIndex(messages, anchor);
+  if (start < 0) return [];
+  const steps: TurnStep[] = [];
+  for (const message of messages.slice(start + 1)) {
+    if (message.role === "user" && (message.kind ?? "text") === "text") break;
+    const entry = toEntry(threadId, message);
+    if (!entry || (entry.kind !== "tool" && entry.kind !== "note" && !(entry.kind === "text" && entry.role === "agent"))) continue;
+    const key = keyOf(entry);
+    if (after && compareKeys(key, after) <= 0) continue;
+    steps.push({ cursor: entry.cursor, kind: entry.kind, text: entry.text.slice(0, 300), at: entry.at });
+  }
+  return steps;
+}
+
+function progressSummary(state: TurnState, stepsTotal: number, reply: string): string {
+  const live = state === "waiting" ? "waiting for approval" : state === "queued" ? "queued" : state === "running" ? "running" : "idle";
+  const parts = [live];
+  if (stepsTotal > 0) parts.push(`${stepsTotal} step${stepsTotal === 1 ? "" : "s"} so far`);
+  if (reply.trim()) parts.push("partial reply ready");
+  return parts.join("; ");
+}
+
+function buildProgress(
+  threadId: string,
+  messages: readonly StoredMessage[],
+  anchor: { id: string | null; at: number },
+  state: TurnState,
+  reply: string,
+  after: CursorKey | null,
+): { progress: TurnProgress; wait_cursor: string | null } {
+  const all = turnSteps(threadId, messages, anchor, null);
+  const fresh = after ? turnSteps(threadId, messages, anchor, after) : all;
+  const shown = fresh.slice(-AWAIT_STEPS_MAX);
+  const last = all.at(-1);
+  return {
+    progress: {
+      summary: progressSummary(state, all.length, reply),
+      turn_state: state,
+      steps: shown,
+      steps_total: all.length,
+    },
+    wait_cursor: last?.cursor ?? (after ? encodeCursor(after) : null),
+  };
 }
 
 // ── the API ───────────────────────────────────────────────────────────
@@ -647,10 +774,25 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
   };
 
   const ok = (body: Record<string, unknown>): AgentApiAnswer => ({ status: 200, body });
-  const asAnswer = (refusal: Refusal): AgentApiAnswer => ({
-    status: refusal.status,
-    body: { error: refusal.message, code: refusal.code, message: refusal.message, ...refusal.extra },
-  });
+  // One error envelope (audit 2026-10-29, B5): {code, message, hint,
+  // details} on every refusal, details.status the HTTP status; the extra
+  // fields a refusal carried before stay at the top level too, and `error`
+  // repeats the message for older clients.
+  const asAnswer = (refusal: Refusal): AgentApiAnswer => {
+    const { hint, details, ...rest } = refusal.extra ?? {};
+    const retryable = typeof rest.retryable === "boolean" ? rest.retryable : isRetryableRefusal(refusal.code);
+    const detailObj = details && typeof details === "object" ? details as Record<string, unknown> : {};
+    return {
+      status: refusal.status,
+      body: {
+        error: refusal.message, code: refusal.code, message: refusal.message,
+        hint: typeof hint === "string" ? hint : "",
+        details: { ...rest, ...detailObj, retryable, status: refusal.status },
+        ...rest,
+        retryable,
+      },
+    };
+  };
 
   /** The agent, when the caller may reach it; one answer for "no such agent" and "not yours". */
   const reachable = async (caller: AgentCaller, agentId: string): Promise<AgentSummary | Refusal> => {
@@ -658,12 +800,42 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     return agent ?? refuse(404, "unknown_agent", "No agent with that id is reachable. Its id must come from list_agents or find_agents.");
   };
 
-  const waitTurn = async (body: HandleBody, handle: string, timeoutMs: number, signal?: AbortSignal): Promise<TurnResult> => {
+  const unfinished = (
+    body: HandleBody,
+    handle: string,
+    state: TurnState,
+    reply: string,
+    after: CursorKey | null,
+    status: TurnResult["status"],
+  ): TurnResult => {
+    const live = state === "idle" ? "queued" : state;
+    const { progress, wait_cursor } = buildProgress(body.t, deps.messages(body.t), { id: body.m, at: body.i }, live, reply, after);
+    return {
+      handle,
+      agent_id: body.a,
+      thread_id: body.t,
+      finished: false,
+      status,
+      reply,
+      progress,
+      wait_cursor,
+      recommended_wait_ms: AWAIT_RECOMMENDED_WAIT_MS,
+    };
+  };
+
+  const waitTurn = async (
+    body: HandleBody,
+    handle: string,
+    timeoutMs: number,
+    signal?: AbortSignal,
+    after: CursorKey | null = null,
+  ): Promise<TurnResult> => {
     const deadline = now() + timeoutMs;
     let idleLooks = 0;
     for (;;) {
       const state = deps.turnState(body.a, body.t);
-      const read = turnReply(deps.messages(body.t), { id: body.m, at: body.i });
+      const messages = deps.messages(body.t);
+      const read = turnReply(messages, { id: body.m, at: body.i });
       if (state === "idle" && read.sawAnchor) {
         idleLooks += 1;
         if (read.reply || idleLooks >= IDLE_LOOKS_DONE) {
@@ -673,26 +845,36 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         // The prompt is not in the conversation yet (queued behind a slot).
         idleLooks += 1;
         if (idleLooks >= IDLE_LOOKS_DONE * 25) {
-          return { handle, agent_id: body.a, thread_id: body.t, finished: false, status: "queued", reply: "" };
+          return unfinished(body, handle, "queued", "", after, "queued");
         }
       } else {
         idleLooks = 0;
         if (state === "waiting") {
           // A card waits for a person: waiting longer only burns the timeout.
-          return { handle, agent_id: body.a, thread_id: body.t, finished: false, status: "waiting_for_approval", reply: read.reply };
+          return unfinished(body, handle, state, read.reply, after, "waiting_for_approval");
         }
       }
+      // Return still_working before the caller's (or gateway) ceiling so the
+      // answer is a structured resume, never a killed tool call.
       if (signal?.aborted || now() >= deadline) {
-        return { handle, agent_id: body.a, thread_id: body.t, finished: false, status: statusWord(state === "idle" ? "queued" : state), reply: read.reply };
+        return unfinished(body, handle, state === "idle" ? "queued" : state, read.reply, after, "still_working");
       }
       await sleep(Math.min(POLL_MS, Math.max(0, deadline - now())));
     }
   };
 
-  const timeoutNote = "The turn is still going. Call await_turn with this handle to wait for it; never send the prompt again.";
+  const stillWorkingNext =
+    "The turn is still going (still_working). Call await_turn again with this handle and pass wait_cursor as cursor; use recommended_wait_ms as timeout_ms. Never send the prompt again.";
+  const timeoutNote = stillWorkingNext;
   const resultBody = (result: TurnResult): Record<string, unknown> => ({
     ...result,
-    ...(result.finished ? (result.reply ? {} : { note: "The turn finished without text." }) : { next: result.status === "waiting_for_approval" ? "An approval waits in that conversation: a person answers it (in Sagax, or from an AI client with sagax_approve); then call await_turn with this handle." : timeoutNote }),
+    ...(result.finished
+      ? (result.reply ? {} : { note: "The turn finished without text." })
+      : {
+          next: result.status === "waiting_for_approval"
+            ? "An approval waits in that conversation: a person answers it (in Sagax, or from an AI client with sagax_approve); then call await_turn with this handle and wait_cursor as cursor."
+            : timeoutNote,
+        }),
   });
 
   const handlers: Record<AgentToolName, (caller: AgentCaller, args: Args, signal?: AbortSignal) => Promise<AgentApiAnswer | Refusal>> = {
@@ -788,32 +970,75 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       const agentId = agentIdArg(args);
       if (isRefusal(agentId)) return agentId;
       const continued = args.thread_id === undefined || args.thread_id === null || args.thread_id === "" ? null : args.thread_id;
-      if (continued !== null && (typeof continued !== "string" || !ID.test(continued))) return refuse(400, "bad_request", "thread_id is a conversation id, as send_prompt or await_turn returned it.");
+      if (continued !== null && (typeof continued !== "string" || !ID.test(continued))) {
+        return refuse(400, "bad_request", "thread_id is a conversation id, as send_prompt or await_turn returned it.", {
+          retryable: false,
+          details: { reason: "invalid_thread_id" },
+          hint: "Omit thread_id to use the default conversation, or pass the thread_id a previous send_prompt or await_turn returned.",
+        });
+      }
       const prompt = typeof args.prompt === "string" ? args.prompt : "";
-      if (!prompt.trim() || prompt.length > PROMPT_MAX_CHARS) return refuse(400, "bad_request", `prompt is 1 to ${PROMPT_MAX_CHARS} characters.`);
+      if (!prompt.trim() || prompt.length > PROMPT_MAX_CHARS) {
+        return refuse(400, "bad_request", `prompt is 1 to ${PROMPT_MAX_CHARS} characters.`, {
+          retryable: false,
+          details: { reason: "invalid_prompt", max_chars: PROMPT_MAX_CHARS },
+        });
+      }
       const mode = (args.mode ?? "fire_and_forget") as SendMode;
-      if (!["fire_and_forget", "blocking", "async"].includes(mode)) return refuse(400, "bad_request", "mode is fire_and_forget, blocking or async.");
+      if (!["fire_and_forget", "blocking", "async"].includes(mode)) {
+        return refuse(400, "bad_request", "mode is fire_and_forget, blocking or async.", {
+          retryable: false,
+          details: { reason: "invalid_mode", allowed: ["fire_and_forget", "blocking", "async"] },
+        });
+      }
       // 2026-10-17: queue by default. supersede stopped a running turn (and
       // its approval) the caller often did not know was still going.
       const onBusy = (args.on_busy ?? "queue") as OnBusy;
-      if (!["supersede", "reject", "queue"].includes(onBusy)) return refuse(400, "bad_request", "on_busy is queue (default), reject or supersede.");
+      if (!["supersede", "reject", "queue"].includes(onBusy)) {
+        return refuse(400, "bad_request", "on_busy is queue (default), reject or supersede.", {
+          retryable: false,
+          details: { reason: "invalid_on_busy", allowed: ["queue", "reject", "supersede"] },
+          hint: "Use on_busy queue to wait your turn, reject to refuse when busy, or supersede to stop a turn you started.",
+        });
+      }
       const asked = parseWakePriority(args.priority);
-      if (asked === "invalid") return refuse(400, "bad_request", "priority is now or normal.");
+      if (asked === "invalid") {
+        return refuse(400, "bad_request", "priority is now or normal.", {
+          retryable: false,
+          details: { reason: "invalid_priority", allowed: ["now", "normal"] },
+        });
+      }
       const timeoutMs = intArg(args, "timeout_ms", TIMEOUT_MS_MIN, TIMEOUT_MS_MAX, TIMEOUT_MS_DEFAULT);
       if (isRefusal(timeoutMs)) return timeoutMs;
       const files = args.files ?? [];
-      if (!Array.isArray(files) || files.length > SEND_FILES_MAX) return refuse(400, "bad_request", `files is a list of at most ${SEND_FILES_MAX} workspace-relative paths.`);
+      if (!Array.isArray(files) || files.length > SEND_FILES_MAX) {
+        return refuse(400, "bad_request", `files is a list of at most ${SEND_FILES_MAX} workspace-relative paths.`, {
+          retryable: false,
+          details: { reason: "invalid_files", max_files: SEND_FILES_MAX },
+        });
+      }
       const fileInputs: FileInput[] = [];
       for (const raw of files) {
         const file: FileInput | null = typeof raw === "string" ? { path: raw } : raw && typeof raw === "object" && typeof (raw as FileInput).path === "string" ? raw as FileInput : null;
-        if (!file) return refuse(400, "bad_request", "each file is a workspace-relative path.");
+        if (!file) {
+          return refuse(400, "bad_request", "each file is a workspace-relative path.", {
+            retryable: false,
+            details: { reason: "invalid_file_entry" },
+          });
+        }
         const path = file.path.trim().replace(/\\/g, "/");
         if (!path || path.length > 512 || path.startsWith("/") || /^[a-zA-Z]:/.test(path) || path.split("/").some((part) => part === ".." || part === "")) {
-          return refuse(400, "bad_request", `${file.path} is not a workspace-relative path (no leading /, no ..).`);
+          return refuse(400, "bad_request", `${file.path} is not a workspace-relative path (no leading /, no ..).`, {
+            retryable: false,
+            details: { reason: "invalid_file_path" },
+          });
         }
         if (file.content_base64 !== undefined) {
           if (typeof file.content_base64 !== "string" || Math.floor(file.content_base64.length * 3 / 4) > SEND_FILE_MAX_BYTES + 3) {
-            return refuse(413, "file_too_large", `${path} is larger than 25 MiB.`);
+            return refuse(413, "file_too_large", `${path} is larger than 25 MiB.`, {
+              retryable: false,
+              details: { reason: "file_too_large", max_bytes: SEND_FILE_MAX_BYTES },
+            });
           }
         }
         fileInputs.push({ path, ...(file.content_base64 !== undefined ? { content_base64: file.content_base64 } : {}) });
@@ -825,7 +1050,11 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       let conversation: { threadId: string } | Refusal;
       if (continued !== null) {
         if (!deps.threads(caller, agentId).some((thread) => thread.threadId === continued)) {
-          return refuse(404, "unknown_thread", "No conversation of yours with this agent has that id. Use the thread_id send_prompt or await_turn returned, or leave it out to start a new one.");
+          return refuse(404, "unknown_thread", "No conversation of yours with this agent has that id. Use the thread_id send_prompt or await_turn returned, or leave it out to start a new one.", {
+            retryable: false,
+            details: { reason: "unknown_thread" },
+            hint: "Omit thread_id for the default conversation, or use a thread_id this caller already received.",
+          });
         }
         conversation = { threadId: continued };
       } else {
@@ -836,7 +1065,18 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       const state = deps.turnState(agentId, threadId);
       if (state !== "idle") {
         if (onBusy === "reject") {
-          return refuse(409, "busy", `${agent.name} is still working in this conversation. Wait with await_turn, or send with on_busy queue (waits its turn) or supersede (stops the running turn).`, { thread_id: threadId });
+          const turnLabel = state === "waiting" ? "waiting for approval" : state === "queued" ? "queued" : "running";
+          return refuse(409, "busy", `${agent.name} is still working in this conversation (${turnLabel}). Retry with on_busy queue (waits its turn), on_busy supersede (stops the running turn you started), or await_turn on the open handle first.`, {
+            thread_id: threadId,
+            retryable: true,
+            details: {
+              reason: "busy_thread",
+              turn_state: state,
+              on_busy: "reject",
+              options: ["queue", "supersede", "await_turn"],
+            },
+            hint: "Pass on_busy: \"queue\" to wait your turn, on_busy: \"supersede\" to stop your own running turn, or call await_turn with the handle you already have. Do not re-send the same prompt as a new fire_and_forget without a decision.",
+          });
         }
         // priority now never stops a turn that is already running, even when
         // the caller also asked to supersede.
@@ -862,7 +1102,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       const body: HandleBody = { a: agentId, t: threadId, m: posted.messageId, i: issuedAt, c: callerKey(caller) };
       const handle = signHandle(deps.secret, body);
       const accepted = {
-        handle, label: turnLabel(agent.name, prompt), agent_id: agentId, thread_id: threadId, mode, accepted: true, files: fileInputs.length,
+        handle, expires_at: handleExpiresAt(issuedAt), label: turnLabel(agent.name, prompt), agent_id: agentId, thread_id: threadId, mode, accepted: true, files: fileInputs.length,
         ...(plan.reported ? { priority: plan.reported, ...(plan.downgraded ? { downgraded: true, priority_note: plan.note } : {}) } : {}),
       };
       if (mode === "fire_and_forget") return ok({ ...accepted, finished: false, status: "accepted" });
@@ -876,26 +1116,49 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         }
         return ok({ ...accepted, finished: false, status: "accepted", next: "You are notified when the turn ends; or call await_turn with this handle. Never send the prompt again." });
       }
-      const result = await waitTurn(body, handle, timeoutMs as number, signal);
+      // Cap the blocking wait under engine/gateway ceilings so the answer
+      // (handle + still_working) reaches the caller; resume with await_turn.
+      const waitMs = Math.min(timeoutMs as number, AWAIT_TIMEOUT_MS_MAX);
+      const result = await waitTurn(body, handle, waitMs, signal);
       return ok({ ...accepted, ...resultBody(result) });
     },
 
     async await_turn(caller, args, signal) {
-      const bad = onlyKeys(args, ["agent_id", "handle", "timeout_ms"]);
+      const bad = onlyKeys(args, ["agent_id", "handle", "timeout_ms", "cursor"]);
       if (bad) return bad;
       const agentId = agentIdArg(args);
       if (isRefusal(agentId)) return agentId;
-      const timeoutMs = intArg(args, "timeout_ms", 0, TIMEOUT_MS_MAX, TIMEOUT_MS_DEFAULT);
+      // Cap under engine/gateway ceilings (~60 s) so a long turn answers
+      // still_working instead of dying as a tool timeout.
+      const timeoutMs = intArg(args, "timeout_ms", AWAIT_TIMEOUT_MS_MIN, AWAIT_TIMEOUT_MS_MAX, AWAIT_TIMEOUT_MS_DEFAULT);
       if (isRefusal(timeoutMs)) return timeoutMs;
+      const after = cursorArg(args);
+      if (isRefusal(after)) return after;
       const agent = await reachable(caller, agentId);
       if (isRefusal(agent)) return agent;
       if (args.handle !== undefined && args.handle !== null && args.handle !== "") {
         if (typeof args.handle !== "string") return badHandleRefusal("format");
         const verified = verifyHandle(deps.secret, args.handle, now());
-        if (!verified.ok) return badHandleRefusal(verified.reason);
-        if (verified.body.a !== agentId) return badHandleRefusal("other_agent");
-        if (verified.body.c !== callerKey(caller)) return badHandleRefusal("other_caller");
-        return ok(resultBody(await waitTurn(verified.body, args.handle, timeoutMs!, signal)));
+        // Altered or not a handle: nothing in it is trusted, nothing is read.
+        if (!verified.ok && verified.reason !== "age") return badHandleRefusal(verified.reason);
+        const body = verified.body;
+        if (body.a !== agentId) return badHandleRefusal("other_agent");
+        const reason: BadHandleReason | null = !verified.ok ? "age" : body.c !== callerKey(caller) ? "other_caller" : null;
+        if (!reason) return ok({ ...resultBody(await waitTurn(body, args.handle, timeoutMs!, signal, after)), expires_at: handleExpiresAt(body.i) });
+        // The handle is authentic (its signature held). A conversation of the
+        // caller's own (deps.threads) is one it may read anyway with
+        // read_latest_page: naming it, or answering from it, discloses nothing.
+        if (!deps.threads(caller, agentId).some((thread) => thread.threadId === body.t)) return badHandleRefusal(reason);
+        // Expired, or issued to another session of a caller who may read the
+        // conversation: answer that turn as read_latest_page would, without a
+        // handle (a new one would anchor at the wrong time).
+        const result = await waitTurn(body, "", timeoutMs!, signal, after);
+        return ok({
+          ...resultBody(result),
+          handle: null,
+          recovered_from: BAD_HANDLE_CODE[reason],
+          note: `${reason === "age" ? "The handle expired" : "The handle was issued to another session"}; this answer was read from thread_id ${body.t}. ${result.finished ? "" : "The turn is still going: call await_turn without a handle, or read_latest_page with this thread_id. "}Never send the prompt again.`,
+        });
       }
       // No handle: the in-flight turn of the caller's newest conversation
       // with this agent, else its last message.
@@ -908,9 +1171,9 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       const handle = signHandle(deps.secret, body);
       if (deps.turnState(agentId, threadId) === "idle") {
         const last = [...entries].reverse().find((entry) => entry.thread_id === threadId && entry.role === "agent" && entry.kind === "text");
-        return ok({ handle, agent_id: agentId, thread_id: threadId, finished: true, status: "idle", reply: last?.text ?? "" });
+        return ok({ handle, expires_at: handleExpiresAt(body.i), agent_id: agentId, thread_id: threadId, finished: true, status: "idle", reply: last?.text ?? "" });
       }
-      return ok(resultBody(await waitTurn(body, handle, timeoutMs!, signal)));
+      return ok({ ...resultBody(await waitTurn(body, handle, timeoutMs!, signal, after)), expires_at: handleExpiresAt(body.i) });
     },
 
     async read_transcript(caller, args) {
@@ -1050,7 +1313,13 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         }
       }
       const wait = limiter.admit(caller, tool, now());
-      if (wait !== null) return finish(asAnswer(refuse(429, "rate_limited", `Too many ${tool} calls; try again in ${Math.ceil(wait / 1000)} s.`, { retry_after_ms: wait })));
+      if (wait !== null) {
+        return finish(asAnswer(refuse(429, "rate_limited", `Too many ${tool} calls; try again in ${Math.ceil(wait / 1000)} s.`, {
+          retry_after_ms: wait,
+          retryable: true,
+          hint: `Wait ${Math.ceil(wait / 1000)} s, then call ${tool} again with the same arguments.`,
+        })));
+      }
       try {
         const answer = await handlers[tool](caller, args, signal);
         const shaped = isRefusal(answer) ? asAnswer(answer) : answer;

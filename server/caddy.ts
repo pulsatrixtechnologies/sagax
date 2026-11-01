@@ -107,6 +107,34 @@ export async function ensureCaddy(options: {
   return destination;
 }
 
+/**
+ * Hold requests at the edge while the single upstream restarts.
+ *
+ * Caddy retries selecting a healthy upstream for `lb_try_duration` instead of
+ * answering 502 the moment the process is gone. Active `/healthz` checks and
+ * passive 502/503 marks tell it when the process is back (docs/zero-downtime-deploy.md).
+ * Indentation matches the reverse_proxy block that embeds these lines.
+ */
+export const CADDY_UPSTREAM_HOLD_MS = 25_000;
+
+export function caddyUpstreamHoldLines(indent: string, options?: { sse?: boolean }): string[] {
+  const lines = [
+    `${indent}# Hold briefly while the upstream restarts (single process).`,
+    `${indent}lb_try_duration ${Math.round(CADDY_UPSTREAM_HOLD_MS / 1000)}s`,
+    `${indent}lb_try_interval 250ms`,
+    `${indent}fail_duration 10s`,
+    `${indent}unhealthy_status 502 503`,
+    `${indent}health_uri /healthz`,
+    `${indent}health_interval 2s`,
+    `${indent}health_timeout 1s`,
+  ];
+  if (options?.sse) {
+    lines.push(`${indent}# SSE: stream events as they arrive`);
+    lines.push(`${indent}flush_interval -1`);
+  }
+  return lines;
+}
+
 /** The Docker stack's Caddyfile with this server's ports; certificates and
  * state live under the data dir so they survive restarts and upgrades. */
 export function caddyfileFor(input: { domain: string; appPort: number; webhookPort: number }): string {
@@ -124,13 +152,14 @@ export function caddyfileFor(input: { domain: string; appPort: number; webhookPo
     "",
     "\t# Webhook ingress has its own per-hook secrets and is meant for third parties.",
     "\thandle /hooks/* {",
-    `\t\treverse_proxy 127.0.0.1:${input.webhookPort}`,
+    `\t\treverse_proxy 127.0.0.1:${input.webhookPort} {`,
+    ...caddyUpstreamHoldLines("\t\t\t"),
+    "\t\t}",
     "\t}",
     "",
     "\thandle {",
     `\t\treverse_proxy 127.0.0.1:${input.appPort} {`,
-    "\t\t\t# SSE: stream events as they arrive",
-    "\t\t\tflush_interval -1",
+    ...caddyUpstreamHoldLines("\t\t\t", { sse: true }),
     "\t\t}",
     "\t}",
     "}",

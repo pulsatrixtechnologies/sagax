@@ -136,7 +136,12 @@ public struct ShapeInkPaint: Equatable, Sendable {
 /// the face's own space (box units) plus the matrices that place it.
 public struct ShapeDrawing: Sendable {
     /// The outline, bent with the resting turn (a plain body) or flat (a skin's own art).
+    /// Largest ring (eye probes / slices). Path bodies may also set `pathD`.
     public var outline: ShapeOutline
+    /// Exact warped path string when a path body is live (may be multi-subpath; evenodd).
+    public var pathD: String? = nil
+    /// Extra warped filled body pieces (parts after the first).
+    public var extras: [String] = []
     /// The eyes on the outline, in the face's space, in the mood's style.
     public var eyes: [ShapeStyledEye]
     /// The pumpkin's stem in the face's space, or nil.
@@ -146,6 +151,16 @@ public struct ShapeDrawing: Sendable {
     public var face: CGAffineTransform
     /// The body's motion (drift, breath, a move's turn and size).
     public var motion: CGAffineTransform
+
+    /// CGPath to fill for the body (exact path when set, else smooth outline).
+    public var fillPath: CGPath {
+        if let pathD, !pathD.isEmpty {
+            return SVGPath.parse(pathD)
+        }
+        let path = CGMutablePath()
+        outline.add(to: path)
+        return path
+    }
 }
 
 public enum ShapeVolume {
@@ -268,6 +283,35 @@ public enum ShapeVolume {
     public static func warp(_ outline: ShapeOutline, _ pose: ShapePose) -> ShapeOutline {
         let b = bendOf(pose)
         return outline.mapped { warpPoint($0, b) }
+    }
+
+    /// A path string (absolute M/C/L/Q/Z with number pairs) under the pose's out-of-plane turn.
+    public static func warpPath(_ d: String, _ pose: ShapePose) -> String {
+        guard !d.isEmpty else { return d }
+        let b = bendOf(pose)
+        let re = try! NSRegularExpression(pattern: #"([A-Za-z])|(-?\d*\.?\d+(?:e-?\d+)?)"#)
+        let range = NSRange(d.startIndex..<d.endIndex, in: d)
+        var out: [String] = []
+        var x: Double?
+        for match in re.matches(in: d, options: [], range: range) {
+            guard let full = Range(match.range, in: d) else { continue }
+            let token = String(d[full])
+            if token.rangeOfCharacter(from: .letters) != nil {
+                out.append(token)
+                continue
+            }
+            guard let v = Double(token) else { continue }
+            if x == nil {
+                x = v
+                continue
+            }
+            let warped = warpPoint(CGPoint(x: x!, y: v), b)
+            let last = out.last ?? ""
+            let gap = (!last.isEmpty && last.rangeOfCharacter(from: .letters) == nil) ? " " : ""
+            out.append("\(gap)\(ShapeMath.js(ShapeMath.round2(Double(warped.x)))) \(ShapeMath.js(ShapeMath.round2(Double(warped.y))))")
+            x = nil
+        }
+        return out.joined()
     }
 
     // MARK: Eyes
@@ -457,16 +501,26 @@ public enum ShapeVolume {
     /// a plain body (its outline takes the resting turn's perspective; a
     /// skin's own art is drawn on the outline at rest).
     public static func drawShape(_ frame: ShapeFrame, _ pose: ShapePose, detail: ShapeVolumeDetail, style: ShapeEyeStyle = .capsule, bend: Bool = true) -> ShapeDrawing? {
-        // the desktop bends the path it wrote (two decimals): bend the same numbers
+        // Path body: exact silhouette when settled; resampled smooth ring while morphing.
+        let pathSource: String? = {
+            guard frame.bodyPath != nil || !frame.bodyExtras.isEmpty else { return nil }
+            if frame.pathMorphing { return ShapeAvatarOutline.smoothClosedOutline(frame.body) }
+            return frame.bodyD
+        }()
+        // Probe ring: frame.body points (path morph samples or polar).
         guard let flat = ShapeOutline(points: frame.body)?.rounded else { return nil }
         let m = matrices(detail, pose, depth: frame.depth)
         let outline = bend ? warp(flat, pose) : flat
+        let warpedPath: String? = pathSource.map { bend ? warpPath($0, pose) : $0 }
+        let warpedExtras = frame.bodyExtras.map { bend ? warpPath($0, pose) : $0 }
         let stem = frame.stem.flatMap { stem -> (outline: ShapeOutline, opacity: Double)? in
             guard let stalk = ShapeOutline(points: stem.points)?.rounded else { return nil }
             return (bend ? warp(stalk, pose) : stalk, stem.opacity)
         }
         return ShapeDrawing(
             outline: outline,
+            pathD: warpedPath,
+            extras: warpedExtras,
             eyes: faceEyes(frame, pose, bend: bend, style: style, outline: outline.onCurve),
             stem: stem,
             slices: m.slices,

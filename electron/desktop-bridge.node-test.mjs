@@ -120,6 +120,24 @@ test("attachments are copied in order into the desktop's own folder", async () =
   fs.rmSync(home, { recursive: true, force: true });
 });
 
+test("a staged large upload continues beyond the old 100 MB transport ceiling", async () => {
+  const home = sandboxHome();
+  const d = deps(home);
+  const name = "0b5a3c1e-large.mp4";
+  const target = path.join(d.attachmentsDir, name);
+  fs.mkdirSync(d.attachmentsDir, { recursive: true });
+  fs.writeFileSync(target, "");
+  const offset = 128 * 1024 * 1024;
+  fs.truncateSync(target, offset);
+  await executeBridgeOperation({ action: "stage_file", name, content: Buffer.from("z").toString("base64"), offset, final: true }, d, signal());
+  assert.equal(fs.statSync(target).size, offset + 1);
+  const last = Buffer.alloc(1);
+  const descriptor = fs.openSync(target, "r");
+  try { fs.readSync(descriptor, last, 0, 1, offset); } finally { fs.closeSync(descriptor); }
+  assert.equal(last.toString(), "z");
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
 test("a staged archive is unpacked next to it, safely", async () => {
   const home = sandboxHome();
   const d = deps(home);

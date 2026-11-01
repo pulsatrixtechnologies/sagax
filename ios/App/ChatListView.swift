@@ -1253,7 +1253,14 @@ struct StatusBanner: View {
             case .live, .unpaired:
                 EmptyView()
             case .connecting:
-                banner("Connecting…", systemImage: "arrow.triangle.2.circlepath", tint: Theme.parity(Color.secondary, Theme.textSecondary))
+                // After a live session (or any hydrated state), a brief drop is
+                // a deploy restart: calm Reconnecting, never a hard error.
+                let label = session.state.cursor != nil || !session.state.bots.isEmpty
+                    ? String(localized: "Reconnecting…")
+                    : String(localized: "Connecting…")
+                banner(label, systemImage: "arrow.triangle.2.circlepath", tint: Theme.parity(Color.secondary, Theme.textSecondary))
+            case let .offline(reason) where Self.isCalmReconnect(reason):
+                banner(reason, systemImage: "arrow.triangle.2.circlepath", tint: Theme.parity(Color.secondary, Theme.textSecondary))
             case let .offline(reason):
                 banner(reason, systemImage: "wifi.slash", tint: Theme.parity(Color.orange, Theme.warning))
             case .unauthorized:
@@ -1261,6 +1268,11 @@ struct StatusBanner: View {
             }
         }
         .animation(.default, value: session.status)
+    }
+
+    private static func isCalmReconnect(_ reason: String) -> Bool {
+        let lower = reason.lowercased()
+        return lower.contains("reconnecting") || lower.contains("reconnexion")
     }
 
     private func banner(_ text: String, systemImage: String, tint: Color) -> some View {
@@ -1539,6 +1551,10 @@ extension ChatListView {
         }
     }
 
+    /// The Grok Bot home (2026-11-01): the photo at the leading corner and
+    /// the + at the trailing one; search joins the + only when "Search at
+    /// top" is on. The iPad keeps the avatar at its trailing corner and
+    /// everything else at the bottom.
     private var standardHeader: some View {
         VStack(spacing: Theme.Metric.controlGap) {
             HStack(spacing: Theme.Metric.controlGap) {
@@ -1550,17 +1566,22 @@ extension ChatListView {
                     homeAccountButton
                     Spacer(minLength: 0)
                     if rosterChromeAtTop {
-                        standardChromeTrailing
+                        GlassCircleButton(systemImage: "magnifyingglass", accessibilityLabel: "Search") {
+                            showingSearch = true
+                        }
+                        .accessibilityFocused($chromeFocus, equals: .search)
+                        .accessibilityIdentifier("home-search")
                     }
+                    newMenuButton
                 }
             }
         }
         .padding(.horizontal, Theme.Metric.screenEdge)
         .padding(.top, HomeMetrics.headerTop)
-        .padding(.bottom, rosterChromeAtTop ? 8 : 0)
+        .padding(.bottom, 8)
     }
 
-    /// Search and + at the trailing edge (top placement) or in the bottom bar.
+    /// Search and + at the trailing edge (the iPad's bottom bar).
     private var standardChromeTrailing: some View {
         HStack(spacing: Theme.Metric.controlGap) {
             GlassCircleButton(systemImage: "magnifyingglass", accessibilityLabel: "Search") {
@@ -1572,29 +1593,55 @@ extension ChatListView {
         }
     }
 
-    /// Search and + sit at the bottom by default, within thumb's reach; with
-    /// the "Updates button" switch on, the large Updates button leads the
-    /// row. "Search and + at top" moves search and + only: the pill stays
-    /// here, alone, at the bottom.
+    /// The bottom bar, as in Grok Bot: the apps button, then the Search
+    /// pill within thumb's reach. With the "Updates button" switch on, the
+    /// large Updates pill takes the middle and search shrinks to its circle;
+    /// "Search at top" moves search only. The iPad keeps search and + here.
     @ViewBuilder
     private var standardBottomBar: some View {
         if selection.active {
             HomeSelectionBar(model: selection)
-        } else if showUpdatesButton || !rosterChromeAtTop {
-            HStack(spacing: Theme.Metric.controlGap) {
-                if showUpdatesButton {
-                    updatesButton
-                        .frame(maxWidth: .infinity)
+        } else {
+            HStack(spacing: HomeMetrics.bottomGap) {
+                HomeAppsButton(select: selectAccount, openApp: openHomeApp)
+                if avatarAtTrailingCorner {
+                    if showUpdatesButton { updatesButton.frame(maxWidth: .infinity) } else { Spacer(minLength: 0) }
+                    standardChromeTrailing
+                } else if showUpdatesButton {
+                    updatesButton.frame(maxWidth: .infinity)
+                    if !rosterChromeAtTop {
+                        GlassCircleButton(systemImage: "magnifyingglass", accessibilityLabel: "Search") {
+                            showingSearch = true
+                        }
+                        .accessibilityFocused($chromeFocus, equals: .search)
+                        .accessibilityIdentifier("home-search")
+                    }
+                } else if !rosterChromeAtTop {
+                    HomeSearchPill { showingSearch = true }
+                        .accessibilityFocused($chromeFocus, equals: .search)
                 } else {
                     Spacer(minLength: 0)
                 }
-                if !rosterChromeAtTop {
-                    standardChromeTrailing
-                }
             }
-            .padding(.horizontal, Theme.Metric.screenEdge)
-            .padding(.bottom, 8)
+            .padding(.leading, HomeMetrics.bottomInset)
+            .padding(.trailing, HomeMetrics.bottomInset)
+            // Grok Bot sits the row 28 pt off the screen's bottom edge, a
+            // little into the home indicator's band
+            .padding(.bottom, avatarAtTrailingCorner ? 8 : 1)
+            .offset(y: avatarAtTrailingCorner ? 0 : 6)
             .bottomBarScrim()
+        }
+    }
+
+    /// The apps menu's own entries.
+    private func openHomeApp(_ app: HomeApp) {
+        Haptics.selection()
+        switch app {
+        case .updates: showingUpdates = true
+        case .connectApps:
+            connectAppsTab = nil
+            showingConnectedApps = true
+        case .templates: showingTemplates = true
         }
     }
 

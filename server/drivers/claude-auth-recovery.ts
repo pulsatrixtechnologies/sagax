@@ -6,7 +6,14 @@ type Frame = {
   is_error?: unknown; isReplay?: unknown; total_cost_usd?: unknown;
   message?: { model?: unknown; content?: unknown };
 };
-type Pending = { refusal?: string; refused?: boolean; buffered: RuntimeEvent[]; settle: (error?: Error) => void };
+type Pending = {
+  refusal?: string;
+  /** The setup error the driver emitted (may be the canonical reconnect sentence). */
+  emittedRefusal?: string;
+  refused?: boolean;
+  buffered: RuntimeEvent[];
+  settle: (error?: Error) => void;
+};
 
 /** Only CLI-marked API errors count; assistant prose about signing out does not. */
 export function claudeAuthFailure(frame: { error?: unknown; is_api_error_message?: unknown }, text: string): boolean {
@@ -52,7 +59,13 @@ export function claudeAuthRecovery(
     emit(event: RuntimeEvent) {
       const held = pending.get(event.threadId);
       if (!held || event.type === "turn.started" || event.type === "session.started") return publish(event);
-      if (held.refusal && event.type === "runtime.error" && event.setup && event.message === held.refusal) return void held.buffered.push(event);
+      // The driver may wrap the CLI text in the canonical reconnect sentence
+      // (claudeSignInExpired); match either the raw refusal or that wrap.
+      if (held.refusal && event.type === "runtime.error" && event.setup && typeof event.message === "string"
+        && (event.message === held.refusal || event.message.includes(held.refusal))) {
+        held.emittedRefusal = event.message;
+        return void held.buffered.push(event);
+      }
       if (held.refused && event.type === "turn.completed" && !event.ok && event.stopReason === "auth_required" && typeof event.turnId === "string") {
         const turnId = event.turnId;
         held.buffered.push(event);
@@ -60,7 +73,7 @@ export function claudeAuthRecovery(
           if (pending.get(event.threadId) !== held) return;
           if (!stopped) return accept(event.threadId, held);
           pending.delete(event.threadId);
-          held.settle(new TurnAuthenticationRefusedError(turnId, held.refusal!));
+          held.settle(new TurnAuthenticationRefusedError(turnId, held.emittedRefusal ?? held.refusal!));
         }, () => accept(event.threadId, held));
       }
       accept(event.threadId, held);

@@ -75,6 +75,9 @@ export const USER_PREFERENCE_KEYS = [
   // where bots work for this person (organization server: their computer
   // through the desktop app, or their server environment; shared/bot-workplace.ts)
   "sagax.botWorkplace.v1",
+  // Computer place labels (Cloud, desktops, Browser, enrolled hosts)
+  // (shared/place-labels.ts): the person's own names for their places.
+  "sagax.placeLabels.v1",
   // voice mode: the xAI voice, speed and language (shared/voice-mode.ts)
   "omb.voiceMode.v1",
   // bot replies without em or en dashes, "on" | "off"; absent follows the
@@ -95,6 +98,9 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.presenceVisible.v1",
   // the Automations page's scope and filters, per person (src/lib/routine-scope-prefs.ts)
   "sagax.routineScope.v1",
+  // routine editor "More options" disclosure open ("1") or collapsed ("0"/absent)
+  // (src/lib/routine-editor-more-pref.ts); Grok-simple default is collapsed
+  "sagax.routineEditorMore.v1",
   // the models starred in the composer's model menu (src/lib/model-favorites.ts)
   "sagax.modelFavorites.v1",
   // the first-run step "connect your own engine" on an organization server

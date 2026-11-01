@@ -4,9 +4,7 @@
 import { CalendarClock, ChevronLeft, CirclePlay, Copy as CopyIcon, History, MoreHorizontal, PanelRight, Pause, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useServerFeature } from "@/lib/server-features";
-import { api, continueRoutineRunInConversation, openBotThread, useStore, type Bot } from "@/state/store";
-import { useShowThreads } from "@/lib/thread-preferences";
-import { routineDateTime } from "@/lib/routine-display";
+import { api, useStore, type Bot } from "@/state/store";
 import type { Routine, RoutineRun, RoutineRunOn } from "@/lib/routines";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -18,8 +16,7 @@ import { RoutineTitle } from "../routines/RoutineRowMenu";
 import { ACTION_LABEL_MAIN, ActionBar, ActionButton, actionButtonClass } from "../ActionBar";
 import { canRunRoutineNow, routineRunInFlight, RunNowButton } from "../routines/RunNowButton";
 import { RoutineDetail } from "../routines/RoutineDetail";
-import { ConnectedRunActivity, RoutineRunDetail } from "../routines/RoutineRunDetail";
-import { RunDetailModal } from "../routines/RunDetailModal";
+import { RoutineRunExchange } from "../routines/RoutineRunExchange";
 
 // The routine page covers the whole panel, so it draws its own top bar the way
 // the panel's does (BotSettingsDialog): a .content-topbar row, whose buttons
@@ -46,7 +43,6 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
   const [editing, setEditing] = useState<Routine | "new" | { copyOf: Routine } | null>(null);
   const [openedRun, setOpenedRun] = useState<RoutineRun | null>(null);
   const [working, setWorking] = useState(false);
-  const showThreads = useShowThreads();
   // 2026-10-28: a folder's + makes the new routine in that folder.
   const [newFolder, setNewFolder] = useState<string | undefined>(undefined);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -73,42 +69,26 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
 
   const openLogs = (routineId: string) => dispatch({ type: "showRoutines", section: "logs", routineId, botId: bot.id });
 
-  // 2026-10-29: a run opened from the routine's history (or Run now) opens
-  // in a large modal over the app, not in the narrow panel; the routine's
-  // page stays under it.
-  let runModal: React.ReactNode = null;
+  // 2026-11-01: a run opened from the routine's history (or Run now) opens
+  // as an exchange sheet over the chat column (same place as Melonie <->
+  // Katarina), not as a modal over the app.
+  let runSheet: React.ReactNode = null;
   if (detail && openedRun) {
     const run = state.routineRuns.find((candidate) => candidate.id === openedRun.id) ?? openedRun;
-    const executionThreadId = run.executionThreadId ?? run.threadId;
-    const canContinue = run.target === "bot";
     const live = ["queued", "running", "waiting"].includes(run.status);
-    runModal = <RunDetailModal title={detail.name} subtitle={t("routineDetail.runOf", { date: routineDateTime(run.scheduledFor) })} onClose={() => setOpenedRun(null)}>{(wide) => (
-      <ConnectedRunActivity key={run.id} run={run}>{({ detail: activity, error: activityError, waiting }) => (
-        <RoutineRunDetail
-          wide={wide}
-          run={run}
-          waiting={waiting}
-          onOpenThread={(_botId, threadId) => openBotThread(dispatch, bot, threadId, showThreads)}
-          routine={detail}
-          bots={[bot]}
-          groups={state.groups}
-          viewerPrincipalId={state.config?.viewer?.principalId ?? null}
-          detail={activity}
-          detailError={activityError}
-          editable={detail.canEdit !== false}
-          canRunAgain={canRunRoutineNow(state.config, detail, bot)}
-          inFlight={Boolean(routineRunInFlight(state.routineRuns, detail.id))}
-          working={working}
-          canContinue={canContinue}
-          onReply={executionThreadId && run.target !== "room-goal" ? async (text) => { await api(`/api/bots/${bot.id}/messages`, { method: "POST", body: JSON.stringify({ text, threadId: executionThreadId, busyMode: "steer", sendId: crypto.randomUUID() }) }); } : undefined}
-          onStop={live ? () => void cancelRun(run.id) : undefined}
-          onRunAgain={() => { setOpenedRun(null); dispatch({ type: "runRoutine", routineId: detail.id, onStarted: (started) => setOpenedRun(started) }); }}
-          onResume={run.autoPaused && !detail.enabled ? () => toggle(detail) : undefined}
-          onContinue={() => continueRoutineRunInConversation(dispatch, bot, run, showThreads)}
-          onLogs={() => openLogs(detail.id)}
-        />
-      )}</ConnectedRunActivity>
-    )}</RunDetailModal>;
+    runSheet = (
+      <RoutineRunExchange
+        run={run}
+        routine={detail}
+        bots={[bot]}
+        working={working}
+        onClose={() => setOpenedRun(null)}
+        onStop={live ? () => void cancelRun(run.id) : undefined}
+        onRunAgain={() => { setOpenedRun(null); dispatch({ type: "runRoutine", routineId: detail.id, onStarted: (started) => setOpenedRun(started) }); }}
+        onLogs={() => openLogs(detail.id)}
+        onOpenConfiguration={() => setEditing(detail)}
+      />
+    );
   }
 
   if (detail) {
@@ -145,9 +125,9 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
         onLogs={() => openLogs(detail.id)}
         onDelete={() => { dispatch({ type: "deleteRoutine", routineId: detail.id }); setDetailId(null); }}
       />
-      {runModal}
-      {editing && editing !== "new" && !("copyOf" in editing) && <RoutineEditor key={detail.id} routine={detail} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} onClose={() => setEditing(null)} />}
-      {editing && editing !== "new" && "copyOf" in editing && <RoutineEditor key={`${detail.id}-copy`} copyOf={editing.copyOf} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} folder={detail.folder} onClose={() => setEditing(null)} />}
+      {runSheet}
+      {editing && editing !== "new" && !("copyOf" in editing) && <RoutineEditor key={detail.id} routine={detail} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} presentation="panel" onClose={() => setEditing(null)} />}
+      {editing && editing !== "new" && "copyOf" in editing && <RoutineEditor key={`${detail.id}-copy`} copyOf={editing.copyOf} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} folder={detail.folder} presentation="panel" onClose={() => setEditing(null)} />}
     </div>;
   }
 
@@ -164,7 +144,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
     </div>;
   }
 
-  return <div className="flex flex-col gap-3">
+  return <div className="relative flex flex-col gap-3">
     <div className="flex items-center gap-2">
       <CalendarClock size={16} className="text-ink-secondary" />
       <h2 className="min-w-0 flex-1 text-[13px] font-normal leading-[18px] text-ink-secondary">{t("computer.tab.routines")}</h2>
@@ -176,7 +156,13 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
     <RoutineFolderList controlRef={folderControl} bot={bot} routines={routines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={runs} loading={state.routinesLoadState === "loading" && routines.length === 0} error={state.routinesLoadState === "error"} onOpen={(routine) => setDetailId(routine.id)} grouped={grouped}
       onCreateIn={(folder) => { setNewFolder(folder); setEditing("new"); }}
       onDuplicate={(routine) => setEditing({ copyOf: routine })} />
-    {editing === "new" && <RoutineEditor key={`${bot.id}-new-${newFolder ?? ""}`} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} folder={newFolder} onClose={() => { setEditing(null); setNewFolder(undefined); }} />}
+    {(editing === "new" || (editing && "copyOf" in editing)) && (
+      <div className="absolute inset-0 z-30 min-h-[24rem]">
+        {editing === "new"
+          ? <RoutineEditor key={`${bot.id}-new-${newFolder ?? ""}`} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} folder={newFolder} presentation="panel" onClose={() => { setEditing(null); setNewFolder(undefined); }} />
+          : <RoutineEditor key={`${"copyOf" in editing ? editing.copyOf.id : ""}-copy`} copyOf={"copyOf" in editing ? editing.copyOf : undefined} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} presentation="panel" onClose={() => setEditing(null)} />}
+      </div>
+    )}
   </div>;
 }
 

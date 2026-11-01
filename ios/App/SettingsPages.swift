@@ -614,6 +614,11 @@ struct SettingsSearchField: View {
     /// Set when the field shares a row with a round button: same height, no
     /// optical nudge, so both centre on one line.
     var rowHeight: CGFloat?
+    /// Focus the field as it appears; `onDismiss` runs when it loses focus
+    /// empty (the root's search folds back into its round button).
+    var autoFocus = false
+    var onDismiss: (() -> Void)?
+    @FocusState private var focused: Bool
 
     var body: some View {
         HStack(spacing: 7.67) {
@@ -626,6 +631,11 @@ struct SettingsSearchField: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
+                .focused($focused)
+                .onAppear { if autoFocus { focused = true } }
+                .onValueChange(of: focused) { now in
+                    if !now, text.isEmpty { onDismiss?() }
+                }
                 .accessibilityIdentifier(identifier)
             if !text.isEmpty {
                 Button {

@@ -3,6 +3,7 @@
 // once and is told to them once per bot and cause, until one of that bot's runs completes.
 import type { RuntimeEvent } from "../shared/runtime-events.ts";
 import type { RoutineRetryCause } from "../shared/routines.ts";
+import { CLAUDE_NEEDS_RECONNECTING, CLAUDE_SIGN_IN_EXPIRED, isClaudeReconnectCondition } from "./drivers/claude-errors.ts";
 import { classifyError, USAGE_LIMIT } from "./drivers/retry.ts";
 import type { RoutineRun } from "./routines.ts";
 import { hostTimeZone } from "./turn-clock.ts";
@@ -16,6 +17,8 @@ export interface RoutineFailureFacts {
   setup?: boolean;
   stalled?: boolean;
   limitResetsAt?: number;
+  /** Model-only refusal (Claude extra-usage credits, one model's weekly window). */
+  limitScope?: "model";
 }
 
 export type RoutineFailureClass =
@@ -29,7 +32,11 @@ export interface RoutineAlert { detail: string }
 
 export interface RoutineOwnerNotice { botId: string; cause: RoutineOwnerCause; at: number }
 
-export type RoutineRecovery = { queued: true; alert?: RoutineAlert } | { queued: false; error: string; alert?: RoutineAlert | null };
+export type RoutineRecovery =
+  | { queued: true; alert?: RoutineAlert }
+  | { queued: false; error: string; alert?: RoutineAlert | null }
+  /** Pause until the person reconnects Claude; the run is not lost and does not fail. */
+  | { waiting: true; attention: string; alert?: RoutineAlert | null };
 
 const RETRY_MS = 15_000;
 const RATE_LIMIT_RETRY_MS = 60_000;
@@ -54,6 +61,9 @@ const OWNER_ACTION: Record<Exclude<RoutineOwnerCause, "setup">, string> = {
   credits: "This bot's engine account is out of credit. Add credit with the provider, or choose another engine for this bot.",
   usage_limit: "This bot's engine reached its usage limit. Its routines work again once it resets, or choose another engine for this bot now.",
 };
+
+const CLAUDE_RECONNECT_ACTION =
+  `${CLAUDE_SIGN_IN_EXPIRED} Routines that use Claude wait until you reconnect; they resume on their own after.`;
 const RETRY_WHY: Record<Exclude<RoutineRetryCause, "usage_limit">, string> = {
   stalled: "the engine stalled", restarted: "Sagax restarted while it ran", rate_limited: "a rate limit", provider: "a temporary error",
 };
@@ -67,6 +77,11 @@ export function classifyRoutineFailure(failure: string, facts: RoutineFailureFac
   if (facts.cause === "stalled" || facts.stalled) return { kind: "retry", cause: "stalled" };
   const { reason, transient } = classifyError({ text: failure });
   if (OUT_OF_CREDITS.test(failure)) return { kind: "owner", cause: "credits" };
+  // Claude extra-usage credits: model-only, no reset to wait for. Never a plan window.
+  if (isClaudeReconnectCondition(failure) && (facts.limitScope === "model" || !facts.limitResetsAt) &&
+    (facts.stopReason === "quota" || reason === "quota" || /extra usage/i.test(failure))) {
+    return { kind: "owner", cause: "credits" };
+  }
   if (facts.limitResetsAt || facts.stopReason === "quota" || USAGE_LIMIT.test(failure)) {
     return { kind: "owner", cause: "usage_limit", ...(facts.limitResetsAt ? { resetsAt: facts.limitResetsAt } : {}) };
   }
@@ -83,8 +98,8 @@ export function dispatchRefusal(error: unknown): RoutineFailureFacts {
   return typeof code === "string" && BUSY_CODES.has(code) ? { cause: "busy" } : {};
 }
 
-export function engineFacts({ setup, stalled, limitResetsAt }: RuntimeEvent & { type: "runtime.error" }): RoutineFailureFacts {
-  return { setup, stalled, limitResetsAt };
+export function engineFacts({ setup, stalled, limitResetsAt, limitScope }: RuntimeEvent & { type: "runtime.error" }): RoutineFailureFacts {
+  return { setup, stalled, limitResetsAt, ...(limitScope === "model" ? { limitScope } : {}) };
 }
 
 /** Host-local, with its zone: on a Cloud home the host's zone need not be the reader's. */
@@ -143,6 +158,18 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
   if (reset && reset > now && reset - now <= LIMIT_WAIT_MS && requeueOnce(run, "usage_limit", failure, now, reset + AFTER_RESET_MS)) {
     return { queued: true, ...(first ? { alert: { detail: `This bot's engine reached its usage limit. This run starts again at ${when(reset + AFTER_RESET_MS)}.` } } : {}) };
   }
+  // Claude auth expired or extra-usage credits: pause the run until reconnect.
+  // No failed status, so the proactive waker never loops on the same cause.
+  if ((verdict.cause === "signed_out" || verdict.cause === "credits") && isClaudeReconnectCondition(failure)) {
+    delete run.error;
+    delete run.retryAt;
+    delete run.retried;
+    return {
+      waiting: true,
+      attention: CLAUDE_NEEDS_RECONNECTING,
+      alert: first ? { detail: CLAUDE_RECONNECT_ACTION } : null,
+    };
+  }
   const action = verdict.cause === "setup" ? failure : OWNER_ACTION[verdict.cause];
   return { queued: false, error: verdict.cause === "signed_out" ? `${action} The engine said: “${failure}”` : failure, alert: first ? { detail: action } : null };
 }
@@ -158,7 +185,8 @@ export function weekRuns(runs: readonly RoutineRun[], routineId: string, now: nu
   for (const run of runs) {
     if (run.routineId !== routineId || !["completed", "failed", "missed"].includes(run.status) || (run.finishedAt ?? run.createdAt) < now - WEEK_MS) continue;
     total += 1;
-    if (run.status === "completed") ok += 1;
+    // Completed with problems (2026-11-01) is not a clean run.
+    if (run.status === "completed" && !run.problems) ok += 1;
   }
   return total ? { ok, total } : undefined;
 }

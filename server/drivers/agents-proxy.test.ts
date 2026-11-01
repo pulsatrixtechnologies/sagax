@@ -767,6 +767,7 @@ describe("agents-proxy MCP surface", () => {
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",

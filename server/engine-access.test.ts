@@ -465,6 +465,15 @@ describe("#1533 / #1759: an expired subscription sign-in", () => {
     const card = signInExpiredCard({ ...base, message: "Failed to authenticate: OAuth session expired and could not be refreshed" });
     expect(card).toEqual({ reason: "no_access", cause: "sign_in_expired", engine: "Claude", botId: "b1", botName: "Helper", ownerPrincipalId: "pr_member", payerPrincipalId: "pr_member", subscriptionSignIn: true });
     expect(signInExpiredCard({ ...base, message: "API Error: authentication_failed" })).not.toBeNull();
+    expect(signInExpiredCard({
+      ...base,
+      message: "Claude's sign-in has expired. Reconnect Claude in Settings → Model providers and accounts. Claude said: Not logged in",
+    })).toMatchObject({ cause: "sign_in_expired", engine: "Claude", subscriptionSignIn: true });
+    // Extra-usage credits on Claude also need Reconnect (same card as an expired sign-in).
+    expect(signInExpiredCard({
+      ...base,
+      message: "Claude refused this turn because this model runs on extra usage for your account, and those credits are used up.",
+    })).toMatchObject({ cause: "sign_in_expired", engine: "Claude" });
     expect(engineAccessNotice("no_access", "Claude", { cause: "sign_in_expired" })).toContain("Reconnect Claude");
   });
 

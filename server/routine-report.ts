@@ -20,10 +20,13 @@
 import type { RoutineGoalStatus, RoutineRunStatus } from "../shared/routines.ts";
 
 export const ROUTINE_QUIET_MARKER = "NOTHING_TO_REPORT";
+/** 2026-11-01: the bot's own word that the run failed or did only part of
+ * its work ("RUN_STATUS: partial: the CRM refused the login"). */
+export const ROUTINE_STATUS_MARKER = "RUN_STATUS:";
 
 /** What the bot reads in its system prompt on every routine run. */
 export const ROUTINE_REPORT_CONTRACT =
-  ` This run works in the background: the person does not see this conversation, only your final message, and only when it needs them. Do the routine's work, then end with a short report of what you found or did that the person should know. Never restate or quote the routine's instructions. If nothing needs the person (nothing found, nothing changed, nothing to decide, or the instructions say to stay silent in this case), end your final message with the line ${ROUTINE_QUIET_MARKER} on its own: nothing is posted to their chat and the run stays in the routine logs.`;
+  ` This run works in the background: the person does not see this conversation, only your final message, and only when it needs them. Do the routine's work, then end with a short report of what you found or did that the person should know. Never restate or quote the routine's instructions. If nothing needs the person (nothing found, nothing changed, nothing to decide, or the instructions say to stay silent in this case), end your final message with the line ${ROUTINE_QUIET_MARKER} on its own: nothing is posted to their chat and the run stays in the routine logs. If a step failed or part of the work could not be done, never report it as done: begin your final message with the line ${ROUTINE_STATUS_MARKER} failed: <why> when the work could not be done, or ${ROUTINE_STATUS_MARKER} partial: <what did not work> when only part of it was.`;
 
 /** The marker on a line of its own, in the shapes models write it in. */
 const MARKER_LINE = /^[\s`*_[(<"']*nothing[\s_-]to[\s_-]report[\s`*_\])>"'.!]*$/i;
@@ -53,11 +56,34 @@ export interface RoutineReportOutcome {
   quiet: boolean;
   /** The bot's final message without the marker, for the logs and the post. */
   report: string;
+  /** The bot said the run failed or did only part of its work, and why. */
+  declared?: { status: "failed" | "partial"; reason: string };
+}
+
+/** The status line on a line of its own, in the shapes models write it in. */
+const STATUS_LINE = /^[\s`*_>]*RUN[_ ]STATUS\s*:?[\s`*_]*(failed|failure|partial|partially)\b[\s`*_]*[:—–-]?\s*(.*)$/i;
+
+/** The bot's own status line (a line of its own, usually first or last),
+ * and the message without it. */
+function declaredStatus(text: string): { declared?: RoutineReportOutcome["declared"]; rest: string } {
+  const lines = text.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = STATUS_LINE.exec(lines[index]!.trim());
+    if (!match) continue;
+    const status = /^fail/i.test(match[1]!) ? "failed" as const : "partial" as const;
+    const reason = match[2]!.replace(/[`*_]+$/g, "").trim();
+    const rest = lines.filter((_, at) => at !== index).join("\n").trim();
+    return { declared: { status, reason: reason || (status === "failed" ? "The bot reported that the run failed" : "The bot reported that only part of the work was done") }, rest };
+  }
+  return { rest: text };
 }
 
 export function routineReportOutcome(output: string | undefined): RoutineReportOutcome {
-  const text = (output ?? "").trim();
-  if (!text) return { quiet: true, report: "" };
+  const raw = (output ?? "").trim();
+  if (!raw) return { quiet: true, report: "" };
+  // A run that says it failed or did part of its work is never quiet.
+  const { declared, rest: text } = declaredStatus(raw);
+  if (declared) return { quiet: false, report: text.replace(new RegExp(`^\\s*${ROUTINE_QUIET_MARKER}\\s*$`, "gim"), "").trim(), declared };
   const lines = text.split(/\r?\n/);
   const last = lines.findLastIndex((line) => line.trim() !== "");
   if (last >= 0 && MARKER_LINE.test(lines[last]!.trim())) {
@@ -84,6 +110,10 @@ export interface RoutineRunReportFacts {
    * otherwise it is silent and stays in Automations. Approvals, questions and
    * errors surface whichever this is, and a quiet run never posts. */
   postResults?: boolean;
+  /** 2026-11-01: the run completed with problems (RoutineRun.problems). */
+  problems?: string;
+  /** 2026-11-01: a person started it: its card shows from the start. */
+  startedBy?: "person";
 }
 
 /** Whether a run has something for the person's conversation now. A plain
@@ -91,10 +121,14 @@ export interface RoutineRunReportFacts {
  * approval, a question, a team that needs input, or an error always does. */
 export function routineRunReportable(run: RoutineRunReportFacts): boolean {
   if (run.goalStatus === "needs-input") return true;
+  // A run a person started shows what started, while it is queued and runs
+  // too; once it ends the usual rules decide (a quiet one says so in place).
+  if (run.startedBy === "person" && ["queued", "running", "waiting"].includes(run.status)) return true;
   switch (run.status) {
     case "waiting": return run.needsPerson === true;
     case "failed": return true;
-    case "completed": return run.quiet !== true && run.postResults === true;
+    // A run that completed with problems tells the person, like a failure.
+    case "completed": return run.problems ? true : run.quiet !== true && run.postResults === true;
     default: return false;
   }
 }

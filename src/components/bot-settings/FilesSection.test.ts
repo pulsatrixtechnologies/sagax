@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ThreadFile } from "@/lib/chat-files";
 import { setLocale } from "@/lib/i18n";
@@ -10,8 +10,9 @@ vi.mock("@/state/store", () => ({
   useStore: () => ({ state: { loadingOlder: {} }, dispatch: vi.fn() }),
 }));
 
-const { FilesBrowser } = await import("./FilesSection");
+const { FilesBrowser, downloadThreadFile } = await import("./FilesSection");
 setLocale("en");
+afterEach(() => vi.unstubAllGlobals());
 
 const file = (name: string, patch: Partial<ThreadFile> = {}): ThreadFile => ({
   id: `${name.replace(/\W/g, "").padEnd(24, "0").slice(0, 24)}`,
@@ -111,5 +112,35 @@ describe("FilesBrowser", () => {
     const failed = render({ files: null, error: true });
     expect(failed).toContain("Couldn&#x27;t load this chat&#x27;s files.");
     expect(failed).toContain("Retry");
+  });
+});
+
+describe("large file download", () => {
+  it("preflights one byte then hands the opaque URL to the browser without a Blob", async () => {
+    const fetcher = vi.fn(async () => new Response("x", {
+      status: 206,
+      headers: {
+        "content-type": "video/mp4",
+        "content-disposition": `attachment; filename="clip.mp4"`,
+        "content-range": "bytes 0-0/1073741824",
+      },
+    }));
+    const click = vi.fn();
+    const remove = vi.fn();
+    const append = vi.fn();
+    const link = { href: "", download: "", style: { display: "" }, click, remove };
+    vi.stubGlobal("fetch", fetcher);
+    vi.stubGlobal("document", { createElement: vi.fn(() => link), body: { append } });
+    const video = file("clip.mp4", { id: "0123456789abcdef01234567", size: 1024 * 1024 * 1024, mime: "video/mp4" });
+
+    await downloadThreadFile("thread-1", video);
+
+    expect(fetcher).toHaveBeenCalledWith("/api/threads/thread-1/files/0123456789abcdef01234567", {
+      headers: { range: "bytes=0-0" },
+    });
+    expect(link).toMatchObject({ href: "/api/threads/thread-1/files/0123456789abcdef01234567", download: "clip.mp4" });
+    expect(append).toHaveBeenCalledWith(link);
+    expect(click).toHaveBeenCalledOnce();
+    expect(remove).toHaveBeenCalledOnce();
   });
 });

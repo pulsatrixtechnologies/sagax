@@ -10,15 +10,22 @@
 // session opened here becomes the usual card and panel row (client "app")
 // through the remote_support_* registrar, and "Prendre le contrôle" takes over.
 //
-// Rules (decisions of 2026-10-26): any person who reaches this server may open
-// (no admin approval); opening is behind SAGAX_UNATTENDED_ACCESS (OFF by
-// default); listing and revoking always work, flag OFF included (M2). The
-// person who enrolled a host revokes it themselves, an admin revokes any host
-// of the organization: Perspicax decides, Sagax adds no gate of its own. The
-// audit (`remote_host.revoked`) names the person who acted, never the
-// installer (M4), with the host, the reason and the UTC time. No key, no
-// address and no host id ever reaches visible text.
-import { parseUnattendedHostId, parseUnattendedHosts, type UnattendedHostRow } from "../shared/remote-unattended-host.ts";
+// Rules (decisions of 2026-10-26 and 2026-11-01): unattended access is always
+// enabled server-side (it is not a mode and cannot be disabled). Any person
+// who reaches this server may open (no admin approval). Listing and revoking
+// always work. The person who enrolled a host revokes it themselves, an admin
+// revokes any host of the organization: Perspicax decides, Sagax adds no gate
+// of its own. The audit (`remote_host.revoked`) names the person who acted,
+// never the installer (M4), with the host, the reason and the UTC time. No
+// key, no address and no host id ever reaches visible text. Safeguards that
+// stay: org consent at host install, visible banner/tray on the host,
+// non-disableable audit, expiry, revoke.
+import {
+  hostOwnedByPerson,
+  parseUnattendedHostId,
+  parseUnattendedHosts,
+  type UnattendedHostRow,
+} from "../shared/remote-unattended-host.ts";
 import { handleRemoteSupportCall, openUnattendedSession, type RemoteSupportContext } from "./remote-support-local.ts";
 
 /** Perspicax tools this page calls (names frozen with Perspicax, contract
@@ -51,12 +58,16 @@ export interface UnattendedHostAuditEvent {
   ok: boolean;
   /** remote_host.revoked: the reason given ("" when none). */
   reason?: string;
+  /** unattended.open: scope and rights asked for, and the bot whose Perspicax seat opened it. */
+  scope?: string;
+  rights?: string;
+  botId?: string;
 }
 
 export type HostsListOutcome = { available: true; hosts: UnattendedHostRow[] } | { available: false; hosts: []; reason: string };
 export type HostOpenOutcome =
   | { ok: true; code: string; botId: string; threadId: string }
-  | { ok: false; error: "disabled" | "invalid" | "unavailable" | "refused"; message: string };
+  | { ok: false; error: "invalid" | "unavailable" | "refused" | "not_found"; message: string };
 export type HostRevokeOutcome = { ok: true } | { ok: false; error: "invalid" | "unavailable" | "refused"; message: string };
 
 const NOT_AVAILABLE = "Perspicax does not list enrolled computers yet on this server.";
@@ -98,8 +109,6 @@ function finished(text: string): "connected" | "over" | null {
 }
 
 export function createUnattendedHosts(deps: {
-  /** SAGAX_UNATTENDED_ACCESS: opening only. Listing and revoking ignore it. */
-  enabled(): boolean;
   /** The person's Perspicax link, or a reason it cannot be made. */
   seat(principalId: string): Promise<PerspicaxSeat | { error: string }>;
   /** The technician side on this computer (support folder, name, org). */
@@ -107,6 +116,9 @@ export function createUnattendedHosts(deps: {
   /** End a Sagax session row by its 12-hex id (cuts control and the tunnel). */
   closeById(id: string): Promise<boolean>;
   audit(event: UnattendedHostAuditEvent): void;
+  /** Perspicax subject for the Sagax principal. Used to enforce ownership
+   * when the host list is wider than the person (defense in depth). */
+  ownerSub?(principalId: string): string | null;
   /** How often and how long the page's open waits for the host's beat. The
    * host polls every `poll_every` (10 s by default), so a minute and a half
    * covers a few missed beats. */
@@ -151,35 +163,58 @@ export function createUnattendedHosts(deps: {
     }
   }
 
-  return {
-    /** Opening is usable (the flag). The page hides the button otherwise. */
-    openEnabled(): boolean {
-      return deps.enabled() === true;
-    },
+  async function list(viewer: UnattendedHostsViewer): Promise<HostsListOutcome> {
+    const out = await withSeat(viewer.principalId, async (seat) => {
+      const posted = await seat.call(HOSTS_LIST_TOOL, {});
+      if (refusal(posted)) return null;
+      return parseUnattendedHosts(answerObject(posted.body.text), now());
+    });
+    if (out && "error" in out) return { available: false, hosts: [], reason: out.error };
+    if (!out) return { available: false, hosts: [], reason: NOT_AVAILABLE };
+    return { available: true, hosts: out };
+  }
 
-    /** The hosts enrolled in this person's organization. Works flag OFF too,
-     * so a host enrolled before the flag was cut can still be revoked. */
-    async list(viewer: UnattendedHostsViewer): Promise<HostsListOutcome> {
-      const out = await withSeat(viewer.principalId, async (seat) => {
-        const posted = await seat.call(HOSTS_LIST_TOOL, {});
-        if (refusal(posted)) return null;
-        return parseUnattendedHosts(answerObject(posted.body.text), now());
-      });
-      if (out && "error" in out) return { available: false, hosts: [], reason: out.error };
-      if (!out) return { available: false, hosts: [], reason: NOT_AVAILABLE };
-      return { available: true, hosts: out };
-    },
+  return {
+    /** The hosts enrolled in this person's organization. */
+    list,
 
     /** Open an unattended session against an enrolled host. No admin
-     * approval: any person who reaches this server may (decision of 2026-10-26). */
+     * approval: any person who reaches this server may (decision of 2026-10-26).
+     * Always available: unattended access is not a server mode (2026-11-01).
+     * Ownership: the host must be one of theirs (installed_by matches their
+     * Perspicax subject, or listed as theirs when no subject is known). */
     async open(viewer: UnattendedHostsViewer, rawHostId: string, options: { scope?: string; rights?: string } = {}): Promise<HostOpenOutcome> {
-      if (!deps.enabled()) return { ok: false, error: "disabled", message: "Unattended access is not enabled on this server." };
       const hostId = parseUnattendedHostId(rawHostId);
       if (!hostId) return { ok: false, error: "invalid", message: "That computer is not an enrolled host." };
+      const scope = typeof options.scope === "string" && options.scope ? options.scope : "full-control";
+      const rights = options.rights === "elevated" ? "elevated" : "standard";
+      const auditOpen = (ok: boolean, botId?: string) => deps.audit({
+        at: now(),
+        actor: viewer.principalId,
+        kind: "unattended.open",
+        hostId,
+        ok,
+        scope,
+        rights,
+        ...(botId ? { botId } : {}),
+      });
+      // Defense in depth: refuse another person's host even when the list
+      // tool still returns the whole org (Perspicax MCP parallel fix).
+      const listed = await list(viewer);
+      if (!listed.available) {
+        auditOpen(false);
+        return { ok: false, error: "unavailable", message: listed.reason };
+      }
+      const row = listed.hosts.find((host) => host.hostId === hostId);
+      const sub = deps.ownerSub?.(viewer.principalId) ?? null;
+      if (!row || row.state !== "enrolled" || !hostOwnedByPerson(row, sub)) {
+        auditOpen(false);
+        return { ok: false, error: "not_found", message: "That computer is not one of your enrolled hosts." };
+      }
       const local = deps.local(viewer.principalId);
       const seat = await deps.seat(viewer.principalId).catch(() => ({ error: NO_SEAT }));
       if ("error" in seat) {
-        deps.audit({ at: now(), actor: viewer.principalId, kind: "unattended.open", hostId, ok: false });
+        auditOpen(false);
         return { ok: false, error: "unavailable", message: seat.error };
       }
       const out = await openUnattendedSession({
@@ -190,22 +225,22 @@ export function createUnattendedHosts(deps: {
       }).catch(() => ({ ok: false as const, error: "Perspicax could not be reached." }));
       if (!out.ok) {
         await seat.end().catch(() => {});
-        deps.audit({ at: now(), actor: viewer.principalId, kind: "unattended.open", hostId, ok: false });
+        auditOpen(false, seat.botId);
         return { ok: false, error: "refused", message: out.error };
       }
       revoked.delete(hostId);
       const ids = openedFor.get(hostId) ?? new Set<string>();
       ids.add(out.session);
       openedFor.set(hostId, ids);
-      deps.audit({ at: now(), actor: viewer.principalId, kind: "unattended.open", hostId, ok: true });
+      auditOpen(true, seat.botId);
       void follow(seat, local, hostId, out.code);
       return { ok: true, code: out.code, botId: seat.botId, threadId: seat.threadId };
     },
 
-    /** Revoke a host, flag OFF included (M2): Perspicax lets the person who
-     * enrolled it and any admin, sets revoked_at and ends the host's
-     * sessions; the host stops and uninstalls at its next beat (410).
-     * Sessions opened from this page end here at once. */
+    /** Revoke a host: Perspicax lets the person who enrolled it and any
+     * admin, sets revoked_at and ends the host's sessions; the host stops
+     * and uninstalls at its next beat (410). Sessions opened from this
+     * page end here at once. */
     async revoke(viewer: UnattendedHostsViewer, rawHostId: string, rawReason = ""): Promise<HostRevokeOutcome> {
       const hostId = parseUnattendedHostId(rawHostId);
       if (!hostId) return { ok: false, error: "invalid", message: "That computer is not an enrolled host." };

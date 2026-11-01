@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { useNetworkOnline } from "@/lib/drafts";
+import { isDeployOutageQuiet } from "@/lib/deploy-reconnect";
 import { plainErrorLine } from "@/lib/plain-error";
 import type { AppState } from "@/state/store";
 
@@ -18,6 +19,24 @@ export function ChatNotice({ notice }: { notice: AppState["notice"] }) {
         {notice.kind === "bot-gone"
           ? t("thread.botGone")
           : notice.botName ? t("thread.goneShowing", { name: notice.botName }) : t("thread.gone")}
+      </div>
+    </div>
+  );
+}
+
+/** Calm line while the live stream is down for a short deploy restart.
+ * Live events resume from the cursor; no error toast for a sub-30 s outage. */
+export function ChatReconnectBanner(props: {
+  connected: boolean;
+  everConnected: boolean;
+  disconnectedAt: number | null;
+}) {
+  if (props.connected || !props.everConnected) return null;
+  if (!isDeployOutageQuiet(props.disconnectedAt)) return null;
+  return (
+    <div className="w-full px-5">
+      <div role="status" data-chat-reconnecting className="mb-2 rounded-lg border border-hairline/40 bg-panel px-3 py-2 text-[13px] text-ink-secondary">
+        {t("chat.reconnecting")}
       </div>
     </div>
   );

@@ -52,14 +52,15 @@ final class ShareViewModel: ObservableObject {
     @Published private(set) var computers: [ShareComputer] = []
     @Published private(set) var destinations: [ShareDestination] = []
     @Published private(set) var preview = SharePreview()
+    @Published private(set) var uploadProgress: Double?
     @Published private(set) var errorMessage: String?
     @Published private(set) var rememberedDestinationID: String?
     @Published private(set) var selectedComputerID: String?
     @Published var instruction = "" {
-        didSet { if instruction != oldValue { pendingDelivery = nil } }
+        didSet { if instruction != oldValue { discardDurableShare(); pendingDelivery = nil } }
     }
     @Published var selectedDestinationID: String? {
-        didSet { if selectedDestinationID != oldValue { pendingDelivery = nil } }
+        didSet { if selectedDestinationID != oldValue { discardDurableShare(); pendingDelivery = nil } }
     }
 
     var onCancel: (() -> Void)?
@@ -73,6 +74,9 @@ final class ShareViewModel: ObservableObject {
     private var pendingDelivery: PendingDelivery?
     private var loadTask: Task<Void, Never>?
     private var sendTask: Task<Void, Never>?
+    private var uploadCleanup: [UUID: (CompanionClient, PendingMessageAttachment)] = [:]
+    private var durableShareID: String?
+    private var shareLease: AttachmentTransferLease?
     private var loadStarted = false
     private var requestedComputerID: String?
 
@@ -185,8 +189,20 @@ final class ShareViewModel: ObservableObject {
         guard canCancel else { return }
         loadTask?.cancel()
         loadTask = nil
-        sendTask?.cancel()
+        let sending = sendTask
+        sending?.cancel()
         sendTask = nil
+        let cleanup = Array(uploadCleanup.values)
+        uploadCleanup.removeAll()
+        let journal = SagaxSharedTransfers.journal
+        let transferID = durableShareID
+        if let transferID { try? journal?.cancel(transferID) }
+        durableShareID = nil
+        Task.detached {
+            await sending?.value
+            for (client, attachment) in cleanup { try? await client.cancelAttachmentUpload(attachment) }
+            if let transferID { try? journal?.remove(transferID) }
+        }
         pendingDelivery = nil
         ShareItemLoader.cleanUp(items)
         items = nil
@@ -198,6 +214,7 @@ final class ShareViewModel: ObservableObject {
               phase == .ready || phase == .failed,
               let selected = SagaxSharedConnectionStore.loadRegistry().connection(id: id)
         else { return }
+        discardDurableShare()
         requestedComputerID = id
         selectedComputerID = id
         destinations = []
@@ -217,7 +234,9 @@ final class ShareViewModel: ObservableObject {
         guard sendTask == nil, canSend else { return }
         sendTask = Task { [weak self] in
             guard let self else { return }
-            await self.performSend()
+            // Extra running time while the sheet is dismissed or the phone
+            // locks; the containing app resumes anything left after that.
+            await SagaxTransferActivity.run("Sagax share upload") { await self.performSend() }
             self.sendTask = nil
         }
     }
@@ -237,62 +256,45 @@ final class ShareViewModel: ObservableObject {
         }
         phase = .sending
         errorMessage = nil
-        // Every upload and the final message receives only the time left in
-        // this one budget. Four attachments therefore cannot each consume a
-        // fresh 90 seconds while a system extension is kept alive.
-        let sendDeadline = ContinuousClock.now.advanced(by: .seconds(90))
-
         do {
+            guard let journal = SagaxSharedTransfers.journal, let connection else { throw ShareItemLoadingError.appGroupUnavailable }
+            let sendID = durableShareID ?? UUID().uuidString
+            let durableAttachments = items.attachments.map {
+                PendingMessageAttachment(id: $0.id, fileURL: $0.url, bytes: $0.bytes, name: $0.name,
+                                         mime: $0.mime, kind: $0.kind == .image ? .image : .file)
+            }
+            let prefix = SharedMessageComposer.compose(instruction: instruction, text: items.text, urls: items.urls, attachments: [])
+            durableShareID = try journal.prepareDelivery(durableAttachments, connectionID: connection.id,
+                destination: destination.messageDestination, prefix: prefix, sendID: sendID)
+            shareLease = try journal.lease(sendID)
+            guard shareLease != nil else { throw ShareExtensionError.alreadySending }
+            defer { shareLease = nil }
             var uploaded: [SharedAttachmentReference] = []
+            let totalBytes = items.attachments.reduce(0) { $0 + $1.bytes }
+            var completedBytes = 0
             for attachment in items.attachments {
                 try Task.checkCancellation()
-                let readTask = Task.detached(priority: .userInitiated) {
-                    try Data(contentsOf: attachment.url, options: .mappedIfSafe)
-                }
-                let data = try await withTaskCancellationHandler {
-                    try await readTask.value
-                } onCancel: {
-                    readTask.cancel()
-                }
-                try Task.checkCancellation()
-                let path: String
-                switch attachment.kind {
-                case .image:
-                    path = try await withFailover(
-                        requestTimeout: 20,
-                        deadline: try remainingSendTime(before: sendDeadline)
-                    ) { client in
-                        try await client.uploadImage(
-                            data: data,
-                            mime: attachment.mime,
-                            uploadId: attachment.id.uuidString
-                        )
+                let pending = PendingMessageAttachment(
+                    id: attachment.id, fileURL: attachment.url, bytes: attachment.bytes, name: attachment.name,
+                    mime: attachment.mime, kind: attachment.kind == .image ? .image : .file
+                )
+                let alreadyUploaded = completedBytes
+                let uploadedFile = try await withFailover(
+                    requestTimeout: 20, deadline: nil
+                ) { [weak self] client in
+                    await self?.rememberUpload(client: client, attachment: pending)
+                    // The server remains authoritative for shared/solo image
+                    // ceilings. The extension has no organization snapshot.
+                    return try await client.uploadAttachment(pending, sharedHost: false) { [weak self] sent, _ in
+                        try? journal.updateProgress(sent, attachmentID: pending.id, id: sendID)
+                        await self?.updateUploadProgress(alreadyUploaded + sent, total: totalBytes)
                     }
-                    uploaded.append(SharedAttachmentReference(
-                        path: path,
-                        kind: .image,
-                        displayName: attachment.name
-                    ))
-                case .file:
-                    let uploadedFile = try await withFailover(
-                        requestTimeout: 20,
-                        deadline: try remainingSendTime(before: sendDeadline)
-                    ) { client in
-                        try await client.uploadFile(
-                            data: data,
-                            name: attachment.name,
-                            mime: attachment.mime,
-                            uploadId: attachment.id.uuidString
-                        )
-                    }
-                    path = uploadedFile.path
-                    uploaded.append(SharedAttachmentReference(
-                        path: path,
-                        kind: .file,
-                        displayName: uploadedFile.name
-                    ))
                 }
+                try journal.updateProgress(pending.bytes, attachmentID: pending.id, receipt: uploadedFile, id: sendID)
+                uploaded.append(uploadedFile.reference(for: pending))
+                completedBytes += attachment.bytes
             }
+            uploadProgress = nil
 
             let message = SharedMessageComposer.compose(
                 instruction: instruction,
@@ -304,20 +306,25 @@ final class ShareViewModel: ObservableObject {
             let delivery = PendingDelivery(
                 text: message,
                 destination: destination,
-                sendID: UUID().uuidString
+                sendID: sendID
             )
+            var manifest = try journal.load(sendID)
+            manifest.preparedText = message
+            try journal.save(manifest, id: sendID)
             pendingDelivery = delivery
-            await deliver(
-                delivery,
-                deadline: min(
-                    try remainingSendTime(before: sendDeadline),
-                    .seconds(18)
-                )
-            )
+            await deliver(delivery)
         } catch {
             guard !Task.isCancelled else { return }
             fail(error, preservePreparedDelivery: pendingDelivery != nil)
         }
+    }
+
+    private func rememberUpload(client: CompanionClient, attachment: PendingMessageAttachment) {
+        uploadCleanup[attachment.id] = (client, attachment)
+    }
+
+    private func updateUploadProgress(_ uploaded: Int, total: Int) {
+        uploadProgress = Double(uploaded) / Double(max(1, total))
     }
 
     private func load() async {
@@ -390,6 +397,9 @@ final class ShareViewModel: ObservableObject {
                     forKey: destinationKey(for: connection.id)
                 )
             }
+            if let id = durableShareID { try SagaxSharedTransfers.journal?.remove(id) }
+            durableShareID = nil
+            uploadCleanup.removeAll()
             ShareItemLoader.cleanUp(items)
             items = nil
             pendingDelivery = nil
@@ -409,12 +419,27 @@ final class ShareViewModel: ObservableObject {
         }
     }
 
-    private func remainingSendTime(
-        before deadline: ContinuousClock.Instant
-    ) throws -> Duration {
-        let remaining = ContinuousClock.now.duration(to: deadline)
-        guard remaining > .zero else { throw ShareExtensionError.sendTimedOut }
-        return remaining
+    /// Closing after an explicit handoff preserves the accepted job. iOS
+    /// may stop this process; the containing app owns the durable continuation.
+    func finishInSagax() {
+        guard durableShareID != nil else { return }
+        let sending = sendTask
+        sending?.cancel()
+        sendTask = nil
+        Task { [weak self] in
+            await sending?.value
+            guard let self else { return }
+            self.shareLease = nil
+            ShareItemLoader.cleanUp(self.items)
+            self.items = nil
+            self.onComplete?()
+        }
+    }
+
+    private func discardDurableShare() {
+        guard let id = durableShareID else { return }
+        durableShareID = nil
+        try? SagaxSharedTransfers.journal?.remove(id)
     }
 
     private func connect(to selectedConnection: Connection) async throws {
@@ -465,7 +490,7 @@ final class ShareViewModel: ObservableObject {
 
     private func withFailover<T: Sendable>(
         requestTimeout: TimeInterval = 5,
-        deadline: Duration = .seconds(18),
+        deadline: Duration? = .seconds(18),
         _ operation: @escaping @Sendable (CompanionClient) async throws -> T
     ) async throws -> T {
         guard let connection, let token else { throw ShareExtensionError.notPaired }
@@ -502,9 +527,11 @@ final class ShareViewModel: ObservableObject {
                 }
                 throw lastError ?? ShareExtensionError.offline(connection.name)
             }
-            group.addTask {
-                try await Task.sleep(for: deadline)
-                throw ShareExtensionError.offline(connection.name)
+            if let deadline {
+                group.addTask {
+                    try await Task.sleep(for: deadline)
+                    throw ShareExtensionError.offline(connection.name)
+                }
             }
             defer { group.cancelAll() }
             guard let first = try await group.next() else {
@@ -699,6 +726,7 @@ private enum ShareExtensionError: LocalizedError {
     case imageSupportUnavailable
     case offline(String)
     case sendTimedOut
+    case alreadySending
 
     var errorDescription: String? {
         switch self {
@@ -712,6 +740,8 @@ private enum ShareExtensionError: LocalizedError {
             return "Couldn't reach \(name). Keep Sagax open and Phone access on, then try again."
         case .sendTimedOut:
             return "Sending took too long. Check your connection and try again."
+        case .alreadySending:
+            return String(localized: "Sagax is already sending this share. You can close this sheet.")
         }
     }
 }

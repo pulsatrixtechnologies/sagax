@@ -526,18 +526,13 @@ function FrameAck({ frame, acknowledge }: { frame: PreviewFrame; acknowledge: (f
   return null;
 }
 
-function PreviewImage({ frame, alt, acknowledge, onTakeControl, waiting }: { frame: PreviewFrame; alt: string; acknowledge: (frame: PreviewFrame) => void; onTakeControl: () => void; waiting: boolean }) {
+function PreviewImage({ frame, alt, acknowledge }: { frame: PreviewFrame; alt: string; acknowledge: (frame: PreviewFrame) => void }) {
   // Acknowledge after the frame is painted (identical pixels fire no load event).
   useEffect(() => { const tick = requestAnimationFrame(() => acknowledge(frame)); return () => cancelAnimationFrame(tick); }, [frame, acknowledge]);
-  // Watch-only: the whole picture is the Take control target (a click on the
-  // thumbnail opens the interactive window), and its pill says so.
-  return <button type="button" data-browser-preview="" data-take-control="" onClick={onTakeControl}
-    className="group/preview absolute inset-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent">
+  // Live picture only: ComputerScreen draws the centered Open pill on hover.
+  return <div data-browser-preview="" className="absolute inset-0">
     <img src={frame.src} alt={alt} draggable={false} className="h-full w-full select-none object-contain" />
-    <span className={takeControlPillClass(waiting)} data-take-control-pill={waiting ? "shown" : "hover"}>
-      <Hand size={15} aria-hidden="true" />{t("sandboxDesktop.takeControl")}
-    </span>
-  </button>;
+  </div>;
 }
 
 /** The bot's browser on the Computer tab, drawn as the VM's screen: a live
@@ -558,20 +553,21 @@ export function BrowserComputerScreen({ bot }: { bot: Bot }) {
   const lastFrame = useRef<string | undefined>(undefined);
   if (preview.frame && !preview.blank) lastFrame.current = preview.frame.src;
   const open = () => setTakeover(true);
-  // The bot stopped to ask the person something: Take control stays in view.
-  const waiting = bot.tasks?.some((task) => task.activity === "waiting-on-you") === true;
-  const state: ScreenState = takeover || (preview.state === "live" && preview.frame) ? "running"
-    : preview.state === "offline" ? "off" : preview.state === "error" ? "error" : "starting";
   // The picker's dot: green while a browser session is live, neutral otherwise.
   const session = takeover || preview.state === "busy" || (preview.state === "live" && Boolean(preview.frame) && !preview.blank);
   useEffect(() => { reportScreenDot(`browser:${bot.id}`, browserDot(session)); }, [bot.id, session]);
-  const message = preview.state === "offline" ? t("browser.preview.offline", { name: bot.name })
-    : preview.state === "error" ? t("browser.preview.failed")
+  const message = preview.state === "error" ? t("browser.preview.failed")
     : preview.state === "busy" ? t("browser.preview.busy", { name: bot.name })
-    : t("browser.preview.connecting");
-  const actions: ScreenAction[] = preview.state === "offline" ? [{ label: t("sandboxDesktop.takeControl"), onClick: open, primary: true }]
-    : preview.state === "error" ? [{ label: t("computerScreen.retry"), onClick: preview.retry }, { label: t("sandboxDesktop.takeControl"), onClick: open }]
+    : undefined;
+  const actions: ScreenAction[] = preview.state === "error"
+    ? [{ label: t("computerScreen.retry"), onClick: preview.retry }, { label: t("computerScreen.open"), onClick: open }]
     : [];
+  // Offline → calm asleep. Connecting/busy → waking. Live frame → running;
+  // ComputerScreen owns the centered Open pill (no second overlay here).
+  const screenState: ScreenState = takeover || (preview.state === "live" && preview.frame && !preview.blank) ? "running"
+    : preview.state === "offline" ? "off"
+    : preview.state === "error" ? "error"
+    : "starting";
   const live = takeover
     ? <div data-browser-takeover-open="" className="flex h-full w-full items-center justify-center p-4 text-center text-[12px] text-ink-secondary">{t("sandboxDesktop.inWindow")}</div>
     : preview.frame && preview.blank
@@ -580,14 +576,22 @@ export function BrowserComputerScreen({ bot }: { bot: Bot }) {
         <Globe size={28} aria-hidden="true" className="text-ink-secondary" />
         <span className="text-[13px] font-medium text-ink">{t("browser.preview.notOpen")}</span>
         <p className="text-[12px] leading-relaxed text-ink-secondary">{t("browser.preview.blank", { name: bot.name })}</p>
-        <button type="button" data-take-control="" onClick={open}
-          className="mt-1 flex min-h-[44px] items-center gap-2 rounded-lg bg-accent px-3 py-1.5 text-[12px] font-medium text-accent-ink hover:brightness-110 md:min-h-0">
-          <Hand size={13} aria-hidden="true" />{t("sandboxDesktop.takeControl")}
-        </button>
       </div>
-    : preview.frame ? <PreviewImage frame={preview.frame} alt={caption} acknowledge={preview.acknowledge} onTakeControl={open} waiting={waiting} /> : undefined;
+    : preview.frame ? <PreviewImage frame={preview.frame} alt={caption} acknowledge={preview.acknowledge} /> : undefined;
   return <>
-    <ComputerScreen source="browser" icon={Globe} state={state} caption={caption} message={message} actions={actions} live={live} />
+    <ComputerScreen
+      source="browser"
+      icon={Globe}
+      state={screenState}
+      caption={caption}
+      message={message}
+      actions={actions}
+      live={live}
+      bot={bot}
+      computerName={t("computer.view.browser")}
+      onOpen={screenState === "running" ? open : undefined}
+      controls={screenState === "off" ? { play: open } : undefined}
+    />
     {takeover && <SandboxDesktopModal kind="browser" title={caption} state="running" onClose={() => { setTakeover(false); setTeach(false); }}
       screen={(control) => <LiveBrowser key={bot.id} bot={bot} control={control} placeholder={lastFrame.current} teach={teach} />} />}
   </>;

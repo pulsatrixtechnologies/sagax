@@ -85,6 +85,10 @@ const documentSchema = z.object({
   plugins: capabilityPluginStateSchema,
   pluginValues: capabilityPluginValuesSchema,
   assignedSkills: z.array(z.string()),
+  /** Capabilities lot 4: the organization's offered declarations this person
+   * turned on (true) or off (false), by Perspicax declaration id. Absent:
+   * none chosen (offered stays off). Imposed ones never read it. */
+  orgCapabilities: z.record(z.string().max(128), z.boolean()).optional(),
 }).strict();
 
 export type PersonalRemoteMcpServer = z.infer<typeof remoteSchema>;
@@ -423,6 +427,21 @@ export class PersonConnections {
   setAssignedSkills(principalId: string, names: readonly string[]): void {
     const document = this.read(principalId);
     document.assignedSkills = [...new Set(names)].sort();
+    this.write(principalId, document);
+  }
+
+  // ── the organization's offered capabilities (lot 4) ───────────────────
+
+  /** The offered declarations this person turned on or off, by id. */
+  orgCapabilityChoices(principalId: string): Record<string, boolean> {
+    return { ...this.read(principalId).orgCapabilities };
+  }
+
+  /** Turn one offered declaration on or off for this person (all their
+   * bots). Only their own state: never another person's, never global. */
+  setOrgCapability(principalId: string, id: string, enabled: boolean): void {
+    const document = this.read(principalId);
+    document.orgCapabilities = { ...document.orgCapabilities, [id]: enabled };
     this.write(principalId, document);
   }
 }

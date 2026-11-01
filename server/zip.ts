@@ -159,6 +159,8 @@ export class ZipWriter {
 }
 
 export interface ZipEntry {
+  /** Preserve executable files when extracting a plugin, never other mode bits. */
+  executable: boolean;
   name: string;
   size: number;
   compressed: number;
@@ -306,7 +308,7 @@ function readDirectory(fd: number, limits: ZipLimits): { entries: Map<string, Zi
     total += declared;
     if (total > limits.maxTotalBytes) throw new ZipError("The archive expands beyond the size limit.", "too_large");
     if (local + 30 > size) throw new ZipError("The archive is damaged.", "damaged");
-    entries.set(name, { name, size: declared, compressed, method, crc, offset: local });
+    entries.set(name, { name, size: declared, compressed, method, crc, offset: local, executable: made === 3 && ((external >>> 16) & 0o111) !== 0 });
   }
   return { entries, total };
 }

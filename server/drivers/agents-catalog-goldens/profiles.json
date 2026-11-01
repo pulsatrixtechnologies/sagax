@@ -1,7 +1,7 @@
 {
   "direct": {
-    "bytes": 90475,
-    "sha256": "ab3ccbce947f26df71f076d05208b9dc18efb945afa08196e7cb795e2d8440d8",
+    "bytes": 94300,
+    "sha256": "84505918399d342afeb70eb59c78a7b1851ca3870e12ef0f17da83f262635a10",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -73,19 +73,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "direct+voice": {
-    "bytes": 91442,
-    "sha256": "4cb3524760dc2e2e8b466a98e10a69cff461bca59175d8b6af0d854fcd0b99ef",
+    "bytes": 95267,
+    "sha256": "e05ba4cc301ff41bfb00b3f92bee0bf098abdf968a4760c37ea0c5c1d9b970cd",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -158,19 +160,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "direct+shared": {
-    "bytes": 92476,
-    "sha256": "5ca93be559d328d30138ea00e93788ddc1c88531f89dde703adc166761e1fac4",
+    "bytes": 96301,
+    "sha256": "2e57f75b418e29bff8429076f6b0aa792f63e8ad012ded31768b146e440456f5",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -244,19 +248,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "direct+shared+voice": {
-    "bytes": 93443,
-    "sha256": "d12b940116f5dec370ba30b86b11ba728d15f6f4ada07acd3278903b4837e6f8",
+    "bytes": 97268,
+    "sha256": "cfe077737120c3b15a372ee718e39243f2f6d93d0910e3820f6e2d9a31387484",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -331,19 +337,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "direct+skills": {
-    "bytes": 92646,
-    "sha256": "1309648de343a7ccc4c11d1ff72cb96b38667233895cc879cdaa93ba034ba16c",
+    "bytes": 95922,
+    "sha256": "4a96277c0e592dda3f4e8ea077396d8a648d3773d931b1c8874edeadc4f2fd53",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -415,6 +423,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -428,8 +437,8 @@
     ]
   },
   "direct+skills+voice": {
-    "bytes": 93613,
-    "sha256": "f4bc49fd9f8a1573c68da39e43b584408e33743b92609f580b33a480ca53650c",
+    "bytes": 96889,
+    "sha256": "0caf66512e2a371ff7263ec62bb1a3571780b375ec943fc33b948b2b274cedf6",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -502,6 +511,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -515,8 +525,8 @@
     ]
   },
   "direct+skills+shared": {
-    "bytes": 94647,
-    "sha256": "047a27786ba9a887ea65fc2507a93de401b224db60696d85841211e2494861e2",
+    "bytes": 97923,
+    "sha256": "2f0fd27f9c3fded8e4712257e24276d50d728b77a4d635c0267de32b2e7ea27a",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -590,6 +600,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -603,8 +614,8 @@
     ]
   },
   "direct+skills+shared+voice": {
-    "bytes": 95614,
-    "sha256": "f6129f680b41fdd9295ae2b1bfac22ee0c8816b3549a35d72aa40af42459c650",
+    "bytes": 98890,
+    "sha256": "4e0d9825a1c276107c7c70b9823d1027c32b76535dcfb60bf4b760cf6984af25",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -679,6 +690,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -692,8 +704,8 @@
     ]
   },
   "room": {
-    "bytes": 81137,
-    "sha256": "84f3cb6c94ddd36b00cbbc1d69dd61d4141148ea85f6ea54febf3e377d27d28b",
+    "bytes": 84962,
+    "sha256": "9af3de70b7628b5f7e2c7fffb03669dffe166c46da2a8c193b5dcdd0978634c9",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -756,19 +768,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+voice": {
-    "bytes": 82104,
-    "sha256": "cb107de27ced57a00b0112821cd5b98a7474c2213c2012431219f0e75637f8b2",
+    "bytes": 85929,
+    "sha256": "48ab62169f83fc98456eb6a230d1a518da2558f87442c12bcb913135a2b8815e",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -832,19 +846,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+shared": {
-    "bytes": 83138,
-    "sha256": "a800216e8967f7b1b1d82de9ee41ee25b6387a7c18198ee1e05d77e05740ada5",
+    "bytes": 86963,
+    "sha256": "9dbeeeb3f380e33aca1d356c8af68a37c9d968c9cbac60935260a510a57c7c13",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -909,19 +925,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+shared+voice": {
-    "bytes": 84105,
-    "sha256": "9143fb773fad118912a873ee306673e98d63f4392f89f2eab68cfd1b296f2551",
+    "bytes": 87930,
+    "sha256": "c2bec0f8d8db8d0c200b6db320364dfe6db088477b2dfe8d41d519b2dad34381",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -987,19 +1005,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+skills": {
-    "bytes": 83308,
-    "sha256": "a603af74f63e3474b5eddef83962155a90fc7e0e1c2c539c0b4efeb5e4cc5a77",
+    "bytes": 86584,
+    "sha256": "853fb65226acdd90639db77d7c65e97374e7b423a0abe510bdd4bb475e90932c",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1062,6 +1082,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -1075,8 +1096,8 @@
     ]
   },
   "room+skills+voice": {
-    "bytes": 84275,
-    "sha256": "17159f1b12aee5ee6334bc63b53865e163a349b8e1994bd021937041bda0a5d4",
+    "bytes": 87551,
+    "sha256": "38d2a66c75a51efda892eeee3032492f2e7a3dde69e48f5d1521f105dc288e1d",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1140,6 +1161,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -1153,8 +1175,8 @@
     ]
   },
   "room+skills+shared": {
-    "bytes": 85309,
-    "sha256": "40c5f18551048b64d794d5e9ca960d77baa98f3ee1a8fb87eabe918fc715643d",
+    "bytes": 88585,
+    "sha256": "3b614f175abed7f376d53b401c509964c59e1e7a8ba816d9b62f055a810a8c77",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1219,6 +1241,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -1232,8 +1255,8 @@
     ]
   },
   "room+skills+shared+voice": {
-    "bytes": 86276,
-    "sha256": "ee99a0ab79d56a161bccda9c822ad4ef506f31662b4e16baf0164c224da28f78",
+    "bytes": 89552,
+    "sha256": "7aa1150965a22b2ff9d97dc37e0a0ed23977a61c5a3e3dfe8420f0ce127d8754",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1299,6 +1322,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -1312,8 +1336,8 @@
     ]
   },
   "room+own-thread": {
-    "bytes": 83325,
-    "sha256": "08daa010662f8e901b7fe35009b32d6b0081da5d4a138f493f2dddf2599bcc08",
+    "bytes": 87150,
+    "sha256": "3e774d324d0cd5105e4907c6d028120509a6db0af08f048637f3f0e4e7fdb422",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1377,19 +1401,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+own-thread+voice": {
-    "bytes": 84292,
-    "sha256": "513f1f64384d982197608eec457d16a31d34893c9d1f959ad431a3172c9bc232",
+    "bytes": 88117,
+    "sha256": "325ee8dc810c4308f1dddebd1ef792850a89b99694a4a5ab726c8540b044a89b",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1454,19 +1480,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+own-thread+shared": {
-    "bytes": 85326,
-    "sha256": "8723eb6502f3aca35f67d5e688b0a18b2c5aefcb55e134054468b73a62807091",
+    "bytes": 89151,
+    "sha256": "10ad1bc05160222042ebd04af1f3e02603331b4d9f0d9ac0e1ef93c469890458",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1532,19 +1560,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+own-thread+shared+voice": {
-    "bytes": 86293,
-    "sha256": "16a144d48fa27976cfb6d8a5c7f6231c9c1f9364c8ca8e494554d04dbbd20bd8",
+    "bytes": 90118,
+    "sha256": "dc56a8312819d49ebf801567f7d8ef982076257bb0cc856bbae475821d0bb9c4",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1611,19 +1641,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+own-thread+skills": {
-    "bytes": 85496,
-    "sha256": "c9d801ca307f5c033d45996da28b0b3ba6968b9dedd976b4fe9933e5c49fee89",
+    "bytes": 88772,
+    "sha256": "3e7086e2798f5becedac75cdbc054e5466d5bbe2cf323828a27dcbad46756d90",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1687,6 +1719,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -1700,8 +1733,8 @@
     ]
   },
   "room+own-thread+skills+voice": {
-    "bytes": 86463,
-    "sha256": "1dc71fd680d5794c23c307e8d4c616cb3688ab47d508216d8621f0d87acb47ee",
+    "bytes": 89739,
+    "sha256": "f52ddfba83080f42ca74ab75b8d2c6ca050ee50d67e421ba59135bb1097eef17",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1766,6 +1799,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -1779,8 +1813,8 @@
     ]
   },
   "room+own-thread+skills+shared": {
-    "bytes": 87497,
-    "sha256": "21125fbf2ea01fc0419bf9194d71c00710dbfc8533d883ed394bfbc110f7d7e1",
+    "bytes": 90773,
+    "sha256": "9b6002ee6a7847c3e98bbf3226894b6f69c3233e0ad61e90245c79f6ab7a0b5f",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1846,6 +1880,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -1859,8 +1894,8 @@
     ]
   },
   "room+own-thread+skills+shared+voice": {
-    "bytes": 88464,
-    "sha256": "b3246eaf7ad12f335f93abd1dbbf769b0892c2b107b78dcbe3c3de34d9abc669",
+    "bytes": 91740,
+    "sha256": "e8c47ad5548414ba6ae825e2062b11f13a80bdef1fa4e2db2d858b4f4455fdc3",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -1927,6 +1962,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -1940,8 +1976,8 @@
     ]
   },
   "direct+non-chief": {
-    "bytes": 79979,
-    "sha256": "f220cc37ac5ec2886864fbd7ed56961c0089223bd62e682a463ab6552b1de845",
+    "bytes": 83804,
+    "sha256": "48a613a36b23032648fed1bef19d6460e8be7033b71e11647b8c117c09a6a441",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2005,19 +2041,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "direct+voice+non-chief": {
-    "bytes": 80946,
-    "sha256": "812bb088d5ada4e2603a812a2f6615141d77e1e0f6065c1157491fd44abb1b2d",
+    "bytes": 84771,
+    "sha256": "75e5bf319bb0892cc4845c04df54fd0ead105bc88bde3f1a54587a03e462b297",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2082,19 +2120,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "direct+shared+non-chief": {
-    "bytes": 81980,
-    "sha256": "652a67f327a426198e7e461298917d69ababf1a03be1ba99e3f3d6c9db3a7343",
+    "bytes": 85805,
+    "sha256": "da89291728ed31064c9e0bc3353497eb69f3539c4813fdead2282ce1657b9abf",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2160,19 +2200,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "direct+shared+voice+non-chief": {
-    "bytes": 82947,
-    "sha256": "dfc8be1ae9ee64b406072a8514fc9af6203872754d77cec4cfbe14fd2c9d1d6a",
+    "bytes": 86772,
+    "sha256": "a23bbf570ade4d09f7d2bea17d9ba56abd305000a9141b04971bd29a71591771",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2239,19 +2281,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "direct+skills+non-chief": {
-    "bytes": 82150,
-    "sha256": "949b0e067526202231f494c87c8fc92a2f3e240fdcbb7b5071f9c052278ad9bd",
+    "bytes": 85426,
+    "sha256": "efec91bcc7c6c484e9387f48587b74c691d5a4df353d6f94789b9cd2e7c040a6",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2315,6 +2359,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -2328,8 +2373,8 @@
     ]
   },
   "direct+skills+voice+non-chief": {
-    "bytes": 83117,
-    "sha256": "e66c4fd6f26004c31d58f973b1c5205ba7faa3bea9a70ea842b549e394bb1390",
+    "bytes": 86393,
+    "sha256": "9f9fe0d660f25e60eb59c75957c7db57559f6e9f5a892daab2f9b597fb0f9180",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2394,6 +2439,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -2407,8 +2453,8 @@
     ]
   },
   "direct+skills+shared+non-chief": {
-    "bytes": 84151,
-    "sha256": "b278ec64c66f29b07ffeb5928bec1355d957e39e8f8b784580a3968ef3791ab1",
+    "bytes": 87427,
+    "sha256": "ce7fbc8506c52f56c9857b312fc9317832cb14e76ca07e9d8f0499a21d96fb67",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2474,6 +2520,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -2487,8 +2534,8 @@
     ]
   },
   "direct+skills+shared+voice+non-chief": {
-    "bytes": 85118,
-    "sha256": "b1cadca5a62886ec1a74b8d0a56a05fe4ac66b9bfeae3d91fc3e7aa4a66049a4",
+    "bytes": 88394,
+    "sha256": "953719eec9d7db0fef2e0691e5e1876a75c8ecf943de8291e6f9d03149e2afb1",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2555,6 +2602,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -2568,8 +2616,8 @@
     ]
   },
   "room+non-chief": {
-    "bytes": 70635,
-    "sha256": "b030b751f6f15ae7e1257763c684642371c0ffb5ed27636af59d3acc4541451f",
+    "bytes": 74460,
+    "sha256": "ad6f4526b7dff37e45b5eea9b76b76ede1f1a466c95b117a9b4306ffaba910a4",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2624,19 +2672,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+voice+non-chief": {
-    "bytes": 71602,
-    "sha256": "4c6421d0df2f15b057618d6a8701d496c64267bc484ce3ab68982624a101d52a",
+    "bytes": 75427,
+    "sha256": "ccfee9e81320fd008caee61ec9b5484cbe797dca9a5fd2bebb0711fdd3287e41",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2692,19 +2742,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+shared+non-chief": {
-    "bytes": 72636,
-    "sha256": "ba850bbe91e8e62818138347b1d199d6855bd0003685271ce4f28ab595d035e7",
+    "bytes": 76461,
+    "sha256": "e745d18c4a8498ceb5facde4065b321c97f64ccf788209266f7d59ec6034359d",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2761,19 +2813,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+shared+voice+non-chief": {
-    "bytes": 73603,
-    "sha256": "95fdb46228557a1f928153c387727d5f6eeac677c85d66aba5f93dfab23286a1",
+    "bytes": 77428,
+    "sha256": "3d9e8578965be1694b645363814c739c7d59a9807ba8a5617521da4cf4d80ffb",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2831,19 +2885,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+skills+non-chief": {
-    "bytes": 72806,
-    "sha256": "4faf350250596ed933d217039fc411324770230e8fc23ab7489d992d87d41ce2",
+    "bytes": 76082,
+    "sha256": "e26df8a7d5db40b876ca1b12ee0121d3711c8b5dd6845cdb5d692a8de6770dcb",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2898,6 +2954,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -2911,8 +2968,8 @@
     ]
   },
   "room+skills+voice+non-chief": {
-    "bytes": 73773,
-    "sha256": "3ac7d2dfa6e6c7219043b86ddeb0a71c9ba3e6526aff09a90fb292cac3b5b783",
+    "bytes": 77049,
+    "sha256": "9fcf621fe4730d2d7597b401ab0116bac7163e81c767a81fed5edc2e6f9e043e",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2968,6 +3025,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -2981,8 +3039,8 @@
     ]
   },
   "room+skills+shared+non-chief": {
-    "bytes": 74807,
-    "sha256": "9b1c54d3ec63c50a7c3de17ec69539477b5a3fa1962a8dc587867cdfcb776e1d",
+    "bytes": 78083,
+    "sha256": "d23bad03a9b57ea1f6e4ee2214698a78c1c7129fb0fb61a15d6480a54a0c3cf9",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3039,6 +3097,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -3052,8 +3111,8 @@
     ]
   },
   "room+skills+shared+voice+non-chief": {
-    "bytes": 75774,
-    "sha256": "f5ff383defc10b29484381a6d52a39a0c9eae736cfb82ca1a5f54385dc7f63e2",
+    "bytes": 79050,
+    "sha256": "1982d2ab9ea2d7fd80911a277e3aaab846f1ec62260d0aa2969026fc1da857bb",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3111,6 +3170,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -3124,8 +3184,8 @@
     ]
   },
   "room+own-thread+non-chief": {
-    "bytes": 72823,
-    "sha256": "58a2368cb83bc0dd54c34f379e3ffc96ef5a61e109daeed633535f0230e72228",
+    "bytes": 76648,
+    "sha256": "a50662c16eed178268de52221a3edce109cf946796feaab8c931e5ee7e2544a7",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3181,19 +3241,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+own-thread+voice+non-chief": {
-    "bytes": 73790,
-    "sha256": "80d79aeaa5ae60cf479344e0d12f8a967b93f3ebb8d19e0b9ae3a61704dc345f",
+    "bytes": 77615,
+    "sha256": "b8708b89401520f690634b0145023f1be230f4f37c321da0005c74cf29e5483b",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3250,19 +3312,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+own-thread+shared+non-chief": {
-    "bytes": 74824,
-    "sha256": "9b592e0458f7d7bf0688703d50da85edb3cf21ae11f8e4727b687409cc5818d2",
+    "bytes": 78649,
+    "sha256": "5c3215868e2c35703d0a597ab45b5486efc69a38736d16a97626104e9ee0b6f8",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3320,19 +3384,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+own-thread+shared+voice+non-chief": {
-    "bytes": 75791,
-    "sha256": "eba66feebf7ab5b8e95ecf7b137d9bb92ff2e778d06ddd0e7be887f681420a23",
+    "bytes": 79616,
+    "sha256": "0b4ca92a3ecb8258bf21ac6ddbbf3af0deb6329e4d1f16326af1d2965de9cdbd",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3391,19 +3457,21 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
       "manage_pairing",
       "manage_settings",
       "act",
+      "skills_list",
       "add_mcp_server",
       "make_video"
     ]
   },
   "room+own-thread+skills+non-chief": {
-    "bytes": 74994,
-    "sha256": "e5463786a351c06d8f0f0b3c78593a08baf12de6b05fefad97f1a1467a8a4040",
+    "bytes": 78270,
+    "sha256": "44bd1f1f1b3c286d127c0cac80105b25e6740048ad9971ea9ede0b52201a0db0",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3459,6 +3527,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -3472,8 +3541,8 @@
     ]
   },
   "room+own-thread+skills+voice+non-chief": {
-    "bytes": 75961,
-    "sha256": "811573a79bc682bef4abccf46282950335f93f483acc62ee2c500812bbca0d9b",
+    "bytes": 79237,
+    "sha256": "1cf2541dc11697cd8d331109e36d28465b59813071af3f3cd92262866d64a5eb",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3530,6 +3599,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -3543,8 +3613,8 @@
     ]
   },
   "room+own-thread+skills+shared+non-chief": {
-    "bytes": 76995,
-    "sha256": "b6d76b5b872175fca2bc90f5bdc3515c8a7e82a550d9d7618e3edbb0991fb195",
+    "bytes": 80271,
+    "sha256": "fb798edd81b432d66106ac2f28232d5d549d139c35de883edcea6cff5cd299c5",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3602,6 +3672,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -3615,8 +3686,8 @@
     ]
   },
   "room+own-thread+skills+shared+voice+non-chief": {
-    "bytes": 77962,
-    "sha256": "290d2324fb6afd1960a8e5648b824d3616fc7db451652838a80402a7e1ecfea1",
+    "bytes": 81238,
+    "sha256": "9ac0c3c054b9395a5937fbfccee39e8d11b27546243f6a128ec100c56d497f69",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -3675,6 +3746,7 @@
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -3688,8 +3760,8 @@
     ]
   },
   "external": {
-    "bytes": 3697,
-    "sha256": "4752459ee8ebb4ec258ff4f029feaba4e71518003b0904b179ca65d86200de2f",
+    "bytes": 5083,
+    "sha256": "630932ab54077e00466eab74c3feb237fb6271fc2349c37dfb5bec63734052fe",
     "tools": [
       "list_bots",
       "ask_bot",
@@ -3700,8 +3772,8 @@
     ]
   },
   "external+everything": {
-    "bytes": 3697,
-    "sha256": "4752459ee8ebb4ec258ff4f029feaba4e71518003b0904b179ca65d86200de2f",
+    "bytes": 5083,
+    "sha256": "630932ab54077e00466eab74c3feb237fb6271fc2349c37dfb5bec63734052fe",
     "tools": [
       "list_bots",
       "ask_bot",

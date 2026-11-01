@@ -1,10 +1,9 @@
-// The conversation around an open page (2026-10-28, the reference design's
-// page view):
+// The conversation around an open page (2026-10-28; lot 5 side pane 2026-10-31):
 //   - PageRefChip: a message sent while the page was open carries the page as
 //     a chip over its words (icon and title); a click opens that page;
-//   - PageBotStatus: over the floating composer, the bot's state or its
-//     latest answer in one line, with its avatar ("On it", then its reply),
-//     so the person talks to the bot without closing the page.
+//   - PageBotStatus: above the composer in the desktop side pane, the bot's
+//     state or its latest answer in one line, with its avatar ("On it", then
+//     its reply), so the person can follow the bot while reading the page.
 import { t } from "@/lib/i18n";
 import { openPage } from "@/lib/open-page";
 import type { Message } from "@/state/store";

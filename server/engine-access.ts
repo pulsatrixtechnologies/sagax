@@ -532,8 +532,9 @@ export function keyEngineProvider(driver: string, savedName: string): string {
 
 /** #1533: Claude Code words when its OAuth sign-in was refused and could not
  * be refreshed ("Failed to authenticate: OAuth session expired and could not
- * be refreshed", `authentication_failed`). */
-const CLAUDE_SIGN_IN_REFUSED = /oauth session expired|could not be refreshed|failed to authenticate|authentication_failed|oauth token (?:has )?expired|invalid (?:oauth|bearer) token|not logged in|please run \/login/i;
+ * be refreshed", `authentication_failed`), plus the canonical reconnect
+ * sentence (`CLAUDE_SIGN_IN_EXPIRED`) and used-up extra-usage credits. */
+const CLAUDE_SIGN_IN_REFUSED = /Claude's sign-in has expired|Reconnect Claude|oauth session expired|could not be refreshed|failed to authenticate|authentication_failed|oauth token (?:has )?expired|invalid (?:oauth|bearer) token|not logged in|please run \/login|runs on extra usage for your account, and those credits are used up/i;
 
 /** #1759: Codex ChatGPT refusals (same shapes as `codexSignInRefused` /
  * `CODEX_SIGN_IN_EXPIRED`) and Grok ACP account refusals

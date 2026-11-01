@@ -46,7 +46,6 @@ import { AboutMeEditor, aboutMeFirstLine } from "./AboutMeSettings";
 import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
 import { AccountCard } from "./settings/AccountCard";
 import { OpenAtLoginRow } from "./OpenAtLoginOffer";
-import { DefaultBotSettings } from "./NewBotDialog";
 import { WorkspaceBackupSettings } from "./WorkspaceBackupSettings";
 import { ImportSettings } from "./settings/ImportSettings";
 import { SecurityKeySettings } from "./SecurityKeySettings";
@@ -114,7 +113,7 @@ export const SECTIONS: Array<{
   // it). 2026-10-28: Voice is a page of its own; every key stays in Models.
   // 2026-10-30: Providers, every account, key and server in one list (lot 1 of "Providers, models and voice")
   { id: "providers", group: "ai", labelKey: "settings.section.providers", icon: Plug, keywords: ["providers", "fournisseurs", "model providers", "accounts", "comptes", "claude", "codex", "grok", "cli", "sign in", "connexion", "subscription", "abonnement", "keys", "clés", "api", "api key", "api keys", "xai", "mistral", "cerebras", "router", "openrouter", "base url", "openai", "anthropic", "groq", "opencode", "provider", "fournisseur", "elevenlabs", "fish audio", "azure", "foundry", "compatible", "server", "serveur", "local models", "modèles locaux", "this computer", "cet ordinateur", "needs setup", "à configurer", "to connect", "à connecter", "view as a member", "voir comme un membre", "connectors", "connecteurs", "claude.ai", "cursor", "cloud agents", "cloud coding agents", "voice keys", "clés de voix"] },
-  { id: "engines", group: "ai", labelKey: "settings.section.models", icon: Terminal, keywords: ["models", "modèles", "engines", "moteurs", "connections", "integrations", "intégrations", "image", "avatar", "box", "vps", "decision", "jev", "typesafe", "routing", "auto", "who answers", "auto model", "modèle auto", "image provider", "fournisseur d'images", "génération d'images", "web search", "recherche web", "brave", "exa", "firecrawl", "searxng"] },
+  { id: "engines", group: "ai", labelKey: "settings.section.models", icon: Terminal, keywords: ["models", "modèles", "engines", "moteurs", "connections", "integrations", "intégrations", "image", "avatar", "box", "vps", "decision", "jev", "typesafe", "routing", "auto", "who answers", "auto model", "modèle auto", "image provider", "fournisseur d'images", "génération d'images", "web search", "recherche web", "brave", "exa", "firecrawl", "searxng", "bot models", "modèles des bots", "bulk", "defaults for new bots", "défauts des nouveaux bots", "who pays", "qui paie", "effort"] },
   { id: "voice", group: "ai", labelKey: "settings.section.voice", icon: AudioLines, keywords: ["voice", "voix", "tts", "speech", "parole", "elevenlabs", "fish", "fish audio", "chatterbox", "grok voice", "voice engine", "moteur de voix", "live call", "live calls", "appels en direct", "read replies", "hang up", "gpt-live", "voice keys", "clés de voix", "microphone", "micro", "audio", "input device", "entrée audio"] },
   // 2026-10-14: Memory is a card of this page (it was its own section).
   { id: "organization", group: "workspace", labelKey: "settings.section.organization", icon: Building2, keywords: ["company", "organization", "organisation", "sign in", "enroll", "managed", "models", "disconnect", "workspace", "cloud", "hosted", "vps", "server", "servers", "connect", "pair", "switch", "local", "memory", "obsidian", "vault", "sync", "git", "perspicax", "mémoire", "cache", "pending", "domain", "dns", "caddy", "full access", "accès complet", "approvals", "approbations", "waiting for an admin", "en attente", "people from before", "rattacher", "invite", "inviter", "invitation", "people", "personnes", "this computer", "cet ordinateur", "serveurs", "oublier", "forget", ...ORGANIZATION_ADVANCED_KEYWORDS] },
@@ -818,7 +817,7 @@ export function SettingsModal() {
                 </SettingsGroup>
                 <SettingsGroup title={t("settings.group.system")} groupId="system">
                   {!remoteActive && <ServerRow />}
-                  {advanced && editConfig && <DefaultBotSettings />}
+                  {/* Defaults for new bots live on Settings > Models > Bot models (#1675). */}
                   {!remoteActive && <GuidedToursRow />}
                   {/* General > Advanced: people's tool access, conversation
                       cleanup and diagnostics on one sub-page (tool access,

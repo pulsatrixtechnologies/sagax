@@ -4,8 +4,8 @@
 // pure numbers in `CompanionCore.OwlArt`.
 //
 // `animated: false` draws the resting pose once in a `Canvas` and never ticks,
-// which is what a long roster needs. Animated owls tick at 30 fps while the
-// app is active. Reduce Motion keeps only the blinks, as on the desktop.
+// which is what a long roster needs. Animated owls tick at 60 fps (30 below
+// 40 pt) while the app is active. Reduce Motion keeps only the blinks, as on the desktop.
 // The owl overflows its box on purpose (the hop, the aura, the flames): the
 // canvas is larger than the frame and the frame does not clip.
 import Combine
@@ -94,12 +94,15 @@ struct OwlMascotView: View {
         let restState = animated && state.isOneShot ? OwlState.idle : state
         // `wake` re-reads `transientUntil` once a move has finished, so the timeline pauses
         let _ = wake
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !ticking)) { timeline in
+        // a header or panel owl hops and flaps: 60 fps there (30 read as
+        // judder on a 120 Hz iPhone); a small one keeps 30
+        TimelineView(.animation(minimumInterval: size >= 40 ? 1.0 / 60.0 : 1.0 / 30.0, paused: !ticking)) { timeline in
             Canvas { context, canvas in
                 let now = timeline.date.timeIntervalSinceReferenceDate
                 let frame: OwlRenderer.Frame
                 if live {
-                    frame = motion.tick(now: now, base: restState, hop: OwlArt.hop(forSize: size), reduced: reduceMotion)
+                    let live = motion.tick(now: now, base: restState, hop: OwlArt.hop(forSize: size), reduced: reduceMotion)
+                    frame = OwlRenderer.Frame(pose: live.pose, pupil: live.pupil, lid: live.lid)
                 } else {
                     frame = OwlRenderer.Frame.still(state, hop: OwlArt.hop(forSize: size), wings: wings)
                 }
@@ -137,97 +140,6 @@ struct OwlMascotView: View {
             transientUntil = Date().addingTimeInterval(longest + 0.1)
             DispatchQueue.main.asyncAfter(deadline: .now() + longest + 0.15) { wake += 1 }
         }
-    }
-}
-
-/// `createOwlController`'s tick, without the DOM: a beat, the blinks, a wing
-/// move and the gaze, stepped by the timeline's clock.
-final class OwlMotion {
-    private var base: OwlState = .idle
-    private var beat: (state: OwlState, until: Double?)?
-    private var beatPending = false
-    private var t0: Double?
-    private var last: Double?
-    private var nextBlink: Double = 0
-    private var blinkStart: Double = -1
-    private var blinkPending = false
-    private var wingMove: (move: OwlWingMove, start: Double?)?
-    private var gaze = OwlArt.gazeRest
-
-    func play(_ state: OwlState, duration: Double) {
-        beat = (state, state.isOneShot ? nil : duration)
-        beatPending = true
-    }
-
-    func blink() { blinkPending = true }
-
-    func flourish(_ move: OwlWingMove) { wingMove = (move, nil) }
-
-    func tick(now: Double, base newBase: OwlState, hop: Double, reduced: Bool) -> OwlRenderer.Frame {
-        if newBase != base {
-            base = newBase
-            if beat == nil { beatPending = true }
-        }
-        if t0 == nil || beatPending {
-            t0 = now
-            beatPending = false
-        }
-        if nextBlink == 0 { nextBlink = now + 1 + Double.random(in: 0...4) }
-        if blinkPending {
-            blinkStart = now
-            blinkPending = false
-        }
-        let dt = last.map { min(0.1, now - $0) } ?? 0
-        last = now
-        var start = t0 ?? now
-
-        if let until = beat?.until, (now - start) >= until {
-            beat = nil
-            t0 = now
-            start = now
-        }
-        let state = beat?.state ?? base
-        let oneShot = beat.map { $0.state.isOneShot } ?? false
-        var pose = OwlArt.pose(state, now - start, loop: !oneShot, hop: hop)
-        if pose.done {
-            beat = nil
-            t0 = now
-        }
-        if var move = wingMove {
-            if move.start == nil { move.start = now }
-            wingMove = move
-            let w = OwlArt.wingPose(move.move, now - (move.start ?? now), hop: hop)
-            if w.done {
-                wingMove = nil
-            } else {
-                pose.open = max(pose.open, w.open)
-                pose.wing += w.flap
-                pose.x += w.x
-                pose.y += w.y
-                pose.sy *= w.sy
-            }
-        }
-
-        // blink every 3-6 s (slower when sleepy); kept under reduced motion
-        if now >= nextBlink {
-            blinkStart = now
-            nextBlink = now + (state == .sleepy ? 4 + Double.random(in: 0...3) : 3 + Double.random(in: 0...3))
-        }
-        let blinkDuration = state == .sleepy ? 0.45 : 0.16
-        let blinkAmount = blinkStart >= 0 && now - blinkStart < blinkDuration ? sin(Double.pi * (now - blinkStart) / blinkDuration) : 0
-        let lid = max(pose.lid, blinkAmount)
-
-        if reduced {
-            wingMove = nil
-            var still = OwlPoseFrame()
-            still.eyeScale = state == .alert ? 1.15 : 1
-            gaze = OwlArt.gazeOffset(pose.gaze)
-            return OwlRenderer.Frame(pose: still, pupil: gaze, lid: lid)
-        }
-        let target = OwlArt.gazeOffset(pose.gaze)
-        let k = 1 - exp(-dt * 6)
-        gaze = CGPoint(x: gaze.x + (target.x - gaze.x) * k, y: gaze.y + (target.y - gaze.y) * k)
-        return OwlRenderer.Frame(pose: pose, pupil: gaze, lid: lid)
     }
 }
 

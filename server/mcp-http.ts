@@ -210,12 +210,14 @@ export class RemoteMcpClient {
   private readonly pending = new Map<number, Pending>();
   private sseEndpoint: Promise<string> | null = null;
   private readonly sseAbort = new AbortController();
-  /** Client name from the last successful initialize; used to redo the
-   * handshake after an SSE stream dies and a fresh GET is opened. */
-  private handshakeName: string | null = null;
-  /** Set when the SSE stream ends or fails after a handshake so the next
-   * request re-opens the GET and runs initialize again. */
-  private needsHandshake = false;
+  /** Legacy SSE reconnect (#1732): each GET stream has a generation, so a
+   * stale stream's end never clears a newer one. After a cut the next
+   * request runs initialize again on the new stream, shared by concurrent
+   * callers, before it sends its own frame once. */
+  private sseGeneration = 0;
+  private sseNeedsInitialize = false;
+  private sseInitializing: Promise<unknown> | null = null;
+  private clientName: string | null = null;
 
   constructor(target: RemoteMcpSpec, options: { fetch?: typeof fetch; maxBytes?: number; onNotification?: (message: JsonRpcMessage) => void } = {}) {
     this.target = target;
@@ -225,22 +227,41 @@ export class RemoteMcpClient {
   }
 
   /** The MCP handshake: initialize, then the initialized notification. */
-  async initialize(clientName: string, signal: AbortSignal): Promise<unknown> {
-    this.handshakeName = clientName;
+  initialize(clientName: string, signal: AbortSignal): Promise<unknown> {
+    this.clientName = clientName;
+    if (this.target.type !== "sse") return this.initializeSession(clientName, signal);
+    if (this.sseInitializing) return this.sseInitializing;
+    const operation = this.initializeSession(clientName, signal);
+    this.sseInitializing = operation;
+    const finished = () => { if (this.sseInitializing === operation) this.sseInitializing = null; };
+    void operation.then(finished, finished);
+    return operation;
+  }
+
+  private async initializeSession(clientName: string, signal: AbortSignal): Promise<unknown> {
     const result = await this.request("initialize", {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: {},
       clientInfo: { name: clientName, version: "1" },
     }, signal);
+    const generation = this.sseGeneration;
     if (isRecord(result) && typeof result.protocolVersion === "string") this.protocolVersion = result.protocolVersion;
     await this.notify("notifications/initialized", undefined, signal);
-    this.needsHandshake = false;
+    if (this.target.type === "sse") {
+      if (!this.sseEndpoint || generation !== this.sseGeneration) throw new McpHttpError("network", "event stream ended during initialize");
+      this.sseNeedsInitialize = false;
+    }
     return result;
   }
 
   request(method: string, params: unknown, signal: AbortSignal): Promise<unknown> {
     if (this.closed) return Promise.reject(new McpHttpError("protocol", "client closed"));
     if (signal.aborted) return Promise.reject(new McpHttpError("network", "aborted"));
+    // A failed call is never replayed. A later request establishes a new
+    // session and its handshake before sending that new request once.
+    if (this.target.type === "sse" && method !== "initialize" && this.clientName && (this.sseNeedsInitialize || this.sseInitializing)) {
+      return (this.sseInitializing ?? this.initialize(this.clientName, signal)).then(() => this.request(method, params, signal));
+    }
     const id = this.nextId++;
     const frame = { jsonrpc: "2.0", id, method, ...(params === undefined ? {} : { params }) };
     const onAbort = () => {
@@ -345,14 +366,25 @@ export class RemoteMcpClient {
   //    POST, and every response comes back over the stream ──
   private openSseStream(signal: AbortSignal): Promise<string> {
     if (this.sseEndpoint) return this.sseEndpoint;
+    const generation = ++this.sseGeneration;
+    const connection = new AbortController();
+    const abortOpening = () => connection.abort();
+    const abortConnection = () => connection.abort();
+    signal.addEventListener("abort", abortOpening, { once: true });
+    this.sseAbort.signal.addEventListener("abort", abortConnection, { once: true });
+    if (signal.aborted || this.sseAbort.signal.aborted) connection.abort();
     this.sseEndpoint = new Promise<string>((resolveEndpoint, rejectEndpoint) => {
       let settled = false;
       const fail = (error: Error) => {
+        signal.removeEventListener("abort", abortOpening);
+        this.sseAbort.signal.removeEventListener("abort", abortConnection);
+        connection.abort();
+        if (generation !== this.sseGeneration) return;
         // Drop the cached endpoint so the next call opens a fresh GET
         // instead of POSTing to a dead stream (#1732).
         this.sseEndpoint = null;
         this.sessionId = null;
-        if (!this.closed && this.handshakeName) this.needsHandshake = true;
+        this.sseNeedsInitialize = !this.closed && this.clientName !== null;
         if (!settled) {
           settled = true;
           rejectEndpoint(error);
@@ -364,23 +396,21 @@ export class RemoteMcpClient {
       headers.set("accept", "text/event-stream");
       // the caller's signal covers the opening; once open, the stream lives
       // until close(), because later requests are answered on it
-      const opening = AbortSignal.any([signal, this.sseAbort.signal]);
-      this.fetchImpl(this.target.url, { method: "GET", headers, signal: opening })
+      Promise.resolve().then(() => this.fetchImpl(this.target.url, { method: "GET", headers, signal: connection.signal }))
         .then(async (response) => {
           if (!response.ok) {
             drain(response);
             throw new McpHttpError("status", `HTTP ${response.status}`, response.status, response.headers.get("www-authenticate") ?? undefined, parseRetryAfter(response.headers.get("retry-after")));
           }
-          await readSse(response, this.sseAbort.signal, (event) => {
+          await readSse(response, connection.signal, (event) => {
             if (event.event === "endpoint") {
               if (!settled) {
-                try {
-                  const endpoint = new URL(event.data, this.target.url).toString();
-                  settled = true;
-                  resolveEndpoint(endpoint);
-                } catch {
-                  fail(new McpHttpError("protocol", "invalid endpoint event"));
-                }
+                let endpoint: string;
+                try { endpoint = new URL(event.data, this.target.url).toString(); }
+                catch { throw new McpHttpError("protocol", "invalid endpoint event"); }
+                settled = true;
+                signal.removeEventListener("abort", abortOpening);
+                resolveEndpoint(endpoint);
               }
               return undefined;
             }
@@ -408,19 +438,6 @@ export class RemoteMcpClient {
     return this.sseEndpoint;
   }
 
-  /** After an SSE cut, redo initialize on the new stream before the caller's
-   * request. Skipped for the initialize frame itself to avoid recursion. */
-  private async rehandshake(signal: AbortSignal): Promise<void> {
-    if (!this.needsHandshake || !this.handshakeName || this.closed) return;
-    this.needsHandshake = false;
-    try {
-      await this.initialize(this.handshakeName, signal);
-    } catch (error) {
-      if (!this.closed) this.needsHandshake = true;
-      throw error;
-    }
-  }
-
   private async ssePost(frame: unknown, signal: AbortSignal): Promise<void> {
     const endpoint = await this.openSseStream(signal);
     const response = await this.post(endpoint, frame, signal);
@@ -444,11 +461,7 @@ export class RemoteMcpClient {
           reject(error);
         },
       });
-      const send = async () => {
-        if (isRecord(frame) && frame.method !== "initialize") await this.rehandshake(signal);
-        await this.ssePost(frame, signal);
-      };
-      void send().catch((error: unknown) => {
+      this.ssePost(frame, signal).catch((error: unknown) => {
         this.pending.delete(id);
         signal.removeEventListener("abort", onAbort);
         reject(error instanceof Error ? error : new McpHttpError("network", String(error)));

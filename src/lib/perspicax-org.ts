@@ -37,6 +37,8 @@ export interface PerspicaxOrg {
     allowVaultExport?: boolean;
     /** Where bots' Claude Code plugins may come from (any by default). */
     pluginMarketplaces?: { mode: "any" } | { mode: "list"; allow: string[] };
+    /** Capabilities lot 4: "perspicax" when Perspicax owns the rule. */
+    pluginMarketplacesOwner?: "perspicax" | "local";
     /** The organization's GitHub OAuth App for "Connecter GitHub". */
     github?: { clientId: string | null; fromEnvironment: boolean };
   };

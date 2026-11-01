@@ -142,6 +142,13 @@ export interface Assignment {
   /** Who the tree acts for (a principal id, or the solo owner), harness-set
    * and never shown: two trees join only when it is the same, known person. */
   person?: string;
+  /** On a root only: the request it answers (the person's message id, or the
+   * routine run), harness-set. One request has one root (invariant I11): a
+   * turn that takes the same request again continues that root. */
+  request?: string;
+  /** send_to_bot priority now: admitted ahead of other queued work, and a
+   * one-way notice starts without waiting for its sender's turn to end. */
+  priority?: "now";
   /** While parked: the exact question for the person. */
   question?: string;
   /** The person's answer, harness-quoted, carried into the next turn. */
@@ -175,7 +182,18 @@ export interface TurnEvidence {
 export type EventKind =
   | "enqueued" | "refused" | "admitted" | "started" | "progress" | "parked" | "answered"
   | "waiting" | "resume_due" | "settled" | "reported" | "woken" | "cancelled"
-  | "restart_reconciled" | "budget" | "stalled";
+  | "restart_reconciled" | "budget" | "stalled"
+  /** The host runs the root's request again itself, as the same root (a
+   * provider limit moved it to another engine): back to running, no new
+   * "started" anchor, so the work it handed out before is still awaited. */
+  | "continued"
+  /** A root whose resume failed on the provider (its teammates had all
+   * reported) is due to resume again with the same results, instead of the
+   * host sending the request again: its earlier outcome is withdrawn. */
+  | "reopened"
+  /** The person's review card allowed queued work it held (the sender's
+   * peer comms need review): it may now start. No status change. */
+  | "approved";
 
 export interface AssignmentEvent {
   id: number;
@@ -228,6 +246,12 @@ export interface EnqueueRequest {
   relay?: boolean;
   /** Who a new root acts for (Assignment.person); a child inherits its root's. */
   person?: string;
+  /** Assignment.priority. */
+  priority?: "now";
+  /** A bot carries its own stopped work on in another of its threads (a
+   * step cap's `Continue:` thread, turn-continuation.ts): a one-way notice to
+   * itself, so not work sent back up its tree. Only with mode notify. */
+  continuation?: boolean;
 }
 
 export type EnqueueResult =

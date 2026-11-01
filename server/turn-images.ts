@@ -10,16 +10,17 @@ import { dirname, extname, resolve } from "node:path";
 
 import { fromMarkdown } from "mdast-util-from-markdown";
 
-import { ATTACHMENTS_DIR, IMAGE_MAX_BYTES, imageMaxBytes } from "./attachments.ts";
+import { ATTACHMENTS_DIR, IMAGE_AGGREGATE_MAX_BYTES, imageMaxBytes, MESSAGE_IMAGE_MAX_COUNT } from "./attachments.ts";
 import { atRestSizeSync } from "./content-at-rest.ts";
 import type { TurnImageInput } from "./contracts.ts";
 import { decodeAttachmentAttribute } from "./message-file.ts";
 
-/** Matches the companion composer policy. Four maximum-sized stored images
- * are bounded here; what a provider ingests is the scaled copy that
- * server/model-image.ts makes, each within the model's per-image limit. */
-export const TURN_IMAGE_MAX_COUNT = 4;
-export const TURN_IMAGE_MAX_BYTES = TURN_IMAGE_MAX_COUNT * IMAGE_MAX_BYTES;
+/** Matches the web and native composer policy: up to 32 pictures sharing
+ * 200 MiB of stored bytes on every host. What a provider ingests is the
+ * scaled copy that server/model-image.ts makes, each within the model's
+ * per-image limit. */
+export const TURN_IMAGE_MAX_COUNT = MESSAGE_IMAGE_MAX_COUNT;
+export const TURN_IMAGE_MAX_BYTES = IMAGE_AGGREGATE_MAX_BYTES;
 
 type MarkdownNode = {
   type: string;
@@ -129,8 +130,9 @@ export function extractTurnImages(
 
   const attachmentsDir = options.attachmentsDir ?? ATTACHMENTS_DIR;
   const maxCount = options.maxCount ?? TURN_IMAGE_MAX_COUNT;
-  // #1098: a solo server's larger picture ceiling (attachments.ts imageMaxBytes)
-  const maxBytes = options.maxBytes ?? TURN_IMAGE_MAX_COUNT * imageMaxBytes();
+  // Per-picture ceilings stay host-specific (attachments.ts imageMaxBytes);
+  // the message aggregate is the same on a shared or solo host.
+  const maxBytes = options.maxBytes ?? TURN_IMAGE_MAX_BYTES;
   const admitted = imageTagCandidates(text)
     .map((tag) => ({ tag, image: ownedImage(tag.path, attachmentsDir) }))
     .filter((item): item is { tag: TagCandidate; image: TurnImageInput } => item.image !== null);

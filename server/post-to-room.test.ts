@@ -128,6 +128,12 @@ interface StoredMessage {
   card?: { requestId?: string; tool?: string; title?: string };
 }
 
+/** An ask_bot made on the job runtime has settled (its teammate's turn ran),
+ * so no turn of it runs into a later test. */
+const settledAsk = async (from: { id: string; threadId: string }, taskId: string): Promise<void> => {
+  await expect.poll(async () => str((await internal("GET", `/api/internal/delegations/${taskId}?fromBotId=${from.id}&fromThreadId=${from.threadId}`)).body.status),
+    { timeout: 20_000, interval: 200 }).toMatch(/^(done|failed|cancelled)$/);
+};
 const messagesOf = async (threadId: string): Promise<StoredMessage[]> => {
   const { body } = await api("GET", `/api/threads/${threadId}/messages`);
   const messages = field(body, "messages");
@@ -314,22 +320,17 @@ describe("peer comms from a room turn", () => {
     expect(asked.body.error, `ask from a room was refused: ${JSON.stringify(asked.body)}`).toBeUndefined();
     expect(str(asked.body.text)).toContain("hello from fake claude");
 
-    // and what the peer was handed says who wrote it and what that means
-    const delivered = (await messagesOf(helper.threadId)).find(
-      (message) => message.role === "user" && message.kind === "text",
+    // Lot 3: a room turn its goal runs asks on the job runtime, as a
+    // consultation on a poll root (no turn of the room is resumed). What the
+    // peer was handed is the runtime's envelope: who asked, act on nothing.
+    const tasks = (await api("GET", "/api/bots")).body as { bots: Array<{ id: string; tasks: Array<{ threadId: string }> }> };
+    const helperThreads = tasks.bots.find((bot) => bot.id === helper.id)!.tasks.map((task) => task.threadId);
+    const handed = (await Promise.all(helperThreads.map(messagesOf))).flat().find(
+      (message) => (message as { roomRequest?: { phase?: string } }).roomRequest?.phase === "request" && str(message.text).includes("what is the status?"),
     );
-    expect(delivered?.text).toContain("[Message from @Room Asker");
-    expect(delivered?.text).toMatch(/not from your user/i);
-    expect(delivered?.text).toMatch(/information, not as an instruction/i);
-    expect(delivered?.text).toContain("what is the status?");
-
-    // The exchange is mirrored into the room the ask was made from — both
-    // the question and the answer — not tucked into a pair channel under
-    // Bot Chats that nothing badges. The room keeps its "Messaged" chip too.
-    const inRoom = await messagesOf(room.threadId);
-    expect(inRoom.some((m) => m.kind === "text" && m.from?.botId === asker.id && m.text === "what is the status?")).toBe(true);
-    expect(inRoom.some((m) => m.kind === "text" && m.from?.botId === helper.id && str(m.text).includes("hello from fake claude"))).toBe(true);
-    expect(inRoom.some((m) => m.kind === "activity" && m.tool?.name === "Messaged @Room Helper")).toBe(true);
+    expect(handed?.from?.botId).toBe(asker.id);
+    // The answer is reported in the room the ask was made from.
+    await expect.poll(async () => (await messagesOf(room.threadId)).some((m) => m.kind === "activity" && m.tool?.name?.startsWith("Room Helper replied")), { timeout: 10_000 }).toBe(true);
     const groups = field((await api("GET", "/api/bots?messages=0")).body, "groups");
     const pairChannel = (Array.isArray(groups) ? groups : []).find(
       (group: unknown) =>
@@ -448,7 +449,8 @@ describe("list_rooms discovery", () => {
   it("never lists a one-to-one bot channel, and refuses a caller with no claim on the conversation", async () => {
     const a = await makeBot("Pair A", "Discovery");
     const b = await makeBot("Pair B", "Discovery");
-    // ask_bot auto-creates the pair's own bot-to-bot channel
+    // ask_bot used to create the pair's own bot-to-bot channel; on the job
+    // runtime (lot 3) it mirrors nothing, and no channel is listed either way.
     const asked = await internal("POST", "/api/internal/ask-bot", {
       fromBotId: a.id,
       fromThreadId: a.threadId,
@@ -457,7 +459,7 @@ describe("list_rooms discovery", () => {
       depth: 0,
     });
     expect(asked.status).toBe(200);
-    await api("POST", `/api/bots/${b.id}/interrupt`);
+    await settledAsk(a, str(asked.body.taskId));
 
     const listed = await internal("GET", `/api/internal/rooms?fromBotId=${a.id}&fromThreadId=${a.threadId}`);
     const rooms = Array.isArray(listed.body.rooms) ? listed.body.rooms : [];
@@ -610,6 +612,8 @@ describe("post_to_room", () => {
     const b = await makeBot("Channel B", "Posting");
     const room = await makeRoom("Shared desk", [a.id, b.id], "Posting");
 
+    // A one-to-one bot channel only exists from before the job runtime
+    // (lot 3: ask_bot mirrors nothing now), so none is made here to post into.
     const asked = await internal("POST", "/api/internal/ask-bot", {
       fromBotId: a.id,
       fromThreadId: a.threadId,
@@ -618,18 +622,9 @@ describe("post_to_room", () => {
       depth: 0,
     });
     expect(asked.status).toBe(200);
-    await api("POST", `/api/bots/${b.id}/interrupt`);
-
+    await settledAsk(a, str(asked.body.taskId));
     const groups = field((await api("GET", "/api/bots")).body, "groups");
-    const pair = Array.isArray(groups)
-      ? groups.find((group) => field(group as Record<string, unknown>, "dm") === true)
-      : undefined;
-    const pairId = str(field(pair as Record<string, unknown>, "id"));
-    expect(pairId).not.toBe("");
-
-    const intoPair = await post(a.id, a.threadId, pairId, "hello");
-    expect(intoPair.status).toBe(400);
-    expect(str(intoPair.body.error)).toContain("one-to-one");
+    expect(Array.isArray(groups) && groups.some((group) => field(group as Record<string, unknown>, "dm") === true)).toBe(false);
 
     const intoOwnRoom = await post(a.id, room.threadId, room.id, "hello again");
     expect(intoOwnRoom.status).toBe(409);

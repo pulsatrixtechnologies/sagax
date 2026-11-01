@@ -68,6 +68,10 @@ import { BrowserPanel } from "./BrowserPanel";
 import { browserAvailable, builtInBrowserEnabled } from "@/lib/feature-flags";
 import { browserTeachPending, onBrowserTeachRequest } from "@/lib/teach-request";
 import { withTeachBot } from "@/lib/computer-teach-client";
+import { BotRemoteHostsSection } from "./remote-session/BotRemoteHostsSection";
+import { openBotRemoteHost, fetchBotRemoteHosts } from "./remote-session/bot-remote-hosts-client";
+import { useRemoteSessions } from "./remote-session/use-remote-sessions";
+import type { UnattendedHostRow } from "../../shared/remote-unattended-host";
 
 import { useDesktopBridgeStatus } from "@/lib/desktop-bridge";
 import { readableError } from "@/lib/plain-error";
@@ -1589,7 +1593,24 @@ export function ComputerPanel({
 
   // Organization server (a desktop bridge status exists): the computer is
   // the person's server environment or their own PC, never this bot's own
-  // (src/components/computer/OrgComputerTab.tsx).
+  // (src/components/computer/OrgComputerTab.tsx). Enrolled hosts attached
+  // to this bot appear as places (2026-11-01).
+  const { rows: remoteSessionRows, reload: reloadRemoteSessions } = useRemoteSessions(bridgeStatus ? bot.id : undefined);
+  // Only connected sessions: ended or temporary ones never linger as active.
+  const activeRemoteSessions = remoteSessionRows.filter((row) => row.state === "connected");
+  const [remoteHostRows, setRemoteHostRows] = useState<UnattendedHostRow[]>([]);
+  const reloadRemoteHosts = useCallback(() => {
+    if (!bridgeStatus) return;
+    fetchBotRemoteHosts(bot.id)
+      .then((body) => setRemoteHostRows(body.hosts))
+      .catch(() => {});
+  }, [bridgeStatus, bot.id]);
+  useEffect(() => { reloadRemoteHosts(); }, [reloadRemoteHosts]);
+  const onPickRemoteHost = useCallback((hostId: string) => {
+    void openBotRemoteHost(bot.id, hostId).then((out) => {
+      if (out.ok) reloadRemoteSessions();
+    });
+  }, [bot.id, reloadRemoteSessions]);
   const body = bridgeStatus ? (
     <div className={embedded ? "pb-5" : "flex-1 overflow-y-auto px-5 pb-5"}>
       <OrgComputerTab
@@ -1600,10 +1621,15 @@ export function ComputerPanel({
         computerOff={livePlace === "off"}
         botName={bot.name}
         botId={bot.id}
+        bot={bot}
         threadId={bot.threadId}
         inUse={livePlace === "auto" ? (autoSurfaceCurrent ? (autoSurface.surface ?? "unknown") : "unknown") : livePlace}
         browser={browserOffered ? <BrowserPanel bot={bot} /> : null}
+        remoteHosts={remoteHostRows}
+        remoteSessions={activeRemoteSessions}
+        onPickRemoteHost={onPickRemoteHost}
       />
+      <BotRemoteHostsSection botId={bot.id} onChanged={() => { reloadRemoteHosts(); reloadRemoteSessions(); }} />
       {!embedded && <div className="mt-6">
         <RoutinesSection key={bot.id} bot={bot} routines={botRoutines} runs={state.routineRuns} defaultRunOn={cloudRoutineReady ? "cloud" : "maus"} />
       </div>}

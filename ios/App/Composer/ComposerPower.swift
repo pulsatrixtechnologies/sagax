@@ -240,7 +240,7 @@ extension ChatView {
                     mime: "image/png",
                     kind: .image
                 )
-                try AttachmentPolicy.validate(existing + added + [candidate])
+                try AttachmentPolicy.validate(existing + added + [candidate], sharedHost: session.surfaceGate.organization)
                 added.append(candidate)
             }
             attachments.append(contentsOf: added)

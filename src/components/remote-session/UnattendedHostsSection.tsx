@@ -1,9 +1,9 @@
 // "Enrolled hosts" on the Remote Sessions page (docs/inscription-hote.md,
 // "Côté Sagax"): the computers Perspicax enrolled for unattended access, with
 // "Unattended access" (opens a session against the host, then the usual
-// control flow) and "Revoke". The open button is behind
-// SAGAX_UNATTENDED_ACCESS; Revoke always shows (M2). No host id on screen:
-// the readable name, the id only in a tooltip and the Copy action.
+// control flow) and "Revoke". Unattended access is always enabled
+// (2026-11-01). No host id on screen: the readable name, the id only in a
+// tooltip and the Copy action.
 import { useRef, useState, type ReactNode } from "react";
 import { Copy, KeyRound, Monitor, ShieldOff } from "lucide-react";
 
@@ -40,11 +40,11 @@ type Notice = { kind: "pending" | "revoked"; host: string } | { kind: "error"; e
 const COLS = ["name", "org", "scope", "enrolled", "expires", "seen", "state", "actions"] as const;
 
 export function UnattendedHostsSection({ state, onOpened }: {
-  state: Pick<UnattendedHostsState, "hosts" | "available" | "openEnabled" | "loading" | "reload">;
+  state: Pick<UnattendedHostsState, "hosts" | "available" | "loading" | "reload">;
   /** A session was opened against a host: the page takes over once its row connects. */
   onOpened?: (opened: { code: string; botId: string }) => void;
 }) {
-  const { hosts, available, openEnabled, loading, reload } = state;
+  const { hosts, available, loading, reload } = state;
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<UnattendedHostRow | null>(null);
   const [reason, setReason] = useState("");
@@ -73,14 +73,11 @@ export function UnattendedHostsSection({ state, onOpened }: {
   };
 
   return (
-    <section data-unattended-hosts="" data-open-enabled={openEnabled ? "on" : "off"} className="border-b border-hairline/50 px-5 py-4">
+    <section data-unattended-hosts="" className="border-b border-hairline/50 px-5 py-4">
       <div className="mb-2 flex items-center gap-2">
         <Monitor size={16} className="text-ink-secondary" />
         <h2 className="text-[14px] font-medium text-ink">{t("remoteSessionsAdmin.hosts.title")}</h2>
       </div>
-      {!openEnabled && !loading && (
-        <p data-unattended-hosts-open-off="" className="mb-2 text-[12.5px] text-ink-secondary">{t("remoteSessionsAdmin.hosts.openOff")}</p>
-      )}
       {notice && (
         <p data-unattended-hosts-notice={notice.kind} role="status" className={cn("mb-2 text-[12.5px]", notice.kind === "error" ? "text-danger" : "text-ink-secondary")}>
           {notice.kind === "error" ? t(`remoteSessionsAdmin.hosts.error.${notice.error}`) : t(`remoteSessionsAdmin.hosts.${notice.kind}`, { host: notice.host })}
@@ -114,7 +111,7 @@ export function UnattendedHostsSection({ state, onOpened }: {
                     <td className="px-2 py-2"><span className={cn(row.state === "enrolled" ? "text-success" : row.state === "revoked" ? "text-danger" : "text-warning")}>{t(`remoteSessionsAdmin.hosts.state.${row.state}`)}</span></td>
                     <td className="px-2 py-2">
                       <div className="flex flex-wrap gap-1.5">
-                        {openEnabled && canOpenUnattendedHost(row) && (
+                        {canOpenUnattendedHost(row) && (
                           <button type="button" data-unattended-host-open="" disabled={working} onClick={() => void open(row)} className="inline-flex items-center gap-1 rounded-lg border border-hairline/50 bg-panel px-2 py-1 text-[12px] text-ink hover:bg-raised disabled:opacity-50">
                             <KeyRound size={12} /> {t("remoteSessionsAdmin.hosts.open")}
                           </button>

@@ -58,6 +58,8 @@ export interface OrgSettings {
   /** Where bots' Claude Code plugins may come from (server/bot-plugins.ts):
    * any marketplace by default, or the admin's list. */
   pluginMarketplaces?: { mode: "any" } | { mode: "list"; allow: string[] };
+  /** lot 4: "perspicax" when Perspicax owns the rule (written there). */
+  pluginMarketplacesOwner?: "perspicax" | "local";
   /** 2026-10-18: Pulsatrix Flow's default plugins as this server installed
    * them (server/org-flow-plugins.ts); read only, declared in Perspicax. */
   flowPlugins?: OrgFlowPluginsStatus;
@@ -253,6 +255,9 @@ export function createPerspicaxOrgRoutes(deps: PerspicaxOrgRouteDeps): RouteHand
       try {
         if (marketplaces) deps.savePluginMarketplaces!(body.pluginMarketplaces, auth);
       } catch (error) {
+        // lot 4: Perspicax owns the rule; this server keeps no second copy
+        const owned = (error as { code?: unknown } | null)?.code === "org_setting_in_perspicax";
+        if (owned) return json(res, 409, { error: (error as Error).message, code: "org_setting_in_perspicax" });
         return json(res, 400, { error: error instanceof Error ? error.message : "That marketplace list is not valid.", code: "invalid_policy" });
       }
       try {

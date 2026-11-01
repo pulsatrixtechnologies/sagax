@@ -220,14 +220,27 @@ export function caddySite(workspace: Pick<FleetWorkspace, "host" | "port" | "web
     const message = workspace.status === "suspended" ? "This workspace is suspended." : "This workspace is not available.";
     return [`${workspace.host} {`, `\trespond "${message}" 503`, "}", ""].join("\n");
   }
+  // Same upstream hold as server/caddy.ts (single-process restart).
+  const hold = [
+    "\t\t\tlb_try_duration 25s",
+    "\t\t\tlb_try_interval 250ms",
+    "\t\t\tfail_duration 10s",
+    "\t\t\tunhealthy_status 502 503",
+    "\t\t\thealth_uri /healthz",
+    "\t\t\thealth_interval 2s",
+    "\t\t\thealth_timeout 1s",
+  ];
   return [
     `${workspace.host} {`,
     "\tencode zstd gzip",
     "\thandle /hooks/* {",
-    `\t\treverse_proxy 127.0.0.1:${workspace.webhookPort}`,
+    `\t\treverse_proxy 127.0.0.1:${workspace.webhookPort} {`,
+    ...hold,
+    "\t\t}",
     "\t}",
     "\thandle {",
     `\t\treverse_proxy 127.0.0.1:${workspace.port} {`,
+    ...hold,
     "\t\t\tflush_interval -1",
     "\t\t}",
     "\t}",

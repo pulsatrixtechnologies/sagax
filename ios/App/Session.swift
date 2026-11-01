@@ -100,6 +100,20 @@ final class Session: ObservableObject {
     @Published private(set) var status: Status = .unpaired
     /// Transient, user-facing failures from an action they just took.
     @Published var actionError: String?
+    /// Uploads outlive a ChatView and stay bound to the connection captured
+    /// at intake. Reopening a conversation restores its pending attachments.
+    @Published private(set) var attachmentUploadStates: [UUID: AttachmentUploadState] = [:]
+    private var attachmentUploadTasks: [UUID: Task<Void, Never>] = [:]
+    private var attachmentUploadConnections: [UUID: String] = [:]
+    private var attachmentUploadClients: [UUID: CompanionClient] = [:]
+    private var attachmentUploadGenerations: [UUID: UUID] = [:]
+    private var attachmentDrafts: [String: [PendingMessageAttachment]] = [:]
+    @Published private(set) var recoveredAttachmentSends: Set<UUID> = []
+    private(set) var recoveredAttachmentDraftTexts: [String: String] = [:]
+    private var attachmentDraftTextTasks: [String: Task<Void, Never>] = [:]
+    private var attachmentRecoveryTask: Task<Void, Never>?
+    private var attachmentUploadTransientFailures: Set<UUID> = []
+    private let attachmentJournal = AttachmentTransferJournal(root: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("AttachmentTransfers", isDirectory: true))
     /// The server answered a routine folder action as an older server does
     /// (no such route): the folder actions say "Available after the server
     /// update." until the next connection (2026-10-28).
@@ -485,6 +499,11 @@ final class Session: ObservableObject {
                let frameData = try? Data(contentsOf: frameURL),
                let frame = try? JSONDecoder().decode(Frame.self, from: frameData) {
                 state.apply(frame)
+            }
+            if let longCount = LongTranscript.previewCount(in: arguments) {
+                // DEBUG / demo measure: one synthetic thread of ~2000 lines so
+                // the chat transcript can be timed before and after LazyVStack.
+                applyLongTranscriptPreview(count: longCount)
             }
             if arguments.contains("-threads-preview"),
                let pagesURL = Bundle.main.url(forResource: "ThreadPreviewPages", withExtension: "json"),
@@ -991,10 +1010,35 @@ final class Session: ObservableObject {
             demoState.apply(.screen(botId: "demo-forge", png: png, mime: "image/png"))
         }
         state = demoState
+#if DEBUG
+        if let longCount = LongTranscript.previewCount(in: ProcessInfo.processInfo.arguments) {
+            applyLongTranscriptPreview(count: longCount)
+        }
+#endif
         status = .live
         // the demo asks for the terms too, and answers Report and Block
         Task { await loadModeration() }
     }
+
+#if DEBUG
+    /// Replaces the first bot's thread with a synthetic long transcript for
+    /// LazyVStack measurement (StorePreview Scout, or demo Atlas). One thread
+    /// keeps the home roster cheap while the open chat carries ~2000 rows.
+    func applyLongTranscriptPreview(count: Int) {
+        guard let bot = state.bots.first else { return }
+        let threadId = bot.threadId
+        let generated = LongTranscript.messages(count: count, idPrefix: "long-\(threadId)")
+        state.messages[threadId] = generated
+        state.hasMore[threadId] = false
+        state.activeLeafIds[threadId] = generated.last?.id
+        if let index = state.bots.firstIndex(where: { $0.id == bot.id }) {
+            state.bots[index].messages = generated
+            state.bots[index].hasMore = false
+            state.bots[index].activeLeafId = generated.last?.id
+            state.bots[index].unread = false
+        }
+    }
+#endif
 
     private func applyDemoFrame(_ frame: Frame) {
         guard isDemo else { return }
@@ -1373,6 +1417,10 @@ final class Session: ObservableObject {
         resetCredentialEntry()
         streamTask?.cancel()
         streamTask = nil
+        // Nothing follows the bots any more: say so (the Live Activities
+        // mark their cards stale on it), and the return reads "Connecting…"
+        // rather than a live status that is not true.
+        if status == .live { status = .connecting }
         endpointRefreshTask?.cancel()
         endpointRefreshTask = nil
         endLinger()
@@ -1420,6 +1468,7 @@ final class Session: ObservableObject {
     }
 
     private func run() async {
+        let generation = streamGeneration
         while !Task.isCancelled {
             guard let client else { return }
             status = .connecting
@@ -1465,6 +1514,7 @@ final class Session: ObservableObject {
                             state.resetCursor(cursor)
                         }
                         status = .live
+                        resumeNativeAttachmentTransfers(using: client)
                         // this server pushes to the phone while the app is closed
                         Task { await PushRegistrar.shared.sync() }
                         // phone tools: what this phone offers, and any request waiting
@@ -1532,6 +1582,14 @@ final class Session: ObservableObject {
                     NotificationCoordinator.shared.setBadge(state.unreadCount)
                     withdrawSettledIfFewerUnread()
                     if streamed { foldQuietly { state.advance(to: frame.seq) } } else { state.advance(to: frame.seq) }
+                }
+                // Cancelled by us (leaving the screen, a restart for the
+                // screen view, pull to refresh): the sequence ends without
+                // an error then. A newer stream owns `status`; never write
+                // "Lost the connection" over it.
+                if Task.isCancelled || streamGeneration != generation {
+                    log.info("stream closed by us")
+                    return
                 }
                 // the stream ended without an error — the harness went away
                 log.notice("stream ended without an error")
@@ -1782,8 +1840,9 @@ final class Session: ObservableObject {
         }
         let connectionID = client.connection.id
         actionError = nil
+        var journaledDelivery: String?
         do {
-            try AttachmentPolicy.validate(attachments)
+            try AttachmentPolicy.validate(attachments, sharedHost: surfaceGate.organization)
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty || !attachments.isEmpty else {
                 actionError = "Write a message or attach a file first."
@@ -1830,38 +1889,34 @@ final class Session: ObservableObject {
             if attachmentSendIDs.count >= 20, attachmentSendIDs[draftKey] == nil {
                 attachmentSendIDs.removeAll(keepingCapacity: true)
             }
-            let sendID = attachmentSendIDs[draftKey] ?? UUID().uuidString
+            let recovered = attachmentJournal.ids().compactMap { try? attachmentJournal.load($0) }.first {
+                !$0.cancelled && $0.connectionID == connectionID && $0.destination == destination && $0.prefix == text
+                    && $0.entries.map(\.id) == attachments.map(\.id)
+            }?.sendID
+            let sendID = attachmentSendIDs[draftKey] ?? recovered ?? UUID().uuidString
             attachmentSendIDs[draftKey] = sendID
 
             var uploaded: [SharedAttachmentReference] = []
             uploaded.reserveCapacity(attachments.count)
             for attachment in attachments {
                 try Task.checkCancellation()
-                let mime = AttachmentPolicy.normalizedMIME(attachment.mime)
-                switch attachment.kind {
-                case .image:
-                    let path = try await client.uploadImage(
-                        data: attachment.data,
-                        mime: mime,
-                        uploadId: attachment.id.uuidString
-                    )
-                    uploaded.append(SharedAttachmentReference(
-                        path: path,
-                        kind: .image,
-                        displayName: attachment.name
-                    ))
-                case .file:
-                    let file = try await client.uploadFile(
-                        data: attachment.data,
-                        name: attachment.name,
-                        mime: mime,
-                        uploadId: attachment.id.uuidString
-                    )
-                    uploaded.append(SharedAttachmentReference(
-                        path: file.path,
-                        kind: .file,
-                        displayName: file.name
-                    ))
+                // Imported attachments upload before Send. A pending or
+                // failed chip never falls through to a second transfer.
+                if let state = attachmentUploadState(attachment.id) {
+                    guard case let .ready(receipt) = state else {
+                        actionError = String(localized: "Finish or retry the attachment uploads before sending.")
+                        return false
+                    }
+                    uploaded.append(receipt.reference(for: attachment))
+                } else {
+                    // Bounded native producers and retained failed sends may
+                    // enter here without a composer. They use the same UUID
+                    // and resumable transport as picked files.
+                    let receipt = try await client.uploadAttachment(attachment, sharedHost: surfaceGate.organization)
+                    attachmentUploadConnections[attachment.id] = connectionID
+                    attachmentUploadClients[attachment.id] = client
+                    attachmentUploadStates[attachment.id] = .ready(receipt)
+                    uploaded.append(receipt.reference(for: attachment))
                 }
             }
 
@@ -1873,7 +1928,20 @@ final class Session: ObservableObject {
             )
             var streamOptions = options
             if case .bot = destination { streamOptions.singleStream = !SidebarPrefsModel.shared.showThreads }
+            // Persist the exact accepted delivery before the network call.
+            // Relaunch retries the same body, options and sendId after an
+            // ambiguous reply, rather than charging for another message.
+            if !attachments.isEmpty {
+                journaledDelivery = try attachmentJournal.prepareDelivery(attachments, connectionID: connectionID, destination: destination,
+                    prefix: text, sendID: sendID, preparedText: message, options: streamOptions,
+                    sourceDraftID: AttachmentTransferJournal.draftID(connectionID: connectionID, threadID: chat.threadId))
+            }
+            let deliveryLease = !attachments.isEmpty ? try attachmentJournal.lease(sendID) : nil
+            defer { withExtendedLifetime(deliveryLease) {} }
             let receipt = try await client.send(text: message, to: destination, sendId: sendID, options: streamOptions)
+            if !attachments.isEmpty, let manifest = try? attachmentJournal.load(sendID) {
+                try attachmentJournal.finish(manifest, id: sendID)
+            }
             // The fresh topic's first message went through: the chat moves there.
             if let startedTopic {
                 createdFreshTopics[startedTopic.botId] = nil
@@ -1892,6 +1960,7 @@ final class Session: ObservableObject {
                 rememberQueuedSend(from: receipt, text: text)
             }
             attachmentSendIDs.removeValue(forKey: draftKey)
+            consumeAttachmentUploads(attachments, threadId: chat.threadId, connectionID: connectionID)
             actionError = nil
             return true
         } catch is CancellationError {
@@ -1903,6 +1972,12 @@ final class Session: ObservableObject {
             actionError = String(localized: "Sagax is reconnecting. Your message was not sent; try again in a moment.")
             return false
         } catch {
+            // A definitive refusal (policy, type, size) must not be replayed
+            // later from the outbox. The draft and its chips stay for editing.
+            if let journaledDelivery, AttachmentTransferDelivery.definitive(error) {
+                try? attachmentJournal.remove(journaledDelivery)
+                attachmentSendIDs = attachmentSendIDs.filter { $0.value != journaledDelivery }
+            }
             actionError = error.localizedDescription
             return false
         }
@@ -2054,13 +2129,18 @@ final class Session: ObservableObject {
         path: String,
         cacheResult: Bool = false
     ) async throws -> DownloadedFile {
-        let download = try await fetchAttachment(
-            threadId: threadId,
-            messageId: messageId,
-            path: path,
-            cacheResult: cacheResult
-        )
-        try Task.checkCancellation()
+        let download: DownloadedFile
+        if cacheResult {
+            download = try await fetchAttachment(threadId: threadId, messageId: messageId, path: path, cacheResult: true)
+        } else {
+            guard let client else { throw APIError.transport("This computer is offline.") }
+            let generation = attachmentCacheGeneration
+            download = try await client.downloadFileToDisk(threadId: threadId, messageId: messageId, path: path)
+            guard generation == attachmentCacheGeneration, !Task.isCancelled else {
+                if let url = download.localURL { try? FileManager.default.removeItem(at: url) }
+                throw CancellationError()
+            }
+        }
         let preparation = Task.detached(priority: .userInitiated) {
             // Content-Disposition is the server's canonical, sanitised name.
             // The transport tag's `name` is presentation-only and must never
@@ -2115,6 +2195,9 @@ final class Session: ObservableObject {
         filename: String
     ) throws -> DownloadedFile {
         let manager = FileManager.default
+        defer {
+            if let url = download.localURL { try? manager.removeItem(at: url) }
+        }
         let root = manager.temporaryDirectory
             .appendingPathComponent("SagaxFilePreviews", isDirectory: true)
         let directory = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -2126,10 +2209,12 @@ final class Session: ObservableObject {
         )
         let fileURL = directory.appendingPathComponent(filename, isDirectory: false)
         do {
-            try download.data.write(
-                to: fileURL,
-                options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
-            )
+            if let downloadedURL = download.localURL {
+                try manager.moveItem(at: downloadedURL, to: fileURL)
+                try manager.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: fileURL.path)
+            } else {
+                try download.data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            }
             try Task.checkCancellation()
             return DownloadedFile(
                 data: download.data,
@@ -2139,6 +2224,7 @@ final class Session: ObservableObject {
             )
         } catch {
             try? manager.removeItem(at: directory)
+            if let url = download.localURL { try? manager.removeItem(at: url) }
             throw error
         }
     }
@@ -2332,14 +2418,24 @@ final class Session: ObservableObject {
     }
 
     /// The same answer, from something that only has the ids — the Live
-    /// Activity's buttons.
+    /// Activity's buttons. True once the harness took it, so the island can
+    /// drop its buttons at once and a refused answer keeps them.
+    @discardableResult
     func answer(
         threadId: String,
         requestId: String,
         choice: String,
         isPermission: Bool,
         reviewedSha256: String? = nil
-    ) async {
+    ) async -> Bool {
+        // A Live Activity button can wake the app before the saved pairing
+        // is restored: restore it rather than drop the answer silently.
+        if client == nil, restorePending { restore() }
+        guard client != nil else {
+            actionError = "Unlock iPhone, then answer again."
+            return false
+        }
+        var accepted = false
         await perform {
             // Permission cards answer allow/deny; a question answers with
             // the chosen text. The harness tells them apart by `behavior`.
@@ -2354,7 +2450,9 @@ final class Session: ObservableObject {
             } else {
                 try await $0.respond(threadId: threadId, requestId: requestId, behavior: "answer", message: choice)
             }
+            accepted = true
         }
+        return accepted
     }
 
     /// "Always allow" — the grant key comes from the card, never from
@@ -3500,18 +3598,51 @@ final class Session: ObservableObject {
         if let last = lastForegroundResync, Date().timeIntervalSince(last) < 5 { return }
         lastForegroundResync = Date()
         // the hydration sets the badge and withdraws settled banners itself
-        _ = await refreshAfterPush()
+        guard let client else { return }
+        do {
+            try await hydrate(using: client)
+        } catch is CancellationError {
+            // a newer stream took over: it hydrates by itself
+        } catch APIError.status(code: 409, _) {
+            // The live stream moved the cursor while the snapshot loaded:
+            // it is working and already current. Reopening it here dropped
+            // a healthy stream (and flashed "Connecting…") every time the
+            // app came back during a reply.
+        } catch let error as APIError where !Self.meansTheSocketDied(error) {
+            log.info("foreground resync refused, keeping the stream: \(error.localizedDescription, privacy: .public)")
+        } catch {
+            // The stream survived the background on paper only (a socket
+            // that died while the phone was locked keeps `streamTask` set
+            // until the 90 s idle timeout): open a fresh one now rather than
+            // show a frozen transcript for a minute and a half.
+            log.notice("foreground resync failed, reopening the stream: \(error.localizedDescription, privacy: .public)")
+            restartStream()
+        }
+    }
+
+    /// A transport failure (the socket a locked phone let die) as opposed
+    /// to an answer from a server that is evidently reachable.
+    private static func meansTheSocketDied(_ error: APIError) -> Bool {
+        if case .transport = error { return true }
+        return false
     }
 
     func refreshAfterPush() async -> Bool {
         guard !isDemo, let client else { return false }
         do {
             try await hydrate(using: client)
+            // The app may be suspended right after this returns: the Live
+            // Activities follow the fresh state now, not after a debounce.
+            await afterPushHydrate?(state)
             return true
         } catch {
             return false
         }
     }
+
+    /// Set by the Live Activity coordinator: runs once a push has hydrated
+    /// the state in the background, before the app may be suspended again.
+    var afterPushHydrate: ((CompanionState) async -> Void)?
 
 /// 2026-10-29 / #1699: Continue in the conversation opens the bot's one
     /// conversation and quotes the run's report in the composer (desktop
@@ -3941,4 +4072,235 @@ extension CompanionState {
         return false
     }
 
+}
+
+
+extension Session {
+    func attachmentUploadState(_ id: UUID) -> AttachmentUploadState? {
+        guard attachmentUploadConnections[id] == client?.connection.id else { return nil }
+        return attachmentUploadStates[id]
+    }
+
+    func attachmentUploadsReady(_ attachments: [PendingMessageAttachment]) -> Bool {
+        attachments.allSatisfy { attachmentUploadState($0.id)?.ready == true }
+    }
+
+    func finishAttachmentUploads(_ attachments: [PendingMessageAttachment]) async -> Bool {
+        let running = attachments.compactMap { attachmentUploadTasks[$0.id] }
+        for task in running { await task.value }
+        return attachmentUploadsReady(attachments)
+    }
+
+    private func attachmentDraftKey(_ threadId: String, connectionID: String) -> String {
+        connectionID + ":" + threadId
+    }
+
+    func pendingAttachmentDraft(threadId: String) -> [PendingMessageAttachment] {
+        guard let connectionID = client?.connection.id else { return [] }
+        let key = attachmentDraftKey(threadId, connectionID: connectionID)
+        if let kept = attachmentDrafts[key] { return kept }
+        let id = AttachmentTransferJournal.draftID(connectionID: connectionID, threadID: threadId)
+        guard let manifest = try? attachmentJournal.load(id),
+              let restored = try? attachmentJournal.attachments(manifest, id: id) else { return [] }
+        attachmentDrafts[key] = restored
+        return restored
+    }
+
+    func pendingAttachmentDraftText(threadId: String) -> String? {
+        guard let connectionID = client?.connection.id else { return nil }
+        let id = AttachmentTransferJournal.draftID(connectionID: connectionID, threadID: threadId)
+        return (try? attachmentJournal.load(id))?.prefix
+    }
+
+    func rememberAttachmentDraftText(_ text: String, threadId: String) {
+        guard let connectionID = client?.connection.id else { return }
+        let key = attachmentDraftKey(threadId, connectionID: connectionID)
+        attachmentDraftTextTasks[key]?.cancel()
+        attachmentDraftTextTasks[key] = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 300_000_000) } catch { return }
+            guard let self else { return }
+            let id = AttachmentTransferJournal.draftID(connectionID: connectionID, threadID: threadId)
+            guard var manifest = try? self.attachmentJournal.load(id), manifest.destination == nil else { return }
+            manifest.prefix = text
+            try? self.attachmentJournal.save(manifest, id: id)
+            self.attachmentDraftTextTasks[key] = nil
+        }
+    }
+
+    func keepAttachmentDraft(_ attachments: [PendingMessageAttachment], threadId: String, connectionID requestedConnectionID: String? = nil, text: String? = nil) {
+        guard let connectionID = requestedConnectionID ?? client?.connection.id else { return }
+        let key = attachmentDraftKey(threadId, connectionID: connectionID)
+        attachmentDrafts[key] = attachments.isEmpty ? nil : attachments
+        do {
+            try attachmentJournal.saveDraft(attachments, connectionID: connectionID, threadID: threadId)
+            if let text, !attachments.isEmpty {
+                let id = AttachmentTransferJournal.draftID(connectionID: connectionID, threadID: threadId)
+                var manifest = try attachmentJournal.load(id)
+                manifest.prefix = text
+                try attachmentJournal.save(manifest, id: id)
+            }
+        }
+        catch {
+            for attachment in attachments { attachmentUploadStates[attachment.id] = .failed(error.localizedDescription) }
+            actionError = error.localizedDescription
+            return
+        }
+        guard client?.connection.id == connectionID else { return }
+        for attachment in attachments where attachmentUploadState(attachment.id) == nil {
+            startAttachmentUpload(attachment)
+        }
+    }
+
+    func startAttachmentUpload(_ attachment: PendingMessageAttachment, retry: Bool = false) {
+        guard let client else { return }
+        if attachmentUploadState(attachment.id) != nil && !retry { return }
+        guard attachmentUploadTasks[attachment.id] == nil else { return }
+        let sharedHost = surfaceGate.organization
+        if retry, let draft = attachmentDrafts.first(where: { $0.value.contains(where: { $0.id == attachment.id }) }),
+           draft.key.hasPrefix(client.connection.id + ":") {
+            let threadID = String(draft.key.dropFirst(client.connection.id.count + 1))
+            do { try attachmentJournal.saveDraft(draft.value, connectionID: client.connection.id, threadID: threadID) }
+            catch { attachmentUploadStates[attachment.id] = .failed(error.localizedDescription); return }
+        }
+        let generation = UUID()
+        attachmentUploadConnections[attachment.id] = client.connection.id
+        attachmentUploadClients[attachment.id] = client
+        attachmentUploadGenerations[attachment.id] = generation
+        attachmentUploadStates[attachment.id] = .uploading(uploaded: 0, total: attachment.bytes)
+        attachmentUploadTransientFailures.remove(attachment.id)
+        attachmentUploadTasks[attachment.id] = Task { [weak self] in
+            do {
+                // Leaving the app keeps the usual extra running time; past
+                // that, the journal resumes from the acknowledged offset.
+                let saved = try await SagaxTransferActivity.run("Sagax attachment upload") {
+                    try await client.uploadAttachment(attachment, sharedHost: sharedHost) { [weak self] sent, total in
+                        await self?.attachmentUploadProgress(attachment.id, generation: generation, sent: sent, total: total)
+                    }
+                }
+                guard let self, self.attachmentUploadGenerations[attachment.id] == generation else { return }
+                self.attachmentUploadStates[attachment.id] = .ready(saved)
+                self.attachmentUploadTasks[attachment.id] = nil
+            } catch {
+                guard let self, self.attachmentUploadGenerations[attachment.id] == generation else { return }
+                self.attachmentUploadStates[attachment.id] = .failed(error.localizedDescription)
+                self.attachmentUploadTasks[attachment.id] = nil
+                // A suspended or lost network transfer resumes by itself on
+                // the next foreground/connection; a refusal waits for Retry.
+                if !(error is CancellationError), !AttachmentTransferDelivery.definitive(error) {
+                    self.attachmentUploadTransientFailures.insert(attachment.id)
+                }
+            }
+        }
+    }
+
+    private func attachmentUploadProgress(_ id: UUID, generation: UUID, sent: Int, total: Int) {
+        guard attachmentUploadGenerations[id] == generation else { return }
+        attachmentUploadStates[id] = .uploading(uploaded: sent, total: total)
+        if let connectionID = attachmentUploadConnections[id],
+           let draft = attachmentDrafts.first(where: { $0.key.hasPrefix(connectionID + ":") && $0.value.contains(where: { $0.id == id }) }) {
+            let threadID = String(draft.key.dropFirst(connectionID.count + 1))
+            try? attachmentJournal.updateProgress(sent, attachmentID: id,
+                id: AttachmentTransferJournal.draftID(connectionID: connectionID, threadID: threadID))
+        }
+    }
+
+    func removeAttachmentUpload(_ attachment: PendingMessageAttachment) {
+        let running = attachmentUploadTasks.removeValue(forKey: attachment.id)
+        running?.cancel()
+        let uploadClient = attachmentUploadClients.removeValue(forKey: attachment.id)
+        attachmentUploadGenerations[attachment.id] = nil
+        attachmentUploadConnections[attachment.id] = nil
+        attachmentUploadStates[attachment.id] = nil
+        attachmentUploadTransientFailures.remove(attachment.id)
+        for key in Array(attachmentDrafts.keys) {
+            attachmentDrafts[key]?.removeAll { $0.id == attachment.id }
+            if let connectionID = uploadClient?.connection.id, key.hasPrefix(connectionID + ":") {
+                let threadID = String(key.dropFirst(connectionID.count + 1))
+                try? attachmentJournal.saveDraft(attachmentDrafts[key] ?? [], connectionID: connectionID, threadID: threadID)
+            }
+            if attachmentDrafts[key]?.isEmpty == true { attachmentDrafts[key] = nil }
+        }
+        for id in attachmentJournal.ids() {
+            guard let manifest = try? attachmentJournal.load(id), manifest.destination != nil,
+                  manifest.entries.contains(where: { $0.id == attachment.id }) else { continue }
+            try? attachmentJournal.cancel(id)
+        }
+        // A fresh Task has its own cancellation state. Wait for the data
+        // request to settle, then clean partial or unused committed content.
+        // The captured client keeps cleanup on its original computer.
+        if let uploadClient {
+            Task.detached {
+                await running?.value
+                try? await uploadClient.cancelAttachmentUpload(attachment)
+            }
+        }
+    }
+
+    private func consumeAttachmentUploads(_ attachments: [PendingMessageAttachment], threadId: String, connectionID: String) {
+        let ids = Set(attachments.map(\.id))
+        let key = attachmentDraftKey(threadId, connectionID: connectionID)
+        attachmentDrafts[key]?.removeAll { ids.contains($0.id) }
+        if attachmentDrafts[key]?.isEmpty == true { attachmentDrafts[key] = nil }
+        for id in ids {
+            attachmentUploadTasks[id] = nil
+            attachmentUploadGenerations[id] = nil
+            attachmentUploadClients[id] = nil
+            attachmentUploadConnections[id] = nil
+            attachmentUploadStates[id] = nil
+            attachmentUploadTransientFailures.remove(id)
+        }
+    }
+}
+
+
+extension Session {
+    func resumeNativeAttachmentTransfers() {
+        guard let client else { return }
+        resumeNativeAttachmentTransfers(using: client)
+    }
+
+    private func resumeNativeAttachmentTransfers(using client: CompanionClient) {
+        guard attachmentRecoveryTask == nil else { return }
+        attachmentRecoveryTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.attachmentRecoveryTask = nil }
+            for id in self.attachmentJournal.ids() {
+                if Task.isCancelled { return }
+                guard let manifest = try? self.attachmentJournal.load(id), manifest.connectionID == client.connection.id else { continue }
+                do {
+                    if manifest.destination != nil {
+                        let draftText = manifest.sourceDraftID.flatMap { try? self.attachmentJournal.load($0).prefix } ?? manifest.prefix
+                        let delivered = try await SagaxTransferActivity.run("Sagax attachment delivery") {
+                            try await AttachmentTransferDelivery(journal: self.attachmentJournal, id: id).run(using: client)
+                        }
+                        if delivered {
+                            if let draftText { self.recoveredAttachmentDraftTexts[manifest.threadID] = draftText }
+                            self.recoveredAttachmentSends.formUnion(manifest.entries.map(\.id))
+                            let ids = Set(manifest.entries.map(\.id))
+                            for key in Array(self.attachmentDrafts.keys) where key.hasPrefix(manifest.connectionID + ":") {
+                                self.attachmentDrafts[key]?.removeAll { ids.contains($0.id) }
+                                if self.attachmentDrafts[key]?.isEmpty == true { self.attachmentDrafts[key] = nil }
+                            }
+                        }
+                    } else {
+                        guard self.client?.connection.id == client.connection.id else { continue }
+                        let restored = try self.attachmentJournal.attachments(manifest, id: id)
+                        let key = self.attachmentDraftKey(manifest.threadID, connectionID: manifest.connectionID)
+                        if self.attachmentDrafts[key] == nil { self.attachmentDrafts[key] = restored }
+                        for attachment in self.attachmentDrafts[key] ?? restored {
+                            if self.attachmentUploadState(attachment.id) == nil {
+                                self.startAttachmentUpload(attachment)
+                            } else if self.attachmentUploadTransientFailures.contains(attachment.id) {
+                                self.startAttachmentUpload(attachment, retry: true)
+                            }
+                        }
+                    }
+                } catch let rejected as AttachmentTransferRejected {
+                    self.actionError = rejected.message
+                } catch {
+                    self.actionError = String(localized: "An attachment is waiting to resume. Open its conversation to retry.")
+                }
+            }
+        }
+    }
 }

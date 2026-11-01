@@ -24,6 +24,8 @@ export type RoutineRow = {
   failureStreak?: number;
   autoPaused?: unknown;
   latestRun?: { status: unknown; at: unknown; error?: string } | null;
+  /** Owned webhook id when this routine starts from a delivery (#1891). */
+  webhookId?: string;
 };
 
 export const ROUTINE_PAGE_DEFAULT = 25;
@@ -60,6 +62,7 @@ export function routineRow(raw: unknown): RoutineRow | null {
     instructions: preview(text(r.instructions ?? r.prompt)),
     ...(typeof r.failureStreak === "number" && r.failureStreak > 0 ? { failureStreak: r.failureStreak } : {}),
     ...(r.autoPaused ? { autoPaused: r.autoPaused } : {}),
+    ...(typeof r.webhookId === "string" && r.webhookId ? { webhookId: r.webhookId } : {}),
     ...(run && typeof run === "object"
       ? { latestRun: { status: run.status, at: run.finishedAt ?? run.startedAt ?? null, ...(typeof run.error === "string" && run.error ? { error: preview(run.error) } : {}) } }
       : {}),

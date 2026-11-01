@@ -12,7 +12,7 @@
 // bridge and no network egress, so the sandbox is reused as-is, never widened.
 import { APP_VERSION, appToText, parseAppInput, type AppPayload } from "../shared/app.ts";
 import { redactSecretsInText } from "./redact.ts";
-import type { AgentCardResult, AgentCardStore } from "./chat-widgets.ts";
+import type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 
 const ROOM_REFUSAL = "Live apps are not available in rooms. Show it in a direct conversation.";
 const NO_SUCH_APP = "No live app with that id in this conversation.";

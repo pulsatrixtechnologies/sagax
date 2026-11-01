@@ -182,6 +182,10 @@ describe("RuntimeCoordinator: the requesting turn and its tree", () => {
       text: "Ship the CSV export", kind: "work", origin: userOrigin, executions: 1 });
     expect(w.coordinator.children("gen-1").map(c => c.id)).toEqual([node.id]);
     expect(w.coordinator.all().map(n => n.id)).toEqual(["gen-1", node.id]);
+    // activity panel path: indexed children of the parent's assignee, same
+    // membership as scanning all() for that parent (no room groupId).
+    expect(w.coordinator.directChildrenOf("chief", "chief-chat").map(c => c.id)).toEqual([node.id]);
+    expect(w.coordinator.directChildrenOf("builder", "builder-work")).toEqual([]);
     // the host validated the request at enqueue, as legacy views
     expect(w.host.validates.at(-1)).toMatchObject({ node: { id: node.id, status: "queued" }, parent: { id: "gen-1", status: "source" } });
     // the level the host said the thread runs with is on the record
@@ -721,5 +725,305 @@ describe("RuntimeCoordinator: restarts", () => {
     } finally {
       await removeTempDir(dir);
     }
+  });
+});
+
+// Lot 3 (docs/plans/grok-convergence-runtime-evidence.md): the seam methods
+// the host uses for a provider limit's backup, routine runs and external runtimes.
+describe("one request, one root at the seam", () => {
+  const sendFor = (w: World, generation: string, request: string) =>
+    w.coordinator.enqueue(chief, generation, undefined, builder, "builder", "Build it", false, false, "Ship the CSV export",
+      undefined, userOrigin, "work", "solo-owner", false, undefined, request);
+
+  it("continues a failed root under the backup turn's generation, finds it by request, and ends it through that generation", async () => {
+    const w = world(hold);
+    sendFor(w, "gen-1", "message-1");
+    w.coordinator.tick();
+    expect(w.coordinator.requestRoot("chief-chat", "message-1")).toBe("gen-1");
+    expect(w.coordinator.requestRoot("other-chat", "message-1")).toBeUndefined();
+    w.coordinator.sourceSettled("gen-1", false);
+    expect(w.coordinator.node("gen-1")?.status).toBe("waiting");
+    expect(w.coordinator.awaitsTeammates("chief-chat")).toBe(true);
+    expect(w.coordinator.continueRoot("gen-1", null)).toBe("continued");
+    expect(w.coordinator.node("gen-1")?.status).toBe("waiting");
+    expect(w.coordinator.continueRoot("gen-1", "gen-2")).toBe("continued");
+    expect(w.coordinator.node("gen-1")?.status).toBe("source");
+    // The backup turn asks again under its own generation: the same request.
+    const again = w.coordinator.enqueue(chief, "gen-2", undefined, builder, "builder", "Build it");
+    expect(again.duplicate).toBe(true);
+    expect(w.coordinator.has("gen-2")).toBe(false);
+    w.coordinator.sourceSettled("gen-2", true);
+    expect(w.coordinator.node("gen-1")?.status).toBe("waiting");
+    const child = w.coordinator.children("gen-1")[0]!;
+    await w.host.release(child.id, { ok: true, text: "built" });
+    w.coordinator.tick();
+    await flush();
+    expect(w.host.runs.filter(run => run.node.id === "gen-1")).toHaveLength(1);
+    expect(w.coordinator.node("gen-1")?.status).toBe("completed");
+    expect(w.coordinator.awaitsTeammates("chief-chat")).toBe(false);
+    expect(w.coordinator.continueRoot("gen-1", "gen-3")).toBe("answered");
+  });
+
+  it("an external runtime's delegation is a poll root that completes once its child settled, with no resume turn", async () => {
+    const w = world(hold);
+    const { node } = w.coordinator.enqueueExternal({ botId: "gateway", threadId: "gateway-pinned" }, builder, "Build it");
+    const root = w.coordinator.node(node.rootId)!;
+    expect(root).toMatchObject({ status: "waiting", origin: { kind: "outside" } });
+    w.coordinator.tick();
+    await w.host.release(node.id, { ok: true, text: "built" });
+    w.coordinator.tick();
+    await flush();
+    expect(w.coordinator.node(node.rootId)?.status).toBe("completed");
+    expect(w.coordinator.node(node.id)).toMatchObject({ status: "completed", result: "built" });
+    expect(w.host.runs.filter(run => run.node.id === node.rootId)).toHaveLength(0);
+  });
+
+  // Lot 3 gap: an external runtime's delegate_bot whose connection dropped
+  // after the server accepted it is retried by the caller. Without a key
+  // each call opened its own poll root, so the retry dispatched the work twice.
+  it("an external runtime's retried delegate_bot with the same idempotency key is the same request: one dispatch", async () => {
+    const w = world(hold);
+    const gateway = { botId: "gateway", threadId: "gateway-pinned" };
+    const first = w.coordinator.enqueueExternal(gateway, builder, "Build it", false, "work", "call-0001");
+    const retry = w.coordinator.enqueueExternal(gateway, builder, "Build it", false, "work", "call-0001");
+    expect(retry).toMatchObject({ duplicate: true, node: { id: first.node.id } });
+    w.coordinator.tick();
+    await flush();
+    expect(w.host.runs.filter(run => run.node.botId === "builder")).toHaveLength(1);
+    expect(w.coordinator.all().filter(n => !n.parentId)).toHaveLength(1);
+    // After it settled the key still answers the same request, never a new one.
+    await w.host.release(first.node.id, { ok: true, text: "built" });
+    w.coordinator.tick();
+    await flush();
+    expect(w.coordinator.enqueueExternal(gateway, builder, "Build it", false, "work", "call-0001")).toMatchObject({ duplicate: true, node: { status: "completed" } });
+    // The same key for another request is refused, not silently answered.
+    expect(() => w.coordinator.enqueueExternal(gateway, builder, "Build something else", false, "work", "call-0001")).toThrow(/idempotency key/);
+    // Without a key, a second call is a second request (unchanged).
+    expect(w.coordinator.enqueueExternal(gateway, builder, "Build it").duplicate).toBe(false);
+  });
+
+  it("an external runtime queues at most six requests on one conversation, like the legacy ledger", () => {
+    const w = world(hold);
+    const gateway = { botId: "gateway", threadId: "gateway-pinned" };
+    w.host.busyAnswer = () => true;
+    for (let i = 0; i < 6; i++) w.coordinator.enqueueExternal(gateway, builder, `Job ${i}`);
+    expect(() => w.coordinator.enqueueExternal(gateway, builder, "Job 7")).toThrow(/too many delegations queued/);
+    // Another conversation of the same bot has its own cap.
+    expect(w.coordinator.enqueueExternal({ botId: "gateway", threadId: "other" }, builder, "Job 7").duplicate).toBe(false);
+  });
+});
+
+// Lot 3: send_to_bot, an aside and review-gated work on the runtime.
+describe("one-way notices, priority and review on the runtime", () => {
+  it("a one-way notice holds nothing: the sender's turn completes, nothing resumes it, and a second notice to the same teammate is accepted", async () => {
+    const w = world();
+    const first = w.coordinator.enqueue(chief, "gen-1", undefined, builder, "builder", "FYI: release at 5", false, false, "", undefined, userOrigin, "notify");
+    expect(first.node).toMatchObject({ oneWay: true, status: "queued" });
+    w.coordinator.tick();
+    await flush();
+    expect(w.coordinator.node(first.node.id)?.status).toBe("completed");
+    // Not an assignment it completed: another notice is not "already completed".
+    const second = w.coordinator.enqueue(chief, "gen-1", undefined, { botId: "builder", threadId: "builder-other" }, "builder", "FYI: moved to 6", false, false, "", undefined, userOrigin, "notify");
+    expect(second.duplicate).toBe(false);
+    w.coordinator.sourceSettled("gen-1", true);
+    w.coordinator.tick();
+    await flush();
+    expect(w.coordinator.node("gen-1")?.status).toBe("completed");
+    expect(w.host.runs.filter(run => run.node.id === "gen-1")).toHaveLength(0);
+    expect(w.coordinator.awaitsTeammates("chief-chat")).toBe(false);
+  });
+
+  it("a notice queued by a turn that then fails on the provider is still delivered once", async () => {
+    const w = world();
+    w.host.busyAnswer = () => true;
+    const { node } = w.coordinator.enqueue(chief, "gen-1", undefined, builder, "builder", "FYI", false, false, "", undefined, userOrigin, "notify");
+    w.coordinator.sourceSettled("gen-1", false);
+    expect(w.coordinator.node("gen-1")?.status).toBe("failed");
+    w.host.busyAnswer = () => false;
+    w.coordinator.tick();
+    await flush();
+    w.coordinator.tick();
+    expect(w.coordinator.node(node.id)?.status).toBe("completed");
+    expect(w.host.runs.filter(run => run.node.id === node.id)).toHaveLength(1);
+  });
+
+  it("priority now is admitted ahead of work queued before it", async () => {
+    const w = world();
+    let free = false;
+    w.host.busyAnswer = () => !free;
+    const normal = w.coordinator.enqueue(chief, "gen-1", undefined, builder, "builder", "Normal", false, false, "", undefined, userOrigin, "notify");
+    const urgent = w.coordinator.enqueue(chief, "gen-1", undefined, { botId: "builder", threadId: "builder-2" }, "builder", "Urgent", false, false, "", undefined, userOrigin, "notify",
+      undefined, false, undefined, undefined, { priority: "now" });
+    expect(urgent.node.priority).toBe("now");
+    // One slot: whichever is admitted first takes it.
+    w.host.busyAnswer = node => !free || w.host.runs.length > 0 || node.id === "never";
+    free = true;
+    w.coordinator.tick();
+    await flush();
+    expect(w.host.runs[0]?.node.id).toBe(urgent.node.id);
+    expect(normal.node.id).not.toBe(urgent.node.id);
+  });
+
+  it("approve lets work the host held for review start; work not queued any more is not approved", async () => {
+    const w = world();
+    let held = true;
+    w.host.busyAnswer = node => held && !node.approvalGranted;
+    const { node } = w.coordinator.enqueue(chief, "gen-1", undefined, builder, "builder", "Build it", false, false, "", undefined, userOrigin);
+    w.coordinator.tick();
+    expect(w.host.runs).toHaveLength(0);
+    expect(w.coordinator.approve(node.id)).toBe(true);
+    await flush();
+    expect(w.coordinator.node(node.id)?.approvalGranted).toBe(true);
+    expect(w.host.runs.map(run => run.node.id)).toEqual([node.id]);
+    held = false;
+    expect(w.coordinator.approve(node.id)).toBe(false);
+  });
+});
+
+// Lot 3: a step cap's Continue: thread (turn-continuation.ts) on the runtime.
+describe("a bot's own continuation on the runtime", () => {
+  const stopped: RoomAddress = { botId: "builder", threadId: "builder-work" };
+  const cont: RoomAddress = { botId: "builder", threadId: "builder-continue" };
+
+  it("runs once in the new thread at its level, under the stopped work's origin, and resumes nothing", async () => {
+    const w = world();
+    w.host.levels.builder = { level: "edits", driverKind: "claudeAgent" };
+    const node = w.coordinator.enqueueContinuation(stopped, cont, "[Auto-continuation] read the handoff", userOrigin);
+    expect(node).toMatchObject({ oneWay: true, botId: "builder", threadId: "builder-continue", approvalGranted: true });
+    // Its poll root ended with the call: nothing waits on the continuation.
+    expect(w.coordinator.node(node.rootId)?.status).toBe("completed");
+    expect(w.coordinator.awaitsTeammates("builder-work")).toBe(false);
+    w.coordinator.tick();
+    await flush();
+    w.coordinator.tick();
+    expect(w.coordinator.node(node.id)?.status).toBe("completed");
+    expect(w.host.runs.map(run => [run.node.id, run.resumed])).toEqual([[node.id, false]]);
+    expect(w.host.runs[0]!.text).toContain("[Auto-continuation] read the handoff");
+    expect(w.host.runs[0]!.text).toContain("Ship the CSV export");
+    // Nothing reports back to the stopped thread.
+    expect(w.host.reports.filter(report => report.child.id === node.id && report.parent?.threadId === "builder-work" && report.child.status !== "completed")).toEqual([]);
+  });
+
+  it("refuses anything but another direct thread of the same bot", () => {
+    const w = world();
+    expect(() => w.coordinator.enqueueContinuation(stopped, tester, "x")).toThrow(/same bot/);
+    expect(() => w.coordinator.enqueueContinuation(stopped, stopped, "x")).toThrow(/same bot/);
+    expect(() => w.coordinator.enqueueContinuation(inRoom("builder"), cont, "x")).toThrow(/same bot/);
+    // A self-notice is only allowed as a continuation: ordinary work to oneself stays refused.
+    expect(() => w.coordinator.enqueueExternal(stopped, cont, "x", false, "notify")).toThrow(/ancestor/);
+  });
+
+  it("a restart while the continuation runs reruns it once in place, never twice", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "runtime-coordinator-"));
+    try {
+      const before = world(() => "hold", {}, dir);
+      const node = before.coordinator.enqueueContinuation(stopped, cont, "[Auto-continuation] read the handoff");
+      before.coordinator.tick();
+      expect(before.coordinator.node(node.id)?.status).toBe("running");
+      before.coordinator.close();
+      const after = world(undefined, {}, dir);
+      expect(after.coordinator.node(node.id)).toMatchObject({ status: "queued", restart: "rerun", restarts: 1 });
+      after.coordinator.tick();
+      await flush();
+      after.coordinator.tick();
+      expect(after.coordinator.node(node.id)).toMatchObject({ status: "completed", restarts: 1 });
+      expect(after.host.runs).toHaveLength(1);
+      after.coordinator.close();
+    } finally {
+      await removeTempDir(dir);
+    }
+  });
+});
+
+// Lot 3: a room goal's worker assignment on the runtime (poll root of the run).
+describe("a room goal's worker assignment on the runtime", () => {
+  it("runs the worker once in the room and resumes nothing of the lead", async () => {
+    const w = world();
+    const lead = inRoom("chief");
+    const worker = inRoom("builder");
+    const node = w.coordinator.enqueueGoalAssignment(lead, worker, "Draft the release notes", "goal-run-1");
+    expect(node).toMatchObject({ botId: "builder", threadId: lead.threadId, groupId: lead.groupId, approvalGranted: true });
+    // The poll root waits on the worker (work, not a one-way notice); nothing
+    // resumes the lead's engine.
+    expect(w.coordinator.node(node.rootId)?.status).toBe("waiting");
+    w.coordinator.tick();
+    await flush();
+    w.coordinator.tick();
+    expect(w.coordinator.node(node.id)?.status).toBe("completed");
+    expect(w.coordinator.node(node.rootId)?.status).toBe("completed");
+    expect(w.host.runs.map(run => [run.node.botId, run.resumed])).toEqual([["builder", false]]);
+    expect(w.host.runs[0]!.text).toContain("Draft the release notes");
+  });
+
+  it("refuses a worker outside the goal's room thread", () => {
+    const w = world();
+    expect(() => w.coordinator.enqueueGoalAssignment(inRoom("chief"), tester, "x", "goal-1")).toThrow(/room thread/);
+    expect(() => w.coordinator.enqueueGoalAssignment(inRoom("chief"), inRoom("chief"), "x", "goal-1")).toThrow(/teammate/);
+  });
+
+  it("a Stop of the room cancels a queued goal worker before it starts", () => {
+    const w = world(() => "hold");
+    w.host.busyAnswer = () => true;
+    const node = w.coordinator.enqueueGoalAssignment(inRoom("chief"), inRoom("builder"), "Draft the release notes", "goal-run-2");
+    expect(w.coordinator.node(node.id)?.status).toBe("queued");
+    w.coordinator.cancelRoom(inRoom("chief").groupId!, inRoom("chief").threadId, "Stopped by you.");
+    expect(w.coordinator.node(node.id)?.status).toBe("cancelled");
+    expect(w.host.runs).toHaveLength(0);
+  });
+});
+
+// 2026-11-01: a routine run ends as the work its thread handed out did.
+describe("handedOutOutcome", () => {
+  it("reads the latest root's ending and the teammates whose work did not complete", async () => {
+    const w = world(hold);
+    expect(w.coordinator.handedOutOutcome("chief-chat", 0)).toBeNull();
+    send(w, chief, "gen-1", undefined, builder, "Build it");
+    w.coordinator.tick();
+    w.coordinator.sourceSettled("gen-1", true);
+    expect(w.coordinator.handedOutOutcome("chief-chat", 0)).toMatchObject({ pending: true, failed: [] });
+    const child = w.coordinator.children("gen-1")[0]!;
+    await w.host.release(child.id, { ok: false, text: "the build server refused" });
+    w.coordinator.tick();
+    await flush();
+    const outcome = w.coordinator.handedOutOutcome("chief-chat", 0)!;
+    expect(outcome.pending).toBe(false);
+    expect(outcome.root.status).toBe("completed");
+    expect(outcome.failed).toEqual([expect.objectContaining({ botId: "builder" })]);
+    // Only work handed out since the run started counts.
+    expect(w.coordinator.handedOutOutcome("chief-chat", Date.now() + 60_000)).toBeNull();
+  });
+});
+
+// JC 2026-11-01: "the bots talk to each other, they do not answer me, I
+// have to relaunch them". A turn cut short that is not the person's Stop (a
+// safe-point cut to read their new words, a turn parked on a busy computer,
+// an engine change) ends not ok while its teammate still works: the
+// conversation waits and the teammate's reply resumes it. Only Stop
+// (stopAwaitingDirect, server/teammate-replies.ts) drops it.
+describe("a teammate's reply comes back after a cut that is not a Stop", () => {
+  it("the cut turn waits and the reply resumes the conversation", async () => {
+    const w = world(hold);
+    const { node: b } = send(w, chief, "gen-1", undefined, builder, "Build it");
+    w.coordinator.tick();
+    // The safe-point cut: the source turn ends interrupted, not ok.
+    w.coordinator.sourceSettled("gen-1", false);
+    expect(w.coordinator.node("gen-1")?.status).toBe("waiting");
+    expect(w.coordinator.awaitsTeammates("chief-chat")).toBe(true);
+    await w.host.release(b.id, { ok: true, text: "Built it." });
+    w.coordinator.tick();
+    const resume = w.host.runs.find(run => run.node.id === "gen-1" && run.resumed);
+    expect(resume?.text).toContain('What @builder said: "Built it."');
+    await flush();
+  });
+
+  it("the person's Stop is the one cut that drops it: nothing resumes into a stopped chat", async () => {
+    const w = world(hold);
+    const { node: b } = send(w, chief, "gen-1", undefined, builder, "Build it");
+    w.coordinator.tick();
+    w.coordinator.stopAwaitingDirect("chief-chat");
+    w.coordinator.sourceSettled("gen-1", false);
+    await w.host.release(b.id, { ok: true, text: "Built it." });
+    w.coordinator.tick();
+    expect(w.host.runs.some(run => run.node.id === "gen-1" && run.resumed)).toBe(false);
   });
 });

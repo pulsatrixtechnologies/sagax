@@ -1,7 +1,7 @@
 // Attached archives: manifest kept at upload, unpacked only where the bot
 // works, a short manifest in the bot's message (server/attachment-archives.ts).
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,6 +12,8 @@ import {
   archiveSummary,
   manifestTree,
   prepareArchiveUpload,
+  recoverArchiveUpload,
+  removeArchiveUpload,
   sandboxArchiveArgv,
   storedArchiveManifest,
   type StoredArchiveManifest,
@@ -61,6 +63,26 @@ describe("prepareArchiveUpload", () => {
   it("refuses manifest names that are not uploads", () => {
     expect(storedArchiveManifest("../../etc/passwd")).toBeNull();
     expect(storedArchiveManifest(`${UPLOAD}.pdf`)).toBeNull();
+  });
+
+  it("removes only this upload's crash leftovers before recovery or cancel", async () => {
+    const dir = scratch();
+    const path = upload(dir, ".zip", zipArchive([{ name: "README.md", data: "# Hi" }]));
+    await prepareArchiveUpload(path, { extractHere: true });
+    const stale = join(dir, `${UPLOAD}.partial-11111111-1111-4111-8111-111111111111`);
+    const unrelated = join(dir, `${UPLOAD}.partial-not-a-session`);
+    mkdirSync(stale, { recursive: true });
+    mkdirSync(unrelated, { recursive: true });
+    writeFileSync(join(dir, ".archives", `${UPLOAD}.zip.json.123.tmp`), "torn");
+    recoverArchiveUpload(path);
+    expect(existsSync(stale)).toBe(false);
+    expect(existsSync(unrelated)).toBe(true);
+    expect(existsSync(join(dir, ".archives", `${UPLOAD}.zip.json.123.tmp`))).toBe(false);
+    expect(existsSync(join(dir, UPLOAD))).toBe(true);
+    removeArchiveUpload(path);
+    expect(existsSync(join(dir, UPLOAD))).toBe(false);
+    expect(storedArchiveManifest(`${UPLOAD}.zip`, dir)).toBeNull();
+    expect(existsSync(path)).toBe(true);
   });
 });
 

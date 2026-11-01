@@ -1,6 +1,458 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Prompt: %lld/%lld files, %lld/%lld bytes; %lld omitted": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Prompt: %lld/%lld files, %lld/%lld bytes; %lld omitted" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Prompt : %1$lld/%2$lld fichiers, %3$lld/%4$lld octets; %5$lld omis" } }
+      }
+    },
+    "Loaded pack: %@": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Loaded pack: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Pack chargé : %@" } }
+      }
+    },
+    "A shared file could not be sent: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A shared file could not be sent: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un fichier partagé n'a pas pu être envoyé : %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível enviar um arquivo compartilhado: %@"
+          }
+        }
+      }
+    },
+    "Finish in Sagax": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish in Sagax"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminer dans Sagax"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Concluir no Sagax"
+          }
+        }
+      }
+    },
+    "An attachment is waiting to resume. Open its conversation to retry.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An attachment is waiting to resume. Open its conversation to retry."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une pièce jointe attend la reprise. Ouvrez sa conversation pour réessayer."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um anexo está aguardando a retomada. Abra a conversa para tentar de novo."
+          }
+        }
+      }
+    },
+    "A shared file is waiting for its paired computer. Open Sagax to reconnect.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A shared file is waiting for its paired computer. Open Sagax to reconnect."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un fichier partagé attend son ordinateur jumelé. Ouvrez Sagax pour vous reconnecter."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um arquivo compartilhado está aguardando o computador pareado. Abra o Sagax para reconectar."
+          }
+        }
+      }
+    },
+    "A shared file is waiting to resume. Open Sagax again to retry.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A shared file is waiting to resume. Open Sagax again to retry."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un fichier partagé attend la reprise. Ouvrez Sagax de nouveau pour réessayer."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um arquivo compartilhado está aguardando a retomada. Abra o Sagax de novo para tentar."
+          }
+        }
+      }
+    },
+    "Uploading %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uploading %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléversement de %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviando %@"
+          }
+        }
+      }
+    },
+    "Uploading %lld%%": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uploading %lld%%"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléversement %lld%%"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviando %lld%%"
+          }
+        }
+      }
+    },
+    "Retry uploading %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry uploading %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réessayer le téléversement de %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tentar enviar %@ de novo"
+          }
+        }
+      }
+    },
+    "Add a photo or video to this message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a photo or video to this message"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une photo ou une vidéo au message"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar uma foto ou um vídeo à mensagem"
+          }
+        }
+      }
+    },
+    "Add a document, audio, or video from Files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a document, audio, or video from Files"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un document, un audio ou une vidéo de Fichiers"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar um documento, áudio ou vídeo do app Arquivos"
+          }
+        }
+      }
+    },
+    "Finish or retry the attachment uploads before sending.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish or retry the attachment uploads before sending."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminez ou réessayez les téléversements avant d’envoyer le message."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conclua ou tente enviar os anexos de novo antes de mandar a mensagem."
+          }
+        }
+      }
+    },
+    "Attach up to 32 items at a time.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attach up to 32 items at a time."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joignez au plus 32 éléments à la fois."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anexe até 32 itens por vez."
+          }
+        }
+      }
+    },
+    "Those images are larger than 200 MB together.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Those images are larger than 200 MB together."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ces images dépassent 200 Mo au total."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Essas imagens ultrapassam 200 MB no total."
+          }
+        }
+      }
+    },
+    "%@ isn't a supported file. Try an image, document, archive, audio, or video file.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ isn't a supported file. Try an image, document, archive, audio, or video file."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ est un fichier non pris en charge. Essayez une image, un document, une archive, un audio ou une vidéo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ não é um arquivo compatível. Tente uma imagem, documento, arquivo compactado, áudio ou vídeo."
+          }
+        }
+      }
+    },
+    "%@ isn't a supported attachment. Try an image, document, archive, audio, or video file.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ isn't a supported attachment. Try an image, document, archive, audio, or video file."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ est une pièce jointe non prise en charge. Essayez une image, un document, une archive, un audio ou une vidéo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ não é um anexo compatível. Tente uma imagem, documento, arquivo compactado, áudio ou vídeo."
+          }
+        }
+      }
+    },
+    "The attachment changed. Choose the file again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The attachment changed. Choose the file again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La pièce jointe a changé. Choisissez le fichier de nouveau."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O anexo mudou. Escolha o arquivo de novo."
+          }
+        }
+      }
+    },
+    "The attachment could not be read. Choose the file again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The attachment could not be read. Choose the file again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La pièce jointe est illisible. Choisissez le fichier de nouveau."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível ler o anexo. Escolha o arquivo de novo."
+          }
+        }
+      }
+    },
+    "The computer returned an invalid upload offset.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The computer returned an invalid upload offset."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’ordinateur a retourné une position de téléversement invalide."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O computador retornou uma posição de envio inválida."
+          }
+        }
+      }
+    },
+    "The computer returned no committed file. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The computer returned no committed file. Try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’ordinateur n’a confirmé aucun fichier enregistré. Réessayez."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O computador não confirmou nenhum arquivo salvo. Tente de novo."
+          }
+        }
+      }
+    },
+    "The uploaded file could not be used.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The uploaded file could not be used."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le fichier téléversé n’a pas pu être utilisé."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível usar o arquivo enviado."
+          }
+        }
+      }
+    },
     "Turned off where it is kept": {
       "localizations": {
         "en": { "stringUnit": { "state": "translated", "value": "Turned off where it is kept" } },
@@ -211,10 +663,16 @@
         "fr": { "stringUnit": { "state": "translated", "value": "Rôle inconnu" } }
       }
     },
-    "The skills index is full: %lld skills left out of the prompt.": {
+    "Plugin discovery is partial. Additional references may exist in enabled plugin folders.": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "The skills index is full: %lld skills left out of the prompt." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "L'index des skills est plein : %lld skills omis du prompt." } }
+        "en": { "stringUnit": { "state": "translated", "value": "Plugin discovery is partial. Additional references may exist in enabled plugin folders." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "La recherche dans les plugins est partielle. Les dossiers des plugins activés peuvent contenir d'autres références." } }
+      }
+    },
+    "Prompt budgets omit %lld whole instruction files.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Prompt budgets omit %lld whole instruction files." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Budgets du prompt : %lld fichiers d’instructions entiers omis." } }
       }
     },
     "Nothing": {
@@ -83535,6 +83993,90 @@
         "en": { "stringUnit": { "state": "translated", "value": "%lld messages queued" } },
         "fr": { "stringUnit": { "state": "translated", "value": "%lld messages en file" } },
         "pt-BR": { "stringUnit": { "state": "translated", "value": "%lld mensagens na fila" } }
+      }
+    },
+    "Updates (%lld)": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Updates (%lld)" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Nouveautés (%lld)" } },
+        "pt-BR": { "stringUnit": { "state": "translated", "value": "Novidades (%lld)" } }
+      }
+    },
+    "Connect apps": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Connect apps" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Connecter des apps" } },
+        "pt-BR": { "stringUnit": { "state": "translated", "value": "Conectar apps" } }
+      }
+    },
+    "Plugins, tools and skills": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Plugins, tools and skills" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Plugins, outils et compétences" } },
+        "pt-BR": { "stringUnit": { "state": "translated", "value": "Plugins, ferramentas e habilidades" } }
+      }
+    },
+    "Permissions and bot settings": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Permissions and bot settings" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Autorisations et réglages des bots" } },
+        "pt-BR": { "stringUnit": { "state": "translated", "value": "Permissões e ajustes dos bots" } }
+      }
+    },
+    "Auto-review, time zone, computer and more": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Auto-review, time zone, computer and more" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Révision auto, fuseau horaire, ordinateur et plus" } },
+        "pt-BR": { "stringUnit": { "state": "translated", "value": "Revisão automática, fuso horário, computador e mais" } }
+      }
+    },
+    "Logins, cards and contact info your bots can use": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Logins, cards and contact info your bots can use" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Connexions, cartes et coordonnées que vos bots peuvent utiliser" } },
+        "pt-BR": { "stringUnit": { "state": "translated", "value": "Logins, cartões e contatos que seus bots podem usar" } }
+      }
+    },
+    "Show all %lld": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Show all %lld" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Tout afficher (%lld)" } },
+        "pt-BR": { "stringUnit": { "state": "translated", "value": "Mostrar todas (%lld)" } }
+      }
+    },
+    "Waking up…": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Waking up…" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Réveil en cours…" } },
+        "pt-BR": { "stringUnit": { "state": "translated", "value": "Acordando…" } }
+      }
+    },
+    "No computer for this bot": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No computer for this bot" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucun ordinateur pour ce bot" } },
+        "pt-BR": { "stringUnit": { "state": "translated", "value": "Nenhum computador para este bot" } }
+      }
+    },
+    "Computer is asleep": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Computer is asleep" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "L’ordinateur dort" } },
+        "pt-BR": { "stringUnit": { "state": "translated", "value": "O computador está dormindo" } }
+      }
+    },
+    "Wake up": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Wake up" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Réveiller" } },
+        "pt-BR": { "stringUnit": { "state": "translated", "value": "Acordar" } }
+      }
+    },
+    "Vault": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Vault" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Coffre" } },
+        "pt-BR": { "stringUnit": { "state": "translated", "value": "Cofre" } }
       }
     }
   },

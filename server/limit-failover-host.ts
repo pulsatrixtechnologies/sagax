@@ -418,6 +418,8 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           // Busy now: once more a minute later, unless a newer message took its place.
           if (!sent && !resume.retry && deps.threadSelection(resume.botId, resume.threadId)) {
             const request = deps.request(resume.threadId);
+            // A request the person stopped is never sent again (Stop is final).
+            if (request?.stopped && request.messageId === resume.messageId) continue;
             if (!request?.messageId || request.messageId === resume.messageId) store.schedule({ ...resume, at: deps.now() + RETRY_BUSY_MS, retry: true });
           }
         } catch (failure) {

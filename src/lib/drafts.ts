@@ -32,6 +32,9 @@ export interface FailedComposerSend {
   threadId: string;
   /** Channel delivery mode; absent for 1:1 messages and legacy retries. */
   channelMode?: "chat" | "goal";
+  /** Draft upload handles retained until this accepted send is confirmed or
+   * explicitly discarded. The paths themselves already live in requestText. */
+  attachmentIds?: string[];
   /** The network was down when this send failed: it is queued, labelled, and
    * goes out by itself when the connection returns. */
   offline?: boolean;
@@ -183,6 +186,7 @@ export function setDraftAttachments(store: Store, id: string, attachments: Attac
   // durable path yet. Keep both in memory for task switching, but persist
   // only upload-complete attachment metadata across an app restart.
   const durable = attachments.flatMap((attachment): Attachment[] => {
+    if (attachment.kind === "file" && (!attachment.path || attachment.uploading || attachment.uploadError)) return [];
     if (attachment.kind !== "image") return [attachment];
     if (!attachment.path || attachment.uploading) return [];
     return [{
@@ -380,6 +384,11 @@ export function prependComposerDraft(id: string, text: string): void {
   });
 }
 
+/** The keyed draft's chips, for intake checks outside the Composer. */
+export function currentDraftAttachments(id: string): Attachment[] {
+  return getDraftAttachments(getStore(), id);
+}
+
 /** Append completed uploads directly to the keyed durable draft. This is
  * safe after the Composer that started the upload has unmounted. */
 export function appendDraftAttachments(id: string, additions: Attachment[]): void {
@@ -516,6 +525,7 @@ export function recoverFailedComposerSend(sent: ComposerSendSnapshot): "restored
       replyToId: sent.replyToId,
       threadId: sent.threadId,
       channelMode: sent.channelMode,
+      attachmentIds: sent.attachments.map((attachment) => attachment.id),
     });
     return "outbox";
   }

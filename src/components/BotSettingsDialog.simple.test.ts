@@ -35,7 +35,7 @@ describe("bot panel in Simple mode", () => {
     vi.stubGlobal("window", { ogb: { platform: "darwin" } });
     const html = renderToStaticMarkup(createElement(DesktopCapabilitiesProvider, null, createElement(BotSettingsDialog, { bot })));
     const tabs = [...html.matchAll(/data-panel-tab="(\w+)"/g)].map((match) => match[1]);
-    expect(tabs).toEqual(["details", "library", "capabilities"]);
+    expect(tabs).toEqual(["details", "library"]);
     expect(html).not.toContain('data-panel-tab="computer"');
     expect(html).not.toContain('data-panel-tab="more"');
     expect(html).not.toContain('data-bot-settings-section="access"');

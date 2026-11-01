@@ -112,7 +112,7 @@ export interface RunItem {
   durationMs: number | null;
   state: RunState;
   planned: boolean;
-  trigger: "schedule" | "manual" | "webhook" | null;
+  trigger: "schedule" | "manual" | "webhook" | "proactive" | null;
   reason: string | null;
   label: string | null;
   threadId: string | null;

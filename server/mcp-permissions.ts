@@ -116,6 +116,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("model:propose", "own", "propose_model"),
   p("routines:propose", "own", "propose_routine"),
   p("routines:propose.action", "own", "propose_routine_action"),
+  // Shape mascot from a short description (catalog generate_shape_avatar).
+  p("shapes:generate", "own", "generate_shape_avatar"),
   p("terminal:offer", "own", "offer_shell_terminal"),
   p("remote:publish", "own", "publish_remote_session"),
   // the person's own connected Tailcat session (owner and bot checked by the service)
@@ -132,9 +134,9 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("credentials:http", "own", "vault_http_request"),
   // the person's own OpenAPI operations (openapi_<operation>, server/openapi-tools.ts)
   p("openapi:call", "own", "openapi_*"),
-  // make_video does not run a shell: it points at the engine's own video
-  // tools, or says none is connected (server/drivers/agents-video.ts)
-  p("video:make", "read", "make_video"),
+  // Generates paid media in the person's conversation, on their own key
+  // or the organization's existing explicit media grant.
+  p("video:make", "own", "make_video"),
   // the person's task list for this bot (server/drivers/agents-task-tools.ts)
   p("tasks:update", "own", "task_list"),
   // 2026-10-28: both reached the catalog without a permission, so enforce
@@ -198,6 +200,9 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("people:ask", "dispatch", "ask_person", "perspicax"),
   p("approvals:answer", "dispatch", "answer_approval", "sagax", ["sagax_approve"]),
   p("routines:run", "dispatch", "run_routine", "sagax", ["sagax_routine_run"]),
+  // 2026-11-01 (#1891): person AI client updates own routines via member PATCH
+  // (Perspicax sagax_routine_update). Bots keep propose_routine_action (Ask/Auto).
+  p("routines:update", "own", "update_routine", "sagax", ["sagax_routine_update"]),
   p("people:nudge", "dispatch", "nudge_person", "sagax", ["sagax_nudge"]),
   // Perspicax meta-tools (connector mcp/meta_tools.rs CORE_META_NAMES).
   p("api:list", "read", "api_list", "perspicax"),

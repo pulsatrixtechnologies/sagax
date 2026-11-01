@@ -60,4 +60,20 @@ describe("routine pages (a bot read back 3 of its 23 routines, 2026-10-29)", () 
     expect(routinePageRequest({ offset: "4", limit: "2" })).toEqual({ offset: 4, limit: 2 });
     expect(formatRoutinePage(pageRoutines([], {}), { now: "n", timeZone: "UTC", readOne: "r", next: "o" })).toMatch(/has no routines/);
   });
+
+  it("keeps an owned webhook id on the short row so list_routines can load by either id (#1891)", () => {
+    const page = pageRoutines([{
+      id: "voice-routine",
+      name: "Voice line requests from JC",
+      prompt: "Handle the request",
+      enabled: false,
+      schedule: { type: "webhook" },
+      webhookId: "9fe3376c-7c0c-4a19-9a8d-5475c52ebf8f",
+    }], {});
+    expect(page.routines[0]).toMatchObject({
+      id: "voice-routine",
+      webhookId: "9fe3376c-7c0c-4a19-9a8d-5475c52ebf8f",
+      enabled: false,
+    });
+  });
 });

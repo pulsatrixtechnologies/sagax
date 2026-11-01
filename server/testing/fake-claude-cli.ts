@@ -939,6 +939,16 @@ const playTurn = (prompt: JsonValue, late = false) => {
       out({ type: "assistant", message: { content: [{ type: "text", text }], ...(usage ? { usage } : {}) } });
       out({ type: "result", is_error: false, stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 5 } });
     }).catch(error => {
+      if (error?.usageLimit) {
+        // the plan's usage limit, in the CLI's own words (as the usage-limit mode)
+        const text = String(error.message);
+        const info = typeof error.resetsAt === "number" ? { status: "rejected", rateLimitType: "five_hour", resetsAt: error.resetsAt } : null;
+        if (info) out({ type: "rate_limit_event", rate_limit_info: info, session_id: sessionId });
+        out({ type: "assistant", message: { model: "<synthetic>", stop_reason: "stop_sequence", content: [{ type: "text", text }] },
+          error: "rate_limit", is_api_error_message: true, api_error: "usage_limit_reached", ...(info ? { api_error_params: { rate_limit_info: info } } : {}) });
+        out({ type: "result", subtype: "success", is_error: true, stop_reason: "stop_sequence", terminal_reason: "api_error", api_error: "usage_limit_reached", result: text });
+        return;
+      }
       out({ type: "result", is_error: true, result: String(error), stop_reason: "error" });
     }).finally(() => { turnRunning = false; finishIfDone(); });
     return;
@@ -1151,15 +1161,29 @@ async function proxyFetch(target: string): Promise<string> {
   const { request } = await import("node:http");
   const parsed = new URL(proxy);
   return new Promise((resolve) => {
+    let settled = false;
+    const done = (note: string) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(note);
+    };
+    // A hung CONNECT through the desktop tunnel used to stall the whole
+    // turn (desktop-bridge.e2e): cap the wait so the scripted reply still
+    // lands and the test can assert on proxy:error.
+    const timer = setTimeout(() => {
+      req.destroy();
+      done("proxy:error:timeout");
+    }, 5_000);
     const req = request({
       host: parsed.hostname, port: parsed.port, path: target, method: "GET",
       headers: { host: new URL(target).host, "proxy-authorization": `Basic ${Buffer.from(`${decodeURIComponent(parsed.username)}:${decodeURIComponent(parsed.password)}`).toString("base64")}` },
     }, (res) => {
       let body = "";
       res.on("data", (chunk) => (body += chunk));
-      res.on("end", () => resolve(`proxy:${res.statusCode}:${body.slice(0, 200)}`));
+      res.on("end", () => done(`proxy:${res.statusCode}:${body.slice(0, 200)}`));
     });
-    req.on("error", (error) => resolve(`proxy:error:${error.message}`));
+    req.on("error", (error) => done(`proxy:error:${error.message}`));
     req.end();
   });
 }

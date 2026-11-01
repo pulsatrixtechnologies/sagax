@@ -1598,6 +1598,29 @@ describe("PiDriver mid-turn steer (fake CLI)", () => {
     await expect(instance.adapter.steer!("t-steer", "late")).resolves.toBe("refused");
   });
 
+  it("says the running turn took a steer in once pi accepts it, and never for a refusal", async () => {
+    // 2026-11-01 (repeated replies): pi queues accepted steering into the
+    // running agent loop, which reads it before the turn ends. Without
+    // steer.received the next turn was offered the words again.
+    await create({ FAKE_PI_MODE: "permission" });
+    await instance.adapter.sendTurn({ threadId: "t-steer-recv", text: "go" });
+    const opened = await recorder.until((e) => e.type === "request.opened");
+    await expect(instance.adapter.steer!("t-steer-recv", "and also this", { steerId: "steer-pi-0001" })).resolves.toBe("steered");
+    expect(recorder.events.find((e) => e.type === "steer.received")).toMatchObject({ steerId: "steer-pi-0001", threadId: "t-steer-recv", turnId: opened.turnId });
+    await instance.adapter.respondToRequest("t-steer-recv", "ask-1", { behavior: "allow" });
+    await recorder.until((e) => e.type === "turn.completed");
+  });
+
+  it("never claims a refused pi steer was taken in", async () => {
+    await create({ FAKE_PI_MODE: "permission", FAKE_PI_STEER_REFUSE: "1" });
+    await instance.adapter.sendTurn({ threadId: "t-refuse-recv", text: "go" });
+    await recorder.until((e) => e.type === "request.opened");
+    await expect(instance.adapter.steer!("t-refuse-recv", "peer context", { steerId: "steer-pi-0002" })).resolves.toBe("refused");
+    expect(recorder.events.some((e) => e.type === "steer.received")).toBe(false);
+    await instance.adapter.respondToRequest("t-refuse-recv", "ask-1", { behavior: "allow" });
+    await recorder.until((e) => e.type === "turn.completed");
+  });
+
   it("maps an explicit runtime refusal to refused so the words stay queued", async () => {
     await create({ FAKE_PI_MODE: "permission", FAKE_PI_STEER_REFUSE: "1" });
     await instance.adapter.sendTurn({ threadId: "t-refuse", text: "go" });

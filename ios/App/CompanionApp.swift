@@ -18,7 +18,7 @@ struct CompanionApp: App {
     @Environment(\.scenePhase) private var scenePhase
     /// ⌘, (the app menu's Settings) for the iPad's desktop shell.
     @UIApplicationDelegateAdaptor(SagaxAppDelegate.self) private var appDelegate
-    @State private var liveActivities = LiveActivityBridge()
+    private var liveActivities: LiveActivityBridge { .shared }
     @State private var widgetSync = WidgetSyncBridge.makeAppGroupBridge()
     @AppStorage(PrefKey.language) private var language = AppLanguage.system.rawValue
 
@@ -82,6 +82,8 @@ struct CompanionApp: App {
                 .onAppear {
                     SagaxSharedInbox.removeDirectories(olderThan: 60 * 60)
                     session.connect()
+                    session.resumeNativeAttachmentTransfers()
+                    SagaxSharedTransfers.resume { session.actionError = $0 }
                     liveActivities.attach(to: session)
                     widgetSync.attach(to: session)
                 }
@@ -98,16 +100,20 @@ struct CompanionApp: App {
                         SagaxSharedInbox.removeDirectories(olderThan: 60 * 60)
                         let kept = session.hasLiveStream
                         session.connect()
+                        session.resumeNativeAttachmentTransfers()
+                        SagaxSharedTransfers.resume { session.actionError = $0 }
                         // A stream kept through the background may have
                         // missed what changed meanwhile (an ask answered on
                         // the Mac, a conversation read there): the server's
                         // state is read again, so Updates, the badge and the
                         // banners follow it. A reconnect hydrates by itself.
                         if kept { Task { await session.resyncOnForeground() } }
+                        liveActivities.sceneChanged(active: true)
                         Task { await session.refreshNotificationAuthorization() }
                         // A photo changed in Perspicax shows on the way back.
                         Task { await session.loadAccount() }
                     case .background:
+                        liveActivities.sceneChanged(active: false)
                         session.linger()
                         if !session.isDemo { widgetSync.flush(session.state, connectionID: session.connection?.id) }
                     case .inactive: break
@@ -356,6 +362,10 @@ final class SagaxAppDelegate: UIResponder, UIApplicationDelegate {
     // handed to the server the app is signed in to.
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         _ = NotificationCoordinator.shared
+        // The Live Activity buttons and the push refresh need the session
+        // and the coordinator even when iOS launched the app in the
+        // background for them, where no window appears.
+        LiveActivityBridge.shared.attach(to: SessionHub.session)
         Task { @MainActor in PushRegistrar.shared.start() }
         return true
     }
@@ -385,6 +395,9 @@ final class SagaxAppDelegate: UIResponder, UIApplicationDelegate {
             // too; this covers a push that woke the app first)
             if push.kind == .settled, let requestId = push.requestId {
                 await NotificationCoordinator.shared.withdraw(threadId: push.threadId, requestId: requestId)
+                // and its buttons leave the island and the lock screen, even
+                // when the state below cannot be read
+                await LiveActivityBridge.settle(requestId: requestId)
             }
             let refreshed = await PushRegistrar.shared.backgroundRefresh?() ?? false
             completionHandler(refreshed ? .newData : .noData)
@@ -422,6 +435,9 @@ final class SagaxAppDelegate: UIResponder, UIApplicationDelegate {
 /// Release build, so the terms sheet always shows there.
 private var parityHarnessActive: Bool {
     #if DEBUG
+    // `-demo-skip-terms`: the demo's screenshots open on the home, not on
+    // the terms sheet (DEBUG only; Release always shows it)
+    if DemoLaunch.opensAtLaunch, ProcessInfo.processInfo.arguments.contains("-demo-skip-terms") { return true }
     return ParityLaunch.current != nil
     #else
     return false

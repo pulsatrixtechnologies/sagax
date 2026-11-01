@@ -26,7 +26,8 @@ final class DemoReviewUITests: XCTestCase {
     @MainActor
     private func launch(french: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["-demo"]
+        // the terms sheet would cover the home (DEBUG flag, CompanionApp)
+        app.launchArguments += ["-demo", "-demo-skip-terms"]
         app.launchArguments += french
             ? ["-AppleLanguages", "(fr)", "-AppleLocale", "fr_CA", "-companion.prefs.language", "fr"]
             : ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-companion.prefs.language", "en"]
@@ -137,7 +138,7 @@ final class DemoReviewUITests: XCTestCase {
 
     @MainActor
     private func openAutomations(_ app: XCUIApplication) {
-        let account = app.buttons["home-account"]
+        let account = app.buttons["home-apps"]
         XCTAssertTrue(account.waitForExistence(timeout: 10))
         account.tap()
         let automations = app.buttons["account-menu.automations"]

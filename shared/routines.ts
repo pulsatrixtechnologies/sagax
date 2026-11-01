@@ -79,7 +79,7 @@ export interface RoutineContextAttachment {
   size: number;
 }
 
-export type RoutineRunTrigger = "schedule" | "manual" | "webhook";
+export type RoutineRunTrigger = "schedule" | "manual" | "webhook" | "proactive";
 
 export type RoutineRunStatus =
   | "queued"
@@ -102,8 +102,9 @@ export type RoutineRetryCause = "stalled" | "restarted" | "rate_limited" | "prov
  * logs filter and the bulk-seen sweep cannot drift apart. */
 export const ROUTINE_PROBLEM_STATUSES: readonly RoutineRunStatus[] = ["failed", "missed"];
 
-export function isRoutineProblemRun(run: { status: RoutineRunStatus }): boolean {
-  return ROUTINE_PROBLEM_STATUSES.includes(run.status);
+export function isRoutineProblemRun(run: { status: RoutineRunStatus; problems?: string }): boolean {
+  // 2026-11-01: a run that completed with problems counts as a problem too.
+  return ROUTINE_PROBLEM_STATUSES.includes(run.status) || (run.status === "completed" && Boolean(run.problems));
 }
 
 /** The logs view's status filter: every run, the composite problem set the
@@ -113,7 +114,7 @@ export type RoutineRunStatusFilter = "all" | "problems" | RoutineRunStatus;
 /** Whether a run shows under a logs status filter. A completed run that had
  * nothing for the person (`quiet`, 2026-10-22) is listed as Nothing to
  * report, with the pre-check's quiet runs. */
-export function routineRunMatchesStatus(run: { status: RoutineRunStatus; quiet?: true }, filter: RoutineRunStatusFilter): boolean {
+export function routineRunMatchesStatus(run: { status: RoutineRunStatus; quiet?: true; problems?: string }, filter: RoutineRunStatusFilter): boolean {
   if (filter === "all") return true;
   if (filter === "problems") return isRoutineProblemRun(run);
   const status = run.status === "completed" && run.quiet ? "nothing_to_report" : run.status;
@@ -240,6 +241,13 @@ export interface RoutineRun {
   /** 2026-10-22: a completed run that had nothing for the person; nothing
    * was posted to their conversation (server/routine-report.ts). */
   quiet?: true;
+  /** 2026-11-01: completed, but not all of it went right: why ("Completed
+   * with problems"). Counts as a problem run. */
+  problems?: string;
+  /** 2026-11-01: a person started this run; its card shows from the start. */
+  startedBy?: "person";
+  /** 2026-11-01: a waiting run waits on its teammates' work, not on the person. */
+  waitingOn?: "teammates";
   error?: string;
   /** Set when the run used its one automatic second start, and why. */
   retried?: RoutineRetryCause;

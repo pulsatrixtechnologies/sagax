@@ -9,7 +9,7 @@ import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
 import { widgetNumber, widgetString, type WidgetNode } from "../../../shared/widget";
 import { WidgetBadge } from "./WidgetContent";
-import type { WidgetWhere } from "./WidgetNodes";
+import type { WidgetWhere } from "./widget-where";
 import { kids } from "./widget-style";
 
 /** A price in the person's locale when the currency is known, else as written. */

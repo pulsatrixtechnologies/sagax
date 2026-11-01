@@ -6,7 +6,7 @@ exposes to a bot or an AI client. The machine-readable form is the registry in
 `server/mcp-permissions.ts`; `server/mcp-permissions.test.ts` fails when a
 catalog tool has no permission.
 
-Totals: capabilities 150, covered 150, gaps 0.
+Totals: capabilities 152, covered 152, gaps 0.
 
 Sources read: the agents tool catalog, the internal routes it calls
 (`/api/internal/*`), the member API (`docs/org-member-api.md`), and the
@@ -102,6 +102,7 @@ Reading the table:
 | model:propose | sagax | `propose_model` | `model:propose` | covered |
 | routines:propose | sagax | `propose_routine` | `routines:propose` | covered |
 | routines:propose.action | sagax | `propose_routine_action` | `routines:propose.action` | covered |
+| shapes:generate | sagax | `generate_shape_avatar` | `shapes:generate` | covered |
 | terminal:offer | sagax | `offer_shell_terminal` | `terminal:offer` | covered |
 | remote:publish | sagax | `publish_remote_session` | `remote:publish` | covered |
 | remote:snapshot | sagax | `remote_session_snapshot` | `remote:snapshot` | covered |
@@ -163,6 +164,7 @@ Reading the table:
 | people:ask | perspicax | `ask_person` | `people:ask` | covered (bridge) |
 | approvals:answer | sagax | `answer_approval` (Perspicax `sagax_approve`) | `approvals:answer` | covered |
 | routines:run | sagax | `run_routine` (Perspicax `sagax_routine_run`) | `routines:run` | covered |
+| routines:update | sagax | `update_routine` (Perspicax `sagax_routine_update`, member `PATCH routines/{id}`) | `routines:update` | covered |
 | people:nudge | sagax | `nudge_person` (Perspicax `sagax_nudge`) | `people:nudge` | covered |
 | api:list | perspicax | `api_list` | `api:list` | covered |
 | api:search | perspicax | `api_search` | `api:search` | covered |
@@ -201,8 +203,11 @@ permissions, so either model is judged.
 `pairing:manage` (`manage_pairing`) and `settings:manage` (`manage_settings`)
 are thin wrappers over `act`, so the person's rights and the bot's approval
 mode still decide. Perspicax's own Sagax tools (`sagax_bots`, `sagax_send`,
-`sagax_thread`, `sagax_routine_run`, `sagax_approve`, `sagax_nudge`) are
-aliases of the Sagax permissions they stand for. The Perspicax gateway tools
+`sagax_thread`, `sagax_routine_run`, `sagax_routine_update`, `sagax_approve`,
+`sagax_nudge`) are aliases of the Sagax permissions they stand for.
+`sagax_routine_update` is the person's own write through the member API
+(`PATCH /api/org/member/routines/{id}`); a bot still uses
+`propose_routine_action`, which follows Ask or Auto. The Perspicax gateway tools
 (`PERSPICAX_TOOLS`: the memory tools, the `api_*` meta-tools, `identity`,
 `flow`, `flow_action`, the `remote_support_*` tools, `review_write`) are listed only on an organization
 server linked to Perspicax (`SAGAX_PERSPICAX_TOOLS`) and forwarded by

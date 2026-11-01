@@ -52,9 +52,9 @@ describe("geometry", () => {
     }
   });
 
-  it("has 32 different shapes: a circle of radius 1, a wide capsule, a triangle, a teardrop pointing up and a pumpkin wider than tall", () => {
-    expect(MASCOT_SHAPES).toHaveLength(32);
-    expect(new Set(MASCOT_SHAPES.map((shape) => SHAPE_RADII[shape].join())).size).toBe(32);
+  it("has 40 different shapes: a circle of radius 1, a wide capsule, a triangle, a teardrop pointing up, a pumpkin wider than tall, and eight object silhouettes", () => {
+    expect(MASCOT_SHAPES).toHaveLength(40);
+    expect(new Set(MASCOT_SHAPES.map((shape) => SHAPE_RADII[shape].join())).size).toBe(40);
     expect(SHAPE_RADII.circle.every((r) => r === 1)).toBe(true);
     const at = (shape: keyof typeof SHAPE_RADII, x: number, y: number) => radiusToward(SHAPE_RADII[shape], x, y);
     expect(at("pill", 1, 0)).toBeGreaterThan(at("pill", 0, -1) * 1.5);

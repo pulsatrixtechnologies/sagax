@@ -4,6 +4,11 @@
 
 nameOverride: ""
 
+# One replica with the chart's ReadWriteOnce PVC. Raise only when the data
+# volume and architecture allow more than one server process; then the chart
+# uses RollingUpdate with maxUnavailable 0 (docs/zero-downtime-deploy.md).
+replicas: 1
+
 image:
   repository: ghcr.io/pulsatrixtechnologies/sagax
   # Placeholder so a lint render is valid. Replace it with a real release tag.

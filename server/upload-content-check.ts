@@ -4,7 +4,7 @@
 // Zip-bomb limits for archives stay in electron/archive-extract.mjs
 // (ARCHIVE_LIMITS: files, total bytes, ratio, depth).
 import { open } from "node:fs/promises";
-import { createReadStream } from "node:fs";
+import { createReadStream, type ReadStream } from "node:fs";
 import { connect, type Socket } from "node:net";
 
 export const SNIFF_BYTES = 4100;
@@ -143,11 +143,18 @@ export function clamdConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ClamdC
 
 export type ScanResult = { status: "clean" } | { status: "infected"; signature: string } | { status: "error"; message: string };
 
+export interface ClamdScanDiagnostics {
+  /** Test/diagnostic hooks only. They never alter the scan. */
+  onBackpressure?: () => void;
+  onSourceClose?: () => void;
+}
+
 /** Stream a file to clamd with INSTREAM. */
-export function clamdScanFile(path: string, config: ClamdConfig): Promise<ScanResult> {
+export function clamdScanFile(path: string, config: ClamdConfig, diagnostics: ClamdScanDiagnostics = {}): Promise<ScanResult> {
   return new Promise((resolve) => {
     let settled = false;
-    const done = (r: ScanResult) => { if (!settled) { settled = true; sock.destroy(); resolve(r); } };
+    let stream: ReadStream | undefined;
+    const done = (r: ScanResult) => { if (!settled) { settled = true; stream?.destroy(); sock.destroy(); resolve(r); } };
     const sock: Socket = config.socket ? connect(config.socket) : connect(config.port ?? 3310, config.host ?? "127.0.0.1");
     sock.setTimeout(config.timeoutMs, () => done({ status: "error", message: "clamd timeout" }));
     let reply = "";
@@ -161,12 +168,20 @@ export function clamdScanFile(path: string, config: ClamdConfig): Promise<ScanRe
       else done({ status: "error", message: line || "empty clamd reply" });
     });
     sock.on("connect", () => {
+      if (settled) return;
       sock.write("zINSTREAM\0");
-      const stream = createReadStream(path, { highWaterMark: 64 * 1024 });
+      stream = createReadStream(path, { highWaterMark: 64 * 1024 });
+      stream.once("close", () => diagnostics.onSourceClose?.());
+      sock.on("drain", () => { if (!settled) stream?.resume(); });
       stream.on("data", (chunk) => {
         const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         const size = Buffer.alloc(4); size.writeUInt32BE(buf.length, 0);
-        sock.write(size); sock.write(buf);
+        const headerReady = sock.write(size);
+        const bodyReady = sock.write(buf);
+        if (!headerReady || !bodyReady) {
+          stream!.pause();
+          diagnostics.onBackpressure?.();
+        }
       });
       stream.on("error", (e) => done({ status: "error", message: e.message }));
       stream.on("end", () => sock.write(Buffer.alloc(4)));

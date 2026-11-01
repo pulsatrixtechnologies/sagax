@@ -58,11 +58,23 @@ import {
   parsePackageDocument,
   type PackageDocument,
 } from "../shared/package-format.ts";
+import {
+  ORG_LIBRARY_CATALOG_MAX_ENTRIES,
+  ORG_LIBRARY_FORMAT,
+  parseOrgLibraryCatalog,
+  type OrgLibraryCatalog,
+  type OrgLibraryEntry,
+} from "../shared/org-library-catalog.ts";
 
-export const ORG_LIBRARY_FORMAT = "openmaus.org-library";
+export {
+  ORG_LIBRARY_FORMAT,
+  parseOrgLibraryCatalog,
+  type OrgLibraryCatalog,
+  type OrgLibraryEntry,
+};
 /** The catalog body cap (contract §1.8). */
 export const ORG_LIBRARY_CATALOG_MAX_BYTES = 256 * 1024;
-export const ORG_LIBRARY_MAX_ENTRIES = 100;
+export const ORG_LIBRARY_MAX_ENTRIES = ORG_LIBRARY_CATALOG_MAX_ENTRIES;
 export const ORG_LIBRARY_REPORT_MAX_ENTRIES = 100;
 
 const UUID = /^[a-f0-9-]{36}$/;
@@ -74,76 +86,8 @@ const REF = /^[a-z][a-z0-9-]{1,30}\/[a-z0-9][a-z0-9-]{0,79}$/;
 /** Electron's safeText rule (electron/managed-desktop.mjs): no control characters. */
 // oxlint-disable-next-line no-control-regex
 const CONTROL = /[\x00-\x1f\x7f]/;
-// oxlint-disable-next-line no-control-regex
-const CONTROL_EXCEPT_LINES = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
 const safeText = (max: number) => z.string().min(1).max(max).refine((value) => !CONTROL.test(value));
 const count = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
-
-const entrySchema = z.object({
-  packageId: z.string().regex(UUID),
-  ref: z.string().regex(REF),
-  name: safeText(100),
-  tagline: safeText(160),
-  kind: z.enum(["team", "library"]),
-  publisher: z.object({ organizationId: z.string().regex(UUID), name: safeText(100), self: z.boolean() }),
-  mode: z.enum(["required", "available", "off"]),
-  offAction: z.enum(["keep", "remove"]),
-  release: z.object({
-    version: z.string().regex(SEMVER),
-    sha256: z.string().regex(HEX64),
-    sizeBytes: z.number().int().min(1).max(PACKAGE_MAX_BYTES),
-    formatVersion: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
-    publishedAt: count,
-    notes: z.string().max(4_000).refine((value) => !CONTROL_EXCEPT_LINES.test(value)),
-  }).nullable(),
-  withdrawnReleases: z.array(z.object({ version: z.string().regex(SEMVER), sha256: z.string().regex(HEX64) })).max(50),
-  contents: z.object({
-    bots: count, skills: count, presets: count, rooms: count, routines: count, connections: count,
-    botNames: z.array(safeText(100)).max(12),
-  }),
-  scanFindings: count,
-});
-export type OrgLibraryEntry = z.output<typeof entrySchema>;
-
-const envelopeSchema = z.object({
-  format: z.literal(ORG_LIBRARY_FORMAT),
-  version: z.literal(1),
-  libraryVersion: count,
-  organization: z.object({ id: z.string().regex(UUID), name: safeText(100) }),
-  truncated: z.literal(true).optional(),
-  packages: z.array(z.unknown()).max(ORG_LIBRARY_MAX_ENTRIES),
-});
-
-export interface OrgLibraryCatalog {
-  format: typeof ORG_LIBRARY_FORMAT;
-  version: 1;
-  libraryVersion: number;
-  organization: { id: string; name: string };
-  truncated?: true;
-  packages: OrgLibraryEntry[];
-}
-
-/** The catalog as §5.3 defines it. Unknown fields are ignored and a malformed
- * entry is dropped; a malformed envelope returns null (keep the last one). */
-export function parseOrgLibraryCatalog(value: unknown): OrgLibraryCatalog | null {
-  const envelope = envelopeSchema.safeParse(value);
-  if (!envelope.success) return null;
-  const seen = new Set<string>();
-  const packages = envelope.data.packages.flatMap((raw) => {
-    const entry = entrySchema.safeParse(raw);
-    if (!entry.success || seen.has(entry.data.packageId)) return [];
-    seen.add(entry.data.packageId);
-    return [entry.data];
-  });
-  return {
-    format: ORG_LIBRARY_FORMAT,
-    version: 1,
-    libraryVersion: envelope.data.libraryVersion,
-    organization: { ...envelope.data.organization },
-    ...(envelope.data.truncated ? { truncated: true as const } : {}),
-    packages,
-  };
-}
 
 /** An Admin origin: https, or http on loopback, with nothing after the host. */
 function adminOrigin(value: unknown): string | null {

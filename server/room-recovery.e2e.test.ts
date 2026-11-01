@@ -14,7 +14,7 @@ it("boots and reports an interrupted routine back to its source room", async () 
   let restarted: ChildProcess | undefined;
   try {
     const { bot } = await runControlOmb(["new-bot", "--name", "Recovery lead", "--url", url]) as any;
-    await request(`/api/bots/${bot.id}`, { method: "PATCH", body: JSON.stringify({ proactiveMode: "propose" }) }, url);
+    await request(`/api/bots/${bot.id}`, { method: "PATCH", body: JSON.stringify({ proactiveMode: "proactive" }) }, url);
     const { channel } = await handleToolCall("create_channel", { name: "Recovery room", member_ids: [bot.id] },
       (path, options) => request(path, options, url)) as any;
     await waitForExit(fixture.child, { signal: "SIGTERM" });
@@ -54,12 +54,12 @@ it("boots and reports an interrupted routine back to its source room", async () 
       .toMatchObject([{ routineRun: { status: "failed" } }]);
     const { groups } = await request("/api/bots", {}, url) as any;
     expect(groups.find((g: any) => g.id === channel.id).working).toBe(false);
-    // The failed run remains available to the bot's proactive mode, even
-    // though recovery emits it synchronously while routines initialize.
-    await expect.poll(async () => {
-      const { messages } = await request(`/api/threads/${bot.activeTaskId}/messages`, {}, url) as any;
-      return messages.some((message: any) => message.card?.proactiveProposal);
-    }, { timeout: 10_000 }).toBe(true);
+    // A restart cut never wakes the bot (runFailureWakesBot): recovery already
+    // told the person. Proactive on does not invent a proposal or a wake here.
+    const { messages: botMessages } = await request(`/api/threads/${bot.activeTaskId}/messages`, {}, url) as any;
+    expect(botMessages.some((message: any) => message.card?.proactiveProposal)).toBe(false);
+    const { runs: after } = await request("/api/routines", {}, url) as any;
+    expect(after.every((run: any) => !run.proactive)).toBe(true);
     // Store deliberately catches subscriber exceptions, so a healthy server
     // alone does not prove that recovery broadcasts were safe.
     expect(readFileSync(logPath, "utf8")).not.toMatch(/ReferenceError|store: change listener threw/);

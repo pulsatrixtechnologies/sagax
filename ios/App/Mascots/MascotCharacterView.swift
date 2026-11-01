@@ -31,7 +31,7 @@ struct MascotCharacterView: View {
         case .owl:
             OwlMascotView(color: color, skin: skin, size: size, state: state.owlState, animated: animated, handle: owlHandle)
         case .shape:
-            ShapeMascotView(shape: look.shape, skin: look.shapeSkin, color: color, size: size, mood: state.shapeMood, animated: animated, handle: owlHandle)
+            ShapeMascotView(shape: look.shape, skin: look.shapeSkin, color: color, size: size, mood: state.shapeMood, avatarDef: look.avatarDef, animated: animated, handle: owlHandle)
         case .trombi:
             TrombiMascotView(skin: look.trombiSkin, size: size, pose: state.trombiPose, animated: animated)
         case .bunbu:

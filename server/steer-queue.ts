@@ -19,7 +19,8 @@
 
 import { newId } from "./contracts.ts";
 import { chatFollowups, saveChatFollowup, settleChatFollowups } from "./message-db.ts";
-import { drainCoalesceHead } from "./admission.ts";
+import { drainCoalesceHead, WAITING_LINES_COALESCE_WINDOW_MS } from "./admission.ts";
+import { SAFE_POINT_NOTE } from "./safe-point-preempt.ts";
 import { spokenLineFields } from "./live-call-record.ts";
 import { workOriginSchema, type WorkOrigin } from "./peer-provenance.ts";
 import { voiceQueuePrompt } from "./voice-turn.ts";
@@ -89,6 +90,11 @@ interface QueueEntry {
 export type SteerQueueHead = Pick<QueueEntry["items"][number], "trigger" | "sender" | "peerAsk" | "speaker" | "origin">;
 
 const queues = new Map<string, QueueEntry>(); // threadId → waiting sends
+
+/** Every line one sender left waiting in a 1:1 thread joins the one
+ * follow-up turn, whatever the gap (admission.ts). Senders and provenance
+ * still never merge (coalesceIdentity). */
+export const STEER_QUEUE_COALESCE_WINDOW_MS = WAITING_LINES_COALESCE_WINDOW_MS;
 
 /** A thread's queue lifted out of the map while a live steer is attempted. */
 export interface HeldSteerQueue {
@@ -246,9 +252,9 @@ export function isSteeredMessageQueued(botId: string, threadId: string, queueId:
  * so transcript-replay adapters do not also see earlier queued texts.
  * Entries leave the map BEFORE running so a settle racing another settle
  * can never fire the same queue twice. M2: only the leading coalesced
- * group drains per settle — one sender's contiguous in-window burst joins
- * one turn, and later groups (another sender, or the same sender past the
- * window) wait for this turn's completion, preserving FIFO. */
+ * group drains per settle — every waiting line of one sender joins one turn
+ * (2026-11-01: whatever the gap), and later groups (another sender or
+ * provenance) wait for this turn's completion, preserving FIFO. */
 export function drainSteeredMessages(
   store: SteerStore,
   run: (
@@ -283,7 +289,7 @@ export function drainSteeredMessages(
     // Lines said on a voice call never pile up into turns: every waiting
     // line of the same call and person drains at once, and the turn answers
     // the newest with the earlier ones as its context (voiceQueuePrompt).
-    const group = entry.items[0]?.voiceCall ? callLineGroup(entry.items) : drainCoalesceHead(entry.items, coalesceIdentity, (item) => item.queuedAt);
+    const group = entry.items[0]?.voiceCall ? callLineGroup(entry.items) : drainCoalesceHead(entry.items, coalesceIdentity, (item) => item.queuedAt, undefined, STEER_QUEUE_COALESCE_WINDOW_MS);
     // committed to draining: the entry leaves the map before anything runs,
     // so a settle racing another settle can never fire the same queue twice
     const ids = group.map((item) => item.messageId);
@@ -324,7 +330,7 @@ export function drainSteeredMessages(
     // newline can merge a trailing standalone attachment tag with the next
     // message into one HTML block, which makes that attachment stop being a
     // native image when the combined follow-up is dispatched.
-    const prompt = group[0]?.voiceCall ? voiceQueuePrompt(group.map((item) => item.prompt)) : group.map((item) => item.prompt).join("\n\n");
+    const prompt = group[0]?.voiceCall ? voiceQueuePrompt(group.map((item) => item.prompt)) : joinQueuedPrompts(group.map((item) => item.prompt));
     const running = run(
       entry.botId,
       threadId,
@@ -342,6 +348,21 @@ export function drainSteeredMessages(
       () => settleChatFollowups(ids, "interrupted"),
     ).catch((error) => console.warn("steer-queue: could not settle durable follow-up", error));
   }
+}
+
+/** The prompts of one drained group, blank-line separated. Lines that each
+ * waited behind the same safe-point pause say so once, at the top. */
+function joinQueuedPrompts(prompts: string[]): string {
+  const marker = `${SAFE_POINT_NOTE}\n`;
+  let noted = false;
+  return prompts.map((prompt) => {
+    if (!prompt.startsWith(marker)) return prompt;
+    if (!noted) {
+      noted = true;
+      return prompt;
+    }
+    return prompt.slice(marker.length);
+  }).join("\n\n");
 }
 
 /** A queued item's coalescing identity: WHO sent it, with provenance as

@@ -42,16 +42,8 @@ import { useConversationGallery } from "./conversation-gallery-context";
 import { isInlineRasterDataUrl } from "@/lib/rich-blocks";
 import { TableFileButton } from "./TableFilePreview";
 
-export interface PreviewImage {
-  src: string;
-  name: string;
-  /** Same-origin images can be downloaded directly. */
-  downloadUrl?: string;
-  /** A portable filename chosen independently from the visible label. */
-  downloadName?: string;
-  /** Authored remote images keep an explicit way to open their source. */
-  openUrl?: string;
-}
+export type { PreviewImage } from "./preview-image";
+import type { PreviewImage } from "./preview-image";
 
 export interface MessageAttachmentContext { threadId: string; messageId: string }
 
@@ -272,6 +264,65 @@ export async function requestMessageFile(
   return response;
 }
 
+export interface MessageFileLocation {
+  /** Opaque, same-origin URLs. Neither one contains the transcript's path. */
+  downloadUrl: string;
+  previewUrl: string;
+  name: string;
+  mime: string;
+  bytes: number;
+}
+
+/** Resolve an exact-message POST capability into the opaque GET capability
+ * a native HTML media element or browser download manager can stream. */
+export async function requestMessageFileLocation(
+  filePath: string,
+  message: MessageAttachmentContext,
+  signal: AbortSignal,
+): Promise<MessageFileLocation> {
+  const response = await fetch(`/api/threads/${encodeURIComponent(message.threadId)}/messages/${encodeURIComponent(message.messageId)}/file`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path: filePath, location: true }),
+    signal,
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string; code?: string } | null;
+    throw Object.assign(new Error(body?.error ?? t("attach.downloadFailed")), { code: body?.code });
+  }
+  if (!response.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+    await response.body?.cancel().catch(() => undefined);
+    throw Object.assign(new Error(t("attach.downloadFailed")), { code: "streaming_location_unavailable" });
+  }
+  const body = await response.json().catch(() => null) as Partial<MessageFileLocation> | null;
+  const prefix = `/api/threads/${encodeURIComponent(message.threadId)}/files/`;
+  const validUrl = (value: unknown, preview: boolean): value is string =>
+    typeof value === "string" && value.startsWith(prefix) &&
+    (preview ? /^[a-f0-9]{24}\?preview=1$/.test(value.slice(prefix.length)) : /^[a-f0-9]{24}$/.test(value.slice(prefix.length)));
+  if (!body || !validUrl(body.downloadUrl, false) || !validUrl(body.previewUrl, true) ||
+      body.previewUrl !== `${body.downloadUrl}?preview=1` ||
+      typeof body.name !== "string" || !body.name || typeof body.mime !== "string" || !body.mime ||
+      typeof body.bytes !== "number" || !Number.isSafeInteger(body.bytes) || body.bytes < 0) {
+    throw new Error(t("attach.downloadFailed"));
+  }
+  return body as MessageFileLocation;
+}
+
+/** Hand an opaque GET to the browser's streaming download implementation.
+ * A click means the download started, not that all bytes reached disk. */
+export function startMessageFileDownload(url: string, name: string): void {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.style.display = "none";
+  document.body.append(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+  }
+}
+
 /** Shared save state for transcript file chips and bot-authored file links. */
 export interface MessageFolderListing {
   name: string;
@@ -331,6 +382,32 @@ export function useLocalFileSave(filePath: string, name?: string, message?: Mess
     const controller = new AbortController();
     request.current = controller;
     try {
+      if (entry === undefined) {
+        try {
+          const location = await requestMessageFileLocation(filePath, message, controller.signal);
+          if (!mounted.current || controller.signal.aborted) return;
+          const saved = canonicalDownloadFilename({
+            fallback: location.name || name || attachmentBasename(filePath),
+            source: filePath,
+            mime: location.mime,
+          });
+          startMessageFileDownload(location.downloadUrl, saved);
+          if (!mounted.current || controller.signal.aborted) return;
+          setSavedTo(saved);
+          setState("saved");
+          if (resetTimer.current) clearTimeout(resetTimer.current);
+          resetTimer.current = setTimeout(() => {
+            if (mounted.current) setState("idle");
+          }, 4000);
+          return;
+        } catch (error) {
+          // A newer client may still be paired to an older Sagax server.
+          // Only that protocol mismatch falls back to its bounded Blob path;
+          // current-server authorization and availability failures stay exact.
+          const code = (error as { code?: unknown } | null)?.code;
+          if (code !== "streaming_location_unavailable" && code !== "directory") throw error;
+        }
+      }
       const response = await requestMessageFile(filePath, message, controller.signal, entry === undefined ? { list: true } : { entry });
       if (response.headers.get("x-openmausbot-folder") === "1") {
         const listing = await response.json() as MessageFolderListing;
@@ -349,16 +426,7 @@ export function useLocalFileSave(filePath: string, name?: string, message?: Mess
         mime: blob.type || response.headers.get("content-type"),
       });
       try {
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = saved;
-        link.style.display = "none";
-        document.body.append(link);
-        try {
-          link.click();
-        } finally {
-          link.remove();
-        }
+        startMessageFileDownload(url, saved);
       } finally {
         // Chromium may not consume a blob URL until after the click task ends.
         revokeObjectUrlLater(url);

@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { widgetNumber, widgetString, type WidgetNode } from "../../../shared/widget";
 import { useWidgetForm } from "./WidgetControls";
-import type { WidgetWhere } from "./WidgetNodes";
+import type { WidgetWhere } from "./widget-where";
 import { BADGE_DOT, BADGE_INK, BADGE_SIZE, BADGE_SOLID, boxStyle } from "./widget-style";
 import { progressClip } from "@/lib/motion";
 

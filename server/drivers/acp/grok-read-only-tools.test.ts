@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { READ_ONLY_AGENT_TOOL_NAMES } from "../../agent-tool-policy.ts";
 import { SPAWNED_PROXIES } from "../../proxy-paths.ts";
-import { grokReadOnlyAllowRules, isPerspicaxBridge, PERSPICAX_READ_ONLY_TOOLS } from "./grok-read-only-tools.ts";
+import { grokReadOnlyAllowRules, isPerspicaxBridge, PERSPICAX_FLOW_COMPUTE_TOOLS, PERSPICAX_READ_ONLY_TOOLS } from "./grok-read-only-tools.ts";
 
 const BRIDGE = SPAWNED_PROXIES.perspicax;
 const bridge = (profile = "pr_1") => ({
@@ -32,6 +32,7 @@ describe("grokReadOnlyAllowRules", () => {
     expect(rules).toEqual([...PERSPICAX_READ_ONLY_TOOLS, "cw_psa_query"].map((n) => `MCPTool(perspicax_owner__${n})`).sort());
     expect(rules).toContain("MCPTool(perspicax_owner__cw_psa__query)");
     expect(rules).toContain("MCPTool(perspicax_owner__memory_search)");
+    for (const tool of PERSPICAX_FLOW_COMPUTE_TOOLS) expect(rules).toContain(`MCPTool(perspicax_owner__${tool})`);
   });
 
   it("never allows a write, action, send, approval or command tool", () => {
@@ -59,6 +60,7 @@ describe("grokReadOnlyAllowRules", () => {
         perspicax_trailing: { command: process.execPath, args: ["--inspect", BRIDGE], env: { SAGAX_PERSPICAX_PROFILE: "pr_1" } },
         github: { command: "npx", args: ["github-mcp"], env: {} },
         remote: { url: "https://example.com/mcp" } as never,
+        "sagax-flow": { command: process.execPath, args: [SPAWNED_PROXIES.userSandbox], env: { SAGAX_TOOL_SERVER: "sagax-flow" } },
       },
     })).toEqual([]);
     expect(grokReadOnlyAllowRules(undefined)).toEqual([]);

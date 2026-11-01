@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import { checkInvariants } from "./invariants.ts";
-import { Runtime, type BeginRequest } from "./runtime.ts";
+import { MAX_REQUESTS_PER_REQUESTER, MAX_REWORKS, Runtime, type BeginRequest } from "./runtime.ts";
 import { openRuntimeStore, type RuntimeStore } from "./store.ts";
 import { CUT_TWICE } from "./tree.ts";
 import type { Assignment, Clock, EnqueueRequest, Limits, RunInput, RunResult, TurnRunner } from "./types.ts";
@@ -179,6 +179,65 @@ describe("Runtime: one tree, one lane", () => {
       { assignee: { botId: "builder", destination: { kind: "room_thread", threadId: "room-1", groupId: "g1" } } })));
     expect(elsewhere.id).not.toBe(rework.id);
     w.runtime.tick(); await flush();
+    invariants(w);
+  });
+
+  // 2026-11-01 (reported: "bots get lost in their reasoning and loop"): every
+  // settlement renews the root's budgets, so a requester that reworks the
+  // same brief after each report (an unmet done_when, a result it keeps
+  // second-guessing) ran it forever. The same brief to the same teammate
+  // under one requester now runs at most 1 + MAX_REWORKS times; the next
+  // rework is a typed refusal the turn reads, never a throw.
+  it("bounds a requester that keeps reworking the same brief: the loop ends in a typed refusal", async () => {
+    let w!: World;
+    const refusals: string[] = [];
+    w = world((a) => {
+      if (a.assignee.botId === "chief") {
+        const again = w.runtime.enqueue(toBot("builder", a.id, undefined, { rework: true }));
+        if (!again.ok) refusals.push(again.reason);
+      }
+      return undefined;
+    });
+    const root = w.runtime.begin(beginReq());
+    ok(w.runtime.enqueue(toBot("builder", root.id)));
+    w.runtime.end(root.id, { ok: true, text: "Handed to builder" });
+    for (let i = 0; i < 40; i += 1) { w.runtime.tick(); await flush(); }
+    const builderRuns = w.runner.runs.filter(r => r.a.assignee.botId === "builder").length;
+    expect(builderRuns).toBe(1 + MAX_REWORKS);
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatch(/already ran 4 times/);
+    expect(w.store.get(root.id)?.status).toBe("completed");
+    invariants(w);
+  });
+
+  // 2026-11-01: the same loop with a new brief each round ("try approach
+  // 2", "try approach 3"...). Each settlement renews the window budgets and
+  // no brief repeats, so nothing ended a requester that re-planned after
+  // every report: before this guard it handed out work for as long as the
+  // ticks lasted (200 rounds here). It now hands out at most
+  // MAX_REQUESTS_PER_REQUESTER pieces of work over its whole life, then
+  // reads a typed refusal telling it to report instead.
+  it("bounds a requester that re-plans after every report with a new brief: the loop converges on a typed refusal", async () => {
+    let w!: World;
+    const refusals: string[] = [];
+    let round = 1;
+    w = world((a) => {
+      if (a.assignee.botId === "chief") {
+        round += 1;
+        const again = w.runtime.enqueue(toBot("builder", a.id, `Try approach ${round}`));
+        if (!again.ok) refusals.push(again.reason);
+      }
+      return undefined;
+    });
+    const root = w.runtime.begin(beginReq());
+    ok(w.runtime.enqueue(toBot("builder", root.id, "Try approach 1")));
+    w.runtime.end(root.id, { ok: true, text: "Handed to builder" });
+    for (let i = 0; i < 400; i += 1) { w.runtime.tick(); await flush(); }
+    const builderRuns = w.runner.runs.filter(r => r.a.assignee.botId === "builder").length;
+    expect(builderRuns).toBe(MAX_REQUESTS_PER_REQUESTER);
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatch(/report/i);
+    expect(w.store.get(root.id)?.status).toBe("completed");
     invariants(w);
   });
 
@@ -998,5 +1057,128 @@ describe("Runtime: a requester that asked the person while its teammates worked"
       outcomeDetail: expect.stringMatching(/decision card never started while hub was busy/),
     });
     invariants(w);
+  });
+});
+
+// Lot 3 of the Grok convergence (docs/plans/grok-convergence-runtime-evidence.md):
+// a requesting turn that failed on a provider limit after handing work out is
+// taken again by the host on another engine. The same request continues as
+// the same root: one child, one result, one resume (invariant I11).
+describe("Runtime: one request, one root, across a provider limit", () => {
+  const failRoot = (w: World, rootId: string) => w.runtime.end(rootId, { ok: false, text: "usage limit" });
+
+  it("continues the failed root: a repeated request lands on the same child, and it resumes once", async () => {
+    const w = world(a => a.assignee.botId === "builder" ? "hold" : undefined);
+    const root = w.runtime.begin(beginReq({ request: "message-1" }));
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id)));
+    w.runtime.tick();
+    failRoot(w, root.id);
+    expect(w.store.get(root.id)?.status).toBe("waiting");
+    expect(w.runtime.continueHost(root.id, "backup", true)).toBe("continued");
+    expect(w.store.get(root.id)?.status).toBe("waiting");
+    expect(w.runtime.continueHost(root.id, "backup")).toBe("continued");
+    expect(w.store.get(root.id)).toMatchObject({ status: "running", executions: 1 });
+    // The backup turn asks for the same work again: the same request.
+    const again = ok(w.runtime.enqueue(toBot("builder", root.id)));
+    expect(again.id).toBe(child.id);
+    w.runtime.end(root.id, { ok: true, text: "Assigned" });
+    expect(w.store.get(root.id)?.status).toBe("waiting");
+    await w.runner.release(child.id, { kind: "completed", text: "built" });
+    w.runtime.tick();
+    await flush();
+    const resumes = w.runner.runs.filter(r => r.a.id === root.id);
+    expect(resumes).toHaveLength(1);
+    expect(resumes[0]!.input.settled?.map(s => s.id)).toEqual([child.id]);
+    expect(w.store.get(root.id)).toMatchObject({ status: "completed", executions: 2 });
+    expect(w.runner.runs.filter(r => r.a.id === child.id)).toHaveLength(1);
+    expect(w.store.events(root.id).map(e => e.kind)).toContain("continued");
+    invariants(w);
+  });
+
+  it("keeps a result that settled before the backup turn: the root still resumes once with it", async () => {
+    const w = world();
+    const root = w.runtime.begin(beginReq({ request: "message-1" }));
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id)));
+    failRoot(w, root.id);
+    // the child runs and settles before the host continues; no tick resumes the root yet
+    w.runtime.tick();
+    await flush();
+    expect(w.store.get(child.id)?.status).toBe("completed");
+    expect(w.runtime.continueHost(root.id, "backup")).toBe("continued");
+    w.runtime.end(root.id, { ok: true, text: "Done on the backup" });
+    expect(w.store.get(root.id)?.status).toBe("waiting");
+    w.runtime.tick();
+    await flush();
+    const resumes = w.runner.runs.filter(r => r.a.id === root.id);
+    expect(resumes).toHaveLength(1);
+    expect(resumes[0]!.input.settled?.map(s => s.id)).toEqual([child.id]);
+    invariants(w);
+  });
+
+  it("says the request is answered once the root's own resume runs or completed", async () => {
+    const w = world(a => a.assignee.botId === "chief" ? "hold" : undefined);
+    const root = w.runtime.begin(beginReq({ request: "message-1" }));
+    ok(w.runtime.enqueue(toBot("builder", root.id)));
+    failRoot(w, root.id);
+    w.runtime.tick();
+    await flush();
+    w.runtime.tick();
+    // the root's resume is running: the request has its answer
+    expect(w.runner.held.has(root.id)).toBe(true);
+    expect(w.runtime.continueHost(root.id, "backup", true)).toBe("answered");
+    await w.runner.release(root.id, { kind: "completed", text: "summary" });
+    expect(w.runtime.continueHost(root.id, "backup")).toBe("answered");
+    expect(w.runtime.continueHost("no-such-root", "backup")).toBe("none");
+    invariants(w);
+  });
+
+  it("runs the root's failed resume again with the same results instead of the request (the limit again)", async () => {
+    let chiefTurns = 0;
+    const w = world(a => a.assignee.botId === "chief" && ++chiefTurns === 1 ? { kind: "failed", outcome: "provider_error", text: "limit" } : undefined);
+    const root = w.runtime.begin(beginReq({ request: "message-1" }));
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id)));
+    failRoot(w, root.id);
+    w.runtime.tick();
+    await flush();
+    w.runtime.tick();
+    await flush();
+    expect(w.store.get(root.id)?.status).toBe("failed");
+    // Sending the request again would dispatch its work again: the resume runs again.
+    expect(w.runtime.continueHost(root.id, "backup", true)).toBe("resumed");
+    expect(w.store.get(root.id)?.status).toBe("failed");
+    expect(w.runtime.continueHost(root.id, "backup")).toBe("resumed");
+    expect(w.store.get(root.id)?.status).toBe("resume");
+    w.runtime.tick();
+    await flush();
+    const resumes = w.runner.runs.filter(r => r.a.id === root.id);
+    expect(resumes).toHaveLength(2);
+    expect(resumes[1]!.input.settled?.map(s => s.id)).toEqual([child.id]);
+    expect(w.store.get(root.id)).toMatchObject({ status: "completed", outcome: "done" });
+    expect(w.runner.runs.filter(r => r.a.id === child.id)).toHaveLength(1);
+    expect(w.store.events(root.id).map(e => e.kind)).toContain("reopened");
+    // A completed resume answered it: nothing runs again.
+    expect(w.runtime.continueHost(root.id, "backup")).toBe("answered");
+    invariants(w);
+  });
+
+  it("does not reopen a root that the person stopped or that failed on its own first turn", async () => {
+    const w = world(() => "hold");
+    const stopped = w.runtime.begin(beginReq({ request: "message-1" }));
+    ok(w.runtime.enqueue(toBot("builder", stopped.id)));
+    w.runtime.cancel(stopped.id, "Stopped by user", "stopped");
+    expect(w.runtime.continueHost(stopped.id, "backup")).toBe("none");
+    const alone = w.runtime.begin(beginReq({ request: "message-2" }));
+    failRoot(w, alone.id);
+    expect(w.store.get(alone.id)?.status).toBe("failed");
+    expect(w.runtime.continueHost(alone.id, "backup")).toBe("none");
+  });
+
+  it("I11 names two trees answering one request", () => {
+    const w = world(() => "hold");
+    for (const _ of [1, 2]) {
+      const root = w.runtime.begin(beginReq({ request: "message-1" }));
+      ok(w.runtime.enqueue(toBot(_ === 1 ? "builder" : "tester", root.id)));
+    }
+    expect(checkInvariants(w.store, w.runner.live()).some(p => p.startsWith("I11 "))).toBe(true);
   });
 });

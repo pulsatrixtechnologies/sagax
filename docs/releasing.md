@@ -133,7 +133,9 @@ sha you pass) is not an ancestor of `origin/main`. Run it after
    `node scripts/check-release-tag.mjs` (refuses when this commit is not an
    ancestor of `origin/main`),
    `node scripts/embed-feed-release-notes.mjs --check release/latest-mac.yml release/latest.yml`
-   (both feeds must carry exactly `docs/releases/X.Y.Z.md`),
+   (fails when either updater manifest is missing on disk, or when a feed does
+   not carry exactly `docs/releases/X.Y.Z.md`; both `latest-mac.yml` and
+   `latest.yml` must always be published),
    `node scripts/verify-win-signatures.mjs release` (every Windows `.exe`
    signed and timestamped, `latest.yml` sha512 and sizes match the signed
    files), and
@@ -149,8 +151,9 @@ sha you pass) is not an ancestor of `origin/main`. Run it after
    Windows first, then create the release with every asset in ONE
    `gh release create` call. Publishing macOS first and adding Windows later is
    not possible. A Latest release without `latest.yml` breaks the Windows
-   update check, so never publish without both feeds (0.4.11 shipped macOS
-   only for this reason).
+   update check, and without `latest-mac.yml` breaks the macOS update check,
+   so never publish without both feeds (0.4.11 shipped macOS only for this
+   reason).
 
 ### Windows signing
 

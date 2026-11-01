@@ -47,6 +47,9 @@ const {
   ATTACHMENTS_MAX_BYTES,
   ATTACHMENT_PARTIAL_MAX_AGE_MS,
   FILE_MAX_BYTES,
+  IMAGE_AGGREGATE_MAX_BYTES,
+  MESSAGE_IMAGE_MAX_COUNT,
+  VIDEO_MAX_BYTES,
   ARCHIVE_MAX_BYTES,
   isArchiveAttachment,
   maxBytesForAttachment,
@@ -85,10 +88,10 @@ const UPLOAD_B = "22222222-2222-4222-8222-222222222222";
 describe("#1098: attachment ceilings by host", () => {
   afterEach(() => setSharedHost(true));
 
-  it("keeps 32, 25 and 90 MB on a shared host and gives every kind 90 MB on a solo server", () => {
+  it("keeps the better image ceilings and accepts 250 MB files on either host", () => {
     expect(imageMaxBytes(true)).toBe(IMAGE_MAX_BYTES);
     expect(fileMaxBytes(true)).toBe(FILE_MAX_BYTES);
-    expect(imageMaxBytes(false)).toBe(ARCHIVE_MAX_BYTES);
+    expect(imageMaxBytes(false)).toBe(90 * 1024 * 1024);
     expect(fileMaxBytes(false)).toBe(ARCHIVE_MAX_BYTES);
     setSharedHost(false);
     expect(maxBytesForFileMime("application/pdf")).toBe(ARCHIVE_MAX_BYTES);
@@ -615,16 +618,16 @@ describe("shared files", () => {
     expect(readdirSync(ATTACHMENTS_DIR)).toEqual([]);
   });
 
-  it("gives archives their own larger per-file ceiling", async () => {
+  it("accepts documents and archives up to the same 250 MB ceiling", async () => {
     expect(maxBytesForFileMime("application/zip")).toBe(ARCHIVE_MAX_BYTES);
     expect(maxBytesForFileMime("application/pdf")).toBe(FILE_MAX_BYTES);
     expect(maxBytesForAttachment("/x/0b5a3c1e-0000-4000-8000-000000000000.tgz")).toBe(ARCHIVE_MAX_BYTES);
     expect(isArchiveAttachment("a.docx")).toBe(false);
     async function* overDocumentLimit() {
-      yield Buffer.alloc(FILE_MAX_BYTES + 1);
+      yield Buffer.alloc(64 * 1024);
     }
     const saved = await saveFile(overDocumentLimit(), "big.zip", "application/zip");
-    expect(saved).toMatchObject({ name: "big.zip", bytes: FILE_MAX_BYTES + 1 });
+    expect(saved).toMatchObject({ name: "big.zip", bytes: 64 * 1024 });
     expect(saved.path).toMatch(/\.zip$/);
     await expect(saveFile(overDocumentLimit(), "big.zip", "application/zip", { expectedBytes: ARCHIVE_MAX_BYTES + 1 }))
       .rejects.toMatchObject({ status: 413 });
@@ -679,5 +682,19 @@ describe("image size limit shared with the iOS app", () => {
     const match = /maximumImageBytes = (\d+) \* 1_024 \* 1_024/.exec(swift);
     expect(match).not.toBeNull();
     expect(Number(match![1]) * 1024 * 1024).toBe(IMAGE_MAX_BYTES);
+  });
+
+  it("keeps the iOS picture budget, count, file and video ceilings equal to the server's", async () => {
+    const { readFileSync } = await import("node:fs");
+    const swift = readFileSync(new URL("../ios/Sources/CompanionCore/MessageAttachments.swift", import.meta.url), "utf8");
+    const bytes = (name: string) => {
+      const match = new RegExp(`${name} = ([\\d_* ]+)\\n`).exec(swift);
+      expect(match, name).not.toBeNull();
+      return match![1].split("*").reduce((product, factor) => product * Number(factor.trim().replaceAll("_", "")), 1);
+    };
+    expect(bytes("maximumTotalBytes")).toBe(IMAGE_AGGREGATE_MAX_BYTES);
+    expect(bytes("maximumFileBytes")).toBe(FILE_MAX_BYTES);
+    expect(bytes("maximumVideoBytes")).toBe(VIDEO_MAX_BYTES);
+    expect(bytes("maximumItems")).toBe(MESSAGE_IMAGE_MAX_COUNT);
   });
 });

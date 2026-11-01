@@ -8,7 +8,6 @@ import type { McpServerSpec } from "./contracts.ts";
 import { githubServersAsPerson, withGithubToken } from "./github-mcp-token.ts";
 import { personalAuthHeaders, type GithubConnection, type PersonalMcpServer } from "./person-connections.ts";
 import { claudePluginDirs } from "./plugin-turn.ts";
-import { engineWorksInFiles } from "../shared/capabilities.ts";
 import { reservedMcpName } from "../shared/mcp-reserved-names.ts";
 
 // ── this installation's MCP servers (config.json mcpServers) ─────────────
@@ -101,9 +100,11 @@ export function turnPluginDirs(input: { driverKind: string; botDirs: readonly st
 }
 
 /** The plugin folders whose skills, commands and agents another engine
- * with files reads from the turn prompt (server/plugin-turn.ts). None for
- * Claude (--plugin-dir) and for an engine without files. */
+ * reads through the turn prompt or managed discovery. None for Claude
+ * (--plugin-dir). Every other engine qualifies: file engines by path, API
+ * engines as whole files inline within the per-capability budget, with or
+ * without skills_list and workspace_read (Q8 C). */
 export function turnPluginPromptDirs(driverKind: string, botDirs: readonly string[]): string[] {
-  if (driverKind === "claudeAgent" || !engineWorksInFiles(driverKind)) return [];
+  if (driverKind === "claudeAgent") return [];
   return [...botDirs];
 }

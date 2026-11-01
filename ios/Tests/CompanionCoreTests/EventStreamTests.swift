@@ -175,6 +175,24 @@ final class EventStreamTests: XCTestCase {
         }
     }
 
+    /// A hello the app cannot read used to be dropped like any frame, and
+    /// the keepalives held the socket: "Connecting…" forever. It fails the
+    /// stream now, so the session retries and says why.
+    func testAnUndecodableHelloFailsTheStreamInsteadOfHangingIt() async {
+        StreamingStub.chunks = [
+            "data: {\"kind\":\"hello\",\"resumed\":true}\n\n",
+            ": keepalive\n\n",
+        ]
+        do {
+            _ = try await collect(limit: 1)
+            XCTFail("an unreadable hello must surface")
+        } catch let error as APIError {
+            guard case .transport = error else { return XCTFail("expected a transport error, got \(error)") }
+        } catch {
+            XCTFail("expected an APIError, got \(error)")
+        }
+    }
+
     func testCancellingTheConsumerTearsDownTheRequest() async throws {
         StreamingStub.chunks = [
             "data: {\"kind\":\"hello\",\"cursor\":\"abc12345:0\",\"resumed\":false}\n\n",

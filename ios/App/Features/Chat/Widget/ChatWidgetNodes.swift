@@ -678,7 +678,7 @@ struct ChatWidgetTable: View {
                             }
                             .padding(.vertical, 8)
                             .gridColumnAlignment(ChatWidgetStyle.horizontal(cell.string("align") ?? "start"))
-                            .gridCellColumns(max(1, Int(cell.number("colSpan") ?? 1)))
+                            .gridCellColumns(cell.integer("colSpan", in: 1...12) ?? 1)
                             .environment(\.chatWidgetInk, row.flag("header") ? headerInk : ink)
                         }
                     }

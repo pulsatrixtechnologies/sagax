@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -75,5 +75,22 @@ describe("embed-feed-release-notes", () => {
     expect(other.ok).toBe(false);
     const bad = project("0.5.4", "Seulement du français");
     expect(embedFeeds({ root: bad, version: "0.5.4", feeds: [join(bad, "release", "latest-mac.yml")] }).ok).toBe(false);
+  });
+
+  it("fails clearly when latest-mac.yml or latest.yml is missing on disk", () => {
+    const root = project();
+    const mac = join(root, "release", "latest-mac.yml");
+    const win = join(root, "release", "latest.yml");
+    unlinkSync(mac);
+    const missingMac = embedFeeds({ root, version: "0.5.4", feeds: [mac, win], check: true });
+    expect(missingMac.ok).toBe(false);
+    expect(missingMac.ok ? "" : missingMac.message).toContain("latest-mac.yml");
+    expect(missingMac.ok ? "" : missingMac.message).toMatch(/must include both latest-mac\.yml and latest\.yml/);
+    writeFileSync(mac, FEED);
+    unlinkSync(win);
+    const missingWin = embedFeeds({ root, version: "0.5.4", feeds: [mac, win] });
+    expect(missingWin.ok).toBe(false);
+    expect(missingWin.ok ? "" : missingWin.message).toContain("latest.yml");
+    expect(missingWin.ok ? "" : missingWin.message).toMatch(/must include both latest-mac\.yml and latest\.yml/);
   });
 });

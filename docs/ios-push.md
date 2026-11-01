@@ -108,12 +108,37 @@ Developer portal. Xcode automatic signing then puts
 that is on, the extension still sets the alert title to the bot's name, but
 iOS keeps showing the Sagax app icon.
 
+## Live Activities (ActivityKit push)
+
+A bot's Dynamic Island / lock-screen Live Activity is started on the phone
+with `pushType: .token`. The phone registers each activity's push token
+(and, on iOS 17.2+, the push-to-start token) at `POST /api/push/activities`
+for that person and bot. When the bot's state changes (working, needs you,
+done) and the phone's live stream is not open, the server sends an APNs
+push with:
+
+- `apns-push-type: liveactivity`
+- `apns-topic: <bundleId>.push-type.liveactivity`
+- `event`: `update` or `end`
+- `content-state` matching `BotActivityContent` (Date `since` as Cocoa
+  reference seconds, Swift's default JSONEncoder)
+- optional `stale-date`, `dismissal-date`, `relevance-score`
+
+Priority 10 for needs-you and end (Apple's high-priority budget, rate
+limited); priority 5 for working line updates. A 410 / dead token is
+pruned; ending a bot clears that person's update tokens for it. Tokens
+belong to one person only.
+
 ## Code
 
 - `server/push/config.ts`: the `SAGAX_APNS_*` settings.
 - `server/push/jwt.ts`: the provider token (JWT ES256 signed with the `.p8`,
   renewed every 40 minutes).
 - `server/push/payload.ts`: the APNs body and headers.
+- `server/push/activity-payload.ts`, `activity-content.ts`,
+  `activity-devices.ts`, `activity-hub.ts`, `activity-frames.ts`: Live
+  Activity push payload, content-state, token store, send hub and frame
+  mapping.
 - `server/push/apns.ts`: HTTP/2 to APNs with Node's `http2`, no dependency.
 - `server/push/devices.ts`: each person's devices in
   `<data>/push-devices/<principal>.json` (mode 0600). A device APNs answers
@@ -124,6 +149,8 @@ iOS keeps showing the Sagax app icon.
 - `server/routes/push-devices.ts`: `POST`, `GET`, `DELETE /api/push/devices`
   (the signed-in person's own devices only; tokens are masked in every
   answer and every log line).
+- `server/routes/push-activities.ts`: `POST`, `GET`, `DELETE
+  /api/push/activities` (Live Activity tokens for the signed-in person).
 - `ios/Sources/CompanionCore/Push.swift`, `ios/App/PushRegistrar.swift`: the
   phone registers its token with the server it is signed in to at every
   launch, when the token changes, when another server becomes active and
@@ -131,6 +158,9 @@ iOS keeps showing the Sagax app icon.
   opens the conversation; a nudge received in front shakes and rings like
   the in-app nudge, once; a push wakes the app for a moment
   (`content-available`) to recount the icon badge.
+- `ios/Sources/CompanionCore/LiveActivityPush.swift`,
+  `ios/App/LiveActivities.swift`: ActivityKit `pushType: .token`, token
+  registration for update and push-to-start.
 - `ios/NotificationService`: Notification Service Extension. A
   `mutable-content` push downloads the avatar and attaches
   `INSendMessageIntent` so the banner uses the bot's name and face.

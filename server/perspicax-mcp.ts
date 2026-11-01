@@ -45,12 +45,21 @@ export const PERSPICAX_UNAVAILABLE_WHY: Record<PerspicaxUnavailableReason, strin
   unknown_profile: "Perspicax no longer lists this profile",
 };
 
+/** The sentence shown for an unavailable profile. Prefers Perspicax's own
+ * error_description when the exchange returned not_held with one. */
+export function perspicaxUnavailableWhy(reason: PerspicaxUnavailableReason, detail?: string): string {
+  if (reason === "not_held" && detail) return detail;
+  return PERSPICAX_UNAVAILABLE_WHY[reason];
+}
+
 /** The activity row of the profiles one reason left out of a turn. A rate
  * limit says its sentence, so the person knows to wait; the other reasons
- * keep their code. */
-export function perspicaxUnavailableRow(names: readonly string[], speakerName: string, reason: PerspicaxUnavailableReason): string {
+ * keep their code. A not_held detail from Perspicax is shown when present. */
+export function perspicaxUnavailableRow(names: readonly string[], speakerName: string, reason: PerspicaxUnavailableReason, detail?: string): string {
   const head = `Perspicax: ${names.join(", ")} unavailable for ${speakerName}`;
-  return reason === "rate_limited" ? `${head}: ${PERSPICAX_UNAVAILABLE_WHY.rate_limited}` : `${head} (${reason})`;
+  if (reason === "rate_limited") return `${head}: ${PERSPICAX_UNAVAILABLE_WHY.rate_limited}`;
+  if (reason === "not_held" && detail) return `${head}: ${detail}`;
+  return `${head} (${reason})`;
 }
 
 export interface PerspicaxMountedProfile {
@@ -61,7 +70,7 @@ export interface PerspicaxMountedProfile {
 
 export interface PerspicaxTurnPlan {
   mounted: PerspicaxMountedProfile[];
-  unavailable: Array<{ profileId: string; name: string; reason: PerspicaxUnavailableReason }>;
+  unavailable: Array<{ profileId: string; name: string; reason: PerspicaxUnavailableReason; detail?: string }>;
 }
 
 /** The link client calls this module needs (PerspicaxDirectory). */
@@ -117,10 +126,24 @@ export interface PerspicaxMcpOptions {
    * goes to place_phone_call with its arguments: the same card, AI
    * disclosure, pilot and do-not-call list. Absent: refused. */
   placeCall?(turn: { threadId: string; generation: string; botId: string }, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }>;
+  /** 2026-11-01: direct MCP remote_support_open. Sagax fills host_id from
+   * the bot's attached owned hosts and generates nodekey/session itself;
+   * model-supplied values are ignored or refused. Absent: the frame is
+   * refused (never forwarded raw). */
+  openRemoteSupport?(turn: {
+    threadId: string;
+    generation: string;
+    botId: string;
+    principalId: string;
+    args: Record<string, unknown>;
+  }): Promise<{ text: string; isError?: boolean }>;
   fetch?: typeof fetch;
   now?: () => number;
   log?: (line: string) => void;
 }
+
+export const REMOTE_SUPPORT_OPEN_UNAVAILABLE =
+  "Refused by Sagax: remote_support_open goes through Sagax (it fills the host and the session key). That path is not available here. Nothing was sent.";
 
 /** What a bot reads in front of the answer when its voice_call became a
  * place_phone_call. */
@@ -418,8 +441,8 @@ export class PerspicaxMcp {
     if (!link || !profiles.length) return plan;
     const catalog = new Map(link.profileCatalog().map((profile) => [profile.id, profile] as const));
     const nameOf = (id: string) => catalog.get(id)?.name || catalog.get(id)?.slug || id;
-    const refuse = (ids: readonly string[], reason: PerspicaxUnavailableReason) => {
-      for (const id of ids) plan.unavailable.push({ profileId: id, name: nameOf(id), reason });
+    const refuse = (ids: readonly string[], reason: PerspicaxUnavailableReason, detail?: string) => {
+      for (const id of ids) plan.unavailable.push({ profileId: id, name: nameOf(id), reason, ...(detail ? { detail } : {}) });
     };
     const known = profiles.filter((id) => catalog.has(id));
     refuse(profiles.filter((id) => !catalog.has(id)), "unknown_profile");
@@ -497,7 +520,7 @@ export class PerspicaxMcp {
           : result.error === "subject" ? (source === "delegation" ? "no_delegation" : "no_session")
           : result.error === "rate_limited" ? "rate_limited" : "unreachable";
         this.log(`perspicax mcp: profile ${profileId} not mounted for this turn (${reason})`);
-        refuse([profileId], reason);
+        refuse([profileId], reason, result.error === "not_held" ? result.description : undefined);
         continue;
       }
       const at = key(input.threadId, input.generation, profileId);
@@ -598,6 +621,28 @@ export class PerspicaxMcp {
           : { text: VOICE_CALL_UNAVAILABLE, isError: true };
         const text = this.options.placeCall ? `${VOICE_CALL_REDIRECTED}\n\n${placed.text}` : placed.text;
         return { status: 200, body: { jsonrpc: "2.0", id, result: { content: [{ type: "text", text }], ...(placed.isError ? { isError: true } : {}) } } };
+      }
+      // remote_support_open: never forward model-chosen host_id / nodekey /
+      // session. Sagax fills them (attached owned hosts + a key of its own).
+      if (String(params.name ?? "") === "remote_support_open") {
+        const args = isObject(params.arguments) ? params.arguments as Record<string, unknown> : {};
+        const opened = this.options.openRemoteSupport
+          ? await this.options.openRemoteSupport({
+            threadId: input.threadId,
+            generation: input.generation,
+            botId: input.botId,
+            principalId: entry.principalId,
+            args,
+          })
+          : { text: REMOTE_SUPPORT_OPEN_UNAVAILABLE, isError: true };
+        return {
+          status: 200,
+          body: {
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: opened.text }], ...(opened.isError ? { isError: true } : {}) },
+          },
+        };
       }
     }
     const blocked = input.judged ? null : telephonyBlock(frame, this.twilioTools.get(input.profileId)) ?? await this.permissionBlock(entry, frame);

@@ -146,11 +146,11 @@ This does not prove resumption or cleanup of real provider sessions after a cras
 
 ### Delegation mailbox
 
-`coordinate_bots` work no longer queues here: it is an assignment on the job
-runtime (docs/runtime-contract.md §6), whose queue bound is 24 hours and whose
-every window restarts at boot. The legacy `delegate_bot` mailbox
-(`server/delegations.ts`) keeps the behaviour below until it moves to the
-runtime.
+`coordinate_bots` work is an assignment on the job runtime
+(docs/runtime-contract.md §6; `server/runtime/`), whose queue bound is 24 hours
+and whose every window restarts at boot. The legacy `delegate_bot` mailbox is
+gone; an older release's `delegations.json` is handed to the runtime once at
+boot (`server/runtime/import-legacy.ts`).
 
 Queued handoffs now wait through repeated busy turns rather than giving up
 after three. The delivery window is 24 hours; an hourly sweep expires a
@@ -165,7 +165,8 @@ until the handoff settles (potentially about 25 hours); it never duplicates
 the pending job to catch up.
 
 ```sh
-pnpm exec vitest run server/delegations.test.ts server/peer-roster.test.ts server/drivers/agents-proxy.test.ts
+pnpm exec vitest run server/runtime/runtime.test.ts server/runtime/scenarios.test.ts server/runtime/import-legacy.test.ts
+pnpm exec vitest run server/direct-coordination.e2e.test.ts server/peer-roster.test.ts server/drivers/agents-proxy.test.ts
 pnpm exec vitest run server/independent-threads-api.test.ts -t "holds coordinated work behind a peer's approval"
 pnpm exec vitest run server/independent-threads-api.test.ts -t "unanswered|what became of each teammate approval"
 pnpm exec vitest run server/comms.test.ts

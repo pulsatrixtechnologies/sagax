@@ -467,7 +467,7 @@ public enum StepLabel {
     public static func duration(_ ms: Double?, words: StepWords) -> String? {
         guard let ms, ms.isFinite, ms >= 0 else { return nil }
         if ms < 1_000 { return words.t("step.duration.underSecond") }
-        let total = Int((ms / 1_000).rounded())
+        let total = Int(min((ms / 1_000).rounded(), 1e9))
         if total < 60 { return words.t("step.duration.seconds", ["seconds": String(total)]) }
         return words.t("step.duration.minutes", ["minutes": String(total / 60), "seconds": String(format: "%02d", total % 60)])
     }

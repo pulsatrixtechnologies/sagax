@@ -168,6 +168,9 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   cwd: "host",
   browser: "host",
   browserProfile: "host",
+  // Enrolled unattended hosts attached so the bot can work on them
+  // (Computer tab places, 2026-11-01).
+  remoteHosts: "host",
   mcpServers: "host",
   mcpAccounts: "host",
   visibility: "sharing",

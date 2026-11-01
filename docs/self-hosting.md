@@ -23,6 +23,9 @@ VPS](deploy-vps.md) walks through the three ways in (public address, own
 domain, Tailscale), signing engines in, pairing, keeping it running,
 updating and backups. This page is the reference behind it.
 
+Updates without showing people errors: [Invisible deploys](zero-downtime-deploy.md)
+(graceful shutdown, Caddy hold, calm client reconnect).
+
 ## What works headless (and what doesn't)
 
 Runs fully on a server:
@@ -264,6 +267,14 @@ What the stack does, so you can adapt it:
 
 Upgrade with `git pull && docker compose up -d --build`. State (chats, routines,
 engine logins, paired sessions) is on the `data` volume; back that up.
+
+Server logs survive a container recreation on that same volume:
+`<DATA_DIR>/server-log/` (`current.jsonl` and `previous.jsonl`, each capped at
+2 MiB, redacted, 0600). The process also keeps a 2,000-line in-memory window
+for `GET /api/org/admin/logs`. Stdout from the container runtime is separate
+and can still rotate away with the old container; use the data-volume files
+(or the admin Logs page) when you need history across a deploy. See
+`server/server-log-ring.ts` and AGENTS.md ("Server log on disk").
 
 A local build keeps the Chrome for Testing (and any `ENGINES`) it installed
 first, because those layers sit beneath the app and stay cached across code
@@ -1415,17 +1426,15 @@ Flow pack: the product `pulsatrix-flow` and the organization's configuration
 plugin), the token audience (`<issuer>/flow/marketplace`) and the plugins with
 their versions. Nothing comes from GitHub.
 
-- Install: the server runs Claude Code's own plugin commands in a folder of
-  its own (`<data>/org-flow-plugins/claude`, `CLAUDE_CONFIG_DIR` of those
-  commands only). The marketplace is declared by URL with a `headersHelper`
-  that prints the token from the command's environment; the token is a
-  member's short marketplace token (RFC 8693 exchange of a live sign-in, at
-  most 15 minutes), never written to disk. Claude Code checks each archive
-  against the SHA-256 of the manifest.
-- Load: each installed plugin is copied the way a plugin "For this bot" is
-  (no hooks, MCP, LSP or bin on the host) and that copy loads with
-  `--plugin-dir` on the Claude turns of a bot whose owner is an active
-  member, after the bot's own plugins and never twice.
+- Install: the server fetches the manifest and ZIP archives directly with
+  its installation link token. It needs no member sign-in and no Claude CLI.
+  The manifest and archive must stay on the linked issuer's marketplace;
+  redirects are refused. SHA-256, plugin name and version are checked before
+  a sanitized copy replaces the current one. Tokens stay in memory only.
+- Load: sanitized copies keep skill, command, agent and executable script
+  files; native hooks, MCP declarations and LSP are stripped. Claude loads
+  them with `--plugin-dir`; the same selected copies are available to the
+  person's sandbox and the capability file reader.
 - Guard: the copy has no hooks, so the Flow guard runs in Perspicax (its
   server guard runs the pack's own PreToolUse hook on every call of a
   Flow-linked profile: dry run, the person's GO, read back). Perspicax
@@ -1434,7 +1443,7 @@ their versions. Nothing comes from GitHub.
   the guard off or in shadow, or `enabled: false` with a `reason` such as
   `flow_guard_uncovered`) the server installs nothing, takes its copy out,
   and no turn loads it.
-- Triggers: a directory that changed, a person's sign-in (their own token),
+- Triggers: a directory that changed, a person's sign-in,
   a Perspicax profile added to a bot, the start of the server and a check
   every 30 minutes. Each is idempotent and silent when the copy matches.
 - Off: the Perspicax admin sets `flow_plugins_default` to `off` (its Flow

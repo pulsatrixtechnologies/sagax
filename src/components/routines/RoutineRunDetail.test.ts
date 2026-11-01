@@ -164,4 +164,21 @@ describe("the run logs (2026-10-29)", async () => {
     expect(markup).toContain("Three items today.");
     expect(markup).not.toContain("| Area |");
   });
+
+  // JC 2026-11-01: "most routines make errors and end up showing success".
+  it("a run that completed with problems says so, with the problems, never as a plain success", () => {
+    const markup = html({ run: run("completed", { output: "Checked 10 invoices.", problems: "crm_login failed 2 times and never succeeded after" }), detail: detail(1) });
+    expect(markup).toContain("data-run-problems");
+    expect(markup).toContain("Completed with problems");
+    expect(markup).toContain("crm_login failed 2 times");
+    expect(markup).toContain("Checked 10 invoices.");
+  });
+
+  it("a queued run says why it waits and its place in its bot's queue", () => {
+    const queued = run("queued", { startedAt: undefined, attention: "Waits for a free slot on this bot" });
+    const earlier = { ...queued, id: "run-earlier", createdAt: queued.createdAt - 1 };
+    const markup = html({ run: queued, runs: [earlier, queued] });
+    expect(markup).toContain("Waits for a free slot on this bot");
+    expect(markup).toContain("Number 2 of 2 waiting for this bot");
+  });
 });

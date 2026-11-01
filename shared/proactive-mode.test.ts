@@ -4,98 +4,78 @@ import {
   PROACTIVE_MODES,
   PROACTIVE_MODE_DEFAULT,
   isProactiveMode,
+  normalizeProactiveMode,
   proactiveModeFor,
   proactiveGate,
   proactiveMayObserve,
   proactiveWriteCanExecuteUnprompted,
-  type ProactiveMode,
 } from "./proactive-mode.ts";
 
 describe("the proactive mode value", () => {
-  it("lists off, propose, read-auto and follow-rules in that order", () => {
-    expect(PROACTIVE_MODES).toEqual(["off", "propose", "read-auto", "follow-rules"]);
-    // 0.8.19: every bot is proactive by default
-    expect(PROACTIVE_MODE_DEFAULT).toBe("follow-rules");
+  it("lists only off and proactive, default on", () => {
+    expect(PROACTIVE_MODES).toEqual(["off", "proactive"]);
+    expect(PROACTIVE_MODE_DEFAULT).toBe("proactive");
   });
 
   it("recognizes only the known modes", () => {
     for (const mode of PROACTIVE_MODES) expect(isProactiveMode(mode)).toBe(true);
-    for (const bad of ["chief", "auto", "", null, undefined, 3, "FOLLOW-RULES"]) expect(isProactiveMode(bad)).toBe(false);
+    for (const bad of ["chief", "auto", "propose", "read-auto", "follow-rules", "", null, undefined, 3]) {
+      expect(isProactiveMode(bad)).toBe(false);
+    }
   });
 
-  it("reads a bot that never chose a mode as proactive, keeps a chosen off, and fails closed to off on a garbled value", () => {
-    expect(proactiveModeFor({})).toBe("follow-rules");
-    expect(proactiveModeFor({ proactiveMode: undefined })).toBe("follow-rules");
-    expect(proactiveModeFor({ proactiveMode: null })).toBe("follow-rules");
+  it("maps legacy propose, read-auto and follow-rules to proactive; keeps off; fails closed on garbage", () => {
+    expect(normalizeProactiveMode(undefined)).toBe("proactive");
+    expect(normalizeProactiveMode(null)).toBe("proactive");
+    expect(normalizeProactiveMode("off")).toBe("off");
+    expect(normalizeProactiveMode("proactive")).toBe("proactive");
+    expect(normalizeProactiveMode("propose")).toBe("proactive");
+    expect(normalizeProactiveMode("read-auto")).toBe("proactive");
+    expect(normalizeProactiveMode("follow-rules")).toBe("proactive");
+    expect(normalizeProactiveMode("chief")).toBe("off");
+    expect(normalizeProactiveMode(7)).toBe("off");
+  });
+
+  it("reads a bot that never chose a mode as proactive, keeps a chosen off, and maps legacy modes", () => {
+    expect(proactiveModeFor({})).toBe("proactive");
+    expect(proactiveModeFor({ proactiveMode: undefined })).toBe("proactive");
+    expect(proactiveModeFor({ proactiveMode: null })).toBe("proactive");
     expect(proactiveModeFor({ proactiveMode: "off" })).toBe("off");
+    expect(proactiveModeFor({ proactiveMode: "propose" })).toBe("proactive");
+    expect(proactiveModeFor({ proactiveMode: "read-auto" })).toBe("proactive");
+    expect(proactiveModeFor({ proactiveMode: "follow-rules" })).toBe("proactive");
     expect(proactiveModeFor({ proactiveMode: "chief" })).toBe("off");
-    expect(proactiveModeFor({ proactiveMode: 7 })).toBe("off");
-    for (const mode of PROACTIVE_MODES) expect(proactiveModeFor({ proactiveMode: mode })).toBe(mode);
+    expect(proactiveModeFor({ proactiveMode: "proactive" })).toBe("proactive");
   });
 });
 
-describe("the proactive gate, per mode", () => {
+describe("the proactive gate", () => {
   it("OFF does nothing: no observation, every action blocked", () => {
     expect(proactiveMayObserve("off")).toBe(false);
     expect(proactiveGate({ mode: "off", kind: "read" })).toBe("blocked");
     expect(proactiveGate({ mode: "off", kind: "write" })).toBe("blocked");
   });
 
-  it("PROPOSE observes read-only, proposes every action, and executes nothing", () => {
-    expect(proactiveMayObserve("propose")).toBe(true);
-    // Even a read-only follow-up is proposed, not run: it executes nothing without a yes.
-    expect(proactiveGate({ mode: "propose", kind: "read" })).toBe("propose");
-    expect(proactiveGate({ mode: "propose", kind: "write" })).toBe("propose");
+  it("PROACTIVE runs reads itself and defers writes to the ordinary approval path", () => {
+    expect(proactiveMayObserve("proactive")).toBe(true);
+    expect(proactiveGate({ mode: "proactive", kind: "read" })).toBe("auto");
+    expect(proactiveGate({ mode: "proactive", kind: "write" })).toBe("defer");
   });
 
-  it("READ-AUTO runs read-only work itself and cards every write/outbound", () => {
-    expect(proactiveMayObserve("read-auto")).toBe(true);
-    expect(proactiveGate({ mode: "read-auto", kind: "read" })).toBe("auto");
-    expect(proactiveGate({ mode: "read-auto", kind: "write" })).toBe("card");
-  });
-
-  it("FOLLOW-RULES runs read-only work itself and defers writes to the bot's normal approval path", () => {
-    expect(proactiveMayObserve("follow-rules")).toBe(true);
-    expect(proactiveGate({ mode: "follow-rules", kind: "read" })).toBe("auto");
-    expect(proactiveGate({ mode: "follow-rules", kind: "write" })).toBe("defer");
-  });
-});
-
-describe("the safety invariant: no write executes unprompted from the proactive layer", () => {
-  it("never returns auto for a write in any mode", () => {
+  it("never returns auto for a write", () => {
     for (const mode of PROACTIVE_MODES) {
-      const disposition = proactiveGate({ mode, kind: "write" });
-      expect(disposition).not.toBe("auto");
+      expect(proactiveGate({ mode, kind: "write" })).not.toBe("auto");
     }
   });
 
-  it("marks only auto as an execute-without-a-card disposition, never for a write", () => {
-    // A read in an auto-capable mode may run; a write never may.
+  it("marks no disposition as an unprompted write from the proactive layer", () => {
     expect(proactiveWriteCanExecuteUnprompted("auto")).toBe(false);
-    expect(proactiveWriteCanExecuteUnprompted("card")).toBe(false);
-    expect(proactiveWriteCanExecuteUnprompted("propose")).toBe(false);
-    expect(proactiveWriteCanExecuteUnprompted("blocked")).toBe(false);
-    // "defer" hands the write to the normal approval path, which cards unless
-    // a standing rule the person set already covers it: that is prompted, not
-    // the proactive layer executing on its own.
     expect(proactiveWriteCanExecuteUnprompted("defer")).toBe(false);
+    expect(proactiveWriteCanExecuteUnprompted("blocked")).toBe(false);
   });
 
-  it("reads are the only thing a non-off mode may run on its own", () => {
-    const autoReadModes: ProactiveMode[] = ["read-auto", "follow-rules"];
-    for (const mode of autoReadModes) expect(proactiveGate({ mode, kind: "read" })).toBe("auto");
-    // Propose never runs even a read.
-    expect(proactiveGate({ mode: "propose", kind: "read" })).toBe("propose");
-  });
-
-  // 2026-10-28: at Full access the proactive layer adds no card of its own;
-  // a write takes the ordinary approval path, where only the organization's
-  // Refuse and Ask first rules, the person's Ask first rules and the outbound
-  // guard still stop it. Propose stays a proposal.
-  it("at Full access, read-auto hands a write to the ordinary path instead of its own card", () => {
-    expect(proactiveGate({ mode: "read-auto", kind: "write", approvalLevel: "full" })).toBe("defer");
-    expect(proactiveGate({ mode: "read-auto", kind: "write", approvalLevel: "auto" })).toBe("card");
-    expect(proactiveGate({ mode: "propose", kind: "write", approvalLevel: "full" })).toBe("propose");
+  it("Full access does not change the gate: writes still defer to the ordinary path", () => {
+    expect(proactiveGate({ mode: "proactive", kind: "write", approvalLevel: "full" })).toBe("defer");
     expect(proactiveGate({ mode: "off", kind: "write", approvalLevel: "full" })).toBe("blocked");
   });
 });

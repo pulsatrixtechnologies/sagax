@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GroupGoalRunStatus } from "../shared/group-goal-run.ts";
 import { isRoutineProblemRun } from "../shared/routines.ts";
-import { ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED } from "./routine-execution.ts";
+import { ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST } from "./routine-execution.ts";
 import {
   nextOccurrence,
   PREWAKE_LEAD_MS,
@@ -328,6 +328,23 @@ describe("bounded scheduled overlap and run health", () => {
       expect(saved.skippedRuns).toBeUndefined(); expect(saved.lastSkippedAt).toBeUndefined(); expect(saved.overlap).toBeUndefined();
     }
     expect(() => h.manager.update(routine.id, { overlap: "invalid" as "queue" })).toThrow("skip or queue");
+  });
+
+  // Lot 3 (docs/plans/grok-convergence-runtime-evidence.md): a run whose
+  // teammates the job runtime goes on with after a restart keeps waiting, and
+  // that work's resume completes it; one the runtime does not hold fails as before.
+  it("keeps a run waiting across a restart while the job runtime goes on with its teammates' work", async () => {
+    const h = harness(start);
+    const routine = h.manager.create({ ...input(), enabled: false });
+    h.manager.runNow(routine.id); await h.manager.tick();
+    h.options.hasPendingDelegations = () => true;
+    finish(h, "thread-1", true);
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "waiting" });
+    const kept = new RoutineManager({ ...h.options, teammatesContinue: (threadId) => threadId === "thread-1" });
+    expect(kept.listRuns()[0]).toMatchObject({ status: "waiting", threadId: "thread-1" });
+    expect(kept.takeRestartResumes()).toEqual([]);
+    const failed = new RoutineManager({ ...h.options, teammatesContinue: () => false });
+    expect(failed.listRuns()[0]).toMatchObject({ status: "failed" });
   });
 });
 
@@ -4621,6 +4638,25 @@ describe("auto-pause after failures in a row (2026-10-26)", () => {
     expect(after.getRoutine(routine.id)).toMatchObject({ enabled: false, autoPaused: { failures: 2 } });
     expect(after.listRuns().at(-1)).toMatchObject({ status: "failed", autoPaused: { failures: 2 } });
   });
+
+  it("never auto-pauses a webhook or email trigger (#1891 phone webhooks stay on)", async () => {
+    const h = harness(start);
+    const voice = h.manager.create({
+      name: "Voice line requests from JC", prompt: "Handle the call request", botId: "maus-1",
+      schedule: { type: "webhook" }, enabled: true, autoPauseAfter: 1,
+    });
+    const texts = h.manager.create({
+      name: "Incoming texts", prompt: "Handle the text", botId: "maus-1",
+      schedule: { type: "event", source: "email" }, enabled: true, autoPauseAfter: 1,
+    });
+    for (let i = 0; i < 3; i++) await fail(h, voice.id);
+    for (let i = 0; i < 3; i++) await fail(h, texts.id);
+    expect(h.manager.getRoutine(voice.id)).toMatchObject({ enabled: true });
+    expect(h.manager.getRoutine(voice.id)!.autoPaused).toBeUndefined();
+    expect(h.manager.getRoutine(texts.id)).toMatchObject({ enabled: true });
+    expect(h.manager.getRoutine(texts.id)!.autoPaused).toBeUndefined();
+    expect(h.manager.listRuns().filter((run) => run.status === "failed")).toHaveLength(6);
+  });
 });
 
 describe("back from an outage or a pause, a routine runs at most once (2026-10-26)", () => {
@@ -4679,5 +4715,255 @@ describe("back from an outage or a pause, a routine runs at most once (2026-10-2
     const after = new RoutineManager(h.options);
     const byId = Object.fromEntries(after.listRuns().map(run => [run.id, run.status]));
     expect(byId).toEqual({ [manual.id]: "queued", old: "missed", new: "queued" });
+  });
+});
+
+describe("truthful run endings and stranded waits (2026-11-01)", () => {
+  const start = Date.parse("2026-11-01T08:00:00Z");
+  const input = () => ({ name: "Invoice check", prompt: "Check the fixture invoices", botId: "maus-1",
+    schedule: { type: "interval" as const, everyMinutes: 60, anchorAt: start }, enabled: false });
+  const at = () => new Date().toISOString();
+  const send = (h: ReturnType<typeof harness>, event: Record<string, unknown>) =>
+    h.manager.handleRuntimeEvent({ eventId: String(Math.random()), provider: "fake", createdAt: at(), ...event } as never);
+  const say = (h: ReturnType<typeof harness>, threadId: string, text: string) =>
+    send(h, { threadId, type: "item.completed", itemType: "assistant_text", text });
+  const tool = (h: ReturnType<typeof harness>, threadId: string, itemId: string, title: string, ok: boolean, output = "") => {
+    send(h, { threadId, itemId, type: "item.started", itemType: "tool", title });
+    send(h, { threadId, itemId, type: "item.completed", itemType: "tool", ok, output });
+  };
+  const done = (h: ReturnType<typeof harness>, threadId: string) => send(h, { threadId, type: "turn.completed", ok: true });
+  const runOf = (h: ReturnType<typeof harness>) => h.manager.listRuns()[0]!;
+
+  it("a tool that kept failing completes the run with problems, never a plain success", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "crm_login", false, "401 Unauthorized\nstack");
+    tool(h, "thread-1", "b", "crm_login", false, "401 Unauthorized");
+    say(h, "thread-1", "Checked the invoices.");
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.status).toBe("completed");
+    expect(run.problems).toContain("crm_login failed 2 times");
+    expect(run.problems).toContain("401 Unauthorized");
+    expect(run.quiet).toBeUndefined();
+    expect(isRoutineProblemRun(run)).toBe(true);
+    expect(h.manager.listRoutines()[0]!.weekRuns).toEqual({ ok: 0, total: 1 });
+  });
+
+  it("a tool that failed then succeeded is a clean run", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "grep", false, "exit 1");
+    tool(h, "thread-1", "b", "grep", true);
+    say(h, "thread-1", "Two invoices lack a PO.");
+    done(h, "thread-1");
+    expect(runOf(h).status).toBe("completed");
+    expect(runOf(h).problems).toBeUndefined();
+  });
+
+  it("one failed call the bot moved past (a search with no match, say) is not a problem: only a tool that kept failing is", async () => {
+    // Engines that title a call by its command (ACP) give each command its
+    // own title, so one miss would otherwise mark nearly every run.
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "grep -r PO-1234 invoices/", false, "exit 1");
+    tool(h, "thread-1", "b", "cat invoices/list.csv", true);
+    say(h, "thread-1", "No invoice references PO-1234.");
+    done(h, "thread-1");
+    expect(runOf(h).status).toBe("completed");
+    expect(runOf(h).problems).toBeUndefined();
+  });
+
+  it("the bot's own RUN_STATUS failed fails the run; partial completes it with problems, even when it says nothing to report", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    say(h, "thread-1", "RUN_STATUS: failed: the mailbox refused the login\nI could not read the inbox.");
+    done(h, "thread-1");
+    expect(runOf(h).status).toBe("failed");
+    expect(runOf(h).error).toBe("the mailbox refused the login");
+    expect(h.failed).toHaveLength(1);
+
+    h.manager.runNow(routine.id); await h.manager.tick();
+    say(h, "thread-2", "Read 10 of 12 invoices.\nRUN_STATUS: partial: two PDFs could not be opened\nNOTHING_TO_REPORT");
+    done(h, "thread-2");
+    const partial = h.manager.listRuns().find(run => run.threadId === "thread-2")!;
+    expect(partial.status).toBe("completed");
+    expect(partial.problems).toBe("two PDFs could not be opened");
+    expect(partial.quiet).toBeUndefined();
+    expect(partial.output).toBe("Read 10 of 12 invoices.");
+  });
+
+  it("an engine error the turn went past is a problem; a retried one is not", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    send(h, { threadId: "thread-1", type: "runtime.error", message: "tool server crashed" });
+    say(h, "thread-1", "Done.");
+    done(h, "thread-1");
+    expect(runOf(h).problems).toContain("tool server crashed");
+
+    h.manager.runNow(routine.id); await h.manager.tick();
+    send(h, { threadId: "thread-2", type: "runtime.error", message: "overloaded" });
+    send(h, { threadId: "thread-2", type: "turn.retrying", attempt: 1, delayMs: 10, reason: "overloaded" });
+    say(h, "thread-2", "Done.");
+    done(h, "thread-2");
+    expect(h.manager.listRuns().find(run => run.threadId === "thread-2")!.problems).toBeUndefined();
+  });
+
+  it("a teammate whose work failed makes the run's ending say so", async () => {
+    const h = harness(start);
+    h.options.handedOutOutcome = () => ({ root: { status: "completed", detail: "", result: "" }, pending: false,
+      failed: [{ name: "Ledger", outcome: "incomplete", detail: "acknowledged without doing the work" }] });
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    say(h, "thread-1", "Summary sent.");
+    done(h, "thread-1");
+    expect(runOf(h).problems).toBe("Ledger's work was not finished: acknowledged without doing the work");
+  });
+
+  it("a run waiting on teammates settles when the runtime ended that work without a turn (relay, stall), instead of waiting forever", async () => {
+    const h = harness(start);
+    let pending = true;
+    let outcome: ReturnType<NonNullable<RoutineManagerOptions["handedOutOutcome"]>> = null;
+    h.options.hasPendingDelegations = () => pending;
+    h.options.handedOutOutcome = () => outcome;
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    done(h, "thread-1");
+    expect(runOf(h).status).toBe("waiting");
+    expect(runOf(h).waitingOn).toBe("teammates");
+    // Still pending: a tick leaves it waiting.
+    await h.manager.tick();
+    expect(runOf(h).status).toBe("waiting");
+    // The runtime relayed the teammate's reply and completed the root: no turn on the thread.
+    pending = false;
+    outcome = { root: { status: "completed", detail: "", result: "Ledger: 3 invoices overdue." }, failed: [], pending: false };
+    await h.manager.tick();
+    expect(runOf(h).status).toBe("completed");
+    expect(runOf(h).output).toBe("Ledger: 3 invoices overdue.");
+    // A later run of the same routine is no longer held behind it.
+    h.manager.runNow(routine.id); await h.manager.tick();
+    expect(h.started).toHaveLength(2);
+
+    // A stalled tree fails the next run, with the runtime's reason.
+    pending = true;
+    h.manager.runNow(routine.id); await h.manager.tick();
+    done(h, "thread-2"); // the second run (still running) completes first
+    const third = h.manager.listRuns().find(run => run.status === "queued" || run.threadId === "thread-3");
+    if (third?.status === "queued") await h.manager.tick();
+    done(h, "thread-3");
+    pending = false;
+    outcome = { root: { status: "failed", outcome: "stalled", detail: "No progress for 4 hours", result: "" }, failed: [], pending: false };
+    await h.manager.tick();
+    const failed = h.manager.listRuns().filter(run => run.status === "failed");
+    expect(failed.at(-1)?.error).toBe("The teammates' work for this run did not finish: No progress for 4 hours");
+  });
+
+  it("a queued run says why it waits and where it stands", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    const other = h.manager.create({ ...input(), name: "Other" });
+    h.setBot("busy");
+    const first = h.manager.runNow(routine.id)!;
+    const second = h.manager.runNow(other.id, undefined, "person")!;
+    await h.manager.tick();
+    expect(second.startedBy).toBe("person");
+    expect(h.manager.runStanding(first.id)).toMatchObject({ status: "queued", position: 1, queuedForBot: 2,
+      reason: "Waits for a free slot on this bot (its other tasks or a room turn hold them)" });
+    expect(h.manager.runStanding(second.id)).toMatchObject({ position: 2, queuedForBot: 2 });
+    h.setBot("ready");
+    await h.manager.tick();
+    expect(h.manager.runStanding(first.id)).toMatchObject({ status: "running" });
+    expect(h.manager.listRuns().find(run => run.id === first.id)!.attention).toBeUndefined();
+    // Same routine again while its run is in flight: it waits for that run, and says so.
+    h.manager.runNow(routine.id);
+    await h.manager.tick();
+    const held = h.manager.listRuns().find(run => run.routineId === routine.id && run.status === "queued")!;
+    expect(held.attention).toBe("Waits for the previous run of this routine to finish");
+  });
+});
+
+// JC 2026-11-01: "it saturates easily, queues really badly". Nothing waits
+// forever: a run behind a wait nobody answers takes its place, and a run
+// whose turn is gone ends, saying so.
+describe("no run waits forever (2026-11-01)", () => {
+  const start = Date.parse("2026-11-01T08:00:00Z");
+  const MIN = 60_000;
+  const input = () => ({ name: "Invoice check", prompt: "Check the fixture invoices", botId: "maus-1",
+    schedule: { type: "interval" as const, everyMinutes: 60, anchorAt: start }, enabled: false });
+  const event = (threadId: string, patch: Record<string, unknown>) =>
+    ({ eventId: String(Math.random()), provider: "fake", threadId, createdAt: new Date(0).toISOString(), ...patch }) as never;
+  const ask = (h: ReturnType<typeof harness>, threadId: string) =>
+    h.manager.handleRuntimeEvent(event(threadId, { type: "request.opened", requestType: "question", tool: "ask", summary: "Which account should I use?" }));
+
+  it("a person's Run now behind a run left waiting on an unanswered question takes its place after the notice window", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    const first = h.manager.runNow(routine.id)!;
+    await h.manager.tick();
+    ask(h, "thread-1");
+    expect(h.manager.listRuns().find(run => run.id === first.id)!.status).toBe("waiting");
+    const second = h.manager.runNow(routine.id, undefined, "person")!;
+    await h.manager.tick();
+    expect(h.manager.runStanding(second.id)).toMatchObject({ status: "queued", reason: "Waits for the previous run of this routine, which is waiting for an answer" });
+    // Inside the window the person may still answer: it keeps waiting.
+    h.setNow(start + 20 * MIN);
+    await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    // Past it, the new run takes the place of the unanswered one.
+    h.setNow(start + 31 * MIN);
+    await h.manager.tick();
+    const byId = Object.fromEntries(h.manager.listRuns().map(run => [run.id, run]));
+    expect(byId[first.id]).toMatchObject({ status: "cancelled", error: ROUTINE_SUPERSEDED_BY_NEW_RUN });
+    expect(byId[second.id]!.status).toBe("running");
+    expect(h.started).toHaveLength(2);
+  });
+
+  it("a run waiting on its teammates is never superseded by a new run", async () => {
+    const h = harness(start);
+    h.options.hasPendingDelegations = () => true;
+    h.options.handedOffWorkLive = () => true;
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id);
+    await h.manager.tick();
+    h.manager.handleRuntimeEvent(event("thread-1", { type: "turn.completed", ok: true }));
+    h.manager.runNow(routine.id, undefined, "person");
+    h.setNow(start + 90 * MIN);
+    await h.manager.tick();
+    expect(h.manager.listRuns().map(run => run.status).sort()).toEqual(["queued", "waiting"]);
+  });
+
+  it("a running run whose turn is gone (nothing works on its thread, no event for 30 minutes) fails, saying so", async () => {
+    const h = harness(start);
+    let alive = true;
+    h.options.turnAlive = () => alive;
+    const routine = h.manager.create(input());
+    const run = h.manager.runNow(routine.id)!;
+    await h.manager.tick();
+    // A long turn that still works is left alone, however long it takes.
+    h.setNow(start + 45 * MIN);
+    await h.manager.tick();
+    expect(h.manager.listRuns()[0]!.status).toBe("running");
+    // Its last event at 45 minutes; the turn is gone after it.
+    h.manager.handleRuntimeEvent(event("thread-1", { type: "item.completed", itemType: "assistant_text", text: "Reading…" }));
+    alive = false;
+    h.setNow(start + 70 * MIN);
+    await h.manager.tick();
+    expect(h.manager.listRuns()[0]!.status).toBe("running");
+    h.setNow(start + 76 * MIN);
+    await h.manager.tick();
+    const ended = h.manager.listRuns().find(candidate => candidate.id === run.id)!;
+    expect(ended.status).toBe("failed");
+    expect(ended.error).toBe(ROUTINE_TURN_LOST);
+    expect(h.failed).toHaveLength(1);
+    // The next run of the routine is no longer held behind it.
+    h.manager.runNow(routine.id);
+    alive = true;
+    await h.manager.tick();
+    expect(h.started).toHaveLength(2);
   });
 });

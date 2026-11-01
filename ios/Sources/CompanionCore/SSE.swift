@@ -174,6 +174,13 @@ public func eventStream(
                             kind = named
                         }
                         log.error("dropped an undecodable frame (kind: \(kind, privacy: .public))")
+                        // A hello that does not decode leaves the app on
+                        // "Connecting…" forever (keepalives hold the socket
+                        // open): fail the stream so the caller retries
+                        // with its backoff and says so.
+                        if kind == "hello" {
+                            throw APIError.transport("The computer sent something this app couldn't read.")
+                        }
                         continue
                     }
                     continuation.yield(frame)

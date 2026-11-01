@@ -90,7 +90,8 @@ final class AchievementToastUITests: XCTestCase {
         let plus = app.buttons["home-plus"]
         Thread.sleep(forTimeInterval: 4)
         let toast = app.descendants(matching: .any)["achievement-toast"]
-        let accountMenu = app.buttons["account-menu.settings"]
+        // the photo opens Settings itself since the Grok Bot home (2026-11-01)
+        let accountMenu = app.descendants(matching: .any).matching(NSPredicate(format: "identifier IN %@", ["account-menu.settings", "settings-close"])).firstMatch
 
         // the card over the account button, then its close button
         try unlockNext(in: app)

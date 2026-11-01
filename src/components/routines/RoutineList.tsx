@@ -116,7 +116,9 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
           const whenLine = upcoming ? when : routine.schedule.type !== "once" || routine.enabled || routine.nextRunAt != null ? scheduleLabelCompact(routine.schedule) : when;
           // 2026-10-29: the row says how the last run went and when the next
           // one is, as cloud routines list them.
-          const lastRun = upcoming ? undefined : runs.filter((run) => run.routineId === routine.id && run.status !== "queued").sort((a, b) => routineRunTime(b) - routineRunTime(a))[0];
+          // The running run already shows as the "Running" pill on the right;
+          // the last-run line never repeats it.
+          const lastRun = upcoming ? undefined : runs.filter((run) => run.routineId === routine.id && run.status !== "queued" && run !== runningRun).sort((a, b) => routineRunTime(b) - routineRunTime(a))[0];
           const lastPreview = lastRun && !lastRun.redacted && !lastRun.quiet ? routineRunPreview(lastRun) : "";
           const nextLine = !upcoming && routine.enabled && routine.nextRunAt != null ? routineNextRunPhrase(routine.nextRunAt) : undefined;
           const whenTitle = [pausedWithSwitch ? routineWhenLabel(routine) : when, fullWhen !== when ? fullWhen : null].filter(Boolean).join("\n");

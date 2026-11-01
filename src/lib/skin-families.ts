@@ -23,7 +23,7 @@
 // in `omb-skin-tint` (skins.ts). The near-duplicate skins this replaces (Slate,
 // Plum, Meadow, Lagoon) stay worn by older builds; this one maps them to the
 // closest base and colour (LEGACY_SKINS), so nobody loses their choice.
-import type { SkinId } from "./skins";
+import type { SkinId } from "./skin-ids";
 
 export type SkinScheme = "light" | "dark";
 /** What the person picked: one scheme, or Auto (follow the system). */

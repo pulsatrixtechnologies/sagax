@@ -17,8 +17,8 @@
 // verifier. Public errors are fixed sentences plus, at most, an OAuth error
 // code that is checked against a strict pattern.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { closeSync, mkdirSync, openSync, readFileSync, rmSync, unlinkSync, writeSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
@@ -43,8 +43,17 @@ export interface McpAuthStatus {
 
 export const PENDING_FLOW_TTL_MS = 10 * 60_000;
 const MAX_PENDING_FLOWS = 20;
-/** Refresh when the access token has less than this left. */
-const REFRESH_MARGIN_MS = 60_000;
+/** Refresh when the access token has less than this left. Engine turns can
+ * last about 16 minutes and keep the Authorization header for the whole turn,
+ * so the margin covers one expected turn (20 minutes). */
+export const REFRESH_MARGIN_MS = 20 * 60_000;
+/** Backoff between refresh retries when the authorization server answers a
+ * transient status (5xx, 429, 408) or the network fails. */
+const REFRESH_BACKOFF_MS = [250, 750, 2_000] as const;
+/** How long one process waits for another's refresh lock before giving up
+ * (tokens stay; the next attempt tries again). */
+const REFRESH_LOCK_WAIT_MS = 30_000;
+const REFRESH_LOCK_POLL_MS = 50;
 const DEFAULT_TIMEOUT_MS = 8_000;
 const MAX_METADATA_BYTES = 256 * 1024;
 const PROTOCOL_VERSION = "2025-06-18";
@@ -52,6 +61,10 @@ const VAULT_FILE = "mcp-oauth.enc";
 const KEY_FILE = "mcp-oauth.key";
 const HEX_KEY = /^[0-9a-f]{64}$/;
 const OAUTH_ERROR_CODE = /^[a-z_]{1,64}$/;
+/** OAuth error codes that mean this grant or client is gone for good. */
+const CLEAR_TOKEN_ERRORS = new Set(["invalid_grant", "invalid_client"]);
+/** HTTP statuses treated as transient: keep tokens and retry with backoff. */
+const TRANSIENT_HTTP = new Set([408, 429, 500, 502, 503, 504]);
 
 // ── vault ────────────────────────────────────────────────────────────────
 
@@ -252,6 +265,18 @@ export class McpOAuthVault {
     this.write({ version: 2, servers });
   }
 
+  /** Drop the in-memory copy so the next get reads the file again (another
+   * process may have rotated tokens under the refresh lock). */
+  invalidate(): void {
+    this.cached = null;
+  }
+
+  /** Path of the exclusive lock that serializes refresh across processes that
+   * share this vault file. */
+  refreshLockPath(): string {
+    return `${this.file}.refresh.lock`;
+  }
+
   /** Forget every account of a server. */
   drop(name: string): void {
     const document = this.load();
@@ -439,6 +464,8 @@ export interface McpOAuthOptions {
   now?: () => number;
   clientName?: string;
   timeoutMs?: number;
+  /** Injectable delay for refresh backoff (tests). */
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
 
 interface PendingFlow {
@@ -509,6 +536,7 @@ export class McpOAuthManager {
   private readonly now: () => number;
   private readonly clientName: string;
   private readonly timeoutMs: number;
+  private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
   private readonly pending = new Map<string, PendingFlow>();
   private readonly refreshing = new Map<string, Promise<boolean>>();
   private readonly probing = new Map<string, Promise<McpAuthStatus>>();
@@ -520,6 +548,7 @@ export class McpOAuthManager {
     this.now = options.now ?? Date.now;
     this.clientName = options.clientName ?? "Sagax";
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.sleep = options.sleep ?? sleepMs;
   }
 
   private signal(outer?: AbortSignal): AbortSignal {
@@ -868,6 +897,9 @@ export class McpOAuthManager {
     const body = await readJsonBody(response);
     if (!response.ok || !body) {
       const code = typeof body?.error === "string" && OAUTH_ERROR_CODE.test(body.error) ? body.error : undefined;
+      if (TRANSIENT_HTTP.has(response.status)) {
+        throw new McpOAuthError(`The authorization server is temporarily unavailable${oauthErrorSuffix(body)}.`, "transient");
+      }
       throw new McpOAuthError(`The authorization server refused the request${oauthErrorSuffix(body)}.`, code ?? "token_failed");
     }
     const access = body.access_token;
@@ -897,30 +929,59 @@ export class McpOAuthManager {
     const inflight = this.refreshing.get(key);
     if (inflight) return inflight;
     const work = (async () => {
-      const record = this.record(name, server, account);
-      const tokens = record?.tokens;
-      if (!record || !tokens || !record.client) return false;
-      const save = (next: McpOAuthRecord) => this.vault.set(name, next, account);
-      const due = force || !tokens.access || (tokens.expiresAt !== undefined && tokens.expiresAt - this.now() < REFRESH_MARGIN_MS);
-      if (!due) return !record.expired;
-      if (!tokens.refresh) {
-        if (tokens.access) save({ ...record, tokens: { ...tokens, access: undefined }, expired: true });
-        return false;
-      }
-      try {
-        const next = await this.tokenRequest(record, { grant_type: "refresh_token", refresh_token: tokens.refresh }, this.signal(outer));
-        save({ ...record, tokens: next, expired: false, lastError: undefined });
-        return true;
-      } catch (error) {
-        const code = error instanceof McpOAuthError ? error.code : undefined;
-        if (code === "network") {
-          // Keep the refresh token: the next attempt may reach the server.
-          return Boolean(tokens.access) && (tokens.expiresAt === undefined || tokens.expiresAt > this.now()) && !force;
+      // Serialize rotation across processes that share the vault file so two
+      // workers never spend the same refresh token at once.
+      return withRefreshLock(this.vault.refreshLockPath(), async () => {
+        this.vault.invalidate();
+        const record = this.record(name, server, account);
+        const tokens = record?.tokens;
+        if (!record || !tokens || !record.client) return false;
+        const save = (next: McpOAuthRecord) => this.vault.set(name, next, account);
+        const due = force || !tokens.access || (tokens.expiresAt !== undefined && tokens.expiresAt - this.now() < REFRESH_MARGIN_MS);
+        if (!due) return !record.expired;
+        if (!tokens.refresh) {
+          if (tokens.access) save({ ...record, tokens: { ...tokens, access: undefined }, expired: true });
+          return false;
         }
-        // invalid_grant and friends: the grant is gone, a new sign-in is due
-        save({ ...record, tokens: undefined, expired: true, lastError: "The sign-in expired. Sign in again." });
-        return false;
-      }
+        const accessStillUsable = () => Boolean(tokens.access) && (tokens.expiresAt === undefined || tokens.expiresAt > this.now()) && !force;
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            const next = await this.tokenRequest(record, { grant_type: "refresh_token", refresh_token: tokens.refresh }, this.signal(outer));
+            save({ ...record, tokens: next, expired: false, lastError: undefined });
+            return true;
+          } catch (error) {
+            const code = error instanceof McpOAuthError ? error.code : undefined;
+            if (code === "network" || code === "transient") {
+              const delay = REFRESH_BACKOFF_MS[attempt];
+              if (delay !== undefined && !outer?.aborted) {
+                try {
+                  await this.sleep(delay, outer);
+                  continue;
+                } catch {
+                  return accessStillUsable();
+                }
+              }
+              // Keep tokens: a deploy's 502/503/429 must not wipe a valid sign-in.
+              return accessStillUsable();
+            }
+            if (code && CLEAR_TOKEN_ERRORS.has(code)) {
+              save({ ...record, tokens: undefined, expired: true, lastError: "The sign-in expired. Sign in again." });
+              return false;
+            }
+            // Other refusals keep the grant; the next turn may succeed.
+            const message = error instanceof McpOAuthError ? error.message : "The sign-in could not be refreshed.";
+            save({ ...record, lastError: message });
+            return accessStillUsable();
+          }
+        }
+      }).catch(() => {
+        // Lock busy or unavailable: keep tokens; do not clear the sign-in.
+        this.vault.invalidate();
+        const record = this.record(name, server, account);
+        const tokens = record?.tokens;
+        if (!tokens?.access) return false;
+        return (tokens.expiresAt === undefined || tokens.expiresAt > this.now()) && !force;
+      });
     })().finally(() => this.refreshing.delete(key));
     this.refreshing.set(key, work);
     return work;
@@ -1043,6 +1104,51 @@ async function readJsonBody(response: Response): Promise<Record<string, unknown>
 function oauthErrorSuffix(body: Record<string, unknown> | null): string {
   const code = body?.error;
   return typeof code === "string" && OAUTH_ERROR_CODE.test(code) ? ` (${code})` : "";
+}
+
+async function sleepMs(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) return;
+  if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("The operation was aborted.", "AbortError"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** Exclusive file lock so two processes that share a vault never rotate the
+ * same refresh token concurrently. Fail closed on an abandoned lock after
+ * REFRESH_LOCK_WAIT_MS: the caller keeps tokens and tries again later. */
+async function withRefreshLock<T>(path: string, work: () => Promise<T>): Promise<T> {
+  mkdirSync(dirname(path), { recursive: true });
+  const deadline = Date.now() + REFRESH_LOCK_WAIT_MS;
+  let fd: number | undefined;
+  while (fd === undefined) {
+    try {
+      fd = openSync(path, "wx", 0o600);
+      writeSync(fd, String(process.pid));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if (Date.now() >= deadline) throw new Error("refresh lock busy");
+      await sleepMs(REFRESH_LOCK_POLL_MS);
+    }
+  }
+  try {
+    return await work();
+  } finally {
+    closeSync(fd);
+    try {
+      unlinkSync(path);
+    } catch {
+      /* already gone */
+    }
+  }
 }
 
 // ── probe and discovery ──────────────────────────────────────────────────

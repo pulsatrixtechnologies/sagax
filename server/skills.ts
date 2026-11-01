@@ -1574,10 +1574,17 @@ export function skillsPromptIndex(botId: string, assignedLibrary?: readonly stri
  * copy, or the library file for an assigned library skill. The same path
  * the prompt index names, so a `/name` turn points at exactly that file. */
 export function enabledSkillFile(botId: string, name: string, assignedLibrary?: readonly string[]): string | null {
-  const skill = resolveBotSkills(botId, assignedLibrary).find((entry) => entry.name === name && entry.enabled);
-  if (!skill) return null;
-  const entry = readManifest(botId)[name];
-  return entry ? join(skillTarget(workspaceDir(botId), name, entry), "SKILL.md") : librarySkillFilePath(name);
+  return resolvedSkillFiles(botId, assignedLibrary).find((entry) => entry.name === name)?.file ?? null;
+}
+
+/** Verify the selected library once, rather than re-reading and hashing the
+ * entire library separately for every row of a discovery response. */
+export function resolvedSkillFiles(botId: string, assignedLibrary?: readonly string[]): Array<SkillListing & { file: string | null }> {
+  const manifest = readManifest(botId);
+  return resolveBotSkills(botId, assignedLibrary).map((skill) => {
+    const entry = manifest[skill.name];
+    return { ...skill, file: skill.enabled ? entry ? join(skillTarget(workspaceDir(botId), skill.name, entry), "SKILL.md") : librarySkillFilePath(skill.name) : null };
+  });
 }
 
 /** The reviewed SKILL.md text of one enabled skill (the bot's own copy, or
@@ -1649,21 +1656,43 @@ export function resolveBotSkills(botId: string, assignedLibrary: readonly string
  * A private skill shadows a same-named library skill, so origin reflects
  * what the bot actually reads. */
 export interface BotSkillWithOrigin extends SkillListing {
-  origin: "private" | "library";
+  /** private: this bot's copy; library: Organisation assignment; me: person's shared Me library. */
+  origin: "private" | "library" | "me";
+  /** Present for shared Me / library skills: bots that still link to the one copy. */
+  assignedBots?: Array<{ id: string; name: string }>;
 }
 
 export function listBotSkillsWithOrigin(
   botId: string,
   assignedLibrary: readonly string[] | undefined,
+  meSkills: readonly LibrarySkillListing[] = [],
+  assignedBotsFor?: (name: string, origin: "me" | "library") => Array<{ id: string; name: string }>,
 ): { skills: BotSkillWithOrigin[]; library: LibrarySkillListing[] } {
   const own = listSkills(botId);
   const ownNames = new Set(own.map((skill) => skill.name));
   const assigned = new Set(assignedLibrary ?? []);
-  const skills = resolveBotSkills(botId, assignedLibrary).map((skill) => ({
-    ...skill,
-    origin: ownNames.has(skill.name) ? ("private" as const) : ("library" as const),
-  }));
-  const library = listLibrarySkills().filter((entry) => !ownNames.has(entry.name) && !assigned.has(entry.name));
+  const meNames = new Set(meSkills.filter((skill) => skill.enabled).map((skill) => skill.name));
+  const skills: BotSkillWithOrigin[] = resolveBotSkills(botId, assignedLibrary)
+    .filter((skill) => !meNames.has(skill.name) || ownNames.has(skill.name))
+    .map((skill) => {
+      const origin = ownNames.has(skill.name) ? ("private" as const) : ("library" as const);
+      return {
+        ...skill,
+        origin,
+        ...(origin === "library" && assignedBotsFor ? { assignedBots: assignedBotsFor(skill.name, "library") } : {}),
+      };
+    });
+  for (const skill of meSkills) {
+    if (ownNames.has(skill.name)) continue;
+    skills.push({
+      ...skill,
+      editable: false,
+      origin: "me",
+      ...(assignedBotsFor ? { assignedBots: assignedBotsFor(skill.name, "me") } : {}),
+    });
+  }
+  skills.sort((a, b) => a.name.localeCompare(b.name));
+  const library = listLibrarySkills().filter((entry) => !ownNames.has(entry.name) && !assigned.has(entry.name) && !meNames.has(entry.name));
   return { skills, library };
 }
 

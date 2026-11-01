@@ -24,7 +24,7 @@ await import("@/components/dev-pods/all-pods");
 const { devPodDefinitions } = await import("@/components/dev-pods/registry");
 const { environmentData } = await import("@/components/dev-pods/pods/environment");
 const { folderLabel } = await import("@/components/dev-pods/sources");
-const { personLabel: directoryPersonLabel } = await import("@/components/OrgDirectory");
+
 const { runAsOptionLabel } = await import("@/components/routines/RunAsField");
 const { ownerLabel } = await import("@/components/settings/OrgSharing");
 const { recipientLabel } = await import("@/components/bot-settings/AllowedRecipientsRow");
@@ -236,7 +236,7 @@ describe("no UUID on screen", () => {
       personLabel("", "ann@example.com", PERSON_ID),
       botLabel(undefined, BOT_ID),
       engineLabel(undefined, ENGINE_ID),
-      directoryPersonLabel({ id: PERSON_ID } as Parameters<typeof directoryPersonLabel>[0]),
+      personLabel(undefined, PERSON_ID),
       runAsOptionLabel({ principalId: PERSON_ID, name: "", selectable: false }),
       ownerLabel({ ownerName: "", ownerPrincipalId: PERSON_ID } as Parameters<typeof ownerLabel>[0]),
     ];

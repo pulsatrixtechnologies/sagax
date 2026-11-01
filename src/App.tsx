@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bot as BotIcon, Loader2, Menu, Plus } from "lucide-react";
+import { Bot as BotIcon, Loader2, Plus } from "lucide-react";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useOrgMemoryAuto } from "@/lib/org-memory";
@@ -12,7 +12,7 @@ import { OpenAtLoginOffer } from "@/components/OpenAtLoginOffer";
 import { LiveCallHost } from "@/components/LiveCallHost";
 import { ThreadRefsProvider } from "@/components/ThreadRefs";
 import { initAnalytics } from "@/lib/analytics";
-import { Sidebar } from "@/components/Sidebar";
+import { AppSidebar } from "@/components/AppSidebar";
 import { ChatView } from "@/components/ChatView";
 import { GroupView } from "@/components/GroupView";
 import { SplitWorkspace, useBotPanelBot } from "@/components/SplitWorkspace";
@@ -153,9 +153,9 @@ function Shell() {
     saveSidebarAttentionPinned(true);
   }, []);
   useExternalChatLinks(state, dispatch);
-  // Mobile-only drawer state. Above md, none of these properties are emitted
-  // at all — Sidebar scopes every mobile class with max-md: rather than
-  // cancelling them with md:, which would still emit a translate value and
+  // Phone-only drawer state. From sm up, none of these properties are emitted
+  // at all — Sidebar scopes every phone class with max-sm: rather than
+  // cancelling them with sm:, which would still emit a translate value and
   // turn the aside into a containing block for its fixed descendants (see
   // Sidebar.tsx's className comment).
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -187,6 +187,7 @@ function Shell() {
   }, [state.shortcutsOpen]);
   const [composeOpen, setComposeOpen] = useState(false);
   const openCompose = useCallback(() => setComposeOpen(true), []);
+  const toggleCompose = useCallback(() => setComposeOpen((open) => !open), []);
   // ⌘⇧N opens the compose picker straight on "Create group chat".
   const [composeGroup, setComposeGroup] = useState(false);
   useEffect(() => {
@@ -195,7 +196,6 @@ function Shell() {
   const [localVmWorkspaceBotId, setLocalVmWorkspaceBotId] = useState<string | null>(null);
   // the Browser tab, expanded into the main column (the small preview in
   // the panel hands off to this and back)
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const previousViewRef = useRef(state.activeView);
   const calendarOriginRef = useRef<"chat" | "team-map">("chat");
   // Someone with no bot of their own still opens on a group they are in.
@@ -476,31 +476,13 @@ function Shell() {
       {/* Hibou 98 only: title bar, menus and toolbar (renders nothing otherwise) */}
       <RetroChromeSlot slot="top" onNewBot={() => setComposeOpen((open) => !open)} />
       <div className="app-shell-row relative flex min-h-0 flex-1">
-      <button
-        type="button"
-        ref={menuButtonRef}
-        aria-label={t("app.openBotList")}
-        aria-expanded={drawerOpen}
-        onClick={() => setDrawerOpen(true)}
-        className="absolute left-3 top-3 z-30 rounded-md p-1.5 text-ink-secondary hover:bg-raised hover:text-ink md:hidden"
-      >
-        <Menu size={18} />
-      </button>
-      {drawerOpen && (
-        <div
-          aria-hidden
-          onMouseDown={(e) => e.target === e.currentTarget && setDrawerOpen(false)}
-          className="absolute inset-0 z-30 bg-black/50 md:hidden"
-        />
-      )}
-      <Sidebar
-        open={drawerOpen}
+      {/* the drawer on a phone, the icons rail up to 768px, then the
+          person's own sidebar (AppSidebar.tsx) */}
+      <AppSidebar
+        drawerOpen={drawerOpen}
+        onDrawerOpenChange={setDrawerOpen}
         composeOpen={composeOpen}
-        onCompose={() => setComposeOpen((open) => !open)}
-        onClose={() => {
-          setDrawerOpen(false);
-          menuButtonRef.current?.focus();
-        }}
+        onCompose={toggleCompose}
       />
       <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col" data-sidebar-follower="">
       {/* nothing answers this person on an organization server: say so above
@@ -562,9 +544,9 @@ function Shell() {
           <WindowDragStrip />
           <Loader2 size={20} className="animate-spin" />
           <div className="text-[14px]">
-            {"Connecting to the bot server…"}
+            {state.everConnected ? t("chat.reconnecting") : t("app.connecting")}
           </div>
-          {!state.connected && (
+          {!state.everConnected && (
             <div className="text-[12px]">
               Start it with <code className="rounded bg-raised px-1.5 py-0.5">pnpm dev:server</code>
             </div>
@@ -635,7 +617,7 @@ function Shell() {
         aria-hidden
         data-drawer-button-no-drag
         style={captionChrome.noDragStyle}
-        className="pointer-events-none absolute left-3 top-3 size-[30px] md:hidden"
+        className="pointer-events-none absolute left-3 top-3 size-[30px] sm:hidden"
       />
       </div>
       <RetroChromeSlot slot="status" />

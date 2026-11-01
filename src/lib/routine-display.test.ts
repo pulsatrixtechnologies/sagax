@@ -84,3 +84,17 @@ describe("auto-pause words and choices (2026-10-26)", () => {
     expect(routineAutoPausedText(1)).toBe("Paused after a failure");
   });
 });
+
+// JC 2026-11-01: "it saturates easily, queues really badly". A queued run
+// shows its place: queued runs start oldest first, per bot.
+describe("routineQueuePosition (2026-11-01)", () => {
+  it("is the run's rank among the queued runs of its bot, oldest first", async () => {
+    const { routineQueuePosition } = await import("./routine-display");
+    const at = (id: string, botId: string, createdAt: number, status = "queued") => ({ id, botId, createdAt, status }) as never;
+    const runs = [at("c", "atlas", 3), at("a", "atlas", 1), at("x", "other", 0), at("done", "atlas", 0, "completed"), at("b", "atlas", 2)];
+    expect(routineQueuePosition(runs[1]!, runs)).toEqual({ position: 1, count: 3 });
+    expect(routineQueuePosition(runs[0]!, runs)).toEqual({ position: 3, count: 3 });
+    expect(routineQueuePosition(runs[2]!, runs)).toEqual({ position: 1, count: 1 });
+    expect(routineQueuePosition(runs[3]!, runs)).toBeNull();
+  });
+});

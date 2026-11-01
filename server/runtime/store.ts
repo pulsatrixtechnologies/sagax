@@ -4,8 +4,10 @@
 // new ships with the app; ":memory:" for the suite.
 //
 // The row's columns exist for lookups (tree, status, owners); the record
-// itself travels whole in the json column and is validated on every read,
-// so a row written by a newer or older build is refused, never half-read.
+// itself travels whole in the json column and is validated (zod) once per
+// distinct payload, so a row written by a newer or older build is refused,
+// never half-read. Re-reads of the same json skip zod; JSON.parse still
+// yields a fresh object so in-place mutations never share a cache entry.
 // Every write the runtime cares about is one transaction: the row and its
 // event land together or not at all (write-before-act).
 import { chmodSync, closeSync, mkdirSync, openSync } from "node:fs";
@@ -74,6 +76,7 @@ const assignmentSchema = z.object({
   rework: z.boolean(),
   joins: z.string().optional(),
   person: z.string().optional(),
+  request: z.string().optional(),
   question: z.string().optional(),
   answer: z.string().optional(),
   carrying: z.array(z.string()).optional(),
@@ -81,6 +84,7 @@ const assignmentSchema = z.object({
   approved: z.boolean().optional(),
   batchKey: z.string().optional(),
   relay: z.boolean().optional(),
+  priority: z.literal("now").optional(),
   version: z.literal(1),
 });
 
@@ -89,6 +93,10 @@ export interface RuntimeStore {
   get(id: string): Assignment | undefined;
   /** Direct children, createdAt order. */
   children(id: string): Assignment[];
+  /** Children of every assignment whose assignee is this bot+thread, excluding
+   * room work (a child with a groupId). Indexed join on the parent's assignee
+   * columns: the activity panel's per-thread read, never a full-table scan. */
+  childrenOfAssignee(botId: string, threadId: string): Assignment[];
   /** The root of this id's tree. */
   root(id: string): Assignment | undefined;
   all(filter?: { rootId?: string; nonTerminal?: boolean; ownerThreadId?: string }): Assignment[];
@@ -194,7 +202,9 @@ export function removeThreadTrees(db: DatabaseSync, threads: Iterable<string>): 
 
 type Row = Record<string, unknown>;
 
-function readAssignment(row: Row): Assignment {
+/** Parse and validate one row. Callers that re-read the same id between
+ * writes go through the per-store cache in openRuntimeStore instead. */
+function parseAssignment(row: Row): Assignment {
   let parsed: unknown;
   try {
     parsed = JSON.parse(String(row.json));
@@ -251,9 +261,41 @@ export function openRuntimeStore(path: string): RuntimeStore {
   db.exec("PRAGMA secure_delete = ON");
   db.exec(SCHEMA);
 
+  // Zod once per distinct json payload. Each read still JSON.parse's so
+  // callers that mutate the returned object (then update, or fail mid-write)
+  // never share a cached reference. The expensive part of the old
+  // activityChildren stall was assignmentSchema.safeParse over every row.
+  const VALIDATED_CACHE_MAX = 4096;
+  const validated = new Map<string, string>();
+  const readAssignment = (row: Row): Assignment => {
+    const id = String(row.id);
+    const json = String(row.json);
+    if (validated.get(id) === json) {
+      try {
+        return JSON.parse(json) as Assignment;
+      } catch (error) {
+        validated.delete(id);
+        throw new Error(`runtime.db: assignment ${id} holds invalid JSON (${String(error)})`);
+      }
+    }
+    const data = parseAssignment(row);
+    validated.delete(id);
+    validated.set(id, json);
+    // Bounded: the oldest validated payload goes first (Map keeps insertion order).
+    if (validated.size > VALIDATED_CACHE_MAX) validated.delete(validated.keys().next().value!);
+    return data;
+  };
+  const invalidate = (id: string) => { validated.delete(id); };
+
   const statements = {
     get: db.prepare("SELECT id, json FROM assignments WHERE id = ?"),
     children: db.prepare("SELECT id, json FROM assignments WHERE parent_id = ? ORDER BY created_at, rowid"),
+    // Parent assignee columns are indexed (assignments_assignee); the join
+    // never walks every assignment the way all() does.
+    childrenOfAssignee: db.prepare(`SELECT c.id, c.json FROM assignments c
+      INNER JOIN assignments p ON c.parent_id = p.id
+      WHERE p.assignee_bot_id = ? AND p.assignee_thread_id = ?
+      ORDER BY c.created_at, c.rowid`),
     insert: db.prepare(`INSERT INTO assignments (id, root_id, parent_id, status, requester_thread_id, requester_run_id,
       assignee_bot_id, assignee_thread_id, created_at, finished_at, json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
     update: db.prepare(`UPDATE assignments SET root_id = ?, parent_id = ?, status = ?, requester_thread_id = ?,
@@ -319,6 +361,17 @@ export function openRuntimeStore(path: string): RuntimeStore {
     children(id) {
       return (statements.children.all(id) as Row[]).map(readAssignment);
     },
+    childrenOfAssignee(botId, threadId) {
+      const out: Assignment[] = [];
+      for (const row of statements.childrenOfAssignee.all(botId, threadId) as Row[]) {
+        const child = readAssignment(row);
+        // Room handoffs carry a groupId; the activity panel's direct-thread
+        // children list skips them (same filter as activityChildren).
+        if (child.assignee.destination.groupId !== undefined) continue;
+        out.push(child);
+      }
+      return out;
+    },
     root(id) {
       const row = statements.get.get(id) as Row | undefined;
       if (!row) return undefined;
@@ -340,6 +393,7 @@ export function openRuntimeStore(path: string): RuntimeStore {
       transaction(() => {
         statements.insert.run(a.id, ...columns(a));
         writeEvent(a.id, event);
+        invalidate(a.id);
       });
     },
     update(a, event) {
@@ -347,6 +401,7 @@ export function openRuntimeStore(path: string): RuntimeStore {
         const changes = statements.update.run(...columns(a), a.id).changes;
         if (changes === 0) throw new Error(`runtime.db: assignment ${a.id} does not exist`);
         if (event) writeEvent(a.id, event);
+        invalidate(a.id);
       });
     },
     transaction,
@@ -385,6 +440,7 @@ export function openRuntimeStore(path: string): RuntimeStore {
           statements.pruneInbox.run(rootId);
           removed += Number(statements.pruneRows.run(rootId).changes);
         }
+        if (roots.length) validated.clear();
         return removed;
       });
     },
@@ -403,6 +459,7 @@ export function openRuntimeStore(path: string): RuntimeStore {
           const root = db.prepare("SELECT assignee_thread_id FROM assignments WHERE id = ?").get(rootId) as Row | undefined;
           if (!live && root?.assignee_thread_id === threadId) {
             removed += removeTree(db, rootId);
+            validated.clear();
             continue;
           }
           for (const raw of db.prepare("SELECT id, json, requester_thread_id, assignee_thread_id FROM assignments WHERE root_id = ?").all(rootId) as Row[]) {
@@ -416,6 +473,7 @@ export function openRuntimeStore(path: string): RuntimeStore {
                 db.prepare("DELETE FROM assignment_events WHERE assignment_id = ?").run(String(raw.id));
                 db.prepare("DELETE FROM inbox WHERE assignment_id = ?").run(String(raw.id));
                 db.prepare("DELETE FROM assignments WHERE id = ?").run(String(raw.id));
+                invalidate(String(raw.id));
                 removed += 1;
                 changed += 1;
               }
@@ -440,6 +498,9 @@ export function openRuntimeStore(path: string): RuntimeStore {
             if (own) scrubbed += 1;
             changed += 1;
             statements.update.run(...columns(a), a.id);
+            // The cached object was mutated above; drop it so the next read
+            // sees the scrubbed json from the row.
+            invalidate(a.id);
           }
         }
         return { removed, scrubbed };
@@ -452,6 +513,7 @@ export function openRuntimeStore(path: string): RuntimeStore {
       return forgotten;
     },
     close() {
+      validated.clear();
       db.close();
     },
   };

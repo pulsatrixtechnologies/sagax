@@ -12,9 +12,8 @@ import { adoptLegacyAutoMemory, legacyClaudeAutoMemoryDir } from "../compact-pro
 import { CLAUDE_UNUSED_COMMANDS, claudeDisallowedTools, claudeOrgTools } from "./host-tools.ts";
 import { readAtRestSync } from "../content-at-rest.ts";
 import { AUTO_COMPUTER_MCP_NAME } from "../auto-computer.ts";
-import { FLOW_TOOLS_MCP_NAME } from "../flow-tools.ts";
 import { cleanCommandVariables, commandVariablesDigest } from "../credential-command-env.ts";
-import { isFlowToolsServer } from "./acp/grok-read-only-tools.ts";
+import { isPerspicaxBridge, PERSPICAX_FLOW_COMPUTE_TOOLS } from "./acp/grok-read-only-tools.ts";
 import { networkProxyEnvironment } from "./network-proxy.ts";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
@@ -58,6 +57,7 @@ import { filesField, writtenFilesFromToolInput } from "../thread-files.ts";
 import { classifyError, computeBackoff, interruptibleDelay, RETRY_MAX_ATTEMPTS, USAGE_LIMIT } from "./retry.ts";
 import { engineFailureMessage, type EngineFailureKind } from "./engine-errors.ts";
 import { claudeAuthFailure, claudeAuthRecovery } from "./claude-auth-recovery.ts";
+import { claudeSignInExpired } from "./claude-errors.ts";
 import {
   claudeSubscriptionHomeKey,
   ensureClaudeSubscriptionFresh,
@@ -2390,9 +2390,13 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       // already reach (server/auto-computer.ts): no card for the choice
       // itself; every tool it routes to still rides the approval mode.
       if (mcpServers[AUTO_COMPUTER_MCP_NAME]) allowed.push(`mcp__${AUTO_COMPUTER_MCP_NAME}`);
-      // Pulsatrix Flow's compute (server/flow-tools.ts) only calculates over
-      // its arguments: nothing to approve.
-      if (isFlowToolsServer(turn.integrations?.custom?.[FLOW_TOOLS_MCP_NAME]) && mcpServers[FLOW_TOOLS_MCP_NAME]) allowed.push(`mcp__${FLOW_TOOLS_MCP_NAME}`);
+      // Pure Flow compute now lives in the signed Perspicax pack. Keep
+      // its existing read-only treatment, only on harness-owned bridges.
+      for (const [name, spec] of Object.entries(turn.integrations?.custom ?? {})) {
+        if (mcpServers[name] && isPerspicaxBridge(spec)) {
+          allowed.push(...PERSPICAX_FLOW_COMPUTE_TOOLS.map((tool) => `mcp__${name}__${tool}`));
+        }
+      }
       // --strict-mcp-config (above) makes this config the CLI's only source
       // of MCP servers, so a server the bot's OWN project declares would
       // otherwise vanish with the machine's. Merge it last: a project file
@@ -2893,7 +2897,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
           active.set(threadId, { stop: () => { retry.cancelled = true; retryAbort.abort(); }, turnId: racedTurnId });
           closeSession(threadId, "authentication race");
           void (async () => {
-            const failure = t.authFailureText ?? "authentication_failed";
+            const failure = t.authFailureText ?? claudeSignInExpired("authentication_failed");
             try {
               const fresh = await refreshSubscriptionHome(racedTurn, true);
               if (retry.cancelled || !fresh.ok) {
@@ -2907,7 +2911,8 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
             } catch (error) {
               if (active.get(threadId)?.turnId === racedTurnId) active.delete(threadId);
               retryState.delete(threadId);
-              emit({ ...base(threadId, racedTurnId), type: "runtime.error", message: error instanceof Error ? error.message : String(error), setup: true });
+              const message = error instanceof Error ? error.message : String(error);
+              emit({ ...base(threadId, racedTurnId), type: "runtime.error", message: claudeSignInExpired(message), setup: true });
               emit({ ...base(threadId, racedTurnId), type: "turn.completed", ok: false, stopReason: "auth_required", cost: null });
             }
           })();
@@ -3146,9 +3151,10 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
             // reply strands the user. Every other engine reports this as a
             // setup error; that is what routes them to the sign-in card.
             if (claudeAuthFailure(o, text)) {
+              const authMessage = claudeSignInExpired(text);
               if (session.turn) {
                 session.turn.authFailed = session.turn.explained = true;
-                session.turn.authFailureText = text;
+                session.turn.authFailureText = authMessage;
                 // #1768: a subscription turn may still recover through the
                 // shared refresh flight; emit the setup error only when settle
                 // decides the sign-in is truly gone.
@@ -3156,9 +3162,9 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
                   && Boolean(session.turn.input.access.claudeConfigDir?.trim())
                   && !retryState.get(threadId)?.authRaced;
                 if (mayRace) session.turn.authFailureDeferred = true;
-                else emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: text, setup: true });
+                else emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: authMessage, setup: true });
               } else {
-                emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: text, setup: true });
+                emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: authMessage, setup: true });
               }
               break;
             }

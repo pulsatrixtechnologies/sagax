@@ -19,6 +19,8 @@ import { MAUS_COLORS } from "@/lib/mascot";
 import { cn } from "@/lib/cn";
 import { MASCOT_SHAPES, SHAPE_SKIN_TIER, SHAPE_SKINS, type MascotShape, type ShapeSkin, type SkinTier } from "../../shared/mascot-look";
 import { SHAPE_ART, STEM_INK } from "./shape-art";
+import type { ShapeAvatarDef } from "../../shared/shape-avatar-def";
+import { isObjectShapeId, OBJECT_SHAPE_BY_ID } from "../../shared/shape-avatar-presets";
 import { gazeFrame, isShapeMove, mixHex, rainbowStops, ShapeEngine, stillFrame, type ShapeExpression, type ShapeFrame } from "./shape-engine";
 import { blinkIdleShape, idleSeed, registerIdleShape } from "./shape-idle";
 import { motionForMood, ShapeMotion } from "./shape-motion";
@@ -75,8 +77,17 @@ export interface ShapeMascotProps {
   sidebarGaze?: boolean;
   /** Filled with an imperative gaze setter when `sidebarGaze` is on. */
   sidebarGazeRef?: React.MutableRefObject<((gaze: { x: number; y: number }) => void) | null>;
+  /** Path-based portable definition (object presets or custom). */
+  avatarDef?: ShapeAvatarDef;
   label?: string | null;
   className?: string;
+}
+
+/** Resolve the live path body: explicit def, else the object preset for this shape id. */
+export function avatarDefForShape(shape: MascotShape, avatarDef?: ShapeAvatarDef): ShapeAvatarDef | undefined {
+  if (avatarDef) return avatarDef;
+  if (isObjectShapeId(shape)) return OBJECT_SHAPE_BY_ID[shape];
+  return undefined;
 }
 
 const hexOf = (color: string) => (MAUS_COLORS as Record<string, string>)[color] ?? (/^#[0-9a-fA-F]{6}$/.test(color) ? color : MAUS_COLORS.green);
@@ -116,9 +127,10 @@ export const IDLE_FRAME_S = 1 / 30 - 0.002;
 
 /** A resting blink's frames, shared by every avatar of a shape and face (20 steps of openness): a blink costs no solve after the first. */
 const BLINK_FRAMES = new Map<string, ShapeFrame>();
-function blinkFrame(state: { shape: MascotShape; expression: ShapeExpression; color: string }, open: number): ShapeFrame {
+function blinkFrame(state: { shape: MascotShape; expression: ShapeExpression; color: string; avatarDef?: ShapeAvatarDef }, open: number): ShapeFrame {
   const step = Math.round(open * 20) / 20;
-  const key = `${state.shape}|${state.expression}|${step}`;
+  const defKey = state.avatarDef?.id ?? (state.avatarDef ? "custom" : "");
+  const key = `${state.shape}|${defKey}|${state.expression}|${step}`;
   let frame = BLINK_FRAMES.get(key);
   if (!frame) {
     frame = gazeFrame({ ...state, color: "#000000" }, 0, 0, {}, { left: step, right: step });
@@ -297,11 +309,13 @@ export function ShapeMascot({
   trackPointer = true,
   sidebarGaze = false,
   sidebarGazeRef,
+  avatarDef,
   label = null,
   className,
 }: ShapeMascotProps) {
   const known: MascotShape = MASCOT_SHAPES.includes(shape) ? shape : "circle";
   const knownSkin: ShapeSkin = SHAPE_SKINS.includes(skin) ? skin : "plain";
+  const resolvedDef = avatarDefForShape(known, avatarDef);
   const hex = hexOf(color);
   const paint = shapeSkinPaint(knownSkin, hex);
   const reduced = useReducedMotion();
@@ -318,8 +332,11 @@ export function ShapeMascot({
   const body = useRef<SVGSVGElement>(null);
   useReplayMove(body, burst && moveBody ? burst.key : null);
 
-  const state = { shape: known, expression: face, color: hex };
-  const still = useMemo(() => stillFrame({ shape: known, expression: face, color: hex }), [known, face, hex]);
+  const state = { shape: known, expression: face, color: hex, ...(resolvedDef ? { avatarDef: resolvedDef } : {}) };
+  const still = useMemo(
+    () => stillFrame({ shape: known, expression: face, color: hex, ...(resolvedDef ? { avatarDef: resolvedDef } : {}) }),
+    [known, face, hex, resolvedDef],
+  );
   const sidebarState = useRef(state);
   sidebarState.current = state;
 

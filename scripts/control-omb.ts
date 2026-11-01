@@ -331,6 +331,13 @@ export interface VerificationServer {
   close(): Promise<void>;
 }
 
+/** Optional hooks for a verification launch. prepareDataDir runs after the
+ * throwaway DATA_DIR and config.json exist and before the server child is
+ * spawned, so lot 5 migration can absorb seeded marketplace state. */
+export interface VerificationLaunchOptions {
+  prepareDataDir?: (dataDir: string) => void | Promise<void>;
+}
+
 /** The environment of a verification server child: a temporary home in
  * `dataDir`, the fake engine's knobs from `parentEnv`, node on PATH, and
  * nothing else from the parent shell or this machine's installed CLIs. A
@@ -416,6 +423,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // so a recipe can call a bot's own tools (launch_cloud_agent) the way a turn does.
   if (parentEnv.SAGAX_TEST_INTERNAL_CAPABILITY_KEY && parentEnv.SAGAX_TEST_INTERNAL_CAPABILITY_KEY.length >= 32) {
     childEnv.SAGAX_TEST_INTERNAL_CAPABILITY_KEY = parentEnv.SAGAX_TEST_INTERNAL_CAPABILITY_KEY;
+    if (/^http:\/\/127\.0\.0\.1:\d{1,5}\/v1$/.test(parentEnv.SAGAX_TEST_VIDEO_URL ?? "")) childEnv.SAGAX_TEST_VIDEO_URL = parentEnv.SAGAX_TEST_VIDEO_URL;
   }
   // The credential vault answers loopback on a headless server only when
   // the operator opts in (server/routes/credential-vault.ts vaultPrincipalFor).
@@ -499,6 +507,8 @@ export async function launchVerificationServer(
   boatFixtureApi?: string,
   /** Programmatic web UI qualification against the fixture's static server. */
   staticDir?: string,
+  /** Runs after DATA_DIR is ready and before the server boots. */
+  options?: VerificationLaunchOptions,
 ): Promise<VerificationServer> {
   if (boatFixtureApi) {
     if (!/^http:\/\/127\.0\.0\.1:[1-9]\d{0,4}$/.test(boatFixtureApi)) {
@@ -545,6 +555,10 @@ export async function launchVerificationServer(
       },
     },
   }, null, 2));
+
+  // Lot 5: marketplaces/state.json is migrated into the sealed installation
+  // store at boot. Suites that need a local marketplace must seed it here.
+  if (options?.prepareDataDir) await options.prepareDataDir(dataDir);
 
   const log = openSync(logPath, "a", 0o600);
   const childEnv = verificationServerEnvironment(parentEnv, dataDir, port);

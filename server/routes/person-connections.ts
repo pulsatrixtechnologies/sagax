@@ -1,7 +1,8 @@
 // A person's own connections on an organization server (Settings > Mes
 // connexions; server/person-connections.ts, server/github-connect.ts).
 //
-//   GET    /api/me/connections
+//   GET    /api/me/capabilities   (lot 5 canonical person store)
+//   GET    /api/me/connections    (alias until 2027-11-01, Deprecation header)
 //          { github: GithubStatus, servers: [listing + auth], sandbox: boolean }
 //   POST   /api/me/github/device              start the device flow: { userCode, verificationUri, expiresAt }
 //   POST   /api/me/github/token  { token }    connect with a pasted token
@@ -21,6 +22,7 @@
 // scope (request-auth.ts CLIENT_ALLOW). No answer carries a token.
 import type { IncomingMessage } from "node:http";
 
+import { setCapabilityDeprecationHeaders } from "../capability-route-deprecation.ts";
 import type { GithubStatus } from "../github-connect.ts";
 import type { PersonalMcpListing } from "../person-connections.ts";
 import type { RequestAuth } from "../request-auth.ts";
@@ -74,9 +76,12 @@ export function createPersonConnectionRoutes(deps: PersonConnectionRouteDeps): R
   return async ({ req, res, path, method, auth, json, readBody }) => {
     // the credential list has its own route (server/routes/github-credentials.ts)
     if (path === "/api/me/github/credentials") return PASS;
-    const mine = path === "/api/me/connections" || path === "/api/me/github" || path.startsWith("/api/me/github/") || path === "/api/me/mcp/servers" || path.startsWith("/api/me/mcp/servers/");
+    // Lot 5: /api/me/capabilities is the canonical person store route;
+    // /api/me/connections and the mcp/github fragments stay as aliases.
+    const mine = path === "/api/me/capabilities" || path === "/api/me/connections" || path === "/api/me/github" || path.startsWith("/api/me/github/") || path === "/api/me/mcp/servers" || path.startsWith("/api/me/mcp/servers/");
     if (!mine) return PASS;
     res.setHeader("cache-control", "private, no-store");
+    if (path !== "/api/me/capabilities") setCapabilityDeprecationHeaders(res, "/api/me/capabilities");
     const principalId = sessionPrincipal(auth);
     if (!deps.organization() || !principalId) {
       return json(res, 404, { error: "Your own connections are kept on an organization server, for a signed-in person.", code: "not_organization" });
@@ -86,7 +91,7 @@ export function createPersonConnectionRoutes(deps: PersonConnectionRouteDeps): R
       return readBody(req);
     };
     try {
-      if (path === "/api/me/connections") {
+      if (path === "/api/me/connections" || path === "/api/me/capabilities") {
         if (method !== "GET") return json(res, 405, { error: "GET only" });
         return json(res, 200, { github: await deps.github.status(principalId), servers: await deps.servers.list(principalId), sandbox: deps.sandboxConfigured() });
       }

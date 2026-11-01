@@ -31,15 +31,23 @@ export type AdmissionQueueReason = "capacity" | "group-turn";
 export type AdmissionRefusalCode = "guarded_busy" | "queue-head-only" | "busy" | "missing";
 
 // ── L2: ordering and batching on drain ─────────────────────────────────
-// M2's drain rule: a sender's CONTIGUOUS burst inside a short window is one
-// item; senders never merge, and a pause past the window reads as separate
-// messages. The window is measured between consecutive queued items, so a
-// rolling burst stays whole while hours-apart texts split.
+// M2's drain rule: a sender's CONTIGUOUS run of waiting lines is one item;
+// senders never merge. Since 2026-11-01 the chat queues pass no time
+// window (WAITING_LINES_COALESCE_WINDOW_MS): lines that all waited behind
+// the same turn are one follow-up, however far apart they were typed.
 
-/** How late one queued text may follow the previous one and still join the
- * same drained turn. Two minutes covers a person typing a burst in pieces;
- * anything slower is already a separate thought, not a continuation. */
+/** The default gap one queued text may follow the previous one by and
+ * still join the same drained turn, for a caller that passes no window.
+ * Both chat queues pass WAITING_LINES_COALESCE_WINDOW_MS instead. */
 export const DRAIN_COALESCE_WINDOW_MS = 120_000;
+
+/** 2026-11-01: every line one sender left waiting behind a running turn,
+ * 1:1 or room, joins the one follow-up turn, whatever the gap. The bot read
+ * none of them; a two-minute split answered each in its own later turn,
+ * long after it was written (the lag a person reported). Senders and provenance
+ * still never merge, and a room group stays bounded by
+ * DRAIN_COALESCE_MAX_ITEMS. */
+export const WAITING_LINES_COALESCE_WINDOW_MS = Number.POSITIVE_INFINITY;
 
 /** The most items one drained head group may carry. Room turns read the
  * transcript through the room-context window (its last N messages), so a
@@ -61,6 +69,7 @@ export function drainCoalesceHead<T>(
   identityOf: (item: T) => string,
   queuedAtOf: (item: T) => number,
   maxItems?: number,
+  windowMs: number = DRAIN_COALESCE_WINDOW_MS,
 ): T[] {
   const head: T[] = [];
   let previousIdentity: string | undefined;
@@ -72,7 +81,7 @@ export function drainCoalesceHead<T>(
     // The gap must be non-negative AND inside the window: a regressed
     // timestamp (clock skew, a rewritten row) is not "within the window".
     const gap = at - (previousAt ?? at);
-    if (head.length === 0 || (identity === previousIdentity && gap >= 0 && gap <= DRAIN_COALESCE_WINDOW_MS)) {
+    if (head.length === 0 || (identity === previousIdentity && gap >= 0 && gap <= windowMs)) {
       head.push(item);
     } else {
       break;

@@ -24,8 +24,8 @@ import { fullAccessNeedsConfirmation, orgFullAccessFor } from "@/lib/full-access
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { api, useStore, type Bot } from "@/state/store";
 import { liveApprovalChange, type ApprovalMode } from "../../../shared/approval-mode";
-import { AppliedLevelNote, proactiveLevelHint } from "./AppliedLevelNote";
-import { PROACTIVE_MODES, proactiveModeFor, type ProactiveMode } from "../../../shared/proactive-mode";
+import { AppliedLevelNote } from "./AppliedLevelNote";
+import { proactiveModeFor, type ProactiveMode } from "../../../shared/proactive-mode";
 import { DEFAULT_OUTBOUND_POLICY, type OutboundPolicy } from "../../../shared/outbound";
 import { ApprovalModeSelector } from "../ApprovalModeSelector";
 import { AllowedRecipientsRow } from "./AllowedRecipientsRow";
@@ -229,16 +229,15 @@ export function PermissionsSection({
         <DescribedRow
           label={t("botPanel.permissions.proactive")}
           help={t("botPanel.permissions.proactiveHelp")}
-          description={proactiveLevelHint(proactiveMode, approvalMode) ?? t(`botPanel.permissions.proactive.${proactiveMode}.hint`)}
+          description={t(`botPanel.permissions.proactive.${proactiveMode}.hint`)}
           rowId="proactiveMode"
         >
-          <PillSelect<ProactiveMode>
-            value={proactiveMixed ? undefined : proactiveMode}
+          <Switch
+            checked={proactiveMode === "proactive"}
             mixed={proactiveMixed}
-            ariaLabel={t("botPanel.permissions.proactive")}
+            aria-label={t("botPanel.permissions.proactive")}
             disabled={Boolean(bot.busy)}
-            onChange={setProactiveMode}
-            options={PROACTIVE_MODES.map((mode) => ({ value: mode, label: t(`botPanel.permissions.proactive.${mode}`) }))}
+            onClick={() => setProactiveMode(proactiveMixed || proactiveMode === "off" ? "proactive" : "off")}
           />
         </DescribedRow>
       )}

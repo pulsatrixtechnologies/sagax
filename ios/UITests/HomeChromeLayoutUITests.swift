@@ -34,7 +34,7 @@ final class HomeChromeLayoutUITests: XCTestCase {
             // phone that is not paired, and a parity run of an older build
             // could leave one (a home with no bots)
             "-reset-pairings",
-            "-demo", "-demo-clock", "1791000000",
+            "-demo", "-demo-clock", "1791000000", "-demo-skip-terms",
             "-companion.prefs.updatesButton", "YES",
         ] + extra
         app.launch()
@@ -232,7 +232,7 @@ final class HomeChromeLayoutUITests: XCTestCase {
     func testThePillStaysAtTheBottomUnderSettings() {
         let app = launch()
         let reference = assertPillAtBottom(app, "home")
-        app.buttons["home-account"].tap()
+        app.buttons["home-apps"].tap()
         let settings = app.buttons["account-menu.settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()

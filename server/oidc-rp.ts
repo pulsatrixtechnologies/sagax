@@ -17,7 +17,9 @@
 import { createHash, createPublicKey, randomBytes, timingSafeEqual, verify as verifySignature, type JsonWebKeyInput, type KeyObject } from "node:crypto";
 
 import { recentSignIn } from "./account-reauth.ts";
-import type { RevocationSink } from "./idp-revocations.ts";
+import type { RevocationSink, RevokeAttempt } from "./idp-revoke-types.ts";
+
+export type { RevokeAttempt };
 import { TokenCallPacer, tokenBudget } from "./idp-token-pacer.ts";
 import { authorizationServerMetadataUrls, pkcePair, readBounded, safeEndpoint } from "./mcp-oauth.ts";
 
@@ -268,12 +270,6 @@ export function rateLimitedText(retryAfterMs: number): string {
 
 /** One revocation call's outcome: `done` (2xx), `drop` (a definitive 400,
  * or nothing to call), `rate_limited` (429), `retry` (anything else). */
-export type RevokeAttempt =
-  | { kind: "done" }
-  | { kind: "drop"; why: string }
-  | { kind: "rate_limited"; retryAfterMs: number }
-  | { kind: "retry"; why: string };
-
 export const RATE_LIMITED_SIGN_IN = "Perspicax is rate limiting sign-ins from this server. Wait a minute and try again.";
 
 const sha256Hex = (value: string) => createHash("sha256").update(value).digest("hex");

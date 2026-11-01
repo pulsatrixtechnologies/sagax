@@ -1,0 +1,96 @@
+{
+  "lang": "en",
+  "scheme": "light",
+  "skin": "pulsatrix-light",
+  "width": 700,
+  "facts": {
+    "rows": [
+      "bot-2",
+      "bot-0",
+      "bot-1"
+    ],
+    "sections": [
+      "unassigned",
+      "Clients"
+    ],
+    "lines": [
+      "bot-0",
+      "bot-1"
+    ],
+    "tables": 1,
+    "cols": [
+      "select",
+      "bot",
+      "model",
+      "effort",
+      "payer",
+      "backup"
+    ],
+    "columnLayouts": [
+      {
+        "section": "unassigned",
+        "cells": [
+          {
+            "left": 264,
+            "width": 40
+          },
+          {
+            "left": 304,
+            "width": 108
+          },
+          {
+            "left": 412,
+            "width": 168
+          },
+          {
+            "left": 580,
+            "width": 84
+          },
+          {
+            "left": 664,
+            "width": 96
+          },
+          {
+            "left": 760,
+            "width": 144
+          }
+        ]
+      },
+      {
+        "section": "Clients",
+        "cells": [
+          {
+            "left": 264,
+            "width": 40
+          },
+          {
+            "left": 304,
+            "width": 108
+          },
+          {
+            "left": 412,
+            "width": 168
+          },
+          {
+            "left": 580,
+            "width": 84
+          },
+          {
+            "left": 664,
+            "width": 96
+          },
+          {
+            "left": 760,
+            "width": 144
+          }
+        ]
+      }
+    ],
+    "columnsAligned": true,
+    "hasDefaults": true,
+    "selected": [
+      "bot-0",
+      "bot-1"
+    ]
+  }
+}

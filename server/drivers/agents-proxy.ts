@@ -22,9 +22,11 @@
 import readline from "node:readline";
 
 import { availableTools, catalogProfileFromEnv, compactListed, compactToolsFromEnv, withDeferredRareTools } from "./agents-catalog.ts";
-import { catalogBridgeDefinitions, catalogBridgeOn, routeBridgeCall } from "./catalog-bridge.ts";
+import { applyCatalogGroups, catalogGroupsOn, routeGroupCall } from "./agents-catalog-budget.ts";
+import { catalogBridgeDefinitions, catalogBridgeOn, resolveCatalogUse, routeBridgeCall } from "./catalog-bridge.ts";
 import { mergeByAction } from "./agents-merged.ts";
 import { readMergedCall } from "../../shared/merged-agent-tools.ts";
+import { BRIDGE_USE_TOOL } from "../../shared/searched-tool-call.ts";
 import { CALL_TOOL, DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, isDirectoryTool, type CatalogTool } from "../mcp-directory.ts";
 import { callTool, capResult, toolCallContextFromEnv } from "./agents-call.ts";
 import { harnessClientFromEnv, type Json } from "./agents-client.ts";
@@ -43,8 +45,13 @@ const AVAILABLE_TOOLS = availableTools(PROFILE);
 // every other tool is found with search_tools and run with call_tool, through
 // the same call path, checks and approvals as a listed one. The list is the
 // same for every conversation of the bot, so a prefix cache serves it.
+// #1703: SAGAX_CATALOG_GROUPS=1 lists the chat-turn core plus
+// list_tool_groups / load_tool_group / use_tool. Every other tool stays
+// reachable by group. Off by default so Grok, Codex and Pi keep the full
+// list (#1314). Prefer this when a profile approaches the soft ceiling.
 const COMPACT = compactToolsFromEnv(process.env);
 const BRIDGE = catalogBridgeOn(process.env);
+const GROUPS = catalogGroupsOn(process.env) && !BRIDGE && !COMPACT;
 const SEARCHED = COMPACT && !BRIDGE
   ? new ToolDirectory(AVAILABLE_TOOLS.filter((tool) => !compactListed(tool.name, { ...COMPACT, coordinating: PROFILE.coordinating })) as unknown as CatalogTool[])
   : undefined;
@@ -66,6 +73,8 @@ const LISTED_TOOLS = BRIDGE
       ? { ...tool, description: `Find a Sagax tool that is not listed here by its own name (call a listed one directly). ${tool.description}` }
       : tool),
   ]
+  : GROUPS
+  ? applyCatalogGroups(AVAILABLE_TOOLS, process.env)
   : COMPACT
   ? [
     ...AVAILABLE_TOOLS.filter((tool) => compactListed(tool.name, { ...COMPACT, coordinating: PROFILE.coordinating })),
@@ -139,6 +148,16 @@ async function handle(msg: Json) {
         if (routed.kind === "answer") return textResult(id, routed.text, routed.isError);
         name = routed.name;
         args = routed.arguments as Json;
+      }
+      if (GROUPS) {
+        const grouped = routeGroupCall(AVAILABLE_TOOLS, name, args);
+        if (grouped.kind === "answer") return textResult(id, grouped.text, grouped.isError);
+        if (name === BRIDGE_USE_TOOL) {
+          const resolved = resolveCatalogUse(AVAILABLE_TOOLS, args);
+          if ("error" in resolved) return textResult(id, resolved.error, true);
+          name = resolved.name;
+          args = resolved.arguments as Json;
+        }
       }
       if (SEARCHED && SEARCHED.tools.length && isDirectoryTool(name)) {
         if (name === SEARCH_TOOL) return ok(id, await SEARCHED.search(args));

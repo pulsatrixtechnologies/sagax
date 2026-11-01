@@ -265,10 +265,27 @@ $site {
 	encode zstd gzip
 	# Webhooks carry their own per-hook secrets and need no session.
 	handle /hooks/* {
-		reverse_proxy 127.0.0.1:8800
+		reverse_proxy 127.0.0.1:8800 {
+			# Hold briefly while the upstream restarts (docs/zero-downtime-deploy.md).
+			lb_try_duration 25s
+			lb_try_interval 250ms
+			fail_duration 10s
+			unhealthy_status 502 503
+			health_uri /healthz
+			health_interval 2s
+			health_timeout 1s
+		}
 	}
 	handle {
 		reverse_proxy 127.0.0.1:8799 {
+			# Hold briefly while the upstream restarts (docs/zero-downtime-deploy.md).
+			lb_try_duration 25s
+			lb_try_interval 250ms
+			fail_duration 10s
+			unhealthy_status 502 503
+			health_uri /healthz
+			health_interval 2s
+			health_timeout 1s
 			# stream events as they arrive
 			flush_interval -1
 		}

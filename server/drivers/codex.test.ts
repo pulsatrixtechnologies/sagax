@@ -2951,6 +2951,31 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     await expect.poll(() => processIsAlive(snapshot.pid), { timeout: 5_000 }).toBe(false);
   }, 20_000);
 
+  it("says the running turn took a steer in once turn/steer accepts it, so the next turn does not offer it again", async () => {
+    // 2026-11-01 (repeated replies): turn/steer folds the words into the
+    // running native turn, which reads them before it ends. Without
+    // steer.received the harness offered them again to the next turn, which
+    // answered them a second time.
+    await create({ mode: "approval" });
+    await instance.adapter.sendTurn({ threadId: "t-codex-steer-received", text: "one" });
+    const opened = await recorder.until((e) => e.type === "request.opened");
+    await expect(instance.adapter.steer?.("t-codex-steer-received", "and also this", { steerId: "steer-codex-0001" })).resolves.toBe("steered");
+    expect(recorder.events.find((e) => e.type === "steer.received")).toMatchObject({ steerId: "steer-codex-0001", threadId: "t-codex-steer-received", turnId: opened.turnId });
+    await instance.adapter.respondToRequest("t-codex-steer-received", opened.requestId!, { behavior: "deny" });
+    await recorder.until((e) => e.type === "turn.completed");
+  }, 20_000);
+
+  it("never claims a refused steer was taken in", async () => {
+    process.env.FAKE_CODEX_STEER_ERROR = JSON.stringify({ code: -32000, message: "active turn is not steerable" });
+    await create({ mode: "approval" });
+    await instance.adapter.sendTurn({ threadId: "t-codex-steer-norecv", text: "one" });
+    const opened = await recorder.until((e) => e.type === "request.opened");
+    await expect(instance.adapter.steer?.("t-codex-steer-norecv", "queued words", { steerId: "steer-codex-0002" })).resolves.toBe("refused");
+    expect(recorder.events.some((e) => e.type === "steer.received")).toBe(false);
+    await instance.adapter.respondToRequest("t-codex-steer-norecv", opened.requestId!, { behavior: "deny" });
+    await recorder.until((e) => e.type === "turn.completed");
+  }, 20_000);
+
   it("reports an explicitly refused steer as refused so the caller queues, and keeps the child alive", async () => {
     const dump = join(scratch, "codex-steer-refused.json");
     process.env.FAKE_CODEX_DUMP = dump;

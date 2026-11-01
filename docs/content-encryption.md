@@ -241,6 +241,8 @@ same setting (`SAGAX_CONTENT_ENCRYPTION`).
 | event logs | `events/<thread>.ndjson`, `native/<thread>.ndjson` | the thread's key, as its messages | inspector, Activity, session ids |
 | decision log | `decisions/YYYY-MM.ndjson` | the row's thread, else the workspace | Activity, Journal, History |
 | admin activity | `admin-activity/YYYY-MM.ndjson` | the workspace | Activity, the organization audit |
+| video jobs | `video-jobs/<jobId>.json` | the job's thread | video generation resume and status |
+| held steers | `held-steers/<threadId>.json` | the thread's key | restart recovery of messages accepted into a running turn |
 
 **File format** (`server/content-file-crypto.ts`): a header (`SGXF`, version,
 chunk size, key id, context) then AES-256-GCM chunks of 64 KiB, each with its

@@ -178,7 +178,7 @@ describe("the member API gate", () => {
     expect(first.status).toBe(200);
     expect(first.headers.get("x-sagax-member-api")).toBe("1");
     expect(first.body).toMatchObject({ api: 1, version: "0.4.16" });
-    expect(first.body.routes).toEqual(expect.arrayContaining(["GET bots", "POST bots/{id}/messages", "GET threads/{id}", "GET routines", "GET routines/{id}", "POST routines/{id}/run", "GET routines/runs/{id}", "GET bots/{id}/rules", "GET bots/{id}/docs", "GET bots/{id}/memory", "GET bots/{id}/connectors", "POST approvals/{id}", "POST people/{id}/nudge"]));
+    expect(first.body.routes).toEqual(expect.arrayContaining(["GET bots", "POST bots/{id}/messages", "GET threads/{id}", "GET routines", "GET routines/{id}", "PATCH routines/{id}", "POST routines/{id}/run", "GET routines/runs/{id}", "GET bots/{id}/rules", "GET bots/{id}/docs", "GET bots/{id}/memory", "GET bots/{id}/connectors", "POST approvals/{id}", "POST people/{id}/nudge"]));
     expect((await call("GET", "capabilities", once)).body.code).toBe("assertion_replayed");
     expect((await call("GET", "nowhere", token("bob"))).status).toBe(404);
     expect((await call("POST", "bots", token("bob"), {})).status).toBe(405);
@@ -409,6 +409,31 @@ describe("threads, approvals and nudges", () => {
     const got = await call("POST", "routines/r1/run", token("bob"), {});
     expect(got.status).toBe(403);
     expect(got.body).toMatchObject({ code: "forbidden_permission", permission: "routines.runNowAny", message: "Only the bot's owner can run it now." });
+  });
+
+  // JC 2026-11-01: "when I invoke routines they start but it is unclear what
+  // started". sagax_routine_run (Perspicax) reaches this route.
+  it("a start through the MCP passes on its receipt; a refused start says why and names the run under way", async () => {
+    people.get("bob")!.permissions.push("clients.routinesRun");
+    const receipt = "Started “Overdue invoices” on Ledger (run run_1). Status: queued. It is number 2 of 2 runs waiting for this bot.";
+    respond = () => ({ status: 201, body: { run: { id: "run_1", routineId: "r1", status: "queued", botId: "b1", attention: "Waits for a free slot on this bot" },
+      standing: { status: "queued", position: 2, queuedForBot: 2, reason: "Waits for a free slot on this bot" }, message: receipt } });
+    const started = await call("POST", "routines/r1/run", token("bob"), {});
+    expect(started.status).toBe(201);
+    expect(started.body).toMatchObject({ message: receipt, standing: { position: 2, queuedForBot: 2 }, run: { id: "run_1", attention: "Waits for a free slot on this bot" } });
+
+    respond = () => ({ status: 409, body: { error: "A run of this routine is already in progress.", code: "run_in_flight", runId: "run_0",
+      message: "“Overdue invoices” already has a run under way (run run_0); no second run was started. Status: running now." } });
+    const refused = await call("POST", "routines/r1/run", token("bob"), {});
+    expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({ code: "run_in_flight", runId: "run_0", message: expect.stringContaining("no second run was started") });
+  });
+
+  it("a run that completed with problems never reads as a plain success", async () => {
+    people.get("bob")!.permissions.push("clients.routinesRun");
+    respond = () => ({ status: 200, body: { runs: [{ id: "run_9", routineId: "r1", status: "completed", problems: "crm_login failed 2 times", startedAt: 1, finishedAt: 2 }] } });
+    const got = await call("GET", "routines/runs/run_9", token("bob"));
+    expect(got.body.run).toMatchObject({ id: "run_9", status: "completed", problems: "crm_login failed 2 times" });
   });
 });
 
@@ -839,6 +864,98 @@ describe("owner-scoped routine and bot reads", () => {
     expect(admin.status).toBe(404);
     expect(JSON.stringify(admin.body)).not.toContain(PLANTED_KEY);
     expect(recorded).toEqual([]);
+  });
+
+  it("lets the owner enable, rename, reschedule and rewrite instructions; audits without the text (#1891)", async () => {
+    people.get("bob")!.permissions.push("clients.routinesRead", "clients.routinesWrite");
+    respond = (request) => {
+      if (request.method === "GET" && request.path === "/api/routines") return { status: 200, body: routineFixture() };
+      if (request.method === "PATCH" && request.path === "/api/routines/r_bob") {
+        const body = (request.body && typeof request.body === "object" ? request.body : {}) as Record<string, unknown>;
+        expect(body).toMatchObject({
+          enabled: false,
+          name: "Evening",
+          prompt: "Report the close of day.",
+          schedule: { type: "cron", expression: "0 18 * * 1-5", timeZone: "America/Toronto" },
+        });
+        expect(body).not.toHaveProperty("instructions");
+        return {
+          status: 200,
+          body: {
+            routine: {
+              id: "r_bob",
+              name: "Evening",
+              botId: "b1",
+              enabled: false,
+              prompt: "Report the close of day.",
+              schedule: { type: "cron", expression: "0 18 * * 1-5", timeZone: "America/Toronto" },
+              nextRunAt: 90,
+              owner: { id: "pr_bob" },
+            },
+          },
+        };
+      }
+      return { status: 404, body: { error: "no" } };
+    };
+    const patched = await call("PATCH", "routines/r_bob", token("bob"), {
+      enabled: false,
+      name: "Evening",
+      instructions: "Report the close of day.",
+      schedule: { type: "cron", expression: "0 18 * * 1-5", timeZone: "America/Toronto" },
+    });
+    expect(patched.status).toBe(200);
+    expect(patched.body.routine).toMatchObject({
+      id: "r_bob", name: "Evening", enabled: false,
+      instructions: "Report the close of day.",
+      schedule: { type: "cron", expression: "0 18 * * 1-5", timeZone: "America/Toronto" },
+    });
+    expect(performed.filter((entry) => entry.request.method === "PATCH")).toEqual([
+      expect.objectContaining({
+        person: expect.objectContaining({ principalId: "pr_bob" }),
+        request: expect.objectContaining({
+          method: "PATCH",
+          path: "/api/routines/r_bob",
+          body: expect.objectContaining({ enabled: false, name: "Evening", prompt: "Report the close of day." }),
+        }),
+      }),
+    ]);
+    expect(recorded).toEqual([{
+      person: expect.objectContaining({ principalId: "pr_bob", actor: "perspicax-mcp" }),
+      action: "client.routine_update",
+      after: { fields: ["enabled", "name", "instructions", "schedule"] },
+    }]);
+    expect(JSON.stringify(recorded)).not.toContain("Report the close");
+  });
+
+  it("refuses a routine write without clients.routinesWrite and never performs (#1891 Ask/Deny)", async () => {
+    people.get("bob")!.permissions = ["clients.routinesRead"];
+    const refused = await call("PATCH", "routines/r_bob", token("bob"), { enabled: true });
+    expect(refused.status).toBe(403);
+    expect(refused.body).toMatchObject({ code: "forbidden_permission", permission: "clients.routinesWrite" });
+    expect(performed).toEqual([]);
+    expect(recorded).toEqual([]);
+  });
+
+  it("refuses patching another person's routine without calling Sagax (#1891)", async () => {
+    people.get("bob")!.permissions.push("clients.routinesWrite");
+    respond = () => ({ status: 200, body: routineFixture() });
+    const missing = await call("PATCH", "routines/r_ann", token("bob"), { enabled: false });
+    expect(missing.status).toBe(404);
+    expect(performed.every((entry) => entry.request.method !== "PATCH")).toBe(true);
+    expect(recorded).toEqual([]);
+    // An admin assertion still only manages routines they own as that person.
+    const admin = await call("PATCH", "routines/r_bob", token("ann", "admin"), { enabled: false });
+    expect(admin.status).toBe(404);
+    expect(performed.filter((entry) => entry.request.method === "PATCH")).toEqual([]);
+  });
+
+  it("rejects an empty or unknown routine patch body (#1891)", async () => {
+    people.get("bob")!.permissions.push("clients.routinesWrite");
+    expect((await call("PATCH", "routines/r_bob", token("bob"), {})).body.code).toBe("bad_request");
+    expect((await call("PATCH", "routines/r_bob", token("bob"), { botId: "b1" })).body).toMatchObject({
+      code: "bad_request", message: expect.stringContaining("Unknown field"),
+    });
+    expect(performed).toEqual([]);
   });
 
   it("reads rules, documents, memory and connector names only for a bot the caller owns", async () => {

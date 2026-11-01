@@ -5,7 +5,19 @@ metadata:
   labels:
     {{- include "sagax-server.labels" . | nindent 4 }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicas | default 1 }}
+  {{- /* RWO PVC cannot attach to two pods: Recreate for a single replica.
+       Rolling with maxUnavailable 0 when replicas > 1 (docs/zero-downtime-deploy.md). */}}
+  {{- if gt (int (.Values.replicas | default 1)) 1 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  {{- else }}
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       {{- include "sagax-server.selector" . | nindent 6 }}
@@ -42,7 +54,10 @@ spec:
             httpGet:
               path: /api/health
               port: app
-            periodSeconds: 15
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
         - name: edge

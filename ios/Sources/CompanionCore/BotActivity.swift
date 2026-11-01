@@ -397,7 +397,8 @@ public enum BotActivityRules {
 
     /// "45s", "12m", "1h 05m" (`formatActivityDuration`).
     public static func duration(_ milliseconds: Double) -> String {
-        let seconds = max(0, Int((milliseconds / 1000).rounded()))
+        // server numbers: a NaN or a huge value must not trap `Int(_:)`
+        let seconds = milliseconds.isFinite ? Int(min(max(0, (milliseconds / 1000).rounded()), 1e9)) : 0
         if seconds < 60 { return "\(seconds)s" }
         let minutes = seconds / 60
         if minutes < 60 { return "\(minutes)m" }

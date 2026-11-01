@@ -39,6 +39,21 @@ export interface HandoffView {
   restart?: "rerun" | "cut" | "teammates";
   /** The requester only passes it on: its reply goes to the person as is (Assignment.relay). */
   relay?: boolean;
+  /** A one-way notice (send_to_bot, an aside): nothing returns to the
+   * requester; its result, failure and questions stay in its own thread. */
+  oneWay?: boolean;
+  /** A consultation: answer, act on nothing. */
+  consult?: boolean;
+  /** Admitted ahead of other queued work (send_to_bot priority now). */
+  priority?: "now";
+}
+
+/** coordinator.handedOutOutcome: what a conversation's handed-out work came to. */
+export interface HandedOutOutcome {
+  root: { status: string; outcome?: string; detail: string; result: string };
+  failed: Array<{ botId: string; outcome: string; detail: string }>;
+  /** A root of it is still live (waiting, resuming, running). */
+  pending: boolean;
 }
 
 export type RoomAddress = Pick<HandoffView, "groupId" | "threadId" | "botId">;
@@ -118,13 +133,60 @@ export interface Coordinator {
    * asks about live work (most do, on every broadcast) reads these. */
   active(): HandoffView[];
   children(id: string): HandoffView[];
+  /** Direct-thread children of work whose parent assignee is this bot+thread
+   * (no room groupId). Indexed store read for the activity panel; identical
+   * membership to scanning all() for those parents. */
+  directChildrenOf(botId: string, threadId: string): HandoffView[];
   /** Throws an Error whose message is the typed refusal the caller shows the model. */
   enqueue(source: RoomAddress, generation: string, parentId: string | undefined, target: RoomAddress, key: string, text: string,
     approvalGranted?: boolean, rework?: boolean, sourceText?: string, requestBatchKey?: string, origin?: WorkOrigin,
-    mode?: "work" | "consult" | "auto", person?: string, relay?: boolean, doneWhen?: string): { node: HandoffView; duplicate: boolean; joined?: boolean };
+    mode?: "work" | "consult" | "notify" | "auto", person?: string, relay?: boolean, doneWhen?: string, request?: string,
+    extra?: { priority?: "now" }): { node: HandoffView; duplicate: boolean; joined?: boolean };
   sharedRequest(node: HandoffView): { id: string; botIds: string[] };
   /** The host's own turn ended; `stalled` when its stall watchdog stopped it. */
   sourceSettled(generation: string, ok: boolean, stalled?: boolean): void;
+  /** A host turn (`generation`) takes again the request a failed turn
+   * (`previous`) answered, as the same root: "continued" (end it with
+   * sourceSettled(generation)), "answered" (that root's own resume already
+   * answers the request: start no other turn), "resumed" (that root's resume
+   * failed on the provider after every teammate reported: the runtime runs
+   * the resume again with the same results, start no other turn), or "none"
+   * (no root: start as usual). docs/runtime-contract.md, one request one
+   * root. A null generation only reads what would happen, and changes nothing. */
+  continueRoot(previous: string, generation: string | null): "continued" | "answered" | "resumed" | "none";
+  /** The root a direct conversation's request opened (Assignment.request),
+   * read from the store: it outlives a restart, which the host's in-memory
+   * request owner does not. */
+  requestRoot(threadId: string, request: string): string | undefined;
+  /** The conversation's own request still waits on work it handed out: its
+   * root waits or resumes, or its running turn handed out work since it
+   * began. A routine run on that thread waits instead of completing. */
+  awaitsTeammates(threadId: string): boolean;
+  /** What the work this direct conversation handed out since `since` came
+   * to (a pure store read, safe before the runtime is ready): the latest
+   * root's ending and the teammates whose work did not complete. Null when
+   * it handed out nothing. A routine run settles honestly from it. */
+  handedOutOutcome(threadId: string, since: number): HandedOutOutcome | null;
+  /** An external runtime's delegate_bot: a poll root of its own with one
+   * child, the root ended at once (its caller polls). Throws a refusal.
+   * `key`: the call's idempotency key; a retried call with the same key
+   * answers the same child (no second dispatch). At most EXTERNAL_QUEUE_CAP
+   * of its requests wait queued on one conversation. */
+  enqueueExternal(source: RoomAddress, target: RoomAddress, text: string, approvalGranted?: boolean, mode?: "work" | "consult" | "notify",
+    key?: string, extra?: { priority?: "now" }): { node: HandoffView; duplicate: boolean };
+  /** A step cap's `Continue:` thread (turn-continuation.ts): the bot's own
+   * stopped work, carried on in a new thread of the same bot as a one-way
+   * notice on a poll root of its own (nothing is resumed; its result,
+   * failure and questions stay in that thread). The level is the target
+   * thread's; `origin` is where the stopped work started. Throws a refusal. */
+  enqueueContinuation(source: RoomAddress, target: RoomAddress, text: string, origin?: WorkOrigin): HandoffView;
+  /** A room goal's worker assignment (group-goal-run): work in the same room
+   * on a poll root of the goal run, so Stop/restart/admission are the
+   * runtime's. The harness polls the child; nothing resumes the lead. */
+  enqueueGoalAssignment(source: RoomAddress, target: RoomAddress, text: string, runId: string): HandoffView;
+  /** The person's review card allowed queued work the sender's peer review
+   * held: it may start now. False when the work is not queued any more. */
+  approve(id: string): boolean;
   cancelRoom(groupId: string, threadId?: string, reason?: string, status?: "failed" | "cancelled"): void;
   cancelDirect(threadId: string, reason?: string): void;
   activeDirect(threadId: string): boolean;

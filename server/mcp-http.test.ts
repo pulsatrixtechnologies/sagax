@@ -72,6 +72,44 @@ describe("a server's JSON-RPC error", () => {
   });
 });
 
+describe("a legacy SSE session", () => {
+  it("keeps its stream after the opening request's signal ends", async () => {
+    fake = await startFakeHttpMcp({ transport: "sse" });
+    client = new RemoteMcpClient({ type: "sse", url: fake.url, headers: {} });
+    const opening = new AbortController();
+    await client.initialize("fixture", opening.signal);
+    opening.abort();
+    expect(await client.request("tools/list", {}, AbortSignal.timeout(5_000))).toHaveProperty("tools");
+    expect(fake.initializes).toHaveLength(1);
+  });
+
+  it("opens and initializes a new stream after a disconnect, sharing the handshake", async () => {
+    fake = await startFakeHttpMcp({ transport: "sse" });
+    client = new RemoteMcpClient({ type: "sse", url: fake.url, headers: {} });
+    await client.initialize("fixture", AbortSignal.timeout(5_000));
+    fake.dropSseStreams();
+    // Wait for the real network close before issuing the next operation.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const results = await Promise.all([
+      client.request("tools/list", {}, AbortSignal.timeout(5_000)),
+      client.request("tools/list", {}, AbortSignal.timeout(5_000)),
+    ]);
+    expect(results.every((result) => Array.isArray((result as { tools: unknown[] }).tools))).toBe(true);
+    expect(fake.initializes).toHaveLength(2);
+  });
+
+  it("reports an interrupted write once and never replays it when the next request reconnects", async () => {
+    fake = await startFakeHttpMcp({ transport: "sse", tools: [{ name: "write_note" }], dropCallReply: true });
+    client = new RemoteMcpClient({ type: "sse", url: fake.url, headers: {} });
+    await client.initialize("fixture", AbortSignal.timeout(5_000));
+    await expect(client.request("tools/call", { name: "write_note", arguments: {} }, AbortSignal.timeout(5_000))).rejects.toThrow("event stream ended");
+    expect(fake.calls).toHaveLength(1);
+    expect(await client.request("tools/list", {}, AbortSignal.timeout(5_000))).toHaveProperty("tools");
+    expect(fake.initializes).toHaveLength(2);
+    expect(fake.calls).toHaveLength(1);
+  });
+});
+
 describe("which plain http requests go through HTTP_PROXY", () => {
   it("skips loopback and NO_PROXY hosts the way curl does", () => {
     const at = (url: string, list = "") => bypassesProxy(new URL(url), list);

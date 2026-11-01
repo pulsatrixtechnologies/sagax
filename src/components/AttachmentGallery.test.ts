@@ -1,7 +1,9 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FILE_MAX_BYTES } from "@/lib/composer-attachments";
+import { bufferedPreviewMaxBytes, VIDEO_MAX_BYTES } from "@/lib/composer-attachments";
+
+const FILE_MAX_BYTES = bufferedPreviewMaxBytes();
 import { AttachmentGallery, collectMessageFiles, isAudioAttachment, isPdfAttachment, isVideoAttachment, listMessageFiles, loadMessageAudio, loadMessageVideo, MessageAttachmentGallery, splitMessageAttachments } from "./AttachmentGallery";
 
 const message = { threadId: "thread/one", messageId: "message two" };
@@ -174,16 +176,25 @@ describe("message gallery", () => {
 });
 
 describe("explicit local video preview", () => {
-  it("posts to the same-origin message route and uses only the authorized response bytes", async () => {
-    const fetcher = vi.fn(async () => new Response("video bytes", { headers: { "content-type": "video/mp4" } }));
+  const location = (patch: Record<string, unknown> = {}) => new Response(JSON.stringify({
+    downloadUrl: "/api/threads/thread%2Fone/files/0123456789abcdef01234567",
+    previewUrl: "/api/threads/thread%2Fone/files/0123456789abcdef01234567?preview=1",
+    name: "demo.mp4",
+    mime: "video/mp4",
+    bytes: VIDEO_MAX_BYTES,
+    ...patch,
+  }), { headers: { "content-type": "application/json" } });
+
+  it("resolves an opaque same-origin stream without buffering its video bytes", async () => {
+    const fetcher = vi.fn(async () => location());
     vi.stubGlobal("fetch", fetcher);
     const signal = new AbortController().signal;
-    const blob = await loadMessageVideo(file, message, signal);
+    const source = await loadMessageVideo(file, message, signal);
     expect(fetcher).toHaveBeenCalledWith("/api/threads/thread%2Fone/messages/message%20two/file", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: file.path }), signal,
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: file.path, location: true }), signal,
     });
-    expect(blob.type).toBe("video/mp4");
-    expect(await blob.text()).toBe("video bytes");
+    expect(source).toEqual({ kind: "stream", src: "/api/threads/thread%2Fone/files/0123456789abcdef01234567?preview=1" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("preserves server authorization failures instead of falling back to arbitrary file URLs", async () => {
@@ -195,17 +206,33 @@ describe("explicit local video preview", () => {
 
   it("refuses executable MIME types and old servers' unspecified bytes", async () => {
     for (const mime of ["text/html", "application/octet-stream", "image/svg+xml"]) {
-      vi.stubGlobal("fetch", vi.fn(async () => new Response("not video", { headers: { "content-type": mime } })));
+      vi.stubGlobal("fetch", vi.fn(async () => location({ mime })));
       await expect(loadMessageVideo(file, message, new AbortController().signal)).rejects.toThrow("cannot be played");
     }
   });
 
-  it("enforces the video size limit with and without Content-Length", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("video", {
-      headers: { "content-type": "video/mp4", "content-length": String(FILE_MAX_BYTES + 1) },
-    })));
-    await expect(loadMessageVideo(file, message, new AbortController().signal)).rejects.toThrow("25 MB");
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array(FILE_MAX_BYTES + 1), { headers: { "content-type": "video/mp4" } })));
+  it("accepts the 1 GiB stream ceiling and rejects a larger server result", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => location({ bytes: VIDEO_MAX_BYTES })));
+    await expect(loadMessageVideo(file, message, new AbortController().signal)).resolves.toMatchObject({ kind: "stream" });
+    vi.stubGlobal("fetch", vi.fn(async () => location({ bytes: VIDEO_MAX_BYTES + 1 })));
+    await expect(loadMessageVideo(file, message, new AbortController().signal)).rejects.toThrow("cannot be played");
+  });
+
+  it("keeps a bounded Blob fallback for an older paired server", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response("old protocol", { headers: { "content-type": "video/mp4" } }))
+      .mockResolvedValueOnce(new Response("video bytes", { headers: { "content-type": "video/mp4" } }));
+    vi.stubGlobal("fetch", fetcher);
+    const source = await loadMessageVideo(file, message, new AbortController().signal);
+    expect(source.kind).toBe("blob");
+    if (source.kind === "blob") expect(await source.blob.text()).toBe("video bytes");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(null, { headers: { "content-type": "video/mp4" } }))
+      .mockResolvedValueOnce(new Response("video", {
+        headers: { "content-type": "video/mp4", "content-length": String(FILE_MAX_BYTES + 1) },
+      })));
     await expect(loadMessageVideo(file, message, new AbortController().signal)).rejects.toThrow("25 MB");
   });
 
@@ -219,7 +246,9 @@ describe("explicit local video preview", () => {
       },
       cancel,
     });
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream, { headers: { "content-type": "video/mp4" } })));
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(null, { headers: { "content-type": "video/mp4" } }))
+      .mockResolvedValueOnce(new Response(stream, { headers: { "content-type": "video/mp4" } })));
     await expect(loadMessageVideo(file, message, request.signal)).rejects.toMatchObject({ name: "AbortError" });
     expect(cancel).toHaveBeenCalledOnce();
   });

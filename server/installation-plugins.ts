@@ -7,6 +7,7 @@ import { copySanitizedPlugin, readPluginContents } from "./bot-plugins.ts";
 import type { InstalledMarketplacePlugin, PluginMarketplaces } from "./plugin-marketplaces.ts";
 import type { McpServerSpec } from "./contracts.ts";
 import { SANDBOX_PLUGINS_DIR } from "./sandbox-plugins.ts";
+import { invalidatePluginMetaCache, pluginMetadataCacheRoot, rebuildPluginMetaCache } from "./plugin-metadata-cache.ts";
 
 export class InstallationPlugins {
   private copies = new Map<string, { name: string; dir: string; mcpServers: Record<string, McpServerSpec>; declaredMcpServers: string[] }>();
@@ -19,6 +20,7 @@ export class InstallationPlugins {
     const dir = join(this.dataDir, "capability-plugins", "organization", plugin.marketplace, plugin.name);
     const result = copySanitizedPlugin(this.marketplaces.pluginDir(plugin.marketplace, plugin.name), dir, undefined, `${SANDBOX_PLUGINS_DIR}/${plugin.name}`);
     this.copies.set(plugin.key, { name: plugin.name, dir, mcpServers: result.mcpServers, declaredMcpServers: result.declaredMcpServers });
+    try { rebuildPluginMetaCache(pluginMetadataCacheRoot(this.dataDir), dir); } catch { /* turn reports partial on miss */ }
   }
 
   restore(): void {
@@ -29,7 +31,10 @@ export class InstallationPlugins {
 
   remove(key: string): void {
     const copy = this.copies.get(key);
-    if (copy) rmSync(copy.dir, { recursive: true, force: true });
+    if (copy) {
+      invalidatePluginMetaCache(pluginMetadataCacheRoot(this.dataDir), copy.dir);
+      rmSync(copy.dir, { recursive: true, force: true });
+    }
     this.copies.delete(key);
   }
 

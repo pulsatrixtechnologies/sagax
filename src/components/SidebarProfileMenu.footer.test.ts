@@ -257,9 +257,13 @@ describe("the foot's profile (the reference design's row)", () => {
   it("is wired in the sidebar's wide foot, the rail keeps the bare avatar", () => {
     const source = readFileSync(new URL("./Sidebar.tsx", import.meta.url), "utf8");
     expect(source).toContain("<SidebarFoot places={accountPlaces}");
-    expect(readFileSync(new URL("./SidebarFoot.tsx", import.meta.url), "utf8")).toContain("<SidebarProfileMenu avatarOnly withName places={places} />");
-    const rail = source.slice(source.indexOf("data-sidebar-account-rail"));
-    expect(rail.slice(0, 200)).toContain("<SidebarProfileMenu avatarOnly places={accountPlaces} />");
+    expect(source).toContain("<SidebarRailFoot places={accountPlaces}");
+    const foot = readFileSync(new URL("./SidebarFoot.tsx", import.meta.url), "utf8");
+    expect(foot).toContain("<SidebarProfileMenu avatarOnly withName places={places} />");
+    // the rail's foot (chosen or automatic): the apps grid, then the bare avatar
+    const rail = foot.slice(foot.indexOf("export function SidebarRailFoot"));
+    expect(rail).toContain("<FootConnectApps apps={apps} onOpen={onOpenApps} />");
+    expect(rail.slice(rail.indexOf("data-sidebar-account-rail"), rail.indexOf("data-sidebar-account-rail") + 200)).toContain("<SidebarProfileMenu avatarOnly places={places} />");
   });
 });
 
@@ -358,8 +362,8 @@ describe("sidebar foot account pill: title and points line", () => {
     const tile = "h-[var(--foot-tile-h,2.25rem)]";
     withSettings({});
     expect(pill()).toContain(tile);
-    const connect = readFileSync(new URL("./Sidebar.tsx", import.meta.url), "utf8");
-    expect(connect).toContain(tile);
+    // the apps button beside it is the round size-9 tile (FootConnectApps);
+    // the old square Connect apps pill left with the rail's Puzzle icon
     expect(css).toMatch(/\[data-sidebar-account-row\]\s*\{[^}]*--foot-tile-h:\s*2\.5rem/);
     expect(css).toMatch(/\[data-sidebar-account-row\]:has\(\[data-account-pill-line\]\)\s*\{[^}]*--foot-tile-h:\s*2\.875rem/);
   });

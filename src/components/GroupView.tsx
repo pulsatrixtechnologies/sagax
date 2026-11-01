@@ -78,7 +78,7 @@ import { roomRetryRequest } from "@/lib/room-retry";
 import { botEngine, failedTurnCause } from "@/lib/failed-turn";
 import { CitationSelectionToolbar, SentCitations } from "./CitationUI";
 import { Composer } from "./Composer";
-import { ChatErrorBanner, ChatNotice, ChatStaleBanner } from "./ChatErrorBanner";
+import { ChatErrorBanner, ChatNotice, ChatReconnectBanner, ChatStaleBanner } from "./ChatErrorBanner";
 import { GroupCostNotice, WeeklyLimitNotice } from "./ChatUsageNotices";
 import { ChatFindBar } from "./ChatFindBar";
 import { ConversationTurnLimit } from "./ConversationTurnLimit";
@@ -1508,8 +1508,8 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
         className={cn(
           "content-topbar",
           "@container/chathead relative flex min-h-[52px] items-center justify-end px-5 py-2.5",
-          // Room for the drawer button, which overlays this corner below md.
-          "pl-11 md:pl-5",
+          // Room for the drawer button, which overlays this corner below sm.
+          "pl-11 sm:pl-5",
         )}
       >
         <div className="absolute left-1/2 top-1/2 flex max-w-[50%] -translate-x-1/2 -translate-y-1/2 items-center gap-2" style={headerNoDragStyle}>
@@ -1546,6 +1546,7 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
       {findOpen && <ChatFindBar threadId={group.threadId} onClose={() => setFindOpen(false)} />}
       {!pane && <ChatErrorBanner message={state.error} onDismiss={() => dispatch({ type: "error", message: null })} />}
       {!pane && <ChatNotice notice={state.notice} />}
+      {!pane && <ChatReconnectBanner connected={state.connected} everConnected={state.everConnected} disconnectedAt={state.disconnectedAt} />}
       <TransientNotice messages={group.messages} settled={(m) => routineAutoPauseSettled(m, state.routines)} render={(m, close) => {
         if (m.kind === "access" && m.access) return (
           <AccessCard

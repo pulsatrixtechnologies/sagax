@@ -82,20 +82,20 @@ final class MessageAttachmentsTests: XCTestCase {
         XCTAssertNoThrow(try AttachmentPolicy.validate(attachments))
         XCTAssertEqual(AttachmentPolicy.kind(forMIME: " IMAGE/JPEG "), .image)
         XCTAssertEqual(AttachmentPolicy.kind(forMIME: "application/pdf"), .file)
-        XCTAssertNil(AttachmentPolicy.kind(forMIME: "application/zip"))
+        XCTAssertEqual(AttachmentPolicy.kind(forMIME: "application/zip"), .file)
     }
 
     func testAttachmentPolicyRejectsCountTypeNameAndSize() {
         let valid = PendingMessageAttachment(
             data: Data([1]), name: "notes.txt", mime: "text/plain", kind: .file
         )
-        XCTAssertThrowsError(try AttachmentPolicy.validate(Array(repeating: valid, count: 5))) {
+        XCTAssertThrowsError(try AttachmentPolicy.validate(Array(repeating: valid, count: 33))) {
             XCTAssertEqual($0 as? AttachmentPolicyError, .tooManyItems)
         }
         XCTAssertThrowsError(try AttachmentPolicy.validate([
-            PendingMessageAttachment(data: Data([1]), name: "archive.zip", mime: "application/zip", kind: .file),
+            PendingMessageAttachment(data: Data([1]), name: "program.exe", mime: "application/x-msdownload", kind: .file),
         ])) {
-            XCTAssertEqual($0 as? AttachmentPolicyError, .unsupportedType("archive.zip"))
+            XCTAssertEqual($0 as? AttachmentPolicyError, .unsupportedType("program.exe"))
         }
         XCTAssertThrowsError(try AttachmentPolicy.validate([
             PendingMessageAttachment(data: Data([1]), name: "../notes.txt", mime: "text/plain", kind: .file),

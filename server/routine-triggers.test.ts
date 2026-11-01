@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -432,6 +432,83 @@ describe("routine webhook and email triggers", () => {
     expect(webhooks.remove(rightHook)).toBe(true);
     expect(routines.routineById(right.id)).toBeNull();
     expect(webhooks.list().some((candidate) => candidate.id === rightHook)).toBe(false);
+  });
+
+  it("keeps an enabled phone/webhook trigger on across syncOwned and a reload (#1891)", async () => {
+    const { service, routines, webhooks } = harness();
+    const { settled } = await confirmCreate(service, { type: "webhook" }, "Voice line requests from JC", "Handle the request.", true);
+    if (settled.state !== "applied") throw new Error("expected applied");
+    const routine = routines.routineById(settled.resultId)!;
+    expect(routine.enabled).toBe(true);
+    const before = triggerOf(webhooks, routine.id);
+    expect(before).toMatchObject({ enabled: true, verificationPending: false });
+
+    // Restart-like rebind: createOwned is idempotent; syncOwned follows the routine.
+    webhooks.createOwned({
+      routineId: routine.id,
+      name: routine.name,
+      prompt: routine.prompt,
+      botId: routine.botId,
+      runOn: routine.runOn,
+      kind: "webhook",
+      enabled: routine.enabled,
+    });
+    webhooks.syncOwned({
+      id: routine.id,
+      name: routine.name,
+      prompt: routine.prompt,
+      botId: routine.botId,
+      runOn: routine.runOn,
+      enabled: routine.enabled,
+    });
+    expect(triggerOf(webhooks, routine.id)).toMatchObject({ id: before.id, enabled: true });
+
+    const again = new WebhookManager({
+      file: join(tempDirs[tempDirs.length - 1]!, "webhooks.json"),
+      now: () => Date.parse("2026-08-28T10:00:00Z"),
+      botState: () => "ready",
+      enqueue: (input) => routines.enqueueWebhook(input),
+    });
+    expect(again.list().find((hook) => hook.routineId === routine.id)).toMatchObject({
+      id: before.id,
+      enabled: true,
+    });
+  });
+
+  it("migrateTokenless does not turn an enabled telephony trigger off (#1891)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-phone-migrate-"));
+    tempDirs.push(dir);
+    const file = join(dir, "webhooks.json");
+    writeFileSync(file, JSON.stringify({
+      version: 1,
+      webhooks: [{
+        id: "phone-1",
+        endpointId: "wh_phone1",
+        name: "Incoming texts",
+        prompt: "Handle the text",
+        botId: "bot-1",
+        runOn: "maus",
+        enabled: true,
+        verificationPending: false,
+        createdAt: 1,
+        updatedAt: 1,
+        deliveryCount: 0,
+        // no tokenLast4: migrateTokenless fills one
+        source: { type: "telephony", events: ["sms.received"], filters: {}, catalog: 1 },
+        secretHash: "a".repeat(64),
+      }],
+      deliveries: [],
+      attempts: [],
+    }));
+    const manager = new WebhookManager({
+      file,
+      now: () => 2,
+      botState: () => "ready",
+      enqueue: () => ({ id: "run-1" }),
+    });
+    const phone = manager.list().find((hook) => hook.id === "phone-1")!;
+    expect(phone).toMatchObject({ enabled: true, tokenPending: true });
+    expect(phone.source?.type).toBe("telephony");
   });
 
   it("strips a planted key from the model-facing proposal result", () => {

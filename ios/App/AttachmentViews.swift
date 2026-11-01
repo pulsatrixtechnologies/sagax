@@ -8,8 +8,18 @@ private struct SendableAttachmentImage: @unchecked Sendable {
     let value: CGImage?
 }
 
+private func decodeAttachmentThumbnail(_ attachment: PendingMessageAttachment, maximumPixelSize: Int) -> SendableAttachmentImage {
+    let source = attachment.fileURL.flatMap { CGImageSourceCreateWithURL($0 as CFURL, nil) }
+        ?? (attachment.fileURL == nil ? CGImageSourceCreateWithData(attachment.data as CFData, nil) : nil)
+    return decodeAttachmentThumbnailSource(source, maximumPixelSize: maximumPixelSize)
+}
+
 private func decodeAttachmentThumbnail(_ data: Data, maximumPixelSize: Int) -> SendableAttachmentImage {
-    guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+    decodeAttachmentThumbnailSource(CGImageSourceCreateWithData(data as CFData, nil), maximumPixelSize: maximumPixelSize)
+}
+
+private func decodeAttachmentThumbnailSource(_ source: CGImageSource?, maximumPixelSize: Int) -> SendableAttachmentImage {
+    guard let source else {
         return SendableAttachmentImage(value: nil)
     }
     let options: [CFString: Any] = [
@@ -33,7 +43,7 @@ enum AttachmentImportError: LocalizedError {
         case let .unreadable(name):
             return "Sagax couldn't read \(name). Try exporting it to Files first."
         case let .unsupported(name):
-            return "\(name) isn't a supported attachment. Try an image, PDF, text, Word, Excel, or PowerPoint file."
+            return String(localized: "\(name) isn't a supported attachment. Try an image, document, archive, audio, or video file.")
         case let .tooLarge(name, bytes):
             let limit = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
             return "\(name) is larger than the \(limit) remaining attachment limit."
@@ -56,10 +66,9 @@ enum PendingAttachmentThumbnails {
 
     static func load(_ attachment: PendingMessageAttachment) async -> UIImage? {
         if let hit = cached(attachment) { return hit }
-        let data = attachment.data
         let size = maximumPixelSize
         let decoded = await Task.detached(priority: .userInitiated) {
-            decodeAttachmentThumbnail(data, maximumPixelSize: size)
+            decodeAttachmentThumbnail(attachment, maximumPixelSize: size)
         }.value
         guard let cgImage = decoded.value else { return nil }
         let image = UIImage(cgImage: cgImage)
@@ -71,6 +80,8 @@ enum PendingAttachmentThumbnails {
 struct PendingAttachmentChip: View {
     @Environment(\.themePalette) var themePalette
     let attachment: PendingMessageAttachment
+    var uploadState: AttachmentUploadState? = nil
+    var retry: () -> Void = {}
     let remove: () -> Void
     @State private var thumbnail: UIImage?
     @State private var thumbnailFailed = false
@@ -83,9 +94,27 @@ struct PendingAttachmentChip: View {
                 Text(attachment.name)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
-                Text(ByteCountFormatter.string(fromByteCount: Int64(attachment.data.count), countStyle: .file))
+                Text(ByteCountFormatter.string(fromByteCount: Int64(attachment.bytes), countStyle: .file))
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.textSecondary)
+                switch uploadState {
+                case let .uploading(uploaded, total):
+                    ProgressView(value: Double(uploaded), total: Double(max(1, total)))
+                        .accessibilityLabel("Uploading \(attachment.name)")
+                    Text("Uploading \(Int(Double(uploaded) / Double(max(1, total)) * 100))%")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textSecondary)
+                case let .failed(error):
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.danger)
+                        .lineLimit(2)
+                    Button("Retry", action: retry)
+                        .font(.system(size: 12, weight: .semibold))
+                        .accessibilityLabel("Retry uploading \(attachment.name)")
+                case .ready, nil:
+                    EmptyView()
+                }
             }
 
             Button(action: remove) {
@@ -538,9 +567,14 @@ struct FilePreviewItem: Identifiable {
 
     var text: String {
         let limit = 2 * 1_024 * 1_024
-        let visible = data.prefix(limit)
+        let available: Data
+        if data.isEmpty, let handle = try? FileHandle(forReadingFrom: url) {
+            defer { try? handle.close() }
+            available = (try? handle.read(upToCount: limit + 1)) ?? Data()
+        } else { available = data }
+        let visible = available.prefix(limit)
         var decoded = String(decoding: visible, as: UTF8.self)
-        if data.count > limit {
+        if available.count > limit {
             decoded += "\n\n(Preview truncated. Share or open the file to read the rest.)"
         }
         return decoded

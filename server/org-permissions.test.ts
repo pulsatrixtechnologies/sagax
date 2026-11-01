@@ -40,7 +40,7 @@ describe("effectivePermissions", () => {
     });
     // the clients.* keys about their own conversations and routines stay
     // the folder of their own groups too (#1098); their bots' folder goes with sagax_bots
-    expect(permissionList(sheet)).toEqual(["apps.ownIntegrations", "folders.roomWorkingFolder", "usage.view", "clients.botsRead", "clients.botsMessage", "clients.routinesRun", "clients.routinesRead", "clients.agentsCreate"]);
+    expect(permissionList(sheet)).toEqual(["apps.ownIntegrations", "folders.roomWorkingFolder", "usage.view", "clients.botsRead", "clients.botsMessage", "clients.routinesRun", "clients.routinesRead", "clients.routinesWrite", "clients.agentsCreate"]);
     expect(sheet.narrowedBy).toEqual(["sagax_bots"]);
   });
 });

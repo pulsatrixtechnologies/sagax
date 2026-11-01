@@ -115,3 +115,79 @@ describe("the screen picker drop-down", () => {
     expect(list().getAttribute("aria-label")).toBe("Afficher l’écran de");
   });
 });
+
+describe("place rename in the screen picker", () => {
+  let onRename: ReturnType<typeof vi.fn<(key: string, label: string | null) => void>>;
+
+  function mountRename(chosen: string | null = "desktop:d1") {
+    act(() => root.render(createElement(ScreenPicker, {
+      items: [
+        { key: "server", label: "Cloud", technical: "Cloud", icon: Server, here: true },
+        { key: "desktop:d1", label: "JeanChrophesMBP.localdomain", technical: "JeanChrophesMBP.localdomain", icon: Laptop },
+        { key: "browser", label: "Browser", technical: "Browser", icon: Globe },
+      ],
+      chosen,
+      onPick,
+      onRename,
+    })));
+  }
+
+  beforeEach(() => {
+    onRename = vi.fn<(key: string, label: string | null) => void>();
+  });
+
+  function typeInto(input: HTMLInputElement, value: string) {
+    act(() => {
+      const native = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      native.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  it("renames in place from … and Enter saves", () => {
+    mountRename();
+    act(() => trigger().click());
+    const row = options()[1]!;
+    act(() => row.querySelector<HTMLButtonElement>("[data-computer-rename]")!.click());
+    const input = host.querySelector<HTMLInputElement>("[data-computer-rename-input]")!;
+    expect(input).not.toBeNull();
+    expect(input.value).toBe("JeanChrophesMBP.localdomain");
+    typeInto(input, "MacBook de JC");
+    act(() => {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    });
+    expect(onRename).toHaveBeenCalledWith("desktop:d1", "MacBook de JC");
+    expect(onPick).not.toHaveBeenCalled();
+  });
+
+  it("starts rename with F2 and cancels with Escape without saving", () => {
+    mountRename();
+    act(() => trigger().click());
+    // Chosen is desktop:d1 → active already on that row.
+    key(list(), "F2");
+    const input = host.querySelector<HTMLInputElement>("[data-computer-rename-input]")!;
+    expect(input).not.toBeNull();
+    typeInto(input, "Nope");
+    act(() => {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    });
+    expect(onRename).not.toHaveBeenCalled();
+    expect(host.querySelector("[data-computer-rename-input]")).toBeNull();
+  });
+
+  it("right-click starts rename and empty Enter clears the label", () => {
+    mountRename("server");
+    act(() => trigger().click());
+    const row = options()[1]!;
+    act(() => {
+      row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    });
+    const input = host.querySelector<HTMLInputElement>("[data-computer-rename-input]")!;
+    expect(input).not.toBeNull();
+    typeInto(input, "   ");
+    act(() => {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    });
+    expect(onRename).toHaveBeenCalledWith("desktop:d1", null);
+  });
+});

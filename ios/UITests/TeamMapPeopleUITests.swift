@@ -90,7 +90,7 @@ final class TeamMapPeopleUITests: XCTestCase {
     @MainActor
     private func openTeamMap(_ app: XCUIApplication) {
         // Team map: the account menu, under Settings
-        app.buttons["home-account"].tap()
+        app.buttons["home-apps"].tap()
         let item = app.buttons["account-menu.teamMap"]
         XCTAssertTrue(item.waitForExistence(timeout: 5), "the account menu offers the Team map")
         item.tap()

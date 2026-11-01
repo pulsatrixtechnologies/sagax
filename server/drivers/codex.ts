@@ -31,7 +31,6 @@ import { codexLaunch, codexLaunchesStarting, codexLaunchSlot, codexRpcTimeoutMs,
 import { isReservedMcpEnvEntry } from "../mcp-registry.ts";
 import { USER_SANDBOX_MCP_NAME } from "../user-sandbox-routing.ts";
 import { AUTO_COMPUTER_MCP_NAME } from "../auto-computer.ts";
-import { FLOW_TOOLS_MCP_NAME } from "../flow-tools.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../../shared/bot-workplace.ts";
 
 import type {
@@ -650,7 +649,7 @@ export function codexNativeIncomingLogMessage(
  * proxy restores the plain names at start (user-sandbox-proxy.ts). Only the
  * prefix and ELECTRON_RUN_AS_NODE (needed before the process starts, never
  * a secret) travel as values in argv. */
-const SAGAX_WORKPLACE_PROXIES = new Set([USER_SANDBOX_MCP_NAME, AUTO_COMPUTER_MCP_NAME, DESKTOP_BRIDGE_MCP_NAME, FLOW_TOOLS_MCP_NAME]);
+const SAGAX_WORKPLACE_PROXIES = new Set([USER_SANDBOX_MCP_NAME, AUTO_COMPUTER_MCP_NAME, DESKTOP_BRIDGE_MCP_NAME]);
 /** Read by user-sandbox-proxy.ts (PROXY_ENV_PREFIX_VARIABLE there; the proxy
  * is a standalone script, so the name is spelled in both places). */
 const PROXY_ENV_PREFIX_VARIABLE = "SAGAX_PROXY_ENV_PREFIX";
@@ -875,7 +874,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
        * "refused" when this attempt has nothing steerable; the caller
        * queues. "indeterminate" when delivery happened but the answer did
        * not come back — the caller must not re-queue those words. */
-      steer?: (text: string) => Promise<SteerOutcome>;
+      steer?: (text: string, steerId?: string) => Promise<SteerOutcome>;
       turnId: string;
       asks: Map<string, (behavior: "allow" | "deny" | "answer", message?: string, source?: "user" | "timeout" | "system") => void>;
     }
@@ -1407,7 +1406,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
       // transport, or a turn that settles while the answer is in flight is
       // "indeterminate": the words may already be running, so the caller must
       // not re-queue them.
-      const steerActiveTurn = async (text: string): Promise<SteerOutcome> => {
+      const steerActiveTurn = async (text: string, steerId?: string): Promise<SteerOutcome> => {
         if (state.settled || abandoned || stopRequested || !codexThreadId || !codexTurnId) return "refused";
         if (child.exitCode !== null || child.signalCode !== null) return "refused";
         try {
@@ -1417,6 +1416,12 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
             input: [{ type: "text", text }],
             expectedTurnId: codexTurnId,
           }, steerTimeoutMs);
+          // Accepted input joins the turn's pending input, and the turn
+          // samples again before it ends while any is pending: the running
+          // turn reads it. Said so, the harness counts it received and never
+          // offers it to the next turn as unseen, which answered it twice
+          // (2026-11-01).
+          if (steerId) emit({ ...base(threadId, turnId), type: "steer.received", steerId });
           return "steered";
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -2504,9 +2509,9 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
         const running = turnReviewers.get(threadId);
         return Boolean(running && running.mode !== "full" && running.sagaxAnswers);
       },
-      steer: async (threadId, text) => {
+      steer: async (threadId, text, options) => {
         const turn = active.get(threadId);
-        return turn?.steer ? await turn.steer(text) : "refused";
+        return turn?.steer ? await turn.steer(text, options?.steerId) : "refused";
       },
       respondToRequest: async (threadId, requestId, decision) => {
         const turn = active.get(threadId);

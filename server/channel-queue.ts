@@ -8,7 +8,7 @@
 
 import { newId } from "./contracts.ts";
 import { chatFollowups, saveChatFollowup, settleChatFollowups } from "./message-db.ts";
-import { drainCoalesceHead, DRAIN_COALESCE_MAX_ITEMS } from "./admission.ts";
+import { drainCoalesceHead, DRAIN_COALESCE_MAX_ITEMS, WAITING_LINES_COALESCE_WINDOW_MS } from "./admission.ts";
 import type { ResolvedSender } from "../shared/wire.ts";
 import type { UsageTrigger } from "./usage-ledger.ts";
 
@@ -219,13 +219,15 @@ export function drainChannelMessages(
 }
 
 /** The leading run of queued room messages that drain as one item: same
- * sender, same provenance shape, each within the coalescing window of the
- * one before it, bounded at the room-context window — a room turn reads
+ * sender, same provenance shape, whatever the gap between them (2026-11-01:
+ * the responder read none of them, and a two-minute split answered each in
+ * its own later turn, long after it was written), bounded at the
+ * room-context window — a room turn reads
  * the burst through that window, so a longer run would append lines the
  * responder never sees; the excess stays queued for the next turn. Manual
  * head-steer folds and settles exactly this group into the live turn. */
 export function headChannelGroup(items: readonly ChannelQueueItem[]): ChannelQueueItem[] {
-  return drainCoalesceHead(items, coalesceIdentity, (item) => item.queuedAt, DRAIN_COALESCE_MAX_ITEMS);
+  return drainCoalesceHead(items, coalesceIdentity, (item) => item.queuedAt, DRAIN_COALESCE_MAX_ITEMS, WAITING_LINES_COALESCE_WINDOW_MS);
 }
 
 /** A queued room message's coalescing identity: WHO sent it, with the

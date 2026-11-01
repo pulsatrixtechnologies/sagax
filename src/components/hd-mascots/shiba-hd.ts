@@ -27,7 +27,7 @@ import stillWave from "@/assets/mascots/shiba/still-wave.webp";
 import stillFront from "@/assets/mascots/shiba/still-front.webp";
 import stillLookLeft from "@/assets/mascots/shiba/still-look-left.webp";
 import stillLookRight from "@/assets/mascots/shiba/still-look-right.webp";
-import type { HdManifest } from "./manifest";
+import type { HdManifest } from "./hd-types";
 
 export const SHIBA_HD: HdManifest = Object.freeze({
   character: "shiba",

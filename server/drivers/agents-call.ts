@@ -8,6 +8,7 @@
 // room posts, checking a delegation made this turn) are the harness's: one
 // proxy can serve many turns of a warm engine, and only the harness knows
 // where a turn begins.
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { CREDENTIAL_TARGETS, isCredentialTargetId } from "../../shared/credential-request.ts";
 import { normalizeCronSchedule } from "../../shared/routine-schedule.ts";
@@ -534,6 +535,21 @@ export function wrapperAct(name: string, args: Json): Json | { error: string } {
   return { error: "action is get, or patch with a patch object." };
 }
 
+/** A teammate request (delegate_bot, ask_bot) sent with one idempotency key
+ * for the call: a connection that drops before the answer arrives is
+ * retried once with the same key, and the server answers the request it
+ * already accepted instead of dispatching it again. A refusal is not retried. */
+export async function sendTeammateRequest(api: HarnessClient["api"], path: string, body: Record<string, unknown>): Promise<Json> {
+  const init = () => ({ method: "POST", body: JSON.stringify(body), headers: { "idempotency-key": String(body.idempotencyKey) } });
+  body.idempotencyKey ??= randomUUID();
+  try {
+    return await api(path, init());
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    return api(path, init());
+  }
+}
+
 export async function callTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult> {
   // The names this body has always used, so it reads (and diffs) as it did
   // when these were the proxy's module-level constants.
@@ -579,7 +595,7 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
   // create_options_card, show_widget, update_widget (agents-call-cards.ts).
   if (CARD_TOOL_NAMES.has(name)) return callCardTool(name, args, context);
   if (name === PHONE_TOOL_NAME) return callPhoneTool(args, context);
-  if (name === VIDEO_TOOL_NAME) return callVideoTool(args);
+  if (name === VIDEO_TOOL_NAME) return callVideoTool(args, context.client);
   if (name === VAULT_HTTP_TOOL_NAME) return callVaultHttpTool(args, context);
   if (name === CONNECTOR_SETUP_TOOL_NAME) return callConnectorSetupTool(args, context);
   if (ARTIFACT_TOOL_NAMES.has(name)) return callArtifactTool(name, args, context);
@@ -832,10 +848,7 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
     const toBotId = String(args.bot_id ?? "").trim();
     const message = String(args.message ?? "").trim();
     if (!toBotId || !message) return { text: "ask_bot needs bot_id and message.", isError: true };
-    const r = await api(`/api/internal/ask-bot`, {
-      method: "POST",
-      body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, toBotId, message, depth: DEPTH }),
-    });
+    const r = await sendTeammateRequest(api, `/api/internal/ask-bot`, { fromBotId: BOT_ID, fromThreadId: THREAD_ID, toBotId, message, depth: DEPTH });
     const note = deliveryNote(r);
     if (r.timeout) {
       // The peer's turn outlived the synchronous wait, so the harness
@@ -907,7 +920,7 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
       depth: DEPTH,
     };
     if (reason) body.reason = reason;
-    const r = await api(`/api/internal/delegate-bot`, { method: "POST", body: JSON.stringify(body) });
+    const r = await sendTeammateRequest(api, `/api/internal/delegate-bot`, body);
     const delivery = deliveryNote(r);
     if (r.error) return { text: `Couldn't queue the delegation: ${r.error}${delivery ? `\n\n${delivery}` : ""}`, isError: true };
     // Fire-and-forget by contract: the harness returns immediately, the
@@ -1405,6 +1418,11 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
       method: "POST",
       body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, routineId }),
     });
+    // 2026-11-01: the server's receipt names the routine, its bot, where the
+    // run stands and where to follow it; pass it on to the person as it is.
+    if (typeof r.message === "string" && typeof r.routineName === "string") {
+      return { text: `${r.message} Tell the person exactly this: what started and where to follow it.` };
+    }
     const note = typeof r.message === "string" ? ` ${r.message}` : " It runs on its own.";
     return { text: `${r.alreadyRunning === true ? "Joined the run already under way" : "Started a run"} of routine ${routineId}${typeof r.runId === "string" ? ` (run ${r.runId})` : ""}.${note} Check list_routines for the result.` };
   }
@@ -1505,6 +1523,61 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
       }),
     });
     return confirmationResult(r, "the profile change", "profile");
+  }
+  if (name === "generate_shape_avatar") {
+    const { runGenerateShapeAvatarAsync } = await import("../shape-avatar.ts");
+    // Keep any skins the bot already wears when list_bots names this bot.
+    let currentLook: unknown = { character: "shape" };
+    try {
+      const listed = await api(`/api/internal/agents?self=${encodeURIComponent(BOT_ID)}`);
+      const mine = Array.isArray((listed as { bots?: unknown }).bots)
+        ? (listed as { bots: Array<{ id?: string; mascotLook?: unknown }> }).bots.find((bot) => bot.id === BOT_ID)
+        : undefined;
+      if (mine?.mascotLook) currentLook = mine.mascotLook;
+    } catch {
+      // Generation still works from a fresh shape look.
+    }
+    // Prefer a ready definition from the calling model; otherwise ask the
+    // harness shape-avatar generate route (bot engine) and fall back to presets.
+    let toolArgs = {
+      direction: typeof args.direction === "string" ? args.direction : undefined,
+      apply: args.apply === undefined ? undefined : Boolean(args.apply),
+      definition: args.definition as unknown,
+    };
+    let routeSource: "model" | "fallback" | undefined;
+    if (toolArgs.definition === undefined && typeof toolArgs.direction === "string") {
+      try {
+        const generated = await api("/api/internal/shape-avatar/generate", {
+          method: "POST",
+          body: JSON.stringify({ botId: BOT_ID, direction: toolArgs.direction }),
+        });
+        if (generated && typeof generated === "object" && (generated as { def?: unknown }).def) {
+          toolArgs = { ...toolArgs, definition: (generated as { def: unknown }).def };
+          const src = (generated as { source?: string }).source;
+          if (src === "model" || src === "fallback") routeSource = src;
+        }
+      } catch {
+        // Offline preset path below.
+      }
+    }
+    const result = await runGenerateShapeAvatarAsync(toolArgs, currentLook, null);
+    if (!result.ok) return { text: result.error, isError: true };
+    const source = routeSource ?? result.source ?? "fallback";
+    if (!result.applied || !result.look) {
+      return { text: `Shape definition (not applied, ${source}):\n${JSON.stringify(result.def)}\n${result.summary}` };
+    }
+    const patch = await apiResponse("/api/internal/act", {
+      method: "POST",
+      body: JSON.stringify({
+        method: "PATCH",
+        path: `/api/bots/${BOT_ID}`,
+        body: { mascotLook: result.look, avatarCrop: "mascot" },
+      }),
+    });
+    if (patch.status >= 400 || patch.body.error) {
+      return { text: String(patch.body.text ?? patch.body.error ?? "Could not save the Shape definition."), isError: true };
+    }
+    return { text: `Shape mascot applied via ${source} (${result.summary}). ${String(patch.body.text ?? "Saved.")}` };
   }
   if (name === "propose_model") {
     const raw = args.model_selection;
@@ -1795,11 +1868,19 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
   }
   if (name === "skills_list") {
     const query = new URLSearchParams({ fromBotId: BOT_ID, fromThreadId: THREAD_ID });
+    if (args.query !== undefined) {
+      if (typeof args.query !== "string" || args.query.length > 200) return { text: "query must be a string of at most 200 characters.", isError: true };
+      query.set("query", args.query);
+    }
+    if (args.offset !== undefined) {
+      if (typeof args.offset !== "number" || !Number.isSafeInteger(args.offset) || args.offset < 0) return { text: "offset must be a nonnegative integer.", isError: true };
+      query.set("offset", String(args.offset));
+    }
     const r = await api(`/api/internal/skills?${query.toString()}`);
     const skills = Array.isArray(r.skills) ? r.skills : [];
     const staged = Array.isArray(r.staged) ? r.staged : [];
-    if (!skills.length && !staged.length) {
-      return { text: "This bot has no imported skills and nothing staged. Use skill_manage action=\"create\" for a user-requested skill, then follow its applied or pending result." };
+    if (!skills.length && !staged.length && r.incomplete !== true) {
+      return { text: typeof r.total === "number" && r.total > 0 ? `No references at this offset. ${r.total} match; start at offset 0.` : "No matching skills or plugin references, and nothing staged." };
     }
     const live = skills.length
       ? skills.map((skill) => {
@@ -1817,7 +1898,8 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
         const path = typeof row.path === "string" ? row.path.trim() : "";
         const descPart = description ? `: ${description}` : "";
         const pathPart = path ? ` Read ${JSON.stringify(path)}.` : "";
-        return `- ${row.name} (${status}, ${kind})${descPart}${pathPart}`;
+        const origin = typeof row.scope === "string" ? ` [${row.scope}: ${row.source}; ${row.kind}; ${row.id}]` : "";
+        return `- ${row.name} (${status}, ${kind})${descPart}${pathPart}${origin}`;
       }).join("\n")
       : "(none)";
     const pending = staged.length
@@ -1828,7 +1910,9 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
         return `- ${row.action} ${row.name}`;
       }).join("\n")
       : "(none)";
-    return { text: `Imported skills:\n${live}\n\nStaged (waiting for the user's decision):\n${pending}` };
+    const partial = r.incomplete === true ? "\nPlugin discovery is partial: not every reference could be indexed. More files may exist in enabled plugin folders; inspect those folders with your native file tools." : "";
+    const page = typeof r.total === "number" ? `\nDiscovered matches: ${r.total}. Offset: ${r.offset}. ${typeof r.nextOffset === "number" ? `Continue with skills_list offset=${r.nextOffset}${typeof args.query === "string" ? ` query=${JSON.stringify(args.query)}` : ""}.` : "End of discovered results."}` : "";
+    return { text: `Imported skills and plugin references:\n${live}${page}${partial}\n\nStaged (waiting for the user's decision):\n${pending}` };
   }
   if (name === "skill_manage") {
     if (args.action !== "create" && args.action !== "update") {

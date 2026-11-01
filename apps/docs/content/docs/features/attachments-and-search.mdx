@@ -8,6 +8,14 @@ icon: Paperclip
 
 Paste a screenshot directly into the composer or attach an image from disk. Add a short instruction explaining what the agent should inspect—the highlighted UI, an error message, a layout mismatch, or the whole image.
 
+## Files and large media
+
+Documents, audio files, and archives can be up to 250 MB. Videos can be up to 1 GB. Each picture can be up to 32 MB on an organization server or 90 MB on a personal one, and the pictures in one message can total 200 MB (at most 32 pictures). Other files have no per-message count. Uploads larger than 4 MB resume from the last acknowledged chunk after a network interruption or app restart.
+
+Open a video from its message or the conversation's **Files** tab to stream it on demand. Playback and seeking request only the needed byte ranges, including for encrypted-at-rest files. **Download** and **Save a copy** hand the opaque conversation URL to the browser's download manager instead of holding the whole file in memory.
+
+PDF and compatibility previews stay intentionally bounded to protect memory. If a preview is too large or the format cannot play in the browser, use **Save a copy**. The original file remains available through the same conversation authorization.
+
 ## Voice notes
 
 Voice notes an agent sends are audio attachments: mp3 files in the same attachments store as images and documents, with their text kept as the visible caption and transcript. They share the attachment quota, and playback can seek without downloading the whole clip.

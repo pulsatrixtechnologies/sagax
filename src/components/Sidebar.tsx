@@ -29,7 +29,6 @@ import {
   PinOff,
   Plus,
   Search,
-  Puzzle,
   Share2,
   SlidersHorizontal,
   Trash2,
@@ -137,6 +136,8 @@ import {
   toggleCollapsedSection,
   toggleSidebarCollapsed,
   useSidebarDensity,
+  useSidebarViewport,
+  effectiveSidebarDensity,
   sidebarDragTarget,
   SIDEBAR_RAIL_WIDTH,
   type SidebarDensity,
@@ -173,8 +174,7 @@ import { phoneSettingsAction, SidebarPhoneButton } from "./SidebarPhoneButton";
 import { PulsatrixMark } from "./PulsatrixMark";
 import type { SidebarMenuItem } from "./SidebarPopoverMenu";
 
-import { SidebarProfileMenu } from "./SidebarProfileMenu";
-import { SidebarFoot } from "./SidebarFoot";
+import { SidebarFoot, SidebarRailFoot } from "./SidebarFoot";
 import { SidebarSectionHeader } from "./SidebarSectionHeader";
 import { useShowThreads, useThreadsMode } from "@/lib/thread-preferences";
 import { openBotConversationActions } from "./thread-home";
@@ -2778,34 +2778,45 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   const searchTitle = `${t("sidebar.search")} (${paletteShortcutLabel()})`;
   // null on 404 and on any other failure, so the roster stays.
   // Chosen in Settings > Appearance or by dragging the edge; one store.
-  const density = useSidebarDensity();
+  // Between the phone drawer and 768px the window draws the rail instead
+  // (Grok Bot's narrow window), without touching the person's choice.
+  const savedDensity = useSidebarDensity();
+  const viewport = useSidebarViewport();
+  const autoRail = viewport === "medium";
+  const density = effectiveSidebarDensity(savedDensity, viewport);
   const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
   // `collapsed` follows the drag itself: the density store answers a beat
   // later, and a second crossing in that beat must not toggle twice.
   const sidebarResize = useRef<{ x: number; width: number; current: number; collapsed: boolean } | null>(null);
   const [sidebarResizing, setSidebarResizing] = useState(false);
-  // The density as of the last toggle, ahead of the store's re-render.
-  const densityNow = useRef(density);
-  densityNow.current = density;
+  // The person's density as of the last toggle, ahead of the store's re-render.
+  const densityNow = useRef(savedDensity);
+  densityNow.current = savedDensity;
   const setSidebarCollapsed = (collapsed: boolean) => {
+    // the automatic rail is the window's, not a choice to save
+    if (autoRail) return;
     if ((densityNow.current === "icons") === collapsed) return;
     densityNow.current = toggleSidebarCollapsed();
   };
   // Rail in or out (the edge, its double-click, ⌘B, Settings): the width
   // changes at once and the snap is drawn with transforms for 200ms
   // (src/lib/sidebar-motion.ts), so the chat column is laid out once.
+  // A window resized into or out of the automatic rail just lays out again.
   const railed = density === "icons";
   const wasRailed = useRef(railed);
+  const wasViewport = useRef(viewport);
   useLayoutEffect(() => {
     const was = wasRailed.current;
     wasRailed.current = railed;
+    const viewportChanged = wasViewport.current !== viewport;
+    wasViewport.current = viewport;
     const aside = sidebarRef.current;
-    if (was === railed || !aside || !window.matchMedia?.("(min-width: 768px)").matches) return;
+    if (was === railed || !aside || viewportChanged || viewport !== "wide") return;
     const follower = aside.parentElement?.querySelector<HTMLElement>(":scope > [data-sidebar-follower]") ?? null;
     return animateSidebarSnap(aside, follower, was ? SIDEBAR_RAIL_WIDTH : sidebarWidth, railed ? SIDEBAR_RAIL_WIDTH : sidebarWidth);
     // the width is read when the rail flips, not followed during a drag
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [railed]);
+  }, [railed, viewport]);
   const resizeSidebar = (clientX: number) => {
     const from = sidebarResize.current;
     if (!from) return;
@@ -3149,20 +3160,25 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       aria-label={t("sidebar.aria")}
       data-native-view-overlay
       data-sidebar
+      // drawer below 640px, the automatic rail up to 768px, the person's own
+      // density above (src/lib/sidebar-preferences.ts)
+      data-sidebar-layout={viewport === "phone" ? "drawer" : autoRail ? "auto-rail" : "own"}
+      data-sidebar-density={density}
       style={density === "icons" ? { width: SIDEBAR_RAIL_WIDTH } : { width: sidebarWidth }}
       className={cn(
         "relative flex h-full shrink-0 flex-col border-r-[0.5px] border-hairline-weak bg-sidebar",
         // The width never transitions: it follows the pointer exactly, and a
         // snap (rail in or out) is drawn with transforms (animateSidebarSnap).
-        // Below md only: the sidebar leaves the flow and slides in over the chat.
-        // Scoped with max-md: rather than cancelled with md: on purpose — Tailwind
+        // Below sm only (a phone): the sidebar leaves the flow and slides in
+        // over the chat. From sm to md it stays in the flow as the automatic
+        // rail. Scoped with max-sm: rather than cancelled with sm: on purpose — Tailwind
         // v4 emits the native `translate` property, and any value other than
         // `none` turns this element into a containing block for its `fixed`
-        // descendants. Cancelling it with an `md:` prefix still emits a value, which
+        // descendants. Cancelling it with an `sm:` prefix still emits a value, which
         // silently reparents a fixed overlay on desktop.
-        "max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:z-40",
-        "max-md:transition-transform max-md:duration-200",
-        open ? "max-md:translate-x-0" : "max-md:-translate-x-full",
+        "max-sm:absolute max-sm:inset-y-0 max-sm:left-0 max-sm:z-40",
+        "max-sm:transition-transform max-sm:duration-200",
+        open ? "max-sm:translate-x-0" : "max-sm:-translate-x-full",
       )}
     >
       {/* The head: the round search button that opens the command palette
@@ -3547,7 +3563,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
             <Archive size={20} />
           </button>
         )}
-        {density === "icons" && (
+        {density === "icons" && !autoRail && (
           <button
             type="button"
             data-sidebar-compact-toggle
@@ -3568,12 +3584,8 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
         )}
         {density === "icons" ? (
           <>
-            <SidebarConnectApps iconOnly icon={<Puzzle size={20} />} onOpen={() => dispatch({ type: "togglePlugins", open: true })} />
-            {/* one avatar, like the wide foot: its menu holds Settings,
-                Approvals, Code and the rest; Browse bots is a tab of Connect apps */}
-            <div data-sidebar-account-rail className="flex h-10 items-center justify-center">
-              <SidebarProfileMenu avatarOnly places={accountPlaces} />
-            </div>
+            {/* the wide foot's row, stacked: the avatar and the apps grid */}
+            <SidebarRailFoot places={accountPlaces} onOpenApps={() => dispatch({ type: "togglePlugins", open: true })} />
           </>
         ) : (
           // The foot (reference design): the account pill, your avatar and
@@ -3817,8 +3829,10 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
       {/* The edge: drag to resize, narrower than the snap width to collapse
           to the rail and back out of it to expand; double-click toggles.
           Invisible at rest (the aside's hairline border is the edge); a 2px
-          line shows on hover, drag and keyboard focus (`.app-resize-handle`). */}
-      <div
+          line shows on hover, drag and keyboard focus (`.app-resize-handle`).
+          Not on the automatic rail: there the window's width decides, and
+          the person's own width and density wait for a wider window. */}
+      {!autoRail && <div
         role="separator"
         aria-orientation="vertical"
         aria-label={t("sidebar.resize")}
@@ -3874,43 +3888,8 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next)); } catch { /* session only */ }
         }}
         className="app-resize-handle -right-[3px]"
-      />
+      />}
     </aside>
     </SidebarMascotProvider>
-  );
-}
-
-/** The sidebar's "Connect apps" entry: a plain nav button that opens the
- * Plugins panel. It no longer previews connected accounts (the standalone
- * account inventory went away); the panel itself lists MCP servers, engine
- * connectors, the catalog, skills and marketplaces. */
-function SidebarConnectApps({ onOpen, iconOnly = false, icon }: { onOpen: () => void; iconOnly?: boolean; icon?: React.ReactNode }) {
-  const label = t("chat.connectApps.pill");
-  if (iconOnly) {
-    return (
-      <button
-        type="button"
-        data-tour="nav-apps"
-        data-sidebar-connect-apps=""
-        onClick={onOpen}
-        aria-label={label}
-        title={label}
-        className="flex h-9 w-full items-center justify-center rounded-lg px-2 text-sidebar-ink-secondary hover:bg-sidebar-hover hover:text-sidebar-ink"
-      >
-        {icon}
-      </button>
-    );
-  }
-  return (
-    <button
-      type="button"
-      data-tour="nav-apps"
-      data-sidebar-connect-apps=""
-      onClick={onOpen}
-      className="flex h-[var(--foot-tile-h,2.25rem)] min-w-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-sidebar-ink-secondary hover:bg-sidebar-hover hover:text-sidebar-ink"
-    >
-      <Puzzle size={16} aria-hidden="true" className="shrink-0" />
-      <span className="truncate">{label}</span>
-    </button>
   );
 }

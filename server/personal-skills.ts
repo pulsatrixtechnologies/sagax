@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { composeSkillMd, parseSkillMd, scanSkillText } from "../shared/skill-md.ts";
 import { principalDir, type PersonCapabilities } from "./person-connections.ts";
 import { deleteLibrarySkill, installLibrarySkill, listLibrarySkills, readLibrarySkillFile, setLibrarySkillReviewState, updateLibrarySkill } from "./skill-library.ts";
+import { botsUsingSharedSkill } from "./skill-share.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";
 import type { RequestAuth } from "./request-auth.ts";
 
@@ -73,9 +74,16 @@ export function createPersonalSkillRoutes(deps: {
       return await readBody(req) as Record<string, unknown>;
     };
     try {
-      if (!name && method === "GET") return json(res, 200, { skills: deps.skills.list(person).map((skill) => ({
-        ...skill, version: null, assignedBots: deps.bots(person),
-      })) });
+      if (!name && method === "GET") {
+        const bots = deps.bots(person);
+        return json(res, 200, { skills: deps.skills.list(person).map((skill) => ({
+          ...skill,
+          version: null,
+          // Links, not copies: every bot of this person that has not
+          // unshared into a private shadow still reads this Me skill.
+          assignedBots: botsUsingSharedSkill({ name: skill.name, scope: "me", bots, personId: person }),
+        })) });
+      }
       if (!name && method === "POST") {
         const input = await body();
         if (typeof input?.text !== "string") return json(res, 400, { error: "text must be the SKILL.md contents" });

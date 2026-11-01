@@ -27,6 +27,10 @@ export interface UnattendedHostRow {
   /** The organization, only when it is a readable name (an org id is left out). */
   org: string | null;
   scope: UnattendedHostScope;
+  /** Perspicax account that enrolled the host (`installed_by`). Sagax matches
+   * this to the person's IdP subject for ownership (defense in depth when the
+   * host list is wider than the person). Null when Perspicax omitted it. */
+  installedBy: string | null;
   /** ISO-8601 UTC. */
   enrolledAt: string;
   expiresAt: string;
@@ -71,12 +75,15 @@ export function parseUnattendedHost(raw: unknown, now: number): UnattendedHostRo
   const hostname = name ? readableOr(name, "") || null : null;
   const orgText = publicText(typeof raw.org === "string" ? raw.org : undefined);
   const org = orgText ? readableOr(orgText, "") || null : null;
+  const installedRaw = typeof raw.installed_by === "string" ? raw.installed_by.trim() : "";
+  const installedBy = installedRaw ? installedRaw.slice(0, 200) : null;
   const state: UnattendedHostState = revokedAt ? "revoked" : Date.parse(expiresAt) <= now ? "expired" : "enrolled";
   return {
     hostId,
     hostname: hostname && hostname !== hostId ? hostname : null,
     org,
     scope: scopeOf(raw.scope),
+    installedBy,
     enrolledAt,
     expiresAt,
     lastSeenAt: iso(raw.last_seen_at),
@@ -105,6 +112,23 @@ export function parseUnattendedHosts(value: unknown, now: number): UnattendedHos
  * Perspicax refuses the others anyway (C1); this keeps the button honest. */
 export function canOpenUnattendedHost(row: Pick<UnattendedHostRow, "state">): boolean {
   return row.state === "enrolled";
+}
+
+/** True when this host belongs to the person (or is explicitly shared with
+ * them). `ownerSub` is the person's Perspicax subject. When Sagax has no
+ * subject (solo desktop), every listed host is treated as theirs. When
+ * Perspicax named `installed_by`, it must equal that subject. A row without
+ * `installed_by` is refused when a subject is known (fail closed: the MCP
+ * list once returned every host of the org). */
+export function hostOwnedByPerson(
+  row: Pick<UnattendedHostRow, "installedBy">,
+  ownerSub: string | null | undefined,
+): boolean {
+  const sub = typeof ownerSub === "string" ? ownerSub.trim() : "";
+  if (!sub) return true;
+  const installed = row.installedBy?.trim() ?? "";
+  if (!installed) return false;
+  return installed === sub;
 }
 
 /** Revoke stays offered for any host not yet revoked, whatever the flag (M2). */

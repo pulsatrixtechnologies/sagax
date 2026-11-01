@@ -440,6 +440,71 @@ describe("createOpenAIChatRuntime mid-turn steer", () => {
     expect(events.at(-1)).toMatchObject({ type: "turn.completed", ok: true });
   }, 20_000);
 
+  // 2026-11-01 (reported: "it repeats itself"): the words were read by the round
+  // that carried them, but nothing said so, so the next turn offered them
+  // again as "sent while an earlier turn was running" and the bot answered
+  // them a second time.
+  it("says a steer was taken in once the round that carried it came back, and not before", async () => {
+    const answer = (text: string) => new Response(`data: {"choices":[{"index":0,"delta":{"content":"${text}"}}]}\n\n`
+      + 'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n', { status: 200, headers: { "content-type": "text/event-stream" } });
+    let calls = 0;
+    let release!: (response: Response) => void;
+    const gate = new Promise<Response>((resolve) => { release = resolve; });
+    let releaseSecond!: (response: Response) => void;
+    const secondGate = new Promise<Response>((resolve) => { releaseSecond = resolve; });
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith("/models")) return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      calls += 1;
+      return calls === 1 ? await gate : await secondGate;
+    }));
+    const instance = await OpenAICompatDriver.create({
+      instanceId: "compat", displayName: "Compat", enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://api.example.com/v1", apiKeyEnv: "K", model: "m" }),
+      environment: { K: "secret" },
+    });
+    const events: RuntimeEvent[] = [];
+    instance.adapter.onEvent((event) => events.push(event));
+    await instance.adapter.sendTurn({ threadId: "t", text: "hi", approvalMode: "full" });
+    await vi.waitFor(() => expect(calls).toBe(1), { timeout: 10_000 });
+    await expect(instance.adapter.steer!("t", "one more thing", { steerId: "steer-1" })).resolves.toBe("steered");
+    release(answer("first answer."));
+    await vi.waitFor(() => expect(calls).toBe(2), { timeout: 10_000 });
+    // parked and sent, not yet read
+    expect(events.some((event) => event.type === "steer.received")).toBe(false);
+    releaseSecond(answer("noted."));
+    await vi.waitFor(() => expect(events.some((event) => event.type === "turn.completed")).toBe(true), { timeout: 10_000 });
+    await instance.dispose();
+    const received = events.filter((event) => event.type === "steer.received");
+    expect(received).toEqual([expect.objectContaining({ type: "steer.received", steerId: "steer-1", threadId: "t" })]);
+    expect(events.findIndex((event) => event.type === "steer.received")).toBeLessThan(events.findIndex((event) => event.type === "turn.completed"));
+  }, 20_000);
+
+  it("never says a steer was taken in when the request carrying it is rejected", async () => {
+    let release!: (response: Response) => void;
+    const gate = new Promise<Response>((resolve) => { release = resolve; });
+    let calls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith("/models")) return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      calls += 1;
+      return calls === 1 ? await gate : new Response(JSON.stringify({ error: { message: "bad request" } }), { status: 400 });
+    }));
+    const instance = await OpenAICompatDriver.create({
+      instanceId: "compat", displayName: "Compat", enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://api.example.com/v1", apiKeyEnv: "K", model: "m" }),
+      environment: { K: "secret" },
+    });
+    const events: RuntimeEvent[] = [];
+    instance.adapter.onEvent((event) => events.push(event));
+    await instance.adapter.sendTurn({ threadId: "t", text: "hi", approvalMode: "full" });
+    await vi.waitFor(() => expect(calls).toBe(1), { timeout: 10_000 });
+    await expect(instance.adapter.steer!("t", "one more thing", { steerId: "steer-2" })).resolves.toBe("steered");
+    release(new Response('data: {"choices":[{"index":0,"delta":{"content":"first answer."}}]}\n\n'
+      + 'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n', { status: 200, headers: { "content-type": "text/event-stream" } }));
+    await vi.waitFor(() => expect(events.some((event) => event.type === "turn.completed")).toBe(true), { timeout: 10_000 });
+    await instance.dispose();
+    expect(events.some((event) => event.type === "steer.received")).toBe(false);
+  }, 20_000);
+
   it("tells the person when the turn fails before it reads an accepted aside", async () => {
     let release!: (response: Response) => void;
     const gate = new Promise<Response>((resolve) => { release = resolve; });

@@ -625,7 +625,7 @@ public struct CompanionClient: Sendable {
     /// 32 MiB a chat image may weigh.
     public static let maximumAvatarUploadBytes = 10 * 1_024 * 1_024
     public static let maximumFileUploadBytes = AttachmentPolicy.maximumFileBytes
-    public static let maximumFileDownloadBytes = AttachmentPolicy.maximumFileBytes
+    public static let maximumFileDownloadBytes = 25 * 1_024 * 1_024
 
     public let connection: Connection
     private let token: String?
@@ -813,7 +813,11 @@ public struct CompanionClient: Sendable {
     /// The server's public descriptor: reachable before pairing, and the way
     /// to notice that the address now belongs to a different server.
     public func environment() async throws -> ServerEnvironment {
-        try await send(makeRequest("GET", "/.well-known/openmausbot/environment"), as: ServerEnvironment.self)
+        // Checked before every stream attempt: a route that drops packets
+        // must not hold "Connecting…" for the default 20 s first.
+        var request = try makeRequest("GET", "/.well-known/openmausbot/environment")
+        request.timeoutInterval = 5
+        return try await send(request, as: ServerEnvironment.self)
     }
 
     /// End this session on the server (server-paired connections only).
@@ -1083,6 +1087,39 @@ public struct CompanionClient: Sendable {
             ? AttachmentPolicy.normalizedMIME(rawContentType)
             : "application/octet-stream"
         return DownloadedFile(data: data, filename: filename, contentType: contentType)
+    }
+
+    /// Quick Look and Share receive a file URL. URLSession writes response
+    /// bytes to disk, so opening a 1 GiB video never builds a 1 GiB Data.
+    /// Provenance and authorization use the same message-scoped route.
+    public func downloadFileToDisk(threadId: String, messageId: String, path rawPath: String) async throws -> DownloadedFile {
+        guard Self.validRouteID(threadId), Self.validRouteID(messageId),
+              case let .desktopFile(path) = LocalMessageLink.resolve(rawPath) else { throw APIError.badURL }
+        let request = try makeRequest("POST", "/api/threads/\(threadId)/messages/\(messageId)/file", body: ["path": path])
+        let (url, response) = try await performDownload(request)
+        do {
+            guard let http = response as? HTTPURLResponse else {
+                throw APIError.transport("The computer sent something this app couldn't read.")
+            }
+            if !(200...299).contains(http.statusCode) {
+                let handle = try FileHandle(forReadingFrom: url)
+                defer { try? handle.close() }
+                try Self.check(response, try handle.read(upToCount: 8_192) ?? Data())
+            }
+            let rawMime = http.value(forHTTPHeaderField: "Content-Type") ?? ""
+            let mime = AttachmentPolicy.validMIME(rawMime) ? AttachmentPolicy.normalizedMIME(rawMime) : "application/octet-stream"
+            let limit = AttachmentPolicy.itemLimit(mime: mime, sharedHost: false)
+            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            guard size <= limit, http.expectedContentLength <= limit else {
+                throw APIError.transport(String(localized: "That file is larger than \(limit / (1_024 * 1_024)) MB."))
+            }
+            try Task.checkCancellation()
+            return DownloadedFile(data: Data(), filename: Self.downloadFilename(from: http.value(forHTTPHeaderField: "Content-Disposition"), fallbackPath: path),
+                                  contentType: mime, localURL: url)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
     }
 
     private static func downloadFilename(from disposition: String?, fallbackPath: String) -> String {
@@ -1375,9 +1412,9 @@ public struct CompanionClient: Sendable {
         guard !displayName.isEmpty,
               displayName.utf8.count <= 255,
               Self.validUploadMime(normalizedMime),
-              data.count <= Self.maximumFileUploadBytes
+              data.count <= AttachmentPolicy.itemLimit(mime: normalizedMime, sharedHost: true)
         else {
-            throw APIError.transport("Choose a file up to 25 MB with a valid filename.")
+            throw APIError.transport("Choose a file up to 250 MB, or a video up to 1 GB, with a valid filename.")
         }
         var request = try makeRequest(
             "POST",

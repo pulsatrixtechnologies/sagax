@@ -17,26 +17,8 @@ import {
   ALIGN, BACKGROUND, boxStyle, CAPTION_SIZE, ICON_SIZE, INK, JUSTIFY, kids, TEXT_ALIGN, TEXT_SIZE, TITLE_SIZE, WEIGHT, widthStyle,
 } from "./widget-style";
 
-/** What a node needs to know about where it is drawn. */
-export interface WidgetWhere {
-  /** The direction its parent lays its children out in. */
-  axis: "row" | "col";
-  /** The room its parent leaves under it, before the next child. */
-  gap: number;
-  /** Inside a list row, where every line is one line. */
-  item?: boolean;
-  /** The first thing in a list row: an icon or image there is its thumbnail. */
-  lead?: boolean;
-  /** A direct child of the card, with the card's padding: a Row there is a
-   * key-value row, and a flush node runs out to these edges. */
-  card?: { top: number; left: number; right: number };
-  /** The room a Divider leaves before and after itself when it names none. */
-  room?: readonly [number, number];
-  /** Already inside a Form: a Form further in is a plain box. */
-  form?: boolean;
-  /** Inside a table cell: text takes the table's own size and wrapping unless it names its own. */
-  cell?: boolean;
-}
+export type { WidgetWhere } from "./widget-where";
+import type { WidgetWhere } from "./widget-where";
 
 /** On a card these lines are a tint of the ink, as the question card's are:
  * the hairline token sits one shade off the composer tone in the dark skins

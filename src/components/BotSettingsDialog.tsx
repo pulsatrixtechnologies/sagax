@@ -13,13 +13,11 @@ import { useDataWindowItem } from "./DataWindowButton";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { reportAchievement } from "@/lib/achievements";
 import { cn } from "@/lib/cn";
-import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { BotActionsMenu, type BotActionsMenuAnchor } from "./bot-settings/BotActionsMenu";
 import { LibraryTab } from "./bot-settings/LibraryTab";
-import { CapabilitiesTab } from "./bot-settings/CapabilitiesTab";
 import { RoutinesSection } from "./bot-settings/RoutinesSection";
-import { RemoteSessionsSection } from "./remote-session/RemoteSessionsSection";
+
 import { visiblePanelTabs, type PanelTab } from "./bot-settings/panel-tabs";
 import { ActivitySection } from "./bot-settings/ActivitySection";
 import { BotTaskSection } from "./bot-settings/BotTaskSection";
@@ -43,7 +41,6 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   overlay?: boolean;
 }) {
   const advanced = useAdvancedMode();
-  const perspicaxOrg = usePerspicaxOrg();
   const { state, dispatch } = useStore();
   const { padClass, dragProps } = useCaptionChrome();
   const { macInset, browser } = useMacInsetChrome();
@@ -260,7 +257,6 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
               <SuggestionsSection bot={bot} routineCount={derived.botRoutines.length} />
               <BotTaskSection botId={bot.id} />
               <ActivitySection bot={bot} />
-              {perspicaxOrg !== null && <RemoteSessionsSection bot={bot} />}
               <section data-bot-settings-section="routines" className="flex flex-col gap-2">
                 <RoutinesSection bot={bot} routines={derived.botRoutines} runs={state.routineRuns} grouped />
               </section>
@@ -269,8 +265,6 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
           )}
 
           {tab === "library" && <LibraryTab bot={bot} />}
-
-          {tab === "capabilities" && <CapabilitiesTab bot={bot} />}
 
           {tab === "computer" && (
             <div className="px-4 pt-2">

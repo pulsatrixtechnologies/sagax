@@ -1,39 +1,39 @@
 import Foundation
 
-/// A bot's proactive mode (`shared/proactive-mode.ts`, 2026-10-30 wired in
-/// `server/proactive-wake.ts`): how it acts on an email, a calendar entry, a
-/// failed run, a bot's post or a webhook on its own. Absent on the wire is
-/// the default (`followRules`); an unknown value reads as off, like the
-/// server.
+/// A bot's proactive mode (`shared/proactive-mode.ts`): a per-bot on/off
+/// switch. When on, the bot wakes on an email, a calendar entry, a failed
+/// run, a mention of the bot, or a webhook, and acts at its usual approval
+/// level and rules. Before a write from a wake, a dry run is recorded on
+/// the wake; then ordinary approval runs it. The proactive layer adds no
+/// extra approval card. Absent on the wire is the default (`.proactive`);
+/// legacy propose / read-auto / follow-rules read as `.proactive`; an
+/// unknown value reads as off, like the server.
 public enum ProactiveMode: String, CaseIterable, Hashable, Sendable {
     case off
-    case propose
-    case readAuto = "read-auto"
-    case followRules = "follow-rules"
+    case proactive
 
-    public static let defaultMode: ProactiveMode = .followRules
+    public static let defaultMode: ProactiveMode = .proactive
 
     public static func of(_ raw: String?) -> ProactiveMode {
         guard let raw else { return defaultMode }
-        return ProactiveMode(rawValue: raw) ?? .off
+        if raw == "off" { return .off }
+        if raw == "proactive" { return .proactive }
+        if raw == "propose" || raw == "read-auto" || raw == "follow-rules" { return .proactive }
+        return .off
     }
 
     /// The desktop's labels (`botPanel.permissions.proactive.*`).
     public var label: String {
         switch self {
         case .off: String(localized: "Off")
-        case .propose: String(localized: "Propose only")
-        case .readAuto: String(localized: "Read on its own, card to act")
-        case .followRules: String(localized: "Follow approval rules")
+        case .proactive: String(localized: "On")
         }
     }
 
     public var hint: String {
         switch self {
         case .off: String(localized: "No proactive behavior. Routines still run on their schedule or when a trigger fires.")
-        case .propose: String(localized: "It may look (read-only) and propose an action on a card. It runs nothing until you say yes.")
-        case .readAuto: String(localized: "It may read, summarize, classify and prepare drafts on its own, and shows a card for any write or send.")
-        case .followRules: String(localized: "A proactive action follows this bot's approval level and rules, exactly like a normal action.")
+        case .proactive: String(localized: "It wakes on an email, a calendar entry, a failed run, a mention of the bot, or a webhook, and acts at this bot's approval level and rules. Before a write from a wake, a dry run is recorded, then ordinary approval runs it. No extra approval card from the proactive layer.")
         }
     }
 }
@@ -41,6 +41,7 @@ public enum ProactiveMode: String, CaseIterable, Hashable, Sendable {
 /// A proactive proposal card (`OptionCardData.proactiveProposal`,
 /// `shared/proactive-proposal.ts`): options[0] accepts, options[1]
 /// declines; the answer goes to `POST /api/bots/:id/proactive/:proposalId`.
+/// Kept so leftover cards from older modes can still be answered.
 public enum ProactiveProposalRules {
     public static func isProposal(_ card: OptionCard) -> Bool {
         card.proactiveProposal != nil

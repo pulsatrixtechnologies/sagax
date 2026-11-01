@@ -248,7 +248,10 @@ public struct SkinPalette: Equatable, Sendable {
     }
 
     /// The parity reference: every value measured from the 21 screenshots.
-    public static let black: SkinPalette = blackBase.bubbled()
+    /// Black is the Grok look (2026-11-01): its bubbles stay Grok's neutral
+    /// greys (`BubbleColors.keepsNeutralBubbles`), the person's a step
+    /// lighter than the bot's, never the accent or the bot's colour.
+    public static let black: SkinPalette = blackBase
     private static let blackBase = SkinPalette(
         id: .black, isDark: true,
         bg: SkinColor(0x141414), card: SkinColor(0x202020), cardRaised: SkinColor(0x2E2E30),

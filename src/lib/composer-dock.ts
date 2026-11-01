@@ -18,7 +18,7 @@ export function transcriptEndPad(composerHeightPx: number): string {
 /** Pad the transcript so rest-at-bottom leaves one inter-bubble gap of
  * black above the docked composer. Tracks composer resizes (multiline,
  * queued chip, approval takeover). */
-export function useComposerDockPad(ref: RefObject<HTMLElement | null>) {
+export function useComposerDockPad(ref: RefObject<HTMLElement | null>, mount?: unknown) {
   const [height, setHeight] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -28,7 +28,9 @@ export function useComposerDockPad(ref: RefObject<HTMLElement | null>) {
     const observer = new ResizeObserver(apply);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [ref]);
+    // `mount`: the caller moved the dock to another element (ChatView's
+    // stage composer on an open page and back); observe the new one.
+  }, [ref, mount]);
   const measured = height > 0 ? height : FALLBACK_COMPOSER_PX;
   return { pad: transcriptEndPad(measured), height: measured };
 }

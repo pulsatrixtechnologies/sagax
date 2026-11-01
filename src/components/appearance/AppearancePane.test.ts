@@ -136,7 +136,7 @@ describe("the Mascot gallery", () => {
     expect(html).not.toContain("data-character-shape");
     expect(html).not.toContain("data-mascot-color=");
     const shapes = renderEditor(makeBot({ mascotLook: botMascotLook({ character: "shape" }) }), "shape");
-    expect(shapes.match(/data-character-shape=/g)).toHaveLength(32);
+    expect(shapes.match(/data-character-shape=/g)).toHaveLength(40);
     expect(shapes).not.toContain("data-character-option=");
   });
 

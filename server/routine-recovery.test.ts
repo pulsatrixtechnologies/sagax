@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { RuntimeEvent } from "../shared/runtime-events.ts";
+import { CLAUDE_NEEDS_RECONNECTING, CLAUDE_SIGN_IN_EXPIRED, claudeSignInExpired } from "./drivers/claude-errors.ts";
 import {
   classifyRoutineFailure, dispatchRefusal, retryNote, ROUTINE_BUSY_RECHECK_MS, ROUTINE_BUSY_WAIT_MS, weekRuns, type RoutineAlert,
 } from "./routine-recovery.ts";
@@ -269,6 +270,87 @@ describe("an unattended run only its owner can fix", () => {
     expect(h.run(run.id)).toMatchObject({ status: "failed", error: credits });
     expect(h.failed[0]!.alert).toEqual({ detail: "This bot's engine account is out of credit. Add credit with the provider, or choose another engine for this bot." });
 
+  });
+
+  it("pauses a Claude sign-in expiry as waiting (Claude needs reconnecting), never fails it", async () => {
+    const h = harness();
+    const message = claudeSignInExpired("Not logged in · Please run /login");
+    const run = await h.start(h.routine("maus-1").id);
+    h.fail("thread-1", message, { setup: true, stopReason: "auth_required" });
+    expect(h.run(run.id)).toMatchObject({
+      status: "waiting",
+      attention: CLAUDE_NEEDS_RECONNECTING,
+      waitingSince: START,
+    });
+    expect(h.run(run.id).error).toBeUndefined();
+    expect(h.failed).toEqual([]);
+    expect(h.deferred).toEqual([expect.objectContaining({
+      alert: { detail: expect.stringContaining("Reconnect Claude") },
+    })]);
+    expect(message.startsWith(CLAUDE_SIGN_IN_EXPIRED)).toBe(true);
+  });
+
+  it("pauses Claude extra-usage credits exhaustion as waiting (Claude needs reconnecting)", async () => {
+    const h = harness();
+    const credits = "Claude refused this turn because this model runs on extra usage for your account, and those credits are used up. " +
+      "Your plan's own usage is not affected: switch this bot to a model your plan includes, or add extra usage in your Claude account.";
+    const run = await h.start(h.routine("maus-1").id);
+    h.fail("thread-1", credits, { stopReason: "quota", limitScope: "model" } as { stopReason: string });
+    expect(h.run(run.id)).toMatchObject({
+      status: "waiting",
+      attention: CLAUDE_NEEDS_RECONNECTING,
+    });
+    expect(h.run(run.id).error).toBeUndefined();
+    expect(h.failed).toEqual([]);
+  });
+
+  it("resumes Claude reconnect waits once after sign-in, without duplicating the run", async () => {
+    const h = harness();
+    const message = claudeSignInExpired("OAuth session expired");
+    const run = await h.start(h.routine("maus-1").id);
+    h.fail("thread-1", message, { setup: true, stopReason: "auth_required" });
+    expect(h.run(run.id).status).toBe("waiting");
+    const resumed = h.manager.resumeClaudeReconnectWaits(["maus-1"]);
+    expect(resumed).toHaveLength(1);
+    expect(h.run(run.id)).toMatchObject({
+      status: "queued",
+      attention: "Starting again after Claude reconnected",
+      id: run.id,
+    });
+    expect(h.manager.resumeClaudeReconnectWaits(["maus-1"])).toEqual([]);
+    await h.manager.tick();
+    expect(h.started.map((turn) => turn.threadId)).toEqual(["thread-1", "thread-1"]);
+  });
+
+
+  it("pauses a due Claude run ahead when the sign-in is already expired", async () => {
+    const notified: Array<{ person: string; detail: string; names: string[] }> = [];
+    const h = harness({
+      claudeReconnect: {
+        usesClaude: () => true,
+        payer: () => "pr_alice",
+        expired: () => true,
+        onAheadNotify: (person, detail, names) => notified.push({ person, detail, names }),
+      },
+    });
+    const routine = h.manager.create({
+      name: "Morning brief",
+      prompt: "Brief me",
+      botId: "maus-1",
+      schedule: { type: "daily", time: "08:30", weekdays: [1] },
+    });
+    // START is Mon 2026-08-17 08:00; next daily Mon 08:30 is today in 30 min.
+    await h.manager.tick();
+    expect(notified).toEqual([expect.objectContaining({
+      person: "pr_alice",
+      names: ["Morning brief"],
+    })]);
+    // Advance past due so the run is queued, then paused for reconnect.
+    await h.advance(31 * MINUTE);
+    const run = h.runs().find((candidate) => candidate.routineId === routine.id);
+    expect(run).toMatchObject({ status: "waiting", attention: CLAUDE_NEEDS_RECONNECTING });
+    expect(h.started).toEqual([]);
+    expect(h.failed).toEqual([]);
   });
 
   it("waits out a usage limit that resets within twelve hours, once, and says so once", async () => {

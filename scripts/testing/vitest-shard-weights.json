@@ -92,7 +92,6 @@
   "server/data/data.e2e.test.ts": 10,
   "server/decider-included.e2e.test.ts": 6,
   "server/decider-rooms.e2e.test.ts": 6,
-  "server/delegations.test.ts": 15,
   "server/delete-bot-memory.e2e.test.ts": 5,
   "server/delta-context.e2e.test.ts": 548,
   "server/desktop-bridge.e2e.test.ts": 1,

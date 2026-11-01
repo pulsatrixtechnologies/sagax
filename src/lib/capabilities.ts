@@ -120,6 +120,7 @@ const REASON_KEY: Record<CapabilityReason, LocaleKey> = {
   not_installed: "capabilities.reason.notInstalled",
   unknown_profile: "capabilities.reason.unknownProfile",
   disabled: "capabilities.reason.disabled",
+  offered: "capabilities.reason.offered",
 };
 
 export const formWord = (form: CapabilityForm): string => t(FORM_KEY[form]);
@@ -227,7 +228,7 @@ function notServedWhy(item: Capability): string {
 
 /** The skills index of the prompt cut something (#1748). */
 export function indexCut(index: BotCapabilities["promptIndex"]): boolean {
-  return Boolean(index && (index.omitted > 0 || index.bytes > index.maxBytes || index.skills > index.maxSkills));
+  return Boolean(index && (index.incomplete || index.omitted > 0 || index.bytes > index.maxBytes || index.skills > index.maxSkills));
 }
 
 /** "4 KB" for the index cap. */
@@ -270,7 +271,7 @@ export function receiptWords(receipt: EngineReceipt): string {
  * server · API: nothing"). */
 export function enginesLine(form: CapabilityForm, parts: Omit<EngineParts, "customMcp">): string {
   return ENGINE_SAMPLES
-    .map((engine) => `${engine.label()}${t("capabilities.engines.colon")}${receiptWords(engineReceipt(engine.kind, form, { customMcp: true, ...parts }))}`)
+    .map((engine) => `${engine.label()}${t("capabilities.engines.colon")}${receiptWords(engineReceipt(engine.kind, form, { customMcp: true, skillDiscovery: form === "skill", ...parts }))}`)
     .join(" · ");
 }
 
@@ -278,7 +279,7 @@ export function enginesLine(form: CapabilityForm, parts: Omit<EngineParts, "cust
  * (the warning before an install). */
 export function engineGetsNothing(driverKind: string, form: CapabilityForm, parts: Omit<EngineParts, "customMcp">): boolean {
   const any = parts.skills || parts.commands || parts.agents || parts.mcp || parts.account;
-  return Boolean(any) && engineReceipt(driverKind, form, { customMcp: true, ...parts }).nothing;
+  return Boolean(any) && engineReceipt(driverKind, form, { customMcp: true, skillDiscovery: form === "skill", ...parts }).nothing;
 }
 
 /** Capabilities > Installed in a bot's scope: what the organization and

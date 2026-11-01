@@ -56,7 +56,7 @@ describe("a bot's character and its look", () => {
   it("is one of the owl, the shapes or Trombi, the owl when absent or malformed", () => {
     // the first eight keep the ids every stored look and older build knows
     expect(MASCOT_SHAPES.slice(0, 8)).toEqual(["circle", "bean", "squircle", "pill", "pick", "hexagon", "cloud", "drop"]);
-    expect(MASCOT_SHAPES).toHaveLength(32);
+    expect(MASCOT_SHAPES).toHaveLength(40);
     expect(MASCOT_SHAPES).toContain("pumpkin");
     // a look stored with a shape of an earlier set keeps working, on the nearest shape
     expect(botMascotLook({ character: "shape", shape: "blob" })).toEqual({ character: "shape", shape: "bean" });

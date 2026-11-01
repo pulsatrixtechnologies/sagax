@@ -74,15 +74,15 @@ export function workOrigin(line: RequestLine | undefined): WorkOrigin {
 }
 
 /** Where a request a conversation admits started, decided once when it is
- * admitted. A routine's or a webhook's run (`trigger`), or a Cloud guest's
- * turn, is never the user's. Otherwise: what a hand-off gave it (a
- * delegation's, a coordinated tree's, a thread the bot opened on itself),
+ * admitted. A routine's, webhook's or proactive wake's run (`trigger`), or a
+ * Cloud guest's turn, is never the user's. Otherwise: what a hand-off gave it
+ * (a delegation's, a coordinated tree's, a thread the bot opened on itself),
  * else what the request it continues had (a card answer, a wake, a resume
  * after the person acted), else the line that starts it. A continuation
  * passes no line: nothing on a stored line says a routine or a webhook
  * wrote it, so one whose request record moved on proves nothing. */
 export function requestWorkOrigin({ trigger, guest, handed, continued, line }: {
-  trigger?: "schedule" | "manual" | "webhook";
+  trigger?: "schedule" | "manual" | "webhook" | "proactive";
   guest?: boolean;
   handed?: WorkOrigin;
   continued?: WorkOrigin;

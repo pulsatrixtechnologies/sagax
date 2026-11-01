@@ -23,7 +23,7 @@ import { dirname, extname, posix, resolve, win32 } from "node:path";
 
 import { fromMarkdown } from "mdast-util-from-markdown";
 
-import { atRestSizeSync, readAtRestSync } from "./content-at-rest.ts";
+import { atRestChunks, atRestSizeSync, readAtRestSync } from "./content-at-rest.ts";
 import { maxBytesForAttachment } from "./attachments.ts";
 
 const OWNED_FILE_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[a-z0-9]{1,8}$/;
@@ -191,13 +191,22 @@ export function stageTurnAttachments(
 }
 
 /** Read one file for copying, in chunks the transports accept. */
-export function* attachmentChunks(file: TurnAttachedFile, chunkBytes: number): Generator<{ offset: number; data: Buffer; final: boolean }> {
-  // the plaintext, opened if sealed at rest: the copy in the target is plain
-  const bytes = readAtRestSync(file.serverPath);
-  if (atRestSizeSync(file.serverPath) !== bytes.length) throw new Error("attachment changed while copying");
-  if (bytes.length === 0) { yield { offset: 0, data: bytes, final: true }; return; }
-  for (let offset = 0; offset < bytes.length; offset += chunkBytes) {
-    const data = bytes.subarray(offset, Math.min(bytes.length, offset + chunkBytes));
-    yield { offset, data, final: offset + data.length >= bytes.length };
+export async function* attachmentChunks(file: TurnAttachedFile, chunkBytes: number): AsyncGenerator<{ offset: number; data: Buffer; final: boolean }> {
+  if (!Number.isSafeInteger(chunkBytes) || chunkBytes <= 0) throw new Error("chunk size must be positive");
+  const total = atRestSizeSync(file.serverPath);
+  if (total !== file.bytes) throw new Error("attachment changed while copying");
+  let offset = 0;
+  let pending: Buffer = Buffer.alloc(0);
+  for await (const bytes of atRestChunks(file.serverPath)) {
+    pending = pending.length ? Buffer.concat([pending, bytes]) : bytes;
+    while (pending.length >= chunkBytes) {
+      const data = pending.subarray(0, chunkBytes);
+      offset += data.length;
+      if (offset > total) throw new Error("attachment changed while copying");
+      yield { offset: offset - data.length, data, final: offset === total };
+      pending = pending.subarray(chunkBytes);
+    }
   }
+  if (offset + pending.length !== total || atRestSizeSync(file.serverPath) !== total) throw new Error("attachment changed while copying");
+  if (pending.length || total === 0) yield { offset, data: pending, final: true };
 }

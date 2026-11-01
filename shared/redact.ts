@@ -31,12 +31,17 @@ const KEY_PREFIXES: RegExp[] = [
   /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/g, // github classic
   /\bgithub_pat_[A-Za-z0-9_]{20,}/g, // github fine-grained
   /\bxox[abposr]-[A-Za-z0-9-]{20,}/g, // slack
+  /\bxapp-\d-[A-Za-z0-9-]{20,}/g, // slack app-level (socket mode) tokens
+  /\bgl(?:pat|dt|rtr?)-[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_-]+)*/g, // gitlab personal, deploy and runner tokens (upstream #3926)
   /\bAKIA[0-9A-Z]{16}\b/g, // aws access key id
   /\bAIza[0-9A-Za-z_-]{30,}/g, // google api key
   /\bnpm_[A-Za-z0-9]{20,}/g, // npm
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, // jwt
 ];
 const BEARER = /(\bBearer\s+)([A-Za-z0-9._~+/=-]{12,})/g;
+/** `Authorization: Basic dXNlcjpwYXNz`: the base64 is `user:password` in the clear. Only after an
+ * Authorization header, so prose like "Basic configuration" stays (upstream #3985). */
+const BASIC_AUTH = /(\bAuthorization["']?\s*[:=]\s*["']?Basic\s+)([A-Za-z0-9+/]{4,}={0,2})(?![A-Za-z0-9._~+/=-])/gi;
 const PEM_BEGIN = /-----BEGIN [A-Z ]*PRIVATE KEY-----/g;
 const PEM_END = /-----END [A-Z ]*PRIVATE KEY-----/g;
 
@@ -91,6 +96,7 @@ export function redactSecretsInText(text: string): string {
   out = maskPemBlocks(out);
   for (const re of KEY_PREFIXES) out = out.replace(re, (m) => mask(m));
   out = out.replace(BEARER, (_m, lead: string, tok: string) => `${lead}${mask(tok)}`);
+  out = out.replace(BASIC_AUTH, (_m, lead: string, creds: string) => `${lead}${mask(creds)}`);
   out = out.replace(KEY_VALUE, (_m, key: string, sep: string, quote: string, value: string) => `${key}${sep}${quote}${mask(value)}${quote}`);
   out = out.replace(KEY_SUFFIX_ASSIGNMENT, (_m, key: string, sep: string, quote: string, value: string) => `${key}${sep}${quote}${mask(value)}${quote}`);
   out = out.replace(SECRET_FLAG, (_m, flag: string, quote: string, value: string) => `${flag}${quote}${mask(value)}${quote}`);

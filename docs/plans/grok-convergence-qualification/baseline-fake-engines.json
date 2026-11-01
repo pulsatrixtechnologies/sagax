@@ -1,0 +1,1040 @@
+{
+  "schema": 1,
+  "corpusVersion": "1",
+  "engine": "fake",
+  "engineLabel": "fake claude CLI (repository fixture)",
+  "startedAt": "2026-11-01T17:23:36.354Z",
+  "finishedAt": "2026-11-01T17:26:52.062Z",
+  "revision": "71ebdcdb9",
+  "node": "v26.11.1",
+  "tasks": [
+    {
+      "id": "reply-01",
+      "category": "reply",
+      "title": "Short English question",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": 354,
+      "finalMs": 354,
+      "timed": true,
+      "wallMs": 3160,
+      "samples": [
+        {
+          "ttftMs": 354,
+          "finalMs": 354
+        }
+      ],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "reply-02",
+      "category": "reply",
+      "title": "Short French question with accents",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": 342,
+      "finalMs": 1162,
+      "timed": true,
+      "wallMs": 3836,
+      "samples": [
+        {
+          "ttftMs": 342,
+          "finalMs": 1162
+        }
+      ],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "reply-03",
+      "category": "reply",
+      "title": "Long prompt (about 20 KB)",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": 495,
+      "finalMs": 1375,
+      "timed": true,
+      "wallMs": 3779,
+      "samples": [
+        {
+          "ttftMs": 495,
+          "finalMs": 1375
+        }
+      ],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "reply-04",
+      "category": "reply",
+      "title": "Emoji, right to left and CJK text",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": 304,
+      "finalMs": 1137,
+      "timed": true,
+      "wallMs": 3584,
+      "samples": [
+        {
+          "ttftMs": 304,
+          "finalMs": 1137
+        }
+      ],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "reply-05",
+      "category": "reply",
+      "title": "Turn with three tool calls",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": 334,
+      "finalMs": 334,
+      "timed": true,
+      "wallMs": 2716,
+      "samples": [
+        {
+          "ttftMs": 334,
+          "finalMs": 334
+        }
+      ],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "reply-06",
+      "category": "reply",
+      "title": "Two turns in one conversation",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 2,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": 354,
+      "finalMs": 827,
+      "timed": true,
+      "wallMs": 3311,
+      "samples": [
+        {
+          "ttftMs": 354,
+          "finalMs": 827
+        },
+        {
+          "ttftMs": 82,
+          "finalMs": 82
+        }
+      ],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "busy-01",
+      "category": "busy",
+      "title": "One message sent while the bot works",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 2,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 5211,
+      "samples": [],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "busy-02",
+      "category": "busy",
+      "title": "Three messages sent while the bot works",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 4,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 5763,
+      "samples": [],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "busy-03",
+      "category": "busy",
+      "title": "Bot-routed busy send",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 2,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 6041,
+      "samples": [],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "busy-04",
+      "category": "busy",
+      "title": "Second conversation while the first works",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 2,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 3127,
+      "samples": [],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "delegation-01",
+      "category": "delegation",
+      "title": "Chief hands work to one teammate",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": 610,
+      "finalMs": 1774,
+      "timed": true,
+      "wallMs": 4297,
+      "samples": [
+        {
+          "ttftMs": 610,
+          "finalMs": 1774
+        }
+      ],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "delegation-02",
+      "category": "delegation",
+      "title": "Chief hands work to two teammates",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": 558,
+      "finalMs": 1707,
+      "timed": true,
+      "wallMs": 4329,
+      "samples": [
+        {
+          "ttftMs": 558,
+          "finalMs": 1707
+        }
+      ],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "delegation-03",
+      "category": "delegation",
+      "title": "Chief, lead and specialist chain",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": 605,
+      "finalMs": 2847,
+      "timed": true,
+      "wallMs": 5496,
+      "samples": [
+        {
+          "ttftMs": 605,
+          "finalMs": 2847
+        }
+      ],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "routine-01",
+      "category": "routine",
+      "title": "Routine run now",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": 554,
+      "finalMs": 554,
+      "timed": true,
+      "wallMs": 3431,
+      "samples": [
+        {
+          "ttftMs": 554,
+          "finalMs": 554
+        }
+      ],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "routine-02",
+      "category": "routine",
+      "title": "Routine run twice in a row",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": 461,
+      "finalMs": 782,
+      "timed": true,
+      "wallMs": 3618,
+      "samples": [
+        {
+          "ttftMs": 461,
+          "finalMs": 782
+        }
+      ],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "routine-03",
+      "category": "routine",
+      "title": "Scheduled one-time routine",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 9779,
+      "samples": [],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "files-01",
+      "category": "files",
+      "title": "Chunked upload and download",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 2796,
+      "samples": [],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "files-02",
+      "category": "files",
+      "title": "Upload resumed with a replayed chunk and commit",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 2762,
+      "samples": [],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "files-03",
+      "category": "files",
+      "title": "File attached to a message and answered",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": 316,
+      "finalMs": 316,
+      "timed": true,
+      "wallMs": 2626,
+      "samples": [
+        {
+          "ttftMs": 316,
+          "finalMs": 316
+        }
+      ],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "pages-01",
+      "category": "pages",
+      "title": "Bot proposes a page",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 3089,
+      "samples": [],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "pages-02",
+      "category": "pages",
+      "title": "Page proposed then published by the person",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 2954,
+      "samples": [],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "failover-01",
+      "category": "failover",
+      "title": "Primary engine at its usage limit",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 3228,
+      "samples": [],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "failover-02",
+      "category": "failover",
+      "title": "Limit reset returns to the primary",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 2,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 10376,
+      "samples": [],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "cancel-01",
+      "category": "cancel",
+      "title": "Stop during a tool call",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 3236,
+      "samples": [],
+      "defects": [],
+      "notes": [
+        "idle 469 ms after Stop"
+      ]
+    },
+    {
+      "id": "cancel-02",
+      "category": "cancel",
+      "title": "Stop then send again",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 2,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 5244,
+      "samples": [],
+      "defects": [],
+      "notes": [
+        "idle 463 ms after Stop"
+      ]
+    },
+    {
+      "id": "cancel-03",
+      "category": "cancel",
+      "title": "Stop with a message queued behind the turn",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 2,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 5665,
+      "samples": [],
+      "defects": [],
+      "notes": [
+        "idle 464 ms after Stop"
+      ]
+    },
+    {
+      "id": "reconnect-01",
+      "category": "reconnect",
+      "title": "Event stream dropped mid-turn, resumed with its cursor",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 4410,
+      "samples": [],
+      "defects": [],
+      "notes": [
+        "resumed=true replayed=1"
+      ]
+    },
+    {
+      "id": "reconnect-02",
+      "category": "reconnect",
+      "title": "Reconnect with an unknown cursor",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 4699,
+      "samples": [],
+      "defects": [],
+      "notes": [
+        "resumed=false replayed=0"
+      ]
+    },
+    {
+      "id": "restart-01",
+      "category": "restart",
+      "title": "Graceful server restart during a tool call",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "recovered",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 10858,
+      "samples": [],
+      "defects": [],
+      "notes": [
+        "SIGTERM: the turn resumed after the restart",
+        "userKept=true cutRowShown=true answeredAfterResume=true"
+      ]
+    },
+    {
+      "id": "restart-02",
+      "category": "restart",
+      "title": "Crash (SIGKILL) during a tool call",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 1,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "recovered",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 12433,
+      "samples": [],
+      "defects": [],
+      "notes": [
+        "SIGKILL: no resume after the restart",
+        "userKept=true cutRowShown=true answeredAfterResume=false"
+      ]
+    },
+    {
+      "id": "restart-03",
+      "category": "restart",
+      "title": "Crash with a message queued behind the turn",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 2,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "recovered",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 12890,
+      "samples": [],
+      "defects": [],
+      "notes": [
+        "SIGKILL: no resume after the restart",
+        "userKept=true cutRowShown=true answeredAfterResume=false",
+        "the message sent behind the turn was delivered"
+      ]
+    },
+    {
+      "id": "restart-04",
+      "category": "restart",
+      "title": "Graceful restart with a message queued behind the turn",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 2,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "recovered",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 11254,
+      "samples": [],
+      "defects": [],
+      "notes": [
+        "SIGTERM: the turn resumed after the restart",
+        "userKept=true cutRowShown=true answeredAfterResume=true",
+        "the message sent behind the turn was delivered"
+      ]
+    },
+    {
+      "id": "concurrent-01",
+      "category": "concurrent",
+      "title": "Six bots messaged at the same moment",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 6,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": 920,
+      "finalMs": 920,
+      "timed": true,
+      "wallMs": 3469,
+      "samples": [
+        {
+          "ttftMs": 457,
+          "finalMs": 457
+        },
+        {
+          "ttftMs": 583,
+          "finalMs": 583
+        },
+        {
+          "ttftMs": 629,
+          "finalMs": 629
+        },
+        {
+          "ttftMs": 717,
+          "finalMs": 717
+        },
+        {
+          "ttftMs": 822,
+          "finalMs": 822
+        },
+        {
+          "ttftMs": 920,
+          "finalMs": 920
+        }
+      ],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "concurrent-02",
+      "category": "concurrent",
+      "title": "Eight rapid sends to one conversation",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 8,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 5101,
+      "samples": [],
+      "defects": [],
+      "notes": []
+    },
+    {
+      "id": "concurrent-03",
+      "category": "concurrent",
+      "title": "Three bots, three sends each",
+      "engine": "fake",
+      "status": "completed",
+      "completed": true,
+      "acceptedSends": 9,
+      "lostAccepted": 0,
+      "duplicateReplies": 0,
+      "duplicateDispatches": 0,
+      "restartRecovery": "n/a",
+      "stuck": false,
+      "ttftMs": null,
+      "finalMs": null,
+      "timed": false,
+      "wallMs": 3948,
+      "samples": [],
+      "defects": [],
+      "notes": []
+    }
+  ],
+  "summary": {
+    "tasks": 35,
+    "run": 35,
+    "skipped": 0,
+    "completed": 35,
+    "completionRate": 1,
+    "lostAccepted": 0,
+    "duplicateReplies": 0,
+    "duplicateDispatches": 0,
+    "restartTasks": 4,
+    "restartRecovered": 4,
+    "restartRecoveryRate": 1,
+    "stuck": 0,
+    "ttft": {
+      "n": 19,
+      "p50": 495,
+      "p95": 920
+    },
+    "final": {
+      "n": 19,
+      "p50": 782,
+      "p95": 2847
+    },
+    "byCategory": {
+      "busy": {
+        "run": 4,
+        "completed": 4,
+        "ttft": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "final": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "cancel": {
+        "run": 3,
+        "completed": 3,
+        "ttft": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "final": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "concurrent": {
+        "run": 3,
+        "completed": 3,
+        "ttft": {
+          "n": 6,
+          "p50": 629,
+          "p95": 920
+        },
+        "final": {
+          "n": 6,
+          "p50": 629,
+          "p95": 920
+        }
+      },
+      "delegation": {
+        "run": 3,
+        "completed": 3,
+        "ttft": {
+          "n": 3,
+          "p50": 605,
+          "p95": 610
+        },
+        "final": {
+          "n": 3,
+          "p50": 1774,
+          "p95": 2847
+        }
+      },
+      "failover": {
+        "run": 2,
+        "completed": 2,
+        "ttft": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "final": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "files": {
+        "run": 3,
+        "completed": 3,
+        "ttft": {
+          "n": 1,
+          "p50": 316,
+          "p95": 316
+        },
+        "final": {
+          "n": 1,
+          "p50": 316,
+          "p95": 316
+        }
+      },
+      "pages": {
+        "run": 2,
+        "completed": 2,
+        "ttft": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "final": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "reconnect": {
+        "run": 2,
+        "completed": 2,
+        "ttft": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "final": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "reply": {
+        "run": 6,
+        "completed": 6,
+        "ttft": {
+          "n": 7,
+          "p50": 342,
+          "p95": 495
+        },
+        "final": {
+          "n": 7,
+          "p50": 827,
+          "p95": 1375
+        }
+      },
+      "restart": {
+        "run": 4,
+        "completed": 4,
+        "ttft": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "final": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "routine": {
+        "run": 3,
+        "completed": 3,
+        "ttft": {
+          "n": 2,
+          "p50": 461,
+          "p95": 554
+        },
+        "final": {
+          "n": 2,
+          "p50": 554,
+          "p95": 782
+        }
+      }
+    }
+  }
+}

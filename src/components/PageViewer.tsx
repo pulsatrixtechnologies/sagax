@@ -371,7 +371,12 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
       // the target may be the window or the document (focus nowhere):
       // Escape still closes, it never throws
       const target = event.target;
-      if (typeof Element !== "undefined" && target instanceof Element && target.closest("input,textarea,select,[role=menu],dialog")) return;
+      // The empty composer docked on the page (stage chat, lot 5) is the
+      // exception: there Escape is the way back to the chat, as from the
+      // page itself. Its own Escapes (menus, reply, stop) prevent default.
+      const emptyStageComposer = typeof HTMLTextAreaElement !== "undefined" && target instanceof HTMLTextAreaElement
+        && target.value === "" && target.closest("[data-page-stage-chat]") !== null;
+      if (!emptyStageComposer && typeof Element !== "undefined" && target instanceof Element && target.closest("input,textarea,select,[role=menu],dialog")) return;
       onClose();
     };
     window.addEventListener("keydown", onKey);
@@ -398,11 +403,14 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
       {/* floats over the page, as the reference design draws it: the page
           runs to the top edge; only the round buttons and the pill catch
           the pointer */}
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-[2] flex h-14 items-center gap-2 px-3 [&>*]:pointer-events-auto">
-        <button type="button" data-page-close aria-label={t("pages.close")} title={t("pages.close")} onClick={onClose} className={cn(ROUND, "window-no-drag")}>
+      {/* @container: on a narrow page (a phone, a split pane) Share keeps only
+          its icon and the title pill takes the room between the buttons, so
+          the pill never runs under « … » (390 px, lot 5). */}
+      <header className="@container/pagehead pointer-events-none absolute inset-x-0 top-0 z-[2] flex h-14 items-center gap-2 px-3 [&>*]:pointer-events-auto">
+        <button type="button" data-page-close aria-label={t("pages.backToChat")} title={t("pages.backToChat")} onClick={onClose} className={cn(ROUND, "window-no-drag")}>
           <X size={17} />
         </button>
-        <div className="!pointer-events-none absolute inset-x-28 flex justify-center">
+        <div className="!pointer-events-none absolute inset-x-28 flex justify-center @max-[34rem]/pagehead:start-14 @max-[34rem]/pagehead:end-[6.5rem]">
           <div className="pointer-events-auto min-w-0 max-w-full">
             <PageTitlePill title={title} busy={busy} onRename={rename} />
           </div>
@@ -428,8 +436,8 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
               )}
             </PopoverMenu>
           )}
-          <button type="button" data-page-share aria-expanded={sharing} aria-haspopup="dialog" disabled={!page || version === null} className={PILL} onClick={() => setSharing((open) => !open)}>
-            <Share size={14} />{t("pages.share")}
+          <button type="button" data-page-share aria-expanded={sharing} aria-haspopup="dialog" disabled={!page || version === null} className={cn(PILL, "@max-[34rem]/pagehead:px-2.5")} onClick={() => setSharing((open) => !open)}>
+            <Share size={14} /><span className="@max-[34rem]/pagehead:sr-only">{t("pages.share")}</span>
           </button>
           {sharing && page && version !== null && (
             <PageSharePopover page={page} version={version} linkOff={!policy.linkSharing} onChange={update} onClose={() => setSharing(false)}

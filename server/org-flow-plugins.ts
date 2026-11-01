@@ -1,66 +1,17 @@
-// Pulsatrix Flow for every member of the organization (decisions of
-// 2026-10-18 and 2026-10-19: « le plugin pulsatrix-flow est installé de base
-// dès que tu ajoutes un profil Perspicax, ou même dès que tu es dans
-// l'organisation » ; the marketplace is served by Perspicax, private and
-// behind the person's identity, never public).
-//
-// Perspicax declares it in the directory (`flow_plugins`, its
-// flow_marketplace.rs): the private marketplace's manifest URL, the audience
-// of its token, the active signed pack and its plugins (the product
-// `pulsatrix-flow` and the organization's `pulsatrix-flow-<tenant>`, with
-// their versions). The admin turns it off in Perspicax (`enabled` false, one
-// switch on its Flow page): the copy here is taken out.
-//
-// The Flow guard stays on (2026-10-26). The copy loaded here has no
-// hooks (like every plugin "For this bot"), so the plugin's own PreToolUse
-// guard does not run in the engine. Perspicax runs that same hook on its side
-// for every call of a Flow-linked profile (its server guard, `enforce`), and
-// declares the marketplace only while that holds for every profile that can
-// write (`guard: "enforce"`). Sagax installs and loads the copy only under
-// that declaration: without `guard: "enforce"` (an older Perspicax, the
-// guard off or in shadow, a write profile not linked to Flow) the copy is
-// taken out and no turn loads it.
-//
-// How it is installed: Claude Code's own marketplace machinery, in a Claude
-// Code folder of this server's own (`<data>/org-flow-plugins/claude`, used as
-// CLAUDE_CONFIG_DIR for the plugin commands only, never a sign-in):
-//   - settings.json declares the marketplace by URL with a `headersHelper`,
-//     a small script that prints `Authorization: Bearer <token>` from the
-//     environment of the command it runs under. The token is a member's
-//     marketplace token (a short RFC 8693 exchange of their live sign-in,
-//     at most 15 minutes), passed in the environment of the one `claude
-//     plugin` process: it is never written to disk.
-//   - A headless session start registers the declared marketplace (the CLI
-//     reconciles `extraKnownMarketplaces`; `plugin marketplace add` refuses
-//     a declared entry with a helper), then `claude plugin install` or
-//     `update` (`-y`: the helper is ours) fetches each archive; Claude Code
-//     checks each archive against the SHA-256 the manifest lists.
-//   - Each installed plugin is copied, sanitized like a plugin "For this
-//     bot" (no hooks, MCP, LSP or bin on the host), to `load/<name>`, and
-//     that copy loads with `--plugin-dir` on the Claude turns of a bot whose
-//     owner is an active member (after the bot's own plugins, never twice).
-//
-// Triggers: the directory (a declaration changed: a new pack, the switch), a
-// person's sign-in (their own token), a Perspicax profile added, the start of
-// the server and a check every 30 minutes (installs what is missing or older;
-// silent when the copy matches the declaration: no command, no token).
-//
-// Engines: Claude Code only. Codex, Grok and the others have no Claude Code
-// plugin system; they reach Flow through the Perspicax profiles of the turn
-// (`flow`, `flow_action`, served by Perspicax from the same signed pack).
+// The linked server installs the signed Perspicax Flow pack directly over
+// HTTP with its own link token. No member sign-in or Claude CLI is required.
+// The guarded directory declaration and archive hashes remain authoritative;
+// sanitized folders serve every engine from the same selected installation.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { copySanitizedPlugin } from "./bot-plugins.ts";
-import { killCliTree, spawnCli } from "./procs.ts";
+import { installationCapabilityBridge } from "./installation-capability-bridge.ts";
+import { ZipReader } from "./zip.ts";
 import type { FlowPluginsDeclaration } from "./perspicax-link.ts";
-
-/** The environment variable the headers helper reads; set only on the
- * `claude plugin` processes this module runs. */
-export const TOKEN_ENV = "SAGAX_FLOW_MARKETPLACE_TOKEN";
 
 export type OrgFlowPluginState = "installed" | "pending" | "failed";
 
@@ -87,64 +38,11 @@ export interface OrgFlowPluginsStatus {
   syncedAt?: number;
 }
 
-/** What one `claude` run gave back. */
-export interface CliResult {
-  code: number | null;
-  stdout: string;
-  stderr: string;
-}
-
-export interface CliRun {
-  env: NodeJS.ProcessEnv;
-  timeoutMs: number;
-  /** Written to stdin; stdin stays open until `done` holds or the run ends. */
-  input?: string;
-  /** Checked every 250 ms while the process runs: true stops it. */
-  done?: () => boolean;
-}
-
-export type CliRunner = (cli: string, args: string[], run: CliRun) => Promise<CliResult>;
-
-/** Spawn the CLI with its own process group; killed at `timeoutMs`. */
-export const runCli: CliRunner = (cli, args, run) => new Promise((resolve) => {
-  let stdout = "";
-  let stderr = "";
-  let settled = false;
-  let child: ReturnType<typeof spawnCli>;
-  try {
-    child = spawnCli(cli, args, { env: run.env, stdio: ["pipe", "pipe", "pipe"] });
-  } catch (error) {
-    resolve({ code: null, stdout: "", stderr: error instanceof Error ? error.message : String(error) });
-    return;
-  }
-  const finish = (code: number | null) => {
-    if (settled) return;
-    settled = true;
-    clearInterval(poll);
-    clearTimeout(timer);
-    resolve({ code, stdout: stdout.slice(-200_000), stderr: stderr.slice(-20_000) });
-  };
-  const stop = () => {
-    try { child.stdin.end(); } catch { /* gone */ }
-    void killCliTree(child).catch(() => false);
-  };
-  child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
-  child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
-  child.stdin.on("error", () => {});
-  child.on("error", (error) => { stderr += error.message; finish(null); });
-  child.on("close", (code) => finish(code));
-  const poll = setInterval(() => {
-    if (run.done?.()) { stop(); }
-  }, 250);
-  const timer = setTimeout(() => { stderr += "\ntimed out"; stop(); }, run.timeoutMs);
-  if (run.input !== undefined) child.stdin.write(run.input);
-  if (!run.done) child.stdin.end();
-});
-
 const savedSchema = z.object({
   version: z.literal(2),
   /** digest of the declaration last applied in full */
   applied: z.string().optional(),
+  pack: z.string().optional(),
   /** plugin name -> the version its load copy holds */
   loaded: z.record(z.string(), z.string()).default({}),
 }).strict();
@@ -156,19 +54,11 @@ export interface OrgFlowPluginsOptions {
   issuer: string;
   /** The last directory's declaration; undefined when it sent none. */
   declaration: () => FlowPluginsDeclaration | undefined;
-  /** The Claude Code CLI of this server; undefined: no Claude Code engine. */
-  cli: () => string | undefined;
-  /** A member's marketplace token, `preferred` first (the person who just
-   * signed in); undefined when no active member has a live sign-in. */
-  token: (preferred?: string) => Promise<string | undefined>;
+  /** This installation's link token, never a member's exchanged identity. */
+  token: () => Promise<string | undefined>;
   /** Whether this principal is an active member of the organization now. */
   isMember: (principalId: string) => boolean;
-  run?: CliRunner;
-  /** The interpreter of the headers helper (`process.execPath`). */
-  node?: string;
-  /** Variables added to the environment of the `claude` commands (a test's
-   * fake CLI log); the rest of the server's environment never reaches them. */
-  env?: NodeJS.ProcessEnv;
+  fetch?: typeof fetch;
   now?: () => number;
   log?: (line: string) => void;
 }
@@ -188,45 +78,20 @@ function short(text: string): string {
   return text.replace(/\s+/g, " ").trim().slice(0, 300);
 }
 
-/** The last JSON line of a `--json` run. */
-function lastJson(stdout: string): Record<string, unknown> | undefined {
-  const lines = stdout.trim().split(/\r?\n/).reverse();
-  for (const line of lines) {
-    try {
-      const value = JSON.parse(line) as unknown;
-      if (value && typeof value === "object") return value as Record<string, unknown>;
-    } catch { /* not JSON */ }
-  }
-  return undefined;
-}
-
-/** A command's failure, readable, without the token (it is never printed,
- * but a message is cut and its whitespace folded all the same). */
-function failure(what: string, result: CliResult, token?: string): string {
-  const json = lastJson(result.stdout);
-  const message = typeof json?.message === "string" ? json.message : result.stderr || result.stdout || `exit ${result.code}`;
-  const text = token ? message.split(token).join("[token]") : message;
-  return short(`${what}: ${text}`);
-}
-
-const HELPER = `// Sagax: the headers of the Perspicax Flow marketplace (server/org-flow-plugins.ts).
-// The token comes from the environment of the one command that runs this;
-// it is never written to disk.
-const token = process.env.${TOKEN_ENV} || "";
-if (!token) {
-  process.stderr.write("no Perspicax marketplace token in this environment\\n");
-  process.exit(1);
-}
-process.stdout.write(JSON.stringify({ Authorization: "Bearer " + token }));
-`;
-
-const ENV_KEEP = ["PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SystemRoot", "ComSpec", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy"];
+const MAX_PLUGIN_BYTES = 128 * 1024 * 1024;
+const manifestSchema = z.object({
+  name: z.string(),
+  plugins: z.array(z.object({
+    name: z.string(), version: z.string(),
+    source: z.object({ source: z.literal("archive"), url: z.string().url(), sha256: z.string().regex(/^[a-f0-9]{64}$/i) }),
+  })),
+});
 
 export class OrgFlowPlugins {
   private readonly options: OrgFlowPluginsOptions;
   private readonly now: () => number;
   private readonly log: (line: string) => void;
-  private readonly run: CliRunner;
+  private readonly fetch: typeof fetch;
   private lock: Promise<unknown> = Promise.resolve();
   private current: OrgFlowPluginsStatus = { mode: "unknown", plugins: [] };
 
@@ -234,17 +99,12 @@ export class OrgFlowPlugins {
     this.options = options;
     this.now = options.now ?? Date.now;
     this.log = options.log ?? ((line) => console.log(line));
-    this.run = options.run ?? runCli;
+    this.fetch = options.fetch ?? fetch;
   }
 
   /** `<data>/org-flow-plugins`. */
   get root(): string {
     return join(this.options.dataDir, "org-flow-plugins");
-  }
-
-  /** The Claude Code folder of the plugin commands (CLAUDE_CONFIG_DIR). */
-  get configDir(): string {
-    return join(this.root, "claude");
   }
 
   private get stateFile(): string {
@@ -256,6 +116,14 @@ export class OrgFlowPlugins {
   }
 
   private read(): Saved {
+    const bridge = installationCapabilityBridge();
+    if (bridge?.hasMigrated("org-flow-state")) {
+      try {
+        return savedSchema.parse(bridge.read().orgFlow ?? { version: 2, loaded: {} });
+      } catch {
+        return { version: 2, loaded: {} };
+      }
+    }
     try {
       return savedSchema.parse(JSON.parse(readFileSync(this.stateFile, "utf8")));
     } catch {
@@ -264,8 +132,16 @@ export class OrgFlowPlugins {
   }
 
   private write(saved: Saved): void {
+    const parsed = savedSchema.parse(saved);
+    const bridge = installationCapabilityBridge();
+    if (bridge?.hasMigrated("org-flow-state")) {
+      bridge.patch((document) => {
+        document.orgFlow = parsed;
+      });
+      return;
+    }
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
-    writeFileAtomic(this.stateFile, JSON.stringify(savedSchema.parse(saved), null, 2));
+    writeFileAtomic(this.stateFile, JSON.stringify(parsed, null, 2));
   }
 
   status(): OrgFlowPluginsStatus {
@@ -273,9 +149,9 @@ export class OrgFlowPlugins {
   }
 
   /** Bring the copy in line with the declaration. Idempotent and
-   * serialized; `principalId` is the person whose token to use first. */
-  sync(reason: string, options: { principalId?: string } = {}): Promise<OrgFlowPluginsStatus> {
-    const next = this.lock.catch(() => undefined).then(() => this.apply(reason, options.principalId));
+   * serialized. Installation uses the server link regardless of who triggered it. */
+  sync(reason: string): Promise<OrgFlowPluginsStatus> {
+    const next = this.lock.catch(() => undefined).then(() => this.apply(reason));
     this.lock = next.catch(() => undefined);
     return next;
   }
@@ -303,7 +179,7 @@ export class OrgFlowPlugins {
     }
   }
 
-  private async apply(reason: string, preferred: string | undefined): Promise<OrgFlowPluginsStatus> {
+  private async apply(reason: string): Promise<OrgFlowPluginsStatus> {
     const declaration = this.options.declaration();
     const now = this.now();
     if (!declaration) {
@@ -347,111 +223,40 @@ export class OrgFlowPlugins {
     const wanted = digest(declaration);
     const current = ids.every((p) => saved.loaded[p.name] === p.version && existsSync(join(this.loadDir(p.name), ".claude-plugin", "plugin.json")));
     if (saved.applied === wanted && current) {
-      // Already up to date: nothing to run, nothing to say.
+      // Already up to date: nothing to fetch, nothing to say.
+      if (saved.pack !== declaration.pack) this.write({ ...saved, pack: declaration.pack });
       this.current = { mode: "on", syncedAt: now, plugins: ids.map((p) => ({ id: p.id, tenant: p.tenant, state: "installed", version: p.version })) };
       return this.status();
     }
-    const cli = this.options.cli();
-    if (!cli) return pending("no Claude Code engine on this server: Pulsatrix Flow installs when one is configured");
-    const token = await this.options.token(preferred);
-    if (!token) return pending("no member is signed in right now: Pulsatrix Flow installs at the next sign-in");
-
-    mkdirSync(this.configDir, { recursive: true, mode: 0o700 });
-    const helper = join(this.root, "headers-helper.cjs");
-    writeFileAtomic(helper, HELPER);
-    const node = this.options.node ?? process.execPath;
-    const headersHelper = `"${node}" "${helper}"`;
-    // The declaration only: the marketplace by URL with our helper, the
-    // plugins enabled. No secret is written here.
-    writeFileAtomic(join(this.configDir, "settings.json"), JSON.stringify({
-      extraKnownMarketplaces: { [market]: { source: { source: "url", url: declaration.url, headersHelper } } },
-      enabledPlugins: Object.fromEntries(ids.map((p) => [p.id, true])),
-    }, null, 2));
-    const env: NodeJS.ProcessEnv = {};
-    for (const key of ENV_KEEP) if (process.env[key] !== undefined) env[key] = process.env[key];
-    Object.assign(env, this.options.env ?? {});
-    env.CLAUDE_CONFIG_DIR = this.configDir;
-    env[TOKEN_ENV] = token;
-    if (process.versions.electron) env.ELECTRON_RUN_AS_NODE = "1";
-    const claude = (args: string[], extra: Partial<CliRun> = {}) => this.run(cli, args, { env, timeoutMs: 120_000, ...extra });
-
-    const known = () => {
-      try {
-        const listed = JSON.parse(readFileSync(join(this.configDir, "plugins", "known_marketplaces.json"), "utf8")) as Record<string, { source?: { url?: unknown } }>;
-        return listed[market]?.source?.url === declaration.url;
-      } catch {
-        return false;
-      }
-    };
+    const token = await this.options.token();
+    if (!token) return pending("the server link is unavailable: Pulsatrix Flow installs when it is restored");
     const statuses: OrgFlowPluginStatus[] = [];
+    const next = this.read();
     let complete = true;
     try {
-      if (!known()) {
-        // A headless session start registers the declared marketplace.
-        const started = await claude(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"], {
-          input: `${JSON.stringify({ type: "control_request", request_id: "sagax-flow", request: { subtype: "initialize" } })}\n`,
-          done: known,
-          timeoutMs: 90_000,
-        });
-        if (!known()) return pending(failure("the Perspicax marketplace could not be added", started, token));
-        this.log(`[org-flow-plugins] marketplace ${market} added (${reason})`);
-      } else {
-        const updated = await claude(["plugin", "marketplace", "update", market, "--json"]);
-        if (updated.code !== 0) return pending(failure("the Perspicax marketplace could not be read", updated, token));
-      }
-      const listed = await claude(["plugin", "list", "--json"]);
-      let installed: Array<{ id?: unknown; version?: unknown; installPath?: unknown }> = [];
-      try {
-        const value = JSON.parse(listed.stdout) as unknown;
-        if (Array.isArray(value)) installed = value as typeof installed;
-      } catch { /* none */ }
-      const have = (id: string) => installed.find((entry) => entry.id === id);
+      const manifest = manifestSchema.parse(JSON.parse((await this.bytes(declaration.url, token, 1024 * 1024)).toString("utf8")));
+      if (manifest.name !== market) throw new Error("the marketplace name does not match its declaration");
       for (const plugin of ids) {
-        const before = have(plugin.id);
-        if (!before || before.version !== plugin.version) {
-          const result = await claude(["plugin", before ? "update" : "install", plugin.id, "-y", "--json"]);
-          if (result.code !== 0) {
-            complete = false;
-            statuses.push({ id: plugin.id, tenant: plugin.tenant, state: "failed", error: failure(before ? "update" : "install", result, token) });
-            continue;
-          }
-        }
-        statuses.push({ id: plugin.id, tenant: plugin.tenant, state: "pending" });
-      }
-      // Where each one is now, then the sanitized copies that load.
-      const after = await claude(["plugin", "list", "--json"]);
-      try {
-        const value = JSON.parse(after.stdout) as unknown;
-        installed = Array.isArray(value) ? value as typeof installed : [];
-      } catch {
-        installed = [];
-      }
-      const next = this.read();
-      for (const status of statuses) {
-        if (status.state === "failed") continue;
-        const plugin = ids.find((p) => p.id === status.id)!;
-        const entry = have(plugin.id);
-        const path = typeof entry?.installPath === "string" ? entry.installPath : undefined;
-        if (!path || entry?.version !== plugin.version || !existsSync(path)) {
-          complete = false;
-          Object.assign(status, { state: "failed", error: `install: Claude Code has ${String(entry?.version ?? "nothing")} where ${plugin.version} is declared` });
+        if (next.loaded[plugin.name] === plugin.version && existsSync(join(this.loadDir(plugin.name), ".claude-plugin", "plugin.json"))) {
+          statuses.push({ id: plugin.id, tenant: plugin.tenant, state: "installed", version: plugin.version });
           continue;
         }
-        if (next.loaded[plugin.name] !== plugin.version || !existsSync(this.loadDir(plugin.name))) {
-          const staging = `${this.loadDir(plugin.name)}.${process.pid}.tmp`;
-          copySanitizedPlugin(path, staging);
-          rmSync(this.loadDir(plugin.name), { recursive: true, force: true });
-          renameSync(staging, this.loadDir(plugin.name));
+        try {
+          const matches = manifest.plugins.filter((entry) => entry.name === plugin.name && entry.version === plugin.version);
+          if (matches.length !== 1) throw new Error("the declared plugin version is missing or ambiguous in the marketplace");
+          const source = matches[0]!.source;
+          const url = new URL(source.url);
+          const resource = new URL(declaration.resource);
+          if (url.origin !== resource.origin || !url.pathname.startsWith(`${resource.pathname}/plugins/`) || url.username || url.password) throw new Error("the archive is not served by this Flow marketplace");
+          const archive = await this.bytes(url.toString(), token, MAX_PLUGIN_BYTES);
+          if (createHash("sha256").update(archive).digest("hex") !== source.sha256.toLowerCase()) throw new Error("archive integrity check failed");
+          this.installArchive(plugin, archive);
           next.loaded[plugin.name] = plugin.version;
+          statuses.push({ id: plugin.id, tenant: plugin.tenant, state: "installed", version: plugin.version });
           this.log(`[org-flow-plugins] ${plugin.id} ${plugin.version} ready (${reason})`);
-        }
-        Object.assign(status, { state: "installed", version: plugin.version });
-      }
-      // A plugin no longer declared: out of Claude Code and of the load list.
-      for (const entry of installed) {
-        const id = typeof entry.id === "string" ? entry.id : "";
-        if (id.endsWith(`@${market}`) && !ids.some((p) => p.id === id)) {
-          await claude(["plugin", "uninstall", id, "--json"]);
+        } catch (error) {
+          complete = false;
+          statuses.push({ id: plugin.id, tenant: plugin.tenant, state: "failed", error: short(`install: ${error instanceof Error ? error.message : String(error)}`.split(token).join("[token]")) });
         }
       }
       for (const name of Object.keys(next.loaded)) {
@@ -460,15 +265,70 @@ export class OrgFlowPlugins {
           delete next.loaded[name];
         }
       }
-      this.write({ ...next, ...(complete ? { applied: wanted } : {}) });
+      if (!complete) { delete next.applied; delete next.pack; }
+      this.write({ ...next, ...(complete ? { applied: wanted, pack: declaration.pack } : {}) });
     } catch (error) {
-      return pending(short(`install: ${error instanceof Error ? error.message : String(error)}`.split(token).join("[token]")));
+      return pending(short(`the Perspicax marketplace could not be read: ${error instanceof Error ? error.message : String(error)}`.split(token).join("[token]")));
     }
     const failed = statuses.find((s) => s.state === "failed");
     this.current = { mode: "on", plugins: statuses, syncedAt: now, ...(failed ? { error: failed.error } : {}) };
     if (failed) this.log(`[org-flow-plugins] ${failed.id}: ${failed.error}`);
     return this.status();
   }
+
+  private async bytes(url: string, token: string, limit: number): Promise<Buffer> {
+    const response = await this.fetch(url, { headers: { authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.timeout(120_000) });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("empty marketplace response");
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) return Buffer.concat(chunks);
+        size += value.byteLength;
+        if (size > limit) throw new Error("the marketplace response exceeds its size limit");
+        chunks.push(value);
+      }
+    } finally { await reader.cancel().catch(() => {}); }
+  }
+
+  private installArchive(plugin: { name: string; version: string }, archive: Buffer): void {
+    mkdirSync(this.root, { recursive: true, mode: 0o700 });
+    const staging = mkdtempSync(join(this.root, ".install-"));
+    try {
+      const file = join(staging, "plugin.zip");
+      writeFileSync(file, archive, { mode: 0o600 });
+      const zip = ZipReader.open(file, { maxEntries: 20_000, maxTotalBytes: MAX_PLUGIN_BYTES, maxEntryBytes: MAX_PLUGIN_BYTES });
+      const source = join(staging, "source");
+      try {
+        const prefix = `${plugin.name}/`;
+        const manifest = zip.json(`${prefix}.claude-plugin/plugin.json`) as { name?: unknown; version?: unknown };
+        if (manifest?.name !== plugin.name || manifest.version !== plugin.version) throw new Error("the archive plugin identity does not match its declaration");
+        for (const [name, entry] of zip.entries) {
+          if (!name.startsWith(prefix)) throw new Error("a file in the archive is outside the declared plugin");
+          const target = join(source, name.slice(prefix.length));
+          mkdirSync(dirname(target), { recursive: true });
+          writeFileSync(target, zip.read(name), { mode: entry.executable ? 0o755 : 0o644 });
+        }
+      } finally { zip.close(); }
+      const prepared = join(staging, "prepared");
+      copySanitizedPlugin(source, prepared);
+      const target = this.loadDir(plugin.name);
+      const before = join(staging, "previous");
+      mkdirSync(dirname(target), { recursive: true });
+      if (existsSync(target)) renameSync(target, before);
+      try { renameSync(prepared, target); }
+      catch (error) { if (existsSync(before)) renameSync(before, target); throw error; }
+    } finally { rmSync(staging, { recursive: true, force: true }); }
+  }
+
+  loadedPack(): string | undefined { return this.read().pack; }
+  loadedVersion(name: string): string | undefined { return this.loadedDir(name) ? this.read().loaded[name] : undefined; }
 
   /** The installed copy of one declared plugin (the folder dirsFor hands a
    * turn), or undefined: the capabilities list reads it. */
@@ -478,7 +338,7 @@ export class OrgFlowPlugins {
     return existsSync(join(dir, ".claude-plugin", "plugin.json")) ? dir : undefined;
   }
 
-  /** The organization's plugin folders for a Claude turn of a bot owned by
+  /** The organization's plugin folders for a turn of a bot owned by
    * `owner`, after the bot's own (`own`, loaded first): none for a person
    * who is not an active member, none when it is off or Perspicax does not
    * enforce the Flow guard, and none whose plugin the bot already has. */

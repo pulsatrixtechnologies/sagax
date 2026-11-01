@@ -143,6 +143,22 @@ final class ShareClientTests: XCTestCase {
         XCTAssertEqual(ShareRequestStub.capturedBody, bytes)
     }
 
+    func testFilePreviewDownloadStreamsToDiskAndKeepsScopedProvenance() async throws {
+        ShareRequestStub.responseBody = Data([1, 2, 3, 4])
+        ShareRequestStub.responseHeaders = ["Content-Type": "video/mp4", "Content-Disposition": "attachment; filename=clip.mp4"]
+        let downloaded = try await client.downloadFileToDisk(threadId: "thread-1", messageId: "message-1", path: "/fixture/clip.mp4")
+        let url = try XCTUnwrap(downloaded.localURL)
+        defer { try? FileManager.default.removeItem(at: url) }
+        XCTAssertTrue(downloaded.data.isEmpty)
+        XCTAssertEqual(try Data(contentsOf: url), Data([1, 2, 3, 4]))
+        XCTAssertEqual(downloaded.filename, "clip.mp4")
+        XCTAssertEqual(downloaded.contentType, "video/mp4")
+        XCTAssertEqual(ShareRequestStub.capturedRequest?.url?.path, "/api/threads/thread-1/messages/message-1/file")
+        XCTAssertEqual(ShareRequestStub.capturedRequest?.value(forHTTPHeaderField: "Authorization"), "Bearer paired-token")
+        let body = try JSONSerialization.jsonObject(with: XCTUnwrap(ShareRequestStub.capturedBody)) as? [String: String]
+        XCTAssertEqual(body, ["path": "/fixture/clip.mp4"])
+    }
+
     func testRawFileUploadEncodesDisplayNameAndReturnsMacPath() async throws {
         ShareRequestStub.statusCode = 201
         ShareRequestStub.responseBody = Data(#"{"path":"/Users/test/.openmausbot/files/id.pdf","name":"Q3 plan.pdf","mime":"application/pdf","bytes":3}"#.utf8)

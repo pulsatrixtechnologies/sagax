@@ -110,25 +110,80 @@
     },
     {
       "name": "make_video",
-      "description": "Ask for a video from a short description, or from an image the person already attached in this turn. If image_to_video or reference_to_video is in your tools, call that instead: it is the producer. This tool never runs a shell. If no producer is connected, it says so and does not invent one.",
+      "description": "Generate a video using the person's xAI API key, or the organization's granted xAI images and videos account. This may incur API charges. Native image_to_video and reference_to_video remain available when the engine offers them. generate starts an async job and returns job_id; status reads progress, list finds this conversation's jobs, cancel stops local polling/download, retry resumes the SAME upstream request without another paid generation. The completed MP4 is saved and attached in this chat. Never claim completion from pending status or show a temporary provider URL. Use a stable request_key for safe retries across turns. A new generate request_key starts a separately billable job. No remote xAI cancellation API is documented.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "generate",
+              "status",
+              "list",
+              "cancel",
+              "retry"
+            ],
+            "description": "Default generate."
+          },
           "prompt": {
             "type": "string",
             "maxLength": 2000,
-            "description": "What the video should show."
+            "description": "What the video should show; required for generate."
           },
           "image": {
             "type": "string",
             "maxLength": 500,
-            "description": "Optional reference already in this turn. Not a new upload and not a shell path to go fetch."
+            "description": "Optional exact attachment path or /api/attachments URL for an image in the current person's message. No external URL or arbitrary file."
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 15,
+            "description": "Seconds; default 8."
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "16:9",
+              "9:16",
+              "4:3",
+              "3:4",
+              "3:2",
+              "2:3",
+              "21:9",
+              "5:2"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p"
+            ]
+          },
+          "generate_audio": {
+            "type": "boolean",
+            "description": "Default true."
+          },
+          "job_id": {
+            "type": "string",
+            "description": "Returned job id; required for status, cancel and retry."
+          },
+          "request_key": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Stable identity for one generation. Same key and arguments reuse its job even across turns. Default: one generation per person request, including engine failover."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "For list: next_offset from the previous page; 20 jobs per page."
           }
         },
-        "required": [
-          "prompt"
-        ]
+        "required": []
       }
     }
   ]

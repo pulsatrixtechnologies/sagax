@@ -11,7 +11,7 @@ recreating its name never restores them. A no-op rename preserves access.
 Run these checks against disposable fixtures only:
 
 ```sh
-pnpm exec vitest run server/peer-roster.test.ts server/chief-of-staff.test.ts server/delegations.test.ts server/bot-overview.test.ts --maxWorkers=2
+pnpm exec vitest run server/peer-roster.test.ts server/chief-of-staff.test.ts server/direct-coordination.e2e.test.ts server/bot-overview.test.ts --maxWorkers=2
 pnpm exec vitest run server/peer-allowlist.e2e.test.ts server/room-coordination.e2e.test.ts --maxWorkers=2
 SAGAX_UI_E2E=1 pnpm exec vitest run scripts/testing/team-access-ui.e2e.test.ts --maxWorkers=1
 ```

@@ -218,8 +218,14 @@ public struct ShapeMark: Equatable, Sendable {
 
 /// One drawn frame in the 0...100 box (`ShapeFrame`).
 public struct ShapeFrame: Sendable {
-    /// The body's outline points (smoothed when drawn).
+    /// The body's outline points (smoothed when drawn; also morph probes for path bodies).
     public var body: [CGPoint]
+    /// Exact path silhouette when a path/parts avatarDef is live (may be multi-subpath).
+    public var bodyPath: String? = nil
+    /// Extra filled body pieces (parts after the first).
+    public var bodyExtras: [String] = []
+    /// True while morphing between path outlines (draw resampled smooth ring).
+    public var pathMorphing: Bool = false
     /// Each shown eye's outline points (cut out with the even-odd rule).
     public var eyes: [[CGPoint]]
     /// The same eyes as upright capsules in the box (`eyeShapes`): the volume
@@ -244,7 +250,14 @@ public struct ShapeFrame: Sendable {
     public var rings: [ShapeRingDraw]
     public var ribbons: [ShapeRibbonDraw]
 
-    public var bodyD: String { ShapeMath.smoothClosed(body) }
+    /// Path string for drawing: exact when settled path body, else smooth of points.
+    public var bodyD: String {
+        if let bodyPath, !pathMorphing { return bodyPath }
+        if pathMorphing || bodyPath != nil {
+            return ShapeAvatarOutline.smoothClosedOutline(body)
+        }
+        return ShapeMath.smoothClosed(body)
+    }
     public var stemD: String? { stem.map { ShapeMath.smoothClosed($0.points) } }
     /// The body's motion in box units (`motion`): shift, turn and scale about the middle.
     public var motion: (x: Double, y: Double, rot: Double, sx: Double, sy: Double) {
@@ -756,6 +769,14 @@ public enum ShapeStem {
 // MARK: - Composing a frame
 
 public enum ShapeFrames {
+    struct PathOutline {
+        var path: String
+        var extras: [String]
+        var points: [CGPoint]
+        var face: CGPoint
+        var morphing: Bool
+    }
+
     struct Inputs {
         /// The body the face anchor is read for.
         var shape: MascotShape
@@ -771,6 +792,8 @@ public enum ShapeFrames {
         var t: Double
         /// How much of the pumpkin's stem shows (0 for every other body).
         var stem: Double = 0
+        /// Path body: exact silhouette (and morph points). When set, frame.body prefers path.
+        var outline: PathOutline? = nil
     }
 
     /// The body's thickness now (`bodyDepth`): its thinnest half-width over
@@ -790,7 +813,11 @@ public enum ShapeFrames {
     }
 
     static func compose(_ input: Inputs) -> ShapeFrame {
-        let anchor = ShapeEngineData.faceAnchor[input.shape] ?? ShapeEngineData.eyeShift
+        let unit = ShapeEngineData.bodyUnit
+        let pathFace: (x: Double, y: Double)? = input.outline.map {
+            (($0.face.x - ShapeEngineData.bodyCenter.x) / unit, ($0.face.y - ShapeEngineData.bodyCenter.y) / unit)
+        }
+        let anchor = pathFace ?? ShapeEngineData.faceAnchor[input.shape] ?? ShapeEngineData.eyeShift
         let placed = input.eyes > 0.02 ? ShapeGaze.solveEyes(input.radii, input.face, gaze: input.gaze, open: input.open, anchor: anchor) : []
         // eyes fading out with a move shrink to nothing about their middle (no move does any more)
         let s = ShapeMath.clamp01(input.eyes)
@@ -808,7 +835,7 @@ public enum ShapeFrames {
             let b = ShapeMath.toBox(e.center)
             return ShapeEyeBox(x: round3(b.x), y: round3(b.y), w: round3(e.w * ShapeEngineData.bodyUnit), h: round3(e.h * ShapeEngineData.bodyUnit), tilt: e.tilt)
         }
-        let unit = ShapeEngineData.bodyUnit, c = ShapeEngineData.bodyCenter
+        let c = ShapeEngineData.bodyCenter
         let morphed = ShapeMath.clamp01(zip(input.radii, input.rest).reduce(0) { max($0, abs($1.0 - $1.1)) } / 0.08)
         let depth = ShapeFrames.bodyDepth(input.radii)
         let w = input.pose?.weight ?? 0
@@ -838,11 +865,15 @@ public enum ShapeFrames {
             ShapeMark(points: mark.points.map(ShapeMath.toBox), opacity: round3(mark.opacity * w))
         }.filter { $0.opacity > 0.001 }
         let n = Double(input.radii.count)
-        let body = input.radii.enumerated().map { i, r in
+        let polarBody = input.radii.enumerated().map { i, r in
             ShapeMath.toBox(CGPoint(x: r * sin(Double(i) / n * Double.pi * 2), y: -r * cos(Double(i) / n * Double.pi * 2)))
         }
+        let body = input.outline?.points ?? polarBody
         return ShapeFrame(
             body: body,
+            bodyPath: input.outline?.path,
+            bodyExtras: input.outline?.extras ?? [],
+            pathMorphing: input.outline?.morphing ?? false,
             eyes: shown.filter { $0.alpha > 0.001 }.map { $0.points.map(ShapeMath.toBox) },
             eyeShapes: eyeShapes,
             stem: input.stem > 0.01 ? (ShapeStem.points(input.radii), round3(input.stem)) : nil,
@@ -861,29 +892,52 @@ public enum ShapeFrames {
 
     private static let stills = Stills()
 
+    private static func pathInputs(shape: MascotShape, avatarDef: ShapeAvatarDef?) -> (radii: [Double], rest: [Double], outline: PathOutline?, stem: Double) {
+        // Polar catalog stays when no avatarDef is passed (regression / thumbnails).
+        // Callers that want object path bodies (ShapeMascotView) pass a resolved def.
+        if let def = avatarDef {
+            let live = ShapeAvatarOutline.liveOutline(from: def)
+            if live.pathBody {
+                let radii = ShapeAvatarOutline.radiiFromOutlinePoints(live.points)
+                return (
+                    radii,
+                    radii,
+                    PathOutline(path: live.path, extras: live.extras, points: live.points, face: live.face, morphing: false),
+                    0
+                )
+            }
+        }
+        let radii = ShapeEngineData.radii[shape] ?? ShapeEngineData.radii[.circle]!
+        return (radii, radii, nil, ShapeEngine.stemOf(shape))
+    }
+
     /// Le repos d'une forme avec les yeux ouverts de `open` (0...1) : un clignement
     /// des petites tailles (`gazeFrame` avec `open` sur le desktop). Mémoïsé
     /// seulement à `open` 1 (le still ordinaire).
-    public static func still(_ shape: MascotShape, _ expression: ShapeExpression, color: String, open: Double) -> ShapeFrame {
-        if open >= 1 { return still(shape, expression, color: color) }
-        let radii = ShapeEngineData.radii[shape] ?? ShapeEngineData.radii[.circle]!
-        return compose(Inputs(shape: shape, radii: radii, rest: radii, face: ShapeEngineData.expressions[expression]!, gaze: (0, 0, 0), open: (open, open),
-                              color: color, body: (0, 0, 0, 1, 1), eyes: 1, pose: nil, t: 0, stem: ShapeEngine.stemOf(shape)))
+    public static func still(_ shape: MascotShape, _ expression: ShapeExpression, color: String, open: Double, avatarDef: ShapeAvatarDef? = nil) -> ShapeFrame {
+        if open >= 1 { return still(shape, expression, color: color, avatarDef: avatarDef) }
+        let path = pathInputs(shape: shape, avatarDef: avatarDef)
+        return compose(Inputs(shape: shape, radii: path.radii, rest: path.rest, face: ShapeEngineData.expressions[expression]!, gaze: (0, 0, 0), open: (open, open),
+                              color: color, body: (0, 0, 0, 1, 1), eyes: 1, pose: nil, t: 0, stem: path.stem, outline: path.outline))
     }
 
     /// The resting frame looking toward a pointer (-1...1 each axis), with a rigid lean on the body (`gazeFrame`).
     public static func gaze(_ shape: MascotShape, _ expression: ShapeExpression, color: String, nx: Double, ny: Double,
-                            body: (rot: Double, sx: Double, sy: Double) = (0, 1, 1), open: (left: Double, right: Double) = (1, 1)) -> ShapeFrame {
-        let radii = ShapeEngineData.radii[shape] ?? ShapeEngineData.radii[.circle]!
+                            body: (rot: Double, sx: Double, sy: Double) = (0, 1, 1), open: (left: Double, right: Double) = (1, 1),
+                            avatarDef: ShapeAvatarDef? = nil) -> ShapeFrame {
+        let path = pathInputs(shape: shape, avatarDef: avatarDef)
         let look = ShapeIdle.hoverGaze(nx, ny)
-        return compose(Inputs(shape: shape, radii: radii, rest: radii, face: ShapeEngineData.expressions[expression]!, gaze: (look.yaw, look.pitch, 0), open: open,
-                              color: color, body: (0, 0, body.rot, body.sx, body.sy), eyes: 1, pose: nil, t: 0, stem: ShapeEngine.stemOf(shape)))
+        return compose(Inputs(shape: shape, radii: path.radii, rest: path.rest, face: ShapeEngineData.expressions[expression]!, gaze: (look.yaw, look.pitch, 0), open: open,
+                              color: color, body: (0, 0, body.rot, body.sx, body.sy), eyes: 1, pose: nil, t: 0, stem: path.stem, outline: path.outline))
     }
 
     /// The resting frame of a shape: no wander, no blink, no move (`stillFrame`).
-    /// Memoised per shape and face; the colour is the caller's.
-    public static func still(_ shape: MascotShape, _ expression: ShapeExpression, color: String = "#000000") -> ShapeFrame {
-        let key = "\(shape.rawValue)|\(expression.rawValue)"
+    /// Memoised per shape and face for polar bodies; path bodies include the def id.
+    public static func still(_ shape: MascotShape, _ expression: ShapeExpression, color: String = "#000000", avatarDef: ShapeAvatarDef? = nil) -> ShapeFrame {
+        // Only an explicit avatarDef switches the cache lane; object presets are not implied.
+        // a def without an id keys on its own value: two custom bodies never share a still
+        let defKey = avatarDef.map { $0.id ?? "custom-\($0.hashValue)" } ?? "polar"
+        let key = "\(shape.rawValue)|\(expression.rawValue)|\(defKey)"
         stills.lock.lock()
         let cached = stills.frames[key]
         stills.lock.unlock()
@@ -891,9 +945,9 @@ public enum ShapeFrames {
         if let cached {
             frame = cached
         } else {
-            let radii = ShapeEngineData.radii[shape] ?? ShapeEngineData.radii[.circle]!
-            frame = compose(Inputs(shape: shape, radii: radii, rest: radii, face: ShapeEngineData.expressions[expression]!, gaze: (0, 0, 0), open: (1, 1),
-                                   color: color, body: (0, 0, 0, 1, 1), eyes: 1, pose: nil, t: 0, stem: ShapeEngine.stemOf(shape)))
+            let path = pathInputs(shape: shape, avatarDef: avatarDef)
+            frame = compose(Inputs(shape: shape, radii: path.radii, rest: path.rest, face: ShapeEngineData.expressions[expression]!, gaze: (0, 0, 0), open: (1, 1),
+                                   color: color, body: (0, 0, 0, 1, 1), eyes: 1, pose: nil, t: 0, stem: path.stem, outline: path.outline))
             stills.lock.lock()
             stills.frames[key] = frame
             stills.lock.unlock()
@@ -910,11 +964,14 @@ public struct ShapeEngineState: Equatable, Sendable {
     public var shape: MascotShape
     public var expression: ShapeExpression
     public var color: String
+    /// Path-based body from a portable avatarDef (v2.1).
+    public var avatarDef: ShapeAvatarDef?
 
-    public init(shape: MascotShape, expression: ShapeExpression, color: String) {
+    public init(shape: MascotShape, expression: ShapeExpression, color: String, avatarDef: ShapeAvatarDef? = nil) {
         self.shape = shape
         self.expression = expression
         self.color = color
+        self.avatarDef = avatarDef
     }
 }
 
@@ -928,6 +985,7 @@ public final class ShapeEngine {
     private let start: Double
     public private(set) var state: ShapeEngineState
     private var fromRadii: [Double]
+    private var fromOutline: [CGPoint]?
     private var shapeAt = -Double.infinity
     private var fromFace: ShapeFace
     private var faceAt = -Double.infinity
@@ -947,7 +1005,9 @@ public final class ShapeEngine {
         self.seed = seed
         self.state = state
         self.start = now
-        fromRadii = Self.radii(state.shape)
+        let live = Self.outline(for: state)
+        fromRadii = live.map { ShapeAvatarOutline.radiiFromOutlinePoints($0.points) } ?? Self.radii(state.shape)
+        fromOutline = live?.points
         fromFace = ShapeEngineData.expressions[state.expression]!
         fromColor = state.color
         fromStem = Self.stemOf(state.shape)
@@ -958,10 +1018,30 @@ public final class ShapeEngine {
 
     private static func radii(_ shape: MascotShape) -> [Double] { ShapeEngineData.radii[shape] ?? ShapeEngineData.radii[.circle]! }
 
+    /// Live outline cache for a path-bodied avatarDef (explicit def only).
+    static func outline(for state: ShapeEngineState) -> ShapeAvatarOutline.Live? {
+        guard let def = state.avatarDef else { return nil }
+        let live = ShapeAvatarOutline.liveOutline(from: def)
+        return live.pathBody ? live : nil
+    }
+
+    private static func bodyFingerprint(_ def: ShapeAvatarDef?) -> String {
+        guard let def else { return "" }
+        switch def.body {
+        case let .path(d): return "path:\(d)"
+        case let .parts(parts): return "parts:\(parts.count):\(parts.map(ShapeAvatarCompile.primitivePath).joined())"
+        case let .radii(values): return "radii:\(values.map { String($0) }.joined(separator: ","))"
+        }
+    }
+
     /// The current shape, face and colour; a change slides from what shows now.
     public func set(_ next: ShapeEngineState, now: Double) {
-        if next.shape != state.shape {
+        let shapeChanged = next.shape != state.shape
+            || (next.avatarDef?.id ?? "") != (state.avatarDef?.id ?? "")
+            || Self.bodyFingerprint(next.avatarDef) != Self.bodyFingerprint(state.avatarDef)
+        if shapeChanged {
             fromRadii = radiiNow(now)
+            fromOutline = outlinePointsNow(now)
             fromStem = stemNow(now)
             shapeAt = now
         }
@@ -1007,9 +1087,29 @@ public final class ShapeEngine {
         return now - move.at <= ShapeMoves.length(move.id)
     }
 
+    private func targetOutline() -> ShapeAvatarOutline.Live? { Self.outline(for: state) }
+
+    private func targetRadii() -> [Double] {
+        if let live = targetOutline() {
+            return ShapeAvatarOutline.radiiFromOutlinePoints(live.points)
+        }
+        return Self.radii(state.shape)
+    }
+
+    private func outlinePointsNow(_ now: Double) -> [CGPoint]? {
+        let to = targetOutline()
+        let k = ShapeMath.easeOutQuint((now - shapeAt) / ShapeEngineData.morphSeconds)
+        if fromOutline == nil && to == nil { return nil }
+        let from = fromOutline ?? to?.points
+        let dest = to?.points ?? fromOutline
+        guard let from, let dest else { return nil }
+        return k >= 1 ? dest : ShapeAvatarOutline.blendOutlines(from, dest, k)
+    }
+
     private func radiiNow(_ now: Double) -> [Double] {
         let k = ShapeMath.easeOutQuint((now - shapeAt) / ShapeEngineData.morphSeconds)
-        return k >= 1 ? Self.radii(state.shape) : ShapeMath.blendRadii(fromRadii, Self.radii(state.shape), k)
+        let to = targetRadii()
+        return k >= 1 ? to : ShapeMath.blendRadii(fromRadii, to, k)
     }
 
     /// How much of the pumpkin's stem shows: it grows in and out with a change of shape.
@@ -1050,7 +1150,8 @@ public final class ShapeEngine {
         var x = body.x, y = body.y, rot = 0.0, scale = 1.0, eyes = 1.0
         var pose: (pose: ShapeMovePose, weight: Double)?
         var stem = stemNow(now)
-        if let move, playing(now) {
+        let movePlaying = playing(now)
+        if let move, movePlaying {
             let u = now - move.at
             let weight = ShapeMoves.weight(move.id, u)
             let p = ShapeMoves.at(move.id, u, rest: rest)
@@ -1067,12 +1168,29 @@ public final class ShapeEngine {
             eyes = ShapeMath.lerp(1, p.eyes ?? 1, weight)
             pose = (p, weight)
         }
+        let live = targetOutline()
+        let outlinePts = outlinePointsNow(now)
+        let morphK = ShapeMath.easeOutQuint((now - shapeAt) / ShapeEngineData.morphSeconds)
+        var outline: ShapeFrames.PathOutline?
+        if let live, let outlinePts {
+            outline = ShapeFrames.PathOutline(
+                path: live.path,
+                extras: live.extras,
+                points: outlinePts,
+                face: live.face,
+                morphing: morphK < 1 || fromOutline != nil
+            )
+            if morphK >= 1 && !movePlaying {
+                outline?.morphing = false
+            }
+        }
         return ShapeFrames.compose(ShapeFrames.Inputs(
             shape: state.shape, radii: radii, rest: rest, face: face,
             gaze: (w.yaw * wanderWeight + yawNow + leanGaze.yaw, w.pitch * wanderWeight + pitchNow + leanGaze.pitch, w.roll * wanderWeight),
             open: (blink, blink), color: colorNow(now),
             body: (x, y, rot, scale * (2 - body.breath), scale * body.breath),
-            eyes: eyes, pose: pose, t: t, stem: stem
+            eyes: eyes, pose: pose, t: t, stem: live != nil ? 0 : stem,
+            outline: outline
         ))
     }
 }

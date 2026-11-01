@@ -378,9 +378,10 @@ function ArtifactLibraryRow({ artifact, actions, now, openMenus }: { artifact: A
 }
 
 /** A page the bot made (2026-10-28): its icon and title; a click opens it
- * like its card in the chat does (openPage, src/lib/open-page.ts: the full
- * panel over the conversation on screen, else a window of its own); « … » Open, Share…,
- * Pin or Unpin, Delete…. Share is the same popover as the open page's. */
+ * like its card in the chat does (openPage, src/lib/open-page.ts: beside the
+ * chat on desktop or full screen on a phone when the conversation is on
+ * screen, else a window of its own); « … » Open, Share…, Pin or Unpin,
+ * Delete…. Share is the same popover as the open page's. */
 function PageLibraryRow({ page, linkOff, openMenus, onChange, onPin, onDelete }: {
   page: PublishedPageSummary;
   linkOff: boolean;

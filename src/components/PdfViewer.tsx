@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download, ExternalLink, LoaderCircle, MoveHorizontal, Search, ZoomIn, ZoomOut } from "lucide-react";
 
-import { fileMaxBytes, soloAttachmentCeilings } from "@/lib/composer-attachments";
+import { bufferedPreviewMaxBytes as fileMaxBytes, soloAttachmentCeilings } from "@/lib/composer-attachments";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { clampPdfZoom, isPdfBytes, pdfFitWidthScale, pdfjsAssetOptions, pdfSearchPages, pdfZoomStep, readBoundedBytes } from "@/lib/pdf-view";

@@ -19,7 +19,7 @@ struct TrombiMascotView: View {
         let live = animated && !reduceMotion && scenePhase == .active
         let width = TrombiArt.avatarWidth(size)
         let height = TrombiArt.avatarHeight(size)
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !live)) { timeline in
+        TimelineView(.animation(minimumInterval: size >= 40 ? 1.0 / 60.0 : 1.0 / 30.0, paused: !live)) { timeline in
             Canvas { context, canvas in
                 TrombiRenderer.draw(
                     in: &context, canvas: canvas, width: width, skin: skin, pose: pose,

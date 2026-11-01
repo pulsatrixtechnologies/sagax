@@ -69,7 +69,8 @@ export interface ConsoleAnswer {
 }
 
 export interface ConsoleRoute {
-  method: "GET" | "POST";
+  /** PATCH is used by the member API (routines); the admin console stays GET/POST. */
+  method: "GET" | "POST" | "PATCH";
   /** Relative to /api/org/admin/, parameters in braces: `bots/{id}`. */
   path: string;
   min: ConsoleRole;

@@ -4,11 +4,15 @@ import { createServer, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
+import { launchVerificationServer, runControlOmb, type VerificationLaunchOptions } from "../scripts/control-omb.ts";
 import { request } from "../scripts/mcp-server.ts";
 import { rebuiltSessionNotice } from "./resume-recovery.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
 import { readHandoffs } from "./testing/handoff-rows.ts";
+import {
+  FIXTURE_ANTHROPIC_KEY_V2,
+  seedClaudeApiKeyForInterrupt,
+} from "./testing/seed-claude-api-key-interrupt.ts";
 import { openSse } from "./testing/sse.ts";
 
 /** What a fixture turn was told: the instructions its process was launched
@@ -22,16 +26,35 @@ const told = (turn: any): string => {
 /** Run direct Chief/lead/specialist workflows against an isolated scripted
  * server. With SAGAX_TEST_DESKTOP_OWNER_TOKEN it runs as the desktop app runs
  * it, and every change this test makes carries the app's owner capability. */
-async function fixture(test: (f: any) => Promise<void>, fakeEnv: NodeJS.ProcessEnv = {}) {
+async function fixture(
+  test: (f: any) => Promise<void>,
+  fakeEnv: NodeJS.ProcessEnv = {},
+  launchOptions?: VerificationLaunchOptions,
+) {
   const desktopOwner = fakeEnv.SAGAX_TEST_DESKTOP_OWNER_TOKEN;
   const realFetch = globalThis.fetch;
   if (desktopOwner) globalThis.fetch = (input, init = {}) => realFetch(input, { ...init,
     headers: { ...Object.fromEntries(new Headers(init.headers)), "x-openmausbot-desktop-owner": desktopOwner } });
-  try { await fixtureSession(test, fakeEnv); } finally { globalThis.fetch = realFetch; }
+  try { await fixtureSession(test, fakeEnv, launchOptions); } finally { globalThis.fetch = realFetch; }
 }
 
-async function fixtureSession(test: (f: any) => Promise<void>, fakeEnv: NodeJS.ProcessEnv) {
-  const session = await launchVerificationServer({ ...process.env, ...fakeEnv }, undefined, undefined, undefined, undefined, { scripted: true });
+async function fixtureSession(
+  test: (f: any) => Promise<void>,
+  fakeEnv: NodeJS.ProcessEnv,
+  launchOptions?: VerificationLaunchOptions,
+) {
+  const session = await launchVerificationServer(
+    { ...process.env, ...fakeEnv },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { scripted: true },
+    [],
+    undefined,
+    undefined,
+    launchOptions,
+  );
   const cli = (...args: string[]) => runControlOmb(args, { env: { SAGAX_URL: session.info.url } }) as Promise<any>;
   const api = (path: string, body?: unknown, method = "POST") => request(path, body === undefined ? {} : { method, body: JSON.stringify(body) }, session.info.url) as Promise<any>;
   try {
@@ -830,8 +853,10 @@ it("does not cancel a live coordination when an automation turn lands in the con
     { reply: "The requested CSV export is implemented and verified" },
     { reply: "Nothing further" },
   ] };
+  // A routine run hands its work out on the job runtime (lot 3,
+  // docs/runtime-contract.md §9): coordinate_bots, not the legacy ledger.
   f.plan[ops.id] = { turns: [
-    { steps: [{ tool: "delegate_bot", arguments: { bot_id: f.chief.id, message: "Nightly note: confirm the export owner." } }], reply: "Delegated the nightly note" },
+    { steps: [{ arguments: { bot_ids: [f.chief.id], message: "Nightly note: confirm the export owner." } }], reply: "Delegated the nightly note" },
     { reply: "Recorded the outcome of the nightly note" },
   ] };
   await f.start();
@@ -841,8 +866,10 @@ it("does not cancel a live coordination when an automation turn lands in the con
   const { routine } = await f.api("/api/routines", { name: "Nightly note", prompt: "Send the nightly note.", botId: ops.id,
     enabled: false, schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 3_600_000 } });
   await f.api(`/api/routines/${routine.id}/run`, {});
-  // The delegated turn really reaches the conversation the coordination lives in.
-  await expect.poll(async () => (await f.messages(f.chief.activeTaskId)).some((message: any) => message.peerAsk?.botId === ops.id), { timeout: 25_000 }).toBe(true);
+  // The routine's request really reaches the Chief, beside the conversation
+  // its own coordination lives in, while that coordination is live.
+  await expect.poll(() => f.nodes().find((node: any) => node.botId === f.chief.id && node.parentId && node.text.includes("Nightly note"))?.status,
+    { timeout: 25_000 }).toMatch(/running|completed/);
   expect(f.nodes().find((node: any) => node.id === assignment.id).status).not.toBe("cancelled");
 
   await expect.poll(() => f.nodes().find((node: any) => node.id === assignment.id)?.status, { timeout: 25_000 }).toBe("completed");
@@ -1111,12 +1138,14 @@ it("keeps a teammate working through a provider settings save that does not touc
 
 // When a save does change a teammate's engine, its turn stops, and the Chief
 // is told that cause rather than "The coordinated turn was interrupted".
+// anthropic.key only rebuilds claudeApi (or an access:api + requireApiKey
+// instance): seed the fixture claude that way so this save is a real rebuild.
 it("tells the Chief a teammate's turn stopped because its engine's settings changed", () => fixture(async f => {
   const gate = join(f.session.info.dataDir, "lead-ready");
   f.plan[f.lead.id] = { gateFile: gate, reply: "Never reached" };
   await f.start();
   await expect.poll(() => f.nodes().find((node: any) => node.botId === f.lead.id)?.status, { timeout: 15_000 }).toBe("running");
-  await f.api("/api/config", { anthropic: { key: "fixture-anthropic-key" } }, "PATCH");
+  await f.api("/api/config", { anthropic: { key: FIXTURE_ANTHROPIC_KEY_V2 } }, "PATCH");
   expect((await f.wait()).status).toBe("settled");
   const child = f.nodes().find((node: any) => node.botId === f.lead.id);
   expect(child.status).toBe("failed");
@@ -1126,4 +1155,4 @@ it("tells the Chief a teammate's turn stopped because its engine's settings chan
   const resumed = f.evidence().find((turn: any) => turn.botId === f.chief.id && turn.resumed);
   expect(resumed.prompt.message.content).toContain("Turn interrupted — provider settings changed.");
   expect(resumed.prompt.message.content).not.toContain("The coordinated turn was interrupted");
-}), 45_000);
+}, {}, { prepareDataDir: seedClaudeApiKeyForInterrupt }), 45_000);

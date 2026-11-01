@@ -69,7 +69,10 @@ export async function handleMediaProxy(
       return true;
     }
     if (!res.headersSent) refuse(502, "Could not reach the media source");
-    else if (!res.writableEnded) res.end();
+    // Once media headers were sent, a JSON error cannot be truthful. Break
+    // the response so players see a failed/truncated transfer, never a clean
+    // 200 with incomplete bytes.
+    else if (!res.writableEnded) res.destroy();
   }
   return true;
 }

@@ -60,12 +60,17 @@ export function ScheduleSummary({ value, paused = false }: { value: ScheduleEdit
   </div>;
 }
 
-export function HumanScheduleFields({ draft, value, onChange, paused = false }: {
+/** `essentials`: one time + days (Grok-simple When). `advanced`: extra times,
+ * time zone, next-runs preview (More options). `all`: previous full block. */
+export type HumanScheduleMode = "all" | "essentials" | "advanced";
+
+export function HumanScheduleFields({ draft, value, onChange, paused = false, mode = "all" }: {
   draft: ScheduleDraft;
   value: ScheduleEditorValue;
   onChange: (draft: ScheduleDraft) => void;
   /** A paused routine: the dates are a preview, not scheduled runs. */
   paused?: boolean;
+  mode?: HumanScheduleMode;
 }) {
   const { model } = draft;
   const update = (patch: Partial<ScheduleModel>) => onChange({ ...draft, model: { ...model, ...patch } });
@@ -83,22 +88,26 @@ export function HumanScheduleFields({ draft, value, onChange, paused = false }: 
     update({ weekdays: has ? model.weekdays.filter((value) => value !== day) : [...model.weekdays, day].sort((a, b) => a - b) });
   };
   const timed = model.frequency !== "hourly" && model.frequency !== "every";
-  return <div data-human-schedule className="space-y-3">
-    {model.frequency === "days" && <div role="group" aria-label={t("scheduleEditor.days")} className="flex flex-wrap gap-1.5">
+  const showShape = mode === "all" || mode === "essentials";
+  const showTimesFull = mode === "all" || mode === "advanced";
+  const showZoneAndPreview = mode === "all" || mode === "advanced";
+  const firstTime = model.times[0] ?? "09:00";
+  return <div data-human-schedule={mode} className="space-y-3">
+    {showShape && model.frequency === "days" && <div role="group" aria-label={t("scheduleEditor.days")} className="flex flex-wrap gap-1.5">
       {WEEK_ORDER.map((day) => {
         const on = model.weekdays.includes(day);
         return <button key={day} type="button" aria-pressed={on} aria-label={weekdayName(day, "long")} title={weekdayName(day, "long")} onClick={() => toggleDay(day)} className={cn("size-8 rounded-full text-[11px] font-semibold", on ? "bg-accent text-accent-ink" : "bg-inset text-ink-secondary hover:bg-raised hover:text-ink")}>{weekdayName(day, "narrow").toLocaleUpperCase(activeLocale())}</button>;
       })}
     </div>}
 
-    {model.frequency === "hourly" && <label className="flex flex-wrap items-center gap-2">
+    {showShape && model.frequency === "hourly" && <label className="flex flex-wrap items-center gap-2">
       <span className={LABEL}>{t("scheduleEditor.atMinute")}</span>
       <select data-schedule-minute value={model.minute} onChange={(event) => update({ minute: Number(event.target.value) })} className={cn(FIELD, "tabular-nums")}>
         {Array.from({ length: 60 }, (_, minute) => <option key={minute} value={minute}>:{String(minute).padStart(2, "0")}</option>)}
       </select>
     </label>}
 
-    {(model.frequency === "monthly" || model.frequency === "yearly") && <div className="flex flex-wrap items-center gap-2">
+    {showShape && (model.frequency === "monthly" || model.frequency === "yearly") && <div className="flex flex-wrap items-center gap-2">
       <span className={LABEL}>{t("scheduleEditor.onDay")}</span>
       <select data-schedule-month-day aria-label={t("scheduleEditor.dayOfMonth")} value={String(model.monthDay)} onChange={(event) => update({ monthDay: event.target.value === "last" ? "last" : Number(event.target.value) })} className={cn(FIELD, "tabular-nums")}>
         {Array.from({ length: 31 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
@@ -108,9 +117,15 @@ export function HumanScheduleFields({ draft, value, onChange, paused = false }: 
         {Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{monthName(index + 1)}</option>)}
       </select>}
     </div>}
-    {model.frequency === "monthly" && typeof model.monthDay === "number" && model.monthDay > 28 && <p className="text-[11px] text-ink-secondary">{t("scheduleEditor.skipHelp")}</p>}
+    {showShape && model.frequency === "monthly" && typeof model.monthDay === "number" && model.monthDay > 28 && <p className="text-[11px] text-ink-secondary">{t("scheduleEditor.skipHelp")}</p>}
 
-    {timed && <div className="flex flex-wrap items-center gap-2">
+    {showShape && timed && mode === "essentials" && <div className="flex flex-wrap items-center gap-2">
+      <span className={LABEL}>{t("scheduleEditor.at")}</span>
+      <input data-schedule-time type="time" step={60} value={firstTime} aria-label={t("scheduleEditor.timeN", { n: 1 })} aria-invalid={Boolean(value.error)} onChange={(event) => setTime(0, event.target.value)} className={cn(FIELD, "tabular-nums")} />
+      {model.times.length > 1 && <span data-schedule-more-times className="text-[11.5px] text-ink-secondary">{t("scheduleEditor.moreTimesHint", { count: model.times.length - 1 })}</span>}
+    </div>}
+
+    {timed && showTimesFull && <div className="flex flex-wrap items-center gap-2">
       <span className={LABEL}>{t("scheduleEditor.at")}</span>
       {model.times.map((time, index) => <span key={index} className="inline-flex items-center gap-1">
         <input data-schedule-time type="time" step={60} value={time} aria-label={t("scheduleEditor.timeN", { n: index + 1 })} aria-invalid={Boolean(value.error)} onChange={(event) => setTime(index, event.target.value)} className={cn(FIELD, "tabular-nums")} />
@@ -119,8 +134,10 @@ export function HumanScheduleFields({ draft, value, onChange, paused = false }: 
       {model.times.length < 12 && <button type="button" data-schedule-add-time onClick={addTime} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12.5px] font-medium text-accent hover:bg-raised"><Plus size={13} />{t("scheduleEditor.addTime")}</button>}
     </div>}
 
-    <TimeZonePicker value={draft.timeZone} onChange={(timeZone) => onChange({ ...draft, timeZone })} />
-    <ScheduleSummary value={value} paused={paused} />
+    {showZoneAndPreview && <>
+      <TimeZonePicker value={draft.timeZone} onChange={(timeZone) => onChange({ ...draft, timeZone })} />
+      <ScheduleSummary value={value} paused={paused} />
+    </>}
   </div>;
 }
 

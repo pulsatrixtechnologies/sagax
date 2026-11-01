@@ -209,7 +209,7 @@ struct ChatWidgetTimePicker: View {
 
     var body: some View {
         let name = node.string("name") ?? ""
-        let step = max(1, Int(node.number("step") ?? 1))
+        let step = node.integer("step", in: 1...1_000_000) ?? 1
         let value = ChatWidgetDates.time(form.text(name))
         let low = ChatWidgetDates.time(node.string("min")) ?? ChatWidgetDates.time("00:00")!
         let high = ChatWidgetDates.time(node.string("max")) ?? ChatWidgetDates.time("23:59")!
@@ -418,8 +418,8 @@ struct ChatWidgetTextarea: View {
 
     var body: some View {
         let name = node.string("name") ?? ""
-        let rows = max(1, Int(node.number("rows") ?? 3))
-        let most = max(rows, Int(node.number("maxRows") ?? Double(max(rows, 8))))
+        let rows = node.integer("rows", in: 1...40) ?? 3
+        let most = max(rows, node.integer("maxRows", in: 1...40) ?? max(rows, 8))
         TextField(
             "",
             text: Binding(get: { form.text(name) }, set: { form.set(name, .text($0)) }),

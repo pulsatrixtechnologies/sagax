@@ -2069,7 +2069,7 @@
     },
     {
       "name": "list_routines",
-      "description": "This bot's routines a page at a time, with the current time and timezone for relative dates. Read every page (offset) before counting; routine_id gives one in full. Only when asked about routines.",
+      "description": "This bot's routines a page at a time, with the current time and timezone for relative dates. Read every page (offset) before counting; routine_id gives one in full (also accepts an owned webhook id from the Webhooks list, and a sibling bot's routine id when you can reach that bot). Short rows include webhookId when the routine starts from a delivery. Only when asked about routines.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -2080,7 +2080,7 @@
           "routine_id": {
             "type": "string",
             "minLength": 1,
-            "description": "Routine id from list_routines."
+            "description": "Routine id from list_routines, or that routine's owned webhook id."
           }
         }
       },
@@ -2323,7 +2323,7 @@
     },
     {
       "name": "propose_routine_action",
-      "description": "Prepare a user-requested change to one of this bot's existing routines. Use list_routines first to get the routine id. If the user asks to change ANOTHER bot's routine and that bot is in your section, call list_bots and pass that bot's id as for_bot_id; the routine keeps its owner and every run keeps that bot's engine and permissions. Read the result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result; report failed or cancelled results honestly. This does not elevate another bot's execution permissions.",
+      "description": "Prepare a user-requested change to one of this bot's existing routines (pause, resume, update name/instructions/schedule, delete, rotate webhook key). Use list_routines first to get the routine id. Follows this bot's Ask or Auto mode. The person's own AI client (Perspicax member API) edits without a proposal card via sagax_routine_update. If the user asks to change ANOTHER bot's routine and that bot is in your section, call list_bots and pass that bot's id as for_bot_id; the routine keeps its owner and every run keeps that bot's engine and permissions. Read the result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result; report failed or cancelled results honestly. This does not elevate another bot's execution permissions.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -2655,6 +2655,30 @@
       }
     },
     {
+      "name": "generate_shape_avatar",
+      "description": "Build a portable Shape mascot definition (geometry JSON only) from a short description and apply it to this bot's look. Use when the person asks to make a mascot that looks like an object (mug, pad, bulb, speech bubble, plant, can, book, rocket, …). Colour stays the bot's colour. The definition is validated before it is stored. Read the result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result; report failed or cancelled results honestly. This does not elevate another bot's execution permissions.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "type": "string",
+            "maxLength": 400,
+            "description": "What the silhouette should look like, for example \"a friendly coffee mug\"."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "When true (default), save the definition on this bot's mascotLook. When false, only return the JSON."
+          },
+          "definition": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Optional ready-made definition JSON to validate and apply instead of generating from direction."
+          }
+        }
+      }
+    },
+    {
       "name": "propose_team_memory",
       "description": "Propose something every bot on the team should know: who a person is (person), where something lives (place), what was decided (decision), or what a name means (term). Every addition or replacement waits for a member of this team, or an organization admin, to confirm its card before entering shared prompts. End the turn and do not claim it is remembered before confirmation; accepted facts stay unchanged until then.",
       "inputSchema": {
@@ -2900,11 +2924,22 @@
     },
     {
       "name": "skills_list",
-      "description": "List this bot's imported skills (enabled and disabled) and any staged skill writes still waiting for the user's decision. Enabled rows include description and SKILL.md path so you can load a skill shortened or left out of the prompt index. Use this before skill_manage to avoid duplicate names. Listing does not enable anything.",
+      "description": "Search this turn's bot, Me and plugin skills, commands and agents. Enabled rows include descriptions and workspace_read paths. Listing changes nothing. Use nextOffset to continue.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "properties": {}
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Name, description, source or scope."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Previous nextOffset; default 0."
+          }
+        }
       },
       "annotations": {
         "readOnlyHint": true,
@@ -3049,25 +3084,80 @@
     },
     {
       "name": "make_video",
-      "description": "Ask for a video from a short description, or from an image the person already attached in this turn. If image_to_video or reference_to_video is in your tools, call that instead: it is the producer. This tool never runs a shell. If no producer is connected, it says so and does not invent one.",
+      "description": "Generate a video using the person's xAI API key, or the organization's granted xAI images and videos account. This may incur API charges. Native image_to_video and reference_to_video remain available when the engine offers them. generate starts an async job and returns job_id; status reads progress, list finds this conversation's jobs, cancel stops local polling/download, retry resumes the SAME upstream request without another paid generation. The completed MP4 is saved and attached in this chat. Never claim completion from pending status or show a temporary provider URL. Use a stable request_key for safe retries across turns. A new generate request_key starts a separately billable job. No remote xAI cancellation API is documented.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "generate",
+              "status",
+              "list",
+              "cancel",
+              "retry"
+            ],
+            "description": "Default generate."
+          },
           "prompt": {
             "type": "string",
             "maxLength": 2000,
-            "description": "What the video should show."
+            "description": "What the video should show; required for generate."
           },
           "image": {
             "type": "string",
             "maxLength": 500,
-            "description": "Optional reference already in this turn. Not a new upload and not a shell path to go fetch."
+            "description": "Optional exact attachment path or /api/attachments URL for an image in the current person's message. No external URL or arbitrary file."
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 15,
+            "description": "Seconds; default 8."
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "16:9",
+              "9:16",
+              "4:3",
+              "3:4",
+              "3:2",
+              "2:3",
+              "21:9",
+              "5:2"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p"
+            ]
+          },
+          "generate_audio": {
+            "type": "boolean",
+            "description": "Default true."
+          },
+          "job_id": {
+            "type": "string",
+            "description": "Returned job id; required for status, cancel and retry."
+          },
+          "request_key": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Stable identity for one generation. Same key and arguments reuse its job even across turns. Default: one generation per person request, including engine failover."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "For list: next_offset from the previous page; 20 jobs per page."
           }
         },
-        "required": [
-          "prompt"
-        ]
+        "required": []
       }
     }
   ]

@@ -60,7 +60,8 @@ export function applyPersonLabel(principalId: string, label: string | null | und
   publish(next);
 }
 
-/** This person's label, "" when they have none. */
+/** This person's custom tag from the store, "" when they have none.
+ * Not human-label's display-name helper (name/login/email candidates). */
 export function personLabel(principalId: string | null | undefined): string {
   return principalId ? labels.get(key(principalId)) ?? "" : "";
 }

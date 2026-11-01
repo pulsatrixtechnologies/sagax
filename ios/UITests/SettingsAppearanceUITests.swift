@@ -56,6 +56,9 @@ final class SettingsAppearanceUITests: XCTestCase {
     /// The search field at the top of Settings.
     @MainActor
     private func search(_ text: String, _ app: XCUIApplication) -> XCUIElement {
+        // the round search button opens the field (Grok Bot's sheet, 2026-11-01)
+        let open = app.buttons["settings-search-open"]
+        if open.waitForExistence(timeout: 5) { open.tap() }
         let field = app.textFields["settings-search"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
@@ -185,7 +188,7 @@ final class SettingsAppearanceUITests: XCTestCase {
         // from the account menu
         XCTAssertFalse(app.element("settings-achievements").exists)
         app.element("settings-close").tap()
-        let account = app.element("home-account")
+        let account = app.element("home-apps")
         XCTAssertTrue(account.waitForExistence(timeout: 10))
         account.tap()
         let entry = app.element("account-menu.achievements")
@@ -280,8 +283,8 @@ final class SettingsAppearanceUITests: XCTestCase {
     private func quickCreate(_ name: String, in app: XCUIApplication) {
         if !app.segmentedControls["routines-section"].exists {
             // Automations opens from the account menu, under Settings
-            XCTAssertTrue(app.buttons["home-account"].waitForExistence(timeout: 30))
-            app.buttons["home-account"].tap()
+            XCTAssertTrue(app.buttons["home-apps"].waitForExistence(timeout: 30))
+            app.buttons["home-apps"].tap()
             let automations = app.buttons["account-menu.automations"]
             XCTAssertTrue(automations.waitForExistence(timeout: 5))
             automations.tap()

@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, it } from "vitest";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { loadBundledSkills, loadUserSkills, mergeSkills, parseSkillManifest, renderSkillInstructions, selectBundledSkills, type BundledSkill } from "./skill-library.ts";
+import { deleteLibrarySkill, installLibrarySkill, listLibrarySkills, loadBundledSkills, loadUserSkills, mergeSkills, parseSkillManifest, readLibrarySkillFile, readSkillLibraryIndex, renderSkillInstructions, selectBundledSkills, skillsLibraryRoot, updateLibrarySkill, type BundledSkill } from "./skill-library.ts";
+import { InstallationCapabilityStore } from "./installation-capability-store.ts";
+import { makeInstallationCapabilityBridge, setInstallationCapabilityBridge } from "./installation-capability-bridge.ts";
 
 const instructionsFor = (text: string, capabilities: string[], skills: BundledSkill[], options?: { includeRoot?: boolean }) =>
   renderSkillInstructions(selectBundledSkills(text, capabilities, skills), options);
@@ -114,5 +116,69 @@ describe("bundled skill triggers", () => {
     expect(selectBundledSkills("(ADB) logs", ["phoneMcp"], [adb])).toEqual([adb]);
     expect(selectBundledSkills("my usb phone, please", ["phoneMcp"], [adb])).toEqual([adb]);
     expect(selectBundledSkills("run /create-verification-skill now", ["phoneMcp"], [adb])).toEqual([adb]);
+  });
+});
+
+// Lot 5 (2026-11-01): the installation store holds the organization's
+// library index only. A person's Me library passes its own root
+// (principals/<pid>/capability-skills) and must never read or write the
+// installation index: on the 0.8.24 branch Bob's packing-list collided with
+// Alice's (422 "already in the library") and the room prompt leaked hers.
+describe("library roots after the lot 5 installation store", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    setInstallationCapabilityBridge(null);
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+  const skill = (description: string, body: string) => `---\nname: packing-list\ndescription: ${description}\n---\n${body}\n`;
+  const entry = (name: string, sha256: string) => ({ name, description: "Audit an order", source: "upload", sha256, importedAt: "2026-11-01T00:00:00.000Z", reviewState: "approved", warnings: [], skippedFiles: [] });
+
+  function bridgeOn() {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-lib-roots-"));
+    dirs.push(dir);
+    const store = new InstallationCapabilityStore(dir, () => ({ kind: "key", key: Buffer.alloc(32, 5) }));
+    store.markMigrated("skills-library-index");
+    setInstallationCapabilityBridge(makeInstallationCapabilityBridge(store));
+    const root = (person: string) => {
+      const path = join(dir, "principals", person, "capability-skills");
+      mkdirSync(path, { recursive: true, mode: 0o700 });
+      return path;
+    };
+    return { dir, store, alice: root("pr_alice"), bob: root("pr_bob") };
+  }
+
+  it("keeps two persons' Me libraries apart from each other and from the installation index", () => {
+    const { store, alice, bob } = bridgeOn();
+    const mine = installLibrarySkill({ name: "packing-list", instructions: skill("Alice packing", "ALICE_ONLY"), source: "local-import", reviewState: "approved", root: alice });
+    expect(mine).not.toHaveProperty("error");
+    const his = installLibrarySkill({ name: "packing-list", instructions: skill("Bob packing", "BOB_ONLY"), source: "local-import", reviewState: "approved", root: bob });
+    expect(his).not.toHaveProperty("error");
+    expect(listLibrarySkills(alice).map((row) => [row.name, row.description, row.enabled])).toEqual([["packing-list", "Alice packing", true]]);
+    expect(listLibrarySkills(bob).map((row) => [row.name, row.description, row.enabled])).toEqual([["packing-list", "Bob packing", true]]);
+    expect(readLibrarySkillFile("packing-list", alice)).toContain("ALICE_ONLY");
+    expect(readLibrarySkillFile("packing-list", bob)).toContain("BOB_ONLY");
+    // each person's index lives under that person; the installation document stays empty
+    expect(existsSync(join(alice, "index.json"))).toBe(true);
+    expect(existsSync(join(bob, "index.json"))).toBe(true);
+    expect(store.read().skillsLibrary).toEqual({});
+    expect(readSkillLibraryIndex(skillsLibraryRoot())).toEqual({});
+    // Bob's edit and removal never reach Alice's library
+    const edited = updateLibrarySkill("packing-list", { text: skill("Bob packing v2", "BOB_ONLY_2"), warnings: [] }, bob);
+    expect(edited).not.toHaveProperty("error");
+    expect(deleteLibrarySkill("packing-list", bob)).toMatchObject({ removed: true });
+    expect(listLibrarySkills(bob)).toEqual([]);
+    expect(listLibrarySkills(alice).map((row) => [row.description, row.enabled])).toEqual([["Alice packing", true]]);
+    expect(readLibrarySkillFile("packing-list", alice)).toContain("ALICE_ONLY");
+    expect(readFileSync(join(alice, "index.json"), "utf8")).not.toContain("Bob");
+  });
+
+  it("reads the organization's library from the installation store, and only there", () => {
+    const { store, alice } = bridgeOn();
+    const document = store.read();
+    document.skillsLibrary = { "order-audit": entry("order-audit", "a".repeat(64)) };
+    store.write(document);
+    expect(Object.keys(readSkillLibraryIndex(skillsLibraryRoot()))).toEqual(["order-audit"]);
+    expect(Object.keys(readSkillLibraryIndex(alice))).toEqual([]);
+    expect(listLibrarySkills(alice)).toEqual([]);
   });
 });

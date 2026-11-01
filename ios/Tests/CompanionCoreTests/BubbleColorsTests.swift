@@ -15,8 +15,9 @@ final class BubbleColorsTests: XCTestCase {
                     if ratio < BubbleColors.minimumContrast {
                         failures.append(String(format: "%@/%@ %@: %.2f", family.id.rawValue, variant.id, scheme.rawValue, ratio))
                     }
-                    // the accent exactly, the colour its accent buttons are filled with
-                    if p.bubbleUser.hex != p.accent.hex {
+                    // the accent exactly, the colour its accent buttons are filled with;
+                    // Black, the Grok look, keeps its neutral grey (2026-11-01)
+                    if !BubbleColors.keepsNeutralBubbles(p.id), p.bubbleUser.hex != p.accent.hex {
                         failures.append("\(family.id.rawValue)/\(variant.id) \(scheme.rawValue): bubble is not the accent")
                     }
                 }
@@ -38,6 +39,19 @@ final class BubbleColorsTests: XCTestCase {
         // lighter than a dark page, darker than a light one
         XCTAssertGreaterThan(SkinPalette.black.bubbleAssistant.luminance, SkinPalette.black.bg.luminance)
         XCTAssertLessThan(SkinID.pulsatrixLight.palette.bubbleAssistant.luminance, SkinID.pulsatrixLight.palette.bg.luminance)
+    }
+
+    /// Black is the Grok look (2026-11-01): Grok Bot's neutral bubbles, the
+    /// person's a step lighter than the bot's, never the accent.
+    func testBlackKeepsGrokNeutralBubbles() {
+        let p = SkinPalette.black
+        XCTAssertTrue(BubbleColors.keepsNeutralBubbles(.black))
+        XCTAssertFalse(BubbleColors.keepsNeutralBubbles(.dim))
+        XCTAssertEqual(p.bubbleAssistant, SkinColor(0x202020))
+        XCTAssertEqual(p.bubbleUser, SkinColor(0x2E2E30))
+        XCTAssertNotEqual(p.bubbleUser, p.accent)
+        XCTAssertGreaterThan(p.bubbleUser.luminance, p.bubbleAssistant.luminance)
+        XCTAssertGreaterThanOrEqual(p.bubbleUserText.contrast(on: p.bubbleUser), BubbleColors.minimumContrast)
     }
 
     func testAnyAccentCarriesItsText() {

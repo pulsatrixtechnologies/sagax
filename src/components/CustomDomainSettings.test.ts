@@ -20,6 +20,8 @@ describe("custom domain setup guidance", () => {
     expect(config).toContain("reverse_proxy 127.0.0.1:23457");
     expect(config).toContain("handle /hooks/*");
     expect(config).toContain("flush_interval -1");
+    expect(config).toContain("lb_try_duration 25s");
+    expect(config).toContain("health_uri /healthz");
     expect(config).not.toContain("0.0.0.0");
   });
 

@@ -21,56 +21,72 @@ extension ChatView {
 
                 // Every action fits on a tall phone; on a shorter one (or with
                 // larger text) the list scrolls instead of leaving the screen.
+                // Grok Bot's composer menu (2026-11-01): a compact glass
+                // popover over the +, one line per action; what each does is
+                // its VoiceOver hint.
                 ViewThatFits(in: .vertical) {
                     plusActionList
                     ScrollView(showsIndicators: false) { plusActionList }
                 }
-                .padding(.vertical, 10)
+                .padding(.vertical, 6)
+                .frame(width: PlusMenuMetrics.width)
+                .glassSheet(cornerRadius: PlusMenuMetrics.radius)
                 .frame(maxWidth: CompanionLayout.chatWidth, alignment: .leading)
-                .glassSheet(cornerRadius: 30)
                 .padding(.horizontal, Theme.Chat.composerMargin)
                 // above the composer row (30 pt bottom inset, 44 pt tall)
-                .padding(.bottom, Theme.Chat.composerBottom + Theme.Metric.glassLarge + 12)
-                .frame(maxWidth: .infinity)
-                .transition(.slideUp(reduce: reduceMotion))
+                .padding(.bottom, Theme.Chat.composerBottom + Theme.Metric.glassLarge + 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.scale(scale: 0.6, anchor: .bottomLeading).combined(with: .opacity))
             }
             .transition(.opacity)
         }
     }
 
     var plusActionList: some View {
-        VStack(spacing: 0) {
-            ForEach(plusActions) { action in
+        let actions = plusActions
+        return VStack(spacing: 0) {
+            ForEach(Array(actions.enumerated()), id: \.element.id) { index, action in
+                if index > 0, PlusMenuMetrics.attachmentIds.contains(actions[index - 1].id), !PlusMenuMetrics.attachmentIds.contains(action.id) {
+                    Rectangle()
+                        .fill(Theme.textPrimary.opacity(0.12))
+                        .frame(height: 0.5)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 4)
+                }
                 Button {
                     withAnimation(.snappy(duration: 0.28)) { showingPlus = false }
                     action.run()
                 } label: {
-                    HStack(spacing: 16) {
+                    HStack(spacing: 12) {
                         Image(systemName: action.systemImage)
-                            .font(.system(size: 20, weight: .medium))
+                            .font(.system(size: 15, weight: .regular))
+                            .foregroundStyle(action.destructive ? Theme.destructiveMenu : Theme.textSecondary)
+                            .frame(width: 22)
+                        Text(action.title)
+                            .font(.system(size: 15))
                             .foregroundStyle(action.destructive ? Theme.destructiveMenu : Theme.textPrimary)
-                            .frame(width: 44, height: 44)
-                            .background(Circle().fill(Theme.textPrimary.opacity(0.10)))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(action.title)
-                                .font(.system(size: 19, weight: .medium))
-                                .foregroundStyle(action.destructive ? Theme.destructiveMenu : Theme.textPrimary)
-                            Text(action.subtitle)
-                                .font(.system(size: 13))
-                                .foregroundStyle(Theme.textSecondary)
-                        }
+                            .lineLimit(1)
                         Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 18)
-                    .frame(height: 64)
+                    .padding(.horizontal, 16)
+                    .frame(height: PlusMenuMetrics.row)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(action.disabled)
                 .opacity(action.disabled ? 0.45 : 1)
+                .accessibilityHint(Text(action.subtitle))
                 .accessibilityIdentifier("plus-\(action.id)")
             }
         }
+    }
+
+    enum PlusMenuMetrics {
+        static let width: CGFloat = 268
+        static let radius: CGFloat = 22
+        static let row: CGFloat = 42
+        /// The attachment group, set apart from the rest by a line.
+        static let attachmentIds: Set<String> = ["photos", "camera", "files", "voiceNote", "paste"]
     }
 
     struct PlusAction: Identifiable {
@@ -89,7 +105,7 @@ extension ChatView {
         var out: [PlusAction] = [
             PlusAction(
                 id: "photos", systemImage: "photo.on.rectangle", title: "Photo Library",
-                subtitle: "Add a photo to this message", disabled: !canAddAttachment
+                subtitle: "Add a photo or video to this message", disabled: !canAddAttachment
             ) { showingPhotoPicker = true },
         ]
         // Take Photo (the reference design's composer menu), where the phone has a camera
@@ -102,7 +118,7 @@ extension ChatView {
         out += [
             PlusAction(
                 id: "files", systemImage: "paperclip", title: "Choose File",
-                subtitle: "Add a document from Files", disabled: !canAddAttachment
+                subtitle: "Add a document, audio, or video from Files", disabled: !canAddAttachment
             ) { showingFileImporter = true },
         ]
         out.append(PlusAction(

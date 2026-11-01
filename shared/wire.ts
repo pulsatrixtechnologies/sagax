@@ -399,6 +399,9 @@ export interface WireBot {
   modelSelection: ModelSelection;
   /** where the bot works ("Works on"). Unset = auto. */
   computer?: Surface | "off";
+  /** Enrolled unattended hosts (`h_` + 32 hex) attached from the Computer
+   * tab so this bot has access by default (2026-11-01). Absent = none. */
+  remoteHosts?: string[];
   /** Which cloud computer backs computer: "cloud"; absent means Boat. */
   cloudBackend?: CloudBackend;
   /** Auto mode may prepare/start this bot's managed VPS container. */
@@ -420,10 +423,10 @@ export interface WireBot {
    * server judges its turns, with why, only when it is not
    * `approvalSetting`. Absent: the conversation runs the bot's setting. */
   approvalApplied?: AppliedApprovalLevel;
-  /** How autonomously this bot may act on its own (shared/proactive-mode.ts):
-   * "off" = never; "propose", "read-auto" and "follow-rules" each gate a
-   * proactive step through our approval model. Absent reads as the default,
-   * "follow-rules" since 0.8.19 (proactiveModeFor). Never a Chief orchestrator. */
+  /** Proactive on/off (shared/proactive-mode.ts): "off" = no wakes;
+   * "proactive" = wakes on email, calendar, failed run, bot mention or
+   * webhook and acts at its approval level and rules. Absent reads as the
+   * default "proactive" (proactiveModeFor). Never a Chief orchestrator. */
   proactiveMode?: ProactiveMode;
   /** Tools this bot may always use without asking. */
   alwaysAllow?: string[];
@@ -791,6 +794,8 @@ export interface WireMessage {
     place?: PlaceRow;
     /** Provider item identity, scoped to the owning turn. */
     itemId?: string;
+    /** A failed one-way send's row: the runtime id of the notice it reports. */
+    handoffId?: string;
     /** Whether the harness captured the full redacted result. Private
      * server-local spill paths are not exposed to clients. */
     fullResult?: boolean;

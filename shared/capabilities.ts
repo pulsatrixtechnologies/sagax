@@ -34,11 +34,13 @@ export interface CapabilitySource {
   kind: SourceKind;
   label: string;
   version?: string;
+  /** The installed signed Flow pack, absent for an incomplete mixed update. */
+  pack?: string;
 }
 
 /** How an engine receives one part of a capability:
  * - native: the engine loads it itself (Claude's --plugin-dir, native skill folders)
- * - prompt: named in the turn prompt with the path of its file
+ * - prompt: a file index, or whole instructions for chat-only engines
  * - mounted: an MCP server the engine itself connects to
  * - proxied: an MCP server Sagax connects to, its tools handed to the engine
  * - none: not received */
@@ -69,11 +71,25 @@ export interface EngineReceipt {
  * - not_member: the organization's Flow for a bot whose owner is not an active member
  * - not_installed: declared, not installed yet
  * - unknown_profile: a Role Perspicax no longer lists
- * - disabled: switched off where it is kept */
+ * - disabled: switched off where it is kept
+ * - offered: offered by the organization (lot 4), off until the person
+ *   turns it on for all their bots */
 export type CapabilityReason =
   | "name_taken" | "not_selected" | "host_command" | "policy"
   | "needs_github" | "needs_token" | "needs_sign_in" | "no_environment" | "private_address"
-  | "library_off" | "not_assigned" | "guard_off" | "not_member" | "not_installed" | "unknown_profile" | "disabled";
+  | "library_off" | "not_assigned" | "guard_off" | "not_member" | "not_installed" | "unknown_profile" | "disabled" | "offered";
+
+export interface CapabilityPromptIndex {
+  bytes: number;
+  maxBytes: number;
+  skills: number;
+  maxSkills: number;
+  omitted: number;
+  /** Discovery stopped early: more references may exist than were indexed. */
+  incomplete?: boolean;
+  /** Whole files actually included, by part. Absent on older servers. */
+  parts?: { skills: number; commands: number; agents: number };
+}
 
 export interface Capability {
   /** stable, never shown (ex. "plugin:bot:name@market") */
@@ -90,6 +106,7 @@ export interface Capability {
   /** the person looking may switch it on or off for this bot */
   canToggle: boolean;
   updateAvailable?: boolean;
+  promptIndex?: CapabilityPromptIndex;
   brings?: { skills: string[]; commands: string[]; agents: string[]; mcpServers: string[] };
   engine: EngineReceipt;
   connect?: { reason: "sign_in" | "token" | "github" | "environment" | "account" | "key" };
@@ -100,6 +117,9 @@ export interface Capability {
   /** added (lot 1a): the MCP server names it puts on a turn of this bot
    * (an MCP server, a Role, a plugin "Everyone"'s servers). Names only. */
   mounts?: string[];
+  /** added (lot 4): the Perspicax declaration an organization capability
+   * comes from, for the person's own switch of an offered one. Never shown. */
+  orgDeclaration?: string;
 }
 
 export interface BotCapabilities {
@@ -107,14 +127,17 @@ export interface BotCapabilities {
   engine: { kind: string; label: string };
   items: Capability[];
   /** the skills index of the prompt (#1748): bytes and count, caps, omitted */
-  promptIndex?: { bytes: number; maxBytes: number; skills: number; maxSkills: number; omitted: number };
+  promptIndex?: CapabilityPromptIndex;
 }
 
 export const CAPABILITIES_PATH = (botId: string) => `/api/bots/${encodeURIComponent(botId)}/capabilities`;
 
 /** Engines with no local folder of their own (server/workspace.ts
  * supportsWorkspaceFiles): API engines, whose turn is a chat request. They
- * read no file, so neither a skill nor a plugin reaches them. */
+ * have no native file tools. Their chat request always receives whole
+ * instructions within each capability's visible prompt budget (say then
+ * fill, Q8 C); when skills_list and workspace_read are allowed those tools
+ * reach the rest. */
 export const ENGINES_WITHOUT_FILES: readonly string[] = ["grok", "openai-compat", "minimax", "mistral", "cerebras", "groq"];
 
 export function engineWorksInFiles(driverKind: string): boolean {
@@ -135,6 +158,10 @@ export interface EngineParts {
   /** skills read only through the prompt index (a library skill: no native
    * link, so Claude reads it from the prompt too) */
   indexOnly?: boolean;
+  /** Managed skills_list/workspace_read is actually mounted for the turn.
+   * Informative since Q8 C: an engine without files receives the files
+   * inline with or without it. */
+  skillDiscovery?: boolean;
 }
 
 const CLAUDE = "claudeAgent";
@@ -143,14 +170,18 @@ const GROK_KINDS = new Set(["grok", "grokAgent"]);
 /** The engine matrix: one function, used by the resolver AND the texts.
  *
  * - Claude (`claudeAgent`) loads a bot's plugins whole with --plugin-dir
- *   (skills, commands and agents: native); the organization's Flow too, and
- *   only Claude does today (server/org-flow-plugins.ts, C-3). Its skills
- *   are linked into its native skills folder.
+ *   (skills, commands and agents: native), including the organization's
+ *   Flow. Its skills are linked into its native skills folder.
  * - The other engines with files (Codex, Pi, Grok CLI, ...) get a plugin's
  *   skills, commands and agents named in the turn prompt with their path
  *   (server/plugin-turn.ts), and the bot's skills in the skills index.
  * - Engines without files (`grok`, `openai-compat`, `minimax`, `mistral`,
- *   `cerebras`, `groq`) get nothing of a plugin, a skill or Flow.
+ *   `cerebras`, `groq`) get whole instruction files within a visible budget
+ *   per plugin, skill or Flow capability (server/capability-prompt.ts),
+ *   tools on or off; with skills_list and workspace_read allowed those
+ *   tools reach the rest. Plugin hooks and LSP stay out of
+ *   discovery on every non-Claude engine; MCP is proxied when customMcp is
+ *   on.
  * - MCP follows `customMcp`: an engine with files connects to the servers
  *   itself (mounted); one without files gets their tools through Sagax
  *   (proxied, server/drivers/chat-mcp-tools.ts).
@@ -160,9 +191,11 @@ export function engineReceipt(driverKind: string, form: CapabilityForm, parts: E
   const claude = driverKind === CLAUDE;
   const out: EngineReceipt = { nothing: true };
   const fileReceipt = (): Receipt => {
-    if (form === "flow") return claude ? "native" : "none";
     if (claude) return parts.indexOnly ? "prompt" : "native";
-    return files ? "prompt" : "none";
+    // Every other engine reads them through the prompt: file engines by
+    // path, engines without files as whole files inline (Q8 C, with or
+    // without skills_list and workspace_read).
+    return "prompt";
   };
   if (form === "plugin" || form === "skill" || form === "flow") {
     if (parts.skills) out.skills = fileReceipt();

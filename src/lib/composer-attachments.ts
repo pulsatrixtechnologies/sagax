@@ -31,6 +31,9 @@ export type FileAttachment = {
   path: string;
   name: string;
   size: number;
+  uploading?: boolean;
+  uploadProgress?: number;
+  uploadError?: string;
   /** Present for an uploaded archive: its listing, for the chip. */
   archive?: ArchiveSummary;
 };
@@ -46,6 +49,8 @@ export type ImageAttachment = {
    * flight and briefly handed to the transcript after Send. Never persisted. */
   previewUrl?: string;
   uploading?: boolean;
+  uploadProgress?: number;
+  uploadError?: string;
 };
 
 export type Attachment = PasteAttachment | FileAttachment | ImageAttachment | CitationAttachment;
@@ -130,13 +135,18 @@ export function fileAttachment(name: string, path: string, size: number, archive
 /** Matches the server's IMAGE_MAX_BYTES — checked client-side so an
  * oversized paste is refused before the upload starts, not mid-stream. */
 export const IMAGE_MAX_BYTES = 32 * 1024 * 1024;
-export const FILE_MAX_BYTES = 25 * 1024 * 1024;
+/** Matches the server's IMAGE_AGGREGATE_MAX_BYTES and MESSAGE_IMAGE_MAX_COUNT:
+ * pictures in one message share 200 MiB on every host. Other files keep
+ * their own per-file ceilings and no message count. */
+export const IMAGE_AGGREGATE_MAX_BYTES = 200 * 1024 * 1024;
+export const MESSAGE_IMAGE_MAX_COUNT = 32;
+export const FILE_MAX_BYTES = 250 * 1024 * 1024;
+export const VIDEO_MAX_BYTES = 1024 * 1024 * 1024;
 /** Matches the server's ARCHIVE_MAX_BYTES. */
-export const ARCHIVE_MAX_BYTES = 90 * 1024 * 1024;
+export const ARCHIVE_MAX_BYTES = FILE_MAX_BYTES;
 
-// #1098: the ceilings above are an organization server's (the shared host).
-// A solo server gives a picture and a document the archive ceiling, as the
-// server does (server/attachments.ts imageMaxBytes). Shared until the app
+// A solo server keeps its higher picture ceiling, as the server does.
+// The document and video ceilings are the same for either host. Shared until the app
 // knows (src/lib/perspicax-org.ts loadPerspicaxOrg sets it).
 let sharedAttachmentHost = true;
 export function setAttachmentHostShared(shared: boolean): void {
@@ -147,10 +157,16 @@ export function soloAttachmentCeilings(): boolean {
   return !sharedAttachmentHost;
 }
 export function imageMaxBytes(): number {
-  return sharedAttachmentHost ? IMAGE_MAX_BYTES : ARCHIVE_MAX_BYTES;
+  return sharedAttachmentHost ? IMAGE_MAX_BYTES : 90 * 1024 * 1024;
 }
 export function fileMaxBytes(): number {
-  return sharedAttachmentHost ? FILE_MAX_BYTES : ARCHIVE_MAX_BYTES;
+  return FILE_MAX_BYTES;
+}
+
+/** Existing in-memory PDF/audio/video previews keep their bounded footprint.
+ * Uploads and downloads use their independent, larger transport ceilings. */
+export function bufferedPreviewMaxBytes(): number {
+  return sharedAttachmentHost ? 25 * 1024 * 1024 : 90 * 1024 * 1024;
 }
 
 const DOCUMENT_MIMES: Readonly<Record<string, string>> = {
@@ -419,6 +435,85 @@ const IMAGE_EXTENSION_BY_MIME: Readonly<Record<string, string>> = {
 };
 
 const UPLOAD_ATTEMPTS = 2;
+const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
+const uploadIds = new WeakMap<File, string>();
+export interface AttachmentUploadOptions {
+  signal?: AbortSignal;
+  onProgress?: (uploaded: number, total: number) => void;
+  /** A resumable upload can be canceled after this call settles without
+   * retaining the browser File. The draft lifecycle owns this handle. */
+  onSession?: (session: AttachmentUploadSession) => void;
+}
+
+export interface AttachmentUploadSession {
+  cancel(): Promise<void>;
+}
+
+function uploadIdFor(file: File): string {
+  let id = uploadIds.get(file);
+  if (!id) { id = newUploadId(); uploadIds.set(file, id); }
+  return id;
+}
+
+/** Keep the File itself as the source. Only one 4 MB slice crosses the
+ * proxy at a time; retry asks the server for its acknowledged byte offset. */
+async function uploadAttachment<T>(file: File, endpoint: string, mime: string, options: AttachmentUploadOptions): Promise<T> {
+  const id = uploadIdFor(file);
+  const base = `${endpoint}?${endpoint === "/api/files" ? `name=${encodeURIComponent(file.name)}&` : ""}uploadId=${encodeURIComponent(id)}`;
+  if (file.size <= UPLOAD_CHUNK_BYTES) {
+    const result = await uploadWithRetry<T>(base, { method: "POST", headers: { "content-type": mime }, body: file, signal: options.signal });
+    uploadIds.delete(file);
+    options.onProgress?.(file.size, file.size);
+    return result;
+  }
+  const url = `${base}&total=${file.size}`;
+  type State = { offset: number; total: number; saved?: T };
+  const request = (phase: string, offset = 0, body?: Blob, signal = options.signal) => uploadWithRetry<State>(
+    `${url}&phase=${phase}&offset=${offset}`, { method: "POST", headers: { "content-type": mime }, body, signal },
+  );
+  let cancelPromise: Promise<void> | undefined;
+  const session: AttachmentUploadSession = {
+    cancel: () => cancelPromise ??= request("cancel", 0, undefined, AbortSignal.timeout(10_000)).then(() => undefined),
+  };
+  options.onSession?.(session);
+  try {
+    let offset = 0;
+    try {
+      const status = await request("status");
+      if (status.saved) { options.onProgress?.(file.size, file.size); return status.saved; }
+      offset = status.offset;
+    } catch (error) { if ((error as { status?: number }).status !== 404) throw error; }
+    while (offset < file.size) {
+      options.signal?.throwIfAborted();
+      const next = Math.min(offset + UPLOAD_CHUNK_BYTES, file.size);
+      let state: State;
+      try { state = await request("chunk", offset, file.slice(offset, next)); }
+      catch (error) {
+        if (options.signal?.aborted) throw error;
+        // A committed chunk's reply may have been lost. Its retry receives
+        // 409; use the acknowledged offset, rather than resend the whole file.
+        const status = await request("status");
+        if (status.saved) return status.saved;
+        if (status.offset <= offset) throw error;
+        state = status;
+      }
+      if (!Number.isSafeInteger(state.offset) || state.offset <= offset || state.offset > file.size) throw new Error("upload returned an invalid offset");
+      offset = state.offset;
+      options.onProgress?.(offset, file.size);
+    }
+    const committed = await request("commit");
+    if (!committed.saved) throw new Error("upload returned no committed file");
+    uploadIds.delete(file);
+    return committed.saved;
+  } catch (error) {
+    if (options.signal?.aborted) {
+      // The cancellation request must outlive the aborted data request.
+      await session.cancel().catch(() => undefined);
+      uploadIds.delete(file);
+    }
+    throw error;
+  }
+}
 
 function retryableUploadStatus(status: number): boolean {
   return status === 408 || status === 425 || status === 429 || status >= 500;
@@ -472,9 +567,10 @@ function canonicalImageName(originalName: string, path: string, mime: string): s
 /** Persist a pasted image server-side and return the attachment chip data.
  * The server writes ~/.sagax/attachments/<uuid>.<ext> and answers
  * with the path; the prompt references that path so every CLI can open it. */
-export function optimisticImageAttachment(file: File): ImageAttachment | null {
+export function optimisticImageAttachment(file: File, pending: readonly Attachment[] = []): ImageAttachment | null {
   if (!isImageFile(file)) return null;
   if (file.size > imageMaxBytes()) throw Object.assign(new Error(`${file.name} exceeds ${imageMaxBytes() / (1024 * 1024)} MB`), { status: 413 });
+  assertImageFitsMessage(file, pending);
   const mime = file.type.split(";", 1)[0]!.trim().toLowerCase();
   const previewUrl = typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : undefined;
   return {
@@ -489,22 +585,28 @@ export function optimisticImageAttachment(file: File): ImageAttachment | null {
   };
 }
 
+/** Refuse the picture that would take a message past its shared image
+ * budget before any byte is uploaded. The sentence names the file and the
+ * limit, so the composer notice is the person's failure receipt. */
+export function assertImageFitsMessage(file: Pick<File, "name" | "size">, pending: readonly Attachment[]): void {
+  const images = pending.filter((attachment): attachment is ImageAttachment => attachment.kind === "image");
+  if (images.length >= MESSAGE_IMAGE_MAX_COUNT) {
+    throw Object.assign(new Error(`one message can carry at most ${MESSAGE_IMAGE_MAX_COUNT} images`), { status: 413 });
+  }
+  const total = images.reduce((sum, image) => sum + image.size, 0) + file.size;
+  if (total > IMAGE_AGGREGATE_MAX_BYTES) {
+    throw Object.assign(new Error(`images in one message can total at most ${IMAGE_AGGREGATE_MAX_BYTES / (1024 * 1024)} MB`), { status: 413 });
+  }
+}
+
 export async function imageAttachmentFromFile(
   file: File,
   optimistic?: Pick<ImageAttachment, "id" | "previewUrl">,
+  options: AttachmentUploadOptions = {},
 ): Promise<ImageAttachment | null> {
   if (!isImageFile(file)) return null;
   if (file.size > imageMaxBytes()) throw Object.assign(new Error(`${file.name} exceeds ${imageMaxBytes() / (1024 * 1024)} MB`), { status: 413 });
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const uploadId = newUploadId();
-  const saved = await uploadWithRetry<{ path: string; mime: string; bytes: number }>(
-    `/api/attachments?uploadId=${encodeURIComponent(uploadId)}`,
-    {
-      method: "POST",
-      headers: { "content-type": file.type },
-      body: bytes,
-    },
-  );
+  const saved = await uploadAttachment<{ path: string; mime: string; bytes: number }>(file, "/api/attachments", file.type, options);
   return {
     kind: "image",
     id: optimistic?.id ?? newId(),
@@ -519,28 +621,34 @@ export async function imageAttachmentFromFile(
 /** Copy a supported document, audio file or archive into the private attachment store. The prompt
  * then carries the same durable path for the local agent and paired phones,
  * instead of exposing an arbitrary Finder path to the companion route. */
-export async function fileAttachmentFromFile(file: File): Promise<FileAttachment | null> {
+function fileUploadMime(file: File): string | null {
   const declared = file.type.split(";", 1)[0]!.trim().toLowerCase();
   const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
   const archive = archiveMime(file);
-  const mime = archive ?? documentMime(file) ??
-    (ACCEPTED_AUDIO_MIMES.has(declared) ? declared : AUDIO_MIMES_BY_EXTENSION[extension]);
+  return archive ?? documentMime(file) ??
+    (["video/mp4", "video/webm", "video/quicktime"].includes(declared) ? declared : undefined) ??
+    (ACCEPTED_AUDIO_MIMES.has(declared) ? declared : AUDIO_MIMES_BY_EXTENSION[extension]) ??
+    ({ mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime" } as Record<string, string>)[extension] ?? null;
+}
+
+export function optimisticFileAttachment(file: File): FileAttachment | null {
+  const mime = fileUploadMime(file);
   if (!mime) return null;
+  const archive = archiveMime(file);
   if (archive && file.size > ARCHIVE_MAX_BYTES) {
-    throw Object.assign(new Error(`${file.name} is ${formatSize(file.size)}; archives can be at most 90 MB`), { status: 413 });
+    throw Object.assign(new Error(`${file.name} is ${formatSize(file.size)}; archives can be at most 250 MB`), { status: 413 });
   }
-  if (!archive && file.size > fileMaxBytes()) {
-    throw Object.assign(new Error(`${file.name} exceeds ${fileMaxBytes() / (1024 * 1024)} MB`), { status: 413 });
+  const maximum = mime.startsWith("video/") ? VIDEO_MAX_BYTES : fileMaxBytes();
+  if (!archive && file.size > maximum) {
+    throw Object.assign(new Error(`${file.name} exceeds ${maximum / (1024 * 1024)} MB`), { status: 413 });
   }
-  const uploadId = newUploadId();
-  const saved = await uploadWithRetry<{ path: string; name: string; bytes: number; archive?: ArchiveSummary }>(
-    `/api/files?name=${encodeURIComponent(file.name)}&uploadId=${encodeURIComponent(uploadId)}`,
-    {
-      method: "POST",
-      headers: { "content-type": mime },
-      body: file,
-    },
-  );
+  return { kind: "file", id: newId(), path: "", name: file.name, size: file.size, uploading: true, uploadProgress: 0 };
+}
+
+export async function fileAttachmentFromFile(file: File, options: AttachmentUploadOptions = {}): Promise<FileAttachment | null> {
+  if (!optimisticFileAttachment(file)) return null;
+  const mime = fileUploadMime(file)!;
+  const saved = await uploadAttachment<{ path: string; name: string; bytes: number; archive?: ArchiveSummary }>(file, "/api/files", mime, options);
   return fileAttachment(saved.name || file.name, saved.path, saved.bytes, saved.archive);
 }
 
@@ -973,7 +1081,7 @@ export async function intakeFiles<T extends DroppedFile & { type: string }>(
     allowImages: boolean;
     getPath: (file: T) => string;
     uploadImage: (file: T) => Promise<Attachment | null>;
-    uploadFile?: (file: T) => Promise<FileAttachment | null>;
+    uploadFile?: (file: T) => Promise<FileAttachment | null | "handled">;
   },
 ): Promise<{ attachments: Attachment[]; notice: string | null }> {
   const files = [..._files];
@@ -1003,6 +1111,7 @@ export async function intakeFiles<T extends DroppedFile & { type: string }>(
     }
     try {
       const attachment = await uploadFile(file);
+      if (attachment === "handled") return { attachments: [], rejectedNames: [] };
       if (attachment) {
         return { attachments: [attachment], rejectedNames: [] };
       }

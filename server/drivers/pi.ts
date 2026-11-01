@@ -1124,7 +1124,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
       turnId: string;
       pending: Map<string, (decision: { behavior: "allow" | "deny" | "answer"; message?: string }) => void>;
       child?: { stdin: { write: (s: string) => void } };
-      steer?: (text: string) => Promise<SteerOutcome>;
+      steer?: (text: string, steerId?: string) => Promise<SteerOutcome>;
     }>();
 
     const emit = (event: RuntimeEvent) => {
@@ -1432,7 +1432,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
       // so the caller can never run the words twice. Each frame carries a
       // unique id that pi echoes on its response, so concurrent steers on
       // the same turn never share or overwrite a waiter.
-      const steerActiveTurn = async (text: string): Promise<SteerOutcome> => {
+      const steerActiveTurn = async (text: string, steerId?: string): Promise<SteerOutcome> => {
         if (settled || child.exitCode !== null || child.signalCode !== null) return "refused";
         let ack: Promise<unknown>;
         try {
@@ -1445,6 +1445,10 @@ export const PiDriver: ProviderDriver<PiConfig> = {
         }
         try {
           await ack;
+          // pi's agent loop polls accepted steering after every step, the
+          // last one included: the running turn reads it. Said so, the
+          // harness never offers it again to the next turn (2026-11-01).
+          if (steerId) emit({ ...base(threadId, turnId), type: "steer.received", steerId });
           return "steered";
         } catch (error) {
           return error instanceof PiRpcRefusalError ? "refused" : "indeterminate";
@@ -2004,9 +2008,9 @@ export const PiDriver: ProviderDriver<PiConfig> = {
           });
           return decision.behavior === "allow" ? "allowed-once" : decision.behavior === "answer" ? "answered" : "rejected";
         },
-        steer: async (threadId, text) => {
+        steer: async (threadId, text, options) => {
           const entry = active.get(threadId);
-          return entry?.steer ? await entry.steer(text) : "refused";
+          return entry?.steer ? await entry.steer(text, options?.steerId) : "refused";
         },
         hasSession: (threadId) => active.has(threadId),
         stopAll: async () => {

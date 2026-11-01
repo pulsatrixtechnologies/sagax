@@ -2,7 +2,7 @@
 // CLI: a Write call in a turn is recorded on its activity message, listed as
 // a file of that conversation, and served by id and through the message
 // route, while another conversation of the same bot does not list it.
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, truncateSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -50,6 +50,7 @@ describe("conversation files through the harness", () => {
         { name: "Write", input: { file_path: "report.md", content: "# Findings" }, output: "File written" },
         { name: "Write", input: { file_path: "remote-only/never-here.png", content: "" }, output: "File written" },
         { name: "Write", input: { file_path: "chart.png", content: "" }, output: "File written" },
+        { name: "Write", input: { file_path: "clip.mp4", content: "" }, output: "File written" },
         { name: "Write", input: { file_path: "refused.md", content: "" }, ok: false, output: "denied" },
       ]),
       FAKE_CLAUDE_REPLIES: JSON.stringify(["Wrote the report."]),
@@ -71,13 +72,17 @@ describe("conversation files through the harness", () => {
     writeFileSync(join(workspace, "report.md"), "# Findings");
     const picture = solidPng(640, 480);
     writeFileSync(join(workspace, "chart.png"), picture);
+    const videoBytes = 1024 * 1024 * 1024;
+    const videoPath = join(workspace, "clip.mp4");
+    writeFileSync(videoPath, "video");
+    truncateSync(videoPath, videoBytes);
 
     expect((await api("POST", `/api/bots/${bot.id}/messages`, { text: "Write the report" })).status).toBe(202);
     let files: Listed[] = [];
     await expect.poll(async () => {
       files = (await api("GET", `/api/threads/${bot.threadId}/files`)).body.files;
       return files.map((file) => file.name).sort();
-    }, { timeout: 20_000 }).toEqual(["chart.png", "never-here.png", "report.md"]);
+    }, { timeout: 20_000 }).toEqual(["chart.png", "clip.mp4", "never-here.png", "report.md"]);
 
     const report = files.find((file) => file.name === "report.md")!;
     expect(report).toMatchObject({ source: "written", size: 10, available: true, mime: "text/markdown; charset=utf-8" });
@@ -112,6 +117,27 @@ describe("conversation files through the harness", () => {
     expect((await fetch(`${session.info.url}/api/threads/${bot.threadId}/files/${"0".repeat(24)}?thumb=1`)).status).toBe(404);
     expect((await fetch(`${session.info.url}/api/threads/${bot.threadId}/files/${report.id}?thumb=1`)).status).toBe(415);
 
+    // A sparse 1 GiB clip is listed at its plaintext size and seeked with a
+    // bounded range. The server never buffers or sends the preceding bytes.
+    const clip = files.find((candidate) => candidate.name === "clip.mp4")!;
+    expect(clip).toMatchObject({ size: videoBytes, available: true, mime: "video/mp4" });
+    const rangeStart = videoBytes - 16;
+    const seek = await fetch(`${session.info.url}/api/threads/${bot.threadId}/files/${clip.id}?preview=1`, {
+      headers: { range: `bytes=${rangeStart}-` },
+    });
+    expect(seek.status).toBe(206);
+    expect(seek.headers.get("accept-ranges")).toBe("bytes");
+    // Caddy's encode and CDNs leave a no-transform body as stored bytes.
+    expect(seek.headers.get("cache-control")).toBe("private, no-store, no-transform");
+    expect(seek.headers.get("content-range")).toBe(`bytes ${rangeStart}-${videoBytes - 1}/${videoBytes}`);
+    expect(seek.headers.get("content-length")).toBe("16");
+    expect(Buffer.from(await seek.arrayBuffer())).toEqual(Buffer.alloc(16));
+    const pastEnd = await fetch(`${session.info.url}/api/threads/${bot.threadId}/files/${clip.id}?preview=1`, {
+      headers: { range: `bytes=${videoBytes}-` },
+    });
+    expect(pastEnd.status).toBe(416);
+    expect(pastEnd.headers.get("content-range")).toBe(`bytes */${videoBytes}`);
+
     const viaMessage = await fetch(`${session.info.url}/api/threads/${bot.threadId}/messages/${report.messageId}/file`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -119,6 +145,21 @@ describe("conversation files through the harness", () => {
     });
     expect(viaMessage.status).toBe(200);
     expect(await viaMessage.text()).toBe("# Findings");
+    const location = await fetch(`${session.info.url}/api/threads/${bot.threadId}/messages/${clip.messageId}/file`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: clip.path, location: true }),
+    });
+    expect(location.status).toBe(200);
+    const opaque = await location.json() as { downloadUrl: string; previewUrl: string; mime: string; bytes: number; name: string };
+    expect(opaque).toEqual({
+      downloadUrl: `/api/threads/${bot.threadId}/files/${clip.id}`,
+      previewUrl: `/api/threads/${bot.threadId}/files/${clip.id}?preview=1`,
+      mime: "video/mp4",
+      bytes: videoBytes,
+      name: "clip.mp4",
+    });
+    expect(JSON.stringify(opaque)).not.toContain(session.info.dataDir);
     // The activity message grants only the file its tool wrote.
     const other = await fetch(`${session.info.url}/api/threads/${bot.threadId}/messages/${report.messageId}/file`, {
       method: "POST",
@@ -134,6 +175,7 @@ describe("conversation files through the harness", () => {
     expect(typeof secondThread).toBe("string");
     expect((await api("GET", `/api/threads/${secondThread}/files`)).body.files).toEqual([]);
     expect((await fetch(`${session.info.url}/api/threads/${secondThread}/files/${report.id}`)).status).toBe(404);
+    expect((await fetch(`${session.info.url}/api/threads/${secondThread}/files/${clip.id}`, { headers: { range: "bytes=0-0" } })).status).toBe(404);
     expect((await api("GET", "/api/threads/no-such-thread/files")).status).toBe(404);
   }, 40_000);
 

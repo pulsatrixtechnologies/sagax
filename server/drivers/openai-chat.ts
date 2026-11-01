@@ -421,7 +421,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
      * array is between rounds, never mid-tool-batch — so the model reads
      * it before its next completion. Kept out of messages[] until then:
      * a parked item must never look like delivered input. */
-    asides: string[];
+    asides: Array<{ text: string; steerId?: string }>;
     /** Set once the turn stops taking rounds: a later steer is refused so the
      * harness sends it as the next turn instead of parking it where no round
      * will ever read it. */
@@ -1025,7 +1025,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     });
     let resolveDone!: () => void;
     const done = new Promise<void>((resolve) => { resolveDone = resolve; });
-    const turnEntry = { abort, turnId, done, approval, asides: [] as string[], ending: false };
+    const turnEntry = { abort, turnId, done, approval, asides: [] as Array<{ text: string; steerId?: string }>, ending: false };
     active.set(turn.threadId, turnEntry);
     emit({ ...base(turn.threadId, turnId), type: "turn.started" });
     emit({ ...base(turn.threadId, turnId), type: "session.started", sessionId: null, model });
@@ -1046,7 +1046,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       // Asides spliced into the request that is in flight. Cleared once the
       // model answers that request. Still set when the turn ends means the
       // model never read them.
-      let unread: string[] = [];
+      let unread: Array<{ text: string; steerId?: string }> = [];
       try {
         const parsed = parseToolScope(turn.toolScope);
         if (!parsed.ok) throw new Error(parsed.error);
@@ -1077,7 +1077,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
           // user message lands on a consistent array (never inside a tool
           // batch) and the provider sees it as the newest input.
           unread = turnEntry.asides.splice(0);
-          if (unread.length) messages.push({ role: "user", content: unread.join("\n\n") });
+          if (unread.length) messages.push({ role: "user", content: unread.map((aside) => aside.text).join("\n\n") });
           // The last step cannot take another round. Refuse a steer now so
           // the harness queues it as the next turn instead of losing it
           // under "Stopped after N steps".
@@ -1196,6 +1196,13 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
             }
           }
           native("in", options.nativeLog.incoming(completion));
+          // The completion that carried the parked words came back: the model
+          // read them. Said so, the harness counts them received and never
+          // offers them to the next turn as unseen, which answered them a
+          // second time (2026-11-01).
+          for (const aside of unread) {
+            if (aside.steerId) emit({ ...base(turn.threadId, turnId), type: "steer.received", steerId: aside.steerId });
+          }
           unread = [];
           if (completion.usage) {
             usage.input += completion.usage.input;
@@ -1477,7 +1484,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       },
       respondToRequest: async (threadId, requestId, decision) =>
         active.get(threadId)?.approval.answer(requestId, decision.behavior, decision.message, decision.always) ?? "unavailable",
-      steer: async (threadId, text) => {
+      steer: async (threadId, text, steerOptions) => {
         // This engine has no external session to respect — parking the
         // words in the live turn's entry IS delivery into the loop, so a
         // successful park is "steered"; a missing or ending turn is
@@ -1486,7 +1493,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         // answer that streamed meanwhile gets one more round to read them.
         const running = active.get(threadId);
         if (!running || running.ending) return "refused";
-        running.asides.push(text);
+        running.asides.push({ text, ...(steerOptions?.steerId ? { steerId: steerOptions.steerId } : {}) });
         return "steered";
       },
       hasSession: (threadId) => active.has(threadId),

@@ -105,8 +105,11 @@ public enum SettingsTree {
         switch page {
         case .root:
             all = [
-                [(.profile, true), (.usage, c.usage), (.organization, c.organization)],
-                [(.bots, true), (.connectApps, c.plugins), (.publishedPages, c.connected)],
+                // Grok Bot's account sheet (2026-11-01): the profile with
+                // Usage and the Vault, Connect apps, then the Bot card
+                [(.profile, true), (.usage, c.usage), (.organization, c.organization), (.vault, c.connected)],
+                [(.connectApps, c.plugins), (.publishedPages, c.connected)],
+                [(.bots, true)],
                 [(.notifications, true), (.appearance, true), (.language, true), (.haptics, true)],
                 [(.privacySecurity, c.connected)],
                 [(.helpCenter, true), (.sendFeedback, true), (.about, true)],
@@ -124,7 +127,7 @@ public enum SettingsTree {
             ]
         case .privacySecurity:
             all = [
-                [(.securityKeys, c.connected), (.vault, c.connected)],
+                [(.securityKeys, c.connected)],
                 [(.presence, c.privacy)],
                 [(.readReceipts, c.privacy)],
             ]

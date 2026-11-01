@@ -34,6 +34,13 @@ import { build } from "esbuild";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { waitForExit } from "../testing/cleanup.ts";
 import { availableTools, catalogProfileFromEnv } from "./agents-catalog.ts";
+import {
+  AGENTS_CATALOG_BYTES_SOFT_CEILING,
+  AGENTS_CATALOG_TOOL_COUNT_LIMIT,
+  applyCatalogGroups,
+  catalogMargin,
+  formatCatalogMargin,
+} from "./agents-catalog-budget.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROXY_SOURCE = join(HERE, "agents-proxy.ts");
@@ -161,59 +168,64 @@ const FULL = { direct: "direct+skills+shared+voice", room: "room+own-thread+skil
 // 2026-10-28: run_with_engine (a part of the work on another engine the
 // person may use, server/run-with-engine.ts) joins direct turns; the eight
 // direct chief profiles move to the measured bytes.
+// 2026-10-31: make_video now describes paid async generation, its scoped
+// lifecycle and documented formats; baselines use the measured new wire.
+// 2026-11-01 (#1703): deliberate raise to the measured wire. The old
+// baselines sat inside 40 to 528 bytes of the +2% cap (room+non-chief was
+// the tightest), which forced description cuts on every new tool. The soft
+// ceiling is now AGENTS_CATALOG_BYTES_SOFT_CEILING (150_000); groups mode
+// (SAGAX_CATALOG_GROUPS=1) is the growth path when a profile approaches it.
 const BUDGET_BASELINE: Record<string, number> = {
-  // +1749 / +1211 / +652 / +1214 on 2026-10-30 (#1818): coordinate_bots
-  // done_when field and short completion note on the tool description.
-  "direct": 89701,
-  "direct+voice": 90668,
-  "direct+shared": 91702,
-  "direct+shared+voice": 92669,
-  "direct+skills": 91754,
-  "direct+skills+voice": 92721,
-  "direct+skills+shared": 93755,
-  "direct+skills+shared+voice": 94722,
-  "room": 80363,
-  "room+voice": 81330,
-  "room+shared": 82364,
-  "room+shared+voice": 83331,
-  "room+skills": 82416,
-  "room+skills+voice": 83383,
-  "room+skills+shared": 84417,
-  "room+skills+shared+voice": 85384,
-  "room+own-thread": 82551,
-  "room+own-thread+voice": 83518,
-  "room+own-thread+shared": 84552,
-  "room+own-thread+shared+voice": 85519,
-  "room+own-thread+skills": 84604,
-  "room+own-thread+skills+voice": 85571,
-  "room+own-thread+skills+shared": 86605,
-  "room+own-thread+skills+shared+voice": 87572,
-  "direct+non-chief": 79205,
-  "direct+voice+non-chief": 80172,
-  "direct+shared+non-chief": 81206,
-  "direct+shared+voice+non-chief": 82173,
-  "direct+skills+non-chief": 81258,
-  "direct+skills+voice+non-chief": 82225,
-  "direct+skills+shared+non-chief": 83259,
-  "direct+skills+shared+voice+non-chief": 84226,
-  "room+non-chief": 69861,
-  "room+voice+non-chief": 70828,
-  "room+shared+non-chief": 71862,
-  "room+shared+voice+non-chief": 72829,
-  "room+skills+non-chief": 71914,
-  "room+skills+voice+non-chief": 72881,
-  "room+skills+shared+non-chief": 73915,
-  "room+skills+shared+voice+non-chief": 74882,
-  "room+own-thread+non-chief": 72049,
-  "room+own-thread+voice+non-chief": 73016,
-  "room+own-thread+shared+non-chief": 74050,
-  "room+own-thread+shared+voice+non-chief": 75017,
-  "room+own-thread+skills+non-chief": 74102,
-  "room+own-thread+skills+voice+non-chief": 75069,
-  "room+own-thread+skills+shared+non-chief": 76103,
-  "room+own-thread+skills+shared+voice+non-chief": 77070,
-  "external": 3697,
-  "external+everything": 3697,
+  "direct": 93854,
+  "direct+voice": 94821,
+  "direct+shared": 95855,
+  "direct+shared+voice": 96822,
+  "direct+skills": 95476,
+  "direct+skills+voice": 96443,
+  "direct+skills+shared": 97477,
+  "direct+skills+shared+voice": 98444,
+  "room": 84516,
+  "room+voice": 85483,
+  "room+shared": 86517,
+  "room+shared+voice": 87484,
+  "room+skills": 86138,
+  "room+skills+voice": 87105,
+  "room+skills+shared": 88139,
+  "room+skills+shared+voice": 89106,
+  "room+own-thread": 86704,
+  "room+own-thread+voice": 87671,
+  "room+own-thread+shared": 88705,
+  "room+own-thread+shared+voice": 89672,
+  "room+own-thread+skills": 88326,
+  "room+own-thread+skills+voice": 89293,
+  "room+own-thread+skills+shared": 90327,
+  "room+own-thread+skills+shared+voice": 91294,
+  "direct+non-chief": 83358,
+  "direct+voice+non-chief": 84325,
+  "direct+shared+non-chief": 85359,
+  "direct+shared+voice+non-chief": 86326,
+  "direct+skills+non-chief": 84980,
+  "direct+skills+voice+non-chief": 85947,
+  "direct+skills+shared+non-chief": 86981,
+  "direct+skills+shared+voice+non-chief": 87948,
+  "room+non-chief": 74014,
+  "room+voice+non-chief": 74981,
+  "room+shared+non-chief": 76015,
+  "room+shared+voice+non-chief": 76982,
+  "room+skills+non-chief": 75636,
+  "room+skills+voice+non-chief": 76603,
+  "room+skills+shared+non-chief": 77637,
+  "room+skills+shared+voice+non-chief": 78604,
+  "room+own-thread+non-chief": 76202,
+  "room+own-thread+voice+non-chief": 77169,
+  "room+own-thread+shared+non-chief": 78203,
+  "room+own-thread+shared+voice+non-chief": 79170,
+  "room+own-thread+skills+non-chief": 77824,
+  "room+own-thread+skills+voice+non-chief": 78791,
+  "room+own-thread+skills+shared+non-chief": 79825,
+  "room+own-thread+skills+shared+voice+non-chief": 80792,
+  "external": 5083,
+  "external+everything": 5083,
 };
 
 const RPC_PREFIX = '{"jsonrpc":"2.0","id":1,"result":';
@@ -456,5 +468,35 @@ describe("agents proxy tools/list wire size", () => {
       .toBeLessThanOrEqual(Math.floor(baseline! * 1.02));
     expect(actual, `${name} shrank by more than 2%. Lower BUDGET_BASELINE to ${actual} so the saving cannot creep back.`)
       .toBeGreaterThanOrEqual(Math.ceil(baseline! * 0.98));
+  });
+
+  it("stays under the measured soft ceiling and tool count limit, and prints margin per profile (#1703)", () => {
+    const lines = [
+      "agents catalog budget margins (#1703)",
+      `soft_ceiling_bytes=${AGENTS_CATALOG_BYTES_SOFT_CEILING}`,
+      `tool_count_limit=${AGENTS_CATALOG_TOOL_COUNT_LIMIT}`,
+      "",
+    ];
+    for (const [name, wire] of Object.entries(wires)) {
+      const toolCount = toolsOf(wire).length;
+      const actual = bytes(wire);
+      const margin = catalogMargin({
+        profile: name,
+        bytes: actual,
+        tools: toolCount,
+        baseline: BUDGET_BASELINE[name]!,
+      });
+      expect(actual, `${name} past soft ceiling ${AGENTS_CATALOG_BYTES_SOFT_CEILING}`).toBeLessThanOrEqual(AGENTS_CATALOG_BYTES_SOFT_CEILING);
+      expect(toolCount, `${name} past tool limit ${AGENTS_CATALOG_TOOL_COUNT_LIMIT}`).toBeLessThanOrEqual(AGENTS_CATALOG_TOOL_COUNT_LIMIT);
+      expect(margin.headroomToSoftCeiling, name).toBeGreaterThan(0);
+      expect(margin.headroomToToolLimit, name).toBeGreaterThanOrEqual(0);
+      const full = availableTools(catalogProfileFromEnv({ SAGAX_BOT_ID: "bot-golden", ...PROFILES[name]!.env }));
+      const grouped = applyCatalogGroups(full, { SAGAX_CATALOG_GROUPS: "1" });
+      const groupBytes = bytes(JSON.stringify({ tools: grouped }));
+      lines.push(formatCatalogMargin(margin));
+      lines.push(`  groups_mode_bytes=${groupBytes} saved=${actual - groupBytes}`);
+    }
+    console.log(lines.join("\n"));
+    expect(lines.length).toBeGreaterThan(5);
   });
 });

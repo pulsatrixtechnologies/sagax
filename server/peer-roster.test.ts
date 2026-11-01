@@ -378,9 +378,12 @@ describe("roomPeerRosterSystemPrompt", () => {
     const prompt = roomPeerRosterSystemPrompt([fleet[1]!, fleet[2]!]);
     expect(prompt).toContain("An @mention only reaches the members of this room");
     expect(prompt).toContain("NOT in this room");
-    expect(prompt).toContain("ask_bot");
-    expect(prompt).toContain("delegate_bot");
+    // Room turns are coordinating: ask_bot / delegate_bot are replaced.
+    expect(prompt).toContain("coordinate_bots");
+    expect(prompt).toContain("send_to_bot");
     expect(prompt).toContain("list_bots");
+    expect(prompt).not.toContain("ask_bot");
+    expect(prompt).not.toContain("delegate_bot");
     expect(prompt).toContain("- Quill — Writer [id: writer]");
     expect(prompt).toContain("- Patch — Engineer [id: coder]");
     // same fence, same reason, and the closing marker is the last line

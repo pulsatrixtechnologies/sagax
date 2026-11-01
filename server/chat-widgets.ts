@@ -17,20 +17,9 @@ import { createAppCard, isAppTool } from "./chat-apps.ts";
 import { createOptionsCard } from "./options-card.ts";
 import { ASK_CHOICE_TOOL, parseAskChoiceInput } from "../shared/options-card.ts";
 import { isSecretName, mask, redactSecretsInText } from "./redact.ts";
-import type { Message } from "./store.ts";
+import type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 
-/** What these calls need of the store (server/store.ts Store satisfies it). */
-export interface AgentCardStore {
-  groupByThread(threadId: string): unknown;
-  messagesFor(threadId: string): Message[];
-  appendMessage(threadId: string, message: Omit<Message, "id" | "at">): Message;
-  patchMessage(threadId: string, messageId: string, patch: Partial<Message>): Message | null;
-}
-
-export type AgentCardResult =
-  /** `masked`: something in the widget read as a secret and was stored masked. */
-  | { ok: true; messageId: string; masked?: true; pageId?: string; version?: number }
-  | { ok: false; status: 400 | 403 | 404 | 409; error: string };
+export type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 
 const ROOM_REFUSAL = "Widgets are not available in rooms yet. Answer in text.";
 const NO_SUCH_WIDGET = "No widget with that id in this conversation.";

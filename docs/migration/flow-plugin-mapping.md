@@ -1,6 +1,6 @@
-# Pulsatrix Flow plugin: mapping to native Sagax tools
+# Pulsatrix Flow plugin: mapping to Perspicax pack tools
 
-The marketplace plugin `pulsatrix-flow` (0.16.0, `plugins/pulsatrix-flow` of
+The marketplace plugin `pulsatrix-flow` (0.20.15, `plugins/pulsatrix-flow` of
 the marketplace repository) brings skills, two sub-agents, two hooks, a
 library of declarative actions and a helper script (`scripts/px_flow.py`,
 `scripts/px_flow_action.py`). This page maps each of them to Sagax.
@@ -17,34 +17,29 @@ as the pack's runner. They reach a bot through the Perspicax profile servers
 Sagax mounts for the person who speaks (`perspicax_<profile>`,
 `server/perspicax-mcp-bridge.ts`). Sagax only relays them: misuse
 classification marks a frame naming `flow_action` as surface `flow`
-(`server/index.ts`), and Grok's read-only rules cover `flow` only
-(`server/drivers/acp/grok-read-only-tools.ts`). Nothing about them changes
-here.
+(`server/index.ts`), and the existing profile authorization applies. Grok and Claude keep
+read-only treatment for the eight pure compute tools only on harness-owned
+Perspicax bridges (`server/drivers/acp/grok-read-only-tools.ts`).
 
-## What became native: the `sagax-flow` tools
+## Compute belongs to the signed Python pack
 
-The deterministic arithmetic the plugin did in Python is now a Sagax MCP
-server, `sagax-flow` (`server/flow-tools.ts`, tests
-`server/flow-tools.test.ts`, end to end in `server/org-mcp.e2e.test.ts`).
+The eight tools are served by Perspicax from the active signed Flow pack,
+through `scripts/px_flow.py serve` (`compute.catalog`, `compute.call`).
+`flow_compute_tools.json` is the only schema catalog and
+`px_flow_compute.py` is the Python implementation. Sagax has no local
+`sagax-flow` server or duplicate TypeScript calculation.
 
-- Pure functions of their arguments: no file, no network, no clock but `now`.
-  Every organization fact (time zone, working hours, holidays, the midnight
-  split time, boards, people) is an argument; none is built in. The plugin's
-  organization library and tenant files were not copied.
-- Mounted on a turn only when at least one Perspicax profile server is
-  mounted for that turn (`perspicaxTurnIntegration`), because the tools work
-  on the data those servers return.
-- Served by the workplace stdio proxy (`server/user-sandbox-proxy.ts`,
-  `SAGAX_TOOL_SERVER=sagax-flow`), which answers in its own process. It
-  carries no capability and never calls the Sagax server. A condition's
-  regular expression runs in that proxy's event loop, so it is capped at
-  200 characters and tried on the first 10,000 characters of the value
-  (`FLOW_REGEX_MAX_PATTERN`, `FLOW_REGEX_MAX_TEXT`); a backtracking pattern
-  can still hold up that proxy, which a warm session keeps.
-- Every tool is annotated read only. Claude pre-allows `mcp__sagax-flow`
-  (like `computer_select`); Grok gets an allow rule and gate read-only entry
-  for each tool, only for the harness's own proxy path; Codex mounts it with
-  the prefixed environment of Sagax's workplace proxies.
+- Every organization fact is an argument: time zone, working hours,
+  holidays, midnight split time and input records. Compute reads no tenant
+  facts, business files or network, and writes nothing.
+- A selected profile linked to the active pack offers the tools. The caller
+  remains the turn's actual speaker, exactly as for other Perspicax tools.
+- Older packs offer no compute tools. Sagax does not manufacture support.
+- The tool answer preserves its fields and adds pack digest and versions.
+- The standard-library Python NFA preserves bounded non-backtracking
+  conditions and title motifs. The host runner retains its normal timeout.
+- Read-only exceptions name these exact tools on harness-owned Perspicax
+  bridges only. Third-party annotations and the retired mount grant none.
 
 | Tool | Ported from | What it computes |
 |---|---|---|
@@ -57,9 +52,10 @@ server, `sagax-flow` (`server/flow-tools.ts`, tests
 | `flow_filter` | `eval_condition`, `_mark_excluded`, `_title_motif` | The routines' condition language (`is set`, `~`, `in`, `>`, `newer than`, ...) as where/unless filters, plus exclusion by id or title motif |
 | `flow_member_load` | `pool_load`, `load_window`, `member_load` | Booked hours per person and local day, cut at local midnight; a person's window over the next business days; least loaded first |
 
-The expected values in `server/flow-tools.test.ts` (free slots, `similar`
-keys, median, local-time conversions, group ids, load) were produced by the
-plugin's own Python on the same inputs.
+The pack's 54 parity cases preserve the former public answers, including
+decimals, DST, midnight splitting, grouping, filters, age buckets and load.
+Sagax's real-turn test proves only the relay and speaker identity; it does
+not reimplement the calculations.
 
 ## Mapping
 
@@ -170,12 +166,12 @@ Internal helpers with no command of their own (`parse_moment`, `utc_at`,
 
 Skills are written procedures: judgment, voice, decision tables. They are
 content, not logic, and Sagax already installs a plugin's skills and commands
-on a bot (Connect apps, `server/bot-plugins.ts`). None is copied into Sagax.
+on a bot (Capabilities, `server/bot-plugins.ts`). None is copied into Sagax.
 
 | Skills | Status |
 |---|---|
 | Host components: `using-px-flow`, `running-px-flow`, `testing-px-flow-skills` | depends on plugin: routing and the multi-agent engine of the plugin |
-| Method: `checking-pulsatrix-host`, `diagnosing-flow-runs`, `debugging-systematically`, `verifying-before-done`, `producing-pdf-excel-deliverables`, `scripting-from-har`, `filing-product-defects` | depends on plugin: generic prose, installable through Connect apps |
+| Method: `checking-pulsatrix-host`, `diagnosing-flow-runs`, `debugging-systematically`, `verifying-before-done`, `producing-pdf-excel-deliverables`, `scripting-from-har`, `filing-product-defects` | depends on plugin: generic prose, installable through Capabilities |
 | Dispatch: `dispatching-tickets`, `choosing-dispatch-techs`, `handling-child-tickets`, `following-up-waiting-tickets`, `handling-unassigned-tickets`, `handling-critical-tickets`, `scheduling-fixed-date-requests`, `repairing-ticket-owners`, `classifying-unreadable-references`, `listing-dispatch-day`, `reporting-dispatch-to-teams`, `mirroring-dispatch-journal` | depends on plugin; their slot, load and grouping arithmetic is migrated (`flow_free_slots`, `flow_member_load`, `flow_group_units`) |
 | Service: `working-service-tickets`, `diagnosing-tickets`, `finding-finishable-tickets`, `watching-client-replies` | depends on plugin |
 | Finance: `managing-time-entries`, `approving-timesheets`, `validating-invoices`, `watching-invoices`, `reconciling-agreements` | depends on plugin; time-block and overlap arithmetic migrated (`flow_time_block`, `flow_overlaps`, `flow_stats`) |
@@ -207,13 +203,9 @@ their skills (depends on plugin).
 | `hooks/session-start` (injects `using-px-flow`) | not migrating: Sagax strips hooks from a plugin it installs on a bot (`server/bot-plugins.ts`); Claude loads the plugin with `--plugin-dir`, other engines get its skills and commands in the turn prompt |
 | `hooks/pre-tool-use.py` (always-refused list, kill switch, read-only, human approvals) | not migrating: hooks are stripped in Sagax (above). Sagax's own controls apply instead: approval modes and cards, misuse guardrails and safety review, and Perspicax's server-side profiles and confirmation holds. Its lists name the organization's tool risks, which stay in the organization's configuration |
 
-## Open points
+## Data completeness
 
-- The native tools are offered only with Perspicax profiles. A bot without
-  profiles that works on pasted data does not get them.
-- The actions keep their own copies of this arithmetic inside the pack.
-  A future pack could let `flow_action` call the native computation instead;
-  that change belongs to Perspicax and the plugin, not Sagax.
-- `flow_age_buckets` counts the dates it is given. The action counts with
-  server-side queries (`take: total`), so a board larger than one read must
-  be paged before the tool sees all of it.
+`flow_age_buckets` counts the records passed to it. Vendor reads that span
+multiple pages must be completed before computing totals. Availability and
+pack versions come from Perspicax; the bot's capability receipt displays
+the loaded Flow identity and version.

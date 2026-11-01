@@ -49,12 +49,15 @@ export function saveSidebarDensity(
   }
 }
 
-/** Collapse or expand the sidebar (its edge's drag and double-click): icons
+/** Collapse or expand the sidebar (its edge's drag and double-click, ⌘B): icons
  * density is the collapsed rail, like Perspicax's narrow sidebar. Collapsing remembers the density it left so
- * expanding lands back on comfortable or compact, whichever it was. */
+ * expanding lands back on comfortable or compact, whichever it was.
+ * On the automatic rail (a medium-width window) the window decides, so the
+ * live toggle leaves the person's density as it is and returns it. */
 export function toggleSidebarCollapsed(
   storage?: Pick<Storage, "getItem" | "setItem"> | null,
 ): SidebarDensity {
+  if (storage === undefined && currentSidebarViewport() === "medium") return currentSidebarDensity();
   let target: Pick<Storage, "getItem" | "setItem"> | null = null;
   try {
     target = storage === undefined ? (globalThis.localStorage ?? null) : storage;
@@ -151,6 +154,82 @@ export function setSidebarDensity(density: SidebarDensity): void {
 
 export function useSidebarDensity(): SidebarDensity {
   return useSyncExternalStore(subscribeDensity, currentSidebarDensity, () => "comfortable");
+}
+
+// The window's width decides how the sidebar is laid out (2026-11-01, Grok
+// Bot's own behavior: its macOS window at 700 px collapses the sidebar to
+// icons, at 1338 px it is full):
+//   - below SIDEBAR_DRAWER_BELOW (Tailwind's `sm`, 640px: the app's phone
+//     boundary, where sheets and page headers already switch) the sidebar is
+//     a drawer that slides over the chat;
+//   - from there up to SIDEBAR_AUTO_RAIL_BELOW (Tailwind's `md`, 768px, the
+//     old drawer boundary) it is the icons rail, automatically;
+//   - at and above `md` it follows the person's own density.
+// The automatic rail is never saved: widening the window finds the person's
+// choice where they left it.
+export const SIDEBAR_DRAWER_BELOW = 640;
+export const SIDEBAR_AUTO_RAIL_BELOW = 768;
+
+/** phone: the drawer; medium: the automatic rail; wide: the person's density. */
+export type SidebarViewport = "phone" | "medium" | "wide";
+
+export function sidebarViewportFor(width: number): SidebarViewport {
+  if (!Number.isFinite(width)) return "wide";
+  if (width < SIDEBAR_DRAWER_BELOW) return "phone";
+  if (width < SIDEBAR_AUTO_RAIL_BELOW) return "medium";
+  return "wide";
+}
+
+/** The density the sidebar draws: the rail at medium widths, the person's
+ * own density everywhere else (the phone drawer keeps it too). */
+export function effectiveSidebarDensity(saved: SidebarDensity, viewport: SidebarViewport): SidebarDensity {
+  return viewport === "medium" ? "icons" : saved;
+}
+
+const SIDEBAR_SM_QUERY = `(min-width: ${SIDEBAR_DRAWER_BELOW}px)`;
+const SIDEBAR_MD_QUERY = `(min-width: ${SIDEBAR_AUTO_RAIL_BELOW}px)`;
+
+function mediaMatches(query: string): boolean | null {
+  try {
+    const media = typeof window !== "undefined" ? window.matchMedia?.(query) : undefined;
+    return media ? media.matches : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The sidebar layout for the window as it is now (same breakpoints as the
+ * CSS: `max-sm:` drawer classes, `md` for the person's density). */
+export function currentSidebarViewport(): SidebarViewport {
+  const sm = mediaMatches(SIDEBAR_SM_QUERY);
+  const md = mediaMatches(SIDEBAR_MD_QUERY);
+  if (sm === null || md === null) return "wide";
+  if (!sm) return "phone";
+  return md ? "wide" : "medium";
+}
+
+function subscribeSidebarViewport(listener: () => void): () => void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
+  const lists: MediaQueryList[] = [];
+  for (const query of [SIDEBAR_SM_QUERY, SIDEBAR_MD_QUERY]) {
+    try {
+      const list = window.matchMedia(query);
+      if (list?.addEventListener) {
+        list.addEventListener("change", listener);
+        lists.push(list);
+      }
+    } catch {
+      // no media queries: the sidebar stays wide
+    }
+  }
+  return () => {
+    for (const list of lists) list.removeEventListener("change", listener);
+  };
+}
+
+/** Where the window's width puts the sidebar, following resizes. */
+export function useSidebarViewport(): SidebarViewport {
+  return useSyncExternalStore(subscribeSidebarViewport, currentSidebarViewport, () => "wide");
 }
 
 export function clampSidebarWidth(width: number, viewportWidth: number): number {

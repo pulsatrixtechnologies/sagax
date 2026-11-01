@@ -49,3 +49,7 @@ ios/.asc/
 
 # Gallery build (vite.gallery.config.ts)
 dist-gallery
+
+# PR evidence media kept off the tracked tree (see docs/pr-assets.md).
+# Local copies may live under pr-assets/ after an orphan move; do not add them.
+pr-assets/

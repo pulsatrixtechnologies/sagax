@@ -1,6 +1,6 @@
 // Golden freeze of M2's drain-coalescing rule (the L2 ordering/batching
-// layer in admission.ts): a sender's CONTIGUOUS burst inside a short window
-// is one drained item; senders never merge; provenance kind is part of the
+// layer in admission.ts): a sender's CONTIGUOUS run of waiting lines (no
+// time window since 2026-11-01) is one drained item; senders never merge; provenance kind is part of the
 // sender identity (Team incidents reports are all Sagax's, whichever
 // bot broke); rooms drain one coalesced item per turn. A failing row
 // means the drain batching changed; pair any intentional change with an
@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DRAIN_COALESCE_MAX_ITEMS, DRAIN_COALESCE_WINDOW_MS } from "./admission.ts";
+import { SAFE_POINT_NOTE } from "./safe-point-preempt.ts";
 import {
   _queuedCount,
   drainSteeredMessages,
@@ -89,7 +90,13 @@ describe("drain coalescing golden (M2)", () => {
     expect(_queuedCount(bot.threadId)).toBe(0);
   });
 
-  it("1:1 splits one sender's items when the gap outgrows the window", () => {
+  // 2026-11-01 (reported: "it processes everything late, as if it accumulates"):
+  // a person's lines that waited behind the same running turn were split
+  // by the two-minute window, each into its own later turn answering stale
+  // context. Every line of one person waiting in a 1:1 thread now joins the
+  // one follow-up turn, whatever the gap, like a call's lines already did.
+  // Rooms keep the window.
+  it("1:1 joins one sender's waiting lines into one turn even when the gap outgrows the window", () => {
     const bot = fakeBot("gd-window", "gd-thread-window", false);
     const store = fakeStore([bot]);
     queueSteeredMessage(bot.id, bot.threadId, "earlier thought");
@@ -99,30 +106,37 @@ describe("drain coalescing golden (M2)", () => {
 
     drainSteeredMessages(store, run);
     expect(run).toHaveBeenCalledTimes(1);
-    expect(run.mock.calls[0][2]).toBe("earlier thought");
-    expect(_queuedCount(bot.threadId)).toBe(1);
-
-    drainSteeredMessages(store, run);
-    expect(run).toHaveBeenCalledTimes(2);
-    expect(run.mock.calls[1][2]).toBe("later thought");
+    expect(run.mock.calls[0][2]).toBe("earlier thought\n\nlater thought");
     expect(store.messages.map((m) => m.text)).toEqual(["earlier thought", "later thought"]);
     expect(_queuedCount(bot.threadId)).toBe(0);
   });
 
-  it("1:1 stops merging hours-apart texts into one prompt", () => {
-    const bot = fakeBot("gd-hours", "gd-thread-hours", false);
+  it("1:1 answers N lines sent minutes apart behind one long turn with one follow-up turn, not N", () => {
+    const bot = fakeBot("gd-backlog", "gd-thread-backlog", true);
     const store = fakeStore([bot]);
-    queueSteeredMessage(bot.id, bot.threadId, "this morning");
-    vi.advanceTimersByTime(3 * 60 * 60 * 1000);
-    queueSteeredMessage(bot.id, bot.threadId, "this afternoon");
+    const sends = 5;
+    for (let i = 1; i <= sends; i += 1) {
+      queueSteeredMessage(bot.id, bot.threadId, `line ${i}`);
+      vi.advanceTimersByTime(3 * 60 * 1000);
+    }
     const run = vi.fn();
+    bot.busy = false;
+    // every settle drains once; count the turns the backlog produces
+    for (let settle = 0; settle < sends; settle += 1) drainSteeredMessages(store, run);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0][2]).toBe("line 1\n\nline 2\n\nline 3\n\nline 4\n\nline 5");
+    expect(_queuedCount(bot.threadId)).toBe(0);
+  });
 
+  it("1:1 says the safe-point pause once when several waiting lines carry it", () => {
+    const bot = fakeBot("gd-safe-point", "gd-thread-safe-point", false);
+    const store = fakeStore([bot]);
+    queueSteeredMessage(bot.id, bot.threadId, "first", { prompt: `${SAFE_POINT_NOTE}\nfirst` });
+    vi.advanceTimersByTime(5_000);
+    queueSteeredMessage(bot.id, bot.threadId, "second", { prompt: `${SAFE_POINT_NOTE}\nsecond` });
+    const run = vi.fn();
     drainSteeredMessages(store, run);
-    expect(run.mock.calls[0][2]).toBe("this morning");
-    drainSteeredMessages(store, run);
-    expect(run.mock.calls[1][2]).toBe("this afternoon");
-    // two turns, never the joined prompt of the pre-M2 drain
-    expect(run.mock.calls.map((call) => call[2])).toEqual(["this morning", "this afternoon"]);
+    expect(run.mock.calls[0][2]).toBe(`${SAFE_POINT_NOTE}\nfirst\n\nsecond`);
   });
 
   it("1:1 never coalesces across senders, and keeps FIFO across groups", () => {
@@ -197,10 +211,32 @@ describe("drain coalescing golden (M2)", () => {
     expect(_queuedChannelCount("gd-room-burst")).toBe(0);
   });
 
-  it("rooms split a sender's burst on window expiry and never merge senders", () => {
+  // 2026-11-01: rooms had the same lag as 1:1 (547770fac). One person's
+  // lines waiting behind a long room turn, minutes apart, each became its
+  // own later room turn answering stale context. They now drain together,
+  // bounded by the room-context window; senders still never merge.
+  it("rooms answer N lines one person sent minutes apart behind one long turn with one follow-up turn, not N", () => {
+    const group = "gd-group-backlog";
+    const thread = "gd-room-backlog";
+    const sends = 5;
+    for (let i = 1; i <= sends; i += 1) {
+      queueChannelMessage(group, thread, `line ${i}`, { sender: { name: "Priya", id: "p_priya" } });
+      vi.advanceTimersByTime(3 * 60 * 1000);
+    }
+    const run = vi.fn();
+    for (let settle = 0; settle < sends; settle += 1) drainChannelMessages(() => false, run);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0][0].items.map((item: { text: string }) => item.text))
+      .toEqual(["line 1", "line 2", "line 3", "line 4", "line 5"]);
+    expect(_queuedChannelCount(thread)).toBe(0);
+  });
+
+  it("rooms never merge senders, and keep FIFO across groups past the window", () => {
     const group = "gd-group-mixed";
     const thread = "gd-room-mixed";
     queueChannelMessage(group, thread, "owner opens");
+    vi.advanceTimersByTime(DRAIN_COALESCE_WINDOW_MS + 1);
+    queueChannelMessage(group, thread, "owner again after a pause");
     queueChannelMessage(group, thread, "priya chimes in", { sender: { name: "Priya", id: "p_priya" } });
     vi.advanceTimersByTime(DRAIN_COALESCE_WINDOW_MS + 1);
     queueChannelMessage(group, thread, "owner resumes after a pause");
@@ -208,7 +244,7 @@ describe("drain coalescing golden (M2)", () => {
 
     drainChannelMessages(() => false, run);
     expect(run).toHaveBeenCalledTimes(1);
-    expect(run.mock.calls[0][0].items.map((item: { text: string }) => item.text)).toEqual(["owner opens"]);
+    expect(run.mock.calls[0][0].items.map((item: { text: string }) => item.text)).toEqual(["owner opens", "owner again after a pause"]);
 
     drainChannelMessages(() => false, run);
     expect(run.mock.calls[1][0].items.map((item: { text: string }) => item.text)).toEqual(["priya chimes in"]);

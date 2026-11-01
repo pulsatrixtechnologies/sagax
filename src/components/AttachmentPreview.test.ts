@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   AttachedFileChips,
@@ -14,12 +14,15 @@ import {
   messageImagePreviewUrl,
   previewImage,
   previewKeyAction,
+  requestMessageFileLocation,
   safeDownloadFilename,
   steppedZoom,
   MAX_ZOOM,
   saveFailureText,
   wrappedImageIndex,
 } from "./AttachmentPreview";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("lightbox zoom", () => {
   it("maps zoom keys whatever the image count", () => {
@@ -88,6 +91,49 @@ describe("attachment download filenames", () => {
       contentDisposition: `attachment; filename="holiday.pdf"`,
       source: "/api/attachments/123.jpeg?download=1",
     })).toBe("holiday.jpeg");
+  });
+});
+
+describe("opaque message file locations", () => {
+  const message = { threadId: "thread/one", messageId: "message two" };
+  const answer = {
+    downloadUrl: "/api/threads/thread%2Fone/files/0123456789abcdef01234567",
+    previewUrl: "/api/threads/thread%2Fone/files/0123456789abcdef01234567?preview=1",
+    name: "clip.mp4",
+    mime: "video/mp4",
+    bytes: 1024 * 1024 * 1024,
+  };
+
+  it("accepts only this thread's path-free opaque URLs", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify(answer), { headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetcher);
+    const signal = new AbortController().signal;
+    await expect(requestMessageFileLocation("/private/clip.mp4", message, signal)).resolves.toEqual(answer);
+    expect(fetcher).toHaveBeenCalledWith("/api/threads/thread%2Fone/messages/message%20two/file", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "/private/clip.mp4", location: true }),
+      signal,
+    });
+  });
+
+  it("refuses another origin, another thread, a host path, and invalid sizes", async () => {
+    for (const patch of [
+      { downloadUrl: "https://example.test/file" },
+      { previewUrl: "/api/threads/other/files/0123456789abcdef01234567?preview=1" },
+      { previewUrl: "/api/threads/thread%2Fone/files/1123456789abcdef01234567?preview=1" },
+      { downloadUrl: "/Users/alice/clip.mp4" },
+      { bytes: -1 },
+    ]) {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ...answer, ...patch }), { headers: { "content-type": "application/json" } })));
+      await expect(requestMessageFileLocation("/private/clip.mp4", message, new AbortController().signal)).rejects.toThrow("download");
+    }
+  });
+
+  it("marks an old non-JSON server response for bounded compatibility fallback", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("video", { headers: { "content-type": "video/mp4" } })));
+    await expect(requestMessageFileLocation("/private/clip.mp4", message, new AbortController().signal))
+      .rejects.toMatchObject({ code: "streaming_location_unavailable" });
   });
 });
 

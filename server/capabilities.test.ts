@@ -124,7 +124,7 @@ function turnDirs(input: CapabilityInputs): string[] {
     bot: input.botPluginDirs.map((dir) => ({ name: basename(dir), dir })),
   });
   return (input.engine.kind === "claudeAgent" ? selected.map((plugin) => plugin.dir)
-    : turnPluginPromptDirs(input.engine.kind, selected.filter((plugin) => plugin.scope !== "organization").map((plugin) => plugin.dir))).sort();
+    : turnPluginPromptDirs(input.engine.kind, selected.map((plugin) => plugin.dir))).sort();
 }
 
 const dirOfItem = (input: CapabilityInputs, key: string): string | undefined => {
@@ -136,6 +136,37 @@ const dirOfItem = (input: CapabilityInputs, key: string): string | undefined => 
 
 describe("personal and complete plugin capabilities", () => {
   const byKey = (list: ReturnType<typeof resolveBotCapabilities>, key: string) => list.items.find((item) => item.key === key);
+  it("folds official GitHub Flow copies and tenant content into one linked pack on every engine", () => {
+    const input = inputs({ ...ENGINES[2]!, agentsMcp: true });
+    input.orgFlow.declared!.push({ name: "pulsatrix-flow-example", version: "1.2.0", tenant: true });
+    input.orgFlow.dirOf = (name) => `/org-flow/${name}`;
+    input.orgFlow.dirsFor = () => ["/org-flow/pulsatrix-flow", "/org-flow/pulsatrix-flow-example"];
+    input.orgFlow.pack = `sha256:${"a".repeat(64)}`;
+    input.orgFlow.contentsOf = (name) => ({ skills: [name === "pulsatrix-flow" ? "using-px-flow" : "shipping"], commands: [], agents: [] });
+    input.botPlugins.push({ ...input.botPlugins[0]!, key: "pulsatrix-flow@pulsatrix", name: "pulsatrix-flow", dir: "/bot/pulsatrix-flow" });
+    input.botPluginDirs.push("/bot/pulsatrix-flow");
+    input.orgFlow.aliases = ["pulsatrix-flow@pulsatrix"];
+    let list = resolveBotCapabilities(input, { principalId: "p1", mayChange: true });
+    expect(list.items.filter((item) => item.form === "flow")).toHaveLength(1);
+    expect(byKey(list, "flow:organization:pulsatrix-flow")).toMatchObject({ state: "imposed", brings: { skills: ["using-px-flow", "shipping"] }, source: { version: "0.20.14", pack: input.orgFlow.pack }, engine: { skills: "prompt" } });
+    expect(byKey(list, "plugin:bot:pulsatrix-flow@pulsatrix")).toBeUndefined();
+    input.orgFlow.guarded = false;
+    input.orgFlow.dirsFor = () => [];
+    list = resolveBotCapabilities(input, { principalId: "p1", mayChange: true });
+    expect(byKey(list, "flow:organization:pulsatrix-flow")).toMatchObject({ state: "off", reason: "guard_off" });
+    expect(byKey(list, "plugin:bot:pulsatrix-flow@pulsatrix")).toBeUndefined();
+  });
+
+  it("reports a capability whose whole instructions exceed the prompt budget as not served", () => {
+    const input = inputs({ ...ENGINES[2]!, agentsMcp: true });
+    input.capabilityPromptIndex = { "plugin:bot:alpha@market": { bytes: 240, maxBytes: 4_000, skills: 0, maxSkills: 30, omitted: 3 } };
+    expect(byKey(resolveBotCapabilities(input, { mayChange: true }), "plugin:bot:alpha@market")).toMatchObject({ state: "not_served", engine: { nothing: true }, promptIndex: { omitted: 3 } });
+  });
+  it("does not claim an omitted instruction kind was received with a smaller included skill", () => {
+    const input = inputs({ ...ENGINES[2]!, agentsMcp: true });
+    input.capabilityPromptIndex = { "plugin:bot:alpha@market": { bytes: 300, maxBytes: 4_000, skills: 1, maxSkills: 30, omitted: 2, parts: { skills: 1, commands: 0, agents: 0 } } };
+    expect(byKey(resolveBotCapabilities(input, { mayChange: true }), "plugin:bot:alpha@market")).toMatchObject({ state: "on", engine: { skills: "prompt", commands: "none", agents: "none", nothing: false } });
+  });
   it("serves a personal plugin to both file engines with priority over a bot copy", () => {
     for (const engine of ENGINES.slice(0, 2)) {
       const input = inputs(engine);
@@ -206,13 +237,13 @@ describe("a turn mounts exactly what the list says", () => {
     });
   }
 
-  it("an engine with no MCP mounts no server and the list says not served", () => {
+  it("an engine with no MCP mounts no server and the list says not served; its plugin files still reach the prompt", () => {
     const input = inputs({ instanceId: "plain", kind: "openai-compat", label: "API", customMcp: false });
     const list = resolveBotCapabilities(input, { principalId: "p1", mayChange: true });
     expect(listedMounts(list)).toEqual([]);
     expect(turnMcp(input)).toEqual([]);
     expect(list.items.find((item) => item.key === "mcp:me:jira")?.state).toBe("not_served");
-    expect(list.items.find((item) => item.key === "plugin:bot:alpha@market")?.state).toBe("not_served");
+    expect(list.items.find((item) => item.key === "plugin:bot:alpha@market")).toMatchObject({ state: "on", engine: { skills: "prompt" } });
   });
 });
 
@@ -237,12 +268,16 @@ describe("resolveBotCapabilities", () => {
     expect(byKey(list, "plugin:bot:beta@market")).toMatchObject({ state: "off", enabled: false });
     expect(byKey(list, "plugin:bot:gamma@market")).toMatchObject({ state: "off", reason: "not_installed" });
     expect(byKey(codex(), "plugin:bot:alpha@market")).toMatchObject({ state: "on", canToggle: false, engine: { skills: "prompt", agents: "prompt" } });
-    expect(byKey(grok(), "plugin:bot:alpha@market")).toMatchObject({ state: "not_served", engine: { nothing: true } });
+    // Q8 C: tools off, an API engine still receives the whole files inline
+    expect(byKey(grok(), "plugin:bot:alpha@market")).toMatchObject({ state: "on", engine: { skills: "prompt", commands: "prompt", agents: "prompt", nothing: false } });
+    expect(byKey(resolveBotCapabilities(inputs({ ...ENGINES[2]!, agentsMcp: true }), { principalId: "p1", mayChange: true }), "plugin:bot:alpha@market"))
+      .toMatchObject({ state: "on", engine: { skills: "prompt", commands: "prompt", agents: "prompt", nothing: false } });
   });
 
-  it("the organization's Flow is imposed on Claude and not served elsewhere (C-3)", () => {
+  it("the organization's Flow is imposed on every engine that receives instructions", () => {
     expect(byKey(claude(), "flow:organization:pulsatrix-flow")).toMatchObject({ state: "imposed", scope: "organization", canToggle: false, source: { kind: "perspicax", version: "0.20.14" } });
-    expect(byKey(codex(), "flow:organization:pulsatrix-flow")).toMatchObject({ state: "not_served" });
+    expect(byKey(codex(), "flow:organization:pulsatrix-flow")).toMatchObject({ state: "imposed", engine: { skills: "prompt" } });
+    expect(byKey(grok(), "flow:organization:pulsatrix-flow")).toMatchObject({ state: "imposed", engine: { skills: "prompt" } });
     const off = inputs(ENGINES[0]!);
     off.orgFlow.guarded = false;
     expect(byKey(resolveBotCapabilities(off, { mayChange: true }), "flow:organization:pulsatrix-flow")).toMatchObject({ state: "off", reason: "guard_off" });
@@ -267,7 +302,7 @@ describe("resolveBotCapabilities", () => {
 
     input.engine = ENGINES[1]!;
     list = resolveBotCapabilities(input, { mayChange: true });
-    expect(byKey(list, "flow:organization:pulsatrix-flow")).toMatchObject({ state: "not_served" });
+    expect(byKey(list, "flow:organization:pulsatrix-flow")).toMatchObject({ state: "imposed" });
     expect(byKey(list, "flow:organization:pulsatrix-flow")?.reason).toBeUndefined();
   });
 
@@ -286,6 +321,18 @@ describe("resolveBotCapabilities", () => {
     const list = claude();
     expect(byKey(list, "mcp:installation:docs")).toBeUndefined();
     expect(byKey(list, "plugin:installation:docs@market")).toMatchObject({ state: "on", scope: "installation", mounts: ["docs"], brings: { mcpServers: ["docs"], skills: ["docs-skill"] } });
+  });
+
+  it("serves library skills, plugin files and the organization's Flow on API engines when retrieval tools are mounted", () => {
+    const input = inputs({ ...ENGINES[2]!, agentsMcp: true });
+    input.skillsLibrary = true;
+    input.bot.assignedSkills = ["docs-skill"];
+    input.skills.push({ name: "docs-skill", description: "Review docs", enabled: true, origin: "library", source: "market" });
+    const list = resolveBotCapabilities(input, { mayChange: true });
+    expect(byKey(list, "skill:installation:docs-skill")).toMatchObject({ state: "on", engine: { skills: "prompt", nothing: false } });
+    expect(byKey(list, "plugin:bot:alpha@market")).toMatchObject({ state: "on", engine: { skills: "prompt", commands: "prompt", agents: "prompt", nothing: false } });
+    expect(byKey(list, "flow:organization:pulsatrix-flow")).toMatchObject({ state: "imposed", engine: { skills: "prompt", nothing: false } });
+    expect(byKey(list, "plugin:installation:docs@market")?.engine.skills).toBe("prompt");
   });
 
   it("deleting a plugin MCP and recreating its name manually never gives the replacement to the old plugin", () => {
@@ -379,7 +426,7 @@ describe("resolveBotCapabilities", () => {
     expect(byKey(list, "skill:bot:own-skill")).toMatchObject({ state: "on", engine: { skills: "native" }, source: { label: "acme/skills" } });
     expect(byKey(list, "skill:bot:off-skill")).toMatchObject({ state: "off" });
     expect(byKey(list, "skill:installation:lib-skill")).toMatchObject({ state: "off", reason: "library_off" });
-    expect(byKey(grok(), "skill:bot:own-skill")).toMatchObject({ state: "not_served" });
+    expect(byKey(grok(), "skill:bot:own-skill")).toMatchObject({ state: "on", engine: { skills: "prompt" } });
   });
 
   it("account connectors: Claude's from its inventory, Grok's catalog unverifiable", () => {

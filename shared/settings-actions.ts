@@ -259,9 +259,9 @@ add({
 });
 // 2026-10-30: how the bot acts on emails, calendar entries, failed runs,
 // bots' posts and webhooks on its own (server/proactive-wake.ts). Absent
-// reads as follow-rules; a wider mode is a wider "runs without asking".
-botField("bot.proactiveMode", "proactiveMode", "enum:off|propose|read-auto|follow-rules",
-  "Proactive mode (off, propose = a proposal card, read-auto = reads and prepares on its own, follow-rules = acts at its approval level and rules; absent = follow-rules)",
+// reads as proactive; off stays off.
+botField("bot.proactiveMode", "proactiveMode", "enum:off|proactive",
+  "Proactive on/off (off = no wakes; proactive = wakes on email, calendar, failed run, bot mention or webhook and acts at its approval level and rules, with a dry run recorded before writes; absent = proactive)",
   "Bot editor > Permissions > Proactive", always("rule-change"));
 add({
   key: "bot.primary", family: "bot", target: "bot", value: "boolean", label: "Primary Bot", where: "Bot editor > Permissions > Primary Bot",

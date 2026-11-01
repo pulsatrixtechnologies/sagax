@@ -23,7 +23,7 @@ export type SlotKind =
   | "queueItem" | "parallelRun" | "card" | "resourceUsage" | "connectorSetup" | "phoneRequest"
   | "cardScan" | "purchase" | "phoneCall" | "invite" | "blocked" | "journalEntry" | "credentialGrant"
   | "draft" | "codeRun" | "cloudAgent" | "allowlistEntry" | "workflow" | "workflowRun" | "taskListItem" | "briefItem"
-  | "calendarCall" | "proactiveProposal";
+  | "calendarCall" | "proactiveProposal" | "providerAccount" | "meSkill" | "unattendedHost";
 
 /** Kinds a person owns: the matrix aims A at B's. The rest only ride along. */
 export const OWNED_KINDS: ReadonlySet<SlotKind> = new Set<SlotKind>([
@@ -81,6 +81,7 @@ export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   "security-keys/": "securityKey",
   "desktop-bridge/": "desktopBridge",
   "shared-computers/": "sharedComputer",
+  "remote-hosts/h_": "unattendedHost",
   "vps/": "vps",
   "engines/": "engine",
   "sections/sec_": "section",
@@ -117,6 +118,12 @@ export const SLOT_KINDS: Readonly<Record<string, SlotKind>> = {
   "calendar-calls/": "calendarCall",
   // a proactive proposal of a bot (#1764): the request is aimed at the bot
   "proactive/": "proactiveProposal",
+  // a provider id under /api/me/providers/keys (#1806): the caller's own account only
+  "keys/": "providerAccount",
+  // a skill of the caller's own Me library: resolved for the session's person only
+  "skills-library/": "meSkill",
+  // an engine instance's personal API key: the instance id names an engine
+  "instances/": "engine",
 };
 
 type Atom = { lit: string } | { cls: string };
@@ -270,6 +277,7 @@ export function rowsBehindFeatures(features: Partial<Record<ClientFeature, boole
 export function fakeId(slot: Slot): string {
   const c = slot.cls;
   if (c.includes("0-9a-f-]{36}")) return "00000000-0000-4000-8000-000000000000";
+  if (c.includes("a-f0-9]{32}") || c.includes("0-9a-f]{32}")) return "a".repeat(32);
   if (c.includes("a-f0-9]{24}")) return "a".repeat(24);
   if (c.includes("a-f0-9]{18}")) return "a".repeat(18);
   if (c.includes("a-f0-9]{16}")) return "a".repeat(16);

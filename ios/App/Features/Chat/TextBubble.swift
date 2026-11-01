@@ -260,7 +260,9 @@ struct TextBubble: View {
     /// My bubble in a 1:1 takes the bot's colour (BubbleColors.user(botColor:)),
     /// whatever the skin's accent; a room keeps the skin's.
     private var botPaint: (fill: SkinColor, ink: SkinColor)? {
-        chat.isBot ? BubbleColors.user(botColor: chat.color) : nil
+        // Black (the Grok look) keeps its neutral grey (2026-11-01)
+        guard chat.isBot, !BubbleColors.keepsNeutralBubbles(themePalette.id) else { return nil }
+        return BubbleColors.user(botColor: chat.color)
     }
 
     /// The text on my bubble.

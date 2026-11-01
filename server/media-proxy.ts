@@ -20,7 +20,10 @@ import {
 } from "./media-proxy-guard.ts";
 
 const TOKEN_TTL_MS = 4 * 60 * 60_000;
-const MAX_BYTES = 512 * 1024 * 1024;
+/** One provider response may carry the same largest durable media object as
+ * an uploaded video. Range responses normally stay much smaller. */
+export const MAX_MEDIA_PROXY_BYTES = 1024 * 1024 * 1024;
+const DEFAULT_HEADER_TIMEOUT_MS = 15_000;
 /** HLS playlists are text; a real one is a few KiB, a long VOD a few hundred. */
 const MAX_PLAYLIST_BYTES = 4 * 1024 * 1024;
 export const HLS_CONTENT_TYPE = "application/vnd.apple.mpegurl";
@@ -53,6 +56,12 @@ export function initMediaProxy(dataDir: string): void {
 function key(): Buffer {
   if (!proxyKey) throw new Error("media proxy not initialized");
   return proxyKey;
+}
+
+/** Private stable identities use the existing persisted server key and a
+ * separate MAC domain. A public principal/upload id cannot predict a URL. */
+export function privateMediaIdentity(namespace: string, identity: readonly string[]): string {
+  return createHmac("sha256", key()).update(JSON.stringify(["private-media-id", namespace, identity])).digest("hex");
 }
 
 export function needsMediaProxy(url: string, source?: string): boolean {
@@ -184,6 +193,8 @@ export interface StreamProxiedMediaOptions {
   policy?: MediaProxyPolicy;
   /** DNS resolver of the destination guard (tests pass a fake one). */
   resolver?: MediaProxyResolver;
+  /** Maximum time to wait for upstream response headers. */
+  headerTimeoutMs?: number;
 }
 
 /** Redirects the proxy follows itself, each hop checked like the first URL. */
@@ -203,6 +214,7 @@ async function requestCheckedUpstream(
   target: URL,
   headers: Record<string, string> | undefined,
   options: StreamProxiedMediaOptions,
+  signal: AbortSignal,
 ): Promise<IncomingMessage> {
   const pinned = await checkMediaDestination(target, options.policy ?? mediaProxyPolicyFromEnv(), options.resolver);
   const https = target.protocol === "https:";
@@ -211,6 +223,8 @@ async function requestCheckedUpstream(
     else callback(null, pinned.address, pinned.family);
   };
   return await new Promise<IncomingMessage>((resolve, reject) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout>;
     const req = (https ? httpsRequest : httpRequest)(
       {
         hostname: target.hostname.replace(/^\[|\]$/g, ""),
@@ -220,10 +234,27 @@ async function requestCheckedUpstream(
         headers,
         agent: https ? proxyHttpsAgent : proxyHttpAgent,
         lookup: pinnedLookup,
+        signal,
       },
-      resolve,
+      (response) => {
+        if (settled) {
+          response.destroy();
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        resolve(response);
+      },
     );
-    req.on("error", reject);
+    const timeout = Math.max(1, Math.floor(options.headerTimeoutMs ?? DEFAULT_HEADER_TIMEOUT_MS));
+    timer = setTimeout(() => req.destroy(new Error("media upstream header timeout")), timeout);
+    timer.unref?.();
+    req.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
     req.end();
   });
 }
@@ -234,30 +265,68 @@ export async function streamProxiedMedia(
   rangeHeader?: string,
   options: StreamProxiedMediaOptions = {},
 ): Promise<void> {
+  const clientAbort = new AbortController();
+  const onClientClose = () => clientAbort.abort();
+  res.once("close", onClientClose);
+  try {
   const playlistByPath = videoFormatFromUrl(targetUrl) === "hls";
   // A playlist is rewritten whole: never ask the upstream for a byte range of it.
   const forwardRange = rangeHeader && !playlistByPath ? rangeHeader : undefined;
   const headers = forwardRange ? { Range: forwardRange } : undefined;
   let current = new URL(targetUrl);
-  let upstream = await requestCheckedUpstream(current, headers, options);
+  let upstream = await requestCheckedUpstream(current, headers, options, clientAbort.signal);
   for (let hop = 0; ; hop += 1) {
     const status = upstream.statusCode ?? 502;
     const location = upstream.headers.location;
     if (status < 300 || status >= 400 || status === 304 || typeof location !== "string") break;
-    upstream.resume();
+    // A redirect body is irrelevant and may be unbounded. Close this hop
+    // before validating and opening the next destination.
+    upstream.destroy();
     if (hop >= MAX_REDIRECTS) throw new MediaProxyBlockedError("too-many-redirects", current.hostname);
     current = new URL(location, current);
-    upstream = await requestCheckedUpstream(current, headers, options);
+    upstream = await requestCheckedUpstream(current, headers, options, clientAbort.signal);
   }
   const finalUrl = current.href;
   const response = upstream;
+  if (res.destroyed) {
+    response.destroy();
+    return;
+  }
   await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let clientClosed = false;
+    let waitingDrain = false;
+    const drain = () => {
+      waitingDrain = false;
+      if (!settled) response.resume();
+    };
+    const finish = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      res.off("close", close);
+      res.off("drain", drain);
+      if (error !== undefined && !clientClosed) reject(error);
+      else resolve();
+    };
+    const close = () => {
+      clientClosed = true;
+      response.destroy();
+      finish();
+    };
+    res.once("close", close);
     const status = response.statusCode ?? 502;
     if (status >= 300) {
-      res.writeHead(status >= 400 ? status : 502, { "content-type": "text/plain" });
+      const out: Record<string, string> = { "content-type": "text/plain" };
+      if (status === 416) {
+        const contentRange = response.headers["content-range"];
+        const acceptRanges = response.headers["accept-ranges"];
+        if (typeof contentRange === "string") out["content-range"] = contentRange;
+        if (typeof acceptRanges === "string") out["accept-ranges"] = acceptRanges;
+      }
+      res.writeHead(status >= 400 ? status : 502, out);
       res.end();
       response.resume();
-      resolve();
+      finish();
       return;
     }
     const ct = response.headers["content-type"];
@@ -274,7 +343,7 @@ export async function streamProxiedMedia(
           response.destroy();
           res.writeHead(502, { "content-type": "text/plain" });
           res.end();
-          resolve();
+          finish();
           return;
         }
         chunks.push(chunk);
@@ -298,19 +367,32 @@ export async function streamProxiedMedia(
           "cache-control": "no-store",
         });
         res.end(body);
-        resolve();
+        finish();
       });
       response.on("error", (error) => {
         if (aborted) return;
-        reject(error);
+        finish(error);
       });
       return;
     }
     let bytes = 0;
-    const out: Record<string, string> = {};
+    // Media bytes pass through as the upstream sent them: a reverse proxy in
+    // front of Sagax must not re-encode a body that a player seeks by range.
+    const out: Record<string, string> = { "cache-control": "private, no-transform" };
     if (contentType) out["content-type"] = contentType;
     const cl = response.headers["content-length"];
-    if (typeof cl === "string") out["content-length"] = cl;
+    if (typeof cl === "string") {
+      const declared = /^\d+$/.test(cl) ? Number(cl) : Number.NaN;
+      if (Number.isSafeInteger(declared) && declared > MAX_MEDIA_PROXY_BYTES) {
+        response.once("error", () => undefined);
+        response.destroy();
+        res.writeHead(502, { "content-type": "text/plain" });
+        res.end();
+        finish();
+        return;
+      }
+      out["content-length"] = cl;
+    }
     const cr = response.headers["content-range"];
     if (typeof cr === "string") out["content-range"] = cr;
     const ar = response.headers["accept-ranges"];
@@ -318,18 +400,29 @@ export async function streamProxiedMedia(
     res.writeHead(status, out);
     response.on("data", (chunk: Buffer) => {
       bytes += chunk.length;
-      if (bytes > MAX_BYTES) {
+      if (bytes > MAX_MEDIA_PROXY_BYTES) {
         response.destroy();
-        if (!res.writableEnded) res.end();
-        resolve();
+        if (!res.destroyed) res.destroy();
+        finish();
         return;
       }
-      res.write(chunk);
+      if (!res.write(chunk)) {
+        response.pause();
+        if (!waitingDrain) {
+          waitingDrain = true;
+          res.once("drain", drain);
+        }
+      }
     });
     response.on("end", () => {
       if (!res.writableEnded) res.end();
-      resolve();
+      finish();
     });
-    response.on("error", reject);
+    response.on("error", (error) => finish(error));
   });
+  } catch (error) {
+    if (!clientAbort.signal.aborted && !res.destroyed) throw error;
+  } finally {
+    res.off("close", onClientClose);
+  }
 }

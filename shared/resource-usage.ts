@@ -3,6 +3,10 @@
 // to the card; this file holds what both sides share: the frame shape, the
 // message field, the bounds and the formatting.
 
+import { formatBytes } from "./format-bytes.ts";
+
+export { formatBytes };
+
 /** One sample every two seconds. */
 export const RESOURCE_CADENCE_MS = 2_000;
 /** The charts show the last minute. */
@@ -106,21 +110,6 @@ function number(value: number, locale: string, digits: number): string {
   return new Intl.NumberFormat(french(locale) ? "fr-CA" : "en-US", { maximumFractionDigits: digits }).format(value)
     // fr-CA groups with no-break spaces; the card uses plain ones and nowrap
     .replace(/[\u202f\u00a0]/g, " ");
-}
-
-const UNITS = { fr: ["o", "Ko", "Mo", "Go", "To", "Po"], en: ["B", "KB", "MB", "GB", "TB", "PB"] } as const;
-
-/** 1024-based, one decimal under 10 and none above: "1,5 Ko", "16 Go", "512 B". */
-export function formatBytes(bytes: number, locale: string): string {
-  const units = french(locale) ? UNITS.fr : UNITS.en;
-  let value = Number.isFinite(bytes) && bytes > 0 ? bytes : 0;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  const digits = unit === 0 ? 0 : value < 10 ? 1 : 0;
-  return `${number(value, locale, digits)} ${units[unit]}`;
 }
 
 export function formatRate(bytesPerSecond: number, locale: string): string {

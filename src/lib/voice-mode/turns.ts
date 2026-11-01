@@ -1,4 +1,7 @@
+import { looksFrench } from "../../../shared/looks-french";
 import { CONTOUR_MS, contourVerdict, type ContourPoint, type ContourVerdict } from "./prosody";
+
+export { looksFrench };
 
 // When the person starts and stops talking, from one voice probability per
 // 32 ms frame (Silero VAD, vad.ts) and the frame's level. Pure: no browser
@@ -120,22 +123,6 @@ export function endsOnContinuingWord(text: string): boolean {
 export function endsOnFiller(text: string): boolean {
   const last = lastWords(text).at(-1);
   return last !== undefined && FILLERS.has(last);
-}
-
-/** French function words, accents stripped ("à" is "a"). */
-const FRENCH_MARKERS = new Set([
-  ...CONTINUING_FR,
-  "je", "tu", "il", "elle", "on", "nous", "vous", "ils", "elles", "pas", "ne", "y", "moi", "toi",
-  "combien", "comment", "pourquoi", "quand", "quoi", "oui", "non", "merci",
-]);
-
-/** The line is Québec or French: an accent, or more than one French function word. */
-export function looksFrench(text: string): boolean {
-  if (/[àâäéèêëïîôùûüçœ]/i.test(text)) return true;
-  const words = lastWords(text);
-  let marks = 0;
-  for (const word of words) if (FRENCH_MARKERS.has(word) && !ENGLISH.has(word)) marks += 1;
-  return marks >= 2;
 }
 
 /** "à" strips to "a", which is also the English article. In a French line it

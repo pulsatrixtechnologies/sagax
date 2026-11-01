@@ -136,7 +136,7 @@ struct BotConversationPage: View {
 
 /// One line of a bot-to-bot conversation, drawn like a chat bubble: Markdown
 /// in the bot's grey, or in the answering bot's colour on the person's side.
-private struct ExchangeBubble: View {
+struct ExchangeBubble: View {
     let text: String
     let paint: (fill: SkinColor, ink: SkinColor)?
 

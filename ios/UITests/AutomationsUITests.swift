@@ -110,8 +110,8 @@ final class AutomationsUITests: XCTestCase {
         app.launchArguments = arguments
         app.launch()
         // Automations: the account menu, under Settings
-        XCTAssertTrue(app.buttons["home-account"].waitForExistence(timeout: 30))
-        app.buttons["home-account"].tap()
+        XCTAssertTrue(app.buttons["home-apps"].waitForExistence(timeout: 30))
+        app.buttons["home-apps"].tap()
         let automations = app.buttons["account-menu.automations"]
         XCTAssertTrue(automations.waitForExistence(timeout: 5))
         automations.tap()

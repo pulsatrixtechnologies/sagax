@@ -4,8 +4,9 @@
 // On the web the bot's plugins moved to Connect apps, scope "For <bot>"
 // (`PluginsPanel.tsx`, `plugins/BotPluginCard.tsx`,
 // `plugins/MarketplacesSection.tsx`); the web Library is Files | Skills with
-// a link there. Capabilities (the bot's resolved list, `BotPanelCapabilities`
-// below) opens from a link beside Plugins.
+// a link there. The bot's resolved capabilities list (`BotPanelCapabilities`
+// below) lives inside that Plugins sheet (Installed), not as its own Library
+// button: the bot panel stays Details, Library and Computer (JC, 2026-11-01).
 // The Plugins view mirrors that scope and needs a server pairing: the companion
 // sidecar does not list `/api/bots/:id/plugins`, so a sidecar pairing shows
 // Files and Skills only (`SurfaceFeature.botPlugins`).
@@ -51,7 +52,6 @@ struct BotPanelLibrary: View {
     /// Files only; the tabs show only if a view is added back.
     private var views: [BotPanelLibraryView] { [.files] }
     @State private var showingPlugins = Self.parityView == .plugins
-    @State private var showingCapabilities = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -63,20 +63,7 @@ struct BotPanelLibrary: View {
             }
             AnyView(content)
                 .padding(.top, 4)
-            if BotCapabilityRules.reachable(gate: session.surfaceGate) {
-                Button { showingCapabilities = true } label: {
-                    Label("Capabilities", systemImage: "square.stack.3d.up")
-                        .font(theme.font(12.5))
-                        .foregroundStyle(theme.inkSecondary)
-                        .padding(.horizontal, 8)
-                        .frame(height: 26)
-                }
-                .buttonStyle(.plain)
-                .hoverEffect(.highlight)
-                .padding(.leading, 17)
-                .accessibilityIdentifier("desktop-panel-library.open-capabilities")
-            }
-            if session.surfaceGate.allows(.botPlugins) {
+            if session.surfaceGate.allows(.botPlugins) || BotCapabilityRules.reachable(gate: session.surfaceGate) {
                 Button { showingPlugins = true } label: {
                     Label("Plugins", systemImage: "puzzlepiece.extension")
                         .font(theme.font(12.5))
@@ -93,9 +80,6 @@ struct BotPanelLibrary: View {
         }
         .sheet(isPresented: $showingPlugins) {
             NavigationStack { ScrollView { BotPanelPlugins(bot: bot).padding(16) }.navigationTitle(Text("Plugins")) }
-        }
-        .sheet(isPresented: $showingCapabilities) {
-            NavigationStack { ScrollView { BotPanelCapabilities(bot: bot).id(bot.id).padding(16) }.navigationTitle(Text("Capabilities")) }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("desktop-panel-library")
@@ -202,8 +186,17 @@ struct BotPanelPlugins: View {
     }
 
     var body: some View {
-        AnyView(content)
+        VStack(alignment: .leading, spacing: 16) {
+            // Resolved list for this bot (Plugins > Installed on the web).
+            if BotCapabilityRules.reachable(gate: session.surfaceGate) {
+                BotPanelCapabilities(bot: bot).id(bot.id)
+            }
+            if session.surfaceGate.allows(.botPlugins) {
+                AnyView(content)
+            }
+        }
             .task(id: bot.id) {
+                guard session.surfaceGate.allows(.botPlugins) else { return }
                 model.client = session.profileClient
                 await model.refresh()
             }
@@ -558,6 +551,7 @@ enum CapabilityText {
         case "not_installed": "Not installed yet"
         case "unknown_profile": "Perspicax no longer lists this Role"
         case "disabled": "Turned off where it is kept"
+        case "offered": "Offered by the organization, off until you turn it on"
         default: nil
         }
     }
@@ -676,7 +670,7 @@ struct BotPanelCapabilities: View {
             receiptLine("Servers and tools", receipt.servers)
             receiptLine("Not served", receipt.notServed)
             if let index = list.promptIndex, index.cuts {
-                Text("The skills index is full: \(index.omitted) skills left out of the prompt.")
+                Text(index.incomplete ? "Plugin discovery is partial. Additional references may exist in enabled plugin folders." : "Prompt budgets omit \(index.omitted) whole instruction files.")
                     .font(theme.font(12)).foregroundStyle(theme.inkSecondary)
             }
         }
@@ -701,6 +695,23 @@ struct BotPanelCapabilities: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: name).font(theme.font(12.5, .medium)).foregroundStyle(theme.ink).lineLimit(1)
                 CapabilityText.detail(item).font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).lineLimit(1)
+                if let index = item.promptIndex {
+                    Text("Prompt: \(index.skills)/\(index.maxSkills) files, \(index.bytes)/\(index.maxBytes) bytes; \(index.omitted) omitted")
+                        .font(theme.font(11.5)).foregroundStyle(theme.inkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let pack = item.sourcePack, let label = item.signedPackLabel {
+                    HStack(spacing: 6) {
+                        Text(verbatim: label).font(theme.font(11.5)).foregroundStyle(theme.inkSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button { PlatformBridge.copyToPasteboard(pack) } label: {
+                            Image(systemName: "doc.on.doc").font(theme.font(11.5))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(theme.inkSecondary)
+                        .accessibilityLabel("Copy the pack digest")
+                    }
+                }
                 (Text(CapabilityText.state(item.state))
                  + (CapabilityText.reason(item.reason).map { Text(verbatim: " · ") + Text($0) } ?? Text(verbatim: "")))
                     .font(theme.font(11.5))

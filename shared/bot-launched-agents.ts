@@ -2,7 +2,7 @@
 // peer's hidden conversation). GET /api/bots/:id/activity `launchedAgents`.
 // The bot panel lists the coding ones (`coding`) under Details > Coding and
 // the rest (a dispatch run, bot-to-bot work) under Activity.
-import type { BotActivityStatus } from "./bot-activity.ts";
+import type { BotActivityStatus } from "./bot-activity-status.ts";
 
 export interface BotLaunchedAgentPullRequest {
   number: number;

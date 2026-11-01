@@ -18,7 +18,11 @@ export interface ComposerPlaceholderInput {
 
 /** What the empty composer says. A 1:1 chat names its bot, idle or working
  * ("Message <name>"): how Enter behaves then is shown by the chip or sheet
- * that appears on send, not by a long line in the placeholder. */
+ * that appears on send, not by a long line in the placeholder.
+ *
+ * Measured Grok 0.78.1 HTML Pages (2026-10-31): visible placeholder stays
+ * Message <botname> while a page is open. Source-derived j7O9JP "Message
+ * about title" is the docked stage-chat aria-label, wired in Composer. */
 export function composerPlaceholder(input: ComposerPlaceholderInput): string {
   if (input.approval) return t("composer.placeholder.approval");
   if (input.attachmentPending) return t("composer.placeholder.attaching");

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { createHmac } from "node:crypto";
 
 import {
-  AGENT_TOOL_NAMES, AGENT_TOOL_POLICY, agentPromptWithFiles, COLD_PAGE_SIZE, createAgentApi, ENTRY_TEXT_MAX, decodeCursor, encodeCursor, FIND_LIMIT_MAX,
+  AGENT_TOOL_NAMES, AGENT_TOOL_POLICY, agentPromptWithFiles, AWAIT_RECOMMENDED_WAIT_MS, AWAIT_TIMEOUT_MS_DEFAULT, AWAIT_TIMEOUT_MS_MAX, COLD_PAGE_SIZE, createAgentApi, ENTRY_TEXT_MAX, decodeCursor, encodeCursor, FIND_LIMIT_MAX,
   HANDLE_TTL_MS, matchScore, SEND_FILES_MAX, signHandle, signTurnHandle, turnLabel, verifyHandle,
   type AgentApiDeps, type AgentCaller, type AgentScope, type AgentSummary, type AuditEntry, type FileInput, type StoredMessage, type TurnState,
 } from "./agent-api.ts";
@@ -422,13 +422,19 @@ describe("send_prompt / await_turn", () => {
     expect(s.body).toMatchObject({ finished: true, reply: "", note: "The turn finished without text." });
   });
 
-  it("blocking past timeout_ms answers the handle; await_turn resumes without re-sending", async () => {
+  it("blocking past timeout_ms answers still_working with the handle; await_turn resumes without re-sending", async () => {
     const w = world({ replyAfterPolls: 20 });
     const r = await w.api.call(bot("bot-x"), "send_prompt", { agent_id: "bot-a", prompt: "slow", mode: "blocking", timeout_ms: 1_000 });
-    expect(r.body).toMatchObject({ finished: false, status: "running" });
-    expect(String(r.body.next)).toContain("never send the prompt again");
+    expect(r.body).toMatchObject({
+      finished: false,
+      status: "still_working",
+      recommended_wait_ms: AWAIT_RECOMMENDED_WAIT_MS,
+      progress: { turn_state: "running" },
+    });
+    expect(String(r.body.next)).toContain("still_working");
+    expect(String(r.body.next).toLowerCase()).toContain("never send the prompt again");
     const sent = w.posted.length;
-    const a = await w.api.call(bot("bot-x"), "await_turn", { agent_id: "bot-a", handle: r.body.handle, timeout_ms: 60_000 });
+    const a = await w.api.call(bot("bot-x"), "await_turn", { agent_id: "bot-a", handle: r.body.handle, timeout_ms: AWAIT_TIMEOUT_MS_MAX });
     expect(a.body).toMatchObject({ finished: true, reply: "echo: slow", handle: r.body.handle });
     expect(w.posted.length).toBe(sent);
   });
@@ -456,13 +462,20 @@ describe("send_prompt / await_turn", () => {
     expect(String(first.body.label)).toMatch(/: first$/);
     const rejected = await w.api.call(caller, "send_prompt", { agent_id: "bot-a", prompt: "second", on_busy: "reject" });
     expect(rejected.status).toBe(409);
-    expect(rejected.body.code).toBe("busy");
+    expect(rejected.body).toMatchObject({
+      code: "busy",
+      retryable: true,
+      details: { reason: "busy_thread", turn_state: "running", on_busy: "reject", retryable: true, status: 409 },
+    });
+    expect(String(rejected.body.hint)).toContain("queue");
+    const invalidBusy = await w.api.call(caller, "send_prompt", { agent_id: "bot-a", prompt: "x", on_busy: "later" });
+    expect(invalidBusy.status).toBe(400);
+    expect(invalidBusy.body).toMatchObject({ code: "bad_request", retryable: false, details: { reason: "invalid_on_busy" } });
     await w.api.call(caller, "send_prompt", { agent_id: "bot-a", prompt: "third", on_busy: "queue" });
     await w.api.call(caller, "send_prompt", { agent_id: "bot-a", prompt: "fourth" });
     expect(w.interrupted).toEqual([]);
     await w.api.call(caller, "send_prompt", { agent_id: "bot-a", prompt: "fifth", on_busy: "supersede" });
     expect(w.interrupted).toHaveLength(1);
-    expect((await w.api.call(caller, "send_prompt", { agent_id: "bot-a", prompt: "x", on_busy: "later" })).status).toBe(400);
   });
 
   it("validates mode, timeout, prompt and files (8 max, workspace-relative, 25 MiB)", async () => {
@@ -487,9 +500,10 @@ describe("send_prompt / await_turn", () => {
     expect((await w.api.call(bot("bot-y"), "send_prompt", { agent_id: "bot-a", prompt: "x" })).status).toBe(404);
     const r = await w.api.call(bot("bot-x"), "send_prompt", { agent_id: "bot-a", prompt: "x" });
     const otherCaller = await w.api.call(bot("bot-z"), "await_turn", { agent_id: "bot-a", handle: r.body.handle });
-    expect(otherCaller.body).toMatchObject({ code: "bad_handle", details: { reason: "other_caller" } });
+    expect(otherCaller.body).toMatchObject({ code: "handle_session_mismatch", details: { reason: "other_caller", family: "bad_handle", status: 400 } });
+    expect(otherCaller.body).not.toHaveProperty("thread_id");
     const otherAgent = await w.api.call(bot("bot-x"), "await_turn", { agent_id: "bot-b", handle: r.body.handle });
-    expect(otherAgent.body).toMatchObject({ code: "bad_handle", details: { reason: "other_agent" } });
+    expect(otherAgent.body).toMatchObject({ code: "handle_agent_mismatch", details: { reason: "other_agent" } });
     const altered = await w.api.call(bot("bot-x"), "await_turn", { agent_id: "bot-a", handle: `${String(r.body.handle)}x` });
     expect(altered.body).toMatchObject({ code: "bad_handle", details: { reason: "signature" } });
   });
@@ -499,11 +513,11 @@ describe("send_prompt / await_turn", () => {
     const c = bot("bot-x");
     const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "x" });
     const good = String(sent.body.handle);
-    const expectBad = async (handle: unknown, reason: string) => {
+    const expectBad = async (handle: unknown, reason: string, code = "bad_handle") => {
       const readsBefore = w.turnStateCalls.length;
       const r = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle });
       expect(r.status).toBe(400);
-      expect(r.body).toMatchObject({ code: "bad_handle", details: { reason }, hint: expect.stringContaining("await_turn") });
+      expect(r.body).toMatchObject({ code, details: { reason, family: "bad_handle", status: 400 }, hint: expect.stringContaining("await_turn") });
       expect(String(r.body.message)).toContain("read_latest_page");
       expect(String(r.body.hint)).toContain("read_latest_page");
       const blob = JSON.stringify(r.body);
@@ -521,24 +535,24 @@ describe("send_prompt / await_turn", () => {
     // i: 1 is already older than the TTL at the fixture clock; do not advance
     // the world clock or the valid handle below would expire too.
     const aged = signHandle(SECRET, { a: "bot-a", t: "t-aged", m: null, i: 1, c: "bot:bot-x" });
-    await expectBad(aged, "age");
+    await expectBad(aged, "age", "handle_expired");
     // Fixture clock starts near 1_791_500_000_000; keep forged handles inside the TTL.
     const issuedAt = 1_791_500_000_000;
     let readsBefore = w.turnStateCalls.length;
     const forOtherAgent = signHandle(SECRET, { a: "bot-b", t: "t-b", m: null, i: issuedAt, c: "bot:bot-x" });
     const otherAgent = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: forOtherAgent });
-    expect(otherAgent.body).toMatchObject({ code: "bad_handle", details: { reason: "other_agent" } });
+    expect(otherAgent.body).toMatchObject({ code: "handle_agent_mismatch", details: { reason: "other_agent" } });
     expect(String(otherAgent.body.message)).toContain("await_turn");
     expect(JSON.stringify(otherAgent.body)).not.toContain("bot-b");
     expect(w.turnStateCalls.length).toBe(readsBefore);
     readsBefore = w.turnStateCalls.length;
     const forOtherCaller = signHandle(SECRET, { a: "bot-a", t: "t-c", m: null, i: issuedAt, c: "bot:other" });
     const otherCaller = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: forOtherCaller });
-    expect(otherCaller.body).toMatchObject({ code: "bad_handle", details: { reason: "other_caller" } });
+    expect(otherCaller.body).toMatchObject({ code: "handle_session_mismatch", details: { reason: "other_caller" } });
     expect(JSON.stringify(otherCaller.body)).not.toContain("bot:other");
     expect(w.turnStateCalls.length).toBe(readsBefore);
     // Valid handle for this caller and agent still works.
-    const ok = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: good, timeout_ms: 60_000 });
+    const ok = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: good, timeout_ms: AWAIT_TIMEOUT_MS_MAX });
     expect(ok.body).toMatchObject({ finished: true, reply: "echo: x", handle: good });
   });
 
@@ -554,12 +568,52 @@ describe("send_prompt / await_turn", () => {
     expect(idle.body).toMatchObject({ finished: true, status: "idle", reply: "echo: ping" });
   });
 
+  it("await_turn returns still_working before its ceiling with progress and a resumable wait_cursor", async () => {
+    const w = world({ replyAfterPolls: 50 });
+    const c = bot("bot-x");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "long", mode: "async" });
+    const threadId = String(sent.body.thread_id);
+    w.add(threadId, { role: "bot", kind: "activity", text: "", tool: { name: "workspace_read", ok: true } });
+    w.add(threadId, { role: "bot", kind: "activity", text: "", tool: { name: "web_search", ok: true } });
+    const first = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 800 });
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({
+      finished: false,
+      status: "still_working",
+      thread_id: threadId,
+      recommended_wait_ms: AWAIT_RECOMMENDED_WAIT_MS,
+      progress: { turn_state: "running", steps_total: 2 },
+    });
+    const progress = first.body.progress as { summary: string; steps: Array<{ text: string; cursor: string }>; steps_total: number };
+    expect(progress.summary).toContain("2 steps");
+    const steps = progress.steps;
+    expect(steps.map((step) => step.text)).toEqual(["workspace_read", "web_search"]);
+    const waitCursor = first.body.wait_cursor as string;
+    expect(waitCursor).toBeTruthy();
+    expect(decodeCursor(waitCursor)).toMatchObject({ threadId });
+
+    w.add(threadId, { role: "bot", kind: "activity", text: "", tool: { name: "workspace_write", ok: true } });
+    const second = await w.api.call(c, "await_turn", {
+      agent_id: "bot-a",
+      handle: sent.body.handle,
+      timeout_ms: 800,
+      cursor: waitCursor,
+    });
+    expect(second.body).toMatchObject({ finished: false, status: "still_working", progress: { steps_total: 3 } });
+    const nextSteps = (second.body.progress as { steps: Array<{ text: string }> }).steps;
+    expect(nextSteps.map((step) => step.text)).toEqual(["workspace_write"]);
+    expect(second.body.wait_cursor).not.toBe(waitCursor);
+
+    expect((await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 60_001 })).status).toBe(400);
+    expect((await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: AWAIT_TIMEOUT_MS_DEFAULT, cursor: "nope" })).status).toBe(400);
+  });
+
   it("handles are signed and expire with a discriminated reason", () => {
     const body = { a: "bot-a", t: "t1", m: "m1", i: 1000, c: "bot:x" };
     const handle = signHandle(SECRET, body);
     expect(verifyHandle(SECRET, handle, 2000)).toEqual({ ok: true, body });
     expect(verifyHandle(Buffer.alloc(32, 8), handle, 2000)).toEqual({ ok: false, reason: "signature" });
-    expect(verifyHandle(SECRET, handle, 1000 + HANDLE_TTL_MS + 1)).toEqual({ ok: false, reason: "age" });
+    expect(verifyHandle(SECRET, handle, 1000 + HANDLE_TTL_MS + 1)).toEqual({ ok: false, reason: "age", body });
     expect(verifyHandle(SECRET, "turn_nope", 2000)).toEqual({ ok: false, reason: "format" });
     expect(verifyHandle(SECRET, "plain", 2000)).toEqual({ ok: false, reason: "format" });
     const payload = Buffer.from(JSON.stringify({ a: 1, t: "t", i: 1, c: "bot:x" }), "utf8").toString("base64url");
@@ -635,7 +689,49 @@ describe("send_prompt / await_turn", () => {
     const r = await w.api.call(bot("sender"), "await_turn", { agent_id: "bot-a", handle, timeout_ms: 0 });
     expect(r.body).toMatchObject({ finished: true, reply: "done" });
     const other = await w.api.call(bot("other"), "await_turn", { agent_id: "bot-a", handle, timeout_ms: 0 });
-    expect(other.body.code).toBe("bad_handle");
+    expect(other.body.code).toBe("handle_session_mismatch");
+  });
+
+  it("send_prompt and await_turn publish the handle's expires_at (audit 2026-10-29)", async () => {
+    const w = world();
+    const c = bot("bot-x");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "ttl" });
+    expect(typeof sent.body.expires_at).toBe("number");
+    expect(Number(sent.body.expires_at) - HANDLE_TTL_MS).toBeGreaterThanOrEqual(1_791_500_000_000);
+    const waited = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: AWAIT_TIMEOUT_MS_MAX });
+    expect(waited.body).toMatchObject({ finished: true, expires_at: sent.body.expires_at });
+  });
+
+  it("an expired handle on the caller's own conversation answers that turn instead of an error", async () => {
+    const w = world();
+    const user = w.add("t-old", { role: "user", kind: "text", text: "old question" });
+    w.add("t-old", { role: "bot", kind: "text", text: "old answer" });
+    w.threads.set("t-old", { agentId: "bot-a", owner: "bot:bot-x", title: "Old", hidden: false });
+    w.state.set("t-old", "idle");
+    const expired = signHandle(SECRET, { a: "bot-a", t: "t-old", m: user.id, i: user.at - HANDLE_TTL_MS - 60_000, c: "bot:bot-x" });
+    const r = await w.api.call(bot("bot-x"), "await_turn", { agent_id: "bot-a", handle: expired, timeout_ms: 0 });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({
+      agent_id: "bot-a", thread_id: "t-old", finished: true, status: "finished", reply: "old answer",
+      handle: null, recovered_from: "handle_expired",
+    });
+    expect(String(r.body.note)).toContain("t-old");
+    // Another caller that cannot read t-old still gets the coded refusal, no thread named.
+    const stranger = await w.api.call(bot("bot-z"), "await_turn", { agent_id: "bot-a", handle: expired, timeout_ms: 0 });
+    expect(stranger.status).toBe(400);
+    expect(stranger.body.code).toBe("handle_expired");
+    expect(JSON.stringify(stranger.body)).not.toContain("t-old");
+  });
+
+  it("a live handle from another session of a caller who reads the conversation is recovered", async () => {
+    const w = world();
+    const user = w.add("t-mine", { role: "user", kind: "text", text: "q" });
+    w.add("t-mine", { role: "bot", kind: "text", text: "a" });
+    w.threads.set("t-mine", { agentId: "bot-a", owner: "bot:bot-x", title: "Mine", hidden: false });
+    w.state.set("t-mine", "idle");
+    const fromOtherSession = signHandle(SECRET, { a: "bot-a", t: "t-mine", m: user.id, i: user.at, c: "bot:earlier-session" });
+    const r = await w.api.call(bot("bot-x"), "await_turn", { agent_id: "bot-a", handle: fromOtherSession, timeout_ms: 0 });
+    expect(r.body).toMatchObject({ thread_id: "t-mine", reply: "a", recovered_from: "handle_session_mismatch", handle: null });
   });
 });
 
@@ -819,3 +915,20 @@ describe("securable tool layer (B2)", () => {
   });
 });
 
+
+describe("one error envelope (audit 2026-10-29, B5)", () => {
+  it("every refusal answers {code, message, hint, details, retryable} with the real status and keeps older fields", async () => {
+    const w = world();
+    const unknown = await w.api.call(bot("bot-x"), "send_prompt", { agent_id: "nope", prompt: "x" });
+    expect(unknown.status).toBe(404);
+    expect(unknown.body).toEqual({
+      error: unknown.body.message, code: "unknown_agent", message: expect.any(String), hint: "", retryable: false,
+      details: { status: 404, retryable: false },
+    });
+    const bad = await w.api.call(bot("bot-x"), "await_turn", { agent_id: "bot-a", handle: "turn_nope" });
+    expect(bad.status).toBe(400);
+    expect(Object.keys(bad.body).sort()).toEqual(["code", "details", "error", "hint", "message", "retryable"]);
+    expect(bad.body.details).toEqual({ reason: "format", family: "bad_handle", status: 400, retryable: false });
+    expect(bad.body.retryable).toBe(false);
+  });
+});

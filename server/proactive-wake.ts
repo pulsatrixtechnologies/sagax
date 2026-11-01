@@ -1,34 +1,32 @@
-// Proactive wakes (2026-10-30): the events Sagax already receives wake the
-// bot they concern, per its proactive mode (shared/proactive-mode.ts).
+// Proactive wakes (2026-10-30, completed 2026-11-01): the events Sagax
+// already receives wake the bot they concern when proactive is on
+// (shared/proactive-mode.ts: off | proactive).
 //
 // The events are the ones Sagax already has, none invented here:
 // - mail: a bot email (Perspicax relay) that no routine of the bot took;
-// - calendar: a one-bot calendar entry coming due (it used to do nothing);
-// - run: a routine or webhook run of the bot that failed;
+// - calendar: a one-bot calendar entry coming due;
+// - run: a routine or webhook run of the bot that failed on its own work;
 // - bot: another bot's post in a room this bot is in;
 // - webhook: a webhook of the bot that posts to its chat (no run of its own).
 //
-// What each mode does (the gate itself stays shared/proactive-mode.ts):
-// - off: nothing, not even a line.
-// - propose: no model call at all. One proposal card in the bot's
-//   conversation; the person's one click runs the wake at the bot's level.
-// - read-auto: a wake run that reads and prepares on its own, and whose
-//   every write waits on the approval card (approvalModeForTurn: Ask).
-// - follow-rules: a wake run at the bot's own level and rules, like any
-//   action of the bot; what needs approval takes the usual card.
+// Off: nothing. Proactive: a background wake at the bot's own approval
+// level and rules. Before a write, the control layer records a dry run on
+// the wake; then the write follows ordinary approval (no extra card).
 //
-// The guards, the rules already in place and nothing more restrictive:
+// Guards:
 // - cost: a simple filter first (proactiveRelevance), no model for an event
 //   that cannot concern the bot; the wake runs on the bot's fast model when
-//   it has one (index.ts, the same pick as a call turn, #1694);
+//   it has one (index.ts, #1694);
 // - no loop: a bot never wakes on its own proactive work, and a chain of
-//   bots waking each other stops at PROACTIVE_MAX_HOPS;
+//   bots waking each other stops at PROACTIVE_MAX_HOPS (hops travel on every
+//   side effect of a wake);
 // - batching: events of one bot within PROACTIVE_GATHER_MS make ONE wake,
-//   and a wake starts at most every minIntervalMs (ProactiveBudget,
-//   server/proactive.ts), the events in between joining the next one;
-// - destination: the wake is a background run that reports into the bot's
-//   one conversation only when it has something (server/routine-report.ts),
-//   so a notification goes only when something is useful;
+//   and a wake starts at most every minIntervalMs (ProactiveBudget),
+//   the events in between joining the next one;
+// - lane: one active wake per bot, in a lane that never blocks the person's
+//   routines (RoutineManager.enqueueProactive);
+// - destination: the wake reports into the bot's one conversation only when
+//   it has something (server/routine-report.ts);
 // - trace: one line in the conversation's Events tab per wake, with its
 //   reason and the events' labels, never their content.
 
@@ -37,8 +35,10 @@ import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { writeFileAtomic } from "./atomic.ts";
+import { isClaudeReconnectCondition } from "./drivers/claude-errors.ts";
 import { ProactiveBudget, type ProactiveBudgetOptions } from "./proactive.ts";
 import { ROUTINE_REPORT_CONTRACT } from "./routine-report.ts";
+import { ROUTINE_RESTARTED } from "./routines.ts";
 import { BOTMAIL_RUN_RULES, defang } from "./webhooks.ts";
 import { proactiveModeFor, type ProactiveMode } from "../shared/proactive-mode.ts";
 
@@ -71,6 +71,9 @@ export interface ProactiveEvent {
   mentionsBot?: boolean;
   /** Mail: the wake is confined like a mail-woken routine run (S2). */
   confined?: boolean;
+  /** Person isolation: when set, the wake runs as this principal (e.g. the
+   * failed run's runAs on a shared org bot). */
+  runAs?: string;
 }
 
 /** A chain of bots waking each other stops here (the fleet's hop limit). */
@@ -130,17 +133,22 @@ export interface ProactiveWakeBatch {
   confined: boolean;
   /** Why it woke, for the Events line. */
   reasons: string[];
+  /** Person the wake should run as, when an event named one. */
+  runAs?: string;
 }
 
 export interface ProactiveWakerDeps {
   /** The stored bot, undefined if gone. */
   bot(botId: string): { proactiveMode?: unknown } | undefined;
-  /** propose: post the proposal card. */
-  propose(batch: ProactiveWakeBatch): void;
-  /** read-auto, follow-rules: start the background wake run. */
+  /** Start the background wake run (proactive on). */
   wake(batch: ProactiveWakeBatch): void;
   /** One line in the bot conversation's Events tab. */
   log(botId: string, line: string): void;
+  /**
+   * @deprecated Proposal cards are retired (2026-11-01). Kept optional so
+   * older test harnesses that still pass it compile; the waker never calls it.
+   */
+  propose?: (batch: ProactiveWakeBatch) => void;
   now?: () => number;
   /** Timers, replaced in tests. */
   setTimer?: (fn: () => void, ms: number) => unknown;
@@ -250,6 +258,7 @@ export class ProactiveWaker {
     this.budget.noteCycle(botId);
     this.budget.noteInitiate(botId);
     this.lastWake.set(botId, this.now());
+    const runAs = pending.events.map((event) => event.runAs).find((value): value is string => Boolean(value));
     const batch: ProactiveWakeBatch = {
       botId,
       mode,
@@ -258,11 +267,11 @@ export class ProactiveWaker {
       hops: Math.max(0, ...pending.events.map((event) => event.hops ?? 0)),
       confined: pending.events.some((event) => event.confined === true),
       reasons: pending.events.map((event) => proactiveRelevance(event) ?? event.source),
+      ...(runAs ? { runAs } : {}),
     };
     try {
       this.deps.log(botId, wakeLine(batch));
-      if (mode === "propose") this.deps.propose(batch);
-      else this.deps.wake(batch);
+      this.deps.wake(batch);
     } catch (error) {
       this.deps.log(botId, `Proactive wake could not start: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
     }
@@ -300,17 +309,16 @@ export function proactiveEventsBlock(events: readonly ProactiveEvent[], more = 0
   ].join("\n");
 }
 
-/** What a wake run is told to do, per mode, before the fenced events. */
+/** What a wake run is told to do before the fenced events. */
 export function proactiveWakePrompt(batch: Pick<ProactiveWakeBatch, "mode" | "events" | "more">, opts: { accepted?: boolean } = {}): string {
   const how = opts.accepted
     ? "The person accepted your proposal to handle these events: handle them now, at your usual approval level and rules."
-    : batch.mode === "read-auto"
-      ? "Your proactive mode is \"read and prepare on my own\": read, look things up and prepare (a summary, a draft, a plan) yourself; every action that writes, sends or changes something goes through the approval card, so make the call and the card asks the person."
-      : "Your proactive mode is \"follow the approval rules\": do what is useful for the person, at your usual approval level and rules, exactly as if they had asked; what needs approval takes the usual card.";
+    : "You are proactive: do what is useful for the person, at your usual approval level and rules, exactly as if they had asked. Org Ask/Deny rules and the person's own rules still apply. Before any write, send, payment or contact, plan it in one short line (what you would do); Sagax records that dry run on this wake, then the ordinary approval path runs the step. Never invent an extra approval card of your own.";
   return [
     "Proactive wake: something happened that may concern you, and nobody asked you about it. Decide whether there is something useful to do for the person.",
     how,
     "If nothing is worth their attention, do nothing and say so in one line.",
+    "In your final report, include any dry runs you planned (what you would write or send) so the person can see them.",
     ROUTINE_REPORT_CONTRACT.trim(),
     // an email is never a request from the owner (bot email, S2)
     ...(batch.events.some((event) => event.source === "mail") ? ["", BOTMAIL_RUN_RULES] : []),
@@ -320,18 +328,27 @@ export function proactiveWakePrompt(batch: Pick<ProactiveWakeBatch, "mode" | "ev
 }
 
 /** The section of every turn's system prompt: the bot knows it is proactive
- * and in which mode (2026-10-30). Empty when off. */
+ * (2026-10-30, one mode since 2026-11-01). Empty when off. */
 export function proactivePrompt(mode: ProactiveMode): string {
   switch (mode) {
     case "off":
       return "";
-    case "propose":
-      return "\nProactive mode: Propose only. When an email, a calendar entry, a failed run, a bot's post or a webhook concerns you, Sagax shows the person a proposal card; a run you start from their yes is theirs. You never act on such an event before that yes.";
-    case "read-auto":
-      return "\nProactive mode: Read and prepare on my own. Emails, calendar entries, failed runs, bots' posts and webhooks that concern you wake you in the background: you read and prepare on your own, and every write waits on the approval card. A wake reports in this conversation only when it has something for the person.";
-    case "follow-rules":
-      return "\nProactive mode: Follow the approval rules. Emails, calendar entries, failed runs, bots' posts and webhooks that concern you wake you in the background, and you act on them at your usual approval level and rules, as for any request. A wake reports in this conversation only when it has something for the person.";
+    case "proactive":
+      return "\nProactive mode: on. Emails, calendar entries, failed runs, bots' posts and webhooks that concern you wake you in the background. You act at your usual approval level and rules, as for any request. Before a write from a wake, plan it (a dry run is recorded on the wake); then the ordinary approval path runs it. A wake reports in this conversation only when it has something for the person.";
   }
+}
+
+/** 2026-11-01: whether a failed run is worth its bot's look. A run that
+ * failed on its own work is; a restart's cut (recovery already tells the
+ * person and reruns what it can), a missed occurrence (the computer was
+ * off, nothing ran) or a wake's own failure is not: waking on those only
+ * spent a model run, and a wake that reran the routine could fail again
+ * and wake the bot again. A known Claude auth / credits reconnect condition
+ * also never wakes: the person must reconnect, and a wake would fail again. */
+export function runFailureWakesBot(run: { status: string; error?: string; attention?: string; proactive?: unknown }): boolean {
+  if (run.status !== "failed" || run.error === ROUTINE_RESTARTED || run.proactive) return false;
+  if (isClaudeReconnectCondition(run.error) || isClaudeReconnectCondition(run.attention)) return false;
+  return true;
 }
 
 // ── proposals (propose mode) ──────────────────────────────────────────
@@ -414,10 +431,13 @@ export class ProactiveProposals {
   }
 
   /** Answer once: the proposal, or null when it is gone, expired or
-   * already answered. */
-  answer(id: string, verdict: "accepted" | "declined"): ProactiveProposal | null {
+   * already answered. `start` (2026-11-01) runs before the answer is kept:
+   * when it throws (the wake could not start), the proposal stays open and
+   * the person can say yes again, instead of a yes that did nothing. */
+  answer(id: string, verdict: "accepted" | "declined", start?: () => void): ProactiveProposal | null {
     const item = this.get(id);
     if (!item || item.answered) return null;
+    start?.();
     item.answered = verdict;
     this.save();
     return item;

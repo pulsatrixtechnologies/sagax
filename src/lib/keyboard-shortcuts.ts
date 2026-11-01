@@ -5,6 +5,9 @@
 import type { SendKey } from "./send-key";
 import type { LocaleKey } from "@/locales";
 import { t } from "./i18n";
+import { isMacPlatform } from "./is-mac-platform";
+
+export { isMacPlatform };
 
 /** Single keyboard shortcut entry with descriptions and platform-specific keys. */
 export interface ShortcutItem {
@@ -146,20 +149,6 @@ export function shouldOpenKeyboardShortcuts(event: KeyboardEvent): boolean {
   return !(target instanceof HTMLElement && (
     target.isContentEditable || target.closest("input, textarea, select, dialog, [role=dialog]")
   ));
-}
-
-/**
- * Detect whether the current host platform is macOS.
- * Checks Electron's window.ogb bridge first, falling back to navigator.userAgent.
- */
-export function isMacPlatform(): boolean {
-  if (typeof window !== "undefined" && window.ogb?.platform) {
-    return window.ogb.platform === "darwin";
-  }
-  if (typeof navigator !== "undefined" && navigator.userAgent) {
-    return navigator.userAgent.includes("Mac");
-  }
-  return true;
 }
 
 /**

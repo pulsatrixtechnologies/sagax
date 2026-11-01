@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canOpenUnattendedHost,
   canRevokeUnattendedHost,
+  hostOwnedByPerson,
   parseUnattendedHostId,
   parseUnattendedHosts,
 } from "./remote-unattended-host.ts";
@@ -53,5 +54,16 @@ describe("enrolled hosts", () => {
     expect(canOpenUnattendedHost({ state: "revoked" })).toBe(false);
     expect(canRevokeUnattendedHost({ state: "expired" })).toBe(true);
     expect(canRevokeUnattendedHost({ state: "revoked" })).toBe(false);
+  });
+
+  it("parses installed_by and owns only the person's hosts", () => {
+    const [host] = parseUnattendedHosts([row({ installed_by: "sub-alice" })], NOW);
+    expect(host!.installedBy).toBe("sub-alice");
+    expect(hostOwnedByPerson(host!, "sub-alice")).toBe(true);
+    expect(hostOwnedByPerson(host!, "sub-bob")).toBe(false);
+    // Solo / no subject: every listed host is theirs.
+    expect(hostOwnedByPerson(host!, null)).toBe(true);
+    // Known subject + missing installed_by: fail closed.
+    expect(hostOwnedByPerson({ installedBy: null }, "sub-alice")).toBe(false);
   });
 });

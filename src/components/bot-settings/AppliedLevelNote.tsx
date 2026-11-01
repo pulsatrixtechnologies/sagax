@@ -9,7 +9,6 @@ import { TriangleAlert } from "lucide-react";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import type { AppliedApprovalLevel, AppliedLevelReason, ApprovalMode } from "../../../shared/approval-mode";
-import type { ProactiveMode } from "../../../shared/proactive-mode";
 
 const REASON: Record<AppliedLevelReason, LocaleKey> = {
   thread: "approvalApplied.reason.thread",
@@ -54,16 +53,4 @@ export function AppliedLevelNote({ setting, applied, onUseSetting }: { setting: 
       )}
     </div>
   );
-}
-
-/** 2026-10-28: how Proactive reads beside the approval level. At Full
- * access, "Read on its own, card to act" asks no card of its own (the
- * organization's Refuse and Ask first rules and sends outside Allowed
- * recipients still do); "Propose only" stays stricter than Full and says
- * so. Undefined: the mode's usual hint. */
-export function proactiveLevelHint(mode: ProactiveMode, level: ApprovalMode): string | undefined {
-  if (level !== "full") return undefined;
-  if (mode === "read-auto") return t("botPanel.permissions.proactive.read-auto.fullHint");
-  if (mode === "propose") return t("botPanel.permissions.proactive.propose.fullHint");
-  return undefined;
 }

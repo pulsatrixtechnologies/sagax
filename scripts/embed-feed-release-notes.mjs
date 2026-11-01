@@ -12,9 +12,11 @@
 //   node scripts/embed-feed-release-notes.mjs release/latest-mac.yml [release/latest.yml]
 //   node scripts/embed-feed-release-notes.mjs --check release/latest-mac.yml release/latest.yml
 //
-// --check changes nothing and fails unless every feed already carries exactly
-// docs/releases/<forkVersion>.md. Run it right before `gh release create`.
-import { readFileSync, writeFileSync } from "node:fs";
+// --check changes nothing and fails unless every named feed exists on disk and
+// already carries exactly docs/releases/<forkVersion>.md. A missing
+// latest-mac.yml or latest.yml fails the release: both must always be published.
+// Run it right before `gh release create`.
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { checkReleaseNotes } from "./check-release-notes.mjs";
@@ -89,6 +91,12 @@ export function embedFeeds({
   const body = read(notes.file).replace(/\r\n/g, "\n").trim();
   const written = [];
   for (const feed of feeds) {
+    if (!existsSync(feed)) {
+      return {
+        ok: false,
+        message: `${feed} is missing. The release must include both latest-mac.yml and latest.yml.`,
+      };
+    }
     const yml = read(feed);
     const got = feedVersion(yml);
     if (got !== version) {

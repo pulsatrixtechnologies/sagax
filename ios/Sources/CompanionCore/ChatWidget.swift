@@ -118,6 +118,13 @@ public struct ChatWidgetNode: Hashable, Sendable, Identifiable {
 
     public func string(_ key: String) -> String? { props[key]?.string }
     public func number(_ key: String) -> Double? { props[key]?.number }
+    /// A whole number a bot wrote, clamped to `range` before it becomes an
+    /// `Int`: `Int(1e20)` traps, and a huge span or row count would hang
+    /// the layout. Nil when absent or not finite.
+    public func integer(_ key: String, in range: ClosedRange<Int>) -> Int? {
+        guard let value = number(key), value.isFinite else { return nil }
+        return Int(min(Double(range.upperBound), max(Double(range.lowerBound), value.rounded(.towardZero))))
+    }
     public func flag(_ key: String) -> Bool { props[key]?.bool == true }
     public subscript(_ key: String) -> WidgetJSON? { props[key] }
 

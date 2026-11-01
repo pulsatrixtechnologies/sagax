@@ -63,7 +63,10 @@ struct ShareRootView: View {
             }
             Spacer()
             if model.phase == .sending {
-                ProgressView().controlSize(.small)
+                if let progress = model.uploadProgress {
+                    ProgressView(value: progress).frame(width: 60)
+                        .accessibilityLabel("Uploading \(Int(progress * 100))%")
+                } else { ProgressView().controlSize(.small) }
             } else if model.phase == .sent {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(p.success.color)
@@ -315,6 +318,11 @@ struct ShareRootView: View {
     }
 
     private var footer: some View {
+        VStack(spacing: 8) {
+        if model.phase == .sending || model.phase == .failed {
+            Button("Finish in Sagax", action: model.finishInSagax)
+                .font(.callout.weight(.semibold))
+        }
         Button {
             model.send()
         } label: {
@@ -333,6 +341,7 @@ struct ShareRootView: View {
         .disabled(!model.canSend)
         .padding(16)
         .background(p.card.color)
+        }
     }
 
     private var destinationIcon: String {

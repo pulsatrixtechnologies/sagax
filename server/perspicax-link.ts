@@ -189,6 +189,60 @@ export const flowPluginsSchema = z.object({
 });
 export type FlowPluginsDeclaration = z.infer<typeof flowPluginsSchema>;
 
+/** Capabilities lot 4 (Perspicax `px-sagax/src/capabilities.rs`): the
+ * organization's capability declarations, carried with their execution
+ * configuration on this authenticated channel only. Perspicax checks every
+ * rule; these schemas only keep a malformed element out, one at a time. */
+const MOUNT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const stringRecord = (max: number) => z.record(z.string().max(128), z.string().max(max));
+export const capabilitySourceSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("manual") }),
+  z.object({ kind: z.literal("marketplace"), url: z.string().url().max(2048), plugin: z.string().regex(MOUNT_NAME), version: z.string().max(64).nullable().optional() }),
+]);
+export const capabilityConfigurationSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("plugin"), values: z.record(z.string().max(128), z.union([z.string().max(8192), z.number(), z.boolean()])).optional() }),
+  z.object({ type: z.literal("skill"), files: z.record(z.string().max(256), z.string()) }),
+  z.object({ type: z.literal("stdio"), command: z.string().min(1).max(4096), args: z.array(z.string().max(4096)).max(256).default([]), env: stringRecord(8192).default({}) }),
+  z.object({ type: z.literal("http"), url: z.string().url().max(2048), headers: stringRecord(8192).default({}) }),
+]);
+export const orgCapabilitySchema = z.object({
+  id: z.string().min(1).max(128),
+  mount_name: z.string().regex(MOUNT_NAME),
+  form: z.enum(["plugin", "skill", "mcp"]),
+  name: z.string().max(120),
+  description: z.string().max(2000).default(""),
+  source: capabilitySourceSchema,
+  scope: z.string().max(32).optional(),
+  mode: z.enum(["offered", "imposed"]),
+  enabled: z.boolean(),
+  configured: z.boolean().optional(),
+  configuration_kind: z.enum(["plugin", "skill", "stdio", "http"]).optional(),
+  created_at: z.string().max(64).optional(),
+  updated_at: z.string().max(64).optional(),
+  /** Only on the linked server's directory; never logged nor sent to a browser. */
+  configuration: capabilityConfigurationSchema.optional(),
+});
+export type OrgCapabilityDeclaration = z.infer<typeof orgCapabilitySchema>;
+export const capabilityMarketplaceSchema = z.object({
+  id: z.string().min(1).max(128),
+  name: z.string().max(64),
+  source: z.string().min(1).max(2048),
+  enabled: z.boolean(),
+  created_at: z.string().max(64).optional(),
+  updated_at: z.string().max(64).optional(),
+});
+export type CapabilityMarketplace = z.infer<typeof capabilityMarketplaceSchema>;
+export const capabilityMarketplacePolicySchema = z.object({ mode: z.enum(["any", "list"]) });
+export type CapabilityMarketplacePolicy = z.infer<typeof capabilityMarketplacePolicySchema>;
+/** An array whose malformed elements are dropped one by one (a newer
+ * Perspicax may add a form this server does not know). Not an array: absent. */
+function tolerantArray<T extends z.ZodTypeAny>(item: T, max: number) {
+  return z.array(z.unknown()).max(max).transform((rows) => rows.flatMap((row) => {
+    const parsed = item.safeParse(row);
+    return parsed.success ? [parsed.data as z.infer<T>] : [];
+  })).optional().catch(undefined);
+}
+
 export const directorySchema = z.object({
   server_id: z.string().min(1).max(64),
   people: z.array(personSchema).max(100_000),
@@ -197,6 +251,13 @@ export const directorySchema = z.object({
   profiles: z.array(profileSchema).max(10_000).optional(),
   /** Absent from an older Perspicax; malformed is read as absent. */
   flow_plugins: flowPluginsSchema.optional().catch(undefined),
+  /** Capabilities lot 4. Absent from an older Perspicax: today's behaviour
+   * (no organization declaration, historical marketplace rules). */
+  capabilities: tolerantArray(orgCapabilitySchema, 1_000),
+  capability_marketplaces: tolerantArray(capabilityMarketplaceSchema, 1_000),
+  /** null: never set in Perspicax, the historical rules stay (never `any`).
+   * Absent or malformed: an older Perspicax. */
+  capability_marketplace_policy: capabilityMarketplacePolicySchema.nullable().optional().catch(undefined),
 });
 export type DirectoryProfile = z.infer<typeof profileSchema>;
 export type DirectoryPerson = z.infer<typeof personSchema>;
@@ -334,8 +395,13 @@ export type ExchangeResult =
   | { ok: true; token: string; expiresAt: number }
   /** not_held: Perspicax answered invalid_target (profile unknown or not
    * held); subject: invalid_grant (the sign-in token was refused); link: the
-   * link token was refused even after re-reading the file. */
-  | { ok: false; error: "not_held" | "subject" | "link" | "rate_limited" | "unreachable" };
+   * link token was refused even after re-reading the file.
+   * `description` is Perspicax's public error_description when present. */
+  | { ok: false; error: "not_held" | "subject" | "link" | "rate_limited" | "unreachable"; description?: string };
+
+/** How long a not_held (invalid_target) answer is remembered so a turn that
+ * lists several tools does not keep asking Perspicax for the same profile. */
+export const NOT_HELD_CACHE_MS = 60_000;
 
 /** 2026-10-08 : a routine always acts in its owner's name. The linked
  * server turns the person's live sign-in access token into their routine
@@ -460,6 +526,16 @@ export function sameSecret(presented: string, expected: string): boolean {
   return timingSafeEqual(createHash("sha256").update(presented).digest(), createHash("sha256").update(expected).digest());
 }
 
+/** A public OAuth error_description safe to show the person: trimmed, short,
+ * no newlines or control characters. */
+export function publicOAuthDescription(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  // Strips control characters on purpose (a server-supplied description).
+  // oxlint-disable-next-line no-control-regex
+  const text = value.replace(/[\r\n\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+  return text || undefined;
+}
+
 /** The organization's people, read from Perspicax with the link token. One
  * refresh at a time; a failed call keeps the last good data. */
 /** A person missing from two directory answers this far apart is out. */
@@ -491,6 +567,9 @@ export class PerspicaxDirectory {
   private readonly avatarCache = new Map<string, AvatarImage>();
   /** Unknown permission keys already logged (one line each). */
   private readonly loggedUnknownPermissions = new Set<string>();
+  /** Short negative cache for profiles a person does not hold (invalid_target),
+   * keyed by subject token fingerprint and profile (or marketplace) resource. */
+  private readonly notHeldUntil = new Map<string, { until: number; description?: string }>();
 
   constructor(options: PerspicaxDirectoryOptions) {
     this.options = options;
@@ -541,6 +620,26 @@ export class PerspicaxDirectory {
    * when it sent none (an older Perspicax, or before the first answer). */
   flowPlugins(): FlowPluginsDeclaration | undefined {
     return this.data?.flow_plugins ?? undefined;
+  }
+
+  /** Capabilities lot 4: the organization's declarations from the last
+   * directory, configuration included (never log or forward it); undefined
+   * when Perspicax sent none (an older Perspicax, or before the first
+   * answer). */
+  orgCapabilities(): OrgCapabilityDeclaration[] | undefined {
+    return this.data?.capabilities ?? undefined;
+  }
+
+  /** The organization's allowed marketplaces; undefined from an older Perspicax. */
+  capabilityMarketplaces(): CapabilityMarketplace[] | undefined {
+    return this.data?.capability_marketplaces ?? undefined;
+  }
+
+  /** The canonical marketplace policy: undefined from an older Perspicax
+   * (or before the first answer), null while Perspicax has none set. */
+  capabilityMarketplacePolicy(): CapabilityMarketplacePolicy | null | undefined {
+    if (!this.data || this.data.capability_marketplace_policy === undefined) return undefined;
+    return this.data.capability_marketplace_policy;
   }
 
   people(): DirectoryPerson[] {
@@ -649,6 +748,11 @@ export class PerspicaxDirectory {
   }
 
   private async exchange(subjectToken: string, resource: string): Promise<ExchangeResult> {
+    const cacheKey = `${createHash("sha256").update(subjectToken).digest("hex")}\0${resource}`;
+    const cached = this.notHeldUntil.get(cacheKey);
+    if (cached && cached.until > this.now()) {
+      return { ok: false, error: "not_held", ...(cached.description ? { description: cached.description } : {}) };
+    }
     let link = this.link ?? this.readLink();
     if (!link) return { ok: false, error: "link" };
     const body = new URLSearchParams({
@@ -699,11 +803,16 @@ export class PerspicaxDirectory {
       /* not JSON */
     }
     if (response.status === 400) {
-      if (parsed.error === "invalid_target") return { ok: false, error: "not_held" };
+      if (parsed.error === "invalid_target") {
+        const description = publicOAuthDescription(parsed.error_description);
+        this.notHeldUntil.set(cacheKey, { until: this.now() + NOT_HELD_CACHE_MS, ...(description ? { description } : {}) });
+        return { ok: false, error: "not_held", ...(description ? { description } : {}) };
+      }
       if (parsed.error === "invalid_grant") return { ok: false, error: "subject" };
       return { ok: false, error: "unreachable" };
     }
     if (response.status !== 200) return { ok: false, error: "unreachable" };
+    this.notHeldUntil.delete(cacheKey);
     const token = parsed.access_token;
     const expiresIn = parsed.expires_in;
     if (typeof token !== "string" || !token || token.length > 4096 || /\s/.test(token)) return { ok: false, error: "unreachable" };
@@ -973,6 +1082,70 @@ export class PerspicaxDirectory {
     }
     if (response.status < 200 || response.status >= 300) return { ok: false, error: "refused", status: response.status, body: parsed };
     return { ok: true, status: response.status, body: parsed };
+  }
+
+  /** Capabilities lot 4: a JSON call (GET, POST, PUT, DELETE) to a route
+   * that takes the link token AND the live sign-in token of the person who
+   * acts (`subjectToken`, SUBJECT_TOKEN_HEADER), such as the organization's
+   * capability routes. The caller hands the token it holds; nothing falls
+   * back to the link alone or to a routine delegation. A 401 re-reads the
+   * link file once. Never throws, never logs a token or a body. A 403
+   * keeps its small JSON body (`code: "subject"` names a refused sign-in). */
+  async linkJson(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body: unknown, limits: { timeoutMs: number; maxBytes: number; subjectToken: string }): Promise<LinkPostResult> {
+    let link = this.link ?? this.readLink();
+    if (!link) return { ok: false, error: "link" };
+    const payload = body === undefined ? undefined : JSON.stringify(body);
+    const call = (token: string) => this.fetcher(`${this.options.serverBase.replace(/\/+$/, "")}${path}`, {
+      method,
+      redirect: "error",
+      signal: AbortSignal.timeout(limits.timeoutMs),
+      headers: {
+        accept: "application/json", authorization: `Bearer ${token}`, [SUBJECT_TOKEN_HEADER]: limits.subjectToken,
+        ...(payload !== undefined ? { "content-type": "application/json" } : {}),
+      },
+      ...(payload !== undefined ? { body: payload } : {}),
+    });
+    let response: Response;
+    try {
+      response = await call(link.linkToken);
+      if (response.status === 401) {
+        void response.body?.cancel().catch(() => {});
+        const again = this.readLink();
+        if (!again) return { ok: false, error: "link" };
+        link = again;
+        response = await call(link.linkToken);
+      }
+    } catch {
+      return { ok: false, error: "unreachable" };
+    }
+    if (response.status === 401) {
+      void response.body?.cancel().catch(() => {});
+      return { ok: false, error: "link", status: 401 };
+    }
+    let text: string | null;
+    try {
+      text = await readLimited(response, response.ok ? limits.maxBytes : 8_192);
+    } catch {
+      return { ok: false, error: "unreachable" };
+    }
+    if (text === null) return { ok: false, error: "too_large", status: response.status };
+    let parsed: unknown = null;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      parsed = null;
+    }
+    if (response.status === 403) return { ok: false, error: "link", status: 403, ...(parsed !== null ? { body: parsed } : {}) };
+    if (!response.ok) return { ok: false, error: "refused", status: response.status, body: parsed };
+    return { ok: true, status: response.status, body: parsed };
+  }
+
+  linkPutJson(path: string, body: unknown, limits: { timeoutMs: number; maxBytes: number; subjectToken: string }): Promise<LinkPostResult> {
+    return this.linkJson("PUT", path, body, limits);
+  }
+
+  linkDeleteJson(path: string, limits: { timeoutMs: number; maxBytes: number; subjectToken: string }): Promise<LinkPostResult> {
+    return this.linkJson("DELETE", path, undefined, limits);
   }
 
   /** A person's avatar at a given version, read through the link and kept

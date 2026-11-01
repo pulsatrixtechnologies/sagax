@@ -47,6 +47,8 @@ export interface BeginRequest {
   reply?: Reply;
   /** Who the tree acts for (Assignment.person). */
   person?: string;
+  /** The request the root answers (Assignment.request). */
+  request?: string;
 }
 
 const BRIEF_MAX = 12_000;
@@ -71,6 +73,16 @@ const defaultClock: Clock = { now: () => Date.now(), monotonic: () => performanc
 interface LiveTurn { controller: AbortController; rootId: string; activeAt: number; interruption: boolean; carried: ReadonlySet<string> }
 
 type TerminalStatus = "completed" | "failed" | "cancelled";
+
+/** How many times one requester may rework the same brief for the same
+ * teammate in the same place, after its first run. */
+export const MAX_REWORKS = 3;
+
+/** How many pieces of work one requesting turn may hand out over its whole
+ * life (2026-11-01). The window budgets renew on every settlement, so a
+ * requester that re-plans after each report with a new brief never ran out
+ * of them: this is the bound that does not renew. */
+export const MAX_REQUESTS_PER_REQUESTER = 64;
 
 export class Runtime {
   readonly limits: Limits;
@@ -178,7 +190,7 @@ export class Runtime {
       mode: "work", reply: req.reply ?? "resume", brief: clip(req.brief, BRIEF_MAX), status: "running",
       level: req.level, levelSource: "own", executions: 1, restarts: 0, createdAt: now, startedAt: now, lastActivityAt: now,
       result: "", rework: false, budgets: { since: now, requests: 0, executions: 1, wakes: 0 }, version: 1,
-      ...(req.person ? { person: req.person } : {}),
+      ...(req.person ? { person: req.person } : {}), ...(req.request ? { request: req.request } : {}),
     };
     this.store.transaction(() => {
       this.store.insert(root, { kind: "enqueued", at: now, detail: "queued: root" });
@@ -186,6 +198,55 @@ export class Runtime {
     });
     this.touch(root);
     return root;
+  }
+
+  /** The host takes a root's request again in a turn of its own: the turn
+   * that began it failed (a provider limit) and the same request continues,
+   * on another engine, as this same root, never as a second root. The work
+   * it handed out stays awaited: no "started" anchor moves, so a child that
+   * settled meanwhile is still owed to its resume. "continued": the root runs
+   * again and the host ends it with end(); "answered": its own resume already
+   * ran or runs, so the request needs no other turn; "none": no root to
+   * continue (it handed out nothing), the host starts its turn as usual;
+   * "resumed": the root's own resume failed (the same limit again) after
+   * every teammate had reported, so the runtime runs that resume again with
+   * the same results, and the host sends nothing (sending the request again
+   * would dispatch its work a second time). */
+  continueHost(rootId: string, detail = "the host continues the request", peek = false): "continued" | "answered" | "resumed" | "none" {
+    const n = this.store.get(rootId);
+    if (!n || n.parentId) return "none";
+    // Its own resume runs, or answered: the request has its answer.
+    if (this.turns.has(n.id) || (n.status === "completed" && n.executions > 1)) return "answered";
+    // A resume that failed on the provider answered nothing, yet its
+    // teammates' results are in: the resume runs again (a dispatched resume
+    // shows every settled result of the node, not only the unread ones).
+    if (n.status === "failed" && (n.outcome === "provider_error" || n.outcome === "stalled") && n.executions > 1 &&
+        n.reply === "resume" && this.resumeReason(n) === "settled") {
+      if (this.closing) return "none";
+      if (peek) return "resumed";
+      const now = this.clock.now();
+      n.status = "resume"; n.lastActivityAt = now;
+      delete n.outcome; delete n.outcomeDetail; delete n.finishedAt; delete n.reportedAt;
+      this.withBatch(() => {
+        this.store.update(n, { kind: "reopened", at: now, detail: clip(`resume: ${detail}, its resume failed`, DETAIL_MAX) });
+        this.touch(n);
+      });
+      return "resumed";
+    }
+    if (n.status === "running" || isTerminal(n)) return "none";
+    if (n.status !== "waiting" && n.status !== "resume") return "none";
+    if (this.closing) return "none";
+    if (peek) return "continued";
+    const now = this.clock.now();
+    n.status = "running"; n.lastActivityAt = now;
+    // The same request's turn again, by the host: not a runtime execution
+    // (executions counts those), but it counts against the tree's budget.
+    if (n.budgets) n.budgets.executions += 1;
+    this.withBatch(() => {
+      this.store.update(n, { kind: "continued", at: now, detail: clip(`running: ${detail}`, DETAIL_MAX) });
+      this.touch(n);
+    });
+    return "continued";
   }
 
   /** That requesting turn ended. */
@@ -225,16 +286,31 @@ export class Runtime {
     // Work cannot go back up its own tree: results return by themselves. A
     // consultation can: the teammate asks the bot that sent it the work a
     // question and gets the answer, nothing is handed back.
-    if (mode !== "consult" && lineage.some(a => a.assignee.botId === target.botId &&
+    // A bot's own continuation is a notice to itself, never work handed back.
+    const ownContinuation = req.continuation === true && mode === "notify";
+    if (mode !== "consult" && !ownContinuation && lineage.some(a => a.assignee.botId === target.botId &&
       (!a.assignee.destination.groupId || !target.destination.groupId || a.assignee.destination.groupId === target.destination.groupId))) {
       return refuse("Cannot assign work back to an ancestor; results return automatically");
     }
     if (parent) {
       // The same brief to the same teammate in the same place under one
       // parent is one request; only rework runs a finished one again.
-      const existing = this.store.children(parent.id).findLast(c => c.brief === brief && c.assignee.botId === target.botId &&
+      const same = this.store.children(parent.id).filter(c => c.brief === brief && c.assignee.botId === target.botId &&
         c.assignee.destination.threadId === target.destination.threadId && c.assignee.destination.groupId === target.destination.groupId);
+      const existing = same.at(-1);
       if (existing && !(req.rework && isTerminal(existing))) return { ok: true, assignment: existing, duplicate: true };
+      // Every settlement renews the budgets, so only this bounds a requester
+      // that reworks the same brief after each report (2026-11-01).
+      if (same.length > MAX_REWORKS) {
+        return refuse(`Rework limit reached: this brief already ran ${same.length} times for this teammate. Change the brief, or report what is still missing to the person`, "budget");
+      }
+      // Nor do they bound one that re-plans with a new brief after each
+      // report: count everything this requester ever handed out.
+      const handedOut = this.store.children(parent.id).length;
+      if (handedOut >= MAX_REQUESTS_PER_REQUESTER) {
+        this.store.update(parent, { kind: "budget", at: now, detail: `requests: ${handedOut} handed out by this turn` });
+        return refuse(`Work limit reached: this request already handed out ${handedOut} pieces of work without finishing. Stop handing out more: report to the person what is done, what is still missing and why`, "budget");
+      }
       if (parent.depth + 1 > this.limits.depth) return refuse(`Assignment depth limit reached (${this.limits.depth})`);
       if (root?.budgets && root.budgets.requests + 1 > this.limits.requests) {
         this.store.update(root, { kind: "budget", at: now, detail: `requests: ${root.budgets.requests} since last progress` });
@@ -251,7 +327,8 @@ export class Runtime {
       reply: req.reply ?? (mode === "notify" ? "none" : "resume"), brief, ...(req.doneWhen ? { doneWhen: req.doneWhen } : {}),
       status: "queued", level, levelSource: source, executions: 0, restarts: 0, createdAt: now, lastActivityAt: now, result: "",
       rework: Boolean(req.rework), ...(req.approved !== undefined ? { approved: req.approved } : {}),
-      ...(req.batchKey !== undefined ? { batchKey: req.batchKey } : {}), ...(req.relay ? { relay: true } : {}), version: 1,
+      ...(req.batchKey !== undefined ? { batchKey: req.batchKey } : {}), ...(req.relay ? { relay: true } : {}),
+      ...(req.priority ? { priority: req.priority } : {}), version: 1,
     };
     const person = root ? root.person : req.person;
     if (person) node.person = person;
@@ -408,7 +485,9 @@ export class Runtime {
   }
 
   private dispatchDue(): void {
-    const live = this.store.all({ nonTerminal: true });
+    // Priority-now work is admitted first (send_to_bot priority now: the
+    // front of the queue); otherwise the store's order.
+    const live = this.store.all({ nonTerminal: true }).sort((a, b) => Number(b.priority === "now") - Number(a.priority === "now"));
     const busyThreads = new Set(live.filter(n => n.status === "running").map(n => n.assignee.destination.threadId));
     for (const snapshot of live) {
       if (snapshot.status !== "queued" && snapshot.status !== "resume") continue;
@@ -641,6 +720,20 @@ export class Runtime {
       if (root && !isTerminal(root)) { root.lastActivityAt = now; this.store.update(root); }
     });
     this.touch(n, ...root ? [root] : []);
+    return true;
+  }
+
+  /** The person's review card allowed this queued work (event "approved"):
+   * the host's validate no longer holds it. False when it is not queued. */
+  approve(id: string): boolean {
+    const n = this.store.get(id);
+    if (!n || n.status !== "queued") return false;
+    if (n.approved) return true;
+    n.approved = true;
+    this.withBatch(() => {
+      this.store.update(n, { kind: "approved", at: this.clock.now(), detail: "queued: the person allowed it" });
+      this.touch(n);
+    });
     return true;
   }
 

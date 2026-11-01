@@ -255,6 +255,24 @@ describe("a turn its engine's limit refused", () => {
     w.host.stop();
   });
 
+  // Lot 3 (docs/plans/grok-convergence-runtime-evidence.md): Stop is final.
+  it("never sends a request the person stopped while it waited for the reset, nor tries again later", async () => {
+    const w = world({ allowed: ["claude"] });
+    w.host.start();
+    w.dispatch();
+    w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
+    await w.host.idle();
+    const resetsAt = w.clock.now + 2 * 3_600_000;
+    // The person stops the conversation; the host's resend then refuses it.
+    w.state.request = { ...w.state.request!, stopped: true };
+    w.state.busy = true;
+    w.clock.now = resetsAt + w.store.afterResetMs;
+    await w.host.tick();
+    expect(w.state.resent).toEqual([]);
+    expect(w.store.resumes()).toEqual([]);
+    w.host.stop();
+  });
+
   it("runs a failed routine again on the backup, or at the reset when there is none", async () => {
     const w = world();
     w.dispatch();

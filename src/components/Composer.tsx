@@ -33,7 +33,6 @@ import {
   prependComposerDraft,
   recoverFailedComposerSend,
   rememberFailedComposerSend,
-  replaceDraftAttachment,
   restoredSendId,
   restoredRequestText,
   useComposerDraft,
@@ -59,7 +58,6 @@ import { CommandAllowlistDialog } from "./CommandAllowlistDialog";
 import { isStopIntent } from "../../shared/stop-intent";
 import {
   appendPastedText,
-  handoffAttachmentImagePreview,
   clipboardHasImages,
   clipboardOtherFiles,
   composeMessage,
@@ -67,17 +65,16 @@ import {
   withPageContext,
   composerShouldRefocus,
   composerTakesFocusOnOpen,
-  imageAttachmentFromFile,
   replyTargetTakesFocus,
   intakeFiles,
   isLongPaste,
-  optimisticImageAttachment,
   pasteAttachment,
   snapshotClipboardImages,
   releaseAttachmentImagePreview,
   type Attachment,
   type PasteAttachment,
 } from "@/lib/composer-attachments";
+import { cancelAttachmentUpload, cancelAttachmentUploads, forgetAttachmentUploads, retryAttachmentUpload, startAttachmentUpload } from "@/lib/attachment-uploads";
 import { normalizeState } from "@/lib/mascot";
 import { goalCoordinatorForComposer, groupComposerHint, jevRoomRoutingOn, openTaskWorking, roomRespondersForComposer, roomTakesImages } from "@/lib/group-routing";
 import { ultracodeFromSelection } from "@/lib/ultracode-chrome";
@@ -172,6 +169,8 @@ export function Composer({
   onClearReply,
   onConsumeReply,
   onRestoreReply,
+  aboutPage,
+  focusOnOpen = true,
 }: {
   bot?: Bot;
   group?: Group;
@@ -186,6 +185,13 @@ export function Composer({
   onClearReply?: () => void;
   onConsumeReply?: () => void;
   onRestoreReply?: (message: Message, threadId: string) => void;
+  /** Title of the page this composer is docked on (stage chat, lot 5): its
+   * accessible name becomes "Message about <title>"; the visible
+   * placeholder keeps naming the bot (measured Grok). */
+  aboutPage?: string;
+  /** False when the conversation gives focus back elsewhere as this composer
+   * mounts (ChatView after a page closes: back to what opened the page). */
+  focusOnOpen?: boolean;
 }) {
   const bot = profile ? currentTaskBot(profile) : undefined;
   // 2026-10-29: the box locks only while a thread's page is on its way, and
@@ -270,7 +276,9 @@ export function Composer({
     draftId,
     !group && bot ? `bot:${bot.id}` : undefined,
   );
-  const attachmentPending = useDraftAttachmentPending(draftId);
+  const pendingUploads = useDraftAttachmentPending(draftId);
+  const attachmentPending = pendingUploads || attachments.some((attachment) =>
+    (attachment.kind === "file" || attachment.kind === "image") && Boolean(attachment.uploading || attachment.uploadError));
   const failedSends = useFailedComposerSends(draftId);
   // Goal mode is opt-in and one-shot so the next ordinary channel message
   // cannot accidentally start another multi-turn team run.
@@ -313,6 +321,7 @@ export function Composer({
   );
   const removeAttachment = useCallback(
     (id: string) => {
+      cancelAttachmentUpload(id);
       const removed = attachments.find((attachment) => attachment.id === id);
       if (removed?.kind === "image") releaseAttachmentImagePreview(removed);
       editAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
@@ -360,7 +369,9 @@ export function Composer({
   // opened: put the caret at the end of its draft so the person can type
   // without clicking the box first. Touch screens are skipped — focusing
   // there pops the on-screen keyboard over the conversation.
+  const focusOnOpenRef = useRef(focusOnOpen);
   useEffect(() => {
+    if (!focusOnOpenRef.current) return;
     if (window.matchMedia?.("(hover: none) and (pointer: coarse)").matches) return;
     const frame = requestAnimationFrame(() => {
       const input = inputRef.current;
@@ -847,30 +858,11 @@ export function Composer({
   const orgFullAccess = orgFullAccessFor(perspicaxOrg, modeBot, viewerId);
   const fullAccessAvailable = trustedThreadAccess || orgFullAccess === "allowed";
   const uploadImage = useCallback(async (file: File): Promise<Attachment | null> => {
-    const optimistic = optimisticImageAttachment(file);
-    if (!optimistic) return null;
-    appendDraftAttachments(draftId, [optimistic]);
-    try {
-      const completed = await imageAttachmentFromFile(file, optimistic);
-      if (!completed) {
-        replaceDraftAttachment(draftId, optimistic.id, null);
-        releaseAttachmentImagePreview(optimistic);
-        return null;
-      }
-      handoffAttachmentImagePreview(completed.path, completed.previewUrl);
-      if (!replaceDraftAttachment(draftId, optimistic.id, completed)) {
-        // The user removed the chip while its upload was completing.
-        releaseAttachmentImagePreview(completed);
-      }
-      // The keyed draft already owns the completed attachment; returning it
-      // would make intakeFiles append a duplicate chip.
-      return null;
-    } catch (error) {
-      replaceDraftAttachment(draftId, optimistic.id, null);
-      releaseAttachmentImagePreview(optimistic);
-      throw error;
-    }
+    await startAttachmentUpload(draftId, file, true);
+    return null;
   }, [draftId]);
+  const uploadFile = useCallback(async (file: File): Promise<"handled" | null> =>
+    await startAttachmentUpload(draftId, file, false) ? "handled" : null, [draftId]);
   const pickFiles = async (picked: FileList | readonly File[] | null) => {
     if (!picked?.length) return;
     changeDraftAttachmentPending(draftId, true);
@@ -879,6 +871,7 @@ export function Composer({
         allowImages: engineSupportsImages,
         getPath: pathForFile,
         uploadImage,
+        uploadFile,
       });
       if (added.length) addAttachments(added);
       if (notice) setAttachmentNotice(notice);
@@ -905,6 +898,7 @@ export function Composer({
       text: failed.requestText,
       replyToId: failed.replyToId,
       threadId: failed.threadId,
+      onSent: () => forgetAttachmentUploads(failed.attachmentIds ?? []),
       onError: () => {
         rememberFailedComposerSend(draftId, {
           sendId: failed.sendId,
@@ -913,6 +907,7 @@ export function Composer({
           replyToId: failed.replyToId,
           threadId: failed.threadId,
           channelMode: failed.channelMode,
+          attachmentIds: failed.attachmentIds,
         });
       },
     };
@@ -1007,6 +1002,7 @@ export function Composer({
       threadId,
       channelMode: group ? effectiveChannelMode : undefined,
     };
+    const onSent = () => forgetAttachmentUploads(sentDraft.attachments.map((attachment) => attachment.id));
     if (group) {
       dispatch({
         type: "sendGroup",
@@ -1016,6 +1012,7 @@ export function Composer({
         replyToId: replyTo?.id,
         threadId,
         mode: effectiveChannelMode,
+        onSent,
         onError: () => restoreDraft(sentDraft),
       });
       track("message_sent", { room: true, mode: effectiveChannelMode, queued: busy });
@@ -1030,6 +1027,7 @@ export function Composer({
         ...(effectiveChannelMode === "goal" ? { mode: "goal" as const } : {}),
         ...(busyMode ? { busyMode } : {}),
         dataContext,
+        onSent,
         onError: () => restoreDraft(sentDraft),
       });
       track("message_sent", { driver: bot.modelSelection?.instanceId, queued: busy && !canSteer });
@@ -1251,6 +1249,13 @@ export function Composer({
         : browserTeach ? showInBrowser() : myChromeOffered ? setMyChromeRecord(true) : startDraftWith("/learn "),
     }] : []),
   ];
+  // Measured Grok HTML Pages: visible placeholder stays Message <botname>.
+  // Source-derived j7O9JP Message about title is the stage-chat aria-label,
+  // only on the composer docked on the page (ChatView passes the live title).
+  const pageTitle = !group ? aboutPage : undefined;
+  const composerAria = pageTitle?.trim()
+    ? t("composer.placeholder.page", { title: pageTitle.trim() })
+    : t("composer.placeholder.bot", { name: group ? group.name : (bot?.name ?? "") });
   return (
     <div className="pointer-events-none relative overflow-x-clip px-[max(16px,calc((100%-960px)/2))] pb-4">
       {/* No fill or hairline on this wrapper — those were the black frame
@@ -1285,7 +1290,10 @@ export function Composer({
             </button>
             <button
               type="button"
-              onClick={() => forgetFailedComposerSend(draftId, failed.id)}
+              onClick={() => {
+                cancelAttachmentUploads(failed.attachmentIds ?? []);
+                forgetFailedComposerSend(draftId, failed.id);
+              }}
               aria-label={t("composer.failed.dismissAria")}
               title={t("composer.failed.dismiss")}
               className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-danger/10"
@@ -1386,6 +1394,8 @@ export function Composer({
           onNotice={setAttachmentNotice}
           onPendingChange={(pending) => changeDraftAttachmentPending(draftId, pending)}
           uploadImage={uploadImage}
+          uploadFile={uploadFile}
+          onRetry={retryAttachmentUpload}
         />
         <QueuedComposerMessages
           items={queuedMessages}
@@ -1415,7 +1425,7 @@ export function Composer({
           <div
             aria-hidden
             data-composer-backdrop
-            className="pointer-events-none absolute -left-[50vw] -right-[50vw] -bottom-4 top-1/2 bg-app [[data-over-page]_&]:hidden"
+            className="pointer-events-none absolute -left-[50vw] -right-[50vw] -bottom-4 top-1/2 bg-app [[data-page-stage-chat]_&]:hidden"
           />
         {/* One row while it fits: chips, editor, mic. Below the container
             width where the chips and the placeholder cannot share a line,
@@ -1590,7 +1600,8 @@ export function Composer({
               }
               send();
             }
-            if (e.key === "Escape" && recording) dictation.stop();
+            // handled here: an open page's Escape-to-close leaves it alone
+            if (e.key === "Escape" && recording) { e.preventDefault(); dictation.stop(); }
           }}
           // an upload in flight must not disable the box: a disabled element
           // drops keyboard focus and never gets it back, so the writer had to
@@ -1610,7 +1621,7 @@ export function Composer({
             groupHint: () => groupComposerHint(group!, members ?? [], { jevOn: jevRoomRoutingOn(config) }),
             botName: bot?.name ?? "",
           })}
-          aria-label={t("composer.placeholder.bot", { name: group ? group.name : (bot?.name ?? "") })}
+          aria-label={composerAria}
             className="block max-h-[7.5rem] min-h-6 w-full resize-none overflow-y-auto bg-transparent chat-input-text px-1 py-1.5 placeholder:text-ink-secondary focus:outline-none"
           />
           <div data-composer-actions className="composer-band flex items-center gap-1 @max-[30rem]/composer:ml-auto">

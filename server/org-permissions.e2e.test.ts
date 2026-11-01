@@ -186,7 +186,7 @@ posixOnly("Perspicax organization: the permission matrix", () => {
     // 2026-10-26: every setting of their own bot, without a permission list
     const auto = await api("PATCH", `/api/bots/${id}`, bob, { approvalMode: "auto" });
     expect(auto.status, auto.text).toBe(200);
-    for (const body of [{ chiefOfStaff: true }, { proactiveMode: "propose" }, { memoryEnabled: false }, { section: "Ops" }, { chiefOfStaff: false }, { hidden: true }]) {
+    for (const body of [{ chiefOfStaff: true }, { proactiveMode: "proactive" }, { memoryEnabled: false }, { section: "Ops" }, { chiefOfStaff: false }, { hidden: true }]) {
       const own = await api("PATCH", `/api/bots/${id}`, bob, body);
       expect(own.status, `${JSON.stringify(body)} ${own.text}`).toBe(200);
     }

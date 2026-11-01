@@ -35,7 +35,7 @@ final class RosterDensityUITests: XCTestCase {
         XCTAssertFalse(app.buttons["thread.roster-pepper-gmail"].exists)
         recordScreenshot("Threads in the chat header: nothing under a bot row", in: app)
 
-        app.buttons["home-account"].tap()
+        app.buttons["home-apps"].tap()
         let settings = app.buttons["account-menu.settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()
@@ -249,7 +249,7 @@ final class RosterDensityUITests: XCTestCase {
     @MainActor
     private func chooseDensity(_ label: String, in app: XCUIApplication) {
         // the photo's account menu > Settings > Appearance > List density
-        app.buttons["home-account"].tap()
+        app.buttons["home-apps"].tap()
         let settings = app.buttons["account-menu.settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()

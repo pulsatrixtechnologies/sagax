@@ -182,7 +182,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Always allowed tools | Bot editor > Access > Always allowed | `sagax_settings` get, set `bot.alwaysAllow` | élargit les droits |
 | Allowed recipients (no card: bot:<id>, email:<address>, phone:+<digits>) | Bot editor > Permissions > Allowed recipients | `sagax_settings` get, set `bot.allowedRecipients` | élargit les droits |
 | Approval level (ask, edits, auto = Approve for me, full) | Bot editor > Permissions > Approval level | `sagax_settings` get, set `bot.approvalMode` | élargit les droits |
-| Proactive mode (off, propose = a proposal card, read-auto = reads and prepares on its own, follow-rules = acts at its approval level and rules; absent = follow-rules) | Bot editor > Permissions > Proactive | `sagax_settings` get, set `bot.proactiveMode` | élargit les droits |
+| Proactive on/off (off = no wakes; proactive = wakes on email, calendar, failed run, bot mention or webhook and acts at its approval level and rules, with a dry run recorded before writes; absent = proactive) | Bot editor > Permissions > Proactive | `sagax_settings` get, set `bot.proactiveMode` | élargit les droits |
 | Primary Bot | Bot editor > Permissions > Primary Bot | `sagax_settings` get, set `bot.primary` | simple |
 | Parallel work, recovery and turn limits ({maxConcurrentThreads, maxParallelPerPerson, busySend, automaticRecovery, turnLimits}) | Bot editor > Behaviour > Parallel tasks | `sagax_settings` get, set `bot.runtime` | simple |
 | Who pays for replies (owner, speaker = each person, default) | Bot editor > Model > Who pays for replies | `sagax_settings` get, set `bot.turnPayer` | simple |

@@ -1,0 +1,391 @@
+[
+  {
+    "file": "before-desktop-dark-chat.png",
+    "tree": "/private/tmp/claude-501/-Users-jencryzthers/34ab7233-17d7-4f08-bd9d-b814b29fdefd/scratchpad/base-tree",
+    "name": "desktop-dark-chat",
+    "skin": "pulsatrix",
+    "width": 1338,
+    "height": 809,
+    "open": false,
+    "scrollBefore": 471,
+    "v1CardState": "superseded",
+    "errors": []
+  },
+  {
+    "file": "before-desktop-dark-stage.png",
+    "tree": "/private/tmp/claude-501/-Users-jencryzthers/34ab7233-17d7-4f08-bd9d-b814b29fdefd/scratchpad/base-tree",
+    "name": "desktop-dark-stage",
+    "skin": "pulsatrix",
+    "width": 1338,
+    "height": 809,
+    "open": "stage",
+    "send": true,
+    "close": true,
+    "scrollBefore": 795,
+    "v1CardState": "superseded",
+    "layout": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "chatColumn": null,
+      "chatInert": null,
+      "cover": false,
+      "beside": false,
+      "surfaceMode": null,
+      "docks": 1,
+      "dock": {
+        "x": 0,
+        "y": 747,
+        "width": 1338,
+        "height": 62
+      },
+      "dockOnPage": false,
+      "stageChat": null,
+      "placeholder": "Message Scout",
+      "ariaLabel": "Message Scout",
+      "closeLabel": "Close"
+    },
+    "sent": {
+      "text": "Tighten the summary.",
+      "dataContext": {
+        "page": {
+          "pageId": "galleryRealPage01",
+          "title": "Synthetic monthly report",
+          "version": 1
+        }
+      }
+    },
+    "escapeClosed": false,
+    "afterClose": {
+      "scrollTop": 1077,
+      "focus": "BODY",
+      "dockInChat": true
+    },
+    "closedFile": "before-desktop-dark-stage-closed.png",
+    "errors": []
+  },
+  {
+    "file": "before-desktop-light-stage.png",
+    "tree": "/private/tmp/claude-501/-Users-jencryzthers/34ab7233-17d7-4f08-bd9d-b814b29fdefd/scratchpad/base-tree",
+    "name": "desktop-light-stage",
+    "skin": "daylight",
+    "width": 1338,
+    "height": 809,
+    "open": "stage",
+    "scrollBefore": 795,
+    "v1CardState": "superseded",
+    "layout": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "chatColumn": null,
+      "chatInert": null,
+      "cover": false,
+      "beside": false,
+      "surfaceMode": null,
+      "docks": 1,
+      "dock": {
+        "x": 0,
+        "y": 747,
+        "width": 1338,
+        "height": 62
+      },
+      "dockOnPage": false,
+      "stageChat": null,
+      "placeholder": "Message Scout",
+      "ariaLabel": "Message Scout",
+      "closeLabel": "Close"
+    },
+    "errors": []
+  },
+  {
+    "file": "before-desktop-dark-beside.png",
+    "tree": "/private/tmp/claude-501/-Users-jencryzthers/34ab7233-17d7-4f08-bd9d-b814b29fdefd/scratchpad/base-tree",
+    "name": "desktop-dark-beside",
+    "skin": "pulsatrix",
+    "width": 1338,
+    "height": 809,
+    "open": "beside",
+    "scrollBefore": 795,
+    "v1CardState": "superseded",
+    "besideOffered": false,
+    "layout": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "chatColumn": null,
+      "chatInert": null,
+      "cover": false,
+      "beside": false,
+      "surfaceMode": null,
+      "docks": 1,
+      "dock": {
+        "x": 0,
+        "y": 747,
+        "width": 1338,
+        "height": 62
+      },
+      "dockOnPage": false,
+      "stageChat": null,
+      "placeholder": "Message Scout",
+      "ariaLabel": "Message Scout",
+      "closeLabel": "Close"
+    },
+    "errors": []
+  },
+  {
+    "file": "before-desktop-dark-stage-fr.png",
+    "tree": "/private/tmp/claude-501/-Users-jencryzthers/34ab7233-17d7-4f08-bd9d-b814b29fdefd/scratchpad/base-tree",
+    "name": "desktop-dark-stage-fr",
+    "skin": "pulsatrix",
+    "width": 1338,
+    "height": 809,
+    "open": "stage",
+    "lang": "fr",
+    "scrollBefore": 795,
+    "v1CardState": "superseded",
+    "layout": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 1338,
+        "height": 809
+      },
+      "chatColumn": null,
+      "chatInert": null,
+      "cover": false,
+      "beside": false,
+      "surfaceMode": null,
+      "docks": 1,
+      "dock": {
+        "x": 0,
+        "y": 747,
+        "width": 1338,
+        "height": 62
+      },
+      "dockOnPage": false,
+      "stageChat": null,
+      "placeholder": "Écrire un message à Scout",
+      "ariaLabel": "Écrire un message à Scout",
+      "closeLabel": "Fermer"
+    },
+    "errors": []
+  },
+  {
+    "file": "before-w700-dark-stage.png",
+    "tree": "/private/tmp/claude-501/-Users-jencryzthers/34ab7233-17d7-4f08-bd9d-b814b29fdefd/scratchpad/base-tree",
+    "name": "w700-dark-stage",
+    "skin": "pulsatrix",
+    "width": 700,
+    "height": 809,
+    "open": "stage",
+    "close": true,
+    "scrollBefore": 795,
+    "v1CardState": "superseded",
+    "layout": {
+      "viewport": {
+        "width": 700,
+        "height": 809
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 700,
+        "height": 809
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 700,
+        "height": 809
+      },
+      "chatColumn": null,
+      "chatInert": null,
+      "cover": false,
+      "beside": false,
+      "surfaceMode": null,
+      "docks": 1,
+      "dock": {
+        "x": 0,
+        "y": 743,
+        "width": 700,
+        "height": 66
+      },
+      "dockOnPage": false,
+      "stageChat": null,
+      "placeholder": "Message Scout",
+      "ariaLabel": "Message Scout",
+      "closeLabel": "Close"
+    },
+    "escapeClosed": true,
+    "afterClose": {
+      "scrollTop": 795,
+      "focus": "page card v1",
+      "dockInChat": true
+    },
+    "closedFile": "before-w700-dark-stage-closed.png",
+    "errors": []
+  },
+  {
+    "file": "before-w390-light-stage.png",
+    "tree": "/private/tmp/claude-501/-Users-jencryzthers/34ab7233-17d7-4f08-bd9d-b814b29fdefd/scratchpad/base-tree",
+    "name": "w390-light-stage",
+    "skin": "daylight",
+    "width": 390,
+    "height": 844,
+    "open": "stage",
+    "send": true,
+    "close": true,
+    "scrollBefore": 778,
+    "v1CardState": "superseded",
+    "layout": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "chatColumn": null,
+      "chatInert": null,
+      "cover": false,
+      "beside": false,
+      "surfaceMode": null,
+      "docks": 1,
+      "dock": {
+        "x": 0,
+        "y": 738,
+        "width": 390,
+        "height": 106
+      },
+      "dockOnPage": false,
+      "stageChat": null,
+      "placeholder": "Message Scout",
+      "ariaLabel": "Message Scout",
+      "closeLabel": "Close"
+    },
+    "sent": {
+      "text": "Tighten the summary.",
+      "dataContext": {
+        "page": {
+          "pageId": "galleryRealPage01",
+          "title": "Synthetic monthly report",
+          "version": 1
+        }
+      }
+    },
+    "escapeClosed": false,
+    "afterClose": {
+      "scrollTop": 1086,
+      "focus": "BODY",
+      "dockInChat": true
+    },
+    "closedFile": "before-w390-light-stage-closed.png",
+    "errors": []
+  },
+  {
+    "file": "before-w390-dark-stage.png",
+    "tree": "/private/tmp/claude-501/-Users-jencryzthers/34ab7233-17d7-4f08-bd9d-b814b29fdefd/scratchpad/base-tree",
+    "name": "w390-dark-stage",
+    "skin": "pulsatrix",
+    "width": 390,
+    "height": 844,
+    "open": "stage",
+    "scrollBefore": 778,
+    "v1CardState": "superseded",
+    "layout": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "host": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "panel": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "chatColumn": null,
+      "chatInert": null,
+      "cover": false,
+      "beside": false,
+      "surfaceMode": null,
+      "docks": 1,
+      "dock": {
+        "x": 0,
+        "y": 738,
+        "width": 390,
+        "height": 106
+      },
+      "dockOnPage": false,
+      "stageChat": null,
+      "placeholder": "Message Scout",
+      "ariaLabel": "Message Scout",
+      "closeLabel": "Close"
+    },
+    "errors": []
+  }
+]

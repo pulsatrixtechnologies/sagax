@@ -355,6 +355,13 @@ export interface PluginMarketplacesOptions {
   /** the bots with plugins installed from a marketplace (server/bot-plugins.ts) */
   inUse?: (name: string) => string[];
   now?: () => number;
+  /** Lot 5: when the installation store has absorbed marketplaces-state,
+   * read/write the record there. Checkout trees stay under marketplaces/. */
+  installationStore?: {
+    hasMigrated(sourceId: string): boolean;
+    readMarketplaces(): unknown;
+    writeMarketplaces(state: State): void;
+  };
 }
 
 async function defaultFetchText(url: string): Promise<string> {
@@ -404,6 +411,14 @@ export class PluginMarketplaces {
   }
 
   private read(): State {
+    const bridge = this.options.installationStore;
+    if (bridge?.hasMigrated("marketplaces-state")) {
+      try {
+        return stateSchema.parse(bridge.readMarketplaces());
+      } catch {
+        return { version: 1, marketplaces: {}, installed: {} };
+      }
+    }
     try {
       return stateSchema.parse(JSON.parse(readFileSync(join(this.root, "state.json"), "utf8")));
     } catch {
@@ -412,8 +427,14 @@ export class PluginMarketplaces {
   }
 
   private write(state: State): void {
+    const parsed = stateSchema.parse(state);
+    const bridge = this.options.installationStore;
+    if (bridge?.hasMigrated("marketplaces-state")) {
+      bridge.writeMarketplaces(parsed);
+      return;
+    }
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
-    writeFileAtomic(join(this.root, "state.json"), JSON.stringify(stateSchema.parse(state), null, 2));
+    writeFileAtomic(join(this.root, "state.json"), JSON.stringify(parsed, null, 2));
   }
 
   /** One change at a time: two Adds never clone into the same folder. */

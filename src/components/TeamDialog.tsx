@@ -5,7 +5,7 @@ import { Plus, X } from "lucide-react";
 import { api, useStore, type Bot } from "@/state/store";
 import { teamMapMutationError } from "@/lib/team-map-access";
 import { BotPickerList } from "./BotPickerList";
-import { NewBotDialog } from "./lazy-screens";
+import { NewBotDialog } from "./lazy-new-bot";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { FIELD, FieldRow, HelpTip, PILL, PRIMARY_PILL, SettingsGroup, DIALOG, GROUP_CARD } from "./SettingsPrimitives";

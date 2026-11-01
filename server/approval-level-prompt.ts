@@ -53,11 +53,14 @@ export function peerContactPrompt(input: {
   canContact: boolean;
   asksBeforeContact: boolean;
 }): string {
+  // canContact is only true on coordinating turns (room or direct chat),
+  // where ask_bot and delegate_bot are replaced by coordinate_bots /
+  // send_to_bot. Name only the tools this turn actually has.
   if (!input.canContact) return "";
   if (input.asksBeforeContact) {
-    return "\nAsk before contacting bots: on. Sagax shows its own card when you contact a teammate (coordinate_bots, ask_bot, delegate_bot, post_to_room)."
+    return "\nAsk before contacting bots: on. Sagax shows its own card when you contact a teammate (coordinate_bots, send_to_bot, post_to_room)."
       + " Do not also ask the person in chat or with ask_choice whether you may contact them.";
   }
-  return "\nAsk before contacting bots: off. When the task needs a teammate, call coordinate_bots (or ask_bot, delegate_bot, post_to_room) immediately."
+  return "\nAsk before contacting bots: off. When the task needs a teammate, call coordinate_bots (or send_to_bot, post_to_room) immediately."
     + " Do not ask the person first in chat or with ask_choice whether you may contact them.";
 }

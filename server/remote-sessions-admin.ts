@@ -42,15 +42,9 @@ export function createRemoteSessionsAdmin(deps: {
    * `actor` is the person who revoked (the installer themselves or an admin),
    * for the audit (M4); `reason` the one they gave ("" when none). */
   onRevoke?(consent: UnattendedConsent, actor: string, reason: string): Promise<void>;
-  /** The unattended (Access) path is only usable when this is true. It is
-   * false by default: the host service install, the revoke that uninstalls it,
-   * and the expiry enforcement are designed but not wired yet, so the grant
-   * action is gated off until they are. Revoke is never gated (M2). */
-  unattendedEnabled?(): boolean;
   now?: () => number;
 }) {
   const now = deps.now ?? (() => Date.now());
-  const unattendedEnabled = () => deps.unattendedEnabled?.() === true;
 
   const visible = (viewer: AdminViewer, input: AdminSessionInput) =>
     viewer.orgAdmin || input.ownerId === viewer.principalId;
@@ -98,14 +92,11 @@ export function createRemoteSessionsAdmin(deps: {
       if (!this.canSee(viewer, id)) return "forbidden";
       return deps.closeById(id);
     },
-    /** Whether the unattended (Access) path is usable (feature flag). */
-    unattendedEnabled,
     /** Record install-time unattended consent, attributed to the caller's
      * principal. Any signed-in person may, for a host that is not another
-     * person's (hostIsTheirs); an admin for any host. Gated off until the
-     * host-service install, revoke-uninstall and expiry enforcement are wired. */
-    grantUnattended(viewer: AdminViewer, input: Omit<UnattendedConsentInput, "installedBy">): UnattendedConsent | null | "forbidden" | "disabled" {
-      if (!unattendedEnabled()) return "disabled";
+     * person's (hostIsTheirs); an admin for any host. Always available:
+     * unattended access is not a server mode (2026-11-01). */
+    grantUnattended(viewer: AdminViewer, input: Omit<UnattendedConsentInput, "installedBy">): UnattendedConsent | null | "forbidden" {
       if (!viewer.principalId) return "forbidden";
       const hostKey = normalizeHostKey(input.hostKey);
       if (hostKey && !hostIsTheirs(viewer, hostKey)) return "forbidden";
@@ -115,8 +106,7 @@ export function createRemoteSessionsAdmin(deps: {
      * recorded the consent (installedBy) does it themselves, an admin does it
      * for any host of the organization (decision 2026-10-26). Mark the consent
      * revoked, end the live sessions on that host the caller may end (cuts the
-     * tunnel), and propagate to the host service and Perspicax. Works whatever
-     * the flag (M2): a consent recorded before the flag was cut stays revocable. */
+     * tunnel), and propagate to the host service and Perspicax. */
     async revokeUnattended(viewer: AdminViewer, hostKey: string, reason = ""): Promise<RevokeOutcome> {
       if (!viewer.principalId && !viewer.orgAdmin) return { ok: false, error: "forbidden" };
       const current = deps.consent.get(hostKey);

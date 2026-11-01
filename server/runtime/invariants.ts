@@ -16,11 +16,13 @@ const isStatus = (value: string): value is Status => (STATUSES as readonly strin
 function replayStep(event: AssignmentEvent): Status | undefined {
   switch (event.kind) {
     case "enqueued": return "queued";
-    case "started": return "running";
+    case "started":
+    case "continued": return "running";
     case "parked": return "needs_input";
     case "answered": return "queued";
     case "waiting": return "waiting";
-    case "resume_due": return "resume";
+    case "resume_due":
+    case "reopened": return "resume";
     case "refused": return "failed";
     case "cancelled": return "cancelled";
     case "settled":
@@ -63,9 +65,12 @@ export function checkInvariants(store: RuntimeStore, live: { running: Set<string
       if (a.status === "needs_input" && !live.parked.has(a.id)) problems.push(`I1 ${label}: needs_input without a parked question`);
       if (a.status === "waiting" && !(childrenOf.get(a.id) ?? []).some(c => c.reply !== "none")) problems.push(`I1 ${label}: waiting on no child`);
     }
-    const reports = events.filter(e => e.kind === "reported").length;
+    // A reopened root (its resume failed, it resumes again) withdrew its
+    // earlier outcome: reports and wakes count for the current one.
+    const current = events.slice(events.findLastIndex(e => e.kind === "reopened") + 1);
+    const reports = current.filter(e => e.kind === "reported").length;
     // A question wakes the requester too; I2 bounds the wakes for the result.
-    const wakes = events.filter(e => e.kind === "woken" && e.detail !== "needs_input").length;
+    const wakes = current.filter(e => e.kind === "woken" && e.detail !== "needs_input").length;
     if (isTerminal(a)) {
       if (a.outcome === undefined) problems.push(`I4 ${label}: terminal without an outcome`);
       if (a.finishedAt === undefined) problems.push(`I4 ${label}: terminal without finishedAt`);
@@ -126,6 +131,19 @@ export function checkInvariants(store: RuntimeStore, live: { running: Set<string
       if (count > 0 && !c.rework) problems.push(`I3 ${c.id}: the same brief under ${parentId} without rework`);
       seen.set(key, count + 1);
     }
+  }
+  // I11: one request has one root: a turn that takes the same request
+  // again (a provider limit's backup) continues that root, so no request is
+  // answered by two trees.
+  const roots = new Map<string, Assignment[]>();
+  for (const a of rows) {
+    if (a.parentId || !a.request) continue;
+    const key = JSON.stringify([a.assignee.botId, a.assignee.destination.threadId, a.request]);
+    roots.set(key, [...roots.get(key) ?? [], a]);
+  }
+  for (const same of roots.values()) {
+    const handedOut = same.filter(a => (childrenOf.get(a.id) ?? []).some(c => c.reply !== "none"));
+    if (handedOut.length > 1) problems.push(`I11 ${handedOut.map(a => a.id).join(", ")}: one request answered by ${handedOut.length} trees`);
   }
   // Every lane an item can sit in: each row's requester.
   const items = new Map<string, InboxItem>();

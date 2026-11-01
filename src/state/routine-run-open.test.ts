@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-// 2026-10-29: View run under a routine's report, a run's notification and a
-// link to a run's execution thread (an Inbox entry) open the run's detail
-// (the Routines page, the run open over its logs), never a conversation
-// beside the chat. Continue in the conversation stays in the detail.
+// 2026-11-01: View run under a routine's report, a run's notification and a
+// link to a run's execution thread (an Inbox entry) open the run as an
+// exchange sheet over the chat column (same place as Melonie <-> Katarina),
+// never a modal. Continue in the conversation stays a footer action.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -40,7 +40,7 @@ function report(): Message {
 }
 
 describe("opening a routine run", () => {
-  it("View run opens the run detail on the Routines page, not a split", () => {
+  it("View run opens the exchange sheet over chat, not a modal or split", () => {
     const actions: Action[] = [];
     const host = document.createElement("div");
     document.body.append(host);
@@ -53,12 +53,12 @@ describe("opening a routine run", () => {
     const button = host.querySelector<HTMLButtonElement>('button[aria-label="View run for Project health watch"]');
     expect(button).not.toBeNull();
     button!.click();
-    expect(actions).toEqual([{ type: "showRoutines", section: "logs", runId: "run-1", routineId: "routine-1" }]);
-    // the detail takes the place of the chat: no conversation selected or opened beside it
-    const next = reducer(initialState, actions[0]!);
-    expect(next.activeView).toBe("routines");
-    expect(next.routinesFocus.runId).toBe("run-1");
-    expect(next.selectedId).toBe(initialState.selectedId);
+    expect(actions).toEqual([{ type: "openRoutineRunSheet", runId: "run-1", routineId: "routine-1" }]);
+    const withBot = { ...initialState, bots: [{ ...initialState.bots[0], id: "scout", threadId: "main-chat" } as never], routineRuns: [{ id: "run-1", botId: "scout", routineId: "routine-1" } as never], selectedId: "other" };
+    const next = reducer(withBot as typeof initialState, actions[0]!);
+    expect(next.activeView).toBe("chat");
+    expect(next.routineRunSheet).toEqual({ runId: "run-1", routineId: "routine-1" });
+    expect(next.selectedId).toBe("scout");
     root.unmount();
     host.remove();
   });
@@ -73,23 +73,23 @@ describe("opening a routine run", () => {
     root.unmount();
   });
 
-  it("a run's notification opens its detail, not its report conversation", () => {
+  it("a run's notification opens its exchange sheet, not its report conversation", () => {
     const actions: Action[] = [];
     openNotificationTarget((action) => actions.push(action), { botId: "scout", threadId: "main-chat", routineRunId: "run-1" }, state, false);
-    expect(actions).toEqual([{ type: "showRoutines", section: "logs", runId: "run-1" }]);
+    expect(actions).toEqual([{ type: "openRoutineRunSheet", runId: "run-1" }]);
   });
 
-  it("a link to a run's execution thread (an Inbox entry) opens the run detail", () => {
+  it("a link to a run's execution thread (an Inbox entry) opens the exchange sheet", () => {
     const actions: Action[] = [];
     expect(routineRunOfThread(state, "run-thread")).toBe("run-1");
     openNotificationTarget((action) => actions.push(action), { botId: "scout", threadId: "run-thread" }, state, false);
-    expect(actions).toEqual([{ type: "showRoutines", section: "logs", runId: "run-1" }]);
+    expect(actions).toEqual([{ type: "openRoutineRunSheet", runId: "run-1" }]);
   });
 
   it("a run this client does not know keeps opening its thread", () => {
     const actions: Action[] = [];
     openNotificationTarget((action) => actions.push(action), { botId: "scout", threadId: "main-chat", routineRunId: "run-gone" }, state, false);
-    expect(actions.some((action) => action.type === "showRoutines")).toBe(false);
+    expect(actions.some((action) => action.type === "openRoutineRunSheet" || action.type === "showRoutines")).toBe(false);
   });
 
   it("the owner's access notification (no thread) still opens the bot's activity", () => {
@@ -137,11 +137,11 @@ describe("continuing a routine run in the conversation", () => {
     expect(currentSideThread()).toBeNull();
   });
 
-  it("with threads hidden, a link into a run's task opens the run's detail, not a column", () => {
+  it("with threads hidden, a link into a run's task opens the exchange sheet, not a column", () => {
     closeSideThread();
     const actions: Action[] = [];
     openBotThread((action) => actions.push(action), bot, "run-thread", false);
-    expect(actions).toEqual([{ type: "showRoutines", section: "logs", runId: "run-1" }]);
+    expect(actions).toEqual([{ type: "openRoutineRunSheet", runId: "run-1" }]);
     expect(currentSideThread()).toBeNull();
   });
 });

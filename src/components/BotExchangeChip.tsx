@@ -14,6 +14,7 @@ import { CHAT_BUBBLE_WIDTH_CLASS, CHAT_COLUMN_CLASS, chatBubbleWidth } from "@/l
 import { prefersWideBubble } from "@/lib/rich-blocks";
 import { runCorners } from "@/lib/room-authors";
 import { cn } from "@/lib/cn";
+import { getExchangeColumnHost, setExchangeColumnHost, subscribeExchangeColumnHost } from "@/lib/exchange-column-host";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ClusterLabel } from "./ClusterLabel";
 import { MessageBoundary } from "./MessageBoundary";
@@ -35,6 +36,12 @@ import {
 const ExchangeColumnContext = createContext<HTMLElement | null>(null);
 
 export function ExchangeColumnProvider({ node, children }: { node: HTMLElement | null; children: ReactNode }) {
+  useEffect(() => {
+    setExchangeColumnHost(node);
+    return () => {
+      if (getExchangeColumnHost() === node) setExchangeColumnHost(null);
+    };
+  }, [node]);
   return <ExchangeColumnContext.Provider value={node}>{children}</ExchangeColumnContext.Provider>;
 }
 
@@ -44,6 +51,14 @@ export function useExchangeColumn(): { node: HTMLElement | null; ref: (node: HTM
     setNode((current) => (current === next ? current : next));
   }, []);
   return { node, ref };
+}
+
+/** Context column, else the registered chat-column host (bot panel sheets). */
+function useExchangePortalHost(): HTMLElement | null {
+  const column = useContext(ExchangeColumnContext);
+  const [host, setHost] = useState<HTMLElement | null>(() => getExchangeColumnHost());
+  useEffect(() => subscribeExchangeColumnHost(() => setHost(getExchangeColumnHost())), []);
+  return column ?? host;
 }
 
 function inkColor(color: string | undefined): MausColor {
@@ -73,9 +88,36 @@ export function TranscriptDate({ at }: { at: number }) {
 
 /** `loadError`: the thread's lines could not be read; `onRetry` reads them
  * again. With no line to show, the sheet says so rather than staying blank
- * (#1502). */
-export function ExchangeSheet({ run, bots, showToolCalls, onClose, loadError = false, onRetry }: { run: ExchangeRun; bots?: readonly Bot[]; showToolCalls: boolean; onClose: () => void; loadError?: boolean; onRetry?: () => void }) {
-  const column = useContext(ExchangeColumnContext);
+ * (#1502). Routine runs reuse this sheet with an optional quiet meta line
+ * under the header and a footer of actions (Run again, Continue, …). */
+export function ExchangeSheet({
+  run,
+  bots,
+  showToolCalls,
+  onClose,
+  loadError = false,
+  onRetry,
+  meta,
+  footer,
+  closeLabel,
+  testId = "bot-exchange-sheet",
+  ariaLabel,
+}: {
+  run: ExchangeRun;
+  bots?: readonly Bot[];
+  showToolCalls: boolean;
+  onClose: () => void;
+  loadError?: boolean;
+  onRetry?: () => void;
+  /** Quiet status line under the header pill (routine runs). */
+  meta?: ReactNode;
+  /** Actions below Close Chat (routine runs: Run again, Continue, …). */
+  footer?: ReactNode;
+  closeLabel?: string;
+  testId?: string;
+  ariaLabel?: string;
+}) {
+  const column = useExchangePortalHost();
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
@@ -98,11 +140,11 @@ export function ExchangeSheet({ run, bots, showToolCalls, onClose, loadError = f
       className="absolute inset-0 z-20 flex min-h-0 flex-col bg-app"
       role="dialog"
       aria-modal="false"
-      aria-label={t("chat.exchange.open", { count: run.messages.length, name: run.party.name })}
-      data-testid="bot-exchange-sheet"
+      aria-label={ariaLabel ?? t("chat.exchange.open", { count: run.messages.length, name: run.party.name })}
+      data-testid={testId}
       onClick={onClose}
     >
-      <div className="flex justify-center pt-6" onClick={(event) => event.stopPropagation()}>
+      <div className="flex flex-col items-center gap-1.5 pt-6" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center gap-2 rounded-full bg-elevated px-3 py-1.5">
           {run.ends.map((party, index) => {
             const bot = avatarBot(party, bots);
@@ -115,6 +157,7 @@ export function ExchangeSheet({ run, bots, showToolCalls, onClose, loadError = f
             );
           })}
         </div>
+        {meta && <div data-exchange-meta className="max-w-[min(92%,36rem)] px-4 text-center text-[12px] text-ink-secondary">{meta}</div>}
       </div>
       {/* The same pane and column as a 1:1 chat (ChatView): the gutter, the
           960px column, Geist at 13px, the Markdown renderer and the bubble
@@ -141,11 +184,12 @@ export function ExchangeSheet({ run, bots, showToolCalls, onClose, loadError = f
           const newStretch = startsNewStretch(previous?.message.at, message.at);
           const stamp = newStretch && <TranscriptDate at={message.at} />;
           if (shape === "tool") {
+            const failed = message.tool?.ok === false;
             return (
               <div key={message.id} className="contents">
                 {stamp}
-                <div data-mid={message.id} className="ps-4">
-                  <ToolActivity tool={message.tool!} nameOf={botNames(bots)} />
+                <div data-mid={message.id} data-exchange-step={failed ? "error" : "ok"} className={cn("ps-4", failed && "rounded-lg bg-danger/10 py-1")}>
+                  <ToolActivity tool={message.tool!} nameOf={botNames(bots)} defaultOpen={failed} />
                 </div>
               </div>
             );
@@ -200,20 +244,22 @@ export function ExchangeSheet({ run, bots, showToolCalls, onClose, loadError = f
         })}
       </div>
       </div>
-      <div className="flex justify-center pb-8" onClick={(event) => event.stopPropagation()}>
+      <div className="flex flex-col items-center gap-3 pb-8" onClick={(event) => event.stopPropagation()}>
+        {footer}
         <button
           type="button"
           data-testid="bot-exchange-close"
           onClick={onClose}
           className="rounded-full bg-raised px-4 py-2 text-[13px] text-ink hover:bg-raised-hover"
         >
-          {t("chat.exchange.close")}
+          {closeLabel ?? t("chat.exchange.close")}
         </button>
       </div>
     </div>
   );
-  // A column host (ChatView, GroupView) is the containing block. Without one
-  // (unit render) the sheet stays in the chip, still not viewport-fixed.
+  // A column host (ChatView, GroupView, or the shared host) is the containing
+  // block. Without one (unit render) the sheet stays in place, still not
+  // viewport-fixed.
   return column ? createPortal(sheet, column) : sheet;
 }
 

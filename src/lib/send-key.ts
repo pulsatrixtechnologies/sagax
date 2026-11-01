@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import { activeLocale } from "./i18n";
-import { isMacPlatform } from "./keyboard-shortcuts";
+import { isMacPlatform } from "./is-mac-platform";
 
 export const SEND_KEY_KEY = "omb-send-key";
 

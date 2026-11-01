@@ -1,0 +1,835 @@
+[
+  {
+    "file": "w1338-dark-full.png",
+    "name": "w1338-dark-full",
+    "skin": "pulsatrix",
+    "width": 1338,
+    "height": 809,
+    "density": "comfortable",
+    "dom": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "layout": "own",
+      "density": "comfortable",
+      "savedDensity": "comfortable",
+      "aside": {
+        "x": 0,
+        "y": 0,
+        "width": 300,
+        "height": 809
+      },
+      "asideVisible": true,
+      "chat": {
+        "x": 300,
+        "y": 0,
+        "width": 1038,
+        "height": 809
+      },
+      "drawerButton": null,
+      "scrim": false,
+      "separator": true,
+      "compactToggle": false,
+      "account": {
+        "label": "Alex Gagnon",
+        "rect": {
+          "x": 10,
+          "y": 753,
+          "width": 237,
+          "height": 40
+        }
+      },
+      "apps": {
+        "label": "Capabilities",
+        "grid": true,
+        "rect": {
+          "x": 253,
+          "y": 755,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "botRows": [
+        "WatchThree advisories to",
+        "AtlasService Desk OpsAns",
+        "IrisDev OpsMemory tidied",
+        "MiloReviewWorking…",
+        "LinaLegalNo routine left"
+      ],
+      "railOffCentre": [],
+      "horizontalOverflow": false,
+      "guidLike": false
+    },
+    "errors": []
+  },
+  {
+    "file": "w1338-dark-saved-rail.png",
+    "name": "w1338-dark-saved-rail",
+    "skin": "pulsatrix",
+    "width": 1338,
+    "height": 809,
+    "density": "icons",
+    "dom": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "layout": "own",
+      "density": "icons",
+      "savedDensity": "icons",
+      "aside": {
+        "x": 0,
+        "y": 0,
+        "width": 80,
+        "height": 809
+      },
+      "asideVisible": true,
+      "chat": {
+        "x": 80,
+        "y": 0,
+        "width": 1258,
+        "height": 809
+      },
+      "drawerButton": null,
+      "scrim": false,
+      "separator": true,
+      "compactToggle": true,
+      "account": {
+        "label": "Alex Gagnon",
+        "rect": {
+          "x": 22,
+          "y": 759,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "apps": {
+        "label": "Capabilities",
+        "grid": true,
+        "rect": {
+          "x": 22,
+          "y": 721,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "botRows": [
+        "Watch",
+        "Atlas",
+        "Iris",
+        "Milo · Working",
+        "Lina"
+      ],
+      "railOffCentre": [],
+      "horizontalOverflow": false,
+      "guidLike": false
+    },
+    "errors": []
+  },
+  {
+    "file": "w700-dark-auto-rail.png",
+    "name": "w700-dark-auto-rail",
+    "skin": "pulsatrix",
+    "width": 700,
+    "height": 809,
+    "density": "comfortable",
+    "widenTo": 1338,
+    "dom": {
+      "viewport": {
+        "width": 700,
+        "height": 809
+      },
+      "layout": "auto-rail",
+      "density": "icons",
+      "savedDensity": "comfortable",
+      "aside": {
+        "x": 0,
+        "y": 0,
+        "width": 80,
+        "height": 809
+      },
+      "asideVisible": true,
+      "chat": {
+        "x": 80,
+        "y": 0,
+        "width": 620,
+        "height": 809
+      },
+      "drawerButton": null,
+      "scrim": false,
+      "separator": false,
+      "compactToggle": false,
+      "account": {
+        "label": "Alex Gagnon",
+        "rect": {
+          "x": 22,
+          "y": 759,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "apps": {
+        "label": "Capabilities",
+        "grid": true,
+        "rect": {
+          "x": 22,
+          "y": 721,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "botRows": [
+        "Watch",
+        "Atlas",
+        "Iris",
+        "Milo · Working",
+        "Lina"
+      ],
+      "railOffCentre": [],
+      "horizontalOverflow": false,
+      "guidLike": false
+    },
+    "widened": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "layout": "own",
+      "density": "comfortable",
+      "savedDensity": "comfortable",
+      "aside": {
+        "x": 0,
+        "y": 0,
+        "width": 300,
+        "height": 809
+      },
+      "asideVisible": true,
+      "chat": {
+        "x": 300,
+        "y": 0,
+        "width": 1038,
+        "height": 809
+      },
+      "drawerButton": null,
+      "scrim": false,
+      "separator": true,
+      "compactToggle": false,
+      "account": {
+        "label": "Alex Gagnon",
+        "rect": {
+          "x": 10,
+          "y": 753,
+          "width": 237,
+          "height": 40
+        }
+      },
+      "apps": {
+        "label": "Capabilities",
+        "grid": true,
+        "rect": {
+          "x": 253,
+          "y": 755,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "botRows": [
+        "WatchThree advisories to",
+        "AtlasService Desk OpsAns",
+        "IrisDev OpsMemory tidied",
+        "MiloReviewWorking…",
+        "LinaLegalNo routine left"
+      ],
+      "railOffCentre": [],
+      "horizontalOverflow": false,
+      "guidLike": false
+    },
+    "widenedFile": "w700-dark-auto-rail-widened-1338.png",
+    "errors": []
+  },
+  {
+    "file": "w390-dark-drawer-closed.png",
+    "name": "w390-dark-drawer-closed",
+    "skin": "pulsatrix",
+    "width": 390,
+    "height": 844,
+    "density": "comfortable",
+    "dom": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "layout": "drawer",
+      "density": "comfortable",
+      "savedDensity": "comfortable",
+      "aside": {
+        "x": -300,
+        "y": 0,
+        "width": 300,
+        "height": 844
+      },
+      "asideVisible": false,
+      "chat": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "drawerButton": {
+        "label": "Open bot list",
+        "expanded": "false"
+      },
+      "scrim": false,
+      "separator": true,
+      "compactToggle": false,
+      "account": {
+        "label": "Alex Gagnon",
+        "rect": {
+          "x": -290,
+          "y": 788,
+          "width": 237,
+          "height": 40
+        }
+      },
+      "apps": {
+        "label": "Capabilities",
+        "grid": true,
+        "rect": {
+          "x": -47,
+          "y": 790,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "botRows": [
+        "WatchThree advisories to",
+        "AtlasService Desk OpsAns",
+        "IrisDev OpsMemory tidied",
+        "MiloReviewWorking…",
+        "LinaLegalNo routine left"
+      ],
+      "railOffCentre": [],
+      "horizontalOverflow": false,
+      "guidLike": false
+    },
+    "errors": []
+  },
+  {
+    "file": "w390-dark-drawer-open.png",
+    "name": "w390-dark-drawer-open",
+    "skin": "pulsatrix",
+    "width": 390,
+    "height": 844,
+    "density": "comfortable",
+    "openDrawer": true,
+    "dom": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "layout": "drawer",
+      "density": "comfortable",
+      "savedDensity": "comfortable",
+      "aside": {
+        "x": 0,
+        "y": 0,
+        "width": 300,
+        "height": 844
+      },
+      "asideVisible": true,
+      "chat": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "drawerButton": {
+        "label": "Open bot list",
+        "expanded": "true"
+      },
+      "scrim": true,
+      "separator": true,
+      "compactToggle": false,
+      "account": {
+        "label": "Alex Gagnon",
+        "rect": {
+          "x": 10,
+          "y": 788,
+          "width": 237,
+          "height": 40
+        }
+      },
+      "apps": {
+        "label": "Capabilities",
+        "grid": true,
+        "rect": {
+          "x": 253,
+          "y": 790,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "botRows": [
+        "WatchThree advisories to",
+        "AtlasService Desk OpsAns",
+        "IrisDev OpsMemory tidied",
+        "MiloReviewWorking…",
+        "LinaLegalNo routine left"
+      ],
+      "railOffCentre": [],
+      "horizontalOverflow": false,
+      "guidLike": false
+    },
+    "errors": []
+  },
+  {
+    "file": "w1338-light-full.png",
+    "name": "w1338-light-full",
+    "skin": "daylight",
+    "width": 1338,
+    "height": 809,
+    "density": "comfortable",
+    "dom": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "layout": "own",
+      "density": "comfortable",
+      "savedDensity": "comfortable",
+      "aside": {
+        "x": 0,
+        "y": 0,
+        "width": 300,
+        "height": 809
+      },
+      "asideVisible": true,
+      "chat": {
+        "x": 300,
+        "y": 0,
+        "width": 1038,
+        "height": 809
+      },
+      "drawerButton": null,
+      "scrim": false,
+      "separator": true,
+      "compactToggle": false,
+      "account": {
+        "label": "Alex Gagnon",
+        "rect": {
+          "x": 10,
+          "y": 753,
+          "width": 237,
+          "height": 40
+        }
+      },
+      "apps": {
+        "label": "Capabilities",
+        "grid": true,
+        "rect": {
+          "x": 253,
+          "y": 755,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "botRows": [
+        "WatchThree advisories to",
+        "AtlasService Desk OpsAns",
+        "IrisDev OpsMemory tidied",
+        "MiloReviewWorking…",
+        "LinaLegalNo routine left"
+      ],
+      "railOffCentre": [],
+      "horizontalOverflow": false,
+      "guidLike": false
+    },
+    "errors": []
+  },
+  {
+    "file": "w1338-light-saved-rail.png",
+    "name": "w1338-light-saved-rail",
+    "skin": "daylight",
+    "width": 1338,
+    "height": 809,
+    "density": "icons",
+    "dom": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "layout": "own",
+      "density": "icons",
+      "savedDensity": "icons",
+      "aside": {
+        "x": 0,
+        "y": 0,
+        "width": 80,
+        "height": 809
+      },
+      "asideVisible": true,
+      "chat": {
+        "x": 80,
+        "y": 0,
+        "width": 1258,
+        "height": 809
+      },
+      "drawerButton": null,
+      "scrim": false,
+      "separator": true,
+      "compactToggle": true,
+      "account": {
+        "label": "Alex Gagnon",
+        "rect": {
+          "x": 22,
+          "y": 759,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "apps": {
+        "label": "Capabilities",
+        "grid": true,
+        "rect": {
+          "x": 22,
+          "y": 721,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "botRows": [
+        "Watch",
+        "Atlas",
+        "Iris",
+        "Milo · Working",
+        "Lina"
+      ],
+      "railOffCentre": [],
+      "horizontalOverflow": false,
+      "guidLike": false
+    },
+    "errors": []
+  },
+  {
+    "file": "w700-light-auto-rail.png",
+    "name": "w700-light-auto-rail",
+    "skin": "daylight",
+    "width": 700,
+    "height": 809,
+    "density": "comfortable",
+    "widenTo": 1338,
+    "dom": {
+      "viewport": {
+        "width": 700,
+        "height": 809
+      },
+      "layout": "auto-rail",
+      "density": "icons",
+      "savedDensity": "comfortable",
+      "aside": {
+        "x": 0,
+        "y": 0,
+        "width": 80,
+        "height": 809
+      },
+      "asideVisible": true,
+      "chat": {
+        "x": 80,
+        "y": 0,
+        "width": 620,
+        "height": 809
+      },
+      "drawerButton": null,
+      "scrim": false,
+      "separator": false,
+      "compactToggle": false,
+      "account": {
+        "label": "Alex Gagnon",
+        "rect": {
+          "x": 22,
+          "y": 759,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "apps": {
+        "label": "Capabilities",
+        "grid": true,
+        "rect": {
+          "x": 22,
+          "y": 721,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "botRows": [
+        "Watch",
+        "Atlas",
+        "Iris",
+        "Milo · Working",
+        "Lina"
+      ],
+      "railOffCentre": [],
+      "horizontalOverflow": false,
+      "guidLike": false
+    },
+    "widened": {
+      "viewport": {
+        "width": 1338,
+        "height": 809
+      },
+      "layout": "own",
+      "density": "comfortable",
+      "savedDensity": "comfortable",
+      "aside": {
+        "x": 0,
+        "y": 0,
+        "width": 300,
+        "height": 809
+      },
+      "asideVisible": true,
+      "chat": {
+        "x": 300,
+        "y": 0,
+        "width": 1038,
+        "height": 809
+      },
+      "drawerButton": null,
+      "scrim": false,
+      "separator": true,
+      "compactToggle": false,
+      "account": {
+        "label": "Alex Gagnon",
+        "rect": {
+          "x": 10,
+          "y": 753,
+          "width": 237,
+          "height": 40
+        }
+      },
+      "apps": {
+        "label": "Capabilities",
+        "grid": true,
+        "rect": {
+          "x": 253,
+          "y": 755,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "botRows": [
+        "WatchThree advisories to",
+        "AtlasService Desk OpsAns",
+        "IrisDev OpsMemory tidied",
+        "MiloReviewWorking…",
+        "LinaLegalNo routine left"
+      ],
+      "railOffCentre": [],
+      "horizontalOverflow": false,
+      "guidLike": false
+    },
+    "widenedFile": "w700-light-auto-rail-widened-1338.png",
+    "errors": []
+  },
+  {
+    "file": "w390-light-drawer-closed.png",
+    "name": "w390-light-drawer-closed",
+    "skin": "daylight",
+    "width": 390,
+    "height": 844,
+    "density": "comfortable",
+    "dom": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "layout": "drawer",
+      "density": "comfortable",
+      "savedDensity": "comfortable",
+      "aside": {
+        "x": -300,
+        "y": 0,
+        "width": 300,
+        "height": 844
+      },
+      "asideVisible": false,
+      "chat": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "drawerButton": {
+        "label": "Open bot list",
+        "expanded": "false"
+      },
+      "scrim": false,
+      "separator": true,
+      "compactToggle": false,
+      "account": {
+        "label": "Alex Gagnon",
+        "rect": {
+          "x": -290,
+          "y": 788,
+          "width": 237,
+          "height": 40
+        }
+      },
+      "apps": {
+        "label": "Capabilities",
+        "grid": true,
+        "rect": {
+          "x": -47,
+          "y": 790,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "botRows": [
+        "WatchThree advisories to",
+        "AtlasService Desk OpsAns",
+        "IrisDev OpsMemory tidied",
+        "MiloReviewWorking…",
+        "LinaLegalNo routine left"
+      ],
+      "railOffCentre": [],
+      "horizontalOverflow": false,
+      "guidLike": false
+    },
+    "errors": []
+  },
+  {
+    "file": "w390-light-drawer-open.png",
+    "name": "w390-light-drawer-open",
+    "skin": "daylight",
+    "width": 390,
+    "height": 844,
+    "density": "comfortable",
+    "openDrawer": true,
+    "dom": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "layout": "drawer",
+      "density": "comfortable",
+      "savedDensity": "comfortable",
+      "aside": {
+        "x": 0,
+        "y": 0,
+        "width": 300,
+        "height": 844
+      },
+      "asideVisible": true,
+      "chat": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "drawerButton": {
+        "label": "Open bot list",
+        "expanded": "true"
+      },
+      "scrim": true,
+      "separator": true,
+      "compactToggle": false,
+      "account": {
+        "label": "Alex Gagnon",
+        "rect": {
+          "x": 10,
+          "y": 788,
+          "width": 237,
+          "height": 40
+        }
+      },
+      "apps": {
+        "label": "Capabilities",
+        "grid": true,
+        "rect": {
+          "x": 253,
+          "y": 790,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "botRows": [
+        "WatchThree advisories to",
+        "AtlasService Desk OpsAns",
+        "IrisDev OpsMemory tidied",
+        "MiloReviewWorking…",
+        "LinaLegalNo routine left"
+      ],
+      "railOffCentre": [],
+      "horizontalOverflow": false,
+      "guidLike": false
+    },
+    "errors": []
+  },
+  {
+    "file": "w700-dark-auto-rail-fr.png",
+    "name": "w700-dark-auto-rail-fr",
+    "skin": "pulsatrix",
+    "width": 700,
+    "height": 809,
+    "density": "comfortable",
+    "lang": "fr",
+    "dom": {
+      "viewport": {
+        "width": 700,
+        "height": 809
+      },
+      "layout": "auto-rail",
+      "density": "icons",
+      "savedDensity": "comfortable",
+      "aside": {
+        "x": 0,
+        "y": 0,
+        "width": 80,
+        "height": 809
+      },
+      "asideVisible": true,
+      "chat": {
+        "x": 80,
+        "y": 0,
+        "width": 620,
+        "height": 809
+      },
+      "drawerButton": null,
+      "scrim": false,
+      "separator": false,
+      "compactToggle": false,
+      "account": {
+        "label": "Alex Gagnon",
+        "rect": {
+          "x": 22,
+          "y": 759,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "apps": {
+        "label": "Capacités",
+        "grid": true,
+        "rect": {
+          "x": 22,
+          "y": 721,
+          "width": 36,
+          "height": 36
+        }
+      },
+      "botRows": [
+        "Veille",
+        "Atlas",
+        "Iris",
+        "Milo · Au travail",
+        "Lina"
+      ],
+      "railOffCentre": [],
+      "horizontalOverflow": false,
+      "guidLike": false
+    },
+    "errors": []
+  }
+]

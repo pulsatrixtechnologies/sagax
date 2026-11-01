@@ -6,6 +6,14 @@ import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
+/** One programmed answer for the next refresh_token grant. `"ok"` issues
+ * tokens as usual; `{ ok: true, delayMs }` does the same after a pause; a
+ * status sends that HTTP answer (and optional body). */
+export type FakeRefreshAnswer =
+  | "ok"
+  | { ok: true; delayMs?: number }
+  | { status: number; body?: Record<string, unknown>; delayMs?: number };
+
 export interface FakeOAuthMcpOptions {
   /** where the 401 points: the WWW-Authenticate header, or only well-known */
   metadataHint?: "header" | "wellknown";
@@ -21,6 +29,9 @@ export interface FakeOAuthMcpOptions {
   foreignResource?: boolean;
   /** leave S256 out of code_challenge_methods_supported */
   noS256?: boolean;
+  /** Queued answers for refresh_token grants (consumed in order). After the
+   * queue is empty, behaviour falls back to refuseRefresh / valid refresh. */
+  refreshAnswers?: FakeRefreshAnswer[];
 }
 
 export interface FakeOAuthMcp {
@@ -32,6 +43,8 @@ export interface FakeOAuthMcp {
   revoked: string[];
   mcpAuthorizations: string[];
   validAccess: Set<string>;
+  /** Queue more programmed refresh answers after start. */
+  queueRefresh(answer: FakeRefreshAnswer): void;
   /** What the user's browser does at the authorization endpoint: consent,
    * then follow the redirect. Returns the callback URL with code and state. */
   authorize(authorizationUrl: string): Promise<URL>;
@@ -56,6 +69,7 @@ export async function startFakeOAuthMcp(options: FakeOAuthMcpOptions = {}): Prom
   const validAccess = new Set<string>();
   const validRefresh = new Set<string>();
   const codes = new Map<string, { challenge: string; redirectUri: string; clientId: string; resource: string }>();
+  const refreshAnswers: FakeRefreshAnswer[] = [...(options.refreshAnswers ?? [])];
   let counter = 0;
   let base = "";
 
@@ -152,9 +166,18 @@ export async function startFakeOAuthMcp(options: FakeOAuthMcpOptions = {}): Prom
           return;
         }
         if (form.grant_type === "refresh_token") {
+          const programmed = refreshAnswers.shift();
+          if (programmed && typeof programmed === "object" && "status" in programmed) {
+            if (programmed.delayMs) await new Promise((resolve) => setTimeout(resolve, programmed.delayMs));
+            send(programmed.status, programmed.body ?? { error: "server_error" });
+            return;
+          }
           if (options.refuseRefresh || !validRefresh.has(form.refresh_token ?? "")) {
             send(400, { error: "invalid_grant", error_description: "refresh token revoked" });
             return;
+          }
+          if (programmed && typeof programmed === "object" && programmed.ok && programmed.delayMs) {
+            await new Promise((resolve) => setTimeout(resolve, programmed.delayMs));
           }
           validRefresh.delete(form.refresh_token!);
           issue();
@@ -187,6 +210,9 @@ export async function startFakeOAuthMcp(options: FakeOAuthMcpOptions = {}): Prom
     revoked,
     mcpAuthorizations,
     validAccess,
+    queueRefresh(answer: FakeRefreshAnswer) {
+      refreshAnswers.push(answer);
+    },
     async authorize(authorizationUrl: string) {
       const response = await fetch(authorizationUrl, { redirect: "manual" });
       const location = response.headers.get("location");

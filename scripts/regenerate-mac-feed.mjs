@@ -26,6 +26,7 @@ const releaseDir = dirname(feedPath);
 
 const sha512 = (file) => createHash("sha512").update(readFileSync(file)).digest("base64");
 
+// latest-mac.yml must exist here and be published with the release.
 const original = readFileSync(feedPath, "utf8");
 const lines = original.split("\n");
 

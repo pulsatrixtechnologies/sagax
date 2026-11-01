@@ -18,11 +18,11 @@ await loadLocale(params.get("lang") ?? "en");
 
 // ?level=mismatch (2026-10-28): the bot is on Full access while its open
 // conversation runs at Ask (an engine change asked again there), with
-// Proactive on "Read on its own, card to act"
+// Proactive on
 const mismatch = params.get("level") === "mismatch";
 const bot = {
   id: "cryptic", name: "Cryptic", approvalMode: "ask", approvePeerComms: true, emailDrafts: true, allowedRecipients: [], threadId: "t1",
-  ...(mismatch ? { approvalSetting: "full", approvalApplied: { mode: "ask", reason: "engine" }, proactiveMode: "read-auto" } : {}),
+  ...(mismatch ? { approvalSetting: "full", approvalApplied: { mode: "ask", reason: "engine" }, proactiveMode: "proactive" } : {}),
 } as unknown as Bot;
 const derived = {
   patch: () => {}, engine: undefined, canCoordinate: true, approvalMode: mismatch ? "full" : "ask",

@@ -199,9 +199,19 @@ public enum ConnectionAdvice {
         host: String,
         tryingNext next: String? = nil
     ) -> String {
+        // A short deploy restart (502/503/504, no other route): calm line,
+        // never an error toast (docs/zero-downtime-deploy.md).
+        if next == nil, (502...504).contains(code) {
+            return String(localized: "Reconnecting…")
+        }
         let fallback = next.map { String(localized: " Trying \($0) next.") } ?? ""
         return String(localized: "The route through \(host) is temporarily unavailable (HTTP \(String(code))).") +
             fallback + String(localized: " The app keeps retrying automatically.")
+    }
+
+    /// Gateway statuses that a deploy restart produces at the edge.
+    public static func isDeployOutageStatus(_ code: Int) -> Bool {
+        (502...504).contains(code)
     }
 }
 

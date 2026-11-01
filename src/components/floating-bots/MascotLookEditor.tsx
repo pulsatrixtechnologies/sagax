@@ -20,7 +20,8 @@
 //       registry (mascots.tsx) in the bot's color. A locked character sits
 //       greyed with its padlock and achievement (Trombi excepted: an easter
 //       egg, out until found). The arrow keys move across the tiles.
-//     Shape: the 32 shapes (Shapes only).
+//     Shape: the catalog shapes plus object silhouettes (Shapes only), with
+//       import / export / generate for portable definitions.
 //     Color: the palettes as chips (Vivid, Pastel, Deep, Neon, Neutral, Clay
 //       for the characters that take it), then that palette's colors (not
 //       for Trombi, who has none).
@@ -60,6 +61,7 @@ import { colorGroupsFor, colorTabFor, colorTabs, nextTab, skinTabFor, skinTierTa
 import { MASCOTS, SHAPE_CHOICES, type CompleteLook, type MascotDefinition } from "./mascots";
 import { characterMoves, type OwlMove } from "./moves";
 import { filterWardrobe, MASCOT_FAMILY_LABEL, wardrobeFilters, wardrobeShelves, wardrobeStep, type WardrobeFilter, type WardrobeShelf } from "./wardrobe";
+import { ShapeAvatarPanel } from "./ShapeAvatarPanel";
 
 export interface MascotLookPatch {
   color?: MausColor;
@@ -68,7 +70,7 @@ export interface MascotLookPatch {
 }
 
 export interface MascotLookEditorProps {
-  bot: { name?: string; color: MausColor; mascotSkin?: MascotSkinId | null; mascotLook?: MascotLook | null };
+  bot: { id?: string; name?: string; color: MausColor; mascotSkin?: MascotSkinId | null; mascotLook?: MascotLook | null };
   disabled?: boolean;
   onPatch: (patch: MascotLookPatch) => void;
   /** The owl's wing moves also play on the bot's avatars across the app. */
@@ -122,6 +124,14 @@ export const SHAPE_LABEL = {
   nibble: "mascot.shape.nibble",
   shield: "mascot.shape.shield",
   bubble: "mascot.shape.bubble",
+  pad: "mascot.shape.pad",
+  cup: "mascot.shape.cup",
+  bulb: "mascot.shape.bulb",
+  say: "mascot.shape.say",
+  sprout: "mascot.shape.sprout",
+  tin: "mascot.shape.tin",
+  tome: "mascot.shape.tome",
+  ship: "mascot.shape.ship",
 } satisfies Record<MascotShape, LocaleKey>;
 
 export { SHAPE_MOVE_LABEL } from "./moves";
@@ -666,7 +676,9 @@ export default function MascotLookEditor({ bot, disabled, onPatch: savePatch, on
   // a pumpkin is orange by default: picking it takes the orange where the skin paints the bot's color
   const pickShape = (shape: MascotShape) =>
     onPatch({
-      mascotLook: { ...look, shape },
+      // Drop a custom avatarDef when the person picks a catalog body, so the
+      // chosen silhouette is what they see (object presets keep their own def).
+      mascotLook: { ...look, shape, avatarDef: undefined },
       ...(shape === "pumpkin" && shape !== look.shape && SHAPE_SKINS_IN_BOT_COLOR.has(look.skins.shape) ? { color: PUMPKIN_COLOR } : {}),
     });
 
@@ -1072,6 +1084,16 @@ export default function MascotLookEditor({ bot, disabled, onPatch: savePatch, on
                 <span className="w-full truncate text-center text-[11px] leading-4 text-ink-secondary" aria-hidden="true">{t(SHAPE_LABEL[shape])}</span>
               </button>
             ))}
+            <div className="col-span-full">
+              <ShapeAvatarPanel
+                look={look}
+                color={bot.color}
+                botId={bot.id}
+                disabled={optionsOff}
+                onApply={(next) => onPatch({ mascotLook: next })}
+                onColor={(next) => onPatch({ color: next })}
+              />
+            </div>
           </div>
         )}
         {tab === "color" && (

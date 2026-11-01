@@ -30,8 +30,8 @@ public final class DemoServer: @unchecked Sendable {
 
     let lock = NSLock()
     private let now: Date
-    private var bots: [Bot]
-    private var rooms: [Room]
+    var bots: [Bot]
+    var rooms: [Room]
     private var routines: [Routine]
     private let sections: [String]
     private var runs: [RoutineRun]
@@ -55,6 +55,14 @@ public final class DemoServer: @unchecked Sendable {
     private var handled: [String] = []
     /// Atlas's made-up page (DemoPages.swift), in memory only.
     var demoPage: DemoPage
+    /// Synthetic Library files for demo threads (DemoFiles.swift).
+    var threadFiles: [DemoThreadFile] = []
+    /// In-memory resumable / one-shot upload sessions (DemoFiles.swift).
+    var uploads: [String: DemoUploadSession] = [:]
+    /// Loopback HTTP fixture (DemoListen.swift).
+    var listener: Int32?
+    var listenerURL: URL?
+    var listenerQueue: DispatchQueue?
 
     public init(now: Date = Date(), language: DemoLanguage = .english, chunkDelay: TimeInterval = 0.06, calendar: Calendar = .current) {
         self.now = now
@@ -73,6 +81,7 @@ public final class DemoServer: @unchecked Sendable {
             id: Self.connectionID, name: language.pick("Sagax demo", "Démo Sagax"), host: Self.host, port: 443,
             serverEnvironmentId: "demo", serverScopes: ["client"]
         )
+        seedDemoFiles(language: language, now: now)
     }
 
     /// The fleet the app hydrates from on entering the demo.
@@ -95,6 +104,7 @@ public final class DemoServer: @unchecked Sendable {
     /// Stop playing replies (leaving the demo).
     public func stop() {
         lock.lock(); stopped = true; lock.unlock()
+        stopListening()
         DemoURLProtocol.unregister(self)
     }
 
@@ -108,15 +118,24 @@ public final class DemoServer: @unchecked Sendable {
     public struct Response: Sendable {
         public var status: Int
         public var body: Data
+        public var contentType: String
+
+        public init(status: Int, body: Data, contentType: String = "application/json") {
+            self.status = status
+            self.body = body
+            self.contentType = contentType
+        }
     }
 
     static let unavailable = "Not available in the demo. Connect a computer or sign in to an organization to use this."
     static let unavailableFrench = "Pas disponible dans la démo. Connecte un ordinateur ou connecte-toi à une organisation pour l'utiliser."
 
-    /// Answer one request. Public for tests.
-    public func respond(method: String, path: String, body: Data?) -> Response {
+    /// Answer one request. Public for tests. Query and Content-Type matter for
+    /// the resumable upload contract (`phase`, `uploadId`, `total`, `offset`).
+    public func respond(method: String, path: String, body: Data?, query: [URLQueryItem] = [], contentType: String? = nil) -> Response {
         lock.lock()
-        handled.append("\(method) \(path)")
+        let queryMark = query.isEmpty ? "" : "?\(query.map { "\($0.name)=\($0.value ?? "")" }.joined(separator: "&"))"
+        handled.append("\(method) \(path)\(queryMark)")
         lock.unlock()
         let parts = path.split(separator: "/").map(String.init)
         let json = (body.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]) ?? [:]
@@ -158,6 +177,13 @@ public final class DemoServer: @unchecked Sendable {
         case ("POST", ["api", "bots"]) where parts.count == 4 && (parts[3] == "read" || parts[3] == "always-allow"),
              ("POST", ["api", "groups"]) where parts.count == 4 && parts[3] == "read":
             return .init(status: 200, body: Data("{}".utf8))
+        case (_, ["api", "threads"]) where parts.count >= 4 && parts[3] == "files",
+             (_, ["api", "bots"]) where parts.count >= 4 && ["files", "artifacts", "links"].contains(parts[3]),
+             ("POST", ["api", "files"]) where parts.count == 2,
+             ("POST", ["api", "attachments"]) where parts.count == 2,
+             ("GET", ["pages", "preview"]),
+             ("GET", ["pages", "preview-frame"]):
+            return libraryFiles(method: method, parts: parts, query: query, body: body, contentType: contentType)
         default:
             return refusal(status: method == "GET" ? 404 : 403)
         }
@@ -312,6 +338,8 @@ public final class DemoServer: @unchecked Sendable {
         rooms = []
         routines = []
         runs = []
+        threadFiles = []
+        uploads = [:]
         accountDeleted = true
         lock.unlock()
         let body = (try? JSONSerialization.data(withJSONObject: [
@@ -525,8 +553,16 @@ public final class DemoURLProtocol: URLProtocol {
             return
         }
         let body = request.httpBody ?? request.httpBodyStream.map(Self.read)
-        let answer = server.respond(method: request.httpMethod ?? "GET", path: url.path, body: body)
-        let response = HTTPURLResponse(url: url, statusCode: answer.status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let contentType = request.value(forHTTPHeaderField: "Content-Type")
+        let answer = server.respond(
+            method: request.httpMethod ?? "GET", path: url.path, body: body,
+            query: query, contentType: contentType
+        )
+        let response = HTTPURLResponse(
+            url: url, statusCode: answer.status, httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": answer.contentType]
+        )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: answer.body)
         client?.urlProtocolDidFinishLoading(self)

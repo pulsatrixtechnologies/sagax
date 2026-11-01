@@ -271,6 +271,8 @@ const USE_WRITES = new Set([
   "POST /api/bots/{bot}/messages/{message}/edit",
   "POST /api/bots/{bot}/read",
   "POST /api/bots/{bot}/warm",
+  // splits text into speakable sentences for a voice turn; stores nothing
+  "POST /api/bots/{bot}/voice/prepare",
   "POST /api/bots/{bot}/interrupt",
   "POST /api/bots/{bot}/tasks",
   "POST /api/bots/{bot}/respond",

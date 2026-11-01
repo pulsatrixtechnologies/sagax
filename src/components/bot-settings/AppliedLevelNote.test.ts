@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { AppliedLevelNote, appliedLevelLine, proactiveLevelHint } from "./AppliedLevelNote";
+import { AppliedLevelNote, appliedLevelLine } from "./AppliedLevelNote";
 
 describe("AppliedLevelNote", () => {
   it("says the real level and why, and offers the way back where there is one", () => {
@@ -20,14 +20,5 @@ describe("AppliedLevelNote", () => {
 
   it("shows nothing when the conversation runs the setting", () => {
     expect(renderToStaticMarkup(createElement(AppliedLevelNote, { setting: "full", applied: { mode: "full", reason: "thread" } }))).toBe("");
-  });
-});
-
-describe("Proactive beside the level", () => {
-  it("at Full, says read-auto adds no card and propose stays stricter; otherwise the usual hint", () => {
-    expect(proactiveLevelHint("read-auto", "full")).toContain("no card of its own");
-    expect(proactiveLevelHint("propose", "full")).toContain("stricter than Full access");
-    expect(proactiveLevelHint("read-auto", "auto")).toBeUndefined();
-    expect(proactiveLevelHint("follow-rules", "full")).toBeUndefined();
   });
 });

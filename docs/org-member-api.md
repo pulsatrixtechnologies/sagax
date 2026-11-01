@@ -44,8 +44,9 @@ Code: `server/org-member-routes.ts`, wired in `server/index.ts`
 |---|---|---|
 | `clients.botsRead` | on | list their bots, read their conversations, and read rules, documents, memory and connector names of bots they own |
 | `clients.botsMessage` | on | send a message and wait for the answer |
-| `clients.routinesRun` | off | run a routine now, read a run |
-| `clients.routinesRead` | off | list their own routines and read one routine's full instructions |
+| `clients.routinesRun` | on (always) | run a routine now, read a run |
+| `clients.routinesRead` | on (always) | list their own routines and read one routine's full instructions |
+| `clients.routinesWrite` | on (always) | enable, disable, rename, and edit schedule or instructions of routines they own |
 | `clients.approvalsAnswer` | off (the bot's owner holds it for their own bots) | allow or deny a card |
 | `clients.peopleNudge` | off | nudge a person |
 | `clients.agentsCreate` | off | create a temporary agent with `agents/create_agent`, delete one with `agents/delete_agent` |
@@ -65,6 +66,7 @@ any other shape, so the plan's `clients.bots.read` is written
 | `GET threads/{id}/stream?anchor&wait` | `clients.botsRead` | watch a running turn, streamed (lot C.3) |
 | `GET routines` | `clients.routinesRead` | the person's own routines |
 | `GET routines/{id}` | `clients.routinesRead` | one routine, full instructions |
+| `PATCH routines/{id}` | `clients.routinesWrite` | enable/disable, rename, edit schedule or instructions |
 | `POST routines/{id}/run` | `clients.routinesRun` | run now |
 | `GET routines/runs/{id}` | `clients.routinesRun` | one run |
 | `GET bots/{id}/rules` | `clients.botsRead` | rules of a bot the person owns |
@@ -265,8 +267,42 @@ audited.
 Text on every one of these routes is passed through the same secret mask as
 a routine's instructions.
 
-Follow-ups, not in this API yet: proposing a routine, routine actions other
-than run now, and an emergency pause.
+### `PATCH routines/{id}`
+
+Change one of the person's own routines. Permission `clients.routinesWrite`.
+Body is a partial object; send at least one field:
+
+```json
+{
+  "enabled": false,
+  "name": "Evening brief",
+  "instructions": "Summarize the close of day.",
+  "schedule": { "type": "cron", "expression": "0 18 * * 1-5", "timeZone": "America/Toronto" }
+}
+```
+
+- `enabled`: turn the routine on or off (pause / resume).
+- `name`: 1 to 80 characters.
+- `instructions`: 1 to 20,000 characters (maps to Sagax `prompt`).
+- `schedule`: same shapes as Sagax (`cron` with `expression` and usually
+  `timeZone`, `daily` with `time` and `weekdays` for a weekly pattern,
+  `interval` with `everyMinutes`, plus `once`, `webhook`, `event`). Sagax
+  validates the schedule; a bad one returns Sagax's refusal.
+
+Unknown fields are refused (`400`). Another person's routine is `404`
+before Sagax is called (an admin's view included). The write is the person
+acting as themselves through `performAsMember` (the same path as the
+Automations editor). It does not open a bot Ask card: Ask and Auto still
+apply only when a bot uses `propose_routine` / `propose_routine_action`.
+One activity row, action `client.routine_update`, `after.fields` naming the
+keys changed (never the instructions text). Answer:
+`{ routine }` in the detail shape (with `instructions`).
+
+Perspicax exposes this as `sagax_routine_update` (MCP permission
+`routines:update`).
+
+Follow-ups, not in this API yet: proposing a new routine from the member
+API, delete, and an emergency pause of every routine at once.
 
 ### `POST routines/{id}/run`, `GET routines/runs/{id}`
 

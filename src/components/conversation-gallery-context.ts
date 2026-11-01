@@ -5,7 +5,7 @@
 // provider component so AttachmentPreview can use it without an import cycle.
 import { createContext, useContext } from "react";
 
-import type { PreviewImage } from "./AttachmentPreview";
+import type { PreviewImage } from "./preview-image";
 
 export interface GalleryEntry {
   element: Element | null;

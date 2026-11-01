@@ -178,4 +178,16 @@ describe("RoutineRunCard", () => {
     expect(plain).not.toContain("data-routine-resume");
     expect(renderToStaticMarkup(createElement(RoutineRunCard, { message: message("failed", { autoPausedAfter: 1 }) }))).toContain("Paused after a failure");
   });
+  it("says a run completed with problems, with the problems under the report (2026-11-01)", () => {
+    const html = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("completed", { summary: "Checked 10 invoices.", problems: "crm_login failed 2 times" }) }));
+    expect(html).toContain("Checked 10 invoices.");
+    expect(html).toContain("data-routine-problems");
+    expect(html).toContain("crm_login failed 2 times");
+    expect(html).toContain("Completed with problems");
+  });
+
+  it("says why a queued run has not started (2026-11-01)", () => {
+    const html = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("queued", { deferredAt: 1, attention: "Waits for the previous run of this routine to finish" }) }));
+    expect(html).toContain("Waits for the previous run of this routine to finish");
+  });
 });

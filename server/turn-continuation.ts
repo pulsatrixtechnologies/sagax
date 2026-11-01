@@ -17,7 +17,8 @@ import type { Store } from "./store.ts";
  * re-send, and its result would never reach the requester.
  *
  * The handoff is written by the driver that has the full transcript in hand;
- * the continuation is driven by a bus subscriber in the harness (index.ts).
+ * the continuation is driven by a bus subscriber in the harness (index.ts) and
+ * runs on the job runtime as the bot's one-way notice to itself.
  */
 
 /** Resolve the handoff directory the same way the server resolves its data
@@ -119,7 +120,10 @@ export function classifyContinuable(_stopReason: string | null | undefined, fail
 
 export interface CapContinuationDeps {
   store: Pick<Store, "botByThread" | "taskByThread" | "createTask" | "appendMessage">;
-  startTurn: (botId: string, text: string, opts?: { threadId?: string; unattended?: boolean }) => Promise<unknown>;
+  /** Hand the continuation to the job runtime (docs/runtime-contract.md):
+   * a one-way notice of the bot to itself in the new thread, admitted,
+   * restarted and stopped like any other teammate work. Throws a refusal. */
+  dispatch: (botId: string, fromThreadId: string, threadId: string, text: string) => void | Promise<void>;
   /** Whether the turn in flight on this thread owes its result to a
    * requester (a coordinated assignment, a delegation that reports back). */
   reportsToRequester: (threadId: string) => boolean;
@@ -131,7 +135,9 @@ const MAX_PER_BOT_PER_HOUR = 5;
 const WINDOW_MS = 3600e3;
 
 /** Bus subscriber: on `cap.exhausted`, create a `Continue:` task on the same
- * bot and start a turn seeded with the handoff. Bounded — at most five
+ * bot and hand the job runtime a turn there seeded with the handoff (lot 3:
+ * no turn starts outside the runtime, so a restart reruns a cut continuation
+ * once and nothing runs it twice). Bounded — at most five
  * continuations per bot per hour, never a continuation of a continuation, and
  * never the same source thread twice. A failure escalates with an activity
  * message carrying the handoff path instead of silently recursing. A turn
@@ -172,7 +178,7 @@ export function makeCapContinuationSubscriber(deps: CapContinuationDeps): (event
       rec.continued.add(event.threadId);
       const prompt = `[Auto-continuation] The task "${deadTask.title}" stopped because its turn ended without a final answer (${event.reason}). A handoff file with the full state was written to ${event.handoffPath}. Read that file first, re-verify the current state of anything it mentions, then continue the task from where it stopped. Do not redo completed work. If you cannot finish, append your progress to the handoff file and say exactly what is blocking.`;
       try {
-        await deps.startTurn(bot.id, prompt, { threadId: contTask.threadId, unattended: true });
+        await deps.dispatch(bot.id, event.threadId, contTask.threadId, prompt);
         deps.store.appendMessage(event.threadId, {
           role: "bot", kind: "activity",
           tool: { name: `Turn ended without a final answer — work continues in a new task (handoff: ${event.handoffPath})`, ok: true },

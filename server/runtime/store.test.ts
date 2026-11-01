@@ -70,6 +70,56 @@ describe("runtime store", () => {
     expect(store.all({ rootId: "a", nonTerminal: true }).map(x => x.id)).toEqual(["a1"]);
   });
 
+  it("childrenOfAssignee matches the activityChildren filter over all()", () => {
+    const store = open();
+    const chief = assignment("chief-root", {
+      status: "running", startedAt: 1_000,
+      assignee: { botId: "chief", destination: { kind: "standing_thread", threadId: "chief-chat" } },
+    });
+    const other = assignment("other-root", {
+      status: "running", startedAt: 1_000, createdAt: 2_000,
+      assignee: { botId: "other", destination: { kind: "standing_thread", threadId: "other-chat" } },
+      requester: { kind: "person", threadId: "other-chat" },
+    });
+    store.insert(chief, { kind: "enqueued", at: 1_000 });
+    store.insert(other, { kind: "enqueued", at: 2_000 });
+    store.insert(child("direct-early", chief, {
+      createdAt: 3_000,
+      assignee: { botId: "builder", destination: { kind: "work_thread", threadId: "builder-early" } },
+    }), { kind: "enqueued", at: 3_000 });
+    store.insert(child("direct-late", chief, {
+      createdAt: 4_000,
+      assignee: { botId: "reviewer", destination: { kind: "work_thread", threadId: "reviewer-late" } },
+    }), { kind: "enqueued", at: 4_000 });
+    store.insert(child("room-child", chief, {
+      createdAt: 5_000,
+      assignee: { botId: "builder", destination: { kind: "room_thread", threadId: "room-1", groupId: "g1" } },
+    }), { kind: "enqueued", at: 5_000 });
+    store.insert(child("other-child", other, {
+      createdAt: 6_000,
+      assignee: { botId: "builder", destination: { kind: "work_thread", threadId: "builder-other" } },
+    }), { kind: "enqueued", at: 6_000 });
+
+    const viaIndex = store.childrenOfAssignee("chief", "chief-chat").map(x => x.id);
+    expect(viaIndex).toEqual(["direct-early", "direct-late"]);
+
+    // Same membership the old activityChildren scan produced: every child
+    // whose parent assignee is (botId, threadId) and who has no groupId.
+    const byId = new Map(store.all().map(row => [row.id, row]));
+    const viaScan = store.all()
+      .filter(node => {
+        if (!node.parentId || node.assignee.destination.groupId !== undefined) return false;
+        const parent = byId.get(node.parentId);
+        return Boolean(parent && parent.assignee.botId === "chief" && parent.assignee.destination.threadId === "chief-chat");
+      })
+      .map(node => node.id);
+    expect(viaIndex).toEqual(viaScan);
+
+    // Parse cache: a second read of the same rows does not re-throw and stays equal.
+    expect(store.childrenOfAssignee("chief", "chief-chat").map(x => x.id)).toEqual(viaIndex);
+    expect(store.childrenOfAssignee("missing", "nope")).toEqual([]);
+  });
+
   it("joins nested transactions and rolls an inner failure back to its savepoint", () => {
     const store = open();
     const root = assignment("root");

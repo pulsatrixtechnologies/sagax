@@ -1,9 +1,8 @@
 // Proactive wakes through the real server and the fake engine
-// (server/proactive-wake.ts): a webhook post wakes the bot it was posted to,
-// per its proactive mode. follow-rules runs at the bot's level and reports
-// into its one conversation; read-auto runs at Ask; propose posts a card and
-// starts nothing until the person's yes; off does nothing. One line in the
-// conversation's Events tab per wake.
+// (server/proactive-wake.ts): a webhook post wakes the bot it was posted to
+// when proactive is on. The wake runs at the bot's approval level, reports
+// into its one conversation, and records dry runs before writes. Off does
+// nothing. One line in the conversation's Events tab per wake.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
@@ -12,11 +11,11 @@ import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.
 
 const REPORT = "The deploy finished; I checked the release notes and nothing needs you.";
 
-it("a webhook post wakes its bot per mode: follow-rules, read-auto, propose, off", async () => {
+it("a webhook post wakes its bot when proactive is on, and stays quiet when off", async () => {
   const fixture = await launchVerificationServer({
     ...process.env,
     SAGAX_PROACTIVE_GATHER_MS: "200",
-    FAKE_CLAUDE_REPLIES: JSON.stringify([REPORT, REPORT, REPORT]),
+    FAKE_CLAUDE_REPLIES: JSON.stringify([REPORT, REPORT]),
   });
   const { url, dataDir } = fixture.info;
   const api = async (method: string, path: string, body?: unknown, status = 200) => {
@@ -53,16 +52,18 @@ it("a webhook post wakes its bot per mode: follow-rules, read-auto, propose, off
       return { id: bot.id as string, threadId: wire.threadId as string };
     };
 
-    // follow-rules (the default): a background run at the bot's own level
-    const doer = await newBot("Doer", "follow-rules");
+    // proactive (the default): a background run at the bot's own level
+    const doer = await newBot("Doer", "proactive");
     await post(doer.id, "Deploy 42 finished.");
     await expect.poll(async () => (await runs(doer.id)).find((run) => run.proactive)?.status, { timeout: 30_000 }).toBe("completed");
     const doerRun = (await runs(doer.id)).find((run) => run.proactive);
-    expect(doerRun.proactive).toMatchObject({ mode: "follow-rules", hops: 0, sources: ["webhook"] });
+    expect(doerRun.proactive).toMatchObject({ mode: "proactive", hops: 0, sources: ["webhook"] });
+    expect(doerRun.triggerSource).toBe("proactive");
     expect(doerRun.routineName).toBe("Proactive: webhook");
+    expect(doerRun.runAs).toBeTruthy();
     await control(["wait", "--bot", doer.id, "--task", doerRun.threadId]);
     expect(systemPrompt()).toContain("Approval level of this turn: Auto-accept edits");
-    expect(systemPrompt()).toContain("Proactive mode: Follow the approval rules.");
+    expect(systemPrompt()).toContain("Proactive mode: on");
     // its report lands in the bot's one conversation
     await expect.poll(async () => (await messages(doer.threadId)).some((message) => message.kind === "routine.run" && String(message.text).includes(REPORT)), { timeout: 20_000 }).toBe(true);
     // the run read the post inside the fence
@@ -70,35 +71,12 @@ it("a webhook post wakes its bot per mode: follow-rules, read-auto, propose, off
     expect(String(asked?.text)).toContain("[UNTRUSTED PROACTIVE EVENT DATA");
     expect(String(asked?.text)).toContain("Deploy 42 finished.");
     // one Events line, without the post's words
-    await expect.poll(() => eventsLines(doer.threadId), { timeout: 10_000 }).toContain("Proactive wake (follow-rules): 1 event, webhook post. Webhook post");
+    await expect.poll(() => eventsLines(doer.threadId), { timeout: 10_000 }).toContain("Proactive wake (proactive): 1 event, webhook post. Webhook post");
     expect(eventsLines(doer.threadId)).not.toContain("Deploy 42");
 
-    // read-auto: the same wake runs at Ask, whatever the bot's level
-    const reader = await newBot("Reader", "read-auto");
-    await post(reader.id, "Deploy 43 finished.");
-    await expect.poll(async () => (await runs(reader.id)).find((run) => run.proactive)?.status, { timeout: 30_000 }).toBe("completed");
-    const readerRun = (await runs(reader.id)).find((run) => run.proactive);
-    expect(readerRun.proactive.mode).toBe("read-auto");
-    await control(["wait", "--bot", reader.id, "--task", readerRun.threadId]);
-    expect(systemPrompt()).toContain("Approval level of this turn: Ask");
-    expect(systemPrompt()).toContain("Proactive mode: Read and prepare on my own.");
-
-    // propose: a card, no run, until the person's yes
-    const proposer = await newBot("Proposer", "propose");
-    await post(proposer.id, "Deploy 44 finished.");
-    await expect.poll(async () => (await messages(proposer.threadId)).some((message) => message.card?.proactiveProposal), { timeout: 20_000 }).toBe(true);
-    const card = (await messages(proposer.threadId)).find((message) => message.card?.proactiveProposal);
-    expect(card).toMatchObject({ kind: "options", card: { options: [expect.any(String), expect.any(String)] } });
-    expect(await runs(proposer.id)).toEqual([]);
-    await api("POST", `/api/bots/${proposer.id}/proactive/${card.card.proactiveProposal.id}`, { accept: "yes" }, 400);
-    await api("POST", `/api/bots/${proposer.id}/proactive/${card.card.proactiveProposal.id}`, { accept: true });
-    // answered once: the second click is refused
-    await api("POST", `/api/bots/${proposer.id}/proactive/${card.card.proactiveProposal.id}`, { accept: false }, 409);
-    await expect.poll(async () => (await runs(proposer.id)).find((run) => run.proactive)?.proactive, { timeout: 20_000 })
-      .toMatchObject({ mode: "propose", accepted: true });
-    const settled = (await messages(proposer.threadId)).find((message) => message.id === card.id);
-    expect(settled.card.answered).toBe(card.card.options[0]);
-    await expect.poll(async () => (await runs(proposer.id)).find((run) => run.proactive)?.status, { timeout: 30_000 }).toBe("completed");
+    // legacy follow-rules on PATCH normalizes to proactive
+    const legacy = await newBot("Legacy", "follow-rules");
+    expect((await api("GET", "/api/bots")).bots.find((b: any) => b.id === legacy.id).proactiveMode).toBe("proactive");
 
     // off: nothing at all
     const quiet = await newBot("Quiet", "off");

@@ -80,3 +80,24 @@ describe("routineRunReportable", () => {
     expect(routineRunReportable({ status: "waiting", goalStatus: "paused", postResults: true })).toBe(false);
   });
 });
+
+describe("the bot's own run status (2026-11-01)", () => {
+  it("reads RUN_STATUS failed or partial on a line of its own, never quiet", () => {
+    expect(routineReportOutcome("RUN_STATUS: failed: the CRM refused the login\nNothing was read."))
+      .toEqual({ quiet: false, report: "Nothing was read.", declared: { status: "failed", reason: "the CRM refused the login" } });
+    expect(routineReportOutcome("Read 10 of 12.\n**RUN_STATUS: partial** — two PDFs unreadable\nNOTHING_TO_REPORT"))
+      .toEqual({ quiet: false, report: "Read 10 of 12.", declared: { status: "partial", reason: "two PDFs unreadable" } });
+    expect(routineReportOutcome("RUN_STATUS: partial").declared?.reason).toBe("The bot reported that only part of the work was done");
+    // Only the line itself: a sentence that mentions it is a report.
+    expect(routineReportOutcome("The status was partial today.").declared).toBeUndefined();
+  });
+
+  it("a run with problems tells the person; a person's own start shows from the start", () => {
+    expect(routineRunReportable({ status: "completed", problems: "x", postResults: false })).toBe(true);
+    expect(routineRunReportable({ status: "completed", quiet: true, problems: "x" })).toBe(true);
+    for (const status of ["queued", "running", "waiting"] as const) {
+      expect(routineRunReportable({ status, startedBy: "person" }), status).toBe(true);
+    }
+    expect(routineRunReportable({ status: "nothing_to_report", startedBy: "person" })).toBe(false);
+  });
+});

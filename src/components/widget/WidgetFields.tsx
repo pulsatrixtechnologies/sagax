@@ -17,7 +17,7 @@ import {
 } from "./WidgetControls";
 import { WidgetDayPicker } from "./WidgetDayPicker";
 import { WidgetTimePicker } from "./WidgetTimePicker";
-import type { WidgetWhere } from "./WidgetNodes";
+import type { WidgetWhere } from "./widget-where";
 
 /** Every node a person fills in. */
 export const WIDGET_FIELD_TYPES: ReadonlySet<string> = new Set(["Select", "DatePicker", "TimePicker", "DayPicker", "Checkbox", "RadioGroup", "Input", "Textarea"]);

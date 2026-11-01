@@ -18,6 +18,7 @@ import { engineServerMcp, perspicaxServerName, withoutHostCommands, personalMcpP
 import { pluginMcpPrecheck, selectPluginScopes } from "./capability-plugin-mounts.ts";
 import {
   engineReceipt,
+  engineWorksInFiles,
   type BotCapabilities,
   type Capability,
   type CapabilityReason,
@@ -85,10 +86,39 @@ export interface SkillInput {
   name: string;
   description: string;
   enabled: boolean;
-  /** private (the bot's own copy) or library (assigned) */
-  origin: "private" | "library";
+  /** private (the bot's own copy), library (Organisation assignment), or me
+   * (person's shared Me library; usually fed through personalSkills) */
+  origin: "private" | "library" | "me";
   /** manifest source (`org:` for the organization library, a URL...) */
   source: string;
+}
+
+/** Capabilities lot 4: one organization declaration from Perspicax, as the
+ * resolver reads it for the person looking (server/org-capabilities.ts).
+ * Never its configuration. */
+export interface OrgDeclarationInput {
+  id: string;
+  mount: string;
+  form: "plugin" | "skill" | "mcp";
+  name: string;
+  description?: string;
+  mode: "offered" | "imposed";
+  /** switched on in Perspicax */
+  enabled: boolean;
+  /** the person is an active member of the organization */
+  member: boolean;
+  /** on for this person: imposed, or offered and turned on in their Me state */
+  active: boolean;
+  /** installed (plugin, skill), declared (mcp), pending, failed, off, or a
+   * Flow mount (never a second Flow line) */
+  installState: "installed" | "pending" | "failed" | "declared" | "off" | "flow";
+  version?: string;
+  sourceLabel: string;
+  /** the installed folder (plugin, skill) */
+  dir?: string;
+  contents?: PluginContents;
+  /** its MCP server names (a plugin's declared servers, or the declaration) */
+  mcpServers: string[];
 }
 
 export interface CapabilityInputs<S extends Record<string, McpServerSpec> = Record<string, McpServerSpec>> {
@@ -96,7 +126,7 @@ export interface CapabilityInputs<S extends Record<string, McpServerSpec> = Reco
   /** readable name of the organization (Perspicax), for "From <org>" */
   organizationName?: string;
   bot: { id: string; name: string; mcpServers?: string[]; perspicaxProfiles: string[]; assignedSkills?: string[] };
-  engine: { instanceId: string; kind: string; label: string; customMcp: boolean };
+  engine: { instanceId: string; kind: string; label: string; customMcp: boolean; agentsMcp?: boolean };
 
   // plugins
   botPlugins: BotPluginInput[];
@@ -109,6 +139,10 @@ export interface CapabilityInputs<S extends Record<string, McpServerSpec> = Reco
   /** the bot's enabled plugin folders as a turn reads them (BotPlugins.pluginDirs) */
   botPluginDirs: string[];
   workspacePlugins: WorkspacePluginInput[];
+  /** Capabilities lot 4: the organization's declarations from Perspicax.
+   * Their MCP servers reach `pluginMcp` with scope organization and key
+   * `orgcap:<id>`. */
+  orgDeclarations?: OrgDeclarationInput[];
   orgFlow: {
     /** the organization's Flow folders for this bot (OrgFlowPlugins.dirsFor) */
     dirsFor: (own: readonly string[]) => string[];
@@ -120,6 +154,10 @@ export interface CapabilityInputs<S extends Record<string, McpServerSpec> = Reco
     member: boolean;
     /** the folder of one declared plugin, when its copy is installed here */
     dirOf: (name: string) => string | undefined;
+    aliases?: readonly string[];
+    pack?: string;
+    versionOf?: (name: string) => string | undefined;
+    contentsOf?: (name: string) => { skills: string[]; commands: string[]; agents: string[] } | undefined;
   };
 
   // this installation's MCP servers
@@ -151,6 +189,7 @@ export interface CapabilityInputs<S extends Record<string, McpServerSpec> = Reco
   librarySkills: Array<{ name: string; source: string }>;
   skillsLibrary: boolean;
   promptIndex?: BotCapabilities["promptIndex"];
+  capabilityPromptIndex?: Record<string, NonNullable<BotCapabilities["promptIndex"]>>;
 
   // Perspicax Roles
   roles: {
@@ -170,9 +209,17 @@ const has = (list: readonly string[] | undefined) => Boolean(list && list.length
 export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: CapabilityViewer): BotCapabilities {
   const engine = inputs.engine;
   const kind = engine.kind;
-  const receipt = (form: Capability["form"], parts: Omit<EngineParts, "customMcp">) => engineReceipt(kind, form, { customMcp: engine.customMcp, ...parts });
+  const receipt = (form: Capability["form"], parts: Omit<EngineParts, "customMcp">) => engineReceipt(kind, form, { customMcp: engine.customMcp, skillDiscovery: engine.agentsMcp === true, ...parts });
   const items: Capability[] = [];
   const push = (item: Capability) => {
+    const index = inputs.capabilityPromptIndex?.[item.key];
+    if (index) {
+      item.promptIndex = index;
+      for (const part of ["skills", "commands", "agents"] as const) {
+        if (item.engine[part] === "prompt" && (index.parts ? !index.parts[part] : !index.skills)) item.engine[part] = "none";
+      }
+      item.engine.nothing = !(["skills", "commands", "agents", "mcp", "tools"] as const).some((part) => item.engine[part] && item.engine[part] !== "none");
+    }
     // a capability the engine receives nothing of is not served, whatever
     // its own switch says (on, imposed, held)
     if ((item.state === "on" || item.state === "imposed") && item.engine.nothing) item.state = "not_served";
@@ -180,17 +227,23 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
   };
 
   // ── plugins of this bot, and the organization's Flow ──────────────────
+  const aliases = new Set(inputs.orgFlow.aliases ?? []);
+  // Organization declarations (lot 4) that are on for this person and
+  // installed claim their mount name first: organization > Me > This bot.
+  const orgDeclarations = (inputs.orgDeclarations ?? []).filter((decl) => decl.installState !== "flow");
+  const orgFolders = orgDeclarations.flatMap((decl) => decl.active && decl.dir && decl.installState === "installed" ? [{ name: basename(decl.dir), dir: decl.dir }] : []);
   const folders = selectPluginScopes({
-    organization: [...inputs.orgFlow.dirsFor([]).map((dir) => ({ name: basename(dir), dir })), ...inputs.workspacePlugins.flatMap((plugin) => plugin.folder ? [{ name: plugin.name, dir: plugin.folder.dir }] : [])],
-    person: (inputs.personalPlugins ?? []).filter((plugin) => plugin.enabled && plugin.present),
-    bot: inputs.botPluginDirs.map((dir) => ({ name: basename(dir), dir })),
+    organization: [...inputs.orgFlow.dirsFor([]).map((dir) => ({ name: basename(dir), dir })), ...orgFolders, ...inputs.workspacePlugins.flatMap((plugin) => plugin.folder && !aliases.has(plugin.key) ? [{ name: plugin.name, dir: plugin.folder.dir }] : [])],
+    person: (inputs.personalPlugins ?? []).filter((plugin) => plugin.enabled && plugin.present && !aliases.has(plugin.key)),
+    bot: inputs.botPluginDirs.filter((dir) => !inputs.botPlugins.some((plugin) => plugin.dir === dir && aliases.has(plugin.key))).map((dir) => ({ name: basename(dir), dir })),
   });
   const dirs = new Set(kind === "claudeAgent" ? folders.map((plugin) => plugin.dir)
-    : turnPluginPromptDirs(kind, folders.filter((plugin) => plugin.scope !== "organization" || inputs.workspacePlugins.some((installed) => installed.folder?.dir === plugin.dir)).map((plugin) => plugin.dir)));
+    : turnPluginPromptDirs(kind, folders.map((plugin) => plugin.dir)));
   for (const { plugin, scope } of [
     ...(inputs.personalPlugins ?? []).map((plugin) => ({ plugin, scope: "me" as const })),
     ...inputs.botPlugins.map((plugin) => ({ plugin, scope: "bot" as const })),
   ]) {
+    if (aliases.has(plugin.key)) continue;
     const loaded = dirs.has(plugin.dir);
     const selected = folders.some((folder) => folder.dir === plugin.dir);
     const state: CapabilityState = !plugin.enabled || !selected ? "off" : loaded ? "on" : plugin.present ? "not_served" : "off";
@@ -215,26 +268,63 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
   }
   // Organization folders have already won their names over personal and
   // bot copies. A declaration without a current folder claims nothing.
-  for (const declared of inputs.orgFlow.declared ?? []) {
-    const dir = inputs.orgFlow.dirOf(declared.name);
-    const loaded = dir !== undefined && dirs.has(dir);
+  const declaredFlow = inputs.orgFlow.declared ?? [];
+  const product = declaredFlow.find((plugin) => !plugin.tenant) ?? declaredFlow[0] ?? (aliases.size ? { name: "pulsatrix-flow", version: "", tenant: false } : undefined);
+  if (product) {
+    // Installed copies; one this engine cannot receive is not served.
+    const installed = declaredFlow.filter((plugin) => inputs.orgFlow.dirOf(plugin.name) !== undefined);
+    const available = installed.filter((plugin) => dirs.has(inputs.orgFlow.dirOf(plugin.name)!));
     let state: CapabilityState = "imposed";
     let reason: CapabilityReason | undefined;
     if (!inputs.orgFlow.guarded) { state = "off"; reason = "guard_off"; }
     else if (!inputs.orgFlow.member) { state = "off"; reason = "not_member"; }
-    else if (!dir) { state = "off"; reason = "not_installed"; }
-    else if (!loaded) state = "not_served";
+    else if (!installed.length) { state = "off"; reason = "not_installed"; }
+    else if (!available.length) state = "not_served";
+    else if (installed.length < declaredFlow.length) reason = "not_installed";
+    const contents = installed.map((plugin) => inputs.orgFlow.contentsOf?.(plugin.name));
+    const union = (part: "skills" | "commands" | "agents") => [...new Set(contents.flatMap((content) => content?.[part] ?? []))];
     push({
-      key: `flow:organization:${declared.name}`,
-      form: "flow",
-      name: readableName(declared.name),
-      source: { kind: "perspicax", label: inputs.organizationName ?? "Perspicax", version: declared.version },
+      key: "flow:organization:pulsatrix-flow", form: "flow", name: "Pulsatrix Flow",
+      source: { kind: "perspicax", label: inputs.organizationName ?? "Perspicax", version: inputs.orgFlow.versionOf?.(product.name) ?? product.version, ...(inputs.orgFlow.pack ? { pack: inputs.orgFlow.pack } : {}) },
+      scope: "organization", state, enabled: state === "imposed", canToggle: false,
+      brings: { skills: union("skills"), commands: union("commands"), agents: union("agents"), mcpServers: [] },
+      engine: receipt("flow", { skills: true, commands: true, agents: true }),
+      ...(reason ? { reason } : {}),
+    });
+  }
+
+  // ── the organization's declarations (lot 4) ───────────────────────────
+  const orgItemKey = new Map<string, string>();
+  const orgIntended = new Map<string, CapabilityState>();
+  for (const decl of orgDeclarations) {
+    const key = `${decl.form}:organization:${decl.mount}`;
+    orgItemKey.set(`orgcap:${decl.id}`, key);
+    const loaded = Boolean(decl.dir && dirs.has(decl.dir) && folders.some((folder) => folder.dir === decl.dir));
+    let state: CapabilityState = decl.mode === "imposed" ? "imposed" : "on";
+    let reason: CapabilityReason | undefined;
+    if (!decl.enabled) { state = "off"; reason = "disabled"; }
+    else if (!decl.member) { state = "off"; reason = "not_member"; }
+    else if (!decl.active) { state = "off"; reason = "offered"; }
+    else if (decl.form !== "mcp" && decl.installState !== "installed") { state = "off"; reason = "not_installed"; }
+    orgIntended.set(key, state);
+    const contents = decl.contents ?? { skills: [], commands: [], agents: [] };
+    const files = decl.form !== "mcp" && loaded;
+    push({
+      key,
+      form: decl.form,
+      name: decl.form === "plugin" ? readableName(decl.name || decl.mount) : decl.name || decl.mount,
+      ...(decl.description ? { description: decl.description } : {}),
+      source: { kind: "perspicax", label: decl.sourceLabel, ...(decl.version ? { version: decl.version } : {}) },
       scope: "organization",
       state,
-      enabled: state === "imposed",
-      canToggle: false,
-      // skills, commands and agents from the signed pack (Claude only, C-3)
-      engine: receipt("flow", { skills: true, commands: true, agents: true }),
+      enabled: decl.active,
+      // Offered: the person's own switch (their Me state, all their bots).
+      // Imposed: a member cannot turn it off.
+      canToggle: decl.mode === "offered" && decl.enabled && decl.member,
+      orgDeclaration: decl.id,
+      brings: { skills: contents.skills, commands: contents.commands, agents: contents.agents, mcpServers: decl.mcpServers },
+      // MCP receipts are completed below from the actual mounts.
+      engine: receipt(decl.form, { skills: files && has(contents.skills), commands: files && has(contents.commands), agents: files && has(contents.agents) }),
       ...(reason ? { reason } : {}),
     });
   }
@@ -245,8 +335,8 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
   const mounted = new Set(engine.customMcp ? Object.keys(asPerson.servers) : []);
   const withheld = new Set(asPerson.githubWithheld);
   const policyKept = new Set(Object.keys(inputs.filterPolicy(withoutHostCommands(inputs.organization, inputs.configured))));
-  const serverOwners = currentPluginOwners(inputs.installationServers.filter((server) => server.valid), inputs.workspacePlugins, (plugin) => plugin.servers);
-  const skillOwners = currentPluginOwners(inputs.librarySkills, inputs.workspacePlugins, (plugin) => plugin.skills);
+  const serverOwners = currentPluginOwners(inputs.installationServers.filter((server) => server.valid), inputs.workspacePlugins.filter((plugin) => !aliases.has(plugin.key)), (plugin) => plugin.servers);
+  const skillOwners = currentPluginOwners(inputs.librarySkills, inputs.workspacePlugins.filter((plugin) => !aliases.has(plugin.key)), (plugin) => plugin.skills);
   const serverRow = (server: InstallationServerInput): { state: CapabilityState; reason?: CapabilityReason; connect?: Capability["connect"] } => {
     if (reservedMcpName(server.name)) return { state: "reserved" };
     if (!server.enabled) return { state: "off", reason: "disabled" };
@@ -285,11 +375,12 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
   const skillByName = new Map(inputs.skills.map((skill) => [skill.name, skill] as const));
   const pluginSkills = new Set<string>();
   for (const plugin of inputs.workspacePlugins) {
+    if (aliases.has(plugin.key)) continue;
     const servers = [...new Set(plugin.servers)].filter((name) => serverOwners.get(name) === plugin.key);
     const ownedSkills = [...new Set(plugin.skills)].filter((name) => skillOwners.get(name) === plugin.key);
     const on = servers.filter((name) => serverItems.get(name)!.state === "on");
     const skills = ownedSkills.filter((name) => skillByName.get(name)?.origin === "library" && skillByName.get(name)!.source === plugin.marketplace && skillByName.get(name)!.enabled);
-    for (const name of ownedSkills) pluginSkills.add(name);
+    if (engineWorksInFiles(kind)) for (const name of ownedSkills) pluginSkills.add(name);
     const needs = servers.map((name) => serverItems.get(name)!).find((row) => row.state === "to_connect" || row.connect);
     const complete = plugin.folder && dirs.has(plugin.folder.dir);
     let state: CapabilityState = complete || on.length || skills.length ? "on" : needs?.state === "to_connect" ? "to_connect" : "off";
@@ -349,10 +440,13 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
   }
 
   // ── the viewer's own MCP servers (mountPersonalMcp) ───────────────────
+  // The organization's active declarations claim their server names before
+  // the person's own servers (organization > Me), as the turn mounts them.
+  const orgClaimed = new Set(orgDeclarations.filter((decl) => decl.active && decl.enabled && decl.member).flatMap((decl) => decl.mcpServers));
   if (inputs.organization && inputs.personal && viewer.principalId) {
     const personal = inputs.personal;
     for (const [name, server] of Object.entries(personal.servers)) {
-      const check = personalMcpPrecheck(name, server, { taken: (other) => taken.has(other), hasEnvironment: personal.hasEnvironment, github: personal.github });
+      const check = personalMcpPrecheck(name, server, { taken: (other) => taken.has(other) || orgClaimed.has(other), hasEnvironment: personal.hasEnvironment, github: personal.github });
       let state: CapabilityState = "on";
       let reason: CapabilityReason | undefined;
       let connect: Capability["connect"] | undefined;
@@ -393,8 +487,12 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
   // Complete-plugin MCP servers, in the runtime's exact order. The
   // selected plugin folder has already resolved organization/person/bot.
   for (const candidate of inputs.pluginMcp ?? []) {
-    const row = items.find((item) => item.key === `plugin:${candidate.scope === "organization" ? "installation" : candidate.scope === "person" ? "me" : "bot"}:${candidate.key}`);
+    const orgKey = orgItemKey.get(candidate.key);
+    const row = items.find((item) => item.key === (orgKey ?? `plugin:${candidate.scope === "organization" ? "installation" : candidate.scope === "person" ? "me" : "bot"}:${candidate.key}`));
     if (!row) continue;
+    // an organization declaration switched off, offered and not chosen, or
+    // not installed: named in its row, never mounted
+    if (orgKey && orgIntended.get(orgKey) === "off") continue;
     const check = pluginMcpPrecheck(candidate.name, candidate.spec, {
       taken: (name) => taken.has(name), organization: inputs.organization,
       hasEnvironment: inputs.pluginEnvironment ?? inputs.personal?.hasEnvironment ?? !inputs.organization,
@@ -408,7 +506,7 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
     taken.add(candidate.name);
     row.mounts = [...(row.mounts ?? []), candidate.name];
     row.engine = { ...row.engine, mcp: receipt("mcp", { mcp: true }).mcp, nothing: false };
-    row.state = "on";
+    row.state = orgKey ? orgIntended.get(orgKey)! : "on";
   }
 
   // ── skills of the bot and of the library ──────────────────────────────
@@ -423,6 +521,8 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
   }
   const assigned = new Set(inputs.bot.assignedSkills ?? []);
   for (const skill of inputs.skills) {
+    // Me rows arrive through personalSkills (one shared copy, scope me).
+    if (skill.origin === "me") continue;
     if (skill.origin === "library" && pluginSkills.has(skill.name)
       && inputs.librarySkills.some((current) => current.name === skill.name && current.source === skill.source)) continue; // folded into its current plugin
     const fromOrg = skill.origin === "private" && skill.source.startsWith("org:");
@@ -539,5 +639,5 @@ function sourceLabel(source: string): string {
 /** The MCP server names a turn of this bot gets from the list: what the
  * test compares with the turn functions. */
 export function listedMounts(capabilities: BotCapabilities): string[] {
-  return [...new Set(capabilities.items.filter((item) => item.state === "on" && item.mounts).flatMap((item) => item.mounts!))].sort();
+  return [...new Set(capabilities.items.filter((item) => (item.state === "on" || item.state === "imposed") && item.mounts).flatMap((item) => item.mounts!))].sort();
 }

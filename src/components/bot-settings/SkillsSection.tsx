@@ -28,8 +28,10 @@ export interface ManagedSkill {
   source: string;
   warnings: string[];
   /** Present only under features.skillsLibrary: where the bot reads this
-   * skill from. Private shadows library on name collision. */
-  origin?: "private" | "library";
+   * skill from. Private shadows me and library on name collision. */
+  origin?: "private" | "library" | "me";
+  /** Shared skills: bots that still link to the one copy. */
+  assignedBots?: Array<{ id: string; name: string }>;
 }
 
 /** Library entries this bot has not been assigned yet (flag on only). */
@@ -121,14 +123,20 @@ export function useManagedSkills(bot: Bot) {
     }
   };
 
+  const skillTextPath = (skill: ManagedSkill) => {
+    if (skill.origin === "library") return `/api/skills-library/${encodeURIComponent(skill.name)}`;
+    if (skill.origin === "me") return `/api/me/skills-library/${encodeURIComponent(skill.name)}`;
+    return `/api/bots/${bot.id}/skills/${encodeURIComponent(skill.name)}`;
+  };
+
   const toggle = async (skill: ManagedSkill) => {
     setWorking(skill.name);
     setError("");
     try {
-      if (skill.origin === "library" && skill.enabled) {
-        // Library skills share one review state across every bot assigned
-        // to them; disabling is immediate, enabling still requires review below.
-        await api(`/api/skills-library/${encodeURIComponent(skill.name)}`, {
+      if ((skill.origin === "library" || skill.origin === "me") && skill.enabled) {
+        // Shared skills share one review state across every bot that links
+        // to them; disabling is immediate, enabling still requires review.
+        await api(skillTextPath(skill), {
           method: "PATCH",
           body: JSON.stringify({ enabled: !skill.enabled }),
         });
@@ -139,7 +147,7 @@ export function useManagedSkills(bot: Bot) {
         // A disabled import has not necessarily been reviewed. Fetch the
         // integrity-checked bytes and require one explicit review step before
         // they can reach the bot's prompt or native skill discovery.
-        const result = (await api(skill.origin === "library" ? `/api/skills-library/${encodeURIComponent(skill.name)}` : `/api/bots/${bot.id}/skills/${encodeURIComponent(skill.name)}`)) as { text?: string };
+        const result = (await api(skillTextPath(skill))) as { text?: string };
         if (!result.text) throw new Error(t("botPanel.skills.unavailable"));
         setReviewing({ skill, text: result.text });
         return;
@@ -162,7 +170,7 @@ export function useManagedSkills(bot: Bot) {
     setWorking(skill.name);
     setError("");
     try {
-      await api(skill.origin === "library" ? `/api/skills-library/${encodeURIComponent(skill.name)}` : `/api/bots/${bot.id}/skills/${encodeURIComponent(skill.name)}`, {
+      await api(skillTextPath(skill), {
         method: "PATCH",
         body: JSON.stringify({ enabled: true }),
       });
@@ -175,8 +183,48 @@ export function useManagedSkills(bot: Bot) {
     }
   };
 
+  const share = async (skill: ManagedSkill, scope: "me" | "organization") => {
+    if (assignmentBusy.current) return;
+    assignmentBusy.current = true;
+    setWorking(skill.name);
+    setError("");
+    try {
+      await api(`/api/bots/${bot.id}/skills/${encodeURIComponent(skill.name)}/share`, {
+        method: "POST",
+        body: JSON.stringify({ scope }),
+      });
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("botPanel.skills.shareError"));
+    } finally {
+      assignmentBusy.current = false;
+      setWorking("");
+    }
+  };
+
+  const unshare = async (skill: ManagedSkill) => {
+    if (assignmentBusy.current || (skill.origin !== "me" && skill.origin !== "library")) return;
+    if (!window.confirm(t("botPanel.skills.unshareConfirm", { name: skill.name }))) return;
+    assignmentBusy.current = true;
+    setWorking(skill.name);
+    setError("");
+    try {
+      await api(`/api/bots/${bot.id}/skills/${encodeURIComponent(skill.name)}/unshare`, {
+        method: "POST",
+        body: JSON.stringify({ scope: skill.origin === "me" ? "me" : "organization" }),
+      });
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("botPanel.skills.unshareError"));
+    } finally {
+      assignmentBusy.current = false;
+      setWorking("");
+    }
+  };
+
   return {
     skills, staged, loading, working, setWorking, error, setError, reviewing, setReviewing, refresh, toggle, enableReviewed,
+    share, unshare,
     // the shared skills library (features.skillsLibrary): what this bot can still add, and assignment changes
     libraryPool, addFromLibrary, setAddFromLibrary, assignmentBusy, putAssignments, addToBot,
   };
@@ -297,6 +345,7 @@ export function SkillsSection({ bot }: { bot: Bot }) {
   const skillWrites = !viewerBotsReadOnly(state.config);
   const {
     skills, staged, loading, working, setWorking, error, setError, reviewing, setReviewing, refresh, toggle, enableReviewed,
+    share, unshare,
     libraryPool, addFromLibrary, setAddFromLibrary, assignmentBusy, putAssignments, addToBot,
   } = useManagedSkills(bot);
   const [viewing, setViewing] = useState<{ name: string; text: string } | null>(null);
@@ -359,6 +408,10 @@ export function SkillsSection({ bot }: { bot: Bot }) {
       }
       return;
     }
+    if (skill.origin === "me") {
+      await unshare(skill);
+      return;
+    }
     if (!window.confirm(`Remove the learned skill “${skill.name}”?`)) return;
     setWorking(skill.name);
     setError("");
@@ -375,13 +428,21 @@ export function SkillsSection({ bot }: { bot: Bot }) {
   const view = async (skill: ManagedSkill) => {
     setError("");
     try {
-      const result = skill.origin === "library"
-        ? ((await api(`/api/skills-library/${encodeURIComponent(skill.name)}`)) as { text?: string })
-        : ((await api(`/api/bots/${bot.id}/skills/${encodeURIComponent(skill.name)}`)) as { text?: string });
+      const path = skill.origin === "library"
+        ? `/api/skills-library/${encodeURIComponent(skill.name)}`
+        : skill.origin === "me"
+          ? `/api/me/skills-library/${encodeURIComponent(skill.name)}`
+          : `/api/bots/${bot.id}/skills/${encodeURIComponent(skill.name)}`;
+      const result = (await api(path)) as { text?: string };
       setViewing({ name: skill.name, text: result.text ?? "" });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("botPanel.skills.viewError"));
     }
+  };
+
+  const originLabel = (skill: ManagedSkill) => {
+    if (skill.origin === "me" || skill.origin === "library") return t("botPanel.skills.originShared");
+    return t("botPanel.skills.originPrivate");
   };
 
   const importSkill = async () => {
@@ -500,12 +561,14 @@ export function SkillsSection({ bot }: { bot: Bot }) {
                     onClick={() => void view(skill)}
                     className="min-w-0 flex-1 text-left"
                   >
-                    <div className="truncate font-mono text-[12.5px] text-ink">{skill.name}</div>
-                    {libraryOn && (
-                      <span className="ml-1.5 rounded bg-control px-1 py-px font-mono text-[9.5px] uppercase tracking-wide text-ink-secondary">
-                        {skill.origin === "library" ? t("botPanel.skills.originLibrary") : t("botPanel.skills.originPrivate")}
-                      </span>
-                    )}
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <div className="truncate font-mono text-[12.5px] text-ink">{skill.name}</div>
+                      {libraryOn && (
+                        <span className="shrink-0 rounded bg-control px-1 py-px font-mono text-[9.5px] uppercase tracking-wide text-ink-secondary">
+                          {originLabel(skill)}
+                        </span>
+                      )}
+                    </div>
                     <div className="mt-0.5 line-clamp-2 text-[11.5px] text-ink-secondary">{skill.description}</div>
                   </button>
                   {skillWrites && (
@@ -529,6 +592,35 @@ export function SkillsSection({ bot }: { bot: Bot }) {
                   )}
                 </div>
                 <div className="mt-1 truncate text-[10.5px] text-ink-secondary" title={skill.source}>{t("botPanel.skills.source", { source: skill.source })}</div>
+                {libraryOn && (skill.origin === "me" || skill.origin === "library") && skill.assignedBots && skill.assignedBots.length > 0 && (
+                  <div className="mt-1 text-[10.5px] text-ink-secondary">
+                    {t("botPanel.skills.sharedWith", { bots: skill.assignedBots.map((entry) => entry.name).join(", ") })}
+                  </div>
+                )}
+                {skillWrites && libraryOn && skill.origin === "private" && (
+                  <div className="mt-1.5 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={Boolean(working)}
+                      onClick={() => void share(skill, "me")}
+                      className="rounded-lg bg-control px-2.5 py-1 text-[11.5px] text-ink hover:bg-raised-hover disabled:opacity-50"
+                    >
+                      {t("botPanel.skills.shareMe")}
+                    </button>
+                  </div>
+                )}
+                {skillWrites && libraryOn && (skill.origin === "me" || skill.origin === "library") && (
+                  <div className="mt-1.5">
+                    <button
+                      type="button"
+                      disabled={Boolean(working)}
+                      onClick={() => void unshare(skill)}
+                      className="rounded-lg bg-control px-2.5 py-1 text-[11.5px] text-ink hover:bg-raised-hover disabled:opacity-50"
+                    >
+                      {t("botPanel.skills.unshare")}
+                    </button>
+                  </div>
+                )}
                 {skill.warnings.length > 0 && (
                   <div className="mt-1 text-[10.5px] text-warning">{skill.warnings.join(" · ")}</div>
                 )}

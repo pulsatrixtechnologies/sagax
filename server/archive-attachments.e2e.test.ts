@@ -79,12 +79,12 @@ describe("archives attached in solo mode", () => {
     await expect.poll(() => promptsSeen().slice(before).some((prompt) => prompt.includes('attached-archive name=\\"src.tar.gz\\"')), { timeout: 30_000 }).toBe(true);
   }, 90_000);
 
-  it("refuses an archive over 90 MB before reading it, and other binaries outright", async () => {
+  it("refuses an archive over 250 MB before reading it, and other binaries outright", async () => {
     // the declared length alone is refused; the body is never read
     const status = await new Promise<number>((resolve, reject) => {
       const url = new URL(`${session.info.url}/api/files?name=big.zip`);
       const req = request({ host: url.hostname, port: url.port, path: `${url.pathname}${url.search}`, method: "POST",
-        headers: { "content-type": "application/zip", "content-length": String(91 * 1024 * 1024) } }, (res) => {
+        headers: { "content-type": "application/zip", "content-length": String(251 * 1024 * 1024) } }, (res) => {
         resolve(res.statusCode ?? 0);
         res.resume();
         req.destroy();

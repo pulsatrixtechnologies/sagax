@@ -250,7 +250,9 @@ describe("durable attachment completion", () => {
     })).toBe("outbox");
     expect(getDraft(store, draftId)).toBe("newer words");
     expect(getDraftAttachments(store, draftId)).toEqual([]);
-    expect(failedComposerSends(draftId)).toEqual([expect.objectContaining({ sendId: "citation-send" })]);
+    expect(failedComposerSends(draftId)).toEqual([
+      expect.objectContaining({ sendId: "citation-send", attachmentIds: [citation.id] }),
+    ]);
   });
 
   it("keeps blob previews in memory but never writes them into durable storage", () => {

@@ -5,22 +5,9 @@
 // one CSS block plus one line in SKINS.
 
 import { autoPairs, isSkinDepth, isSkinTexture, isSkinTint, LEGACY_SKINS, normalizeWorn, readSkinAuto, writeSkinAuto, type SkinDepth, type SkinTexture, type SkinTintId } from "./skin-families";
+import { SKIN_IDS, type SkinId } from "./skin-ids";
 
-export const SKIN_IDS = [
-  "pulsatrix",
-  "pulsatrix-light",
-  "midnight",
-  "atelier",
-  "foundry",
-  "lagoon",
-  "graphite",
-  "linen",
-  "dusk",
-  "daylight",
-  "retro98",
-  "meadow",
-] as const;
-export type SkinId = (typeof SKIN_IDS)[number];
+export { SKIN_IDS, type SkinId };
 
 export type Skin = {
   id: SkinId;

@@ -26,6 +26,8 @@ enum SettingsMetrics {
     static let footerGap: CGFloat = 30.3
     /// The references set 13.5 pt text about 1% tighter than SwiftUI does.
     static let tracking135: CGFloat = -0.05
+    /// The sheet's top corners (Grok Bot's account sheet).
+    static let sheetRadius: CGFloat = 38
 }
 
 // MARK: - Page
@@ -53,7 +55,7 @@ struct SettingsPage<Trailing: View, Content: View>: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            background.ignoresSafeArea()
+            SettingsSheetBackground()
             Group {
                 if scrollable {
                     ScrollView(showsIndicators: false) { stack }
@@ -62,6 +64,7 @@ struct SettingsPage<Trailing: View, Content: View>: View {
                     stack
                 }
             }
+            .clipShape(SettingsSheetShape())
             header
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -76,17 +79,29 @@ struct SettingsPage<Trailing: View, Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .top)
     }
 
+    /// Grok Bot's sheet header (2026-11-01): the round X or back at the
+    /// leading corner, the title centred on the screen, a trailing control.
     private var header: some View {
-        HStack(spacing: 0) {
-            switch leading {
-            case let .close(action):
-                GlassCircleButton(systemImage: "xmark", size: .sheet, accessibilityLabel: "Close", action: action)
-                    .accessibilityIdentifier("settings-close")
-            case .back:
-                GlassCircleButton(systemImage: "chevron.left", size: .sheet, accessibilityLabel: "Back", glyphOffset: CGSize(width: 1, height: 0)) {
-                    if let settingsPop { settingsPop() } else { dismiss() }
+        ZStack {
+            HStack(spacing: 0) {
+                switch leading {
+                case let .close(action):
+                    GlassCircleButton(systemImage: "xmark", size: .sheet, accessibilityLabel: "Close", action: action)
+                        .accessibilityIdentifier("settings-close")
+                case .back:
+                    GlassCircleButton(systemImage: "chevron.left", size: .sheet, accessibilityLabel: "Back", glyphOffset: CGSize(width: 1, height: 0)) {
+                        if let settingsPop { settingsPop() } else { dismiss() }
+                    }
+                        .accessibilityIdentifier("settings-back")
                 }
-                    .accessibilityIdentifier("settings-back")
+                if trailingFills {
+                    trailing()
+                        .frame(maxWidth: .infinity)
+                        .padding(.leading, SettingsMetrics.titleGap)
+                } else {
+                    Spacer(minLength: 8)
+                    trailing()
+                }
             }
             if let title {
                 Text(title)
@@ -94,21 +109,41 @@ struct SettingsPage<Trailing: View, Content: View>: View {
                     .tracking(SettingsMetrics.tracking135)
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
-                    .padding(.leading, SettingsMetrics.titleGap)
+                    .minimumScaleFactor(0.85)
+                    .padding(.horizontal, GlassCircleButton.Size.sheet.rawValue + 20)
+                    .allowsHitTesting(false)
                     .accessibilityAddTraits(.isHeader)
-            }
-            if trailingFills {
-                trailing()
-                    .frame(maxWidth: .infinity)
-                    .padding(.leading, SettingsMetrics.titleGap)
-            } else {
-                Spacer(minLength: 8)
-                trailing()
             }
         }
         .padding(.leading, SettingsMetrics.headerInset)
         .padding(.trailing, SettingsMetrics.headerInset)
         .padding(.top, SettingsMetrics.headerInset)
+    }
+}
+
+/// The sheet's shape: Grok Bot's card sheet, rounded at the top and
+/// running past the bottom edge.
+struct SettingsSheetShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path(roundedRect: CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height + 80),
+             cornerRadius: SettingsMetrics.sheetRadius, style: .continuous)
+    }
+}
+
+/// Behind every Settings page: the dimmed strip under the status bar and
+/// the sheet itself, as Grok Bot presents its account sheet (2026-11-01).
+/// Settings still covers the whole home (owner, 2026-10-26).
+struct SettingsSheetBackground: View {
+    @Environment(\.themePalette) var themePalette
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Theme.bg.overlay(Color.black.opacity(themePalette.isDark ? 0.45 : 0.18)).ignoresSafeArea()
+            SettingsSheetShape()
+                .fill(Theme.bg)
+                .ignoresSafeArea(edges: .bottom)
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -135,6 +170,8 @@ struct SettingsCard<Content: View>: View {
         VStack(spacing: 0, content: content)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
+            // Grok Bot's cards carry a hairline edge (2026-11-01)
+            .overlay(RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 1))
             .padding(.horizontal, SettingsMetrics.cardMargin)
     }
 }

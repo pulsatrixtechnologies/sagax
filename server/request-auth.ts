@@ -435,6 +435,11 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // the live view and capture of a bot's own cloud computer: the handler
   // lets only that bot's owner (or this computer's own person) through
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/computer\/(?:join|screenshot)$/ },
+  // Computer tab: attach enrolled unattended hosts to a bot the person edits.
+  // Handler enforces person isolation (own hosts only) in remote-bot-hosts.ts.
+  { methods: ["GET", "POST"], path: /^\/api\/bots\/[\w-]{1,80}\/remote-hosts$/ },
+  { methods: ["DELETE"], path: /^\/api\/bots\/[\w-]{1,80}\/remote-hosts\/(h_[0-9a-f]{32})$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]{1,80}\/remote-hosts\/(h_[0-9a-f]{32})\/open$/ },
   { methods: ["POST"], path: /^\/api\/computer\/(?:update|reset)$/ },
   // Its scheduled update, read and set from the phone (parity R7, O2). The
   // handler (routes/computer-care.ts) keys it to the person's own computer.
@@ -609,6 +614,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // generation, and the bot profile's Links, Media and Files tabs. The
   // handlers check the owner and narrow the threads to the viewer's own.
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/avatar\/generate$/ },
+  // Shape avatar geometry JSON via the bot's text model (fallback presets).
+  // Handler checks the owner; never an admin-only gate on the person's own bot.
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/shape-avatar\/generate$/ },
   // #1098: a bot's outbound allowance and today's count (Sending on your
   // behalf), for the owner who sets it; the handler checks the owner.
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/outbound$/ },
@@ -862,6 +870,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // A person's own connections (server/routes/person-connections.ts): their
   // GitHub account and their own MCP servers, the session's person only.
   { methods: ["GET"], path: /^\/api\/me\/connections$/, feature: "orgDirectory" },
+  // Lot 5: canonical person capability store (connections stays as alias).
+  { methods: ["GET"], path: /^\/api\/me\/capabilities$/, feature: "orgDirectory" },
+  { methods: ["GET"], path: /^\/api\/installation\/capabilities$/, feature: "orgDirectory" },
   // The person's own credential vault (server/routes/credential-vault.ts):
   // the session's own vault only. Reads are POSTs (a loopback GET needs no
   // desktop capability); no answer carries a value.
@@ -896,6 +907,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // person who may use the bot read them and its owner or a manager change them.
   { methods: ["GET", "POST"], path: /^\/api\/bots\/[\w-]+\/skills$/, feature: "orgDirectory" },
   { methods: ["GET", "PATCH", "DELETE"], path: /^\/api\/bots\/[\w-]+\/skills\/[a-z0-9-]+$/, feature: "orgDirectory" },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/skills\/[a-z0-9-]+\/(?:share|unshare)$/, feature: "orgDirectory" },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/skill-template$/, feature: "orgDirectory" },
   // Skills > Upload (server/routes/bot-skill-upload.ts): same rights as the
   // skills routes, checked in the handler.

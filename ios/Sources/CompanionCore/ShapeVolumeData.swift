@@ -65,6 +65,14 @@ public enum ShapeVolumeData {
         .nibble: 0.86,
         .shield: 0.854,
         .bubble: 0.94,
+        .pad: 1.003,
+        .cup: 1.04,
+        .bulb: 1.04,
+        .say: 1.014,
+        .sprout: 1.002,
+        .tin: 1.029,
+        .tome: 0.982,
+        .ship: 1.029,
     ]
 
     /// The motion library (`MOTIONS`).

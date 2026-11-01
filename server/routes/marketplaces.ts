@@ -21,6 +21,7 @@
 // carries a token (`hasToken` only says there is one).
 import type { IncomingMessage } from "node:http";
 
+import { setCapabilityDeprecationHeaders } from "../capability-route-deprecation.ts";
 import { MarketplaceError, type MarketplaceView, type MarketplaceViewer, type MarketplaceVisibility, type PluginMarketplaces } from "../plugin-marketplaces.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import type { MarketplaceCredentialView } from "../../shared/github-credentials.ts";
@@ -73,6 +74,7 @@ export function createMarketplaceRoutes(deps: MarketplaceRouteDeps): RouteHandle
   return async ({ req, res, path, method, auth, json, readBody }) => {
     if (path !== "/api/marketplaces" && !path.startsWith("/api/marketplaces/")) return PASS;
     res.setHeader("cache-control", "private, no-store");
+    setCapabilityDeprecationHeaders(res, "/api/installation/capabilities");
     const fail = (error: unknown) => {
       if (error instanceof MarketplaceError) return json(res, error.status, { error: error.message, code: error.code });
       if (error instanceof Error && error.name === "GithubCredentialsError") {

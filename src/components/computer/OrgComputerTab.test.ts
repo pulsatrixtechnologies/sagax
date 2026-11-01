@@ -41,7 +41,10 @@ describe("Computer tab on an organization server", () => {
       const markup = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place, computerOff: false, botName: "Luna" }));
       expect(markup).toContain('data-org-computer="user-sandbox"');
       expect(markup).toContain('data-computer-source="server"');
-      expect(markup).toContain('aria-label="Screen controls"');
+      // Calm waking while status loads: no Off badge, no transport bar yet.
+      expect(markup).toContain('data-computer-screen="starting"');
+      expect(markup).toContain('data-screen-calm="waking"');
+      expect(markup).toContain("Waking up");
       expect(markup).toContain("Luna&#x27;s screen");
       // Only the screen: no "works on" line, no description, usage folded.
       expect(markup).not.toContain("works on:");
@@ -119,60 +122,71 @@ describe("Computer tab on an organization server", () => {
     expect(markup).not.toContain("<pre");
   });
 
-  it("names each state of the screen", () => {
+  it("names each state of the screen (calm asleep / waking / running)", () => {
     const running = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "vm", computerOff: true, botName: "Luna", initialLocal: status({ ...STALE, state: "running", stale: null, folder: "/Users/example/.openmausbot/vm-home", folderExists: true }) }));
     expect(running).toContain('data-computer-screen="running"');
-    expect(running).toContain(">Running<");
+    // Running: live frame only, no badge, pause/stop on hover (hidden until intent).
+    expect(running).not.toContain('data-power=');
     expect(running).toMatch(/<button[^>]*aria-label="Pause"(?![^>]*disabled="")/);
     expect(running).toMatch(/<button[^>]*aria-label="Stop"(?![^>]*disabled="")/);
     expect(running).toContain("This bot&#x27;s computer is off");
     const missing = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "local", computerOff: false, botName: "Luna", initialLocal: status(null) }));
-    expect(missing).toContain(">Off<");
+    // Setup still keeps its primary action (not the calm one-line asleep).
+    expect(missing).toContain("Asleep");
     expect(missing).toContain("Set up in one click");
+    const asleep = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "local", computerOff: false, botName: "Luna",
+      initialLocal: status({ ...STALE, state: "exited", stale: null, folder: "/Users/example/.openmausbot/vm-home", folderExists: true }) }));
+    expect(asleep).toContain('data-screen-calm="asleep"');
+    expect(asleep).toContain("JeanChrophesMBP is asleep");
+    expect(asleep).not.toContain("data-screen-controls");
+    expect(asleep).not.toMatch(/Your server environment is off|press Start/i);
   });
 
   it("shows a state chip only when the state is not obvious from the screen", () => {
     expect(showsStateChip("running")).toBe(false);
-    for (const state of ["off", "starting", "paused", "error"] as const) expect(showsStateChip(state)).toBe(true);
+    expect(showsStateChip("off")).toBe(false);
+    expect(showsStateChip("starting")).toBe(false);
+    for (const state of ["paused", "error"] as const) expect(showsStateChip(state)).toBe(true);
     const running = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "vm", computerOff: false, botName: "Luna", initialLocal: status({ ...STALE, state: "running", stale: null, folder: "/Users/example/.openmausbot/vm-home", folderExists: true }) }));
     expect(running).not.toContain("data-power=");
     const paused = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "vm", computerOff: false, botName: "Luna", initialLocal: status({ ...STALE, state: "paused", stale: null, folder: "/Users/example/.openmausbot/vm-home", folderExists: true }) }));
     expect(paused).toContain('data-power="paused"');
-    const off = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "local", computerOff: false, botName: "Luna", initialLocal: status(null) }));
-    expect(off).toContain('data-power="off"');
+    const off = renderToStaticMarkup(createElement(ComputerScreen, { source: "server", state: "off", caption: "Luna's screen", computerName: "Cloud", controls: { play: () => {} } }));
+    expect(off).toContain('data-screen-calm="asleep"');
+    expect(off).not.toContain("data-power=");
     const error = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "vm", computerOff: false, botName: "Luna", initialLocal: status(STALE) }));
     expect(error).toContain('data-power="error"');
   });
 
-  it("hides Play / Pause / Stop until intent, except Play on a machine that is off", () => {
-    expect(controlsAlwaysShown("off")).toBe(true);
+  it("never forces the transport bar: asleep wakes by click, running reveals on hover", () => {
+    expect(controlsAlwaysShown("off")).toBe(false);
     for (const state of ["running", "starting", "paused", "error"] as const) expect(controlsAlwaysShown(state)).toBe(false);
     const running = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "vm", computerOff: false, botName: "Luna", initialLocal: status({ ...STALE, state: "running", stale: null, folder: "/Users/example/.openmausbot/vm-home", folderExists: true }) }));
     expect(running).toContain('data-controls="hidden"');
     expect(running).toMatch(/data-screen-controls="hidden"[^>]*pointer-events-none opacity-0/);
-    // Off with nothing else to press: Play is shown at once.
-    const serverOff = renderToStaticMarkup(createElement(ComputerScreen, { source: "server", state: "off", caption: "Luna's screen", controls: { play: () => {} } }));
-    expect(serverOff).toContain('data-screen-controls="shown"');
-    expect(serverOff).toMatch(/<button[^>]*aria-label="Start"/);
+    // Calm asleep: one line, no transport bar (wake by clicking the screen).
+    const serverOff = renderToStaticMarkup(createElement(ComputerScreen, { source: "server", state: "off", caption: "Luna's screen", computerName: "Cloud", controls: { play: () => {} } }));
+    expect(serverOff).toContain('data-screen-calm="asleep"');
+    expect(serverOff).toContain("Cloud is asleep");
+    expect(serverOff).not.toContain("data-screen-controls");
+    expect(serverOff).not.toMatch(/aria-label="Start"/);
   });
 
-  // Owner 2026-10-14: on the Local VM that is off, Démarrer sat on top of the
-  // floating Play / Pause / Stop bar. The off screen's own primary action
-  // replaces the bar; elsewhere the bar sits under the state, never over it.
+  // Owner 2026-10-14 / calm 2026-11-01: setup keeps its primary button; a
+  // plain off machine uses calm asleep (click to wake), never a transport bar.
   it("never draws Démarrer and the control bar together on a machine that is off", () => {
     expect(showsControlBar("off", { play: () => {} }, [{ label: "Start", onClick: () => {}, primary: true }])).toBe(false);
-    expect(showsControlBar("off", { play: () => {} }, [])).toBe(true);
+    expect(showsControlBar("off", { play: () => {} }, [])).toBe(false);
     expect(showsControlBar("running", { pause: () => {} }, [])).toBe(true);
     expect(showsControlBar("off", undefined, [])).toBe(false);
     const off = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "local", computerOff: false, botName: "Luna",
       initialLocal: status({ ...STALE, state: "exited", stale: null, folder: "/Users/example/.openmausbot/vm-home", folderExists: true }) }));
     expect(off).toContain('data-computer-screen="off"');
-    expect(off).toMatch(/<button[^>]*>Start<\/button>/);
+    expect(off).toContain('data-screen-calm="asleep"');
     expect(off).not.toContain("data-screen-controls");
-    // A state with the bar but no live screen keeps it in the screen's flow, under the words.
-    const serverOff = renderToStaticMarkup(createElement(ComputerScreen, { source: "server", state: "off", caption: "Luna's screen", message: "Off", controls: { play: () => {} } }));
-    expect(serverOff).toMatch(/data-screen-controls="shown" class="[^"]*mb-2 shrink-0/);
-    expect(serverOff).not.toMatch(/data-screen-controls="shown" class="[^"]*absolute/);
+    const setup = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "local", computerOff: false, botName: "Luna", initialLocal: status(null) }));
+    expect(setup).toMatch(/<button[^>]*>Set up in one click<\/button>/);
+    expect(setup).not.toContain("data-screen-controls");
   });
 
   it("keeps the caption on one line, with the whole name in its tooltip", () => {
@@ -202,9 +216,11 @@ describe("the cloud screen while its cluster wakes", () => {
     expect(serverScreenState(null, null)).toBe("starting");
   });
 
-  it("shows the quiet line under Starting only while the cluster wakes", () => {
+  it("shows calm Waking up with the quiet hint only while the cluster wakes", () => {
     const waking = render(WAKING);
     expect(waking).toContain('data-computer-screen="starting"');
+    expect(waking).toContain('data-screen-calm="waking"');
+    expect(waking).toContain("Waking up");
     expect(waking).toMatch(/data-screen-hint=""[^>]*text-\[11px\][^>]*text-ink-tertiary/);
     expect(waking).toContain("The environment was asleep. Starting can take a few minutes.");
     expect(waking).not.toContain("cannot be reached");
@@ -222,7 +238,7 @@ describe("the cloud screen while its cluster wakes", () => {
 
   it("shows Retry alone on an error: no control bar over it, one message", () => {
     expect(showsControlBar("error", { play: undefined }, [{ label: "Try again", onClick: () => {} }])).toBe(false);
-    expect(showsControlBar("error", { play: undefined }, [])).toBe(true);
+    expect(showsControlBar("error", { play: undefined }, [])).toBe(false);
     const error = render(DOWN);
     expect(error).toContain('data-computer-screen="error"');
     expect(error).toMatch(/<button[^>]*>Try again<\/button>/);

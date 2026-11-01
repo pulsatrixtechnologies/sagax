@@ -2,18 +2,20 @@ import Foundation
 import XCTest
 @testable import CompanionCore
 
-/// 2026-10-30: proactive bots wired for real (server/proactive-wake.ts).
-/// The phone reads a bot's mode like the server (absent is follow-rules,
-/// unknown is off), draws a proposal card until it is answered and answers
-/// it on its own route (shared/proactive-proposal.ts).
+/// Proactive on/off (shared/proactive-mode.ts). The phone reads a bot's
+/// mode like the server (absent is proactive, legacy acting modes become
+/// proactive, unknown is off), draws a leftover proposal card until it is
+/// answered and answers it on its own route (shared/proactive-proposal.ts).
 final class ProactiveModeTests: XCTestCase {
     func testModeReadsLikeTheServer() {
-        XCTAssertEqual(ProactiveMode.of(nil), .followRules)
-        XCTAssertEqual(ProactiveMode.of("propose"), .propose)
-        XCTAssertEqual(ProactiveMode.of("read-auto"), .readAuto)
+        XCTAssertEqual(ProactiveMode.of(nil), .proactive)
+        XCTAssertEqual(ProactiveMode.of("proactive"), .proactive)
+        XCTAssertEqual(ProactiveMode.of("propose"), .proactive)
+        XCTAssertEqual(ProactiveMode.of("read-auto"), .proactive)
+        XCTAssertEqual(ProactiveMode.of("follow-rules"), .proactive)
         XCTAssertEqual(ProactiveMode.of("off"), .off)
         XCTAssertEqual(ProactiveMode.of("garbled"), .off)
-        XCTAssertEqual(ProactiveMode.allCases.map(\.rawValue), ["off", "propose", "read-auto", "follow-rules"])
+        XCTAssertEqual(ProactiveMode.allCases.map(\.rawValue), ["off", "proactive"])
     }
 
     private func card(_ json: String) throws -> OptionCard {
@@ -40,7 +42,7 @@ final class ProactiveModeTests: XCTestCase {
     }
 
     func testPatchCarriesTheMode() throws {
-        let data = try JSONEncoder().encode(BotPanelPatch(proactiveMode: "propose"))
-        XCTAssertEqual(try JSONSerialization.jsonObject(with: data) as? [String: String], ["proactiveMode": "propose"])
+        let data = try JSONEncoder().encode(BotPanelPatch(proactiveMode: "proactive"))
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: data) as? [String: String], ["proactiveMode": "proactive"])
     }
 }

@@ -102,6 +102,13 @@ export const GUIDES: Guide[] = [
     refs: ["file:server/attachment-archives.ts", "file:electron/archive-extract.mjs"],
   },
   {
+    id: "attachment-upload-recovery",
+    title: "Attach a large file or retry an interrupted upload",
+    keywords: "attachment upload retry interrupted large file video fichier piece jointe televersement reprendre reessayer",
+    text: "Attach or drop a file in the composer. Documents, audio and archives accept up to 250 MB each; videos accept up to 1 GB. Pictures keep 32 MB on a shared host and 90 MB on a solo host. Files larger than 4 MB upload in resumable chunks with progress. Removing the chip cancels the upload; Retry upload resumes the acknowledged bytes of that same file, including after the server restarts. The file is committed only after its content checks pass. Existing buffered previews have a separate 25 MB shared or 90 MB solo limit. Archives keep their unpacked-size and path rules. No extra administrator action is needed to attach your files.",
+    refs: ["file:server/attachments.ts", "file:src/lib/attachment-uploads.ts"],
+  },
+  {
     id: "create-bot",
     title: "Create a new bot",
     keywords: "creer create nouveau new bot bots agent assistant",

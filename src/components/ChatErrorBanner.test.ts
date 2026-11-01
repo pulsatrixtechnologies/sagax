@@ -2,9 +2,33 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { ChatErrorBanner, ChatNotice } from "./ChatErrorBanner";
+import { ChatErrorBanner, ChatNotice, ChatReconnectBanner } from "./ChatErrorBanner";
 
 const source = (name: string) => readFileSync(new URL(`../${name}`, import.meta.url), "utf8");
+
+describe("ChatReconnectBanner", () => {
+  it("shows a calm reconnecting line only during a short post-connect outage", () => {
+    expect(renderToStaticMarkup(createElement(ChatReconnectBanner, {
+      connected: true, everConnected: true, disconnectedAt: null,
+    }))).toBe("");
+    expect(renderToStaticMarkup(createElement(ChatReconnectBanner, {
+      connected: false, everConnected: false, disconnectedAt: Date.now(),
+    }))).toBe("");
+    const markup = renderToStaticMarkup(createElement(ChatReconnectBanner, {
+      connected: false, everConnected: true, disconnectedAt: Date.now() - 1_000,
+    }));
+    expect(markup).toContain('role="status"');
+    expect(markup).toContain("data-chat-reconnecting");
+    expect(markup).toContain("Reconnecting");
+    expect(markup).not.toContain("role=\"alert\"");
+  });
+
+  it("is mounted in the chat and the room", () => {
+    for (const file of ["components/ChatView.tsx", "components/GroupView.tsx"]) {
+      expect(source(file)).toContain("<ChatReconnectBanner");
+    }
+  });
+});
 
 describe("ChatErrorBanner", () => {
   it("renders nothing when there is no error", () => {

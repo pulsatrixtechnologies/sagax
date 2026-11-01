@@ -20,6 +20,7 @@ import {
   phoneOAuthReturns,
   phoneReturnLocation,
   protectedResourceMetadataUrls,
+  REFRESH_MARGIN_MS,
   resolveVaultKey,
   type VaultKeySource,
 } from "./mcp-oauth.ts";
@@ -42,8 +43,16 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-function manager(key: () => VaultKeySource = () => FIXED_KEY): McpOAuthManager {
-  return new McpOAuthManager({ vault: new McpOAuthVault(dir, key), now: () => clock, timeoutMs: 5_000 });
+function manager(
+  key: () => VaultKeySource = () => FIXED_KEY,
+  extra: { sleep?: (ms: number, signal?: AbortSignal) => Promise<void>; timeoutMs?: number } = {},
+): McpOAuthManager {
+  return new McpOAuthManager({
+    vault: new McpOAuthVault(dir, key),
+    now: () => clock,
+    timeoutMs: extra.timeoutMs ?? 5_000,
+    ...(extra.sleep ? { sleep: extra.sleep } : {}),
+  });
 }
 
 function remote(url: string, headers: Record<string, string> = {}): RemoteMcpSpec {
@@ -240,14 +249,16 @@ describe("tokens for engines", () => {
   });
 
   it("refreshes before expiry and after the server refuses the token", async () => {
-    fake = await startFakeOAuthMcp({ accessTtl: 120 });
+    // Access lives long enough that a fresh token is outside the turn margin.
+    fake = await startFakeOAuthMcp({ accessTtl: Math.ceil(REFRESH_MARGIN_MS / 1000) + 600 });
     const oauth = manager();
     const server = remote(fake.mcpUrl);
     await signIn(oauth, "notes", server);
     const first = oauth.vault.get("notes")!.tokens!.access;
     await oauth.refreshDue({ notes: server });
     expect(oauth.vault.get("notes")!.tokens!.access).toBe(first); // not due yet
-    clock += 90_000; // within the 60 s margin
+    // Enter the turn-length margin: refresh so a long engine turn keeps a live header.
+    clock += 601_000;
     await oauth.refreshDue({ notes: server });
     const second = oauth.vault.get("notes")!.tokens!.access;
     expect(second).not.toBe(first);
@@ -264,10 +275,83 @@ describe("tokens for engines", () => {
     const oauth = manager();
     const server = remote(fake.mcpUrl);
     await signIn(oauth, "notes", server);
-    expect(await oauth.refresh("notes", server)).toBe(false);
+    expect(await oauth.refresh("notes", server, true)).toBe(false);
     expect(oauth.status("notes", server)).toMatchObject({ auth: "expired" });
     expect(oauth.vault.get("notes")!.tokens).toBeUndefined();
     expect(oauth.withAuthHeaders({ notes: server }).notes.headers).toEqual({});
+  });
+
+  it("keeps tokens and retries on 5xx, 429 and 408; clears only on invalid_grant or invalid_client", async () => {
+    const sleeps: number[] = [];
+    fake = await startFakeOAuthMcp({
+      accessTtl: 3_600,
+      refreshAnswers: [
+        { status: 503, body: { error: "temporarily_unavailable" } },
+        { status: 429, body: { error: "slow_down" } },
+        { status: 408, body: { error: "request_timeout" } },
+        "ok",
+      ],
+    });
+    const oauth = manager(() => FIXED_KEY, {
+      sleep: async (ms) => { sleeps.push(ms); },
+    });
+    const server = remote(fake.mcpUrl);
+    await signIn(oauth, "notes", server);
+    const before = oauth.vault.get("notes")!.tokens!;
+    expect(await oauth.refresh("notes", server, true)).toBe(true);
+    expect(sleeps.length).toBeGreaterThanOrEqual(3);
+    expect(oauth.vault.get("notes")!.tokens!.refresh).toBeTruthy();
+    expect(oauth.vault.get("notes")!.tokens!.access).not.toBe(before.access);
+    expect(oauth.status("notes", server)?.auth).toBe("connected");
+
+    // A lasting grant refusal still clears the sign-in.
+    fake.queueRefresh({ status: 400, body: { error: "invalid_grant", error_description: "revoked" } });
+    expect(await oauth.refresh("notes", server, true)).toBe(false);
+    expect(oauth.vault.get("notes")!.tokens).toBeUndefined();
+    expect(oauth.status("notes", server)).toMatchObject({ auth: "expired" });
+
+    // invalid_client also clears (bad registration), after a fresh sign-in.
+    await signIn(oauth, "notes", server);
+    fake.queueRefresh({ status: 401, body: { error: "invalid_client" } });
+    expect(await oauth.refresh("notes", server, true)).toBe(false);
+    expect(oauth.vault.get("notes")!.tokens).toBeUndefined();
+
+    // A non-grant 400 keeps the tokens (do not wipe on a deploy-shaped glitch).
+    await signIn(oauth, "notes", server);
+    const kept = oauth.vault.get("notes")!.tokens!;
+    fake.queueRefresh({ status: 400, body: { error: "invalid_request" } });
+    expect(await oauth.refresh("notes", server, true)).toBe(false);
+    expect(oauth.vault.get("notes")!.tokens?.refresh).toBe(kept.refresh);
+    expect(oauth.vault.get("notes")!.expired).not.toBe(true);
+  });
+
+  it("serializes refresh across managers that share a vault file", async () => {
+    fake = await startFakeOAuthMcp({
+      accessTtl: Math.ceil(REFRESH_MARGIN_MS / 1000) + 600,
+      refreshAnswers: [{ ok: true, delayMs: 80 }],
+    });
+    const a = manager();
+    const server = remote(fake.mcpUrl);
+    await signIn(a, "notes", server);
+    const before = a.vault.get("notes")!.tokens!;
+    clock += 601_000; // inside the turn margin for both
+    // A second manager on the same directory (desktop + server, or two workers).
+    const b = new McpOAuthManager({ vault: new McpOAuthVault(dir, () => FIXED_KEY), now: () => clock, timeoutMs: 5_000 });
+    const [ra, rb] = await Promise.all([
+      a.refresh("notes", server, false),
+      b.refresh("notes", server, false),
+    ]);
+    expect(ra).toBe(true);
+    expect(rb).toBe(true);
+    const refreshCalls = fake.tokenRequests.filter((row) => row.grant_type === "refresh_token");
+    expect(refreshCalls).toHaveLength(1);
+    a.vault.invalidate();
+    b.vault.invalidate();
+    const afterA = a.vault.get("notes")!.tokens!;
+    const afterB = b.vault.get("notes")!.tokens!;
+    expect(afterA.access).toBe(afterB.access);
+    expect(afterA.access).not.toBe(before.access);
+    expect(afterA.refresh).toBe(afterB.refresh);
   });
 
   it("disconnect revokes both tokens and keeps the client", async () => {
@@ -321,13 +405,13 @@ describe("several accounts on one server", () => {
   });
 
   it("refreshes the account a turn uses, and only that one", async () => {
-    fake = await startFakeOAuthMcp({ accessTtl: 120 });
+    fake = await startFakeOAuthMcp({ accessTtl: Math.ceil(REFRESH_MARGIN_MS / 1000) + 600 });
     const oauth = manager();
     const server = remote(fake.mcpUrl);
     await signIn(oauth, "notes", server);
     await addAccount(oauth, server, "acct-work01");
     const before = { first: oauth.vault.get("notes")!.tokens!.access, work: oauth.vault.get("notes", "acct-work01")!.tokens!.access };
-    clock += 90_000;
+    clock += 601_000;
     await oauth.refreshDue({ notes: server }, undefined, () => "acct-work01");
     expect(oauth.vault.get("notes")!.tokens!.access).toBe(before.first);
     expect(oauth.vault.get("notes", "acct-work01")!.tokens!.access).not.toBe(before.work);

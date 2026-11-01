@@ -25,7 +25,10 @@ import { z } from "zod";
 import { writeFileAtomic } from "./atomic.ts";
 import type { TokenCallPacer } from "./idp-token-pacer.ts";
 import type { VaultKeySource } from "./mcp-oauth.ts";
-import type { RevokeAttempt } from "./oidc-rp.ts";
+import type { RevocationHint, RevokeAttempt } from "./idp-revoke-types.ts";
+
+export type { RevocationHint, RevocationSink, RevokeAttempt } from "./idp-revoke-types.ts";
+import type { RevocationSink } from "./idp-revoke-types.ts";
 
 export const IDP_REVOCATIONS_FILE = "idp-revocations.enc";
 const REVOCATIONS_AAD = "pulsa-bot idp-revocations v1";
@@ -34,13 +37,6 @@ export const REVOCATION_MAX_AGE_MS = 30 * 86_400_000;
 export const REVOCATION_CAP = 5000;
 export const REVOCATION_BACKOFF_MS = 30_000;
 export const REVOCATION_BACKOFF_MAX_MS = 600_000;
-
-export type RevocationHint = "refresh_token" | "access_token";
-
-/** Where a revocation goes: the durable queue in production. */
-export interface RevocationSink {
-  enqueue(token: string, hint: RevocationHint, why: string): void;
-}
 
 /** A sink that calls at once (the fallback without a queue). */
 export function immediateRevocations(revoke: (token: string, hint: RevocationHint) => Promise<boolean>, log: (line: string) => void, prefix: string): RevocationSink {

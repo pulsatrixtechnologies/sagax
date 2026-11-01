@@ -177,6 +177,16 @@ struct ChatView: View {
     static let liveBubbleId = "companion.live"
     static let bottomId = "companion.bottom"
 
+    /// Lazy transcript is the default. DEBUG `-transcript-eager` forces the
+    /// old VStack path for before/after measure only.
+    static var usesLazyTranscript: Bool {
+#if DEBUG
+        !ProcessInfo.processInfo.arguments.contains("-transcript-eager")
+#else
+        true
+#endif
+    }
+
     /// The live chat record, so busy/unread stay current as frames land.
     var current: Chat {
         switch chat {
@@ -331,7 +341,7 @@ struct ChatView: View {
             isPresented: $showingPhotoPicker,
             selection: $selectedPhotos,
             maxSelectionCount: max(1, AttachmentPolicy.maximumItems - attachments.count),
-            matching: .images,
+            matching: .any(of: [.images, .videos]),
             preferredItemEncoding: .current
         )
         .fullScreenCover(isPresented: $showingCamera) {
@@ -344,6 +354,17 @@ struct ChatView: View {
         .onValueChange(of: selectedPhotos) { items in
             guard !items.isEmpty else { return }
             Task { await importPhotos(items) }
+        }
+        .onValueChange(of: session.recoveredAttachmentSends) { delivered in
+            let settled = attachments.contains { delivered.contains($0.id) }
+            attachments.removeAll { delivered.contains($0.id) }
+            if settled, attachments.isEmpty, session.recoveredAttachmentDraftTexts[threadId] == draft { draft = "" }
+        }
+        .onValueChange(of: draft) { text in
+            if !attachments.isEmpty { session.rememberAttachmentDraftText(text, threadId: threadId) }
+        }
+        .onValueChange(of: attachments.map(\.id)) { _ in
+            session.keepAttachmentDraft(attachments, threadId: threadId, text: draft)
         }
         .fileImporter(
             isPresented: $showingFileImporter,
@@ -429,8 +450,12 @@ struct ChatView: View {
         AnyView(arrival)
         .onAppear {
             if case let .bot(bot) = current { session.noteBackAtBot(bot.id) }
+            if attachments.isEmpty { attachments = session.pendingAttachmentDraft(threadId: threadId) }
+            if draft.isEmpty, !attachments.isEmpty { draft = session.pendingAttachmentDraftText(threadId: threadId) ?? "" }
+            session.keepAttachmentDraft(attachments, threadId: threadId, text: draft)
         }
         .onDisappear {
+            session.keepAttachmentDraft(attachments, threadId: threadId, text: draft)
             if case let .bot(bot) = current { session.noteLeftBot(bot.id) }
             if AttentionCenter.shared.viewingThreadId == current.threadId { AttentionCenter.shared.viewingThreadId = nil }
             dictation.stop()
@@ -579,12 +604,14 @@ struct ChatView: View {
             earlierTopicsShown = 0
             pendingTopicReveal = nil
             dictation.stop()
+            session.keepAttachmentDraft(attachments, threadId: previous, text: draft)
             threadDrafts[previous] = ComposerSnapshot(text: draft, attachments: attachments, error: attachmentError, replyTo: replyTo)
             let restored = threadDrafts.removeValue(forKey: next) ?? ComposerSnapshot()
             // another thread's draft coming back is not a paste
             power.pasteCheckSuppressed = restored.text != draft
             draft = restored.text
-            attachments = restored.attachments
+            attachments = restored.attachments.isEmpty ? session.pendingAttachmentDraft(threadId: next) : restored.attachments
+            if draft.isEmpty, !attachments.isEmpty { draft = session.pendingAttachmentDraftText(threadId: next) ?? "" }
             attachmentError = restored.error
             replyTo = restored.replyTo
             // a draft prepared for the thread now shown (Tasks "Answer")
@@ -640,15 +667,18 @@ struct ChatView: View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    // VStack, not LazyVStack. A lazy stack does not know how
-                    // tall it is until its rows have been built, so
-                    // `.defaultScrollAnchor(.bottom)` anchors against an
-                    // estimate and the chat opens somewhere in the middle of
-                    // the conversation. Building all of it up front makes the
-                    // height exact and the anchor land on the newest message.
-                    // A thread holds 50 messages until you ask for more, so
-                    // there is nothing here worth being lazy about.
-                    VStack(alignment: .leading, spacing: 0) {
+                    // LazyVStack by default: long threads (pagination, DEBUG
+                    // synthetic ~2000) stay cheap to open. Height is estimated
+                    // until rows appear, so `.defaultScrollAnchor(.bottom)`
+                    // alone can land mid-thread; the scrollTo(bottomId) paths
+                    // below (initial, new message, stream follower, settle
+                    // task, bottom onAppear) keep the newest message in view.
+                    // ChatLiveTail and the bottom spacer stay in this stack so
+                    // jump-to-latest, streaming and the thinking mascot keep
+                    // one identity. DEBUG `-transcript-eager` forces VStack
+                    // for before/after measure only.
+                    let useLazyTranscript = Self.usesLazyTranscript
+                    TranscriptStack(lazy: useLazyTranscript) {
                         // One conversation: the topic before the oldest one
                         // drawn loads on request, the way older messages do.
                         if let nextTopic {
@@ -813,6 +843,13 @@ struct ChatView: View {
                         Color.clear
                             .frame(height: desktopChat == nil ? 26.3 - Self.composerTopPadding : DesktopChatMetrics.composerGap)
                             .id(Self.bottomId)
+                            // Lazy stacks finish laying out after the first
+                            // pass; re-assert the bottom while following so
+                            // open-and-stream still land on the newest line.
+                            .onAppear {
+                                guard follow.following, session.focusedMessageId == nil, revealedMessageId == nil else { return }
+                                proxy.scrollTo(Self.bottomId, anchor: .bottom)
+                            }
                     }
                     .padding(.horizontal, desktopChat == nil ? Theme.Chat.bubbleLeading : 20)
                     .padding(.top, desktopChat == nil ? 12 : 56 - Self.topBarHeight)
@@ -824,6 +861,9 @@ struct ChatView: View {
                     .environment(\.conversationGallery, conversationGallery)
                     .environment(\.openPagePanel, openPagePanelAction)
                     .background(BottomFollowProbe(model: follow))
+#if DEBUG
+                    .background(LongTranscriptMetricsProbe(rowCount: transcript.count, lazyStack: useLazyTranscript))
+#endif
                     // an earlier topic asked for (a notification, a link, a
                     // search hit): its start comes on screen once it is drawn
                     .task(id: topicRevealKey) {
@@ -920,9 +960,12 @@ struct ChatView: View {
                 // pass; settle on the newest message once they have, unless a
                 // deep link asked for a particular one.
                 .task(id: threadId) {
-                    for delay in [150, 450] {
+                    // Lazy stacks keep revealing height after the first pass;
+                    // several settles keep the newest message on screen.
+                    for delay in [50, 150, 450, 900] {
                         try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000)
                         guard !Task.isCancelled, session.focusedMessageId == nil, revealedMessageId == nil else { return }
+                        guard follow.following else { return }
                         proxy.scrollTo(Self.bottomId, anchor: .bottom)
                     }
                 }
@@ -1067,7 +1110,7 @@ struct ChatView: View {
     var canSend: Bool {
         (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
             || !power.pastes(threadId).isEmpty || !citations.citations(threadId).isEmpty)
-            && !preparingAttachments && !sendingMessage
+            && !preparingAttachments && !sendingMessage && session.attachmentUploadsReady(attachments)
     }
 
     /// Messages the harness is holding for this thread. They sit above the

@@ -152,7 +152,7 @@
     },
     {
       "name": "coordinate_bots",
-      "description": "Ask existing Sagax teammates for advice or assign concrete work. In a room it defaults to this room; use group_id from list_room_targets for a specific room. Outside a room, everything you send a teammate from this conversation goes to one thread with them and runs after anything still running there. Give 1-4 bot_ids — teammate ids as list_bots or your roster prints them; a unique teammate name also resolves: they see only what you send them and use their own model, tools and permissions. They can consult their specialists; all results return here and resume you automatically. Include exact file paths, constraints and what must be verified. After sending all assignments, END your turn; do not poll or wait. On return, resolve tradeoffs, verify the requested outcome and request concrete corrections if necessary before giving one final answer. Do not send acknowledgements as new work.",
+      "description": "Ask existing Sagax teammates for advice or assign concrete work. In a room it defaults to this room; use group_id from list_room_targets for a specific room. Outside a room, everything you send a teammate from this conversation goes to one thread with them and runs after anything still running there. Give 1-4 bot_ids — teammate ids as list_bots or your roster prints them; a unique teammate name also resolves: they see only what you send them and use their own model, tools and permissions. They can consult their specialists; all results return here and resume you automatically. Include exact file paths, constraints and what must be verified. After sending all assignments, END your turn; do not poll or wait. On return, resolve tradeoffs, verify the requested outcome and request concrete corrections if necessary before giving one final answer. Do not send acknowledgements as new work. A peer ack alone is not completed: set done_when or rework on failed(incomplete).",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -192,6 +192,12 @@
           "relay": {
             "type": "boolean",
             "description": "True when the person only wants this one teammate's own answer passed back (ask it something, give its reply): the reply goes to the person directly, right after the line naming the teammate, and you are not resumed. Leave out when you must combine replies, check the work, decide or continue after it."
+          },
+          "done_when": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Harness-checked criterion: tool:ask_choice and/or first_line:PASS|FAIL (join with \"; \"). Free text is advisory. Unmet or a work-mode ack-only reply ends failed(incomplete)."
           }
         },
         "required": [
@@ -1578,7 +1584,7 @@
     },
     {
       "name": "routines",
-      "description": "Routines: propose, change, list and run. Set tool to the one to run, with its own arguments beside it.\n- propose_routine: Prepare a new routine after the user explicitly asks to schedule recurring or future work. A new routine starts active; pass enabled false to create it paused. Give exactly one of schedule or trigger. Call list_routines first for relative dates or times so you use its authoritative current time and timezone. Convert calendar requests (monthly dates, last days, nth weekdays) into a validated five-field cron schedule with an explicit IANA timeZone; keep elapsed every-N-minutes work as interval. Never approximate unsupported requests with a different weekly schedule or an AI date-check routine; explain the limitation instead. Resolve ambiguous dates, times, timezone, destination, or instructions with the user first, and always give one-time schedules an explicit RFC3339 offset. If the user asks for the routine to run as ANOTHER bot in your section, call list_bots and pass that bot's id as for_bot_id; each run retains that bot's own permissions. Read the result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result; report failed or cancelled results honestly. This does not elevate another bot's execution permissions. Needs: name, instructions.\n- propose_routine_action: Prepare a user-requested change to one of this bot's existing routines. Use list_routines first to get the routine id. If the user asks to change ANOTHER bot's routine and that bot is in your section, call list_bots and pass that bot's id as for_bot_id; the routine keeps its owner and every run keeps that bot's engine and permissions. Read the result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result; report failed or cancelled results honestly. This does not elevate another bot's execution permissions. Needs: routine_id, action.\n- list_routines: This bot's routines a page at a time, with the current time and timezone for relative dates. Read every page (offset) before counting; routine_id gives one in full. Only when asked about routines.\n- run_routine: Run one of this bot's own routines now, once. Get the routine id from list_routines. The schedule and the Active switch stay as they are; a paused routine runs and stays paused. It waits while busy, then starts; a run already in progress is returned, never doubled. Needs: routine_id.",
+      "description": "Routines: propose, change, list and run. Set tool to the one to run, with its own arguments beside it.\n- propose_routine: Prepare a new routine after the user explicitly asks to schedule recurring or future work. A new routine starts active; pass enabled false to create it paused. Give exactly one of schedule or trigger. Call list_routines first for relative dates or times so you use its authoritative current time and timezone. Convert calendar requests (monthly dates, last days, nth weekdays) into a validated five-field cron schedule with an explicit IANA timeZone; keep elapsed every-N-minutes work as interval. Never approximate unsupported requests with a different weekly schedule or an AI date-check routine; explain the limitation instead. Resolve ambiguous dates, times, timezone, destination, or instructions with the user first, and always give one-time schedules an explicit RFC3339 offset. If the user asks for the routine to run as ANOTHER bot in your section, call list_bots and pass that bot's id as for_bot_id; each run retains that bot's own permissions. Read the result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result; report failed or cancelled results honestly. This does not elevate another bot's execution permissions. Needs: name, instructions.\n- propose_routine_action: Prepare a user-requested change to one of this bot's existing routines (pause, resume, update name/instructions/schedule, delete, rotate webhook key). Use list_routines first to get the routine id. Follows this bot's Ask or Auto mode. The person's own AI client (Perspicax member API) edits without a proposal card via sagax_routine_update. If the user asks to change ANOTHER bot's routine and that bot is in your section, call list_bots and pass that bot's id as for_bot_id; the routine keeps its owner and every run keeps that bot's engine and permissions. Read the result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result; report failed or cancelled results honestly. This does not elevate another bot's execution permissions. Needs: routine_id, action.\n- list_routines: This bot's routines a page at a time, with the current time and timezone for relative dates. Read every page (offset) before counting; routine_id gives one in full (also accepts an owned webhook id from the Webhooks list, and a sibling bot's routine id when you can reach that bot). Short rows include webhookId when the routine starts from a delivery. Only when asked about routines.\n- run_routine: Run one of this bot's own routines now, once. Get the routine id from list_routines. The schedule and the Active switch stay as they are; a paused routine runs and stays paused. It waits while busy, then starts; a run already in progress is returned, never doubled. Needs: routine_id.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1757,6 +1763,10 @@
             "maxLength": 60,
             "description": "Folder of this bot's Routines list to file it in, such as Reports or Home. A new name makes the folder; reuse a name from list_routines to group with others. null in an update takes it out of its folder. Do not put the folder in the name as a [Prefix]."
           },
+          "delete_when_finished": {
+            "type": "boolean",
+            "description": "Delete this routine automatically once its schedule has no more runs and the last run has settled (completed, failed, cancelled or missed). Only for a one-time routine or an interval with an end date. Defaults to false. Past runs stay in the calendar and the run log. Set false in an update to keep it listed after it ends."
+          },
           "trigger": {
             "type": "object",
             "additionalProperties": false,
@@ -1790,7 +1800,7 @@
           "routine_id": {
             "type": "string",
             "minLength": 1,
-            "description": "Routine id from list_routines."
+            "description": "Routine id from list_routines. / Routine id from list_routines, or that routine's owned webhook id."
           },
           "action": {
             "type": "string",
@@ -1971,6 +1981,10 @@
                 ],
                 "maxLength": 60,
                 "description": "Folder of this bot's Routines list to file it in, such as Reports or Home. A new name makes the folder; reuse a name from list_routines to group with others. null in an update takes it out of its folder. Do not put the folder in the name as a [Prefix]."
+              },
+              "delete_when_finished": {
+                "type": "boolean",
+                "description": "Delete this routine automatically once its schedule has no more runs and the last run has settled (completed, failed, cancelled or missed). Only for a one-time routine or an interval with an end date. Defaults to false. Past runs stay in the calendar and the run log. Set false in an update to keep it listed after it ends."
               }
             },
             "description": "Fields to change when action is update. Omit for every other action."
@@ -2100,6 +2114,30 @@
           "model_selection",
           "reason"
         ]
+      }
+    },
+    {
+      "name": "generate_shape_avatar",
+      "description": "Build a portable Shape mascot definition (geometry JSON only) from a short description and apply it to this bot's look. Use when the person asks to make a mascot that looks like an object (mug, pad, bulb, speech bubble, plant, can, book, rocket, …). Colour stays the bot's colour. The definition is validated before it is stored. Read the result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result; report failed or cancelled results honestly. This does not elevate another bot's execution permissions.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "type": "string",
+            "maxLength": 400,
+            "description": "What the silhouette should look like, for example \"a friendly coffee mug\"."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "When true (default), save the definition on this bot's mascotLook. When false, only return the JSON."
+          },
+          "definition": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Optional ready-made definition JSON to validate and apply instead of generating from direction."
+          }
+        }
       }
     },
     {
@@ -2348,7 +2386,7 @@
     },
     {
       "name": "skills",
-      "description": "Skills: list and manage. Set tool to the one to run, with its own arguments beside it.\n- skills_list: List this bot's imported skills (enabled and disabled) and any staged skill writes still waiting for the user's decision. Use this before skill_manage to avoid duplicate names. Listing does not enable anything.\n- skill_manage: Submit a new or updated reusable SKILL.md. Never update unless the user explicitly asked to revise that named skill. If the result is pending, a create stays inactive and an update leaves the current version unchanged. Read the result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result; report failed or cancelled results honestly. This does not elevate another bot's execution permissions. Needs: action, skill_md, source.",
+      "description": "Skills: list and manage. Set tool to the one to run, with its own arguments beside it.\n- skills_list: Search this turn's bot, Me and plugin skills, commands and agents. Enabled rows include descriptions and workspace_read paths. Listing changes nothing. Use nextOffset to continue.\n- skill_manage: Submit a new or updated reusable SKILL.md. Never update unless the user explicitly asked to revise that named skill. If the result is pending, a create stays inactive and an update leaves the current version unchanged. Read the result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result; report failed or cancelled results honestly. This does not elevate another bot's execution permissions. Needs: action, skill_md, source.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -2360,6 +2398,16 @@
               "skill_manage"
             ],
             "description": "The tool to run."
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Name, description, source or scope."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Previous nextOffset; default 0."
           },
           "action": {
             "type": "string",
@@ -2488,25 +2536,80 @@
     },
     {
       "name": "make_video",
-      "description": "Ask for a video from a short description, or from an image the person already attached in this turn. If image_to_video or reference_to_video is in your tools, call that instead: it is the producer. This tool never runs a shell. If no producer is connected, it says so and does not invent one.",
+      "description": "Generate a video using the person's xAI API key, or the organization's granted xAI images and videos account. This may incur API charges. Native image_to_video and reference_to_video remain available when the engine offers them. generate starts an async job and returns job_id; status reads progress, list finds this conversation's jobs, cancel stops local polling/download, retry resumes the SAME upstream request without another paid generation. The completed MP4 is saved and attached in this chat. Never claim completion from pending status or show a temporary provider URL. Use a stable request_key for safe retries across turns. A new generate request_key starts a separately billable job. No remote xAI cancellation API is documented.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "generate",
+              "status",
+              "list",
+              "cancel",
+              "retry"
+            ],
+            "description": "Default generate."
+          },
           "prompt": {
             "type": "string",
             "maxLength": 2000,
-            "description": "What the video should show."
+            "description": "What the video should show; required for generate."
           },
           "image": {
             "type": "string",
             "maxLength": 500,
-            "description": "Optional reference already in this turn. Not a new upload and not a shell path to go fetch."
+            "description": "Optional exact attachment path or /api/attachments URL for an image in the current person's message. No external URL or arbitrary file."
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 15,
+            "description": "Seconds; default 8."
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "16:9",
+              "9:16",
+              "4:3",
+              "3:4",
+              "3:2",
+              "2:3",
+              "21:9",
+              "5:2"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p"
+            ]
+          },
+          "generate_audio": {
+            "type": "boolean",
+            "description": "Default true."
+          },
+          "job_id": {
+            "type": "string",
+            "description": "Returned job id; required for status, cancel and retry."
+          },
+          "request_key": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Stable identity for one generation. Same key and arguments reuse its job even across turns. Default: one generation per person request, including engine failover."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "For list: next_offset from the previous page; 20 jobs per page."
           }
         },
-        "required": [
-          "prompt"
-        ]
+        "required": []
       }
     }
   ]

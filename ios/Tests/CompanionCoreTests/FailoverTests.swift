@@ -82,6 +82,22 @@ final class FailoverTests: XCTestCase {
         }
     }
 
+    func testDeployOutageShowsCalmReconnectingWithoutAnotherRoute() {
+        for code in [502, 503, 504] {
+            XCTAssertTrue(ConnectionAdvice.isDeployOutageStatus(code))
+            let message = ConnectionAdvice.message(forGatewayStatus: code, host: "mac.example")
+            XCTAssertEqual(message, String(localized: "Reconnecting…"))
+            XCTAssertFalse(message.contains("HTTP"))
+        }
+        let withNext = ConnectionAdvice.message(
+            forGatewayStatus: 502,
+            host: "mac.example",
+            tryingNext: "10.0.0.2"
+        )
+        XCTAssertTrue(withNext.contains("10.0.0.2"))
+        XCTAssertFalse(ConnectionAdvice.isDeployOutageStatus(500))
+    }
+
     func testConsumedWriteReplaysOnlyWhenDeliveryIsProvenImpossible() {
         // Dial and handshake failures never sent a byte.
         XCTAssertTrue(ConnectionAdvice.provablyUndeliveredRequest(URLError(.cannotFindHost)))

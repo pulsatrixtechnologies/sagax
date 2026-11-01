@@ -29,8 +29,7 @@ import { join } from "node:path";
 import { DATA_DIR } from "../../config.ts";
 import type { McpServerSpec } from "../../contracts.ts";
 import { READ_ONLY_AGENT_TOOL_NAMES } from "../../agent-tool-policy.ts";
-import { isFlowToolsServer, isPerspicaxBridge, PERSPICAX_READ_ONLY_TOOLS } from "./grok-read-only-tools.ts";
-import { FLOW_TOOL_NAMES, FLOW_TOOLS_MCP_NAME } from "../../flow-tools.ts";
+import { isPerspicaxBridge, PERSPICAX_READ_ONLY_TOOLS } from "./grok-read-only-tools.ts";
 import { AUTO_COMPUTER_MCP_NAME } from "../../auto-computer.ts";
 import { cloudOnlyBot } from "../../cloud-only-bots.ts";
 
@@ -71,6 +70,5 @@ export function gateReadOnlyTools(server: { name: string; builtin: boolean; spec
   // computer_select can move the turn to the person's machine and still asks.
   if (server.builtin && server.name === AUTO_COMPUTER_MCP_NAME && cloudOnlyBot(botId, dataDir)) return ["computer_select"];
   if (!server.builtin && server.name !== "agents" && isPerspicaxBridge(server.spec)) return [...PERSPICAX_READ_ONLY_TOOLS];
-  if (!server.builtin && server.name === FLOW_TOOLS_MCP_NAME && isFlowToolsServer(server.spec)) return [...FLOW_TOOL_NAMES];
   return [];
 }

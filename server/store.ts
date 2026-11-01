@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic, writeFileAtomicIfChanged } from "./atomic.ts";
-import { PROACTIVE_MODE_DEFAULT } from "../shared/proactive-mode.ts";
+import { PROACTIVE_MODE_DEFAULT, normalizeProactiveMode } from "../shared/proactive-mode.ts";
 import { commitBotChange, keptRevocation, saveBotsFor } from "./bots-save.ts";
 import { applyHumanIds } from "./channel-membership.ts";
 import { parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
@@ -930,13 +930,13 @@ export class Store {
         botsMigrated = true;
       }
     }
-    // 0.8.19: every bot is proactive by default. A record that never stored
-    // a mode (the person never chose one: before 0.8.19 "off" was stored as
-    // nothing) takes the default, written once so every client reads it. A
-    // mode the person chose, "off" included since 0.8.19, is kept.
+    // 0.8.19: every bot is proactive by default. 2026-11-01: only off |
+    // proactive remain; propose / read-auto / follow-rules all become
+    // proactive; a chosen off stays off; a garbled value fails closed to off.
     for (const b of this.bots) {
-      if (b.proactiveMode === undefined || b.proactiveMode === null) {
-        b.proactiveMode = PROACTIVE_MODE_DEFAULT;
+      const next = normalizeProactiveMode(b.proactiveMode);
+      if (b.proactiveMode !== next) {
+        b.proactiveMode = next;
         botsMigrated = true;
       }
     }

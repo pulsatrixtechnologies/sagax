@@ -382,6 +382,16 @@ const definitions = [
       fr: "Lister leurs propres routines et lire les instructions complètes d'une routine depuis un client relié à Perspicax. La routine d'une autre personne reste cachée.",
     },
   },
+  // 2026-11-01 (#1891): a person manages their own routines from an AI client
+  // (enable/disable, rename, schedule, instructions) without an admin.
+  {
+    key: "clients.routinesWrite", group: "clients", memberDefault: true, adminOnly: false, memberAlways: true,
+    label: { en: "Change their routines from an AI client", fr: "Modifier leurs routines depuis un client IA" },
+    description: {
+      en: "Enable, disable, rename, and edit the schedule or instructions of routines they own from a client attached to Perspicax. Another person's routine is hidden. Bot proposals still follow the bot's Ask or Auto mode.",
+      fr: "Activer, désactiver, renommer et modifier l'horaire ou les instructions des routines qu'ils possèdent depuis un client relié à Perspicax. La routine d'une autre personne reste cachée. Les propositions d'un bot suivent encore son mode Demander ou Auto.",
+    },
+  },
   {
     key: "clients.approvalsAnswer", group: "clients", memberDefault: false, adminOnly: false,
     label: { en: "Answer approvals from an AI client", fr: "Répondre aux approbations depuis un client IA" },

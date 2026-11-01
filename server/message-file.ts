@@ -15,12 +15,18 @@ import { atRestStream, describeHandle, plainSizeFor, readAllFromHandle } from ".
 import { windowsPathDestinations } from "../shared/markdown-windows-paths.ts";
 import { isSharedHost } from "./host-kind.ts";
 
-/** The shared host's ceiling (an organization server). #1098: a solo
- * server opens files up to the archive ceiling (attachments.ts). */
-export const MESSAGE_FILE_MAX_BYTES = 25 * 1024 * 1024;
-const SOLO_MESSAGE_FILE_MAX_BYTES = 90 * 1024 * 1024;
-export function messageFileMaxBytes(sharedHost = isSharedHost()): number {
-  return sharedHost ? MESSAGE_FILE_MAX_BYTES : SOLO_MESSAGE_FILE_MAX_BYTES;
+/** Message-authorized downloads use the same durable transport ceilings as
+ * composer uploads. Previewers keep their own smaller in-memory ceilings.
+ * Images retain the existing shared/solo limits, while a video may stream
+ * through one 1 GiB file without ever becoming one in-memory Buffer. */
+export const MESSAGE_FILE_MAX_BYTES = 250 * 1024 * 1024;
+export const MESSAGE_VIDEO_MAX_BYTES = 1024 * 1024 * 1024;
+export const MESSAGE_IMAGE_MAX_BYTES = 32 * 1024 * 1024;
+const SOLO_MESSAGE_IMAGE_MAX_BYTES = 90 * 1024 * 1024;
+export function messageFileMaxBytes(mime = "application/octet-stream", sharedHost = isSharedHost()): number {
+  if (mime.startsWith("video/")) return MESSAGE_VIDEO_MAX_BYTES;
+  if (mime.startsWith("image/")) return sharedHost ? MESSAGE_IMAGE_MAX_BYTES : SOLO_MESSAGE_IMAGE_MAX_BYTES;
+  return MESSAGE_FILE_MAX_BYTES;
 }
 
 export interface OpenedMessageFile {
@@ -467,10 +473,6 @@ export async function openMessageFile(href: string, roots: readonly string[]): P
       const opened = await handle.stat();
       if (opened.isDirectory()) throw statusError(400, "the link points to a folder, not a file", "directory");
       if (!opened.isFile()) throw statusError(400, "the link does not point to a regular file");
-      if (opened.size > messageFileMaxBytes()) {
-        throw statusError(413, `file exceeds ${messageFileMaxBytes()} bytes`);
-      }
-
       const canonicalAfter = await realpath(candidate);
       if (!containedBy(root, canonicalAfter)) throw outsideWorkspace();
       const after = await stat(canonicalAfter);
@@ -478,14 +480,19 @@ export async function openMessageFile(href: string, roots: readonly string[]): P
         throw statusError(409, "the linked file changed while it was being opened");
       }
 
-      // sealed at rest (server/content-at-rest.ts): served and copied as plaintext
+      // Sealed files are a little larger on disk than their plaintext. Apply
+      // the public ceiling to the described plaintext size, never the cipher
+      // container's stat size, so an exact-limit upload remains downloadable.
       const content = await describeHandle(handle, canonicalAfter);
+      const mime = mimeFor(canonicalAfter);
+      const maximum = messageFileMaxBytes(mime);
+      if (content.size > maximum) throw statusError(413, `file exceeds ${maximum} bytes`);
       const opener = handle;
       return {
         handle,
         bytes: content.size,
         name: basename(canonicalAfter),
-        mime: mimeFor(canonicalAfter),
+        mime,
         stream: (options = {}) => atRestStream(opener, content, options.start ?? 0, options.end ?? content.size - 1, options.autoClose ?? true),
         read: () => readAllFromHandle(opener, content),
       };
@@ -528,7 +535,10 @@ export async function statMessageFile(href: string, roots: readonly string[]): P
       const info = await stat(canonical);
       if (!info.isFile()) continue;
       // its plaintext size (a stored file may be sealed at rest)
-      return { bytes: plainSizeFor(canonical, info), name: basename(canonical), mime: mimeFor(canonical), path: canonical };
+      const bytes = plainSizeFor(canonical, info);
+      const mime = mimeFor(canonical);
+      if (bytes > messageFileMaxBytes(mime)) continue;
+      return { bytes, name: basename(canonical), mime, path: canonical };
     } catch {
       continue;
     }
@@ -661,11 +671,14 @@ async function readMessageFolder(
         if (!containedBy(root, target)) continue;
         const info = await stat(target);
         if (!info.isFile()) continue;
+        const mime = mimeFor(target);
+        const bytes = plainSizeFor(target, info);
+        if (bytes > messageFileMaxBytes(mime)) continue;
         if (entries.length >= MESSAGE_FOLDER_MAX_ENTRIES) {
           truncated = true;
           break;
         }
-        entries.push({ name, bytes: info.size, mime: mimeFor(target) });
+        entries.push({ name, bytes, mime });
       } catch {
         continue;
       }

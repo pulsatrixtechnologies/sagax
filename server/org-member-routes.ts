@@ -8,6 +8,7 @@
 //   GET  /api/org/member/threads/{id}          messages since a cursor
 //   GET  /api/org/member/routines              the person's own routines
 //   GET  /api/org/member/routines/{id}         one routine, full instructions
+//   PATCH /api/org/member/routines/{id}        enable/disable, rename, schedule, instructions
 //   POST /api/org/member/routines/{id}/run     run a routine now
 //   GET  /api/org/member/routines/runs/{id}    one run
 //   GET  /api/org/member/bots/{id}/rules       the owner's rules
@@ -109,7 +110,7 @@ export interface MemberPerson {
 
 /** One Sagax route performed as the person. */
 export interface MemberRequest {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PATCH";
   path: string;
   query?: Record<string, string>;
   body?: unknown;
@@ -228,12 +229,17 @@ interface MemberContext {
 }
 
 interface MemberRoute {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PATCH";
   path: string;
   /** The permission the route needs; none for capabilities. */
   permission?: PermissionKey;
   handle(ctx: MemberContext): Promise<Answer | StreamAnswer>;
 }
+
+/** Caps for a member routine PATCH (match Sagax / agents catalog). */
+const MEMBER_ROUTINE_NAME_MAX = 80;
+const MEMBER_ROUTINE_INSTRUCTIONS_MAX = 20_000;
+const MEMBER_ROUTINE_PATCH_FIELDS = ["enabled", "name", "instructions", "schedule"] as const;
 
 const answer = (body: unknown, status = 200): Answer => ({ status, body });
 
@@ -248,9 +254,11 @@ function passThrough(reply: MemberReply, fallback: string): Answer {
   const body = reply.body && typeof reply.body === "object" && !Array.isArray(reply.body) ? reply.body as Record<string, unknown> : {};
   const message = typeof body.message === "string" && body.message ? body.message : typeof body.error === "string" && body.error ? body.error : fallback;
   const permission = typeof body.permission === "string" ? body.permission : undefined;
+  // A start refused because a run is under way names that run (2026-11-01).
+  const runId = typeof body.runId === "string" ? body.runId : undefined;
   const code = permission ? "forbidden_permission" : typeof body.code === "string" ? body.code : reply.status === 404 ? "not_found" : reply.status === 403 ? "forbidden" : reply.status === 409 ? "conflict" : reply.status >= 500 ? "server_error" : "refused";
   const status = reply.status >= 400 && reply.status < 600 ? reply.status : 502;
-  return fail(status, code, message.slice(0, 500), permission ? { permission } : {});
+  return fail(status, code, message.slice(0, 500), { ...(permission ? { permission } : {}), ...(runId ? { runId } : {}) });
 }
 
 const okStatus = (reply: MemberReply) => reply.status >= 200 && reply.status < 300;
@@ -299,7 +307,9 @@ function docPath(path: string): string | null {
 
 function lastRunOf(runs: readonly Record<string, unknown>[], routineId: string) {
   const mine = runs.filter((run) => run.routineId === routineId);
-  mine.sort((a, b) => (typeof b.startedAt === "number" ? b.startedAt : 0) - (typeof a.startedAt === "number" ? a.startedAt : 0));
+  // A run that has not started yet (queued) is the newest too (2026-11-01).
+  const at = (run: Record<string, unknown>) => typeof run.startedAt === "number" ? run.startedAt : typeof run.createdAt === "number" ? run.createdAt : 0;
+  mine.sort((a, b) => at(b) - at(a));
   const run = mine[0];
   if (!run || typeof run.id !== "string") return null;
   return {
@@ -307,6 +317,7 @@ function lastRunOf(runs: readonly Record<string, unknown>[], routineId: string) 
     status: str(run.status),
     startedAt: typeof run.startedAt === "number" ? run.startedAt : null,
     endedAt: typeof run.finishedAt === "number" ? run.finishedAt : typeof run.endedAt === "number" ? run.endedAt : null,
+    ...(typeof run.problems === "string" && run.problems ? { problems: scrubText(run.problems).slice(0, 1_000) } : {}),
   };
 }
 
@@ -442,8 +453,9 @@ function cardQuestions(card: Record<string, unknown>): AskQuestion[] | null {
   return request ? parseAskQuestions({ questions: request.questions }) : null;
 }
 
-/** A card as an AI client reads it. */
-export function describeApproval(threadId: string, message: Record<string, unknown>, card: Record<string, unknown>): MemberApproval {
+/** A card as an AI client reads it. Not shared/approval-describe's tool-card
+ * wording: this builds the MemberApproval shape for the member API. */
+export function describeMemberApproval(threadId: string, message: Record<string, unknown>, card: Record<string, unknown>): MemberApproval {
   const kind = approvalKind(card);
   const labels = parseChoices(card.options, MAX_OPTIONS) ?? [];
   const questions = kind === "question" ? cardQuestions(card) : null;
@@ -652,7 +664,7 @@ export function readThreadPage(threadId: string, raw: unknown, since: string | n
     const card = objectOf(m.card);
     const requestId = str(card?.requestId);
     if (!card || !requestId || card.answered !== undefined || card.dismissed === true || card.expired === true) continue;
-    approvals.push(describeApproval(threadId, m, card));
+    approvals.push(describeMemberApproval(threadId, m, card));
   }
   const last = all.at(-1);
   return {
@@ -938,7 +950,7 @@ function memberRoutes(deps: OrgMemberRouteDeps): MemberRoute[] {
     const page = await rawPage(person, threadId);
     if (!("raw" in page)) return page;
     const found = cardIn(page.raw, requestId);
-    const approval = found ? describeApproval(threadId, found.message, found.card) : null;
+    const approval = found ? describeMemberApproval(threadId, found.message, found.card) : null;
     // A card older than the page read: answered by decision, as before.
     const plan = approval && found ? planAnswer(approval, found.card, input)
       : input.decision ? { ok: true as const, decision: input.decision, picked: null, via: "decision" as const, body: { behavior: input.decision } }
@@ -1234,13 +1246,93 @@ function memberRoutes(deps: OrgMemberRouteDeps): MemberRoute[] {
       },
     },
     {
+      // 2026-11-01 (#1891): the person manages their own routine as themselves
+      // (same as the Automations editor). Bot Ask/Auto still gates propose_*;
+      // this path is the person's own write, never a bot proposal.
+      method: "PATCH", path: "routines/{id}", permission: "clients.routinesWrite",
+      async handle({ person, params, body }) {
+        const input = objectOf(body);
+        if (!input) return fail(400, "bad_request", "Send { \"enabled\", \"name\", \"instructions\" and/or \"schedule\" }.");
+        const extra = Object.keys(input).filter((key) => !(MEMBER_ROUTINE_PATCH_FIELDS as readonly string[]).includes(key));
+        if (extra.length) return fail(400, "bad_request", `Unknown field: ${extra[0]}.`);
+        const patch: Record<string, unknown> = {};
+        const fields: string[] = [];
+        if (Object.hasOwn(input, "enabled")) {
+          if (typeof input.enabled !== "boolean") return fail(400, "bad_request", "enabled is true or false.");
+          patch.enabled = input.enabled;
+          fields.push("enabled");
+        }
+        if (Object.hasOwn(input, "name")) {
+          if (typeof input.name !== "string") return fail(400, "bad_request", "name is a string.");
+          const name = input.name.trim();
+          if (!name || name.length > MEMBER_ROUTINE_NAME_MAX) {
+            return fail(400, "bad_request", `name is 1 to ${MEMBER_ROUTINE_NAME_MAX} characters.`);
+          }
+          patch.name = name;
+          fields.push("name");
+        }
+        if (Object.hasOwn(input, "instructions")) {
+          if (typeof input.instructions !== "string") return fail(400, "bad_request", "instructions is a string.");
+          const instructions = input.instructions.trim();
+          if (!instructions || instructions.length > MEMBER_ROUTINE_INSTRUCTIONS_MAX) {
+            return fail(400, "bad_request", `instructions is 1 to ${MEMBER_ROUTINE_INSTRUCTIONS_MAX} characters.`);
+          }
+          // Sagax PATCH uses prompt; the member wire keeps instructions.
+          patch.prompt = instructions;
+          fields.push("instructions");
+        }
+        if (Object.hasOwn(input, "schedule")) {
+          if (!input.schedule || typeof input.schedule !== "object" || Array.isArray(input.schedule)) {
+            return fail(400, "bad_request", "schedule is an object (cron, daily/weekly, or interval, with a time zone when needed).");
+          }
+          const schedule = input.schedule as Record<string, unknown>;
+          const type = str(schedule.type);
+          if (type !== "cron" && type !== "daily" && type !== "interval" && type !== "once" && type !== "webhook" && type !== "event") {
+            return fail(400, "bad_request", "schedule.type is cron, daily, interval, once, webhook or event.");
+          }
+          patch.schedule = schedule;
+          fields.push("schedule");
+        }
+        if (!fields.length) return fail(400, "bad_request", "Send at least one of enabled, name, instructions, schedule.");
+
+        const rows = await ownRoutineRows(person);
+        if ("status" in rows) return rows;
+        const owned = rows.routines.find((row) => row.id === params.id);
+        if (!owned) return fail(404, "not_found", "No such routine.");
+
+        const reply = await deps.perform(person, {
+          method: "PATCH",
+          path: `/api/routines/${encodeURIComponent(params.id!)}`,
+          body: patch,
+        });
+        if (!okStatus(reply)) return passThrough(reply, "The routine could not be updated.");
+        const updated = objectOf(objectOf(reply.body)?.routine) ?? objectOf(reply.body);
+        deps.record(person, {
+          action: "client.routine_update",
+          target: { kind: "routine", id: params.id!, ...(typeof owned.name === "string" ? { name: scrubText(owned.name).slice(0, 80) } : {}) },
+          after: { fields },
+        });
+        // Prefer the live Sagax row; fall back to the owned list row with the
+        // patch applied so the answer still matches projectRoutine.
+        const row = updated && typeof updated.id === "string"
+          ? { ...owned, ...updated, ...(typeof updated.prompt === "string" ? { prompt: updated.prompt } : {}), ...(Object.hasOwn(patch, "prompt") ? { prompt: patch.prompt } : {}) }
+          : { ...owned, ...patch, ...(Object.hasOwn(patch, "prompt") ? { prompt: patch.prompt } : {}) };
+        return answer({ routine: projectRoutine(row, rows.runs, true) });
+      },
+    },
+    {
       method: "POST", path: "routines/{id}/run", permission: "clients.routinesRun",
       async handle({ person, params }) {
         const reply = await deps.perform(person, { method: "POST", path: `/api/routines/${encodeURIComponent(params.id!)}/run`, body: {} });
         if (!okStatus(reply)) return passThrough(reply, "The routine could not be run.");
-        const run = wireRun(objectOf(objectOf(reply.body)?.run));
+        const body = objectOf(reply.body);
+        const run = wireRun(objectOf(body?.run), true);
         deps.record(person, { action: "client.routine_run", target: { kind: "routine", id: params.id! }, after: { runId: run?.id ?? null } });
-        return answer({ run }, 201);
+        // 2026-11-01: the start's receipt (what started, where it stands in
+        // its bot's queue and why, where to follow it), passed on as said.
+        const standing = objectOf(body?.standing);
+        const message = str(body?.message);
+        return answer({ run, ...(standing ? { standing: scrubValue(standing) } : {}), ...(message ? { message: scrubText(message).slice(0, 1_000) } : {}) }, 201);
       },
     },
     {
@@ -1459,6 +1551,8 @@ function wireRun(run: Record<string, unknown> | null | undefined, detail = false
     threadId: str(run.threadId) ?? str(run.resultsThreadId) ?? str(run.executionThreadId),
     startedAt: typeof run.startedAt === "number" ? run.startedAt : null,
     endedAt: typeof run.finishedAt === "number" ? run.finishedAt : null,
+    // 2026-11-01: completed, but not all of it went right: never a plain success.
+    ...(typeof run.problems === "string" && run.problems ? { problems: scrubText(run.problems).slice(0, 1_000) } : {}),
     ...(detail ? { attention: cut(run.attention, 500), error: cut(run.error, 500), output: cut(run.output, MEMBER_REPLY_MAX) } : {}),
   };
 }
@@ -1550,7 +1644,7 @@ export function createOrgMemberRoutes(deps: OrgMemberRouteDeps): (req: IncomingM
       return refuse(403, "forbidden_permission", `Your profile does not include ${permissionLabel(route.permission, typeof assertion.locale === "string" ? assertion.locale : "en")}. Ask an admin to add it in Perspicax.`, { permission: route.permission });
     }
     let body: unknown = null;
-    if (method === "POST") {
+    if (method === "POST" || method === "PATCH") {
       const max = sub === "agents/send_prompt" ? AGENT_SEND_BODY_BYTES : MAX_BODY_BYTES;
       const declared = Number(req.headers["content-length"] ?? 0);
       if (Number.isFinite(declared) && declared > max) return refuse(413, "too_large", `The body is larger than ${max} bytes.`);

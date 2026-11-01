@@ -109,8 +109,8 @@ final class RoutinesUITests: XCTestCase {
         app.launchArguments = arguments
         app.launch()
         // Automations opens from the account menu, under Settings
-        XCTAssertTrue(app.buttons["home-account"].waitForExistence(timeout: 30))
-        app.buttons["home-account"].tap()
+        XCTAssertTrue(app.buttons["home-apps"].waitForExistence(timeout: 30))
+        app.buttons["home-apps"].tap()
         let row = app.buttons["account-menu.automations"]
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()

@@ -73,6 +73,11 @@ private struct PhoneBotPanelContent: View {
     @StateObject private var owlHandle = OwlMascotHandle()
     @State private var draft: CharacterDraft
     @State private var libraryStart: BotLibraryChip = .files(.all)
+    /// Grok Bot's three tabs under the name (2026-11-01).
+    @State private var tab: DesktopPanelTab
+    /// Set when the person wakes the computer from its tab.
+    @State private var wakeRequestedAt: Date?
+    @State private var panelContentWidth: CGFloat = 402
 
     // Details
     @StateObject private var activity: BotActivityModel
@@ -103,15 +108,9 @@ private struct PhoneBotPanelContent: View {
             // pairing hides has no page to land on anyway)
             for page in BotEditTree.path(to: startSection) ?? [] { start.append(page) }
             start.append(startSection)
-        } else {
-            // a door that names Library or Computer opens that page over
-            // the overview, so Back lands on the overview list
-            switch startTab {
-            case .library: start.append(PanelOverviewPage.library)
-            case .computer: start.append(PanelComputerRoute())
-            case .details: break
-            }
         }
+        // a door that names Library or Computer opens on that tab
+        _tab = State(initialValue: startSection == nil ? startTab : .details)
         _path = State(initialValue: start)
         _draft = State(initialValue: CharacterDraft(bot: bot))
         _activity = StateObject(wrappedValue: BotActivityModel(botId: bot.id))
@@ -238,22 +237,15 @@ private struct PhoneBotPanelContent: View {
             ScrollView {
                 VStack(spacing: 0) {
                     AnyView(identity)
-                    BotPanelNoticesView(bot: current)
-                        .padding(.top, 20)
-                    // the desktop's Details > Suggestions (Hide turns it off everywhere)
-                    BotSuggestionsCard(bot: current) { runSuggestion($0) }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                    // the desktop's Details > Tasks: the to-do list the bot keeps
-                    BotTaskListCard(bot: current, openThread: { openThread($0) }, insets: true)
-                    AnyView(overviewCard)
-                        .padding(.top, 8)
-                    if let mailRow {
-                        AnyView(emailCard(mailRow))
-                            .padding(.top, Theme.Profile.cardGap + 12)
+                    PanelTabBar(tabs: tabs, selected: $tab)
+                        .padding(.top, 14)
+                    switch tab {
+                    case .details: AnyView(detailsTab)
+                    case .library:
+                        AnyView(PhoneBotLibrary(bot: current, start: libraryStart, onShowInChat: { file in showInChat(file) }, onShowLink: { link in showInChat(link) }))
+                            .padding(.top, 16)
+                    case .computer: AnyView(computerTab)
                     }
-                    AnyView(notificationsCard)
-                        .padding(.top, Theme.Profile.cardGap + 12)
                     Color.clear.frame(height: 1).id("panel-end")
                 }
                 .padding(.top, 64)
@@ -437,6 +429,170 @@ private struct PhoneBotPanelContent: View {
         }
     }
 
+    // MARK: Tabs
+
+    /// Details, as Grok Bot's: the notices and suggestions, the to-do list,
+    /// Coding, the routines with their switches, the email address and
+    /// notifications.
+    private var detailsTab: some View {
+        VStack(spacing: 0) {
+            BotPanelNoticesView(bot: current)
+                .padding(.top, 16)
+            // the desktop's Details > Suggestions (Hide turns it off everywhere)
+            BotSuggestionsCard(bot: current) { runSuggestion($0) }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+            // the desktop's Details > Tasks: the to-do list the bot keeps
+            BotTaskListCard(bot: current, openThread: { openThread($0) }, insets: true)
+            if !overviewRows.isEmpty {
+                AnyView(overviewCard)
+                    .padding(.top, 8)
+            }
+            AnyView(routinesSection)
+                .padding(.top, Theme.Profile.cardGap + 8)
+            if let mailRow {
+                AnyView(emailCard(mailRow))
+                    .padding(.top, Theme.Profile.cardGap + 12)
+            }
+            AnyView(notificationsCard)
+                .padding(.top, Theme.Profile.cardGap + 12)
+        }
+    }
+
+    /// "Routines" over the bot's routines, each with its switch as in Grok
+    /// Bot; "All" opens the full page (folders, sort, run logs).
+    private var routinesSection: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Routines")
+                    .font(Theme.Profile.labelFont)
+                    .foregroundStyle(Theme.textTertiary)
+                Spacer()
+                Button {
+                    Haptics.selection()
+                    path.append(PanelOverviewPage.routines)
+                } label: {
+                    Text(routinesLoaded ? String(localized: "\(routinesOn) on") : String(localized: "All"))
+                        .font(Theme.Profile.labelFont)
+                        .foregroundStyle(Theme.accentText)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("All routines"))
+                .accessibilityIdentifier("panel-overview.routines")
+            }
+            .padding(.horizontal, Theme.Profile.cardMargin + Theme.Profile.textInset)
+            .padding(.bottom, 2)
+            ProfileCard {
+                if !routinesLoaded {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Loading routines…")
+                    }
+                    .font(Theme.Profile.labelFont)
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, minHeight: Theme.Profile.row)
+                }
+                ForEach(botRoutines.prefix(PanelRoutinePreview.limit)) { routine in
+                    routineSwitchRow(routine)
+                    ProfileDivider(leading: Theme.Profile.textInset)
+                }
+                if botRoutines.count > PanelRoutinePreview.limit {
+                    Button {
+                        Haptics.selection()
+                        path.append(PanelOverviewPage.routines)
+                    } label: {
+                        ProfileRow(title: Text("Show all \(botRoutines.count)"), titleColor: Theme.accentText, height: Theme.Profile.row)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("panel-routines-all")
+                    ProfileDivider(leading: Theme.Profile.textInset)
+                }
+                Button {
+                    Haptics.selection()
+                    addingRoutine = true
+                } label: {
+                    ProfileRow(icon: ProfileRowIcon(systemImage: "plus", size: 18, color: Theme.blue),
+                               title: Text("Add routine"), titleColor: Theme.accentText, height: Theme.Profile.row)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("panel-add-routine")
+            }
+        }
+    }
+
+    /// A routine with its switch (Grok Bot's Details): the row opens the
+    /// routine, the switch turns it on or off where the person may.
+    private func routineSwitchRow(_ routine: Routine) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                Haptics.selection()
+                path.append(PanelRoutineRoute(id: routine.id, instruction: false))
+            } label: {
+                ProfileRow(
+                    title: Text(verbatim: routine.name),
+                    subtitle: routine.enabled
+                        ? Text(verbatim: RoutineWording.subtitle(routine))
+                        : Text("Paused"),
+                    height: Theme.Profile.routineRow
+                )
+            }
+            .buttonStyle(.plain)
+            Toggle("", isOn: Binding(get: { routine.enabled }, set: { on in
+                Task { _ = await session.setRoutineEnabled(routine, enabled: on); await loadRoutines() }
+            }))
+            .labelsHidden()
+            .tint(MausPalette.color(current.color))
+            .disabled(!(routine.mayEdit && routine.canToggle()))
+            .padding(.trailing, Theme.Profile.textInset)
+            .accessibilityLabel(Text(verbatim: routine.name))
+            .accessibilityIdentifier("panel-routine-switch.\(routine.name)")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("profile-routine.\(routine.name)")
+    }
+
+    /// Computer, as Grok Bot shows it: asleep (the mascot dozing, "z Z"),
+    /// waking up, or the live screen alone once it runs.
+    private var computerTab: some View {
+        let phase = BotComputerPhase.of(computer: current.computer, busy: current.busy == true,
+                                        wakeRequestedAt: wakeRequestedAt, now: Date())
+        return VStack(spacing: 0) {
+            switch phase {
+            case .running:
+                // the live screen alone, with its own caption (Grok Bot)
+                ComputerView(bot: current, embeddedWidth: panelContentWidth - 2 * Theme.Profile.cardMargin) {
+                    path.append(PanelComputerRoute())
+                }
+                .padding(.horizontal, Theme.Profile.cardMargin)
+                .accessibilityIdentifier("panel-computer-live")
+            case .asleep, .waking, .off:
+                BotComputerSleepCard(bot: current, phase: phase) {
+                    wakeRequestedAt = Date()
+                    Task {
+                        try? await Task.sleep(nanoseconds: UInt64(BotComputerPhase.wakeWindow * 1_000_000_000))
+                        // awake: the live screen takes the tab
+                        if wakeRequestedAt != nil { wakeRequestedAt = .distantPast }
+                    }
+                } open: {
+                    path.append(PanelComputerRoute())
+                }
+            }
+            if phase != .running {
+                Text("\(current.name)'s screen")
+                    .font(Theme.Profile.labelFont)
+                    .foregroundStyle(Theme.textTertiary)
+                    .padding(.top, 10)
+            }
+        }
+        .padding(.top, 16)
+        .background(GeometryReader { box in
+            Color.clear.onAppear { panelContentWidth = box.size.width }
+                .onValueChange(of: box.size.width) { panelContentWidth = $0 }
+        })
+    }
+
     // MARK: Overview
 
     private var codingWorking: Int { (activity.coding ?? []).filter { $0.status.isActive }.count }
@@ -489,14 +645,8 @@ private struct PhoneBotPanelContent: View {
             rows.append(OverviewRow(id: "panel-overview.coding", symbol: "chevron.left.forwardslash.chevron.right", title: Text("Coding"),
                                     value: String(localized: "\(codingWorking) working"), page: .page(.coding)))
         }
-        rows.append(OverviewRow(id: "panel-overview.routines", symbol: "clock", title: Text("Routines"),
-                                value: routinesLoaded ? String(localized: "\(routinesOn) on") : nil, page: .page(.routines)))
-        if tabs.contains(.library) {
-            rows.append(OverviewRow(id: "panel-tab.library", symbol: "folder", title: Text("Library"), value: nil, page: .page(.library)))
-        }
-        if tabs.contains(.computer) {
-            rows.append(OverviewRow(id: "panel-tab.computer", symbol: "desktopcomputer", title: Text("Computer"), value: computerStatus, page: .computer))
-        }
+        // Routines, Library and Computer are Details' section and the
+        // panel's tabs now (Grok Bot, 2026-11-01)
         return rows
     }
 

@@ -179,4 +179,12 @@ describe("the row's state word (2026-10-28)", () => {
     act(() => { word.click(); });
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "showRoutines", section: "logs", botId: "bot-1", routineId: "r1", runStatus: "running", runId: "run-9" });
   });
+
+  it("shows Running once: the last-run line skips the run the Running word already shows", async () => {
+    runs.push({ id: "run-8", routineId: "r1", status: "completed" }, { id: "run-9", routineId: "r1", status: "running" });
+    await mount();
+    expect(row("r1").querySelector("[data-routine-running]")).not.toBeNull();
+    expect(row("r1").querySelector("[data-routine-last-run]")?.getAttribute("data-routine-last-run")).toBe("completed");
+    expect(row("r1").textContent?.match(/Running/g)?.length).toBe(1);
+  });
 });

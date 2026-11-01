@@ -595,6 +595,50 @@ describe("PerspicaxDirectory, slice 5: profiles and token exchange", () => {
     expect(bad.calls).toHaveLength(0);
   });
 
+  it("surfaces invalid_target's error_description and caches not_held briefly", async () => {
+    let now = 5_000_000;
+    const dir = tempDir();
+    const linkFile = join(dir, "pulsabot.json");
+    writeLink(linkFile, linkDoc());
+    const principals = new PrincipalRegistry({ path: join(dir, "principals.json") });
+    const answers: Answer[] = [
+      { status: 400, body: { error: "invalid_target", error_description: "Carol does not hold profile Dispatch" } },
+      ok,
+    ];
+    const calls: string[] = [];
+    const fetcher = (async (input: string | URL | Request) => {
+      calls.push(String(input));
+      const next = answers.shift() ?? { status: 200, body: {} };
+      if (next === "throw") throw new Error("connect ECONNREFUSED");
+      return new Response(next.body === undefined ? null : typeof next.body === "string" ? next.body : JSON.stringify(next.body), { status: next.status });
+    }) as typeof fetch;
+    const sync = new PerspicaxDirectory({
+      issuer: `${ISSUER}/`, serverBase: "http://perspicax:8787/", linkFile, expect: EXPECT, principals,
+      onPersonOut: () => {}, onRoleNarrowed: () => {}, version: "0.1.89", now: () => now, fetch: fetcher, log: () => {},
+    });
+    expect(await sync.exchangeToken("pxlo1.CAROL.subject", "P1")).toEqual({
+      ok: false,
+      error: "not_held",
+      description: "Carol does not hold profile Dispatch",
+    });
+    expect(calls).toHaveLength(1);
+    // Same subject + profile: served from the short negative cache, no second call.
+    expect(await sync.exchangeToken("pxlo1.CAROL.subject", "P1")).toEqual({
+      ok: false,
+      error: "not_held",
+      description: "Carol does not hold profile Dispatch",
+    });
+    expect(calls).toHaveLength(1);
+    // A different subject still hits the server (cache is per person + profile).
+    answers.unshift({ status: 400, body: { error: "invalid_target", error_description: "Bob does not hold profile Dispatch" } });
+    expect(await sync.exchangeToken("pxlo1.BOB.subject", "P1")).toMatchObject({ ok: false, error: "not_held", description: "Bob does not hold profile Dispatch" });
+    expect(calls).toHaveLength(2);
+    // After the cache window, the same person may try again.
+    now += 60_001;
+    expect(await sync.exchangeToken("pxlo1.CAROL.subject", "P1")).toEqual({ ok: true, token: "pxlo1.BOB.exchanged-secret", expiresAt: now + 900_000 });
+    expect(calls).toHaveLength(3);
+  });
+
   it("a 401 re-reads the link file once and retries, then answers link", async () => {
     const h = exchangeHarness([{ status: 401, body: { error: "invalid_client" } }, ok]);
     expect(await h.sync.exchangeToken("pxlo1.BOB.subject", "P1")).toMatchObject({ ok: true });
@@ -702,5 +746,69 @@ describe("an avatar read through the link", () => {
     expect(avatarContentType(Buffer.from("ffd8ffe000", "hex"))).toBe("image/jpeg");
     expect(avatarContentType(Buffer.from("<svg onload=alert(1)>"))).toBeNull();
     expect(avatarContentType(Buffer.alloc(0))).toBeNull();
+  });
+});
+
+describe("Capabilities lot 4: the organization's declarations in the directory", () => {
+  const declaration = (patch: Record<string, unknown> = {}) => ({
+    id: "cap-1", mount_name: "example-tools", form: "skill", name: "Example tools", description: "", source: { kind: "manual" },
+    scope: "organization", mode: "offered", enabled: true, configured: true, configuration_kind: "skill",
+    created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-01T00:00:00Z",
+    configuration: { type: "skill", files: { "SKILL.md": "---\nname: example-tools\ndescription: Fixture\n---\nUse the fixture.\n" } },
+    ...patch,
+  });
+
+  it("an older Perspicax without the new fields keeps today's behaviour (all undefined)", async () => {
+    const h = harness(directoryOf([person("BOB")]));
+    await h.sync.refresh();
+    expect(h.sync.orgCapabilities()).toBeUndefined();
+    expect(h.sync.capabilityMarketplaces()).toBeUndefined();
+    expect(h.sync.capabilityMarketplacePolicy()).toBeUndefined();
+  });
+
+  it("parses declarations with their configuration, marketplaces, and a null policy that stays null", async () => {
+    const h = harness({
+      ...directoryOf([person("BOB")]),
+      capabilities: [declaration(), declaration({ id: "cap-2", mount_name: "notes", form: "mcp", configuration_kind: "stdio", configuration: { type: "stdio", command: "notes-mcp", args: ["--fixture"], env: { MODE: "fixture" } } })],
+      capability_marketplaces: [{ id: "m-1", name: "Example", source: "example-org/*", enabled: true, created_at: "x", updated_at: "x" }],
+      capability_marketplace_policy: null,
+    } as Directory);
+    await h.sync.refresh();
+    expect(h.sync.orgCapabilities()?.map((row) => row.mount_name)).toEqual(["example-tools", "notes"]);
+    expect(h.sync.orgCapabilities()?.[1]?.configuration).toEqual({ type: "stdio", command: "notes-mcp", args: ["--fixture"], env: { MODE: "fixture" } });
+    expect(h.sync.capabilityMarketplaces()).toEqual([expect.objectContaining({ source: "example-org/*", enabled: true })]);
+    expect(h.sync.capabilityMarketplacePolicy()).toBeNull();
+  });
+
+  it("drops a malformed element alone and reads a malformed policy as absent, never as any", async () => {
+    const h = harness({
+      ...directoryOf([person("BOB")]),
+      capabilities: [declaration(), { id: "bad", form: "rocket" }, declaration({ id: "cap-3", mount_name: "../escape" })],
+      capability_marketplaces: "not a list",
+      capability_marketplace_policy: { mode: "everything" },
+    } as unknown as Directory);
+    await h.sync.refresh();
+    expect(h.sync.state().state).toBe("ok");
+    expect(h.sync.orgCapabilities()?.map((row) => row.id)).toEqual(["cap-1"]);
+    expect(h.sync.capabilityMarketplaces()).toBeUndefined();
+    expect(h.sync.capabilityMarketplacePolicy()).toBeUndefined();
+  });
+
+  it("linkJson carries the link token and the person's sign-in token, and keeps a subject refusal's code", async () => {
+    const h = harness(directoryOf([person("BOB")]));
+    await h.sync.refresh();
+    h.queue.push({ status: 200, body: { value: { mode: "list" }, changed: true } });
+    const put = await h.sync.linkPutJson("/api/v1/pulsabot/capabilities/marketplace-policy", { mode: "list" }, { timeoutMs: 200, maxBytes: 4096, subjectToken: "subject-fixture" });
+    expect(put).toEqual({ ok: true, status: 200, body: { value: { mode: "list" }, changed: true } });
+    const sent = h.requests.at(-1)!;
+    expect(sent.url).toBe("http://perspicax:8787/api/v1/pulsabot/capabilities/marketplace-policy");
+    expect(sent.headers).toMatchObject({ authorization: `Bearer ${TOKEN_A}`, "x-perspicax-subject-token": "subject-fixture", "content-type": "application/json" });
+    h.queue.push({ status: 403, body: { code: "subject", message: "x", details: {} } });
+    const refused = await h.sync.linkDeleteJson("/api/v1/pulsabot/capabilities/cap-1", { timeoutMs: 200, maxBytes: 4096, subjectToken: "subject-fixture" });
+    expect(refused).toMatchObject({ ok: false, status: 403, body: { code: "subject" } });
+    expect(isSubjectRefusal(refused)).toBe(true);
+    h.queue.push({ status: 400, body: { code: "validation", message: "mount_name: required", details: {} } });
+    expect(await h.sync.linkJson("POST", "/api/v1/pulsabot/capabilities", {}, { timeoutMs: 200, maxBytes: 4096, subjectToken: "subject-fixture" }))
+      .toMatchObject({ ok: false, error: "refused", status: 400, body: { message: "mount_name: required" } });
   });
 });

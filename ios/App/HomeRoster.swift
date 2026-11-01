@@ -73,6 +73,14 @@ enum HomeMetrics {
     static let previewIconBox: CGFloat = 12
     static let previewIconGap: CGFloat = 8
 
+    /// The bottom bar (Grok Bot iOS, 2026-11-01): 48 pt controls 28 pt in
+    /// from the screen edges, 12 pt apart; the Search pill fills the rest.
+    static let bottomControl: CGFloat = 48
+    static let bottomInset: CGFloat = 28
+    static let bottomGap: CGFloat = 12
+    /// The lead's label under the large mascot: name · role, primary ink.
+    static let leadLabelMax: CGFloat = 220
+
     static var font12: Font { Theme.font(12) }
     static var name: Font { Theme.font(14, .medium) }
     static var chevron: Color { Theme.parity(Color(hex: 0x3C3C3D), Theme.chevron) }
@@ -109,8 +117,12 @@ struct HomeAccountButton: View {
     @ObservedObject private var approvals = OrgApprovalsCenter.shared
 
     var body: some View {
-        Menu {
-            HomeAccountMenuItems(select: select)
+        // A tap opens Settings, the account sheet, as in Grok Bot
+        // (2026-11-01); touch and hold keeps the whole account menu, which
+        // the apps button at the bottom also lists.
+        Button {
+            Haptics.selection()
+            select(.settings)
         } label: {
             ZStack {
                 if let photo = session.accountPhoto {
@@ -129,6 +141,7 @@ struct HomeAccountButton: View {
         }
         .buttonStyle(.plain)
         .themeGlass(Circle())
+        .contextMenu { HomeAccountMenuItems(select: select) }
         .accessibilityLabel(Text("Account"))
         .accessibilityIdentifier("home-account")
         // "photo" once the person's own picture shows (UI tests wait on it).
@@ -192,6 +205,7 @@ struct HomePinnedCell: View {
     var mascot: CGFloat = HomeMetrics.pinnedMascot
 
     private var overflow: CGFloat { max(0, (mascot - HomeMetrics.pinnedMascot) / 2) }
+    private var isLead: Bool { mascot > HomeMetrics.pinnedMascot }
 
     @EnvironmentObject private var session: Session
     @ObservedObject private var people = PeopleDirectory.shared
@@ -225,10 +239,14 @@ struct HomePinnedCell: View {
             .frame(width: HomeMetrics.pinnedMascot, height: HomeMetrics.pinnedMascot)
 
             HStack(spacing: HomeMetrics.unreadGap) {
-                Text(verbatim: people.name(chat, session: session))
-                    .font(.system(size: 11.65))
-                    .foregroundStyle(Theme.textSecondaryHome)
+                // the lead reads "Name · Role" in the primary ink, as Grok
+                // Bot's primary bot does; the grid keeps the quiet name
+                Text(verbatim: isLead ? HomeChatRow.nameAndRole(chat, name: people.name(chat, session: session)) : people.name(chat, session: session))
+                    .font(.system(size: isLead ? 13 : 11.65))
+                    .foregroundStyle(isLead ? Theme.textPrimary : Theme.textSecondaryHome)
                     .lineLimit(1)
+                    .frame(maxWidth: isLead ? HomeMetrics.leadLabelMax : nil)
+                    .fixedSize(horizontal: !isLead, vertical: false)
                 if chat.unread && !chat.busy {
                     Circle()
                         .fill(Theme.unreadDot)
@@ -241,7 +259,7 @@ struct HomePinnedCell: View {
             Spacer(minLength: 0)
         }
         .padding(.top, overflow)
-        .frame(width: HomeMetrics.pinnedColumn, height: HomeMetrics.pinnedRowHeight + overflow, alignment: .top)
+        .frame(width: isLead ? HomeMetrics.leadLabelMax + 12 : HomeMetrics.pinnedColumn, height: HomeMetrics.pinnedRowHeight + overflow, alignment: .top)
         .contentShape(Rectangle())
     }
 }
@@ -410,18 +428,22 @@ struct HomeChatRow: View {
         return ""
     }
 
+    /// "Name · Role" for a bot with a role (never twice when the name
+    /// already ends with it), the name alone otherwise.
+    static func nameAndRole(_ chat: Chat, name: String) -> String {
+        guard case let .bot(bot) = chat else { return name }
+        return HomeNameLine.text(name: name, role: bot.displayRole)
+    }
+
     private var nameLine: some View {
         HStack(spacing: 7.5) {
-            Text(verbatim: people.name(chat, session: session))
+            // "Name · Role" on one line, as Grok Bot writes it (2026-11-01)
+            Text(verbatim: Self.nameAndRole(chat, name: people.name(chat, session: session)))
                 .font(HomeMetrics.name)
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)
                 .layoutPriority(2)
-            if !role.isEmpty {
-                RoleChip(text: role, font: .system(size: 11.65, weight: .medium), horizontalPadding: 6)
-                    .frame(maxWidth: HomeMetrics.chipMaxWidth, alignment: .leading)
-                    .layoutPriority(0)
-            } else if case let .room(room) = chat, let peer = people.peer(room, session: session) {
+            if role.isEmpty, case let .room(room) = chat, let peer = people.peer(room, session: session) {
                 // #172: a person's label, as a bot's label tag
                 PersonLabelTag(personId: peer.id, font: .system(size: 11.65, weight: .medium), horizontalPadding: 6)
                     .frame(maxWidth: HomeMetrics.chipMaxWidth, alignment: .leading)
@@ -504,6 +526,125 @@ struct HomeChatRow: View {
         case .attachment: ("paperclip", 12.5)
         case .sentToBot: ("paperplane", 11.5)
         }
+    }
+}
+
+// MARK: - Bottom bar
+
+/// The bottom bar's Search pill (Grok Bot iOS): a 48 pt glass capsule with
+/// the magnifier and "Search", filling the row beside the apps button.
+struct HomeSearchPill: View {
+    @Environment(\.themePalette) var themePalette
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.selection()
+            action()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 19, weight: .medium))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("Search")
+                    .font(.system(size: 17))
+                    .foregroundStyle(Theme.composerPlaceholder)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, 20)
+            .padding(.trailing, 16)
+            .frame(maxWidth: .infinity, minHeight: HomeMetrics.bottomControl, maxHeight: HomeMetrics.bottomControl)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .themeGlass(Capsule())
+        .chatGlassRim(Capsule())
+        .accessibilityLabel(Text("Search"))
+        .accessibilityIdentifier("home-search")
+    }
+}
+
+/// What the apps button opens besides the account menu's entries.
+enum HomeApp: String, CaseIterable {
+    case updates, connectApps, templates
+}
+
+/// The apps button at the bottom leading corner (Grok Bot's grid with a
+/// +): the places the account menu lists (Settings, Team map,
+/// Automations, Achievements, Release notes, About, Help), then Updates,
+/// Connect apps and Templates.
+struct HomeAppsButton: View {
+    @Environment(\.themePalette) var themePalette
+    @EnvironmentObject private var session: Session
+    let select: (AccountMenuItem) -> Void
+    let openApp: (HomeApp) -> Void
+
+    var body: some View {
+        Menu {
+            Section {
+                Button { openApp(.updates) } label: {
+                    let count = session.state.updates.count
+                    Label(count > 0 ? String(localized: "Updates (\(count))") : String(localized: "Updates"), systemImage: "tray")
+                }
+                .accessibilityIdentifier("home-apps.updates")
+                Button { openApp(.connectApps) } label: {
+                    Label(String(localized: "Connect apps"), systemImage: "puzzlepiece.extension")
+                }
+                .accessibilityIdentifier("home-apps.connectApps")
+                Button { openApp(.templates) } label: {
+                    Label(String(localized: "Templates"), systemImage: "square.on.square")
+                }
+                .accessibilityIdentifier("home-apps.templates")
+            }
+            HomeAccountMenuItems(select: select)
+        } label: {
+            AppsGridGlyph()
+                .frame(width: 20, height: 20)
+                .foregroundStyle(Theme.textPrimary)
+                .frame(width: HomeMetrics.bottomControl, height: HomeMetrics.bottomControl)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .themeGlass(Circle())
+        .chatGlassRim(Circle())
+        .simultaneousGesture(TapGesture().onEnded { Haptics.selection() })
+        .overlay(alignment: .topTrailing) {
+            if !session.state.updates.isEmpty {
+                Circle()
+                    .fill(Theme.unreadDot)
+                    .frame(width: 10, height: 10)
+                    .offset(x: -3, y: 3)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityLabel(Text("Apps"))
+        .accessibilityIdentifier("home-apps")
+    }
+}
+
+/// Grok Bot's apps glyph: three rounded squares and a +, on a 2 x 2 grid.
+struct AppsGridGlyph: View {
+    var body: some View {
+        Canvas { context, size in
+            let unit = min(size.width, size.height)
+            let cell = unit * 0.38
+            let gap = unit - 2 * cell
+            let stroke = StrokeStyle(lineWidth: unit * 0.09, lineCap: .round, lineJoin: .round)
+            for origin in [CGPoint(x: 0, y: 0), CGPoint(x: cell + gap, y: 0), CGPoint(x: 0, y: cell + gap)] {
+                let rect = CGRect(origin: origin, size: CGSize(width: cell, height: cell)).insetBy(dx: unit * 0.045, dy: unit * 0.045)
+                context.stroke(Path(roundedRect: rect, cornerRadius: unit * 0.06), with: .foreground, style: stroke)
+            }
+            let center = CGPoint(x: cell + gap + cell / 2, y: cell + gap + cell / 2)
+            var plus = Path()
+            plus.move(to: CGPoint(x: center.x - cell / 2.2, y: center.y))
+            plus.addLine(to: CGPoint(x: center.x + cell / 2.2, y: center.y))
+            plus.move(to: CGPoint(x: center.x, y: center.y - cell / 2.2))
+            plus.addLine(to: CGPoint(x: center.x, y: center.y + cell / 2.2))
+            context.stroke(plus, with: .foreground, style: stroke)
+        }
+        .accessibilityHidden(true)
     }
 }
 

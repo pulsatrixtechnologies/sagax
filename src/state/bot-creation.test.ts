@@ -56,10 +56,10 @@ describe("bot presets", () => {
   });
 
   it("sends the settings a member's permissions open on the follow-up patch (#1076)", async () => {
-    const request = vi.fn().mockResolvedValueOnce({ bot }).mockResolvedValueOnce({ bot: { approvalMode: "ask", proactiveMode: "propose" } });
-    const created = await createBotWithRole(undefined, request, undefined, undefined, { approvalMode: "ask", proactiveMode: "propose" });
-    expect(request).toHaveBeenLastCalledWith("/api/bots/created", { method: "PATCH", body: JSON.stringify({ approvalMode: "ask", proactiveMode: "propose" }) });
-    expect(created.bot).toMatchObject({ id: "created", approvalMode: "ask", proactiveMode: "propose" });
+    const request = vi.fn().mockResolvedValueOnce({ bot }).mockResolvedValueOnce({ bot: { approvalMode: "ask", proactiveMode: "off" } });
+    const created = await createBotWithRole(undefined, request, undefined, undefined, { approvalMode: "ask", proactiveMode: "off" });
+    expect(request).toHaveBeenLastCalledWith("/api/bots/created", { method: "PATCH", body: JSON.stringify({ approvalMode: "ask", proactiveMode: "off" }) });
+    expect(created.bot).toMatchObject({ id: "created", approvalMode: "ask", proactiveMode: "off" });
   });
 
   it("creates a restricted bot already restricted, in the one create request", async () => {

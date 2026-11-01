@@ -5,17 +5,18 @@ import fr from "@/locales/fr.json";
 import { PANEL_TABS } from "./panel-tabs";
 
 describe("bot panel tabs", () => {
-  it("run Details, Library, Capabilities, Computer in that order, with no More tab", () => {
-    expect(PANEL_TABS).toEqual(["details", "library", "capabilities", "computer"]);
+  it("run Details, Library, Computer in that order, with no Capabilities or More tab", () => {
+    expect(PANEL_TABS).toEqual(["details", "library", "computer"]);
   });
 
   it("are labelled in English and French, with no Routines or More tab", () => {
     const labels = (catalog: Record<string, string>) => PANEL_TABS.map((id) => catalog[`botPanel.tab.${id}`]);
-    expect(labels(en)).toEqual(["Details", "Library", "Capabilities", "Computer"]);
-    expect(labels(fr)).toEqual(["Détails", "Bibliothèque", "Capacités", "Ordinateur"]);
+    expect(labels(en)).toEqual(["Details", "Library", "Computer"]);
+    expect(labels(fr)).toEqual(["Détails", "Bibliothèque", "Ordinateur"]);
     for (const catalog of [en, fr]) {
       expect(catalog).not.toHaveProperty("botPanel.tab.routines");
       expect(catalog).not.toHaveProperty("botPanel.tab.more");
+      expect(catalog).not.toHaveProperty("botPanel.tab.capabilities");
     }
   });
 

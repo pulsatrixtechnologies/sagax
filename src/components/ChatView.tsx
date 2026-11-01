@@ -38,6 +38,8 @@ import {
   Webhook,
   X,
   AppWindow,
+  MessageSquare,
+  PanelLeftClose,
 } from "lucide-react";
 import { WorkingDots } from "@/components/WorkingIndicator";
 import { TerminalChatEmbed } from "@/components/terminal/TerminalChatEmbed";
@@ -130,11 +132,19 @@ import { PageSurface } from "./PageViewer";
 import { PageBotStatus, pageBotStatusLine, PageRefChip } from "./PageComposerParts";
 import { MenuItem } from "./bot-settings/FilesSection";
 import { closePagePanel, latestPageVersionIn, openPage as openPageAt, openPageFor, renameOpenPage, useOpenPage, usePagePanelHost } from "@/lib/open-page";
+import {
+  pageBesideChat,
+  pageCoversChat,
+  pageStageComposer,
+  usePageChatHostWide,
+  PAGE_CHAT_SURFACE_DEFAULT,
+  type PageChatSurface,
+} from "@/lib/page-chat-layout";
 import { OutboundCard } from "./OutboundCard";
 import { OwnerSettled, OwnerWait } from "./OwnerWait";
 import { Composer } from "./Composer";
 import { BackgroundEffectLayer, useBackgroundEffectShown } from "./BackgroundEffectLayer";
-import { ChatErrorBanner, ChatNotice, ChatStaleBanner } from "./ChatErrorBanner";
+import { ChatErrorBanner, ChatNotice, ChatReconnectBanner, ChatStaleBanner } from "./ChatErrorBanner";
 import { WeeklyLimitNotice } from "./ChatUsageNotices";
 import { ChatFindBar } from "./ChatFindBar";
 import { ReplyQuote } from "./ReplyQuote";
@@ -172,6 +182,7 @@ import { collapseBotExchanges, exchangeJumpStays, startsNewStretch, visibleEdge,
 import { foldCollapsedEntry, voiceCallPlan, voiceCallVisibleSpan } from "@/lib/voice-call-transcript";
 import { VoiceCallCard } from "./VoiceCallCard";
 import { BotExchangeChip, ExchangeColumnProvider, TranscriptDate, useExchangeColumn } from "./BotExchangeChip";
+import { RoutineRunExchange } from "./routines/RoutineRunExchange";
 import { GotoGroupChip } from "./GotoGroupChip";
 import { collapseGotoLines, silentChatItem, type GotoGroup, type GotoTarget } from "@/lib/goto-lines";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
@@ -1117,6 +1128,17 @@ const MessagesList = memo(function MessagesList({
   const appleMobileWeb = isAppleMobileWebClient();
   const selfColor = bots.find((candidate) => candidate.id === botId)?.color;
   const owners = useMemo(() => ({ bots: storeBots, groups: storeGroups }), [storeBots, storeGroups]);
+  // Newest page version named in this transcript: mounted v1 cards refresh when v2 arrives.
+  const latestPageVersionById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const message of messages) {
+      const ref = message.pagePublish;
+      if (!ref) continue;
+      const current = map.get(ref.pageId);
+      if (current === undefined || ref.version > current) map.set(ref.pageId, ref.version);
+    }
+    return map;
+  }, [messages]);
   // Bot-to-bot lines become one chip per run first, so a tool fold never
   // swallows them. Person lines and replies to the person stay in the groups.
   // The locale refreshes the turn labels when the language changes.
@@ -1376,7 +1398,14 @@ const MessagesList = memo(function MessagesList({
           if (m.state === "owner-settled") return <OwnerSettled message={m} />;
           // a bot's page proposal: its approval card (src/components/PublishedPages.tsx)
           if (m.pagePublish && m.role === "bot") {
-            return <MessageBoundary fallbackText={m.text ?? ""}><PagePublishCard message={m} /></MessageBoundary>;
+            return (
+              <MessageBoundary fallbackText={m.text ?? ""}>
+                <PagePublishCard
+                  message={m}
+                  threadLatestVersion={latestPageVersionById.get(m.pagePublish.pageId)}
+                />
+              </MessageBoundary>
+            );
           }
           // a phone call or a purchase on its card (src/components/OutboundCard.tsx)
           if (m.outbound && m.role === "bot") {
@@ -1941,8 +1970,48 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   useConfidentialDocumentTitle(confidential && !side);
   const privateHint = showPrivateConversationHint({ org: perspicaxOrg !== null, viewerId: viewerActorId(state.config), bot });
   const { node: exchangeColumnNode, ref: exchangeColumnRef } = useExchangeColumn();
+  // Beside/cover follows this host's width (split panes, sidebar), not the window.
+  const pageHostRef = useRef<HTMLElement | null>(null);
+  const pageChatWide = usePageChatHostWide(pageHostRef);
+  // Measured HTML Pages default to stage (full page + docked composer). Beside
+  // is a deliberate Sagax richer control (Grok canvas chat-pane analogue).
+  const [pageChatSurface, setPageChatSurface] = useState<PageChatSurface>(PAGE_CHAT_SURFACE_DEFAULT);
+  // A page open in this conversation (src/lib/open-page.ts, lot 5):
+  // default stage covers the mounted chat with a docked floating composer
+  // (measured Grok HTML/file path). Optional beside keeps a side transcript
+  // when the ChatView host is wide. Close restores the same scroll either way.
+  // Split-view side chats never host the panel.
+  const openPageAny = useOpenPage();
+  const openPage = side ? null : openPageFor(openPageAny, bot.id, undefined);
+  usePagePanelHost(bot.id, !side);
+  const pageBeside = pageBesideChat(Boolean(openPage), pageChatWide, pageChatSurface);
+  const pageCover = pageCoversChat(Boolean(openPage), pageChatWide, pageChatSurface);
+  const pageStage = pageStageComposer(Boolean(openPage), pageChatSurface);
+  // Closing the page gives focus back to what opened it (its card in the
+  // transcript, a Library row). Captured at open, before the cover makes the
+  // chat inert; given back from this (parent) effect, whose frame runs after
+  // the remounted composer's own open-focus frame.
+  const pageOpenerRef = useRef<HTMLElement | null>(null);
+  const openPageKey = openPage?.pageId ?? null;
+  useLayoutEffect(() => {
+    if (!openPageKey) return;
+    const active = document.activeElement;
+    pageOpenerRef.current = active instanceof HTMLElement && active !== document.body ? active : null;
+  }, [openPageKey]);
+  useEffect(() => {
+    if (openPageKey) return;
+    const opener = pageOpenerRef.current;
+    pageOpenerRef.current = null;
+    if (!opener) return;
+    const frame = requestAnimationFrame(() => {
+      if (!opener.isConnected || opener.closest("[inert]")) return;
+      opener.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [openPageKey]);
   const composerDockRef = useRef<HTMLDivElement>(null);
-  const composerDock = useComposerDockPad(composerDockRef);
+  // The dock moves onto the page in stage mode and back: re-measure each time.
+  const composerDock = useComposerDockPad(composerDockRef, pageStage);
   // Settings > Appearance > Background effects (main conversation only)
   const shownEffect = useBackgroundEffectShown();
   const backgroundEffect = side ? null : shownEffect;
@@ -2279,14 +2348,6 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
     : null, [canWrite, currentLink, bot.id, bot.threadId, dispatch]);
 
 
-  // A page open over this conversation (src/lib/open-page.ts): the panel
-  // covers the header and the transcript, which stay mounted under it (the
-  // same place on close); the composer floats over the page.
-  const openPageAny = useOpenPage();
-  const openPage = side ? null : openPageFor(openPageAny, bot.id, undefined);
-  // this conversation draws the panel for its bot (openPage picks the panel
-  // only while one is on screen; a side panel draws none)
-  usePagePanelHost(bot.id, !side);
   const latestPageVersion = useMemo(() => (openPage ? latestPageVersionIn(messages, openPage.pageId) : undefined), [openPage, messages]);
 
   const Root = side ? "section" : "main";
@@ -2320,7 +2381,29 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   return (
     <ThreadLinkContext value={threadLink}>
     <ExchangeColumnProvider node={exchangeColumnNode}>
-    <Root ref={exchangeColumnRef} aria-label={side?.label} data-side-chat={side ? "" : undefined} style={bubbleStyle} className="app-glow relative isolate flex h-full min-w-0 flex-1 flex-col bg-app">
+    <Root
+      ref={pageHostRef}
+      aria-label={side?.label}
+      data-side-chat={side ? "" : undefined}
+      data-page-beside={pageBeside ? "" : undefined}
+      data-page-cover={pageCover ? "" : undefined}
+      style={bubbleStyle}
+      className={cn(
+        "app-glow relative isolate flex h-full min-w-0 flex-1 bg-app",
+        // Host-width beside/cover (not viewport md:): split panes stay correct.
+        pageBeside ? "flex-row" : "flex-col",
+      )}
+    >
+      <div
+        ref={exchangeColumnRef}
+        data-chat-column=""
+        inert={pageCover ? true : undefined}
+        className={cn(
+          // Exchange sheet portals here (absolute inset-0), never over the page.
+          "relative isolate flex min-h-0 min-w-0 flex-1 flex-col",
+          pageBeside && "order-2 w-[min(26rem,38%)] max-w-[28rem] flex-none border-l border-hairline/50",
+        )}
+      >
       {/* The older call mode covers the thread while the bot is on the line;
           a voice mode call docks at the top of the banner stack below */}
       {!side && <>
@@ -2340,8 +2423,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           // styles.css): a normal band, not a float, but still the
           // containing block the centered pill below needs.
           "@container/chathead absolute inset-x-0 top-0 z-[3] flex min-h-[52px] items-center justify-end px-5 py-2.5",
-          // Room for the drawer button, which overlays this corner below md.
-          "pl-11 md:pl-5",
+          // Room for the drawer button, which overlays this corner below sm.
+          "pl-11 sm:pl-5",
         )}
       >
         <div className="absolute left-1/2 top-1/2 flex max-w-[50%] -translate-x-1/2 -translate-y-1/2 items-center gap-2" style={headerNoDragStyle}>
@@ -2399,6 +2482,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
 
       {!side && <ChatErrorBanner message={state.error} onDismiss={() => dispatch({ type: "error", message: null })} />}
       {!side && <ChatNotice notice={state.notice} />}
+      {!side && <ChatReconnectBanner connected={state.connected} everConnected={state.everConnected} disconnectedAt={state.disconnectedAt} />}
       {!side && <TransientNotice messages={messages} settled={autoPauseSettled} render={(m, close) => m.kind === "access" && m.access ? (
         <AccessCard
           access={m.access}
@@ -2539,8 +2623,10 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           pane's top-right corner; the transcript above never moves. */}
       <DevPods bot={bot} messages={messages} composerHeight={composerDock.height + runCardHeight} computerStart={state.computerStarts[bot.id]} dispatch={dispatch} />
 
-      {/* Reading scrollback — one tap back to the end, streaming or not */}
-      {!following && !openPage && (
+      {/* Reading scrollback — one tap back to the end, streaming or not.
+          Hidden only while a phone page covers the chat; desktop keeps it
+          in the side pane. */}
+      {!following && !pageCover && (
         <button
           onClick={jumpToLatest}
           aria-label={t("chat.jumpToLatestAria")}
@@ -2583,10 +2669,14 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
       {/* Keyed by task: each conversation keeps its own draft and a failed
           request can restore the old task without spilling into the newly
           selected one. ArrowUp-to-edit stays gated on busy because editing
-          rewinds the thread, which a live turn forbids (the server 409s it). */}
-      <div ref={composerDockRef} data-composer-dock="" data-over-page={openPage ? "" : undefined} className={cn("pointer-events-none absolute inset-x-0 bottom-0", openPage ? "z-[7]" : "z-[2]")}>
+          rewinds the thread, which a live turn forbids (the server 409s it).
+          Stage mode docks this composer on the page (measured HTML path);
+          beside keeps it in the side column. */}
+      {!pageStage && (
+      <div ref={composerDockRef} data-composer-dock="" className="pointer-events-none absolute inset-x-0 bottom-0 z-[2]">
       {confidential && <ConfidentialBanner position="bottom" className="mb-1" />}
-      {openPage && (
+      {/* Optional beside: bot status above the side-pane composer. */}
+      {pageBeside && openPage && (
         <PageBotStatus
           status={pageBotStatusLine(messages, bot.busy === true, openPage.openedAt ?? 0)}
           name={bot.name}
@@ -2599,6 +2689,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
       <Composer
         key={bot.threadId}
         bot={profile}
+        // back from a page: focus returns to what opened it, not here
+        focusOnOpen={pageOpenerRef.current === null}
         replyTo={replyTo}
         onClearReply={clearReply}
         onConsumeReply={consumeReply}
@@ -2616,29 +2708,109 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
       />
       )}
       </div>
+      )}
+      </div>
       </div>
       </div>
 
       {openPage && (
-        <div data-page-panel={openPage.pageId} className="absolute inset-0 z-[6] flex">
+        <div
+          data-page-panel={openPage.pageId}
+          data-page-surface-mode={pageChatSurface}
+          className={cn(
+            "flex min-h-0 min-w-0 flex-col bg-app",
+            // Stage (default): cover the mounted chat (exact scroll on close).
+            // Optional beside: fill the main frame; chat stays in the side column.
+            pageCover ? "absolute inset-0 z-[6]" : "relative z-auto order-1 flex-1",
+          )}
+        >
           <PageSurface
             key={openPage.pageId}
             pageId={openPage.pageId}
             {...(openPage.version !== undefined ? { version: openPage.version } : {})}
             initialTitle={openPage.title}
             {...(latestPageVersion !== undefined ? { latestVersion: latestPageVersion } : {})}
-            onClose={() => closePagePanel(openPage.pageId)}
+            onClose={() => {
+              setPageChatSurface(PAGE_CHAT_SURFACE_DEFAULT);
+              closePagePanel(openPage.pageId);
+            }}
             onChange={(next) => renameOpenPage(next.id, next.title)}
+            className="h-full min-h-0"
             moreItems={(close) => (
-              <MenuItem icon={<AppWindow size={14} />} label={t("pages.openWindow")} onClick={() => {
-                close();
-                void openPageAt({ pageId: openPage.pageId, botId: openPage.botId, threadId: openPage.threadId, title: openPage.title }, "window");
-              }} />
+              <>
+                <MenuItem icon={<AppWindow size={14} />} label={t("pages.openWindow")} onClick={() => {
+                  close();
+                  void openPageAt({ pageId: openPage.pageId, botId: openPage.botId, threadId: openPage.threadId, title: openPage.title }, "window");
+                }} />
+                {/* Sagax richer control: optional side transcript (Grok canvas
+                    chat-pane analogue). Default remains measured stage. */}
+                {pageChatSurface === "stage" ? (
+                  <MenuItem
+                    icon={<MessageSquare size={14} />}
+                    label={t("pages.showConversation")}
+                    disabled={!pageChatWide}
+                    onClick={() => { close(); setPageChatSurface("beside"); }}
+                  />
+                ) : (
+                  <MenuItem
+                    icon={<PanelLeftClose size={14} />}
+                    label={t("pages.hideConversation")}
+                    onClick={() => { close(); setPageChatSurface("stage"); }}
+                  />
+                )}
+              </>
             )}
+            footer={pageStage ? (
+              <div
+                ref={composerDockRef}
+                data-composer-dock=""
+                data-page-stage-chat="docked"
+                className="pointer-events-none absolute inset-x-0 bottom-0 z-[3]"
+              >
+                <PageBotStatus
+                  status={pageBotStatusLine(messages, bot.busy === true, openPage.openedAt ?? 0)}
+                  name={bot.name}
+                  avatar={<BotAvatar bot={bot} primary={isViewersPrimaryBot(bot, viewerActorId(state.config))} state={stateForBot({ ...bot, messages })} size={22} />}
+                />
+                {canWrite === false ? (
+                  <NewConversationInstead onNew={() => dispatch({ type: "newTask", botId: bot.id })} />
+                ) : (
+                  <Composer
+                    key={bot.threadId}
+                    bot={profile}
+                    aboutPage={openPage.title}
+                    replyTo={replyTo}
+                    onClearReply={clearReply}
+                    onConsumeReply={consumeReply}
+                    onRestoreReply={restoreReply}
+                    onEditLast={lastUserMessage && !lastUserMessageHasAttachments && !bot.busy && !lastUserMessage.id.startsWith("optimistic-")
+                      ? () => setEditingId(lastUserMessage.id)
+                      : undefined}
+                  />
+                )}
+              </div>
+            ) : undefined}
           />
         </div>
       )}
     </Root>
+    {state.routineRunSheet && (() => {
+      const sheet = state.routineRunSheet;
+      const run = state.routineRuns.find((candidate) => candidate.id === sheet.runId);
+      if (!run) return null;
+      const routine = state.routines.find((candidate) => candidate.id === (sheet.routineId ?? run.routineId)) ?? null;
+      return (
+        <RoutineRunExchange
+          run={run}
+          routine={routine}
+          bots={state.bots}
+          onClose={() => dispatch({ type: "closeRoutineRunSheet" })}
+          onRunAgain={routine ? () => dispatch({ type: "runRoutine", routineId: routine.id, onStarted: (started) => dispatch({ type: "openRoutineRunSheet", runId: started.id, routineId: routine.id, botId: started.botId }) }) : undefined}
+          onStop={["queued", "running", "waiting"].includes(run.status) ? () => dispatch({ type: "cancelRoutineRun", runId: run.id }) : undefined}
+          onLogs={() => dispatch({ type: "showRoutines", section: "logs", routineId: routine?.id ?? run.routineId, botId: run.botId })}
+        />
+      );
+    })()}
     </ExchangeColumnProvider>
     </ThreadLinkContext>
   );

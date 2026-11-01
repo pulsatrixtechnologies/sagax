@@ -378,8 +378,8 @@ final class SettingsUITests: XCTestCase {
     private func openAppearance(in app: XCUIApplication) {
         if app.element("skin.family.phone").exists { return }
         if !app.element("settings-close").exists {
-            // the photo opens the account menu, which holds Settings
-            let open = app.element("home-account")
+            // the apps button opens the account menu, which holds Settings (the photo opens Settings itself)
+            let open = app.element("home-apps")
             XCTAssertTrue(open.waitForExistence(timeout: 10))
             open.tap()
             let settings = app.buttons["account-menu.settings"]

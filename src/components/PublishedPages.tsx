@@ -25,6 +25,7 @@ import { PageSharePopover } from "./PageShare";
 import { useWidgetTheme } from "./WidgetFrame";
 import { encodeSkinTokens } from "@/lib/page-theme";
 import { openPage } from "@/lib/open-page";
+import { pageCardOpenVersion, pageCardStatusWithThreadLatest } from "@/lib/page-chat-layout";
 import { readableError } from "@/lib/plain-error";
 
 export { expiryFromHours, previewSrc };
@@ -84,10 +85,16 @@ export function pageCardState(page: Pick<PublishedPageSummary, "status" | "curre
 /** A page in the conversation (message field `pagePublish`, 2026-10-28, the
  * reference design's page card): a live, scaled-down drawing of the top of
  * the page fading out at the bottom, then its icon, its title and "Page".
- * A click anywhere opens it over the conversation (src/lib/open-page.ts),
- * where Share puts it online. The drawing is the same sandboxed preview as
- * the open page, inert here (no pointer, no focus). */
-export function PagePublishCard({ message }: { message: Message }) {
+ * A click opens it in the conversation frame (src/lib/open-page.ts): beside
+ * the chat on desktop, full screen on a phone. A superseded card says
+ * "Updated below" and opens the latest version. Share puts it online. The
+ * drawing is the same sandboxed preview as the open page, inert here.
+ *
+ * `threadLatestVersion`: newest version this conversation names for the same
+ * page. When the bot appends v2 while a v1 card stays mounted, the summary
+ * reloads and the label / open intention flip to Updated below → latest.
+ * Deliberate opens of a non-superseded card version stay on that version. */
+export function PagePublishCard({ message, threadLatestVersion }: { message: Message; threadLatestVersion?: number }) {
   const ref = message.pagePublish!;
   const [page, setPage] = useState<PublishedPageSummary | null>(null);
   const [missing, setMissing] = useState(false);
@@ -103,28 +110,46 @@ export function PagePublishCard({ message }: { message: Message }) {
 
   useEffect(() => {
     let live = true;
+    setMissing(false);
+    setDeleted(false);
     api<{ page: PublishedPageSummary }>(`/api/pages/${encodeURIComponent(ref.pageId)}`)
       .then((answer) => { if (live) setPage(answer.page); })
       .catch((cause) => { if (!live) return; if (pageGone(cause)) setDeleted(true); else setMissing(true); });
+    // Thumbnail stays on this card's version; only the summary reloads on a
+    // newer thread version so Updated below / open-latest stay correct.
     api<{ version: { previewPath: string } }>(`/api/pages/${encodeURIComponent(ref.pageId)}/versions/${ref.version}`)
       .then((answer) => { if (live) setPreviewPath(answer.version.previewPath); })
       .catch(() => { if (live) setNoPreview(true); });
     return () => { live = false; };
-  }, [ref.pageId, ref.version]);
+  }, [ref.pageId, ref.version, threadLatestVersion]);
 
   if (missing) {
     return <div className="chat-text w-fit max-w-[min(80%,560px)] rounded-[18px] bg-card px-3 py-[7px] text-[13px] text-ink">{message.text}</div>;
   }
   const title = page?.title || ref.title;
-  const status = deleted ? "deleted" : pageCardState(page, ref.version);
+  const loadedStatus = deleted ? "deleted" : pageCardState(page, ref.version);
+  const status = pageCardStatusWithThreadLatest(loadedStatus, ref.version, threadLatestVersion);
   // the page's own preview address, and nothing else, is ever framed: any
   // other answer (an older server, a bad path) is "Preview unavailable"
   const src = !deleted && previewPath ? previewSrc(previewPath, { bare: true, theme, skin }) : null;
   const unavailable = deleted || noPreview || (previewPath !== null && src === null);
-  // the page names its own bot and conversation
-  const open = () => { if (page) void openPage({ pageId: ref.pageId, botId: page.botId, threadId: page.threadId, title, version: ref.version }); };
+  // the page names its own bot and conversation; Updated below opens latest
+  const open = () => {
+    if (!page) return;
+    const version = pageCardOpenVersion(status, ref.version);
+    void openPage({ pageId: ref.pageId, botId: page.botId, threadId: page.threadId, title, ...(version !== undefined ? { version } : {}) });
+  };
+  const stateLine = status === "deleted"
+    ? ` · ${t("pages.card.deleted")}`
+    : status === "superseded"
+      ? ` · ${t("pages.card.updatedBelow")}`
+      : status && status !== "draft"
+        ? ` · ${status === "published" && page
+          ? t("pages.card.published", { access: page.access === "private" && ((page.invites?.people.length ?? 0) + (page.invites?.teams.length ?? 0)) > 0 ? t("pages.share.invited") : t(ACCESS_LABEL[page.access]) })
+          : t(`pages.card.${status}`, { n: String(ref.version) })}`
+        : "";
   return (
-    <article ref={cardRef} data-page-card={ref.pageId} aria-label={t("pages.cardAria", { title })}
+    <article ref={cardRef} data-page-card={ref.pageId} data-page-card-version={ref.version} aria-label={t("pages.cardAria", { title })}
       className="group relative my-2 w-full max-w-[420px] overflow-hidden rounded-2xl border border-hairline/50 bg-card shadow-sm transition-shadow hover:shadow-md">
       <div data-page-thumb aria-hidden="true" className="relative h-[200px] overflow-hidden bg-app">
         {src ? (
@@ -141,7 +166,7 @@ export function PagePublishCard({ message }: { message: Message }) {
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13.5px] font-medium text-ink">{title}</span>
           <span data-page-card-state={status ?? ""} className="block truncate text-[12px] text-ink-secondary">
-            {t("pages.label")}{status === "deleted" ? ` · ${t("pages.card.deleted")}` : status && status !== "draft" ? ` · ${status === "published" && page ? t("pages.card.published", { access: page.access === "private" && ((page.invites?.people.length ?? 0) + (page.invites?.teams.length ?? 0)) > 0 ? t("pages.share.invited") : t(ACCESS_LABEL[page.access]) }) : t(`pages.card.${status}`, { n: String(ref.version) })}` : ""}
+            {t("pages.label")}{stateLine}
           </span>
         </span>
       </footer>

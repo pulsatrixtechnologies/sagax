@@ -82,9 +82,8 @@ function LogsPanel({ row, onClose }: { row: RemoteSessionAdminRow; onClose: () =
   );
 }
 
-// Revoke shows whatever the flag says (M2): only recording consent is gated.
-// It shows to an admin, and to the person who recorded the consent (their
-// own host, no admin needed).
+// Revoke shows to an admin, and to the person who recorded the consent
+// (their own host, no admin needed).
 function UnattendedCell({ row, admin, onRevoke }: { row: RemoteSessionAdminRow; admin: boolean; onRevoke: (row: RemoteSessionAdminRow) => void }) {
   if (!row.unattended) return <span className="text-ink-secondary">{t("remoteSessionsAdmin.unattended.no")}</span>;
   return (
@@ -105,7 +104,7 @@ export function RemoteSessionsAdminPage() {
   const { controlsShiftStyle } = useCaptionChrome();
   const [filters, setFilters] = useState<AdminRowFilters>({});
   const [search, setSearch] = useState("");
-  const { rows, admin, unattendedEnabled, loading, reload } = useRemoteSessionsAdmin({ ...filters, ...(search.trim() ? { search: search.trim() } : {}) });
+  const { rows, admin, loading, reload } = useRemoteSessionsAdmin({ ...filters, ...(search.trim() ? { search: search.trim() } : {}) });
   const [logsFor, setLogsFor] = useState<RemoteSessionAdminRow | null>(null);
   const [controlling, setControlling] = useState<RemoteSessionAdminRow | null>(null);
   const [confirmEnd, setConfirmEnd] = useState<string | null>(null);
@@ -169,9 +168,6 @@ export function RemoteSessionsAdminPage() {
         </div>
       </header>
 
-      {!unattendedEnabled && !loading && (
-        <p data-remote-admin-unattended-note="" className="border-b border-hairline/40 bg-raised/40 px-5 py-2 text-[12.5px] text-ink-secondary">{t("remoteSessionsAdmin.unattended.notReady")}</p>
-      )}
       <UnattendedHostsSection state={hosts} onOpened={(opened) => { setAwaiting(opened); reload(); }} />
       <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
         {rows.length === 0 && <p data-remote-admin-empty="" data-loading={loading ? "" : undefined} className="text-[13px] text-ink-secondary">{t("remoteSessionsAdmin.empty")}</p>}

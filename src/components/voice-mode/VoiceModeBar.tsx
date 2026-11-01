@@ -27,7 +27,7 @@ import { VOICE_PROVIDER_LABELS } from "../../../shared/voice-providers";
 import { BotAvatar } from "../Avatar";
 import { openProviderKeyDialog } from "../settings/ProviderKeys";
 import { REVEAL_MOTION_MS, REVEAL_SHELL_CLASS, reducedMotion, useReveal } from "../MenuMotion";
-import type { CallMetrics } from "./LiveCall";
+import type { LiveCallMetrics as CallMetrics } from "@/lib/voice-mode/live-call-store";
 import { formatCallTime, phaseLabel } from "@/lib/voice-mode/call-labels";
 
 export { formatCallTime, phaseLabel };

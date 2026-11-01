@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createServer } from "node:net";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { assertContentMatches, checkUploadedFile, clamdScanFile, sniff, sniffModeFromEnv } from "./upload-content-check.ts";
@@ -72,5 +72,60 @@ describe("upload content check", () => {
       await expect(checkUploadedFile(bad, "application/zip", env)).rejects.toThrow(/antivirus/);
       await expect(checkUploadedFile(clean, "application/zip", { SAGAX_CLAMD_SOCKET: pipe("none"), SAGAX_CLAMD_REQUIRED: "1" })).rejects.toThrow(/unavailable/);
     } finally { server.close(); }
+  });
+
+  it("pauses the file source on socket backpressure and resumes to a clean reply", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "clamd-pressure-"));
+    const socket = process.platform === "win32" ? `\\\\.\\pipe\\${basename(dir)}-clamd` : join(dir, "clamd.sock");
+    const file = join(dir, "large.zip");
+    writeFileSync(file, Buffer.alloc(8 * 1024 * 1024, 0x61));
+    const server = createServer((conn) => {
+      conn.pause();
+      setTimeout(() => conn.resume(), 75);
+      let tail = Buffer.alloc(0);
+      conn.on("data", (data: Buffer) => {
+        tail = Buffer.concat([tail, data]).subarray(-4);
+        if (tail.equals(Buffer.alloc(4))) conn.end("stream: OK\0");
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(socket, resolve));
+    let backpressure = 0;
+    try {
+      await expect(clamdScanFile(file, { socket, required: true, timeoutMs: 5_000 }, {
+        onBackpressure: () => { backpressure += 1; },
+      })).resolves.toEqual({ status: "clean" });
+      expect(backpressure).toBeGreaterThan(0);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("times out a stalled scan and closes its file source", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "clamd-timeout-"));
+    const socket = process.platform === "win32" ? `\\\\.\\pipe\\${basename(dir)}-clamd` : join(dir, "clamd.sock");
+    const file = join(dir, "large.zip");
+    writeFileSync(file, Buffer.alloc(8 * 1024 * 1024, 0x61));
+    let stalled: import("node:net").Socket | undefined;
+    const server = createServer((conn) => {
+      stalled = conn;
+      conn.pause();
+    });
+    await new Promise<void>((resolve) => server.listen(socket, resolve));
+    let sourceClosed!: () => void;
+    const closed = new Promise<void>((resolve) => { sourceClosed = resolve; });
+    try {
+      await expect(clamdScanFile(file, { socket, required: true, timeoutMs: 25 }, {
+        onSourceClose: sourceClosed,
+      })).resolves.toEqual({ status: "error", message: "clamd timeout" });
+      await expect(Promise.race([
+        closed.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1_000)),
+      ])).resolves.toBe(true);
+    } finally {
+      stalled?.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

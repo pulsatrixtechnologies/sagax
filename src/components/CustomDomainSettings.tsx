@@ -60,12 +60,23 @@ export function CustomDomainDnsRecord({ domain, serverIpv4 }: { domain: string; 
 /** Fixed placeholder avoids turning a partially typed domain into shell or
  * Caddy configuration. Ports come from the running server, not the browser. */
 export function customDomainProxyExample(status: Pick<CustomDomainStatus, "appPort" | "webhookPort">): string {
+  // Same upstream hold as deploy/Caddyfile (docs/zero-downtime-deploy.md).
+  const hold = `            lb_try_duration 25s
+            lb_try_interval 250ms
+            fail_duration 10s
+            unhealthy_status 502 503
+            health_uri /healthz
+            health_interval 2s
+            health_timeout 1s`;
   return `bots.example.com {
     handle /hooks/* {
-        reverse_proxy 127.0.0.1:${status.webhookPort}
+        reverse_proxy 127.0.0.1:${status.webhookPort} {
+${hold}
+        }
     }
     handle {
         reverse_proxy 127.0.0.1:${status.appPort} {
+${hold}
             flush_interval -1
         }
     }

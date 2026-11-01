@@ -34,6 +34,8 @@ struct MascotGalleryView: View {
                 case "frog": frogs
                 case "crab": crabs
                 case "group": groups
+                case "live-activity": LiveActivityGallery()
+                case "motion": MascotMotionGallery()
                 default: owls
                 }
             }

@@ -13,7 +13,16 @@
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createProxyHandler } from "../src/proxy.ts";
+import { createProxyHandler, isHarnessRestartError } from "../src/proxy.ts";
+
+describe("harness restart classification", () => {
+  it("treats connection refused/reset as a short restart", () => {
+    expect(isHarnessRestartError(Object.assign(new Error("refused"), { code: "ECONNREFUSED" }))).toBe(true);
+    expect(isHarnessRestartError(Object.assign(new Error("reset"), { code: "ECONNRESET" }))).toBe(true);
+    expect(isHarnessRestartError(Object.assign(new Error("other"), { code: "ETIMEDOUT" }))).toBe(false);
+    expect(isHarnessRestartError(new Error("offline"))).toBe(false);
+  });
+});
 
 const listen = (server: Server): Promise<number> =>
   new Promise((resolve) =>
@@ -131,9 +140,9 @@ describe("an upstream that fails mid-stream", () => {
     expect(escaped).toEqual([]);
   }, 20_000);
 
-  it("still says 502 when the harness was never there to begin with", async () => {
-    // The other half of the same handler: nothing has been written yet, so
-    // there is a status line to spend, and a phone deserves the real reason.
+  it("answers 503 reconnecting when the harness refuses the connection", async () => {
+    // ECONNREFUSED looks the same for a restart and a missing harness. Answer
+    // 503 so the phone shows Reconnecting and retries (docs/zero-downtime-deploy.md).
     const dead = createServer(() => {});
     servers.push(dead);
     const harnessPort = await listen(dead);
@@ -152,9 +161,9 @@ describe("an upstream that fails mid-stream", () => {
 
     const escaped = await watchingForCrashes(async () => {
       const res = await fetch(`${base}/api/health`, { headers: { authorization: "Bearer omb_x" } });
-      expect(res.status).toBe(502);
+      expect(res.status).toBe(503);
       expect((await res.json()) as { error: string }).toEqual({
-        error: "Sagax is not running on this computer",
+        error: "Sagax is restarting. Reconnecting…",
       });
     });
     expect(escaped).toEqual([]);

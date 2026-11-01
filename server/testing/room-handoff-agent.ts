@@ -1,7 +1,7 @@
 // Scripted provider fixture that exercises the REAL injected agents MCP proxy.
 // The plan and evidence are confined to the isolated launcher's temporary home.
 import { spawn } from "node:child_process";
-import { appendFileSync, readFileSync, existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, existsSync, rmSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { claudeLaunchLevel } from "./claude-level.ts";
 import { waitForExit } from "./cleanup.ts";
@@ -192,6 +192,24 @@ export async function runRoomHandoffAgent(argv: string[], planPath: string, prom
       evidence.push(await call("tools/list"));
       evidence.push(await call("tools/call", { name: "list_room_targets", arguments: {} }));
       for (const step of steps) {
+        // `internal`: a raw call to a harness route with this turn's own
+        // capability, as an older proxy or script makes it (an old entrypoint
+        // beside the tool surface). `saveAs` keeps its taskId for a later turn's
+        // path ("{{name}}"), in `${planPath}.vars.json`.
+        if (step.internal) {
+          const varsPath = `${planPath}.vars.json`;
+          const vars: Record<string, string> = existsSync(varsPath) ? JSON.parse(readFileSync(varsPath, "utf8")) : {};
+          const path = String(step.internal.path).replace(/\{\{(\w+)\}\}/g, (_m: string, key: string) => vars[key] ?? "");
+          const response = await fetch(`${integration.env.SAGAX_HARNESS_URL}${path}`, {
+            method: step.internal.method ?? "POST",
+            headers: { authorization: `Bearer ${integration.env.SAGAX_COMMS_TOKEN}`, "content-type": "application/json" },
+            ...(step.internal.body ? { body: JSON.stringify(step.internal.body) } : {}),
+          });
+          const body = await response.json().catch(() => ({})) as Record<string, any>;
+          evidence.push({ step, internal: { status: response.status, body } });
+          if (step.internal.saveAs && typeof body.taskId === "string") writeFileSync(varsPath, JSON.stringify({ ...vars, [step.internal.saveAs]: body.taskId }));
+          continue;
+        }
         const response = await call("tools/call", { name: step.tool ?? "coordinate_bots", arguments: step.arguments });
         evidence.push({ step, response });
         if (Boolean(response.error || response.result?.isError) !== Boolean(step.expectError)) throw new Error(`Unexpected tool outcome: ${JSON.stringify(response)}`);
@@ -221,6 +239,18 @@ export async function runRoomHandoffAgent(argv: string[], planPath: string, prom
       });
       if (typeof plan.progressAfterGate === "string") progress?.(plan.progressAfterGate);
       if (plan.delayMs) await new Promise(resolve => { delayTimer = setTimeout(resolve, plan.delayMs); });
+      // `usageLimitFile`: while it exists, this turn ends on the account's
+      // usage limit after its steps ran (the file is taken once), as Claude
+      // Code reports one (fake-claude-cli.ts reads `usageLimit`). A JSON file
+      // { text, resetsAt } (epoch seconds) also says when the window resets.
+      if (plan.usageLimitFile && existsSync(plan.usageLimitFile)) {
+        const raw = readFileSync(plan.usageLimitFile, "utf8").trim();
+        rmSync(plan.usageLimitFile, { force: true });
+        let limit: { text?: string; resetsAt?: number } = {};
+        try { limit = raw.startsWith("{") ? JSON.parse(raw) : { text: raw }; } catch { limit = { text: raw }; }
+        throw Object.assign(new Error(limit.text || "You've hit your weekly limit"), { usageLimit: true,
+          ...(typeof limit.resetsAt === "number" ? { resetsAt: limit.resetsAt } : {}) });
+      }
       if (plan.fail && !resumed) throw new Error("Scripted addressed agent failure");
       if (plan.failResumed && resumed) throw new Error("Scripted failure of a resumed turn");
       if (approval && approval.behavior !== "allow") return plan.replyIfDenied ?? `${plan.reply} (approval ${approval.behavior})`;

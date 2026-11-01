@@ -43,7 +43,15 @@
     "chomp",
     "nibble",
     "shield",
-    "bubble"
+    "bubble",
+    "pad",
+    "cup",
+    "bulb",
+    "say",
+    "sprout",
+    "tin",
+    "tome",
+    "ship"
   ],
   "shapeSkins": [
     "plain",
@@ -7488,6 +7496,1774 @@
       "expected": {
         "character": "shape",
         "shape": "bubble",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape pad plain",
+      "input": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape pad pastel",
+      "input": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape pad glossy",
+      "input": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape pad night",
+      "input": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape pad outline",
+      "input": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape pad gold",
+      "input": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape pad neon",
+      "input": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape pad chrome",
+      "input": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape pad crystal",
+      "input": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape pad circuit",
+      "input": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape pad holo",
+      "input": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape pad molten",
+      "input": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape pad galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "pad",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape cup plain",
+      "input": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape cup pastel",
+      "input": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape cup glossy",
+      "input": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape cup night",
+      "input": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape cup outline",
+      "input": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape cup gold",
+      "input": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape cup neon",
+      "input": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape cup chrome",
+      "input": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape cup crystal",
+      "input": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape cup circuit",
+      "input": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape cup holo",
+      "input": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape cup molten",
+      "input": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape cup galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "cup",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape bulb plain",
+      "input": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape bulb pastel",
+      "input": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape bulb glossy",
+      "input": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape bulb night",
+      "input": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape bulb outline",
+      "input": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape bulb gold",
+      "input": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape bulb neon",
+      "input": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape bulb chrome",
+      "input": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape bulb crystal",
+      "input": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape bulb circuit",
+      "input": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape bulb holo",
+      "input": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape bulb molten",
+      "input": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape bulb galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "bulb",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape say plain",
+      "input": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape say pastel",
+      "input": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape say glossy",
+      "input": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape say night",
+      "input": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape say outline",
+      "input": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape say gold",
+      "input": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape say neon",
+      "input": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape say chrome",
+      "input": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape say crystal",
+      "input": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape say circuit",
+      "input": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape say holo",
+      "input": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape say molten",
+      "input": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape say galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "say",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape sprout plain",
+      "input": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape sprout pastel",
+      "input": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape sprout glossy",
+      "input": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape sprout night",
+      "input": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape sprout outline",
+      "input": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape sprout gold",
+      "input": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape sprout neon",
+      "input": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape sprout chrome",
+      "input": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape sprout crystal",
+      "input": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape sprout circuit",
+      "input": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape sprout holo",
+      "input": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape sprout molten",
+      "input": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape sprout galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "sprout",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape tin plain",
+      "input": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape tin pastel",
+      "input": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape tin glossy",
+      "input": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape tin night",
+      "input": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape tin outline",
+      "input": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape tin gold",
+      "input": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape tin neon",
+      "input": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape tin chrome",
+      "input": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape tin crystal",
+      "input": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape tin circuit",
+      "input": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape tin holo",
+      "input": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape tin molten",
+      "input": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape tin galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tin",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape tome plain",
+      "input": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape tome pastel",
+      "input": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape tome glossy",
+      "input": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape tome night",
+      "input": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape tome outline",
+      "input": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape tome gold",
+      "input": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape tome neon",
+      "input": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape tome chrome",
+      "input": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape tome crystal",
+      "input": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape tome circuit",
+      "input": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape tome holo",
+      "input": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape tome molten",
+      "input": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape tome galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "tome",
+        "skins": {
+          "shape": "galaxy"
+        }
+      }
+    },
+    {
+      "name": "shape ship plain",
+      "input": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "plain"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "plain"
+        }
+      }
+    },
+    {
+      "name": "shape ship pastel",
+      "input": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "pastel"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "pastel"
+        }
+      }
+    },
+    {
+      "name": "shape ship glossy",
+      "input": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "glossy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "glossy"
+        }
+      }
+    },
+    {
+      "name": "shape ship night",
+      "input": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "night"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "night"
+        }
+      }
+    },
+    {
+      "name": "shape ship outline",
+      "input": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "outline"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "outline"
+        }
+      }
+    },
+    {
+      "name": "shape ship gold",
+      "input": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "gold"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "gold"
+        }
+      }
+    },
+    {
+      "name": "shape ship neon",
+      "input": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "neon"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "neon"
+        }
+      }
+    },
+    {
+      "name": "shape ship chrome",
+      "input": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "chrome"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "chrome"
+        }
+      }
+    },
+    {
+      "name": "shape ship crystal",
+      "input": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "crystal"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "crystal"
+        }
+      }
+    },
+    {
+      "name": "shape ship circuit",
+      "input": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "circuit"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "circuit"
+        }
+      }
+    },
+    {
+      "name": "shape ship holo",
+      "input": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "holo"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "holo"
+        }
+      }
+    },
+    {
+      "name": "shape ship molten",
+      "input": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "molten"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "molten"
+        }
+      }
+    },
+    {
+      "name": "shape ship galaxy",
+      "input": {
+        "character": "shape",
+        "shape": "ship",
+        "skins": {
+          "shape": "galaxy"
+        }
+      },
+      "expected": {
+        "character": "shape",
+        "shape": "ship",
         "skins": {
           "shape": "galaxy"
         }

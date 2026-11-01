@@ -14,10 +14,22 @@ export function latestRoutineRun(routineId: string, runs: readonly RoutineRun[])
 
 export function routineRunLabel(run: RoutineRun): string {
   // a completed run with nothing for the person posted nothing (2026-10-22)
+  if (run.status === "completed" && run.problems) return t("routines.status.completedWithProblems");
   if (run.status === "completed" && run.quiet) return t("routines.status.nothing_to_report");
   if (run.goalStatus) return t(`routines.goal.${run.goalStatus}`);
   const status = t(`routines.status.${run.status}`);
   return run.retried && run.status !== "queued" ? t(`routines.retried.${run.retried}`, { status }) : status;
+}
+
+/** 2026-11-01: a queued run's place among the queued runs of its bot,
+ * oldest first (the scheduler starts them in that order). Null when the run
+ * is not queued. */
+export function routineQueuePosition(run: Pick<RoutineRun, "id" | "botId" | "status" | "createdAt">, runs: readonly Pick<RoutineRun, "id" | "botId" | "status" | "createdAt">[]): { position: number; count: number } | null {
+  if (run.status !== "queued") return null;
+  const queued = runs.filter((other) => other.status === "queued" && other.botId === run.botId);
+  if (!queued.some((other) => other.id === run.id)) queued.push(run);
+  queued.sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return { position: queued.findIndex((other) => other.id === run.id) + 1, count: queued.length };
 }
 
 /** Driver stop codes a run's error can still be (a run recorded before the
@@ -41,6 +53,7 @@ export function routineRunTone(run: RoutineRun): string {
   if (run.status === "waiting" || ["needs-input", "limit-reached", "paused"].includes(run.goalStatus ?? "")) return "text-warning";
   if (["failed", "missed"].includes(run.status) || ["failed", "blocked"].includes(run.goalStatus ?? "")) return "text-danger";
   if (run.status === "running") return "text-accent";
+  if (run.status === "completed" && run.problems) return "text-warning";
   if (run.status === "completed" && run.quiet) return "text-ink-secondary";
   if (run.status === "completed" && (!run.goalStatus || run.goalStatus === "completed")) return "text-success";
   return "text-ink-secondary";
@@ -169,7 +182,8 @@ export function routineRunDuration(run: Pick<RoutineRun, "startedAt" | "finished
 
 /** The first line of what a run has to say: what it waits on, its error, its
  * report. A quiet run says it had nothing. */
-export function routineRunPreview(run: Pick<RoutineRun, "status" | "quiet" | "attention" | "error" | "output">): string {
+export function routineRunPreview(run: Pick<RoutineRun, "status" | "quiet" | "attention" | "error" | "output" | "problems">): string {
+  if (run.status === "completed" && run.problems) return run.problems.split("\n")[0]!.trim();
   if (run.status === "completed" && run.quiet) return t("routineRun.quiet");
   const text = run.attention || routineRunError(run.error) || run.output || "";
   const line = text.split("\n").map((part) => part.trim()).find((part) => part && !/^\|?\s*:?-{2,}/.test(part)) ?? "";

@@ -32,6 +32,11 @@ import {
   sidebarDragTarget,
   SIDEBAR_RAIL_WIDTH,
   SIDEBAR_SNAP_WIDTH,
+  SIDEBAR_AUTO_RAIL_BELOW,
+  SIDEBAR_DRAWER_BELOW,
+  currentSidebarViewport,
+  effectiveSidebarDensity,
+  sidebarViewportFor,
 } from "./sidebar-preferences";
 import { userSectionId } from "./sidebar-layout";
 
@@ -252,5 +257,37 @@ describe("sidebar edge drag", () => {
 
   it("takes another snap width", () => {
     expect(sidebarDragTarget(199, { ...bounds, snap: 200 })).toEqual({ collapsed: true });
+  });
+});
+
+describe("the sidebar by window width (Grok Bot's narrow window, 2026-11-01)", () => {
+  it("is a drawer on a phone, the rail from sm to md, the person's own above", () => {
+    expect([SIDEBAR_DRAWER_BELOW, SIDEBAR_AUTO_RAIL_BELOW]).toEqual([640, 768]);
+    expect(sidebarViewportFor(390)).toBe("phone");
+    expect(sidebarViewportFor(639)).toBe("phone");
+    expect(sidebarViewportFor(640)).toBe("medium");
+    expect(sidebarViewportFor(700)).toBe("medium");
+    expect(sidebarViewportFor(767)).toBe("medium");
+    expect(sidebarViewportFor(768)).toBe("wide");
+    expect(sidebarViewportFor(1338)).toBe("wide");
+  });
+
+  it("draws the rail at medium widths only, whatever the person chose", () => {
+    for (const saved of ["comfortable", "compact", "icons"] as const) {
+      expect(effectiveSidebarDensity(saved, "medium")).toBe("icons");
+      expect(effectiveSidebarDensity(saved, "wide")).toBe(saved);
+      expect(effectiveSidebarDensity(saved, "phone")).toBe(saved);
+    }
+  });
+
+  it("reads the window through the same breakpoints as the CSS", () => {
+    for (const [width, expected] of [[390, "phone"], [700, "medium"], [1338, "wide"]] as const) {
+      vi.stubGlobal("window", { matchMedia: (query: string) => ({ matches: width >= Number(/(\d+)px/.exec(query)?.[1]) }) });
+      try {
+        expect(currentSidebarViewport()).toBe(expected);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    }
   });
 });

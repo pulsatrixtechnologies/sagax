@@ -44,3 +44,15 @@ describe("the fixture's Code section environment", () => {
     expect(childEnv({ SAGAX_TEST_INTERNAL_CAPABILITY_KEY: key }).SAGAX_TEST_INTERNAL_CAPABILITY_KEY).toBe(key);
   });
 });
+
+describe("the fixture's video provider environment", () => {
+  it("accepts only an explicit loopback fake tied to a valid test capability key", () => {
+    const key = "synthetic-video-fixture-key-at-least-32";
+    expect(childEnv({ SAGAX_TEST_INTERNAL_CAPABILITY_KEY: key, SAGAX_TEST_VIDEO_URL: "http://127.0.0.1:4100/v1" }).SAGAX_TEST_VIDEO_URL).toBe("http://127.0.0.1:4100/v1");
+    for (const url of ["https://api.x.ai/v1", "http://localhost:4100/v1", "http://127.0.0.1:4100/v1/other", "http://192.0.2.1:4100/v1"]) {
+      expect(childEnv({ SAGAX_TEST_INTERNAL_CAPABILITY_KEY: key, SAGAX_TEST_VIDEO_URL: url })).not.toHaveProperty("SAGAX_TEST_VIDEO_URL");
+    }
+    expect(childEnv({ SAGAX_TEST_VIDEO_URL: "http://127.0.0.1:4100/v1" })).not.toHaveProperty("SAGAX_TEST_VIDEO_URL");
+    expect(childEnv({ SAGAX_TEST_INTERNAL_CAPABILITY_KEY: "short", SAGAX_TEST_VIDEO_URL: "http://127.0.0.1:4100/v1" })).not.toHaveProperty("SAGAX_TEST_VIDEO_URL");
+  });
+});

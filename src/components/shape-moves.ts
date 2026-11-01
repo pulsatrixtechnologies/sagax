@@ -9,7 +9,7 @@
 // over its morph, holds for its duration, slides back over its morph). The
 // ring and ribbon generators are our own: a circle in 3D tilted twice and
 // split by depth, and a bundle of quadratic curves fanned around a line.
-import type { Expression } from "./shape-engine";
+import type { Expression } from "./shape-expression";
 import { blendRadii, BODY, clamp01, easeInOut, easeOutQuint, lerp, MOVE_RADII, RAD, SHAPE_RADII, toBox, type Radii } from "./shape-art";
 
 type Point = [number, number];

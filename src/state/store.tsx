@@ -114,6 +114,7 @@ import { BOT_TASKS_EVENT } from "@/lib/bot-task-events";
 import { makeConfidentialBody } from "@/lib/confidential-thread";
 import { bindModerationApi, blockedDmSender, notifyReportsChanged } from "@/lib/moderation";
 import { readableError } from "@/lib/plain-error";
+import { shouldSuppressDeployOutageError } from "@/lib/deploy-reconnect";
 
 bindModerationApi(api);
 
@@ -687,6 +688,9 @@ export interface Bot {
   /** Where this bot works: a computer, only the built-in browser tab, or
    * nowhere; unset = auto (cloud boat if one exists, else local). */
   computer?: "cloud" | "vm" | "local" | "browser" | "off";
+  /** Enrolled unattended hosts attached from the Computer tab so this bot
+   * has access by default (2026-11-01). Absent = none. */
+  remoteHosts?: string[];
   /** Which cloud computer backs `computer: "cloud"`; absent means Boat. */
   cloudBackend?: CloudBackend;
   /** Allow Auto to prepare/start the managed VPS container. Off by default. */
@@ -950,6 +954,9 @@ export interface ConfigStatus {
   openaiCompat?: { configured: boolean; url?: string; model?: string };
   /** 2026-10-30: the named OpenAI-compatible servers (never their keys). */
   openaiCompatServers?: Array<{ instanceId: string; name: string; url: string; configured: boolean }>;
+  /** Capabilities lot 4: changes when the organization's declarations do
+   * (Plugins reads its capabilities again). */
+  orgCapabilities?: { revision: string };
   /** what this server is entitled to; Settings shows only what works here.
    * `license` reaches admins only, and only while the key is inside its
    * warning window or grace period. */
@@ -1142,7 +1149,7 @@ export interface BrowserProfile {
 // Settings shows (a saved key's Test button used to vanish that way).
 export type ConfigStatusFrame = Pick<
   ConfigStatus,
-  "xai" | "mistral" | "cerebras" | "groq" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "fleet" | "box" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "localVm" | "opencodeGo" | "tts" | "decider" | "imageGen" | "live" | "profile" | "language" | "features" | "onboarding" | "browserEngine" | "browserProfiles" | "personalSettings" | "edition" | "budgets" | "billing" | "managedPolicy" | "viewer" | "allowedEngines" | "ownAccountsOutsideList" | "disabledModels" | "myDisabledModels" | "confidentialThreadsByDefault"
+  "xai" | "mistral" | "cerebras" | "groq" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "fleet" | "box" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "localVm" | "opencodeGo" | "tts" | "decider" | "imageGen" | "live" | "profile" | "language" | "features" | "onboarding" | "browserEngine" | "browserProfiles" | "personalSettings" | "edition" | "budgets" | "billing" | "managedPolicy" | "viewer" | "allowedEngines" | "ownAccountsOutsideList" | "disabledModels" | "myDisabledModels" | "confidentialThreadsByDefault" | "orgCapabilities"
 >;
 
 export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
@@ -1185,6 +1192,7 @@ export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
     disabledModels: frame.disabledModels,
     myDisabledModels: frame.myDisabledModels,
     confidentialThreadsByDefault: frame.confidentialThreadsByDefault,
+    orgCapabilities: frame.orgCapabilities,
   };
 }
 
@@ -1366,6 +1374,9 @@ export interface AppState {
   /** 2026-10-15: a routine to show on its page in the bot panel (a routine
    * line in the conversation was clicked); RoutinesSection opens it once. */
   routineFocus: { botId: string; routineId: string } | null;
+  /** 2026-11-01: a routine run open as an exchange sheet over the chat
+   * column (same place as Melonie <-> Katarina). ChatView renders it. */
+  routineRunSheet: { runId: string; routineId?: string } | null;
   /** a link that opens Connect apps on one tab: Pages (the published
    * pages), Providers (once My accounts: the old name "accounts" still
    * leads there, see the togglePlugins action), Sources or Bots (Browse
@@ -1469,6 +1480,10 @@ export interface AppState {
    * so it holds still while that conversation stays open. */
   unreadDivider: { threadId: string; messageId: string } | null;
   connected: boolean;
+  /** True after the live stream has opened at least once this session. */
+  everConnected: boolean;
+  /** When the live stream last dropped after being up; null while connected. */
+  disconnectedAt: number | null;
   /** Bots and rooms have loaded once: a link opened at launch can resolve. */
   hydrated?: true;
   error: string | null;
@@ -1648,6 +1663,8 @@ export type Action =
       threadId?: string;
       mode?: "chat" | "goal";
       onError?: () => void;
+      /** the server accepted the message or queued it durably */
+      onSent?: () => void;
     }
   | {
       type: "patchGroup";
@@ -1803,6 +1820,8 @@ export type Action =
   | { type: "toggleSettings"; open?: boolean; section?: BotSettingsSection; botId?: string; owner?: PanelOwner | null }
   | { type: "openRoutine"; botId: string; routineId: string }
   | { type: "routineFocused" }
+  | { type: "openRoutineRunSheet"; runId: string; routineId?: string; botId?: string }
+  | { type: "closeRoutineRunSheet" }
   | { type: "openPersonPanel"; personId: string | null }
   /** Open a bot's panel on Details with one Coding activity item shown
    * (`run:<routineRunId>` or `thread:<threadId>`), e.g. from the owner's
@@ -1878,16 +1897,20 @@ interface NotificationRoutingState {
   routineRuns?: ReadonlyArray<{ id: string }>;
 }
 
-/** 2026-10-29: a routine run opens its run detail (the Routines page with
- * the run open over its logs, its routine's page and history one click
- * away), never a conversation beside the chat. A run of a deleted routine
- * opens the same way, to read. Continue in the conversation stays in the
- * detail. */
+/** 2026-11-01: a routine run opens as an exchange sheet over the chat
+ * column (header "<routine> <-> <bot>", bubbles, Close Chat), the same
+ * place as a bot-to-bot exchange. Continue in the conversation stays a
+ * footer action on that sheet. */
 export function openRoutineRun(
   dispatch: (action: Action) => void,
-  run: { runId: string; routineId?: string },
+  run: { runId: string; routineId?: string; botId?: string },
 ) {
-  dispatch({ type: "showRoutines", section: "logs", runId: run.runId, ...(run.routineId ? { routineId: run.routineId } : {}) });
+  dispatch({
+    type: "openRoutineRunSheet",
+    runId: run.runId,
+    ...(run.routineId ? { routineId: run.routineId } : {}),
+    ...(run.botId ? { botId: run.botId } : {}),
+  });
 }
 
 /** 2026-10-29 (maintainer: "we are in a unified chat"): Continue in the
@@ -3100,7 +3123,14 @@ function reduce(state: AppState, action: Action): AppState {
       })));
     }
     case "connected":
-      return { ...state, connected: action.value };
+      if (action.value) {
+        return { ...state, connected: true, everConnected: true, disconnectedAt: null };
+      }
+      return {
+        ...state,
+        connected: false,
+        disconnectedAt: state.connected ? Date.now() : (state.disconnectedAt ?? Date.now()),
+      };
     case "error":
       return {
         ...(action.message && state.selectedId
@@ -3174,6 +3204,27 @@ function reduce(state: AppState, action: Action): AppState {
     }
     case "routineFocused":
       return state.routineFocus ? { ...state, routineFocus: null } : state;
+    case "openRoutineRunSheet": {
+      const known = state.routineRuns.find((candidate) => candidate.id === action.runId);
+      const botId = action.botId ?? known?.botId;
+      const bot = botId ? state.bots.find((candidate) => candidate.id === botId) : undefined;
+      const next: AppState = {
+        ...state,
+        activeView: "chat",
+        routineRunSheet: { runId: action.runId, ...(action.routineId ?? known?.routineId ? { routineId: action.routineId ?? known?.routineId } : {}) },
+        // Keep the bot panel if it was already open; otherwise land on chat.
+        personPanelId: null,
+        appSettingsOpen: false,
+        pluginsOpen: false,
+        triggersOpen: false,
+      };
+      if (bot && state.selectedId !== bot.id) {
+        return { ...next, selectedId: bot.id };
+      }
+      return next;
+    }
+    case "closeRoutineRunSheet":
+      return state.routineRunSheet ? { ...state, routineRunSheet: null } : state;
     case "openBotActivity": {
       const opened = reducer(state, { type: "toggleSettings", open: true, section: "routines", botId: action.botId });
       if (opened === state) return state;
@@ -3817,6 +3868,7 @@ export const initialState: AppState = {
   pluginsBotId: null,
   pluginsFocusApps: null,
   routineFocus: null,
+  routineRunSheet: null,
   pluginsPage: null,
   triggersOpen: false,
   newBotOpen: false,
@@ -3852,6 +3904,8 @@ export const initialState: AppState = {
   freshTopic: {},
   unreadDivider: null,
   connected: false,
+  everConnected: false,
+  disconnectedAt: null,
   error: null,
   notice: null,
   revealThread: null,
@@ -4436,6 +4490,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const olderPagesInFlight = new Set<string>();
     let creatingBot = false;
     const showError = (e: unknown) => {
+      // A short deploy restart: keep the transcript, show Reconnecting, no toast.
+      const snap = stateRef.current;
+      if (
+        shouldSuppressDeployOutageError({
+          failure: e,
+          everConnected: snap.everConnected,
+          connected: snap.connected,
+          disconnectedAt: snap.disconnectedAt,
+        })
+      ) {
+        return;
+      }
       rawDispatch({ type: "error", message: readableError(e) });
     };
     /** Where a card action's message lives, and the card on it. A card asked
@@ -5211,6 +5277,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               }),
             }))
             .then((body) => {
+              action.onSent?.();
               if (body?.message && typeof body.threadId === "string") {
                 rawDispatch({ type: "messageAdded", threadId: body.threadId, message: body.message });
               }

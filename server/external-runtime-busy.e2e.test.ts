@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb, type VerificationServer } from "../scripts/control-omb.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
+import { readHandoffs } from "./testing/handoff-rows.ts";
 
 const TOKEN = "external-runtime-busy-fixture-0123456789abcdef";
 
@@ -45,10 +46,8 @@ it.each(["already busy", "became busy during approval"])(
         expect(await response.json()).toEqual({ error: "Result withheld: team access changed while the teammate was working" });
         await api("PATCH", `/api/bots/${source.id}`, { peers: [peer.id], acknowledgePeerScope: true });
       };
-      const waiting = (id: string) => {
-        const path = join(session.info.dataDir, "delegations.json");
-        return existsSync(path) && JSON.parse(readFileSync(path, "utf8"))[sourceThread]?.find((item: any) => item.id === id)?.waitingOnBusy === true;
-      };
+      // Lot 3: the ask is a runtime consultation on the caller's poll root.
+      const waiting = (id: string) => readHandoffs(session.info.dataDir).find((node) => node.id === id)?.status === "queued";
       await api("PATCH", `/api/bots/${source.id}`, { approvePeerComms: true });
       writeFileSync(join(session.info.dataDir, "external-runtimes.json"), JSON.stringify({ [source.id]: { token: TOKEN, threadId: sourceThread } }), { mode: 0o600 });
       const requestText = `Only this queued request: ${scenario}`;
@@ -57,57 +56,42 @@ it.each(["already busy", "became busy during approval"])(
         await expect.poll(() => existsSync(prompts) && readFileSync(prompts, "utf8").includes("Keep this unrelated turn running"), { timeout: 15_000 }).toBe(true);
       };
       const approve = async (card: any) => api("POST", `/api/threads/${sourceThread}/respond`, { requestId: card.card.requestId, behavior: "allow" });
-      let queued: any;
-      if (scenario === "already busy") {
-        await occupy();
-        queued = await api("POST", "/api/internal/ask-bot", { toBotId: peer.id, message: requestText }, true);
-        expect(await sourceCards()).toHaveLength(0);
-      } else {
-        // Attach a rejection handler immediately: fixture teardown must not
-        // turn a failed assertion into an unhandled in-flight HTTP rejection.
-        const pendingAsk = api("POST", "/api/internal/ask-bot", { toBotId: peer.id, message: requestText }, true)
-          .then(value => ({ value }), error => ({ error }));
-        await expect.poll(async () => (await sourceCards()).length, { timeout: 15_000 }).toBe(1);
-        const [card] = await sourceCards();
-        expect(card.card.tool).toBe("ask_bot");
-        expect(await peerRequests()).toHaveLength(0);
-        await occupy();
-        await approve(card);
-        const outcome = await pendingAsk;
-        if ("error" in outcome) throw outcome.error;
-        queued = outcome.value;
-      }
+      // Lot 3: a review-gated external ask is not held open on the card. It
+      // is answered at once with a task id, waits queued for the person's
+      // card (asked once, as ask_bot), and runs once the card allows it and
+      // the peer is free, whichever comes last.
+      if (scenario === "already busy") await occupy();
+      const queued = await api("POST", "/api/internal/ask-bot", { toBotId: peer.id, message: requestText }, true);
       expect(queued).toMatchObject({ busy: true, taskId: expect.any(String) });
       evidence.push({ scenario, queued, sourceThread, peerThread });
-      // This is the lost-wakeup boundary: merely storing a fresh queue item
-      // does not subscribe it to the target's next idle transition.
+      await expect.poll(async () => (await sourceCards()).length, { timeout: 15_000 }).toBe(1);
+      const [card] = await sourceCards();
+      expect(card.card.tool).toBe("ask_bot");
+      expect(await peerRequests()).toHaveLength(0);
+      if (scenario === "became busy during approval") await occupy();
+      await approve(card);
+      // Allowed, but the peer is busy: it waits queued, nothing is lost.
       await expect.poll(() => waiting(queued.taskId), { timeout: 5_000 }).toBe(true);
       expect(await peerRequests()).toHaveLength(0);
       expect((await sourceState()).busy).toBeFalsy();
       expect((await messages(sourceThread)).filter(message => message.role === "user")).toHaveLength(0);
-      await withholdAfterRevocation(queued.taskId);
       evidence.push({ scenario, queued, waitingOnBusy: true, beforeRelease: await sourceCards() });
 
       writeFileSync(gate, "release only the isolated provider");
-      if (scenario === "already busy") {
-        await expect.poll(async () => (await sourceCards()).length, { timeout: 15_000 }).toBe(1);
-        const [card] = await sourceCards();
-        expect(card.card.tool).toBe("delegate_bot");
-        expect(card.card.answered).toBeFalsy();
-        expect(await peerRequests()).toHaveLength(0);
-        await approve(card);
-      }
       await expect.poll(async () => (await receipt(queued.taskId)).status, { timeout: 20_000 }).toBe("done");
       expect((await receipt(queued.taskId)).result).toContain(requestText);
       expect((await control("wait", "--bot", peer.id, "--task", peerThread)).status).toBe("settled");
       // The gateway polls this receipt; the source bot's own engine never runs.
       expect((await control("wait", "--bot", source.id, "--task", sourceThread)).status).toBe("settled");
       expect((await messages(sourceThread)).filter(message => message.role === "bot" && message.turnId && !message.from)).toEqual([]);
-      const requests = await peerRequests();
+      // Delivered once, where the runtime ran it (the peer's work thread).
+      expect(await peerRequests()).toHaveLength(0);
+      const workThread = readHandoffs(session.info.dataDir).find((node) => node.id === queued.taskId)!.threadId;
+      const requests = (await messages(workThread)).filter(message => message.roomRequest?.phase === "request");
       expect(requests).toHaveLength(1);
       expect(requests[0].text).toContain(requestText);
       expect((await sourceCards()).map(card => ({ tool: card.card.tool, answered: card.card.answered })))
-        .toEqual([{ tool: scenario === "already busy" ? "delegate_bot" : "ask_bot", answered: "allow" }]);
+        .toEqual([{ tool: "ask_bot", answered: "allow" }]);
       await withholdAfterRevocation(queued.taskId);
       evidence.push({ receipt: await receipt(queued.taskId), sourceMessages: await messages(sourceThread), peerMessages: await messages(peerThread) });
     } finally {

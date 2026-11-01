@@ -72,8 +72,8 @@ const READ_DEFAULT = 256_000;
 const READ_MAX = 1_000_000;
 const WRITE_MAX = 1024 * 1024;
 const FETCH_MAX = 256 * 1024;
-/** The server's largest upload (an archive, server/attachments.ts). */
-const STAGE_MAX = 90 * 1024 * 1024;
+/** The server's largest upload (a video, server/attachments.ts). */
+const STAGE_MAX = 1024 * 1024 * 1024;
 const ACTIONS = new Set(["run_command", "read_file", "write_file", "list_files", "search_files", "fetch_url", "browse", "computer_tools", "computer_call", "vm_status", "vm_start", "vm_run_command", "vm_create", "vm_stop", "vm_pause", "vm_resume", "vm_setup", "vm_install", "vm_screenshot", "vm_computer_call", "stage_file", "extract_archive", "local_model", "terminal_open", "vm_terminal_open"]);
 const KEYS = new Set(["action", "path", "content", "encoding", "offset", "max_bytes", "command", "cwd", "timeout_seconds", "pattern", "glob", "url", "screenshot", "tool_name", "arguments", "container", "name", "final", "endpoint", "http_method", "http_path", "json", "env"]);
 /** Command variables (run_command, vm_run_command): API keys the person

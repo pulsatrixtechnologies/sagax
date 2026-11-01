@@ -109,6 +109,9 @@ struct MarkdownImageView: View {
     var foreground: Color = BubbleColor.theirsText
     var identifier: String?
     @State private var approved = false
+    /// The inline `data:` raster, decoded once off the main thread: decoding
+    /// it in `body` ran again on every streaming tick of the reply.
+    @State private var inline: (source: String, image: UIImage?)?
 
     private var name: String { RichBlocks.markdownImageName(image.source, alt: image.alt) }
     private var openOriginal: URL? {
@@ -136,7 +139,14 @@ struct MarkdownImageView: View {
     @ViewBuilder
     private var picture: some View {
         let source = image.source.trimmingCharacters(in: .whitespaces)
-        if let data = RichBlocks.inlineRasterData(source), let decoded = UIImage(data: data) {
+        if RichBlocks.isInlineRasterDataURL(source), inline?.source != source {
+            placeholder(icon: nil) { ProgressView() }
+                .task(id: source) {
+                    let data = await Task.detached(priority: .userInitiated) { RichBlocks.inlineRasterData(source) }.value
+                    let decoded: UIImage? = if let data { await ImageDecoding.prepared(data) } else { nil }
+                    inline = (source, decoded)
+                }
+        } else if let decoded = inline?.source == source ? inline?.image : nil {
             Image(uiImage: decoded)
                 .resizable()
                 .scaledToFit()

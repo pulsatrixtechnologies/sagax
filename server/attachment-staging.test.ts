@@ -13,8 +13,11 @@ const store = join(dir, "attachments");
 mkdirSync(store);
 const README = "0b5a3c1e-1111-4111-8111-111111111111.md";
 const PDF = "9d1e2f3a-2222-4222-8222-222222222222.pdf";
+const LARGE = "8c1d2e3f-3333-4333-8333-333333333333.pdf";
+const LARGE_BYTES = Buffer.alloc(1024 * 1024 + 17, 0x5a);
 writeFileSync(join(store, README), "# Hello\nworld\n");
 writeFileSync(join(store, PDF), Buffer.from([0x25, 0x50, 0x44, 0x46, 0x00, 0x01]));
+writeFileSync(join(store, LARGE), LARGE_BYTES);
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const tag = (file: string, name: string) => `<attached-file path="${join(store, file)}" name="${name}" />`;
@@ -67,9 +70,21 @@ describe("attachments in a turn", () => {
     expect(displayName("a<b>:c?.md", README)).toBe("a_b__c_.md");
   });
 
-  it("chunks a file for copying", () => {
+  it("chunks a file for copying", async () => {
     const [file] = attachedFilesInText(tag(PDF, "spec.pdf"), store);
-    const chunks = [...attachmentChunks(file!, 4)];
+    const chunks: { offset: number; data: Buffer; final: boolean }[] = [];
+    for await (const chunk of attachmentChunks(file!, 4)) chunks.push(chunk);
     expect(chunks.map((chunk) => [chunk.offset, chunk.data.length, chunk.final])).toEqual([[0, 4, false], [4, 2, true]]);
+  });
+
+  it("reconstructs a large desktop transfer exactly from bounded ordered chunks", async () => {
+    const [file] = attachedFilesInText(tag(LARGE, "large.pdf"), store);
+    const chunks: { offset: number; data: Buffer; final: boolean }[] = [];
+    for await (const chunk of attachmentChunks(file!, 48 * 1024)) chunks.push(chunk);
+    expect(chunks.every((chunk) => chunk.data.length <= 48 * 1024)).toBe(true);
+    expect(chunks.map((chunk) => chunk.offset)).toEqual(chunks.map((_, index) => index * 48 * 1024));
+    expect(chunks.filter((chunk) => chunk.final)).toHaveLength(1);
+    expect(chunks.at(-1)?.final).toBe(true);
+    expect(Buffer.concat(chunks.map((chunk) => chunk.data))).toEqual(LARGE_BYTES);
   });
 });

@@ -81,13 +81,13 @@ describe("classifyContinuable", () => {
 
 interface FakeHarness {
   sub: (event: RuntimeEvent) => void;
-  calls: { createTask: unknown[][]; startTurn: unknown[][]; append: unknown[][] };
+  calls: { createTask: unknown[][]; dispatch: unknown[][]; append: unknown[][] };
   setClock: (now: number) => void;
   failNextStart: () => void;
 }
 
 function harness(options?: { taskTitle?: string; taskForEveryThread?: boolean; requested?: Set<string> }): FakeHarness {
-  const calls: FakeHarness["calls"] = { createTask: [], startTurn: [], append: [] };
+  const calls: FakeHarness["calls"] = { createTask: [], dispatch: [], append: [] };
   const task = { threadId: "thread-cont", title: "Continue: Whatever", projectId: undefined as string | undefined, approvalMode: "ask" as const, modelSelection: undefined };
   let clock = 1_000_000;
   let failNext = false;
@@ -99,13 +99,13 @@ function harness(options?: { taskTitle?: string; taskForEveryThread?: boolean; r
     createTask: (...args: unknown[]) => { calls.createTask.push(args); return task; },
     appendMessage: (...args: unknown[]) => { calls.append.push(args); return {}; },
   };
-  const startTurn = async (...args: unknown[]) => {
-    calls.startTurn.push(args);
+  const dispatch = async (...args: unknown[]) => {
+    calls.dispatch.push(args);
     if (failNext) throw new Error("thread_busy");
   };
   const sub = makeCapContinuationSubscriber({
     store: store as unknown as Parameters<typeof makeCapContinuationSubscriber>[0]["store"],
-    startTurn: startTurn as unknown as Parameters<typeof makeCapContinuationSubscriber>[0]["startTurn"],
+    dispatch: dispatch as unknown as Parameters<typeof makeCapContinuationSubscriber>[0]["dispatch"],
     reportsToRequester: (threadId) => options?.requested?.has(threadId) === true,
     now: () => clock,
   });
@@ -121,7 +121,7 @@ function capEvent(threadId = "thread-1", over: Partial<RuntimeEvent> = {}): Runt
 }
 
 describe("makeCapContinuationSubscriber", () => {
-  it("creates a Continue task, starts a turn seeded with the handoff, and posts an activity message", async () => {
+  it("creates a Continue task, hands the runtime a turn seeded with the handoff, and posts an activity message", async () => {
     const h = harness();
     h.sub(capEvent());
     await vi.waitFor(() => expect(h.calls.createTask.length).toBe(1));
@@ -133,9 +133,10 @@ describe("makeCapContinuationSubscriber", () => {
     // confidential when the thread it continues is not.
     expect(h.calls.createTask[0][4]).toMatchObject({ botId: "bot-1", name: expect.any(String) });
     expect(h.calls.createTask[0][10]).toBe(false);
-    await vi.waitFor(() => expect(h.calls.startTurn.length).toBe(1));
-    expect(h.calls.startTurn[0][1]).toContain("/tmp/handoff.md");
-    expect(h.calls.startTurn[0][2]).toEqual({ threadId: "thread-cont", unattended: true });
+    await vi.waitFor(() => expect(h.calls.dispatch.length).toBe(1));
+    // On the job runtime: the bot's notice to itself, from the stopped thread to the new one.
+    expect(h.calls.dispatch[0].slice(0, 3)).toEqual(["bot-1", "thread-1", "thread-cont"]);
+    expect(h.calls.dispatch[0][3]).toContain("/tmp/handoff.md");
     await vi.waitFor(() => expect(h.calls.append.length).toBe(1));
     expect(h.calls.append[0][1]).toMatchObject({ kind: "activity", tool: { ok: true } });
   });
@@ -145,7 +146,7 @@ describe("makeCapContinuationSubscriber", () => {
     h.sub(capEvent());
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(h.calls.createTask.length).toBe(0);
-    expect(h.calls.startTurn.length).toBe(0);
+    expect(h.calls.dispatch.length).toBe(0);
   });
 
   it("never continues the same source thread twice", async () => {
@@ -169,7 +170,7 @@ describe("makeCapContinuationSubscriber", () => {
     await vi.waitFor(() => expect(h.calls.createTask.length).toBe(6));
   });
 
-  it("escalates with a failing activity message when startTurn fails", async () => {
+  it("escalates with a failing activity message when the runtime refuses the continuation", async () => {
     const h = harness();
     h.failNextStart();
     h.sub(capEvent());
@@ -189,12 +190,12 @@ describe("makeCapContinuationSubscriber", () => {
     h.sub(capEvent());
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(h.calls.createTask.length).toBe(0);
-    expect(h.calls.startTurn.length).toBe(0);
+    expect(h.calls.dispatch.length).toBe(0);
     expect(h.calls.append.length).toBe(0);
     // Read when the cap lands: once the assignment settled, the thread is the person's again.
     requested.clear();
     h.sub(capEvent());
-    await vi.waitFor(() => expect(h.calls.startTurn.length).toBe(1));
+    await vi.waitFor(() => expect(h.calls.dispatch.length).toBe(1));
   });
 
   it("ignores events that are not cap.exhausted", async () => {

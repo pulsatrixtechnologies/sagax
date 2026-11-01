@@ -34,7 +34,7 @@ import { servedPage } from "@/lib/desktop";
 import { viewerBotsReadOnly, viewerCanCreateBots, viewerIsOrgMember } from "@/lib/viewer";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { memberNewBotFields, memberNewBotSettings } from "@/lib/member-new-bot-settings";
-import { PROACTIVE_MODE_DEFAULT, PROACTIVE_MODES, type ProactiveMode } from "../../shared/proactive-mode";
+import { PROACTIVE_MODE_DEFAULT, type ProactiveMode } from "../../shared/proactive-mode";
 import { botsReadOnlyText } from "@/lib/permissions";
 import { templatesEntryActions } from "@/lib/templates-entry";
 import { showBotZipImport } from "@/lib/bot-zip";
@@ -112,8 +112,11 @@ export function CompanionNewBotDialog({ onClose, onCreated, section, preserveSel
         </DescribedRow>}
         {offered.proactiveMode && <DescribedRow label={t("botPanel.permissions.proactive")} help={t("botPanel.permissions.proactiveHelp")}
           description={t(`botPanel.permissions.proactive.${proactive}.hint` as LocaleKey)} rowId="proactiveMode">
-          <PillSelect<ProactiveMode> value={proactive} ariaLabel={t("botPanel.permissions.proactive")} onChange={setProactive}
-            options={PROACTIVE_MODES.map(mode => ({ value: mode, label: t(`botPanel.permissions.proactive.${mode}` as LocaleKey) }))} />
+          <Switch
+            checked={proactive === "proactive"}
+            aria-label={t("botPanel.permissions.proactive")}
+            onClick={() => setProactive(proactive === "proactive" ? "off" : "proactive")}
+          />
         </DescribedRow>}
       </div>}
       <div className={DIALOG.footer}>

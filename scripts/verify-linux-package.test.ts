@@ -5,14 +5,14 @@ import { describe, expect, it } from "vitest";
 const root = fileURLToPath(new URL("..", import.meta.url));
 
 describe("verify-linux-package cloudflared pin", () => {
-  it("compares the packaged cloudflared license to LICENSE-APACHE, not repo LICENSE", () => {
+  it("compares the packaged cloudflared license to the repo LICENSE, which is the Apache 2.0 text", () => {
     const src = readFileSync(new URL("./verify-linux-package.mjs", import.meta.url), "utf8");
-    expect(src).toContain('sha256(path.join(root, "LICENSE-APACHE"))');
-    expect(src).not.toMatch(/cloudflared-LICENSE\.txt"\)\) !== sha256\(path.join\(root, "LICENSE"\)\)/);
+    expect(src).toContain('cloudflared-LICENSE.txt")) !== sha256(path.join(root, "LICENSE"))');
     const license = readFileSync(`${root}/LICENSE`, "utf8");
-    const apache = readFileSync(`${root}/LICENSE-APACHE`, "utf8");
-    expect(license).not.toBe(apache);
-    expect(apache).toContain("Apache License");
+    expect(license).toMatch(/Apache License\s+Version 2\.0, January 2004/);
+    expect(license).toContain("END OF TERMS AND CONDITIONS");
+    const yml = readFileSync(`${root}/electron-builder.yml`, "utf8");
+    expect(yml).toMatch(/- from: LICENSE\n\s+to: licenses\/cloudflared-LICENSE\.txt/);
   });
 
   it("pins DEB Maintainer to electron-builder.yml, not the upstream author", () => {

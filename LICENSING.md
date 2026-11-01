@@ -1,36 +1,34 @@
 # Licensing
 
 Sagax is owned by Pulsatrix Technologies inc. and licensed under the
-[PolyForm Noncommercial License 1.0.0](LICENSE-POLYFORM-NC.md). The summary
-and the Required Notice are in [LICENSE](LICENSE).
+[Apache License 2.0](LICENSE). Attribution notices are in [NOTICE](NOTICE).
 
 ## In short
 
-- **Noncommercial use is free:** personal use, study, research, hobby
-  projects, and use by charities, schools, public research, public safety
-  or health organizations and government institutions, as the license
-  defines them. You may change Sagax and share it for those purposes, as
-  long as you pass on the license terms and the Required Notice.
-- **Commercial use needs a license from Pulsatrix Technologies inc.** That
-  includes running Sagax in or for a business, offering it as a hosted
-  service, and selling, bundling or reselling it.
+- **Any use is allowed, commercial use included.** You may use Sagax for
+  yourself or in and for a business, host it as a service, change it, and
+  share, bundle or sell it, under the terms of the Apache License 2.0.
+- **Keep the notices.** A copy you distribute, changed or not, carries the
+  license ([LICENSE](LICENSE)) and the attribution notices
+  ([NOTICE](NOTICE)), and the files you changed say so (section 4 of the
+  license).
+- **No trademark rights.** The license does not grant the use of the
+  Pulsatrix, Sagax or Perspicax names and logos (section 6 of the license).
+
+## Perspicax is a separate product
+
+Perspicax, which provides Sagax Business (the organization layer), is a
+separate, proprietary commercial product of Pulsatrix Technologies inc. It
+is not part of this repository and the Apache License 2.0 does not cover it.
 
 ## Where the code comes from
 
 Sagax is based on OpenMausBot, Copyright 2026 Milind Soni and OpenMausBot
-contributors, under the [Apache License 2.0](LICENSE-APACHE). Apache 2.0
-section 4 lets a modified version put its own license on its changes, as
-long as the Apache terms are kept for the original work. So:
-
-- The parts of this tree that come unchanged from OpenMausBot stay under
-  Apache 2.0. Anyone may use those parts under Apache 2.0, from here or from
-  the original project.
-- The changes and additions made by Pulsatrix Technologies inc. are under
-  the PolyForm Noncommercial License 1.0.0 only.
-- Copies of Sagax published before 2026-10-02 under Apache 2.0 keep that
-  license. The new terms apply from the releases published after that date.
-
-The OpenMausBot copyright and attribution notices are kept in
+contributors, also under the Apache License 2.0. The OpenMausBot project
+was relicensed from the MIT License to the Apache License 2.0 with the
+consent of all contributors whose copyright was incorporated before the
+change. The OpenMausBot copyright and attribution notices, and a summary of
+the changes made by Pulsatrix Technologies inc., are kept in
 [NOTICE](NOTICE). Apache 2.0 section 6 does not grant trademark rights: the
 OpenMausBot and MausBot names and the mascot are trademarks of Supamaus
 Software Private Limited and are not used as this product's name.
@@ -39,10 +37,17 @@ The `enterprise/` directory of the original project is not part of this
 tree. Its source and its license check were never copied here; with the
 directory absent, the server reports `{"edition":"oss"}`.
 
+Sagax releases 0.4.0 to 0.8.24 were first published with the PolyForm
+Noncommercial License 1.0.0 on the changes made by Pulsatrix Technologies inc.
+Pulsatrix Technologies inc. now also makes those releases available under the
+Apache License 2.0. All of Sagax is under the Apache License 2.0.
+
 ## Contributions
 
-Contributions from outside Pulsatrix Technologies inc. need the signed
-contributor agreement described in [CLA.md](CLA.md) before they are merged.
+Contributions are accepted under the Apache License 2.0 (section 5 of the
+license). Contributions from outside Pulsatrix Technologies inc. also need
+the signed contributor agreement described in [CLA.md](CLA.md) before they
+are merged.
 
 ## Third-party components
 

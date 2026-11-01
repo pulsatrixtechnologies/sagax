@@ -61,18 +61,16 @@ files:
 asar: true
 
 extraResources:
-  # Ship the app's own license terms in every desktop distribution.
+  # Ship the app's own license terms (Apache-2.0) and notices in every
+  # desktop distribution.
   - from: LICENSE
     to: licenses/Sagax-LICENSE.txt
-  - from: LICENSE-POLYFORM-NC.md
-    to: licenses/Sagax-PolyForm-Noncommercial-1.0.0.md
-  - from: LICENSE-APACHE
-    to: licenses/Sagax-Apache-2.0-LICENSE.txt
   - from: NOTICE
     to: licenses/Sagax-NOTICE.txt
   # cloudflared is distributed under Apache-2.0 as a separate executable;
-  # ship the Apache text under its name so its terms remain unambiguous.
-  - from: LICENSE-APACHE
+  # ship the Apache text (the repository's LICENSE) under its name so its
+  # terms remain unambiguous.
+  - from: LICENSE
     to: licenses/cloudflared-LICENSE.txt
   - from: third_party/cloudflared/README.md
     to: licenses/cloudflared-README.md

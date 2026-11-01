@@ -1,14 +1,16 @@
 Sagax
 Copyright 2026 Pulsatrix Technologies inc.
-Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE).
-
-Required Notice: Copyright 2026 Pulsatrix Technologies inc. (https://github.com/pulsatrixtechnologies)
+Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 This product includes software originally published as OpenMausBot:
 
 OpenMausBot
 Copyright 2026 Milind Soni and OpenMausBot contributors
-Licensed under the Apache License 2.0 (see LICENSE-APACHE).
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+OpenMausBot was relicensed from the MIT License to the Apache License,
+Version 2.0, with the consent of all contributors whose copyright was
+incorporated before the transition.
 
 Changes made by Pulsatrix Technologies inc. to the OpenMausBot work: the
 product is renamed Sagax; organizations through Perspicax, people and
@@ -17,7 +19,7 @@ desktop bridge, voice mode, the desktop mascot and many other features were
 added; the interface was redesigned; the source-available enterprise/
 directory was removed and none of its source or license check is included;
 files across the tree were modified. These changes are licensed under the
-PolyForm Noncommercial License 1.0.0, not the Apache License 2.0.
+Apache License, Version 2.0, like the rest of Sagax.
 
 The Android companion app bundles a prebuilt WebRTC library for Live calls
 (io.github.webrtc-sdk:android), built from the WebRTC project, Copyright (c)
@@ -29,8 +31,26 @@ The egress gate for the bots' browser (server/browser/egress/) adapts T3 Code's
 public-only SOCKS5 proxy for HTML previews and the Linux listener-ownership
 scan of its preview port scanner, Copyright 2026 T3 Tools Inc., used under the
 MIT License (third_party/t3-code/LICENSE). It was ported from OpenMausBot
-#2930. Other files adapted from T3 Code (the Antigravity runtime, citations)
-carry the same notice in their headers.
+#2930. Other files adapted from T3 Code (the Antigravity runtime, citations,
+the Browser panel's address bar parsing in src/lib/browser-address.ts) carry
+the same notice in their headers.
+
+The Google Antigravity ACP integration adapts release, installation, profile,
+authentication, and runtime temporary-folder behavior from T3 Code, Copyright
+2026 T3 Tools Inc., used under the MIT License (third_party/t3-code/LICENSE).
+
+Selected-text citation matching adapts T3 Code's assistant citation selection,
+Copyright 2026 T3 Tools Inc., used under the MIT License.
+
+The secure phone credential transport uses @hpke/core and @hpke/common from
+hpke-js, Copyright 2023-2024 Ajitomi Daisuke, used under the MIT License.
+
+The model provider catalog bundles provider and model data from models.dev,
+https://github.com/anomalyco/models.dev, Copyright (c) 2025 models.dev, used
+under the MIT License. Its cache and refresh logic is adapted from OpenCode,
+https://github.com/anomalyco/opencode, Copyright (c) 2025 opencode, used under
+the MIT License. The full license texts are in third_party/models-dev/LICENSE
+and third_party/opencode/LICENSE.
 
 Selected provider icon paths are from Simple Icons, used under CC0 1.0.
 The Cohere provider icon path is from Lobe Icons, Copyright 2023 LobeHub,
@@ -95,9 +115,11 @@ The iOS companion app bundles a prebuilt WebRTC library for Live calls
 project authors, used under the BSD 3-Clause License. WebRTC includes
 third-party components under their own licenses, listed with the library.
 
-The nudge sound (public/nudge.mp3) is the owner's own copy of the classic
+The nudge sound (public/nudge.mp3, the same file as ios/App/nudge.mp3,
+ios/App/nudge.caf converted from it for notifications, and the copies of
+these files in built packages) is the owner's own copy of the classic
 instant-messenger "wizz" alert, supplied by the project owner for use in
-Sagax. It is not part of the PolyForm Noncommercial grant.
+Sagax. It is not covered by the Apache License 2.0 grant.
 
 The desktop mascot characters (Owl, Shapes, Trombi) are original work of
 Pulsatrix Technologies inc., except the Shapes bodies below.

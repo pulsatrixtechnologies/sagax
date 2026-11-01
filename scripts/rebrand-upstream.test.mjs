@@ -73,7 +73,7 @@ describe("rebrand-upstream narrow rules", () => {
   it("keeps the license credit in the README and CONTRIBUTING, line breaks included", () => {
     const readme = `[NOTICE](NOTICE) and [\`third_party/\`](third_party/). ${Old} and MausBot\nare trademarks of their owner and are not this product's name.\n`;
     expect(rebrandFile("README.md", readme)).toBe(readme);
-    const contributing = `  [PolyForm](LICENSE-POLYFORM-NC.md). Parts that come unchanged from\n  ${Old} stay under Apache 2.0.\n`;
+    const contributing = `  [Apache License 2.0](LICENSE). Parts that come unchanged from\n  ${Old} keep their notices.\n`;
     expect(rebrandFile("CONTRIBUTING.md", contributing)).toBe(contributing);
   });
 

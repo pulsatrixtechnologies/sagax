@@ -40264,28 +40264,6 @@
         }
       }
     },
-    "A desktop home for your agents. © 2026 Pulsatrix Technologies inc. Free for noncommercial use (PolyForm Noncommercial 1.0.0).": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A desktop home for your agents. © 2026 Pulsatrix Technologies inc. Free for noncommercial use (PolyForm Noncommercial 1.0.0)."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Un chez-soi de bureau pour vos agents. © 2026 Pulsatrix Technologies inc. Gratuit pour un usage non commercial (PolyForm Noncommercial 1.0.0)."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Uma casa de desktop para seus agentes. © 2026 Pulsatrix Technologies inc. Gratuito para uso não comercial (PolyForm Noncommercial 1.0.0)."
-          }
-        }
-      }
-    },
     "Per bot": {
       "localizations": {
         "en": {
@@ -64784,18 +64762,18 @@
         }
       }
     },
-    "© 2026 Pulsatrix Technologies inc. Free for noncommercial use (PolyForm Noncommercial 1.0.0).": {
+    "© 2026 Pulsatrix Technologies inc. Open source under the Apache License 2.0.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "© 2026 Pulsatrix Technologies inc. Free for noncommercial use (PolyForm Noncommercial 1.0.0)."
+            "value": "© 2026 Pulsatrix Technologies inc. Open source under the Apache License 2.0."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "© 2026 Pulsatrix Technologies inc. Gratuit pour un usage non commercial (PolyForm Noncommercial 1.0.0)."
+            "value": "© 2026 Pulsatrix Technologies inc. Open source sous licence Apache 2.0."
           }
         }
       }

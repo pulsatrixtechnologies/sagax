@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/pulsatrixtechnologies/sagax/releases"><img src="https://img.shields.io/github/v/release/pulsatrixtechnologies/sagax?include_prereleases&label=release&color=1084fe&cacheSeconds=300" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Windows%20%C2%B7%20iPhone%20%C2%B7%20iPad-2b2e3a" alt="Platforms: macOS, Windows, iPhone, iPad">
-  <a href="#license"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-38d591" alt="License: PolyForm Noncommercial 1.0.0"></a>
+  <a href="#license"><img src="https://img.shields.io/badge/license-Apache%202.0-38d591" alt="License: Apache 2.0"></a>
 </p>
 
 <p align="center">
@@ -360,9 +360,10 @@ Sagax Business is the organization layer: the admin console, people and
 teams, sign-in, organization policies (allowed engines, approval modes,
 default models), shared keys and the activity log. It is provided by
 Perspicax, a separate Pulsatrix product, and it is **closed source**. The
-Sagax app and its server, in this repository, are source available (see
-[License](#license)). A solo app that joins an organization later can bring
-chosen bots along, with their conversations and memory.
+Sagax app and its server, in this repository, are open source under the
+Apache License 2.0 (see [License](#license)). A solo app that joins an
+organization later can bring chosen bots along, with their conversations
+and memory.
 
 ## Security and privacy
 
@@ -423,20 +424,19 @@ first; outside contributions need the signed agreement in [CLA.md](CLA.md).
 
 ## License
 
-The Sagax app is source available under the
-[PolyForm Noncommercial License 1.0.0](LICENSE-POLYFORM-NC.md): free for
-personal, research, educational and other noncommercial use. Commercial use,
-such as use in or for a business, hosting it as a service, or bundling it,
-needs a commercial license from Pulsatrix Technologies inc. Details in
-[LICENSE](LICENSE) and [LICENSING.md](LICENSING.md).
+Sagax is open source under the [Apache License 2.0](LICENSE). Anyone may
+use, change and share it for any purpose, commercial use included, as long
+as the license and the notices in [NOTICE](NOTICE) go with it. Details in
+[LICENSING.md](LICENSING.md).
 
 Sagax is based on OpenMausBot, Copyright 2026 Milind Soni and OpenMausBot
-contributors, under the [Apache License 2.0](LICENSE-APACHE); the parts that
-come unchanged from it stay under Apache 2.0. Notices are in
+contributors, also under the Apache License 2.0. Notices are in
 [NOTICE](NOTICE) and [`third_party/`](third_party/). OpenMausBot and MausBot
 are trademarks of their owner and are not this product's name.
 
-Sagax Business (Perspicax) is proprietary and not part of this repository.
+Sagax Business (Perspicax) is a separate, proprietary commercial product of
+Pulsatrix Technologies inc. It is not part of this repository and not
+covered by the Apache License 2.0.
 
 Sagax is made by Pulsatrix Technologies inc. It is not affiliated with
 Anthropic, OpenAI, xAI or any other model provider; their product names are

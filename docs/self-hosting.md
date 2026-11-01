@@ -397,16 +397,16 @@ sagax fleet delete acme --yes # add --keep-data to keep the home folder
 Give `init` `--operator USER` (the Unix user your own workspace runs as; the
 user behind `sudo` by default) and it also installs the **fleet agent**: a
 root service on a Unix socket only that user may open. Your workspace then
-shows **Settings → Installations** (with the enterprise `admin` feature): create
-an installation, add or remove who may sign in, suspend, resume, delete, upgrade
-all, and see each one's spend this month. Every action goes through the
-agent's audit log at `/var/log/openmausbot/fleet.jsonl`.
+shows **Settings → Installations** to its admins: create an installation, add
+or remove who may sign in, suspend, resume, delete, upgrade all, and see each
+one's spend this month. Every action goes through the agent's audit log at
+`/var/log/openmausbot/fleet.jsonl`.
 
 `https://acme.example.com` is up when `create` returns; the first admin signs
-in with an emailed code. `SAGAX_LICENSE_KEY` in the environment (or
-`--license-key`) is carried into every workspace so a partner's white-label
-key covers them all. Not root? Every command prints the exact steps to run as
-root instead, and `--dry-run` always prints.
+in with an emailed code. Each workspace shows its own `--brand` file (name,
+colour, logo) and stops new turns at its `--cap` monthly limit. Not root?
+Every command prints the exact steps to run as root instead, and `--dry-run`
+always prints.
 
 ## Signing the engines in without a terminal
 
@@ -597,6 +597,12 @@ local requests: service trust (hosted workspace); without a session, loopback ma
 |---|---|---|
 | `owner` | a self-hosted server, the desktop app | do everything, as today |
 | `service` | a hosted workspace: any of `SAGAX_ADMIN_URL`, `SAGAX_ADMIN_WORKSPACE` or `SAGAX_ADMIN_MEMBERSHIP` set (shared-workspace Full access only works there, so it is covered too) | read health, who-am-I, edition and brand; use the bots' own capability routes (`/api/internal/*`, which check their own per-turn token). The worker data plane below answers only with the relay token. |
+
+Portal sign-in, portal membership and shared-workspace Full access also need
+the hosted workspace bridge, which only an enterprise layer installed outside
+this tree provides. Without one, a hosted configuration refuses hosted sign-in
+(`/api/health/hosted` and `/api/auth/hosted/*` answer 503), and loopback keeps
+the `service` default above.
 
 Under `service`, everything else from loopback needs a real session and
 answers 403: settings and keys (`/api/config`), instances, MCP servers,
@@ -1276,7 +1282,10 @@ On a hosted workspace whose members your organization's Admin manages
 People shows, read-only, who has signed in and what they spent, with a
 **Manage people in Admin** link to that workspace in Admin → People. Remote
 access there lists signed-in devices and offers no pairing codes, since a
-hosted workspace refuses them.
+hosted workspace refuses them. Portal membership runs on the hosted workspace
+bridge of an enterprise layer installed outside this tree: without that layer,
+the workspace refuses every hosted sign-in and still offers no pairing code or
+email sign-in instead.
 
 ### People from before Perspicax
 
@@ -1293,9 +1302,10 @@ shorten the window, extend it up to 90 days, or close it now.
 ### Who may answer a card
 
 Approval cards are the provider's own (see the approval modes); Sagax
-adds none. On a workspace several people share — portal membership, or an
-email sign-in list that names users — it narrows only whose answer counts,
-and only when the card can be traced to a person:
+adds none. On a workspace several people share (portal membership, on a
+hosted workspace with an enterprise layer's bridge, or an email sign-in list
+that names users), it narrows only whose answer counts, and only when the
+card can be traced to a person:
 
 - a card for a request a user sent, or in a thread a user opened, is
   theirs to answer (admins and the owner may answer any card);
@@ -1384,9 +1394,9 @@ alone.
 The desktop app has no chat-only user sessions and does not show this setting;
 nothing there changes.
 
-On the Workspaces screen, creating a client workspace shows the same kind of
-link for that workspace's admin, so a client gets one address, one workspace
-and one link.
+In **Settings → Installations**, creating a client workspace shows the same
+kind of link for that workspace's admin, so a client gets one address, one
+workspace and one link.
 
 ## Standing Claude Code permissions for every bot
 
@@ -1641,15 +1651,15 @@ curl -H "Authorization: Bearer $TOKEN" -o activity.csv \
 starts 30 days ago. Nothing here is sent to your organization's cloud Admin,
 which keeps its own activity log.
 
-## Spend limits and sell prices (enterprise)
+## Spend limits and sell prices
 
-With the `budgets` entitlement, **Settings → Usage → Monthly spend limit**
-caps the workspace: once the month's cost reaches it, no bot starts a turn,
-whether a person wrote, a routine fired, a peer asked or a webhook arrived,
-until an admin raises it. A warning shows at a configurable percentage, and
-admins get one in-app notification the first time each month crosses the
-warning and one when it reaches the limit (a new month or a new limit starts
-over).
+A **monthly spend limit** (`budgets.monthlyUsd`, or `--cap` when `sagax fleet
+create` makes the workspace) caps the workspace: once the month's cost reaches
+it, no bot starts a turn, whether a person wrote, a routine fired, a peer asked
+or a webhook arrived, until an admin raises it. A warning shows at a
+configurable percentage (`budgets.warnAtPercent`, 80 by default), and admins
+get one in-app notification the first time each month crosses the warning and
+one when it reaches the limit (a new month or a new limit starts over).
 
 The figure is every cost in the usage ledger. Claude reports its own cost
 (real on your keys, an equivalent on personal subscriptions). Codex, the
@@ -1661,13 +1671,14 @@ that is not in the list is unpriced and not counted; Usage says how many
 turns that was. Estimates use each vendor's standard short-context rate, so
 long prompts, cache writes and priority tiers cost more than estimated.
 
-With the `billing` entitlement, **Sell prices** takes your own price per
-million tokens by model id, `driver/model`, or `default`, and History and the
-CSV export gain a **billable** column next to the provider's cost. For an
-engine that reports no cost, a price you set for that exact model also
+**Sell prices** (`billing.prices`) take your own price per million tokens by
+model id, `driver/model`, or `default`, and the usage report (`/api/usage`)
+and its CSV export gain a **billable** column next to the provider's cost. For
+an engine that reports no cost, a price you set for that exact model also
 replaces the list price in its estimate; `default` is used only for models
 the list does not know. Both are plain settings in `config.json` (`budgets`,
-`billing`) and through `PUT /api/config`.
+`billing`) and through `PUT /api/config`, on every server: no key or extra
+component is needed.
 
 ## A bot that also runs outside the server
 

@@ -40,7 +40,6 @@ import { openSettings } from "@/lib/settings-link";
 import { shortcutLabel } from "./ShortcutHint";
 import { UsageSection } from "./UsageSection";
 import { CredentialsSettings } from "./settings/CredentialsSettings";
-import { LicenseExpiryBanner } from "./LicenseExpiryBanner";
 import { workspacesAvailable } from "./WorkspacesSection";
 import { AboutMeEditor, aboutMeFirstLine } from "./AboutMeSettings";
 import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
@@ -774,7 +773,6 @@ export function SettingsModal() {
               {sectionLabelKey ? t(sectionLabelKey) : null}
             </h2>
             <div className="flex flex-col gap-3 px-4 pb-6 pt-4 sm:px-8">
-            <LicenseExpiryBanner config={state.config} />
             {/* 0.5.6: the reference design's layout (OrganizationSettings): grey
                 headings over cards of rows. Memory and, from General >
                 Advanced (2026-10-15), routines in the conversation, group

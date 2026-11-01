@@ -5892,8 +5892,6 @@
   "settings.launch.server": "Signed in to your organization's Sagax server with your Pulsatrix account.",
   "settings.launch.solo": "No server: your bots, conversations and keys stay on this computer.",
   "settings.launch.title": "Server",
-  "settings.license.expiring": "This installation's enterprise license expires on {date} ({days} day(s) left). Renew the key to keep enterprise features.",
-  "settings.license.grace": "This installation's enterprise license expired on {date}. Enterprise features keep working until {graceEnd}; renew the key before then.",
   "settings.mac.allow": "Allow control of this computer",
   "settings.messages.help": "Lets Sagax read and send messages on the Mac where this app runs. Not from a server, and not through another Mac.",
   "settings.messages.permission": "Reading Messages needs Full Disk Access for Sagax. Sending needs Automation for Messages. Nothing is sent to someone who is not on the bot's allowed recipients without a card.",

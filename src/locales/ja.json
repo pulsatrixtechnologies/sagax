@@ -1680,8 +1680,6 @@
   "table.loadFailed": "この表を開けませんでした。接続を確認して、もう一度お試しください。UTF-8 の CSV と TSV に対応しています。",
   "settings.sendKey.title": "メッセージの送信キー",
   "approval.held.outbound": "あなたに代わって送信する操作のため、必ず事前に確認します。",
-  "settings.license.expiring": "このインストール環境のエンタープライズライセンスは {date} に期限が切れます（残り {days} 日）。エンタープライズ機能を継続するにはキーを更新してください。",
-  "settings.license.grace": "このインストール環境のエンタープライズライセンスは {date} に期限が切れました。エンタープライズ機能は {graceEnd} まで使えます。それまでにキーを更新してください。",
   "settings.section.organization": "組織",
   "settings.section.decisionModel": "判断用モデル",
   "settings.section.people": "ユーザー",

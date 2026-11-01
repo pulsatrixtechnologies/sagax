@@ -957,13 +957,11 @@ export interface ConfigStatus {
   /** Capabilities lot 4: changes when the organization's declarations do
    * (Plugins reads its capabilities again). */
   orgCapabilities?: { revision: string };
-  /** what this server is entitled to; Settings shows only what works here.
-   * `license` reaches admins only, and only while the key is inside its
-   * warning window or grace period. */
+  /** the features this server runs with (every one in the open-source
+   * edition); Settings shows only what works here. */
   edition?: {
     edition: "oss" | "enterprise";
     features: string[];
-    license?: { expiresAt: string; expiresInDays: number; graceEndsAt?: string };
   };
   /** a fleet agent exists on this server (Settings → Workspaces) */
   fleet?: { available: boolean };

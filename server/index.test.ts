@@ -1733,12 +1733,28 @@ describe("harness HTTP API", () => {
     expect(await statusWithHeaders({ origin: `http://[::1]:${PORT}` })).toBe(200);
   });
 
-  it("keeps the fleet screen behind the admin entitlement on the open-source edition", async () => {
+  it("opens Installations on the open-source edition, still for admins only", async () => {
+    // no enterprise layer: every feature on, and no license data anywhere
+    const OPEN_SOURCE = ["admin", "billing", "budgets", "whitelabel"];
+    expect((await api("GET", "/api/edition")).body).toMatchObject({ edition: "oss", features: OPEN_SOURCE });
+    expect((await api("GET", "/api/config")).body.edition).toEqual({ edition: "oss", features: OPEN_SOURCE });
+    // the owner reaches the fleet routes, which answer 404 here: no fleet agent runs
     const fleet = await api("GET", "/api/fleet");
-    expect(fleet.status).toBe(403);
-    expect(fleet.body.error).toContain("enterprise");
-    expect((await api("POST", "/api/fleet/workspaces", { slug: "acme", admins: ["a@b.test"] })).status).toBe(403);
-    expect((await api("DELETE", "/api/fleet/workspaces/acme")).status).toBe(403);
+    expect(fleet.status).toBe(404);
+    expect(fleet.body.error).toContain("No fleet agent on this server");
+    expect((await api("POST", "/api/fleet/workspaces", { slug: "acme", admins: ["a@b.test"] })).status).toBe(404);
+    expect((await api("DELETE", "/api/fleet/workspaces/acme")).status).toBe(404);
+    // authorization is unchanged: a chat-only device is refused on every fleet route by its scope
+    const opened = await api("POST", "/api/auth/pairing", { scopes: ["client"] });
+    const paired = await fetch(`${BASE}/api/auth/pair`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: opened.body.code }),
+    });
+    const token = ((await paired.json()) as { token: string }).token;
+    for (const [method, path] of [["GET", "/api/fleet"], ["POST", "/api/fleet/workspaces"], ["DELETE", "/api/fleet/workspaces/acme"], ["POST", "/api/fleet/upgrade"]] as const) {
+      const refused = await fetch(`${BASE}${path}`, { method, headers: { authorization: `Bearer ${token}` } });
+      expect(refused.status, `${method} ${path}`).toBe(403);
+      expect(((await refused.json()) as { error: string }).error).toContain("lacks the admin scope");
+    }
   });
 
   it("identifies itself on /api/health", async () => {

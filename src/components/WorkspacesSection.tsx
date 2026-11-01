@@ -1,7 +1,8 @@
 // App settings → Workspaces: the operator's view of the client workspaces on
 // this server, through the fleet agent (server/fleet-agent.ts). Create one,
-// add or remove a person, suspend, resume, delete, upgrade all. Enterprise
-// `admin` entitlement, and only where an agent exists.
+// add or remove a person, suspend, resume, delete, upgrade all. Shown where an
+// agent exists and the server reports the `admin` feature, which the
+// open-source edition always does (only an enterprise layer can withhold it).
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, RefreshCw } from "lucide-react";
 import { api, useStore, type ConfigStatus } from "@/state/store";

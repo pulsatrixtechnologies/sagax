@@ -1,8 +1,10 @@
-// A lapsing license through the running server: the isolated fixture booted
-// with a stand-in enterprise layer whose key expires soon, or expired a few
-// days ago, read back from /api/edition, the startup log, and the config
-// Settings reads as an admin and as a chat-only device. No real licence is
-// involved; the fixture's home is disposable.
+// The edition through the running server. Without an enterprise layer, the
+// open-source edition: every feature on, no key, no countdown anywhere. With
+// a stand-in layer whose key expires soon, or expired a few days ago, the
+// extension point still works: the countdown is read back from /api/edition
+// (admins only) and the startup log, while the config the app reads carries
+// the features and never a license date. No real licence is involved; the
+// fixture's home is disposable.
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +17,7 @@ import { jsLiteral } from "../scripts/testing/js-literal.mjs";
 const DAY_MS = 24 * 60 * 60_000;
 const day = (offsetDays: number) => new Date(Date.now() + offsetDays * DAY_MS).toISOString().slice(0, 10);
 
-describe("license expiry through the running server", () => {
+describe("the edition and an enterprise layer's key expiry through the running server", () => {
   let session: VerificationServer | undefined;
   let layerDir: string | undefined;
 
@@ -29,12 +31,16 @@ describe("license expiry through the running server", () => {
     layerDir = undefined;
   });
 
-  const boot = async (expiresAt: string) => {
-    layerDir = mkdtempSync(join(tmpdir(), "omb-expiring-layer-"));
-    mkdirSync(join(layerDir, "server"));
-    writeFileSync(join(layerDir, "server", "index.js"),
-      `export async function register() { return { customer: "Fixture Co", features: ["budgets"], expiresAt: ${jsLiteral(expiresAt)} }; }\n`);
-    session = await launchVerificationServer(process.env, undefined, undefined, undefined, { dir: layerDir, licenseKey: "fixture-key" });
+  /** Boot the fixture with a stand-in layer whose key expires at `expiresAt`,
+   * or with no layer at all. */
+  const boot = async (expiresAt?: string) => {
+    if (expiresAt !== undefined) {
+      layerDir = mkdtempSync(join(tmpdir(), "omb-expiring-layer-"));
+      mkdirSync(join(layerDir, "server"));
+      writeFileSync(join(layerDir, "server", "index.js"),
+        `export async function register() { return { customer: "Fixture Co", features: ["budgets"], expiresAt: ${jsLiteral(expiresAt)} }; }\n`);
+    }
+    session = await launchVerificationServer(process.env, undefined, undefined, undefined, layerDir ? { dir: layerDir, licenseKey: "fixture-key" } : undefined);
     const api = (path: string, init: RequestInit = {}) => fetch(`${session!.info.url}${path}`, init);
     const opened = (await (await api("/api/auth/pairing", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ scopes: ["client"] }) })).json()) as { code: string };
     const member = ((await (await api("/api/auth/pair", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: opened.code, label: "Member phone" }) })).json()) as { token: string }).token;
@@ -47,7 +53,18 @@ describe("license expiry through the running server", () => {
     };
   };
 
-  it("warns inside the last 30 days: the day count on /api/edition, the log, and the admin's Settings only", async () => {
+  it("runs the open-source edition with every feature on and no key when no layer is installed", async () => {
+    const server = await boot();
+    const open = { edition: "oss", features: ["admin", "billing", "budgets", "whitelabel"] };
+    expect(await server.edition()).toMatchObject(open);
+    expect(await server.memberEdition()).toMatchObject(open);
+    expect((await server.adminConfig()).edition).toEqual(open);
+    expect((await server.memberConfig()).edition).toEqual(open);
+    expect(server.log()).toContain("Sagax open-source edition");
+    expect(server.log()).not.toContain("SAGAX_LICENSE_KEY expire");
+  }, 90_000);
+
+  it("warns inside the last 30 days on /api/edition and in the log; the app's config carries no date", async () => {
     const expiresAt = day(12);
     const server = await boot(expiresAt);
     const edition = await server.edition();
@@ -55,25 +72,24 @@ describe("license expiry through the running server", () => {
     expect(edition.expiresInDays).toBeGreaterThanOrEqual(11);
     expect(edition.expiresInDays).toBeLessThanOrEqual(12);
     expect(server.log()).toContain(`SAGAX_LICENSE_KEY expires on ${expiresAt}`);
-    expect((await server.adminConfig()).edition).toEqual({
-      edition: "enterprise", features: ["budgets"], license: { expiresAt, expiresInDays: edition.expiresInDays },
-    });
+    // a present layer alone decides the features; Settings shows no license notice
+    expect((await server.adminConfig()).edition).toEqual({ edition: "enterprise", features: ["budgets"] });
     expect((await server.memberConfig()).edition).toEqual({ edition: "enterprise", features: ["budgets"] });
-    // a member's /api/edition says what is entitled, not when it lapses
+    // a member's /api/edition says what is on, not when it lapses
     const member = await server.memberEdition();
     expect(member).toMatchObject({ edition: "enterprise", features: ["budgets"] });
     expect(member).not.toHaveProperty("expiresInDays");
   }, 90_000);
 
-  it("keeps the features working through the grace period and says until when", async () => {
+  it("keeps the layer's features working through the grace period and says until when", async () => {
     const expiresAt = day(-2);
     const server = await boot(expiresAt);
     const edition = await server.edition();
     expect(edition).toMatchObject({ edition: "enterprise", features: ["budgets"], expiresAt, graceEndsAt: day(5) });
     expect(edition.notice).toBe(`SAGAX_LICENSE_KEY expired on ${expiresAt}; enterprise features keep working until ${day(5)} while it is renewed`);
     expect(server.log()).toContain(`enterprise features keep working until ${day(5)}`);
-    expect((await server.adminConfig()).edition.license).toMatchObject({ expiresAt, graceEndsAt: day(5) });
-    expect((await server.memberConfig()).edition.license).toBeUndefined();
+    expect((await server.adminConfig()).edition).toEqual({ edition: "enterprise", features: ["budgets"] });
+    expect((await server.memberConfig()).edition).toEqual({ edition: "enterprise", features: ["budgets"] });
     const member = await server.memberEdition();
     expect(member).toMatchObject({ edition: "enterprise", features: ["budgets"] });
     for (const field of ["expiresInDays", "graceEndsAt", "notice"]) expect(member).not.toHaveProperty(field);

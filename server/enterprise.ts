@@ -1,12 +1,20 @@
-// Neutral hook point for the source-available enterprise layer.
+// Which features this server runs with, and the neutral hook point for an
+// optional enterprise layer.
 //
-// The layer lives in enterprise/ (its own LICENSE) and is loaded only if that
-// folder is present: delete it and this file still compiles, the server still
-// starts, and /api/edition reports the open-source edition. Core never imports
-// the layer statically; a build ships it as its own bundled file beside the
-// server (see enterpriseLayerDirs for where it is looked up).
-// The layer's only obligation is `register()`, which turns SAGAX_LICENSE_KEY into
-// entitlements; core keeps the resulting status and answers `entitled()`.
+// Sagax is open source with no license key: without a layer, which is every
+// build of this repository, the server runs the open-source edition and every
+// gated feature is on (OPEN_SOURCE_FEATURES). A feature gate is never an
+// authorization check: who may use a feature stays with the request's scope
+// (server/request-auth.ts) and the route's own checks.
+//
+// The hook stays for a layer that lives outside this tree (its own folder and
+// LICENSE), loaded only if that folder is present. Core never imports it
+// statically; a build ships it as its own bundled file beside the server (see
+// enterpriseLayerDirs for where it is looked up). A present layer alone decides
+// the features: its only obligation is `register()`, which turns
+// SAGAX_LICENSE_KEY into the features it grants; core keeps the resulting
+// status and answers `entitled()`. The hosted workspace bridge
+// (createWorkspaceAccess) only ever comes from such a layer.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -21,7 +29,9 @@ export interface EditionStatus {
   edition: "oss" | "enterprise";
   /** Enterprise only: who the license was issued to. */
   customer?: string;
-  /** Entitlement ids the license grants (sorted). Empty for the open-source edition. */
+  /** The features this server runs with (sorted): OPEN_SOURCE_FEATURES in the
+   * open-source edition without a layer; with a layer, what its key grants,
+   * and none while it grants nothing. */
   features: string[];
   /** Enterprise only: ISO date the license stops working, null for perpetual. */
   expiresAt?: string | null;
@@ -42,10 +52,11 @@ const layerSchema = z.object({
   expiresAt: z.string().nullable(),
 });
 
-/** Days before expiry that the startup log, /api/edition and Settings start
- * saying so, and days after it that the features keep working while the
- * operator renews. The key and its verification are unchanged: the layer
- * accepts a key that expired less than the grace period ago. */
+/** A layer's key only (the open-source edition has none): days before expiry
+ * that the startup log and /api/edition start saying so, and days after it
+ * that the features keep working while the operator renews. The key and its
+ * verification are the layer's: it accepts a key that expired less than the
+ * grace period ago. */
 export const LICENSE_WARN_DAYS = 30;
 export const LICENSE_GRACE_DAYS = 7;
 const DAY_MS = 24 * 60 * 60_000;
@@ -66,7 +77,21 @@ function layerEntry(dir: string): string | undefined {
   return [join(dir, "server", "index.ts"), join(dir, "server", "index.js")].find((candidate) => existsSync(candidate));
 }
 
-let current: EditionStatus = { edition: "oss", features: [] };
+/** Every gated feature, all on in the open-source edition: `admin` is
+ * Settings > Installations (the /api/fleet routes, beside a fleet agent),
+ * `billing` the operator's sell prices, `budgets` the monthly spend limit,
+ * `whitelabel` brand.json. */
+export const OPEN_SOURCE_FEATURES: readonly string[] = Object.freeze(["admin", "billing", "budgets", "whitelabel"]);
+
+/** No enterprise layer: every feature on, no key involved. The notice only
+ * says that a SAGAX_LICENSE_KEY set anyway has nothing to unlock. */
+function openSourceEdition(notice?: string): EditionStatus {
+  return { edition: "oss", features: [...OPEN_SOURCE_FEATURES], ...(notice ? { notice } : {}) };
+}
+
+// The open-source edition until loadEnterpriseLayer finds a layer, which only
+// a server that installed one ever does.
+let current: EditionStatus = openSourceEdition();
 let workspaceAccessFactory: ((options: WorkspaceAccessOptions) => WorkspaceAccess) | undefined;
 
 export interface WorkspaceAccessOptions {
@@ -137,19 +162,23 @@ export function sharedWorkspaceFullAccessConfigured(env: NodeJS.ProcessEnv = pro
 
 /** No enterprise import or portal dependency enters the core bundle. A
  * configured server without this hook must refuse hosted access, not fall
- * back to legacy email or QR credentials. */
+ * back to legacy email or QR credentials. The bridge runs on its own layer's
+ * grant (hostedAccessEntitled), never on the open-source edition's features. */
 export function createWorkspaceAccess(options: Omit<WorkspaceAccessOptions, "entitled">): WorkspaceAccess | null {
   if (!hostedWorkspaceConfigured(options.env)) return null;
-  return workspaceAccessFactory?.({ ...options, entitled: () => entitled("admin") }) ?? null;
+  return workspaceAccessFactory?.({ ...options, entitled: () => hostedAccessEntitled() }) ?? null;
 }
 
-function oss(notice?: string): EditionStatus {
-  current = notice ? { edition: "oss", features: [], notice } : { edition: "oss", features: [] };
+/** A layer is present but grants nothing (no key, a refused key, a broken
+ * layer). The layer decides, so no feature is on; the notice says why. */
+function layerGrantsNothing(notice: string): EditionStatus {
+  current = { edition: "oss", features: [], notice };
   return current;
 }
 
-/** Resolve the edition once at startup. Never throws: a broken layer or key
- * degrades to the open-source edition with a notice that says what to fix. */
+/** Resolve the edition once at startup. Never throws. No layer: the
+ * open-source edition, every feature on. A broken layer or key turns every
+ * feature off, with a notice that says what to fix. */
 export async function loadEnterpriseLayer(
   options: { dir?: string; licenseKey?: string; env?: NodeJS.ProcessEnv; serverRoot?: string } = {},
 ): Promise<EditionStatus> {
@@ -158,9 +187,12 @@ export async function loadEnterpriseLayer(
   const licenseKey = options.licenseKey ?? process.env.SAGAX_LICENSE_KEY;
   const entry = dirs.map(layerEntry).find((candidate) => candidate !== undefined);
   if (!entry) {
-    return oss(
-      licenseKey ? `SAGAX_LICENSE_KEY is set but no enterprise layer exists at ${dirs.join(" or ")}` : undefined,
+    // The Docker and open-source CI jobs boot with a stray key and expect
+    // this notice on /api/edition: keep "no enterprise layer exists".
+    current = openSourceEdition(
+      licenseKey ? `SAGAX_LICENSE_KEY is set but no enterprise layer exists at ${dirs.join(" or ")}; the open-source edition needs no key` : undefined,
     );
+    return current;
   }
   try {
     const loaded: unknown = await import(pathToFileURL(entry).href);
@@ -168,7 +200,7 @@ export async function loadEnterpriseLayer(
     if (typeof access === "function") workspaceAccessFactory = access as (options: WorkspaceAccessOptions) => WorkspaceAccess;
     const register: unknown = Reflect.get(Object(loaded), "register");
     if (typeof register !== "function") throw new Error(`${entry} does not export register()`);
-    if (!licenseKey) return oss("enterprise layer present but SAGAX_LICENSE_KEY is not set");
+    if (!licenseKey) return layerGrantsNothing("enterprise layer present but SAGAX_LICENSE_KEY is not set");
     // graceDays is additive: a layer that ignores it refuses an expired key
     // at startup exactly as before.
     const registered: unknown = await register({ licenseKey, graceDays: LICENSE_GRACE_DAYS });
@@ -181,7 +213,7 @@ export async function loadEnterpriseLayer(
     };
     return current;
   } catch (error) {
-    return oss(`enterprise layer disabled: ${error instanceof Error ? error.message : String(error)}`);
+    return layerGrantsNothing(`enterprise layer disabled: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -227,10 +259,20 @@ export function editionForMembers(status: EditionStatus): EditionStatus {
   return shared;
 }
 
-/** Feature gates in core ask this and nothing else. Unknown ids are simply not
- * granted, and the open-source edition always carries an empty feature list. */
+/** Feature gates in core ask this and nothing else. True for every id of
+ * OPEN_SOURCE_FEATURES in the open-source edition; with a layer, for what its
+ * key grants until its grace period ends. Unknown ids are simply not granted.
+ * Never a permission: the caller still checks who is asking. */
 export function entitled(feature: string, now: number = Date.now()): boolean {
   return !expired(now) && current.features.includes(feature);
+}
+
+/** The hosted workspace features (portal membership and its readiness probe,
+ * hosted Slack, shared-workspace Full access) run on a layer's bridge, so only
+ * that layer's key turns them on: a loaded layer granting `admin`, never the
+ * open-source edition's own `admin`. */
+export function hostedAccessEntitled(now: number = Date.now()): boolean {
+  return current.edition === "enterprise" && entitled("admin", now);
 }
 
 /** The startup warning for a key that is about to lapse or already in its

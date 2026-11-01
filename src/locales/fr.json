@@ -8033,8 +8033,6 @@
   "settings.group.ai": "IA",
   "settings.group.computers": "Ordinateurs",
   "settings.group.you": "Vous",
-  "settings.license.expiring": "La licence entreprise de cette installation expire le {date} ({days} jour(s) restant(s)). Renouvelez la clé pour conserver les fonctionnalités entreprise.",
-  "settings.license.grace": "La licence entreprise de cette installation a expiré le {date}. Les fonctionnalités entreprise continuent de fonctionner jusqu’au {graceEnd} ; renouvelez la clé avant cette date.",
   "settings.pinnedCircles.subtitle": "Affichez les bots épinglés sous forme de grands avatars. Élargir la barre latérale en fait tenir davantage par rangée.",
   "settings.pinnedCircles.title": "Bots épinglés en cercles",
   "settings.profile.sharedSubtitle": "Vos renseignements et le contexte partagé. Enregistrés au fur et à mesure.",

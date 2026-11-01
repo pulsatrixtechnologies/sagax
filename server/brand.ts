@@ -1,8 +1,9 @@
 // White-label as config: a brand.json next to the data dir renames and recolours
 // the product for one deployment. The file is customer data (it never lives in
-// this repo); applying it is the `whitelabel` entitlement, so an unlicensed
-// server reads the file, reports what it found, and keeps the default brand.
-// Read on every request so an edit shows up on the next reload, no restart.
+// this repo). Applying it is the `whitelabel` feature, always on in the
+// open-source edition; only an enterprise layer that withholds it leaves the
+// server reading the file, reporting what it found, and keeping the default
+// brand. Read on every request so an edit shows up on the next reload, no restart.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
@@ -77,7 +78,7 @@ export function loadBrand(options: { file?: string; isEntitled?: (feature: strin
     return fallback(`${file}: ${where}${issue?.message ?? "invalid"}; using the default brand`);
   }
   if (!isEntitled("whitelabel")) {
-    return fallback(`${file} found but this server is not licensed for whitelabel; using the default brand`);
+    return fallback(`${file} found but the enterprise layer on this server does not grant whitelabel; using the default brand`);
   }
   return { brand: parsed.data, source: "file", file };
 }

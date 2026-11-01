@@ -32,7 +32,7 @@ describe("packaged native modules", () => {
     const checkout = mkdtempSync(join(tmpdir(), "sagax-npm-package-"));
     temporaryDirectories.push(checkout);
     const pins = Object.fromEntries(nativelyRequired().map((name, i) => [name, `9.9.${i}`]));
-    writeFileSync(join(checkout, "package.json"), JSON.stringify({ forkVersion: "0.0.1", dependencies: { ...pins, react: "19.0.0" } }));
+    writeFileSync(join(checkout, "package.json"), JSON.stringify({ forkVersion: "0.0.1", license: "LicenseRef-Fixture", dependencies: { ...pins, react: "19.0.0" } }));
     for (const file of ["dist-server/index.js", "dist-server/openmausbot.js", "dist/index.html", "LICENSE"]) {
       mkdirSync(join(checkout, file, ".."), { recursive: true });
       writeFileSync(join(checkout, file), "");
@@ -42,6 +42,8 @@ describe("packaged native modules", () => {
     execFileSync(process.execPath, [join(checkout, "scripts", "build-npm-package.mjs")], { stdio: "pipe" });
     const manifest = JSON.parse(readFileSync(join(checkout, "release", "npm", "package.json"), "utf8"));
     expect(manifest.dependencies).toEqual(pins);
+    // The manifest takes the license from package.json, not from a constant.
+    expect(manifest.license).toBe("LicenseRef-Fixture");
   });
 
   it("refuses to assemble a package whose native dependency is not pinned exactly", () => {

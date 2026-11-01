@@ -75,7 +75,7 @@ writeFileSync(
       forkVersion: version,
       baseVersion: app.baseVersion ?? app.version,
       description: "Run the Sagax server anywhere and pair your devices to it",
-      license: "Apache-2.0",
+      license: app.license,
       type: "module",
       bin: { [BIN]: "cli.js" },
       // Never bundled, so npm installs them beside the server: DuckDB (the

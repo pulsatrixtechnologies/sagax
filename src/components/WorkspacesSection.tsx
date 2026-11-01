@@ -1,4 +1,4 @@
-// App settings → Workspaces: the operator's view of the client workspaces on
+// App settings → Installations: the operator's view of the client workspaces on
 // this server, through the fleet agent (server/fleet-agent.ts). Create one,
 // add or remove a person, suspend, resume, delete, upgrade all. Shown where an
 // agent exists and the server reports the `admin` feature, which the

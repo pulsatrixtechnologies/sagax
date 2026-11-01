@@ -116,6 +116,22 @@ describe("enterprise hook point", () => {
     expect(fresh.entitled("budgets")).toBe(true);
     expect(fresh.hostedAccessEntitled()).toBe(false);
   });
+  it("starts with no feature when a layer is present, until that layer has decided", async () => {
+    const dir = fakeLayer(`export function register() { throw new Error("no valid key"); }`);
+    vi.stubEnv("SAGAX_ENTERPRISE_DIR", dir);
+    try {
+      vi.resetModules();
+      const fresh = await import("./enterprise.ts");
+      expect(fresh.editionStatus()).toEqual({ edition: "oss", features: [], notice: "enterprise layer present but not loaded yet" });
+      for (const feature of OPEN_SOURCE_FEATURES) expect(fresh.entitled(feature), feature).toBe(false);
+      expect(fresh.describeEdition(fresh.editionStatus())).toBe("Sagax open-source edition: no features (enterprise layer present but not loaded yet)");
+      // the layer refuses its key: still nothing on
+      expect((await fresh.loadEnterpriseLayer({ licenseKey: "k" })).features).toEqual([]);
+      expect(fresh.entitled("budgets")).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it("is the open-source edition with every feature on when the folder is absent, key or not", async () => {
     const absent = join(tmpdir(), "omb-enterprise-absent");
     expect(await loadEnterpriseLayer({ dir: absent, licenseKey: undefined })).toEqual({ edition: "oss", features: ["admin", "billing", "budgets", "whitelabel"] });
@@ -123,7 +139,7 @@ describe("enterprise hook point", () => {
     // unknown ids are still not granted, and nothing counts down
     expect(entitled("sso")).toBe(false);
     expect(licenseWarning(editionStatus())).toBeNull();
-    expect(describeEdition(editionStatus())).toBe("Sagax open-source edition");
+    expect(describeEdition(editionStatus())).toBe("Sagax open-source edition: admin, billing, budgets, whitelabel");
     // a key set anyway unlocks nothing more and says so (CI greps "no enterprise layer exists")
     const status = await loadEnterpriseLayer({ dir: absent, licenseKey: "omb1.x.y" });
     expect(status.edition).toBe("oss");
@@ -131,7 +147,7 @@ describe("enterprise hook point", () => {
     expect(status.notice).toContain("SAGAX_LICENSE_KEY is set but no enterprise layer exists");
     expect(status.notice).toContain("the open-source edition needs no key");
     expect(entitled("whitelabel")).toBe(true);
-    expect(describeEdition(status)).toContain("open-source edition (SAGAX_LICENSE_KEY is set");
+    expect(describeEdition(status)).toContain("open-source edition: admin, billing, budgets, whitelabel (SAGAX_LICENSE_KEY is set");
   });
 
   it("registers the layer's entitlements from the key, and only those", async () => {
@@ -193,6 +209,7 @@ describe("enterprise hook point", () => {
     expect(entitled("admin", after)).toBe(false);
     expect(lapsed.expiresInDays).toBeUndefined();
     expect(lapsed.notice).toMatch(/expired on 2027-01-01; renew it/);
+    expect(describeEdition(lapsed)).toMatch(/^Sagax open-source edition: no features \(enterprise layer disabled: SAGAX_LICENSE_KEY expired on 2027-01-01/);
     expect(licenseWarning(lapsed)).toBeNull();
     // members see what is entitled, not the countdown, grace date or notice
     expect(editionForMembers(grace)).toEqual({ edition: "enterprise", customer: "Acme", features: ["sso"], expiresAt: "2027-01-01" });
@@ -243,6 +260,8 @@ describe("enterprise hook point", () => {
     expect(status.notice).toBe("enterprise layer disabled: license expired on 2025-01-01");
     expect(entitled("sso")).toBe(false);
     for (const feature of OPEN_SOURCE_FEATURES) expect(entitled(feature), feature).toBe(false);
+    // the log line says no feature is on, unlike the plain open-source edition
+    expect(describeEdition(status)).toBe("Sagax open-source edition: no features (enterprise layer disabled: license expired on 2025-01-01)");
   });
 
   it("tells the operator when the layer is present but no key is configured", async () => {
@@ -250,6 +269,7 @@ describe("enterprise hook point", () => {
     const status = await loadEnterpriseLayer({ dir, licenseKey: undefined });
     expect(status).toEqual({ edition: "oss", features: [], notice: "enterprise layer present but SAGAX_LICENSE_KEY is not set" });
     expect(entitled("admin")).toBe(false);
+    expect(describeEdition(status)).toBe("Sagax open-source edition: no features (enterprise layer present but SAGAX_LICENSE_KEY is not set)");
   });
 
   it("refuses a layer that does not honour the contract", async () => {

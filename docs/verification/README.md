@@ -82,7 +82,7 @@ Use only mapped, tested commands:
 - [Optional company cloud backups](company-backups.md)
 - [Organization library: the desktop channel](desktop-library.md)
 - [Fleet: many workspaces on one server](fleet.md)
-- [Workspaces screen and the fleet agent](workspaces.md)
+- [Installations screen and the fleet agent](workspaces.md)
 - [Hosted workspace sign-in and revocation](hosted-workspaces.md)
 - [Sign in with Pulsatrix (Perspicax OpenID Connect)](perspicax-sign-in.md)
 - [Slice 7: the Perspicax console admin API, the org audit and the "Open in Sagax" link](perspicax-sign-in.md#slice-7-the-sagax-console-in-perspicax)

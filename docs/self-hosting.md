@@ -598,6 +598,12 @@ local requests: service trust (hosted workspace); without a session, loopback ma
 | `owner` | a self-hosted server, the desktop app | do everything, as today |
 | `service` | a hosted workspace: any of `SAGAX_ADMIN_URL`, `SAGAX_ADMIN_WORKSPACE` or `SAGAX_ADMIN_MEMBERSHIP` set (shared-workspace Full access only works there, so it is covered too) | read health, who-am-I, edition and brand; use the bots' own capability routes (`/api/internal/*`, which check their own per-turn token). The worker data plane below answers only with the relay token. |
 
+Portal sign-in, portal membership and shared-workspace Full access also need
+the hosted workspace bridge, which only an enterprise layer installed outside
+this tree provides. Without one, a hosted configuration refuses hosted sign-in
+(`/api/health/hosted` and `/api/auth/hosted/*` answer 503), and loopback keeps
+the `service` default above.
+
 Under `service`, everything else from loopback needs a real session and
 answers 403: settings and keys (`/api/config`), instances, MCP servers,
 webhooks, sessions and pairing, people and sign-in lists, usage, budgets,
@@ -1276,7 +1282,10 @@ On a hosted workspace whose members your organization's Admin manages
 People shows, read-only, who has signed in and what they spent, with a
 **Manage people in Admin** link to that workspace in Admin → People. Remote
 access there lists signed-in devices and offers no pairing codes, since a
-hosted workspace refuses them.
+hosted workspace refuses them. Portal membership runs on the hosted workspace
+bridge of an enterprise layer installed outside this tree: without that layer,
+the workspace refuses every hosted sign-in and still offers no pairing code or
+email sign-in instead.
 
 ### People from before Perspicax
 
@@ -1293,9 +1302,10 @@ shorten the window, extend it up to 90 days, or close it now.
 ### Who may answer a card
 
 Approval cards are the provider's own (see the approval modes); Sagax
-adds none. On a workspace several people share — portal membership, or an
-email sign-in list that names users — it narrows only whose answer counts,
-and only when the card can be traced to a person:
+adds none. On a workspace several people share (portal membership, on a
+hosted workspace with an enterprise layer's bridge, or an email sign-in list
+that names users), it narrows only whose answer counts, and only when the
+card can be traced to a person:
 
 - a card for a request a user sent, or in a thread a user opened, is
   theirs to answer (admins and the owner may answer any card);
@@ -1384,9 +1394,9 @@ alone.
 The desktop app has no chat-only user sessions and does not show this setting;
 nothing there changes.
 
-On the Workspaces screen, creating a client workspace shows the same kind of
-link for that workspace's admin, so a client gets one address, one workspace
-and one link.
+In **Settings → Installations**, creating a client workspace shows the same
+kind of link for that workspace's admin, so a client gets one address, one
+workspace and one link.
 
 ## Standing Claude Code permissions for every bot
 

@@ -60,7 +60,7 @@ describe("the edition and an enterprise layer's key expiry through the running s
     expect(await server.memberEdition()).toMatchObject(open);
     expect((await server.adminConfig()).edition).toEqual(open);
     expect((await server.memberConfig()).edition).toEqual(open);
-    expect(server.log()).toContain("Sagax open-source edition");
+    expect(server.log()).toContain("Sagax open-source edition: admin, billing, budgets, whitelabel");
     expect(server.log()).not.toContain("SAGAX_LICENSE_KEY expire");
   }, 90_000);
 

@@ -1,4 +1,4 @@
-# Workspaces screen and the fleet agent
+# Installations screen and the fleet agent
 
 ## Sub-features
 

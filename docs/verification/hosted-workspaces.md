@@ -10,7 +10,9 @@ accounts, invitations and provider gateway.
 
 An operator configures the workspace with an HTTPS `SAGAX_ADMIN_URL` origin,
 its `SAGAX_ADMIN_WORKSPACE` slug, its exact HTTPS `SAGAX_PUBLIC_URL`, and an
-active `admin` entitlement. Partial or invalid hosted configuration denies
+enterprise layer, installed outside this tree, that is loaded and grants
+`admin` (`hostedAccessEntitled()`: the open-source edition's own `admin`
+feature never counts). Partial or invalid hosted configuration denies
 remote access; it never enables legacy email or QR sign-in as a fallback.
 Unproxied loopback without a session is a *service*, not the owner, on a hosted
 workspace (see [shared-workspace trust](shared-workspace-trust.md)): it keeps
@@ -71,7 +73,8 @@ or restarting a tenant for every accepted invitation.
 
 The public `GET /api/health/hosted` capability probe returns `200` only when
 complete hosted configuration, explicit portal membership, the loaded access
-hook, and a currently valid `admin` entitlement are all present; otherwise it
+hook, and a currently valid `admin` grant from the layer that provides it
+(never the open-source edition's own `admin`) are all present; otherwise it
 returns a generic `503`. Its successful response
 includes `{ok:true,service:"openmausbot",membershipAuthority:"portal",workspace:"<slug>"}`
 plus the contract metadata above and the `X-OMB-Hosted-Contract-Version: 1`
@@ -129,6 +132,9 @@ recording executors and bounded child processes for hostile file cases.
 The capability probe is also exercised against missing or invalid hosted
 settings, local membership, absent hooks, invalid licenses, missing admin
 entitlement, valid portal mode, and entitlement expiry in the running process.
+`server/enterprise.test.ts` proves that the open-source edition's own `admin`
+never stands in for the layer's grant: with no layer, no bridge exists and
+`hostedAccessEntitled()` is false.
 The contract fixtures cover explicit v1 and legacy-v1 peers, malformed/future
 versions, no downgrade retry, safe mismatch errors, and idle-stream closure
 with session recovery after compatibility is restored. The real server emits

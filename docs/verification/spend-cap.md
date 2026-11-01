@@ -65,12 +65,11 @@ pnpm exec vitest run server/spend.test.ts server/model-prices.test.ts server/pri
 These cover price precedence and cached-input pricing, month-to-date sums
 with the short cache and the just-booked note, the cap enforced with the
 open-source default gate, inert behaviour when a layer withholds `budgets` or
-no cap is set, the warning threshold, the 409 shape, the saver
-persisting `anthropic`, `budgets` and `billing`, the cards rendering only
-with their entitlements, the billable column in summaries and CSV, estimated
-costs counting against the cap, the list-price table (every entry sourced and
-dated, unknown models unpriced, the operator's per-model price winning), and
-the once-a-month notices surviving a restart.
+no cap is set, the warning threshold, the 409 shape, the saver persisting
+`anthropic`, `budgets` and `billing`, the billable column in summaries and
+CSV, estimated costs counting against the cap, the list-price table (every
+entry sourced and dated, unknown models unpriced, the operator's per-model
+price winning), and the once-a-month notices surviving a restart.
 
 ## Gotchas
 

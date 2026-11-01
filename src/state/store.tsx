@@ -963,7 +963,7 @@ export interface ConfigStatus {
     edition: "oss" | "enterprise";
     features: string[];
   };
-  /** a fleet agent exists on this server (Settings → Workspaces) */
+  /** a fleet agent exists on this server (Settings → Installations) */
   fleet?: { available: boolean };
   budgets?: { monthlyUsd?: number; warnAtPercent?: number };
   billing?: { currency?: string; prices?: Record<string, { inputPerMillion: number; outputPerMillion: number; cachedInputPerMillion?: number }> };

@@ -30526,7 +30526,7 @@ function configStatus() {
     anthropic: { configured: Boolean(cfg.anthropic?.key), everyClaudeBot: false },
     openai: { configured: Boolean(cfg.openai?.key) },
     openrouter: { configured: Boolean(cfg.openrouter?.key) },
-    // a fleet agent on this server means Settings → Workspaces has something to drive
+    // a fleet agent on this server means Settings → Installations has something to drive
     fleet: { available: fleetAvailable(fleetSocketPath()) },
     // the features this server runs with (every one in the open-source
     // edition), so Settings shows only what works here

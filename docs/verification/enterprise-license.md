@@ -21,6 +21,13 @@ anyway unlocks nothing more.
   The hosted workspace features (portal membership, hosted Slack,
   shared-workspace Full access) need that layer's bridge and its own `admin`
   grant; the open-source edition's `admin` never stands in for it.
+- Until the server has looked for a layer, it runs what that look decides
+  when none is installed (every feature on), and no feature at all when a
+  layer is present.
+- The startup log names the features either way, since `edition: "oss"` alone
+  does not say which are on: `Sagax open-source edition: admin, billing,
+  budgets, whitelabel` without a layer, `Sagax open-source edition: no
+  features (...)` with the reason while a present layer grants nothing.
 - With a layer, from 30 days before its key expires: `expiresInDays` on
   `/api/edition` and a warning in the startup log. The dates reach admin
   sessions only: a member's `/api/edition` leaves out `expiresInDays`,

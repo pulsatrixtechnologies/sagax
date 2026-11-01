@@ -89,9 +89,16 @@ function openSourceEdition(notice?: string): EditionStatus {
   return { edition: "oss", features: [...OPEN_SOURCE_FEATURES], ...(notice ? { notice } : {}) };
 }
 
-// The open-source edition until loadEnterpriseLayer finds a layer, which only
-// a server that installed one ever does.
-let current: EditionStatus = openSourceEdition();
+/** Before loadEnterpriseLayer has looked: the open-source edition when no
+ * layer is installed, which is what that call decides too (every build of
+ * this repository); no feature at all when a layer is present, since only
+ * that layer decides and it has not been asked yet. */
+function editionBeforeLoad(): EditionStatus {
+  const layerPresent = enterpriseLayerDirs().some((dir) => layerEntry(dir) !== undefined);
+  return layerPresent ? { edition: "oss", features: [], notice: "enterprise layer present but not loaded yet" } : openSourceEdition();
+}
+
+let current: EditionStatus = editionBeforeLoad();
 let workspaceAccessFactory: ((options: WorkspaceAccessOptions) => WorkspaceAccess) | undefined;
 
 export interface WorkspaceAccessOptions {
@@ -287,11 +294,14 @@ export function licenseWarning(status: EditionStatus): string | null {
   return `SAGAX_LICENSE_KEY expires on ${status.expiresAt} (in ${days}); renew it before then to keep enterprise features`;
 }
 
-/** One line for the startup log. */
+/** One line for the startup log. It names the features in every edition:
+ * "open-source edition" alone does not say whether they are all on (no
+ * layer) or all off (a layer that grants nothing, or a lapsed key). */
 export function describeEdition(status: EditionStatus): string {
+  const features = status.features.join(", ") || "no features";
   if (status.edition === "enterprise") {
     const until = status.expiresAt ? ` until ${status.expiresAt}` : "";
-    return `Sagax enterprise edition for ${status.customer}${until}: ${status.features.join(", ") || "no features"}`;
+    return `Sagax enterprise edition for ${status.customer}${until}: ${features}`;
   }
-  return `Sagax open-source edition${status.notice ? ` (${status.notice})` : ""}`;
+  return `Sagax open-source edition: ${features}${status.notice ? ` (${status.notice})` : ""}`;
 }

@@ -1,5 +1,5 @@
 // A routine run opened like a bot-to-bot exchange (JC, 2026-11-01): the same
-// ExchangeSheet shell (header pill, chat bubbles, round X to close), with the
+// ExchangeSheet shell (header pill, chat bubbles, Close Chat pill at the bottom), with the
 // routine's instruction as the opening line, tool steps in the transcript,
 // and Continue / Stop / Run again / Run logs / Configuration in one opaque
 // footer band. Live runs poll activity and refresh the sheet.

@@ -1868,6 +1868,7 @@
   "chat.error.replyCut": "The reply was cut by the provider.",
   "chat.error.dismiss": "Dismiss",
   "chat.error.signedOut": "{name} isn't signed in yet. Sign in below, then send your message again.",
+  "chat.exchange.closeChat": "Close Chat",
   "chat.exchange.empty": "No messages with {name} yet.",
   "chat.exchange.loadError": "This conversation could not be loaded.",
   "chat.exchange.open": "Open {count} messages with {name}",

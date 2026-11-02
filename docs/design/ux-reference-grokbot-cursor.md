@@ -32,35 +32,38 @@ admin. On copie une façon de ranger, jamais une fonction en moins.
 
 ## 1. Principes
 
-1. **Haut de gamme et calme.** Fond presque uni, peu de couleur, aucune décoration qui
+1. **Les surfaces Sagax gardent leur famille existante : ce qui était une fenêtre
+   reste une fenêtre, sauf si JC demande autrement.** Une conversion en page ou en
+   panneau ne se fait que sur demande explicite. Fenêtres centrées (DialogLayer /
+   DialogFrame / CATEGORY_MODAL) aujourd'hui : **Edit bot**, **bulk edit**, **team bot
+   from thread**, **New bot / bot creation wizard**, **Org import**, **Archived bots**,
+   **Bot catalogue** (Browse Bots), **Réglages**, **Capacités**, **À propos**, **notes
+   de version**, **raccourcis**, visionneuse de fichier distant. Pages (rester pages) :
+   Mémoire (avec carte), Automations, carte d'équipe, Achievements. Panneau / chat :
+   exécution de routine dans la colonne de chat, création/édition de routine dans le
+   panneau latéral, calendrier en popover/panneau de détail.
+2. **Haut de gamme et calme.** Fond presque uni, peu de couleur, aucune décoration qui
    ne porte pas d'information. La couleur sert à un état réel (en cours, en attente,
    erreur, en ligne) ou à l'action principale. Tout le reste est en gris.
-2. **Dense sans être tassé.** Une rangée dit beaucoup en deux lignes : un titre, puis une
+3. **Dense sans être tassé.** Une rangée dit beaucoup en deux lignes : un titre, puis une
    ligne de contexte grise (« horaire · état », « 1 connecteur · 27 skills »,
    « examen auto actif · 20 règles »). On évite les cartes géantes avec une seule valeur.
-3. **Une option, un seul endroit.** Un réglage vit à une adresse. Les autres surfaces
+4. **Une option, un seul endroit.** Un réglage vit à une adresse. Les autres surfaces
    y mènent par un lien, elles ne le recopient pas. Si deux écrans montrent le même
    interrupteur, l'un des deux est un bogue.
-4. **Divulgation progressive, jamais de perte.** Le défaut montre l'essentiel ; le reste
+5. **Divulgation progressive, jamais de perte.** Le défaut montre l'essentiel ; le reste
    est derrière « Plus d'options », une sous-page, « Afficher plus » ou un onglet. Une
    refonte réorganise, elle ne retire aucune information ni aucune action.
-5. **Pas de fenêtre modale, sauf la confirmation destructive.** Un objet s'ouvre dans une
-   page ou dans le panneau du bot. Une fenêtre (dialogue) ne sert qu'à : confirmer une
-   suppression ou un retrait, avertir d'un changement non enregistré, la session expirée.
-   Restent permis parce qu'ils ne modifient aucun objet : la palette de commandes, le
-   lanceur de recherche, l'aide des raccourcis, la visionneuse d'un fichier en lecture
-   seule (fenêtre superposée, décision de JC du 2026-11-01, voir 2.13), un menu.
-   Exceptions décidées par JC (grande fenêtre centrée, comme la référence) :
-   les **Réglages du bureau** (2026-11-01, voir 2.5), **Capacités** / Connecter des
-   apps (2026-11-02, correction après le lot 5, voir 2.8), les **notes de version** /
-   « What's new » (2026-11-02, restauration après le lot bannières, voir 2.5 bis),
-   l'**accueil de première fois** (onboarding, voir 2.14). Ce n'est pas un patron à
-   reprendre ailleurs : aucun autre écran ne devient une fenêtre pour « faire comme
-   les Réglages ». Mémoire, Automations et la carte d'équipe restent des **pages**.
-6. **Clavier d'abord.** Tout se fait au clavier : palette, recherche, Échap pour reculer,
+6. **Confirmation destructive et surfaces listées au point 1.** Une confirmation
+   (alertdialog) sert à confirmer une suppression ou un retrait, ou à avertir d'un
+   changement non enregistré. Les autres fenêtres listées au point 1 sont des
+   exceptions décidées par JC ; ne pas en inventer d'autres « pour faire comme les
+   Réglages ». Restent aussi hors confirmation : la palette, le lanceur de recherche,
+   l'aide des raccourcis, un menu.
+7. **Clavier d'abord.** Tout se fait au clavier : palette, recherche, Échap pour reculer,
    flèches dans les listes, lettres pour répondre à une question, raccourcis visibles
    dans les menus et les info-bulles.
-7. **La personne voit seulement ce qui est à elle.** Pas de nom d'autre personne, pas
+8. **La personne voit seulement ce qui est à elle.** Pas de nom d'autre personne, pas
    d'identifiant technique (jamais d'UUID, voir `AGENTS.md` « Never a UUID/GUID on
    screen »), pas de jargon d'outil.
 

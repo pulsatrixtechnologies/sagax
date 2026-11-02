@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { initialState, reducer } from "./store";
 
-describe("Archived bots view (lot 5)", () => {
-  it("showArchivedBots fills the content frame and closes overlays", () => {
+describe("Archived bots window (restored)", () => {
+  it("showArchivedBots opens the centred window and closes overlays", () => {
     const withOverlays = {
       ...initialState,
       pluginsOpen: true,
@@ -14,7 +14,8 @@ describe("Archived bots view (lot 5)", () => {
       personaEditor: { botId: "ada", section: "overview" as const },
     };
     const opened = reducer(withOverlays, { type: "showArchivedBots" });
-    expect(opened.activeView).toBe("archived-bots");
+    expect(opened.archivedBotsOpen).toBe(true);
+    expect(opened.activeView).toBe("apps");
     expect(opened.pluginsOpen).toBe(false);
     expect(opened.appSettingsOpen).toBe(false);
     expect(opened.personPanelId).toBeNull();
@@ -22,8 +23,9 @@ describe("Archived bots view (lot 5)", () => {
     expect(opened.personaEditor).toBeNull();
   });
 
-  it("showChat leaves the archived bots list", () => {
+  it("closeArchivedBots and showChat leave the window", () => {
     const opened = reducer(initialState, { type: "showArchivedBots" });
-    expect(reducer(opened, { type: "showChat" }).activeView).toBe("chat");
+    expect(reducer(opened, { type: "closeArchivedBots" }).archivedBotsOpen).toBe(false);
+    expect(reducer(opened, { type: "showChat" }).archivedBotsOpen).toBe(false);
   });
 });

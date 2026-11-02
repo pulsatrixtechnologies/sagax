@@ -116,9 +116,9 @@ afterEach(() => {
 
 describe("Edit bot search", () => {
   it("sits under the title and lists every page when empty", () => {
-    expect(host.querySelector("#persona-editor-title")!.textContent).toContain("Edit bot");
+    expect(host.querySelector("#persona-modal-title")!.textContent).toContain("Edit bot");
     const nav = host.querySelector("[data-persona-nav]")!;
-    expect(nav.firstElementChild!.contains(input())).toBe(true);
+    expect(nav.querySelector("[data-persona-search]")).toBe(input());
     expect(pagesInRail().length).toBeGreaterThan(10);
   });
 
@@ -167,11 +167,11 @@ describe("Edit bot search", () => {
 
   it("goes to the field with a slash or Command-F, but not while typing", () => {
     const outside = document.createElement("div");
-    key(host.querySelector("[data-persona-editor]")!, "/");
+    key(host.querySelector("[data-persona-modal]")!, "/");
     expect(document.activeElement).toBe(input());
     outside.remove();
     input().blur();
-    key(host.querySelector("[data-persona-editor]")!, "f", { metaKey: true });
+    key(host.querySelector("[data-persona-modal]")!, "f", { metaKey: true });
     expect(document.activeElement).toBe(input());
     const slash = key(input(), "/");
     expect(slash.defaultPrevented).toBe(false);

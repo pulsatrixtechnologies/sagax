@@ -56,7 +56,7 @@ describe("startTurn characterization (#1388 w4 step 3)", () => {
     expect(body).toMatch(/DirectTurnSetupCancelled\("turn stopped during context setup"\)/);
     const catchStart = body.indexOf("} catch (cause");
     const catchBody = body.slice(catchStart, body.indexOf("} finally {", catchStart));
-    expect(catchBody).toMatch(/handoffs\.abandon\(threadId, dispatchClaimId\)/);
+    expect(catchBody).toMatch(/handoffs\.abandon\(state\.threadId, state\.dispatchClaimId\)/);
     expect(catchBody).toMatch(/e instanceof DirectTurnSetupCancelled/);
   });
 
@@ -64,7 +64,7 @@ describe("startTurn characterization (#1388 w4 step 3)", () => {
     const body = startTurnBody(startTurnSrc);
     const catchStart = body.indexOf("} catch (cause");
     const catchBody = body.slice(catchStart, body.indexOf("} finally {", catchStart));
-    expect(catchBody).toMatch(/hasQueuedSteeredMessages\(bot\.id, threadId\)/);
+    expect(catchBody).toMatch(/hasQueuedSteeredMessages\(state\.bot\.id, state\.threadId\)/);
     expect(body).toMatch(/handoffs\.begin\(/);
     expect(body).toMatch(/handoffs\.dispatching\(/);
     expect(body).toMatch(/handoffs\.bindTurn\(/);
@@ -76,17 +76,17 @@ describe("startTurn characterization (#1388 w4 step 3)", () => {
     const claimAt = body.indexOf("assertTurnAdmission(");
     expect(holdAt).toBeGreaterThan(-1);
     expect(claimAt).toBeGreaterThan(holdAt);
-    expect(body).toMatch(/directMachinePlan\(\{ host: bot\.host/);
+    expect(body).toMatch(/directMachinePlan\(\{ host: state\.bot\.host/);
   });
 
   it("warm finally always settles onWarmSettled and clears the warm dispatch claim", () => {
     const body = startTurnBody(startTurnSrc);
     const finallyStart = body.indexOf("} finally {");
     const finallyBody = body.slice(finallyStart);
-    expect(finallyBody).toMatch(/if \(warmOnly\)/);
-    expect(finallyBody).toMatch(/opts\?\.onWarmSettled\?\.\(warmOk\)/);
-    expect(finallyBody).toMatch(/clearDirectTurnDispatch\(threadId, dispatchClaimId\)/);
-    expect(finallyBody).toMatch(/handoffs\.abandon\(threadId, dispatchClaimId\)/);
+    expect(finallyBody).toMatch(/if \(state\.warmOnly\)/);
+    expect(finallyBody).toMatch(/state\.opts\?\.onWarmSettled\?\.\(state\.warmOk\)/);
+    expect(finallyBody).toMatch(/clearDirectTurnDispatch\(state\.threadId, state\.dispatchClaimId\)/);
+    expect(finallyBody).toMatch(/handoffs\.abandon\(state\.threadId, state\.dispatchClaimId\)/);
     expect(finallyBody).toMatch(/drainQueuedSends\(\)/);
   });
 

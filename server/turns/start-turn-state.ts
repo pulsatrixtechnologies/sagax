@@ -2,10 +2,6 @@
 // Fields are declared up front and mutated only through this object.
 // Leaf modules take TurnState plus host deps; they must not close over
 // orchestrator locals or Object.assign partial contexts.
-import type { ConnectorSwitch } from "../connector-switch.ts";
-import type { ComputerWant, PlaceSource } from "../surface.ts";
-import type { LocalVmTarget, Runtime } from "../container-computer.ts";
-
 export type StartTurnFn = (botId: string, text: string, opts?: any) => Promise<any>;
 
 /**
@@ -100,11 +96,11 @@ export type TurnState = {
   compactPrompt: any;
   recalled: any;
   transcript: any;
-  wants: ComputerWant | undefined;
-  placeSource: PlaceSource | undefined;
-  localVmTarget: LocalVmTarget | undefined;
-  connectorSwitch: ConnectorSwitch | undefined;
-  runtime: Runtime | undefined;
+  wants: any;
+  placeSource: any;
+  localVmTarget: any;
+  connectorSwitch: any;
+  runtime: any;
   enginesRead: any;
   plannedConfig: any;
   strictResume: any;

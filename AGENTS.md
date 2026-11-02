@@ -16,6 +16,16 @@ isolated fixture; never verify mutations against the user's live app or data.
 
 UI work: read docs/design/ux-reference-grokbot-cursor.md first; do not re-scan Grok Bot unless the doc lacks the surface, then extend the doc.
 
+## A call is a realtime voice session (2026-11-02)
+
+Never text to speech on a call: `GET /voice/realtime` bridges the page to
+xAI's Voice Agent API (`server/realtime-call.ts`); the bot's work is the
+`work` function, run as an ordinary turn (`server/realtime-call-host.ts`).
+No realtime voice means no call, said plainly with the voice settings link;
+never restore the dictation plus text to speech call as a fallback. Audio of
+a cut response is dropped by response id; a permission is decided from the
+person's words, not the model's. `docs/voice-mode-xai.md`, first section.
+
 ## Full access, one decision (#1065, #1819, #1905; 2026-11-02)
 
 `server/full-access-gate.ts` is the one place that says whether a turn at

@@ -251,6 +251,15 @@ describe("voice mode routes", () => {
     expect(out.status).toBe(404);
   });
 
+  // 2026-11-02: a call is a realtime voice session; the status says when it is there
+  it("says a call can run on the realtime voice when an xAI key serves the speaker", async () => {
+    const realtime = { openUpstream: vi.fn(), session: vi.fn() };
+    const { call } = harness({ ownKeys: { "sub-ada": OWN_KEY }, realtime } as Options);
+    const out = await call({ method: "GET", path: "/api/bots/b-quasar/voice/status" });
+    expect(out.body).toMatchObject({ available: true, realtime: true });
+    expect(realtime.openUpstream).not.toHaveBeenCalled();
+  });
+
   it("reports who pays without the key", async () => {
     const { call } = harness({ ownKeys: { "sub-ada": OWN_KEY } });
     const out = await call({ method: "GET", path: "/api/bots/b-quasar/voice/status" });

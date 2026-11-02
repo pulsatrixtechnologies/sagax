@@ -1,5 +1,76 @@
 # Voice mode with xAI
 
+## A call is a realtime voice session (2026-11-02)
+
+The maintainer's decision: a voice call is never text to speech. It runs on
+the configured realtime voice API, for a full voice call, like the voice
+mode of the reference apps.
+
+Before, every call was a pipeline: the page streamed the microphone to
+xAI's speech to text, its own detector ended each turn, the words became
+an ordinary chat turn on the bot, and the bot's text was read by xAI's
+text to speech. On a call of 2026-11-02 (a bot on Grok 4.7 Fast, the
+organization server) that gave 9 to 15 s from the last word to the bot's
+text (production journal: one turn spent 17 s on tool discovery before
+its mail tool), half sentences ("That's okay, I'm, I'm") sent as turns,
+and "Are you there" said while the bot worked queued as a steer: the
+engine (Grok over ACP) cannot take words mid turn, so the queue drained
+it as a second full turn that read the same mail again.
+
+Now (`server/realtime-call.ts`, `server/realtime-call-host.ts`, the page's
+`src/lib/voice-mode/realtime-call.ts`, `src/components/voice-mode/RealtimeCall.tsx`):
+
+- `GET /api/bots/<id>/voice/realtime` (WebSocket) bridges the page to xAI's
+  Voice Agent API (`wss://api.x.ai/v1/realtime`, the key in the
+  Authorization header on the server, never on the page). PCM16 at 24 kHz
+  both ways. The realtime model listens and speaks natively; its server
+  turn detection (`server_vad`, 500 ms of silence) ends a turn and cuts its
+  own speech on a barge-in.
+- The bot stays the brain for real work, bridged as function calls: `work`
+  hands the person's request to the bot as an ordinary turn on the thread
+  (`via: "call"`, the call's id, the person's attribution); the voice says
+  one short sentence while it runs and speaks the result when the turn's
+  final answer comes back as the function's output. `answer_permission`
+  records a spoken allow once or deny, decided from the person's own words
+  (`spokenConsent(..., "voice")`), never from the model's arguments; a
+  question card is answered by the person's next request. `end_call` hangs up
+  after the goodbye.
+- Chit-chat, "are you there", a repeat or a thank you are answered by the
+  voice at once, with no chat turn.
+- One answer per response id: the audio of a response cut by the person
+  (barge-in, interrupt button) is dropped, never played later. A function's
+  output goes once per call id, and the same request again while it runs
+  joins it instead of running twice.
+- No realtime voice: no call. The status says `realtime: true` only when an
+  xAI key serves the speaker; without it the call button says so and opens
+  the voice settings. A key xAI refuses reaches the page in words
+  (`{"type":"refused","code":"realtime_key_refused"}`: "The realtime voice
+  key was refused. Fix it in Settings > Voice."), never a fallback to text
+  to speech. The older macOS dictation call is gone. Text to speech stays
+  for reading a message aloud.
+- Logs are counters and milliseconds only (`[voice-realtime] call ended ...
+  firstAudioP50=...`). Usage is booked as `grok-realtime` (seconds of audio,
+  estimated at 0.05 USD a minute).
+
+Fixture (`server/realtime-call.e2e.test.ts`, a fake xAI realtime server and
+a fake engine on loopback): end of speech to first audio 202 ms for
+chit-chat with a voice whose own pause is 180 ms (the bridge adds about
+20 ms); a request for the bot's work is acknowledged aloud at the same
+202 ms and its result is heard 848 ms after the request with a 400 ms
+engine turn. The real provider's own pause decides the rest; acceptance
+against xAI itself is still to run with a real key.
+
+Still on the older pipeline: the room call (several bots on one line) and
+the iPhone call.
+
+Tests: `server/realtime-call.test.ts`, `server/realtime-call-host.test.ts`,
+`server/realtime-call.e2e.test.ts`, `server/voice-mode.test.ts` (status).
+
+The sections below describe the older pipeline (speech to text, a chat
+turn, text to speech). A desktop call no longer runs on it; they stay for
+the room call, the iPhone and reading a message aloud.
+
+
 ## Recognition reliability (2026-10-30)
 
 Short answers such as names, weekdays, commands and single letters are

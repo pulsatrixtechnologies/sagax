@@ -13,6 +13,8 @@ import type { OrderTracking } from "./order-tracking.ts";
 import type { SoloGoalLine } from "./solo-goal-line.ts";
 import type { FinishUntilLine } from "./finish-until-line.ts";
 import type { MeetingRequestCardData } from "./meeting-request.ts";
+import type { PhoneCallConsentCardData } from "./phone-call-consent.ts";
+import type { PhoneCallLiveEvent, PhoneCallLiveLine, PhoneCallPhase } from "./phone-call-live.ts";
 import type { ParallelTaskRef, TaskParallelOf } from "./parallel-tasks.ts";
 import type { DataBroadcast } from "./data-surface.ts";
 import type { AppliedApprovalLevel, ApprovalException, ApprovalMode } from "./approval-mode.ts";
@@ -929,6 +931,9 @@ export interface WireMessage extends WaitLineField {
   parentId?: string | null;
   /** Optional flat reply reference for an inline quote. */
   replyToId?: string;
+  /** A widget press the device performed itself (open_page, open_routine,
+   * open_run): recorded so the bot knows it is done; it started no turn. */
+  deviceAction?: { type: string };
   /** Stable client identity for at-most-once chat POST retries. */
   sendId?: string;
   /** Per-send channel behavior. Absent is legacy quick chat. */
@@ -1184,6 +1189,9 @@ export interface OptionCardData extends WaitCardField {
   /** A meeting the bot asks to join as a notetaker (join_meeting): the
    * consent card, then the live meeting's state. Never auto-applied. */
   meetingRequest?: MeetingRequestCardData;
+  /** One-time acceptable-use consent before a bot may place phone calls
+   * for this person. Recorded per person; never auto-applied. */
+  phoneCallConsent?: PhoneCallConsentCardData;
   /** A change asked from a ConnectWise widget, waiting for an Allow
    * (server/cw-widget-actions.ts). `by` is the principal who asked. */
   cwActionRequest?: { id: string; action: CwAction; by: string };
@@ -1644,6 +1652,18 @@ export interface OutboundCard {
   /** A conversation call once it ended. Placed without a result yet: the
    * call is under way. */
   result?: OutboundCallResult;
+  /** Live conversation call: who is being called (when known). */
+  calleeName?: string;
+  /** Live phase chip on the card (dialing through ended). */
+  phase?: PhoneCallPhase;
+  /** epoch ms when dialing started; drives the live timer. */
+  liveStartedAt?: number;
+  /** Streaming transcript while the call is live (also kept after end). */
+  liveTranscript?: PhoneCallLiveLine[];
+  /** Hold, DTMF and transfer events shown in the live stream. */
+  liveEvents?: PhoneCallLiveEvent[];
+  /** Sagax proxy path for the recording player after the call ends. */
+  recordingUrl?: string;
   /** A purchase: the shop, the amount, the card's brand and last four
    * digits, what it buys, and once done, the receipt. */
   merchant?: string;

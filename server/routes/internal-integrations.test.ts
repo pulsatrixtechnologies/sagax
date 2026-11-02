@@ -1,0 +1,335 @@
+import type { ServerResponse } from "node:http";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createInternalIntegrationsRoutes,
+  type InternalIntegrationsBot,
+  type InternalIntegrationsDeps,
+} from "./internal-integrations.ts";
+import type { InternalRouteContext } from "./internal-route.ts";
+import { PASS } from "./table.ts";
+
+const bot: InternalIntegrationsBot = {
+  id: "bot-1",
+  name: "Ada",
+  color: "blue",
+  threadId: "t-1",
+};
+
+function deps(over: Partial<InternalIntegrationsDeps> = {}): InternalIntegrationsDeps {
+  return {
+    bot: (id) => (id === bot.id ? bot : null),
+    isPerspicax: () => false,
+    ownsThread: (botId, threadId) => (botId === bot.id && threadId === "t-1" ? { group: false } : null),
+    vaultPrincipalForThread: () => "person-1",
+    principalIsOrgAdmin: () => false,
+    principalCan: () => true,
+    permissionRefusal: (key) => ({ error: "forbidden", permission: key, message: `need ${key}` }),
+    addPersonalMcpServer: async () => undefined,
+    sourceApprovalMode: () => "auto",
+    setPersonalMcpEnabled: () => undefined,
+    closePersonalStdio: () => undefined,
+    tryBeginMcpConfigUpdate: () => true,
+    endMcpConfigUpdate: () => undefined,
+    mcpServers: () => ({}),
+    addDisabledMcpServer: () => ({
+      ok: true as const,
+      name: "tools",
+      server: { command: "npx", args: [] as string[], env: {} as Record<string, string>, enabled: false },
+      next: { tools: { command: "npx", args: [] as string[], env: {} as Record<string, string>, enabled: false } },
+    }),
+    sharedMcpPersonalRefusal: () => null,
+    mcpPolicyRefusal: () => undefined,
+    persistMcpServers: () => undefined,
+    turnSpeaker: () => ({ origin: "person" as const, principalId: "person-1" }),
+    turnIsRoutine: () => false,
+    turnIsInternal: () => false,
+    turnIsAutomation: () => false,
+    turnIsUnattended: () => false,
+    localPrincipalId: () => "local",
+    personGithub: () => undefined,
+    githubProbeStatus: async () => ({ state: "disconnected" as const }),
+    githubDeviceFlowAvailable: () => true,
+    githubStartDeviceFlow: async () => ({
+      userCode: "ABCD-1234",
+      verificationUri: "https://github.com/login/device",
+      expiresAt: Date.now() + 900_000,
+    }),
+    githubTokenKind: () => "classic",
+    credentialConfigured: () => false,
+    appendMessage: () => ({ id: "msg-1" }),
+    activePath: () => [],
+    patchMessage: () => undefined,
+    botForThread: () => bot,
+    orgXaiMediaGiven: () => false,
+    turnMediaPrincipal: () => "person-1",
+    botOwner: () => "person-1",
+    speakVoiceNote: async () => ({ bytes: new Uint8Array([1, 2]), mime: "audio/mpeg" }),
+    requireActive: () => undefined,
+    liveTurnId: () => "turn-1",
+    saveAudio: () => ({ path: "/tmp/a.mp3", mime: "audio/mpeg" }),
+    pushTurnAttachment: () => undefined,
+    isConfidentialThread: () => false,
+    confidentialPerspicaxRefusal: () => null,
+    misuseToolFrameText: () => null,
+    misuseTextRefusal: () => null,
+    safetyPrincipal: () => ({ triage: false }),
+    misuseActor: () => ({ triage: false }),
+    safetyReviewer: () => undefined,
+    safetyToolHold: async () => null,
+    perspicaxMounted: () => true,
+    perspicaxRelay: async () => ({ status: 200, body: { jsonrpc: "2.0", id: 1, result: {} } }),
+    ...over,
+  };
+}
+
+function call(
+  route: ReturnType<typeof createInternalIntegrationsRoutes>,
+  opts: {
+    path: string;
+    method?: string;
+    body?: Record<string, unknown>;
+    query?: string;
+    capability?: InternalRouteContext["capability"];
+  },
+) {
+  const sent: Array<{ status: number; body: unknown }> = [];
+  const ended: Array<{ status: number; body: string }> = [];
+  let statusCode = 200;
+  const res = {
+    headersSent: false,
+    writableEnded: false,
+    writeHead(status: number) {
+      statusCode = status;
+    },
+    end(payload?: string) {
+      (res as { writableEnded: boolean }).writableEnded = true;
+      ended.push({ status: statusCode, body: payload ?? "" });
+    },
+  } as unknown as ServerResponse;
+  const url = new URL(`http://x${opts.path}${opts.query ? `?${opts.query}` : ""}`);
+  const ctx: InternalRouteContext = {
+    res,
+    path: opts.path,
+    method: opts.method ?? "POST",
+    url,
+    json: ((_r, status, body) => {
+      sent.push({ status, body });
+    }) as InternalRouteContext["json"],
+    capability: opts.capability ?? { botId: bot.id, threadId: "t-1", generation: "g-1", perspicaxProfile: "prof-1" },
+    readBody: async () => opts.body ?? {},
+  };
+  return {
+    ctx,
+    sent,
+    ended,
+    run: () => route(ctx),
+  };
+}
+
+describe("createInternalIntegrationsRoutes", () => {
+  it("passes foreign paths and methods", async () => {
+    const route = createInternalIntegrationsRoutes(deps());
+    expect(await route(call(route, { path: "/api/internal/ask-bot" }).ctx)).toBe(PASS);
+    expect(await route(call(route, { path: "/api/internal/mcp-servers", method: "GET" }).ctx)).toBe(PASS);
+    expect(await route(call(route, { path: "/api/internal/computer-control" }).ctx)).toBe(PASS);
+    expect(await route(call(route, { path: "/api/mcp/servers" }).ctx)).toBe(PASS);
+  });
+
+  it("POST /mcp-servers (perspicax) refuses a foreign source conversation (403)", async () => {
+    const route = createInternalIntegrationsRoutes(deps({
+      isPerspicax: () => true,
+      ownsThread: () => null,
+    }));
+    const { sent, run } = call(route, { path: "/api/internal/mcp-servers", body: { name: "x", url: "https://x.test/mcp" } });
+    await run();
+    expect(sent).toEqual([{ status: 403, body: { error: "source conversation does not belong to sender" } }]);
+  });
+
+  it("POST /mcp-servers (perspicax) refuses missing ownIntegrations (403)", async () => {
+    const route = createInternalIntegrationsRoutes(deps({
+      isPerspicax: () => true,
+      principalCan: () => false,
+      permissionRefusal: (key) => ({ error: "forbidden", permission: key, message: "no" }),
+    }));
+    const { sent, run } = call(route, { path: "/api/internal/mcp-servers", body: { name: "x", url: "https://x.test/mcp" } });
+    await run();
+    expect(sent[0]?.status).toBe(403);
+    expect(sent[0]?.body).toMatchObject({ error: "forbidden", permission: "apps.ownIntegrations" });
+  });
+
+  it("POST /mcp-servers (perspicax) adds a personal remote server (201)", async () => {
+    const addPersonalMcpServer = vi.fn(async () => undefined);
+    const route = createInternalIntegrationsRoutes(deps({
+      isPerspicax: () => true,
+      addPersonalMcpServer,
+      sourceApprovalMode: () => "auto",
+    }));
+    const { sent, run } = call(route, {
+      path: "/api/internal/mcp-servers",
+      body: { name: "tools", url: "https://example.com/mcp" },
+    });
+    await run();
+    expect(addPersonalMcpServer).toHaveBeenCalledOnce();
+    expect(sent[0]?.status).toBe(201);
+    expect(sent[0]?.body).toMatchObject({ name: "tools", personal: true, enabled: true });
+  });
+
+  it("POST /mcp-servers (shared) returns 409 when busy", async () => {
+    const route = createInternalIntegrationsRoutes(deps({
+      tryBeginMcpConfigUpdate: () => false,
+    }));
+    const { sent, run } = call(route, { path: "/api/internal/mcp-servers", body: { name: "x", command: "echo" } });
+    await run();
+    expect(sent).toEqual([{ status: 409, body: { error: "MCP servers are already being updated." } }]);
+  });
+
+  it("POST /mcp-servers (shared) adds a disabled server (201)", async () => {
+    const persistMcpServers = vi.fn();
+    const endMcpConfigUpdate = vi.fn();
+    const route = createInternalIntegrationsRoutes(deps({
+      persistMcpServers,
+      endMcpConfigUpdate,
+      sourceApprovalMode: () => "ask",
+    }));
+    const { sent, run } = call(route, { path: "/api/internal/mcp-servers", body: { name: "tools", command: "npx" } });
+    await run();
+    expect(persistMcpServers).toHaveBeenCalledOnce();
+    expect(endMcpConfigUpdate).toHaveBeenCalledOnce();
+    expect(sent[0]?.status).toBe(201);
+    expect(sent[0]?.body).toMatchObject({ name: "tools", enabled: false, transport: "command" });
+  });
+
+  it("POST /github-connect refuses a foreign source conversation (403)", async () => {
+    const route = createInternalIntegrationsRoutes(deps({ ownsThread: () => null }));
+    const { sent, run } = call(route, { path: "/api/internal/github-connect" });
+    await run();
+    expect(sent).toEqual([{ status: 403, body: { error: "source conversation does not belong to sender" } }]);
+  });
+
+  it("POST /github-connect returns not_person when the turn is unattended", async () => {
+    const route = createInternalIntegrationsRoutes(deps({ turnIsUnattended: () => true }));
+    const { sent, run } = call(route, { path: "/api/internal/github-connect" });
+    await run();
+    expect(sent).toEqual([{ status: 200, body: { state: "not_person" } }]);
+  });
+
+  it("POST /github-connect starts a device flow (happy path)", async () => {
+    const githubStartDeviceFlow = vi.fn(async () => ({
+      userCode: "WXYZ-9999",
+      verificationUri: "https://github.com/login/device",
+      expiresAt: 1_700_000_000_000,
+    }));
+    const route = createInternalIntegrationsRoutes(deps({ githubStartDeviceFlow }));
+    const { sent, run } = call(route, { path: "/api/internal/github-connect" });
+    await run();
+    expect(githubStartDeviceFlow).toHaveBeenCalledWith("person-1");
+    expect(sent).toEqual([{
+      status: 200,
+      body: {
+        state: "pending",
+        userCode: "WXYZ-9999",
+        verificationUri: "https://github.com/login/device",
+        expiresAt: 1_700_000_000_000,
+      },
+    }]);
+  });
+
+  it("POST /request-credential refuses a foreign source conversation (403)", async () => {
+    const route = createInternalIntegrationsRoutes(deps({ ownsThread: () => null }));
+    const { sent, run } = call(route, {
+      path: "/api/internal/request-credential",
+      body: { credentialId: "xaiApiKey" },
+    });
+    await run();
+    expect(sent).toEqual([{ status: 403, body: { error: "source conversation does not belong to sender" } }]);
+  });
+
+  it("POST /request-credential rejects an unsupported id (400)", async () => {
+    const route = createInternalIntegrationsRoutes(deps());
+    const { sent, run } = call(route, {
+      path: "/api/internal/request-credential",
+      body: { credentialId: "not-a-real-key" },
+    });
+    await run();
+    expect(sent).toEqual([{ status: 400, body: { error: "unsupported credential id" } }]);
+  });
+
+  it("POST /request-credential appends a secret card (201)", async () => {
+    const appendMessage = vi.fn(() => ({ id: "sec-1" }));
+    const route = createInternalIntegrationsRoutes(deps({ appendMessage }));
+    const { sent, run } = call(route, {
+      path: "/api/internal/request-credential",
+      body: { credentialId: "xaiApiKey", reason: "need grok" },
+    });
+    await run();
+    expect(appendMessage).toHaveBeenCalledOnce();
+    expect(sent).toEqual([{ status: 201, body: { messageId: "sec-1", label: "xAI API key" } }]);
+  });
+
+  it("POST /voice-note validates text (400 / 413)", async () => {
+    const route = createInternalIntegrationsRoutes(deps());
+    const empty = call(route, { path: "/api/internal/voice-note", body: { text: "  " } });
+    await empty.run();
+    expect(empty.sent[0]?.status).toBe(400);
+    const long = call(route, { path: "/api/internal/voice-note", body: { text: "x".repeat(1001) } });
+    await long.run();
+    expect(long.sent[0]?.status).toBe(413);
+  });
+
+  it("POST /voice-note refuses when the bot turned notes off (403)", async () => {
+    const route = createInternalIntegrationsRoutes(deps({
+      botForThread: () => ({ ...bot, voiceNotes: false }),
+    }));
+    const { sent, run } = call(route, { path: "/api/internal/voice-note", body: { text: "hi" } });
+    await run();
+    expect(sent).toEqual([{ status: 403, body: { error: "voice notes are turned off for this bot" } }]);
+  });
+
+  it("POST /voice-note attaches audio (201)", async () => {
+    const pushTurnAttachment = vi.fn();
+    const route = createInternalIntegrationsRoutes(deps({ pushTurnAttachment }));
+    const { sent, run } = call(route, { path: "/api/internal/voice-note", body: { text: "hello" } });
+    await run();
+    expect(pushTurnAttachment).toHaveBeenCalledOnce();
+    expect(sent).toEqual([{ status: 201, body: { attached: true } }]);
+  });
+
+  it("POST /voice-note surfaces requireActive as 401", async () => {
+    const route = createInternalIntegrationsRoutes(deps({
+      requireActive: () => {
+        throw Object.assign(new Error("the internal turn capability has expired"), { status: 401 });
+      },
+    }));
+    const { sent, run } = call(route, { path: "/api/internal/voice-note", body: { text: "hello" } });
+    await expect(run()).rejects.toMatchObject({ status: 401 });
+    expect(sent).toEqual([]);
+  });
+
+  it("POST /perspicax/mcp refuses an unmounted profile (403)", async () => {
+    const route = createInternalIntegrationsRoutes(deps({ perspicaxMounted: () => false }));
+    const { sent, run } = call(route, {
+      path: "/api/internal/perspicax/mcp",
+      query: "profile=other",
+      body: { jsonrpc: "2.0", id: 1, method: "tools/list" },
+    });
+    await run();
+    expect(sent).toEqual([{
+      status: 403,
+      body: { error: "this Perspicax profile is not mounted in this turn", code: "profile_not_mounted" },
+    }]);
+  });
+
+  it("POST /perspicax/mcp relays a frame (happy path)", async () => {
+    const perspicaxRelay = vi.fn(async () => ({ status: 200, body: { jsonrpc: "2.0", id: 7, result: { ok: true } } }));
+    const route = createInternalIntegrationsRoutes(deps({ perspicaxRelay }));
+    const { ended, run } = call(route, {
+      path: "/api/internal/perspicax/mcp",
+      query: "profile=prof-1",
+      body: { jsonrpc: "2.0", id: 7, method: "tools/list" },
+    });
+    await run();
+    expect(perspicaxRelay).toHaveBeenCalledOnce();
+    expect(ended[0]?.status).toBe(200);
+    expect(JSON.parse(ended[0]!.body)).toEqual({ jsonrpc: "2.0", id: 7, result: { ok: true } });
+  });
+});

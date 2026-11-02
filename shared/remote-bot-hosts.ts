@@ -54,19 +54,49 @@ export function detachRemoteHost(current: unknown, hostId: string): string[] {
   return cleanRemoteHosts(current).filter((entry) => entry !== id);
 }
 
-/** Hosts the Computer picker offers: attached and still enrolled. */
+export type RemoteHostPlace = {
+  hostId: string;
+  /** Readable hostname only; never the opaque host id. */
+  label: string;
+  state: UnattendedHostRow["state"];
+  /** Already an endpoint on this bot. */
+  attached: boolean;
+};
+
+/** Readable place label for a host: hostname when known, else the fallback
+ * word. Never the opaque `h_…` id. */
+export function remoteHostLabel(
+  row: Pick<UnattendedHostRow, "hostname">,
+  fallback = "Remote",
+): string {
+  const name = row.hostname?.trim();
+  return name || fallback;
+}
+
+/** Hosts the Computer place picker offers: every enrolled catalog host, plus
+ * attached hosts that are not revoked. Attach / detach live in the picker's
+ * per-place menu; temporary attended sessions never appear here. */
 export function remoteHostPlaces(
   attached: unknown,
-  available: UnattendedHostRow[],
-): Array<{ hostId: string; label: string; state: UnattendedHostRow["state"] }> {
+  catalog: UnattendedHostRow[],
+  fallbackLabel = "Remote",
+): RemoteHostPlace[] {
   const want = new Set(cleanRemoteHosts(attached));
-  if (!want.size) return [];
-  const byId = new Map(available.map((row) => [row.hostId, row]));
-  const places: Array<{ hostId: string; label: string; state: UnattendedHostRow["state"] }> = [];
-  for (const id of want) {
-    const row = byId.get(id);
-    if (!row || row.state === "revoked") continue;
-    places.push({ hostId: id, label: row.hostname ?? id, state: row.state });
+  const seen = new Set<string>();
+  const places: RemoteHostPlace[] = [];
+  for (const row of catalog) {
+    if (row.state === "revoked") continue;
+    const isAttached = want.has(row.hostId);
+    // Catalog: enrolled only. Attached: keep until revoked (expired still shown).
+    if (!isAttached && row.state !== "enrolled") continue;
+    if (seen.has(row.hostId)) continue;
+    seen.add(row.hostId);
+    places.push({
+      hostId: row.hostId,
+      label: remoteHostLabel(row, fallbackLabel),
+      state: row.state,
+      attached: isAttached,
+    });
   }
   return places;
 }
@@ -80,4 +110,23 @@ export function sessionForHost(
   const name = host.hostname?.trim().toLowerCase();
   if (!name) return undefined;
   return sessions.find((row) => row.state === "connected" && (row.hostname ?? "").trim().toLowerCase() === name);
+}
+
+/** Active temporary (attended) sessions for Details: connected ones that do
+ * not belong to an attached unattended host place. */
+export function temporaryRemoteSessions<T extends { state: string; hostname?: string | null }>(
+  sessions: T[],
+  attachedHosts: Array<Pick<UnattendedHostRow, "hostname">>,
+): T[] {
+  const names = new Set(
+    attachedHosts
+      .map((row) => row.hostname?.trim().toLowerCase())
+      .filter((value): value is string => Boolean(value)),
+  );
+  return sessions.filter((row) => {
+    if (row.state !== "connected") return false;
+    const name = (row.hostname ?? "").trim().toLowerCase();
+    if (name && names.has(name)) return false;
+    return true;
+  });
 }

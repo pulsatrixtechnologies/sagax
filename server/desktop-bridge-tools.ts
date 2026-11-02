@@ -10,7 +10,7 @@ import { localVmDesktopSpec } from "./container-computer.ts";
 import { cleanCommandVariables } from "./credential-command-env.ts";
 import type { DesktopBridgeOperation } from "./desktop-bridge.ts";
 import { localVmComputerCall, localVmComputerCatalogText } from "./local-vm-computer.ts";
-import { boundToolResult, readOnHint } from "./tool-output-bound.ts";
+import { boundToolResult, readOnHint, type BoundToolTextOptions } from "./tool-output-bound.ts";
 
 const where = "on the computer of the person you are working for (their own PC, through their Sagax desktop app), like their own terminal";
 
@@ -197,13 +197,15 @@ export function webUrl(value: unknown): string {
 /** What the model reads of a desktop answer (tool-output-bound.ts): a
  * command's output, a text file, a search or a page is cut to a size the
  * conversation can keep; a base64 file must stay whole to decode, and a
- * screen or tool catalog is no machine dump. */
-export function boundDesktopResult(operation: DesktopBridgeOperation, result: ToolResult): ToolResult {
+ * screen or tool catalog is no machine dump. Optional `hold` saves the
+ * full text so the cut marker can name tool_result_read (TST-02). */
+export function boundDesktopResult(operation: DesktopBridgeOperation, result: ToolResult, hold?: BoundToolTextOptions["hold"]): ToolResult {
+  const bound = (hint?: string) => boundToolResult(result, { ...(hint ? { hint } : {}), ...(hold ? { hold } : {}) });
   switch (operation.action) {
     case "read_file":
-      return operation.encoding === "base64" ? result : boundToolResult(result, { hint: readOnHint() });
+      return operation.encoding === "base64" ? result : bound(readOnHint());
     case "run_command": case "vm_run_command": case "search_files": case "list_files": case "fetch_url": case "browse":
-      return boundToolResult(result);
+      return bound();
     default:
       return result;
   }
@@ -237,6 +239,8 @@ export async function handleDesktopBridgeMcp(
      * command (server/credential-command-env.ts). Added after the refusal
      * checks, which never see a value. */
     commandVariables?: () => Record<string, string>;
+    /** Save a cut's full text for tool_result_read (TST-02). */
+    hold?: BoundToolTextOptions["hold"];
   },
 ): Promise<unknown> {
   if (method === "tools/list") return { tools: DESKTOP_BRIDGE_TOOLS };
@@ -274,7 +278,7 @@ export async function handleDesktopBridgeMcp(
       if (operation.action === "vm_computer_call" && staleDesktop) {
         return text("The Sagax desktop app on this computer is too old to control the Local VM screen. Update the Sagax app.", true);
       }
-      return boundDesktopResult(operation, result);
+      return boundDesktopResult(operation, result, options?.hold);
     } catch (error) {
       return text(error instanceof Error ? error.message : String(error), true);
     }

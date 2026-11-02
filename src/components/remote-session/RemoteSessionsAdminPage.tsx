@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Monitor, FileText, X, ShieldOff, RefreshCw } from "lucide-react";
+import { Monitor, FileText, ShieldOff, RefreshCw } from "lucide-react";
 
 import { formatEndLabel, type RemoteSessionView } from "../../../shared/remote-session";
 import type { AdminRowFilters, RemoteSessionAdminRow, RemoteSessionLogEntry } from "../../../shared/remote-session-admin";
 import { cn } from "@/lib/cn";
 import { useCaptionChrome } from "@/components/DesktopCapabilities";
+import { DetailPanel } from "@/components/DetailPanel";
 import { t, activeLocale } from "@/lib/i18n";
 import { remoteControllable, RemoteTakeover } from "./RemoteScreenCard";
 import {
@@ -66,19 +67,16 @@ export function RemoteSessionLogList({ entries }: { entries: RemoteSessionLogEnt
 function LogsPanel({ row, onClose }: { row: RemoteSessionAdminRow; onClose: () => void }) {
   const [entries, setEntries] = useState<RemoteSessionLogEntry[] | null>(null);
   useMemo(() => { void fetchRemoteSessionLog(row.id).then(setEntries, () => setEntries([])); }, [row.id]);
+  const title = t("remoteSessionsAdmin.logs.title", { host: row.host });
+  // Right detail panel (lot 6). Escape inside it is DetailPanel's; the page
+  // listener below stays for the live screen and the revoke confirm.
   return (
-    <div data-remote-admin-logs="" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-      <div className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-hairline/60 bg-panel shadow-xl">
-        <div className="flex items-center justify-between border-b border-hairline/50 px-4 py-3">
-          <h2 className="truncate text-[14px] font-medium text-ink">{t("remoteSessionsAdmin.logs.title", { host: row.host })}</h2>
-          <button type="button" aria-label={t("remoteSessionsAdmin.close")} onClick={onClose} className="rounded-lg p-1 text-ink-secondary hover:bg-raised hover:text-ink"><X size={18} /></button>
-        </div>
-        <p className="border-b border-hairline/40 px-4 py-2 text-[12px] text-ink-secondary">{t("remoteSessionsAdmin.logs.retention")}</p>
-        <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
-          <RemoteSessionLogList entries={entries} />
-        </div>
+    <DetailPanel label={title} title={title} onClose={onClose} closeLabel={t("remoteSessionsAdmin.close")} data-remote-admin-logs="">
+      <p className="border-b border-hairline/40 px-4 py-2 text-[12px] text-ink-secondary">{t("remoteSessionsAdmin.logs.retention")}</p>
+      <div className="px-4 py-3">
+        <RemoteSessionLogList entries={entries} />
       </div>
-    </div>
+    </DetailPanel>
   );
 }
 
@@ -124,17 +122,16 @@ export function RemoteSessionsAdminPage() {
   const toggle = (key: "activeOnly" | "unattendedOnly") => setFilters((f) => ({ ...f, [key]: !f[key] }));
 
   useEffect(() => {
-    if (!logsFor && !controlling && !confirmRevoke) return;
+    if (!controlling && !confirmRevoke) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
       if (confirmRevoke) setConfirmRevoke(null);
-      else if (controlling) setControlling(null);
-      else setLogsFor(null);
+      else setControlling(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [logsFor, controlling, confirmRevoke]);
+  }, [controlling, confirmRevoke]);
 
   const end = async (row: RemoteSessionAdminRow) => {
     if (confirmEnd !== row.id) { setConfirmEnd(row.id); return; }

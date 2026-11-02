@@ -4,6 +4,15 @@ import { join } from "node:path";
 import { composeSkillMd, parseSkillMd, scanSkillText } from "../shared/skill-md.ts";
 import { principalDir, type PersonCapabilities } from "./person-connections.ts";
 import { deleteLibrarySkill, installLibrarySkill, listLibrarySkills, readLibrarySkillFile, setLibrarySkillReviewState, updateLibrarySkill } from "./skill-library.ts";
+import {
+  acceptLibrarySkillReview,
+  afterLibrarySkillPersonSave,
+  afterLibrarySkillRemoved,
+  librarySkillFolder,
+  loadLibrarySkillEditor,
+  readSkillFolderFile,
+  revertLibrarySkillReview,
+} from "./skill-person-edit.ts";
 import { botsUsingSharedSkill } from "./skill-share.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";
 import type { RequestAuth } from "./request-auth.ts";
@@ -60,8 +69,8 @@ export function createPersonalSkillRoutes(deps: {
   enabled: () => boolean;
   bots: (person: string) => Array<{ id: string; name: string }>;
 }): RouteHandler {
-  return async ({ req, res, path, method, auth, json, readBody }) => {
-    const match = path.match(/^\/api\/me\/skills-library(?:\/([a-z0-9-]+))?$/);
+  return async ({ req, res, path, method, auth, json, readBody, url }) => {
+    const match = path.match(/^\/api\/me\/skills-library(?:\/([a-z0-9-]+)(?:\/(review|files))?)?$/);
     if (!match) return PASS;
     res.setHeader("cache-control", "private, no-store");
     const person = deps.person(auth);
@@ -69,6 +78,7 @@ export function createPersonalSkillRoutes(deps: {
     if (!deps.enabled()) return json(res, 404, { error: "skills library is not enabled" });
     const root = deps.skills.root(person);
     const name = match[1];
+    const sub = match[2];
     const body = async () => {
       if (!/^application\/json\b/i.test(String(req.headers["content-type"] ?? ""))) throw Object.assign(new Error("content-type must be application/json"), { status: 415 });
       return await readBody(req) as Record<string, unknown>;
@@ -92,15 +102,47 @@ export function createPersonalSkillRoutes(deps: {
         const result = installLibrarySkill({ name: parsed.name, instructions: input.text, source: "local-import", warnings: scanSkillText(input.text), reviewState: "approved", root });
         if ("error" in result) return json(res, 422, { error: result.error });
         deps.skills.reference(person, null, result.name);
+        afterLibrarySkillPersonSave(result.name, input.text, root);
         return json(res, 201, { skill: result });
       }
       if (!name) return json(res, 405, { error: "GET or POST only" });
       if (!deps.skills.list(person).some((skill) => skill.name === name)) return json(res, 404, { error: "no such skill" });
-      const previous = readLibrarySkillFile(name, root);
-      if (method === "GET") return previous === null ? json(res, 409, { error: "The stored file changed; save your reviewed version again." }) : json(res, 200, { text: previous });
+      if (sub === "review" && method === "POST") {
+        const input = await body();
+        if (input?.action !== "accept" && input?.action !== "revert") return json(res, 400, { error: "action must be accept or revert" });
+        const result = input.action === "accept"
+          ? acceptLibrarySkillReview(name, root)
+          : revertLibrarySkillReview(name, root);
+        if ("error" in result) return json(res, result.status, { error: result.error });
+        return json(res, 200, { skill: result });
+      }
+      if (sub === "files" && method === "GET") {
+        const filePath = url.searchParams.get("path");
+        const folder = librarySkillFolder(name, root);
+        if (!filePath) {
+          const payload = loadLibrarySkillEditor(name, "me", root);
+          if ("error" in payload) return json(res, payload.status, { error: payload.error });
+          return json(res, 200, { files: payload.files });
+        }
+        const file = readSkillFolderFile(folder, filePath);
+        if ("error" in file) return json(res, file.status, { error: file.error });
+        if (file.kind === "text") return json(res, 200, { path: filePath, kind: file.kind, text: file.text, bytes: file.bytes });
+        res.statusCode = 200;
+        res.setHeader("content-type", file.contentType);
+        res.setHeader("cache-control", "private, no-store");
+        res.end(file.buffer);
+        return;
+      }
+      if (sub) return json(res, 405, { error: "unsupported skill path" });
+      if (method === "GET") {
+        const payload = loadLibrarySkillEditor(name, "me", root);
+        if ("error" in payload) return json(res, payload.status, { error: payload.error });
+        return json(res, 200, payload);
+      }
       if (method === "DELETE") {
         const result = deleteLibrarySkill(name, root);
         if ("error" in result) return json(res, result.status, { error: result.error });
+        afterLibrarySkillRemoved(name, root);
         deps.skills.reference(person, name, null);
         return json(res, 200, { ok: true });
       }
@@ -113,9 +155,11 @@ export function createPersonalSkillRoutes(deps: {
       }
       if (method !== "PUT") return json(res, 405, { error: "GET, PUT, PATCH or DELETE only" });
       if (typeof input?.name !== "string" || typeof input.description !== "string" || typeof input.instructions !== "string") return json(res, 400, { error: "name, description and instructions are required" });
+      const previous = readLibrarySkillFile(name, root);
       const text = composeSkillMd(previous, { name: input.name, description: input.description, body: input.instructions });
       const result = updateLibrarySkill(name, { text, warnings: scanSkillText(text) }, root);
       if ("error" in result) return json(res, result.status, { error: result.error });
+      afterLibrarySkillPersonSave(result.skill.name, text, root, result.renamedFrom);
       deps.skills.reference(person, name, result.skill.name);
       return json(res, 200, { skill: result.skill });
     } catch (error) {

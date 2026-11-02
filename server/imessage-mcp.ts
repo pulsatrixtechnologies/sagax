@@ -17,6 +17,7 @@ import {
 } from "../shared/imessage.ts";
 import { stageImessageSend, type PendingImessage } from "./imessage-cards.ts";
 import { fileInsideRoots, messagesDbPresent, openMessagesReader, type MessageRow } from "./imessage-db.ts";
+import { probeFullDiskAccess } from "./imessage-permissions.ts";
 import type { ImessageSender } from "./imessage-send.ts";
 
 const SEND_FILE_MAX_BYTES = 8_000_000;
@@ -230,10 +231,12 @@ export async function handleMessagesMcp(body: unknown, deps: MessagesMcpDeps): P
     ? params.arguments as Record<string, unknown> : {};
   if (name === "check_permissions") {
     const gate = messagesOnBotMac(deps.host);
+    const fullDisk = gate.ok ? probeFullDiskAccess() : "unsupported";
     return { result: text({
       useMessages: deps.useMessages,
       onThisMac: gate.ok,
-      fullDiskAccess: Boolean(deps.useMessages && gate.ok && deps.dbDir && messagesDbPresent(deps.dbDir)),
+      fullDiskAccess: fullDisk === "granted",
+      fullDiskAccessState: fullDisk,
       automation: "notAsked",
     }) };
   }

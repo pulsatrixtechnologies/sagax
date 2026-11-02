@@ -428,12 +428,15 @@ struct BotWorksOnSection: View {
 
 // MARK: - Voice & alerts
 
-/// Voice & alerts (`VoiceSection.tsx` with `VoiceSettings`): the engine,
-/// the agent's voice, read replies aloud, voice notes, and notifications.
-/// Provider keys stay on the computer.
+/// Voice options (`VoiceSection.tsx` with `VoiceSettings`): the engine,
+/// the agent's voice, read replies aloud and voice notes. Notifications
+/// stay on the bot profile only (lot 3); pass `showsNotifications` when a
+/// legacy desktop surface still wants the toggle here.
 struct BotVoiceSections: View {
     @Environment(\.themePalette) var themePalette
     let bot: Bot
+    /// When false (Edit bot More voice options), Notifications is omitted.
+    var showsNotifications: Bool = true
     @EnvironmentObject private var session: Session
 
     @State private var voices: [Voice] = []
@@ -455,77 +458,81 @@ struct BotVoiceSections: View {
     private var canSpeak: Bool { config?.canSpeak(agentVoice: voice) == true }
 
     var body: some View {
-        Section {
-            if canSetEngine {
-                Picker("Voice engine", selection: $engine) {
-                    Text("ElevenLabs").tag(VoiceProvider.elevenlabs)
-                    Text("Fish Audio").tag(VoiceProvider.fish)
-                    Text("Built-in Mac voices").tag(VoiceProvider.system).disabled(!hostIsMac)
-                    Text("Chatterbox (local)").tag(VoiceProvider.chatterbox)
+        Group {
+            Section {
+                if canSetEngine {
+                    Picker("Voice engine", selection: $engine) {
+                        Text("ElevenLabs").tag(VoiceProvider.elevenlabs)
+                        Text("Fish Audio").tag(VoiceProvider.fish)
+                        Text("Built-in Mac voices").tag(VoiceProvider.system).disabled(!hostIsMac)
+                        Text("Chatterbox (local)").tag(VoiceProvider.chatterbox)
+                    }
+                    .disabled(switching)
+                    if config?.voiceProvider == .chatterbox {
+                        TextField("Chatterbox server address", text: $chatterboxURL, prompt: Text(verbatim: "http://127.0.0.1:4123"))
+                            .keyboardType(.URL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        TextField("Chatterbox model", text: $chatterboxModel, prompt: Text(verbatim: "chatterbox-turbo"))
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        Button { Task { await saveServer() } } label: {
+                            HStack { Text("Save server"); if savingServer { Spacer(); ProgressView() } }
+                        }
+                        .disabled(savingServer || chatterboxURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        if let serverProblem {
+                            Label(serverProblem, systemImage: "exclamationmark.triangle").foregroundStyle(Theme.warning)
+                        }
+                    }
                 }
-                .disabled(switching)
-                if config?.voiceProvider == .chatterbox {
-                    TextField("Chatterbox server address", text: $chatterboxURL, prompt: Text(verbatim: "http://127.0.0.1:4123"))
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    TextField("Chatterbox model", text: $chatterboxModel, prompt: Text(verbatim: "chatterbox-turbo"))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    Button { Task { await saveServer() } } label: {
-                        HStack { Text("Save server"); if savingServer { Spacer(); ProgressView() } }
+                if configured {
+                    Picker("Spoken replies voice", selection: Binding(get: { voice }, set: { save(voice: $0) })) {
+                        if config?.hasWorkspaceDefaultVoice == true {
+                            Text("Workspace default").tag("")
+                        } else {
+                            Text("Choose an agent voice").tag("").disabled(true)
+                        }
+                        if !voice.isEmpty, !voices.contains(where: { $0.id == voice }) {
+                            Text("Current agent voice").tag(voice)
+                        }
+                        ForEach(voices) { option in Text(option.label).tag(option.id) }
                     }
-                    .disabled(savingServer || chatterboxURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    if let serverProblem {
-                        Label(serverProblem, systemImage: "exclamationmark.triangle").foregroundStyle(Theme.warning)
-                    }
+                    .accessibilityIdentifier("voice-picker")
+                    Button("Preview voice", systemImage: "speaker.wave.2") { Task { await preview() } }
+                        .disabled(previewing || !canSpeak)
+                } else {
+                    Label(String(localized: "Add it in Sagax on your computer."), systemImage: "speaker.slash")
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                Toggle("Read replies aloud", isOn: Binding(get: { current.speakReplies == true }, set: { on in
+                    var patch = BotProfilePatch()
+                    patch.speakReplies = on
+                    update(patch)
+                }))
+                .tint(Theme.toggleOn)
+                .disabled(!canSpeak && current.speakReplies != true)
+                .accessibilityIdentifier("voice-speak-replies")
+            } header: {
+                Text("Voice")
+            } footer: {
+                Text("Give this agent a voice for calls and spoken replies. The voice choice belongs to this agent; provider keys stay on your computer and never come to this device.")
+            }
+            if session.surfaceGate.allows(.voiceNotesSetting, bot: current) {
+                BotVoiceNotesSection(bot: current)
+            }
+            if showsNotifications {
+                Section {
+                    Toggle("Notifications", isOn: Binding(get: { current.notifications }, set: { on in
+                        var patch = BotProfilePatch()
+                        patch.notifications = on
+                        update(patch)
+                    }))
+                    .tint(Theme.toggleOn)
+                    .accessibilityIdentifier("profile-notifications")
+                } footer: {
+                    Text("Get notified when this Bot finishes or needs input")
                 }
             }
-            if configured {
-                Picker("Voice", selection: Binding(get: { voice }, set: { save(voice: $0) })) {
-                    if config?.hasWorkspaceDefaultVoice == true {
-                        Text("Workspace default").tag("")
-                    } else {
-                        Text("Choose an agent voice").tag("").disabled(true)
-                    }
-                    if !voice.isEmpty, !voices.contains(where: { $0.id == voice }) {
-                        Text("Current agent voice").tag(voice)
-                    }
-                    ForEach(voices) { option in Text(option.label).tag(option.id) }
-                }
-                .accessibilityIdentifier("voice-picker")
-                Button("Preview voice", systemImage: "speaker.wave.2") { Task { await preview() } }
-                    .disabled(previewing || !canSpeak)
-            } else {
-                Label(String(localized: "Add it in Sagax on your computer."), systemImage: "speaker.slash")
-                    .foregroundStyle(Theme.textSecondary)
-            }
-            Toggle("Read replies aloud", isOn: Binding(get: { current.speakReplies == true }, set: { on in
-                var patch = BotProfilePatch()
-                patch.speakReplies = on
-                update(patch)
-            }))
-            .tint(Theme.toggleOn)
-            .disabled(!canSpeak && current.speakReplies != true)
-            .accessibilityIdentifier("voice-speak-replies")
-        } header: {
-            Text("Voice")
-        } footer: {
-            Text("Give this agent a voice for calls and spoken replies. The voice choice belongs to this agent; provider keys stay on your computer and never come to this device.")
-        }
-        if session.surfaceGate.allows(.voiceNotesSetting, bot: current) {
-            BotVoiceNotesSection(bot: current)
-        }
-        Section {
-            Toggle("Notifications", isOn: Binding(get: { current.notifications }, set: { on in
-                var patch = BotProfilePatch()
-                patch.notifications = on
-                update(patch)
-            }))
-            .tint(Theme.toggleOn)
-            .accessibilityIdentifier("profile-notifications")
-        } footer: {
-            Text("Get notified when this Bot finishes or needs input")
         }
         .task {
             async let status = session.configStatus()

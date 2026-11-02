@@ -449,7 +449,7 @@ describe("§2 lifecycle", () => {
     invariants(w);
   });
 
-  it("S07b needs_input expiry → failed(expired), never completed, parent woken once (I5)", async () => {
+  it("S07b needs_input expiry → expired(expired), never completed, parent woken once (I5)", async () => {
     const w = world({ inputWaitMs: 1_000 });
     const root = beginChief(w);
     const child = ok(enqueueFrom(w, root, workFor("dev", "Pick a colour")));
@@ -465,7 +465,7 @@ describe("§2 lifecycle", () => {
     w.clock.advance(2);
     await drain(w);
     const c = get(w, child.id);
-    expect(c.status).toBe("failed");
+    expect(c.status).toBe("expired");
     expect(c.outcome).toBe("expired");
     expect(kinds(w, child.id)).not.toContain("answered");
     expect(w.runner.runs(child.id)).toHaveLength(1);
@@ -476,7 +476,7 @@ describe("§2 lifecycle", () => {
     const rootRuns = w.runner.runs(root.id);
     expect(rootRuns).toHaveLength(2);
     expect(rootRuns[0].input!.asked?.map((a) => a.id)).toEqual([child.id]);
-    expect(rootRuns[1].input!.settled?.map((a) => [a.id, a.status, a.outcome])).toEqual([[child.id, "failed", "expired"]]);
+    expect(rootRuns[1].input!.settled?.map((a) => [a.id, a.status, a.outcome])).toEqual([[child.id, "expired", "expired"]]);
     expect(w.store.inbox(chiefOwner, false).filter((i) => i.kind === "settled")).toHaveLength(1);
     expect(get(w, root.id).status).toBe("completed");
     invariants(w);
@@ -484,7 +484,7 @@ describe("§2 lifecycle", () => {
 });
 
 describe("§4b a question waits for the person (bot quality 2026-10-19)", () => {
-  it("S07c default limits: answered after 45 minutes, the branch resumes and finishes (no failed), one reminder with the whole question", async () => {
+  it("S07c default limits: mid-delay reminder at 120 of 240 min, then answer resumes (R6)", async () => {
     const w = world();
     const root = beginChief(w);
     const long = `Which colour? ${"Context the person needs to decide. ".repeat(12)}End of question.`;
@@ -495,7 +495,12 @@ describe("§4b a question waits for the person (bot quality 2026-10-19)", () => 
     expect(get(w, child.id).status).toBe("needs_input");
     expect(w.runner.callsOf("remind", child.id)).toHaveLength(0);
 
-    w.clock.advance(31 * 60_000);
+    // Before mid-delay (half of 240 m): no remind.
+    w.clock.advance(119 * 60_000);
+    await drain(w);
+    expect(w.runner.callsOf("remind", child.id)).toHaveLength(0);
+
+    w.clock.advance(2 * 60_000);
     await drain(w);
     expect(get(w, child.id).status).toBe("needs_input");
     const reminders = w.runner.callsOf("remind", child.id);
@@ -515,9 +520,12 @@ describe("§4b a question waits for the person (bot quality 2026-10-19)", () => 
     invariants(w);
   });
 
-  it("S07d reminds once a day while it waits, and expires only after the week", async () => {
+  it("S07d reminds at mid-delay then daily, and expires only after the week", async () => {
     // A host that lets a delegation's question wait the whole week (the
-    // default closes a delegation sooner, S07e).
+    // default closes a delegation sooner, S07e). First remind at half of
+    // that wait (4 d), then one a day (R6). Reminds fire once waited
+    // strictly exceeds each threshold, so six days exactly yields mid +
+    // day 5; one more hour yields day 6.
     const w = world({ delegationInputWaitMs: 8 * 24 * 60 * 60_000 });
     const root = beginChief(w);
     const child = ok(enqueueFrom(w, root, workFor("dev", "Pick a colour")));
@@ -529,10 +537,37 @@ describe("§4b a question waits for the person (bot quality 2026-10-19)", () => 
       await drain(w);
     }
     expect(get(w, child.id).status).toBe("needs_input");
-    expect(w.runner.callsOf("remind", child.id).length).toBe(6);
-    w.clock.advance(25 * 60 * 60_000);
+    expect(w.runner.callsOf("remind", child.id).length).toBe(2);
+    w.clock.advance(60 * 60_000);
     await drain(w);
-    expect(get(w, child.id)).toMatchObject({ status: "failed", outcome: "expired" });
+    expect(get(w, child.id).status).toBe("needs_input");
+    expect(w.runner.callsOf("remind", child.id).length).toBe(3);
+    w.clock.advance(24 * 60 * 60_000);
+    await drain(w);
+    expect(get(w, child.id)).toMatchObject({ status: "expired", outcome: "expired" });
+    invariants(w);
+  });
+
+  it("S07h default_answer resumes the branch instead of expiring (R6)", async () => {
+    const w = world();
+    const root = beginChief(w);
+    const child = ok(enqueueFrom(w, root, { ...workFor("dev", "Pick a colour"), defaultAnswer: "blue" }));
+    w.runner.script("dev", needsInput("GO?"), complete("painted blue"));
+    w.rt.end(root.id, { ok: true, text: "" });
+    await drain(w);
+    expect(get(w, child.id).status).toBe("needs_input");
+    w.clock.advance(4 * 60 * 60_000 + 60_000);
+    await drain(w);
+    expect(kinds(w, child.id)).toContain("answered");
+    const runs = w.runner.runs(child.id);
+    expect(runs).toHaveLength(2);
+    expect(runs[1]!.input!.answer).toMatch(/declared default answer/);
+    expect(runs[1]!.input!.answer).toMatch(/blue/);
+    const c = get(w, child.id);
+    expect(c.status).toBe("completed");
+    expect(c.outcome).toBe("done");
+    expect(c.result).toBe("painted blue");
+    expect(get(w, root.id).status).toBe("completed");
     invariants(w);
   });
 
@@ -552,7 +587,7 @@ describe("§4b a question waits for the person (bot quality 2026-10-19)", () => 
     expect(get(w, child.id).status).toBe("needs_input");
     w.clock.advance(61 * 60_000);
     await drain(w);
-    expect(get(w, child.id)).toMatchObject({ status: "failed", outcome: "expired" });
+    expect(get(w, child.id)).toMatchObject({ status: "expired", outcome: "expired" });
     expect(get(w, child.id).result).toMatch(/did not answer within 240m/);
     expect(w.runner.reports(child.id)).toHaveLength(1);
     invariants(w);
@@ -570,7 +605,7 @@ describe("§4b a question waits for the person (bot quality 2026-10-19)", () => 
     w.rt.close();
     w.clock.advance(5 * 60 * 60_000);
     reopen(w);
-    expect(get(w, child.id)).toMatchObject({ status: "failed", outcome: "expired" });
+    expect(get(w, child.id)).toMatchObject({ status: "expired", outcome: "expired" });
     expect(w.runner.callsOf("park", child.id)).toHaveLength(parks);
     await drain(w);
     invariants(w);
@@ -591,7 +626,7 @@ describe("§4b a question waits for the person (bot quality 2026-10-19)", () => 
     gone.add(child.id);
     w.clock.advance(60_000);
     await drain(w);
-    expect(get(w, child.id)).toMatchObject({ status: "failed", outcome: "expired" });
+    expect(get(w, child.id)).toMatchObject({ status: "expired", outcome: "expired" });
     invariants(w);
   });
 });
@@ -789,7 +824,7 @@ describe("§6 budgets and clocks", () => {
     invariants(w);
   });
 
-  it("S13 queue expiry: never started past queueMs → failed(expired)", async () => {
+  it("S13 queue expiry: never started past queueMs → expired(expired)", async () => {
     const w = world({ queueMs: 1_000, stallMs: 1e9 });
     const root = beginChief(w);
     w.runner.setCanStart("dev", false);
@@ -806,7 +841,7 @@ describe("§6 budgets and clocks", () => {
     w.clock.advance(2);
     await drain(w);
     const c = get(w, child.id);
-    expect(c.status).toBe("failed");
+    expect(c.status).toBe("expired");
     expect(c.outcome).toBe("expired");
     expect(c.startedAt).toBeUndefined();
     expect(c.executions).toBe(0);

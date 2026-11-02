@@ -12,6 +12,8 @@ import SwiftUI
 struct SkillSheet: Identifiable {
     let skill: ManagedSkill
     let text: String
+    /// Open the editor already in Edit mode (row menu Edit).
+    var startEditing: Bool = false
     var id: String { skill.name }
 }
 
@@ -101,13 +103,46 @@ final class BotSkillsModel: ObservableObject {
         }
     }
 
-    func view(_ skill: ManagedSkill) async {
+    func view(_ skill: ManagedSkill, startEditing: Bool = false) async {
         guard let client else { return }
         error = ""
         do {
-            viewing = SkillSheet(skill: skill, text: try await client.skillText(botId: botId, name: skill.name) ?? "")
+            let payload = try await client.skillEditor(botId: botId, name: skill.name)
+            viewing = SkillSheet(skill: skill, text: payload.text, startEditing: startEditing)
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+
+    func saveSkill(_ skill: ManagedSkill, name: String, description: String, instructions: String) async -> Bool {
+        guard let client else { return false }
+        working = skill.name
+        error = ""
+        defer { working = "" }
+        do {
+            try await client.saveSkill(botId: botId, name: skill.name, newName: name, description: description, instructions: instructions)
+            viewing = nil
+            await refresh()
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
+    }
+
+    func reviewSkill(_ skill: ManagedSkill, action: String) async -> Bool {
+        guard let client else { return false }
+        working = skill.name
+        error = ""
+        defer { working = "" }
+        do {
+            try await client.reviewSkill(botId: botId, name: skill.name, action: action)
+            viewing = nil
+            await refresh()
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
         }
     }
 
@@ -217,18 +252,22 @@ struct BotSkillsSection: View {
 
     @ViewBuilder
     private func row(_ skill: ManagedSkill) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let title = DisplayHygiene.skillTitle(skill)
+        let slug = DisplayHygiene.skillSlug(skill)
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 10) {
                 Button { Task { await model.view(skill) } } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(verbatim: skill.name)
-                            .font(Theme.mono(13))
+                        // Lot 8: readable title first; slug as a discreet subline.
+                        Text(verbatim: title)
+                            .font(.system(size: 14))
                             .foregroundStyle(Theme.textPrimary)
-                        if !skill.description.isEmpty {
-                            Text(verbatim: skill.description)
-                                .font(.system(size: 12))
+                            .lineLimit(2)
+                        if slug != title {
+                            Text(verbatim: slug)
+                                .font(Theme.mono(11))
                                 .foregroundStyle(Theme.textSecondary)
-                                .lineLimit(2)
+                                .lineLimit(1)
                         }
                         Text(String(localized: "Used when the bot decides it's relevant"))
                             .font(.system(size: 11))
@@ -245,10 +284,19 @@ struct BotSkillsSection: View {
                     .accessibilityLabel(Text(skill.enabled ? String(localized: "Disable \(skill.name)") : String(localized: "Enable \(skill.name)")))
                     .accessibilityIdentifier("skill-toggle.\(skill.name)")
             }
-            Text(String(localized: "Source: \(skill.source)"))
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.textSecondary)
-                .lineLimit(1)
+            if !skill.source.isEmpty {
+                DisclosureGroup {
+                    Text(verbatim: skill.source)
+                        .font(Theme.mono(11))
+                        .foregroundStyle(Theme.textSecondary)
+                        .textSelection(.enabled)
+                } label: {
+                    Text(String(localized: "Source"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .accessibilityIdentifier("skill-source.\(skill.name)")
+            }
             if !skill.warnings.isEmpty {
                 Text(verbatim: skill.warnings.joined(separator: " · "))
                     .font(.system(size: 11))
@@ -260,6 +308,8 @@ struct BotSkillsSection: View {
                 .disabled(model.working == skill.name)
         }
         .contextMenu {
+            Button(String(localized: "Open"), systemImage: "doc.text") { Task { await model.view(skill) } }
+            Button(String(localized: "Edit"), systemImage: "pencil") { Task { await model.view(skill, startEditing: true) } }
             Button(String(localized: "Remove skill"), systemImage: "trash", role: .destructive) { removing = skill }
         }
     }
@@ -275,8 +325,20 @@ struct SkillReviewSheet: View {
         NavigationStack {
             ThemedList {
                 Section {
-                    Text(String(localized: "Source: \(sheet.skill.source)"))
-                        .font(.footnote).foregroundStyle(Theme.textSecondary)
+                    Text(verbatim: DisplayHygiene.skillTitle(sheet.skill))
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(verbatim: DisplayHygiene.skillSlug(sheet.skill))
+                        .font(Theme.mono(12))
+                        .foregroundStyle(Theme.textSecondary)
+                    if !sheet.skill.source.isEmpty {
+                        DisclosureGroup(String(localized: "Source")) {
+                            Text(verbatim: sheet.skill.source)
+                                .font(Theme.mono(11))
+                                .foregroundStyle(Theme.textSecondary)
+                                .textSelection(.enabled)
+                        }
+                    }
                     if !sheet.skill.warnings.isEmpty {
                         Text(verbatim: sheet.skill.warnings.joined(separator: " · "))
                             .font(.footnote).foregroundStyle(Theme.warning)
@@ -291,7 +353,7 @@ struct SkillReviewSheet: View {
                     }
                 }
             }
-            .navigationTitle(String(localized: "Review \(sheet.skill.name) before enabling"))
+            .navigationTitle(String(localized: "Review before enabling"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -307,30 +369,140 @@ struct SkillReviewSheet: View {
     }
 }
 
-/// A skill's full text, read-only.
+/// A skill's SKILL.md in the shared markdown editor: view by default, Edit, Save.
 struct SkillTextSheet: View {
     @Environment(\.themePalette) var themePalette
     let sheet: SkillSheet
     @ObservedObject var model: BotSkillsModel
 
+    @State private var editing = false
+    @State private var name: String = ""
+    @State private var description: String = ""
+    @State private var instructions: String = ""
+    @State private var currentText: String = ""
+    @State private var changedAfterReview = false
+    @State private var reviewedText: String?
+    @State private var reviewingChanges = false
+    @State private var loaded = false
+
     var body: some View {
         NavigationStack {
             ThemedList {
-                Text(verbatim: sheet.text)
-                    .font(Theme.mono(12))
-                    .foregroundStyle(Theme.textPrimary)
-                    .textSelection(.enabled)
-                    .accessibilityLabel(Text(String(localized: "Full SKILL.md for \(sheet.skill.name)")))
-                    .accessibilityIdentifier("skill-text")
+                if changedAfterReview {
+                    Section {
+                        Text(String(localized: "stored SKILL.md changed after review - enablement is blocked"))
+                            .font(.footnote)
+                            .foregroundStyle(Theme.warning)
+                        Button(String(localized: "Review changes")) { reviewingChanges = true }
+                            .accessibilityIdentifier("skill-review-changes")
+                    }
+                }
+                if reviewingChanges {
+                    Section {
+                        Text(String(localized: "Reviewed"))
+                            .font(.footnote)
+                            .foregroundStyle(Theme.textSecondary)
+                        Text(verbatim: reviewedText ?? "")
+                            .font(Theme.mono(12))
+                            .textSelection(.enabled)
+                        Text(String(localized: "Current"))
+                            .font(.footnote)
+                            .foregroundStyle(Theme.textSecondary)
+                        Text(verbatim: currentText.isEmpty ? sheet.text : currentText)
+                            .font(Theme.mono(12))
+                            .textSelection(.enabled)
+                    }
+                } else {
+                    Section {
+                        TextField(String(localized: "Name"), text: $name)
+                            .disabled(!editing)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        TextField(String(localized: "Description"), text: $description, axis: .vertical)
+                            .disabled(!editing)
+                            .lineLimit(2...4)
+                    }
+                    Section {
+                        MarkdownEditor(
+                            text: $instructions,
+                            placeholder: String(localized: "Instructions"),
+                            minHeight: 220,
+                            accessibilityLabel: String(localized: "Instructions"),
+                            identifier: "skill-text"
+                        )
+                        .disabled(!editing)
+                        .accessibilityIdentifier("skill-text")
+                    }
+                }
+                if !model.error.isEmpty {
+                    Section {
+                        Text(verbatim: model.error).font(.footnote).foregroundStyle(Theme.danger)
+                    }
+                }
             }
-            .navigationTitle(Text(verbatim: sheet.skill.name))
+            .navigationTitle(Text(verbatim: DisplayHygiene.skillTitle(sheet.skill)))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button(String(localized: "Close")) { model.viewing = nil }
+                        .disabled(model.working == sheet.skill.name)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if reviewingChanges {
+                        Menu {
+                            Button(String(localized: "Accept")) {
+                                Task { _ = await model.reviewSkill(sheet.skill, action: "accept") }
+                            }
+                            Button(String(localized: "Revert"), role: .destructive) {
+                                Task { _ = await model.reviewSkill(sheet.skill, action: "revert") }
+                            }
+                        } label: {
+                            Text(String(localized: "Review changes"))
+                        }
+                        .disabled(model.working == sheet.skill.name)
+                    } else if editing {
+                        Button(String(localized: "Save")) {
+                            Task {
+                                if await model.saveSkill(sheet.skill, name: name, description: description, instructions: instructions) {
+                                    editing = false
+                                }
+                            }
+                        }
+                        .disabled(model.working == sheet.skill.name || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("skill-save")
+                    } else {
+                        Button(String(localized: "Edit")) { editing = true }
+                            .accessibilityIdentifier("skill-edit")
+                    }
+                }
+            }
+            .task {
+                guard !loaded else { return }
+                loaded = true
+                editing = sheet.startEditing
+                if let client = model.client,
+                   let payload = try? await client.skillEditor(botId: model.botId, name: sheet.skill.name) {
+                    name = payload.name
+                    description = payload.description
+                    currentText = payload.text
+                    instructions = Self.body(from: payload.text)
+                    changedAfterReview = payload.changedAfterReview
+                    reviewedText = payload.reviewedText
+                } else {
+                    name = sheet.skill.name
+                    description = sheet.skill.description
+                    currentText = sheet.text
+                    instructions = Self.body(from: sheet.text)
                 }
             }
         }
+    }
+
+    /// SKILL.md body after the frontmatter block.
+    private static func body(from text: String) -> String {
+        guard text.hasPrefix("---"),
+              let end = text.range(of: "\n---\n") else { return text }
+        return String(text[end.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -352,8 +524,15 @@ struct OrgSkillsSection: View {
                     ForEach(offer.skills) { skill in
                         HStack(spacing: 10) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(verbatim: skill.name).font(Theme.mono(13)).foregroundStyle(Theme.textPrimary)
-                                Text(verbatim: skill.description).font(.system(size: 12)).foregroundStyle(Theme.textSecondary).lineLimit(2)
+                                let title = skill.description.trimmingCharacters(in: .whitespacesAndNewlines)
+                                Text(verbatim: title.isEmpty ? skill.name.replacingOccurrences(of: "-", with: " ") : title)
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(Theme.textPrimary)
+                                    .lineLimit(2)
+                                Text(verbatim: skill.name)
+                                    .font(Theme.mono(11))
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .lineLimit(1)
                                 Text(String(localized: "\(skill.packageName) \(skill.release) · \(skill.publisher)"))
                                     .font(.system(size: 11)).foregroundStyle(Theme.textSecondary).lineLimit(1)
                             }

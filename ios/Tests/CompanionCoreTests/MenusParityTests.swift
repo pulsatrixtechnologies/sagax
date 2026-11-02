@@ -19,12 +19,16 @@ final class MenusParityTests: XCTestCase {
     func testTheOwnerGetsTheDesktopMenuInOrder() throws {
         let mine = try bot("mine", owner: "pr_me")
         let plan = BotActionsMenuPlan(gate: SurfaceGate(scope: .serverAdmin), bot: mine, viewerId: "pr_me",
-                                      editable: true, zipExport: true, activeBotCount: 3)
-        XCTAssertEqual(plan.groups, [
-            [.editBot, .rename, .makePrimary],
+                                      editable: true, zipExport: true, activeBotCount: 3, wizard: true)
+        // Lot 6: Edit bot and Rename left; Redo the wizard and Delete joined.
+        let expected: [[BotActionsMenuItem]] = [
+            [.makePrimary, .redoWizard],
             [.copyConversation, .downloadConversation, .exportZip],
-            [.archive],
-        ])
+            [.archive, .delete],
+        ]
+        XCTAssertEqual(plan.groups, expected)
+        XCTAssertFalse(plan.items.contains(.editBot))
+        XCTAssertFalse(plan.items.contains(.rename))
         XCTAssertNil(plan.archiveBlock)
         XCTAssertTrue(plan.enables(.archive))
     }
@@ -36,17 +40,19 @@ final class MenusParityTests: XCTestCase {
         XCTAssertTrue(plan.items.contains(.replacePrimary))
         XCTAssertFalse(plan.items.contains(.makePrimary))
         XCTAssertFalse(plan.items.contains(.exportZip))
+        XCTAssertTrue(plan.items.contains(.delete))
         XCTAssertEqual(plan.archiveBlock, .primary)
         XCTAssertFalse(plan.enables(.archive))
     }
 
-    func testTheLastActiveBotStaysAndAClientCannotRenameAnotherOnesBot() throws {
+    func testTheLastActiveBotStaysAndAClientCannotDeleteAnotherOnesBot() throws {
         let theirs = try bot("theirs", owner: "pr_other")
         let plan = BotActionsMenuPlan(gate: SurfaceGate(scope: .serverClient), bot: theirs, viewerId: "pr_me",
                                       editable: false, zipExport: false, activeBotCount: 1)
         XCTAssertFalse(plan.items.contains(.editBot))
         XCTAssertFalse(plan.items.contains(.rename))
         XCTAssertFalse(plan.items.contains(.makePrimary))
+        XCTAssertFalse(plan.items.contains(.delete), "another member's bot stays theirs")
         XCTAssertEqual(plan.items.prefix(2), [.copyConversation, .downloadConversation])
         if plan.items.contains(.archive) { XCTAssertEqual(plan.archiveBlock, .lastActive) }
     }

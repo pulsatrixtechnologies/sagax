@@ -63,6 +63,25 @@ public struct BotProfileEdit: Encodable, Equatable, Sendable {
         color: "green", mascotLook: .owl, mascotSkin: MascotSkin.none, avatarCrop: .mascot, avatarUrl: .clear
     )
 
+    /// Lot 9: the Avatar sheet keeps a local draft until Done. Builds the
+    /// PATCH from the baseline look to the draft; `clearsPicture` is set when
+    /// the person tapped Reset (picture goes with the default look).
+    public static func lookDiff(
+        fromColor: String, fromLook: MascotLook, fromSkin: MascotSkin,
+        toColor: String, toLook: MascotLook, toSkin: MascotSkin,
+        clearsPicture: Bool
+    ) -> BotProfileEdit {
+        var edit = BotProfileEdit()
+        if toColor != fromColor { edit.color = toColor }
+        if toLook != fromLook { edit.mascotLook = toLook }
+        if toSkin != fromSkin { edit.mascotSkin = toSkin }
+        if clearsPicture {
+            edit.avatarCrop = .mascot
+            edit.avatarUrl = .clear
+        }
+        return edit
+    }
+
     public var isEmpty: Bool {
         color == nil && mascotLook == nil && mascotSkin == nil && avatarCrop == nil && avatarZoom == nil
             && avatarFocusX == nil && avatarFocusY == nil && avatarUrl == nil && notifications == nil && soul == nil && voiceNotes == nil

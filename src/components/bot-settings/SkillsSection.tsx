@@ -4,22 +4,27 @@
 // its nested review dialog raised from z-[80] to z-[90] to float above this
 // dialog's own z-50, plus: an Import from GitHub row, a static "when it's
 // used" line on every row (learned skills have no triggers to show), and a
-// read-only click-through view of a skill's full text.
-import { ArrowUpRight, Trash2 } from "lucide-react";
+// click-through skill editor (MarkdownEditor, same as MEMORY.md / RULES.md).
+import { ArrowUpRight, Ellipsis, Eye, Pencil, Share2, Trash2 } from "lucide-react";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { t } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 
 import { useStore, type Bot } from "@/state/store";
 import { useBotEditor } from "./BotEditorContext";
 import { skillAuthoringEnabled, skillsLibraryEnabled } from "@/lib/feature-flags";
+import { skillSourceLabel } from "@/lib/skills-ui";
 import { viewerBotsReadOnly } from "@/lib/viewer";
-import { DIALOG, DialogCloseButton, PILL, PillSelect, PRIMARY_PILL, Switch } from "../SettingsPrimitives";
+import { PILL, PillSelect, PRIMARY_PILL, Switch } from "../SettingsPrimitives";
 import { inputCls } from "./field";
 import { cn } from "@/lib/cn";
 import { PaneEmpty, PaneSection } from "./PaneSection";
 import { OrgSkillsCard } from "./OrgSkillsCard";
 import { SkillUpload } from "./SkillUpload";
 import { WriteCommandCard } from "./WriteCommandCard";
+import { PanelPage } from "./PanelPage";
+import { MenuItem, PopoverMenu } from "./FilesSection";
+import { SkillEditorPage, type SkillEditorTarget } from "./SkillEditorPage";
 
 export interface ManagedSkill {
   name: string;
@@ -51,6 +56,7 @@ interface StagedSkillSummary {
  * one on fetches its integrity-checked text and waits for an explicit review
  * (`reviewing` + `enableReviewed`) before it can reach the bot's prompt. */
 export function useManagedSkills(bot: Bot) {
+  const confirm = useConfirm();
   const { request: api } = useBotEditor();
   const [skills, setSkills] = useState<ManagedSkill[]>([]);
   const [assignedSkills, setAssignedSkills] = useState<string[]>([]);
@@ -204,7 +210,11 @@ export function useManagedSkills(bot: Bot) {
 
   const unshare = async (skill: ManagedSkill) => {
     if (assignmentBusy.current || (skill.origin !== "me" && skill.origin !== "library")) return;
-    if (!window.confirm(t("botPanel.skills.unshareConfirm", { name: skill.name }))) return;
+    if (!(await confirm({
+      title: t("botPanel.skills.unshareConfirm", { name: skill.name }),
+      confirmLabel: t("botPanel.skills.unshare"),
+      tone: "danger",
+    }))) return;
     assignmentBusy.current = true;
     setWorking(skill.name);
     setError("");
@@ -230,8 +240,8 @@ export function useManagedSkills(bot: Bot) {
   };
 }
 
-/** The review step before a skill is switched on: its full SKILL.md, with
- * Escape and a focus trap, layered above the settings panel. */
+/** The review step before a skill is switched on: full SKILL.md as a pushed
+ * page in the bot panel. Escape goes back. */
 export function SkillReviewDialog({
   skill,
   text,
@@ -239,6 +249,7 @@ export function SkillReviewDialog({
   working,
   onCancel,
   onEnable,
+  onPanelClose,
 }: {
   skill: ManagedSkill;
   text: string;
@@ -246,95 +257,49 @@ export function SkillReviewDialog({
   working: boolean;
   onCancel: () => void;
   onEnable: () => void;
+  onPanelClose?: () => void;
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const cancel = useRef(onCancel);
-  cancel.current = onCancel;
-
-  useEffect(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const dialog = dialogRef.current;
-    const parentDialog = dialog?.parentElement?.closest<HTMLElement>('[role="dialog"]');
-    dialog?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        if (!working) cancel.current();
-      }
-      if (event.key !== "Tab" || !dialog) return;
-      const controls = dialog.querySelectorAll<HTMLElement>('button:not([disabled]), [tabindex="0"]');
-      const first = controls[0];
-      const last = controls[controls.length - 1];
-      if (!first || !last) return;
-      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      if (previousFocus && previousFocus !== document.body && previousFocus.isConnected) previousFocus.focus();
-      else parentDialog?.focus();
-    };
-  }, [working]);
-
   return (
-    <div
-      ref={dialogRef}
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="skill-review-title"
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-6"
-    >
-      <div className={cn(DIALOG.frame, DIALOG.width.xl, "max-h-[min(760px,90vh)] p-5")}>
-        <div id="skill-review-title" className={DIALOG.title}>
-          {t("botPanel.skills.reviewTitle", { name: skill.name })}
-        </div>
-        <div className="mt-1 break-all text-[11.5px] text-ink-secondary">
-          {t("botPanel.skills.source", { source: skill.source })}
-        </div>
-        {skill.warnings.length > 0 && (
-          <div className="mt-2 rounded-lg bg-warning/10 px-3 py-2 text-[11.5px] text-warning">
-            {skill.warnings.join(" · ")}
-          </div>
-        )}
-        <pre
-          tabIndex={0}
-          aria-label={t("botPanel.skills.fullText", { name: skill.name })}
-          className="mt-3 min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-inset p-3 font-mono text-[12px] leading-relaxed text-ink"
-        >
-          {text}
-        </pre>
-        {error && <div role="alert" className="mt-2 text-[12px] text-danger">{error}</div>}
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            disabled={working}
-            onClick={onCancel}
-            className={PILL}
-          >
+    <PanelPage
+      name={t("botPanel.skills.reviewTitle", { name: skill.name })}
+      onBack={() => { if (!working) onCancel(); }}
+      onClose={onPanelClose ?? (() => { if (!working) onCancel(); })}
+      data-skill-review-page=""
+      bodyClassName="flex flex-col px-4 py-4"
+      footer={
+        <>
+          <span className="flex-1" />
+          <button type="button" disabled={working} onClick={onCancel} className={PILL}>
             {t("common.cancel")}
           </button>
-          <button
-            type="button"
-            disabled={working}
-            onClick={onEnable}
-            className={PRIMARY_PILL}
-          >
+          <button type="button" disabled={working} onClick={onEnable} className={PRIMARY_PILL}>
             {t("botPanel.skills.enableReviewed")}
           </button>
-        </div>
+        </>
+      }
+    >
+      <div className="break-all text-[12px] text-ink-secondary">
+        {t("botPanel.skills.source", { source: skill.source })}
       </div>
-    </div>
+      {skill.warnings.length > 0 && (
+        <div className="mt-2 rounded-lg bg-warning/10 px-3 py-2 text-[12px] text-warning">
+          {skill.warnings.join(" · ")}
+        </div>
+      )}
+      <pre
+        tabIndex={0}
+        aria-label={t("botPanel.skills.fullText", { name: skill.name })}
+        className="mt-3 min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-inset p-3 font-mono text-[12px] leading-relaxed text-ink"
+      >
+        {text}
+      </pre>
+      {error && <div role="alert" className="mt-2 text-[12px] text-danger">{error}</div>}
+    </PanelPage>
   );
 }
 
 export function SkillsSection({ bot }: { bot: Bot }) {
+  const confirm = useConfirm();
   const { request: api } = useBotEditor();
   const { state, dispatch } = useStore();
   const featureEnabled = skillAuthoringEnabled(state.config);
@@ -348,53 +313,27 @@ export function SkillsSection({ bot }: { bot: Bot }) {
     share, unshare,
     libraryPool, addFromLibrary, setAddFromLibrary, assignmentBusy, putAssignments, addToBot,
   } = useManagedSkills(bot);
-  const [viewing, setViewing] = useState<{ name: string; text: string } | null>(null);
+  const [editing, setEditing] = useState<SkillEditorTarget | null>(null);
   const [source, setSource] = useState("");
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState("");
-  const skillDialogRef = useRef<HTMLDivElement>(null);
-  const skillDialogOpen = Boolean(viewing);
+  const closePanel = () => {
+    dispatch({ type: "toggleSettings", open: false });
+    dispatch({ type: "toggleComputer", open: false });
+  };
 
   useEffect(() => {
-    if (!skillDialogOpen) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const dialog = skillDialogRef.current;
-    const parentDialog = dialog?.parentElement?.closest<HTMLElement>('[role="dialog"]');
-    dialog?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        if (!working) setViewing(null);
-      }
-      if (event.key !== "Tab" || !dialog) return;
-      const controls = dialog.querySelectorAll<HTMLElement>('button:not([disabled]), [tabindex="0"]');
-      const first = controls[0];
-      const last = controls[controls.length - 1];
-      if (!first || !last) return;
-      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      if (previousFocus && previousFocus !== document.body && previousFocus.isConnected) previousFocus.focus();
-      else parentDialog?.focus();
-    };
-  }, [skillDialogOpen, working]);
-
-  useEffect(() => {
-    setViewing(null);
+    setEditing(null);
   }, [bot.id]);
 
   const remove = async (skill: ManagedSkill) => {
     if (skill.origin === "library") {
       if (assignmentBusy.current) return;
-      if (!window.confirm(`Unassign “${skill.name}” from this bot? The skill stays in the library.`)) return;
+      if (!(await confirm({
+        title: t("botPanel.skills.unassignConfirm", { name: skill.name }),
+        confirmLabel: t("botPanel.skills.removeTitle"),
+        tone: "danger",
+      }))) return;
       assignmentBusy.current = true;
       setWorking(skill.name);
       setError("");
@@ -412,7 +351,11 @@ export function SkillsSection({ bot }: { bot: Bot }) {
       await unshare(skill);
       return;
     }
-    if (!window.confirm(`Remove the learned skill “${skill.name}”?`)) return;
+    if (!(await confirm({
+      title: t("botPanel.skills.removeLearnedConfirm", { name: skill.name }),
+      confirmLabel: t("botPanel.skills.removeTitle"),
+      tone: "danger",
+    }))) return;
     setWorking(skill.name);
     setError("");
     try {
@@ -425,25 +368,17 @@ export function SkillsSection({ bot }: { bot: Bot }) {
     }
   };
 
-  const view = async (skill: ManagedSkill) => {
-    setError("");
-    try {
-      const path = skill.origin === "library"
-        ? `/api/skills-library/${encodeURIComponent(skill.name)}`
-        : skill.origin === "me"
-          ? `/api/me/skills-library/${encodeURIComponent(skill.name)}`
-          : `/api/bots/${bot.id}/skills/${encodeURIComponent(skill.name)}`;
-      const result = (await api(path)) as { text?: string };
-      setViewing({ name: skill.name, text: result.text ?? "" });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("botPanel.skills.viewError"));
-    }
+  const openSkill = (skill: ManagedSkill, startEditing = false) => {
+    setEditing({ name: skill.name, origin: skill.origin, startEditing });
   };
 
   const originLabel = (skill: ManagedSkill) => {
     if (skill.origin === "me" || skill.origin === "library") return t("botPanel.skills.originShared");
     return t("botPanel.skills.originPrivate");
   };
+
+  const changedAfterReview = (skill: ManagedSkill) =>
+    skill.warnings.some((warning) => warning.includes("changed after review"));
 
   const importSkill = async () => {
     const trimmed = source.trim();
@@ -499,7 +434,7 @@ export function SkillsSection({ bot }: { bot: Bot }) {
             ) : (
               <div className="text-[12px] text-ink-secondary">{t("botPanel.skills.allAssigned")}</div>
             )}
-            {/* The library itself (new, edit, delete) is in Connect apps. */}
+            {/* The library itself (new, edit, delete) lives in Connect apps > Installed. */}
             <button
               type="button"
               data-manage-in-connect-apps="skills"
@@ -509,7 +444,7 @@ export function SkillsSection({ bot }: { bot: Bot }) {
               }}
               className="flex items-center gap-1 self-start rounded-lg px-1 py-1 text-[12.5px] font-medium text-accent-text hover:underline"
             >
-              {t("botAccess.manageInConnectApps")} <ArrowUpRight size={13} aria-hidden="true" />
+              {t("botPanel.skills.manageInConnectApps")} <ArrowUpRight size={13} aria-hidden="true" />
             </button>
 
           </div>
@@ -554,12 +489,13 @@ export function SkillsSection({ bot }: { bot: Bot }) {
         ) : (
           <div className="-mx-3.5 mt-3 divide-y divide-hairline/40 border-t border-hairline/40">
             {skills.map((skill) => (
-              <div key={skill.name} className="px-3.5 py-2.5">
+              <div key={skill.name} className="px-3.5 py-2.5" data-skill-row={skill.name}>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => void view(skill)}
+                    onClick={() => openSkill(skill)}
                     className="min-w-0 flex-1 text-left"
+                    data-skill-open={skill.name}
                   >
                     <div className="flex min-w-0 items-center gap-1.5">
                       <div className="truncate font-mono text-[12.5px] text-ink">{skill.name}</div>
@@ -579,51 +515,73 @@ export function SkillsSection({ bot }: { bot: Bot }) {
                         disabled={Boolean(working)}
                         onClick={() => void toggle(skill)}
                       />
-                      <button
-                        aria-label={t("botPanel.skills.removeAria", { name: skill.name })}
-                        title={t("botPanel.skills.removeTitle")}
-                        disabled={Boolean(working)}
-                        onClick={() => void remove(skill)}
-                        className="flex size-8 shrink-0 items-center justify-center rounded-md text-ink-secondary hover:bg-danger/10 hover:text-danger disabled:opacity-40"
+                      <PopoverMenu
+                        label={t("botPanel.skills.rowMenu", { name: skill.name })}
+                        menuLabel={t("botPanel.skills.rowMenu", { name: skill.name })}
+                        icon={<Ellipsis size={15} />}
+                        buttonClass="flex size-8 shrink-0 items-center justify-center rounded-md text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-40"
+                        data-skill-row-menu={skill.name}
                       >
-                        <Trash2 size={15} />
-                      </button>
+                        {(close) => (
+                          <>
+                            <MenuItem icon={<Eye size={14} />} label={t("botPanel.skills.open")} onClick={() => { close(); openSkill(skill); }} />
+                            <MenuItem icon={<Pencil size={14} />} label={t("botPanel.skills.edit")} onClick={() => { close(); openSkill(skill, true); }} />
+                            {libraryOn && skill.origin === "private" && (
+                              <MenuItem
+                                icon={<Share2 size={14} />}
+                                label={t("botPanel.skills.shareMe")}
+                                disabled={Boolean(working)}
+                                onClick={() => { close(); void share(skill, "me"); }}
+                              />
+                            )}
+                            {libraryOn && (skill.origin === "me" || skill.origin === "library") && (
+                              <MenuItem
+                                icon={<Share2 size={14} />}
+                                label={t("botPanel.skills.unshare")}
+                                disabled={Boolean(working)}
+                                onClick={() => { close(); void unshare(skill); }}
+                              />
+                            )}
+                            <MenuItem
+                              icon={<Trash2 size={14} />}
+                              label={t("botPanel.skills.removeTitle")}
+                              disabled={Boolean(working)}
+                              onClick={() => { close(); void remove(skill); }}
+                            />
+                          </>
+                        )}
+                      </PopoverMenu>
                     </>
                   )}
                 </div>
-                <div className="mt-1 truncate text-[10.5px] text-ink-secondary" title={skill.source}>{t("botPanel.skills.source", { source: skill.source })}</div>
+                {skill.source && (
+                  <details className="mt-1 text-[10.5px] text-ink-secondary" data-skill-source={skill.name}>
+                    <summary className="cursor-pointer select-none">
+                      {t("botPanel.skills.sourceLabel", { label: skillSourceLabel(skill.source) })}
+                    </summary>
+                    <p className="mt-0.5 break-all font-mono text-[10px]" title={skill.source}>{skill.source}</p>
+                  </details>
+                )}
                 {libraryOn && (skill.origin === "me" || skill.origin === "library") && skill.assignedBots && skill.assignedBots.length > 0 && (
                   <div className="mt-1 text-[10.5px] text-ink-secondary">
                     {t("botPanel.skills.sharedWith", { bots: skill.assignedBots.map((entry) => entry.name).join(", ") })}
                   </div>
                 )}
-                {skillWrites && libraryOn && skill.origin === "private" && (
-                  <div className="mt-1.5 flex flex-wrap gap-2">
+                {changedAfterReview(skill) ? (
+                  <div className="mt-1 text-[10.5px] text-warning" data-skill-warning={skill.name}>
+                    <span>{t("botPanel.skills.changedAfterReview")}</span>
+                    {" · "}
                     <button
                       type="button"
-                      disabled={Boolean(working)}
-                      onClick={() => void share(skill, "me")}
-                      className="rounded-lg bg-control px-2.5 py-1 text-[11.5px] text-ink hover:bg-raised-hover disabled:opacity-50"
+                      className="font-medium text-accent-text hover:underline"
+                      onClick={() => openSkill(skill)}
                     >
-                      {t("botPanel.skills.shareMe")}
+                      {t("botPanel.skills.reviewChanges")}
                     </button>
                   </div>
-                )}
-                {skillWrites && libraryOn && (skill.origin === "me" || skill.origin === "library") && (
-                  <div className="mt-1.5">
-                    <button
-                      type="button"
-                      disabled={Boolean(working)}
-                      onClick={() => void unshare(skill)}
-                      className="rounded-lg bg-control px-2.5 py-1 text-[11.5px] text-ink hover:bg-raised-hover disabled:opacity-50"
-                    >
-                      {t("botPanel.skills.unshare")}
-                    </button>
-                  </div>
-                )}
-                {skill.warnings.length > 0 && (
+                ) : skill.warnings.length > 0 ? (
                   <div className="mt-1 text-[10.5px] text-warning">{skill.warnings.join(" · ")}</div>
-                )}
+                ) : null}
               </div>
             ))}
           </div>
@@ -648,32 +606,18 @@ export function SkillsSection({ bot }: { bot: Bot }) {
           working={working === reviewing.skill.name}
           onCancel={() => setReviewing(null)}
           onEnable={() => void enableReviewed()}
+          onPanelClose={closePanel}
         />
       )}
 
-      {viewing && (
-        <div
-          ref={skillDialogRef}
-          tabIndex={-1}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="skill-view-title"
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-6"
-        >
-          <div className={cn(DIALOG.frame, DIALOG.width.xl, "max-h-[min(760px,90vh)] p-5")}>
-            <DialogCloseButton label={t("botPanel.skills.close")} onClick={() => setViewing(null)} />
-            <div className="pr-10">
-              <div id="skill-view-title" className={DIALOG.title}>{viewing.name}</div>
-            </div>
-            <pre
-              tabIndex={0}
-              aria-label={t("botPanel.skills.fullText", { name: viewing.name })}
-              className="mt-3 min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-inset p-3 font-mono text-[12px] leading-relaxed text-ink"
-            >
-              {viewing.text}
-            </pre>
-          </div>
-        </div>
+      {editing && (
+        <SkillEditorPage
+          botId={bot.id}
+          target={editing}
+          onClose={() => setEditing(null)}
+          onPanelClose={closePanel}
+          onSaved={() => void refresh()}
+        />
       )}
     </div>
   );

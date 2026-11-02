@@ -1,13 +1,22 @@
 import { Children, createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WebhookTrigger } from "@/lib/webhooks";
 
-const fixture = vi.hoisted(() => ({ api: vi.fn(), dispatch: vi.fn() }));
+const fixture = vi.hoisted(() => ({
+  api: vi.fn(),
+  dispatch: vi.fn(),
+  confirm: vi.fn(async () => true),
+}));
 vi.mock("@/state/store", () => ({
   api: fixture.api,
   useStore: () => ({ state: { webhookAttempts: [], routineRuns: [] }, dispatch: fixture.dispatch }),
+}));
+vi.mock("@/components/ConfirmProvider", () => ({
+  useConfirm: () => fixture.confirm,
+  confirmAsync: fixture.confirm,
+  discardConfirmRequest: (body?: string) => ({ title: "Close without saving?", body, confirmLabel: "Discard", tone: "danger" }),
 }));
 vi.mock("@/components/Avatar", () => ({ BotAvatar: () => createElement("span") }));
 import { TypedTriggerRow, automationText, draftFromConfig, pollerCredentialsInput, sourceEndpointUrl, typedSourceConfig, typedTriggerInput } from "./TypedTriggers";
@@ -44,9 +53,9 @@ function renderRow(webhook: WebhookTrigger, onSetup = vi.fn()) {
 beforeEach(() => {
   fixture.api.mockReset();
   fixture.dispatch.mockReset();
-  vi.stubGlobal("window", { confirm: () => true });
+  fixture.confirm.mockReset();
+  fixture.confirm.mockResolvedValue(true);
 });
-afterEach(() => vi.unstubAllGlobals());
 
 describe("typed trigger helpers", () => {
   it("parses comma-separated filters, drops unknown events, bounds the rate and keeps the tenant for Graph only", () => {
@@ -106,15 +115,14 @@ describe("TypedTriggerRow", () => {
   });
 
   it("asks before making a new generated secret and hands the new setup up once", async () => {
-    const confirm = vi.fn().mockReturnValueOnce(false).mockReturnValue(true);
-    vi.stubGlobal("window", { confirm });
+    fixture.confirm.mockResolvedValueOnce(false).mockResolvedValue(true);
     const onSetup = vi.fn();
     fixture.api.mockResolvedValue({ webhook: trigger(), sourceSetup: { endpointUrl: "https://hooks.example/sources/wh_abc", secret: "whsec_new" } });
     const { button } = renderRow(trigger(), onSetup);
     (button("New signing secret").props.onClick as () => void)();
     await flush();
     expect(fixture.api).not.toHaveBeenCalled();
-    expect(String(confirm.mock.calls[0])).toContain("stops working immediately");
+    expect(JSON.stringify(fixture.confirm.mock.calls[0])).toContain("stops working immediately");
     (button("New signing secret").props.onClick as () => void)();
     await flush();
     expect(fixture.api).toHaveBeenCalledWith("/api/webhooks/w1/rotate", { method: "POST" });

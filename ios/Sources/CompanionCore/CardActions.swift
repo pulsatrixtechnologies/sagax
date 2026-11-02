@@ -296,6 +296,7 @@ public enum ApprovalDockRules {
         messages.compactMap { message in
             guard message.kind == .options, message.ownerWait == nil, let card = message.card,
                   let requestId = card.requestId, let tool = card.tool,
+                  card.phoneCallConsent == nil,
                   card.answered == nil, card.dismissed != true, card.expired != true
             else { return nil }
             return PendingApproval(message: message, card: card, requestId: requestId, tool: tool)

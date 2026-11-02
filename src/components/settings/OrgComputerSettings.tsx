@@ -11,11 +11,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Circle, Loader2, X } from "lucide-react";
 
+import { confirmAsync, type ConfirmRequest } from "@/components/ConfirmProvider";
 import { cn } from "@/lib/cn";
 import { currentDesktop, type DesktopBridgeStatus } from "@/lib/desktop-bridge";
 import { installChoices, localVmAutoSetup, localVmProblemKey, localVmReady, localVmView, runtimeSummaryKey, type DesktopLocalVmStatus, type SetupStep } from "@/lib/desktop-local-vm";
 import { t } from "@/lib/i18n";
 import { loadServerEnvironment, resetServerEnvironment, type ServerEnvironmentStatus } from "@/lib/server-environment";
+
+type LooseConfirm = (request: ConfirmRequest | string) => Promise<boolean> | boolean;
+
+const defaultConfirm: LooseConfirm = (request) =>
+  confirmAsync(typeof request === "string" ? { title: request, confirmLabel: t("common.confirm"), tone: "danger" } : request);
 import { ServerComputerScreen, useDesktopLocalVm } from "../computer/OrgComputerTab";
 import { screenStateLabel } from "../computer/ComputerScreen";
 import { DANGER_PILL, DescribedRow, HelpTip, SettingsGroup } from "../SettingsPrimitives";
@@ -23,14 +29,14 @@ import { BotWorkplaceSettings } from "./BotWorkplaceSettings";
 import { LocalModelsSettings } from "./LocalModelsSettings";
 import { serverEnvironmentStateText } from "./MyServerEnvironment";
 
-export function OrgComputerSettings({ bridge, initialLocal = null, initialServer = null, confirm = (text: string) => window.confirm(text), localVmAllowed = true }: {
+export function OrgComputerSettings({ bridge, initialLocal = null, initialServer = null, confirm = defaultConfirm, localVmAllowed = true }: {
   bridge: DesktopBridgeStatus;
   /** False when the organization's policy turned the Local VM off: no
    * automatic setup then. */
   localVmAllowed?: boolean;
   initialLocal?: DesktopLocalVmStatus | null;
   initialServer?: ServerEnvironmentStatus | null;
-  confirm?: (text: string) => boolean;
+  confirm?: LooseConfirm;
 }) {
   const desktop = currentDesktop(bridge);
   return (
@@ -65,7 +71,7 @@ function pillClass(primary = false): string {
  * it checks, then runs the one-click setup by itself once when a check is
  * not ready and needs nothing from the person (localVmAutoSetup); the pill
  * goes away once every check is ready and comes back with the real error. */
-export function LocalVmCard({ bridge, initial, confirm, allowed = true }: { bridge: DesktopBridgeStatus; initial: DesktopLocalVmStatus | null; confirm: (text: string) => boolean; allowed?: boolean }) {
+export function LocalVmCard({ bridge, initial, confirm, allowed = true }: { bridge: DesktopBridgeStatus; initial: DesktopLocalVmStatus | null; confirm: LooseConfirm; allowed?: boolean }) {
   const desktop = currentDesktop(bridge);
   const connected = Boolean(desktop?.capabilities?.localVm);
   const vm = useDesktopLocalVm(connected, initial);
@@ -81,8 +87,12 @@ export function LocalVmCard({ bridge, initial, confirm, allowed = true }: { brid
     void vm.act("setup");
   }, [auto, vm.act]);
   const ready = localVmReady(vm.status, connected, vm.pending);
-  const oneClick = () => {
-    if (!confirm(t("localVm.consent.oneClick", { folder: vm.status?.workspace ?? "" }))) return;
+  const oneClick = async () => {
+    if (!(await confirm({
+      title: t("localVm.consent.oneClick", { folder: vm.status?.workspace ?? "" }),
+      confirmLabel: t("common.confirm"),
+      tone: "neutral",
+    }))) return;
     void vm.act("setup");
   };
   const description = !connected
@@ -131,7 +141,7 @@ export function LocalVmCard({ bridge, initial, confirm, allowed = true }: { brid
               {t("vm.main.recheck")}
             </button>
             {!ready && (
-              <button type="button" onClick={oneClick} disabled={vm.pending !== null || setup?.state === "running" || view.problem === "foreign"}
+              <button type="button" onClick={() => void oneClick()} disabled={vm.pending !== null || setup?.state === "running" || view.problem === "foreign"}
                 data-local-vm-setup="" className={cn(pillClass(true), "min-h-[44px] gap-1.5 md:min-h-0")}>
                 {setup?.state === "running" && <Loader2 size={13} aria-hidden="true" className="animate-spin" />}
                 {setup?.state === "error" ? t("localVm.retry") : view.repair ? t("localVm.repair") : t("localVm.setupOneClick")}
@@ -167,7 +177,7 @@ function StateDot({ tone }: { tone: "ok" | "bad" | "idle" }) {
 /** The person's server environment, as two rows of "Bots' computer":
  * its state and resources with its screen on demand, then Reset (a red
  * pill, after a confirmation), as the reference design's Update and Reset rows. */
-export function ServerEnvironmentCard({ initial = null, confirm = (text: string) => window.confirm(text) }: { initial?: ServerEnvironmentStatus | null; confirm?: (text: string) => boolean }) {
+export function ServerEnvironmentCard({ initial = null, confirm = defaultConfirm }: { initial?: ServerEnvironmentStatus | null; confirm?: LooseConfirm }) {
   const [status, setStatus] = useState<ServerEnvironmentStatus | null>(initial);
   const [showScreen, setShowScreen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -177,7 +187,11 @@ export function ServerEnvironmentCard({ initial = null, confirm = (text: string)
   };
   useEffect(() => { if (!initial) void load(); }, []);
   const reset = async () => {
-    if (!confirm(t("serverEnvironment.reset.confirm"))) return;
+    if (!(await confirm({
+      title: t("serverEnvironment.reset.confirm"),
+      confirmLabel: t("serverEnvironment.reset"),
+      tone: "danger",
+    }))) return;
     setBusy(true);
     setError("");
     try { setStatus(await resetServerEnvironment()); } catch { setError(t("serverEnvironment.reset.error")); await load(); } finally { setBusy(false); }

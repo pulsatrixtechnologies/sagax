@@ -337,12 +337,17 @@ export function RemoteDesktopPanel({ bot }: { bot: Bot }) {
         </div>
       </div>
       {creatingRoutine && (
-        <RoutineEditor
-          bots={[bot]}
-          lockedBotId={bot.id}
-          defaultRunOn={cloudRoutineReady ? "cloud" : "maus"}
-          onClose={() => setCreatingRoutine(false)}
-        />
+        // 2026-11-01 (lot 2): panel push inside this docked panel, not a
+        // centred window (same presentation as the bot panel's routines).
+        <div className="absolute inset-0 z-30 min-h-[24rem]">
+          <RoutineEditor
+            bots={[bot]}
+            lockedBotId={bot.id}
+            defaultRunOn={cloudRoutineReady ? "cloud" : "maus"}
+            presentation="panel"
+            onClose={() => setCreatingRoutine(false)}
+          />
+        </div>
       )}
     </aside>
   );

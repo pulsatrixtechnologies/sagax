@@ -1,4 +1,5 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { waitForLocalVmReady } from "@/lib/local-vm-readiness";
 import { isActiveTurnRefusal } from "@/lib/remote-desktop";
 import { api, type Bot } from "@/state/store";
@@ -36,6 +37,7 @@ export function useComputerActions(args: {
     setPending, setError, setBoatState, setResolvedComputerSelection, setPhase,
     setVmStatus, setVpsStatus, setRetry,
   } = args;
+  const confirm = useConfirm();
 
   const run = (kind: "sleep" | "provision") => {
     setPending(kind);
@@ -94,14 +96,15 @@ export function useComputerActions(args: {
   };
 
   const runVmAction = async (action: "vm-start" | "vm-create" | "vm-recreate" | "vm-delete") => {
-    if (
-      (action === "vm-recreate" || action === "vm-delete") &&
-      !window.confirm(
-        action === "vm-delete"
-          ? t("computer.confirm.deleteVm", { name: bot.name })
-          : t("computer.confirm.replaceVm", { name: bot.name }),
-      )
-    ) return;
+    if (action === "vm-recreate" || action === "vm-delete") {
+      const deleting = action === "vm-delete";
+      const ok = await confirm({
+        title: t(deleting ? "computer.confirm.deleteVm" : "computer.confirm.replaceVm", { name: bot.name }),
+        confirmLabel: t(deleting ? "common.delete" : "common.confirm"),
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
     if (vmActionController.current) return;
     const controller = new AbortController();
     vmActionController.current = controller;
@@ -148,7 +151,11 @@ export function useComputerActions(args: {
   };
 
   const replaceVpsComputer = async () => {
-    if (!window.confirm(t("computer.confirm.replaceVps", { name: bot.name }))) return;
+    if (!(await confirm({
+      title: t("computer.confirm.replaceVps", { name: bot.name }),
+      confirmLabel: t("computer.replaceVps"),
+      tone: "danger",
+    }))) return;
     setPending("vps-replace");
     setError(null);
     try {

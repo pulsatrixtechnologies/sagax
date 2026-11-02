@@ -356,7 +356,19 @@ struct ChatWidgetCard: View {
     private func press(_ ref: String) {
         guard let entry = form.actions[ref], form.pending == nil else { return }
         if entry.client {
-            // opens on this device and is never sent
+            if let place = entry.appAction {
+                // An in-app place opens here at once; the press is then
+                // recorded for the bot as already done (it starts no turn).
+                session.openWidgetAppAction(place, botId: botId)
+                Task {
+                    _ = await session.sendWidgetAction(
+                        botId: botId, threadId: threadId, messageId: messageId, ref: ref, rev: payload.rev,
+                        values: nil, sendId: UUID().uuidString.lowercased()
+                    )
+                }
+                return
+            }
+            // open_url: opens on this device and is never sent
             if let url = entry.url { openURL(url) }
             return
         }

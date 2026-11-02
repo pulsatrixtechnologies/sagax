@@ -1,6 +1,7 @@
 // What moves into a message's "more" menu, built the same way for 1:1 chats
 // and rooms, bot answers and the person's own bubbles.
 import { Ban, Code, Eye, Flag, Pencil, Pin, PinOff, RefreshCw, Square, UserCheck, Volume2 } from "lucide-react";
+import { confirmAsync } from "@/components/ConfirmProvider";
 import { t } from "@/lib/i18n";
 import type { ConfigStatus } from "@/state/store";
 import { ACTION_ICON, type MessageMenuItem } from "@/components/MessageActions";
@@ -93,10 +94,15 @@ export function useBotMessageMenu({
       label: t("chat.reportBug"),
       title: t("chat.reportBugTitle"),
       onSelect: () => {
-        openBugReport({
+        void openBugReport({
           excerpt: text,
           version: appVersion(),
-          confirm: (preview) => window.confirm(`${t("chat.reportBugConfirm")}\n\n${preview}`),
+          confirm: (preview) => confirmAsync({
+            title: t("chat.reportBugConfirm"),
+            body: preview,
+            confirmLabel: t("common.confirm"),
+            tone: "neutral",
+          }),
           open: (url) => { window.open(url, "_blank", "noopener"); },
         });
       },

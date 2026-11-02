@@ -1,8 +1,8 @@
 // A routine run opened like a bot-to-bot exchange (JC, 2026-11-01): the same
-// ExchangeSheet shell (header pill, chat bubbles, Close Chat), with the
+// ExchangeSheet shell (header pill, chat bubbles, round X to close), with the
 // routine's instruction as the opening line, tool steps in the transcript,
-// and Run again / Continue / Run logs / Configuration reachable from the
-// footer. Live runs poll activity and refresh the sheet.
+// and Continue / Stop / Run again / Run logs / Configuration in one opaque
+// footer band. Live runs poll activity and refresh the sheet.
 import { useMemo, useState } from "react";
 import { ChevronDown, History, Loader2, MessageSquareText, MoreHorizontal, RotateCcw, Settings2, Square } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -31,6 +31,7 @@ function RoutineRunExchangeSheet({
   onStop,
   onLogs,
   onOpenConfiguration,
+  onOpenRoom,
   working,
 }: {
   run: RoutineRun;
@@ -45,6 +46,7 @@ function RoutineRunExchangeSheet({
   onStop?: () => void;
   onLogs?: () => void;
   onOpenConfiguration?: () => void;
+  onOpenRoom?: (id: string) => void;
   working: boolean;
 }) {
   const { state, dispatch } = useStore();
@@ -53,6 +55,14 @@ function RoutineRunExchangeSheet({
   const canRunAgain = Boolean(routine && canRunRoutineNow(state.config, routine, bot));
   const inFlight = Boolean(routine && routineRunInFlight(state.routineRuns, routine.id));
   const canContinue = run.target === "bot";
+  // A team goal ran in its group: Continue is the group's thread.
+  const goalGroupId = run.target === "room-goal" ? run.groupId ?? routine?.groupId : undefined;
+  const openGroupThread = () => {
+    if (!goalGroupId) return;
+    if (run.threadId) dispatch({ type: "switchGroupTask", groupId: goalGroupId, threadId: run.threadId });
+    onOpenRoom?.(goalGroupId);
+    onClose();
+  };
   const [menuOpen, setMenuOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const exchange = useMemo(
@@ -85,8 +95,13 @@ function RoutineRunExchangeSheet({
     </span>
   );
 
+  // One row in the sheet's opaque footer band: Continue is the main action,
+  // Stop is a quiet destructive control (icon + label), then Run again and ….
+  // Narrow widths wrap without overlap.
+  const quietStop =
+    "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[12.5px] text-danger hover:bg-danger/10 disabled:opacity-50";
   const footer = (
-    <div data-routine-run-actions className="flex flex-col items-center gap-3 px-4">
+    <div data-routine-run-actions className="flex flex-col gap-3">
       {configOpen && (
         <div data-run-configuration-panel className="w-full max-w-[min(92%,36rem)] rounded-xl border border-hairline/40 bg-card px-4 py-3 text-left" onClick={(event) => event.stopPropagation()}>
           <RoutineConfiguration
@@ -100,22 +115,28 @@ function RoutineRunExchangeSheet({
         </div>
       )}
       <div className="flex flex-wrap items-center justify-center gap-2">
-        {live && onStop && (
-          <button type="button" data-run-stop onClick={onStop} disabled={working} className={cn(PILL, "gap-1.5 text-danger")}>
-            {working ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Square size={12} fill="currentColor" aria-hidden="true" />}
-            {t("routineRun.stop")}
+        {canContinue && (
+          <button type="button" data-run-continue onClick={openContinue} className={cn(PRIMARY_PILL, "gap-1.5")}>
+            <MessageSquareText size={13} aria-hidden="true" />
+            {t("routineRun.continue")}
+          </button>
+        )}
+        {goalGroupId && (
+          <button type="button" data-run-continue onClick={openGroupThread} className={cn(PRIMARY_PILL, "gap-1.5")}>
+            <MessageSquareText size={13} aria-hidden="true" />
+            {t("routineCalendar.openGroupThread")}
           </button>
         )}
         {!live && canRunAgain && onRunAgain && (
-          <button type="button" data-run-again onClick={onRunAgain} disabled={working || inFlight} title={inFlight ? t("routines.runNow.inFlight") : t("routineRun.runAgain")} className={cn(PRIMARY_PILL, "gap-1.5")}>
+          <button type="button" data-run-again onClick={onRunAgain} disabled={working || inFlight} title={inFlight ? t("routines.runNow.inFlight") : t("routineRun.runAgain")} className={cn(PILL, "gap-1.5")}>
             {working ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <RotateCcw size={13} aria-hidden="true" />}
             {t("routineRun.runAgain")}
           </button>
         )}
-        {canContinue && (
-          <button type="button" data-run-continue onClick={openContinue} className={cn(PILL, "gap-1.5")}>
-            <MessageSquareText size={13} aria-hidden="true" />
-            {t("routineRun.continue")}
+        {live && onStop && (
+          <button type="button" data-run-stop onClick={onStop} disabled={working} className={quietStop}>
+            {working ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Square size={12} fill="currentColor" aria-hidden="true" />}
+            {t("routineRun.stop")}
           </button>
         )}
         <div className="relative">
@@ -173,6 +194,7 @@ export function RoutineRunExchange({
   onStop,
   onLogs,
   onOpenConfiguration,
+  onOpenRoom,
   working = false,
 }: {
   run: RoutineRun;
@@ -183,6 +205,7 @@ export function RoutineRunExchange({
   onStop?: () => void;
   onLogs?: () => void;
   onOpenConfiguration?: () => void;
+  onOpenRoom?: (id: string) => void;
   working?: boolean;
 }) {
   const { state } = useStore();
@@ -205,6 +228,7 @@ export function RoutineRunExchange({
         onStop={onStop}
         onLogs={onLogs}
         onOpenConfiguration={onOpenConfiguration}
+        onOpenRoom={onOpenRoom}
         working={working}
       />
     )}</ConnectedRunActivity>

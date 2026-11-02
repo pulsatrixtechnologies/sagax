@@ -24,9 +24,10 @@
 // Every choice is written to the binding at once; the owner decides whether
 // that is a draft (create) or a save (profile).
 //
-// `section` draws one part only (the bot's Appearance sheet, track A,
-// 2026-10-28: a preview on top, then Mascot | Shape | Color | Skin as a
-// segmented control, one grid at a time). Nil draws every part, as above.
+// `section` draws one part only (legacy one-grid mode). Nil draws every
+// part as scrolling sections (Lot 9 Avatar: Mascot / Shape / Color / Skin
+// without a secondary segmented control). `showsSectionLabels` names each
+// part when they all scroll together.
 import PhotosUI
 import SwiftUI
 import CompanionCore
@@ -115,6 +116,8 @@ struct CharacterEditor: View {
     var metrics: Metrics = .createSheet
     /// The one part to draw; nil draws them all.
     var section: Section? = nil
+    /// Lot 9: when every part scrolls together, name each (Mascot, Shape, Color, Skin).
+    var showsSectionLabels = false
     /// The picture row (Upload, Remove): the profile shows it, create does not.
     var showsPhotoRow = false
     /// "Reset to default": the profile shows it, create does not.
@@ -152,6 +155,7 @@ struct CharacterEditor: View {
             let shown = shownCharacter
             let characterLines = Self.lines(characters, perRow: 5)
             if draws(.character) {
+                sectionLabel("Mascot", for: .character)
                 ForEach(characterLines.indices, id: \.self) { line in
                     row(count: characterLines[line].count, pitch: metrics.pitch, height: metrics.pitch) { index in
                         characterCell(characterLines[line][index], shown: shown)
@@ -160,37 +164,31 @@ struct CharacterEditor: View {
             }
 
             if draft.character == .shape && draws(.shape) {
-                // every shape, four to a row
-                let shapeLines = Self.lines(MascotShape.allCases, perRow: 4)
-                ForEach(shapeLines.indices, id: \.self) { line in
-                    row(count: shapeLines[line].count, pitch: metrics.pitch, height: metrics.pitch) { index in
-                        let shape = shapeLines[line][index]
-                        thumbnail(look: edited { $0.shape = shape; $0.avatarDef = ShapeAvatarPresets.byShape(shape) }, skin: .none, size: metrics.cell, selected: draft.complete.shape == shape, label: Text(verbatim: shape.rawValue)) {
-                            var next = draft.complete
-                            if let color = MascotShape.pickedColor(shape, from: next.shape, skin: next.shapeSkin) { draft.color = color }
-                            next.shape = shape
-                            // Object shapes carry their path preset; polar catalog clears a custom def.
-                            next.avatarDef = ShapeAvatarPresets.byShape(shape)
-                            draft.look = next.stored
-                        }
-                    }
-                }
-                if section == .shape {
-                    ShapeAvatarEditorPanel(draft: $draft)
-                        .padding(.top, 12)
-                        .padding(.horizontal, Theme.Metric.rowInset)
-                }
+                sectionLabel("Shape", for: .shape)
+                shapeGrid
             }
 
-            if draws(.skin) { skinRow }
+            // Lot 9 labeled scroll: Color then Skin. Create sheet keeps Skin
+            // then Color so the measured skinToColours spacing still holds.
+            if showsSectionLabels {
+                if draft.character != .trombi && draws(.colour) {
+                    sectionLabel("Color", for: .colour)
+                    colourRows.padding(.top, 8)
+                }
+                if draws(.skin) {
+                    sectionLabel("Skin", for: .skin)
+                    skinRow
+                }
+            } else {
+                if draws(.skin) { skinRow }
+                if draft.character != .trombi && draws(.colour) {
+                    colourRows
+                        .padding(.top, section == nil ? metrics.skinToColours - (metrics.skinRowHeight ?? metrics.pitch) / 2 - metrics.swatch / 2 : 8)
+                }
+            }
 
             if previewing {
                 previewCard.padding(.top, 10)
-            }
-
-            if draft.character != .trombi && draws(.colour) {
-                colourRows
-                    .padding(.top, section == nil ? metrics.skinToColours - (metrics.skinRowHeight ?? metrics.pitch) / 2 - metrics.swatch / 2 : 8)
             }
 
             if showsPhotoRow { photoRow.padding(.top, metrics.photoTopPadding) }
@@ -199,6 +197,40 @@ struct CharacterEditor: View {
         .padding(.top, metrics.topPadding)
         .frame(maxWidth: .infinity)
         .animation(.snappy(duration: 0.2), value: draft)
+    }
+
+    /// Every shape, four to a row, plus the shape panel when Shape is in view.
+    @ViewBuilder private var shapeGrid: some View {
+        let shapeLines = Self.lines(MascotShape.allCases, perRow: 4)
+        ForEach(shapeLines.indices, id: \.self) { line in
+            row(count: shapeLines[line].count, pitch: metrics.pitch, height: metrics.pitch) { index in
+                let shape = shapeLines[line][index]
+                thumbnail(look: edited { $0.shape = shape; $0.avatarDef = ShapeAvatarPresets.byShape(shape) }, skin: .none, size: metrics.cell, selected: draft.complete.shape == shape, label: Text(verbatim: shape.rawValue)) {
+                    var next = draft.complete
+                    if let color = MascotShape.pickedColor(shape, from: next.shape, skin: next.shapeSkin) { draft.color = color }
+                    next.shape = shape
+                    // Object shapes carry their path preset; polar catalog clears a custom def.
+                    next.avatarDef = ShapeAvatarPresets.byShape(shape)
+                    draft.look = next.stored
+                }
+            }
+        }
+    }
+
+    /// Lot 9: a named heading above each scrolling part. Hidden when the
+    /// editor shows only one part, or when the create sheet keeps a dense grid.
+    @ViewBuilder private func sectionLabel(_ title: LocalizedStringKey, for part: Section) -> some View {
+        if showsSectionLabels && section == nil {
+            Text(title)
+                .font(Theme.Font.labelMedium)
+                .foregroundStyle(Theme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Theme.Metric.rowInset)
+                .padding(.top, part == .character ? 0 : 16)
+                .padding(.bottom, 6)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("avatar-section.\(part.rawValue)")
+        }
     }
 
     /// What the bot wears now: always usable (MascotLookEditor.tsx).

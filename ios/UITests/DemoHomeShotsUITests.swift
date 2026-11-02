@@ -34,11 +34,12 @@ final class DemoHomeShotsUITests: XCTestCase {
         let name = app.buttons["chat-name"]
         XCTAssertTrue(name.waitForExistence(timeout: 10), "Pixel's chat")
         name.tap()
-        let computer = app.buttons["panel-tab.computer"].firstMatch
-        XCTAssertTrue(computer.waitForExistence(timeout: 10), "panel tabs")
+        let computer = app.descendants(matching: .any)["panel-overview.computer"].firstMatch
+        XCTAssertTrue(computer.waitForExistence(timeout: 10), "profile Computer row")
         computer.tap()
-        // the tab: asleep, waking or the live screen (Grok Bot, 2026-11-01)
-        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'panel-computer'")).firstMatch.waitForExistence(timeout: 10))
+        // Computer page: help, back, or the live/embedded screen (Lot 4)
+        let onComputer = app.descendants(matching: .any).matching(NSPredicate(format: "identifier == 'computer-help' OR identifier == 'computer-back' OR identifier BEGINSWITH 'panel-computer'")).firstMatch
+        XCTAssertTrue(onComputer.waitForExistence(timeout: 10))
         sleep(2)
         save("computer")
     }

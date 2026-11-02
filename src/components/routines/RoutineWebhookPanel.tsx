@@ -5,6 +5,7 @@
 // Automations panel uses), and the masked last four characters otherwise.
 // A routine saved without its webhook (made before 0.8.17) gets one here.
 import { useState } from "react";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { Check, Copy, Eye, EyeOff, Loader2, RotateCw, Terminal, Webhook } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
@@ -37,6 +38,7 @@ export function routineWebhookFor(webhooks: WebhookTrigger[], routineId: string 
 }
 
 export function RoutineWebhookPanel({ routine, bot }: { routine?: Routine; bot?: Bot }) {
+  const confirm = useConfirm();
   const { state, dispatch } = useStore();
   const webhook = routineWebhookFor(state.webhooks, routine?.id);
   const [credential, setCredential] = useState<WebhookCredential | null>(null);
@@ -59,7 +61,7 @@ export function RoutineWebhookPanel({ routine, bot }: { routine?: Routine; bot?:
 
   const fetchKey = async (rotate: boolean) => {
     if (!webhook) return;
-    if (rotate && !window.confirm(t("webhooks.confirmRotate"))) return;
+    if (rotate && !(await confirm({ title: t("webhooks.confirmRotate"), confirmLabel: t("common.confirm"), tone: "danger" }))) return;
     setWorking(rotate ? "rotate" : "reveal");
     setError("");
     try {

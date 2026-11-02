@@ -124,6 +124,8 @@ export interface PluginSources {
   /** Whop, an MCP server connected like an app (#2411): its server's name
    * once added, and whether it is signed in and on. */
   whop?: { description: string; server?: string; connected: boolean } | null;
+  /** Tailscale: the person's bot computer joins their private tailnet. */
+  tailscale?: { description: string; connected: boolean; pending?: boolean } | null;
   /** Cloud connectors of the xAI account (shared/grok-cloud-connectors.ts),
    * only when a Grok provider is set up. A catalog of names managed on
    * grok.com: never connected, never merged with an MCP server. */
@@ -139,6 +141,7 @@ export const isGrokConnector = (item: Pick<PluginItem, "source" | "key">) =>
   item.source === "grok" && item.key.startsWith(GROK_CONNECTOR_PREFIX);
 
 export const WHOP_KEY = "whop:whop";
+export const TAILSCALE_KEY = "tailscale:tailscale";
 
 /** The key of a marketplace plugin row. */
 export const marketplacePluginKey = (marketplace: string, plugin: string) => `plugin:${plugin}@${marketplace}`;
@@ -175,6 +178,7 @@ const KNOWN_APPS: ReadonlyArray<[RegExp, string, string?]> = [
   [/^canva$/, "canva.com"],
   [/^stripe$/, "stripe.com"],
   [/^context7$/, "context7.com"],
+  [/^tailscale$/, "tailscale.com"],
 ];
 
 /** MCP hosts that are not the provider's site (their favicon is a generic
@@ -257,6 +261,26 @@ export function buildPluginItems(sources: PluginSources): PluginItem[] {
       installed: sources.whop.connected,
       status: sources.whop.connected ? "connected" : "available",
       action: sources.whop.connected ? null : "connect",
+      source: "catalog",
+    });
+  }
+  if (sources.tailscale) {
+    items.push({
+      key: TAILSCALE_KEY,
+      kind: "featured",
+      id: "tailscale",
+      name: "Tailscale",
+      description: sources.tailscale.description,
+      domain: "tailscale.com",
+      category: "other",
+      recommended: true,
+      installed: sources.tailscale.connected || Boolean(sources.tailscale.pending),
+      status: sources.tailscale.connected
+        ? "connected"
+        : sources.tailscale.pending
+          ? "pending"
+          : "available",
+      action: sources.tailscale.connected || sources.tailscale.pending ? null : "connect",
       source: "catalog",
     });
   }
@@ -422,8 +446,8 @@ export function matchesFilter(item: PluginItem, filter: PluginFilter): boolean {
 
 export function matchesType(item: PluginItem, type: PluginTypeFilter): boolean {
   if (type === "any") return true;
-  if (type === "apps") return item.kind === "app" || item.key === WHOP_KEY;
-  if (type === "mcp") return item.kind === "mcp" || (item.kind === "featured" && item.key !== WHOP_KEY);
+  if (type === "apps") return item.kind === "app" || item.key === WHOP_KEY || item.key === TAILSCALE_KEY;
+  if (type === "mcp") return item.kind === "mcp" || (item.kind === "featured" && item.key !== WHOP_KEY && item.key !== TAILSCALE_KEY);
   if (type === "skills") return item.kind === "skill";
   return item.source === type.slice("source:".length) && !item.parent;
 }

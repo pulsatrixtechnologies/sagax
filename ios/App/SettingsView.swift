@@ -140,7 +140,7 @@ private struct SettingsRootPage: View {
         // button's 42), centred on one line.
         SettingsPage(
             leading: close.map { .close($0) } ?? .back,
-            contentTop: SettingsMetrics.headerInset + GlassCircleButton.Size.sheet.rawValue + 37,
+            contentTop: SettingsMetrics.headerClearance + 37,
             trailingFills: searching,
             trailing: {
                 // Grok Bot's sheet has the X alone (2026-11-01): search waits

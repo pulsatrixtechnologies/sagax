@@ -66,7 +66,8 @@ describe("the scope bar on every tab", () => {
     expect(group.getAttribute("aria-disabled")).toBe("true");
     expect(group.getAttribute("aria-describedby")).toBe("why");
     const options = [...host.querySelectorAll<HTMLButtonElement>("[data-plugins-scope-option]")];
-    expect(options).toHaveLength(2);
+    // bot + me + everyone (organization defaults on)
+    expect(options).toHaveLength(3);
     expect(options.every((option) => option.disabled)).toBe(true);
     // the scope in use is still the one marked
     expect(host.querySelector('[data-plugins-scope-option="bot"]')?.getAttribute("aria-checked")).toBe("true");

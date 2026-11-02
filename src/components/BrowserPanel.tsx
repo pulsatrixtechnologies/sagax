@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { ArrowLeft, ArrowRight, Bot as BotIcon, EllipsisVertical, Globe, Hand, Loader2, Plus, RotateCw, Square, UserRound, X } from "lucide-react";
 import { BrowserUnavailableNote } from "./SettingsLink";
 import { t } from "@/lib/i18n";
@@ -18,6 +19,9 @@ import { TeachStepsDialog } from "./TeachStepsDialog";
 import { onBrowserTeachRequest, takeBrowserTeach } from "@/lib/teach-request";
 import type { TeachStep } from "../../shared/teach-recording";
 import { readableError } from "@/lib/plain-error";
+import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { AnchoredPopover, useAnchoredDismissRoot } from "./AnchoredPopover";
+import { PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 
 interface BrowserTab { tabId: string; title: string; url: string; active: boolean }
 type ViewerFrame = BrowserFrame & { viewerId: string; generation: number };
@@ -38,6 +42,7 @@ export const BROWSER_START_URL = "https://www.google.com/";
  * view-only. `placeholder`: the preview's last picture, shown dimmed while
  * the live view connects, so the window never opens on an empty square. */
 export function LiveBrowser({ bot, control: allowed = true, placeholder, teach = false }: { bot: Bot; control?: boolean; placeholder?: string | undefined; teach?: boolean }) {
+  const confirm = useConfirm();
   const { state } = useStore();
   const [attempt, setAttempt] = useState(0);
   const [frame, setFrame] = useState<ViewerFrame | null>(null);
@@ -69,8 +74,11 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
   const generation = useRef(0);
   const pendingOperation = useRef<number | null>(null);
   const addressInput = useRef<HTMLInputElement>(null);
-  const profilesDialog = useRef<HTMLDialogElement>(null);
-  const typingDialog = useRef<HTMLDialogElement>(null);
+  const profilesButton = useRef<HTMLButtonElement>(null);
+  const profilesPopover = useRef<HTMLDivElement>(null);
+  const typingPopover = useRef<HTMLDivElement>(null);
+  const typingField = useRef<HTMLInputElement>(null);
+  const menuSummary = useRef<HTMLElement>(null);
   const inputQueue = useRef<ReturnType<typeof createBrowserInputQueue> | null>(null);
   const browserControl = useRef<ReturnType<typeof createBrowserControl> | null>(null);
   // The latest server control state, for callbacks that outlive a render.
@@ -93,11 +101,17 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
   const profileName = bot.browserProfile === "guest" ? t("browser.profile.temporary")
     : bot.browserProfile === "my-chrome" ? t("settings.profiles.myChrome")
     : state.config?.browserProfiles?.find((profile) => profile.id === bot.browserProfile)?.name ?? t("browser.profile.own", { name: bot.name });
-  useEffect(() => { if (showProfiles) profilesDialog.current?.showModal(); else profilesDialog.current?.close(); }, [showProfiles]);
+  // 2026-11-01 lot 7: profile and typing choices are anchored popovers on the bar.
+  const profilesDismiss = useAnchoredDismissRoot(profilesButton, profilesPopover);
+  const typingDismiss = useAnchoredDismissRoot(menuSummary, typingPopover);
+  usePopoverDismiss(showProfiles, profilesDismiss, () => setShowProfiles(false));
+  usePopoverDismiss(showTyping, typingDismiss, () => setShowTyping(false));
   useEffect(() => {
     // Typed text goes to the field the person picked, so keep control while they write it.
     browserControl.current?.hold(showTyping);
-    if (showTyping) typingDialog.current?.showModal(); else typingDialog.current?.close();
+    if (!showTyping || typeof requestAnimationFrame !== "function") return;
+    const frame = requestAnimationFrame(() => typingField.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [showTyping]);
 
   const action = useCallback(async (body: Record<string, unknown>, expected = viewer.current) => {
@@ -338,7 +352,7 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
         <button className={`${button} shrink-0`} disabled={!commandsReady} aria-label={t("browser.tab.new")} title={t("browser.tab.new")} onClick={() => command({ type: "tab-new" })}><Plus size={17} /></button>
       </div>
       {/* Profiles can't switch while this window holds the browser: opening them hands it back now, not after the idle wait. */}
-      <button className={`${button} rounded-xl bg-inset p-2`} title={t("browser.profile.current", { name: profileName })} aria-label={t("browser.profiles.open")} aria-expanded={showProfiles} onClick={() => { browserControl.current?.handBack(); setShowProfiles(true); }}><UserRound size={16} /></button>
+      <button ref={profilesButton} type="button" className={`${button} rounded-xl bg-inset p-2`} title={t("browser.profile.current", { name: profileName })} aria-label={t("browser.profiles.open")} aria-expanded={showProfiles} aria-haspopup="dialog" onClick={() => { browserControl.current?.handBack(); setShowProfiles((open) => !open); }}><UserRound size={16} /></button>
     </div>
     <form className="flex h-12 items-center gap-1 border-b border-hairline/40 px-2" onSubmit={(e) => { e.preventDefault(); const url = resolveAddressBarInput(address); if (commandsReady && url) command({ type: "navigate", url }); else if (address.trim()) setError(t("browser.address.invalid")); }}>
       <div className="flex shrink-0 items-center">
@@ -348,7 +362,7 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
       </div>
       <input ref={addressInput} aria-label={t("browser.address.label")} readOnly={!commandsReady} value={address} onChange={(e) => setAddress(e.target.value)} onFocus={(e) => { urlEditing.current = true; if (commandsReady) e.target.select(); }} onBlur={() => { urlEditing.current = false; }} placeholder={connected ? "about:blank" : t("browser.live.connecting")} spellCheck={false} className="mx-1 min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1.5 text-center text-[12px] outline-none placeholder:text-ink-secondary focus:bg-inset focus:text-left" />
       <details className="relative shrink-0">
-        <summary className={`${button} list-none cursor-pointer [&::-webkit-details-marker]:hidden`} aria-label={t("browser.menu.label")} title={t("browser.menu.label")}><EllipsisVertical size={17} /></summary>
+        <summary ref={menuSummary} className={`${button} list-none cursor-pointer [&::-webkit-details-marker]:hidden`} aria-label={t("browser.menu.label")} title={t("browser.menu.label")}><EllipsisVertical size={17} /></summary>
         <div className="absolute right-0 top-full z-20 mt-2 flex w-44 flex-col rounded-xl border border-hairline/50 bg-card p-1.5 text-[12px] shadow-xl">
           <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!typingReady} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setShowTyping(true); }}>{t("browser.menu.type")}</button>
           <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!connected} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setShowNetwork(true); }}>{t("browser.menu.network")}</button>
@@ -359,8 +373,14 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
           <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset" onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); reconnect(); }}>{t("browser.menu.reconnect")}</button>
           <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!connected || pending || taking} onClick={(e) => {
             e.currentTarget.closest("details")?.removeAttribute("open");
-            if (!window.confirm(t("browser.menu.restartConfirm"))) return;
-            void execute({ type: "restart" });
+            void (async () => {
+              // Confirm is async; a reconnect (or stream replace) while the
+              // dialog is open must cancel this restart for the old viewer.
+              const generationAtClick = generation.current;
+              if (!(await confirm({ title: t("browser.menu.restartConfirm"), confirmLabel: t("common.confirm"), tone: "neutral" }))) return;
+              if (generation.current !== generationAtClick) return;
+              void execute({ type: "restart" });
+            })();
           }}>{t("browser.menu.restart")}</button>
         </div>
       </details>
@@ -416,21 +436,65 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
         </span> : null}
       </div>
     </div>
-    <dialog ref={profilesDialog} onClose={() => setShowProfiles(false)} onClick={(e) => { if (e.target === e.currentTarget) setShowProfiles(false); }} className="m-auto w-[min(420px,calc(100%-32px))] max-h-[80vh] overflow-auto rounded-2xl border border-hairline/50 bg-card p-5 text-ink shadow-2xl backdrop:bg-black/40">
-      <div className="mb-4 flex items-center justify-between"><h2 className="text-[15px] font-medium">{t("browser.profiles.open")}</h2><button className={button} aria-label={t("browser.profiles.close")} onClick={() => setShowProfiles(false)}><X size={16} /></button></div>
-      {/* Opening this hands an idle hold back at once; say why the switcher waits otherwise. */}
-      {(heldElsewhere || (control.owned && (pending || taking))) && <p className="mb-3 text-[12px] text-ink-secondary">{t(heldElsewhere ? "browser.profiles.heldElsewhere" : "browser.profiles.busy")}</p>}
-      <BrowserProfilesManager bot={bot} disabled={pending || control.held} onProfileChanged={() => { setShowProfiles(false); reconnect(); }} />
-    </dialog>
+    {showProfiles && (
+      <AnchoredPopover
+        anchorRef={profilesButton}
+        popoverRef={profilesPopover}
+        side="bottom"
+        align="end"
+        role="dialog"
+        aria-labelledby="browser-profiles-title"
+        data-browser-profiles=""
+        className="w-[min(360px,calc(100vw-24px))] max-h-[min(480px,calc(100dvh-96px))] overflow-auto rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-4 text-ink shadow-xl"
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          setShowProfiles(false);
+        }}
+      >
+        <h2 id="browser-profiles-title" className="mb-3 text-[14px] font-medium">{t("browser.profiles.open")}</h2>
+        {(heldElsewhere || (control.owned && (pending || taking))) && <p className="mb-3 text-[12px] text-ink-secondary">{t(heldElsewhere ? "browser.profiles.heldElsewhere" : "browser.profiles.busy")}</p>}
+        <BrowserProfilesManager bot={bot} disabled={pending || control.held} onProfileChanged={() => { setShowProfiles(false); reconnect(); }} />
+      </AnchoredPopover>
+    )}
     {showNetwork && <NetworkDebuggerDialog botId={bot.id} botName={bot.name} onClose={() => setShowNetwork(false)} />}
     {taught && <TeachStepsDialog botId={bot.id} botName={bot.name} steps={taught.steps} recordedAt={taught.recordedAt} onClose={() => setTaught(undefined)} />}
-    <dialog ref={typingDialog} onClose={() => setShowTyping(false)} className="m-auto w-[min(420px,calc(100%-32px))] rounded-2xl border border-hairline/50 bg-card p-5 text-ink shadow-2xl backdrop:bg-black/40">
-      <div className="mb-3 flex items-center justify-between"><h2 className="text-[14px] font-medium">{t("browser.typing.title")}</h2><button className={button} aria-label={t("browser.typing.close")} onClick={() => setShowTyping(false)}><X size={16} /></button></div>
-      <form className="flex flex-col gap-3" onSubmit={(e) => {
-      e.preventDefault(); const field = e.currentTarget.elements.namedItem("pageText") as HTMLInputElement;
-      if (typingReady && field.value) { input({ type: "input_keyboard", eventType: "char", text: field.value }); field.value = ""; setShowTyping(false); }
-    }}><input name="pageText" aria-label={t("browser.typing.field")} autoComplete="off" maxLength={4096} placeholder={t("browser.typing.placeholder")} className="rounded-lg bg-inset px-3 py-2 text-[13px] outline-none focus:ring-1 focus:ring-accent" /><button disabled={!typingReady} className="self-end rounded-lg bg-accent px-4 py-2 text-[12px] text-accent-ink disabled:opacity-40">{t("browser.typing.send")}</button></form>
-    </dialog>
+    {showTyping && (
+      <AnchoredPopover
+        anchorRef={menuSummary}
+        popoverRef={typingPopover}
+        side="bottom"
+        align="end"
+        role="dialog"
+        aria-labelledby="browser-typing-title"
+        data-browser-typing=""
+        className="w-[min(360px,calc(100vw-24px))] rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-4 text-ink shadow-xl"
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          setShowTyping(false);
+        }}
+      >
+        <h2 id="browser-typing-title" className="mb-3 text-[14px] font-medium">{t("browser.typing.title")}</h2>
+        <form className="flex flex-col gap-3" onSubmit={(e) => {
+          e.preventDefault();
+          const field = e.currentTarget.elements.namedItem("pageText") as HTMLInputElement;
+          if (typingReady && field.value) {
+            input({ type: "input_keyboard", eventType: "char", text: field.value });
+            field.value = "";
+            setShowTyping(false);
+          }
+        }}>
+          <input ref={typingField} name="pageText" aria-label={t("browser.typing.field")} autoComplete="off" maxLength={4096} placeholder={t("browser.typing.placeholder")} className="rounded-lg bg-inset px-3 py-2 text-[13px] outline-none focus:ring-1 focus:ring-accent" />
+          <div className="flex justify-end gap-2">
+            <button type="button" className={PILL} onClick={() => setShowTyping(false)}>{t("browser.typing.close")}</button>
+            <button type="submit" disabled={!typingReady} className={PRIMARY_PILL}>{t("browser.typing.send")}</button>
+          </div>
+        </form>
+      </AnchoredPopover>
+    )}
   </div>;
 }
 

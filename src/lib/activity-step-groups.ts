@@ -102,7 +102,10 @@ function groupsWithMerge(
     if (isSubagentStep(step)) {
       flush();
       const phase = activityStepPhase(step);
-      const reading = readStep({ name: step.name, ok: step.ok, input: step.input, summary: step.summary });
+      // The activity feed may carry only the extracted sub-agent fields, not the raw input.
+      const about = step.subagent?.description ?? step.subagent?.type;
+      const input = step.input ?? (about ? JSON.stringify(step.subagent?.description ? { description: about } : { subagent_type: about }) : undefined);
+      const reading = readStep({ name: step.name, ok: step.ok, input, summary: step.summary });
       const whereChanged = step.where !== undefined && step.where !== lastWhere;
       if (step.where !== undefined) lastWhere = step.where;
       const own = children.get(step.id);

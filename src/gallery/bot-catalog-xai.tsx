@@ -5,10 +5,9 @@
  * scripts/capture-bot-catalog-xai.mjs takes the shots. */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { X } from "lucide-react";
 import { BotCatalogView } from "../components/bot-catalog/BotCatalogView";
 import { BotCatalogDetailView, templateDetail } from "../components/bot-catalog/BotCatalogDetailView";
-import { CATEGORY_MODAL, cardActionClass } from "../components/category-modal";
+import { cardActionClass } from "../components/category-modal";
 import { AgentImportSummary } from "../components/AgentImport";
 import { GrokLeftOutList } from "../components/GrokImportBox";
 import { catalogCategories, catalogSections, catalogTemplates, xaiErrorText, type CatalogItem } from "../lib/bot-catalog";
@@ -56,15 +55,11 @@ const templates = catalogTemplates([], undefined, { xai: params.get("xai") === "
 const sections = catalogSections({ organization: false, entries: [] }, templates, { category: "all", query: "", showArchived: false, app: null })
   .filter((section) => params.get("xai") !== "0" || section.id !== "xai");
 
+/** Lot 5: Browse Bots fills the content frame (no modal backdrop). */
 function Frame({ children }: { children: React.ReactNode }) {
   return (
-    <div className={CATEGORY_MODAL.backdrop}>
-      <div role="dialog" aria-modal="true" className={CATEGORY_MODAL.frame} data-gallery-frame="">
-        <div className={CATEGORY_MODAL.content}>
-          <button type="button" aria-label="Fermer" className={CATEGORY_MODAL.close}><X size={18} /></button>
-          {children}
-        </div>
-      </div>
+    <div className="flex h-[100dvh] w-full flex-col bg-app text-ink" data-gallery-sample="" data-gallery-frame="">
+      {children}
     </div>
   );
 }

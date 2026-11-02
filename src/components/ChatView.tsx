@@ -2458,9 +2458,6 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           <DevPodsToggle bot={bot} />
           {!showThreads && <NewTopicButton bot={bot} />}
           <TaskPicker bot={bot} />
-          {/* Upstream sits this next to ThreadContextWarning; this fork has no
-              context-warning chip, so the notice stays in the header controls. */}
-          <EngineLimitNotice engine={bot.modelSelection?.instanceId} />
         </div>
       </div>}
 
@@ -2498,6 +2495,14 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
       ) : <RoutineRunRow message={m} botId={bot.id} onResume={resumeAutoPaused(m, close)} />} />}
       {!side && <ChatStaleBanner />}
       {!side && !remoteClient && <WeeklyLimitNotice />}
+      {/* Engine near/at its limit: full-width banner (not a header pill). */}
+      {!side && !remoteClient && (
+        <EngineLimitNotice
+          engine={bot.modelSelection?.instanceId}
+          botId={bot.id}
+          threadId={bot.threadId}
+        />
+      )}
 
       {/* Pinned message banner */}
       <PinnedBanner

@@ -33,6 +33,7 @@ import {
   type SourceHandshake,
   type SourceRequest,
 } from "./trigger-sources.ts";
+import { eventPayloadMaxChars, eventRawExcerptMaxChars } from "./cold-prompt-budget.ts";
 
 export type WebhookTriggerInput = z.input<typeof triggerInputSchema>;
 export type WebhookVerificationSample = z.output<typeof verificationSampleSchema>;
@@ -205,6 +206,9 @@ export type WebhookManagerEvent =
 
 const MAX_DELIVERIES = 2_000;
 const MAX_ATTEMPTS = 2_000;
+/** Generic webhook / non-email event fence. Email and botmail use the tighter
+ * cold-prompt budget (server/cold-prompt-budget.ts) so watch routines stay
+ * under the model context window. */
 const MAX_EVENT_CHARS = 48_000;
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT = 10;
@@ -1273,7 +1277,10 @@ function sourcePrompt(trigger: StoredWebhookTrigger, event: WebhookEvent, receiv
   const instructions = configured
     || "Review the event, summarize what happened and suggest the next step. Do not take external actions unless the event clearly requires them and existing permissions allow them.";
   const conditions = (event.deferred ?? []).map(({ key, values }) => `- ${key}: ${values.join(", ")}`);
-  const raw = event.raw ? defang(event.raw) : "";
+  const payloadMax = eventPayloadMaxChars(normalized.source);
+  const rawMax = eventRawExcerptMaxChars(normalized.source);
+  let raw = event.raw ? defang(event.raw) : "";
+  if (raw.length > rawMax) raw = `${cutAt(raw, rawMax)}\n[Payload truncated by Sagax]`;
   return [
     "[USER-CONFIGURED TRIGGER INSTRUCTIONS]",
     instructions,
@@ -1300,30 +1307,31 @@ function sourcePrompt(trigger: StoredWebhookTrigger, event: WebhookEvent, receiv
     `Delivery ID: ${metadataValue(deliveryId, 200)}`,
     `Event: ${metadataValue(normalized.kind, 200)}`,
     "",
-    fenceText(redact(JSON.stringify(normalized, null, 2), trigger.signingSecret)),
+    fenceText(redact(JSON.stringify(normalized, null, 2), trigger.signingSecret), payloadMax),
     ...(raw ? ["", "Raw payload (excerpt):", raw] : []),
     `[/UNTRUSTED ${fence} EVENT DATA ${boundary}]`,
   ].join("\n");
 }
 
 /** Quote marker-looking text only after the cap, so a long body is not
- * scanned past 48 000 characters. Quoting can grow the text; a second cut
- * then keeps the fence's closing line on a code-point boundary. */
-function fenceText(text: string): string {
+ * scanned past the budget. Quoting can grow the text; a second cut then
+ * keeps the fence's closing line on a code-point boundary. Email watch
+ * sources use the tighter cold-prompt budget. */
+function fenceText(text: string, maxChars = MAX_EVENT_CHARS): string {
   let truncated = false;
-  if (text.length > MAX_EVENT_CHARS) {
-    text = cutAt(text, MAX_EVENT_CHARS);
+  if (text.length > maxChars) {
+    text = cutAt(text, maxChars);
     truncated = true;
   }
   text = defang(text);
-  if (text.length > MAX_EVENT_CHARS) {
-    text = cutAt(text, MAX_EVENT_CHARS);
+  if (text.length > maxChars) {
+    text = cutAt(text, maxChars);
     truncated = true;
   }
   return truncated ? `${text}\n\n[Payload truncated by Sagax]` : text;
 }
 
-function serializePayload(payload: JsonValue, fenced = false): string {
+function serializePayload(payload: JsonValue, fenced = false, maxChars = MAX_EVENT_CHARS): string {
   let text: string;
   const plainText = z.string().safeParse(payload);
   if (plainText.success) text = plainText.data;
@@ -1335,9 +1343,9 @@ function serializePayload(payload: JsonValue, fenced = false): string {
     }
   }
   if (!fenced) {
-    return text.length > MAX_EVENT_CHARS ? `${cutAt(text, MAX_EVENT_CHARS)}\n\n[Payload truncated by Sagax]` : text;
+    return text.length > maxChars ? `${cutAt(text, maxChars)}\n\n[Payload truncated by Sagax]` : text;
   }
-  return fenceText(text);
+  return fenceText(text, maxChars);
 }
 
 function previewPayload(payload: JsonValue): string {

@@ -77,7 +77,7 @@ export function pendingApprovals(messages: Message[]): Pending[] {
     // or offer its decision buttons anywhere.
     // A meeting's consent card is answered on the card itself, in the chat
     // (MeetingCard), never from the composer's approval stepper.
-    .filter((m) => m.kind === "options" && m.card?.requestId && m.card.tool && !m.card.meetingRequest && !m.card.answered && !m.card.dismissed && !m.card.expired)
+    .filter((m) => m.kind === "options" && m.card?.requestId && m.card.tool && !m.card.meetingRequest && !m.card.phoneCallConsent && !m.card.answered && !m.card.dismissed && !m.card.expired)
     .map((m) => ({
       message: m,
       requestId: m.card!.requestId!,
@@ -184,7 +184,7 @@ export function readOnlyApprovals(approvals: Pending[]): Pending[] {
   return approvals.filter((pending) => {
     const card = pending.message.card;
     if (!card || card.adminApproval) return false;
-    if (card.routineRequest || card.skillRequest || card.profileRequest || card.ruleRequest || card.teamSetupRequest || card.questionRequest || card.terminalRequest || card.meetingRequest) return false;
+    if (card.routineRequest || card.skillRequest || card.profileRequest || card.ruleRequest || card.teamSetupRequest || card.questionRequest || card.terminalRequest || card.meetingRequest || card.phoneCallConsent) return false;
     return describeApproval(pending.tool, card.toolInput ?? card.subtitle, card.toolHints).risk === "read";
   });
 }

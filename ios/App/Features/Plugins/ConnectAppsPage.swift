@@ -40,6 +40,7 @@ final class ConnectAppsModel: ObservableObject {
     @Published private(set) var probes: [String: MCPProbe] = [:]
     @Published private(set) var probing: Set<String> = []
     @Published private(set) var claudeConnectors = 0
+    @Published private(set) var tailscale: BotTailscaleView?
     @Published var busy: String?
     @Published var message: String?
     @Published var query = ""
@@ -68,11 +69,13 @@ final class ConnectAppsModel: ObservableObject {
         async let page = try? client.searchPlugins()
         async let skills = try? client.skillsLibrary()
         async let markets = try? client.marketplaces()
+        async let tailscaleView = try? client.botTailscale()
         self.servers = await servers?.servers ?? []
         disabledTools = await disabled ?? [:]
         featured = await page?.featured ?? []
         self.skills = await skills ?? []
         marketplaces = await markets ?? []
+        tailscale = await tailscaleView
         rebuild()
         loading = false
         // the claude.ai connectors count in "N connected"; that answer can
@@ -83,10 +86,21 @@ final class ConnectAppsModel: ObservableObject {
     }
 
     private func rebuild() {
+        let tailscaleRow: BotTailscaleRowState? = {
+            // Always offer the row; a failed GET still shows Connect so the
+            // person can open the page and see the error there.
+            let description = String(localized: "Join your bot computer to your private tailnet.")
+            if let view = tailscale {
+                return BotTailscaleRowState(view: view, description: description)
+            }
+            return BotTailscaleRowState(description: description, connected: false)
+        }()
         items = ConnectApps.items(ConnectAppSources(
             servers: servers.map { ConnectAppServer(name: $0.name, enabled: $0.enabled ?? true, url: $0.url, command: $0.command, auth: $0.auth, managedBy: $0.managedBy, source: $0.source) },
             featured: featured.map { ConnectAppFeatured(id: $0.id, name: $0.name, description: $0.description, url: $0.url, domain: $0.domain, auth: $0.auth, installed: $0.installed, iconUrl: $0.iconUrl) },
-            skills: skills, marketplaces: marketplaces
+            skills: skills,
+            marketplaces: marketplaces,
+            tailscale: tailscaleRow
         ))
     }
 
@@ -107,8 +121,9 @@ final class ConnectAppsModel: ObservableObject {
         await load(session)
     }
 
-    /// Add or Connect on a row.
+    /// Add or Connect on a row. Tailscale opens its own page (caller pushes).
     func act(_ item: ConnectAppItem, alias: String?, session: Session) async {
+        if item.key == tailscaleConnectAppKey { return }
         switch item.kind {
         case .featured:
             await run(item.key, session) { client in
@@ -202,6 +217,11 @@ final class ConnectAppsModel: ObservableObject {
 enum ConnectAppsRoute: Hashable {
     case detail(String)
     case skill(String)
+    /// Connect apps > Mac hub (native Mac apps).
+    case mac
+    /// Connect apps > Mac > Messages setup.
+    case macMessages
+    case tailscale
 }
 
 /// The whole panel: the main view and what it pushes.
@@ -240,6 +260,12 @@ struct ConnectAppsPage: View {
                     switch route {
                     case let .detail(key): ConnectAppDetail(model: model, key: key) { path.append($0) }
                     case let .skill(name): LibrarySkillPage(model: model, name: name)
+                    case .mac: MacAppsPage { path.append($0) }
+                    case .macMessages: MacMessagesSetupView()
+                    case .tailscale:
+                        TailscaleConnectPage {
+                            Task { await model.load(session) }
+                        }
                     }
                 }
                 // the Bots tab's cards, View all, publish, the imports
@@ -552,10 +578,11 @@ struct ConnectAppsMain: View {
         switch hit.target {
         case let .app(key):
             if let item = hit.app {
-                Button { push(.detail(key)) } label: {
+                Button { open(item) } label: {
                     ConnectAppRow(item: item, busy: model.busy == item.key) { act(item) }
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier(key == tailscaleConnectAppKey ? "connect-apps-tailscale-row" : "connect-apps-app-\(key)")
             }
         case let .skill(name):
             if let item = hit.app {
@@ -716,10 +743,12 @@ struct ConnectAppsMain: View {
     }
 
     private func open(_ item: ConnectAppItem) {
+        if item.key == tailscaleConnectAppKey { push(.tailscale); return }
         if item.kind == .skill { push(.skill(item.id)) } else { push(.detail(item.key)) }
     }
 
     private func act(_ item: ConnectAppItem) {
+        if item.key == tailscaleConnectAppKey { push(.tailscale); return }
         Task { await model.act(item, alias: nil, session: session) }
     }
 }
@@ -831,7 +860,10 @@ struct ConnectAppsManage: View {
             Section {
                 ForEach(entries) { entry in
                     HStack(spacing: 12) {
-                        Button { push(.detail(entry.primary.key)) } label: {
+                        Button {
+                            if entry.primary.key == tailscaleConnectAppKey { push(.tailscale) }
+                            else { push(.detail(entry.primary.key)) }
+                        } label: {
                             HStack(spacing: 12) {
                                 ConnectAppIcon(item: icon(entry))
                                 VStack(alignment: .leading, spacing: 2) {
@@ -881,6 +913,8 @@ struct ConnectAppsManage: View {
                 Text(String(localized: "Private skills"))
             }
         }
+        // Mac apps (Messages): always listed; setup runs on the person's Mac.
+        MacAppsInstalledSection(push: push)
         // Providers (2026-10-29): once a tab of their own, now the last
         // section of Installed. A provider listed is already installed.
         accounts

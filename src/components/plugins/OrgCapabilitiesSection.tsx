@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
 
+import { useConfirm } from "@/components/ConfirmProvider";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
@@ -223,6 +224,7 @@ export function OrgCapabilityForm({ initial, onDone, onCancel }: { initial?: Dec
  * declarations: the list, Add, Edit and Remove. Unlinked: nothing (the
  * Organization scope keeps its local behaviour). */
 export function OrgCapabilitiesAdmin() {
+  const confirm = useConfirm();
   const [inventory, setInventory] = useState<OrgInventory | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Declaration | "new" | null>(null);
@@ -238,7 +240,7 @@ export function OrgCapabilitiesAdmin() {
   useEffect(() => { void reload(); }, [reload]);
   if (inventory?.owner === "local") return null;
   const remove = async (row: Declaration) => {
-    if (!window.confirm(t("orgCapabilities.admin.removeConfirm", { name: row.name }))) return;
+    if (!(await confirm({ title: t("orgCapabilities.admin.removeConfirm", { name: row.name }), confirmLabel: t("common.confirmRemove"), tone: "danger" }))) return;
     setBusy(row.id);
     try {
       await removeDeclaration(row.id);

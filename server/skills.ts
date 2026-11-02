@@ -681,6 +681,112 @@ export function setSkillEnabled(botId: string, name: string, enabled: boolean): 
   return skillListing(botId, name, entry);
 }
 
+/** Person-UI Accept: re-sign the stored SKILL.md hash to the given bytes
+ * (already on disk). Enablement stays as it was; a blocked skill can be
+ * turned on after this without a second review. */
+export function resignBotSkill(
+  botId: string,
+  name: string,
+  text: string,
+): SkillListing | { error: string; status: number } {
+  if (!isSkillName(name)) return { error: "invalid skill name", status: 400 };
+  if (Buffer.byteLength(text, "utf8") > SKILL_FILE_MAX_BYTES) {
+    return { error: `SKILL.md is larger than ${SKILL_FILE_MAX_BYTES / 1024}KB`, status: 413 };
+  }
+  const parsed = parseSkillMd(text);
+  if ("error" in parsed) return { error: parsed.error, status: 400 };
+  if (parsed.name !== name) return { error: `the skill is named "${parsed.name}", not "${name}"`, status: 400 };
+  const manifest = readManifest(botId);
+  const entry = manifest[name];
+  if (!entry) return { error: `no imported skill named "${name}"`, status: 404 };
+  entry.sha256 = createHash("sha256").update(text).digest("hex");
+  entry.description = parsed.description;
+  entry.warnings = scanSkillText(text);
+  writeManifest(botId, manifest);
+  syncSkillLinks(botId);
+  return skillListing(botId, name, entry);
+}
+
+/** Person-UI Save of a private bot skill: write SKILL.md, update the
+ * reviewed hash (the save is the review), optionally rename. Organization
+ * package skills stay read-only here. */
+export function updateBotSkillByPerson(
+  botId: string,
+  name: string,
+  input: { text: string },
+): { skill: SkillListing; renamedFrom?: string } | { error: string; status: number } {
+  if (!isSkillName(name)) return { error: "invalid skill name", status: 400 };
+  if (Buffer.byteLength(input.text, "utf8") > SKILL_FILE_MAX_BYTES) {
+    return { error: `SKILL.md is larger than ${SKILL_FILE_MAX_BYTES / 1024}KB`, status: 413 };
+  }
+  const parsed = parseSkillMd(input.text);
+  if ("error" in parsed) return { error: parsed.error, status: 400 };
+  const manifest = readManifest(botId);
+  const entry = manifest[name];
+  if (!entry) return { error: `no imported skill named "${name}"`, status: 404 };
+  if (entry.package || entry.source.startsWith("org:")) {
+    return { error: "this skill comes from your organization's library and cannot be changed here", status: 409 };
+  }
+  const renamed = parsed.name !== name;
+  if (renamed && manifest[parsed.name]) {
+    return { error: `a skill named "${parsed.name}" is already imported: choose a different name`, status: 409 };
+  }
+  const directory = skillDirectory(botId, name, entry) ?? existingSkillDirectory(botId, name);
+  if (!directory) return { error: "the skill folder is missing", status: 404 };
+  const sha256 = createHash("sha256").update(input.text).digest("hex");
+  const next: SkillManifestEntry = {
+    ...entry,
+    description: parsed.description,
+    sha256,
+    warnings: scanSkillText(input.text),
+    ...(parsed.license ? { license: parsed.license } : {}),
+    ...(parsed.compatibility ? { compatibility: parsed.compatibility } : {}),
+  };
+  if (!parsed.license) delete next.license;
+  if (!parsed.compatibility) delete next.compatibility;
+  // Bytes first. On rename, move the folder after writing into the new name.
+  if (renamed) {
+    const root = ensureSkillsRoot(botId);
+    if (!root) return { error: "the workspace skills path must be a real directory", status: 500 };
+    const target = join(root, parsed.name);
+    if (entryExistsWithoutFollowing(target)) {
+      return { error: `skill path already exists: ${parsed.name}`, status: 409 };
+    }
+    mkdirSync(target, { recursive: true, mode: 0o700 });
+    writeFileAtomic(join(target, "SKILL.md"), input.text, { mode: 0o600 });
+    // Copy any supporting files from the old folder.
+    try {
+      for (const file of readdirSync(directory)) {
+        if (file === "SKILL.md" || file.startsWith(".")) continue;
+        const from = join(directory, file);
+        try {
+          if (!lstatSync(from).isFile()) continue;
+          writeFileSync(join(target, file), readFileSync(from), { mode: 0o600 });
+        } catch {
+          // Supporting file copy is best-effort.
+        }
+      }
+    } catch {
+      // Old folder listing failure still leaves SKILL.md in place.
+    }
+    delete manifest[name];
+    manifest[parsed.name] = next;
+    writeManifest(botId, manifest);
+    try {
+      rmSync(directory, { recursive: true, force: true });
+    } catch {
+      // Orphan old folder is recoverable; the manifest already points at the new name.
+    }
+    syncSkillLinks(botId);
+    return { skill: skillListing(botId, parsed.name, next), renamedFrom: name };
+  }
+  writeFileAtomic(join(directory, "SKILL.md"), input.text, { mode: 0o600 });
+  manifest[name] = next;
+  writeManifest(botId, manifest);
+  syncSkillLinks(botId);
+  return { skill: skillListing(botId, name, next) };
+}
+
 function removeReviewedRevision(botId: string, revision: string, sha256: string): void {
   const root = existingSkillsRoot(botId);
   if (!root) return;

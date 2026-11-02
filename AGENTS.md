@@ -14,6 +14,8 @@ Before claiming a server or conversation change works, follow
 [`docs/verification/README.md`](docs/verification/README.md). Always launch an
 isolated fixture; never verify mutations against the user's live app or data.
 
+UI work: read docs/design/ux-reference-grokbot-cursor.md first; do not re-scan Grok Bot unless the doc lacks the surface, then extend the doc.
+
 ## Agents catalog budget (#1703, 2026-11-01)
 
 The agents `tools/list` wire is pinned and size-budgeted by
@@ -1920,6 +1922,7 @@ One source, one drawing (the "disassembled shape" fix, 2026-10-28):
   mascots, the sidebar or the headers, and `--update` the references when a
   change is wanted); iOS `ShapeSetRegressionTests`, `ShapeEngineTests`,
   `ShapeVolumeTests`. Gallery: `src/gallery/shape-set.html`.
+- The shape generator is out of the UX but kept: how to generate and add a shape is in `docs/design/shape-generator.md` (`scripts/generate-shape.mjs`).
 
 ## The reader's bar of a published page (2026-10-28)
 
@@ -2931,9 +2934,13 @@ The maintainer's GO on points 1 and 2 of the bot quality diagnostic. Rules:
   Local VM keep the direct-turn rule. The ordinary-bot roster shows the
   description of the owner's own teammates; a person's AI client
   conversation never reuses a bot-opened thread and carries `aiClientPrompt`.
-- A parked question (NEEDS INPUT) waits: reminder after 30 min then daily
-  (`inputRemindMs`, `TurnRunner.remind`), expiry after 7 days, never the
-  old 30 min `failed`. The card (`WireMessage.inputRequest`,
+- A parked question (NEEDS INPUT) waits: reminder then daily
+  (`TurnRunner.remind`), expiry after 7 days as status `expired` (never
+  `failed`). Room / own question: first remind at `inputRemindMs` (30 min).
+  Delegation (child outside a room): first remind at half of
+  `delegationInputWaitMs` (120 of 240 min, R6). Optional
+  `coordinate_bots` `default_answer` resumes with that answer and a harness
+  note when the wait would expire. The card (`WireMessage.inputRequest`,
   `src/components/InputRequestCard.tsx`) holds the whole question and
   answers in place; it goes to the requester's conversation and, when that
   is bot-to-bot, to the root conversation too.
@@ -6500,6 +6507,30 @@ An image attached to a message is named on the read and returned by
 at most 1.5 MB (`server/imessage-db.ts`). A file is sent only from the
 bot's own folder, by iMessage, and the card shows the file's name, not
 its path.
+
+### Connect apps > Mac > Messages setup (2026-11-02)
+
+Setup lives under Connect apps > Mac > Messages (Installed shows a "This Mac"
+section). Structure matches the Grok Bot Mac Messages surface; Sagax words and
+branding only (`docs/design/ux-reference-grokbot-cursor.md` §2.8bis).
+
+- Live permission checks: Full Disk Access (read `chat.db`) and Automation
+  (send via the Messages app). Electron opens the matching Privacy panes
+  (`Privacy_AllFiles`, `Privacy_Automation`).
+- Test reads recent conversation **names** and returns a count only; logs
+  never include message bodies (`POST /api/messages/test`).
+- Enable switch stays **off** until the person turns it on. After that,
+  `read_messages` / `send_message` are available on that Mac only. Sends still
+  follow approval level and allowed recipients. No admin gate for a person's
+  own enable; org Ask/Deny and person isolation stay.
+- API (solo darwin only; else 404): `GET`/`PUT /api/messages`,
+  `POST /api/messages/test`, `POST /api/messages/permissions/open`. Shared
+  helpers: `shared/mac-messages-setup.ts`, `server/imessage-permissions.ts`.
+- Computer Settings keeps a shortcut that deep-links to this setup
+  (`sagax:open-mac-messages`). iOS mirrors the same Installed > This Mac >
+  Messages flow (`ios/App/Features/Plugins/MacMessagesSetupView.swift`).
+- Gallery: `src/gallery/mac-messages.html` (`?state=off|ready|enabled|unavailable`).
+  Captures: `node scripts/capture-mac-messages.mjs`.
 
 Plugin lifecycle hooks are stripped from the folder Claude loads with
 `--plugin-dir`. The commands are kept under `bot-plugins/<bot>/computer-hooks/`

@@ -19,8 +19,9 @@
 // edge. One panel at a time (AppState.panelOwner): opening one closes the
 // other, and closing the section, or showing another conversation in it,
 // closes its panel. A group's panel portals into App's panel slot.
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Loader2, Maximize2, X } from "lucide-react";
+import { PanelSlotProvider, usePanelSlot } from "./panel-slot";
 import { api, openBotThread, peopleDmReadTarget, useStore, type Bot, type Group } from "@/state/store";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
@@ -78,9 +79,6 @@ function edgeRect(box: DropZone["rect"], edge: SplitEdge | null, share: number):
   return { ...box, top: box.top + box.height * (1 - share), height: box.height * share };
 }
 
-/** App's slot at the window's right edge, past the content frame, where a
- * group section's panel portals to. */
-const PanelSlot = createContext<HTMLElement | null>(null);
 
 export function SplitWorkspace({ main, panelSlot = null }: { main: ReactNode; panelSlot?: HTMLElement | null }) {
   const layout = useSplitLayout();
@@ -164,7 +162,7 @@ export function SplitWorkspace({ main, panelSlot = null }: { main: ReactNode; pa
   };
 
   return (
-    <PanelSlot.Provider value={panelSlot}>
+    <PanelSlotProvider slot={panelSlot}>
     <div
       ref={rootRef}
       data-split-workspace={layout.type === "split" ? "split" : ""}
@@ -186,7 +184,7 @@ export function SplitWorkspace({ main, panelSlot = null }: { main: ReactNode; pa
         />
       )}
     </div>
-    </PanelSlot.Provider>
+    </PanelSlotProvider>
   );
 }
 
@@ -209,7 +207,7 @@ function useSectionPanel(leafId: string, owner: { botId: string } | { groupId: s
     if (open) for (const action of botPillActions(true)) dispatch(action);
     else dispatch({ type: "toggleSettings", open: true, owner: { leafId, ...owner } });
   };
-  return { open, onToggle, slot: useContext(PanelSlot) };
+  return { open, onToggle, slot: usePanelSlot() };
 }
 
 /** Opens a section's conversation in the main chat. A bot's thread goes

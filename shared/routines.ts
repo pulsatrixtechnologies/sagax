@@ -104,8 +104,9 @@ export type RoutineRunStatus =
 
 /** Why a run started a second time by itself: its engine stalled, Sagax
  * restarted while it ran, the provider rate-limited it or failed for a moment,
- * or it waited for its engine's usage limit to reset. A run gets one. */
-export type RoutineRetryCause = "stalled" | "restarted" | "rate_limited" | "provider" | "usage_limit";
+ * it waited for its engine's usage limit to reset, or the model returned only
+ * reasoning / an empty reply. A run gets one. */
+export type RoutineRetryCause = "stalled" | "restarted" | "rate_limited" | "provider" | "usage_limit" | "empty_response";
 
 /** The statuses both failure indicators count: a run that went wrong and has
  * not been acknowledged. One home so the sidebar dot, the errors pill, the

@@ -66,7 +66,11 @@ export function AnchoredPopover({
   onPointerDown?: PointerEventHandler<HTMLElement>;
   id?: string;
   role?: string;
+  tabIndex?: number;
   "aria-label"?: string;
+  "aria-labelledby"?: string;
+  "aria-describedby"?: string;
+  "aria-busy"?: boolean | "true" | "false";
   /** A menu playing its exit animation is inert meanwhile (useMenuMotion's exitProps). */
   "aria-hidden"?: boolean;
   inert?: boolean;

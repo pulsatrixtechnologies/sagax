@@ -52,7 +52,7 @@ describe("Watcher options-card tool", () => {
     const tool = availableTools(profile()).find((candidate) => candidate.name === "create_options_card")!;
     const options = (tool.inputSchema.properties as any).options;
     expect(options).toMatchObject({ type: "array", minItems: 2, maxItems: 6, uniqueItems: true });
-    expect(tool.inputSchema.required).toEqual(["title", "subtitle", "options"]);
+    expect((tool.inputSchema as { required?: string[] }).required).toEqual(["title", "subtitle", "options"]);
   });
 
   it("refuses direct calls from another bot before a server round trip", async () => {

@@ -4,7 +4,7 @@
 // control flow) and "Revoke". Unattended access is always enabled
 // (2026-11-01). No host id on screen: the readable name, the id only in a
 // tooltip and the Copy action.
-import { useRef, useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Copy, KeyRound, Monitor, ShieldOff } from "lucide-react";
 
 import {
@@ -12,7 +12,7 @@ import {
   canRevokeUnattendedHost,
   type UnattendedHostRow,
 } from "../../../shared/remote-unattended-host";
-import { useModalDialog } from "@/hooks/use-modal-dialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
 import { activeLocale, t } from "@/lib/i18n";
@@ -134,11 +134,16 @@ export function UnattendedHostsSection({ state, onOpened }: {
         </div>
       )}
       {confirmRevoke && (
-        <RevokeDialog onClose={() => setConfirmRevoke(null)}>
-          <div className="w-full max-w-sm rounded-2xl border border-hairline/60 bg-panel p-5 shadow-xl">
-            <h2 className="text-[14px] font-medium text-ink">{t("remoteSessionsAdmin.hosts.revokeTitle", { host: unattendedHostLabel(confirmRevoke) })}</h2>
-            <p className="mt-2 text-[13px] text-ink-secondary">{t("remoteSessionsAdmin.hosts.revokeBody")}</p>
-            <label className="mt-3 block text-[12px] text-ink-secondary">
+        <ConfirmDialog
+          open
+          tone="danger"
+          title={t("remoteSessionsAdmin.hosts.revokeTitle", { host: unattendedHostLabel(confirmRevoke) })}
+          body={t("remoteSessionsAdmin.hosts.revokeBody")}
+          confirmLabel={t("remoteSessionsAdmin.hosts.revoke")}
+          onCancel={() => setConfirmRevoke(null)}
+          onConfirm={() => void revoke(confirmRevoke)}
+          extra={
+            <label className="block text-[12px] text-ink-secondary">
               {t("remoteSessionsAdmin.hosts.reasonLabel")}
               <input
                 type="text"
@@ -150,24 +155,9 @@ export function UnattendedHostsSection({ state, onOpened }: {
                 className="mt-1 w-full rounded-lg border border-hairline/50 bg-raised px-2 py-1 text-[13px] text-ink"
               />
             </label>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setConfirmRevoke(null)} className="rounded-lg border border-hairline/50 px-3 py-1 text-[13px] text-ink-secondary hover:bg-raised">{t("remoteSessionsAdmin.cancel")}</button>
-              <button type="button" data-unattended-host-revoke-confirm="" onClick={() => void revoke(confirmRevoke)} className="rounded-lg bg-danger px-3 py-1 text-[13px] text-white hover:opacity-90">{t("remoteSessionsAdmin.hosts.revoke")}</button>
-            </div>
-          </div>
-        </RevokeDialog>
+          }
+        />
       )}
     </section>
-  );
-}
-
-/** The revoke confirmation: a modal dialog, so Escape closes it and focus stays inside. */
-function RevokeDialog({ onClose, children }: { onClose: () => void; children: ReactNode }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useModalDialog(dialogRef, onClose);
-  return (
-    <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 outline-none" role="dialog" aria-modal="true">
-      {children}
-    </div>
   );
 }

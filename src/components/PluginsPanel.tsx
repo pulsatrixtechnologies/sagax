@@ -32,8 +32,9 @@
 // plugins, servers, apps, skills and marketplaces. Other screens link here
 // or choose among them for one bot; keys stay in Settings > API keys.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ExternalLink, Loader2, X } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 
+import { confirmAsync, useConfirm } from "@/components/ConfirmProvider";
 import { api, ApiError, useStore } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -51,7 +52,9 @@ import { detailIdentity, discoverItems, installedEntries, privateSkills, type In
 import { engineGetsNothing, enginesLine, organizationRows, useBotCapabilities } from "@/lib/capabilities";
 import type { CapabilityForm, EngineParts } from "../../shared/capabilities";
 import type { SkillsLibrarySkillWire } from "../../shared/wire";
-import { WHOP_KEY, buildPluginItems, isGrokConnector, marketplacePluginKey, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
+import { WHOP_KEY, TAILSCALE_KEY, buildPluginItems, isGrokConnector, marketplacePluginKey, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
+import { TailscaleConnectView } from "./plugins/TailscaleConnectView";
+import { fetchBotTailscale, type BotTailscaleView } from "@/lib/bot-tailscale";
 import { GROK_CLOUD_CONNECTORS, GROK_CONNECTORS_URL } from "../../shared/grok-cloud-connectors";
 import { grokProviderConfigured } from "@/lib/providers-model";
 import { openExternalLink } from "@/lib/app-links";
@@ -90,7 +93,8 @@ import { MyGithubConnection, MyGithubSummary, MyMcpServers } from "./settings/My
 import { useServerMode } from "./ServerModeSettings";
 import { ConnectAppsView, connectAppsTabLabel, connectedCounts, isProvidersLink, normalizeConnectAppsTab, type ConnectAppsTab } from "./plugins/ConnectAppsView";
 import type { Crumb } from "./Breadcrumb";
-import { CATEGORY_MODAL, cardActionClass } from "./category-modal";
+import { cardActionClass } from "./category-modal";
+import { PageTopStrip } from "./content-page";
 import { BotCatalogPane } from "./lazy-screens";
 import { useBotCatalogSources } from "./bot-catalog/use-bot-catalog-sources";
 import { catalogSections, type CatalogItem } from "@/lib/bot-catalog";
@@ -116,6 +120,10 @@ import { AddAccountButton, PluginDetailView, SignInButton, type DetailAccount, t
 import { SkillPage } from "./plugins/SkillPage";
 import { ScopeToggle } from "./plugins/ScopeToggle";
 import { BotPluginCard } from "./plugins/BotPluginCard";
+import { MacAppsInstalledSection, MacAppsView } from "./plugins/MacAppsView";
+import { MessagesSetupView } from "./plugins/MessagesSetupView";
+import { loadMessagesSetup } from "@/lib/mac-messages-setup";
+import type { MessagesSetupStatus } from "../../shared/mac-messages-setup.ts";
 
 interface MarketplaceListing {
   name: string;
@@ -153,7 +161,13 @@ type Page =
   /** a private skill's page; no name: a new skill */
   | { page: "skill"; name?: string }
   /** the GitHub connection, when no marketplace has the GitHub plugin */
-  | { page: "github" };
+  | { page: "github" }
+  /** Connect apps > Mac: native apps on this person's Mac */
+  | { page: "mac" }
+  /** Connect apps > Mac > Messages setup */
+  | { page: "mac-messages" }
+  /** Connect apps > Tailscale: join a bot computer to the person's tailnet */
+  | { page: "tailscale" };
 
 /** The GitHub plugin's page (2026-10-29), where the GitHub connection is:
  * the marketplace plugin named github, else one whose MCP server reads the
@@ -252,9 +266,10 @@ export function grokConnectorDetail(item: PluginItem): Omit<PluginDetailProps, "
 }
 
 export function PluginsPanel() {
+  const confirm = useConfirm();
   const { state, dispatch } = useStore();
   const remoteClient = window.ogb?.remoteClient?.active === true;
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   const mcp = useMcpServers();
   const [stack, setStack] = useState<Page[]>([{ page: "main" }]);
   const page = stack[stack.length - 1]!;
@@ -295,7 +310,21 @@ export function PluginsPanel() {
   const organization = Boolean(serverMode?.active) || perspicaxOrg !== null;
   const mayManageOrganization = organization ? perspicaxOrg?.viewerRole === "admin" : ownerOrAdmin === true;
   const [featured, setFeatured] = useState<FeaturedListing[] | null>(null);
-  const [dataCenterFor, setDataCenterFor] = useState<{ item: PluginItem; regions: DataCenter[]; defaultUrl: string } | null>(null);
+  const [dataCenterFor, setDataCenterFor] = useState<{ item: PluginItem; regions: DataCenter[]; defaultUrl: string; anchor: HTMLElement } | null>(null);
+  const [messagesSetup, setMessagesSetup] = useState<MessagesSetupStatus | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void loadMessagesSetup().then((status) => { if (alive) setMessagesSetup(status); });
+    return () => { alive = false; };
+  }, [page.page]);
+  useEffect(() => {
+    const openMacMessages = () => {
+      setTab("installed");
+      setStack([{ page: "main" }, { page: "mac" }, { page: "mac-messages" }]);
+    };
+    window.addEventListener("sagax:open-mac-messages", openMacMessages);
+    return () => window.removeEventListener("sagax:open-mac-messages", openMacMessages);
+  }, []);
   const [skills, setSkills] = useState<SkillsLibrarySkillWire[] | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
@@ -399,9 +428,10 @@ export function PluginsPanel() {
   const back = useCallback(() => setStack((current) => current.length > 1 ? current.slice(0, -1) : current), []);
   useEffect(() => { void BotCatalogPane.preload().catch(() => undefined); }, []);
 
-  // Focus and keys: Escape steps back one page (the Bots tab's own steps
-  // first), then closes; Cmd+[ steps back and never closes. A search with
-  // text takes Escape first: it empties (ConnectAppsSearch).
+  // Focus and keys (content view, lot 5): Escape steps back one page (the
+  // Bots tab's own steps first), then leaves the view; Cmd+[ steps back and
+  // never leaves. A search with text takes Escape first: it empties
+  // (ConnectAppsSearch). Tab is free (no modal trap).
   const pageRef = useRef(page);
   pageRef.current = page;
   const botsTabRef = useRef(false);
@@ -409,45 +439,21 @@ export function PluginsPanel() {
   const depthRef = useRef(stack.length - 1);
   depthRef.current = stack.length - 1;
   useEffect(() => {
-    const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const dialog = dialogRef.current;
-    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ) ?? []);
-    (dialog?.querySelector<HTMLElement>("input") ?? focusable()[0] ?? dialog)?.focus();
+    const main = dialogRef.current;
+    main?.focus({ preventScroll: true });
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" || isBackShortcut(event)) {
-        // A dialog opened inside this one (Browse Bots' confirmations) owns its keys.
-        const nested = dialog?.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]');
-        if (event.defaultPrevented || (nested && nested.getClientRects().length > 0)) return;
-        event.preventDefault();
-        const action = pageKeyAction(event, { depth: depthRef.current, innerBack: botsTabRef.current ? () => botsBack.current?.() ?? false : undefined });
-        if (action === "back") back();
-        else if (action === "close") close();
-        return;
-      }
-      if (event.key !== "Tab" || !dialog) return;
-      const items = focusable();
-      if (items.length === 0) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-      const first = items[0];
-      const last = items.at(-1)!;
-      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
+      if (event.key !== "Escape" && !isBackShortcut(event)) return;
+      // A dialog or popover opened inside this view owns its keys.
+      const nested = main?.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+      if (event.defaultPrevented || (nested && nested.getClientRects().length > 0)) return;
+      if (document.body.querySelector("[data-data-center-dialog]")) return;
+      event.preventDefault();
+      const action = pageKeyAction(event, { depth: depthRef.current, innerBack: botsTabRef.current ? () => botsBack.current?.() ?? false : undefined });
+      if (action === "back") back();
+      else if (action === "close") close();
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      returnFocus?.focus();
-    };
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [back, close]);
 
   // The bot scope reads the same marketplaces through the bot: installed
@@ -457,17 +463,38 @@ export function PluginsPanel() {
     [scope, scopedPluginView, marketplaces],
   );
   const grokConfigured = grokProviderConfigured(state.instances);
+  const [tailscaleView, setTailscaleView] = useState<BotTailscaleView | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchBotTailscale()
+      .then((view) => { if (!cancelled) setTailscaleView(view); })
+      .catch(() => { /* row stays available; the page loads its own error */ });
+    return () => { cancelled = true; };
+  }, []);
   const items = useMemo(() => buildPluginItems({
     servers: mcp.servers,
     featured,
     skills,
     marketplaces: shownMarketplaces,
     whop: { description: t("whop.description"), server: mcp.whopServer?.name, connected: mcp.whopConnected },
+    tailscale: {
+      description: t("connectApps.tailscale.rowDescription"),
+      connected: tailscaleView?.phase === "connected",
+      pending: tailscaleView?.phase === "pending_approval" || tailscaleView?.phase === "joining",
+    },
     grok: grokConfigured ? { connectors: GROK_CLOUD_CONNECTORS, description: t("connectApps.grok.description") } : null,
-  }), [mcp.servers, featured, skills, shownMarketplaces, mcp.whopServer?.name, mcp.whopConnected, grokConfigured]);
+  }), [mcp.servers, featured, skills, shownMarketplaces, mcp.whopServer?.name, mcp.whopConnected, grokConfigured, tailscaleView?.phase]);
   // For a bot, only marketplace plugins: apps, servers and skills are the
-  // workspace's (a bot chooses among them in its own Access).
-  const scopedItems = useMemo(() => (scope !== "workspace" ? items.filter((item) => item.kind === "plugin" || (scope === "me" && item.kind === "skill")) : items), [scope, items]);
+  // workspace's (a bot chooses among them in its own Access). Tailscale is
+  // person-scoped (sealed vault + bot computer join), so it stays visible
+  // under Me and workspace.
+  const scopedItems = useMemo(() => {
+    if (scope === "workspace") return items;
+    return items.filter((item) =>
+      item.key === TAILSCALE_KEY
+      || item.kind === "plugin"
+      || (scope === "me" && item.kind === "skill"));
+  }, [scope, items]);
 
   const refreshAll = () => {
     void mcp.load(true);
@@ -484,15 +511,20 @@ export function PluginsPanel() {
       push({ page: "skill", name: item.id });
       return;
     }
+    if (item.key === TAILSCALE_KEY) {
+      push({ page: "tailscale" });
+      return;
+    }
     // Whop's page is its MCP server's page.
     const key = item.key === WHOP_KEY && mcp.whopServer ? `mcp:${mcp.whopServer.name}` : item.key;
     push({ page: "detail", key });
   };
 
-  const installFeatured = async (item: PluginItem, region?: string) => {
+  const installFeatured = async (item: PluginItem, region?: string, anchor?: HTMLElement | null) => {
     const listing = featured?.find((entry) => entry.id === item.id);
     if (region === undefined && listing?.regions?.length) {
-      setDataCenterFor({ item, regions: listing.regions, defaultUrl: listing.url });
+      if (!anchor) return;
+      setDataCenterFor({ item, regions: listing.regions, defaultUrl: listing.url, anchor });
       return;
     }
     setInstalling(item.id);
@@ -566,19 +598,25 @@ export function PluginsPanel() {
   });
   const removeMarketplace = (name: string) => {
     const fromBot = (marketRoute === "bot" || marketRoute === "me") && scopedPluginTarget;
-    if (!window.confirm(fromBot ? t("connectApps.market.removeFromBotConfirm", { name, bot: scopedPluginName }) : t("connectApps.market.removeConfirm", { name }))) return;
-    void marketAction(`remove:${name}`, async () => {
-      if (fromBot) {
-        const view = await removeBotMarketplace(fromBot, name);
-        await afterBotMarket(view);
-        if (!view.sharedRemoved) setPanelNotice(t("connectApps.market.keptForEveryone", { name }));
-      } else {
-        const result = await api(`/api/marketplaces/${encodeURIComponent(name)}`, { method: "DELETE" });
-        setMarketplaces(result.marketplaces ?? []);
-        void loadBotView();
-      }
-      if (filter === `source:${name}`) setFilter("all");
-    });
+    void (async () => {
+      if (!(await confirm({
+        title: fromBot ? t("connectApps.market.removeFromBotConfirm", { name, bot: scopedPluginName }) : t("connectApps.market.removeConfirm", { name }),
+        confirmLabel: t("common.confirmRemove"),
+        tone: "danger",
+      }))) return;
+      void marketAction(`remove:${name}`, async () => {
+        if (fromBot) {
+          const view = await removeBotMarketplace(fromBot, name);
+          await afterBotMarket(view);
+          if (!view.sharedRemoved) setPanelNotice(t("connectApps.market.keptForEveryone", { name }));
+        } else {
+          const result = await api(`/api/marketplaces/${encodeURIComponent(name)}`, { method: "DELETE" });
+          setMarketplaces(result.marketplaces ?? []);
+          void loadBotView();
+        }
+        if (filter === `source:${name}`) setFilter("all");
+      });
+    })();
   };
   // The GitHub connection: the person's GitHub account (organization
   // server) and the one credential list, in both scopes, on the GitHub
@@ -619,8 +657,14 @@ export function PluginsPanel() {
     void botAction(`install:${id}`, () => installBotPlugin(scopedPluginTarget!, id.slice(at + 1), id.slice(0, at)));
   };
   const uninstallForBot = (id: string) => {
-    if (!scopedPluginTarget || !window.confirm(scope === "me" ? t("connectApps.mePlugin.uninstallConfirm", { name: id.slice(0, id.lastIndexOf("@")) }) : t("connectApps.botPlugin.uninstallConfirm", { name: id.slice(0, id.lastIndexOf("@")), bot: scopedPluginName }))) return;
-    void botAction(`remove:${id}`, () => uninstallBotPlugin(scopedPluginTarget!, id));
+    if (!scopedPluginTarget) return;
+    const title = scope === "me"
+      ? t("connectApps.mePlugin.uninstallConfirm", { name: id.slice(0, id.lastIndexOf("@")) })
+      : t("connectApps.botPlugin.uninstallConfirm", { name: id.slice(0, id.lastIndexOf("@")), bot: scopedPluginName });
+    void (async () => {
+      if (!(await confirm({ title, confirmLabel: t("common.confirmRemove"), tone: "danger" }))) return;
+      void botAction(`remove:${id}`, () => uninstallBotPlugin(scopedPluginTarget!, id));
+    })();
   };
   const toggleForBot = (id: string, enabled: boolean) => {
     if (!scopedPluginTarget) return;
@@ -765,7 +809,7 @@ export function PluginsPanel() {
   };
   const uninstallPlugin = async (item: PluginItem) => {
     const [plugin, marketplace] = item.id.split("@") as [string, string];
-    if (!window.confirm(t("connectApps.plugin.uninstallConfirm", { name: plugin }))) return;
+    if (!(await confirm({ title: t("connectApps.plugin.uninstallConfirm", { name: plugin }), confirmLabel: t("common.confirmRemove"), tone: "danger" }))) return;
     setInstalling(item.id);
     setPanelError(null);
     try {
@@ -783,6 +827,19 @@ export function PluginsPanel() {
     const grokAction = grokRowAction(item);
     if (grokAction !== undefined) return grokAction;
     if (item.key === WHOP_KEY) return <WhopAction mcp={mcp} />;
+    if (item.key === TAILSCALE_KEY) {
+      if (item.installed) return null;
+      return (
+        <button
+          type="button"
+          data-tailscale-connect
+          onClick={() => openItem(item)}
+          className={cn(cardActionClass("quiet"), "min-w-[76px]")}
+        >
+          {t("connectApps.action.connect")}
+        </button>
+      );
+    }
     if (item.kind === "plugin") {
       if (scope !== "workspace") {
         // installed on this bot: Install again updates it in place (its
@@ -810,7 +867,7 @@ export function PluginsPanel() {
     }
     if (item.kind === "featured") {
       return (
-        <button type="button" disabled={installing !== null} onClick={() => void installFeatured(item)} className={cn(cardActionClass("quiet"), "min-w-[76px]")}>
+        <button type="button" disabled={installing !== null} onClick={(event) => void installFeatured(item, undefined, event.currentTarget)} className={cn(cardActionClass("quiet"), "min-w-[76px]")}>
           {installing === item.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : t(item.action === "connect" ? "connectApps.action.connect" : "connectApps.action.add")}
         </button>
       );
@@ -879,7 +936,7 @@ export function PluginsPanel() {
    * server of the entry added by hand or from the catalog, after one
    * confirmation. */
   const removeEntry = async (entry: InstalledEntry) => {
-    if (!window.confirm(t("connectApps.entry.removeConfirm", { name: entry.name }))) return;
+    if (!(await confirm({ title: t("connectApps.entry.removeConfirm", { name: entry.name }), confirmLabel: t("common.confirmRemove"), tone: "danger" }))) return;
     setPanelError(null);
     setInstalling(entry.key);
     try {
@@ -933,6 +990,9 @@ export function PluginsPanel() {
       }
       case "skill": return entry.name ?? t("connectApps.skill.new");
       case "github": return t("myConnections.github.title");
+      case "mac": return t("connectApps.mac.title");
+      case "mac-messages": return t("connectApps.mac.messages.rowTitle");
+      case "tailscale": return t("connectApps.tailscale.title");
     }
   };
   const trail: Crumb[] = stack.slice(0, -1).map((entry, depth) => ({ label: pageLabel(entry), onSelect: () => popTo(depth) }));
@@ -1004,6 +1064,27 @@ export function PluginsPanel() {
           {githubSection ?? <p className="rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary">{t("connectApps.manage.accountsEmpty")}</p>}
         </div>
       </>
+    );
+  } else if (page.page === "mac") {
+    subpage = (
+      <MacAppsView
+        onBack={back}
+        trail={trail}
+        onOpenMessages={() => push({ page: "mac-messages" })}
+        messagesEnabled={messagesSetup?.useMessages}
+        messagesAvailable={messagesSetup?.available}
+      />
+    );
+  } else if (page.page === "mac-messages") {
+    subpage = <MessagesSetupView onBack={back} trail={trail} />;
+  } else if (page.page === "tailscale") {
+    subpage = (
+      <TailscaleConnectView
+        onBack={() => {
+          back();
+          void fetchBotTailscale().then(setTailscaleView).catch(() => undefined);
+        }}
+      />
     );
   } else if (page.page === "detail" && detailItem) {
     const identity = detailIdentity(detailItem, entries);
@@ -1164,6 +1245,7 @@ export function PluginsPanel() {
     <ConnectAppsView
       tab={tab}
       onTab={chooseTab}
+      onBack={close}
       page={subpage ?? undefined}
       tabs={tabs}
       // what "N connected" counted, on the tabs that list them (2026-10-28):
@@ -1200,6 +1282,13 @@ export function PluginsPanel() {
           addDisabled={mcp.busy !== null}
           onNewSkill={scope !== "bot" && skillsOn && (scope === "me" || ownerOrAdmin !== false || libraryEditor) ? () => push({ page: "skill" }) : undefined}
           onDiscover={() => setTab("discover")}
+          macApps={scope !== "bot" ? (
+            <MacAppsInstalledSection
+              onOpenMac={() => { setTab("installed"); push({ page: "mac" }); }}
+              onOpenMessages={() => { setTab("installed"); push({ page: "mac-messages" }); }}
+              messagesEnabled={messagesSetup?.useMessages}
+            />
+          ) : undefined}
           providers={(
         <AccountsView
           groups={groups}
@@ -1277,42 +1366,28 @@ export function PluginsPanel() {
     />
   );
 
+  const dataCenterAnchor = useRef<HTMLElement | null>(null);
+  dataCenterAnchor.current = dataCenterFor?.anchor ?? null;
+
   return (
-    <div
-      className={CATEGORY_MODAL.backdrop}
-      onMouseDown={(event) => event.target === event.currentTarget && close()}
+    <main
+      ref={dialogRef}
+      data-tour="apps-panel"
+      data-plugins-page={page.page}
+      data-plugins-depth={stack.length - 1}
+      data-gallery-frame=""
+      aria-labelledby="plugins-title"
+      tabIndex={-1}
+      className="flex h-full min-w-0 flex-1 flex-col bg-app outline-none"
     >
-      {/* Browse Bots' window (src/components/category-modal.ts): same size,
-          frame and close button, so the two read as one window. */}
-      <div
-        ref={dialogRef}
-        data-tour="apps-panel"
-        data-plugins-page={page.page}
-        data-plugins-depth={stack.length - 1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="plugins-title"
-        tabIndex={-1}
-        className={cn("animate-pop-in", CATEGORY_MODAL.frame)}
-      >
-        <div className={CATEGORY_MODAL.content}>
-          <button
-            type="button"
-            data-tour="apps-close"
-            onClick={close}
-            aria-label={t("connectors.closeAria")}
-            className={CATEGORY_MODAL.close}
-          >
-            <X size={18} />
-          </button>
-          {content}
-        </div>
-      </div>
+      <PageTopStrip />
+      {content}
       {dataCenterFor && (
         <DataCenterDialog
           name={dataCenterFor.item.name}
           regions={dataCenterFor.regions}
           defaultUrl={dataCenterFor.defaultUrl}
+          anchorRef={dataCenterAnchor}
           onCancel={() => setDataCenterFor(null)}
           onChoose={(region) => {
             const { item } = dataCenterFor;
@@ -1321,7 +1396,7 @@ export function PluginsPanel() {
           }}
         />
       )}
-    </div>
+    </main>
   );
 }
 
@@ -1441,8 +1516,14 @@ function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccountDraft,
           </button>
         ),
         onRemove: () => {
-          if (!window.confirm(t("mcp.accounts.removeConfirm", { account: label, name }))) return;
-          void mcp.signOut(server, other.id);
+          void (async () => {
+            if (!(await confirmAsync({
+              title: t("mcp.accounts.removeConfirm", { account: label, name }),
+              confirmLabel: t("common.confirmRemove"),
+              tone: "danger",
+            }))) return;
+            void mcp.signOut(server, other.id);
+          })();
         },
         removeLabel: t("mcp.accounts.removeAria", { account: label, name }),
       };

@@ -72,6 +72,8 @@ struct RoutineDetailView: View {
     @EnvironmentObject private var session: Session
     @State private var runs: [RoutineRun] = []
     @State private var showingInstruction = false
+    /// Lot 5: run history is its own page (Grok Bot layout).
+    @State private var showingHistory = false
     @State private var editing = false
     /// Duplicate (2026-10-29): the editor opens on a copy.
     @State private var duplicating = false
@@ -83,13 +85,9 @@ struct RoutineDetailView: View {
 
     private let margin = Theme.Profile.routineMargin
 
-    /// "Every Monday at 7:02 AM · in 3 days · Ara", "When a webhook fires · Ara".
-    private var summary: String {
-        RoutineEditorRules.pageSummary(
-            trigger: RoutineWording.compact(routine.schedule),
-            nextRun: routine.schedule.isTrigger ? nil : RoutineWording.nextRun(routine),
-            bot: session.state.bot(routine.botId)?.name
-        )
+    private var instructionText: String {
+        RoutineDetailSections.instructionBody(routine.prompt)
+            ?? String(localized: "No instructions yet.")
     }
 
     var body: some View {
@@ -136,65 +134,62 @@ struct RoutineDetailView: View {
                 }
             }
 
-            // 2026-10-29: one line, trigger · next run · bot; the whole
-            // configuration is seen and changed in the editor (read only for
-            // someone else's routine), so the page repeats none of it.
+            // Lot 5: Instruction text visible on the detail (Grok Bot).
+            ProfileSectionLabel(text: "Instruction", margin: margin)
+                .padding(.top, Theme.Profile.cardGap)
+            TextCardBody(text: instructionText)
+                .accessibilityIdentifier("routine-instruction")
+
+            ProfileSectionLabel(text: "Schedule", margin: margin)
+                .padding(.top, Theme.Profile.cardGap)
+            ProfileCard(margin: margin) {
+                ProfileRow(
+                    title: Text(verbatim: RoutineWording.compact(routine.schedule)),
+                    height: Theme.Profile.singleRow
+                ) { EmptyView() }
+                .accessibilityIdentifier("routine-schedule")
+            }
+
+            if RoutineDetailSections.showsWebhook(routine.schedule) {
+                ProfileSectionLabel(text: "Webhook", margin: margin)
+                    .padding(.top, Theme.Profile.cardGap)
+                ProfileCard(margin: margin) {
+                    RoutineWebhookPanel(
+                        routine: routine,
+                        bot: session.state.bot(routine.botId),
+                        onRoutineChanged: { routine = $0 }
+                    )
+                    .padding(.horizontal, Theme.Profile.textInset)
+                    .padding(.vertical, 12)
+                }
+                .accessibilityIdentifier("routine-webhook-section")
+            }
+
+            // Lot 5: Run history is a page, not an inline list.
             ProfileCard(margin: margin) {
                 Button {
                     Haptics.selection()
-                    editing = true
+                    showingHistory = true
                 } label: {
-                    HStack(spacing: 8) {
-                        Text(verbatim: summary)
-                            .font(Theme.Font.body)
-                            .foregroundStyle(Theme.textPrimary)
-                            .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    ProfileRow(title: Text("Run history"), height: Theme.Profile.singleRow) {
                         ProfileChevronTrailing()
                     }
-                    .padding(.leading, Theme.Profile.textInset)
-                    .padding(.vertical, 14)
-                    .frame(minHeight: Theme.Profile.singleRow)
-                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint(routine.mayEdit ? Text("Edit routine") : Text("Routine"))
-                .accessibilityIdentifier("routine-summary")
+                .accessibilityIdentifier("routine-run-history")
             }
             .padding(.top, Theme.Profile.cardGap)
-
-            ProfileSectionLabel(text: "Run history", margin: margin)
-                .padding(.top, Theme.Profile.cardGap)
-            ProfileCard(margin: margin) {
-                if runs.isEmpty {
-                    ProfileRow(title: Text("No runs yet"), titleColor: Theme.textDisabled, height: Theme.Profile.singleRow)
-                        
-                        .accessibilityIdentifier("routine-no-runs")
-                } else {
-                    ForEach(Array(runs.prefix(20).enumerated()), id: \.element.id) { index, run in
-                        if index > 0 { ProfileDivider(leading: Theme.Profile.textInset) }
-                        // AU8, AU9: a run opens its detail (seen on open,
-                        // Cancel run); a long press cancels a live one.
-                        Button {
-                            Haptics.selection()
-                            openRun = run
-                        } label: {
-                            RunHistoryRow(run: run, unseen: session.surfaceGate.allows(.routineRunsSeen) && run.isUnseenProblem)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            if run.isActive && session.surfaceGate.allows(.routineRunCancel) {
-                                Button(String(localized: "Cancel run"), systemImage: "xmark", role: .destructive) {
-                                    Task { await cancel(run) }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
         .navigationDestination(isPresented: $showingInstruction) {
             TextCardView(title: String(localized: "Instruction"), text: routine.prompt)
+        }
+        .navigationDestination(isPresented: $showingHistory) {
+            RoutineRunHistoryView(
+                routine: routine,
+                runs: $runs,
+                onOpen: { openRun = $0 },
+                onCancel: { run in await cancel(run) }
+            )
         }
 #if DEBUG
         // captures only (`-parityOpenRoutineEditor YES`): the editor open
@@ -274,14 +269,60 @@ struct RoutineDetailView: View {
     }
 }
 
-/// One past run: when it was due and how it went.
-private struct RunHistoryRow: View {
+/// Lot 5: the routine's run history as its own page. A run opens as a
+/// bot-to-bot exchange (RoutineRunDetailView).
+struct RoutineRunHistoryView: View {
+    @Environment(\.themePalette) var themePalette
+    let routine: Routine
+    @Binding var runs: [RoutineRun]
+    var onOpen: (RoutineRun) -> Void
+    var onCancel: (RoutineRun) async -> Void
+
+    @EnvironmentObject private var session: Session
+    private let margin = Theme.Profile.routineMargin
+
+    var body: some View {
+        RoutineScreen(title: String(localized: "Run history")) { EmptyView() } content: {
+            ProfileCard(margin: margin) {
+                if runs.isEmpty {
+                    ProfileRow(title: Text("No runs yet"), titleColor: Theme.textDisabled, height: Theme.Profile.singleRow)
+                        .accessibilityIdentifier("routine-no-runs")
+                } else {
+                    ForEach(Array(runs.prefix(50).enumerated()), id: \.element.id) { index, run in
+                        if index > 0 { ProfileDivider(leading: Theme.Profile.textInset) }
+                        Button {
+                            Haptics.selection()
+                            onOpen(run)
+                        } label: {
+                            RunHistoryRow(
+                                run: run,
+                                unseen: session.surfaceGate.allows(.routineRunsSeen) && run.isUnseenProblem
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            if run.isActive && session.surfaceGate.allows(.routineRunCancel) {
+                                Button(String(localized: "Cancel run"), systemImage: "xmark", role: .destructive) {
+                                    Task { await onCancel(run) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One past run: when it was due and how it went (relative date, status
+/// colour, duration and cost on the subtitle).
+struct RunHistoryRow: View {
     @Environment(\.themePalette) var themePalette
     let run: RoutineRun
     /// A failed or missed run nobody opened: the red dot (AU9).
     var unseen = false
 
-    /// 2026-10-29: how long it took, what it cost and its first line.
+    /// Lot 5: duration and cost on the sub-line (preview stays for density).
     private var subtitle: Text? {
         let parts = [RoutineRunWording.duration(run), RoutineRunWording.cost(run), run.quiet == true ? nil : run.previewLine].compactMap { $0 }
         return parts.isEmpty ? nil : Text(verbatim: parts.joined(separator: " · "))

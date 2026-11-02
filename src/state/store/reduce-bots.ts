@@ -21,6 +21,7 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
           ...panelFollowsSelection(base, action.id),
           unreadDivider: openedUnreadDivider(base, room.threadId, Boolean(room.unread), room.messages, room.lastReadMessageId),
           activeView: "chat",
+          pluginsOpen: false,
           selectedId: action.id,
           groups: base.groups.map((g) => (g.id === action.id ? { ...g, unread: false } : g)),
         });
@@ -35,6 +36,7 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
               ? openedUnreadDivider(base, opened.threadId, threadOpensUnread(opened), visibleMessages(opened), threadReadCursor(opened))
               : base.unreadDivider,
             activeView: "chat",
+            pluginsOpen: false,
             selectedId: action.id,
           },
           action.id,

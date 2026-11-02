@@ -278,7 +278,14 @@ struct MessageRow: View {
         case .options:
             // A structured ask draws its own card: its answers are the
             // model's questions, not an allow/deny a tap could stand for.
-            if message.card?.questions.isEmpty == false {
+            if message.card?.phoneCallConsent != nil {
+                // one-time phone-call consent (PhoneCallConsentCard.tsx)
+                PhoneCallConsentCardView(
+                    chat: chat,
+                    message: message,
+                    accent: Theme.readable(MausPalette.color(chat.color))
+                )
+            } else if message.card?.questions.isEmpty == false {
                 QuestionCardView(chat: chat, message: message)
             } else if let card = message.card, FlatQuestionCardView.draws(card) {
                 // a bot's flat ask: the same question card (QuestionSheet)

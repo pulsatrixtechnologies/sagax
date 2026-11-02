@@ -35,6 +35,10 @@ const BUILTIN_LABELS: Record<string, string> = {
   Agent: "Ran a subagent",
   AskUserQuestion: "Asked you a question",
   TodoWrite: "Updated its task list",
+  request_purchase: "Asked to pay",
+  record_purchase: "Recorded a receipt",
+  update_order_tracking: "Updated order tracking",
+  fill_credential: "Filled a saved field",
 };
 
 /** "save_issue" → "Save issue", "TaskUpdate" → "Task update",

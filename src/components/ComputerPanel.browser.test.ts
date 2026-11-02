@@ -22,6 +22,7 @@ vi.mock("@/state/store", async (importOriginal) => ({
     flushBotPatches: vi.fn(),
   }),
 }));
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { ComputerPanel } from "./ComputerPanel";
 import { BrowserPanel } from "./BrowserPanel";
 
@@ -29,7 +30,7 @@ afterAll(() => vi.unstubAllGlobals());
 const bot = { id: "browser-fixture", name: "Browser fixture", modelSelection: { instanceId: "fixture" } } as Bot;
 const render = (config: FeatureFlagConfig & { cloudHome?: boolean }, browser?: boolean) => {
   fixture.config = config;
-  return renderToStaticMarkup(createElement(ComputerPanel, { bot: { ...bot, browser } }));
+  return renderToStaticMarkup(createElement(ConfirmProvider, null, createElement(ComputerPanel, { bot: { ...bot, browser } })));
 };
 
 // Sagax 0.1.0 (8a563e929) dropped the Browser view from the Computer panel;

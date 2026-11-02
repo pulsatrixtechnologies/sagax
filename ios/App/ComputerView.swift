@@ -722,6 +722,7 @@ struct ComputerGestureHelp: View {
         ("hand.draw", "Drag", "Touch and hold, then move without lifting."),
         ("keyboard", "Type", "The keyboard button sends what you type. Touch and hold it for Esc, Tab, Ctrl, Alt, Cmd and the arrows."),
         ("list.clipboard", "Clipboard", "Send this phone's clipboard to the computer, or copy the computer's."),
+        ("hand.raised", "Hand it back", "From the \"...\" menu, choose Release control so the bot can use its computer again."),
     ]
 
     var body: some View {
@@ -742,10 +743,10 @@ struct ComputerGestureHelp: View {
                         .padding(.vertical, 4)
                     }
                 } footer: {
-                    Text("Take control from the \"...\" menu. While you have it, the bot cannot use its computer.")
+                    Text("Take control from the \"...\" menu when you need the trackpad or keyboard. Hand it back when you are done.")
                 }
             }
-            .navigationTitle("Gestures")
+            .navigationTitle("Using the computer")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

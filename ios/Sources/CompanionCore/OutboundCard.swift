@@ -3,7 +3,7 @@
 // a purchase with a saved card (server/credential-vault.ts). Parité Grok Bot
 // V4, 59, 83; the desktop's src/components/OutboundCard.tsx.
 //
-// One answer covers one action: Call or Don't call, Allow once or Decline.
+// One answer covers one action: Call or Don't call, Pay or Cancel.
 // No Always allow. The card shows the full number to its own person, the
 // exact words the call says, what the purchase buys; never a card number, a
 // security code or an id.
@@ -107,9 +107,69 @@ public struct OutboundCardData: Codable, Hashable, Sendable {
     public var via: String?
     public var tracking: Tracking?
     public var error: String?
+    /// Live conversation call: who is being called (when known).
+    public var calleeName: String?
+    /// Live phase chip (`shared/phone-call-live.ts`): dialing through ended.
+    public var phase: String?
+    /// epoch ms when dialing started; drives the live timer.
+    public var liveStartedAt: Double?
+    /// Streaming transcript while the call is live (also kept after end).
+    public var liveTranscript: [LiveLine]?
+    /// Hold, DTMF and transfer events shown in the live stream.
+    public var liveEvents: [LiveEvent]?
+    /// Sagax proxy path for the recording player after the call ends.
+    public var recordingUrl: String?
+
+    /// A streaming line on the live conversation card.
+    public struct LiveLine: Codable, Hashable, Sendable {
+        /// "bot", "callee" or "system" (anything else is drawn as the other party).
+        public var speaker: String
+        public var text: String
+        /// epoch ms when the line arrived (optional for older cards).
+        public var at: Double?
+        public var isBot: Bool { speaker == "bot" }
+        public var isSystem: Bool { speaker == "system" }
+        public init(speaker: String, text: String, at: Double? = nil) {
+            self.speaker = speaker
+            self.text = text
+            self.at = at
+        }
+    }
+
+    /// Hold, DTMF, transfer or resume shown in the live stream.
+    public struct LiveEvent: Codable, Hashable, Sendable {
+        public enum Kind: String, Codable, Sendable { case hold, dtmf, transfer, resume, unknown }
+        public var kind: Kind
+        public var detail: String
+        public var at: Double
+        public init(kind: Kind, detail: String, at: Double) {
+            self.kind = kind
+            self.detail = detail
+            self.at = at
+        }
+
+        private enum CodingKeys: String, CodingKey { case kind, detail, at }
+
+        public init(from decoder: Decoder) throws {
+            let row = try decoder.container(keyedBy: CodingKeys.self)
+            kind = (try? row.decode(String.self, forKey: .kind)).flatMap(Kind.init(rawValue:)) ?? .unknown
+            detail = (try? row.decode(String.self, forKey: .detail)) ?? ""
+            let stamp = (try? row.decodeIfPresent(Double.self, forKey: .at)).flatMap { $0 } ?? 0
+            at = stamp.isFinite ? stamp : 0
+        }
+    }
 
     /// A call the bot holds as a conversation (place_phone_call mode conversation).
     public var isConversation: Bool { kind == .call && mode == "conversation" }
+
+    /// Live conversation card: placed with no result yet, or an explicit live phase.
+    public var isLiveConversation: Bool {
+        guard isConversation, result == nil else { return false }
+        if let phase, Self.livePhases.contains(phase) { return true }
+        return status == "done" || status == "approved"
+    }
+
+    public static let livePhases: Set<String> = ["dialing", "ringing", "on_hold", "in_call", "transferred"]
 
     /// A card this phone knows how to draw and answer.
     public var isDrawable: Bool { kind != .unknown && !id.isEmpty }
@@ -125,6 +185,7 @@ public struct OutboundCardData: Codable, Hashable, Sendable {
         case kind, id, status, botName, destination, from, callback, purpose, script, language
         case mode, objective, instructions, maxMinutes, voicemail, result
         case merchant, amount, currency, cardLabel, items, flights, orderRef, declared, mismatchTotal, via, tracking, error
+        case calleeName, phase, liveStartedAt, liveTranscript, liveEvents, recordingUrl
     }
 
     /// Lenient: a field this phone does not know the shape of is left out
@@ -160,6 +221,12 @@ public struct OutboundCardData: Codable, Hashable, Sendable {
         via = try? row.decodeIfPresent(String.self, forKey: .via)
         tracking = try? row.decodeIfPresent(Tracking.self, forKey: .tracking)
         error = try? row.decodeIfPresent(String.self, forKey: .error)
+        calleeName = try? row.decodeIfPresent(String.self, forKey: .calleeName)
+        phase = try? row.decodeIfPresent(String.self, forKey: .phase)
+        liveStartedAt = try? row.decodeIfPresent(Double.self, forKey: .liveStartedAt)
+        liveTranscript = try? row.decodeIfPresent([LiveLine].self, forKey: .liveTranscript)
+        liveEvents = try? row.decodeIfPresent([LiveEvent].self, forKey: .liveEvents)
+        recordingUrl = try? row.decodeIfPresent(String.self, forKey: .recordingUrl)
     }
 }
 
@@ -271,9 +338,11 @@ public enum OutboundCardRules {
     public static func status(_ card: OutboundCardData, status: String? = nil) -> Status? {
         let status = status ?? card.status
         if card.isConversation {
+            // Live and ended cards carry their own chrome (phase chip / result).
+            var view = card
+            view.status = status
+            if view.isLiveConversation || card.result != nil { return nil }
             switch status {
-            case "approved": return .callApproved
-            case "done": return card.result == nil ? .callInProgress : nil
             case "denied": return .callDenied
             case "failed": return card.result == nil ? .callFailed : nil
             default: return nil
@@ -290,6 +359,12 @@ public enum OutboundCardRules {
         }
     }
 
+    /// Whole seconds since startedAt, capped at a day so a stuck card stays readable.
+    public static func liveElapsed(startedAt: Double?, now: Double) -> Int {
+        guard let startedAt, startedAt.isFinite, startedAt <= now else { return 0 }
+        return min(86_400, max(0, Int((now - startedAt) / 1000)))
+    }
+
     /// The body of the answer (`POST /api/me/phone-calls/:id/answer` or
     /// `/api/me/credentials/purchases/:id/answer`). A call goes only once
     /// the person confirmed the number on the card.
@@ -297,12 +372,26 @@ public enum OutboundCardRules {
         let id = card.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? card.id
         return card.kind == .call ? "/api/me/phone-calls/\(id)/answer" : "/api/me/credentials/purchases/\(id)/answer"
     }
+
+    /// End a live conversation call (`POST /api/me/phone-calls/:id/hangup`).
+    public static func hangupPath(_ card: OutboundCardData) -> String {
+        let id = card.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? card.id
+        return "/api/me/phone-calls/\(id)/hangup"
+    }
+
+    /// Sagax recording proxy path on the card (`GET /api/me/phone-calls/:id/recording`).
+    public static func recordingPath(_ card: OutboundCardData) -> String? {
+        guard let raw = card.recordingUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        if raw.hasPrefix("/api/me/phone-calls/") { return raw }
+        let id = card.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? card.id
+        return "/api/me/phone-calls/\(id)/recording"
+    }
 }
 
 extension CompanionClient {
     /// The person's answer on an outbound card: Call or Don't call (a call
-    /// goes only with the number confirmed on the card), Allow once or
-    /// Decline for a purchase.
+    /// goes only with the number confirmed on the card), Pay or Cancel for
+    /// a purchase (once / deny on the wire).
     public func answerOutbound(_ card: OutboundCardData, yes: Bool, confirmed: Bool) async throws {
         let body: [String: Any]
         switch card.kind {
@@ -316,5 +405,19 @@ extension CompanionClient {
             throw APIError.badURL
         }
         try await send(try makeRequest("POST", OutboundCardRules.answerPath(card), body: body))
+    }
+
+    /// End a live conversation call from the card's End call button.
+    public func hangUpOutbound(_ card: OutboundCardData) async throws {
+        guard card.kind == .call else { throw APIError.badURL }
+        try await send(try makeRequest("POST", OutboundCardRules.hangupPath(card), body: [:]))
+    }
+
+    /// Recording bytes for the ended-card player (bearer-authenticated proxy).
+    public func outboundRecording(_ card: OutboundCardData) async throws -> Data {
+        guard let path = OutboundCardRules.recordingPath(card) else { throw APIError.badURL }
+        let (data, response) = try await perform(try makeRequest("GET", path))
+        try Self.check(response, data)
+        return data
     }
 }

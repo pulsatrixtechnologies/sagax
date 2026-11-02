@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Hourglass } from "lucide-react";
+import { Hourglass, X } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { limitLine, nearLimit, resetTime, useEngineLimits } from "@/lib/limit-resets";
 import type { Routine } from "@/lib/routines";
+import { dismissNotice, noticeDismissed } from "@/lib/usage-notices";
 import { api, useStore } from "@/state/store";
 
 /** The stopped turn's "Continue at 3:40 PM when your limit resets": one click sets up a one-time automation in this
@@ -30,15 +31,68 @@ export function useLimitResetContinue(botId: string | undefined, threadId: strin
   };
 }
 
-/** A compact line in the bot's chat when its engine is nearly out of usage: "Claude: 92% used · resets 3:40 PM". */
-export function EngineLimitNotice({ engine }: { engine: string | undefined }) {
+/** Dismissal key for one engine limit event. A new resetsAt (or a newly blocked
+ * window) is a new event, so the banner comes back after a prior dismiss. */
+export function engineLimitNoticeKey(limit: { engine: string; blocked: boolean; resetsAt: number | null }): string {
+  return `engine-limit:${limit.engine}:${limit.blocked ? "blocked" : "near"}:${limit.resetsAt ?? "-"}`;
+}
+
+/** Full-width dismissible banner above the conversation when this bot's engine
+ * is near or at its usage limit. Same shell as the other chat banners. */
+export function EngineLimitNotice({
+  engine,
+  botId,
+  threadId,
+}: {
+  engine: string | undefined;
+  botId?: string;
+  threadId?: string;
+}) {
   const limit = useEngineLimits().find((candidate) => candidate.engine === engine);
+  const continueAt = useLimitResetContinue(botId, threadId, limit?.resetsAt ?? undefined);
+  const [dismissed, setDismissed] = useState<string | null>(null);
   if (!limit || !nearLimit(limit)) return null;
+  const key = engineLimitNoticeKey(limit);
+  if (dismissed === key || noticeDismissed(key)) return null;
   return (
-    <span role="status" data-testid="engine-limit-notice" title={t("limits.chatHint")}
-      className="flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/10 px-2.5 py-1 text-[12.5px] text-ink">
-      <Hourglass size={13} className="shrink-0 text-warning" aria-hidden="true" />
-      <span className="tabular-nums">{limitLine(limit)}</span>
-    </span>
+    <div className="w-full px-5">
+      <div
+        role="status"
+        data-testid="engine-limit-notice"
+        data-notice="engine-limit"
+        title={t("limits.chatHint")}
+        className="mb-2 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[13px] text-warning"
+      >
+        <Hourglass size={15} className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+        <div className="min-w-0 flex-1 break-words">
+          <span className="tabular-nums text-ink">{limitLine(limit)}</span>
+          {continueAt && (
+            <>
+              {" "}
+              <button
+                type="button"
+                data-testid="engine-limit-continue"
+                onClick={continueAt.onClick}
+                className="underline hover:no-underline"
+              >
+                {continueAt.label}
+              </button>
+            </>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            dismissNotice(key);
+            setDismissed(key);
+          }}
+          aria-label={t("limits.dismiss")}
+          title={t("limits.dismiss")}
+          className="shrink-0 rounded p-0.5 hover:bg-warning/15"
+        >
+          <X size={13} />
+        </button>
+      </div>
+    </div>
   );
 }

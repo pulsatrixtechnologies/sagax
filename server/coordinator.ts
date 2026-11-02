@@ -8,7 +8,7 @@ import { RuntimeCoordinator } from "./runtime-coordinator.ts";
 import type { WorkOrigin } from "./peer-provenance.ts";
 import type { EnvelopeNames, Level, Limits } from "./runtime/types.ts";
 
-export type HandoffStatus = "source" | "queued" | "running" | "waiting" | "resume" | "completed" | "failed" | "cancelled";
+export type HandoffStatus = "source" | "queued" | "running" | "waiting" | "resume" | "completed" | "failed" | "cancelled" | "expired";
 
 /** A coordinated turn as the server reads it: who runs it where, what it
  * was asked, how far it got. Projected from an Assignment row. */
@@ -86,6 +86,13 @@ export interface CoordinatorHost {
   validate(node: HandoffView, parent?: HandoffView): string | undefined;
   /** The assignee cannot take a turn now (slot-aware admission). */
   busy(node: HandoffView): boolean;
+  /**
+   * Slot use for the reserved person slot (DEL-08). When present, canStart
+   * prefers this over busy for capacity: automatic work fills `max`, a person
+   * wake may use one more. `hardBlocked` covers thread busy, group turns and
+   * review holds. Absent: canStart falls back to busy alone.
+   */
+  slotUse?(node: HandoffView): { used: number; max: number; hardBlocked: boolean };
   /** Run one turn of the assignee with the composed text; resolves when the
    * engine settles. `stalled`: the host's stall watchdog stopped the turn
    * (a room turn too, during its setup), so it fails as `stalled`, not as a
@@ -141,7 +148,7 @@ export interface Coordinator {
   enqueue(source: RoomAddress, generation: string, parentId: string | undefined, target: RoomAddress, key: string, text: string,
     approvalGranted?: boolean, rework?: boolean, sourceText?: string, requestBatchKey?: string, origin?: WorkOrigin,
     mode?: "work" | "consult" | "notify" | "auto", person?: string, relay?: boolean, doneWhen?: string, request?: string,
-    extra?: { priority?: "now" }): { node: HandoffView; duplicate: boolean; joined?: boolean };
+    extra?: { priority?: "now"; defaultAnswer?: string }): { node: HandoffView; duplicate: boolean; joined?: boolean };
   sharedRequest(node: HandoffView): { id: string; botIds: string[] };
   /** The host's own turn ended; `stalled` when its stall watchdog stopped it. */
   sourceSettled(generation: string, ok: boolean, stalled?: boolean): void;

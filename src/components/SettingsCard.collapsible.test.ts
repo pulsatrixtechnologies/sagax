@@ -204,8 +204,8 @@ describe("skin picker", () => {
     const { SkinPicker } = await import("./SkinPicker");
     const html = renderToStaticMarkup(createElement(SkinPicker));
     expect(html).toContain("grid-cols-[repeat(auto-fill,minmax(132px,1fr))]");
-    expect(html).toContain(`title="Perspicax&#x27;s own look: navy chrome, Geist and a soft glow from the top."`);
-    expect(html).toContain(`aria-description="Perspicax&#x27;s own look: navy chrome, Geist and a soft glow from the top."`);
+    expect(html).toContain(`title="Perspicax&#x27;s own look: neutral dark chrome, Geist and Pulsatrix blue."`);
+    expect(html).toContain(`aria-description="Perspicax&#x27;s own look: neutral dark chrome, Geist and Pulsatrix blue."`);
     expect(html).toContain('aria-pressed="true"');
   });
 });

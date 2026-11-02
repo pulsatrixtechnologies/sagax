@@ -36,6 +36,7 @@ import { proactiveProposalAccepts } from "../../../shared/proactive-proposal";
 import { reviewedSkillSha256, skillRequestBehavior } from "../../../shared/skill-request";
 import { terminalRequestBehavior } from "../../../shared/terminal-request";
 import { meetingRequestBehavior } from "../../../shared/meeting-request";
+import { phoneCallConsentBehavior } from "../../../shared/phone-call-consent";
 import { onNudgeSent } from "@/lib/desktop-nudge";
 import type { BotUpdatePatch } from "../bot-patch-queue";
 
@@ -475,7 +476,9 @@ function dispatchSendEffects(action: Action, env: DispatchEnv): void {
                     ? { behavior: terminalRequestBehavior(action.answer) }
                     : card.meetingRequest
                       ? { behavior: meetingRequestBehavior(action.answer) }
-                      : answerResponse(card, action.answer);
+                      : card.phoneCallConsent
+                        ? { behavior: phoneCallConsentBehavior(action.answer) }
+                        : answerResponse(card, action.answer);
                 return api(`/api/threads/${action.threadId ?? host.threadId}/respond`, {
                   method: "POST",
                   body: JSON.stringify({
@@ -1131,7 +1134,7 @@ export function createStoreDispatch(ctx: StoreDispatchCtx): (action: Action) => 
   function wrapped(action: Action): void {
       // Deferred folder creation may select its bot only while it is still
       // the latest navigation intent, even if the person went away and back.
-      if (["select", "newTask", "switchTask", "newGroupTask", "switchGroupTask", "showChat", "showRoutines", "showTeamMap", "showCode", "showApprovals", "showRemoteSessions", "showAchievements"].includes(action.type)) shared.selectionRevision++;
+      if (["select", "newTask", "switchTask", "newGroupTask", "switchGroupTask", "showChat", "showRoutines", "showTeamMap", "showCode", "showApprovals", "showRemoteSessions", "showAchievements", "showArchivedBots", "showOrgImport"].includes(action.type)) shared.selectionRevision++;
       // Pin before any await or optimistic state change, including legacy
       // callers such as keyboard shortcuts and voice controls.
       action = pinBotThreadAction(action, stateRef.current.bots);

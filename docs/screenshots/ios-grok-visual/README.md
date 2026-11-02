@@ -36,8 +36,8 @@ row below names the reference it was compared with.
   attachments set apart. Each action's explanation is its VoiceOver hint.
 - **Bot panel**: Details, Library and Computer pill tabs under the name. Details
   lists routines with their switches ("N on" opens the full list with folders,
-  sort and run logs). Computer shows the mascot asleep ("z Z"), then "Waking
-  up…", then only the live screen.
+  sort and run logs). Computer shows a generic muted bot glyph asleep ("z Z"),
+  then "Waking up…", then only the live screen.
 - **Settings**: shown as a sheet with rounded top corners over a dimmed strip.
   Cards have a hairline edge and sub-page titles are centred. The root shows
   the X alone, with search behind a round button. The Vault sits with the

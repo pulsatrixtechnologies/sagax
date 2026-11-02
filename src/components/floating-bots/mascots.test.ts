@@ -27,7 +27,7 @@ function memoryStorage(): FloatingStorage & { removeItem(key: string): void } {
 }
 
 /** The eyes a shape's fill cuts out: its outline's closed subpaths after the body's own. */
-const eyeCuts = (html: string) => {
+const eyeCuts = (html: string, _shape?: string) => {
   // the eyes: their own opaque path on a turned body (2026-10-18), or cut out of a flat skin's fill
   const own = /<path d="([^"]+)"[^>]*data-shape-eyes=""/.exec(html)?.[1];
   if (own) return own.split("M").filter(Boolean);
@@ -90,7 +90,7 @@ describe("a bot's character and its look", () => {
         const html = renderToStaticMarkup(createElement(BotAvatar, { bot: { color: "blue", mascotLook: { character: "shape", shape, skins: { shape: skin } } }, size: 40 }));
         expect(html).toContain(`data-shape="${shape}"`);
         expect(html).toContain(`data-shape-skin="${skin}"`);
-        expect(eyeCuts(html), `${shape} ${skin}`).toHaveLength(2);
+        expect(eyeCuts(html, shape), `${shape} ${skin}`).toHaveLength(2);
         expect(shapeSkinPaint(skin, "#377FE6").fill).toMatch(/^#/);
       }
     }
@@ -99,7 +99,7 @@ describe("a bot's character and its look", () => {
   it("gives every shape the same resting face: rounded bars about twice as tall as wide, side by side", () => {
     for (const shape of MASCOT_SHAPES) {
       const html = renderToStaticMarkup(createElement(BotAvatar, { bot: { color: "white", mascotLook: { character: "shape", shape } }, size: 60, animated: false }));
-      const eyes = eyeCuts(html).map((d) => {
+      const eyes = eyeCuts(html, shape).map((d) => {
         const pts = [...d.matchAll(/(-?[\d.]+) (-?[\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
         const xs = pts.map(([x]) => x);
         const ys = pts.map(([, y]) => y);

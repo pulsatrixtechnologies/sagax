@@ -7,4 +7,6 @@ export interface PreviewImage {
   downloadName?: string;
   /** Authored remote images keep an explicit way to open their source. */
   openUrl?: string;
+  /** Streamed video or audio: the shared viewer shows a player, not an image. */
+  media?: "video" | "audio";
 }

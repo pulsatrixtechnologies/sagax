@@ -206,9 +206,10 @@ public enum DesktopFileSize {
 }
 
 /// The panel's own bot fields (`PATCH /api/bots/:id`): Permissions (Chief
-/// of Staff, ask before contacting other bots, the approval level) and
-/// Access (works on, cloud backend, working folder). The server takes them
-/// from an admin session only; `SurfaceGate.botAccessEdit` says when to send.
+/// of Staff, ask before contacting other bots, the approval level,
+/// proactive) and Access (works on, cloud backend, working folder). Sent
+/// when `SurfaceGate.botAccessEdit` allows it (admin, owner's sidecar, or
+/// the bot's owner on an organization server).
 public struct BotPanelPatch: Encodable, Hashable, Sendable {
     public var chiefOfStaff: Bool?
     public var approvePeerComms: Bool?
@@ -737,16 +738,17 @@ public enum BotLibraryChip: Hashable, Sendable {
 
 // MARK: - The bot's one "..." menu
 
-/// One entry of the bot's one "..." menu (`BotActionsMenu.tsx`, the owner
-/// 2026-10-14): Edit bot, Rename, the Primary Bot entry; Export the
-/// conversation (copy, download) and the bot (.zip); Archive, and in the
-/// desktop's Advanced mode the Inspector. It replaced the mascot's menu,
-/// the editor Overview's quick actions and the Primary bot button. "Put on
-/// the desktop" floats a window: desktop only.
+/// One entry of the bot's one "..." menu (`BotActionsMenu.tsx`, lot 6
+/// 2026-11-01): Make / Replace primary, Redo the wizard, Share (org);
+/// Export the conversation and the bot (.zip); Archive, Delete, and in
+/// Advanced mode the Inspector. Edit bot and Rename left the menu (the
+/// Edit button and the Name field cover them). Delete left Edit bot's
+/// root and lives here. "Put on the desktop" floats a window: desktop only.
+/// `editBot` and `rename` stay in the enum for older callers and tests.
 public enum BotActionsMenuItem: String, CaseIterable, Hashable, Sendable {
     case editBot, redoWizard, rename, share, makePrimary, replacePrimary
     case copyConversation, downloadConversation, exportZip
-    case archive, inspector
+    case archive, delete, inspector
 }
 
 public struct BotActionsMenuPlan: Hashable, Sendable {
@@ -765,7 +767,8 @@ public struct BotActionsMenuPlan: Hashable, Sendable {
     /// - Parameters:
     ///   - viewerId: the viewer as the server knows them; nil keeps the
     ///     Primary Bot entry out, as the sidebar's menu does.
-    ///   - editable: the pairing lists at least one section of the editor.
+    ///   - editable: the pairing lists at least one section of the editor
+    ///     (gates Redo the wizard).
     ///   - zipExport: `showBotZipExport` (the bot's owner or an admin, not
     ///     through a sidecar).
     ///   - inspector: the Inspector is offered where the pairing shows it.
@@ -774,13 +777,8 @@ public struct BotActionsMenuPlan: Hashable, Sendable {
     public init(gate: SurfaceGate, bot: Bot, viewerId: String?, editable: Bool, zipExport: Bool,
                 inspector: Bool = false, activeBotCount: Int, wizard: Bool = false) {
         var first: [BotActionsMenuItem] = []
-        if editable { first.append(.editBot) }
-        if editable, wizard { first.append(.redoWizard) }
-        if gate.allows(.renameBot), gate.scope != .serverClient || viewerId.map({ PrimaryBotRules.viewerOwns(bot, viewerId: $0) }) == true {
-            first.append(.rename)
-        }
-        // Share: the Shared with page (organization servers), after Edit bot
-        if gate.allows(.botSharing) { first.append(.share) }
+        // Lot 6: Make / Replace primary first, then Redo the wizard, then
+        // Share with people. Edit bot and Rename are gone (duplicates).
         if let viewerId, gate.allows(.primaryBot) {
             switch PrimaryBotRules.menuAction(for: bot, viewerId: viewerId) {
             case .make: first.append(.makePrimary)
@@ -788,6 +786,8 @@ public struct BotActionsMenuPlan: Hashable, Sendable {
             case nil: break
             }
         }
+        if editable, wizard { first.append(.redoWizard) }
+        if gate.allows(.botSharing) { first.append(.share) }
         var export: [BotActionsMenuItem] = [.copyConversation, .downloadConversation]
         if zipExport { export.append(.exportZip) }
         var last: [BotActionsMenuItem] = []
@@ -796,6 +796,8 @@ public struct BotActionsMenuPlan: Hashable, Sendable {
             last.append(.archive)
             if bot.chiefOfStaff == true { block = .primary } else if activeBotCount <= 1 { block = .lastActive }
         }
+        // Delete: owner or admin extras (same gate as the sidebar row menu)
+        if gate.allows(.botOwnerExtras, bot: bot) { last.append(.delete) }
         if inspector, gate.allows(.inspector, bot: bot) { last.append(.inspector) }
         groups = [first, export, last].filter { !$0.isEmpty }
         archiveBlock = block

@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { setLocale } from "@/lib/i18n";
 
 const storeFixture = vi.hoisted(() => ({ config: null as unknown }));
@@ -83,9 +84,9 @@ describe("computer inventory request wiring", () => {
     }
   });
 
-  it("does not expose a destructive request when confirmation is cancelled", () => {
+  it("does not expose a destructive request when confirmation is cancelled", async () => {
     const confirm = vi.fn(() => false);
-    const request = confirmComputerAction(perBotLocalVmDeletePlan(cloudVm), confirm);
+    const request = await confirmComputerAction(perBotLocalVmDeletePlan(cloudVm), confirm);
 
     expect(request).toBeNull();
     expect(confirm).toHaveBeenCalledOnce();
@@ -94,13 +95,13 @@ describe("computer inventory request wiring", () => {
     );
   });
 
-  it("builds the exact confirmed Local VM, Boat, and VPS lifecycle requests", () => {
+  it("builds the exact confirmed Local VM, Boat, and VPS lifecycle requests", async () => {
     const confirm = vi.fn(() => true);
-    const local = confirmComputerAction(perBotLocalVmDeletePlan(cloudVm), confirm);
-    const cloudDelete = confirmComputerAction(cloudComputerActionPlan("delete", ownedCloudComputer), confirm);
-    const cloudSleep = confirmComputerAction(cloudComputerActionPlan("sleep", ownedCloudComputer), confirm);
+    const local = await confirmComputerAction(perBotLocalVmDeletePlan(cloudVm), confirm);
+    const cloudDelete = await confirmComputerAction(cloudComputerActionPlan("delete", ownedCloudComputer), confirm);
+    const cloudSleep = await confirmComputerAction(cloudComputerActionPlan("sleep", ownedCloudComputer), confirm);
     const vpsName = "openmausbot-vps-current-123456abcdef";
-    const vps = confirmComputerAction(vpsComputerRemovePlan({
+    const vps = await confirmComputerAction(vpsComputerRemovePlan({
       name: vpsName,
       state: "running",
       ownerBotId: "current-owner",
@@ -546,10 +547,11 @@ describe("VPS computer inventory UI", () => {
 describe("Settings → Computers", () => {
   afterEach(() => { storeFixture.config = null; });
   // Settings cards are collapsible here: the title is the first span of the card's toggle.
-  const cards = () => [...renderToStaticMarkup(createElement(LocalComputerSection)).matchAll(/<button type="button" aria-expanded="[a-z]+"[^>]*><span class="min-w-0 truncate">([^<]+)<\/span>/g)].map((match) => match[1]);
+  const markup = () => renderToStaticMarkup(createElement(ConfirmProvider, null, createElement(LocalComputerSection)));
+  const cards = () => [...markup().matchAll(/<button type="button" aria-expanded="[a-z]+"[^>]*><span class="min-w-0 truncate">([^<]+)<\/span>/g)].map((match) => match[1]);
 
   // 0.5.6: the Local VM is a row of the "Bots' computer" group, not a card.
-  const html = () => renderToStaticMarkup(createElement(LocalComputerSection));
+  const html = () => markup();
 
   it("sets up a Local VM on a desktop or self-hosted server", () => {
     expect(cards()).toContain("Setup");
@@ -616,7 +618,7 @@ describe("Local VM automatic care", () => {
     expect(localVmAutoAction(auto({ phase: "running" }))).toBeNull();
   });
 
-  it("starts without asking and resets only once confirmed", () => {
+  it("starts without asking and resets only once confirmed", async () => {
     const ensure = localVmEnsurePlan();
     expect(ensure.confirmation).toBeNull();
     expect(ensure.request).toEqual([
@@ -625,13 +627,13 @@ describe("Local VM automatic care", () => {
     ]);
 
     const confirm = vi.fn(() => true);
-    const reset = confirmComputerAction(localVmResetPlan(false), confirm);
+    const reset = await confirmComputerAction(localVmResetPlan(false), confirm);
     expect(reset).toEqual([
       "/api/local-computer/reset",
       { method: "POST", headers: { "content-type": "application/json" }, body: '{"confirm":true}' },
     ]);
     expect(confirm).toHaveBeenCalledWith("Delete this computer's Local VM and let Sagax create it again? Files saved on this computer are kept.");
-    expect(confirmComputerAction(localVmResetPlan(true), () => false)).toBeNull();
+    expect(await confirmComputerAction(localVmResetPlan(true), () => false)).toBeNull();
     expect(confirm).toHaveBeenCalledTimes(1);
   });
 

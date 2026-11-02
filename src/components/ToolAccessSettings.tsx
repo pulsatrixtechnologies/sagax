@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { confirmAsync, type ConfirmRequest } from "@/components/ConfirmProvider";
 import { t, activeLocale } from "@/lib/i18n";
 import { grantTier, sortGrants, type ToolGrantRow } from "@/lib/tool-grants";
 import type { OrgDirectoryPerson } from "@/lib/perspicax-org";
@@ -12,13 +13,20 @@ const STATE_KEY = {
   revoked: "settings.toolAccess.state.revoked",
 } as const;
 
+function defaultConfirm(request: ConfirmRequest | string): Promise<boolean> {
+  if (typeof request === "string") {
+    return confirmAsync({ title: request, confirmLabel: t("common.confirm"), tone: "danger" });
+  }
+  return confirmAsync(request);
+}
+
 /** Settings > General > Advanced: the tool grants given to people (B3b).
  * A bot's own grants moved to its editor, under Permissions (2026-10-15, 
  * bot-settings/BotToolAccess.tsx). Sagax has no form for a person's grant
  * (they come through POST /api/tool-grants), so this card shows only when
  * some exist, for review and Revoke. Admins only; the server refuses
  * anyone else, and the card then stays away. */
-export function PeopleToolAccessSettings({ confirm = (text: string) => window.confirm(text) }: { confirm?: (text: string) => boolean } = {}) {
+export function PeopleToolAccessSettings({ confirm = defaultConfirm }: { confirm?: (req: ConfirmRequest | string) => Promise<boolean> } = {}) {
   const [rows, setRows] = useState<ToolGrantRow[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
@@ -51,7 +59,11 @@ export function PeopleToolAccessSettings({ confirm = (text: string) => window.co
 
   const revoke = async (row: ToolGrantRow) => {
     if (busy) return;
-    if (!confirm(t("settings.toolAccess.revokeConfirm", { name: who(row.subject.id), scope: what(row.scope) }))) return;
+    if (!(await confirm({
+      title: t("settings.toolAccess.revokeConfirm", { name: who(row.subject.id), scope: what(row.scope) }),
+      confirmLabel: t("common.confirm"),
+      tone: "danger",
+    }))) return;
     setBusy(row.id);
     try {
       await api(`/api/tool-grants/${encodeURIComponent(row.id)}/revoke`, { method: "POST", body: "{}" });

@@ -4,6 +4,7 @@ import { ApprovalCard, approvalCardStaysInChat } from "./ApprovalCard";
 import { MeetingCard } from "./MeetingCard";
 import { MessageBoundary } from "./MessageBoundary";
 import { OptionCard, shouldHideOnboardingCard } from "./OptionCard";
+import { PhoneCallConsentCard } from "./PhoneCallConsentCard";
 import { QuestionCard } from "./QuestionCard";
 
 /** The transcript row for an `options` message in a direct chat. Called, not
@@ -25,6 +26,8 @@ export function optionsCardRow({ message: m, transcript, botId, botName, threadI
   // whole page down every time this chat is selected.
   const card = m.card?.requestId && m.card.meetingRequest ? (
     <MeetingCard botId={botId} botName={botName} threadId={threadId} message={m} />
+  ) : m.card?.requestId && m.card.phoneCallConsent ? (
+    <PhoneCallConsentCard botId={botId} botName={botName} threadId={threadId} message={m} />
   ) : m.card?.requestId && m.card.questionRequest ? (
     <QuestionCard threadId={threadId} bot={{ name: botName }} message={m} />
   ) : m.card?.requestId && m.card.tool ? (

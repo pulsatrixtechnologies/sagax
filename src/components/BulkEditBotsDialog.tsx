@@ -8,7 +8,7 @@
 // Replace with. Before Apply: one summary line; after: one result per bot,
 // and Undo puts the bots back (src/lib/bulk-bot-edit.ts runs both).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, CircleAlert, Loader2, Minus, Undo2 } from "lucide-react";
+import { Check, ChevronLeft, CircleAlert, Loader2, Minus, Undo2 } from "lucide-react";
 
 import { api, BotEditorStore, persistBotUpdate, useStore, type Bot, type BotSettingsSection } from "@/state/store";
 import { cn } from "@/lib/cn";
@@ -16,6 +16,8 @@ import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { engineLabel, personLabel } from "@/lib/human-label";
 import { placeLabelKey, type EffectivePlace } from "@/lib/place";
+import { isBackShortcut } from "@/lib/back-shortcut";
+import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { usePerspicaxOrg, type OrgDirectory } from "@/lib/perspicax-org";
 import { useMcpServers } from "@/lib/mcp-servers";
 import { viewerCan } from "@/lib/viewer";
@@ -63,7 +65,9 @@ import { AccessSection } from "./bot-settings/AccessSection";
 import { VoiceSection } from "./bot-settings/VoiceSection";
 import { PermissionsSection } from "./bot-settings/PermissionsSection";
 import { PerspicaxProfileControl, perspicaxRows, type PerspicaxAnswer, type PerspicaxProfile } from "./bot-settings/PerspicaxSection";
-import { DialogFrame, DialogLayer, GROUP_CARD, HelpTip, PILL, PRIMARY_PILL } from "./SettingsPrimitives";
+import { useCaptionChrome } from "./DesktopCapabilities";
+import { PageTopStrip } from "./content-page";
+import { GROUP_CARD, HelpTip, PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 
 const LIST_MODES: BulkListMode[] = ["add", "remove", "replace"];
 const MODE_KEY: Record<BulkListMode, LocaleKey> = {
@@ -126,6 +130,8 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
   const { state, dispatch, flushBotPatches } = parent;
   const perspicaxOrg = usePerspicaxOrg();
   const { servers } = useMcpServers();
+  const { dragProps, noDragStyle, padClass } = useCaptionChrome();
+  const rootRef = useRef<HTMLElement>(null);
   const bots = useMemo(
     () => botIds.flatMap((id) => state.bots.filter((bot) => bot.id === id && !viewerLocalBotSettings(state.config, bot))),
     [botIds, state.bots, state.config],
@@ -150,17 +156,8 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
   const busy = step === "running" || undoState === "running";
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || busy) return;
-      // a menu or picker inside a section takes Escape first
-      if (document.querySelector("[role=menu], [role=listbox]")) return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeRef.current();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [busy]);
+    rootRef.current?.focus({ preventScroll: true });
+  }, []);
 
   // Shared with and Perspicax compare lists the bots hold
   useEffect(() => {
@@ -316,7 +313,7 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
   const count = bots.length;
   const nameOf = (botId: string) => state.bots.find((bot) => bot.id === botId)?.name ?? t("bulkEdit.removedBot");
 
-  const footer = step === "edit" ? (
+  const footerActions = step === "edit" ? (
     <>
       <button type="button" className={PILL} onClick={onClose}>{t("common.cancel")}</button>
       <button type="button" data-bulk-review className={PRIMARY_PILL} disabled={touched.length === 0 || count === 0} onClick={() => setStep("review")}>{t("bulkEdit.review")}</button>
@@ -341,19 +338,50 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
     </>
   );
 
+  // Full-height content panel (Sidebar still mounts it; App wiring can move
+  // it into the main frame later). No backdrop.
   return (
-    <DialogLayer onBackdropMouseDown={() => { if (!busy && step !== "edit") onClose(); }}>
-      <DialogFrame
-        titleId={titleId}
-        title={t("bulkEdit.title", { count })}
-        subtitle={bots.map((bot) => bot.name).join(", ")}
-        width="xl"
-        closeLabel={t("common.close")}
-        onClose={onClose}
-        closeDisabled={busy}
-        frameProps={{ "data-bulk-edit": "", "aria-busy": busy }}
-        footer={footer}
+    <main
+      ref={rootRef}
+      tabIndex={-1}
+      data-bulk-edit-view=""
+      data-bulk-edit=""
+      aria-labelledby={titleId}
+      aria-busy={busy || undefined}
+      className="fixed inset-0 z-50 flex h-full min-w-0 flex-1 flex-col bg-app outline-none"
+      onKeyDown={(event) => {
+        if (event.defaultPrevented || busy) return;
+        if (document.querySelector("[role=menu], [role=listbox]")) return;
+        if (event.key === "Escape" || isBackShortcut(event)) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeRef.current();
+        }
+      }}
+    >
+      <PageTopStrip />
+      <header
+        {...dragProps}
+        className={cn("content-topbar relative flex h-12 shrink-0 items-center gap-2 border-b border-hairline/50 px-3", padClass)}
       >
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={busy}
+          aria-label={t("breadcrumb.back")}
+          title={t("breadcrumb.back")}
+          data-bulk-back=""
+          style={noDragStyle}
+          className={cn(CIRCLE_BUTTON, "disabled:opacity-40")}
+        >
+          <ChevronLeft size={18} strokeWidth={1.75} />
+        </button>
+        <div className="min-w-0 flex-1" style={noDragStyle}>
+          <h1 id={titleId} className="truncate text-[15px] font-medium leading-6 text-ink">{t("bulkEdit.title", { count })}</h1>
+          <p className="truncate text-[12px] leading-4 text-ink-secondary">{bots.map((bot) => bot.name).join(", ")}</p>
+        </div>
+      </header>
+      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-3 overflow-y-auto px-4 py-4 sm:px-6">
         {step === "edit" && (
           <>
             <p className="text-[12.5px] leading-relaxed text-ink-secondary">{t("bulkEdit.intro")}</p>
@@ -449,8 +477,11 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
             {undoState !== "idle" && <UndoResults state={undoState} outcomes={undoOutcomes} nameOf={nameOf} />}
           </>
         )}
-      </DialogFrame>
-    </DialogLayer>
+      </div>
+      <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-hairline/40 px-4 py-3 sm:px-6">
+        {footerActions}
+      </footer>
+    </main>
   );
 }
 

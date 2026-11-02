@@ -1,18 +1,19 @@
-// The remote computer's files, in a window drawn like Settings (2026-10-21,
+// The remote computer's files, in the right detail panel (2026-10-21,
 // 2026-10-22: Télécharger and Envoyer un fichier open a browser of the remote
-// computer instead of asking for a path). It starts in the user's profile,
-// climbs with the breadcrumb or the parent button, switches drives on
-// Windows, and lists name, size and last change. Download picks a file;
-// upload picks the folder the chosen file goes to.
+// computer instead of asking for a path. 2026-11-01: that window is the
+// panel). It starts in the user's profile, climbs with the breadcrumb or
+// the parent button, switches drives on Windows, and lists name, size and
+// last change. Download picks a file; upload picks the folder the chosen
+// file goes to.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUp, ChevronRight, File, Folder, HardDrive, Home, Loader2 } from "lucide-react";
 
 import { remoteCrumbs, remoteJoin, scpSafePath, sensitiveRemoteDir, type RemoteEntry, type RemoteListing } from "../../../shared/remote-files";
 import { publicText, type RemoteSessionView } from "../../../shared/remote-session";
-import { useModalDialog } from "@/hooks/use-modal-dialog";
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
-import { DANGER_PILL, DialogFrame, DialogLayer, PILL, PRIMARY_PILL } from "../SettingsPrimitives";
+import { DetailPanel } from "../DetailPanel";
+import { DANGER_PILL, PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { listRemoteDir } from "./remote-session-client";
 
 export type RemoteBrowserMode = { kind: "download" } | { kind: "upload"; fileName: string };
@@ -75,7 +76,6 @@ export function RemoteFileBrowser({ botId, view, mode, busy = false, error: acti
   const crumbsRef = useRef<HTMLElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const close = () => { if (!busy) onClose(); };
-  useModalDialog(frame, close);
 
   const open = useCallback(async (path: string) => {
     const ticket = ++request.current;
@@ -96,13 +96,12 @@ export function RemoteFileBrowser({ botId, view, mode, busy = false, error: acti
     const nav = crumbsRef.current;
     if (nav) nav.scrollLeft = nav.scrollWidth;
     // the row that was clicked is gone with the old listing: keep focus in
-    // the window so Escape and Tab still work
-    const dialog = frame.current;
-    if (dialog && !dialog.contains(document.activeElement)) dialog.focus();
+    // the panel so Escape still closes it
+    const panel = frame.current?.closest<HTMLElement>("[data-detail-panel]");
+    if (panel && !panel.contains(document.activeElement)) panel.focus();
   }, [listing, listError]);
 
   const download = mode.kind === "download";
-  const titleId = "remote-file-browser-title";
   const title = download ? t("remoteSession.browser.downloadTitle", { host }) : t("remoteSession.browser.uploadTitle", { name: mode.fileName });
   const subtitle = download ? t("remoteSession.browser.downloadSubtitle") : t("remoteSession.browser.uploadSubtitle", { host });
   const here = listing?.path ?? "";
@@ -137,18 +136,13 @@ export function RemoteFileBrowser({ botId, view, mode, busy = false, error: acti
   const iconButton = "flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:pointer-events-none disabled:opacity-40 motion-reduce:transition-none";
 
   return (
-    <DialogLayer className="z-[70]" onBackdropMouseDown={close}>
-      <DialogFrame
-        titleId={titleId}
-        title={title}
-        subtitle={subtitle}
-        width="lg"
-        closeLabel={t("common.close")}
-        onClose={close}
-        closeDisabled={busy}
-        frameRef={frame}
-        frameProps={{ "data-remote-file-browser": mode.kind, "aria-busy": busy || loading || undefined }}
-        footer={asking && listing ? (
+    <DetailPanel
+      label={title}
+      title={title}
+      closeLabel={t("common.close")}
+      onClose={close}
+      data-remote-file-browser={mode.kind}
+      footer={asking && listing ? (
           <div data-remote-confirm={conflict ? "replace" : "send"} className="flex w-full flex-col gap-3">
             <div className={cn("rounded-xl px-3 py-2.5 text-[13px]", conflict ? "bg-danger/10 text-ink" : "bg-inset text-ink")}>
               <p className="font-medium">
@@ -181,7 +175,7 @@ export function RemoteFileBrowser({ botId, view, mode, busy = false, error: acti
                 {t("remoteSession.browser.destination", { path: listing.path })}
               </p>
             ) : null}
-            <button type="button" className={PILL} onClick={close} disabled={busy}>{t("common.cancel")}</button>
+            <button type="button" className={cn(PILL, "ml-auto")} onClick={close} disabled={busy}>{t("common.cancel")}</button>
             <button type="button" data-remote-browser-pick="" className={cn(PRIMARY_PILL, "font-medium")} onClick={pick} disabled={!canPick}>
               {busy && <Loader2 size={14} aria-hidden="true" className="animate-spin" />}
               {download
@@ -190,7 +184,9 @@ export function RemoteFileBrowser({ botId, view, mode, busy = false, error: acti
             </button>
           </>
         )}
-      >
+    >
+      <div ref={frame} tabIndex={-1} aria-busy={busy || loading || undefined} className="flex min-w-0 flex-col gap-3 px-4 py-3 outline-none">
+        <p className="text-[13px] leading-[18px] text-ink-secondary">{subtitle}</p>
         <div className="flex min-w-0 items-center gap-1">
           <button type="button" data-remote-browser-up="" className={iconButton} aria-label={t("remoteSession.browser.up")} title={t("remoteSession.browser.up")}
             disabled={locked || !listing?.parent} onClick={() => listing?.parent && void open(listing.parent)}>
@@ -299,7 +295,7 @@ export function RemoteFileBrowser({ botId, view, mode, busy = false, error: acti
           </div>
         </div>
         {actionError && <p role="alert" className="px-1 text-[12.5px] text-danger">{actionError}</p>}
-      </DialogFrame>
-    </DialogLayer>
+      </div>
+    </DetailPanel>
   );
 }

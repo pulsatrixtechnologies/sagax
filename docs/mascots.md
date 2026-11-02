@@ -392,8 +392,8 @@ eyes, thirteen skins, fourteen moves, volume extrusion (`shape-volume.ts`) and
 pointer gaze (`shape-engine.ts`). Geometry lives in
 `shared/mascot-geometry.json` (64 radii per body). Portable avatar definitions
 (`shared/shape-avatar-def.ts`, schema v1) add object silhouettes (pad, cup,
-bulb, say, sprout, tin, tome, ship), import/export/share JSON, and
-`generate_shape_avatar` for chat. Colour stays on the bot. Custom definitions
+bulb, say, sprout, tin, tome, ship), import/export/share JSON in code, and
+a generator kept for developers (no UI, no bot tool). Colour stays on the bot. Custom definitions
 store on `mascotLook.avatarDef`. Bodies never render disassembled
 (`shape-set.regression.test.ts`, `scripts/capture-shapes.mjs`).
 
@@ -406,7 +406,7 @@ store on `mascotLook.avatarDef`. Bodies never render disassembled
 | Object presets | `shared/shape-avatar-presets.ts` |
 | Generate from a description | `shared/shape-avatar-generate.ts`, `server/shape-avatar.ts` |
 | Engine, volume, motion, moves | `src/components/shape-*.ts`, `ShapeMascot.tsx` |
-| Editor import/export/generate | `src/components/floating-bots/ShapeAvatarPanel.tsx` |
+| Generate a new shape (dev only, not in the UX) | `scripts/generate-shape.mjs`, `docs/design/shape-generator.md` |
 | Phone | `ios/Sources/CompanionCore/ShapeEngine*.swift`, `ShapeMascotView.swift` |
 | Screenshots | `docs/screenshots/shapes`, `docs/screenshots/shape-engine-v2` |
 

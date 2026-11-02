@@ -102,7 +102,7 @@ export interface AgentToolGroup {
 export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
   {
     id: "routines",
-    title: "Routines and schedules",
+    title: "Routines, schedules and waits",
     tools: ["propose_routine", "propose_routine_action", "list_routines", "run_routine", "wait_until", "list_waits", "cancel_wait"],
   },
   {
@@ -172,7 +172,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
   {
     id: "phone",
     title: "Phone, meetings and outbound calls",
-    tools: ["phone_tool", "place_phone_call", "join_meeting", "end_call"],
+    tools: ["phone_tool", "place_phone_call", "place_call", "send_dtmf", "transfer", "hang_up", "join_meeting", "end_call"],
   },
   {
     id: "rooms",
@@ -184,7 +184,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
     title: "Cards, tasks, voice notes, video and shapes",
     tools: [
       "ask_choice", "create_options_card", "task_list", "send_voice_note",
-      "make_video", "generate_shape_avatar", "remove_reaction",
+      "make_video", "remove_reaction",
       "connect_github", "sagax_web_search", "vault_http_request",
       "group_memory_update",
     ],

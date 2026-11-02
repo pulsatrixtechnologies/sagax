@@ -326,14 +326,22 @@ describe("the sidecar in front of an unmodified harness", () => {
     // but reading config is fine — it is booleans, not keys
     expect((await device("GET", "/api/config")).status).toBe(200);
 
-    // General-purpose PATCH routes can change execution policy, connected
-    // apps, working directories and computer targets. The bot PATCH crosses
-    // for the phone's profile edits, but the harness holds a companion
-    // request to the owner's member fields, so a stolen device token cannot
-    // smuggle those fields.
+    // Lot 1: Permissions / Approval / Access cross for the owner's phone.
+    // Org sharing and host fields stay refused so a stolen device token
+    // cannot smuggle them.
     const { body } = await device("GET", "/api/bots");
     const botId = body.bots[0].id;
-    for (const smuggled of [{ autoApprove: true }, { approvalMode: "full" }, { cwd: "/" }, { computer: "local" }, { mcpServers: [] }]) {
+    for (const allowed of [
+      { approvalMode: "ask" },
+      { proactiveMode: "off" },
+      { browser: false },
+      { mcpServers: [] },
+      { computer: "local" },
+      { chiefOfStaff: false },
+    ]) {
+      expect((await device("PATCH", `/api/bots/${botId}`, { body: allowed })).status, JSON.stringify(allowed)).not.toBe(403);
+    }
+    for (const smuggled of [{ browserProfile: "guest" }, { visibility: "admins" }, { hidden: true }, { host: "local" }, { peers: [] }]) {
       expect((await device("PATCH", `/api/bots/${botId}`, { body: smuggled })).status, JSON.stringify(smuggled)).toBe(403);
     }
     expect((await device("PATCH", `/api/groups/not-a-room`, { body: { unread: false } })).status).toBe(404);
@@ -476,11 +484,14 @@ describe("the sidecar in front of an unmodified harness", () => {
     expect(history.body).toMatchObject({ rows: expect.any(Array) });
     expect((await device("GET", "/api/bot-presets")).status).toBe(200);
     expect((await device("GET", "/api/me/achievements")).status).not.toBe(403);
-    // the memory switches cross the companion's bot PATCH; access still does not
+    // the memory switches and Access fields cross the companion's bot PATCH (Lot 1)
     const off = await device("PATCH", `/api/bots/${bot.id}`, { body: { memoryEnabled: false, memoryUpkeep: false } });
     expect(off.status).toBe(200);
     expect(off.body.bot).toMatchObject({ memoryEnabled: false });
-    expect((await device("PATCH", `/api/bots/${bot.id}`, { body: { memoryEnabled: true, cwd: "/" } })).status).toBe(403);
+    const access = await device("PATCH", `/api/bots/${bot.id}`, { body: { memoryEnabled: true, browser: false } });
+    expect(access.status).toBe(200);
+    // org sharing still refused when mixed with an allowed field
+    expect((await device("PATCH", `/api/bots/${bot.id}`, { body: { memoryEnabled: true, visibility: "admins" } })).status).toBe(403);
     // opening the memory folder acts on the host's screen: still no route
     const open = await device("POST", `/api/bots/${bot.id}/memory/open`, { body: { target: "folder" } });
     expect(open.status).toBe(404);

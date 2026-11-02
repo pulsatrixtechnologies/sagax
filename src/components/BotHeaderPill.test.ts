@@ -65,4 +65,12 @@ describe("chat header bot pill", () => {
     expect(botPillActions(false)).toEqual([{ type: "toggleSettings", open: true }]);
     expect(botPillActions(true)).toEqual([{ type: "toggleSettings", open: false }, { type: "toggleComputer", open: false }]);
   });
+
+  it("never shows a reasoning effort label under the pill", () => {
+    const html = pill(false);
+    expect(html).not.toContain("data-model-effort");
+    expect(html).not.toContain("data-model-variant");
+    expect(html).not.toMatch(/>High</);
+    expect(html).not.toMatch(/>· High</);
+  });
 });

@@ -136,8 +136,9 @@ export function buildJournal(input: JournalInput): { rows: JournalRow[]; truncat
     let outcome = OUTCOME[latest.decision]!;
     // an approval left open when Sagax restarted died with its request
     if (ERROR_SOURCES.has(latest.source) && outcome === "denied") outcome = "failed";
-    const ruleRow = [...group].reverse().find((row) => row.rule && row.source !== "user");
-    const rule = ruleRow?.rule ? input.rule(ruleRow.source, ruleRow.rule, botId) : undefined;
+    const ruleRow = [...group].reverse().find((row) => (row.ruleId || row.rule) && row.source !== "user");
+    const matchedRuleId = ruleRow?.ruleId ?? ruleRow?.rule;
+    const rule = matchedRuleId ? input.rule(ruleRow!.source, matchedRuleId, botId) : undefined;
     const decider: JournalDecider = latest.decision === "expired" ? "expired"
       : latest.source === "user" || latest.source === "question" && latest.decision !== "card-shown" ? "person"
         : outcome === "failed" ? "error"
@@ -160,7 +161,7 @@ export function buildJournal(input: JournalInput): { rows: JournalRow[]; truncat
       decider,
       source: latest.source,
       ...(askedBy ? { askedBy, askedSource: card!.source } : {}),
-      ...(rule ? { ruleText: rule.text.slice(0, 300), ...(rule.behavior ? { ruleBehavior: rule.behavior } : {}), ruleId: ruleRow!.rule! } : {}),
+      ...(rule ? { ruleText: rule.text.slice(0, 300), ...(rule.behavior ? { ruleBehavior: rule.behavior } : {}), ruleId: matchedRuleId! } : {}),
       ...(reason ? { reason: reason.slice(0, 200) } : {}),
       ...(answered ? { answeredBy: answered } : {}),
       ...(group.some((row) => row.unattended) ? { unattended: true as const } : {}),

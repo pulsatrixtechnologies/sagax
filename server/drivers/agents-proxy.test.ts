@@ -771,7 +771,6 @@ describe("agents-proxy MCP surface", () => {
       "propose_profile",
       "propose_model",
       "propose_rule",
-      "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -804,6 +803,10 @@ describe("agents-proxy MCP surface", () => {
       "remote_support_close",
       "review_write",
       "place_phone_call",
+      "place_call",
+      "send_dtmf",
+      "transfer",
+      "hang_up",
     ]);
     const ask = list.result.tools.find((tool: { name: string }) => tool.name === "ask_bot");
     const delegate = list.result.tools.find((tool: { name: string }) => tool.name === "delegate_bot");
@@ -2714,6 +2717,19 @@ describe("coordinate_bots arguments (room turn)", () => {
     expect(res.result.isError).toBeFalsy();
     expect(lastCoordinateBody).toMatchObject({
       botIds: ["bot-helper"], message: "Reply PASS or FAIL.", doneWhen: "first_line:PASS|FAIL",
+    });
+  });
+
+  it("forwards default_answer for R6 person-no-reply fallback", async () => {
+    const listed = await roomRpc("tools/list");
+    const tool = listed.result.tools.find((entry: { name: string }) => entry.name === "coordinate_bots");
+    expect(tool.inputSchema.properties.default_answer).toBeTruthy();
+    const res = await roomRpc("tools/call", { name: "coordinate_bots", arguments: {
+      bot_ids: ["bot-helper"], message: "Ask the person which colour.", default_answer: "blue",
+    } });
+    expect(res.result.isError).toBeFalsy();
+    expect(lastCoordinateBody).toMatchObject({
+      botIds: ["bot-helper"], message: "Ask the person which colour.", defaultAnswer: "blue",
     });
   });
 });

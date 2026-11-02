@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // Routine run exchange (2026-11-01): opens like Melonie <-> Katarina, Escape
-// closes, footer keeps Run again / Continue / logs / configuration.
+// closes, header X closes, footer keeps Run again / Continue / logs / configuration.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -99,14 +99,18 @@ function mountExchange(props: { run?: RoutineRun; onClose?: () => void; onRunAga
 }
 
 describe("RoutineRunExchange", () => {
-  it("portals into the exchange column with routine <-> bot header and Close Chat", async () => {
+  it("portals into the exchange column with routine <-> bot header and a header close control", async () => {
     mountExchange({ onClose: vi.fn(), onRunAgain: vi.fn(), onLogs: vi.fn() });
     await vi.waitFor(() => expect(column.querySelector("[data-testid=routine-run-exchange]")).not.toBeNull());
     const sheet = column.querySelector("[data-testid=routine-run-exchange]")!;
     expect(sheet.textContent).toContain("Morning brief");
     expect(sheet.textContent).toContain("Atlas");
     expect(sheet.querySelector("[data-routine-run-meta]")?.textContent).toMatch(/Completed/);
-    expect(sheet.querySelector("[data-testid=bot-exchange-close]")?.textContent).toBe("Close Chat");
+    const close = sheet.querySelector<HTMLButtonElement>("[data-testid=bot-exchange-close]")!;
+    expect(close.getAttribute("aria-label")).toBe("Close");
+    expect(close.textContent).not.toMatch(/Close Chat/i);
+    expect(sheet.querySelector("[data-exchange-footer]")).not.toBeNull();
+    expect(sheet.querySelector("[data-run-continue]")).not.toBeNull();
     expect(document.body.innerHTML).not.toMatch(/run-1|r1\b/);
   });
 

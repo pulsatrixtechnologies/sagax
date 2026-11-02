@@ -44,11 +44,20 @@ export interface WorkspaceListing {
   workspacePath: string;
   now: number;
   forgottenAfterDays: number;
+  /** Upload ceiling for any file in the bot folder (matches attachment file max). */
+  uploadMaxBytes?: number;
   budgets: { rules: { maxLines: number; maxBytes: number }; rulesTotal?: { maxLines: number; maxBytes: number }; memory: { maxLines: number; maxBytes: number }; soul: { maxBytes: number } };
   rulesTemplate: string;
   soul: WorkspaceEntry;
   entries: WorkspaceEntry[];
   truncated: boolean;
+}
+
+/** Standing files: Every turn badge, editable, never deleted / renamed / moved. */
+export const CORE_WORKSPACE_FILES = new Set(["SOUL.md", "MEMORY.md", "RULES.md"]);
+
+export function isCoreWorkspaceFile(path: string): boolean {
+  return CORE_WORKSPACE_FILES.has(path);
 }
 
 export function fetchWorkspace(botId: string): Promise<WorkspaceListing> {
@@ -99,6 +108,74 @@ export function deleteWorkspaceDoc(botId: string, path: string): Promise<{ ok: t
 
 export function renameWorkspaceDoc(botId: string, from: string, to: string): Promise<{ ok: true; path: string }> {
   return api(`/api/bots/${encodeURIComponent(botId)}/workspace/docs/rename`, { method: "POST", body: JSON.stringify({ from, to }) });
+}
+
+export function createWorkspaceFolder(botId: string, path: string): Promise<{ ok: true; path: string }> {
+  return api(`/api/bots/${encodeURIComponent(botId)}/workspace/mkdir`, { method: "POST", body: JSON.stringify({ path }) });
+}
+
+export function createWorkspaceFile(botId: string, path: string, text = ""): Promise<{ ok: true; path: string; bytes?: number }> {
+  return api(`/api/bots/${encodeURIComponent(botId)}/workspace/touch`, { method: "POST", body: JSON.stringify({ path, text }) });
+}
+
+export function renameWorkspaceEntry(botId: string, from: string, to: string): Promise<{ ok: true; path: string }> {
+  return api(`/api/bots/${encodeURIComponent(botId)}/workspace/rename`, { method: "POST", body: JSON.stringify({ from, to }) });
+}
+
+export function deleteWorkspaceEntry(botId: string, path: string, opts: { recursive?: boolean } = {}): Promise<{ ok: true; path: string; removed?: number }> {
+  const query = new URLSearchParams({ path });
+  if (opts.recursive) query.set("recursive", "1");
+  return api(`/api/bots/${encodeURIComponent(botId)}/workspace/entry?${query}`, { method: "DELETE" });
+}
+
+export function countWorkspaceFiles(botId: string, path: string): Promise<{ path: string; count: number }> {
+  return api(`/api/bots/${encodeURIComponent(botId)}/workspace/count?path=${encodeURIComponent(path)}`);
+}
+
+/** Upload raw bytes to a workspace path with progress. */
+export function uploadWorkspaceFile(
+  botId: string,
+  path: string,
+  file: Blob,
+  opts: { overwrite?: boolean; signal?: AbortSignal; onProgress?: (uploaded: number, total: number) => void } = {},
+): Promise<{ ok: true; path: string; bytes: number }> {
+  const query = new URLSearchParams({ path });
+  if (opts.overwrite) query.set("overwrite", "1");
+  const url = `/api/bots/${encodeURIComponent(botId)}/workspace/upload?${query}`;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.responseType = "json";
+    xhr.setRequestHeader("content-type", "application/octet-stream");
+    if (opts.signal) {
+      if (opts.signal.aborted) {
+        reject(new DOMException("Aborted", "AbortError"));
+        return;
+      }
+      opts.signal.addEventListener("abort", () => xhr.abort(), { once: true });
+    }
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) opts.onProgress?.(event.loaded, event.total);
+    };
+    xhr.onload = () => {
+      const body = (xhr.response ?? {}) as { ok?: boolean; path?: string; bytes?: number; error?: string };
+      if (xhr.status >= 200 && xhr.status < 300 && body.path) {
+        resolve({ ok: true, path: body.path, bytes: body.bytes ?? file.size });
+        return;
+      }
+      reject(new ApiError(readableError(typeof body.error === "string" ? body.error : `${xhr.status} ${xhr.statusText}`), xhr.status));
+    };
+    xhr.onerror = () => reject(new ApiError(readableError("network error"), 0));
+    xhr.onabort = () => reject(new DOMException("Aborted", "AbortError"));
+    xhr.send(file);
+  });
+}
+
+/** Join a parent folder with a file or folder name. */
+export function joinWorkspacePath(parent: string | null, name: string): string {
+  const clean = name.replace(/^\/+|\/+$/g, "");
+  if (!parent) return clean;
+  return `${parent.replace(/\/+$/, "")}/${clean}`;
 }
 
 /** RULES.md as it loads: comments removed, blank runs folded, trimmed

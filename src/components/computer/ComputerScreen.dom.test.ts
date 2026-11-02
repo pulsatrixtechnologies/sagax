@@ -45,11 +45,12 @@ function mount(props: Partial<Parameters<typeof ComputerScreen>[0]> & { state: P
 }
 
 describe("ComputerScreen calm states", () => {
-  it("asleep: mascot sleep pose, z Z glyphs, one plain line, no transport bar", () => {
+  it("asleep: muted idle bot, z Z glyphs, one plain line, no transport bar", () => {
     const play = vi.fn();
     mount({ state: "off", controls: { play } });
     expect(host.querySelector('[data-screen-calm="asleep"]')).not.toBeNull();
-    expect(host.querySelector('[data-computer-mascot="asleep"]')).not.toBeNull();
+    expect(host.querySelector('[data-computer-idle="asleep"]')).not.toBeNull();
+    expect(host.querySelector('[data-computer-idle-bot="asleep"]')).not.toBeNull();
     expect(host.querySelector("[data-sleep-glyphs]")).not.toBeNull();
     expect(host.textContent).toContain("Cloud is asleep");
     expect(host.textContent).not.toMatch(/starts by itself|press Start|Off/i);
@@ -73,10 +74,11 @@ describe("ComputerScreen calm states", () => {
     expect(play).toHaveBeenCalledTimes(3);
   });
 
-  it("waking: awake mascot, Waking up…, no z glyphs, no transport bar", () => {
+  it("waking: muted idle bot, Waking up…, no z glyphs, no transport bar", () => {
     mount({ state: "starting" });
     expect(host.querySelector('[data-screen-calm="waking"]')).not.toBeNull();
-    expect(host.querySelector('[data-computer-mascot="waking"]')).not.toBeNull();
+    expect(host.querySelector('[data-computer-idle="waking"]')).not.toBeNull();
+    expect(host.querySelector('[data-computer-idle-bot="waking"]')).not.toBeNull();
     expect(host.querySelector("[data-sleep-glyphs]")).toBeNull();
     expect(host.querySelector("[data-waking-shimmer]")).not.toBeNull();
     expect(host.textContent).toContain("Waking up");

@@ -47,6 +47,7 @@ RUN set -eux; \
     rm -f /etc/sudoers 2>/dev/null || true
 
 COPY --chmod=0755 deploy/sandbox/sagax-desktop /usr/local/bin/sagax-desktop
+COPY --chmod=0755 deploy/sandbox/sagax-tailscale /usr/local/bin/sagax-tailscale
 # Tailcat 0.7.0. The running sandbox is read-only and has no sudo, so the
 # binary has to be in the image. Sagax also looks at /usr/local/bin when
 # the process PATH is only the system directories. Pins: scripts/prepare-tailcat.mjs.
@@ -69,6 +70,33 @@ RUN set -eux; \
     rm -f /tmp/tailcat.tgz; \
     echo "${binary_sha}  /usr/local/bin/tailcat" | sha256sum -c -; \
     /usr/local/bin/tailcat version | grep -F "v${TAILCAT_VERSION}"
+# Tailscale 1.104.4 static binaries for userspace joins inside the sandbox
+# only (sagax-tailscale --tun=userspace-networking). Never on the node.
+# Pins: archive + binary SHAs checked at build. DENY_HOSTS keeps 100.64/10
+# blocked at the NetworkPolicy; apps reach the tailnet via local proxies.
+ARG TAILSCALE_VERSION=1.104.4
+ARG TAILSCALE_AMD64_SHA=624ea093d47d62cf56f17b8332d74b8decda4a1faa610ebc60a1de334b2b3dc9
+ARG TAILSCALE_ARM64_SHA=a1c249ce6bdebef62e1ae3b997595555bce2ae4709bf95a718e9ca7a129dad7e
+ARG TAILSCALE_AMD64_CLI_SHA=f27bd0ad0a9a04c23ae02aa8a5897cf7f99e4e5ae153c0e5f7000b122418c830
+ARG TAILSCALE_AMD64_DAEMON_SHA=afc601d3c5be812105064eba11b64afa8928e983815bc47db218f25f3749c0c0
+ARG TAILSCALE_ARM64_CLI_SHA=01c657aa13af9a13789aa5f5fa70327c200d5387f2ac8cf245ec73e213b15217
+ARG TAILSCALE_ARM64_DAEMON_SHA=c8c80d2f0919eb48b0a86a9f1ddd2289d07ded51a886066db8059cd6461e5aa3
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) archive_sha="$TAILSCALE_AMD64_SHA"; cli_sha="$TAILSCALE_AMD64_CLI_SHA"; daemon_sha="$TAILSCALE_AMD64_DAEMON_SHA" ;; \
+      arm64) archive_sha="$TAILSCALE_ARM64_SHA"; cli_sha="$TAILSCALE_ARM64_CLI_SHA"; daemon_sha="$TAILSCALE_ARM64_DAEMON_SHA" ;; \
+      *) echo "tailscale has no build for $arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_${arch}.tgz" -o /tmp/tailscale.tgz; \
+    echo "${archive_sha}  /tmp/tailscale.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/tailscale.tgz -C /tmp; \
+    install -m 0755 "/tmp/tailscale_${TAILSCALE_VERSION}_${arch}/tailscale" /usr/local/bin/tailscale; \
+    install -m 0755 "/tmp/tailscale_${TAILSCALE_VERSION}_${arch}/tailscaled" /usr/local/bin/tailscaled; \
+    rm -rf /tmp/tailscale.tgz "/tmp/tailscale_${TAILSCALE_VERSION}_${arch}"; \
+    echo "${cli_sha}  /usr/local/bin/tailscale" | sha256sum -c -; \
+    echo "${daemon_sha}  /usr/local/bin/tailscaled" | sha256sum -c -; \
+    /usr/local/bin/tailscale version | grep -F "${TAILSCALE_VERSION}"
 COPY deploy/sandbox/openbox-menu.xml /etc/xdg/openbox/menu.xml
 COPY deploy/sandbox/tint2rc /etc/xdg/sagax/tint2rc
 COPY deploy/sandbox/applications/ /usr/share/sagax/applications/

@@ -183,6 +183,11 @@ export function takeRequestedSettingsCard(): string | null {
   return id;
 }
 
+/** Peek at the card a link asked for without clearing it (Vault filter). */
+export function peekRequestedSettingsCard(): string | null {
+  return lastRequestedCard;
+}
+
 /** Test seam: drop the in-memory choices so storage is read again. */
 export function resetSettingsCards(): void {
   cardChoices = null;

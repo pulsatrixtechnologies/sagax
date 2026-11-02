@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Monitor, X } from "lucide-react";
 
+import { temporaryRemoteSessions } from "../../../shared/remote-bot-hosts";
 import { formatEndLabel, publicText, type RemoteSessionView } from "../../../shared/remote-session";
+import type { UnattendedHostRow } from "../../../shared/remote-unattended-host";
 import { cn } from "@/lib/cn";
 import { GROUPED_CARD, GROUPED_ROW } from "@/lib/grouped-card";
 import { t } from "@/lib/i18n";
 import { clearRemoteSessionLocal, focusRemoteSessionLocal } from "@/lib/remote-session-focus";
 import type { Bot } from "@/state/store";
+import { fetchBotRemoteHosts } from "./bot-remote-hosts-client";
 import { remoteClosePhase } from "./remote-close";
 import { closeRemoteSession, focusRemoteSession } from "./remote-session-client";
 import { remoteControllable, RemoteTakeover, STOP_CONFIRM_MS } from "./RemoteScreenCard";
@@ -137,19 +140,36 @@ export function RemoteSessionsPanel({
   );
 }
 
-/** Sidebar list of the bot's connected sessions, with an empty state. */
+/** Details tab: temporary (attended) sessions only, above Routines, and only
+ * while at least one is active. Unattended hosts live in the Computer place
+ * picker, never here. */
 export function RemoteSessionsSection({ bot }: { bot: Bot }) {
   const { rows, reload } = useRemoteSessions(bot.id);
+  const [attachedHosts, setAttachedHosts] = useState<UnattendedHostRow[]>([]);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [controlling, setControlling] = useState<string | null>(null);
+
+  useEffect(() => {
+    let stop = false;
+    fetchBotRemoteHosts(bot.id)
+      .then((body) => { if (!stop) setAttachedHosts(body.hosts); })
+      .catch(() => { /* keep last list; next poll of sessions still works */ });
+    return () => { stop = true; };
+  }, [bot.id]);
+
+  const temporary = useMemo(
+    () => temporaryRemoteSessions(rows, attachedHosts),
+    [rows, attachedHosts],
+  );
+
   // a first press on X is forgotten after a few seconds, like Stop on the screen card
   useEffect(() => {
     if (!confirmId) return;
     const timer = setTimeout(() => setConfirmId(null), STOP_CONFIRM_MS);
     return () => clearTimeout(timer);
   }, [confirmId]);
-  const controlled = rows.find((row) => row.id === controlling) ?? null;
+  const controlled = temporary.find((row) => row.id === controlling) ?? null;
 
   const takeControl = (view: RemoteSessionView) => {
     takeRemoteControl({
@@ -182,7 +202,7 @@ export function RemoteSessionsSection({ bot }: { bot: Bot }) {
     <>
       <RemoteSessionsPanel
         botId={bot.id}
-        rows={rows}
+        rows={temporary}
         confirmId={confirmId}
         error={error}
         onTakeControl={takeControl}

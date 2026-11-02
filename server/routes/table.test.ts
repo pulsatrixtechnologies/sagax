@@ -7,7 +7,13 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import { PASS, dispatchRoutes, type RouteHandler } from "./table.ts";
+import {
+  PASS,
+  dispatchPreAuthRoutes,
+  dispatchRoutes,
+  type PreAuthRouteHandler,
+  type RouteHandler,
+} from "./table.ts";
 
 const servers: Server[] = [];
 afterEach(async () => {
@@ -91,5 +97,32 @@ describe("route table dispatch", () => {
     const response = await fetch(`${base}/api/example`);
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: "nope" });
+  });
+});
+
+describe("pre-auth route table dispatch", () => {
+  it("stops on answer with nullable auth, same as dispatchRoutes", async () => {
+    const seen: string[] = [];
+    const routes: PreAuthRouteHandler[] = [
+      async ({ auth, res, json: reply }) => {
+        seen.push(auth === null ? "null" : "authed");
+        reply(res, 200, { ok: true });
+      },
+      async () => { seen.push("second"); },
+    ];
+    const server = createServer(async (req, res) => {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      await dispatchPreAuthRoutes(routes, {
+        req, res, url, path: url.pathname, method: req.method ?? "GET",
+        auth: null, json, readBody,
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const response = await fetch(`${base}/api/health`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(seen).toEqual(["null"]);
   });
 });

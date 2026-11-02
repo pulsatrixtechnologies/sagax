@@ -43,13 +43,15 @@ import {
 } from "lucide-react";
 
 import { BotAvatar } from "@/components/Avatar";
+import { discardConfirmRequest, useConfirm } from "@/components/ConfirmProvider";
 import { AnchoredPopover } from "@/components/AnchoredPopover";
+import { DetailPanel } from "@/components/DetailPanel";
 import { useBotEditor } from "./bot-settings/BotEditorContext";
 import { pathForFile } from "@/components/ComposerAttachments";
 import { CalendarSidebar } from "@/components/routines/CalendarSidebar";
 import { RoutineList } from "@/components/routines/RoutineList";
 import { RoutineMenuPortal, routineRowActions, RoutineRowMenuItems, RoutineTitle } from "@/components/routines/RoutineRowMenu";
-import { PAGE_COLUMN, PAGE_FIELD_LABEL, PAGE_FILTER_RESET, PAGE_HEADER_BUTTON, PAGE_INDICATOR, PAGE_MENU_COUNT, PAGE_POPOVER, PAGE_SCROLL, PAGE_SELECT, PageFilters, PageHeader, PageHeading, PageMenu, PageMenuItem, PageMenuSeparator, PageSegment, PageTopStrip, useDismissMenus } from "@/components/content-page";
+import { PAGE_COLUMN, PAGE_FIELD_LABEL, PAGE_FILTER_RESET, PAGE_HEADER_BUTTON, PAGE_INDICATOR, PAGE_MENU_COUNT, PAGE_POPOVER, PAGE_SCROLL, PageFilters, PageHeader, PageHeading, PageMenu, PageMenuItem, PageMenuSeparator, PageSegment, PageTopStrip, useDismissMenus } from "@/components/content-page";
 import { RoutineLogs } from "@/components/routines/RoutineLogs";
 import { RoutineOwnerBadge, RoutineScopeBar } from "@/components/routines/RoutineScopeBar";
 import { useRoutineScope } from "@/lib/use-routine-scope";
@@ -62,7 +64,7 @@ import { RoutineRunExchange } from "@/components/routines/RoutineRunExchange";
 import { getExchangeColumnHost } from "@/lib/exchange-column-host";
 import { canRunRoutineNow, routineRunInFlight } from "@/components/routines/RunNowButton";
 import { AdvancedScheduleFields, HumanScheduleFields } from "@/components/routines/HumanScheduleFields";
-import { EditorSection } from "@/components/routines/EditorSection";
+import { EditorSection, HelpTip } from "@/components/routines/EditorSection";
 import { RoutineWebhookPanel } from "@/components/routines/RoutineWebhookPanel";
 import { personLabel } from "@/lib/human-label";
 import { everyMinutesOf, keptScheduleValue, PICKER_FREQUENCIES, savedPatternSchedule, scheduleDraftFor, scheduleEditorValue, type ScheduleDraft } from "@/components/routines/schedule-editor";
@@ -72,7 +74,7 @@ import { ROUTINE_AUTO_PAUSE_DEFAULT, routineAutoPauseAfter } from "../../shared/
 import { t, activeLocale } from "@/lib/i18n";
 import { useModalDialog } from "@/hooks/use-modal-dialog";
 import { useCaptionChrome, useDesktopCapabilities } from "@/components/DesktopCapabilities";
-import { WebhooksPanel } from "@/components/WebhooksPanel";
+import { TriggersPanel } from "@/components/TriggersPanel";
 import type { CalendarCall, CalendarCallAttachment, CalendarCallInput } from "@/lib/calendar-calls";
 import { cn } from "@/lib/cn";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
@@ -104,7 +106,7 @@ import {
   type RoutineCalendarItem,
 } from "@/lib/routine-calendar";
 import { dayNames, durationLabel, intervalLabel, niceDate, niceTime, scheduleLabel, scheduleLabelCompact } from "@/lib/schedule-label";
-import { Switch } from "./SettingsPrimitives";
+import { PillSelect, Switch } from "./SettingsPrimitives";
 import { MarkdownEditor } from "./markdown/MarkdownEditor";
 import {
   isRoutineProblemRun,
@@ -168,7 +170,8 @@ type EventSeed = {
   botIds: string[];
   name?: string;
   description?: string;
-  anchor?: { x: number; y: number };
+  /** Where quick create hangs: a point, or a day column (x its right edge, left its left edge). */
+  anchor?: { x: number; y: number; left?: number };
   routine?: Routine;
   /** 2026-10-29: a new routine prefilled from this one (Duplicate). */
   copyOf?: Routine;
@@ -356,7 +359,7 @@ function BotPicker({
               className={cn("flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition", active ? "bg-accent/12 ring-1 ring-accent/50" : "hover:bg-raised", locked && "cursor-default")}
             >
               <BotAvatar bot={bot} state={active ? "happy" : "idle"} size={32} animated={false} />
-              <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink">{bot.name}</span>
+              <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">{bot.name}</span>
               {active && <CheckCircle2 size={14} className="shrink-0 text-accent" />}
             </button>
           );
@@ -396,6 +399,7 @@ function EventEditor({
   onClose: () => void;
   onSavedCall: (call: CalendarCall) => void;
 }) {
+  const confirm = useConfirm();
   const { state, dispatch } = useStore();
   const existingRoutine = seed.routine;
   // A copy (Duplicate) starts from another routine's settings and saves as new.
@@ -788,12 +792,15 @@ function EventEditor({
   const editorSnapshot = JSON.stringify([kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
   const openedSnapshot = useRef(editorSnapshot);
   const dirty = editorSnapshot !== openedSnapshot.current;
-  const requestClose = () => {
-    if (dirty && !saving && !window.confirm(t("routineEditor.discard"))) return;
+  const requestClose = async () => {
+    if (dirty && !saving && !(await confirm(discardConfirmRequest(t("routineEditor.discard"))))) return;
     onClose();
   };
-  useModalDialog(dialogRef, requestClose);
   const panel = presentation === "panel";
+  // A panel is not modal (2026-11-01): no focus trap; Escape inside it still
+  // asks about unsaved changes before it closes, and stops there.
+  const noModal = useRef<HTMLDivElement>(null);
+  useModalDialog(panel ? noModal : dialogRef, requestClose);
   const titleText = kind === "routine"
     ? (readOnly ? t("routineEditor.titleView") : existingRoutine ? t("routineEditor.titleEdit") : t("routineEditor.titleNew"))
     : existingRoutine || existingCall ? t("routineCalendar.editEvent") : t("routineCalendar.newEvent");
@@ -806,35 +813,41 @@ function EventEditor({
         aria-label={existingRoutine || existingCall ? t("routineCalendar.editEventAria") : t("routineCalendar.createEventAria")}
         tabIndex={-1}
         data-routine-editor-presentation={presentation}
+        onKeyDown={panel ? (event) => {
+          if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
+          event.preventDefault();
+          event.stopPropagation();
+          requestClose();
+        } : undefined}
         className={panel
           ? "absolute inset-0 z-30 flex min-h-0 flex-col overflow-hidden bg-panel"
           : "max-h-[94vh] w-full max-w-[760px] overflow-y-auto rounded-[14px] border border-border bg-elevated"}
       >
-        <div className={cn("sticky top-0 z-20 flex items-center justify-between border-b border-hairline/40", panel ? "bg-panel px-3 py-2.5" : "bg-elevated px-5 py-3.5")}>
+        <div className={cn("sticky top-0 z-20 flex items-center justify-between border-b border-hairline/40", panel ? "bg-panel px-4 py-2" : "bg-elevated px-6 py-4")}>
           <div className="flex min-w-0 items-center gap-2">
             {panel && (
               <button type="button" data-editor-back onClick={requestClose} aria-label={t("routineRun.back")} title={t("routineRun.back")} className={cn(CIRCLE_BUTTON, "shrink-0")}>
                 <ChevronLeft size={18} strokeWidth={1.75} />
               </button>
             )}
-            <div data-editor-title className="truncate text-[15px] font-semibold text-ink">{titleText}</div>
+            <div data-editor-title className="truncate text-[16px] font-medium leading-6 text-ink">{titleText}</div>
             {dirty && !readOnly && <span data-editor-dirty className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent-text"><span aria-hidden="true" className="size-1.5 rounded-full bg-accent" />{t("routineEditor.unsaved")}</span>}
           </div>
           {!panel && <button onClick={requestClose} className="rounded-full p-2 text-ink-secondary hover:bg-raised hover:text-ink" aria-label={t("common.close")}><X size={18} /></button>}
         </div>
         <div className={panel ? "min-h-0 flex-1 overflow-y-auto" : undefined}>
 
-        <div className="space-y-5 px-5 py-5 sm:px-8">
+        <div className={cn(panel ? "px-4 py-4" : "space-y-5 px-6 py-5 sm:px-8")}>
           {canSwitchKind && (
             <div className="ml-10 inline-flex rounded-lg bg-inset p-1">
-              <button type="button" onClick={() => { setKind("routine"); setBotIds((ids) => ids.slice(0, 1)); if (recurrence !== "none" && recurrence !== "interval" && recurrence !== "limit_reset" && recurrence !== "webhook" && recurrence !== "email") { setScheduleDraft(scheduleDraftFor(makeCalendarSchedule(recurrence as CalendarRecurrenceChoice, at, weekdays), at).draft); setRecurrence("pattern"); } }} className={cn("rounded-md px-4 py-1.5 text-[12.5px] font-medium", kind === "routine" ? "bg-raised text-ink shadow" : "text-ink-secondary")}>{t("botPanel.coding.kind.routine")}</button>
-              <button type="button" onClick={() => { setKind("call"); if (recurrence === "interval" || recurrence === "limit_reset" || recurrence === "pattern" || recurrence === "advanced" || recurrence === "webhook" || recurrence === "email") setRecurrence("none"); }} className={cn("rounded-md px-4 py-1.5 text-[12.5px] font-medium", kind === "call" ? "bg-raised text-ink shadow" : "text-ink-secondary")}>{t("routineCalendar.kindCall")}</button>
+              <button type="button" onClick={() => { setKind("routine"); setBotIds((ids) => ids.slice(0, 1)); if (recurrence !== "none" && recurrence !== "interval" && recurrence !== "limit_reset" && recurrence !== "webhook" && recurrence !== "email") { setScheduleDraft(scheduleDraftFor(makeCalendarSchedule(recurrence as CalendarRecurrenceChoice, at, weekdays), at).draft); setRecurrence("pattern"); } }} className={cn("rounded-md px-4 py-1.5 text-[13px] font-medium", kind === "routine" ? "bg-raised text-ink shadow" : "text-ink-secondary")}>{t("botPanel.coding.kind.routine")}</button>
+              <button type="button" onClick={() => { setKind("call"); if (recurrence === "interval" || recurrence === "limit_reset" || recurrence === "pattern" || recurrence === "advanced" || recurrence === "webhook" || recurrence === "email") setRecurrence("none"); }} className={cn("rounded-md px-4 py-1.5 text-[13px] font-medium", kind === "call" ? "bg-raised text-ink shadow" : "text-ink-secondary")}>{t("routineCalendar.kindCall")}</button>
             </div>
           )}
 
           {kind === "routine" && !lockedBotId && (
             <div className="ml-10">
-              <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-ink-secondary">{t("routineCalendar.routineType")}</div>
+              <div className="mb-2 text-[12px] font-medium text-ink-secondary">{t("routineCalendar.routineType")}</div>
               <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
@@ -842,7 +855,7 @@ function EventEditor({
                   className={cn("flex items-start gap-3 rounded-xl border p-3 text-left transition", routineTarget === "bot" ? "border-accent/60 bg-accent/10" : "border-hairline/50 bg-inset hover:bg-raised")}
                 >
                   <UserRoundPlus size={17} className={cn("mt-0.5 shrink-0", routineTarget === "bot" ? "text-accent" : "text-ink-secondary")} />
-                  <span><span className="block text-[12.5px] font-medium text-ink">{t("routineCalendar.botTask")}</span><span className="mt-1 block text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.botTaskHelp")}</span></span>
+                  <span><span className="block text-[13px] font-medium text-ink">{t("routineCalendar.botTask")}</span><span className="mt-1 block text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.botTaskHelp")}</span></span>
                 </button>
                 <button
                   type="button"
@@ -850,56 +863,67 @@ function EventEditor({
                   className={cn("flex items-start gap-3 rounded-xl border p-3 text-left transition", routineTarget === "room-goal" ? "border-accent/60 bg-accent/10" : "border-hairline/50 bg-inset hover:bg-raised")}
                 >
                   <Target size={17} className={cn("mt-0.5 shrink-0", routineTarget === "room-goal" ? "text-accent" : "text-ink-secondary")} />
-                  <span><span className="block text-[12.5px] font-medium text-ink">{t("routineCalendar.teamGoal")}</span><span className="mt-1 block text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.teamGoalHelp")}</span></span>
+                  <span><span className="block text-[13px] font-medium text-ink">{t("routineCalendar.teamGoal")}</span><span className="mt-1 block text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.teamGoalHelp")}</span></span>
                 </button>
               </div>
             </div>
           )}
 
           {kind === "routine" ? <>
-            <div className="space-y-2">
-              <input autoFocus data-routine-editor-name value={name} onChange={(event) => setName(event.target.value)} aria-label={t("routineEditor.name")} placeholder={t("routineCalendar.addTitle")} className="w-full min-w-0 border-b border-hairline/60 bg-transparent px-1 pb-2 text-[22px] font-medium text-ink outline-none placeholder:text-ink-secondary focus:border-border-strong" />
-              {routineSummary && <p data-routine-editor-summary className="px-1 text-[12.5px] leading-relaxed text-ink-secondary">{routineSummary}</p>}
-              {otherOwner && <p data-routine-editor-owner className="px-1 text-[12px] text-ink-secondary">{t("routineEditor.owner", { name: personLabel(otherOwner.name, otherOwner.id) })}</p>}
+            <div className={cn("space-y-1.5", panel && "pb-4")}>
+              <input autoFocus data-routine-editor-name value={name} onChange={(event) => setName(event.target.value)} aria-label={t("routineEditor.name")} placeholder={t("routineCalendar.addTitle")} className={cn("w-full min-w-0 border-b border-hairline/50 bg-transparent px-0.5 pb-1.5 font-medium text-ink outline-none placeholder:text-ink-tertiary focus:border-border-strong", panel ? "text-[20px] leading-7" : "text-[22px] leading-8")} />
+              {routineSummary && <p data-routine-editor-summary className="px-0.5 text-[12px] leading-[17px] text-ink-secondary">{routineSummary}</p>}
+              {otherOwner && <p data-routine-editor-owner className="px-0.5 text-[12px] text-ink-secondary">{t("routineEditor.owner", { name: personLabel(otherOwner.name, otherOwner.id) })}</p>}
               {readOnly && <p data-routine-editor-readonly className="rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary">{t("routineEditor.readOnly")}</p>}
             </div>
-            <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
+            <fieldset disabled={readOnly} className={cn("m-0 min-w-0 border-0 p-0", panel ? "space-y-0 divide-y divide-hairline/35" : "space-y-5")}>
             {/* 2026-11-01 Grok-simple: What first, compact When, then bot / where, advanced in More. */}
-            <EditorSection icon={FileText} title={t("routineEditor.what")} data-routine-editor-section="what">
+            <EditorSection icon={FileText} title={t("routineEditor.what")} data-routine-editor-section="what" className={panel ? "py-4 first:pt-0" : undefined}>
               {existingRoutine?.redacted && <p className="text-[12px] text-ink-secondary">{t("routineEditor.redacted")}</p>}
-              <MarkdownEditor compact expandable readOnly={readOnly} value={description} onChange={setDescription} minHeight={140} maxHeight="40vh" dataField="routine-instructions" className="min-w-0" ariaLabel={isRoomGoal ? t("routineCalendar.teamAccomplish") : kind === "routine" ? t("routineCalendar.botInstructions") : t("routineCalendar.addAgenda")} placeholder={isRoomGoal ? t("routineCalendar.teamAccomplish") : kind === "routine" ? t("routineCalendar.botInstructions") : t("routineCalendar.addAgenda")} />
+              <MarkdownEditor compact expandable readOnly={readOnly} value={description} onChange={setDescription} minHeight={panel ? 96 : 120} maxHeight={panel ? 160 : 220} dataField="routine-instructions" className="min-w-0" ariaLabel={isRoomGoal ? t("routineCalendar.teamAccomplish") : kind === "routine" ? t("routineCalendar.botInstructions") : t("routineCalendar.addAgenda")} placeholder={isRoomGoal ? t("routineCalendar.teamAccomplish") : kind === "routine" ? t("routineCalendar.botInstructions") : t("routineCalendar.addAgenda")} />
               <div className="min-w-0 space-y-2">
             {isRoomGoal ? (
               <div className="min-w-0 flex-1 rounded-xl border border-hairline/50 bg-inset px-3.5 py-3">
-                <div className="text-[12.5px] font-medium text-ink">{t("routineCalendar.sharedContext")}</div>
+                <div className="text-[13px] font-medium text-ink">{t("routineCalendar.sharedContext")}</div>
                 <div className="mt-1 text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.noGoalAttachments")}</div>
               </div>
             ) : <div className="min-w-0 flex-1 space-y-2">
               <input ref={fileInput} type="file" multiple className="hidden" onChange={(event) => { void pickFiles(event.target.files); event.target.value = ""; }} />
-              <button type="button" onClick={() => fileInput.current?.click()} className="rounded-lg border border-hairline/50 px-3 py-2 text-[12.5px] font-medium text-ink hover:bg-raised">{t("routineCalendar.addAttachment")}</button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => fileInput.current?.click()} className="rounded-lg border border-hairline/50 px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-raised">{t("routineCalendar.addAttachment")}</button>
+                <span className="inline-flex min-w-0 items-center gap-1 text-[11px] leading-4 text-ink-secondary">
+                  <span className="truncate">{t("routineCalendar.attachRoutineHint")}</span>
+                  <HelpTip id="routine-attach-help" text={t("routineCalendar.attachRoutineHelp")} />
+                </span>
+              </div>
               <AttachmentChips attachments={attachments} onRemove={(id) => setAttachments((current) => current.filter((attachment) => attachment.id !== id))} />
-              <div className="text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.attachRoutineHelp")}</div>
-              {attachmentNotice && <div className="text-[11.5px] text-warning">{attachmentNotice}</div>}
+              {attachmentNotice && <div className="text-[12px] text-warning">{attachmentNotice}</div>}
             </div>}
               </div>
             </EditorSection>
 
-            <EditorSection icon={Clock3} title={t("routineEditor.when")} data-routine-editor-section="when">
+            <EditorSection icon={Clock3} title={t("routineEditor.when")} data-routine-editor-section="when" className={panel ? "py-4" : undefined}>
               <div className="flex flex-wrap items-center gap-2">
                 <Repeat2 size={14} className="text-ink-secondary" />
-                <select data-schedule-frequency aria-label={t("routines.editor.repeat")} value={recurrence === "pattern" ? scheduleDraft.model.frequency : recurrence} onChange={(event) => {
-                    const value = event.target.value;
-                    if ((PICKER_FREQUENCIES as string[]).includes(value)) selectFrequency(value as ScheduleFrequency);
-                    else selectRecurrence(value as RecurrenceChoice);
-                  }} className="rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong">
-                    <option value="none">{t("scheduleEditor.frequency.once")}</option>
-                    {PICKER_FREQUENCIES.map((frequency) => <option key={frequency} value={frequency}>{t(`scheduleEditor.frequency.${frequency}`)}</option>)}
-                    <option value="interval">{t("scheduleEditor.frequency.every")}</option>
-                    <option value="limit_reset">{t("routines.limitReset.option")}</option>
-                    {recurrence === "advanced" && <option value="advanced">{t("scheduleEditor.frequency.advanced")}</option>}
-                    {!isRoomGoal && <option value="webhook">{t("routineEditor.whenWebhook")}</option>}
-                    {recurrence === "email" && <option value="email">{t("schedule.sentence.email")}</option>}
-                  </select>
+                <div data-schedule-frequency={recurrence === "pattern" ? scheduleDraft.model.frequency : recurrence}>
+                  <PillSelect
+                    ariaLabel={t("routines.editor.repeat")}
+                    value={recurrence === "pattern" ? scheduleDraft.model.frequency : recurrence}
+                    onChange={(value) => {
+                      if ((PICKER_FREQUENCIES as string[]).includes(value)) selectFrequency(value as ScheduleFrequency);
+                      else selectRecurrence(value as RecurrenceChoice);
+                    }}
+                    options={[
+                      { value: "none", label: t("scheduleEditor.frequency.once") },
+                      ...PICKER_FREQUENCIES.map((frequency) => ({ value: frequency, label: t(`scheduleEditor.frequency.${frequency}`) })),
+                      { value: "interval", label: t("scheduleEditor.frequency.every") },
+                      { value: "limit_reset", label: t("routines.limitReset.option") },
+                      ...(recurrence === "advanced" ? [{ value: "advanced", label: t("scheduleEditor.frequency.advanced") }] : []),
+                      ...(!isRoomGoal ? [{ value: "webhook", label: t("routineEditor.whenWebhook") }] : []),
+                      ...(recurrence === "email" ? [{ value: "email", label: t("schedule.sentence.email") }] : []),
+                    ]}
+                  />
+                </div>
               </div>
               {recurrence === "none" && (
                 <div className="flex flex-wrap items-center gap-2">
@@ -916,11 +940,11 @@ function EventEditor({
                 />
               )}
               {recurrence === "webhook" && <RoutineWebhookPanel routine={existingRoutine?.schedule.type === "webhook" ? existingRoutine : undefined} bot={bots.find((bot) => bot.id === botIds[0])} />}
-              {recurrence === "email" && <p className="text-[11.5px] leading-relaxed text-ink-secondary">{t("routineEditor.emailTrigger")}</p>}
+              {recurrence === "email" && <p className="text-[12px] leading-relaxed text-ink-secondary">{t("routineEditor.emailTrigger")}</p>}
               {kind === "routine" && recurrence === "pattern" && pattern && <HumanScheduleFields mode="essentials" draft={scheduleDraft} value={pattern} onChange={changeScheduleDraft} paused={Boolean(existingRoutine && !existingRoutine.enabled)} />}
               {kind === "routine" && recurrence === "advanced" && pattern && <AdvancedScheduleFields value={pattern} onSimplify={simplifySchedule} paused={Boolean(existingRoutine && !existingRoutine.enabled)} />}
               {recurrence === "interval" && kind === "routine" && (
-                <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink">
+                <div className="flex flex-wrap items-center gap-2 text-[13px] text-ink">
                   <span className="font-medium">{t("routineCalendar.runsEvery")}</span>
                   <select
                     value={INTERVAL_PRESETS.includes(intervalMinutes) ? String(intervalMinutes) : "custom"}
@@ -952,47 +976,47 @@ function EventEditor({
               )}
             </EditorSection>
 
-            <EditorSection icon={Send} title={t("routineEditor.where")} data-routine-editor-section="where">
+            <EditorSection icon={Send} title={t("routineEditor.where")} data-routine-editor-section="where" className={panel ? "py-4" : undefined}>
               {!lockedBotId && <div className="min-w-0">
               {isRoomGoal ? (
                 <div className="space-y-3">
                   <div>
-                    <label htmlFor="routine-goal-room" className="mb-2 block text-[12.5px] font-medium text-ink">{t("routineCalendar.chooseGroup")}</label>
+                    <label htmlFor="routine-goal-room" className="mb-2 block text-[13px] font-medium text-ink">{t("routineCalendar.chooseGroup")}</label>
                     {rooms.length > 0 ? (
                       <select id="routine-goal-room" value={groupId} onChange={(event) => selectRoom(event.target.value)} className="w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong">
                         <option value="">{t("routineCalendar.selectGroup")}</option>
                         {rooms.map((room) => <option key={room.id} value={room.id}>{room.name}</option>)}
                       </select>
                     ) : (
-                      <div className="rounded-xl border border-dashed border-hairline/60 bg-inset px-3.5 py-3 text-[11.5px] leading-relaxed text-ink-secondary">{t("routineCalendar.createGroupFirst")}</div>
+                      <div className="rounded-xl border border-dashed border-hairline/60 bg-inset px-3.5 py-3 text-[12px] leading-relaxed text-ink-secondary">{t("routineCalendar.createGroupFirst")}</div>
                     )}
                   </div>
                   {selectedRoom && (
                     <div>
-                      <div className="mb-2 text-[12.5px] font-medium text-ink">{t("routineCalendar.chooseLead")}</div>
+                      <div className="mb-2 text-[13px] font-medium text-ink">{t("routineCalendar.chooseLead")}</div>
                       {roomMembers.length > 0 ? (
                         <>
                           <BotPicker bots={roomMembers} selected={botIds} multiple={false} onChange={selectBots} />
-                          <div className="mt-2 text-[11.5px] text-ink-secondary">{t("routineCalendar.leadCoordinates", { name: selectedRoom.name })}</div>
+                          <div className="mt-2 text-[12px] text-ink-secondary">{t("routineCalendar.leadCoordinates", { name: selectedRoom.name })}</div>
                         </>
                       ) : (
-                        <div className="rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-3 text-[11.5px] text-warning">{t("routineCalendar.noActiveMembers")}</div>
+                        <div className="rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-3 text-[12px] text-warning">{t("routineCalendar.noActiveMembers")}</div>
                       )}
                     </div>
                   )}
                 </div>
               ) : (
                 <>
-                  <div className="mb-2 text-[12.5px] font-medium text-ink">{t("routineCalendar.assignBot")}</div>
+                  <div className="mb-2 text-[13px] font-medium text-ink">{t("routineCalendar.assignBot")}</div>
                   {bots.length > 0 ? (
                 <>
                   <BotPicker bots={bots} selected={botIds} multiple={false} locked={Boolean(lockedBotId)} onChange={selectBots} />
-                  <div className="mt-2 text-[11.5px] text-ink-secondary">{t("routineCalendar.botOwnsRun")}</div>
+                  <div className="mt-2 text-[12px] text-ink-secondary">{t("routineCalendar.botOwnsRun")}</div>
                 </>
               ) : viewerCanCreateBots(state.config) && (
                 <button type="button" onClick={() => { dispatch({ type: "openBotWizard" }); onClose(); }} className="w-full rounded-xl border border-dashed border-accent/45 bg-accent/[0.06] px-4 py-4 text-left hover:bg-accent/10">
-                  <div className="text-[12.5px] font-medium text-accent">{t("onboarding.firstRun.bot.title")}</div>
-                  <div className="mt-1 text-[11.5px] text-ink-secondary">{t("routineCalendar.needsOneBot")}</div>
+                  <div className="text-[13px] font-medium text-accent">{t("onboarding.firstRun.bot.title")}</div>
+                  <div className="mt-1 text-[12px] text-ink-secondary">{t("routineCalendar.needsOneBot")}</div>
                 </button>
                   )}
                 </>
@@ -1007,12 +1031,12 @@ function EventEditor({
                 <div className="min-w-0 flex-1">
                   {isRoomGoal ? (
                     <div className="rounded-xl border border-accent/35 bg-accent/[0.07] p-3">
-                      <div className="text-[12.5px] font-medium text-ink">{t("routineCalendar.runsHere")}</div>
+                      <div className="text-[13px] font-medium text-ink">{t("routineCalendar.runsHere")}</div>
                       <div className="mt-1 text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.runsHereHelp")}</div>
                     </div>
                   ) : <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => setRunOn("maus")} className={cn("rounded-xl border p-3 text-left", runOn === "maus" ? "border-accent/60 bg-accent/10" : "border-hairline/50 bg-inset hover:bg-raised")}><div className="text-[12.5px] font-medium text-ink">{t("routineCalendar.botSetup")}</div><div className="mt-1 text-[11px] text-ink-secondary">{t("routineCalendar.botSetupHelp")}</div></button>
-                    <button type="button" disabled={!cloudReady || attachments.length > 0} onClick={() => setRunOn("cloud")} className={cn("rounded-xl border p-3 text-left disabled:cursor-not-allowed disabled:opacity-45", runOn === "cloud" ? "border-accent/60 bg-accent/10" : "border-hairline/50 bg-inset hover:bg-raised")}><div className="text-[12.5px] font-medium text-ink">{t("routineCalendar.boatAgent")}</div><div className="mt-1 text-[11px] text-ink-secondary">{t("routineCalendar.boatAgentHelp")}</div></button>
+                    <button type="button" onClick={() => setRunOn("maus")} className={cn("rounded-xl border p-3 text-left", runOn === "maus" ? "border-accent/60 bg-accent/10" : "border-hairline/50 bg-inset hover:bg-raised")}><div className="text-[13px] font-medium text-ink">{t("routineCalendar.botSetup")}</div><div className="mt-1 text-[11px] text-ink-secondary">{t("routineCalendar.botSetupHelp")}</div></button>
+                    <button type="button" disabled={!cloudReady || attachments.length > 0} onClick={() => setRunOn("cloud")} className={cn("rounded-xl border p-3 text-left disabled:cursor-not-allowed disabled:opacity-45", runOn === "cloud" ? "border-accent/60 bg-accent/10" : "border-hairline/50 bg-inset hover:bg-raised")}><div className="text-[13px] font-medium text-ink">{t("routineCalendar.boatAgent")}</div><div className="mt-1 text-[11px] text-ink-secondary">{t("routineCalendar.boatAgentHelp")}</div></button>
                   </div>}
                 </div>
               </div>
@@ -1021,15 +1045,15 @@ function EventEditor({
               <label data-routine-post-results className="flex items-start gap-3 rounded-xl border border-hairline/40 bg-inset/40 px-3.5 py-3">
                 <input type="checkbox" aria-label={t("routines.postResults.label")} checked={postResults} onChange={(event) => setPostResults(event.target.checked)} className="mt-0.5 accent-accent" />
                 <span>
-                  <span className="block text-[12.5px] font-medium text-ink">{t("routines.postResults.label")}</span>
+                  <span className="block text-[13px] font-medium text-ink">{t("routines.postResults.label")}</span>
                   <span className="mt-1 block text-[11px] leading-relaxed text-ink-secondary">{t("routines.postResults.help")}</span>
                 </span>
               </label>
             )}
             </EditorSection>
 
-            <details data-routine-editor-more className="group rounded-xl border border-hairline/40 bg-inset/30 px-3.5 py-2.5" open={moreOpen} onToggle={(event) => toggleMore((event.currentTarget as HTMLDetailsElement).open)}>
-              <summary className="cursor-pointer select-none text-[12.5px] font-medium text-ink-secondary hover:text-ink">{t("routineEditor.more")}<span className="ml-1.5 font-normal">· {moreSummary}</span></summary>
+            <details data-routine-editor-more className={cn("group", panel ? "py-4" : "rounded-xl border border-hairline/40 bg-inset/30 px-3.5 py-2")} open={moreOpen} onToggle={(event) => toggleMore((event.currentTarget as HTMLDetailsElement).open)}>
+              <summary className="cursor-pointer select-none text-[12px] font-medium text-ink-secondary hover:text-ink">{t("routineEditor.more")}<span className="ml-1.5 font-normal text-ink-tertiary">· {moreSummary}</span></summary>
               <div className="mt-3 space-y-3 border-t border-hairline/35 pt-3">
               {kind === "routine" && recurrence === "pattern" && pattern && (
                 <div data-routine-editor-more-schedule className="space-y-3">
@@ -1052,7 +1076,7 @@ function EventEditor({
               )}
               {recurrence === "interval" && kind === "routine" && (
                 <div className="space-y-3" data-routine-interval-advanced>
-                  <div className="grid items-center gap-2 text-[12.5px] text-ink sm:flex sm:flex-wrap">
+                  <div className="grid items-center gap-2 text-[13px] text-ink sm:flex sm:flex-wrap">
                     <span className="inline-flex items-center gap-2 whitespace-nowrap">
                       <span className="font-medium">{t("routineCalendar.intervalOn")}</span>
                       <select
@@ -1104,7 +1128,7 @@ function EventEditor({
                       <div className="mb-2 text-[11px] font-medium text-ink-secondary">{t("routineCalendar.chooseDays")}</div>
                       <div role="group" aria-label={t("routineCalendar.customIntervalDays")} aria-invalid={intervalDaysInvalid} aria-describedby={intervalDaysInvalid ? "routine-interval-days-error" : undefined} className="flex flex-wrap gap-1.5">
                         {dayNames().map((label, day) => (
-                          <button key={label} type="button" onClick={() => setIntervalWeekdays((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day].sort())} aria-label={t(intervalWeekdays.includes(day) ? "routineCalendar.daySelected" : "routineCalendar.dayNotSelected", { day: label })} aria-pressed={intervalWeekdays.includes(day)} className={cn("size-8 rounded-full text-[10px] font-semibold", intervalWeekdays.includes(day) ? "bg-accent text-accent-ink" : "bg-inset text-ink-secondary hover:bg-raised hover:text-ink")}>
+                          <button key={label} type="button" onClick={() => setIntervalWeekdays((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day].sort())} aria-label={t(intervalWeekdays.includes(day) ? "routineCalendar.daySelected" : "routineCalendar.dayNotSelected", { day: label })} aria-pressed={intervalWeekdays.includes(day)} className={cn("size-8 rounded-full text-[11px] font-semibold", intervalWeekdays.includes(day) ? "bg-accent text-accent-ink" : "bg-inset text-ink-secondary hover:bg-raised hover:text-ink")}>
                             {dayNames()[day]?.slice(0, 2)}
                           </button>
                         ))}
@@ -1138,7 +1162,7 @@ function EventEditor({
                         {EVENT_DURATION_OPTIONS.map((minutes) => <option key={minutes} value={minutes}>{durationLabel(minutes)}</option>)}
                       </select>
                     </label>
-                    <div className="mt-1.5 text-[10.5px] leading-relaxed text-ink-secondary">{t("routineCalendar.safetyLimitHelp")}</div>
+                    <div className="mt-1.5 text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.safetyLimitHelp")}</div>
                     {repeatsOnClock && <div className="mt-3">
                       <label className="flex flex-wrap items-center gap-2 text-[12px] text-ink">
                         <span>{t("routines.overlapLabel")}</span>
@@ -1147,7 +1171,7 @@ function EventEditor({
                           <option value="queue">{t("routines.overlapQueue")}</option>
                         </select>
                       </label>
-                      <p className="mt-1.5 text-[10.5px] leading-relaxed text-ink-secondary">{t(overlap === "queue" ? "routines.overlapQueueHelp" : "routines.overlapSkipHelp")}</p>
+                      <p className="mt-1.5 text-[11px] leading-relaxed text-ink-secondary">{t(overlap === "queue" ? "routines.overlapQueueHelp" : "routines.overlapSkipHelp")}</p>
                     </div>}
                     {repeatsOnClock && <div data-routine-auto-pause className="mt-3">
                       <label className="flex flex-wrap items-center gap-2 text-[12px] text-ink">
@@ -1156,13 +1180,13 @@ function EventEditor({
                           {routineAutoPauseChoices(autoPauseAfter).map((count) => <option key={count} value={count}>{routineAutoPauseOption(count)}</option>)}
                         </select>
                       </label>
-                      <p className="mt-1.5 text-[10.5px] leading-relaxed text-ink-secondary">{t("routines.autoPause.help")}</p>
+                      <p className="mt-1.5 text-[11px] leading-relaxed text-ink-secondary">{t("routines.autoPause.help")}</p>
                     </div>}
           {kind === "routine" && !isRoomGoal && repeatsOnClock && (
             <label className="flex items-start gap-3 rounded-xl border border-hairline/40 bg-inset/40 px-3.5 py-3">
               <input type="checkbox" aria-label={t("routines.continuityLabel")} checked={continuity} onChange={(event) => setContinuity(event.target.checked)} className="mt-0.5 accent-accent" />
               <span>
-                <span className="block text-[12.5px] font-medium text-ink">{t("routines.continuityLabel")}</span>
+                <span className="block text-[13px] font-medium text-ink">{t("routines.continuityLabel")}</span>
                 <span className="mt-1 block text-[11px] leading-relaxed text-ink-secondary">{t("routines.continuityHelp")}</span>
               </span>
             </label>
@@ -1171,7 +1195,7 @@ function EventEditor({
             <label data-routine-only-present className="flex items-start gap-3 rounded-xl border border-hairline/40 bg-inset/40 px-3.5 py-3">
               <input type="checkbox" aria-label={t("routines.away.onlyLabel")} checked={onlyWhenPresent} onChange={(event) => setOnlyWhenPresent(event.target.checked)} className="mt-0.5 accent-accent" />
               <span>
-                <span className="block text-[12.5px] font-medium text-ink">{t("routines.away.onlyLabel")}</span>
+                <span className="block text-[13px] font-medium text-ink">{t("routines.away.onlyLabel")}</span>
                 <span className="mt-1 block text-[11px] leading-relaxed text-ink-secondary">{t("routines.away.onlyHelp")}</span>
               </span>
             </label>
@@ -1180,14 +1204,14 @@ function EventEditor({
             <label data-routine-delete-when-finished className="flex items-start gap-3 rounded-xl border border-hairline/40 bg-inset/40 px-3.5 py-3">
               <input type="checkbox" aria-label={t("routines.deleteWhenFinished.label")} checked={deleteWhenFinished} onChange={(event) => setDeleteWhenFinished(event.target.checked)} className="mt-0.5 accent-accent" />
               <span>
-                <span className="block text-[12.5px] font-medium text-ink">{t("routines.deleteWhenFinished.label")}</span>
+                <span className="block text-[13px] font-medium text-ink">{t("routines.deleteWhenFinished.label")}</span>
                 <span className="mt-1 block text-[11px] leading-relaxed text-ink-secondary">{t("routines.deleteWhenFinished.help")}</span>
               </span>
             </label>
           )}
           {kind === "routine" && !isRoomGoal && (
             <label data-routine-mail-alias className="flex flex-col gap-1 rounded-xl border border-hairline/40 bg-inset/40 px-3.5 py-3">
-              <span className="text-[12.5px] font-medium text-ink">{t("routines.mailAlias.label")}</span>
+              <span className="text-[13px] font-medium text-ink">{t("routines.mailAlias.label")}</span>
               <input
                 value={mailAlias}
                 maxLength={32}
@@ -1223,34 +1247,48 @@ function EventEditor({
                   {kind === "call" && <>
                     <span className="text-[12px] text-ink-secondary">{t("routineCalendar.to")}</span>
                     <span className="rounded-lg border border-hairline/40 bg-inset/60 px-3 py-2 text-[13px] text-ink">{niceTime(endAt)}</span>
-                    <select aria-label={t("routineCalendar.callDuration")} value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} className="rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong">
-                      {EVENT_DURATION_OPTIONS.map((minutes) => <option key={minutes} value={minutes}>{durationLabel(minutes)}</option>)}
-                    </select>
+                    <PillSelect
+                      ariaLabel={t("routineCalendar.callDuration")}
+                      value={String(durationMinutes)}
+                      onChange={(value) => setDurationMinutes(Number(value))}
+                      options={EVENT_DURATION_OPTIONS.map((minutes) => ({ value: String(minutes), label: durationLabel(minutes) }))}
+                    />
                   </>}
                 </div>
               )}
               <div className="flex flex-wrap items-center gap-2">
                 <Repeat2 size={14} className="text-ink-secondary" />
                 {isRoutineKind ? (
-                  <select data-schedule-frequency aria-label={t("routines.editor.repeat")} value={recurrence === "pattern" ? scheduleDraft.model.frequency : recurrence} onChange={(event) => {
-                    const value = event.target.value;
-                    if ((PICKER_FREQUENCIES as string[]).includes(value)) selectFrequency(value as ScheduleFrequency);
-                    else selectRecurrence(value as RecurrenceChoice);
-                  }} className="rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong">
-                    <option value="none">{t("scheduleEditor.frequency.once")}</option>
-                    {PICKER_FREQUENCIES.map((frequency) => <option key={frequency} value={frequency}>{t(`scheduleEditor.frequency.${frequency}`)}</option>)}
-                    <option value="interval">{t("scheduleEditor.frequency.every")}</option>
-                    <option value="limit_reset">{t("routines.limitReset.option")}</option>
-                    {recurrence === "advanced" && <option value="advanced">{t("scheduleEditor.frequency.advanced")}</option>}
-                  </select>
+                  <div data-schedule-frequency={recurrence === "pattern" ? scheduleDraft.model.frequency : recurrence}>
+                    <PillSelect
+                      ariaLabel={t("routines.editor.repeat")}
+                      value={recurrence === "pattern" ? scheduleDraft.model.frequency : recurrence}
+                      onChange={(value) => {
+                        if ((PICKER_FREQUENCIES as string[]).includes(value)) selectFrequency(value as ScheduleFrequency);
+                        else selectRecurrence(value as RecurrenceChoice);
+                      }}
+                      options={[
+                        { value: "none", label: t("scheduleEditor.frequency.once") },
+                        ...PICKER_FREQUENCIES.map((frequency) => ({ value: frequency, label: t(`scheduleEditor.frequency.${frequency}`) })),
+                        { value: "interval", label: t("scheduleEditor.frequency.every") },
+                        { value: "limit_reset", label: t("routines.limitReset.option") },
+                        ...(recurrence === "advanced" ? [{ value: "advanced", label: t("scheduleEditor.frequency.advanced") }] : []),
+                      ]}
+                    />
+                  </div>
                 ) : (
-                <select aria-label={t("routines.editor.repeat")} value={recurrence} onChange={(event) => selectRecurrence(event.target.value as RecurrenceChoice)} className="rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong">
-                  <option value="none">{t("routineCalendar.noRepeat")}</option>
-                  <option value="daily">{t("routineCalendar.daily")}</option>
-                  <option value="weekdays">{t("routineCalendar.everyWeekday")}</option>
-                  <option value="weekly">{t("routineCalendar.weeklyOn", { day: dayNames()[new Date(at).getDay()] ?? "" })}</option>
-                  <option value="custom">{t("routineCalendar.selectedWeekdays")}</option>
-                </select>
+                <PillSelect
+                  ariaLabel={t("routines.editor.repeat")}
+                  value={recurrence}
+                  onChange={(value) => selectRecurrence(value as RecurrenceChoice)}
+                  options={[
+                    { value: "none", label: t("routineCalendar.noRepeat") },
+                    { value: "daily", label: t("routineCalendar.daily") },
+                    { value: "weekdays", label: t("routineCalendar.everyWeekday") },
+                    { value: "weekly", label: t("routineCalendar.weeklyOn", { day: dayNames()[new Date(at).getDay()] ?? "" }) },
+                    { value: "custom", label: t("routineCalendar.selectedWeekdays") },
+                  ]}
+                />
                 )}
               </div>
               {isRoutineKind && recurrence === "limit_reset" && (
@@ -1275,12 +1313,12 @@ function EventEditor({
               {isRoutineKind && <RoutineScheduleNote />}
               {kind === "call" && recurrence === "custom" && (
                 <div className="flex flex-wrap gap-1.5">
-                  {dayNames().map((label, day) => <button key={label} type="button" onClick={() => setWeekdays((current) => current.includes(day) ? (current.length === 1 ? current : current.filter((value) => value !== day)) : [...current, day].sort())} className={cn("size-8 rounded-full text-[10px] font-semibold", weekdays.includes(day) ? "bg-accent text-accent-ink" : "bg-inset text-ink-secondary hover:bg-raised hover:text-ink")}>{label[0]}</button>)}
+                  {dayNames().map((label, day) => <button key={label} type="button" onClick={() => setWeekdays((current) => current.includes(day) ? (current.length === 1 ? current : current.filter((value) => value !== day)) : [...current, day].sort())} className={cn("size-8 rounded-full text-[11px] font-semibold", weekdays.includes(day) ? "bg-accent text-accent-ink" : "bg-inset text-ink-secondary hover:bg-raised hover:text-ink")}>{label[0]}</button>)}
                 </div>
               )}
               {recurrence === "interval" && isRoutineKind && (
                 <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink">
+                  <div className="flex flex-wrap items-center gap-2 text-[13px] text-ink">
                     <span className="font-medium">{t("routineCalendar.runsEvery")}</span>
                     <select
                       value={INTERVAL_PRESETS.includes(intervalMinutes) ? String(intervalMinutes) : "custom"}
@@ -1309,7 +1347,7 @@ function EventEditor({
                     {!INTERVAL_PRESETS.includes(intervalMinutes) && <span>{t("settings.mcpCalls.minutes")}</span>}
                   </div>
 
-                  <div className="grid items-center gap-2 text-[12.5px] text-ink sm:flex sm:flex-wrap">
+                  <div className="grid items-center gap-2 text-[13px] text-ink sm:flex sm:flex-wrap">
                     <span className="inline-flex items-center gap-2 whitespace-nowrap">
                       <span className="font-medium">{t("routineCalendar.intervalOn")}</span>
                       <select
@@ -1376,7 +1414,7 @@ function EventEditor({
                               : [...current, day].sort())}
                             aria-label={t(intervalWeekdays.includes(day) ? "routineCalendar.daySelected" : "routineCalendar.dayNotSelected", { day: label })}
                             aria-pressed={intervalWeekdays.includes(day)}
-                            className={cn("size-8 rounded-full text-[10px] font-semibold", intervalWeekdays.includes(day) ? "bg-accent text-accent-ink" : "bg-inset text-ink-secondary hover:bg-raised hover:text-ink")}
+                            className={cn("size-8 rounded-full text-[11px] font-semibold", intervalWeekdays.includes(day) ? "bg-accent text-accent-ink" : "bg-inset text-ink-secondary hover:bg-raised hover:text-ink")}
                           >
                             {dayNames()[day]?.slice(0, 2)}
                           </button>
@@ -1428,42 +1466,42 @@ function EventEditor({
               {isRoomGoal ? (
                 <div className="space-y-3">
                   <div>
-                    <label htmlFor="routine-goal-room" className="mb-2 block text-[12.5px] font-medium text-ink">{t("routineCalendar.chooseGroup")}</label>
+                    <label htmlFor="routine-goal-room" className="mb-2 block text-[13px] font-medium text-ink">{t("routineCalendar.chooseGroup")}</label>
                     {rooms.length > 0 ? (
                       <select id="routine-goal-room" value={groupId} onChange={(event) => selectRoom(event.target.value)} className="w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong">
                         <option value="">{t("routineCalendar.selectGroup")}</option>
                         {rooms.map((room) => <option key={room.id} value={room.id}>{room.name}</option>)}
                       </select>
                     ) : (
-                      <div className="rounded-xl border border-dashed border-hairline/60 bg-inset px-3.5 py-3 text-[11.5px] leading-relaxed text-ink-secondary">{t("routineCalendar.createGroupFirst")}</div>
+                      <div className="rounded-xl border border-dashed border-hairline/60 bg-inset px-3.5 py-3 text-[12px] leading-relaxed text-ink-secondary">{t("routineCalendar.createGroupFirst")}</div>
                     )}
                   </div>
                   {selectedRoom && (
                     <div>
-                      <div className="mb-2 text-[12.5px] font-medium text-ink">{t("routineCalendar.chooseLead")}</div>
+                      <div className="mb-2 text-[13px] font-medium text-ink">{t("routineCalendar.chooseLead")}</div>
                       {roomMembers.length > 0 ? (
                         <>
                           <BotPicker bots={roomMembers} selected={botIds} multiple={false} onChange={selectBots} />
-                          <div className="mt-2 text-[11.5px] text-ink-secondary">{t("routineCalendar.leadCoordinates", { name: selectedRoom.name })}</div>
+                          <div className="mt-2 text-[12px] text-ink-secondary">{t("routineCalendar.leadCoordinates", { name: selectedRoom.name })}</div>
                         </>
                       ) : (
-                        <div className="rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-3 text-[11.5px] text-warning">{t("routineCalendar.noActiveMembers")}</div>
+                        <div className="rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-3 text-[12px] text-warning">{t("routineCalendar.noActiveMembers")}</div>
                       )}
                     </div>
                   )}
                 </div>
               ) : (
                 <>
-                  <div className="mb-2 text-[12.5px] font-medium text-ink">{isRoutineKind ? t("routineCalendar.assignBot") : t("routineCalendar.addGuests")}</div>
+                  <div className="mb-2 text-[13px] font-medium text-ink">{isRoutineKind ? t("routineCalendar.assignBot") : t("routineCalendar.addGuests")}</div>
                   {bots.length > 0 ? (
                 <>
                   <BotPicker bots={bots} selected={botIds} multiple={kind === "call"} locked={Boolean(lockedBotId)} onChange={selectBots} />
-                  <div className="mt-2 text-[11.5px] text-ink-secondary">{isRoutineKind ? t("routineCalendar.botOwnsRun") : selectedBots.length === 0 ? t("routineCalendar.noBotsInvited") : selectedBots.length === 1 ? t("routineCalendar.oneBotInvited") : t("routineCalendar.botsInvited", { count: selectedBots.length })}</div>
+                  <div className="mt-2 text-[12px] text-ink-secondary">{isRoutineKind ? t("routineCalendar.botOwnsRun") : selectedBots.length === 0 ? t("routineCalendar.noBotsInvited") : selectedBots.length === 1 ? t("routineCalendar.oneBotInvited") : t("routineCalendar.botsInvited", { count: selectedBots.length })}</div>
                 </>
               ) : viewerCanCreateBots(state.config) && (
                 <button type="button" onClick={() => { dispatch({ type: "openBotWizard" }); onClose(); }} className="w-full rounded-xl border border-dashed border-accent/45 bg-accent/[0.06] px-4 py-4 text-left hover:bg-accent/10">
-                  <div className="text-[12.5px] font-medium text-accent">{t("onboarding.firstRun.bot.title")}</div>
-                  <div className="mt-1 text-[11.5px] text-ink-secondary">{t("routineCalendar.needsOneBot")}</div>
+                  <div className="text-[13px] font-medium text-accent">{t("onboarding.firstRun.bot.title")}</div>
+                  <div className="mt-1 text-[12px] text-ink-secondary">{t("routineCalendar.needsOneBot")}</div>
                 </button>
                   )}
                 </>
@@ -1479,12 +1517,12 @@ function EventEditor({
             <Paperclip size={18} className="mt-2.5 shrink-0 text-ink-secondary" />
             {isRoomGoal ? (
               <div className="min-w-0 flex-1 rounded-xl border border-hairline/50 bg-inset px-3.5 py-3">
-                <div className="text-[12.5px] font-medium text-ink">{t("routineCalendar.sharedContext")}</div>
+                <div className="text-[13px] font-medium text-ink">{t("routineCalendar.sharedContext")}</div>
                 <div className="mt-1 text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.noGoalAttachments")}</div>
               </div>
             ) : <div className="min-w-0 flex-1 space-y-2">
               <input ref={fileInput} type="file" multiple className="hidden" onChange={(event) => { void pickFiles(event.target.files); event.target.value = ""; }} />
-              <button type="button" onClick={() => fileInput.current?.click()} className="rounded-lg border border-hairline/50 px-3 py-2 text-[12.5px] font-medium text-ink hover:bg-raised">{t("routineCalendar.addAttachment")}</button>
+              <button type="button" onClick={() => fileInput.current?.click()} className="rounded-lg border border-hairline/50 px-3 py-2 text-[13px] font-medium text-ink hover:bg-raised">{t("routineCalendar.addAttachment")}</button>
               <AttachmentChips attachments={attachments} onRemove={(id) => setAttachments((current) => current.filter((attachment) => attachment.id !== id))} />
               <div className="text-[11px] leading-relaxed text-ink-secondary">
                 {isRoutineKind
@@ -1493,19 +1531,19 @@ function EventEditor({
                     ? t("routineCalendar.refsSharedHelp")
                     : t("routineCalendar.refsStayHelp")}
               </div>
-              {attachmentNotice && <div className="text-[11.5px] text-warning">{attachmentNotice}</div>}
+              {attachmentNotice && <div className="text-[12px] text-warning">{attachmentNotice}</div>}
             </div>}
           </div>
 
           </>}
-          {error && <div className="ml-10 flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2.5 text-[12.5px] text-danger"><CircleAlert size={15} className="mt-0.5 shrink-0" />{error}</div>}
+          {error && <div className="ml-10 flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-[13px] text-danger"><CircleAlert size={15} className="mt-0.5 shrink-0" />{error}</div>}
         </div>
         </div>
 
-        <div className={cn("sticky bottom-0 z-20 flex items-center justify-end gap-2 border-t border-hairline/40 px-5 py-3.5", panel ? "bg-panel" : "bg-elevated")}>
-          {dirty && <span className="mr-auto text-[11.5px] text-ink-secondary">{t("routineEditor.unsavedHint")}</span>}
-          <button onClick={requestClose} className="rounded-lg px-4 py-2 text-[12.5px] text-ink-secondary hover:bg-raised hover:text-ink">{readOnly ? t("common.close") : t("common.cancel")}</button>
-          {!readOnly && <button onClick={save} disabled={saving || attachmentPending || !valid} className="flex items-center gap-2 rounded-lg bg-accent px-5 py-2 text-[12.5px] font-semibold text-accent-ink hover:brightness-110 disabled:opacity-40">{(saving || attachmentPending) && <Loader2 size={14} className="animate-spin" />}{attachmentPending ? t("routineCalendar.attaching") : existingRoutine || existingCall ? t("common.save") : kind === "call" ? t("routineCalendar.scheduleCall") : isRoomGoal ? t("routineCalendar.scheduleGoal") : t("routineCalendar.scheduleRoutine")}</button>}
+        <div className={cn("sticky bottom-0 z-20 flex items-center justify-end gap-2 border-t border-hairline/40", panel ? "bg-panel px-4 py-3" : "bg-elevated px-6 py-4")}>
+          {dirty && <span className="mr-auto text-[12px] text-ink-secondary">{t("routineEditor.unsavedHint")}</span>}
+          <button onClick={requestClose} className="rounded-lg px-3.5 py-2 text-[13px] text-ink-secondary hover:bg-raised hover:text-ink">{readOnly ? t("common.close") : t("common.cancel")}</button>
+          {!readOnly && <button onClick={save} disabled={saving || attachmentPending || !valid} className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-[13px] font-medium text-accent-ink hover:brightness-110 disabled:opacity-40">{(saving || attachmentPending) && <Loader2 size={14} className="animate-spin" />}{attachmentPending ? t("routineCalendar.attaching") : existingRoutine || existingCall ? t("common.save") : kind === "call" ? t("routineCalendar.scheduleCall") : isRoomGoal ? t("routineCalendar.scheduleGoal") : t("routineCalendar.scheduleRoutine")}</button>}
         </div>
       </div>
   );
@@ -1536,6 +1574,7 @@ export function QuickComposer({
   onSavedRoutine: (routine: Routine) => void;
   onSavedCall: (call: CalendarCall) => void;
 }) {
+  const confirm = useConfirm();
   const { state, dispatch } = useStore();
   const [kind, setKind] = useState<EventKind>(routinesOnly || seed.limitReset ? "routine" : seed.kind);
   const [name, setName] = useState(seed.name ?? "");
@@ -1547,6 +1586,37 @@ export function QuickComposer({
   const dialogRef = useRef<HTMLDivElement>(null);
   const [dialogPosition, setDialogPosition] = useState<{ left: number; top: number } | null>(null);
   const durationMinutes = kind === "routine" ? 30 : seed.durationMinutes;
+  // 2026-11-01 (no modals): a popover hung off the slot or the New button,
+  // with no scrim; the calendar stays usable. A press outside closes it while
+  // it is empty; with a draft it stays (another slot moves the draft there)
+  // and Escape or Close asks before dropping it.
+  const dirty = Boolean(name.trim() || description.trim());
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const requestClose = useCallback(async () => {
+    if (dirtyRef.current && !(await confirm(discardConfirmRequest(t("routineEditor.discard"))))) return;
+    onCloseRef.current();
+  }, [confirm]);
+  useEffect(() => {
+    const onDown = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (!target || dialogRef.current?.contains(target) || target.closest?.("[data-anchored-popover], [data-tour-card]")) return;
+      if (!dirtyRef.current) onCloseRef.current();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      event.preventDefault();
+      requestClose();
+    };
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [requestClose]);
 
   useLayoutEffect(() => {
     if (!seed.anchor) {
@@ -1560,7 +1630,8 @@ export function QuickComposer({
       const rect = dialog.getBoundingClientRect();
       let left = seed.anchor!.x + gap;
       let top = seed.anchor!.y + gap;
-      if (left + rect.width > window.innerWidth - gap) left = seed.anchor!.x - rect.width - gap;
+      // A day column anchors by both edges: the other side when this one has no room.
+      if (left + rect.width > window.innerWidth - gap) left = (seed.anchor!.left ?? seed.anchor!.x) - rect.width - gap;
       if (top + rect.height > window.innerHeight - gap) top = seed.anchor!.y - rect.height - gap;
       setDialogPosition({
         left: Math.max(gap, Math.min(left, window.innerWidth - rect.width - gap)),
@@ -1634,10 +1705,10 @@ export function QuickComposer({
 
   const valid = Boolean(name.trim() && botIds.length && (kind === "call" || description.trim()));
   return (
-    <div ref={dialogRef} role="dialog" aria-label={t("routineCalendar.quickCreate")} style={dialogPosition ?? undefined} className={cn("fixed z-50 max-h-[calc(100vh-24px)] w-[min(430px,calc(100vw-24px))] overflow-y-auto rounded-[14px] border border-border popover-surface bg-elevated", !dialogPosition && "left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2")}>
-      <div className="flex items-center justify-between bg-raised/70 px-4 py-2.5">
-        <div className="text-[12px] font-medium text-ink-secondary">{t("routineCalendar.newCalendarEvent")}</div>
-        <button onClick={onClose} className="rounded-full p-1.5 text-ink-secondary hover:bg-inset hover:text-ink" aria-label={t("common.close")}><X size={16} /></button>
+    <div ref={dialogRef} role="dialog" aria-modal="false" aria-label={t("routineCalendar.quickCreate")} data-quick-create="" data-quick-create-anchored={seed.anchor ? "" : undefined} style={dialogPosition ?? undefined} className={cn("animate-pop-in fixed z-50 max-h-[calc(100vh-24px)] w-[min(400px,calc(100vw-24px))] overflow-y-auto rounded-[14px] border border-popover-hairline popover-surface bg-popover shadow-xl", !dialogPosition && "left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2")}>
+      <div className="flex items-center justify-between px-4 pb-1 pt-3">
+        <div className="text-[12px] font-medium text-popover-ink-secondary">{t("routineCalendar.newCalendarEvent")}</div>
+        <button type="button" onClick={requestClose} className="rounded-full p-1.5 text-popover-ink-secondary hover:bg-popover-hover hover:text-popover-ink" aria-label={t("common.close")}><X size={16} /></button>
       </div>
       <div className="space-y-3 p-4">
         <input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder={t("routineCalendar.addTitle")} onKeyDown={(event) => { if (event.key === "Enter" && valid) void save(); }} className="w-full border-b border-hairline/60 bg-transparent pb-2 text-[18px] font-medium text-ink outline-none placeholder:text-ink-secondary focus:border-border-strong" />
@@ -1647,7 +1718,7 @@ export function QuickComposer({
             <button type="button" onClick={() => setKind("call")} className={cn("rounded-lg px-3 py-1.5 text-[12px] font-medium", kind === "call" ? "bg-accent/15 text-accent" : "text-ink-secondary hover:bg-raised hover:text-ink")}>{t("routineCalendar.kindCall")}</button>
           </div>
         )}
-        <div className="flex items-start gap-3 text-[12.5px] text-ink">
+        <div className="flex items-start gap-3 text-[13px] text-ink">
           <Clock3 size={16} className="mt-0.5 shrink-0 text-ink-secondary" />
           {seed.limitReset
             ? <div data-testid="quick-limit-reset">{limitResetWhen({ engine: seed.limitReset.engine, repeat: "once" })}</div>
@@ -1658,22 +1729,26 @@ export function QuickComposer({
           {bots.length === 0 ? viewerCanCreateBots(state.config) && (
             <button type="button" onClick={() => { dispatch({ type: "openBotWizard" }); onClose(); }} className="min-w-0 flex-1 rounded-xl border border-dashed border-accent/45 bg-accent/[0.06] px-3 py-3 text-left hover:bg-accent/10">
               <div className="text-[12px] font-medium text-accent">{t("onboarding.firstRun.bot.title")}</div>
-              <div className="mt-0.5 text-[10.5px] text-ink-secondary">{t("routineCalendar.thenComeBack")}</div>
+              <div className="mt-0.5 text-[11px] text-ink-secondary">{t("routineCalendar.thenComeBack")}</div>
             </button>
           ) : kind === "routine" ? (
-            <select value={botIds[0] ?? ""} onChange={(event) => selectBots([event.target.value])} className="min-w-0 flex-1 rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong">
-              <option value="">{t("routineCalendar.assignBot")}</option>
-              {bots.map((bot) => <option key={bot.id} value={bot.id}>{bot.name}</option>)}
-            </select>
+            <div className="min-w-0 flex-1">
+              <PillSelect
+                ariaLabel={t("routineCalendar.assignBot")}
+                value={botIds[0] ?? ""}
+                onChange={(id) => selectBots(id ? [id] : [])}
+                options={[{ value: "", label: t("routineCalendar.assignBot") }, ...bots.map((bot) => ({ value: bot.id, label: bot.name }))]}
+              />
+            </div>
           ) : (
             <div className="min-w-0 flex-1"><BotPicker bots={bots} selected={botIds} multiple onChange={selectBots} /></div>
           )}
         </div>
         <div className="flex items-start gap-3">
           <FileText size={16} className="mt-2.5 shrink-0 text-ink-secondary" />
-          <MarkdownEditor value={description} onChange={setDescription} minHeight={72} maxHeight={220} showCount={false} dataField="routine-instructions-quick" className="min-w-0 flex-1" ariaLabel={kind === "routine" ? t("routineCalendar.botDo") : t("routineCalendar.descOptional")} placeholder={kind === "routine" ? t("routineCalendar.botDo") : t("routineCalendar.descOptional")} />
+          <MarkdownEditor compact expandable value={description} onChange={setDescription} minHeight={72} maxHeight={220} showCount={false} dataField="routine-instructions-quick" className="min-w-0 flex-1" ariaLabel={kind === "routine" ? t("routineCalendar.botDo") : t("routineCalendar.descOptional")} placeholder={kind === "routine" ? t("routineCalendar.botDo") : t("routineCalendar.descOptional")} />
         </div>
-        {error && <div className="rounded-lg bg-danger/10 px-3 py-2 text-[11.5px] text-danger">{error}</div>}
+        {error && <div className="rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">{error}</div>}
       </div>
       <div className="flex items-center justify-end gap-2 border-t border-hairline/40 px-4 py-3">
         <button onClick={() => onMore({ ...seed, kind, botIds, name, description, durationMinutes })} title={t("routineCalendar.moreOptionsTitle")} className="rounded-lg px-3 py-2 text-[12px] font-medium text-accent hover:bg-accent/10">{t("routines.editor.more")}</button>
@@ -1719,6 +1794,7 @@ function CalendarEventCard({
   const color = isCall ? "#6d7cff" : primary ? (mausInk(primary.color) ?? "#666") : "#666";
   // Someone else's routine (a wider scope): its owner, and no drag unless
   // the server says this person may edit it.
+  const confirm = useConfirm();
   const { state: cardState } = useStore();
   const viewerId = cardState.config?.viewer?.principalId?.toLowerCase();
   const otherOwner = routine?.owner && routine.owner.id && routine.owner.id.toLowerCase() !== viewerId ? routine.owner : null;
@@ -1730,6 +1806,12 @@ function CalendarEventCard({
   const schedule = isCall ? item.call.schedule : routine?.schedule;
   const recurring = Boolean(schedule && schedule.type !== "once");
   const intervalCadence = schedule?.type === "interval" ? intervalLabel(schedule.everyMinutes) : null;
+  const metaLine = `${niceTime(item.at)} · ${deletedRoutine ? `${t("routineCalendar.deletedRoutine")}${statusLabel ? ` · ${statusLabel}` : ""}` : intervalCadence ?? (isCall ? (ownerBots.length === 1 ? t("canvas.botCountOne") : t("canvas.botCount", { count: ownerBots.length })) : isRoomGoal ? `${t("routineCalendar.teamGoalIn", { name: room?.name ?? t("routines.drawer.group") })}${statusLabel ? ` · ${statusLabel}` : ""}` : statusLabel ?? primary?.name ?? routine?.bot?.name)}`;
+  const titleOnly = compact || previewDuration < 30;
+  const cardTitle = [
+    routine?.schedule.type === "cron" ? t("routineCalendar.openRoutineForCron") : deletedRoutine ? `${name} · ${t("routineCalendar.deletedRoutine")}` : undefined,
+    titleOnly ? metaLine : undefined,
+  ].filter(Boolean).join("\n") || undefined;
 
   const beginResize = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -1745,11 +1827,17 @@ function CalendarEventCard({
       document.removeEventListener("pointermove", move);
       document.removeEventListener("pointerup", up);
       if (next === item.durationMinutes) return;
-      if (recurring && !window.confirm(t("routineCalendar.resizeSeries"))) {
-        setPreviewDuration(item.durationMinutes);
-        return;
-      }
-      onResize(next);
+      void (async () => {
+        if (recurring && !(await confirm({
+          title: t("routineCalendar.resizeSeries"),
+          confirmLabel: t("common.confirm"),
+          tone: "neutral",
+        }))) {
+          setPreviewDuration(item.durationMinutes);
+          return;
+        }
+        onResize(next);
+      })();
     };
     document.addEventListener("pointermove", move);
     document.addEventListener("pointerup", up, { once: true });
@@ -1760,7 +1848,7 @@ function CalendarEventCard({
       data-event-card
       type="button"
       draggable={canMove}
-      title={routine?.schedule.type === "cron" ? t("routineCalendar.openRoutineForCron") : deletedRoutine ? `${name} · ${t("routineCalendar.deletedRoutine")}` : undefined}
+      title={cardTitle}
       data-deleted-routine={deletedRoutine || undefined}
       onDragStart={(event) => {
         if (!canMove) return event.preventDefault();
@@ -1779,13 +1867,13 @@ function CalendarEventCard({
       }}
     >
       <div className="flex min-w-0 items-start gap-1.5 text-white">
-        {previewDuration >= 30 && (isCall ? <Video size={compact ? 11 : 13} className="mt-0.5 shrink-0" /> : primary ? <BotAvatar bot={primary} state={status ? statusState(status) : "idle"} size={compact ? 22 : 26} animated={status === "running" || status === "waiting"} /> : null)}
+        {previewDuration >= 30 && (isCall ? <Video size={compact ? 13 : 15} className="mt-0.5 shrink-0" /> : primary ? <BotAvatar bot={primary} state={status ? statusState(status) : "idle"} size={compact ? 16 : 26} animated={status === "running" || status === "waiting"} /> : null)}
         <div className="min-w-0 flex-1">
           <div className={cn("truncate text-[11px] font-semibold", previewDuration < 30 ? "leading-none" : "leading-tight")}>{name}</div>
-          {previewDuration >= 30 && <div className="mt-0.5 truncate text-[9.5px] text-white/75">{niceTime(item.at)} · {deletedRoutine ? `${t("routineCalendar.deletedRoutine")}${statusLabel ? ` · ${statusLabel}` : ""}` : intervalCadence ?? (isCall ? (ownerBots.length === 1 ? t("canvas.botCountOne") : t("canvas.botCount", { count: ownerBots.length })) : isRoomGoal ? `${t("routineCalendar.teamGoalIn", { name: room?.name ?? t("routines.drawer.group") })}${statusLabel ? ` · ${statusLabel}` : ""}` : statusLabel ?? primary?.name ?? routine?.bot?.name)}</div>}
-          {previewDuration >= 45 && otherOwner && <RoutineOwnerBadge owner={otherOwner} size={12} className="mt-0.5 max-w-full text-[9.5px] text-white/80" />}
+          {!titleOnly && <div className="mt-0.5 truncate text-[11px] text-white/75">{metaLine}</div>}
+          {!titleOnly && previewDuration >= 45 && otherOwner && <RoutineOwnerBadge owner={otherOwner} size={12} className="mt-0.5 max-w-full text-[11px] text-white/80" />}
         </div>
-        {previewDuration >= 30 && ownerBots.length > 1 && <span className="rounded bg-black/20 px-1 py-0.5 text-[8px]">+{ownerBots.length - 1}</span>}
+        {!titleOnly && ownerBots.length > 1 && <span className="rounded bg-black/20 px-1 py-0.5 text-[11px]">+{ownerBots.length - 1}</span>}
       </div>
       {isCall && <div onPointerDown={beginResize} className="absolute inset-x-1 bottom-0 h-1.5 cursor-ns-resize rounded-full opacity-0 transition group-hover:opacity-100" aria-label={t("routineCalendar.resizeEvent")}><div className="mx-auto mt-0.5 h-0.5 w-5 rounded-full bg-white/55" /></div>}
     </button>
@@ -1804,6 +1892,7 @@ function CalendarGrid({
   onResize,
   markers,
   onDropOnReset,
+  pending,
 }: {
   anchor: number;
   days: number;
@@ -1816,6 +1905,8 @@ function CalendarGrid({
   onResize: (item: CalendarEventItem, duration: number) => void;
   markers?: ResetMarker[];
   onDropOnReset?: (drop: ResetDrop, marker: ResetMarker) => void;
+  /** The slot quick create is open on: it stays marked while the popover is up. */
+  pending?: { at: number; durationMinutes: number; kind: EventKind } | null;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<{ day: number; start: number; end: number } | null>(null);
@@ -1879,11 +1970,13 @@ function CalendarGrid({
       end = Math.max(start + CALENDAR_SLOT_MINUTES * 60_000, current + CALENDAR_SLOT_MINUTES * 60_000);
       setSelection({ day, start, end });
     };
-    const up = (pointer: PointerEvent) => {
+    const up = () => {
       document.removeEventListener("pointermove", move);
       document.removeEventListener("pointerup", up);
       setSelection(null);
-      onCreate({ kind: "routine", at: start, durationMinutes: Math.max(CALENDAR_SLOT_MINUTES, Math.round((end - start) / 60_000)), botIds: [], anchor: { x: pointer.clientX, y: pointer.clientY } });
+      // Beside the day's column at the slot's top, so the marked slot stays in view.
+      const slotTop = rect.top + ((new Date(start).getHours() * 60 + new Date(start).getMinutes()) / 60) * HOUR_HEIGHT;
+      onCreate({ kind: "routine", at: start, durationMinutes: Math.max(CALENDAR_SLOT_MINUTES, Math.round((end - start) / 60_000)), botIds: [], anchor: { x: rect.right, y: slotTop, left: rect.left } });
     };
     document.addEventListener("pointermove", move);
     document.addEventListener("pointerup", up, { once: true });
@@ -1919,23 +2012,23 @@ function CalendarGrid({
     <div className="relative flex min-h-0 min-w-0 flex-1">
     {botDrag && (
       <div data-calendar-drop-target className="pointer-events-none absolute inset-1 z-40 rounded-lg border-2 border-dashed border-accent/70">
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-accent px-3 py-1 text-[11.5px] font-medium text-accent-ink shadow-md">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-accent px-3 py-1 text-[12px] font-medium text-accent-ink shadow-md">
           {botDrag.name ? t("routines.upcoming.dropBot", { name: botDrag.name }) : t("routines.upcoming.drop")}
         </div>
       </div>
     )}
     <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-auto border-l border-t border-hairline/40 bg-app", botDrag && "bg-accent/[0.03]")}>
       <div className="sticky top-0 z-30 grid bg-app/95 backdrop-blur" style={{ gridTemplateColumns, minWidth }}>
-        <div className="border-b border-r border-hairline/40 px-2 py-3 text-center text-[9px] uppercase tracking-wider text-ink-secondary">{formatGmtOffset(-new Date(anchor).getTimezoneOffset())}</div>
+        <div className="border-b border-r border-hairline/40 px-2 py-3 text-center text-[12px] font-medium text-ink-secondary">{formatGmtOffset(-new Date(anchor).getTimezoneOffset())}</div>
         {starts.map((start) => {
           const date = new Date(start);
           const isToday = start === today;
-          return <div key={start} role="columnheader" className={cn("border-b border-r border-hairline/40 px-2 py-2 text-center last:border-r-0", isToday && "bg-accent/[0.035]")}><div className={cn("text-[10px] font-medium uppercase tracking-[0.14em]", isToday ? "text-accent" : "text-ink-secondary")}>{dayNames()[date.getDay()]}</div><div className={cn("mx-auto mt-1 flex size-8 items-center justify-center rounded-full text-[15px] font-medium", isToday ? "bg-accent text-accent-ink" : "text-ink")}>{date.getDate()}</div></div>;
+          return <div key={start} role="columnheader" className={cn("border-b border-r border-hairline/40 px-2 py-2 text-center last:border-r-0", isToday && "bg-accent/[0.035]")}><div className={cn("text-[11px] font-medium", isToday ? "text-accent" : "text-ink-secondary")}>{dayNames()[date.getDay()]}</div><div className={cn("mx-auto mt-1 flex size-8 items-center justify-center rounded-full text-[15px] font-medium", isToday ? "bg-accent text-accent-ink" : "text-ink")}>{date.getDate()}</div></div>;
         })}
       </div>
       <div role="grid" aria-label={t("routineCalendar.calendarAria")} onDragEnd={() => setDragPreview(null)} className="relative grid" style={{ height: HOUR_HEIGHT * 24, gridTemplateColumns, minWidth }}>
         <div className="relative border-r border-hairline/40">
-          {Array.from({ length: 24 }, (_, hour) => <div key={hour} className="absolute right-2 -translate-y-1/2 text-[9.5px] tabular-nums text-ink-tertiary" style={{ top: hour * HOUR_HEIGHT }}>{hour === 0 ? "" : new Date(2000, 0, 1, hour).toLocaleTimeString(activeLocale(), { hour: "numeric" })}</div>)}
+          {Array.from({ length: 24 }, (_, hour) => <div key={hour} className="absolute right-2 -translate-y-1/2 text-[11px] tabular-nums text-ink-tertiary" style={{ top: hour * HOUR_HEIGHT }}>{hour === 0 ? "" : new Date(2000, 0, 1, hour).toLocaleTimeString(activeLocale(), { hour: "numeric" })}</div>)}
         </div>
         {starts.map((start) => {
           const now = new Date();
@@ -1950,7 +2043,8 @@ function CalendarGrid({
               {Array.from({ length: 48 }, (_, half) => <div key={half} className={cn("pointer-events-none absolute inset-x-0 border-t", half % 2 === 0 ? "border-hairline/30" : "border-hairline/10")} style={{ top: (half / 2) * HOUR_HEIGHT }} />)}
               {start === today && <div className="pointer-events-none absolute inset-x-0 z-20 flex items-center" style={{ top: nowTop }}><span className="-ml-1 size-2 rounded-full bg-danger" /><span className="h-px flex-1 bg-danger/80" /></div>}
               {selected && <div className="pointer-events-none absolute inset-x-1 z-10 rounded-md border border-accent/70 bg-accent/20" style={{ top: ((new Date(selected.start).getHours() * 60 + new Date(selected.start).getMinutes()) / 60) * HOUR_HEIGHT, height: Math.max(16, ((selected.end - selected.start) / 3_600_000) * HOUR_HEIGHT) }} />}
-              {preview && <div className="pointer-events-none absolute inset-x-1 z-20 rounded-md border border-accent/80 bg-accent/25 shadow-sm" style={{ top: ((new Date(preview.at).getHours() * 60 + new Date(preview.at).getMinutes()) / 60) * HOUR_HEIGHT, height: HOUR_HEIGHT / 2 }}><div className="px-2 py-1 text-[9.5px] font-medium text-accent">{niceTime(preview.at)}</div></div>}
+              {!selected && pending && startOfDay(pending.at) === start && <div data-calendar-pending="" className="pointer-events-none absolute inset-x-1 z-10 overflow-hidden rounded-md border border-accent/70 bg-accent/15 px-2 py-1 text-[12px] font-medium text-accent-text" style={{ top: ((new Date(pending.at).getHours() * 60 + new Date(pending.at).getMinutes()) / 60) * HOUR_HEIGHT, height: Math.max(16, (pending.durationMinutes / 60) * HOUR_HEIGHT) }}>{pending.kind === "call" ? t("routineCalendar.newEvent") : t("routineEditor.titleNew")}</div>}
+              {preview && <div className="pointer-events-none absolute inset-x-1 z-20 rounded-md border border-accent/80 bg-accent/25 shadow-sm" style={{ top: ((new Date(preview.at).getHours() * 60 + new Date(preview.at).getMinutes()) / 60) * HOUR_HEIGHT, height: HOUR_HEIGHT / 2 }}><div className="px-2 py-1 text-[11px] font-medium text-accent">{niceTime(preview.at)}</div></div>}
               {dayItems.map((item) => <CalendarEventCard key={item.id} item={item} bots={bots} groups={groups} compact={days === 7} layout={collisionLayouts.get(item.id) ?? { column: 0, columns: 1 }} reserveRight={crowded.has(item.id) ? 34 : 0} onOpen={() => onOpen(item)} onResize={(minutes) => onResize(item, minutes)} />)}
               {(markers ?? []).filter((marker) => startOfDay(marker.at) === start).map((marker) => (
                 <LimitResetMarker
@@ -2005,9 +2099,8 @@ export function EventDetails({
   onCallChanged: (id: string | null) => void;
   onOpenRoom: (id: string) => void;
 }) {
+  const confirm = useConfirm();
   const { state, dispatch } = useStore();
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useModalDialog(dialogRef, onClose);
   const [working, setWorking] = useState(false);
   const runNowPending = useRef(false);
   const [starting, setStarting] = useState(false);
@@ -2101,7 +2194,11 @@ export function EventDetails({
   };
 
   const deleteEvent = async () => {
-    if (!window.confirm(t("routineCalendar.deleteConfirm", { title }))) return;
+    if (!(await confirm({
+      title: t("routineCalendar.deleteConfirm", { title }),
+      confirmLabel: t("common.delete"),
+      tone: "danger",
+    }))) return;
     if (call) {
       // #1754: a refused DELETE must surface in the dialog like joinRoom;
       // never leave the dialog open on an unhandled rejection.
@@ -2130,12 +2227,8 @@ export function EventDetails({
     onClose();
   };
 
-  const frameClass = isCall
-    ? (description ? "max-w-[520px] min-[720px]:w-[min(92vw,960px)] min-[720px]:max-w-none" : "max-w-[520px]")
-    : "h-full max-w-none w-full";
-  // 2026-11-01: routine detail and run open in a docked side panel (Grok Bot
-  // style), never a centered modal. Calendar calls keep the compact dialog.
-  const docked = !isCall;
+  // 2026-11-01 (no modals): a routine, its run and a calendar call all open
+  // in the right detail panel (DetailPanel.tsx), the calendar usable beside it.
   if (showingRun && run) {
     const exchange = (
       <RoutineRunExchange
@@ -2148,91 +2241,83 @@ export function EventDetails({
         onRunAgain={runRoutineNow}
         onLogs={openLogs}
         onOpenConfiguration={onEdit}
+        onOpenRoom={onOpenRoom}
       />
     );
     // Chat column host present: portal into it like Melonie <-> Katarina.
-    // Automations alone: fall back to a relative dock on the right.
+    // Automations alone: the detail panel holds it.
     if (getExchangeColumnHost()) return exchange;
-    return (
-      <div className="fixed inset-0 z-50" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-        <div className="pointer-events-none absolute inset-0 bg-black/25" />
-        <div className="pointer-events-auto absolute inset-y-0 right-0 w-full max-w-[min(100vw,560px)] border-l border-border bg-app shadow-xl">
-          <div className="relative h-full w-full">{exchange}</div>
-        </div>
-      </div>
-    );
+    return <DetailPanel bare label={t("routineCalendar.eventDetails")} onClose={onClose} data-event-details="run">{exchange}</DetailPanel>;
   }
 
-  return (
-    <div className={docked ? "fixed inset-0 z-50" : "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3"} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      {docked && <div className="absolute inset-0 bg-black/25" />}
-      <div ref={dialogRef} role="dialog" aria-modal={docked ? "false" : "true"} aria-label={t("routineCalendar.eventDetails")} tabIndex={-1} data-event-details={isCall ? (description ? "two-column" : "single") : "routine"} className={cn("flex flex-col overflow-hidden border-border bg-elevated", docked ? "absolute inset-y-0 right-0 w-full max-w-[min(100vw,560px)] border-l shadow-xl" : cn("max-h-[calc(100dvh-24px)] w-full rounded-[14px] border", frameClass))}>
-        <div className="flex shrink-0 items-center gap-3 border-b border-hairline/40 px-5 py-3.5">
-          {canGoBack
-            ? <button type="button" data-event-back onClick={goBack} aria-label={t("routineRun.back")} title={t("routineRun.back")} className="-ml-1.5 flex size-7 shrink-0 items-center justify-center rounded-full text-ink-secondary hover:bg-raised hover:text-ink"><ChevronLeft size={16} /></button>
-            : <span className={cn("size-3.5 shrink-0 rounded", isCall ? "bg-[#6d7cff]" : "bg-accent")} />}
-          <div className="min-w-0 flex-1">
-            {routine && editable
-              ? <div className="flex min-w-0"><RoutineTitle name={routine.name} editable onRename={(name) => { dispatch({ type: "routinePatched", routine: { ...routine, name } }); dispatch({ type: "updateRoutine", routineId: routine.id, patch: { name } }); }} className="truncate text-[17px] font-semibold text-ink" /></div>
-              : <div className="truncate text-[17px] font-semibold text-ink">{title}</div>}
-          </div>
-          <button onClick={onClose} className="rounded-full p-2 text-ink-secondary hover:bg-raised hover:text-ink" aria-label={t("common.close")}><X size={17} /></button>
-        </div>
-
-        {isCall ? <>
-          <div className={cn("min-h-0 flex-1 overflow-y-auto", description && "min-[720px]:grid min-[720px]:grid-cols-[320px_minmax(0,1fr)] min-[720px]:overflow-hidden")}>
-          <div data-event-details-side className={cn("space-y-4 px-5 py-4", description && "min-[720px]:min-h-0 min-[720px]:overflow-y-auto min-[720px]:border-r min-[720px]:border-hairline/40")}>
-            <div>
-              <div className="text-[12.5px] text-ink-secondary">{niceDate(item.at)} · {niceTime(item.at)} - {niceTime(item.at + item.durationMinutes * 60_000)}</div>
-              {call && !scheduleRepeatsEventDate(call.schedule, item.at) && <div className="mt-1 text-[11.5px] text-ink-secondary">{scheduleLabel(call.schedule)}</div>}
-            </div>
-            <div className="flex items-start gap-3">
-              <UserRoundPlus size={17} className="mt-1 shrink-0 text-ink-secondary" />
-              <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-medium uppercase tracking-wider text-ink-secondary">{t("routines.drawer.guests")}</div>
-                <div className="mt-2 flex flex-wrap gap-2">{invited.map((bot) => <div key={bot.id} className="flex items-center gap-2 rounded-full border border-hairline/50 bg-inset py-1 pl-1 pr-2.5"><BotAvatar bot={bot} state="idle" size={26} animated={false} /><span className="text-[11.5px] text-ink">{bot.name}</span></div>)}</div>
-              </div>
-            </div>
-            {!description ? null : <div className="min-[720px]:hidden"><div className="flex items-start gap-3"><FileText size={17} className="mt-1 shrink-0 text-ink-secondary" /><div data-event-details-prose className="min-w-0 max-w-[68ch] whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink">{description}</div></div></div>}
-            {attachments.length > 0 && <div className="flex items-start gap-3"><Paperclip size={17} className="mt-1 shrink-0 text-ink-secondary" /><div className="min-w-0 flex-1 space-y-2"><AttachmentChips attachments={attachments} />{call && <div className="text-[11px] leading-relaxed text-ink-secondary">{call.botIds.length > 1 ? t("routineCalendar.detailRefsShared") : t("routineCalendar.detailRefsStay")}</div>}</div></div>}
-            {error && <div role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[11.5px] text-danger">{error}</div>}
-          </div>
-          {description && <div data-event-details-instructions className="hidden px-5 py-4 min-[720px]:block min-[720px]:min-h-0 min-[720px]:overflow-y-auto"><div className="flex items-start gap-3"><FileText size={17} className="mt-1 shrink-0 text-ink-secondary" /><div data-event-details-prose className="min-w-0 max-w-[68ch] whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink">{description}</div></div></div>}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 border-t border-hairline/40 px-4 py-3">
-            {roomId && <button onClick={() => onOpenRoom(roomId)} className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-[12px] font-semibold text-accent-ink hover:brightness-110"><ExternalLink size={13} />{t("routineCalendar.joinGroup")}</button>}
-            {call && call.botIds.length > 1 && <button onClick={joinRoom} disabled={working} className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-[12px] font-semibold text-accent-ink hover:brightness-110 disabled:opacity-50"><ExternalLink size={13} />{t("routineCalendar.joinGroup")}</button>}
-            <div className="ml-auto flex items-center gap-1">
-              <button onClick={onEdit} className="rounded-lg px-3 py-2 text-[12px] text-ink-secondary hover:bg-raised hover:text-ink">{t("routines.edit")}</button>
-              <button onClick={() => void deleteEvent()} disabled={working} className="rounded-lg p-2 text-ink-secondary hover:bg-danger/10 hover:text-danger disabled:opacity-40" title={t("common.delete")}><Trash2 size={15} /></button>
-            </div>
-          </div>
-        </> : routine ? (
-          <RoutineDetail
-            routine={routine}
-            runs={state.routineRuns}
-            bots={state.bots}
-            groups={state.groups}
-            viewerPrincipalId={viewerPrincipal ?? null}
-            editable={editable}
-            canRun={canRunRoutineNow(state.config, routine, primary)}
-            inFlight={routineInFlight}
-            starting={starting}
-            working={working}
-            error={error}
-            onOpenRun={(opened) => { setSubmittedRun(undefined); setOpenedRun(opened); if (["failed", "missed"].includes(opened.status) && !opened.seenAt && !opened.redacted) dispatch({ type: "markRoutineRunSeen", runId: opened.id }); }}
-            onRunNow={runRoutineNow}
-            onToggle={toggleRoutine}
-            onEdit={onEdit}
-            onDuplicate={onDuplicate ? () => onDuplicate(routine) : undefined}
-            onDelete={() => void deleteEvent()}
-            onLogs={openLogs}
-            onOpenGroup={goalGroup ? () => { onOpenRoom(goalGroup.id); onClose(); } : undefined}
-            onConfigure={onEdit}
-          />
-        ) : null}
-      </div>
+  const leading = canGoBack
+    ? <button type="button" data-event-back onClick={goBack} aria-label={t("routineRun.back")} title={t("routineRun.back")} className="-ml-1.5 flex size-7 shrink-0 items-center justify-center rounded-full text-ink-secondary hover:bg-raised hover:text-ink"><ChevronLeft size={16} /></button>
+    : <span aria-hidden="true" className={cn("size-3 shrink-0 rounded", isCall ? "bg-[#6d7cff]" : "bg-accent")} />;
+  const heading = routine && editable
+    ? <div className="flex min-w-0"><RoutineTitle name={routine.name} editable onRename={(name) => { dispatch({ type: "routinePatched", routine: { ...routine, name } }); dispatch({ type: "updateRoutine", routineId: routine.id, patch: { name } }); }} className="truncate text-[16px] font-medium text-ink" /></div>
+    : <h2 className="truncate text-[16px] font-medium text-ink">{title}</h2>;
+  const callFooter = isCall ? <>
+    {roomId && <button onClick={() => onOpenRoom(roomId)} className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-[12px] font-semibold text-accent-ink hover:brightness-110"><ExternalLink size={13} />{t("routineCalendar.joinGroup")}</button>}
+    {call && call.botIds.length > 1 && <button onClick={joinRoom} disabled={working} className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-[12px] font-semibold text-accent-ink hover:brightness-110 disabled:opacity-50"><ExternalLink size={13} />{t("routineCalendar.joinGroup")}</button>}
+    <div className="ml-auto flex items-center gap-1">
+      <button onClick={onEdit} className="rounded-lg px-3 py-2 text-[12px] text-ink-secondary hover:bg-raised hover:text-ink">{t("routines.edit")}</button>
+      <button onClick={() => void deleteEvent()} disabled={working} className="rounded-lg p-2 text-ink-secondary hover:bg-danger/10 hover:text-danger disabled:opacity-40" title={t("common.delete")} aria-label={t("common.delete")}><Trash2 size={15} /></button>
     </div>
+  </> : undefined;
+
+  return (
+    <DetailPanel
+      label={t("routineCalendar.eventDetails")}
+      leading={leading}
+      title={heading}
+      onClose={onClose}
+      footer={callFooter}
+      bodyClassName={isCall ? undefined : "flex flex-col overflow-hidden!"}
+      data-event-details={isCall ? "call" : "routine"}
+    >
+      {isCall ? (
+        <div data-event-details-side className="space-y-4 p-4">
+          <div>
+            <div className="text-[13px] font-medium text-ink">{niceDate(item.at)}</div>
+            <div className="mt-1 text-[13px] text-ink-secondary">{niceTime(item.at)} - {niceTime(item.at + item.durationMinutes * 60_000)}</div>
+            {call && !scheduleRepeatsEventDate(call.schedule, item.at) && <div className="mt-1 text-[12px] text-ink-secondary">{scheduleLabel(call.schedule)}</div>}
+          </div>
+          <div className="flex items-start gap-3">
+            <UserRoundPlus size={17} className="mt-1 shrink-0 text-ink-secondary" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[12px] text-ink-secondary">{t("routines.drawer.guests")}</div>
+              <div className="mt-2 flex flex-wrap gap-2">{invited.map((bot) => <div key={bot.id} className="flex items-center gap-2 rounded-full bg-inset py-1 pl-1 pr-3"><BotAvatar bot={bot} state="idle" size={24} animated={false} /><span className="text-[12px] text-ink">{bot.name}</span></div>)}</div>
+            </div>
+          </div>
+          {description && <div data-event-details-instructions className="flex items-start gap-3"><FileText size={17} className="mt-1 shrink-0 text-ink-secondary" /><div data-event-details-prose className="min-w-0 max-w-[68ch] whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink">{description}</div></div>}
+          {attachments.length > 0 && <div className="flex items-start gap-3"><Paperclip size={17} className="mt-1 shrink-0 text-ink-secondary" /><div className="min-w-0 flex-1 space-y-2"><AttachmentChips attachments={attachments} />{call && <div className="text-[11px] leading-relaxed text-ink-secondary">{call.botIds.length > 1 ? t("routineCalendar.detailRefsShared") : t("routineCalendar.detailRefsStay")}</div>}</div></div>}
+          {error && <div role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">{error}</div>}
+        </div>
+      ) : routine ? (
+        <RoutineDetail
+          routine={routine}
+          runs={state.routineRuns}
+          bots={state.bots}
+          groups={state.groups}
+          viewerPrincipalId={viewerPrincipal ?? null}
+          editable={editable}
+          canRun={canRunRoutineNow(state.config, routine, primary)}
+          inFlight={routineInFlight}
+          starting={starting}
+          working={working}
+          error={error}
+          onOpenRun={(opened) => { setSubmittedRun(undefined); setOpenedRun(opened); if (["failed", "missed"].includes(opened.status) && !opened.seenAt && !opened.redacted) dispatch({ type: "markRoutineRunSeen", runId: opened.id }); }}
+          onRunNow={runRoutineNow}
+          onToggle={toggleRoutine}
+          onEdit={onEdit}
+          onDuplicate={onDuplicate ? () => onDuplicate(routine) : undefined}
+          onDelete={() => void deleteEvent()}
+          onLogs={openLogs}
+          onOpenGroup={goalGroup ? () => { onOpenRoom(goalGroup.id); onClose(); } : undefined}
+          onConfigure={onEdit}
+        />
+      ) : null}
+    </DetailPanel>
   );
 }
 
@@ -2252,25 +2337,21 @@ export function PausedList({
   onOpenRoom: (id: string) => void;
 }) {
   const { dispatch } = useStore();
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useModalDialog(dialogRef, onClose);
   return (
-    <div className="fixed inset-0 z-50" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="absolute inset-0 bg-black/25" />
-      <div ref={dialogRef} role="dialog" aria-modal="false" aria-label={t("routineCalendar.pausedTitle")} tabIndex={-1} data-paused-list-panel="" className="absolute inset-y-0 right-0 flex w-full max-w-[min(100vw,520px)] flex-col border-l border-border bg-elevated shadow-xl">
-        <div className="flex items-center justify-between border-b border-hairline/40 px-5 py-4"><div><div className="text-[16px] font-semibold text-ink">{t("routineCalendar.pausedTitle")}</div><div className="mt-0.5 text-[11.5px] text-ink-secondary">{t("routineCalendar.pausedHistory")}</div></div><button onClick={onClose} className="rounded-full p-2 text-ink-secondary hover:bg-raised" aria-label={t("routines.paused.close")}><X size={17} /></button></div>
-        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
+    <DetailPanel label={t("routineCalendar.pausedTitle")} title={t("routineCalendar.pausedTitle")} closeLabel={t("routines.paused.close")} onClose={onClose} data-paused-list-panel="">
+        <p className="px-4 pt-3 text-[12px] text-ink-secondary">{t("routineCalendar.pausedHistory")}</p>
+        <div className="space-y-1 p-3">
           {routines.map((routine) => {
             const bot = bots.find((candidate) => candidate.id === routine.botId);
             const room = routine.target === "room-goal"
               ? groups.find((candidate) => candidate.id === routine.groupId)
               : undefined;
             return (
-              <div key={routine.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-raised/60">
+              <div key={routine.id} className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-raised/60">
                 {room ? <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent/12 text-accent"><UsersRound size={17} /></span> : bot && <BotAvatar bot={bot} state="sleeping" size={36} animated={false} />}
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[12.5px] font-medium text-ink">{routine.name}</div>
-                  <div className="mt-0.5 truncate text-[10.5px] text-ink-secondary">{room ? `${t("routineCalendar.teamGoalIn", { name: room.name })} · ` : ""}{scheduleLabel(routine.schedule)}</div>
+                  <div className="truncate text-[13px] font-medium text-ink">{routine.name}</div>
+                  <div className="mt-0.5 truncate text-[11px] text-ink-secondary">{room ? `${t("routineCalendar.teamGoalIn", { name: room.name })} · ` : ""}{scheduleLabel(routine.schedule)}</div>
                 </div>
                 {room && <button onClick={() => { onOpenRoom(room.id); onClose(); }} className="rounded-lg px-2 py-1.5 text-[11px] text-ink-secondary hover:bg-inset">{t("routines.drawer.group")}</button>}
                 <button onClick={() => dispatch({ type: "updateRoutine", routineId: routine.id, patch: { enabled: true } })} className="rounded-lg bg-accent/15 px-2.5 py-1.5 text-[11px] font-medium text-accent">{t("routines.resume")}</button>
@@ -2279,8 +2360,7 @@ export function PausedList({
             );
           })}
         </div>
-      </div>
-    </div>
+    </DetailPanel>
   );
 }
 
@@ -2326,6 +2406,7 @@ export function RoutineEditor({
 }
 
 export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fill = false }: { onBack: () => void; onOpenRoom: (id: string) => void; embedded?: boolean; fill?: boolean }) {
+  const confirm = useConfirm();
   const { state, dispatch } = useStore();
   const { capabilities } = useDesktopCapabilities();
   const advanced = useAdvancedMode();
@@ -2352,7 +2433,7 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
   const [editor, setEditor] = useState<EventSeed | null>(null);
   const [selected, setSelected] = useState<CalendarEventItem | null>(null);
   const [pausedOpen, setPausedOpen] = useState(false);
-  const [botsOpen, setBotsOpen] = useState(true);
+  const [botsOpen, setBotsOpen] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(min-width: 1280px)").matches);
   const [webhookCreateRequest, setWebhookCreateRequest] = useState(0);
   const [error, setError] = useState("");
   const visibleBots = state.bots.filter((bot) => !bot.hidden);
@@ -2477,14 +2558,22 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
   const handleWebhookCreateHandled = useCallback(() => setWebhookCreateRequest(0), []);
   const openCreate = useCallback((seed?: Partial<EventSeed>) => {
     setSelected(null);
-    setQuick({ kind: "routine", at: nextHour(), durationMinutes: 30, botIds: [], ...seed });
+    setPausedOpen(false);
+    // 2026-11-01 (no modals): quick create hangs off what opened it, the slot
+    // that was clicked or the New button, never the middle of the window.
+    const button = newMenuRef.current?.querySelector("summary")?.getBoundingClientRect();
+    const anchor = seed?.anchor ?? (button ? { x: button.right, y: button.bottom } : undefined);
+    setQuick({ kind: "routine", at: nextHour(), durationMinutes: 30, botIds: [], ...seed, ...(anchor ? { anchor } : {}) });
   }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.matches("input, textarea, select, [contenteditable=true]")) return;
-      if (event.key === "Escape") { for (const menu of [newMenuRef.current, navMenuRef.current, filtersMenuRef.current]) menu?.removeAttribute("open"); setQuick(null); setEditor(null); setSelected(null); return; }
+      // A panel (the editor asking about unsaved changes) or the quick create
+      // popover already handled this Escape.
+      if (event.defaultPrevented) return;
+      if (event.key === "Escape") { for (const menu of [newMenuRef.current, navMenuRef.current, filtersMenuRef.current]) menu?.removeAttribute("open"); setEditor(null); setSelected(null); setPausedOpen(false); return; }
       if (section !== "calendar" || event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key.toLowerCase() === "c") { event.preventDefault(); openCreate(); }
       if (event.key.toLowerCase() === "t") goToday();
@@ -2504,13 +2593,21 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
         const routine = scopedRoutines.find((candidate) => candidate.id === dragged.id);
         if (!routine || routine.canEdit === false) return;
         if (routine.schedule.type === "cron") throw new Error(t("routineCalendar.openRoutineForCron"));
-        if (routine.schedule.type !== "once" && !window.confirm(t("routineCalendar.moveSeries"))) return;
+        if (routine.schedule.type !== "once" && !(await confirm({
+          title: t("routineCalendar.moveSeries"),
+          confirmLabel: t("common.confirm"),
+          tone: "neutral",
+        }))) return;
         const response = await api(`/api/routines/${routine.id}`, { method: "PATCH", body: JSON.stringify({ schedule: scheduleAt(routine.schedule, dragged.at, nextAt) }) });
         dispatch({ type: "routinePatched", routine: response.routine });
       } else {
         const call = calls.find((candidate) => candidate.id === dragged.id);
         if (!call) return;
-        if (call.schedule.type === "daily" && !window.confirm(t("routineCalendar.moveSeries"))) return;
+        if (call.schedule.type === "daily" && !(await confirm({
+          title: t("routineCalendar.moveSeries"),
+          confirmLabel: t("common.confirm"),
+          tone: "neutral",
+        }))) return;
         const response = await api(`/api/calendar-calls/${call.id}`, { method: "PATCH", body: JSON.stringify({ schedule: scheduleAt(call.schedule, dragged.at, nextAt) }) });
         upsertCall(response.call);
       }
@@ -2584,7 +2681,6 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
   };
   const closeNavMenu = () => navMenuRef.current?.removeAttribute("open");
   const FIELD_LABEL = PAGE_FIELD_LABEL;
-  const SELECT = PAGE_SELECT;
 
   const filtersMenu = section !== "webhooks" && (
     <PageFilters name="automations" menuRef={filtersMenuRef} activeCount={activeFilters}>
@@ -2592,14 +2688,28 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
           <span className={FIELD_LABEL}>{t("routines.scope.label")}</span>
           <RoutineScopeBar stacked prefs={scoped.prefs} allowed={scoped.allowed} teams={scoped.facets.teams} owners={scoped.facets.owners} advanced={advanced} hideStatus={hideStatus} viewerPrincipalId={state.config?.viewer?.principalId ?? null} onChange={(next) => { scoped.setPrefs(next); setRoutineFilter(undefined); }} />
         </div>}
-        <label className="block">
+        <div className="block">
           <span className={FIELD_LABEL}>{t("routineCalendar.filterBot")}</span>
-          <select aria-label={t("routineCalendar.filterByBot")} value={botFilter} onChange={(event) => { setBotFilter(event.target.value); setRoutineFilter(undefined); }} className={SELECT}><option value="all">{t("usage.allBots")}</option>{botChoices.map((bot) => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select>
-        </label>
-        {calendarGrid && <label className="block">
+          <PillSelect
+            ariaLabel={t("routineCalendar.filterByBot")}
+            value={botFilter}
+            onChange={(next) => { setBotFilter(next); setRoutineFilter(undefined); }}
+            options={[{ value: "all", label: t("usage.allBots") }, ...botChoices.map((bot) => ({ value: bot.id, label: bot.name }))]}
+          />
+        </div>
+        {calendarGrid && <div className="block">
           <span className={FIELD_LABEL}>{t("routineCalendar.scheduleRange")}</span>
-          <select aria-label={t("routineCalendar.scheduleRange")} value={viewDays} onChange={(event) => setView(Number(event.target.value) as 1 | 3 | 7)} className={SELECT}><option value={1}>{t("routines.view.day")}</option><option value={3}>{t("routineCalendar.threeDays")}</option><option value={7}>{t("routines.view.week")}</option></select>
-        </label>}
+          <PillSelect
+            ariaLabel={t("routineCalendar.scheduleRange")}
+            value={String(viewDays)}
+            onChange={(next) => setView(Number(next) as 1 | 3 | 7)}
+            options={[
+              { value: "1", label: t("routines.view.day") },
+              { value: "3", label: t("routineCalendar.threeDays") },
+              { value: "7", label: t("routines.view.week") },
+            ]}
+          />
+        </div>}
         {activeFilters > 0 && <button type="button" data-routine-filter-reset onClick={clearFilters} className={PAGE_FILTER_RESET}>{t("routines.scope.reset")}</button>}
     </PageFilters>
   );
@@ -2608,28 +2718,28 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
     <>
           <PageMenu name="automations" menuRef={navMenuRef} label={t("routineCalendar.automationMenu")} title={paused.length > 0 ? `${t("routineCalendar.automationMenu")} (${t("routineCalendar.pausedMenu")} ${paused.length})` : t("routineCalendar.automationMenu")} badge={paused.length}>
               <PageMenuItem icon={CalendarDays} current={section === "calendar"} onClick={() => { closeNavMenu(); setSection("calendar"); }}>{routinesOnly ? t("routineCalendar.scheduledRoutines") : t("routines.drawer.schedule")}</PageMenuItem>
-              <PageMenuItem icon={FileText} current={section === "logs"} trailing={unseenFailures > 0 ? <span className="ml-auto rounded-full bg-danger/10 px-1.5 text-[10px] text-danger">{unseenFailures}</span> : undefined} onClick={() => { closeNavMenu(); setSection("logs"); setRoutineFilter(undefined); }}>{t("routines.logs")}</PageMenuItem>
+              <PageMenuItem icon={FileText} current={section === "logs"} trailing={unseenFailures > 0 ? <span className="ml-auto rounded-full bg-danger/10 px-1.5 text-[11px] text-danger">{unseenFailures}</span> : undefined} onClick={() => { closeNavMenu(); setSection("logs"); setRoutineFilter(undefined); }}>{t("routines.logs")}</PageMenuItem>
               {!routinesOnly && <PageMenuItem icon={Webhook} current={section === "webhooks"} trailing={state.webhooks.length > 0 ? <span className={PAGE_MENU_COUNT}>{state.webhooks.length}</span> : undefined} onClick={() => { closeNavMenu(); setSection("webhooks"); }}>{t("routines.webhooks")}</PageMenuItem>}
               <PageMenuSeparator />
-              {paused.length > 0 && <PageMenuItem icon={Pause} aria-label={t("routineCalendar.viewPaused")} trailing={<span className={PAGE_MENU_COUNT}>{paused.length}</span>} onClick={() => { closeNavMenu(); setPausedOpen(true); }}>{t("routineCalendar.pausedMenu")}</PageMenuItem>}
+              {paused.length > 0 && <PageMenuItem icon={Pause} aria-label={t("routineCalendar.viewPaused")} trailing={<span className={PAGE_MENU_COUNT}>{paused.length}</span>} onClick={() => { closeNavMenu(); setQuick(null); setEditor(null); setSelected(null); setPausedOpen(true); }}>{t("routineCalendar.pausedMenu")}</PageMenuItem>}
               <PageMenuItem icon={CheckCheck} onClick={() => { closeNavMenu(); dispatch({ type: "markAllRoutineRunsSeen" }); }}>{t("routines.markAllSeen")}</PageMenuItem>
           </PageMenu>
           <details ref={newMenuRef} className="group relative">
-            <summary role="button" data-automations-create aria-label={t("routineCalendar.createAutomation")} title={t("routineCalendar.createAutomation")} className={cn(PAGE_HEADER_BUTTON, "border-transparent bg-accent px-3 text-[12px] font-medium text-white hover:bg-accent/90")}>
+            <summary role="button" data-automations-create aria-label={t("routineCalendar.createAutomation")} title={t("routineCalendar.createAutomation")} className={cn(PAGE_HEADER_BUTTON, "h-9 w-auto gap-1.5 border-transparent bg-accent px-3 text-[12px] font-medium text-white hover:bg-accent/90")}>
               <Plus size={15} aria-hidden="true" /><span className="@max-[30rem]/page-header:sr-only">{t("sidebar.new")}</span>
             </summary>
             <div role="group" aria-label={t("routineCalendar.newAutomation")} className={cn(PAGE_POPOVER, "w-[280px] min-w-[200px] gap-0.5 p-1.5")}>
               <button type="button" aria-label={t("routineCalendar.createTaskAria")} onClick={() => { newMenuRef.current?.removeAttribute("open"); setSection("calendar"); openCreate({ kind: "routine" }); }} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover">
                 <Clock3 size={16} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
-                <span><span className="block text-[12.5px] font-medium text-ink">{t("routineCalendar.scheduledTask")}</span><span className="mt-0.5 block text-[10.5px] leading-relaxed text-ink-secondary">{t("routineCalendar.scheduledTaskHelp")}</span></span>
+                <span><span className="block text-[13px] font-medium text-ink">{t("routineCalendar.scheduledTask")}</span><span className="mt-0.5 block text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.scheduledTaskHelp")}</span></span>
               </button>
               {!routinesOnly && <button type="button" aria-label={t("routineCalendar.createCallAria")} onClick={() => { newMenuRef.current?.removeAttribute("open"); setSection("calendar"); openCreate({ kind: "call" }); }} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover">
                 <Video size={16} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
-                <span><span className="block text-[12.5px] font-medium text-ink">{t("routineCalendar.scheduledCall")}</span><span className="mt-0.5 block text-[10.5px] leading-relaxed text-ink-secondary">{t("routineCalendar.scheduledCallHelp")}</span></span>
+                <span><span className="block text-[13px] font-medium text-ink">{t("routineCalendar.scheduledCall")}</span><span className="mt-0.5 block text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.scheduledCallHelp")}</span></span>
               </button>}
               {!routinesOnly && <button type="button" aria-label={t("routineCalendar.createWebhookAria")} disabled={visibleBots.length === 0} onClick={() => { newMenuRef.current?.removeAttribute("open"); setSection("webhooks"); setWebhookCreateRequest((request) => request + 1); }} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40">
                 <Webhook size={16} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
-                <span><span className="block text-[12.5px] font-medium text-ink">{t("routines.trigger.webhook")}</span><span className="mt-0.5 block text-[10.5px] leading-relaxed text-ink-secondary">{t("routineCalendar.webhookHelp")}</span></span>
+                <span><span className="block text-[13px] font-medium text-ink">{t("routines.trigger.webhook")}</span><span className="mt-0.5 block text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.webhookHelp")}</span></span>
               </button>}
             </div>
           </details>
@@ -2668,18 +2778,18 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
           </>}
         actions={<>
             {section !== "webhooks" && running > 0 && <span role="status" data-automations-running title={t("routineCalendar.activeCount", { count: running })} aria-label={t("routineCalendar.activeCount", { count: running })} className={cn(PAGE_INDICATOR, "text-accent")}><Loader2 size={13} className="animate-spin" aria-hidden="true" />{running}</span>}
-            {unseenFailures > 0 && <button type="button" data-automations-problems onClick={() => dispatch({ type: "showRoutines", section: "logs", runStatus: "problems" })} className="flex h-9 items-center gap-1 rounded-lg px-2 text-[11.5px] font-medium text-danger hover:bg-danger/10" title={t("routineCalendar.openProblemLogs")} aria-label={t("routineCalendar.openProblemLogs")}><CircleAlert size={14} aria-hidden="true" />{unseenFailures}</button>}
+            {unseenFailures > 0 && <button type="button" data-automations-problems onClick={() => dispatch({ type: "showRoutines", section: "logs", runStatus: "problems" })} className="flex h-9 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-danger hover:bg-danger/10" title={t("routineCalendar.openProblemLogs")} aria-label={t("routineCalendar.openProblemLogs")}><CircleAlert size={14} aria-hidden="true" />{unseenFailures}</button>}
             {filtersMenu}
             {automationActions}
           </>}
         below={<>
-        {scopeShown && scoped.error && <p role="alert" className="mt-1 text-[11.5px] text-danger">{t("routines.scope.loadError")}</p>}
+        {scopeShown && scoped.error && <p role="alert" className="mt-1 text-[12px] text-danger">{t("routines.scope.loadError")}</p>}
         {section !== "webhooks" && (error || (calendarGrid && state.routinesLoadState !== "ready")) && <div className="mt-2 flex flex-wrap items-center gap-2" style={windowNoDragStyle}>
-          {error && <button onClick={() => setError("")} className="flex items-center gap-1.5 rounded-lg bg-danger/10 px-2.5 py-1.5 text-[10.5px] text-danger"><CircleAlert size={11} />{error}<X size={11} /></button>}
-          {calendarGrid && state.routinesLoadState === "error" && <p role="alert" className="w-full text-[11.5px] text-danger">{t("routines.loadError")}</p>}
-          {calendarGrid && state.routinesLoadState === "loading" && state.routines.length === 0 && <p role="status" className="w-full text-[11.5px] text-ink-secondary">{t("routines.loading")}</p>}
+          {error && <button onClick={() => setError("")} className="flex items-center gap-1.5 rounded-lg bg-danger/10 px-2.5 py-1.5 text-[11px] text-danger"><CircleAlert size={11} />{error}<X size={11} /></button>}
+          {calendarGrid && state.routinesLoadState === "error" && <p role="alert" className="w-full text-[12px] text-danger">{t("routines.loadError")}</p>}
+          {calendarGrid && state.routinesLoadState === "loading" && state.routines.length === 0 && <p role="status" className="w-full text-[12px] text-ink-secondary">{t("routines.loading")}</p>}
         </div>}
-        {section === "webhooks" && error && <div className="mt-2"><button onClick={() => setError("")} className="flex items-center gap-1.5 rounded-lg bg-danger/10 px-2.5 py-1.5 text-[10.5px] text-danger"><CircleAlert size={11} />{error}<X size={11} /></button></div>}
+        {section === "webhooks" && error && <div className="mt-2"><button onClick={() => setError("")} className="flex items-center gap-1.5 rounded-lg bg-danger/10 px-2.5 py-1.5 text-[11px] text-danger"><CircleAlert size={11} />{error}<X size={11} /></button></div>}
         </>}
       />
       <RoutineAwayBanner routines={state.routines} dispatch={dispatch} />
@@ -2687,10 +2797,11 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
           in layout, so embedded/standalone keep their exact original flex
           children. Only `fill` (the one mode rendered inside the content
           frame) opts into the card treatment. */}
-      <div className={cn(fill ? "content-card-body flex min-h-0 flex-1 flex-col" : "contents")}>
+      <div data-automations-row="" className="relative flex min-h-0 min-w-0 flex-1">
+      <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", fill && "content-card-body")}>
       <RoutineWakeBar />
 
-      {section === "webhooks" ? <WebhooksPanel bots={visibleBots} createRequest={webhookCreateRequest} onCreateHandled={handleWebhookCreateHandled} /> : section === "logs" ? (
+      {section === "webhooks" ? <TriggersPanel bots={visibleBots} createRequest={webhookCreateRequest} onCreateHandled={handleWebhookCreateHandled} /> : section === "logs" ? (
         <div className="min-h-0 flex-1 overflow-y-auto"><RoutineLogs runs={filteredRuns} bots={state.bots} ownerOf={routineOwnerOf} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRuns.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} routineId={routineFilter} status={statusFilter} onStatusChange={setStatusFilter} onClearRoutine={() => setRoutineFilter(undefined)} onRoutineChange={setRoutineFilter} onClearLogs={clearLogs} onOpen={openRun} /></div>
       ) : scheduleView === "list" ? (
         <div className={PAGE_SCROLL}><div className={PAGE_COLUMN}>
@@ -2707,17 +2818,17 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
               onRename: () => setRenamingId(rowMenu.routine.id),
             })} />
           </RoutineMenuPortal>}
-          {!routinesOnly && calls.some((call) => botFilter === "all" || call.botIds.includes(botFilter)) && <section className="space-y-2" aria-label={t("routineCalendar.scheduledCalls")}><h2 className="text-[15px] font-semibold text-ink">{t("routineCalendar.scheduledCalls")}</h2>{calls.filter((call) => botFilter === "all" || call.botIds.includes(botFilter)).map((call) => <button key={call.id} type="button" onClick={() => setSelected({ kind: "call", id: call.id, at: call.schedule.type === "once" ? call.schedule.at : atLocalTime(Date.now(), call.schedule.time), durationMinutes: call.durationMinutes, call })} className="flex w-full items-center gap-3 rounded-xl border border-hairline/40 bg-card p-4 text-left hover:bg-raised"><Video size={17} className="text-accent" /><span><span className="block text-[13px] font-medium text-ink">{call.name}</span><span className="mt-1 block text-[11.5px] text-ink-secondary">{scheduleLabel(call.schedule)}</span></span></button>)}</section>}
+          {!routinesOnly && calls.some((call) => botFilter === "all" || call.botIds.includes(botFilter)) && <section className="space-y-2" aria-label={t("routineCalendar.scheduledCalls")}><h2 className="text-[15px] font-semibold text-ink">{t("routineCalendar.scheduledCalls")}</h2>{calls.filter((call) => botFilter === "all" || call.botIds.includes(botFilter)).map((call) => <button key={call.id} type="button" onClick={() => setSelected({ kind: "call", id: call.id, at: call.schedule.type === "once" ? call.schedule.at : atLocalTime(Date.now(), call.schedule.time), durationMinutes: call.durationMinutes, call })} className="flex w-full items-center gap-3 rounded-xl border border-hairline/40 bg-card p-4 text-left hover:bg-raised"><Video size={17} className="text-accent" /><span><span className="block text-[13px] font-medium text-ink">{call.name}</span><span className="mt-1 block text-[12px] text-ink-secondary">{scheduleLabel(call.schedule)}</span></span></button>)}</section>}
         </div></div>
       ) : (
         <div className="flex min-h-0 flex-1">
-          <CalendarGrid anchor={rangeStart} days={viewDays} items={items} bots={state.bots} groups={state.groups} onOpen={(item) => { setSelected(item); if (item.kind === "routine" && item.run && ["failed", "missed"].includes(item.run.status) && !item.run.seenAt && !item.run.redacted) dispatch({ type: "markRoutineRunSeen", runId: item.run.id }); }} onCreate={openCreate} onMove={(item, at) => void moveEvent(item, at)} onResize={(item, duration) => void resizeEvent(item, duration)} markers={markers} onDropOnReset={(drop, marker) => void dropOnReset(drop, marker)} />
+          <CalendarGrid anchor={rangeStart} days={viewDays} items={items} bots={state.bots} groups={state.groups} onOpen={(item) => { setSelected(item); if (item.kind === "routine" && item.run && ["failed", "missed"].includes(item.run.status) && !item.run.seenAt && !item.run.redacted) dispatch({ type: "markRoutineRunSeen", runId: item.run.id }); }} onCreate={openCreate} onMove={(item, at) => void moveEvent(item, at)} onResize={(item, duration) => void resizeEvent(item, duration)} markers={markers} onDropOnReset={(drop, marker) => void dropOnReset(drop, marker)} pending={quick && !quick.limitReset ? { at: quick.at, durationMinutes: quick.durationMinutes, kind: quick.kind } : null} />
           {botsOpen ? (
             <div className="hidden shrink-0 lg:block">
               <CalendarSidebar anchor={anchor} onSelectDate={(at) => setAnchor(startOfDay(at))} routines={upcoming} runs={scopedRuns} bots={state.bots} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && upcoming.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpenRoutine={showUpcoming} filteredOut={filteredRoutines.length > 0} onCollapse={() => setBotsOpen(false)} />
             </div>
           ) : (
-            <button type="button" onClick={() => setBotsOpen(true)} aria-label={t("routines.upcoming.show")} title={t("routines.upcoming.title")} className="hidden w-10 shrink-0 flex-col items-center gap-2 border-l border-hairline/40 bg-panel px-1 py-4 text-[11px] text-ink-secondary hover:text-ink lg:flex">
+            <button type="button" onClick={() => setBotsOpen(true)} aria-label={t("routines.upcoming.show")} title={t("routines.upcoming.title")} className="hidden w-10 shrink-0 flex-col items-center gap-2 border-l border-hairline/40 bg-panel px-1 py-4 text-[11px] text-ink-secondary hover:bg-raised hover:text-ink lg:flex">
               <CalendarClock size={16} />
               <span className="[writing-mode:vertical-rl]">{t("routines.upcoming.title")}</span>
             </button>
@@ -2726,19 +2837,18 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
       )}
       </div>
 
-      {quick && <><div className="fixed inset-0 z-40 bg-black/25" onMouseDown={() => setQuick(null)} /><QuickComposer seed={quick} bots={visibleBots} routinesOnly={routinesOnly} onClose={() => setQuick(null)} onMore={(seed) => { setQuick(null); setEditor(seed); }} onSavedRoutine={(routine) => dispatch({ type: "routinePatched", routine })} onSavedCall={upsertCall} /></>}
-      {editor && editor.kind === "routine" ? (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/25" onMouseDown={() => setEditor(null)} />
-          <div className="absolute inset-y-0 right-0 w-full max-w-[min(100vw,560px)] border-l border-border bg-panel shadow-xl">
-            <EventEditor seed={editor} bots={visibleBots} routinesOnly={routinesOnly} presentation="panel" onClose={() => setEditor(null)} onSavedCall={upsertCall} />
-          </div>
-        </div>
-      ) : editor ? (
-        <EventEditor seed={editor} bots={visibleBots} routinesOnly={routinesOnly} onClose={() => setEditor(null)} onSavedCall={upsertCall} />
-      ) : null}
-      {liveSelected && <EventDetails key={`${liveSelected.kind}:${liveSelected.id}`} item={liveSelected} bots={state.bots} onClose={() => setSelected(null)} onEdit={() => { const seed: EventSeed = liveSelected.kind === "call" ? { kind: "call", at: liveSelected.at, durationMinutes: liveSelected.call.durationMinutes, botIds: liveSelected.call.botIds, call: liveSelected.call } : { kind: "routine", at: liveSelected.at, durationMinutes: liveSelected.routine?.durationMinutes ?? liveSelected.run?.durationMinutes ?? 30, botIds: [liveSelected.routine?.botId ?? liveSelected.run?.botId ?? ""].filter(Boolean), routine: liveSelected.routine ?? undefined }; setSelected(null); setEditor(seed); }} onDuplicate={(routine) => { setSelected(null); setEditor({ kind: "routine", at: routineEditorAt(routine), durationMinutes: routine.durationMinutes, botIds: [routine.botId], copyOf: routine }); }} onCallChanged={(id) => { if (id) setCalls((current) => current.filter((call) => call.id !== id)); else void loadCalls(); }} onOpenRoom={onOpenRoom} />}
-      {pausedOpen && <PausedList routines={paused} bots={state.bots} groups={state.groups} onClose={() => setPausedOpen(false)} onEdit={(routine) => { setPausedOpen(false); const at = routine.schedule.type === "once" ? routine.schedule.at : routine.schedule.type === "interval" ? routine.schedule.anchorAt : routine.schedule.type === "webhook" || routine.schedule.type === "event" ? Date.now() : routine.schedule.type === "cron" ? routine.nextRunAt ?? nextHour() : routine.schedule.type === "limit_reset" ? (routine.schedule.at ?? Date.now()) : atLocalTime(Date.now(), routine.schedule.time); setEditor({ kind: "routine", at, durationMinutes: routine.durationMinutes, botIds: [routine.botId], routine }); }} onOpenRoom={onOpenRoom} />}
+      {quick && <QuickComposer seed={quick} bots={visibleBots} routinesOnly={routinesOnly} onClose={() => setQuick(null)} onMore={(seed) => { setQuick(null); setSelected(null); setPausedOpen(false); setEditor(seed); }} onSavedRoutine={(routine) => dispatch({ type: "routinePatched", routine })} onSavedCall={upsertCall} />}
+      {/* 2026-11-01 (no modals): the editor, an event's details and the paused
+          list share the one right detail panel (DetailPanel.tsx); the editor
+          opened from the details goes back to them when it closes. */}
+      {editor && (
+        <DetailPanel bare label={editor.routine || editor.call ? t("routineCalendar.editEventAria") : t("routineCalendar.createEventAria")} onClose={() => setEditor(null)} data-calendar-editor-panel="">
+          <EventEditor key={`${editor.kind}:${editor.routine?.id ?? editor.call?.id ?? editor.copyOf?.id ?? "new"}`} seed={editor} bots={visibleBots} routinesOnly={routinesOnly} presentation="panel" onClose={() => setEditor(null)} onSavedCall={upsertCall} />
+        </DetailPanel>
+      )}
+      {!editor && liveSelected && <EventDetails key={`${liveSelected.kind}:${liveSelected.id}`} item={liveSelected} bots={state.bots} onClose={() => setSelected(null)} onEdit={() => { const seed: EventSeed = liveSelected.kind === "call" ? { kind: "call", at: liveSelected.at, durationMinutes: liveSelected.call.durationMinutes, botIds: liveSelected.call.botIds, call: liveSelected.call } : { kind: "routine", at: liveSelected.at, durationMinutes: liveSelected.routine?.durationMinutes ?? liveSelected.run?.durationMinutes ?? 30, botIds: [liveSelected.routine?.botId ?? liveSelected.run?.botId ?? ""].filter(Boolean), routine: liveSelected.routine ?? undefined }; setEditor(seed); }} onDuplicate={(routine) => { setEditor({ kind: "routine", at: routineEditorAt(routine), durationMinutes: routine.durationMinutes, botIds: [routine.botId], copyOf: routine }); }} onCallChanged={(id) => { if (id) setCalls((current) => current.filter((call) => call.id !== id)); else void loadCalls(); }} onOpenRoom={onOpenRoom} />}
+      {!editor && !liveSelected && pausedOpen && <PausedList routines={paused} bots={state.bots} groups={state.groups} onClose={() => setPausedOpen(false)} onEdit={(routine) => { const at = routine.schedule.type === "once" ? routine.schedule.at : routine.schedule.type === "interval" ? routine.schedule.anchorAt : routine.schedule.type === "webhook" || routine.schedule.type === "event" ? Date.now() : routine.schedule.type === "cron" ? routine.nextRunAt ?? nextHour() : routine.schedule.type === "limit_reset" ? (routine.schedule.at ?? Date.now()) : atLocalTime(Date.now(), routine.schedule.time); setEditor({ kind: "routine", at, durationMinutes: routine.durationMinutes, botIds: [routine.botId], routine }); }} onOpenRoom={onOpenRoom} />}
+      </div>
     </main>
   );
 }
@@ -2768,7 +2878,7 @@ function RoutineWakeBar() {
         ? state.reason === "running" ? t("routineCalendar.wakeRunning") : state.at ? t("routineCalendar.wakeDue", { time: niceTime(state.at) }) : t("routineCalendar.wakeDueHour")
         : t("routineCalendar.wakeIdle");
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-hairline/35 bg-panel/60 px-4 py-2.5">
+    <div className="flex items-center justify-between gap-4 border-b border-hairline/35 bg-panel/60 px-4 py-2">
       <div className="min-w-0 text-[12px] leading-relaxed text-ink-secondary">
         <span className="font-medium text-ink">{t("routineCalendar.wakeLabel")}</span> {status}
       </div>

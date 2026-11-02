@@ -36,6 +36,7 @@ import { type SkillRequestCardData } from "../../../shared/skill-request";
 import type { Routine, RoutineInput, RoutineRun, RoutineRunStatusFilter } from "@/lib/routines";
 import type { WebhookAttempt, WebhookIngressStatus, WebhookTrigger } from "@/lib/webhooks";
 import type { GraphConnectorOption } from "../../../shared/trigger-sources";
+import type { OrgImportDocument } from "../../../shared/org-import";
 import { firstUnreadMessageId } from "@/lib/unread-divider";
 import type { ComputerStart } from "@/lib/computer-start";
 import { type NotificationTarget } from "@/lib/notify";
@@ -170,6 +171,8 @@ export interface OptionCardData {
   terminalRequest?: import("../../../shared/terminal-request").TerminalRequestCardData;
   /** A meeting the bot asks to join as a notetaker (join_meeting). */
   meetingRequest?: import("../../../shared/meeting-request").MeetingRequestCardData;
+  /** One-time acceptable-use consent before a bot may place phone calls. */
+  phoneCallConsent?: import("../../../shared/phone-call-consent").PhoneCallConsentCardData;
   /** A change asked from a ConnectWise widget (shared/wire.ts). */
   cwActionRequest?: import("../../../shared/wire").OptionCardData["cwActionRequest"];
   /** 2026-10-16: custom rules (shared/custom-rules.ts) and email draft sends. */
@@ -1281,7 +1284,9 @@ export interface AppState {
   /** The person's sidebar hidden keys (src/lib/sidebar-hidden.ts): a
    * restored or fallback selection never lands on one of them. */
   sidebarHiddenKeys: ReadonlySet<string>;
-  activeView: "chat" | "team-map" | "routines" | "code" | "approvals" | "remote-sessions" | "achievements";
+  activeView: "chat" | "team-map" | "routines" | "code" | "approvals" | "remote-sessions" | "achievements" | "apps" | "archived-bots" | "org-import";
+  /** Staged solo-Sagax copy for the org-import content view (lot 6). */
+  orgImportStaged: OrgImportDocument | null;
   routines: Routine[];
   routineRuns: RoutineRun[];
   routinesLoadState: "loading" | "ready" | "error";
@@ -1305,6 +1310,9 @@ export interface AppState {
   /** The person whose details fill the right panel (principal id), or null.
    * Shares the right slot with bot settings, the computer and app settings. */
   personPanelId: string | null;
+  /** True while Connect apps fills the content frame (activeView "apps",
+   * 2026-11-01 lot 5: no modal). Kept in sync with activeView for callers
+   * that still read pluginsOpen. */
   pluginsOpen: boolean;
   /** Which tab the Plugins panel opens on; "mcp" when a bot's tools
    * sent the user there to add a server. */
@@ -1326,9 +1334,12 @@ export interface AppState {
    * leads there, see the togglePlugins action), Sources or Bots (Browse
    * Bots, 2026-10-29: openBotCatalog leads there) */
   pluginsPage: "pages" | "providers" | "sources" | "bots" | null;
-  /** The Triggers pop-up (webhooks, as a sentence: when this happens, that
-   * bot should…). */
+  /** Legacy flag for the old Triggers pop-up. 2026-11-01 (lot 2): toggleTriggers
+   * opens Automations > Webhooks instead; this stays false. Kept so older
+   * bot-act callers and tests still type-check. */
   triggersOpen: boolean;
+  /** Tools > Memory: right DetailPanel manager (2026-11-02). */
+  memoryManagerOpen: boolean;
   /** The "New bot" role picker. */
   newBotOpen: boolean;
   /** The bot creation wizard (src/components/bot-wizard/BotWizard.tsx):
@@ -1348,9 +1359,9 @@ export interface AppState {
    * names, "all" otherwise. `nonce` changes on every open, so a second link
    * to another category re-selects it on a page already showing. */
   achievementsFocus: { category: AchievementsCategory; nonce: number };
-  /** The organisation bot catalogue ("Browse Bots"), opened from the sidebar
-   * row (Settings > Experimental features), New bot and Connect apps. Use dispatch(openBotCatalog()) and
-   * dispatch(closeBotCatalog()). */
+  /** Legacy flag for Browse Bots' own window. 2026-10-29 / lot 5: every
+   * openBotCatalog opens Connect apps' Bots tab (activeView "apps"); this
+   * stays false. Kept so older callers and tests still type-check. */
   botCatalogOpen: boolean;
   /** Where the catalogue opens: its Templates section (New bot, Connect apps,
    * an install link carrying a team's address), or
@@ -1567,6 +1578,9 @@ export type Action =
   | { type: "showRemoteSessions" }
   /** The Achievements page, on `category` when a link names one. */
   | { type: "showAchievements"; category?: AchievementsCategory }
+  /** Archived bots as a content-frame list (2026-11-01 lot 5). */
+  | { type: "showArchivedBots" }
+  | { type: "showOrgImport"; staged?: OrgImportDocument | null }
   | { type: "showChat" }
   | { type: "routinesHydrated"; routines: Routine[]; runs: RoutineRun[]; folders?: Record<string, string[]> }
   | { type: "routineFoldersPatched"; botId: string; folders: string[] }
@@ -1774,6 +1788,7 @@ export type Action =
   | { type: "botActivityOpened" }
   | { type: "togglePlugins"; open?: boolean; surface?: "apps" | "mcp"; botId?: string | null; page?: "pages" | "providers" | "accounts" | "sources" | "bots" | null; focusApps?: string[] }
   | { type: "toggleTriggers"; open?: boolean }
+  | { type: "toggleMemoryManager"; open?: boolean }
   | { type: "toggleNewBot"; open?: boolean }
   | { type: "openBotWizard"; botId?: string | null; redo?: boolean }
   | { type: "closeBotWizard" }
@@ -1842,7 +1857,7 @@ interface NotificationRoutingState {
 }
 
 /** 2026-11-01: a routine run opens as an exchange sheet over the chat
- * column (header "<routine> <-> <bot>", bubbles, Close Chat), the same
+ * column (header "<routine> <-> <bot>", bubbles, header close), the same
  * place as a bot-to-bot exchange. Continue in the conversation stays a
  * footer action on that sheet. */
 export function openRoutineRun(
@@ -2431,6 +2446,7 @@ export const initialState: AppState = {
   selectedId: "",
   sidebarHiddenKeys: new Set<string>(),
   activeView: "chat",
+  orgImportStaged: null,
   routines: [],
   routineRuns: [],
   routinesLoadState: "loading",
@@ -2453,6 +2469,7 @@ export const initialState: AppState = {
   routineRunSheet: null,
   pluginsPage: null,
   triggersOpen: false,
+  memoryManagerOpen: false,
   newBotOpen: false,
   botWizard: null,
   botCreationPending: false,

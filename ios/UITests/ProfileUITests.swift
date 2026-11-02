@@ -127,27 +127,54 @@ final class ProfileUITests: XCTestCase {
 
     // MARK: Character
 
+    /// Lot 9: look edits stay local until Done; Back discards them.
     @MainActor
-    func testCharacterChangeSavesAtOnceAndResetGoesBackToTheDefault() throws {
+    func testCharacterChangeSavesOnDoneAndBackDiscards() throws {
         let ara = try XCTUnwrap(try bot(named: "Ara"))
         let id = try XCTUnwrap(ara["id"] as? String)
         defer { _ = try? api("PATCH", "/api/bots/\(id)", ["color": "purple", "mascotLook": ["character": "owl"], "mascotSkin": "none"]) }
         let app = launchAvatarEditor()
 
+        XCTAssertTrue(element("avatar-back", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(element("avatar-section.character", in: app).exists, "Mascot scrolls as a section")
+        XCTAssertTrue(element("avatar-section.colour", in: app).exists, "Color scrolls as a section")
+        XCTAssertFalse(element("avatar-part", in: app).exists, "no secondary Mascot/Shape/Color/Skin tabs")
+
         let teal = app.buttons["teal"]
         XCTAssertTrue(teal.waitForExistence(timeout: 10))
         teal.tap()
-        try eventually("Ara is teal on the server") { try bot(named: "Ara")?["color"] as? String == "teal" }
+        // Still purple on the server until Done.
+        XCTAssertEqual(try bot(named: "Ara")?["color"] as? String, "purple")
 
+        element("avatar-back", in: app).tap()
+        let discard = app.buttons["Discard changes"]
+        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        discard.tap()
+        XCTAssertEqual(try bot(named: "Ara")?["color"] as? String, "purple")
+
+        // Re-open, change, Done saves.
+        element("profile-mascot", in: app).tap()
+        XCTAssertTrue(element("character-reset", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["teal"].waitForExistence(timeout: 10))
+        app.buttons["teal"].tap()
+        element("avatar-done", in: app).tap()
+        try eventually("Ara is teal on the server after Done") { try bot(named: "Ara")?["color"] as? String == "teal" }
+
+        element("profile-mascot", in: app).tap()
+        XCTAssertTrue(element("character-reset", in: app).waitForExistence(timeout: 10))
         app.buttons["Shape"].tap()
-        try eventually("Ara is a shape on the server") {
+        element("avatar-done", in: app).tap()
+        try eventually("Ara is a shape on the server after Done") {
             ((try bot(named: "Ara")?["mascotLook"] as? [String: Any])?["character"] as? String) == "shape"
         }
 
+        element("profile-mascot", in: app).tap()
+        XCTAssertTrue(element("character-reset", in: app).waitForExistence(timeout: 10))
         let reset = app.buttons["character-reset"]
         XCTAssertTrue(reset.exists)
         reset.tap()
-        try eventually("Ara is the default green owl again") {
+        element("avatar-done", in: app).tap()
+        try eventually("Ara is the default green owl again after Done") {
             let now = try bot(named: "Ara")
             return now?["color"] as? String == "green"
                 && ((now?["mascotLook"] as? [String: Any])?["character"] as? String) == "owl"
@@ -187,7 +214,9 @@ final class ProfileUITests: XCTestCase {
         let tomato = app.buttons["tomato"]
         XCTAssertTrue(tomato.waitForExistence(timeout: 5))
         tomato.tap()
-        try eventually("Ara wears Clay tomato on the server") { try bot(named: "Ara")?["color"] as? String == "tomato" }
+        // Lot 9: the look draft saves on Done.
+        element("avatar-done", in: app).tap()
+        try eventually("Ara wears Clay tomato on the server after Done") { try bot(named: "Ara")?["color"] as? String == "tomato" }
     }
 
     // MARK: Picture
@@ -391,7 +420,7 @@ final class ProfileUITests: XCTestCase {
     func testLinksOpenInTheAppAndComputerLinksCopy() throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the iPad's panel: testIPadLibraryShowsTheLinks")
         let app = launchProfile()
-        element("panel-tab.library", in: app).tap()
+        element("panel-overview.library", in: app).tap()
         let chip = element("thread-files-chip.links", in: app)
         XCTAssertTrue(chip.waitForExistence(timeout: 15))
         chip.tap()
@@ -452,7 +481,7 @@ final class ProfileUITests: XCTestCase {
         XCTAssertTrue(name.waitForExistence(timeout: 30))
         name.tap()
         XCTAssertTrue(element("profile-name", in: app).waitForExistence(timeout: 10))
-        element("panel-tab.library", in: app).tap()
+        element("panel-overview.library", in: app).tap()
         let chip = element("thread-files-chip.links", in: app)
         XCTAssertTrue(chip.waitForExistence(timeout: 15))
         chip.tap()
@@ -509,7 +538,7 @@ final class ProfileUITests: XCTestCase {
     @MainActor
     func testLibraryChipsShowFilesByKindAndTheLinks() throws {
         let app = launchProfile()
-        element("panel-tab.library", in: app).tap()
+        element("panel-overview.library", in: app).tap()
         XCTAssertTrue(element("thread-files", in: app).waitForExistence(timeout: 10))
 
         let links = element("thread-files-chip.links", in: app)

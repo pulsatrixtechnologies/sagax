@@ -562,6 +562,33 @@ describe("pressing", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("opens an in-app place on this device at once and records the press, without asking the bot to do it", async () => {
+    const dispatch = store.dispatch as ReturnType<typeof vi.fn>;
+    dispatch.mockClear();
+    const parsed = parseWidgetInput({
+      type: "Card", title: "Fleet routines",
+      children: [
+        { type: "Text", value: "18 of 30 on" },
+        { type: "Button", label: "Open the routine board", onClickAction: { type: "open_page", payload: { page: "routines" } } },
+        { type: "Button", label: "Open last run", onClickAction: { type: "open_run", payload: { runId: "run-1", routineId: "r-1" } } },
+      ],
+    });
+    if (!parsed.ok) throw new Error(parsed.error);
+    mount(row(parsed.value));
+    await press(button("Open the routine board")!);
+    expect(dispatch).toHaveBeenCalledWith({ type: "showRoutines", botId: "scout" });
+    expect(openExternal).not.toHaveBeenCalled();
+    // recorded for the bot: the press names its button, nothing else rides along
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(posted().path).toBe("/api/bots/scout/messages");
+    expect(posted().body.widgetAction).toMatchObject({ messageId: "w1", ref: widgetActions(parsed.value).find((entry) => entry.label === "Open the routine board")!.ref });
+    expect(posted().body.widgetAction.values).toBeUndefined();
+    // the card stays live: another place can still be opened
+    await press(button("Open last run")!);
+    expect(dispatch).toHaveBeenLastCalledWith({ type: "openRoutineRunSheet", runId: "run-1", routineId: "r-1" });
+    expect(find('[data-widget="w1"]')!.getAttribute("data-widget-state")).toBe("live");
+  });
+
   it("shows the server's sentence in the card when a press is refused, and stays live", async () => {
     fetchMock.mockImplementation(async () => reply(409, { error: "This was already answered." }));
     mount(row(sample("routineForm")));

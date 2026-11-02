@@ -75,9 +75,9 @@ final class ParityChatUITests: XCTestCase {
         attach("Reply streamed from the fake engine", app)
     }
 
-    /// The name capsule opens the bot panel; the computer circle the panel
-    /// on Computer, whose full screen button opens the computer view; the
-    /// white capsule voice mode.
+    /// The name capsule opens the bot panel; the computer entry in "..."
+    /// opens the Computer page (Lot 4: a pushed page with Back and help);
+    /// the white capsule opens voice mode.
     @MainActor
     func testTopBarAndVoiceOpenTheirScreens() throws {
         let app = try launchChat()
@@ -92,14 +92,12 @@ final class ParityChatUITests: XCTestCase {
         XCTAssertTrue(app.buttons["header-computer"].waitForExistence(timeout: 5))
         attach("The header's more menu", app)
         app.buttons["header-computer"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["panel-computer"].firstMatch.waitForExistence(timeout: 10), "the panel on Computer")
-        attach("Panel on Computer", app)
-        app.buttons["computer-full-screen"].tap()
-        // the computer view (13): its own glass back button over the screen
+        // Lot 4: the Computer door opens the computer page directly
         let back = app.buttons["computer-back"]
-        XCTAssertTrue(back.waitForExistence(timeout: 10), "computer view")
-        attach("Computer view", app)
-        back.tap()
+        let help = app.descendants(matching: .any)["computer-help"].firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 10) || help.waitForExistence(timeout: 2), "computer page")
+        attach("Computer page", app)
+        if back.exists { back.tap() }
         XCTAssertTrue(app.buttons["panel-close"].waitForExistence(timeout: 10))
         app.buttons["panel-close"].tap()
         XCTAssertTrue(app.buttons["composer-voice"].waitForExistence(timeout: 10))

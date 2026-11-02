@@ -579,6 +579,10 @@ struct DesktopSidebarMenus {
                 out.append(DesktopMenuEntry(id: "automations", title: String(localized: "Automations"), icon: .calendarDays, kind: .action {
                     model.show(.automations)
                 }))
+            case .memory:
+                out.append(DesktopMenuEntry(id: "memory", title: String(localized: "Memory"), icon: .fileText, kind: .action {
+                    model.modal = .memory
+                }))
             case .archivedBots, .settings, .achievements, .releaseNotes, .about, .help:
                 break
             }
@@ -627,9 +631,9 @@ struct DesktopSidebarMenus {
     func new() -> [DesktopMenuEntry] {
         var out: [DesktopMenuEntry] = []
         if gate.allows(.createBot) {
-            // 2026-10-27: Create a bot, the wizard's first screen
+            // Lot 7: Create New Bot (quick create) first.
             out.append(DesktopMenuEntry(id: "new-bot", title: String(localized: "Create new Bot"), icon: .plus, kind: .action {
-                BotWizardPresenter.shared.open()
+                model.modal = .newBot
             }))
         }
         out.append(DesktopMenuEntry(id: "new-group", title: String(localized: "Create group chat"), icon: .users, kind: .action {

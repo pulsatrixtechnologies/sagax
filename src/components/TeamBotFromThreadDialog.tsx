@@ -16,15 +16,20 @@
 //    bot's Sharing opens (grants through Perspicax); on this computer alone,
 //    the new bot opens. The app adds no multi-person view of its own.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { Check, Loader2, ShieldCheck, Sparkles, UsersRound, X } from "lucide-react";
+import { Check, ChevronLeft, Loader2, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
 
 import { activeLocale, t } from "@/lib/i18n";
+import { isBackShortcut } from "@/lib/back-shortcut";
+import { CIRCLE_BUTTON } from "@/lib/circle-button";
+import { cn } from "@/lib/cn";
 import { mcpServersForBot, useMcpServers } from "@/lib/mcp-servers";
 import { closeTeamBotFromThread, setTeamBotSources, useTeamBotFromThreadRequest, type TeamBotFromThreadRequest } from "@/lib/teambot-from-thread";
 import { viewerCanCreateBots } from "@/lib/viewer";
 import { api, useStore, type Bot } from "@/state/store";
 import { readableError } from "@/lib/plain-error";
+import { useCaptionChrome } from "./DesktopCapabilities";
+import { PageTopStrip } from "./content-page";
+import { PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 
 export interface TeamBotDraft { name: string; title: string; description: string; instructions: string; source: "model" | "excerpt" }
 interface DraftAnswer { draft: TeamBotDraft }
@@ -83,7 +88,8 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
   const { state, dispatch } = useStore();
   const source = state.bots.find((bot) => bot.id === request.botId);
   const { servers } = useMcpServers();
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const { dragProps, noDragStyle, padClass } = useCaptionChrome();
+  const rootRef = useRef<HTMLElement>(null);
   const [plugins, setPlugins] = useState<SourcePlugin[] | null>(null);
   const [form, setForm] = useState<TeamBotDraft | null>(null);
   const [choices, setChoices] = useState(() => initialCarryChoices({ plugins: [], connectors: [] }));
@@ -124,7 +130,7 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
 
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    dialogRef.current?.focus();
+    rootRef.current?.focus({ preventScroll: true });
     return () => { if (opener?.isConnected) opener.focus(); };
   }, []);
 
@@ -222,114 +228,141 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
   const busy = stage === "creating";
   const canCreate = viewerCanCreateBots(state.config);
 
-  return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 p-4" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !busy) onClose();
-    }}>
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="teambot-thread-title" tabIndex={-1} data-teambot-from-thread
-        className="flex max-h-[90vh] w-full max-w-[600px] flex-col overflow-hidden rounded-2xl border border-hairline/50 bg-panel text-ink shadow-2xl outline-none"
-        onKeyDown={(event) => { if (event.key === "Escape" && !busy) { event.stopPropagation(); onClose(); } }}>
-        <header className="flex items-start justify-between gap-3 px-6 pb-2 pt-5">
-          <div>
-            <h2 id="teambot-thread-title" className="flex items-center gap-2 text-[17px] font-semibold"><UsersRound size={17} aria-hidden="true" />{t("teamBotFromThread.title")}</h2>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">{t("teamBotFromThread.intro", { title: request.title || t("teamBotFromThread.untitled") })}</p>
-          </div>
-          <button type="button" aria-label={t("common.cancel")} disabled={busy} onClick={onClose} className="rounded-lg p-1.5 text-ink-secondary hover:bg-raised"><X size={18} /></button>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 pt-2">
-          {!canCreate && <p role="alert" className="rounded-lg bg-warning/10 px-3 py-2 text-[12.5px] text-warning">{t("teamBotFromThread.cannotCreate")}</p>}
-          {stage === "done" && created ? (
-            <div data-teambot-created>
-              <p className="flex items-center gap-2 text-[13.5px] font-medium"><Check size={16} className="text-success" />{t("teamBotFromThread.created", { name: created.name })}</p>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">{organization ? t("teamBotFromThread.publishHint") : t("teamBotFromThread.publishHintSolo")}</p>
-              {warnings.length > 0 && (
-                <ul className="mt-3 list-disc rounded-xl border border-hairline px-4 py-3 pl-8 text-[12.5px] text-ink-secondary">
-                  {warnings.map((line) => <li key={line}>{line}</li>)}
-                </ul>
-              )}
-            </div>
-          ) : !form ? (
-            !error && <div className="flex items-center gap-2 py-6 text-[13px] text-ink-secondary"><Loader2 size={15} className="animate-spin" />{t("teamBotFromThread.drafting")}</div>
-          ) : (
-            <fieldset disabled={busy} className="space-y-3">
-              {form.source === "model" && <p className="flex items-center gap-1.5 text-[12px] text-ink-secondary"><Sparkles size={13} aria-hidden="true" />{t("teamBotFromThread.draftedBy", { name: source?.name ?? "" })}</p>}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block text-[12.5px] text-ink-secondary">{t("teamBotFromThread.name")}
-                  <input value={form.name} maxLength={60} onChange={(event) => setForm({ ...form, name: event.target.value })} className={field} />
-                </label>
-                <label className="block text-[12.5px] text-ink-secondary">{t("teamBotFromThread.role")}
-                  <input value={form.title} maxLength={120} onChange={(event) => setForm({ ...form, title: event.target.value })} className={field} />
-                </label>
-              </div>
-              <label className="block text-[12.5px] text-ink-secondary">{t("teamBotFromThread.description")}
-                <input value={form.description} maxLength={300} onChange={(event) => setForm({ ...form, description: event.target.value })} className={field} />
-              </label>
-              <label className="block text-[12.5px] text-ink-secondary">{source?.soul?.trim() ? t("teamBotFromThread.persona", { name: sourceName }) : t("teamBotFromThread.instructions")}
-                {source?.soul?.trim() && drafted.trim() && form.instructions !== drafted && (
-                  <button type="button" data-teambot-use-draft onClick={() => setForm({ ...form, instructions: drafted })} className="ml-2 text-[12px] text-accent hover:underline">{t("teamBotFromThread.useDraft")}</button>
-                )}
-                <textarea value={form.instructions} rows={7} maxLength={8000} onChange={(event) => setForm({ ...form, instructions: event.target.value })} className={`${field} font-mono text-[12.5px]`} />
-              </label>
-
-              <div data-teambot-carry-plugins>
-                <div className="text-[12.5px] font-medium text-ink">{t("teamBotFromThread.plugins")}</div>
-                {plugins && plugins.length === 0 && connectors.length === 0 && <p className="mt-1 text-[12px] text-ink-secondary">{t("teamBotFromThread.noPlugins")}</p>}
-                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                  {(plugins ?? []).map((plugin) => (
-                    <label key={plugin.key} className="flex items-center gap-1.5 text-[12.5px]">
-                      <input type="checkbox" className="size-3.5 accent-accent" checked={choices.plugins.has(plugin.key)} onChange={() => toggle("plugins", plugin.key)} />
-                      {plugin.name}
-                    </label>
-                  ))}
-                  {connectors.map((name) => (
-                    <label key={`mcp:${name}`} className="flex items-center gap-1.5 text-[12.5px]">
-                      <input type="checkbox" className="size-3.5 accent-accent" checked={choices.connectors.has(name)} onChange={() => toggle("connectors", name)} />
-                      {name}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div data-teambot-carry-rules className="flex flex-col gap-1 rounded-xl border border-hairline/50 px-4 py-3">
-                <label className="flex items-center gap-1.5 text-[12.5px]">
-                  <input type="checkbox" data-teambot-carry-rules-box className="size-3.5 accent-accent" checked={choices.rules} onChange={(event) => setChoices({ ...choices, rules: event.target.checked })} />
-                  {t("teamBotFromThread.rules", { name: sourceName })}
-                </label>
-                {source?.section && <p className="text-[12px] text-ink-secondary">{t("teamBotFromThread.teamMemory", { team: source.section })}</p>}
-                <p data-teambot-private-memory className="text-[12px] text-ink-secondary">{t("teamBotFromThread.privateMemory", { name: sourceName })}</p>
-              </div>
-              <p className="flex items-start gap-2 text-[12px] leading-relaxed text-ink-secondary">
-                <ShieldCheck size={14} className="mt-0.5 shrink-0 text-success" />
-                <span>{t("teamBotFromThread.never")}</span>
-              </p>
-            </fieldset>
-          )}
+  // Full-height content panel without backdrop. App may later mount this in
+  // the main frame; the host still reacts to the module request.
+  return (
+    <main
+      ref={rootRef}
+      tabIndex={-1}
+      data-teambot-from-thread=""
+      aria-labelledby="teambot-thread-title"
+      className="fixed inset-0 z-50 flex h-full min-w-0 flex-1 flex-col bg-app outline-none"
+      onKeyDown={(event) => {
+        if (event.defaultPrevented || busy) return;
+        if (event.key === "Escape" || isBackShortcut(event)) {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <PageTopStrip />
+      <header
+        {...dragProps}
+        className={cn("content-topbar relative flex h-12 shrink-0 items-center gap-2 border-b border-hairline/50 px-3", padClass)}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={busy}
+          aria-label={t("breadcrumb.back")}
+          title={t("breadcrumb.back")}
+          data-teambot-back=""
+          style={noDragStyle}
+          className={cn(CIRCLE_BUTTON, "disabled:opacity-40")}
+        >
+          <ChevronLeft size={18} strokeWidth={1.75} />
+        </button>
+        <div className="min-w-0 flex-1" style={noDragStyle}>
+          <h1 id="teambot-thread-title" className="flex items-center gap-2 truncate text-[15px] font-medium leading-6 text-ink">
+            <UsersRound size={16} aria-hidden="true" className="shrink-0 text-ink-secondary" />
+            {t("teamBotFromThread.title")}
+          </h1>
+          <p className="truncate text-[12px] leading-4 text-ink-secondary">{t("teamBotFromThread.intro", { title: request.title || t("teamBotFromThread.untitled") })}</p>
         </div>
+      </header>
 
-        {error && <p role="alert" className="mx-6 mb-2 rounded-lg bg-danger/10 px-3 py-2 text-[12.5px] text-danger">{error}</p>}
-        <footer className="flex justify-end gap-2 border-t border-hairline/35 px-6 py-3">
-          {stage === "done" ? (
-            <>
-              <button type="button" onClick={onClose} className="rounded-lg px-3 py-2 text-[13px] text-ink-secondary hover:bg-raised">{t("teamShare.done")}</button>
-              <button type="button" data-teambot-publish onClick={publish} className="rounded-lg bg-accent px-4 py-2 text-[13px] font-medium text-accent-ink">
-                {organization ? t("teamBotFromThread.publish") : t("teamBotFromThread.open")}
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" disabled={busy} onClick={onClose} className="rounded-lg px-3 py-2 text-[13px] text-ink-secondary hover:bg-raised">{t("common.cancel")}</button>
-              <button type="button" data-teambot-create disabled={busy || stage !== "ready" || !form?.name.trim() || !canCreate} onClick={() => void create()}
-                className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-[13px] font-medium text-accent-ink disabled:opacity-40">
-                {busy && <Loader2 size={14} className="animate-spin" />}
-                {busy ? t("teamBotFromThread.creating") : t("teamBotFromThread.create")}
-              </button>
-            </>
-          )}
-        </footer>
+      <div className="mx-auto min-h-0 w-full max-w-xl flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+        {!canCreate && <p role="alert" className="rounded-lg bg-warning/10 px-3 py-2 text-[12.5px] text-warning">{t("teamBotFromThread.cannotCreate")}</p>}
+        {stage === "done" && created ? (
+          <div data-teambot-created>
+            <p className="flex items-center gap-2 text-[13.5px] font-medium"><Check size={16} className="text-success" />{t("teamBotFromThread.created", { name: created.name })}</p>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">{organization ? t("teamBotFromThread.publishHint") : t("teamBotFromThread.publishHintSolo")}</p>
+            {warnings.length > 0 && (
+              <ul className="mt-3 list-disc rounded-xl border border-hairline px-4 py-3 pl-8 text-[12.5px] text-ink-secondary">
+                {warnings.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            )}
+          </div>
+        ) : !form ? (
+          !error && <div className="flex items-center gap-2 py-6 text-[13px] text-ink-secondary"><Loader2 size={15} className="animate-spin" />{t("teamBotFromThread.drafting")}</div>
+        ) : (
+          <fieldset disabled={busy} className="space-y-3">
+            {form.source === "model" && <p className="flex items-center gap-1.5 text-[12px] text-ink-secondary"><Sparkles size={13} aria-hidden="true" />{t("teamBotFromThread.draftedBy", { name: source?.name ?? "" })}</p>}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-[12.5px] text-ink-secondary">{t("teamBotFromThread.name")}
+                <input value={form.name} maxLength={60} onChange={(event) => setForm({ ...form, name: event.target.value })} className={field} />
+              </label>
+              <label className="block text-[12.5px] text-ink-secondary">{t("teamBotFromThread.role")}
+                <input value={form.title} maxLength={120} onChange={(event) => setForm({ ...form, title: event.target.value })} className={field} />
+              </label>
+            </div>
+            <label className="block text-[12.5px] text-ink-secondary">{t("teamBotFromThread.description")}
+              <input value={form.description} maxLength={300} onChange={(event) => setForm({ ...form, description: event.target.value })} className={field} />
+            </label>
+            <label className="block text-[12.5px] text-ink-secondary">{source?.soul?.trim() ? t("teamBotFromThread.persona", { name: sourceName }) : t("teamBotFromThread.instructions")}
+              {source?.soul?.trim() && drafted.trim() && form.instructions !== drafted && (
+                <button type="button" data-teambot-use-draft onClick={() => setForm({ ...form, instructions: drafted })} className="ml-2 text-[12px] text-accent hover:underline">{t("teamBotFromThread.useDraft")}</button>
+              )}
+              <textarea value={form.instructions} rows={7} maxLength={8000} onChange={(event) => setForm({ ...form, instructions: event.target.value })} className={`${field} font-mono text-[12.5px]`} />
+            </label>
+
+            <div data-teambot-carry-plugins>
+              <div className="text-[12.5px] font-medium text-ink">{t("teamBotFromThread.plugins")}</div>
+              {plugins && plugins.length === 0 && connectors.length === 0 && <p className="mt-1 text-[12px] text-ink-secondary">{t("teamBotFromThread.noPlugins")}</p>}
+              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                {(plugins ?? []).map((plugin) => (
+                  <label key={plugin.key} className="flex items-center gap-1.5 text-[12.5px]">
+                    <input type="checkbox" className="size-3.5 accent-accent" checked={choices.plugins.has(plugin.key)} onChange={() => toggle("plugins", plugin.key)} />
+                    {plugin.name}
+                  </label>
+                ))}
+                {connectors.map((name) => (
+                  <label key={`mcp:${name}`} className="flex items-center gap-1.5 text-[12.5px]">
+                    <input type="checkbox" className="size-3.5 accent-accent" checked={choices.connectors.has(name)} onChange={() => toggle("connectors", name)} />
+                    {name}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div data-teambot-carry-rules className="flex flex-col gap-1 rounded-xl border border-hairline/50 px-4 py-3">
+              <label className="flex items-center gap-1.5 text-[12.5px]">
+                <input type="checkbox" data-teambot-carry-rules-box className="size-3.5 accent-accent" checked={choices.rules} onChange={(event) => setChoices({ ...choices, rules: event.target.checked })} />
+                {t("teamBotFromThread.rules", { name: sourceName })}
+              </label>
+              {source?.section && <p className="text-[12px] text-ink-secondary">{t("teamBotFromThread.teamMemory", { team: source.section })}</p>}
+              <p data-teambot-private-memory className="text-[12px] text-ink-secondary">{t("teamBotFromThread.privateMemory", { name: sourceName })}</p>
+            </div>
+            <p className="flex items-start gap-2 text-[12px] leading-relaxed text-ink-secondary">
+              <ShieldCheck size={14} className="mt-0.5 shrink-0 text-success" />
+              <span>{t("teamBotFromThread.never")}</span>
+            </p>
+          </fieldset>
+        )}
       </div>
-    </div>,
-    document.body,
+
+      {error && <p role="alert" className="mx-4 mb-2 rounded-lg bg-danger/10 px-3 py-2 text-[12.5px] text-danger sm:mx-6">{error}</p>}
+      <footer className="flex shrink-0 justify-end gap-2 border-t border-hairline/35 px-4 py-3 sm:px-6">
+        {stage === "done" ? (
+          <>
+            <button type="button" onClick={onClose} className={PILL}>{t("teamShare.done")}</button>
+            <button type="button" data-teambot-publish onClick={publish} className={PRIMARY_PILL}>
+              {organization ? t("teamBotFromThread.publish") : t("teamBotFromThread.open")}
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" disabled={busy} onClick={onClose} className={PILL}>{t("common.cancel")}</button>
+            <button type="button" data-teambot-create disabled={busy || stage !== "ready" || !form?.name.trim() || !canCreate} onClick={() => void create()}
+              className={cn(PRIMARY_PILL, "gap-2 disabled:opacity-40")}>
+              {busy && <Loader2 size={14} className="animate-spin" />}
+              {busy ? t("teamBotFromThread.creating") : t("teamBotFromThread.create")}
+            </button>
+          </>
+        )}
+      </footer>
+    </main>
   );
 }
 

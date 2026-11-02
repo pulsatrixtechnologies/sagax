@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { verifyJournal } from "./action-journal.ts";
 import {
   appendDecision, decisionFileFor, decisionRetentionDays, decisionsCsv, DEFAULT_DECISION_RETENTION_DAYS, flushDecisionLog,
-  pruneDecisions, readDecisionRange, readDecisions, readSealedChain, sealedDecisionSources, withDecisionActor, type DecisionRow,
+  pruneDecisions, readDecisionRange, readDecisions, readSealedChain, sealedDecisionSources, withDecisionActor, withMatchedRuleId, type DecisionRow,
 } from "./decision-log.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
 
@@ -191,7 +191,7 @@ describe("appendDecision / readDecisions", () => {
     expect(rows.map((r) => r.requestId)).toEqual(["r1"]);
     const csv = decisionsCsv(rows);
     const [header, line] = csv.trim().split("\n");
-    expect(header).toBe("time,decision,source,bot,tool,summary,rule,unattended,answered_by,thread,request");
+    expect(header).toBe("time,decision,source,bot,tool,summary,rule,rule_id,unattended,answered_by,thread,request");
     expect(line).toContain("'=HYPERLINK");
     expect(line).toContain("'+ada@example.test");
     expect(line).not.toContain("sk-live-abcdefghijklmnop1234");
@@ -218,6 +218,23 @@ describe("appendDecision / readDecisions", () => {
       Array.from({ length: 100 }, (_, i) => `req-${i}`),
     );
   });
+
+  it("records the matched rule id on a rule decision (L3 / MAN-01 thinned)", async () => {
+    expect(withMatchedRuleId({ source: "custom-rule", rule: "cr-42" })).toEqual({ source: "custom-rule", rule: "cr-42", ruleId: "cr-42" });
+    expect(withMatchedRuleId({ source: "custom-rule", ruleId: "cr-9" })).toEqual({ source: "custom-rule", ruleId: "cr-9", rule: "cr-9" });
+    expect(withMatchedRuleId({ source: "full-access", rule: "Bash:git" })).toEqual({ source: "full-access", rule: "Bash:git" });
+
+    appendDecision(dir, row({ requestId: "from-rule", decision: "auto-approved", source: "owner-rule", rule: "orule_abc" }));
+    appendDecision(dir, row({ requestId: "from-id", decision: "auto-denied", source: "custom-rule-deny", rule: undefined, ruleId: "cr_deny" }));
+    appendDecision(dir, row({ requestId: "grant-key", decision: "auto-approved", source: "full-access", rule: "Bash:git" }));
+    await flushDecisionLog(dir);
+    const rows = readDecisions(dir, 10);
+    expect(rows.find((r) => r.requestId === "from-rule")).toMatchObject({ rule: "orule_abc", ruleId: "orule_abc" });
+    expect(rows.find((r) => r.requestId === "from-id")).toMatchObject({ rule: "cr_deny", ruleId: "cr_deny" });
+    expect(rows.find((r) => r.requestId === "grant-key")).toMatchObject({ rule: "Bash:git" });
+    expect(rows.find((r) => r.requestId === "grant-key")?.ruleId).toBeUndefined();
+    expect(decisionsCsv(rows)).toContain("orule_abc");
+  });
 });
 
 describe("the call a rule test replays (2026-10-26, Journal)", () => {
@@ -229,6 +246,6 @@ describe("the call a rule test replays (2026-10-26, Journal)", () => {
     expect(decisionCall(null)).toBeUndefined();
     // too long to keep: no arguments, the replay reads the summary instead
     expect(decisionCall({ input: "x".repeat(DECISION_CALL_INPUT_MAX + 1), command: "ls" })).toEqual({ command: "ls" });
-    expect(metadataOnly({ threadId: "t", summary: "s", call: { input: "{}" } })).toEqual({ threadId: "t" });
+    expect(metadataOnly({ threadId: "t", summary: "s", ruleId: "cr-1", call: { input: "{}" } })).toEqual({ threadId: "t" });
   });
 });

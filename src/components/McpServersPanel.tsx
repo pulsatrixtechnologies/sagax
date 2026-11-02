@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, KeyRound, Loader2 } from "lucide-react";
 
+import { useConfirm } from "@/components/ConfirmProvider";
 import { cn } from "@/lib/cn";
 import { claudeUserMcpEnabled } from "@/lib/feature-flags";
 import { t } from "@/lib/i18n";
@@ -233,6 +234,7 @@ function draftFor(server: McpServerListing): McpDraft {
  * does with them: add, edit, paste a config, test, sign in and out, switch a
  * server or one of its tools, remove, and Whop's own connect flow. */
 export function useMcpServers() {
+  const confirm = useConfirm();
   const { state: store, dispatch } = useStore();
   // While enrolled with custom servers off, only approved servers can be added.
   const policy = store.config?.managedPolicy;
@@ -657,7 +659,7 @@ export function useMcpServers() {
   };
 
   const remove = async (server: Pick<McpServerListing, "name">) => {
-    if (!window.confirm(t("mcp.removeConfirm", { name: server.name }))) return;
+    if (!(await confirm({ title: t("mcp.removeConfirm", { name: server.name }), confirmLabel: t("common.confirmRemove"), tone: "danger" }))) return;
     setBusy(`delete:${server.name}`);
     loadGeneration.current += 1;
     setError(null);

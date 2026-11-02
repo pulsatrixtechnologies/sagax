@@ -30,6 +30,7 @@ import type { TurnPayerMode } from "../../../shared/turn-payer";
 import { payerLabel } from "../bot-settings/BotPayerSettings";
 import { EffortRow, ModelPicker } from "../ModelPicker";
 import { DefaultBotSettings } from "../NewBotDialog";
+import { ConfirmDialog } from "../ConfirmDialog";
 import { DialogFrame, DialogLayer, HelpTip, PILL, PRIMARY_PILL, PillSelect, SettingsGroup } from "../SettingsPrimitives";
 
 function warningText(kind: BotModelWarningKind): string {
@@ -94,26 +95,21 @@ function BulkConfirmDialog({
 }) {
   const auto = selection.auto === true;
   return (
-    <DialogLayer onBackdropMouseDown={busy ? undefined : onCancel}>
-      <DialogFrame
-        titleId="bot-models-bulk-confirm-title"
-        title={t("botModels.bulk.title")}
-        closeLabel={t("common.close")}
-        onClose={busy ? undefined : onCancel}
-        frameProps={{ "data-bot-models-bulk-confirm": "" }}
-        footer={
-          <div className="flex justify-end gap-2">
-            <button type="button" className={PILL} disabled={busy} onClick={onCancel}>{t("common.cancel")}</button>
-            <button type="button" className={PRIMARY_PILL} disabled={busy} data-bot-models-bulk-apply="" onClick={onConfirm}>
-              {busy ? t("botModels.bulk.applying") : t("botModels.bulk.apply")}
-            </button>
-          </div>
-        }
-      >
-        <p className="text-[13px] leading-relaxed text-ink-secondary">
-          {auto ? t("botModels.bulk.autoIntro", { count: lines.length }) : t("botModels.bulk.intro", { count: lines.length })}
-        </p>
-        <ul className="mt-3 max-h-64 overflow-auto rounded-xl border border-hairline/40 bg-inset/40 px-3 py-2 text-[12.5px]" data-bot-models-bulk-summary="">
+    <div data-bot-models-bulk-confirm="">
+    <ConfirmDialog
+      open
+      tone="neutral"
+      title={t("botModels.bulk.title")}
+      body={auto ? t("botModels.bulk.autoIntro", { count: lines.length }) : t("botModels.bulk.intro", { count: lines.length })}
+      confirmLabel={busy ? t("botModels.bulk.applying") : t("botModels.bulk.apply")}
+      pending={busy}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+      extra={
+        <ul
+          className="max-h-64 overflow-auto rounded-xl border border-hairline/40 bg-inset/40 px-3 py-2 text-[12.5px]"
+          data-bot-models-bulk-summary=""
+        >
           {lines.map((line) => (
             <li key={line.botId} data-bot-models-bulk-line={line.botId} className="flex flex-col gap-0.5 border-b border-hairline/30 py-2 last:border-0">
               <span className="font-medium text-ink">{line.name}</span>
@@ -121,8 +117,9 @@ function BulkConfirmDialog({
             </li>
           ))}
         </ul>
-      </DialogFrame>
-    </DialogLayer>
+      }
+    />
+    </div>
   );
 }
 

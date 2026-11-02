@@ -1,10 +1,10 @@
 // The full-window pages of the content frame (2026-10-28): Automations
 // (RoutineCalendarPage.tsx) and Achievements (achievements/AchievementsScreen.tsx)
 // draw from these pieces, so the two stay sister pages. One row of header
-// (icon, 15px title, an optional "› section", the page's primary controls,
+// (icon, 16px title, an optional "› section", the page's primary controls,
 // then on the right its indicators, Filters, the ☰ menu and an action), a
-// body in a centred 4xl column with a 17px heading and a 12px line under
-// it, sections with a 15px heading, rows that light on hover and a dashed
+// body in a centred 4xl column with a 16px heading and a 12px line under
+// it, sections with a 16px heading, rows that light on hover and a dashed
 // empty state. Under 60rem of header the labels of the segment and Filters
 // fold to their icons (a tooltip keeps the name).
 import { useEffect, useRef, type CSSProperties, type HTMLAttributes, type ReactNode, type RefObject } from "react";
@@ -13,29 +13,40 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
 
-/** A control of the header row: a 36px rounded button on the panel surface. */
-export const PAGE_HEADER_BUTTON = "flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 [&::-webkit-details-marker]:hidden";
+/** A header control: the same 36px circle as CIRCLE_BUTTON. A labelled control adds w-auto, px-3 and gap-1.5. */
+export const PAGE_HEADER_BUTTON = "flex size-9 shrink-0 cursor-pointer list-none items-center justify-center rounded-full border border-hairline-weak bg-elevated text-ink transition-colors hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 [&::-webkit-details-marker]:hidden";
 /** A popover under a header control (Filters, ☰, New). */
 export const PAGE_POPOVER = "absolute right-0 top-full z-40 mt-1.5 flex flex-col rounded-xl border-[0.5px] border-border popover-surface bg-elevated text-[13px] leading-[18px]";
 /** An entry of the ☰ menu. */
 export const PAGE_MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover";
 /** A field's label inside Filters. */
-export const PAGE_FIELD_LABEL = "mb-1 block text-[11px] font-medium uppercase tracking-[0.04em] text-ink-secondary";
+export const PAGE_FIELD_LABEL = "mb-1 block text-[12px] font-medium text-ink-secondary";
 /** A select inside Filters. */
 export const PAGE_SELECT = "w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong";
 /** A small count on the right of a ☰ entry. */
-export const PAGE_MENU_COUNT = "ml-auto rounded-full bg-raised px-1.5 text-[10px] text-ink-secondary";
+export const PAGE_MENU_COUNT = "ml-auto rounded-full bg-raised px-1.5 text-[11px] text-ink-secondary";
 /** An indicator of the header's right group (a count with its icon). */
-export const PAGE_INDICATOR = "flex h-9 items-center gap-1 px-1.5 text-[11.5px] tabular-nums";
+export const PAGE_INDICATOR = "flex h-9 items-center gap-1 px-1.5 text-[12px] tabular-nums";
 /** Filters' "Clear filters". */
 export const PAGE_FILTER_RESET = "self-start rounded-md text-[12px] text-accent hover:underline";
 /** The body's scroller and its centred column. */
 export const PAGE_SCROLL = "min-h-0 flex-1 overflow-y-auto";
-export const PAGE_COLUMN = "mx-auto w-full max-w-4xl space-y-5 p-4 sm:p-6";
+export const PAGE_COLUMN = "mx-auto w-full max-w-4xl space-y-4 p-4 sm:p-6";
 /** A row of a list: lights on hover. */
-export const PAGE_ROW = "flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-hover";
+export const PAGE_ROW = "flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-hover";
 /** Nothing to list. */
-export const PAGE_EMPTY = "rounded-xl border border-dashed border-hairline/50 p-5 text-center text-[13px] text-ink-secondary";
+export const PAGE_EMPTY = "rounded-xl border border-dashed border-hairline/50 p-6 text-center text-[13px] text-ink-secondary";
+
+/** Dashed empty card. `icon` and `action` are optional; callers can still use PAGE_EMPTY alone. */
+export function PageEmpty({ icon: Icon, children, action }: { icon?: LucideIcon; children: ReactNode; action?: ReactNode }) {
+  return (
+    <div className={PAGE_EMPTY}>
+      {Icon ? <Icon size={18} className="mx-auto mb-2 text-ink-tertiary" aria-hidden="true" /> : null}
+      {children}
+      {action ? <div className="mt-3 flex justify-center">{action}</div> : null}
+    </div>
+  );
+}
 
 type DataAttributes = { [key: `data-${string}`]: string | undefined };
 
@@ -91,13 +102,13 @@ export function PageHeader({ name, icon: Icon, title, section, primary, actions,
       {...rest}
       {...{ [`data-${name}-header`]: "" }}
       data-page-header=""
-      className={cn(topbar && "content-topbar", "@container/page-header shrink-0 border-b border-hairline/50 bg-app py-3 pr-4", inset ? "pl-[86px]" : "pl-5", rest.className)}
+      className={cn(topbar && "content-topbar", "@container/page-header shrink-0 border-b border-hairline/50 bg-app py-3 pr-4", inset ? "pl-[86px]" : "pl-6", rest.className)}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div {...titleProps} data-page-title="" className="flex min-w-0 shrink-0 items-center gap-2">
           <Icon size={18} className="shrink-0 text-ink-secondary" aria-hidden="true" />
-          <h1 className="text-[15px] font-medium leading-6 text-ink">{title}</h1>
-          {section && <span {...{ [`data-${name}-section`]: "" }} className="flex min-w-0 items-center gap-1 text-[15px] text-ink-secondary"><ChevronRight size={14} aria-hidden="true" /><span className="truncate">{section}</span></span>}
+          <h1 className="text-[16px] font-medium leading-6 text-ink">{title}</h1>
+          {section && <span {...{ [`data-${name}-section`]: "" }} className="flex min-w-0 items-center gap-1 text-[16px] text-ink-secondary"><ChevronRight size={14} aria-hidden="true" /><span className="truncate">{section}</span></span>}
         </div>
         {primary && <div {...{ [`data-${name}-primary`]: "" }} className="flex min-w-0 items-center gap-2 @max-[44rem]/page-header:order-last @max-[44rem]/page-header:basis-full" style={primaryStyle}>{primary}</div>}
         <div {...{ [`data-${name}-actions`]: "" }} className="ml-auto flex shrink-0 items-center gap-1.5" style={actionsStyle}>{actions}</div>
@@ -138,10 +149,10 @@ export function PageSearch({ value, onChange, placeholder, label, ...rest }: {
   label: string;
 } & DataAttributes) {
   return (
-    <label className="flex h-9 min-w-0 max-w-[260px] flex-1 items-center gap-1.5 rounded-lg border border-hairline/50 bg-panel px-2.5 text-ink focus-within:ring-2 focus-within:ring-accent/60">
+    <label className="flex h-9 min-w-0 max-w-[260px] flex-1 items-center gap-1.5 rounded-full border border-hairline/50 bg-panel px-2.5 text-ink focus-within:ring-2 focus-within:ring-accent/60">
       <Search size={14} aria-hidden="true" className="shrink-0 text-ink-secondary" />
       <input {...rest} type="search" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-label={label}
-        className="min-w-0 flex-1 bg-transparent text-[12.5px] text-ink outline-none placeholder:text-ink-tertiary" />
+        className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-tertiary" />
     </label>
   );
 }
@@ -157,10 +168,10 @@ export function PageFilters({ name, menuRef, activeCount, children }: {
   return (
     <details ref={menuRef} {...{ [`data-${name}-filters`]: "" }} className="relative">
       <summary role="button" aria-label={label} title={label}
-        className={cn(PAGE_HEADER_BUTTON, "px-2.5 text-[12px] font-medium", activeCount > 0 && "border-accent/40 text-accent")}>
+        className={cn(PAGE_HEADER_BUTTON, "text-[12px] font-medium", "@min-[60rem]/page-header:h-9 @min-[60rem]/page-header:w-auto @min-[60rem]/page-header:gap-1.5 @min-[60rem]/page-header:px-3", activeCount > 0 && "h-9 w-auto gap-1.5 border-accent/40 px-3 text-accent")}>
         <SlidersHorizontal size={15} aria-hidden="true" />
         <span className="@max-[60rem]/page-header:sr-only">{t("routineCalendar.filters")}</span>
-        {activeCount > 0 && <span {...{ [`data-${name}-filter-count`]: "" }} className="min-w-[18px] rounded-full bg-accent px-1.5 text-center text-[10.5px] font-semibold leading-[18px] text-white">{activeCount}</span>}
+        {activeCount > 0 && <span {...{ [`data-${name}-filter-count`]: "" }} className="min-w-[18px] rounded-full bg-accent px-1.5 text-center text-[11px] font-semibold leading-[18px] text-white">{activeCount}</span>}
       </summary>
       <div role="group" aria-label={t("routineCalendar.filters")} className={cn(PAGE_POPOVER, "w-[280px] gap-3 p-3")}>
         {children}
@@ -183,7 +194,7 @@ export function PageMenu({ name, menuRef, label, title, badge, children }: {
     <details ref={menuRef} {...{ [`data-${name}-menu`]: "" }} className="group relative">
       <summary aria-label={label} title={title ?? label} className={cn(PAGE_HEADER_BUTTON, "relative w-9 justify-center")}>
         <Menu size={16} />
-        {badge ? <span aria-hidden="true" className="absolute -right-1 -top-1 min-w-[16px] rounded-full border border-app bg-raised px-1 text-center text-[9.5px] leading-[14px] text-ink-secondary">{badge}</span> : null}
+        {badge ? <span aria-hidden="true" className="absolute -right-1 -top-1 min-w-[16px] rounded-full border border-app bg-raised px-1 text-center text-[11px] leading-[14px] text-ink-secondary">{badge}</span> : null}
       </summary>
       <div role="menu" className={cn(PAGE_POPOVER, "w-[240px] min-w-[200px] gap-0.5 p-1.5")}>
         {children}
@@ -222,21 +233,21 @@ export function PageBody({ children, ...rest }: { children: ReactNode } & DataAt
   );
 }
 
-/** The body's heading: 17px, a 12px line under it, and room on the right. */
+/** The body's heading: 16px, a 12px line under it, and room on the right. */
 export function PageHeading({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-      <div className="min-w-0"><h2 className="text-[17px] font-semibold text-ink">{title}</h2>{subtitle && <p className="mt-1 text-[12px] text-ink-secondary">{subtitle}</p>}</div>
+      <div className="min-w-0"><h2 className="text-[16px] font-semibold text-ink">{title}</h2>{subtitle && <p className="mt-1 text-[12px] text-ink-secondary">{subtitle}</p>}</div>
       {children}
     </div>
   );
 }
 
-/** A section of the body: a 15px heading (and its count), then its rows. */
+/** A section of the body: a 16px heading (and its count), then its rows. */
 export function PageSection({ title, count, children, ...rest }: { title: string; count?: ReactNode; children: ReactNode } & DataAttributes) {
   return (
     <section {...rest} className="space-y-2" aria-label={title}>
-      <h2 className="flex items-baseline gap-2 text-[15px] font-semibold text-ink">{title}{count != null && <span className="text-[12px] font-normal tabular-nums text-ink-secondary">{count}</span>}</h2>
+      <h2 className="flex items-baseline gap-2 text-[16px] font-semibold text-ink">{title}{count != null && <span className="text-[12px] font-normal tabular-nums text-ink-secondary">{count}</span>}</h2>
       {children}
     </section>
   );

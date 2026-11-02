@@ -239,8 +239,9 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // initial.
   { method: "GET", path: /^\/api\/people\/[\w-]{1,80}\/avatar$/ },
   // The owner's bot edits from the profile: the harness holds a companion
-  // request to the member fields (look, framing, name, instructions,
-  // notifications, model), never where the bot runs or what it may do.
+  // request to the member fields plus Permissions / Approval / Proactive /
+  // Access (Lot 1). Org sharing and host fields stay refused in
+  // companionBotFieldViolation.
   { method: "PATCH", path: /^\/api\/bots\/[\w-]+$/ },
   // The profile's Links, Media and Files tabs, the files' thumbnails and
   // downloads, and Share as Template (a package without secrets).

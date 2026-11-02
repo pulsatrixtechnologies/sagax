@@ -26,10 +26,6 @@ vi.mock("@/state/store", async (importOriginal) => ({
 
 // These cases cover the full picker; Simple mode has its own file.
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
-vi.mock("@/lib/unready-providers-preference", () => ({
-  useShowUnreadyProviders: () => false,
-  setShowUnreadyProviders: () => {},
-}));
 
 const { ClaudeAccountSelect, EffortRow, ModelEngineRail, ModelPicker, ModelVariantRow, modelSelectionForPick, providerRailUnready } = await import("./ModelPicker");
 
@@ -359,12 +355,22 @@ describe("ModelPicker trigger", () => {
     ]);
   });
 
-  it("shows the model and its effort together in the header", () => {
+  it("keeps effort out of the header-style chip; the tooltip still names it", () => {
+    // Chat header is the bot pill alone: a stray "High" under that pill is a
+    // bug. Effort stays in the picker menu and in the chip's tooltip.
     const markup = renderTrigger("high");
 
     expect(markup).toContain("GPT-5.6");
-    expect(effortChip(markup)).toBe("· High");
+    expect(effortChip(markup)).toBeUndefined();
+    expect(markup).not.toContain("data-model-effort");
     expect(markup).toContain("Codex · GPT-5.6 · High effort");
+    expect(markup).toContain("flex-nowrap");
+  });
+
+  it("still shows effort on the contained settings chip", () => {
+    fixture.instances = [engine(["low", "high"])];
+    const markup = renderToStaticMarkup(createElement(ModelPicker, { bot: bot("high"), contained: true }));
+    expect(effortChip(markup)).toBe("· High");
   });
 
   it("says nothing about effort when the bot sends no level", () => {

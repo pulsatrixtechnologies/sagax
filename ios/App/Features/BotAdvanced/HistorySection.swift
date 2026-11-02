@@ -3,8 +3,13 @@
 // profile, newest first; a soul row that can be undone offers "Undo this
 // change" (and a swipe), confirmed as on the desktop, then the list reloads
 // whether the rollback worked or not.
+//
+// Lot 8 (2026-11-01): the line a person reads is a phrase without ids or
+// byte sizes; those stay behind "Show details" with Copy. The page title
+// matches the Edit bot row: Changes.
 import CompanionCore
 import SwiftUI
+import UIKit
 
 struct BotHistorySection: View {
     @Environment(\.themePalette) var themePalette
@@ -15,6 +20,9 @@ struct BotHistorySection: View {
     @State private var rollingBack = false
     @State private var target: BotHistoryRow?
     @State private var request = 0
+    @State private var expanded: Set<String> = []
+
+    private var current: Bot { session.state.bot(bot.id) ?? bot }
 
     var body: some View {
         Section {
@@ -39,7 +47,7 @@ struct BotHistorySection: View {
                 Text(String(localized: "Loading…")).foregroundStyle(Theme.textSecondary)
             }
         } header: {
-            Text(String(localized: "History"))
+            Text(String(localized: "Changes"))
         }
         .task(id: bot.id) { await load() }
         .confirmationDialog(
@@ -52,16 +60,18 @@ struct BotHistorySection: View {
                 .accessibilityIdentifier("history-restore-confirm")
             Button(String(localized: "Cancel"), role: .cancel) { target = nil }
         } message: { _ in
-            Text(String(localized: "Replaces current SOUL with the version before this change. Current version stays in History."))
+            Text(String(localized: "Replaces current SOUL with the version before this change. Current version stays in Changes."))
         }
     }
 
     @ViewBuilder
     private func rowView(_ row: BotHistoryRow, revision: String?) -> some View {
+        let details = DisplayHygiene.historyDetails(row)
         VStack(alignment: .leading, spacing: 6) {
-            Text(verbatim: BotAdvancedWording.historyLine(row))
+            Text(verbatim: DisplayHygiene.historyPhrase(row, botName: current.name))
                 .font(.system(size: 14))
                 .foregroundStyle(Theme.textPrimary)
+                .accessibilityIdentifier("history-line.\(row.id)")
             if row.restorable {
                 Button(String(localized: "Undo this change")) { target = row }
                     .font(.system(size: 13, weight: .medium))
@@ -74,6 +84,43 @@ struct BotHistorySection: View {
                      ?? String(localized: "The exact previous instructions are unavailable, so this change cannot be undone."))
                     .font(.footnote)
                     .foregroundStyle(Theme.textSecondary)
+            }
+            if !details.isEmpty {
+                DisclosureGroup(
+                    isExpanded: Binding(
+                        get: { expanded.contains(row.id) },
+                        set: { open in
+                            if open { expanded.insert(row.id) } else { expanded.remove(row.id) }
+                        }
+                    )
+                ) {
+                    ForEach(Array(details.enumerated()), id: \.offset) { _, detail in
+                        HStack(alignment: .top, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(verbatim: detail.label)
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.textSecondary)
+                                Text(verbatim: detail.value)
+                                    .font(Theme.mono(12))
+                                    .foregroundStyle(Theme.textPrimary)
+                                    .textSelection(.enabled)
+                            }
+                            Spacer(minLength: 0)
+                            Button(String(localized: "Copy")) {
+                                UIPasteboard.general.string = detail.value
+                            }
+                            .font(.caption)
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel(Text(String(localized: "Copy \(detail.label)")))
+                        }
+                        .padding(.vertical, 2)
+                    }
+                } label: {
+                    Text(String(localized: "Show details"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .accessibilityIdentifier("history-details.\(row.id)")
             }
         }
         .swipeActions(edge: .trailing) {
@@ -117,7 +164,7 @@ struct BotHistoryPage: View {
 
     var body: some View {
         ThemedList { BotHistorySection(bot: bot) }
-            .navigationTitle(String(localized: "History"))
+            .navigationTitle(String(localized: "Changes"))
             .navigationBarTitleDisplayMode(.inline)
             .accessibilityIdentifier("history-page")
     }

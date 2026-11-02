@@ -12610,7 +12610,7 @@
   "connectApps.tailscale.deviceIps": "Tailnet IPs",
   "connectApps.tailscale.noIps": "No address yet",
   "connectApps.tailscale.disconnect": "Disconnect",
-  "orgComputer.diskFull": "The server environment's disk is full: {free} free of {total}. Bots can no longer save files. Delete large files in /workspace.",
+  "orgComputer.diskFull": "The server environment's disk is full: {free} free of {total}. Bots can no longer save files. Delete large files in the bots' folders.",
   "orgComputer.diskAlmostFull": "The server environment's disk is almost full: {free} free of {total}.",
   "orgComputer.diskFree": "{free} free"
 }

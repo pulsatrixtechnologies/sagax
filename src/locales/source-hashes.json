@@ -5354,6 +5354,7 @@
       "step.startThread.done": "38f3840378af1edb9d3f1e4a6678b38c804551bc3492724c96e26a5b8e4cca84",
       "step.startThread.failed": "b00eac83cc9c102342d91cf1b19f1b9ed5f7a4742d886298cf8c16db6b42e162",
       "step.startThread.running": "838e8719590271ee5660f03fc7498ea6a8341a39876174639db506698bafe72b",
+      "step.stuck": "a5c9999e6aab64a30f258781c19f7a26cde283ef366904c8700f348ad2eb4c22",
       "step.subagent.bare.done": "f04bebc3fe7efa6ccde017c19c53a7e001b4fd260598017fb16ee424c1ccc481",
       "step.subagent.bare.failed": "15612362c0a7127dc9922a620d488a28d3e291ff4559b2481ed1245f08f907c8",
       "step.subagent.bare.running": "59b345bc2b0b6fb0bbdc4f589bd5c337bf7dbe79a363429c140771aae7b3ab07",

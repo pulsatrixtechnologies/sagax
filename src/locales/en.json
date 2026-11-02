@@ -2155,6 +2155,7 @@
   "step.startThread.done": "Started a thread",
   "step.startThread.failed": "Could not start a thread",
   "step.startThread.running": "Starting a thread",
+  "step.stuck": "Same call repeated {count} times. It may be stuck",
   "step.subagent.bare.done": "Ran a sub-agent",
   "step.subagent.bare.failed": "Sub-agent failed",
   "step.subagent.bare.running": "Running a sub-agent",

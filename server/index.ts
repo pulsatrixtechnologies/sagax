@@ -16559,10 +16559,6 @@ const turnUsage = new Map<string, { input: number; output: number; cachedInput?:
 /** What the window held on the latest model call of the turn in flight, banked beside the totals at turn.completed. */
 const turnContext = new Map<string, { tokens?: number; window?: number }>();
 
-// Bounded per active turn. OpenHands uses a bounded recent-event scan for
-// the same class of stuck-loop detection; retaining an unlimited set of
-// unique arguments would let one pathological turn grow the server forever.
-
 // ── stall watchdog ─────────────────────────────────────────────────────
 // ask_bot has a short inline wait budget, while room turns have a separately
 // configurable absolute ceiling. The main 1:1 path had none, so a wedged CLI

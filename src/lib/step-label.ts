@@ -361,6 +361,31 @@ function serverSentence(name: string): string | undefined {
   return undefined;
 }
 
+/** The loop guard's notice (server/host/loop-guard.ts), "Same call repeated
+ * 5× - tool: git status - it may be stuck"; rows written before 2026-11-02
+ * carry long dashes where it has hyphens. */
+const STUCK_NOTICE = /^Same call repeated (\d+)× [-\u2013\u2014] (.+) [-\u2013\u2014] it may be stuck$/;
+/** The guard's word for a call it knows by its title, and an ACP agent's
+ * kind for an MCP call: neither says anything to a person. */
+const GENERIC_CALL = /^(?:tool|other): /;
+
+/** That notice in the person's language, with no dash: the count in the
+ * sentence, the call quiet after it. */
+function stuckNotice(name: string): StepReading | undefined {
+  const match = STUCK_NOTICE.exec(name);
+  if (!match) return undefined;
+  const call = match[2]!.replace(GENERIC_CALL, "").trim();
+  return { label: t("step.stuck", { count: Number(match[1]) }), target: oneLine(call), title: call };
+}
+
+/** A stuck notice by its count and its call, whatever its dashes: servers
+ * before 2026-11-02 wrote each one twice, once with long dashes, and the
+ * same notice twice is one (src/lib/step-group.ts). */
+export function stuckNoticeKey(name: string): string | undefined {
+  const match = STUCK_NOTICE.exec(name.trim());
+  return match ? `${match[1]} ${oneLine(match[2]!)}` : undefined;
+}
+
 /** Grok's meta tools, as rows stored before the driver named the tool a
  * use_tool ran (grok 1.0.62 titles them `use_tool` and `search_tool`, or
  * "Use Tool" and "Search Tool"): a use_tool reads as the MCP tool it ran,
@@ -388,6 +413,8 @@ export function readStep(tool: StepTool, nameOf?: StepNameOf): StepReading {
   const name = tool.name.trim();
   const meta = grokMetaTool(tool, phase);
   if (meta) return meta;
+  const stuck = stuckNotice(name);
+  if (stuck) return stuck;
   const sentence = serverSentence(name);
   if (sentence) return { label: sentence };
   if (isSentence(name)) return { label: name };

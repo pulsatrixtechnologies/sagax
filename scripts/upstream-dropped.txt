@@ -124,3 +124,7 @@ src/locales/vocabulary.test.ts
 # retired OMB Cloud on 2026-10-04; the desktop client only reaches a control
 # plane named by SAGAX_CONTROL_PLANE_URL.
 cloudflare/control-plane
+
+# Removed 2026-11-02 (repo tidy): the OMB Cloud Pro home machine on Fly (its
+# image and cloud-home-start were already gone).
+deploy/fly

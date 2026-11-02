@@ -1859,6 +1859,8 @@
   "memoryManager.openNote": "Ouvrir une note",
   "memoryManager.clearSearch": "Effacer la recherche",
   "memoryManager.sidebarLabel": "Sources de mémoire",
+  "memoryManager.explorerHide": "Masquer les sources de mémoire",
+  "memoryManager.explorerShow": "Afficher les sources de mémoire",
   "memoryManager.viewsLabel": "Vues de la mémoire",
   "memoryManager.nav.all": "Toutes les notes",
   "memoryManager.nav.teams": "Équipes",

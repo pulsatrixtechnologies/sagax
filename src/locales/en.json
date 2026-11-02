@@ -2340,6 +2340,8 @@
   "memoryManager.openNote": "Open a note",
   "memoryManager.clearSearch": "Clear the search",
   "memoryManager.sidebarLabel": "Memory sources",
+  "memoryManager.explorerHide": "Hide memory sources",
+  "memoryManager.explorerShow": "Show memory sources",
   "memoryManager.viewsLabel": "Memory views",
   "memoryManager.nav.all": "All notes",
   "memoryManager.nav.teams": "Teams",

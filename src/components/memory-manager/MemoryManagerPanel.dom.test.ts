@@ -25,14 +25,23 @@ vi.mock("@/state/store", async () => {
     }),
     useStoreOptional: () => null,
     api: vi.fn(async (path: string) => {
+      // `wide`: every kind of row (a team section, a team tier, a proposal).
+      const wide = (globalThis as { __memoryWide?: boolean }).__memoryWide === true;
       if (path === "/api/memory-manager/sources") {
         return {
           sources: [
             { id: "bot:atlas", kind: "bot", name: "Atlas", detail: "Bot memory", mayWrite: true, botId: "atlas" },
+            // A bot the memory routes refuse (an older server still lists it).
+            { id: "bot:alubar", kind: "bot", name: "Alubar", detail: "Bot memory", mayWrite: true, botId: "alubar" },
+            ...(wide ? [{ id: "team:general", kind: "team", name: "General", detail: "1 team note", mayWrite: true, section: "" }] : []),
             { id: "perspicax", kind: "perspicax", name: "Perspicax", mayWrite: true, mayManage: true, scope: "me" },
           ],
           perspicax: { available: true },
         };
+      }
+      if (path.startsWith("/api/bots/alubar/")) throw new actual.ApiError("no such bot", 404);
+      if (path.startsWith("/api/team-memory")) {
+        return { entries: [{ id: "tm1", kind: "term", name: "OMB", detail: "Open MAUS Bot", status: "proposed", updatedAt: Date.now() }] };
       }
       if (path.startsWith("/api/bots/atlas/memory") && !path.includes("/file")) {
         return {
@@ -54,9 +63,13 @@ vi.mock("@/state/store", async () => {
           tiers: [{
             scope: "me", kind: "me", name: "Personal", may_write: true, may_manage: true, trashed: 0,
             topics: [{ topic: "notes", count: 1, entries: [{ id: "n1", title: "Brief", topic: "notes", tags: ["work"], excerpt: "Keep" }] }],
-          }],
+          }, ...(wide ? [{
+            scope: "team:ops", kind: "team", name: "Ops", may_write: true, may_manage: false, trashed: 0,
+            topics: [{ topic: "runbooks", count: 1, entries: [{ id: "n2", title: "Runbook", topic: "runbooks", tags: [], excerpt: "Steps" }] }],
+          }] : [])],
         };
       }
+      if (path.startsWith("/api/me/memory/trash")) return { notes: [], days: 30 };
       if (path.startsWith("/api/me/memory/entry")) {
         return { id: "n1", scope: "me", topic: "notes", title: "Brief", body: "# Brief\n", tags: ["work"], may_edit: true, version: 1 };
       }
@@ -80,7 +93,15 @@ describe("MemoryManagerPanel page", () => {
   let host: HTMLDivElement;
   let root: Root;
 
+  // The window width the explorer reads (it opens from 1280px, as Automations' rail).
+  let viewport = 1440;
+
   beforeEach(() => {
+    viewport = 1440;
+    vi.spyOn(window, "matchMedia").mockImplementation((query: string) => {
+      const min = /min-width:\s*(\d+)px/.exec(query);
+      return { matches: min ? viewport >= Number(min[1]) : false, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false } as MediaQueryList;
+    });
     setLocale("en");
     host = document.createElement("div");
     document.body.append(host);
@@ -90,6 +111,44 @@ describe("MemoryManagerPanel page", () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+    delete (globalThis as { __memoryWide?: boolean }).__memoryWide;
+    vi.restoreAllMocks();
+  });
+
+  it("puts the explorer on the right of the body, as Automations' rail", async () => {
+    await act(async () => {
+      root.render(createElement(MemoryManagerPanel));
+    });
+    await act(async () => { await Promise.resolve(); });
+    const body = host.querySelector("[data-memory-row] .content-card-body")!;
+    const children = Array.from(body.children);
+    expect(children[0]!.tagName).toBe("SECTION");
+    expect(children[children.length - 1]!.hasAttribute("data-memory-sources")).toBe(true);
+    expect(host.querySelector("[data-memory-sources]")!.className).toContain("border-l");
+    expect(host.querySelector("[data-memory-sources]")!.className).toContain("w-[280px]");
+  });
+
+  it("folds the explorer into its strip under 1280px, and Cmd+O opens it", async () => {
+    viewport = 1024;
+    await act(async () => {
+      root.render(createElement(MemoryManagerPanel));
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(host.querySelector("[data-memory-sources]")).toBeNull();
+    const strip = host.querySelector("[data-memory-explorer-show]") as HTMLButtonElement;
+    expect(strip.getAttribute("aria-label")).toBe("Show memory sources");
+    await act(async () => { strip.click(); });
+    expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
+    const hide = host.querySelector("[data-memory-explorer-hide]") as HTMLButtonElement;
+    expect(hide.getAttribute("aria-label")).toBe("Hide memory sources");
+    await act(async () => { hide.click(); });
+    expect(host.querySelector("[data-memory-sources]")).toBeNull();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "o", metaKey: true, ctrlKey: true }));
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
+    expect(document.activeElement).toBe(host.querySelector("[data-memory-search]"));
   });
 
   it("opens as a main page with sources list", async () => {
@@ -186,5 +245,39 @@ describe("MemoryManagerPanel page", () => {
     await act(async () => { noteNode.click(); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(host.querySelector("[data-memory-note]")).not.toBeNull();
+  });
+
+  // 2026-11-02: selecting a bot the memory routes refuse showed a red
+  // "no such bot" under the header. Such a bot leaves the column, and no
+  // row of the column (views, tiers, bots, folders) ends on an error.
+  it("never shows an error for any row of the column", async () => {
+    (globalThis as { __memoryWide?: boolean }).__memoryWide = true;
+    await act(async () => {
+      root.render(createElement(MemoryManagerPanel));
+    });
+    const settle = async () => { await act(async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); }); };
+    await settle();
+    expect(host.querySelector('[data-memory-source="bot:alubar"]')).toBeNull();
+    expect(host.textContent).not.toContain("Alubar");
+    const navIds = Array.from(host.querySelectorAll("[data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"));
+    expect(navIds).toEqual(["all", "teams", "recent", "review", "trash"]);
+    const rows = [
+      ...navIds.map((id) => `[data-memory-nav="${id}"]`),
+      '[data-memory-tier="mine"]',
+      '[data-memory-source="bot:atlas"]',
+      '[data-memory-folder="bot:atlas/topics"]',
+      '[data-memory-folder="me/notes"]',
+      '[data-memory-tier="team:general"]',
+      '[data-memory-tier="perspicax:team:ops"]',
+    ];
+    for (const selector of rows) {
+      const row = host.querySelector(selector) as HTMLElement | null;
+      expect(row, selector).not.toBeNull();
+      const target = (row!.matches("button") ? row : row!.querySelector("button")) as HTMLButtonElement;
+      await act(async () => { target.click(); });
+      await settle();
+      expect(host.querySelector('[role="alert"]'), selector).toBeNull();
+      expect(host.textContent, selector).not.toContain("no such bot");
+    }
   });
 });

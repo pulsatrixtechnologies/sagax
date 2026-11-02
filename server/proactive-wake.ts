@@ -7,6 +7,9 @@
 // - calendar: a one-bot calendar entry coming due;
 // - run: a routine or webhook run of the bot that failed on its own work;
 // - bot: another bot's post in a room this bot is in;
+// - peer: a teammate's one-way notice (send_to_bot) that ran in its own
+//   thread of this bot (2026-11-02): the notice turn is quiet by design, so
+//   without this wake nothing of it ever reached the person's conversation;
 // - webhook: a webhook of the bot that posts to its chat (no run of its own).
 //
 // Off: nothing. Proactive: a background wake at the bot's own approval
@@ -42,7 +45,7 @@ import { ROUTINE_RESTARTED } from "./routines/routines.ts";
 import { BOTMAIL_RUN_RULES, defang } from "./webhooks.ts";
 import { proactiveModeFor, type ProactiveMode } from "../shared/proactive-mode.ts";
 
-export type ProactiveSource = "mail" | "calendar" | "run" | "bot" | "webhook";
+export type ProactiveSource = "mail" | "calendar" | "run" | "bot" | "peer" | "webhook";
 
 export interface ProactiveEvent {
   botId: string;
@@ -110,7 +113,74 @@ export function proactiveRelevance(event: ProactiveEvent): string | null {
       return event.failed ? "a run failed" : null;
     case "bot":
       return event.mentionsBot ? "a bot named it in a room" : null;
+    case "peer":
+      // a teammate addressed this bot directly: it always concerns it
+      return "a teammate sent it a message";
   }
+}
+
+/** 2026-11-02 (peer inbox): the hop of each teammate's one-way notice, by
+ * the thread it runs in on its receiver. A notice turn that writes to
+ * another bot carries the chain on, as a wake does, so bots answering each
+ * other through send_to_bot stop at PROACTIVE_MAX_HOPS (no ping-pong). In
+ * memory and bounded: a restart starts chains over, like the wake budget. */
+export class PeerNoticeHops {
+  private readonly hops = new Map<string, number>();
+  private readonly kept: number;
+  constructor(kept = 2_000) {
+    this.kept = kept;
+  }
+
+  /** A notice now runs in `threadId`, sent from a thread whose own hop is
+   * `senderHops` (0: a person's turn): it is at least hop 1, a bot sent it. */
+  note(threadId: string, senderHops: number): number {
+    const hop = Math.max(1, senderHops);
+    this.hops.delete(threadId);
+    this.hops.set(threadId, hop);
+    if (this.hops.size > this.kept) this.hops.delete(this.hops.keys().next().value!);
+    return hop;
+  }
+
+  get(threadId: string): number | undefined {
+    return this.hops.get(threadId);
+  }
+}
+
+/** The proactive event of a teammate's settled one-way notice: one per
+ * notice (its id is the key), the receiver's to look at. `text` and
+ * `result` are untrusted, read inside the wake's fence. */
+export function peerNoticeEvent(input: {
+  receiverId: string;
+  noticeId: string;
+  threadId: string;
+  title: string;
+  status: string;
+  text: string;
+  result?: string;
+  senderId?: string;
+  senderName?: string;
+  hops?: number;
+}): ProactiveEvent {
+  const from = input.senderName?.trim() || "A teammate";
+  const result = (input.result ?? "").trim().slice(0, 1_500);
+  return {
+    botId: input.receiverId,
+    source: "peer",
+    key: `peer-notice:${input.noticeId}`,
+    ...(input.senderId ? { fromBotId: input.senderId } : {}),
+    hops: input.hops ?? 1,
+    label: `Message from ${from}`,
+    summary: `${from}: ${input.title}`,
+    detail: [
+      `From: ${from}`,
+      `Thread: #${input.title} (id ${input.threadId})`,
+      `Its turn there: ${input.status === "completed" ? "done" : input.status}`,
+      "",
+      "Message:",
+      input.text.trim().slice(0, 2_000),
+      ...(result ? ["", "What that turn said:", result] : []),
+    ].join("\n"),
+  };
 }
 
 /** Whether a post names this bot: "@Nova" or "Nova" as a word, any case. */
@@ -314,6 +384,18 @@ export function proactiveEventsBlock(events: readonly ProactiveEvent[], more = 0
   ].join("\n");
 }
 
+/** 2026-11-02: how a wake treats teammates' messages. Each one already ran
+ * once in its own thread of this bot (the outcome is in the event); the
+ * wake is where the person hears of them: handled ones in one short line,
+ * and everything that needs the person gathered into one card, never one
+ * card per message. A reply to the sender is a hop of the chain. */
+export const PEER_WAKE_RULES = [
+  "Teammates' messages: each one below already ran once in its own thread of yours; its outcome is part of the event.",
+  "Handle what is left that your level allows, then tell the person in one short report what came in and what you did.",
+  "Everything that needs the person (a decision, an approval, a GO for a write or a send) goes into ONE card for all of these messages, with the options they can pick; never one card per message.",
+  "Reply to a teammate only when it is waiting on something from you. Never send a reply just to acknowledge: replies count against the hop limit and a chain of bots stops there.",
+].join(" ");
+
 /** What a wake run is told to do before the fenced events. */
 export function proactiveWakePrompt(batch: Pick<ProactiveWakeBatch, "mode" | "events" | "more">, opts: { accepted?: boolean } = {}): string {
   const how = opts.accepted
@@ -327,6 +409,7 @@ export function proactiveWakePrompt(batch: Pick<ProactiveWakeBatch, "mode" | "ev
     ROUTINE_REPORT_CONTRACT.trim(),
     // an email is never a request from the owner (bot email, S2)
     ...(batch.events.some((event) => event.source === "mail") ? ["", BOTMAIL_RUN_RULES] : []),
+    ...(batch.events.some((event) => event.source === "peer") ? ["", PEER_WAKE_RULES] : []),
     "",
     proactiveEventsBlock(batch.events, batch.more),
   ].join("\n");
@@ -339,7 +422,7 @@ export function proactivePrompt(mode: ProactiveMode): string {
     case "off":
       return "";
     case "proactive":
-      return "\nProactive mode: on. Emails, calendar entries, failed runs, bots' posts and webhooks that concern you wake you in the background. You act at your usual approval level and rules, as for any request. Before a write from a wake, plan it (a dry run is recorded on the wake); then the ordinary approval path runs it. A wake reports in this conversation only when it has something for the person.";
+      return "\nProactive mode: on. Emails, calendar entries, failed runs, bots' posts, teammates' messages and webhooks that concern you wake you in the background. You act at your usual approval level and rules, as for any request. Before a write from a wake, plan it (a dry run is recorded on the wake); then the ordinary approval path runs it. A wake reports in this conversation only when it has something for the person.";
   }
 }
 

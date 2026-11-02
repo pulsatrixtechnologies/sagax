@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { McpAuditRecord } from "./mcp-permissions.ts";
 import type { SubjectTokenOutcome } from "./idp-session.ts";
 import type { ExchangeResult } from "./perspicax-link.ts";
-import { PERSPICAX_ACCESS_ENDED, PERSPICAX_SESSION_RESET, PERSPICAX_UNAVAILABLE_WHY, PerspicaxMcp, parseMcpBody, perspicaxReplayable, reviewedReadsOf, perspicaxSessionLost, perspicaxUnavailableRow, perspicaxUnavailableWhy, type PerspicaxMcpLink, type PerspicaxMcpOptions } from "./perspicax-mcp.ts";
+import { PERSPICAX_ACCESS_ENDED, PERSPICAX_ROUTINE_RETRY_MS, PERSPICAX_SESSION_RESET, PERSPICAX_UNAVAILABLE_WHY, PerspicaxMcp, parseMcpBody, perspicaxReplayable, reviewedReadsOf, perspicaxSessionLost, perspicaxUnavailableRow, perspicaxUnavailableWhy, type PerspicaxMcpLink, type PerspicaxMcpOptions } from "./perspicax-mcp.ts";
 
 const ISS = "https://px.example.test";
 const ALICE = "pr_alice";
@@ -29,6 +29,7 @@ function harness(options: { held?: Record<string, string[]>; mcp?: (request: { h
   const logs: string[] = [];
   const mcpCalls: Array<{ method: string; headers: Record<string, string>; body: any }> = [];
   const subjectCalls: string[] = [];
+  const sleeps: number[] = [];
   let signInFails: SubjectTokenOutcome | null = null;
   let exchangeFails: ExchangeResult | null = null;
   let exchangeFailsOnce: ExchangeResult | null = null;
@@ -94,13 +95,24 @@ function harness(options: { held?: Record<string, string[]>; mcp?: (request: { h
     fetch: fetcher,
     now: () => clock,
     log: (line) => logs.push(line),
+    // routine backoff waits are recorded, never slept (2026-11-02)
+    sleep: async (ms) => { sleeps.push(ms); clock += ms; },
   });
   return {
-    mcp, subjects, botProfiles, exchanges, revoked, logs, mcpCalls, subjectCalls, delegations, delegationCalls, refusedDelegations,
+    mcp, subjects, sleeps, botProfiles, exchanges, revoked, logs, mcpCalls, subjectCalls, delegations, delegationCalls, refusedDelegations,
     advance: (ms: number) => { clock += ms; },
     failSignIn: (outcome: SubjectTokenOutcome | null) => { signInFails = outcome; },
     failExchange: (outcome: ExchangeResult | null) => { exchangeFails = outcome; },
     failExchangeOnce: (outcome: ExchangeResult) => { exchangeFailsOnce = outcome; },
+    /** The next `times` exchanges fail with `outcome`, then they pass. */
+    failExchangeTimes: (outcome: ExchangeResult, times: number) => {
+      let left = times;
+      const original = link.exchangeToken;
+      link.exchangeToken = async (token, profileId) => {
+        if (left > 0) { left -= 1; exchanges.push({ subject: token, profile: profileId }); return outcome; }
+        return original(token, profileId);
+      };
+    },
   };
 }
 
@@ -343,6 +355,70 @@ describe("PerspicaxMcp", () => {
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
     await h.mcp.endGeneration("t1", "g1");
     expect(h.revoked).toEqual(["pxlo1.B.mcp-P1-1"]);
+  });
+
+  it("a routine waits out a connector roll with backoff before a profile is left out (2026-11-02)", async () => {
+    const h = harness();
+    h.delegations.add(BOB);
+    // the connector is down for the first five exchanges (about 20 s here)
+    h.failExchangeTimes({ ok: false, error: "unreachable" }, 5);
+    const plan = await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "owner-routine" });
+    expect(plan).toEqual({ mounted: [{ profileId: "P1", slug: "dispatch", name: "Dispatch" }], unavailable: [] });
+    // the quick retry, then the routine backoff until it passed
+    expect(h.sleeps).toEqual([2_000, 5_000, 10_000, 20_000]);
+    expect(h.logs.join("\n")).toContain("still refused; trying again in 2 s");
+  });
+
+  it("a routine gives up after the whole backoff, and a person's turn keeps the single quick retry", async () => {
+    const h = harness();
+    h.delegations.add(BOB);
+    h.failExchange({ ok: false, error: "unreachable" });
+    const routine = await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "owner-routine" });
+    expect(routine).toMatchObject({ mounted: [], unavailable: [{ reason: "unreachable" }] });
+    expect(h.sleeps).toEqual([...PERSPICAX_ROUTINE_RETRY_MS]);
+    h.sleeps.length = 0;
+    const person = await h.mcp.prepareTurn({ threadId: "t2", generation: "g", bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    expect(person).toMatchObject({ mounted: [], unavailable: [{ reason: "unreachable" }] });
+    expect(h.sleeps).toEqual([]);
+  });
+
+  it("a routine's MCP read is sent again over HTTP 502 and 503 with backoff; a write only over 503 or a refused connection", async () => {
+    let failures: Array<number | "refused"> = [];
+    const h = harness({
+      mcp: ({ body }) => {
+        const next = failures.shift();
+        if (next === "refused") throw Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }) });
+        if (typeof next === "number") return new Response("Bad Gateway", { status: next });
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { content: [{ type: "text", text: "ok" }] } }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "sess-1" } });
+      },
+    });
+    h.delegations.add(BOB);
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "owner-routine" });
+    const read = { jsonrpc: "2.0", id: 1, method: "tools/list" };
+    failures = [502, 503, "refused"];
+    expect(await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: read })).toMatchObject({ status: 200, body: { result: { content: [{ text: "ok" }] } } });
+    expect(h.sleeps).toEqual([2_000, 5_000, 10_000]);
+    const write = { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "cw_psa__write", arguments: {} } };
+    h.sleeps.length = 0;
+    failures = ["refused", 503];
+    expect(await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: write })).toMatchObject({ body: { result: { content: [{ text: "ok" }] } } });
+    expect(h.sleeps).toEqual([2_000, 5_000]);
+    // a 502 may have run the write: never sent again, the bot gets the failure
+    h.sleeps.length = 0;
+    failures = [502];
+    expect(await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { ...write, id: 3 } })).toMatchObject({ body: { error: { message: "Perspicax answered HTTP 502" } } });
+    expect(h.sleeps).toEqual([]);
+  });
+
+  it("a person's MCP call is not held up by the routine backoff", async () => {
+    let failures = [502];
+    const h = harness({ mcp: ({ body }) => failures.shift()
+      ? new Response("Bad Gateway", { status: 502 })
+      : new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: {} }), { status: 200, headers: { "content-type": "application/json" } }) });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    expect(await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } })).toMatchObject({ body: { error: { message: "Perspicax answered HTTP 502" } } });
+    expect(h.sleeps).toEqual([]);
+    failures = [];
   });
 
   it("tries a refused-for-now exchange once more before leaving the profile out", async () => {

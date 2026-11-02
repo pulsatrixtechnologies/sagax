@@ -44,6 +44,7 @@ export function AnchoredPopover({
   align = "start",
   gap = 4,
   maxHeight,
+  floor,
   className,
   style,
   children,
@@ -59,6 +60,9 @@ export function AnchoredPopover({
   gap?: number;
   /** The most the menu may take, in px, even when there is more room. */
   maxHeight?: number;
+  /** The lowest y the menu may reach, when something drawn over the window
+   * (a chat's composer) covers its bottom: the menu flips above sooner. */
+  floor?: (anchor: HTMLElement) => number | null;
   className?: string;
   style?: CSSProperties;
   children: ReactNode;
@@ -92,7 +96,7 @@ export function AnchoredPopover({
       const result = placeAnchored({
         anchor: anchor.getBoundingClientRect(),
         size: { width: node.offsetWidth || box.width, height: node.offsetHeight || box.height },
-        viewport: { width: window.innerWidth, height: window.innerHeight },
+        viewport: { width: window.innerWidth, height: Math.min(window.innerHeight, floor?.(anchor) ?? window.innerHeight) },
         align,
         side,
         gap,
@@ -113,7 +117,7 @@ export function AnchoredPopover({
       window.removeEventListener("scroll", place, true);
       resize?.disconnect();
     };
-  }, [anchorRef, ref, align, side, gap, maxHeight]);
+  }, [anchorRef, ref, align, side, gap, maxHeight, floor]);
 
   const element = createElement(
     as,

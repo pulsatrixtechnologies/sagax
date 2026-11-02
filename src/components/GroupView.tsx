@@ -6,7 +6,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { createPortal } from "react-dom";
 import { t, activeLocale } from "@/lib/i18n";
 import { useShowThreads } from "@/lib/thread-preferences";
-import { ArrowDown, ChevronDown, FolderOpen, Pin, X } from "lucide-react";
+import { ChevronDown, FolderOpen, Pin, X } from "lucide-react";
 import {
   api,
   useStore,
@@ -122,6 +122,7 @@ import { foldCollapsedEntry, voiceCallPlan, voiceCallVisibleSpan } from "@/lib/v
 import { VoiceCallCard } from "./VoiceCallCard";
 import { BotExchangeChip, ExchangeColumnProvider, TranscriptDate, useExchangeColumn } from "./BotExchangeChip";
 import { GotoGroupChip } from "./GotoGroupChip";
+import { JumpToLatestPill } from "./JumpToLatestPill";
 import { collapseGotoLines, type GotoGroup } from "@/lib/goto-lines";
 import { ActivityRun } from "./ActivityRun";
 import { CwActivityWidgets, CwWidgetView, shownCwWidget } from "./cw/CwWidgetView";
@@ -1768,17 +1769,10 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
       <TranscriptAnnouncer threadKey={transcriptKey} snapshot={announcement} />
 
       {!following && (
-        <button
-          onClick={jumpToLatest}
-          aria-label={t("chat.jumpToLatestAria")}
-          className="animate-pop-in absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-hairline/40 bg-raised px-3 py-1.5 text-[12.5px] text-ink shadow-lg hover:bg-raised-hover"
-          style={{ bottom: composerDock.height + 16 }}
-        >
-          <ArrowDown size={13} /> {t("chat.jumpToLatest")}
-        </button>
+        <JumpToLatestPill onClick={jumpToLatest} bottom={composerDock.height + 16} scrollRef={scrollRef} />
       )}
 
-      <div ref={composerDockRef} className="absolute inset-x-0 bottom-0 z-[2]">
+      <div ref={composerDockRef} data-composer-dock="" className="absolute inset-x-0 bottom-0 z-[2]">
       <Composer
         key={group.threadId}
         group={group}

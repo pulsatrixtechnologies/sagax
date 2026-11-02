@@ -18,7 +18,6 @@ import { ReactionChips } from "./Reactions";
 import { myReactions, reactionSelfIds, useToggleReaction } from "@/lib/reactions";
 import {
   AlertTriangle,
-  ArrowDown,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -185,6 +184,7 @@ import { VoiceCallCard } from "./VoiceCallCard";
 import { BotExchangeChip, ExchangeColumnProvider, TranscriptDate, useExchangeColumn } from "./BotExchangeChip";
 import { RoutineRunExchange } from "./routines/RoutineRunExchange";
 import { GotoGroupChip } from "./GotoGroupChip";
+import { JumpToLatestPill } from "./JumpToLatestPill";
 import { collapseGotoLines, gotoGroupFromConversations, silentChatItem, type GotoGroup, type GotoTarget } from "@/lib/goto-lines";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
 import { CancelledTurnRow } from "./CancelledTurnRow";
@@ -2655,14 +2655,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           Hidden only while a phone page covers the chat; desktop keeps it
           in the side pane. */}
       {!following && !pageCover && (
-        <button
-          onClick={jumpToLatest}
-          aria-label={t("chat.jumpToLatestAria")}
-          className="animate-pop-in absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-hairline/40 bg-raised px-3 py-1.5 text-[12.5px] text-ink shadow-lg hover:bg-raised-hover"
-          style={{ bottom: composerDock.height + 16 }}
-        >
-          <ArrowDown size={13} /> {t("chat.jumpToLatest")}
-        </button>
+        <JumpToLatestPill onClick={jumpToLatest} bottom={composerDock.height + 16} scrollRef={scrollRef} />
       )}
 
       {runCardOpen && lastRunStep && (

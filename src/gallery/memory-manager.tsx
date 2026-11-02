@@ -1,5 +1,5 @@
-/** Headless gallery for Tools > Memory (2026-11-02). Synthetic data only.
- * ?skin=<id>&lang=<code>&view=sources|browse|note|trash
+/** Headless gallery for Tools > Memory page (2026-11-02). Synthetic data only.
+ * ?skin=<id>&lang=<code>&view=sources|browse|note|map|trash
  */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -36,10 +36,13 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     });
   }
   if (url.includes("/api/bots/atlas/memory/file")) {
+    const travel = url.includes("travel");
     return json({
-      path: "memory/dining.md",
-      text: "# Dining\n\nPrefers short tables.\n\n```json\n{\n  \"likes\": [\"pasta\", \"bread\"],\n  \"avoids\": {\"olives\": true}\n}\n```\n",
-      hash: "abc123",
+      path: travel ? "memory/travel.md" : "memory/dining.md",
+      text: travel
+        ? "# Travel\n\nTrips with [[Dining]].\n"
+        : "# Dining\n\nPrefers short tables. See [[Travel]].\n\n```json\n{\n  \"likes\": [\"pasta\", \"bread\"],\n  \"avoids\": {\"olives\": true}\n}\n```\n",
+      hash: travel ? "trv" : "abc123",
       exists: true,
     });
   }
@@ -100,6 +103,7 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
 const store = {
   state: {
     ...initialState,
+    activeView: "memory" as const,
     memoryManagerOpen: true,
     bots: [{
       id: "atlas", threadId: "main", name: "Atlas", title: "Research", description: "",
@@ -128,8 +132,13 @@ function Shell() {
       if (cancelled) return;
       const sourceKey = view === "trash" ? "perspicax" : "bot:atlas";
       document.querySelector<HTMLButtonElement>(`[data-memory-source="${sourceKey}"]`)?.click();
-      if (view === "browse") {
-        await waitFor("[data-memory-browse]");
+      if (view === "browse" || view === "map") {
+        await waitFor("[data-memory-browse], [data-memory-map]");
+        if (view === "map") {
+          const mapToggle = [...document.querySelectorAll("button")].find((button) => /Map|Carte/i.test(button.textContent || "") && button.getAttribute("aria-pressed") !== null);
+          mapToggle?.click();
+          await waitFor("[data-memory-map]");
+        }
         if (!cancelled) setReady(true);
         return;
       }
@@ -142,7 +151,7 @@ function Shell() {
         return;
       }
       if (view === "trash") {
-        await waitFor("[data-memory-browse], [data-memory-manager-panel]");
+        await waitFor("[data-memory-browse], [data-memory-manager-page]");
         if (cancelled) return;
         const trash = [...document.querySelectorAll("button")].find((button) => /Trash|Corbeille/i.test(button.textContent || ""));
         trash?.click();
@@ -155,17 +164,11 @@ function Shell() {
 
   return (
     <div className="flex h-full bg-app" data-gallery-ready={ready ? "1" : "0"} style={{ width, height }}>
-      <div className="flex min-w-0 flex-1 flex-col border-r border-hairline/40 bg-panel px-6 py-5">
-        <div className="text-[13px] font-medium text-ink">Conversation</div>
-        <p className="mt-2 text-[12.5px] text-ink-secondary">Synthetic chat stays visible beside the memory panel.</p>
-      </div>
-      <div className="relative flex h-full" style={{ width: 480 }}>
-        <BotEditorStore value={store as never}>
-          <PanelSlotProvider slot={null}>
-            <MemoryManagerPanel />
-          </PanelSlotProvider>
-        </BotEditorStore>
-      </div>
+      <BotEditorStore value={store as never}>
+        <PanelSlotProvider slot={null}>
+          <MemoryManagerPanel />
+        </PanelSlotProvider>
+      </BotEditorStore>
     </div>
   );
 }

@@ -103,8 +103,8 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
     case "botActivityOpened":
       return state.botActivityTarget ? { ...state, botActivityTarget: null } : state;
     case "togglePlugins": {
-      // 2026-11-01 (lot 5, no modals): Connect apps fills the content frame
-      // (activeView "apps"), same place as Achievements and Automations.
+      // Capabilities is a decided centred modal (like Settings). activeView
+      // "apps" still marks it open so other views close it cleanly.
       const open = action.open ?? !(state.activeView === "apps" || state.pluginsOpen);
       if (!open) {
         return {
@@ -137,16 +137,29 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
       };
     }
     case "toggleMemoryManager": {
-      const open = action.open ?? !state.memoryManagerOpen;
-      if (!open) return state.memoryManagerOpen ? { ...state, memoryManagerOpen: false } : state;
+      // Memory is a main-column page (Automations / Team map family).
+      const open = action.open ?? !(state.activeView === "memory" || state.memoryManagerOpen);
+      if (!open) {
+        return {
+          ...state,
+          memoryManagerOpen: false,
+          activeView: state.activeView === "memory" ? "chat" : state.activeView,
+        };
+      }
       return {
         ...state,
+        activeView: "memory",
         memoryManagerOpen: true,
         settingsOpen: false,
         computerOpen: false,
         personPanelId: null,
         inspectorOpen: false,
+        activityOpen: false,
         appSettingsOpen: false,
+        pluginsOpen: false,
+        triggersOpen: false,
+        newBotOpen: false,
+        shortcutsOpen: false,
       };
     }
     case "toggleTriggers": {

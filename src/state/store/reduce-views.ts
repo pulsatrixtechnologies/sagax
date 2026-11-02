@@ -22,9 +22,9 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
         memoryManagerOpen: false,
       };
     case "showChat":
-      return state.activeView === "chat" && !state.pluginsOpen
+      return state.activeView === "chat" && !state.pluginsOpen && !state.memoryManagerOpen
         ? state
-        : { ...state, activeView: "chat", pluginsOpen: false, orgImportStaged: null };
+        : { ...state, activeView: "chat", pluginsOpen: false, memoryManagerOpen: false, orgImportStaged: null };
     case "showCode":
       return {
         ...state,

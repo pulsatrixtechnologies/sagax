@@ -32,7 +32,7 @@
 // plugins, servers, apps, skills and marketplaces. Other screens link here
 // or choose among them for one bot; keys stay in Settings > API keys.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink, Loader2, X } from "lucide-react";
 
 import { confirmAsync, useConfirm } from "@/components/ConfirmProvider";
 import { api, ApiError, useStore } from "@/state/store";
@@ -93,8 +93,7 @@ import { MyGithubConnection, MyGithubSummary, MyMcpServers } from "./settings/My
 import { useServerMode } from "./ServerModeSettings";
 import { ConnectAppsView, connectAppsTabLabel, connectedCounts, isProvidersLink, normalizeConnectAppsTab, type ConnectAppsTab } from "./plugins/ConnectAppsView";
 import type { Crumb } from "./Breadcrumb";
-import { cardActionClass } from "./category-modal";
-import { PageTopStrip } from "./content-page";
+import { CATEGORY_MODAL, cardActionClass } from "./category-modal";
 import { BotCatalogPane } from "./lazy-screens";
 import { useBotCatalogSources } from "./bot-catalog/use-bot-catalog-sources";
 import { catalogSections, type CatalogItem } from "@/lib/bot-catalog";
@@ -269,7 +268,7 @@ export function PluginsPanel() {
   const confirm = useConfirm();
   const { state, dispatch } = useStore();
   const remoteClient = window.ogb?.remoteClient?.active === true;
-  const dialogRef = useRef<HTMLElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const mcp = useMcpServers();
   const [stack, setStack] = useState<Page[]>([{ page: "main" }]);
   const page = stack[stack.length - 1]!;
@@ -428,10 +427,10 @@ export function PluginsPanel() {
   const back = useCallback(() => setStack((current) => current.length > 1 ? current.slice(0, -1) : current), []);
   useEffect(() => { void BotCatalogPane.preload().catch(() => undefined); }, []);
 
-  // Focus and keys (content view, lot 5): Escape steps back one page (the
-  // Bots tab's own steps first), then leaves the view; Cmd+[ steps back and
-  // never leaves. A search with text takes Escape first: it empties
-  // (ConnectAppsSearch). Tab is free (no modal trap).
+  // Focus and keys (centred modal, decided exception like Settings): Escape
+  // steps back one page (the Bots tab's own steps first), then closes;
+  // Cmd+[ steps back and never closes. A search with text takes Escape
+  // first: it empties (ConnectAppsSearch). Tab stays inside the dialog.
   const pageRef = useRef(page);
   pageRef.current = page;
   const botsTabRef = useRef(false);
@@ -439,21 +438,46 @@ export function PluginsPanel() {
   const depthRef = useRef(stack.length - 1);
   depthRef.current = stack.length - 1;
   useEffect(() => {
-    const main = dialogRef.current;
-    main?.focus({ preventScroll: true });
+    const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ) ?? []);
+    (dialog?.querySelector<HTMLElement>("input") ?? focusable()[0] ?? dialog)?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" && !isBackShortcut(event)) return;
-      // A dialog or popover opened inside this view owns its keys.
-      const nested = main?.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]');
-      if (event.defaultPrevented || (nested && nested.getClientRects().length > 0)) return;
-      if (document.body.querySelector("[data-data-center-dialog]")) return;
-      event.preventDefault();
-      const action = pageKeyAction(event, { depth: depthRef.current, innerBack: botsTabRef.current ? () => botsBack.current?.() ?? false : undefined });
-      if (action === "back") back();
-      else if (action === "close") close();
+      if (event.key === "Escape" || isBackShortcut(event)) {
+        // A dialog opened inside this one (Browse Bots' confirmations) owns its keys.
+        const nested = dialog?.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+        if (event.defaultPrevented || (nested && nested.getClientRects().length > 0)) return;
+        if (document.body.querySelector("[data-data-center-dialog]")) return;
+        event.preventDefault();
+        const action = pageKeyAction(event, { depth: depthRef.current, innerBack: botsTabRef.current ? () => botsBack.current?.() ?? false : undefined });
+        if (action === "back") back();
+        else if (action === "close") close();
+        return;
+      }
+      if (event.key !== "Tab" || !dialog) return;
+      const items = focusable();
+      if (items.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items.at(-1)!;
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      returnFocus?.focus();
+    };
   }, [back, close]);
 
   // The bot scope reads the same marketplaces through the bot: installed
@@ -1245,7 +1269,6 @@ export function PluginsPanel() {
     <ConnectAppsView
       tab={tab}
       onTab={chooseTab}
-      onBack={close}
       page={subpage ?? undefined}
       tabs={tabs}
       // what "N connected" counted, on the tabs that list them (2026-10-28):
@@ -1370,18 +1393,37 @@ export function PluginsPanel() {
   dataCenterAnchor.current = dataCenterFor?.anchor ?? null;
 
   return (
-    <main
-      ref={dialogRef}
-      data-tour="apps-panel"
-      data-plugins-page={page.page}
-      data-plugins-depth={stack.length - 1}
-      data-gallery-frame=""
-      aria-labelledby="plugins-title"
-      tabIndex={-1}
-      className="flex h-full min-w-0 flex-1 flex-col bg-app outline-none"
+    <div
+      className={CATEGORY_MODAL.backdrop}
+      onMouseDown={(event) => event.target === event.currentTarget && close()}
     >
-      <PageTopStrip />
-      {content}
+      {/* Capabilities centred modal (decided exception like Settings): same
+          size and close button as Browse Bots used to share. */}
+      <div
+        ref={dialogRef}
+        data-tour="apps-panel"
+        data-plugins-page={page.page}
+        data-plugins-depth={stack.length - 1}
+        data-gallery-frame=""
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="plugins-title"
+        tabIndex={-1}
+        className={cn("animate-pop-in", CATEGORY_MODAL.frame)}
+      >
+        <div className={CATEGORY_MODAL.content}>
+          <button
+            type="button"
+            data-tour="apps-close"
+            onClick={close}
+            aria-label={t("common.close")}
+            className={CATEGORY_MODAL.close}
+          >
+            <X size={18} />
+          </button>
+          {content}
+        </div>
+      </div>
       {dataCenterFor && (
         <DataCenterDialog
           name={dataCenterFor.item.name}
@@ -1396,7 +1438,7 @@ export function PluginsPanel() {
           }}
         />
       )}
-    </main>
+    </div>
   );
 }
 

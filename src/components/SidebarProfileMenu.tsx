@@ -319,7 +319,7 @@ export function profileMenuItems(input: {
   mobile: boolean;
   achievementsLabel: string | null;
   automationsActive: boolean;
-  /** Tools > Memory panel is open */
+  /** Tools > Memory page is open */
   memoryActive?: boolean;
   /** Team map is the page on screen */
   teamMapActive?: boolean;
@@ -679,7 +679,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
     mobile: SAGAX_MOBILE_URL !== null,
     achievementsLabel: achievements.status === "ready" ? t("achievements.menu") : null,
     automationsActive: state.activeView === "routines",
-    memoryActive: state.memoryManagerOpen,
+    memoryActive: state.activeView === "memory" || state.memoryManagerOpen,
     teamMapActive: state.activeView === "team-map",
     teamMap: window.ogb?.remoteClient?.active !== true,
     remoteSessionsActive: state.activeView === "remote-sessions",

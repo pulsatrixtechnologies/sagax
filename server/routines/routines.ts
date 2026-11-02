@@ -253,13 +253,21 @@ function loadSuspension(value: unknown): RoutineSuspension | undefined {
 }
 
 /** What admission answers for a run (slice 6). */
-export type RoutineAdmission = { ok: true } | { ok: false; error: string; suspend?: RoutineSuspendReason; retryAfterMs?: number };
+export type RoutineAdmission = { ok: true } | { ok: false; error: string; suspend?: RoutineSuspendReason; retryAfterMs?: number;
+  /** What the run says when its retries are spent (default: the rate limit's words). */
+  skipped?: string };
 
 /** Slice 6, fix 2: a rate-limited admission is retried this many times. */
 export const ROUTINE_ADMIT_MAX_ATTEMPTS = 3;
 export const ROUTINE_ADMIT_BASE_MS = 60_000;
 export const ROUTINE_ADMIT_MAX_MS = 600_000;
 export const ROUTINE_RATE_LIMITED_SKIPPED = "Perspicax is rate limiting this server; this run is skipped";
+/** 2026-11-02: Perspicax unreachable at admission (a connector roll) is
+ * retried like a rate limit (1, 2 then 4 minutes later, in the same run
+ * window) instead of skipping the run at once. */
+export const ROUTINE_UNREACHABLE_RETRY_MS = 30_000;
+export const ROUTINE_UNREACHABLE_RETRIED = "Perspicax is unreachable for now; this run is retried in a moment";
+export const ROUTINE_UNREACHABLE_SKIPPED = "Perspicax stayed unreachable for several minutes; this run is skipped and the next one tries again";
 
 /** The wait before the next admission of a rate-limited run: the larger of
  * Retry-After and 60 s doubling per attempt, at most 10 minutes. */
@@ -3319,7 +3327,7 @@ export class RoutineManager {
           if (run.status !== "queued") continue;
           if (!admission.ok) {
             if (admission.retryAfterMs !== undefined && !admission.suspend) {
-              // A rate limit is retried a few times; the routine is never
+              // A rate limit (or Perspicax unreachable for a moment) is retried a few times; the routine is never
               // paused for it. While the run waits, the occurrences that fall
               // due fold into it (a queued run of the routine already stands
               // for them), so even a per-minute routine gets its retries.
@@ -3333,7 +3341,7 @@ export class RoutineManager {
                 this.emitRun(run);
                 continue;
               }
-              this.failRun(run, ROUTINE_RATE_LIMITED_SKIPPED);
+              this.failRun(run, admission.skipped ?? ROUTINE_RATE_LIMITED_SKIPPED);
               continue;
             }
             this.failRun(run, admission.error);

@@ -688,6 +688,32 @@ droite ; c'est une page comme Automations et la carte d'équipe).
 - Code : `src/components/memory-manager/MemoryManagerPanel.tsx`,
   `MemoryMapCanvas.tsx`, `src/lib/memory-map.ts`.
 
+### 2.22 Messages d'un autre bot (boîte d'entrée du bot)
+
+Ajouté le 2026-11-02 (JC : « tu as reçu plein de messages de Katarina, pourquoi tu ne
+t'en occupes pas ? », et c'est pareil pour tous les bots). Comme Grok Bot : un bot traite
+les messages de ses coéquipiers à leur arrivée et ne montre à la personne que ce qui a
+besoin d'elle.
+
+- **À l'arrivée.** Un avis à sens unique (`send_to_bot`) roule une fois dans son propre fil
+  du bot qui le reçoit (inchangé). Quand ce tour finit, un bot en mode proactif est réveillé
+  dans sa conversation : il voit le message et ce que le tour en a fait.
+- **Regroupé.** Plusieurs messages dans une courte fenêtre (30 s, puis au plus un réveil
+  aux 2 minutes et 12 à l'heure) donnent un seul réveil, donc un seul rapport.
+- **Ce que la personne voit.** Une ligne de rapport dans la conversation du bot quand il y a
+  quelque chose ; tout ce qui demande une décision (GO d'une écriture, approbation) est
+  réuni dans **une seule carte**, jamais une carte par message. Une question posée dans le
+  fil de l'avis arrive aussi en carte dans la conversation du bot qui l'a reçu.
+- **Pas de ping-pong.** Une réponse au bot qui a écrit compte comme un saut ; la chaîne
+  s'arrête à 3 sauts. Un bot ne répond pas seulement pour accuser réception.
+- **Tous les bots.** Bot principal, bot d'équipe ou bot solo : même règle. Mode proactif
+  désactivé : rien ne se réveille.
+- **Les rangées « Aller à la conversation ».** Les pointeurs vers les fils d'avis se
+  regroupent visuellement ailleurs (travail séparé) ; ils ne remplacent pas le réveil.
+- Code : `server/proactive-wake.ts` (`peerNoticeEvent`, `PeerNoticeHops`,
+  `PEER_WAKE_RULES`), `server/index.ts` (`offerPeerNotice`, rapport d'un avis à sens unique,
+  `postInputRequest`).
+
 ---
 
 ## 3. Cursor : ce qu'on retient

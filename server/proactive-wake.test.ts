@@ -10,6 +10,8 @@ import { describe, expect, it } from "vitest";
 import type { ProactiveMode } from "../shared/proactive-mode.ts";
 import { ROUTINE_RESTARTED } from "./routines/routines.ts";
 import {
+  PEER_WAKE_RULES,
+  PeerNoticeHops,
   PROACTIVE_MAX_HOPS,
   ProactiveProposals,
   ProactiveWaker,
@@ -17,6 +19,7 @@ import {
   proactivePrompt,
   proactiveRelevance,
   proactiveWakePrompt,
+  peerNoticeEvent,
   runFailureWakesBot,
   proposalCardWords,
   textNamesBot,
@@ -318,5 +321,88 @@ describe("a yes whose wake cannot start (2026-11-01)", () => {
     expect(store.answer(added.id, "accepted", () => { started += 1; })?.answered).toBe("accepted");
     expect(store.answer(added.id, "accepted", () => { started += 1; })).toBeNull();
     expect(started).toBe(1);
+  });
+});
+
+describe("teammates' messages (peer inbox, 2026-11-02)", () => {
+  const notice = (receiverId: string, n: number, extra: Partial<Parameters<typeof peerNoticeEvent>[0]> = {}) => peerNoticeEvent({
+    receiverId, noticeId: `node-${n}`, threadId: `th-${n}`, title: `Alubar write ${n}`, status: "completed",
+    text: `Dry run done for write ${n}; GO needed.`, result: `Checked write ${n}; it needs JC's GO.`,
+    senderId: "katarina", senderName: "Katarina", ...extra,
+  });
+
+  it("a teammate's notice always concerns its receiver: it wakes it, whatever kind of bot it is", () => {
+    const h = harness({ primary: "proactive", team: "proactive", solo: undefined });
+    for (const bot of ["primary", "team", "solo"]) expect(h.waker.offer(notice(bot, 1))).toBe("gathered");
+    h.advance(30_000);
+    expect(h.woken.map((batch) => batch.botId).sort()).toEqual(["primary", "solo", "team"]);
+    for (const batch of h.woken) {
+      expect(batch.reasons).toEqual(["a teammate sent it a message"]);
+      expect(batch.hops).toBe(1);
+    }
+  });
+
+  it("several messages within the window become ONE wake, with every message and its outcome", () => {
+    const h = harness({ team: "proactive" });
+    for (const n of [1, 2, 3]) {
+      h.waker.offer(notice("team", n));
+      h.advance(5_000);
+    }
+    h.advance(30_000);
+    expect(h.modelCalls()).toBe(1);
+    const prompt = proactiveWakePrompt(h.woken[0]!);
+    for (const n of [1, 2, 3]) {
+      expect(prompt).toContain(`Dry run done for write ${n}; GO needed.`);
+      expect(prompt).toContain(`Checked write ${n}; it needs JC's GO.`);
+    }
+    // one card for all of them, and no acknowledgement ping-pong
+    expect(prompt).toContain(PEER_WAKE_RULES);
+    expect(prompt).toContain("ONE card for all of these messages");
+    expect(wakeLine(h.woken[0]!)).toContain("Message from Katarina (x3)");
+    expect(wakeLine(h.woken[0]!)).not.toContain("Alubar");
+  });
+
+  it("the same notice reported twice (a restart's reconcile) wakes once", () => {
+    const h = harness({ team: "proactive" });
+    expect(h.waker.offer(notice("team", 1))).toBe("gathered");
+    expect(h.waker.offer(notice("team", 1))).toBe("duplicate");
+  });
+
+  it("off: a teammate's notice wakes nothing", () => {
+    const h = harness({ team: "off" });
+    expect(h.waker.offer(notice("team", 1))).toBe("off");
+    h.advance(60_000);
+    expect(h.woken).toEqual([]);
+  });
+
+  it("replies between two bots count against the hop limit: no ping-pong", () => {
+    const hops = new PeerNoticeHops();
+    const h = harness({ melonie: "proactive", katarina: "proactive" });
+    // a person's turn of Katarina sends a notice to Melonie: hop 1
+    const first = hops.note("mel-th-1", 0);
+    expect(h.waker.offer(notice("melonie", 1, { threadId: "mel-th-1", hops: first }))).toBe("gathered");
+    // Melonie's wake (hop 1) replies to Katarina: hop 2, still woken
+    const second = hops.note("kat-th-1", 1 + 1);
+    expect(h.waker.offer(notice("katarina", 2, { threadId: "kat-th-1", hops: second, senderId: "melonie", senderName: "Melonie" }))).toBe("gathered");
+    // Katarina's wake (hop 2) answers again: hop 3, the chain stops
+    const third = hops.note("mel-th-2", second + 1);
+    expect(third).toBe(PROACTIVE_MAX_HOPS);
+    expect(h.waker.offer(notice("melonie", 3, { threadId: "mel-th-2", hops: third }))).toBe("hops");
+    // a notice turn (not a wake) that writes on carries the chain too
+    expect(hops.get("mel-th-2")).toBe(3);
+  });
+
+  it("a notice is at least hop 1 (a bot sent it), and the kept hops are bounded", () => {
+    const hops = new PeerNoticeHops(2);
+    expect(hops.note("a", 0)).toBe(1);
+    hops.note("b", 2);
+    hops.note("c", 1);
+    expect(hops.get("a")).toBeUndefined();
+    expect(hops.get("b")).toBe(2);
+    expect(proactiveRelevance(notice("x", 1))).toBe("a teammate sent it a message");
+  });
+
+  it("every turn of a proactive bot knows teammates' messages wake it", () => {
+    expect(proactivePrompt("proactive")).toContain("teammates' messages");
   });
 });

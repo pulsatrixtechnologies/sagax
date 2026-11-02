@@ -140,6 +140,34 @@ export interface PerspicaxMcpOptions {
   fetch?: typeof fetch;
   now?: () => number;
   log?: (line: string) => void;
+  /** The waits between tries of a routine's transient Perspicax failure
+   * (PERSPICAX_ROUTINE_RETRY_MS); replaced in tests. */
+  routineRetryMs?: readonly number[];
+  /** Waits that long (tests replace it). */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/** 2026-11-02: a routine (nobody at the keyboard) waits out a short Perspicax
+ * outage, such as a connector roll of about two minutes, instead of running
+ * without its tools or failing a call: these waits, about 2 min 17 s in all,
+ * between tries of a transient failure (unreachable, rate limited, HTTP 502
+ * or 503, connection refused). A person's own turn keeps the single quick
+ * retry: they are there to try again. */
+export const PERSPICAX_ROUTINE_RETRY_MS: readonly number[] = [2_000, 5_000, 10_000, 20_000, 40_000, 60_000];
+/** HTTP answers of an edge whose upstream is down for a moment. */
+const TRANSIENT_HTTP = new Set([502, 503]);
+/** Network errors that mean the request never left (nothing was sent). */
+const UNSENT_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH"]);
+
+/** A failed fetch that never reached Perspicax (connection refused, name
+ * not resolved): safe to send again, even a write. */
+export function perspicaxUnsent(error: unknown): boolean {
+  for (let at: unknown = error, depth = 0; at && depth < 4; depth += 1) {
+    const code = (at as { code?: unknown }).code;
+    if (typeof code === "string" && UNSENT_CODES.has(code)) return true;
+    at = (at as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 export const REMOTE_SUPPORT_OPEN_UNAVAILABLE =
@@ -399,6 +427,8 @@ export class PerspicaxMcp {
   private readonly fetcher: typeof fetch;
   private readonly now: () => number;
   private readonly log: (line: string) => void;
+  private readonly routineRetryMs: readonly number[];
+  private readonly sleep: (ms: number) => Promise<void>;
   private readonly entries = new Map<string, Entry>();
   /** tokens a call keeps between turns (keepWarm), by thread, profile and speaker */
   private readonly warm = new Map<string, Entry>();
@@ -421,6 +451,8 @@ export class PerspicaxMcp {
     this.fetcher = options.fetch ?? fetch;
     this.now = options.now ?? Date.now;
     this.log = options.log ?? ((line) => console.log(line));
+    this.routineRetryMs = options.routineRetryMs ?? PERSPICAX_ROUTINE_RETRY_MS;
+    this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
   /** Exchange the speaker's access for each profile of the bot, before the
@@ -500,6 +532,18 @@ export class PerspicaxMcp {
       await new Promise((resolve) => setTimeout(resolve, RETRY_EXCHANGE_MS));
       const again = await exchangeAll(signIn.token, transient);
       results = results.map((entry) => again.find((retry) => retry.profileId === entry.profileId) ?? entry);
+    }
+    // 2026-11-02: a routine waits out a short outage (a connector roll)
+    // with backoff before a profile is left out of its turn.
+    if (source === "delegation") {
+      for (const wait of this.routineRetryMs) {
+        const still = results.filter(({ result }) => !result.ok && TRANSIENT.has(result.error)).map(({ profileId }) => profileId);
+        if (!still.length) break;
+        this.log(`perspicax mcp: routine exchange for ${still.join(", ")} still refused; trying again in ${Math.round(wait / 1000)} s`);
+        await this.sleep(wait);
+        const again = await exchangeAll(signIn.token, still);
+        results = results.map((entry) => again.find((retry) => retry.profileId === entry.profileId) ?? entry);
+      }
     }
     if (source === "delegation" && results.some(({ result }) => !result.ok && result.error === "subject")) {
       // The cached delegation token was refused (revoked from the console,
@@ -667,7 +711,9 @@ export class PerspicaxMcp {
       await this.reopen(link, entry);
     }
     const usedSession = entry.mcpSessionId;
-    const sent = await this.send(link, entry, frame);
+    const sent = entry.source === "delegation" && !notification
+      ? await this.sendForRoutine(link, entry, frame)
+      : await this.send(link, entry, frame);
     if (sent === "ended") return ended();
     if (sent === "unreachable") return notification ? { status: 202 } : { status: 200, body: rpcError(id, -32000, "Perspicax is unavailable") };
     let { response, text } = sent;
@@ -829,9 +875,33 @@ export class PerspicaxMcp {
     return { ok: true, isError: result.isError === true, value: value ?? null };
   }
 
+  /** 2026-11-02: send for a routine, with backoff over a transient failure
+   * (PERSPICAX_ROUTINE_RETRY_MS). A read, or anything that never left
+   * (connection refused), is tried again on unreachable, HTTP 502 or 503.
+   * A call that can change data is tried again only when it surely did not
+   * run: never sent, or answered 503 (unavailable, not processed); a 502 or
+   * a cut answer may have run it, so the bot gets the failure instead. */
+  private async sendForRoutine(link: PerspicaxMcpLink, entry: Entry, frame: Json): Promise<{ response: Response; text: string } | "ended" | "unreachable"> {
+    const replayable = perspicaxReplayable(frame) || frame.method === "initialize";
+    for (let attempt = 0; ; attempt += 1) {
+      const note: { unsent?: boolean } = {};
+      const sent = await this.send(link, entry, frame, note);
+      if (sent === "ended") return sent;
+      const status = sent === "unreachable" ? 0 : sent.response.status;
+      const retry = sent === "unreachable"
+        ? replayable || note.unsent === true
+        : TRANSIENT_HTTP.has(status) && (replayable || status === 503);
+      const wait = this.routineRetryMs[attempt];
+      if (!retry || wait === undefined) return sent;
+      this.log(`perspicax mcp: profile ${entry.profileId} ${status ? `answered HTTP ${status}` : "could not be reached"} during a routine; trying again in ${Math.round(wait / 1000)} s`);
+      await this.sleep(wait);
+      if (entry.ended) return "ended";
+    }
+  }
+
   /** POST one frame with the entry's token and session; a 401 renews the
    * token once. The answer is read whole (bounded); the session it names is kept. */
-  private async send(link: PerspicaxMcpLink, entry: Entry, frame: Json): Promise<{ response: Response; text: string } | "ended" | "unreachable"> {
+  private async send(link: PerspicaxMcpLink, entry: Entry, frame: Json, note?: { unsent?: boolean }): Promise<{ response: Response; text: string } | "ended" | "unreachable"> {
     let response: Response;
     try {
       response = await this.post(link.mcpEndpoint(), entry, frame);
@@ -847,6 +917,7 @@ export class PerspicaxMcp {
       }
     } catch (error) {
       this.log(`perspicax mcp: a call could not reach Perspicax (${error instanceof Error ? error.name : "error"})`);
+      if (note && perspicaxUnsent(error)) note.unsent = true;
       return "unreachable";
     }
     const session = response.headers.get("mcp-session-id");

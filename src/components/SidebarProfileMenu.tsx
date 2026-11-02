@@ -68,6 +68,7 @@ import { api } from "@/state/store";
 import { accountChoices, businessAccount, SAGAX_MOBILE_URL, switchAccount, switchTargets as listSwitchTargets, usageLines as planUsageLines, usagePercent as planUsagePercent, type AccountChoice, type SwitchTarget, type UsageLine } from "@/lib/account-menu";
 import { connectedPlanRows, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
 import { costOf, formatCost, personalUsagePeriods, usageQuery, type PersonalUsageSummary } from "@/lib/usage-personal";
+import { requestAbout } from "@/lib/about-ui";
 import { requestReleaseNotes } from "@/lib/release-notes-ui";
 import { serverModeBridge } from "@/lib/launch";
 import { openExternalLink } from "@/lib/app-links";
@@ -711,7 +712,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
         dispatch({ type: "toggleShortcuts", open: true });
       },
       onReleaseNotes: () => requestReleaseNotes("browse"),
-      onAbout: () => dispatch({ type: "toggleAppSettings", open: true, section: "updates" }),
+      onAbout: () => requestAbout(),
       onViewUsage: () => dispatch({ type: "toggleAppSettings", open: true, section: "usage" }),
       // Switching never signs out: from an organization server's page,
       // Personal opens through the desktop and the server stays signed in.

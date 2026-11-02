@@ -51,12 +51,32 @@ describe("buildApplicationMenu", () => {
     expect(JSON.stringify(appMenu)).not.toContain("openmausbot");
   });
 
+  it("macOS About opens the in-app About modal, not the native about panel", () => {
+    const onOpenAbout = vi.fn();
+    const [appMenu] = build("darwin", { onOpenAbout });
+    const about = appMenu.submenu.find((entry) => entry.label === "About Sagax");
+    expect(about.role).toBeUndefined();
+    expect(about.click).toBeTypeOf("function");
+    about.click();
+    expect(onOpenAbout).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["linux", "win32"])("does not add an app menu on %s", (platform) => {
     const template = build(platform);
     expect(template[0].role).toBe("fileMenu");
     for (const item of template) {
       expect(item.label).not.toBe("Sagax");
     }
+  });
+
+  it.each(["linux", "win32"])("Help > About opens the in-app About modal on %s", (platform) => {
+    const onOpenAbout = vi.fn();
+    const template = build(platform, { onOpenAbout });
+    const help = template.find((entry) => entry.role === "help");
+    expect(help).toBeDefined();
+    const about = help.submenu.find((entry) => entry.label === "About");
+    about.click();
+    expect(onOpenAbout).toHaveBeenCalledTimes(1);
   });
 
   it.each(["darwin", "linux", "win32"])("does not offer hosted organisation sign-in on %s", platform => {

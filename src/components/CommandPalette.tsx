@@ -37,6 +37,7 @@ import type { SearchHit } from "@/lib/search-hit";
 import { landOnSearchHit } from "@/lib/focus-message";
 import { navigate } from "@/lib/view-transitions";
 import { isMacPlatform } from "@/lib/keyboard-shortcuts";
+import { requestAbout } from "@/lib/about-ui";
 import { requestReleaseNotes } from "@/lib/release-notes-ui";
 import { setComposerChannelMode } from "@/lib/drafts";
 import { useAllArtifacts } from "@/lib/artifacts";
@@ -263,6 +264,10 @@ export function CommandPalette({
         dispatch({ type: "togglePlugins", open: true });
         return;
       case "settings":
+        if (action.section === "about") {
+          requestAbout();
+          return;
+        }
         dispatch({ type: "toggleAppSettings", open: true, ...(action.section ? { section: action.section } : {}) });
         return;
       case "botSettings":

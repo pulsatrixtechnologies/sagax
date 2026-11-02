@@ -13,6 +13,17 @@ enum AboutLinks {
     static let license = URL(string: "https://github.com/pulsatrixtechnologies/sagax/blob/main/LICENSE")!
 }
 
+/// About footer license line. Single constant so the UI follows LICENSE on
+/// the tree (desktop `APP_LICENSE_ID` / `about.copyright`). Today LICENSE is
+/// PolyForm Noncommercial 1.0.0; change only here when LICENSE switches.
+enum AboutLicense {
+    static let id = "PolyForm Noncommercial 1.0.0"
+    static let footer = "© 2026 Pulsatrix Technologies inc. Free for noncommercial use (\(id))."
+    /// Upstream OpenMausBot release this fork is based on (package.json baseVersion).
+    static let basedOnVersion = "0.1.107"
+    static var basedOn: String { String(localized: "Based on OpenMausBot \(basedOnVersion)") }
+}
+
 struct AboutPage: View {
     @Environment(\.themePalette) var themePalette
     @State private var link: URL?
@@ -59,7 +70,8 @@ struct AboutPage: View {
                 CardHairline(leadingInset: SettingsMetrics.rowInset)
                 SettingsRow(title: "License", accessory: .chevron, identifier: "about-license") { link = AboutLinks.license }
             }
-            SettingsFooter(text: "© 2026 Pulsatrix Technologies inc. Free for noncommercial use (PolyForm Noncommercial 1.0.0).")
+            // Footer follows LICENSE on the tree (APP_LICENSE_FOOTER / about.copyright).
+            SettingsFooter(text: "\(AboutLicense.footer)\n\(AboutLicense.basedOn)")
         }
         .navigationDestination(isPresented: $showingReleaseNotes) { ReleaseNotesPage() }
         .sheet(item: Binding(get: { link.map(IdentifiedURL.init) }, set: { link = $0?.url })) { item in

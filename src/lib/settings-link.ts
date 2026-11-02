@@ -2,6 +2,7 @@
 // screen actually shows, and a button opens it. The label is the same one
 // the Settings navigation uses, so a renamed section updates every pointer.
 import type { LocaleKey } from "@/locales";
+import { requestAbout } from "@/lib/about-ui";
 import { t } from "@/lib/i18n";
 import { requestSettingsCard } from "@/components/SettingsPrimitives";
 import type { AppSettingsSection } from "@/state/store";
@@ -42,6 +43,7 @@ const SECTION_LABEL = {
   notifications: "settings.section.notifications",
   memory: "settings.section.organization",
   updates: "settings.updates.title",
+  about: "sidebar.menu.about",
   security: "settings.section.security",
   // Published pages are a section of Connect apps > Manage (2026-10-26).
   pages: "connectApps.title",
@@ -63,6 +65,11 @@ export function openSettings(dispatch: SettingsDispatch, section: AppSettingsSec
   // Published pages moved to Connect apps > Manage (2026-10-26).
   if (section === "pages") {
     dispatch({ type: "togglePlugins", open: true, page: "pages" });
+    return;
+  }
+  // About is its own centred modal (last under App), not a Settings pane.
+  if (section === "about") {
+    requestAbout();
     return;
   }
   // The organization's sources and access moved to Connect apps > Sources

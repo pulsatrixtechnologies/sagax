@@ -4,12 +4,27 @@ import type {Action, AppState} from "./model";
 
 export type ReduceFn = (state: AppState, action: Action) => AppState;
 
+/** 2026-11-02 (JC): a full page (Automations, Code, Approvals, Remote
+ * sessions, Achievements, Team map) never keeps a bot's or a person's right
+ * panel open: every right-slot panel closes when the page opens. */
+export const closedRightPanels = {
+  settingsOpen: false,
+  computerOpen: false,
+  personPanelId: null,
+  panelOwner: null,
+  inspectorOpen: false,
+  activityOpen: false,
+  appSettingsOpen: false,
+  routineRunSheet: null,
+} satisfies Partial<AppState>;
+
 export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn): AppState | undefined {
   switch (action.type) {
     case "showRoutines":
       return {
         ...state,
         activeView: "routines",
+        ...closedRightPanels,
         routinesFocus: { section: action.section, view: action.view, botId: action.botId, routineId: action.routineId, runStatus: action.runStatus, runId: action.runId, nonce: state.routinesFocus.nonce + 1 },
         settingsOpen: false,
         personPanelId: null,
@@ -29,6 +44,7 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
       return {
         ...state,
         activeView: "code",
+        ...closedRightPanels,
         codeFocus: { ...(action.runId ? { runId: action.runId } : {}), nonce: state.codeFocus.nonce + 1 },
         settingsOpen: false,
         computerOpen: false,
@@ -43,6 +59,7 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
       return {
         ...state,
         activeView: "approvals",
+        ...closedRightPanels,
         settingsOpen: false,
         computerOpen: false,
         inspectorOpen: false,
@@ -56,6 +73,7 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
       return {
         ...state,
         activeView: "remote-sessions",
+        ...closedRightPanels,
         settingsOpen: false,
         computerOpen: false,
         inspectorOpen: false,
@@ -69,6 +87,7 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
       return {
         ...state,
         activeView: "achievements",
+        ...closedRightPanels,
         achievementsFocus: { category: action.category ?? "all", nonce: state.achievementsFocus.nonce + 1 },
         settingsOpen: false,
         personPanelId: null,
@@ -136,6 +155,7 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
       return {
         ...state,
         activeView: "team-map",
+        ...closedRightPanels,
         settingsOpen: false,
         computerOpen: false,
         inspectorOpen: false,

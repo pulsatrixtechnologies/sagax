@@ -6,8 +6,25 @@
 // there is never a second microphone or a second voice.
 import { useSyncExternalStore } from "react";
 
-import type { VoiceCall } from "./call";
 import type { CallState } from "./call-machine";
+
+/** What the pill and the mascot drive on a call, whichever engine runs it
+ * (the realtime voice, realtime-call.ts, or the older pipeline, call.ts). */
+export interface CallControls {
+  readonly current: CallState;
+  readonly analysers: { mic: AnalyserNode | null; bot: AnalyserNode | null };
+  readonly enrolled: boolean;
+  enroll(progress: (share: number) => void): Promise<boolean>;
+  forgetVoice(): void;
+  interrupt(): void;
+  hold(): void;
+  resume(): void;
+  pushToTalk(down: boolean): void;
+  setMuted(muted: boolean): void;
+  /** the pipeline's endpoint and on-device models (absent on the realtime voice) */
+  readonly endpointMs?: number;
+  readonly modelsReady?: boolean;
+}
 import type { stageDurations } from "./latency";
 
 export interface LiveCallTranscriptLine {
@@ -31,8 +48,10 @@ export interface LiveCallMetrics {
 
 export interface LiveCallData {
   botId: string;
-  call: VoiceCall;
+  call: CallControls;
   state: CallState;
+  /** the call runs on the realtime voice (no voiceprint, no pipeline settings) */
+  realtime?: boolean;
   /** when the call started (Date.now()) */
   startedAt: number;
   heard: string;
@@ -59,7 +78,7 @@ export function publishLiveCall(data: LiveCallData | null): void {
 }
 
 /** Ownership-safe: an engine going away never clears a newer engine's call. */
-export function retractLiveCall(call: VoiceCall): void {
+export function retractLiveCall(call: CallControls): void {
   if (current?.call === call) publishLiveCall(null);
 }
 

@@ -143,6 +143,9 @@ export interface InternalRoomsDeps {
   turnAttachmentKey(threadId: string, turnId?: string): string;
   offerRoomPostToBots(room: InternalRoomsGroup, poster: InternalRoomsBot, text: string, messageId: string, hops: number): void;
   proactiveHopsFromThread(threadId: string | undefined): number;
+  /** A one-way notice now runs in `threadId` of its receiver, sent from
+   * `fromThreadId`: its hop in a chain of bots (peer inbox, 2026-11-02). */
+  notePeerNotice?(threadId: string, fromThreadId: string): void;
   pollOnlyCaller(capability: InternalCapabilityView): boolean;
   peerSpeaker(fromBotId: string, fromThreadId?: string): unknown;
   cloudGuestDriven(threadId: string): boolean;
@@ -837,6 +840,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
         store.deleteTask(target.id, task.threadId);
       }
       const threadId = node.threadId;
+      if (oneWay) deps.notePeerNotice?.(threadId, fromThreadId);
       const openedTitle = store.taskByThread(target.id, threadId)?.title ?? task.title;
       if (threadId === task.threadId) {
         const chip: Omit<Message, "id" | "at"> = {

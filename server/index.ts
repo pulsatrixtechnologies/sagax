@@ -196,6 +196,8 @@ import {
   ProactiveWaker,
   proactivePrompt,
   textNamesBot,
+  PeerNoticeHops,
+  peerNoticeEvent,
   proactiveWakePrompt,
   runFailureWakesBot,
   type ProactiveEvent,
@@ -1228,6 +1230,9 @@ import {
   PREWARM_ENGINE_LEAD_MS,
   ROUTINE_RESTARTED,
   ROUTINE_RESUME_PROMPT,
+  ROUTINE_UNREACHABLE_RETRIED,
+  ROUTINE_UNREACHABLE_RETRY_MS,
+  ROUTINE_UNREACHABLE_SKIPPED,
   RoutineManager,
   setRoutineTimeZone,
   type Routine,
@@ -1613,6 +1618,8 @@ import {
 } from "./turn-trace.ts";
 import { unansweredCallMessage, VOICE_CALL_WATCHDOG_MS, voiceCallRecoveryPrompt } from "./voice-call-watchdog.ts";
 import * as grokVoice from "./tts/grok.ts";
+import { realtimeUrl, WORK_TIMEOUT_MS as REALTIME_WORK_TIMEOUT_MS } from "./realtime-call.ts";
+import { realtimeWork } from "./realtime-call-host.ts";
 import { createOpenAiVoice } from "./tts/openai-voice.ts";
 import { createOpenAiStt } from "./tts/openai-stt.ts";
 import { createElevenLabsVoice } from "./tts/elevenlabs-voice.ts";
@@ -12495,6 +12502,8 @@ const coordinator: Coordinator = createCoordinator({
       // A one-way send's result, failure and questions stay in its own
       // thread: nothing goes back to the sender. A failure says so there.
       if (child.oneWay) {
+        // the receiver owns it: a proactive one is woken to tell its person
+        if (child.result !== THREAD_DELETED) offerPeerNotice(child, parent);
         if (child.status === "completed") return;
         if (child.result !== THREAD_DELETED && store.taskByThread(child.botId, child.threadId)) {
           // Named by its runtime id: a restart's recovery finds it was told.
@@ -12831,6 +12840,14 @@ function postInputRequest(node: HandoffView, question: string, reminder: boolean
     else store.patchTask(target.botId, target.threadId, { unread: true });
   };
   const parent = node.parentId ? coordinator.node(node.parentId) : undefined;
+  // 2026-11-02: a one-way notice belongs to its receiver (send_to_bot moves
+  // ownership), so its question is for the receiver's person: one card in
+  // the receiver's own conversation, answered in place. It used to reach
+  // only the sender's conversation.
+  if (node.oneWay && !node.groupId) {
+    const own = botMainThread(bot.id) ?? bot.threadId;
+    if (own && own !== node.threadId) postTo({ ...node, threadId: own, botId: bot.id, groupId: undefined });
+  }
   postTo(parent);
   // The requester's conversation is a bot-to-bot one: the person reads the
   // conversation the work started in.
@@ -20399,7 +20416,9 @@ async function routineAdmission(run: RoutineRun, _routine: Routine | undefined):
   // Fix 2: a rate limit keeps the run queued (server/routines/routines.ts retries it).
   if (prepared.error === "rate_limited") return { ok: false, error: "Perspicax is rate limiting this server; this run is retried", retryAfterMs: prepared.retryAfterMs };
   if (prepared.error === "missing" || prepared.error === "ended") return { ok: false, error: `Perspicax did not issue ${name}'s routine access yet; this run is skipped and the next one tries again` };
-  return { ok: false, error: "Perspicax is unreachable; this run is skipped" };
+  // 2026-11-02: unreachable is most often a short roll of the connector:
+  // the run waits and tries again in its window instead of skipping now.
+  return { ok: false, error: ROUTINE_UNREACHABLE_RETRIED, retryAfterMs: ROUTINE_UNREACHABLE_RETRY_MS, skipped: ROUTINE_UNREACHABLE_SKIPPED };
 }
 /** Slice 6: one neutral status line in the routine's results thread, and a
  * notification, when a routine is paused (its person is out or lost `run`). */
@@ -24506,11 +24525,22 @@ resumeEngineReconnectForPerson = (person, engineName) => {
 // Events line per wake. Hops travel on every side effect of a wake.
 
 
+/** 2026-11-02: hops of teammates' one-way notices (proactive-wake.ts). */
+const peerNoticeHops = new PeerNoticeHops();
+
 /** Hops a new event from this thread should carry (wake chain bound). */
 function proactiveHopsFromThread(threadId: string | undefined): number {
   if (!threadId) return 0;
   const wake = activeRoutineRunForThread(threadId)?.proactive;
-  return wake ? wake.hops + 1 : 0;
+  if (wake) return wake.hops + 1;
+  const notice = peerNoticeHops.get(threadId);
+  return notice !== undefined ? notice + 1 : 0;
+}
+
+/** A one-way notice was sent from `fromThreadId` into `threadId` of its
+ * receiver: remember the hop it is. */
+function notePeerNotice(threadId: string, fromThreadId: string): void {
+  peerNoticeHops.note(threadId, proactiveHopsFromThread(fromThreadId));
 }
 
 /** Whether this thread's turn is a proactive wake (for dry-run recording). */
@@ -24530,6 +24560,27 @@ function noteWakeDryRun(threadId: string, botId: string, tool: string, command?:
   });
 }
 
+/** 2026-11-02 (peer inbox): a teammate's one-way notice ran in its own
+ * thread of the receiver, quietly (an internal turn: no unread, no
+ * notification), and its result stays there. On a proactive receiver it
+ * now also wakes the bot, so the person hears of it in the bot's one
+ * conversation: notices settling close together make one wake (the
+ * waker's gather window and cadence), and a chain stops at the hop limit.
+ * Any receiver: Primary Bot, team bot or solo bot. */
+function offerPeerNotice(child: HandoffView, parent: HandoffView | undefined): void {
+  const receiver = store.bot(child.botId);
+  if (!receiver || child.groupId) return;
+  const sender = parent ? store.bot(parent.botId) : undefined;
+  if (sender?.id === receiver.id) return;
+  offerProactive(peerNoticeEvent({
+    receiverId: receiver.id, noticeId: child.id, threadId: child.threadId,
+    title: store.taskByThread(receiver.id, child.threadId)?.title ?? "Teammate message",
+    status: child.status, text: redactSecretsInText(child.text), result: redactSecretsInText(child.result ?? ""),
+    ...(sender ? { senderId: sender.id, senderName: sender.name } : {}),
+    hops: peerNoticeHops.get(child.threadId) ?? 1,
+  }));
+}
+
 /** One event for one bot; never throws into the path that saw it. */
 function offerProactive(event: ProactiveEvent): void {
   try {
@@ -24546,7 +24597,8 @@ function offerRoomPostToBots(room: GroupRecord, poster: BotRecord, text: string,
     if (memberId === poster.id) continue;
     const member = store.bot(memberId);
     if (!member) continue;
-    const mentionsBot = textNamesBot(text, member.name);
+    // a direct conversation of two bots: every post is for the other one
+    const mentionsBot = room.dm === true || textNamesBot(text, member.name);
     offerProactive({
       botId: member.id, source: "bot", key: `room-post:${messageId}`, fromBotId: poster.id, hops, mentionsBot,
       label: `Post by ${poster.name} in ${room.name}`,
@@ -24567,6 +24619,7 @@ const PROACTIVE_RUN_NAMES: Record<ProactiveSource, string> = {
   calendar: "calendar",
   run: "failed run",
   bot: "bot post",
+  peer: "teammate message",
   webhook: "webhook"
 };
 
@@ -31007,6 +31060,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     turnAttachmentKey,
     offerRoomPostToBots: (room, poster, text, messageId, hops) =>
       offerRoomPostToBots(room as unknown as GroupRecord, poster as unknown as BotRecord, text, messageId, hops),
+    notePeerNotice,
     proactiveHopsFromThread,
     pollOnlyCaller: (capability) => pollOnlyCaller(capability as InternalCapability),
     peerSpeaker: (fromBotId, fromThreadId) => peerSpeaker(fromBotId, fromThreadId),
@@ -38768,6 +38822,41 @@ const voiceModeDeps: VoiceModeDeps = {
       configured: configuredKeyterms(process.env.SAGAX_VOICE_KEYTERMS),
       recentTexts
     });
+  },
+  // 2026-11-02 (the maintainer): a call is a realtime voice session; the bot's work
+  // comes through its `work` function as ordinary turns on the thread
+  realtime: {
+    openUpstream: (key) => grokVoice.openRealtimeSocket(key, realtimeUrl()),
+    session: (target, auth, callId) => {
+      const bot = store.bot(target.botId);
+      const threadId = target.threadId;
+      return {
+        bot: { name: bot?.name ?? target.botName, ...(bot?.title ? { title: bot.title } : {}), ...(bot?.description ? { description: bot.description } : {}) },
+        history: liveHistoryFor(threadId),
+        work: realtimeWork({
+          onChange: (listener) => store.onChange(listener),
+          threadId,
+          send: async (text) => {
+            if (!liveSignedIn(auth)) throw new Error("signed out");
+            const receipt = await acceptDirectSend({
+              botId: target.botId, threadId, text,
+              sendId: randomUUID().replaceAll("-", ""),
+              sender: messageSender(auth),
+              trigger: usageTriggerFor(auth),
+              speaker: speakerFor(auth),
+              via: "call",
+              callId,
+              personPresent: true
+            });
+            return "queued" in receipt ? { queued: true as const } : { messageId: receipt.message.id };
+          },
+          answer: async (requestId, text) => (await respondToCard({ auth, threadId, requestId, behavior: "answer", message: text, callId })).ok,
+          busy: () => Boolean(store.taskByThread(target.botId, threadId)?.busy),
+          timeoutMs: REALTIME_WORK_TIMEOUT_MS
+        }),
+        respond: async (requestId, behavior) => (await respondToCard({ auth, threadId, requestId, behavior, callId })).ok
+      };
+    }
   },
   callSession: {
     start: (target, callId, language, auth, heartbeat) => {

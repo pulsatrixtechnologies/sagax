@@ -1,6 +1,7 @@
 // Domain slice of the client store reduce(ui).
 // Returns the next state when it handles the action, otherwise undefined.
 import type {Action, AppState} from "./model";
+import {closedRightPanels} from "./reduce-views";
 import {withoutFreshTopicFor} from "./model";
 import {personaCategoryForSection} from "@/lib/persona-sections";
 import {currentSettingsSection} from "@/lib/settings-sections";
@@ -150,6 +151,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         ...state,
         activeView: "memory",
         memoryManagerOpen: true,
+        ...closedRightPanels,
         settingsOpen: false,
         computerOpen: false,
         personPanelId: null,
@@ -180,6 +182,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         },
         triggersOpen: false,
         memoryManagerOpen: false,
+        ...closedRightPanels,
         settingsOpen: false,
         appSettingsOpen: false,
         newBotOpen: false,

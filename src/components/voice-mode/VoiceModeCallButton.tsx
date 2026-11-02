@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
 import { CTA_CIRCLE, CTA_DEFAULT, CTA_TONED, ctaStyle, type BotCtaColors } from "@/lib/voice-cta";
 import { endCall, startCall, useOnCall } from "@/lib/call";
 import { t } from "@/lib/i18n";
-import { refreshVoiceMode, useVoiceModeCheck, type VoiceModeCheck } from "@/lib/voice-mode/api";
+import { realtimeCallReady, refreshVoiceMode, useVoiceModeCheck, type VoiceModeCheck } from "@/lib/voice-mode/api";
 import { useMenuMotion } from "../MenuMotion";
 import { openProviderKeyDialog } from "../settings/ProviderKeys";
 import { voiceAccessCardText } from "./VoiceModeBar";
@@ -34,7 +34,9 @@ export function voiceUnavailableView(check: VoiceModeCheck, options: { group?: b
   if (options.group) return { title, lines: [t("voiceMode.groupUnavailable")], actions: [], cause: "group" };
   if (check.state === "loading") return { title, lines: [t("voiceMode.checking")], actions: [], cause: "loading" };
   if (check.state === "error") return { title, lines: [t("voiceMode.checkFailed", { error: check.error })], actions: ["retry"], cause: "error" };
-  if (check.status.available) return null;
+  if (realtimeCallReady(check.status)) return null;
+  // a voice without the realtime session is no call (the maintainer, 2026-11-02): say what it needs
+  if (check.status.available) return { title, lines: [t("voiceMode.realtimeNeededReason")], actions: ["open-connections"], cause: "realtime" };
   const refusal = check.status.refusal ?? { cause: "no_credentials" as const };
   const admin = refusal.admin === true;
   const actions: VoiceUnavailableAction[] = [];
@@ -62,7 +64,7 @@ export function VoiceModeCallButton({ targetId, targetName, botId, group, onStar
   const { dispatch } = useStore();
   const check = useVoiceModeCheck(botId ?? "");
   const active = useOnCall() === targetId;
-  const available = !group && check.state === "ready" && check.status.available;
+  const available = !group && check.state === "ready" && realtimeCallReady(check.status);
   const [open, setOpen] = useState(false);
   const motion = useMenuMotion(open && !available && !active);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -108,7 +110,7 @@ export function VoiceModeCallButton({ targetId, targetName, botId, group, onStar
           // the server decides, every time: a key added meanwhile opens the bar at once
           if (botId && !group) {
             void refreshVoiceMode(botId).then((next) => {
-              if (next.state === "ready" && next.status.available) start();
+              if (next.state === "ready" && realtimeCallReady(next.status)) start();
             });
           }
         }}
@@ -179,7 +181,7 @@ export function VoiceModeCallButton({ targetId, targetName, botId, group, onStar
                   data-voice-action="retry"
                   onClick={() => {
                     void refreshVoiceMode(botId).then((next) => {
-                      if (next.state === "ready" && next.status.available) start();
+                      if (next.state === "ready" && realtimeCallReady(next.status)) start();
                     });
                   }}
                   className="rounded-lg border border-hairline px-3 py-1.5 text-[12px] text-ink hover:bg-raised"

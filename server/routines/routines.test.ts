@@ -10,11 +10,15 @@ import {
   nextOccurrence,
   PREWAKE_LEAD_MS,
   PREWARM_ENGINE_LEAD_MS,
+  ROUTINE_UNREACHABLE_RETRIED,
+  ROUTINE_UNREACHABLE_RETRY_MS,
+  ROUTINE_UNREACHABLE_SKIPPED,
   RoutineManager,
   routineAskAction,
   routineWaitingLine,
   RoutineScheduleError,
   RoutineInputError,
+  type RoutineAdmission,
   type RoutineManagerOptions,
   type RoutineRun,
   type RoutineSchedule,
@@ -3929,6 +3933,37 @@ describe("slice 6: routines in their person's name", () => {
     expect(h.manager.listRoutines()[0].suspended).toBeUndefined();
     // the fields survive a reload
     expect(new RoutineManager({ ...h.options, file: (h.manager as unknown as { options: { file: string } }).options.file }).listRuns()[0]).toMatchObject({ admitAttempts: 3 });
+  });
+
+  it("Perspicax unreachable at admission (a connector roll) waits and runs later in the same window, never skipped at once (2026-11-02)", async () => {
+    const hourly = { ...input, schedule: { type: "cron" as const, expression: "0 * * * *", timeZone: "UTC" } };
+    let answer: RoutineAdmission = { ok: false, error: ROUTINE_UNREACHABLE_RETRIED, retryAfterMs: ROUTINE_UNREACHABLE_RETRY_MS, skipped: ROUTINE_UNREACHABLE_SKIPPED };
+    const h = withAdmission(() => answer);
+    const routine = h.manager.create(hourly, undefined, { actorPrincipalId: "pr_alice" });
+    const due = routine.nextRunAt!;
+    h.setNow(due);
+    await h.manager.tick();
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "queued", admitAfter: due + 60_000, admitAttempts: 1 });
+    expect(h.started).toHaveLength(0);
+    // the connector is back a minute later: the run starts, in its window
+    answer = { ok: true };
+    h.setNow(due + 60_000);
+    await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    expect(h.suspended).toEqual([]);
+  });
+
+  it("Perspicax unreachable through every retry skips the run with its own words", async () => {
+    const hourly = { ...input, schedule: { type: "cron" as const, expression: "0 * * * *", timeZone: "UTC" } };
+    const h = withAdmission(() => ({ ok: false, error: ROUTINE_UNREACHABLE_RETRIED, retryAfterMs: ROUTINE_UNREACHABLE_RETRY_MS, skipped: ROUTINE_UNREACHABLE_SKIPPED }));
+    const routine = h.manager.create(hourly, undefined, { actorPrincipalId: "pr_alice" });
+    const due = routine.nextRunAt!;
+    for (const at of [due, due + 60_000, due + 180_000, due + 420_000]) {
+      h.setNow(at);
+      await h.manager.tick();
+    }
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "failed", error: ROUTINE_UNREACHABLE_SKIPPED });
+    expect(h.manager.listRoutines()[0].suspended).toBeUndefined();
   });
 
   it("honors a Retry-After longer than the back-off and runs when a retry is admitted (fix 2)", async () => {

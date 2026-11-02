@@ -862,3 +862,72 @@ it("an external runtime's delegate_bot that needs the person's review is not hel
   expect(f.evidence().filter((turn) => turn.botId === gateway.id)).toHaveLength(0);
   expect(runtimeInvariants(f)).toEqual([]);
 }), 150_000);
+
+it("peer inbox (2026-11-02): teammates' one-way notices wake each proactive receiver once, batched, Primary Bot and team bot alike; nothing resumes the sender", () => withFixture(async (f) => {
+  const sender = (await f.cli("new-bot", "--name", "Katarina")).bot;
+  const primary = (await f.cli("new-bot", "--name", "Melonie")).bot;
+  const teammate = (await f.cli("new-bot", "--name", "Harrie")).bot;
+  await f.api(`/api/bots/${primary.id}`, { chiefOfStaff: true, acknowledgePeerScope: true }, "PATCH");
+  f.plan[sender.id] = {
+    steps: [
+      { tool: "send_to_bot", arguments: { bot_id: primary.id, title: "Northwind write 1", message: "Dry run done for Northwind write 1; GO needed" } },
+      { tool: "send_to_bot", arguments: { bot_id: primary.id, title: "Northwind write 2", message: "Dry run done for Northwind write 2; GO needed" } },
+      { tool: "send_to_bot", arguments: { bot_id: teammate.id, title: "Bank threshold", message: "FYI: the support bank is under its threshold" } },
+    ],
+    reply: "Sent the three notices",
+  };
+  const receiverPlan = (report: string) => ({ byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: report } }], reply: "Looked at the notice" });
+  f.plan[primary.id] = receiverPlan("PRIMARY_WAKE_REPORT: two Northwind writes wait on your GO");
+  f.plan[teammate.id] = receiverPlan("TEAMMATE_WAKE_REPORT: the support bank is under its threshold");
+  f.save();
+  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Melonie and Harrie what you found.", threadId: sender.activeTaskId });
+  const wakes = async (botId: string) => ((await f.api("/api/routines", undefined, "GET")).runs as any[]).filter((run) => run.botId === botId && run.proactive);
+  for (const bot of [primary, teammate]) {
+    await expect.poll(async () => (await wakes(bot.id)).map((run) => run.status), { timeout: 60_000, interval: 250 }).toEqual(["completed"]);
+  }
+  await settledBots(f, [sender.id, primary.id, teammate.id]);
+  // a late second wake would show up here
+  await new Promise((resolve) => setTimeout(resolve, 4_000));
+  const isWake = (turn: any) => JSON.stringify(turn.prompt).includes("Proactive wake");
+  const turnsOf = (botId: string) => f.evidence().filter((turn) => turn.botId === botId);
+  // each notice ran once in its own thread, then ONE wake per receiver
+  expect(turnsOf(primary.id).filter((turn) => !isWake(turn))).toHaveLength(2);
+  expect(turnsOf(primary.id).filter(isWake)).toHaveLength(1);
+  expect(turnsOf(teammate.id).filter((turn) => !isWake(turn))).toHaveLength(1);
+  expect(turnsOf(teammate.id).filter(isWake)).toHaveLength(1);
+  const primaryWake = (await wakes(primary.id))[0];
+  expect(primaryWake.proactive).toMatchObject({ mode: "proactive", hops: 1, sources: ["peer"] });
+  expect(primaryWake.routineName).toBe("Proactive: teammate message");
+  // the one wake read both messages and their outcomes inside the fence
+  const wakePrompt = JSON.stringify(turnsOf(primary.id).find(isWake)!.prompt);
+  expect(wakePrompt).toContain("Dry run done for Northwind write 1; GO needed");
+  expect(wakePrompt).toContain("Dry run done for Northwind write 2; GO needed");
+  expect(wakePrompt).toContain("ONE card for all of these messages");
+  expect((await wakes(teammate.id))[0].proactive).toMatchObject({ hops: 1, sources: ["peer"] });
+  // the person reads it in each receiver's own conversation
+  const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
+  const mainOf = (id: string) => bots.find((bot) => bot.id === id).threadId as string;
+  await expect.poll(async () => (await f.messages(mainOf(primary.id))).some((message) => String(message.text ?? "").includes("PRIMARY_WAKE_REPORT")), { timeout: 20_000 }).toBe(true);
+  await expect.poll(async () => (await f.messages(mainOf(teammate.id))).some((message) => String(message.text ?? "").includes("TEAMMATE_WAKE_REPORT")), { timeout: 20_000 }).toBe(true);
+  // one-way stays one-way: the sender is never resumed nor woken by its own notices
+  expect(turnsOf(sender.id).map((turn) => turn.resumed)).toEqual([false]);
+  expect(await wakes(sender.id)).toEqual([]);
+  expect(runtimeInvariants(f)).toEqual([]);
+}, { env: { SAGAX_PROACTIVE_GATHER_MS: "3000" } }), 150_000);
+
+it("peer inbox (2026-11-02): a one-way notice's question reaches its receiver's own conversation as a card", () => withFixture(async (f) => {
+  const sender = (await f.cli("new-bot", "--name", "Katarina")).bot;
+  const teammate = (await f.cli("new-bot", "--name", "Harrie")).bot;
+  await f.api(`/api/bots/${teammate.id}`, { proactiveMode: "off" }, "PATCH");
+  f.plan[sender.id] = {
+    steps: [{ tool: "send_to_bot", arguments: { bot_id: teammate.id, title: "Northwind writes", message: "Seven Northwind writes are ready after the dry run" } }],
+    reply: "Sent",
+  };
+  f.plan[teammate.id] = { reply: "Ready to write.\n\nNEEDS INPUT: GO for the seven Northwind writes?" };
+  f.save();
+  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Harrie about the Northwind writes.", threadId: sender.activeTaskId });
+  const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
+  const main = bots.find((bot) => bot.id === teammate.id).threadId as string;
+  await expect.poll(async () => (await f.messages(main)).filter((message) => message.inputRequest?.botId === teammate.id)
+    .map((message) => message.inputRequest.question), { timeout: 60_000, interval: 250 }).toEqual(["GO for the seven Northwind writes?"]);
+}), 150_000);

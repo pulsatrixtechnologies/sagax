@@ -1,11 +1,12 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { RichTable } from "./RichTable";
+import { RichTable, tableRowLabel } from "./RichTable";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { AttachedFileChip } from "./AttachmentPreview";
 import { readTableResponse } from "@/lib/table-data";
 import { TABLE_FILE_MAX_BYTES } from "@/lib/table-data";
+import { setLocale } from "@/lib/i18n";
 
 describe("rich table rendering", () => {
   it("keeps Markdown links, emphasis, code, alignment and escaped HTML inside cells", () => {
@@ -20,6 +21,22 @@ describe("rich table rendering", () => {
     expect(html).not.toContain("<script>");
     expect(html).toContain("2 rows");
     expect(html).toContain('scope="col"');
+    expect(html).toContain('data-table-scroll');
+    expect(html).toContain("bg-panel");
+    expect(html).toContain("text-ink");
+    expect(html).toContain("ui-code-chip");
+  });
+
+  it("uses the language plural rule for the toolbar row count", () => {
+    setLocale("en");
+    expect(tableRowLabel(1)).toBe("1 row");
+    expect(tableRowLabel(0)).toBe("0 rows");
+    expect(tableRowLabel(2)).toBe("2 rows");
+    const one = renderToStaticMarkup(createElement(ChatMarkdown, {
+      text: "| Name | Schedule |\n| --- | --- |\n| Nightly | `20 8 * * *` |",
+    }));
+    expect(one).toContain("1 row");
+    expect(one).not.toContain("1 rows");
   });
   it("bounds the DOM for a large table", () => {
     const html = renderToStaticMarkup(createElement(RichTable, { columns: [{ text: "ID" }], rows: Array.from({ length: 5000 }, (_, i) => [{ text: String(i) }]) }));

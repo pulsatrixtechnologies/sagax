@@ -108,7 +108,8 @@ describe("dragging a bot from the left sidebar", () => {
   });
 
   it("is wired on every bot row of the sidebar and read by the calendar", () => {
-    const sidebar = readFileSync(join(process.cwd(), "src/components/Sidebar.tsx"), "utf8");
+    // #1383: the sidebar's drag wiring lives in its section DnD hook.
+    const sidebar = readFileSync(join(process.cwd(), "src/components/Sidebar.tsx-parts/useSidebarSectionDnD.ts"), "utf8");
     expect(sidebar).toContain('if (kind === "bot") addBotCalendarDrag(event.dataTransfer, itemId);');
     // every bot and group row drags (the split view, #1504), the bot's with the calendar payload
     expect(sidebar).toContain("const itemDragProps = (kind: SectionItemKind, itemId: string) => ({");

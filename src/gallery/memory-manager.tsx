@@ -1,5 +1,7 @@
 /** Headless gallery for Tools > Memory page (2026-11-02). Synthetic data only.
- * ?skin=<id>&lang=<code>&view=sources|browse|note|map|trash&dense=1
+ * ?skin=<id>&lang=<code>&view=sources|browse|note|map|trash|folder|hover&dense=1
+ * sources: All notes; browse/note/map: Atlas's memory; folder: a Perspicax
+ * folder; hover: waits on the folder row (the capture hovers it); trash: Trash.
  */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -219,8 +221,26 @@ function Shell() {
     void (async () => {
       await new Promise((done) => setTimeout(done, 200));
       if (cancelled) return;
-      const sourceKey = view === "trash" || dense ? "perspicax" : "bot:atlas";
-      document.querySelector<HTMLButtonElement>(`[data-memory-source="${sourceKey}"]`)?.click();
+      await waitFor("[data-memory-tiers]");
+      if (view === "trash") {
+        document.querySelector<HTMLButtonElement>('[data-memory-nav="trash"]')?.click();
+        await waitFor("[data-memory-trash]");
+        if (!cancelled) setReady(true);
+        return;
+      }
+      if (view === "folder" || view === "hover") {
+        const folder = dense ? "me/alpha" : "me/notes";
+        await waitFor(`[data-memory-folder="${folder}"]`);
+        const row = document.querySelector<HTMLButtonElement>(`[data-memory-folder="${folder}"]`);
+        if (view === "folder") {
+          row?.click();
+          await waitFor("[data-memory-browse]");
+        }
+        if (!cancelled) setReady(true);
+        return;
+      }
+      const sourceKey = dense ? "me/alpha" : "bot:atlas";
+      document.querySelector<HTMLButtonElement>(dense ? `[data-memory-folder="${sourceKey}"]` : `[data-memory-source="${sourceKey}"]`)?.click();
       if (view === "browse" || view === "map") {
         await waitFor("[data-memory-browse], [data-memory-map]");
         if (view === "map") {
@@ -237,20 +257,12 @@ function Shell() {
         return;
       }
       if (view === "note") {
-        await waitFor('[data-memory-note-row="memory/dining.md"]');
+        await waitFor('[data-memory-browse] [data-memory-note-row="memory/dining.md"]');
         if (cancelled) return;
-        document.querySelector<HTMLButtonElement>('[data-memory-note-row="memory/dining.md"] button')?.click();
+        document.querySelector<HTMLButtonElement>('[data-memory-browse] [data-memory-note-row="memory/dining.md"] button')?.click();
         await waitFor("[data-memory-read-body], [data-memory-json-tree]");
         if (!cancelled) setReady(true);
         return;
-      }
-      if (view === "trash") {
-        await waitFor("[data-memory-browse], [data-memory-manager-page]");
-        if (cancelled) return;
-        const trash = [...document.querySelectorAll("button")].find((button) => /Trash|Corbeille/i.test(button.textContent || ""));
-        trash?.click();
-        await waitFor("[data-memory-trash]");
-        if (!cancelled) setReady(true);
       }
     })();
     return () => { cancelled = true; };

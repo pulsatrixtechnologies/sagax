@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { initialState, reducer } from "./store";
 
-describe("Org import view (lot 6)", () => {
-  it("showOrgImport fills the content frame and closes overlays", () => {
+describe("Org import window (restored)", () => {
+  it("showOrgImport opens the centred window and closes overlays", () => {
     const withOverlays = {
       ...initialState,
       pluginsOpen: true,
@@ -13,17 +13,18 @@ describe("Org import view (lot 6)", () => {
       botWizard: { botId: null },
     };
     const opened = reducer(withOverlays, { type: "showOrgImport", staged: null });
-    expect(opened.activeView).toBe("org-import");
+    expect(opened.orgImportOpen).toBe(true);
     expect(opened.orgImportStaged).toBeNull();
+    expect(opened.activeView).toBe("apps");
     expect(opened.pluginsOpen).toBe(false);
     expect(opened.appSettingsOpen).toBe(false);
     expect(opened.personPanelId).toBeNull();
     expect(opened.botWizard).toBeNull();
   });
 
-  it("showChat leaves the org import view", () => {
+  it("closeOrgImport and showChat leave the window", () => {
     const opened = reducer(initialState, { type: "showOrgImport" });
-    expect(reducer(opened, { type: "showChat" }).activeView).toBe("chat");
-    expect(reducer(opened, { type: "showChat" }).orgImportStaged).toBeNull();
+    expect(reducer(opened, { type: "closeOrgImport" })).toMatchObject({ orgImportOpen: false, orgImportStaged: null });
+    expect(reducer(opened, { type: "showChat" })).toMatchObject({ orgImportOpen: false, orgImportStaged: null });
   });
 });

@@ -21,6 +21,9 @@ const DIALOG_FRAME_ALLOW = new Set([
   "components/remote-session/RemoteFileBrowser.tsx", // remote file catalog window (file-preview family)
   "components/bot-settings/CodeBranchList.tsx", // branch forms; empty with later bot-panel work
   "components/settings/BotModelsSettings.tsx", // BulkModelChoice picker until a popover lands
+  "components/BulkEditBotsDialog.tsx", // bulk Edit bots window (restored)
+  "components/TeamBotFromThreadDialog.tsx", // team bot from thread window (restored)
+  "components/OrgImportDialog.tsx", // org import window (restored)
 ]);
 
 /** Production files that may call useModalDialog. */

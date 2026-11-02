@@ -1,12 +1,12 @@
-// Browse Bots: the organisation bot catalogue, Connect apps' Bots tab since
-// 2026-10-29 (every link opens that tab via openBotCatalog; 2026-11-01 lot 5:
-// Connect apps is a content-frame view, so the catalogue has no window of
-// its own). Sources: GET /api/bot-catalog and the templates (org library,
-// presets, community teams, built-in roles, xAI Bot Marketplace). Actions:
-// show or hide in the sidebar, Import Bot, Use this template, Open, publish
-// / withdraw / feature. Templates' tools are TemplateTools.
+// Browse Bots: the organisation bot catalogue as its own centred window
+// (CATEGORY_MODAL; restored after UX lot 5). openBotCatalog opens this window;
+// Capabilities still embeds BotCatalogPane on its Bots tab. Sources: GET
+// /api/bot-catalog and the templates (org library, presets, community teams,
+// built-in roles, xAI Bot Marketplace). Actions: show or hide in the sidebar,
+// Import Bot, Use this template, Open, publish / withdraw / feature.
+// Templates' tools are TemplateTools.
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
-import { Check } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -45,8 +45,10 @@ import {
 import { DEFAULT_BOT_CATALOG_CATEGORIES, type BotCatalogListing } from "../../../shared/bot-catalog";
 import { isBackShortcut } from "@/lib/back-shortcut";
 import { Breadcrumb, type Crumb } from "../Breadcrumb";
+import { useRetroSkin } from "../RetroChromeHost";
+import { shortcutLabel } from "../ShortcutHint";
 import { openBotConversationActions } from "../thread-home";
-import { CATEGORY_MODAL, cardActionClass } from "../category-modal";
+import { CATEGORY_MODAL, cardActionClass, useCategoryModalKeyboard } from "../category-modal";
 import { BotCatalogView } from "./BotCatalogView";
 import { BotCatalogDetailView, templateDetail, type CatalogDetailContent, type CatalogTab } from "./BotCatalogDetailView";
 import { TeamImportDetails, type TeamImportResult } from "./TeamImportDetails";
@@ -126,39 +128,55 @@ function categoryFromInput(value: string): string {
   return id ?? text;
 }
 
-/** Legacy entry kept for markup tests. Production opens Browse Bots as
- * Connect apps' Bots tab (activeView "apps", lot 5); App no longer mounts
- * this window. */
+/** Browse Bots' own centred window (CATEGORY_MODAL shell). Opened by
+ * openBotCatalog; Capabilities also embeds BotCatalogPane on its Bots tab. */
 export function BotCatalogModal() {
   const { dispatch } = useStore();
+  const retroSkin = useRetroSkin();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const backRef = useRef<(() => boolean) | null>(null);
   const close = useCallback(() => dispatch(closeBotCatalog()), [dispatch]);
 
+  useCategoryModalKeyboard(dialogRef, "[data-catalog-search]", () => { if (!backRef.current?.()) close(); });
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        if (!backRef.current?.()) close();
-        return;
-      }
-      if (!isBackShortcut(event)) return;
+      if (event.defaultPrevented || !isBackShortcut(event)) return;
       event.preventDefault();
       backRef.current?.();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [close]);
+  }, []);
 
   return (
-    <div
-      aria-labelledby="bot-catalog-title"
-      tabIndex={-1}
-      data-bot-catalog-modal=""
-      data-gallery-frame=""
-      className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-app outline-none"
-    >
-      <BotCatalogPane onClose={close} backRef={backRef} />
+    <div className={CATEGORY_MODAL.backdrop} onMouseDown={(event) => event.target === event.currentTarget && close()}>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bot-catalog-title"
+        tabIndex={-1}
+        data-bot-catalog-modal=""
+        className={CATEGORY_MODAL.frame}
+      >
+        <div className={CATEGORY_MODAL.content}>
+          <button
+            type="button"
+            onClick={close}
+            aria-label={t("common.close")}
+            title={`${t("common.close")} (${shortcutLabel("close-panel")})`}
+            className={CATEGORY_MODAL.close}
+          >
+            <X size={18} />
+          </button>
+          <BotCatalogPane onClose={close} backRef={backRef} />
+          {retroSkin && (
+            <div className="r98-dialog-footer">
+              <button type="button" className="r98-dialog-ok" onClick={close}>{t("retro.button.ok")}</button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

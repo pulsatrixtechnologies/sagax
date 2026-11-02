@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const root = fileURLToPath(new URL("..", import.meta.url));
+const root = fileURLToPath(new URL("../../..", import.meta.url));
 
 describe("verify-linux-package cloudflared pin", () => {
   it("compares the packaged cloudflared license to the repo LICENSE, which is the Apache 2.0 text", () => {

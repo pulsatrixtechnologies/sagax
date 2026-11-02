@@ -9,7 +9,7 @@
 // 2. latest.yml lists files that exist, with the sha512 and size of the bytes
 //    on disk now, so the feed describes the signed installer.
 //
-// Usage: node scripts/verify-win-signatures.mjs [release dir]
+// Usage: node scripts/verify/release/verify-win-signatures.mjs [release dir]
 // package-fork.mjs runs it after every Windows build; run it again before
 // gh release create.
 import { spawnSync } from "node:child_process";
@@ -18,7 +18,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, w
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isVendorExecutable } from "./win-trusted-signing.mjs";
+import { isVendorExecutable } from "../../win-trusted-signing.mjs";
 
 // Microsoft roots for Trusted Signing certificates and the ACS timestamp
 // authority, absent from the macOS OpenSSL CA file. Pinned by SHA-256.
@@ -162,7 +162,7 @@ export async function verifyWindowsRelease(release, publisher) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const release = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), "..", "release");
+  const release = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "release");
   const publisher = process.env.SAGAX_WIN_SIGN_PUBLISHER?.trim();
   if (!publisher) {
     console.error("Set SAGAX_WIN_SIGN_PUBLISHER to the signer CN the Windows executables must carry.");

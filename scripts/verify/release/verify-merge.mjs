@@ -38,7 +38,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const VITEST = join(ROOT, "node_modules", "vitest", "vitest.mjs");
 const STAMP_FOLDER = "sagax-verify-merge";
 

@@ -143,3 +143,7 @@ maus.ps1
 scripts/verify-company-backups.mjs
 scripts/verify-connected-apps.ts
 scripts/testing/connected-apps-preview.tsx
+
+# Moved 2026-11-02 (repo tidy 2) to scripts/verify/release/, with the other
+# release, CI and pre-push gates.
+scripts/verify-linux-package.mjs

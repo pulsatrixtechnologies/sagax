@@ -8,7 +8,7 @@ if [ -z "${COSIGN_PUBLIC_KEY:-}" ]; then
   exit 1
 fi
 if [ -z "$image" ]; then
-  echo "usage: COSIGN_PUBLIC_KEY=cosign.pub scripts/verify-sandbox-image-signature.sh <image ref>" >&2
+  echo "usage: COSIGN_PUBLIC_KEY=cosign.pub scripts/verify/release/verify-sandbox-image-signature.sh <image ref>" >&2
   exit 1
 fi
 if ! command -v cosign >/dev/null 2>&1; then

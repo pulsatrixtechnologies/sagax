@@ -218,7 +218,7 @@ pnpm check:electron
 pnpm build:cua:linux          # networked, checksum-pinned staging
 dbus-run-session -- xvfb-run -a pnpm smoke:cua-x11-input
 pnpm package:linux:offline    # CUA staging is offline; builder caches must already be available
-node scripts/verify-linux-package.mjs
+node scripts/verify/release/verify-linux-package.mjs
 pnpm smoke:linux-package
 ```
 

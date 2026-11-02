@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { checkReleaseNotes } from "./check-release-notes.mjs";
 import { embedFeeds } from "./embed-feed-release-notes.mjs";
 import { preflight, SigningSetupError } from "./win-trusted-signing.mjs";
-import { verifyWindowsRelease } from "./verify-win-signatures.mjs";
+import { verifyWindowsRelease } from "./verify/release/verify-win-signatures.mjs";
 
 const target = process.argv[2];
 if (target !== "mac" && target !== "win") {

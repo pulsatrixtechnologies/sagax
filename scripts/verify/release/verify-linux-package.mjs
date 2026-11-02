@@ -15,17 +15,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { LICENSE_FILES } from "./cua-linux-release.mjs";
+import { LICENSE_FILES } from "../../cua-linux-release.mjs";
 import {
   CLOUDFLARED_ASSETS,
   CLOUDFLARED_VERSION,
   executableTarget,
-} from "./prepare-cloudflared.mjs";
+} from "../../prepare-cloudflared.mjs";
 
 const require = createRequire(import.meta.url);
-const { validateDriverCandidate } = require("../electron/cua-linux.cjs");
+const { validateDriverCandidate } = require("../../../electron/cua-linux.cjs");
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const releaseDir = path.resolve(process.argv[2] ?? path.join(root, "release"));
 
 function fail(message) {

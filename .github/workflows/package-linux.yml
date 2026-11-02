@@ -49,7 +49,7 @@ jobs:
       - name: Package from the verified offline CUA stage
         run: pnpm package:linux:offline
       - name: Verify package contents and metadata
-        run: node scripts/verify-linux-package.mjs
+        run: node scripts/verify/release/verify-linux-package.mjs
       - name: Match a normal Ubuntu package parent on the ephemeral runner
         run: |
           test ! -L /opt

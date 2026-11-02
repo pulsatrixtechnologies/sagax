@@ -31,7 +31,7 @@
     "gen:switch": "node scripts/gen-switch-tokens.mjs",
     "gen:bubble": "node scripts/gen-bubble-tokens.mjs",
     "i18n:check": "node scripts/generate-locale.mjs --check",
-    "verify:merge": "node scripts/verify-merge.mjs",
+    "verify:merge": "node scripts/verify/release/verify-merge.mjs",
     "dev": "vite",
     "docs:dev": "pnpm --filter @sagax/docs dev",
     "docs:build": "pnpm --filter @sagax/docs build",

@@ -12,7 +12,7 @@
 //   them for emulation (cloudflared, the browser engine, Android tools), plus
 //   electron-builder's NSIS elevate.exe, which only exists as x86.
 //
-// Usage: node scripts/verify-win-natives.mjs <app dir> <x64|arm64>
+// Usage: node scripts/verify/release/verify-win-natives.mjs <app dir> <x64|arm64>
 import { open, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,7 +95,7 @@ export async function verifyWindowsNatives(appDir, arch, { readHeaderImpl = read
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const [appDir, arch] = process.argv.slice(2);
   if (!appDir || !arch) {
-    console.error("usage: node scripts/verify-win-natives.mjs <app dir> <x64|arm64>");
+    console.error("usage: node scripts/verify/release/verify-win-natives.mjs <app dir> <x64|arm64>");
     process.exit(2);
   }
   const { problems, addons } = await verifyWindowsNatives(appDir, arch);

@@ -4,7 +4,7 @@ set -euo pipefail
 # This runs only the bundled offline thread and roster fixtures. CI creates
 # and deletes its own simulators; no phone is paired and no desktop data is
 # opened.
-cd "$(dirname "$0")/../ios"
+cd "$(dirname "$0")/../../../ios"
 
 runtime_id=$(xcrun simctl list runtimes -j | python3 -c '
 import json, sys

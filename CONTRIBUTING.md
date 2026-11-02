@@ -334,7 +334,7 @@ dies at link time. `server/testing/fakes-self-contained.test.ts` enforces it.
 - [ ] Locale changes pass `pnpm i18n:check`, keep `source-hashes.json` in step, and en, fr and pt-br are all updated
 - [ ] Verified on the isolated fixture, never on live data
 - [ ] `pnpm check:electron` passes for desktop-shell changes
-- [ ] Ubuntu packaging changes pass `pnpm package:linux` and `node scripts/verify-linux-package.mjs`
+- [ ] Ubuntu packaging changes pass `pnpm package:linux` and `node scripts/verify/release/verify-linux-package.mjs`
 - [ ] No em or en dashes, issues and PR target `pulsatrixtechnologies/sagax` only
 - [ ] New server behavior has a test; driver changes keep the contract tests green
 - [ ] No `dist-server/` churn, no lockfile churn beyond your actual dependency change

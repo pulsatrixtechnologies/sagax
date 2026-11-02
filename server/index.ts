@@ -6000,15 +6000,15 @@ function botBusyThreadCount(botId: string): number {
  * landing thread; used/max are capacity alone so a person wake may take
  * one slot past max.
  */
-function coordinatorSlotUse(n: HandoffView): { used: number; max: number; hardBlocked: boolean } {
+function coordinatorSlotUse(n: HandoffView): { used: number; max: number; hardBlocked: boolean } | undefined {
   if (reviewHolds(n)) return { used: 0, max: 0, hardBlocked: true };
   if (n.oneWay && n.priority !== "now" && n.parentId && ["source", "running"].includes(coordinator.node(n.parentId)?.status ?? "")) {
     return { used: 0, max: 0, hardBlocked: true };
   }
-  if (n.groupId) {
-    const blocked = Boolean(store.bot(n.botId)?.busy || (store.group(n.groupId) && groupIsWorking(store.group(n.groupId)!)));
-    return { used: 0, max: 0, hardBlocked: blocked };
-  }
+  // A room turn holds no thread slot (unattendedDispatchState): no slot
+  // math, so host.busy admits it. Counted as {used 0, max 0}, every room
+  // handoff and goal worker waited "for a free slot" forever (DEL-08).
+  if (n.groupId) return undefined;
   const hardBlocked = threadBusy(n.botId, n.threadId) || Boolean(activeGroupTurnForBot(n.botId));
   return {
     used: botBusyThreadCount(n.botId),

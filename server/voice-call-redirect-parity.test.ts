@@ -89,8 +89,10 @@ let wiring: ReturnType<typeof outboundWiring>;
 let counter = 0;
 
 function makeWiring() {
-  return outboundWiring({
+  const made = outboundWiring({
     dataDir: dir,
+    // a fixed clock: the card's liveStartedAt (5e792c845) is compared between runs
+    now: () => Date.UTC(2026, 9, 28, 15, 0, 0),
     store: {
       messagesFor: (threadId) => threads.get(threadId) ?? [],
       appendMessage: (threadId, message) => {
@@ -121,6 +123,10 @@ function makeWiring() {
     principalSub: () => "A",
     wake: () => {},
   });
+  // the one-time acceptable-use consent (5e792c845) is its own gate, tested in
+  // outbound-wiring.test.ts; this person accepted it already
+  made.consentStore.accept(PERSON, "bot-rocket");
+  return made;
 }
 
 /** place_phone_call exactly as the agents catalog's route calls it. */

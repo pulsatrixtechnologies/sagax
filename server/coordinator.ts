@@ -90,9 +90,10 @@ export interface CoordinatorHost {
    * Slot use for the reserved person slot (DEL-08). When present, canStart
    * prefers this over busy for capacity: automatic work fills `max`, a person
    * wake may use one more. `hardBlocked` covers thread busy, group turns and
-   * review holds. Absent: canStart falls back to busy alone.
+   * review holds. Absent, or undefined for a node with no slot (a room turn):
+   * canStart falls back to busy alone.
    */
-  slotUse?(node: HandoffView): { used: number; max: number; hardBlocked: boolean };
+  slotUse?(node: HandoffView): { used: number; max: number; hardBlocked: boolean } | undefined;
   /** Run one turn of the assignee with the composed text; resolves when the
    * engine settles. `stalled`: the host's stall watchdog stopped the turn
    * (a room turn too, during its setup), so it fails as `stalled`, not as a

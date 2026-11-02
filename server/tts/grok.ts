@@ -613,7 +613,8 @@ export function openRealtimeSocket(key: string, url: string): {
   };
   socket.on("open", () => adapter.onopen?.({}));
   socket.on("message", (data: Buffer, binary: boolean) => adapter.onmessage?.({ data: binary ? data : data.toString("utf8") }));
-  socket.on("close", () => adapter.onclose?.({}));
+  // the close code says why a call ended (realtimeDropReason)
+  socket.on("close", (code: number) => adapter.onclose?.({ code }));
   socket.on("error", (error) => adapter.onerror?.({ message: socketFailure(error) }));
   socket.on("unexpected-response", (_request, response) => {
     adapter.onerror?.({ message: refusal(response.statusCode ?? 0) });

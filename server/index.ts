@@ -1513,6 +1513,7 @@ import { createCaptureMailer, createMailer, type Mailer } from "./mail/mailer.ts
 import { createMailSettingsRoutes } from "./mail/mail-routes.ts";
 import {
   createVoiceModeRoutes,
+  isVoiceSocketPath,
   resolveVoiceKey,
   type VoiceModeDeps,
   type VoiceSpeaker
@@ -13736,7 +13737,7 @@ const sandboxControlHolds = new SandboxControlHolds();
 const desktopViewer = createDesktopViewer({
   // voice mode's live call; in-chat terminal WebSocket (server/routes/terminal.ts)
   acceptsUpgrade: (path) =>
-    /^\/api\/bots\/[\w-]+\/voice\/(?:listen|speech)$/.test(path)
+    isVoiceSocketPath(path)
     || /^\/api\/terminal\/sessions\/[\w-]+\/ws$/.test(path)
     || isRemoteControlPath(path),
   target: (id, auth) => {

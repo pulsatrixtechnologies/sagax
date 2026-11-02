@@ -388,6 +388,8 @@ describe("in-app peer tools (#1905)", () => {
     expect(autoVerdict("full", "agents__post_to_room").source).toBe("full-access");
   });
   it("a real outbound send still holds under Approve for me", () => {
-    expect(autoVerdict("auto", "GMAIL_SEND_EMAIL").source).toBe("outbound-guard");
+    expect(autoVerdict("auto", "SLACK_SEND_MESSAGE")).toEqual({ approve: null, source: "outbound-guard" });
+    // A mail send is held one step earlier, by the draft rule.
+    expect(autoVerdict("auto", "GMAIL_SEND_EMAIL")).toEqual({ approve: null, source: "email-draft-required" });
   });
 });

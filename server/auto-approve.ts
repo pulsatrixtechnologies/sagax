@@ -396,7 +396,7 @@ export function autoVerdict(
   // the grant guard, the safety review and the person's own rules above,
   // and never: a sandbox widening, a send that leaves the app
   // (send_voice_note and connector sends keep the outbound guard; in-app
-  // peer tools send_to_bot / post_to_room are not outbound — #1905), a call
+  // peer tools send_to_bot / post_to_room are not outbound, #1905), a call
   // in a class the person protects with a security key (the card then needs
   // the key), or a rule change. A Grok gate card is answered too: the gate
   // holds these calls and routes them here (grok-approval-gate.ts), so the

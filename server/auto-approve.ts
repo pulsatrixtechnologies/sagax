@@ -366,11 +366,13 @@ export function autoVerdict(
   // Sagax's own person-scoped tools (sagax-internal-tools.ts, a reviewed
   // list of exact names) and the owner's own environment answer only after
   // the grant guard, the safety review and the person's own rules above,
-  // and never: a sandbox widening, a send (send_to_bot, post_to_room,
-  // send_voice_note keep the outbound guard), a call in a class the person
-  // protects with a security key (the card then needs the key), or a rule
-  // change. A Grok gate card is answered too: the gate holds these calls and
-  // routes them here (grok-approval-gate.ts), so the same rules apply.
+  // and never: a sandbox widening, a send that leaves the app
+  // (send_voice_note and connector sends keep the outbound guard; in-app
+  // peer tools send_to_bot / post_to_room are not outbound — #1905), a call
+  // in a class the person protects with a security key (the card then needs
+  // the key), or a rule change. A Grok gate card is answered too: the gate
+  // holds these calls and routes them here (grok-approval-gate.ts), so the
+  // same rules apply.
   const sendsOut = outward;
   const selfAnswerable = !context?.requiresExplicitApproval && !sendsOut && !(context?.stepUpRequired?.length);
   if (context?.sagaxInternal && selfAnswerable && !context.ruleChange) {

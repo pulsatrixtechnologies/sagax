@@ -105,6 +105,9 @@ export type TurnState = {
   teamComputer: any;
   vpsUnavailableNote: any;
   worksInWorkspace: any;
+  selectedSkills: any;
+  sessionConfig: any;
+  decideContext: any;
   // Try-scoped fields that stream post-dispatch / finish may read.
   warmOk: boolean;
   browser: any;
@@ -245,6 +248,9 @@ export function createTurnState(init: {
     teamComputer: undefined,
     vpsUnavailableNote: undefined,
     worksInWorkspace: undefined,
+    selectedSkills: undefined,
+    sessionConfig: undefined,
+    decideContext: undefined,
     warmOk: false,
     browser: undefined,
     browserCapture: undefined,

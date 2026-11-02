@@ -60,8 +60,10 @@ describe("startTurn characterization (#1388 w4 step 3)", () => {
   it("cancellation during setup becomes DirectTurnSetupCancelled and abandons handoffs", () => {
     const body = startTurnBody(startTurnSrc);
     const stream = readFileSync(join(here, "start-turn-stream.ts"), "utf8");
+    const setup = readFileSync(join(here, "start-turn-setup.ts"), "utf8");
     expect(stream).toMatch(/DirectTurnSetupCancelled\("turn stopped during provider setup"\)/);
-    expect(body).toMatch(/DirectTurnSetupCancelled\("turn stopped during context setup"\)/);
+    expect(setup).toMatch(/DirectTurnSetupCancelled\("turn stopped during context setup"\)/);
+    expect(body).toMatch(/await setupStartTurn\(state\)/);
     expect(finishSrc).toMatch(/handoffs\.abandon\(state\.threadId, state\.dispatchClaimId\)/);
     expect(finishSrc).toMatch(/e instanceof DirectTurnSetupCancelled/);
   });
@@ -69,8 +71,10 @@ describe("startTurn characterization (#1388 w4 step 3)", () => {
   it("steer-aware recovery refuses to climb while steered messages are queued", () => {
     const body = startTurnBody(startTurnSrc);
     const dispatch = readFileSync(join(here, "start-turn-dispatch.ts"), "utf8");
+    const setup = readFileSync(join(here, "start-turn-setup.ts"), "utf8");
     expect(finishSrc).toMatch(/hasQueuedSteeredMessages\(state\.bot\.id, state\.threadId\)/);
-    expect(body).toMatch(/handoffs\.begin\(/);
+    expect(setup).toMatch(/handoffs\.begin\(/);
+    expect(body).toMatch(/await setupStartTurn\(state\)/);
     expect(dispatch).toMatch(/handoffs\.dispatching\(/);
     expect(readFileSync(join(here, "start-turn-stream.ts"), "utf8")).toMatch(/handoffs\.bindTurn\(/);
   });

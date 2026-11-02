@@ -31,6 +31,7 @@ describe("startTurn leaf modules (#1388 w4 step 3)", () => {
       "start-turn-prepare-claim.ts",
       "start-turn-dispatch.ts",
       "start-turn-prompt.ts",
+      "start-turn-setup.ts",
     ]) {
       expect(existsSync(join(here, name)), name).toBe(true);
       const leaf = readFileSync(join(here, name), "utf8");
@@ -54,6 +55,8 @@ describe("startTurn leaf modules (#1388 w4 step 3)", () => {
     expect(src).toMatch(/await dispatchStartTurn\(state\)/);
     expect(src).toMatch(/createPromptStartTurn\(host\)/);
     expect(src).toMatch(/await promptStartTurn\(state\)/);
+    expect(src).toMatch(/createSetupStartTurn\(host\)/);
+    expect(src).toMatch(/await setupStartTurn\(state\)/);
   });
 
 

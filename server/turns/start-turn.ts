@@ -1,6 +1,5 @@
 // #1388 wave 4 step 3: startTurn runtime (leaf phase modules re-exported).
 // Never imports server/index.ts.
-import { createHash } from "node:crypto";
 import type { LocalVmTarget, Runtime } from "../container-computer.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import { createTurnState } from "./start-turn-state.ts";
@@ -11,6 +10,7 @@ import { createPrepareAdmitStartTurn } from "./start-turn-prepare-admit.ts";
 import { createPrepareClaimStartTurn } from "./start-turn-prepare-claim.ts";
 import { createDispatchStartTurn } from "./start-turn-dispatch.ts";
 import { createPromptStartTurn } from "./start-turn-prompt.ts";
+import { createSetupStartTurn } from "./start-turn-setup.ts";
 
 export type { StartTurnHost };
 
@@ -24,7 +24,7 @@ export function createStartTurn(host: StartTurnHost) {
     COMPACT_VOLATILE_SECTIONS: _COMPACT_VOLATILE_SECTIONS,
     CREDENTIAL_PROMPT,
     ComputerWaitParked,
-    DEFAULT_REBUILD_BYTES,
+    DEFAULT_REBUILD_BYTES: _DEFAULT_REBUILD_BYTES,
     DESKTOP_BRIDGE_MCP_NAME,
     DirectTurnSetupCancelled,
     EngineAccessLost: _EngineAccessLost,
@@ -57,7 +57,7 @@ export function createStartTurn(host: StartTurnHost) {
     approvalLevelPrompt: _approvalLevelPrompt,
     approvalModeForTurn: _approvalModeForTurn,
     asPlaceFailure,
-    attachCustomMcp,
+    attachCustomMcp: _attachCustomMcp,
     attachTeamBoat,
     auditFullAccessTurn: _auditFullAccessTurn,
     autoLocalVmAttachable,
@@ -65,7 +65,7 @@ export function createStartTurn(host: StartTurnHost) {
     autoRecallEnabled,
     autoRecallPrompt: _autoRecallPrompt,
     autoVmClaims,
-    availableSkills,
+    availableSkills: _availableSkills,
     beginMemoryTurn,
     bindInternalCapabilityToProviderTurn: _bindInternalCapabilityToProviderTurn,
     bindTurnComputer,
@@ -74,22 +74,22 @@ export function createStartTurn(host: StartTurnHost) {
     botCreationOffered,
     botProfilePrompt,
     botRecoveryBackups: _botRecoveryBackups,
-    botUserName,
+    botUserName: _botUserName,
     botUserProfile: _botUserProfile,
     browserIntegration,
     browserIsThePlace: _browserIsThePlace,
     browserRuntime,
-    buildRecoveryText,
+    buildRecoveryText: _buildRecoveryText,
     buildSystemPrompt: _buildSystemPrompt,
-    buildTurnContext,
+    buildTurnContext: _buildTurnContext,
     builtInBrowserEnabled,
     bus: _bus,
-    callLinesBlock,
-    callLinesSince,
+    callLinesBlock: _callLinesBlock,
+    callLinesSince: _callLinesSince,
     callTurnEffort: _callTurnEffort,
     canWorkOnCloud,
     cfg,
-    checkSoulDrift,
+    checkSoulDrift: _checkSoulDrift,
     checkedTaskModelSwitch: _checkedTaskModelSwitch,
     checkpoints,
     chiefOfStaffSystemPrompt,
@@ -97,14 +97,14 @@ export function createStartTurn(host: StartTurnHost) {
     claudeAiConnectorsFor: _claudeAiConnectorsFor,
     claudeUserMcpEnabled: _claudeUserMcpEnabled,
     clearCancelledProviderHandshake: _clearCancelledProviderHandshake,
-    clearDirectTurnDispatch,
+    clearDirectTurnDispatch: _clearDirectTurnDispatch,
     clearFailedAutoPin,
     clearTurnDigestState: _clearTurnDigestState,
     cloudEngine,
     cloudGuestOpened,
     cloudPlaceRefusal,
-    cloudRoutineReadiness,
-    compactConversation,
+    cloudRoutineReadiness: _cloudRoutineReadiness,
+    compactConversation: _compactConversation,
     compactPromptFor: _compactPromptFor,
     compactVolatileOrder: _compactVolatileOrder,
     computerPlaceRefusal,
@@ -118,7 +118,7 @@ export function createStartTurn(host: StartTurnHost) {
     containerComputerStatus,
     controlIntegration,
     coordinationSystemInstructions: _coordinationSystemInstructions,
-    coordinator,
+    coordinator: _coordinator,
     customMcpPrompt: _customMcpPrompt,
     dataIntegration,
     deliverableNotification,
@@ -126,33 +126,33 @@ export function createStartTurn(host: StartTurnHost) {
     desktopModelPersonFor: _desktopModelPersonFor,
     devPodsPrompt: _devPodsPrompt,
     devPodsThreads: _devPodsThreads,
-    directContext,
+    directContext: _directContext,
     directFollowupTurns: _directFollowupTurns,
     directRequestOwners,
-    directTurnBots,
+    directTurnBots: _directTurnBots,
     directTurnClaimExists: _directTurnClaimExists,
     directTurnClaimIsCurrent,
     directTurnGenerationByThread,
     docsIndexPrompt: _docsIndexPrompt,
-    drainComputerResumes,
-    drainDelegationWakes,
-    drainQueuedSends,
-    drainSecretResumes,
-    drainTeamSetupResumes,
+    drainComputerResumes: _drainComputerResumes,
+    drainDelegationWakes: _drainDelegationWakes,
+    drainQueuedSends: _drainQueuedSends,
+    drainSecretResumes: _drainSecretResumes,
+    drainTeamSetupResumes: _drainTeamSetupResumes,
     effectiveBotOwner: _effectiveBotOwner,
     endMemoryTurn: _endMemoryTurn,
     engineConnectorsPromptFor: _engineConnectorsPromptFor,
     engineDisplayName: _engineDisplayName,
     engineHasNativeWebSearch,
-    engineIsFresh,
+    engineIsFresh: _engineIsFresh,
     engineStartGate: _engineStartGate,
     engineTurnLevel: _engineTurnLevel,
     enginesRead: _enginesRead,
     ensureTaskWorkspace,
     ensureWorkspace,
-    expandLearnTurnText,
-    expandSetupTurnText,
-    expandSkillCommandTurnText,
+    expandLearnTurnText: _expandLearnTurnText,
+    expandSetupTurnText: _expandSetupTurnText,
+    expandSkillCommandTurnText: _expandSkillCommandTurnText,
     failedTurnTool,
     finishUntilPrompt: _finishUntilPrompt,
     fitTurnImagesForModel: _fitTurnImagesForModel,
@@ -161,8 +161,8 @@ export function createStartTurn(host: StartTurnHost) {
     githubWithheldPrompt: _githubWithheldPrompt,
     grokCloudConnectorsForTurn: _grokCloudConnectorsForTurn,
     guardTurnDispatch: _guardTurnDispatch,
-    handedStateUsable,
-    handoffs,
+    handedStateUsable: _handedStateUsable,
+    handoffs: _handoffs,
     harnessCommandSource: _harnessCommandSource,
     harnessCommands: _harnessCommands,
     hasQueuedSteeredMessages: _hasQueuedSteeredMessages,
@@ -175,14 +175,14 @@ export function createStartTurn(host: StartTurnHost) {
     inheritedTeamComputer,
     installedPlaybookInstructions,
     interruptDirectThread,
-    isExternalContextMarker,
+    isExternalContextMarker: _isExternalContextMarker,
     isLocalModelId: _isLocalModelId,
     isModelRefusal: _isModelRefusal,
     languageOfPerson: _languageOfPerson,
-    latestCompaction,
+    latestCompaction: _latestCompaction,
     lightenColdPrompt: _lightenColdPrompt,
     limitFailover: _limitFailover,
-    localPrincipalId,
+    localPrincipalId: _localPrincipalId,
     localVmActiveThreads,
     localVmIdleFor,
     localVmImageBusy,
@@ -202,13 +202,13 @@ export function createStartTurn(host: StartTurnHost) {
     markDirectTurnDispatching,
     markWorkspaceUse: _markWorkspaceUse,
     mcpCallTimeoutMinutes: _mcpCallTimeoutMinutes,
-    mcpServersAsPerson,
+    mcpServersAsPerson: _mcpServersAsPerson,
     measureContextBuckets: _measureContextBuckets,
     memoryPromptFor: _memoryPromptFor,
     mentionPrompt: _mentionPrompt,
     mentionedBots,
-    messagesIntegration,
-    messagesWanted,
+    messagesIntegration: _messagesIntegration,
+    messagesWanted: _messagesWanted,
     modelFallbackByPayer: _modelFallbackByPayer,
     modelFallbackByThread: _modelFallbackByThread,
     modelFallbackPayerKey: _modelFallbackPayerKey,
@@ -226,7 +226,7 @@ export function createStartTurn(host: StartTurnHost) {
     noteCallBesideConversation: _noteCallBesideConversation,
     noteTurnQueued: _noteTurnQueued,
     notify,
-    orgSpeakerPrincipal,
+    orgSpeakerPrincipal: _orgSpeakerPrincipal,
     orgTurnAccess: _orgTurnAccess,
     outstandingAssignmentsPrompt: _outstandingAssignmentsPrompt,
     ownerBotsReadOnly,
@@ -237,12 +237,12 @@ export function createStartTurn(host: StartTurnHost) {
     peerReviewRequired: _peerReviewRequired,
     peerRosterSystemPrompt,
     pendingCancelledProviderHandshakes,
-    personalFeatureOn,
-    personalSkillInputs,
-    personalSkills,
+    personalFeatureOn: _personalFeatureOn,
+    personalSkillInputs: _personalSkillInputs,
+    personalSkills: _personalSkills,
     pluginDirsFor: _pluginDirsFor,
-    perspicaxTurnIntegration,
-    phoneIntegration,
+    perspicaxTurnIntegration: _perspicaxTurnIntegration,
+    phoneIntegration: _phoneIntegration,
     pickFastSentenceModel: _pickFastSentenceModel,
     poolLocalVmTarget,
     prepareSemanticRecall,
@@ -250,7 +250,7 @@ export function createStartTurn(host: StartTurnHost) {
     proactiveModeFor: _proactiveModeFor,
     proactivePrompt: _proactivePrompt,
     promptSectionPaths: _promptSectionPaths,
-    promptWithReply,
+    promptWithReply: _promptWithReply,
     reachable: _reachable,
     reachablePeers,
     readCuaConnection,
@@ -259,25 +259,25 @@ export function createStartTurn(host: StartTurnHost) {
     recentWorkFor: _recentWorkFor,
     recentWorkPrompt: _recentWorkPrompt,
     redactSecretsInText,
-    refreshMcpOAuth,
+    refreshMcpOAuth: _refreshMcpOAuth,
     refreshStreamDigests: _refreshStreamDigests,
     registerComputerResume,
     releaseBootEngineSlot: _releaseBootEngineSlot,
     releaseLocalVmThread,
     releasePlain: _releasePlain,
     releaseTurnComputer,
-    releaseTurnResources,
+    releaseTurnResources: _releaseTurnResources,
     rememberAutoRefusal: _rememberAutoRefusal,
     remoteComputerForTurn,
     renderSkillInstructions,
-    renderUnseen,
-    replaysNatively,
+    renderUnseen: _renderUnseen,
+    replaysNatively: _replaysNatively,
     reportIncident,
     resolveComputerPromptKind: _resolveComputerPromptKind,
     resolveEngineTurnEffort: _resolveEngineTurnEffort,
     retireProviderTurn: _retireProviderTurn,
-    retryDelegationsWaitingOn,
-    revokeInternalCapabilityGeneration,
+    retryDelegationsWaitingOn: _retryDelegationsWaitingOn,
+    revokeInternalCapabilityGeneration: _revokeInternalCapabilityGeneration,
     richOutputPrompt: _richOutputPrompt,
     roomHandoffProblem: _roomHandoffProblem,
     routines: _routines,
@@ -289,22 +289,22 @@ export function createStartTurn(host: StartTurnHost) {
     savedSteps,
     scopedSkillsPrompt: _scopedSkillsPrompt,
     screenPollers,
-    sectionContextSystemPrompt,
-    selectBundledSkills,
-    selectReplay,
+    sectionContextSystemPrompt: _sectionContextSystemPrompt,
+    selectBundledSkills: _selectBundledSkills,
+    selectReplay: _selectReplay,
     semanticEmbeddingEndpoint,
-    sessionStart,
+    sessionStart: _sessionStart,
     sessions: _sessions,
     settleDirectCoordination: _settleDirectCoordination,
-    settleDirectFollowup,
+    settleDirectFollowup: _settleDirectFollowup,
     settlingResourceOwners: _settlingResourceOwners,
     setupModeActive,
     setupSystemPrompt: _setupSystemPrompt,
     shouldMountLocalComputer,
-    skillAuthoringEnabled,
-    skillCommandInline,
+    skillAuthoringEnabled: _skillAuthoringEnabled,
+    skillCommandInline: _skillCommandInline,
     skillDiscoveryAvailable: _skillDiscoveryAvailable,
-    skillsLibraryEnabled,
+    skillsLibraryEnabled: _skillsLibraryEnabled,
     soloGoalSystemPrompt: _soloGoalSystemPrompt,
     soloGoals: _soloGoals,
     startScreenPoller,
@@ -335,29 +335,29 @@ export function createStartTurn(host: StartTurnHost) {
     turnReachPrompt: _turnReachPrompt,
     turnResourceOwners,
     turnResources,
-    turnTrace,
+    turnTrace: _turnTrace,
     typedCommandForTurn: _typedCommandForTurn,
     uniquePeerName: _uniquePeerName,
-    unseenMessages,
+    unseenMessages: _unseenMessages,
     userProfileSystemPrompt: _userProfileSystemPrompt,
     usesCompactPrompt: _usesCompactPrompt,
     usesStablePrompt: _usesStablePrompt,
-    vaultPrincipalForThread,
-    voiceBriefText,
-    voiceCalls,
+    vaultPrincipalForThread: _vaultPrincipalForThread,
+    voiceBriefText: _voiceBriefText,
+    voiceCalls: _voiceCalls,
     voiceLatency: _voiceLatency,
-    voiceSessions,
-    voiceTranscript,
-    voiceUnseenBlock,
+    voiceSessions: _voiceSessions,
+    voiceTranscript: _voiceTranscript,
+    voiceUnseenBlock: _voiceUnseenBlock,
     vps,
     vpsThreadEnded,
     vpsThreadStarted,
     wants: _wants,
-    watchdog,
+    watchdog: _watchdog,
     webhooks: _webhooks,
     withDesktopModelPerson: _withDesktopModelPerson,
     withRecalled: _withRecalled,
-    withUnseenMessages,
+    withUnseenMessages: _withUnseenMessages,
     withWorkplaceNote: _withWorkplaceNote,
     withholdHostToolsFor,
     workspaceCwdPrompt: _workspaceCwdPrompt,
@@ -373,6 +373,9 @@ export function createStartTurn(host: StartTurnHost) {
   const prepareClaimStartTurn = createPrepareClaimStartTurn(host);
   const dispatchStartTurn = createDispatchStartTurn(host);
   const promptStartTurn = createPromptStartTurn(host);
+  const setupStartTurn = createSetupStartTurn(host);
+  void _DEFAULT_REBUILD_BYTES; void _attachCustomMcp; void _availableSkills; void _botUserName; void _buildRecoveryText; void _buildTurnContext; void _callLinesBlock; void _callLinesSince; void _checkSoulDrift; void _clearDirectTurnDispatch; void _cloudRoutineReadiness; void _compactConversation; void _coordinator; void _directContext; void _directTurnBots; void _drainComputerResumes; void _drainDelegationWakes; void _drainQueuedSends; void _drainSecretResumes; void _drainTeamSetupResumes; void _engineIsFresh; void _expandLearnTurnText; void _expandSetupTurnText; void _expandSkillCommandTurnText; void _handedStateUsable; void _handoffs; void _isExternalContextMarker; void _latestCompaction; void _localPrincipalId; void _mcpServersAsPerson; void _messagesIntegration; void _messagesWanted; void _orgSpeakerPrincipal; void _personalFeatureOn; void _personalSkillInputs; void _personalSkills; void _perspicaxTurnIntegration; void _phoneIntegration; void _promptWithReply; void _refreshMcpOAuth; void _releaseTurnResources; void _renderUnseen; void _replaysNatively; void _retryDelegationsWaitingOn; void _revokeInternalCapabilityGeneration; void _sectionContextSystemPrompt; void _selectBundledSkills; void _selectReplay; void _sessionStart; void _settleDirectFollowup; void _skillAuthoringEnabled; void _skillCommandInline; void _skillsLibraryEnabled; void _turnTrace; void _unseenMessages; void _vaultPrincipalForThread; void _voiceBriefText; void _voiceCalls; void _voiceSessions; void _voiceTranscript; void _voiceUnseenBlock; void _watchdog; void _withUnseenMessages;
+
   void _AUTO_COMPUTER_RULES; void _BUILT_IN_BROWSER_SYSTEM_PROMPT; void _BUILT_IN_DATA_SYSTEM_PROMPT; void _CALL_RECALL_BUDGET; void _CLAUDE_REUSE_VOLATILE_SECTIONS; void _COMPACT_VOLATILE_SECTIONS; void _HOSTED_WORKSPACE; void _LOCAL_RECALL_BUDGET; void _LOCAL_RECENT_WORK_LINES; void _REACTION_PROMPT; void _ROUTINE_EXECUTION_PROMPT; void _TEAM_MEMORY_PROMPT; void _WEBHOOK_PROMPT; void _WITHHELD_HOST_TOOLS_PROMPT; void _aiClientThreadPerson; void _approvalLevelPrompt; void _approvalModeForTurn; void _autoPayerKey; void _autoRecallPrompt; void _botUserProfile; void _buildSystemPrompt; void _compactPromptFor; void _compactVolatileOrder; void _computerPrompt; void _computerSkippedNote; void _coordinationSystemInstructions; void _customMcpPrompt; void _devPodsPrompt; void _devPodsThreads; void _docsIndexPrompt; void _effectiveBotOwner; void _engineConnectorsPromptFor; void _engineDisplayName; void _finishUntilPrompt; void _githubWithheldPrompt; void _idleEngines; void _isLocalModelId; void _lightenColdPrompt; void _limitFailover; void _longCommandsPrompt; void _markWorkspaceUse; void _measureContextBuckets; void _memoryPromptFor; void _mentionPrompt; void _modelFallbackByPayer; void _modelFallbackByThread; void _modelFallbackPayerKey; void _modelPrompt; void _myChromePromptFor; void _outstandingAssignmentsPrompt; void _ownerPaysForMember; void _parseLocalPromptMode; void _peerContactPrompt; void _peerName; void _peerReviewRequired; void _proactiveModeFor; void _proactivePrompt; void _promptSectionPaths; void _recentWorkFor; void _recentWorkPrompt; void _refreshStreamDigests; void _resolveComputerPromptKind; void _richOutputPrompt; void _roomHandoffProblem; void _rulesSystemPrompt; void _runningTurnEngines; void _scopedSkillsPrompt; void _setupSystemPrompt; void _skillDiscoveryAvailable; void _soloGoalSystemPrompt; void _soloGoals; void _streamDigestPrompt; void _streamTurn; void _surfacePrompt; void _teamAvailabilityPart; void _teamComputerPrompt; void _teamMemory; void _toolDefinitionBytes; void _turnConnectorsFor; void _turnContextBuckets; void _turnPromptBytes; void _turnReachPrompt; void _uniquePeerName; void _userProfileSystemPrompt; void _usesCompactPrompt; void _usesStablePrompt; void _workspaceCwdPrompt; void _workspaceLocationsPrompt;
 
   void _VOICE_FIRST_SENTENCE_SYSTEM; void _accountConnectorInput; void _auditFullAccessTurn; void _botRecoveryBackups; void _browserIsThePlace; void _callTurnEffort; void _claudeAiConnectorsFor; void _claudeUserMcpEnabled; void _clearCancelledProviderHandshake; void _confinedWhy; void _desktopLocalModels; void _desktopModelPersonFor; void _directTurnClaimExists; void _engineStartGate; void _engineTurnLevel; void _fitTurnImagesForModel; void _grokCloudConnectorsForTurn; void _guardTurnDispatch; void _harnessCommandSource; void _harnessCommands; void _holdBootEngineSlot; void _languageOfPerson; void _mcpCallTimeoutMinutes; void _noteBotRead; void _noteTurnQueued; void _orgTurnAccess; void _pluginDirsFor; void _pickFastSentenceModel; void _resolveEngineTurnEffort; void _runAsBotEngine; void _toolErrorCorrectiveRoundsFor; void _turnCommandEnvironment; void _turnNetworkProxy; void _typedCommandForTurn; void _voiceLatency; void _withDesktopModelPerson; void _withRecalled;
@@ -396,317 +399,8 @@ export function createStartTurn(host: StartTurnHost) {
     void (async () => {
     state.warmOk = false;
     try {
+      await setupStartTurn(state);
 
-      if (state.warmOnly && state.opts?.warmSignal?.aborted) {
-        state.instance.adapter.releaseWarmSession?.(state.threadId);
-        return;
-      }
-      if (state.enginesRead) {
-        await state.enginesRead;
-        if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped while the engines were read");
-      }
-      // A call warm must not compact or rewrite the resume cursor. The first
-      // spoken turn decides that, and a reset discards this process.
-      if (!state.warmOnly) {
-      // Readiness can wait on the network. Admit the task first so its busy
-      // state, Stop action and watchdog own that wait just like VM setup.
-      if (state.opts?.runOn === "cloud") {
-        const readiness = await cloudRoutineReadiness(state.botId, state.threadId);
-        if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
-          throw new DirectTurnSetupCancelled("turn stopped during cloud readiness");
-        }
-        if (!readiness.ready) throw new Error(readiness.reason ?? "The cloud computer is not ready");
-      }
-      // A call turn starts its own short session: the conversation's fold
-      // waits for its next written turn, off the person's silence.
-      if (!state.voiceCallTurn) await compactConversation({ bot: state.bot, threadId: state.threadId, generation: state.dispatchClaimId, instance: state.instance, model: state.model,
-        excludedIds: new Set([state.userMessage.id, ...(state.opts?.excludeMessageIds ?? [])]), manual: state.opts?.compactOnly === true });
-      turnTrace(state.threadId, "compacted");
-      if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped during context setup");
-      if (state.opts?.compactOnly) {
-        clearDirectTurnDispatch(state.threadId, state.dispatchClaimId);
-        revokeInternalCapabilityGeneration(state.threadId, state.dispatchClaimId);
-        settleDirectFollowup(state.dispatchClaimId);
-        releaseTurnResources(state.resourceOwner);
-        store.setTaskActivity(state.bot.id, state.threadId, "idle");
-        watchdog.settle(state.threadId);
-        directTurnBots.delete(state.threadId);
-        retryDelegationsWaitingOn(state.bot.id);
-        drainQueuedSends();
-        drainComputerResumes();
-        drainSecretResumes();
-        drainTeamSetupResumes();
-        drainDelegationWakes();
-        return;
-      }
-      }
-      // Keep the full branch order for delivery bookkeeping, but select actual
-      // replay entries by bytes. A compacted prefix is represented by its record.
-      const skipTranscript = new Set<string>([state.userMessage.id, ...(state.opts?.excludeMessageIds ?? [])]);
-      state.activeMessages = store.activePath(state.threadId);
-      const coordinationChildren = state.opts?.coordination?.resumed
-        ? new Set(coordinator.children(state.opts.coordination.id).map((child: any) => child.id)) : undefined;
-      for (const m of state.activeMessages) {
-        if (!state.opts?.coordination || !m.roomRequest) continue;
-        if ((m.roomRequest.phase === "request" && m.roomRequest.id === state.opts.coordination.id) ||
-          (m.roomRequest.phase === "result" && coordinationChildren?.has(m.roomRequest.id))) skipTranscript.add(m.id);
-      }
-      const context = directContext(state.bot, state.threadId, state.activeMessages);
-      state.contextOrder = context.map((m: any) => m.id);
-      const replayable = context.filter((m: any) => !skipTranscript.has(m.id));
-      state.record = latestCompaction(state.activeMessages, state.task);
-      state.selection = selectReplay(context, { budgetBytes: cfg.context?.rebuildBytes ?? DEFAULT_REBUILD_BYTES, excludedIds: skipTranscript, compaction: state.record });
-      state.transcript = state.selection.transcript.map(({ role, text }: any) => ({ role, text }));
-      state.contextReset = state.selection.compacted > 0 && state.record?.id !== state.task.appliedCompactionId;
-      // Whether this engine had a session here is decided on the cursors
-      // from before the reset below: a fold is a continuation, not a new
-      // engine joining (turn-context.ts COMPACTED_PREAMBLE).
-      const cursorsBeforeReset = state.task.resumeCursors;
-      // The record is durable even if a crash occurs before this bookkeeping.
-      // A retry then sees the unapplied record again and rebuilds safely.
-      if (state.contextReset && !state.warmOnly && !state.voiceCallTurn) store.patchTask(state.bot.id, state.threadId, { resumeCursors: {} });
-      // A fold of a stale session reads as a pause, never "continue where you left off".
-      const pausedFold = state.contextReset && Boolean(state.record && state.task.contextSummaries?.some((entry: any) => entry.id === state.record.id && entry.stale));
-
-      // After a rewind (edit / branch switch) the provider's native session
-      // still contains the abandoned branch: start a fresh session instead of
-      // resuming, and for cursor-resuming drivers replay the surviving path
-      // inline (transcript-replay drivers get it via transcript). The flag is
-      // cleared only once the turn is actually dispatched — clearing it here
-      // would cost the next attempt its history if this dispatch fails.
-      state.rewound = Boolean(state.task.rewound);
-      // A fresh engine — the user switched this bot's model mid-thread — has no
-      // current session here either, so it gets the same replay. Distinct from
-      // rewound: the OTHER instances' cursors are left alone (a rewind wipes
-      // them all), and "fresh" is decided by who ran the last turn, not by
-      // whether we hold a cursor — see engineIsFresh.
-      state.externalContextMarker = isExternalContextMarker(state.task.lastInstanceId)
-        ? state.task.lastInstanceId
-        : undefined;
-      const fresh =
-        !state.rewound &&
-        !state.externalContextMarker &&
-        engineIsFresh({ instanceId: state.instanceId, lastInstanceId: state.task.lastInstanceId, resumeCursors: cursorsBeforeReset, transcript: replayable });
-      // An engine that records what its session was handed resumes it with only
-      // the context messages outside that record. A record of another session
-      // (the one it replaced) or one that no longer lines up with the branch is
-      // not trusted: the session is rebuilt by the same replay as any other.
-      state.strictResume = state.instance.adapter.capabilities.strictResume === true;
-      const cursor = state.task.resumeCursors[state.instanceId];
-      const handed = state.strictResume && !state.rewound && !state.contextReset && !fresh && !state.externalContextMarker && cursor !== undefined
-        ? state.task.handedMessages?.[state.instanceId] : undefined;
-      const unseen = handed && handedStateUsable(handed, cursor, state.contextOrder) ? unseenMessages(replayable, state.contextOrder, handed) : undefined;
-      // A teammate's result or reply: without records this turn would replay.
-      const externalUpdate = Boolean(state.opts?.coordination?.resumed || unseen?.some((m: any) => m.keep));
-      // What a resumed session keeps from its launch: the standing instructions
-      // (tools, servers and — for Claude — the model are passed on every launch),
-      // plus settings that a live turn cannot change. Codex now reasserts its
-      // model/provider on resume, but an in-flight turn and an omitted effort
-      // retain the prior selection, so both still belong to the session here. An
-      // external update that finds any of it changed since the session started
-      // gets the fresh session and replay it always got, rather than a resume.
-      const persistentConfig = [state.bot.name, state.bot.title, state.bot.description, sectionContextSystemPrompt(state.bot.section),
-        ...(state.instance.driverKind === "codex" ? [state.model, state.effort ?? null] : [])];
-      const sessionConfig = (soul: string | undefined) =>
-        createHash("sha256").update(JSON.stringify([...persistentConfig, soul])).digest("hex").slice(0, 16);
-      state.plannedConfig = sessionConfig(state.bot.soul);
-      // Agent-tool gate shared by skill authoring, the /setup turn-text rewrite,
-      // the setup prompt block, and the peer-comms integration below: a driver
-      // that never mounts agent tools (or a turn already at the comms-depth cap)
-      // must not be steered into — or told about — tools it cannot call.
-      state.skillAuthoring = personalFeatureOn("state.skillAuthoring", skillAuthoringEnabled(cfg), vaultPrincipalForThread(state.threadId)) && state.peerToolsMounted;
-      // Setup mode's turn-text rewrite (parseSetupCommand/expandSetupTurnText)
-      // must not run ahead of a system prompt that can't explain it: a driver
-      // without agent tools sees the user's literal "/setup ..." message. The
-      // gate on whether the coaching block itself is active — setupModeActive,
-      // which also depends on the bot's soul/description — is decided below,
-      // from the same bot snapshot the prompt's soul is built from.
-      // A `/name` turn for one of the bot's enabled skills reads as a plain
-      // request to follow that SKILL.md (shared/skill-command.ts). An engine
-      // with workspace files is pointed at the file. An API engine (or any
-      // organization turn whose files are the person's environment) gets the
-      // reviewed instructions inlined, while skills_list/workspace_read still
-      // serve the managed index when those tools are allowed.
-      const skillCommandText = expandSkillCommandTurnText(
-        state.bot.id,
-        state.providerText,
-        skillsLibraryEnabled(cfg) ? (store.bot(state.bot.id)?.assignedSkills ?? state.bot.assignedSkills) : undefined,
-        { inline: skillCommandInline({ workspaceFiles: supportsWorkspaceFiles(state.instance.driverKind), organization: IDENTITY.kind === "perspicax" }),
-          overrides: (() => {
-            state.person = IDENTITY.kind === "perspicax" ? orgSpeakerPrincipal(state.bot, state.speaker) : localPrincipalId();
-            return skillsLibraryEnabled(cfg) && state.person ? personalSkills.commands(state.person, new Set(personalSkillInputs(state.bot, state.person).filter((skill: any) => skill.shadowed).map((skill: any) => skill.name))) : [];
-          })()
-        },
-      );
-      const setupText = state.peerToolsMounted ? expandSetupTurnText(skillCommandText) : skillCommandText;
-      const userTurnText = promptWithReply(
-        state.skillAuthoring ? expandLearnTurnText(setupText) : setupText,
-        state.opts?.replyTo,
-        botUserName(state.bot),
-      );
-      // Decided again at dispatch when setup outlasted a soul edit (config).
-      const decideContext = (config: string) => {
-        // A Codex thread keeps the last effort it was sent and no turn can clear
-        // one: back on the default, a thread that holds a level is rebuilt from
-        // the transcript rather than resumed on that level.
-        const effortHeld = !state.effort && typeof handed?.effort === "string";
-        const handedStale = Boolean(handed && (!unseen || effortHeld || (externalUpdate && handed.config !== config)));
-        const { block: unseenBlock, placed } = unseen && !handedStale ? renderUnseen(unseen) : { block: "", placed: [] };
-        const { turnText: contextTurnText, resume } = buildTurnContext({
-          text: userTurnText,
-          transcript: state.transcript,
-          rewound: state.rewound,
-          fresh,
-          compacted: state.contextReset,
-          paused: pausedFold,
-          externallyUpdated: Boolean(state.externalContextMarker) || handedStale,
-          replaysNatively: replaysNatively(state.instance.driverKind)
-        });
-        // Snapshot the cursor alongside the context decision. An external result
-        // can arrive during async computer/setup work and clear the task cursor;
-        // this already-built turn must either keep its old session or replay on the
-        // following turn, never start a blank session with no transcript.
-        const resumeCursor = resume ? state.task.resumeCursors[state.instanceId] : undefined;
-        // A cursor the provider no longer honours must not brick the thread: the
-        // driver may fall back to ONE fresh session, and this is what it sends
-        // there, so the new session is not blank (server/resume-recovery.ts). A
-        // turn carrying an external update gets the replay it would have had.
-        const recoveryIsReplay = resumeCursor !== undefined && externalUpdate && state.transcript.length > 0;
-        const recoveryText = resumeCursor === undefined ? undefined : recoveryIsReplay
-          ? buildTurnContext({ text: userTurnText, transcript: state.transcript, rewound: false, fresh: false, externallyUpdated: true, replaysNatively: false }).turnText
-          : buildRecoveryText({ text: userTurnText, transcript: state.transcript });
-        // What this turn puts in front of the provider, for each session it can end
-        // up in (server/delta-context.ts). buildTurnContext prepends a replay only
-        // when it replays, so a changed text means the transcript was sent.
-        const carried = [...skipTranscript];
-        const windowIds = state.selection.representedIds;
-        return {
-          turnText: withUnseenMessages(unseenBlock, contextTurnText),
-          resumeCursor, sessionReset: !resume, recoveryText,
-          handoff: state.strictResume ? {
-            botId: state.bot.id, instanceId: state.instanceId, config, resumeCursor: typeof resumeCursor === "string" ? resumeCursor : undefined,
-            ...(state.instance.driverKind === "codex" ? { effort: state.effort ?? null } : {}),
-            started: sessionStart(state.contextOrder, contextTurnText !== userTurnText ? windowIds : [], carried),
-            recovery: sessionStart(state.contextOrder, recoveryText !== undefined ? windowIds : [], carried),
-            resumed: sessionStart(state.contextOrder, [], [...placed, ...carried]),
-            placed, carried, own: [state.userMessage.id, ...(state.opts?.excludeMessageIds ?? [])]
-          } : undefined
-        };
-      };
-      state.dispatchContext = decideContext(state.plannedConfig);
-      // A call turn (server/voice-turn.ts) runs in the call's own session,
-      // never the conversation's: no conversation cursor, no handed-message
-      // record. Its first dispatch (the warm, or the first spoken turn) closes
-      // an idle process the thread kept, so the call never reuses the long
-      // session; the first spoken turn carries the short view of the
-      // conversation; the later ones resume the call session, with what it
-      // has not seen (a task's result) in front of the words.
-      // The conversation's session resumes after a call: the call's lines go
-      // in front of the words (a rebuild or a replaying engine has them).
-      const callSince = !state.voiceCallTurn && !state.warmOnly ? callLinesSince.get(state.threadId) : undefined;
-      if (callSince !== undefined) {
-        const from = state.contextOrder.indexOf(callSince);
-        if (state.dispatchContext.resumeCursor !== undefined && !state.dispatchContext.sessionReset && from >= 0 && !replaysNatively(state.instance.driverKind)) {
-          const lines = replayable.filter((m: any) => state.contextOrder.indexOf(m.id) > from);
-          state.dispatchContext = { ...state.dispatchContext, turnText: withUnseenMessages(callLinesBlock(lines), state.dispatchContext.turnText) };
-        }
-        callLinesSince.delete(state.threadId);
-      }
-      const liveCall = state.voiceCallTurn ? voiceCalls.active(state.threadId) : undefined;
-      state.voiceView = liveCall ? voiceTranscript(context, { excludedIds: skipTranscript, ...(state.record ? { compaction: state.record } : {}) }) : null;
-      state.voiceHanded = [];
-      state.voiceAnchor = undefined;
-      state.voiceBriefed = false;
-      if (liveCall && state.voiceView) {
-        state.plan = voiceSessions.plan(state.threadId, { callId: liveCall.callId, instanceId: state.instanceId, model: String(state.model ?? "") });
-        if (state.plan.fresh) {
-          // the idle process may hold the conversation's session: never reuse it
-          try { state.instance.adapter.releaseWarmSession?.(state.threadId); } catch { /* already closed */ }
-        }
-        // the warm starts the call's process: the first spoken turn takes it as is
-        if (state.warmOnly) voiceSessions.dispatched(state.threadId, []);
-        const byId = new Map<string, any>(state.activeMessages.map((message: any) => [message.id, message]));
-        const ownReply = (id: string) => {
-          state.source = byId.get(byId.get(id)?.requestMessageId ?? "");
-          return Boolean(state.source?.voiceCall);
-        };
-        const unseen = state.plan.brief ? [] : voiceSessions.unseen(state.threadId, replayable)
-          .filter((m: any) => !(m.role === "user" && (m.spoken || byId.get(m.id)?.voiceCall)) && !(m.role === "assistant" && ownReply(m.id)));
-        const natively = replaysNatively(state.instance.driverKind);
-        const brief = voiceBriefText(state.voiceView.transcript, userTurnText);
-        state.text = state.warmOnly ? "" : natively ? userTurnText
-          : state.plan.brief ? brief : withUnseenMessages(voiceUnseenBlock(unseen), userTurnText);
-        state.voiceHanded = state.warmOnly ? [] : [...(state.plan.brief ? state.voiceView.representedIds : unseen.map((m: any) => m.id)), ...skipTranscript];
-        state.voiceAnchor = state.warmOnly ? undefined : (state.contextOrder.at(-1) ?? state.userMessage.id);
-        state.voiceBriefed = state.plan.brief;
-        state.dispatchContext = {
-          turnText: state.text,
-          resumeCursor: state.plan.cursor,
-          sessionReset: false,
-          // a call session the engine no longer has starts again from the short view
-          ...(state.plan.cursor !== undefined && !natively ? { recoveryText: brief } : {}),
-          handoff: undefined
-        } as typeof state.dispatchContext;
-        console.log(`[voice-turn] thread ${state.threadId}: ${state.warmOnly ? "warm" : state.plan.brief ? "new call session" : "call session resumed"} on ${state.instanceId}/${String(state.model ?? "")}, ${Buffer.byteLength(state.text)} bytes of context`);
-      }
-
-      state.persona = [
-        `You are ${state.bot.name}, a personal bot in Sagax.`,
-        state.bot.title && `Role: ${state.bot.title}.`,
-        state.bot.description && `About: ${state.bot.description}`,
-      ]
-        .filter(Boolean)
-        .join(" ");
-
-      // The SOUL.md mirror is checked here, at dispatch, and only reported:
-      // the prompt below reads bot.soul, never the file.
-      if (!state.warmOnly) {
-        const drift = checkSoulDrift(state.bot.id, state.bot.soul ?? "", state.bot.soulHash ?? "");
-        if (drift.drift !== Boolean(state.bot.soulDrift)) store.patchBot(state.bot.id, { soulDrift: drift.drift });
-      }
-      if (!state.warmOnly && state.dispatchContext.handoff) handoffs.begin(state.threadId, state.dispatchClaimId, state.dispatchContext.handoff);
-
-      state.integrations = {};
-      state.githubWithheld = [];
-      state.browser = null;
-      const selectedSkills = selectBundledSkills(
-        state.providerText,
-        [
-          ...(state.instance.adapter.capabilities.phoneMcp === true ? ["phoneMcp"] : []),
-          ...(state.skillAuthoring ? ["state.skillAuthoring"] : []),
-        ],
-        availableSkills(),
-      );
-      if (selectedSkills.some((skill: any) => skill.manifest.requiredCapabilities.includes("phoneMcp"))) {
-        state.integrations.phone = phoneIntegration(state.bot.id, state.threadId, state.dispatchClaimId);
-      }
-      if (messagesWanted()) state.integrations.messages = messagesIntegration(state.bot.id, state.threadId, state.dispatchClaimId);
-      // user-configured MCP servers (config.json mcpServers): only to a
-      // driver that can mount them. Their tools are
-      // never pre-allowed, so every call rides the normal permission flow.
-      if (state.instance.adapter.capabilities.customMcp === true) {
-        await refreshMcpOAuth(state.bot);
-        const mounted = mcpServersAsPerson(state.bot, orgSpeakerPrincipal(state.bot, state.speaker), state.threadId);
-        attachCustomMcp(state.integrations, mounted.servers, cfg);
-        state.githubWithheld = mounted.githubWithheld;
-      }
-      // Slice 5: the bot's Perspicax profiles, as the person who speaks.
-      state.perspicaxPrompt = "";
-      if (IDENTITY.kind === "perspicax" && state.instance.adapter.capabilities.customMcp === true && (store.bot(state.bot.id) ?? state.bot).perspicax?.profiles.length) {
-        const perspicax = await perspicaxTurnIntegration({ bot: state.bot, threadId: state.threadId, generation: state.dispatchClaimId, speaker: state.speaker, taken: Object.keys(state.integrations.custom ?? {}), ...(state.warmOnly ? { quiet: true } : {}) });
-        if (Object.keys(perspicax.custom).length) state.integrations.custom = { ...state.integrations.custom, ...perspicax.custom };
-        state.perspicaxPrompt = perspicax.prompt;
-      }
-      if (!state.warmOnly) turnTrace(state.threadId, "integrations");
-      // a call's tools should not come and go between its turns: say so when they do
-      const callMcp = voiceCalls.noteMcp(state.threadId, Object.keys(state.integrations.custom ?? {}));
-      if (callMcp.added.length || callMcp.removed.length) {
-        console.warn(`[voice-call] thread ${state.threadId}: MCP servers changed between call turns${callMcp.added.length ? `; added ${callMcp.added.join(", ")}` : ""}${callMcp.removed.length ? `; missing ${callMcp.removed.join(", ")}` : ""}`);
-      }
-      // CLI engines work inside the bot's own workspace directory rather
-      // than the user's home: a bot with file tools and acceptEdits gets a
-      // desk, not the whole house — and the workspace is where its
-      // MEMORY.md lives. API/box engines have no local filesystem story.
       state.worksInWorkspace = supportsWorkspaceFiles(state.instance.driverKind);
       if (state.worksInWorkspace) {
         ensureWorkspace(state.bot.id);
@@ -717,7 +411,7 @@ export function createStartTurn(host: StartTurnHost) {
         if (!state.warmOnly && state.bot.memoryEnabled !== false) beginMemoryTurn(state.bot.id, state.threadId);
       }
       state.privateWorkspace = state.worksInWorkspace ? ensureTaskWorkspace(state.bot.id, state.threadId) : undefined;
-      state.skillInstructions = renderSkillInstructions(selectedSkills, {
+      state.skillInstructions = renderSkillInstructions(state.selectedSkills, {
         includeRoot: state.worksInWorkspace
       });
       state.packagePlaybooks = installedPlaybookInstructions(state.providerText, state.bot.playbooks);
@@ -1411,8 +1105,8 @@ export function createStartTurn(host: StartTurnHost) {
       }
       await promptStartTurn(state);
 
-      const dispatchedConfig = sessionConfig(state.liveBot?.soul ?? state.bot.soul);
-      if (state.strictResume && !state.voiceView && !(state.opts?.cardContinuation && state.continuingRoutine) && dispatchedConfig !== state.plannedConfig) state.dispatchContext = decideContext(dispatchedConfig);
+      const dispatchedConfig = state.sessionConfig(state.liveBot?.soul ?? state.bot.soul);
+      if (state.strictResume && !state.voiceView && !(state.opts?.cardContinuation && state.continuingRoutine) && dispatchedConfig !== state.plannedConfig) state.dispatchContext = state.decideContext(dispatchedConfig);
       await dispatchStartTurn(state);
 
       await streamStartTurn(state);

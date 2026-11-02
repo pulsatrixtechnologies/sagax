@@ -1447,9 +1447,9 @@ import {
   createWorkspaceAccess,
   describeEdition,
   editionStatus,
+  hostedAccessEntitled,
   hostedWorkspaceConfiguration,
   hostedWorkspaceConfigured,
-  LICENSE_WARN_DAYS,
   licenseWarning,
   sharedWorkspaceFullAccessConfigured,
   loadEnterpriseLayer,
@@ -3310,7 +3310,7 @@ const HOSTED_WORKSPACE = hostedWorkspaceConfigured();
 let workspaceAccess: WorkspaceAccess | null = null;
 const DESKTOP_MANAGED = process.env.SAGAX_DESKTOP_PARENT === "1";
 const SHARED_WORKSPACE_FULL_ACCESS = sharedWorkspaceFullAccessConfigured();
-const sharedWorkspaceFullAccessEnabled = () => SHARED_WORKSPACE_FULL_ACCESS && Boolean(workspaceAccess) && entitled("admin");
+const sharedWorkspaceFullAccessEnabled = () => SHARED_WORKSPACE_FULL_ACCESS && Boolean(workspaceAccess) && hostedAccessEntitled();
 // Who a loopback request without a session is (server/request-auth.ts
 // LoopbackTrust): the owner on a desktop or a one-person server; a service on
 // a shared workspace, where every bot's shell is a loopback caller too.
@@ -4657,7 +4657,8 @@ function usageTriggerFor(auth: RequestAuth): UsageTrigger {
     : { kind: "owner" };
 }
 
-/** The operator's price list, when the server may read it (`billing`). */
+/** The operator's price list, when the `billing` feature is on (always, in
+ * the open-source edition). */
 function operatorPrices(): PriceList | null {
   return entitled("billing") && cfg.billing?.prices && Object.keys(cfg.billing.prices).length ? cfg.billing.prices : null;
 }
@@ -28044,17 +28045,11 @@ async function perBotLocalVmCountForModeChange(): Promise<number | null> {
   return existingPerBotLocalVmCount(runtime.runtime);
 }
 
-/** What Settings needs about the edition: the features, and, once the key
- * is inside its warning window or grace period, when it lapses. The dates
- * reach admins only (configForAccess strips them for client sessions). */
+/** What Settings needs about the edition: which features are on, nothing
+ * else. An enterprise layer's key dates stay on /api/edition (admins) and in
+ * the startup log; the app shows no license notice. */
 function editionForSettings(status: EditionStatus) {
-  const expiring = status.edition === "enterprise" && status.expiresAt && status.expiresInDays !== undefined &&
-    (status.graceEndsAt !== undefined || status.expiresInDays <= LICENSE_WARN_DAYS);
-  return {
-    edition: status.edition,
-    features: status.features,
-    ...(expiring ? { license: { expiresAt: status.expiresAt!, expiresInDays: status.expiresInDays!, ...(status.graceEndsAt ? { graceEndsAt: status.graceEndsAt } : {}) } } : {})
-  };
+  return { edition: status.edition, features: status.features };
 }
 
 function configStatus() {
@@ -28070,9 +28065,10 @@ function configStatus() {
     anthropic: { configured: Boolean(cfg.anthropic?.key), everyClaudeBot: false },
     openai: { configured: Boolean(cfg.openai?.key) },
     openrouter: { configured: Boolean(cfg.openrouter?.key) },
-    // a fleet agent on this server means Settings → Workspaces has something to drive
+    // a fleet agent on this server means Settings → Installations has something to drive
     fleet: { available: fleetAvailable(fleetSocketPath()) },
-    // what this build is entitled to, so Settings shows only what works here
+    // the features this server runs with (every one in the open-source
+    // edition), so Settings shows only what works here
     edition: editionForSettings(editionStatus()),
     // settings, not secrets: the cap and the operator's own price list
     budgets: {
@@ -28232,7 +28228,6 @@ function configForAccess(status: ReturnType<typeof configStatus>, admin: boolean
   // source objects.
   return {
     ...status,
-    edition: { edition: status.edition.edition, features: status.edition.features },
     ...("signIn" in status ? { signIn: { admins: [], members: [] } } : {}),
     vps: { configured: status.vps.configured, sshAlias: "" },
     opencodeGo: { configured: status.opencodeGo.configured, providerKeys: [] },
@@ -31163,7 +31158,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     perspicaxRelay: (input) => perspicaxMcp!.relay(input)
   }),
 ];
-ROUTES.push(createHostedSlackRoutes({ bot: (id) => store.bot(id), hostedReady: () => Boolean(workspaceAccess) && entitled("admin") }));
+ROUTES.push(createHostedSlackRoutes({ bot: (id) => store.bot(id), hostedReady: () => Boolean(workspaceAccess) && hostedAccessEntitled() }));
 // 2026-10-21 (B21 / iOS CO5): the bots' own email addresses, from the
 // Perspicax relay (server/bot-mail-addresses.ts, contract B), and the
 // delivery route (server/bot-inbound-mail.ts, contract A, wired before the
@@ -43673,11 +43668,12 @@ async function originGates(req: IncomingMessage, res: ServerResponse, url: URL, 
   // pages' frames and nothing else: before any other route or credential.
   if (PAGES_ORIGIN && handlePagesOriginRequest(publishedPageOptions(), req, res, path, method)) return true;
   // Unlike the legacy reachability probe, this attests the running
-  // server's portal-membership capability, including live entitlement.
+  // server's portal-membership capability, including the layer's live
+  // entitlement (never the open-source edition's own features).
   if (method === "GET" && path === "/api/health/hosted") {
     res.setHeader("cache-control", "no-store");
     const hosted = hostedWorkspaceConfiguration();
-    if (!hosted?.portalMembership || !workspaceAccess || !entitled("admin")) {
+    if (!hosted?.portalMembership || !workspaceAccess || !hostedAccessEntitled()) {
       json(res, 503, { error: "Hosted workspace readiness is unavailable." });
       return true;
     }
@@ -45872,8 +45868,12 @@ async function fallback(req: IncomingMessage, res: ServerResponse, url: URL, pat
   }
   const fleetRoute = /^\/api\/fleet(?:\/(workspaces(?:\/([a-z0-9-]+)(?:\/(users|suspend|resume))?)?|upgrade))?$/.exec(path);
   if (fleetRoute) {
+    // Admin scope by default (server/request-auth.ts), checked before this
+    // point; the socket's own permissions decide whether this workspace may
+    // drive the agent at all. The `admin` feature is always on in the
+    // open-source edition: only an enterprise layer that withholds it ends here.
     if (!entitled("admin")) {
-      json(res, 403, { error: "Workspaces need an enterprise licence with the admin feature." });
+      json(res, 403, { error: "Installations are off: the enterprise layer on this server does not grant its admin feature." });
       return true;
     }
     const socket = fleetSocketPath();

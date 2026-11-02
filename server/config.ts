@@ -572,7 +572,8 @@ const appConfigSchema = z.object({
   /** OpenRouter key, for the `openrouter` instance only. */
   openrouter: z.object({ key: optionalText }).optional(),
   /** Monthly spend limit for the whole workspace, against the cost engines
-   * report to the usage ledger. Enforced only with the `budgets` entitlement. */
+   * report to the usage ledger. Enforced while the `budgets` feature is on:
+   * always in the open-source edition (server/enterprise.ts). */
   budgets: z
     .object({
       monthlyUsd: z.number().min(0).max(1_000_000).optional(),
@@ -580,7 +581,8 @@ const appConfigSchema = z.object({
     })
     .optional(),
   /** The operator's own sell prices per million tokens, keyed by model id,
-   * `driver/model`, or `default`. Read only with the `billing` entitlement. */
+   * `driver/model`, or `default`. Read while the `billing` feature is on:
+   * always in the open-source edition. */
   billing: z
     .object({
       currency: z.string().regex(/^[A-Z]{3}$/).optional(),

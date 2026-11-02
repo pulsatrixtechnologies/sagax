@@ -107,7 +107,6 @@ export interface CliOptions {
   brandFile?: string;
   anthropicKeyFile?: string;
   cap?: number;
-  licenseKey?: string;
   memory?: string;
   dryRun?: boolean;
   yes?: boolean;
@@ -218,7 +217,6 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
       else if (options.command === "fleet" && arg === "--brand") options.brandFile = resolve(value());
       else if (options.command === "fleet" && arg === "--anthropic-key-file") options.anthropicKeyFile = resolve(value());
       else if (options.command === "fleet" && arg === "--cap") options.cap = Number(value());
-      else if (options.command === "fleet" && arg === "--license-key") options.licenseKey = value();
       else if (options.command === "fleet" && arg === "--memory") options.memory = value();
       else if (options.command === "fleet" && arg === "--dry-run") options.dryRun = true;
       else if (options.command === "fleet" && arg === "--yes") options.yes = true;
@@ -288,7 +286,7 @@ export const USAGE = `sagax — your team of AI bots, ready in a few steps
   sagax task give --bot NAME --text TEXT [--data-dir DIR]
   sagax task wait ID [--timeout SEC] [--data-dir DIR]
   sagax fleet init --domain HOST [--operator USER] | create NAME --admin EMAIL [--member EMAIL] [--brand FILE]
-              [--anthropic-key-file FILE] [--cap USD] [--license-key KEY] [--memory 1G]
+              [--anthropic-key-file FILE] [--cap USD] [--memory 1G]
             | list | users NAME add|remove EMAIL [--chat-only] | suspend NAME | resume NAME
             | delete NAME --yes [--keep-data] | upgrade [--to X.Y.Z]   (all take --dry-run)
             | agent [--socket PATH] [--group USER]   (root; installed by init --operator)
@@ -1357,6 +1355,11 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     case "task":
       return options.taskAction === "wait" ? runTaskWait(options) : runTaskGive(options);
     case "fleet":
+      // Sagax needs no license key: every workspace runs the open-source
+      // edition with every feature on. SAGAX_LICENSE_KEY, when the operator's
+      // environment has one, is only carried into each workspace's
+      // environment for an enterprise layer installed outside this tree
+      // (server/enterprise.ts); there is no flag for it.
       if (options.fleetAction === "agent") {
         const layout = fleetLayout();
         await startFleetAgent({
@@ -1364,7 +1367,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
           group: options.group,
           node: process.execPath,
           script: process.argv[1] ?? "",
-          licenseKey: options.licenseKey ?? process.env.SAGAX_LICENSE_KEY,
+          licenseKey: process.env.SAGAX_LICENSE_KEY,
         }, { log: (line) => console.log(line) });
         // A service: stay up until systemd stops it.
         await new Promise<void>((resolveStop) => {
@@ -1383,7 +1386,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         brandFile: options.brandFile,
         anthropicKeyFile: options.anthropicKeyFile,
         cap: options.cap,
-        licenseKey: options.licenseKey ?? process.env.SAGAX_LICENSE_KEY,
+        licenseKey: process.env.SAGAX_LICENSE_KEY,
         memory: options.memory,
         dryRun: options.dryRun ?? false,
         yes: options.yes ?? false,

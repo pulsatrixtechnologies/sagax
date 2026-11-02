@@ -111,7 +111,16 @@ describe("spend against a monthly cap", () => {
     expect(() => assertWithinBudget({ budgets: { monthlyUsd: 9 } }, dataDir, now, yes)).toThrow(expect.objectContaining({ code: "spend_cap" }));
   });
 
-  it("is inert without the entitlement or a cap, warns at the threshold, and refuses at the cap", async () => {
+  it("enforces the cap on the open-source edition, with no enterprise layer and no key", async () => {
+    appendUsage(dataDir, row("2026-09-02T00:00:00.000Z", 8));
+    await flushUsageLedger(dataDir);
+    // the default gate (server/enterprise.ts) has `budgets` on without a layer
+    expect(spendState({ budgets: { monthlyUsd: 10 } }, dataDir, now)).toMatchObject({ spentUsd: 8, percent: 80, warn: true, exceeded: false });
+    expect(() => assertWithinBudget({ budgets: { monthlyUsd: 8 } }, dataDir, now)).toThrow(expect.objectContaining({ status: 409, code: "spend_cap" }));
+    expect(spendState({}, dataDir, now)).toBeNull();
+  });
+
+  it("is inert when a layer withholds the feature or no cap is set, warns at the threshold, and refuses at the cap", async () => {
     appendUsage(dataDir, row("2026-09-02T00:00:00.000Z", 8));
     await flushUsageLedger(dataDir);
     expect(spendState({ budgets: { monthlyUsd: 10 } }, dataDir, now, no)).toBeNull();

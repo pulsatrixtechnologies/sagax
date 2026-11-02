@@ -128,7 +128,9 @@ workspace can provision `SAGAX_SHARED_WORKSPACE_FULL_ACCESS=1` at server startup
 It is active only with a fully validated HTTPS `SAGAX_ADMIN_URL`,
 `SAGAX_PUBLIC_URL`, workspace slug `SAGAX_ADMIN_WORKSPACE`,
 `SAGAX_ADMIN_MEMBERSHIP=portal`, a loaded hosted-access hook and a live `admin`
-entitlement. `SAGAX_DESKTOP_PARENT=1` disallows it. HTTP settings cannot toggle it.
+grant from the enterprise layer that provides that hook (the open-source
+edition's own `admin` feature never counts). `SAGAX_DESKTOP_PARENT=1`
+disallows it. HTTP settings cannot toggle it.
 
 Only while that policy is active does authenticated health advertise
 `capabilities.sharedWorkspaceFullAccess: 1`. A trusted loopback caller may then

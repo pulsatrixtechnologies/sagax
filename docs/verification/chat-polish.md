@@ -3,7 +3,7 @@
 ## Launch the disposable app
 
 ```sh
-node --experimental-strip-types scripts/verify-chat-polish.ts
+node --experimental-strip-types scripts/verify/dev/verify-chat-polish.ts
 ```
 
 Open the printed `previewUrl`, not an already-running app. The fixture copies

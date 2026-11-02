@@ -4,7 +4,7 @@ Launch the real renderer and server with only an offline provider and a
 disposable data directory:
 
 ```sh
-node --experimental-strip-types scripts/verify-bidi.ts
+node --experimental-strip-types scripts/verify/dev/verify-bidi.ts
 ```
 
 Open the printed `previewUrl`. The fixture seeds Probe with one thread holding

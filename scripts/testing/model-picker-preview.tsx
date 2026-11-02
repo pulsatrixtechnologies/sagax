@@ -1,4 +1,4 @@
-// The composer's model menu on its own, for scripts/verify-model-picker-ui.ts:
+// The composer's model menu on its own, for scripts/verify/dev/verify-model-picker-ui.ts:
 // a bot on Grok with the catalogs the real drivers build from recorded
 // engine answers (scripts/testing/fixtures/model-picker). No account, no
 // engine and no user data are involved.

@@ -182,7 +182,7 @@
       "id": "cline",
       "name": "Cline",
       "drivers": ["clineAgent"],
-      "reason": "Added upstream in 0.1.107+ (native ACP); it is not verified to withhold its own shell and file tools (scripts/verify-org-host-tools.ts), so organization turns are refused (409 host_tools) and the server image does not carry it yet."
+      "reason": "Added upstream in 0.1.107+ (native ACP); it is not verified to withhold its own shell and file tools (scripts/verify/dev/verify-org-host-tools.ts), so organization turns are refused (409 host_tools) and the server image does not carry it yet."
     },
     {
       "id": "antigravity",

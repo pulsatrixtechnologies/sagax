@@ -25,7 +25,7 @@ and may still contain pasted secrets, so the archive must remain private.
 ## Launch and drive
 
 ```sh
-node --experimental-strip-types scripts/verify-workspace-backup.ts
+node --experimental-strip-types scripts/verify/dev/verify-workspace-backup.ts
 ```
 
 This recipe accepts no live URL. It launches two owned fake-engine servers with

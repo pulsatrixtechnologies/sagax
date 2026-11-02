@@ -2231,7 +2231,7 @@ workspace switch.
   no destination and is never given the saved-server list.
 - Tests: `electron/page-contexts.node-test.mjs`, `electron/server-mode.node-test.mjs`,
   `electron/bundled-ui.node-test.mjs`, `src/lib/account-menu.test.ts`; real
-  Electron with timings: `scripts/verify-account-switch.ts`.
+  Electron with timings: `scripts/verify/dev/verify-account-switch.ts`.
 
 ## Never a UUID/GUID on screen (2026-10-19)
 
@@ -5341,7 +5341,7 @@ the bundled page gets only `BUNDLED_EXTRA` in `electron/preload.cjs`, and
 main checks those channels with `desktopUiOnly` (`electron/local-origin.cjs`);
 anything touching this computer stays `localOnly`. Tests:
 `electron/bundled-ui.node-test.mjs`; real Electron:
-`scripts/verify-server-mode.ts`.
+`scripts/verify/dev/verify-server-mode.ts`.
 
 On an organization server (`SAGAX_IDENTITY=perspicax`) bots never use the
 server's own machine: `ManagedDesktopPolicy` refuses `thisComputer` and
@@ -5448,7 +5448,7 @@ Two surfaces, one list (2026-10-12, after Cursor's composer menu):
   lets Sagax pick it), Effort › and Model › (each a list over the whole
   menu; Escape, the left arrow or Back returns). Each row reads the effort a
   pick would run, the tooltip the whole name. Preview with recorded
-  catalogs and screenshots: `scripts/verify-model-picker-ui.ts --shots DIR`
+  catalogs and screenshots: `scripts/verify/dev/verify-model-picker-ui.ts --shots DIR`
   (`PLAYWRIGHT_CHROMIUM` for a local Chromium).
 
 Thread scope stays out of both. On an organization server the window shows
@@ -5462,7 +5462,7 @@ Connected with Disconnect, signing in their own subscription through
 local models are not offered. Tests: `ModelPicker.interaction.test.ts`,
 `ModelPicker.simple.test.ts`, `ModelMenu.test.ts`, `src/lib/model-menu.test.ts`,
 `BotContextMenu.model.test.ts`, `src/lib/model-payers.test.ts`; real
-Electron: `scripts/verify-server-mode.ts` (org). iPad: `DesktopModelPicker`
+Electron: `scripts/verify/dev/verify-server-mode.ts` (org). iPad: `DesktopModelPicker`
 lists every model, always open, under its search (no Suggested or Show all);
 the composer menu, its model settings and the Auto mode are not ported there
 yet (its effort pickers do offer only the model's own levels).
@@ -5814,13 +5814,13 @@ engine inside the person's environment (sagax-sandboxd) is not built
 |---|---|---|---|
 | Claude Code (`claudeAgent`) | `--tools` allowlist (`CLAUDE_ORG_TOOLS`), then `--disallowedTools` host tools (they hold for subagents) | `scripts/smoke-host-tools.ts`, real 2.1.288 | yes |
 | Codex (`codex`) | features off, read-only sandbox, requests declined | `server/drivers/codex.test.ts` | yes |
-| Grok Build (`grokAgent`) | ACP `agentProfile` with `search_tool`, `use_tool` only | real 1.0.46, `scripts/verify-tool-scope.ts` | yes |
-| pi (`piAgent`) | `--no-builtin-tools --exclude-tools --no-extensions` | `scripts/verify-pi-tool-scope.ts` | yes |
-| Gemini CLI (`geminiAgent`) | `--admin-policy` deny of every host tool (top tier: a denied tool is not offered), `-e none`, `--skip-trust` with `--allowed-mcp-server-names` = Sagax's servers, empty workspace | real 0.62.0, `scripts/verify-org-host-tools.ts gemini` | yes |
-| Qwen Code (`qwenAgent`) | `--core-tools` allowlist (`tool_search`, `tool_call`, `ask_user_question`), `--exclude-tools`, `--allowed-mcp-server-names`, system settings (`QWEN_CODE_SYSTEM_SETTINGS_PATH`): no memory, dream or skill agent, no hook; empty workspace | real 0.24.7, `scripts/verify-org-host-tools.ts qwen` | yes |
-| Kimi Code (`kimiAgent`) | `<KIMI_CODE_HOME>/agents/agent.md` overriding the default profile: `tools` allowlist (questions, plan, goals, todo, `mcp__*`), `disallowedTools`; empty workspace | real 2.1.1, `scripts/verify-org-host-tools.ts kimi` | yes |
-| OpenCode (`opencodeGo`) | `OPENCODE_PERMISSION` allowlist: `*` denied (a denied tool is not offered), the todo list and the turn's MCP servers let back in, every host permission denied by name; `OPENCODE_DISABLE_PROJECT_CONFIG=1`, empty workspace | real 1.18.34, `scripts/verify-org-host-tools.ts opencode` | yes |
-| Hermes Agent (`hermesAgent`) | `HERMES_HOME` of Sagax's (`<data>/engine-policies/hermes-org`): the server's config with `platform_toolsets.acp: []`, every host toolset disabled, no `mcp_servers`, hooks, plugins or skills; `.env` and `auth.json` linked, not copied; empty workspace | real 0.21.5, `scripts/verify-org-host-tools.ts hermes` | yes |
+| Grok Build (`grokAgent`) | ACP `agentProfile` with `search_tool`, `use_tool` only | real 1.0.46, `scripts/verify/dev/verify-tool-scope.ts` | yes |
+| pi (`piAgent`) | `--no-builtin-tools --exclude-tools --no-extensions` | `scripts/verify/dev/verify-pi-tool-scope.ts` | yes |
+| Gemini CLI (`geminiAgent`) | `--admin-policy` deny of every host tool (top tier: a denied tool is not offered), `-e none`, `--skip-trust` with `--allowed-mcp-server-names` = Sagax's servers, empty workspace | real 0.62.0, `scripts/verify/dev/verify-org-host-tools.ts gemini` | yes |
+| Qwen Code (`qwenAgent`) | `--core-tools` allowlist (`tool_search`, `tool_call`, `ask_user_question`), `--exclude-tools`, `--allowed-mcp-server-names`, system settings (`QWEN_CODE_SYSTEM_SETTINGS_PATH`): no memory, dream or skill agent, no hook; empty workspace | real 0.24.7, `scripts/verify/dev/verify-org-host-tools.ts qwen` | yes |
+| Kimi Code (`kimiAgent`) | `<KIMI_CODE_HOME>/agents/agent.md` overriding the default profile: `tools` allowlist (questions, plan, goals, todo, `mcp__*`), `disallowedTools`; empty workspace | real 2.1.1, `scripts/verify/dev/verify-org-host-tools.ts kimi` | yes |
+| OpenCode (`opencodeGo`) | `OPENCODE_PERMISSION` allowlist: `*` denied (a denied tool is not offered), the todo list and the turn's MCP servers let back in, every host permission denied by name; `OPENCODE_DISABLE_PROJECT_CONFIG=1`, empty workspace | real 1.18.34, `scripts/verify/dev/verify-org-host-tools.ts opencode` | yes |
+| Hermes Agent (`hermesAgent`) | `HERMES_HOME` of Sagax's (`<data>/engine-policies/hermes-org`): the server's config with `platform_toolsets.acp: []`, every host toolset disabled, no `mcp_servers`, hooks, plugins or skills; `.env` and `auth.json` linked, not copied; empty workspace | real 0.21.5, `scripts/verify/dev/verify-org-host-tools.ts hermes` | yes |
 | Droid (`droidAgent`) | none: `droid exec -o acp` ignores `--only-tools` and `--remove-tools`, its ACP session takes no tool selection | real 0.230.0: Execute, Read, Edit and the rest still offered | no |
 | Cursor Agent (`cursorAgent`) | none: Cursor's service picks the tools and the model; deny rules only refuse a call, and no stand-in model can check it | not verifiable offline | no |
 | Antigravity, Custom ACP | none verified | - | no |
@@ -5851,7 +5851,7 @@ or `src/components/ModelPicker.interaction.test.ts`:
   on the server.
 - Gemini 0.62 skips a system settings file whose folder is not owned by
   root; the admin policy carries its guarantee instead.
-- Admit an engine only after `scripts/verify-org-host-tools.ts <engine>`
+- Admit an engine only after `scripts/verify/dev/verify-org-host-tools.ts <engine>`
   passes against its real CLI (fake model on 127.0.0.1, Full access, every
   card approved): no host tool in any model request, the shell and file
   requests did not act, the Sagax MCP fixture still answers. Re-run it on
@@ -5881,7 +5881,7 @@ pays for but has not given the person (`sagax_server_engines`,
   status notice in its conversation (`tool.engineMove`, drawn in the
   reader's language by `statusActivity`; the sidebar preview too).
 - Keys rows (Settings > Models and voice) stay: a key can serve voice or
-  another engine. Real check: `scripts/verify-org-hidden-providers.ts`.
+  another engine. Real check: `scripts/verify/dev/verify-org-hidden-providers.ts`.
   Tests: `shared/offered-engines.test.ts`, `ModelPicker.interaction.test.ts`,
   `src/lib/activity-runs.test.ts`, C5 in `server/org/org-admin-console.e2e.test.ts`.
 
@@ -5915,7 +5915,7 @@ security keys unchanged). Afterwards, while nothing answers, the chat shows
 blocked); the person's engines are read again when the engine list or the
 organization's list changes and on window focus. iOS has no per-person
 engine list or engine sign-in yet and is not changed. Real check:
-`scripts/verify-org-engine-onboarding.ts`. Tests:
+`scripts/verify/dev/verify-org-engine-onboarding.ts`. Tests:
 `shared/org-engine-readiness.test.ts`.
 
 ## Voice mode (xAI)
@@ -5935,7 +5935,7 @@ xAI voice mode serves the person; otherwise a solo Mac keeps the older call
 `server/voice-mode.test.ts`, `src/lib/voice-mode/voice-mode.test.ts`,
 `src/components/voice-mode/VoiceModeSettingsPanel.test.ts` or
 `electron/app-permissions.node-test.mjs`; real Electron in server mode with a
-fake xAI: `scripts/verify-voice-mode.ts`. Details: `docs/voice-mode-xai.md`.
+fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-xai.md`.
 
 - The xAI key never reaches a client: the server proxies speech to text
   (`/voice/transcribe`) and text to speech (`/voice/speak`, `/voice/voices`);
@@ -6048,7 +6048,7 @@ fake xAI: `scripts/verify-voice-mode.ts`. Details: `docs/voice-mode-xai.md`.
 - xAI is only ears and a voice: never its realtime agent, responses, chat or
   function calling. Every turn goes to the bot through the normal send route,
   and only the bot's text is synthesized. The e2e test and
-  `scripts/verify-voice-mode.ts` fail on any other xAI path.
+  `scripts/verify/dev/verify-voice-mode.ts` fail on any other xAI path.
 - On an organization server (the status says `organization: true`, or the
   viewer is managed by Perspicax) the call button is
   `VoiceModeCallButton`: the server decides (`/voice/status`, asked again at
@@ -6057,7 +6057,7 @@ fake xAI: `scripts/verify-voice-mode.ts`. Details: `docs/voice-mode-xai.md`.
   access card (admin: the organization's key hint and "Open Settings >
   Connections"), or the server's error with a retry; a room says voice mode
   talks with one bot at a time. Tests: `VoiceModeCallButton.test.ts`,
-  `scripts/verify-voice-mode.ts` (no key, then the admin's key).
+  `scripts/verify/dev/verify-voice-mode.ts` (no key, then the admin's key).
 
 - Latency (`docs/voice-mode-xai.md`, "Latency"): every call turn is timed
   under its `utteranceId` on the page (`latency.ts`) and on the server
@@ -6134,7 +6134,7 @@ Electron restart (no HMR); launch-test them before committing.
   a move that puts more than about a fifth of a window on a neighbouring
   display: there the room stays within `SEAM_SHARE` (`keepOffNeighbours`),
   geometry sends the `limits` and the chat's room opens away from the seam
-  (`sideWithin`). Measure with `node scripts/verify-mascot-desktop.mjs`
+  (`sideWithin`). Measure with `node scripts/verify/dev/verify-mascot-desktop.mjs`
   (corners of every display, the seam, a restart, the menu, the bubble,
   the effects; screenshots next to the report).
 - Placement rules live in `placement.ts` (pure, `placement.test.ts`):
@@ -6160,7 +6160,7 @@ Electron restart (no HMR); launch-test them before committing.
   `focus` on a change. A focus that moved the window is put back on that
   same turn. With the balloon open the mascot stays home (no
   wander, no flight while its bot works), draws at 30 fps at most and the
-  skin's loops rest. Measure with `node scripts/verify-mascot-chat.mjs`
+  skin's loops rest. Measure with `node scripts/verify/dev/verify-mascot-chat.mjs`
   (isolated real Electron: open latency, window moves, clipped and dropped
   frames, mascot jumps, position writes, the balloon's gap to the
   character and click-through of the transparent parts, theme).
@@ -6226,7 +6226,7 @@ Electron restart (no HMR); launch-test them before committing.
   mascot's bot, mute or unmute, talk while held. Tests:
   `electron/mascot-hotkey.node-test.mjs`, `hotkey.test.ts`,
   `hover-controls.test.ts`, `captions.test.ts`, `tray.test.ts`; real Electron:
-  `node scripts/verify-mascot-desktop.mjs` (hover controls and click-to-call
+  `node scripts/verify/dev/verify-mascot-desktop.mjs` (hover controls and click-to-call
   legs, screenshots next to the report).
 - The desktop mascot's menu (right click, long press, the menu key or
   Shift+F10) is main's native menu, popped exactly at the pointer
@@ -6396,7 +6396,7 @@ descriptor's `identity.loopbackReturn`. Tests:
 `server/oidc-session.e2e.test.ts` (S2-7b). The return lands in the main window as
 `<origin>/pair?signin=<nonce>#code=...` (`authReturnTarget`): never a
 fragment-only change of the `/pair` the window already shows, which would
-not reload the page. `scripts/verify-desktop-sign-in.ts` proves it in a real
+not reload the page. `scripts/verify/dev/verify-desktop-sign-in.ts` proves it in a real
 Electron window. A change to that server code needs the server image
 redeployed.
 
@@ -6490,7 +6490,7 @@ not open a shared machine. Keep these rules, each covered by `server/user-sandbo
   (`withholdHostTools`, `server/drivers/host-tools.ts`); an engine that
   cannot withhold them is refused (409 `host_tools`, matrix in "Engines on
   an organization server" below). `scripts/smoke-host-tools.ts` checks the
-  real Claude Code CLI, `scripts/verify-org-host-tools.ts` the ACP ones.
+  real Claude Code CLI, `scripts/verify/dev/verify-org-host-tools.ts` the ACP ones.
 - Server code runs under `--experimental-strip-types`: no TypeScript
   parameter properties in these files.
 - `scripts/smoke-user-sandbox.ts` proves isolation on a real Docker host and
@@ -6585,7 +6585,7 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
 `server/desktop-egress.test.ts`, `server/attachment-staging.test.ts`,
 `electron/local-vm.node-test.mjs`, `electron/desktop-bridge.node-test.mjs`,
 `server/local-vm-computer.test.ts` or
-`scripts/verify-desktop-bridge.ts`:
+`scripts/verify/dev/verify-desktop-bridge.ts`:
 
 - Where tools run is decided once per turn by `resolveBotWorkplace` from
   the bot's Works on (or the conversation's pin): Local VM or This computer,
@@ -6650,7 +6650,7 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   network only", never `localhost`). The activity log records the route
   (`via`) and the detailed error; the server, the bot and the audit get only
   a coarse reason (`coarseFailure`), never the proxy's address. Real
-  Electron: `pnpm exec electron scripts/verify-desktop-proxy.electron.mjs`.
+  Electron: `pnpm exec electron scripts/verify/dev/verify-desktop-proxy.electron.mjs`.
 - Local VM creation (`local_vm` action `create`, operation `vm_create`):
   only after the person's yes in the desktop app's own prompt
   (`confirmBridgeLocalVm` in `electron/main.mjs`, the Local VM's

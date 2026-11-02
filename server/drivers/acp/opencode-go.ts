@@ -875,7 +875,7 @@ const support = (loadCatalog: OpenCodeCatalogLoader): AcpSupport => ({
   spawnFingerprint: openCodeLoginsFingerprint,
   // Organization server: no shell, file, web, subagent or skill tool of
   // OpenCode's own (server/drivers/host-tools.ts; verified on 1.18.34 with
-  // scripts/verify-org-host-tools.ts).
+  // scripts/verify/dev/verify-org-host-tools.ts).
   withholdsHostTools: true,
   withheldWorkspace,
   applyTurnEnv: (env, { fullAuto, botId, cwd, withholdHostTools, mcpServers }) => {

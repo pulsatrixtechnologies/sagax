@@ -3,7 +3,7 @@
 Start the isolated renderer fixture directly in a terminal:
 
 ```sh
-node --experimental-strip-types scripts/verify-cloud-preview.ts
+node --experimental-strip-types scripts/verify/dev/verify-cloud-preview.ts
 ```
 
 Open the printed `previewUrl` in a browser or an isolated Electron window.

@@ -91,8 +91,7 @@ describe("BotExchangeChip", () => {
     expect(markup).toContain("Which database?");
     expect(markup).not.toContain("another bot in this Sagax");
     expect(markup).toContain("unRAID → Quasar, pour info");
-    expect(markup).toContain('aria-label="Close"');
-    expect(markup).not.toContain("Close Chat");
+    expect(markup).toContain(">Close Chat</button>");
     expect(markup).toContain("Today");
     expect(markup).toContain('data-testid="transcript-date"');
     expect(markup).toContain("self-end pb-1 text-[11px] tabular-nums");
@@ -107,8 +106,7 @@ describe("BotExchangeChip", () => {
     const markup = renderToStaticMarkup(createElement(BotExchangeChip, { run: run(), forceOpen: true }));
     expect(markup).toContain("max-w-[960px]");
     expect(markup).not.toContain("max-w-xl");
-    expect(markup).toContain('aria-label="Close"');
-    expect(markup).not.toContain("Close Chat");
+    expect(markup).toContain(">Close Chat</button>");
     expect(markup).toContain('data-testid="transcript-date"');
     // unRAID opens the header: its line is a bot reply, start side, grey
     expect(markup).toMatch(/data-side="start"[^>]*>(?:(?!data-side).)*bg-bubble-bot(?:(?!data-side).)*pour info/s);
@@ -124,8 +122,7 @@ describe("BotExchangeChip", () => {
     setLocale("fr");
     const markup = renderToStaticMarkup(createElement(BotExchangeChip, { run: run(), forceOpen: true }));
     expect(markup).toMatch(/Aujourd(&#x27;|')hui/);
-    expect(markup).toContain('aria-label="Fermer"');
-    expect(markup).not.toContain("Fermer la conversation");
+    expect(markup).toContain(">Fermer la conversation</button>");
     setLocale("en");
   });
 });

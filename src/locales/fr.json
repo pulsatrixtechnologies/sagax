@@ -12266,6 +12266,8 @@
   "botModels.col.effort": "Effort",
   "botModels.col.payer": "Qui paie",
   "botModels.col.backup": "Secours",
+  "botModels.col.modelShort": "Modèle",
+  "botModels.col.account": "Compte",
   "botModels.backup.none": "Aucun",
   "botModels.selectSection": "Sélectionner tous les bots de {section}",
   "botModels.selectBot": "Sélectionner {name}",

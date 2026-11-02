@@ -15723,6 +15723,8 @@
       "botModels.col.effort": "4387e5d3966fc436532792769763cd1ab7cccd6464d4c01c2b91261894e96b77",
       "botModels.col.payer": "c64a8d67fdd97a3294c513286bd28bedfa3350761d549014b532c48be2bacbc0",
       "botModels.col.backup": "838557924a5cdfb2f10f233635223e79be8443aef62f9d176cfe18787a2e8b03",
+      "botModels.col.modelShort": "5e2c614c23f02239bc03c6c04fcb681950f9e72bf8fdff6be79c79841cbb10c0",
+      "botModels.col.account": "7e1b0d5641f2640ce9a953ec231eea2c27a2a7633f7d3c273e5735e2b30c10b7",
       "botModels.backup.none": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
       "botModels.selectSection": "fceb36a625df9dd53e01ad03903ec4e52267d7c0e83547aca7b40922ba6d7312",
       "botModels.selectBot": "cbe2f0672d5fa31237d6a0db471aaa842fcfbc924608b2bfcf3445e320b73df1",

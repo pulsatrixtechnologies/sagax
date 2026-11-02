@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 import { SWITCH_OFF, SWITCH_ON, SWITCH_THUMB_OFF, SWITCH_THUMB_ON } from "@/lib/status-tones";
 import { useCopyFeedback } from "@/lib/copy-text";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
-import { AnchoredPopover, useAnchoredDismissRoot } from "./AnchoredPopover";
+import { AnchoredPopover, enclosingWindowBounds, useAnchoredDismissRoot } from "./AnchoredPopover";
 
 export function Switch({
   checked,
@@ -515,6 +515,10 @@ export function UnitField({
   );
 }
 
+/** A control that fills a Settings table cell (Settings > Models): the
+ * value at the left, the chevron at the cell's right edge. */
+export const TABLE_CELL_CONTROL = "flex h-8 w-full min-w-0 items-center gap-1.5 rounded-lg px-2 text-left text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none";
+
 /** The reference design's grey pill button, 44 px tall on a touch screen. */
 export const PILL = "ui-button min-h-[44px] disabled:opacity-50 md:min-h-0";
 
@@ -534,6 +538,7 @@ export function PillSelect<T extends string>({
   disabled,
   mixed = false,
   mixedLabel,
+  fill = false,
 }: {
   value: T | undefined;
   options: ReadonlyArray<PillOption<T>>;
@@ -543,6 +548,9 @@ export function PillSelect<T extends string>({
   /** Bulk edit: bots differ; no choice looks selected (#1701). */
   mixed?: boolean;
   mixedLabel?: string;
+  /** Fill a table cell (Settings > Models): the value at the left, the
+   * chevron at the cell's right edge, the same width on every row. */
+  fill?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -575,7 +583,7 @@ export function PillSelect<T extends string>({
   };
   const shown = current?.label ?? (mixed ? (mixedLabel ?? t("bulkEdit.mixed")) : value);
   return (
-    <div ref={rootRef} className="relative inline-flex justify-end">
+    <div ref={rootRef} className={fill ? "relative flex w-full min-w-0" : "relative inline-flex justify-end"}>
       <button
         ref={triggerRef}
         type="button"
@@ -597,9 +605,9 @@ export function PillSelect<T extends string>({
         }}
         data-pill-select=""
         data-pill-mixed={mixed || value === undefined ? "" : undefined}
-        className="inline-flex h-7 max-w-[240px] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none"
+        className={fill ? TABLE_CELL_CONTROL : "inline-flex h-7 max-w-[240px] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none"}
       >
-        <span className={cn("min-w-0 truncate", (mixed || value === undefined) && "text-ink-secondary")}>{shown}</span>
+        <span className={cn("min-w-0 truncate", fill && "flex-1 text-left", (mixed || value === undefined) && "text-ink-secondary")}>{shown}</span>
         <ChevronDown size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" />
       </button>
       {open && (
@@ -607,8 +615,9 @@ export function PillSelect<T extends string>({
           as="ul"
           anchorRef={triggerRef}
           popoverRef={listRef}
-          align="end"
+          align={fill ? "start" : "end"}
           maxHeight={280}
+          bounds={fill ? enclosingWindowBounds : undefined}
           id={listId}
           role="listbox"
           aria-label={ariaLabel}

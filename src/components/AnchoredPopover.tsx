@@ -11,12 +11,21 @@
 // so a press inside the portalled menu is not an "outside" press.
 import { createElement, useLayoutEffect, useMemo, useRef, type CSSProperties, type KeyboardEventHandler, type PointerEventHandler, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { placeAnchored, type PopoverAlign, type PopoverSide } from "@/lib/anchored-placement";
+import { placeAnchored, type PlacementBounds, type PopoverAlign, type PopoverSide } from "@/lib/anchored-placement";
 
 /** Above dialogs (z-50) and sidebars; below the guided tour card. */
 export const POPOVER_LAYER = "z-[70]";
 
 type Containing = { contains(target: unknown): boolean };
+
+/** The window drawn over the app that holds `anchor` (Settings, a dialog),
+ * for `bounds`: a menu opened inside it stays inside it. */
+export function enclosingWindowBounds(anchor: HTMLElement): PlacementBounds | null {
+  const frame = anchor.closest<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+  if (!frame) return null;
+  const box = frame.getBoundingClientRect();
+  return { left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+}
 
 /** A dismiss root that covers both the trigger's wrapper and the portalled
  * menu (which is no longer inside it in the DOM). */
@@ -45,6 +54,7 @@ export function AnchoredPopover({
   gap = 4,
   maxHeight,
   floor,
+  bounds,
   className,
   style,
   children,
@@ -63,6 +73,8 @@ export function AnchoredPopover({
   /** The lowest y the menu may reach, when something drawn over the window
    * (a chat's composer) covers its bottom: the menu flips above sooner. */
   floor?: (anchor: HTMLElement) => number | null;
+  /** The box the menu must stay inside (the Settings window), else the window. */
+  bounds?: (anchor: HTMLElement) => PlacementBounds | null;
   className?: string;
   style?: CSSProperties;
   children: ReactNode;
@@ -100,6 +112,7 @@ export function AnchoredPopover({
         align,
         side,
         gap,
+        bounds: bounds?.(anchor) ?? undefined,
       });
       node.style.top = `${Math.round(result.top)}px`;
       node.style.left = `${Math.round(result.left)}px`;
@@ -117,7 +130,7 @@ export function AnchoredPopover({
       window.removeEventListener("scroll", place, true);
       resize?.disconnect();
     };
-  }, [anchorRef, ref, align, side, gap, maxHeight, floor]);
+  }, [anchorRef, ref, align, side, gap, maxHeight, floor, bounds]);
 
   const element = createElement(
     as,

@@ -974,6 +974,34 @@ it("withholds direct results when the owner's cross-team grant is revoked", () =
   expect(resumed.prompt.message.content).toContain("Result withheld");
 }), 45_000);
 
+it("never names a teammate hidden and renamed while it worked: its withheld report says Teammate", () => fixture(async f => {
+  // Isolation between people: by the time the work reports, the teammate is
+  // another person's private bot. The requester's chips, its resume and the
+  // report in it carry the reason only, never the new name.
+  const ready = join(f.session.info.dataDir, "hidden-work.ready");
+  const gate = join(f.session.info.dataDir, "hidden-work.gate");
+  const PRIVATE = "Private renamed lead";
+  f.plan[f.lead.id] = { readyFile: ready, gateFile: gate, reply: "PRIVATE_LEAD_RESULT" };
+  await f.start();
+  await expect.poll(() => existsSync(ready), { timeout: 15_000 }).toBe(true);
+  await f.api(`/api/bots/${f.lead.id}`, { hidden: true, name: PRIVATE }, "PATCH");
+  writeFileSync(gate, "finish the work after the teammate went private");
+  expect((await f.wait()).status).toBe("settled");
+  const resumed = f.evidence().find((turn: any) => turn.botId === f.chief.id && turn.resumed);
+  expect(resumed, JSON.stringify(f.nodes())).toBeTruthy();
+  expect(resumed.prompt.message.content).toContain("Result withheld");
+  expect(resumed.prompt.message.content).toContain("[Sagax report from @Teammate on assignment");
+  expect(told(resumed)).not.toContain(PRIVATE);
+  expect(JSON.stringify(resumed)).not.toContain("PRIVATE_LEAD_RESULT");
+  const chat = await f.messages(f.chief.activeTaskId);
+  const withheld = chat.find((message: any) => message.tool?.name?.startsWith("Result withheld"));
+  expect(withheld, JSON.stringify(chat)).toBeTruthy();
+  expect(withheld.from).toBeUndefined();
+  expect(withheld.threadRef?.title).toBe("Teammate work");
+  expect(chat.some((message: any) => message.tool?.name?.startsWith("Resumed with Teammate results"))).toBe(true);
+  expect(JSON.stringify(chat)).not.toContain(PRIVATE);
+}), 45_000);
+
 it("retains returned direct reports for follow-up turns but rechecks access before replay", () => fixture(async f => {
   f.plan[f.lead.id] = { reply: "PRIVATE_ENGINEERING_FACT_8347" };
   f.plan[f.chief.id].resumeReply = "Finished";

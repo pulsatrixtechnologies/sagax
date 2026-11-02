@@ -12,7 +12,7 @@ import type { SteerOutcome } from "../contracts.ts";
 import { findDelegationReceipt, summarizeDelegatedActivity } from "../delegation-receipts.ts";
 import { isEngineEmptyFailure } from "../incidents.ts";
 import { peerApprovalFailure, requestPeerApproval, type ApprovalBus } from "../peer-approval.ts";
-import { peerDeliveryReceipt, type PeerDeliveryReceipt } from "../peer-delivery.ts";
+import { peerDeliveryReceipt, receiptName, type PeerDeliveryReceipt } from "../peer-delivery.ts";
 import { quoteInNote } from "../peer-provenance.ts";
 import {
   PEER_ACCESS_HELP,
@@ -239,6 +239,11 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
       const toBotId = resolvedTo.id;
       const target = store.bot(toBotId);
       if (!target) return json(res, 404, { error: "no such bot" });
+      // Every name this ask writes after a wait (a review card, a steer, the
+      // synchronous wait) is read at that moment and only while the sender
+      // can still reach the teammate (receiptName): `target` is the live
+      // record, renamed in place, so it never lends its name to an answer.
+      const shownName = () => receiptName(store.bot(fromBotId), store.bot(toBotId));
       // An unknown sender used to fall through: no mirroring AND no
       // approval, while still running the peer turn. That made an
       // unresolvable id the cheapest way past the gate, so it is now a
@@ -272,12 +277,15 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
       // busy shape with the runtime id.
       if (!pollOnlyCaller(internalCapability)) {
         const [status, out] = await delegateOnRuntime(from, target, message, internalCapability, delegatedThisTurn, false, "consult");
-        // The person's review said no: ask_bot's own refusal shape.
+        // The person's review said no: ask_bot's own refusal shape. The card
+        // may have been open for minutes, so the teammate is named only if
+        // the sender can still reach it now.
         const review = Array.isArray(out.approvals) ? out.approvals[0] as ReturnType<typeof peerApprovalFailure> : undefined;
         if (review) return json(res, 200, { error: review.error, approvalOutcome: review.approvalOutcome, approvalSource: review.approvalSource,
-          receipt: peerDeliveryReceipt({ botId: toBotId, botName: target.name, outcome: "failed", detail: `peer review ${review.error} — the message was not sent` }) });
+          receipt: peerDeliveryReceipt({ botId: toBotId, botName: shownName(), outcome: "failed", detail: `peer review ${review.error}: the message was not sent` }) });
+        const answering = typeof out.toBotName === "string" && out.toBotName ? `@${out.toBotName}` : "The teammate";
         return json(res, status, out.queued ? { busy: true, taskId: out.taskId, toBotName: out.toBotName, receipt: out.receipt,
-          message: `@${target.name} answers on the job runtime: end your turn; the answer resumes you automatically.` } : out);
+          message: `${answering} answers on the job runtime: end your turn; the answer resumes you automatically.` } : out);
       }
       // An external runtime, or a room turn its goal runs, has no turn the
       // runtime resumes (pollOnlyCaller). The aside lane first: the
@@ -302,8 +310,9 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
         // another bot's words joined the owner's live turn: no phone tool in it
         phoneToolTaintedThreads.add(target.threadId);
         recordInjectedAside(store as never, target.threadId!, prompt, { botId: from.id, name: from.name, unattended: isUnattended(from.id, fromThreadId) });
-        return { busy: true, aside: "injected" as const, toBotName: target.name,
-          message: `@${target.name} is mid-turn; your message was handed to them as an aside — peer context folded into their current work. It is not a request for a reply: continue your plan and treat their next output as possibly informed by it.` };
+        const shown = shownName(); // read after the steer it waited on
+        return { busy: true, aside: "injected" as const, ...(shown ? { toBotName: shown } : {}),
+          message: `${shown ? `@${shown}` : "The teammate"} is mid-turn; your message was handed to them as an aside (peer context folded into their current work). It is not a request for a reply: continue your plan and treat their next output as possibly informed by it.` };
       };
       if (target.busy) {
         const aside = await tryAsideDelivery();
@@ -317,8 +326,11 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
         idempotencyKeyOf(askBody, req.headers["idempotency-key"]));
       if (!out.queued) return json(res, status, out);
       const taskId = String(out.taskId);
-      const queuedReceipt = (detail: string) => peerDeliveryReceipt({ botId: toBotId, botName: target.name, outcome: "queued", taskId, detail });
-      if (out.approvalRequired) return json(res, 200, { busy: true, taskId, toBotName: target.name,
+      // Each answer below reads the name when it is written: the synchronous
+      // wait lasts up to ASK_BOT_TIMEOUT_MS, long enough for a rename.
+      const named = () => { const shown = shownName(); return shown ? { toBotName: shown } : {}; };
+      const queuedReceipt = (detail: string) => peerDeliveryReceipt({ botId: toBotId, botName: shownName(), outcome: "queued", taskId, detail });
+      if (out.approvalRequired) return json(res, 200, { busy: true, taskId, ...named(),
         receipt: queuedReceipt("the ask waits on the user's approval; poll its task id") });
       const deadline = Date.now() + ASK_BOT_TIMEOUT_MS;
       for (;;) {
@@ -342,9 +354,9 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
         }
         if (Date.now() >= deadline) {
           return json(res, 200, node.status === "queued"
-            ? { busy: true, taskId, toBotName: target.name, receipt: queuedReceipt("the teammate was busy; the ask waits on the job runtime as a consultation") }
-            : { timeout: true, taskId, toBotName: target.name, waitedMs: ASK_BOT_TIMEOUT_MS,
-              receipt: peerDeliveryReceipt({ botId: toBotId, botName: target.name, outcome: "injected", taskId,
+            ? { busy: true, taskId, ...named(), receipt: queuedReceipt("the teammate was busy; the ask waits on the job runtime as a consultation") }
+            : { timeout: true, taskId, ...named(), waitedMs: ASK_BOT_TIMEOUT_MS,
+              receipt: peerDeliveryReceipt({ botId: toBotId, botName: shownName(), outcome: "injected", taskId,
                 detail: "the teammate's turn started and is still running; only the synchronous wait ended" }) });
         }
         await new Promise(resolve => setTimeout(resolve, 250));
@@ -622,6 +634,14 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
         // enqueue is honestly "queued"; a repeat reports the request it
         // repeats.
         const receipts: PeerDeliveryReceipt[] = [];
+        // A receipt names a teammate only on a route the sender may still use
+        // when it is written (isolation between people): reachable from the
+        // sender (receiptName), or still admitted to the room it was
+        // addressed in. A teammate hidden, unshared or renamed meanwhile is
+        // named by the id the caller sent, never by its new name.
+        const shownFor = (target: { groupId?: string; threadId: string; botId: string }) =>
+          receiptName(store.bot(internalSender.id), store.bot(target.botId))
+            ?? (destination && !roomHandoffProblem(target, address) ? store.bot(target.botId)?.name : undefined);
         // Why nothing was sent, in full: a receipt's detail is clipped.
         const refused: string[] = [];
         // intended non-results (already completed): not sent either, said in full
@@ -630,6 +650,12 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
           let createdThread: string | undefined;
           try {
             requireActiveInternalCapability();
+            // The approval cards may have been open for minutes: the route
+            // is checked again before anything touches the teammate, so one
+            // hidden, unshared or moved out of reach meanwhile gets no thread
+            // and no work (the same check delegate_bot and ask_bot make).
+            const current = store.bot(target.botId);
+            if (!current || current.hidden || roomHandoffProblem(target, address)) throw new Error("that bot is no longer available to this bot");
             // Outside a room this conversation has one thread with each
             // teammate: the first request opens it, everything after
             // continues it and runs once the work already there is done.
@@ -683,7 +709,7 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
                 : "handed to the coordinator; the teammate's turn has not started yet");
             receipts.push(peerDeliveryReceipt({
               botId: node.botId,
-              botName: recipientBot?.name,
+              botName: shownFor(target),
               outcome: notSent ? "failed" : !duplicate || node.status === "queued" ? "queued" : "injected",
               detail: notSent ?? (joined
                 ? "the same request from another conversation is already with this teammate: joined it, its result will resume you"
@@ -714,7 +740,7 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
             else notSentNotes.push(said);
             receipts.push(peerDeliveryReceipt({
               botId: target.botId,
-              botName: store.bot(target.botId)?.name,
+              botName: shownFor(target),
               outcome: intended ? "injected" : "failed",
               detail: said,
             }));

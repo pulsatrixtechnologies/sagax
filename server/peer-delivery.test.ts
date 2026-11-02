@@ -1,6 +1,38 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { peerDeliveryReceipt, renderPeerDeliveryReceipts, type PeerDeliveryReceipt } from "./peer-delivery.ts";
+import { peerDeliveryReceipt, receiptName, renderPeerDeliveryReceipts, type PeerDeliveryReceipt } from "./peer-delivery.ts";
+import { setPeerScope, type RosterMember } from "./peer-roster.ts";
+
+describe("receiptName", () => {
+  afterEach(() => setPeerScope(null));
+  const sender: RosterMember = { id: "bot-sender", name: "Sender", section: "Ops" };
+  const teammate = (patch: Partial<RosterMember> = {}): RosterMember => ({ id: "bot-mate", name: "Teammate name", section: "Ops", ...patch });
+
+  it("names a teammate the sender can still reach, as it is named now", () => {
+    expect(receiptName(sender, teammate())).toBe("Teammate name");
+    expect(receiptName(sender, teammate({ name: "Renamed in view" }))).toBe("Renamed in view");
+  });
+
+  it("names nothing once the teammate is another person's private bot (isolation between people)", () => {
+    expect(receiptName(sender, teammate({ hidden: true, name: "Private codename" }))).toBeUndefined();
+    expect(receiptName(sender, teammate({ section: "Elsewhere" }))).toBeUndefined();
+    expect(receiptName({ ...sender, peers: [] }, teammate())).toBeUndefined();
+    expect(receiptName(sender, teammate({ visibility: { people: ["someone@example.test"] } }))).toBeUndefined();
+    expect(receiptName(sender, teammate({ temporary: { archived: true } }))).toBeUndefined();
+    // an organization server: shared with the sender's person, then unshared
+    let shared = true;
+    setPeerScope((_from, to) => to.id !== "bot-mate" || shared);
+    expect(receiptName(sender, teammate())).toBe("Teammate name");
+    shared = false;
+    expect(receiptName(sender, teammate({ name: "Private codename" }))).toBeUndefined();
+  });
+
+  it("names nothing for a missing record or the sender itself", () => {
+    expect(receiptName(sender, undefined)).toBeUndefined();
+    expect(receiptName(null, teammate())).toBeUndefined();
+    expect(receiptName(sender, sender)).toBeUndefined();
+  });
+});
 
 describe("peerDeliveryReceipt", () => {
   it("keeps the ids and tickets and clips a hostile detail onto one line", () => {

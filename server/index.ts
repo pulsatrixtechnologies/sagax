@@ -969,7 +969,7 @@ import {
   resolvePeerComms,
   type ApprovalBus
 } from "./peer-approval.ts";
-import { peerDeliveryReceipt } from "./peer-delivery.ts";
+import { peerDeliveryReceipt, receiptName } from "./peer-delivery.ts";
 import {
   READ_RECEIPTS_PREFERENCE,
   botParticipant,
@@ -12390,6 +12390,18 @@ function roomHandoffProblem(node: Pick<HandoffView, "groupId" | "threadId" | "bo
   }
 }
 
+/** A teammate's name as the conversation that handed it work may read it:
+ * shown while the route still admits that work (roomHandoffProblem, the
+ * check that withholds its result), else the neutral "Teammate". Isolation
+ * between people: a teammate hidden, unshared, renamed or moved out of the
+ * requester's reach while it worked is another person's private bot now,
+ * so its new name never reaches the requester's reports, chips or
+ * notifications; a withheld result travels with its reason only. */
+function teammateNameFor(child: Pick<HandoffView, "groupId" | "threadId" | "botId">, parent: Pick<HandoffView, "groupId" | "threadId" | "botId"> | undefined): string {
+  const bot = store.bot(child.botId);
+  return bot && (!parent || !roomHandoffProblem(child, parent)) ? bot.name : "Teammate";
+}
+
 // Keep only stable policy in the system prompt. Claude records that prompt on
 // a session's first request and reuses the snapshot across --resume launches,
 // so every assignment body and returned result must travel in the user turn.
@@ -12608,10 +12620,14 @@ const coordinator: Coordinator = createCoordinator({
       const bot = store.bot(child.botId);
       if (store.messagesFor(parent.threadId).some(m => m.roomRequest?.id === child.id && m.roomRequest.phase === "result")) return;
       const problem = roomHandoffProblem(child, parent);
+      // A withheld result travels with its reason only: the teammate the
+      // route no longer admits (hidden, unshared, renamed, out of reach) is
+      // not named here, nor its thread's title (isolation between people).
+      const shown = problem ? undefined : bot;
       store.appendMessage(parent.threadId, {
         role: "bot", kind: "activity",
         roomRequest: { id: child.id, phase: "result" },
-        from: bot ? { botId: bot.id, name: bot.name, color: bot.color } : undefined,
+        from: shown ? { botId: shown.id, name: shown.name, color: shown.color } : undefined,
         tool: {
           name: problem ? `Result withheld: ${problem}`
             : child.status === "completed" ? `${bot?.name ?? "Teammate"} replied${child.groupId ? ` · ${store.group(child.groupId)?.name ?? "Room"}` : ""}`
@@ -12625,8 +12641,8 @@ const coordinator: Coordinator = createCoordinator({
             ? { output: redactSecretsInText(child.result.trim()).slice(0, 2_000) } : {})
         },
         ...(child.groupId ? { comm: { groupId: child.groupId, threadId: child.threadId, withBotId: child.botId,
-          withName: bot?.name ?? "Teammate", withColor: bot?.color ?? "blue" } }
-          : { threadRef: { botId: child.botId, threadId: child.threadId, title: store.taskByThread(child.botId, child.threadId)?.title ?? "Teammate work" } })
+          withName: shown?.name ?? "Teammate", withColor: shown?.color ?? "blue" } }
+          : { threadRef: { botId: child.botId, threadId: child.threadId, title: (shown ? store.taskByThread(child.botId, child.threadId)?.title : undefined) ?? "Teammate work" } })
       });
       if (group) store.patchGroup(group.id, { unread: true });
       else {
@@ -12711,8 +12727,15 @@ const coordinator: Coordinator = createCoordinator({
         // A teammate's question resumes it while other work is still out:
         // named as a question, and no "results in" notification.
         const asking = composed.asked ?? [];
-        const settledFrom = [...new Set((asking.length ? asking : coordinator.children(node.id).map(child => child.botId))
-          .map(botId => store.bot(botId)?.name ?? "Teammate"))];
+        // Named as this conversation may still read each teammate
+        // (teammateNameFor): one whose result is withheld is "Teammate", in
+        // the chip and in the notification below.
+        const children = coordinator.children(node.id);
+        const nameOf = (botId: string) => {
+          const child = children.find(row => row.botId === botId);
+          return child ? teammateNameFor(child, node) : "Teammate";
+        };
+        const settledFrom = [...new Set(asking.length ? asking.map(nameOf) : children.map(child => teammateNameFor(child, node)))];
         const who = settledFrom.length ? settledFrom.join(", ") : "delegated work";
         store.appendMessage(node.threadId, {
           role: "bot", kind: "activity",
@@ -12824,12 +12847,15 @@ const coordinator: Coordinator = createCoordinator({
     },
     // ── runtime-only hooks (docs/runtime-contract.md §4, §8) ──
     // Display names for the envelope. The person is named only when the
-    // profile has a name; otherwise the envelope says "the user".
+    // profile has a name; otherwise the envelope says "the user". A report
+    // or question goes to the requester, which reads the assignee only while
+    // the route still admits it (teammateNameFor): a withheld one is
+    // "Teammate" in the resume, never its new private name.
     names: (node, parent) => {
       const person = cfg.profile?.name?.trim() || undefined;
       return {
         requester: parent ? store.bot(parent.botId)?.name ?? "Teammate" : person ?? "the user",
-        assignee: store.bot(node.botId)?.name ?? "Teammate",
+        assignee: teammateNameFor(node, parent),
         person,
         thread: store.taskByThread(parent?.botId ?? node.botId, parent?.threadId ?? node.threadId)?.title
       };
@@ -47474,8 +47500,12 @@ async function delegateOnRuntime(from: BotRecord, target: BotRecord, message: st
   delegated: (taskId: string) => void, external = false, mode: "work" | "consult" = "work", key?: string): Promise<[number, Record<string, unknown>]> {
   const room = store.groupByThread(capability.threadId);
   const address = { ...(room ? { groupId: room.id } : {}), threadId: capability.threadId, botId: from.id };
+  // The teammate's name as this sender may read it at the moment it is
+  // written (receiptName): `target` is the live record, which a rename
+  // patches in place while a card waits, so it is never trusted for a name.
+  const shownName = () => receiptName(store.bot(from.id), store.bot(target.id));
   const refused = (detail: string, status = 200): [number, Record<string, unknown>] => [status, { error: detail,
-    receipt: peerDeliveryReceipt({ botId: target.id, botName: target.name, outcome: "failed", detail: `${detail}: nothing was queued` }) }];
+    receipt: peerDeliveryReceipt({ botId: target.id, botName: shownName(), outcome: "failed", detail: `${detail}: nothing was queued` }) }];
   if (target.id === from.id) return refused("a bot cannot delegate to itself");
   const problem = roomHandoffProblem(address) ?? roomHandoffProblem({ threadId: target.threadId, botId: target.id }, address);
   if (problem) return refused(problem, 403);
@@ -47494,6 +47524,14 @@ async function delegateOnRuntime(from: BotRecord, target: BotRecord, message: st
       const failure = peerApprovalFailure(verdict);
       return [403, { error: verdict === "deny" ? "Denied by user; no work sent." : `${failure.error}; no work sent.`, approvals: [{ botId: target.id, ...failure }] }];
     }
+    // The card may have been open for minutes. Read both bots again before
+    // anything touches the teammate, as ask_bot did before it moved onto the
+    // runtime: one hidden, unshared or moved out of reach meanwhile gets no
+    // thread and no work, and the refusal names it by the id that was
+    // addressed, never by its new name (isolation between people).
+    const sender = store.bot(from.id);
+    const current = store.bot(target.id);
+    if (!sender || !current || !canReachPeer(sender, current)) return refused("that bot is no longer available to this bot");
     approvalGranted = true;
   }
   const continued = store.workThread(target.id, from.id, address.threadId);
@@ -47514,15 +47552,19 @@ async function delegateOnRuntime(from: BotRecord, target: BotRecord, message: st
     else coordinator.tick();
     if (duplicate && !continued) store.deleteTask(target.id, task.threadId);
     else if (!continued) threadStarters.set(task.threadId, openerFrom(address.threadId));
+    // A repeat answers the request already made without a fresh route check,
+    // so the name is read here too, like every name this function writes.
+    const shown = shownName();
+    const called = shown ? `@${shown}` : "the teammate";
     if (!duplicate) store.appendMessage(address.threadId, { role: "bot", kind: "activity",
       from: { botId: from.id, name: from.name, color: from.color },
-      tool: { name: `Sent to ${target.name}`, ok: true },
+      tool: { name: `Sent to ${shown ?? "Teammate"}`, ok: true },
       threadRef: { botId: target.id, threadId: node.threadId, title: store.taskByThread(target.id, node.threadId)?.title ?? "Teammate work" } });
-    return [200, { queued: true, taskId: node.id, toBotName: target.name, ...(duplicate ? { duplicate: true } : {}),
-      message: reviewLater ? `Queued for review: @${target.name} will pick it up once the user approves.`
-        : external ? `Delegated: @${target.name} is picking it up now.` : "Queued on the job runtime: end your turn; the result resumes you automatically.",
+    return [200, { queued: true, taskId: node.id, ...(shown ? { toBotName: shown } : {}), ...(duplicate ? { duplicate: true } : {}),
+      message: reviewLater ? `Queued for review: ${called} will pick it up once the user approves.`
+        : external ? `Delegated: ${called} is picking it up now.` : "Queued on the job runtime: end your turn; the result resumes you automatically.",
       ...(reviewLater ? { approvalRequired: true } : {}),
-      receipt: peerDeliveryReceipt({ botId: target.id, botName: target.name, outcome: duplicate && node.status !== "queued" ? "injected" : "queued",
+      receipt: peerDeliveryReceipt({ botId: target.id, botName: shown, outcome: duplicate && node.status !== "queued" ? "injected" : "queued",
         detail: duplicate ? `already sent: it is ${node.status} and its result will resume you`
           : reviewLater ? "the teammate's turn waits on the user's approval" : "queued; it runs after your current turn ends", taskId: node.id }) }];
   } catch (error) {

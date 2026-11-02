@@ -581,6 +581,61 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     expect(promptsNow()).not.toContain("work from dot");
   }, 60_000);
 
+  it("S3-13: a peer receipt never names a bot its owner unshared and renamed while the asker's card was open", async () => {
+    // Isolation between people: alice shares a writer bot with bob, a bot of
+    // bob's asks it and bob's card is open; alice takes the share back and
+    // renames the writer. Bob allows, and the answer his bot reads names the
+    // writer by the id it sent, never by alice's new private name; the
+    // writer gets nothing.
+    const PRIVATE = "Writer private codename";
+    const bob = await signIn(BOB);
+    const writer = await createBot(alice, "Shared writer", "claude");
+    expect((await api("POST", `/api/bots/${writer.id}/direct-grants`, alice, { userId: bobId })).status).toBe(200);
+    // a bot of bob's own, so this case needs nothing an earlier case made
+    const asker = await createBot(bob, "Asking bot", "claude");
+    const reviewed = await api("PATCH", `/api/bots/${asker.id}`, bob, { approvePeerComms: true });
+    expect(reviewed.status, reviewed.text).toBe(200);
+    const minted = await fetch(`${BASE}/api/testing/internal-capability`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-openmausbot-test-capability": TEST_CAPABILITY_KEY },
+      body: JSON.stringify({ botId: asker.id, threadId: asker.threadId, kind: "agents" }),
+    });
+    expect(minted.status).toBe(201);
+    const token = ((await minted.json()) as { token: string }).token;
+    const promptsNow = () => (existsSync(prompts) ? readFileSync(prompts, "utf8") : "");
+    try {
+      const asked = fetch(`${BASE}/api/internal/ask-bot`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ toBotId: writer.id, message: "hop to the writer once private" }),
+      });
+      void asked.catch(() => {});
+      const card = await waitFor(async () => {
+        const got = await api("GET", `/api/threads/${asker.threadId}/messages`, bob);
+        return (got.body.messages as Array<{ card?: { requestId?: string; answered?: string; dismissed?: boolean; title?: string } }> | undefined)
+          ?.find((m) => m.card?.requestId && !m.card.answered && !m.card.dismissed) ?? null;
+      });
+      expect(card.card?.title).toContain("@Shared writer");
+      expect((await api("DELETE", `/api/bots/${writer.id}/direct-grants/${bobId}`, alice)).status).toBe(200);
+      expect((await api("PATCH", `/api/bots/${writer.id}`, alice, { name: PRIVATE })).status).toBe(200);
+      const answered = await api("POST", `/api/threads/${asker.threadId}/respond`, bob, { requestId: card.card!.requestId, behavior: "allow" });
+      expect(answered.status, answered.text).toBeLessThan(300);
+      const response = await asked;
+      const text = await response.text();
+      expect(response.status, text).toBe(200);
+      const result = JSON.parse(text) as { error?: string; receipt?: Record<string, unknown> };
+      expect(result.receipt).not.toHaveProperty("botName");
+      expect(text).not.toContain(PRIVATE);
+      expect(result).toMatchObject({ error: "that bot is no longer available to this bot", receipt: { botId: writer.id, outcome: "failed" } });
+      // nothing in bob's conversation names it, and the writer got no turn
+      expect((await api("GET", `/api/threads/${asker.threadId}/messages`, bob)).text).not.toContain(PRIVATE);
+      await sleep(300);
+      expect(promptsNow()).not.toContain("hop to the writer once private");
+    } finally {
+      await api("PATCH", `/api/bots/${asker.id}`, bob, { approvePeerComms: false });
+    }
+  }, 60_000);
+
   it("S3-7: Full access on a member's bot is its owner's choice, confirmed once; Custom never", async () => {
     // off until an admin turns it on (2026-10-11)
     const allowed = await api("PATCH", "/api/org/settings", alice, { allowFullAccess: true });

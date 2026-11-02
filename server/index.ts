@@ -5272,6 +5272,10 @@ function externalRuntimeCapability(header: string | string[] | undefined): Inter
   };
 }
 
+/** Roots the test capability route began for a thread with no live turn:
+ * no turn end ever comes for them, so the revoke of their generation ends
+ * them (upstream OpenMausBot, after 34cbd59b). */
+const standInRoots = new Set<string>();
 function beginInternalCapabilityGeneration(threadId: string, generation = randomUUID()): string {
   const previous = activeInternalGenerationByThread.get(threadId);
   if (previous) revokeInternalCapabilityGeneration(threadId, previous);
@@ -5342,6 +5346,7 @@ function revokeInternalCapabilityGeneration(threadId: string, generation: string
   // A call warm awaits it so the tokens are in the warm map before the
   // first spoken turn looks for them.
   const retired = perspicaxMcp?.endGeneration(threadId, generation) ?? Promise.resolve();
+  if (standInRoots.delete(generation)) coordinator.endTurn(generation, { ok: true, text: "" });
   endForeignTurns(threadId, generation);
   if (guestDrivenTurns.get(threadId) === generation) guestDrivenTurns.delete(threadId);
   for (const [token, capability] of internalCapabilities) {
@@ -48024,7 +48029,30 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
       json(res, 400, { error: "invalid test capability" });
       return true;
     }
-    const generation = beginInternalCapabilityGeneration(parsed.data.threadId);
+    // A turn running in that thread lends the capability its own
+    // generation and root: what the capability does belongs to that turn,
+    // whose end settles it (a card it leaves parks that root). Otherwise
+    // the capability stands in for a turn of that bot in that thread, so
+    // the hand-offs it makes need what any turn's have: the turn's root,
+    // begun as a person's turn there would begin it, and ended when a
+    // newer generation revokes it (standInRoots).
+    const live = activeInternalGenerationByThread.get(parsed.data.threadId);
+    const liveRoot = live ? coordinator.node(live) : undefined;
+    const generation = live && liveRoot && !ENDED.has(liveRoot.status) && !standInRoots.has(live)
+      ? live : beginInternalCapabilityGeneration(parsed.data.threadId);
+    if (generation !== live) {
+      standInRoots.add(generation);
+      const minted = store.bot(parsed.data.botId)!;
+      const threadId = parsed.data.threadId;
+      const owner = connectorThread(minted.id, threadId);
+      const latestUser = [...store.activePath(threadId)].reverse().find((message) => message.role === "user" && message.kind === "text" && message.text);
+      const opener = handoffOpener({ botId: minted.id, threadId }, threadId);
+      coordinator.beginTurn({
+        id: generation, address: { botId: minted.id, threadId, ...(owner?.group ? { groupId: owner.group.id } : {}) }, brief: latestUser?.text ?? "",
+        level: owner?.group ? roomTurnLevel(minted, threadId, undefined) : approvalModeForTurn(store.projectBotForTask(minted.id, threadId) ?? minted, false, threadId),
+        ...(opener ? { opener } : {}), origin: requestWorkOrigin({ line: latestUser }), ...personForJoin(threadId),
+      });
+    }
     const { deliversSavedFiles, speakerPrincipalId, ...grants } = parsed.data;
     if (speakerPrincipalId) {
       turnSpeakers.set(parsed.data.threadId, { origin: "person", principalId: speakerPrincipalId });

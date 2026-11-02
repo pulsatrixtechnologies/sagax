@@ -172,7 +172,7 @@ describe("moving saved bots off the engine", () => {
     expect(moves.find(move => move.botId === auto.id)?.askNow).toBe(false);
   });
 
-  it("keeps the bot's Full and the level of a conversation on another engine when the bot moves", () => {
+  it("keeps the level of a conversation on another engine when the bot's own level goes back to Ask", () => {
     const store = new Store(newBotDefault);
     // The first conversation has no level of its own: it follows the bot's.
     const bot = store.createBot({ modelSelection: { instanceId: "computer", model: "claude-fable-5" } }, { seedMessages: false });
@@ -196,11 +196,11 @@ describe("moving saved bots off the engine", () => {
     // It is the bot's open conversation, so it still hears what moved: the
     // bot's own engine and level, not its own.
     expect(moves).toEqual([
-      { botId: bot.id, threadId: elsewhere, scope: "bot-only", cloud: false, noComputer: false, askNow: false },
+      { botId: bot.id, threadId: elsewhere, scope: "bot-only", cloud: false, noComputer: false, askNow: true },
     ]);
   });
 
-  it("leaves a moved conversation that follows the bot's level at Full, with nothing to ask", () => {
+  it("tells a moved conversation that follows the bot's level that it is now Ask", () => {
     const store = new Store(newBotDefault);
     const bot = store.createBot({ modelSelection: { instanceId: "computer", model: "claude-fable-5" } }, { seedMessages: false });
     // As above: a thread with no level of its own, which Sagax never starts with.
@@ -212,8 +212,8 @@ describe("moving saved bots off the engine", () => {
 
     const moves = store.retireInstances(removed, replacement, noBoat);
 
-    expect(moves.find(move => move.threadId === first)).toMatchObject({ scope: "conversation", askNow: false });
-    expect(new Store(newBotDefault).projectBotForTask(bot.id, first)).toMatchObject({ approvalMode: "full" });
+    expect(moves.find(move => move.threadId === first)).toMatchObject({ scope: "conversation", askNow: true });
+    expect(new Store(newBotDefault).projectBotForTask(bot.id, first)).toMatchObject({ approvalMode: "ask" });
   });
 
   it("keeps a bot on Auto when the new engine can't use a computer, and says so", () => {

@@ -5764,7 +5764,9 @@ describe("harness HTTP API", () => {
       const keptCustom = (await isolatedApi("GET", "/api/bots?messages=0")).body.bots.find(
         (candidate: { id: string }) => candidate.id === customThread.id,
       );
-      expect(keptCustom.approvalMode).toBe("ask");
+      // The first start moved the Ask bot onto Approve for me (main's
+      // approval-default-auto.v1); the refused requests changed nothing since.
+      expect(keptCustom.approvalMode).toBe("auto");
       expect(keptCustom.tasks.find((task: { threadId: string }) => task.threadId === "custom-thread-own").approvalMode).toBe("custom");
     } finally {
       await waitForExit(isolatedChild, { signal: "SIGTERM" });
@@ -7714,7 +7716,9 @@ describe("harness HTTP API", () => {
         expect(team.body.bot.alwaysAllow, mode).toEqual(["Read"]);
         const saved = (await api("GET", "/api/bots?messages=0")).body.bots.find((entry: { id: string }) => entry.id === bot.id);
         expect(levels(saved), mode).toEqual([mode, mode, mode]);
-        if (mode === "auto") expect(await permissionModeOf(bot.id, opened[0]!)).toBe("auto");
+        // Approve for me runs Claude on acceptEdits plus Sagax's own allow
+        // list, never the CLI's auto mode (main 2026-10-19, drivers/claude.ts).
+        if (mode === "auto") expect(await permissionModeOf(bot.id, opened[0]!)).toBe("acceptEdits");
       }
       // Full stays the packaged desktop's private channel (solo server): a
       // team-wide Full over HTTP is refused and changes no thread.
@@ -9244,41 +9248,8 @@ describe("harness HTTP API", () => {
     }
   });
 
-  it("tells a /setup turn to connect an app itself when its connected-apps tools are mounted, and names the switch when they are off", async () => {
-    // This suite's server has the managed connected-apps service (the stub
-    // broker), so connected apps are set up for the workspace.
-    type Dump = { systemPrompt: string; mcpConfig: { mcpServers: Record<string, unknown> } };
-    const setupTurn = async (botId: string) => {
-      rmSync(fakeClaudeDump, { force: true });
-      expect((await api("POST", `/api/bots/${botId}/messages`, { text: "/setup set up my Gmail" })).status).toBe(202);
-      return readJsonFileWhenReady<Dump>(fakeClaudeDump, 15_000);
-    };
-    const on = (await api("POST", "/api/bots", { name: "Inbox" })).body.bot;
-    const off = (await api("POST", "/api/bots", { name: "Quiet inbox" })).body.bot;
-    try {
-      for (const bot of [on, off]) {
-        expect((await api("PATCH", `/api/bots/${bot.id}`, {
-          modelSelection: { instanceId: "claude", model: "claude-sonnet-5" },
-        })).status).toBe(200);
-      }
-      const mounted = await setupTurn(on.id);
-      expect(mounted.mcpConfig.mcpServers.composio).toBeDefined();
-      expect(mounted.systemPrompt).toContain("make COMPOSIO_MANAGE_CONNECTIONS for its toolkit (for example gmail) your last tool call");
-      expect(mounted.systemPrompt).toContain("The user gets a Connect card in this chat");
-      expect(mounted.systemPrompt).not.toContain("point them to the Access section");
-
-      expect((await api("PATCH", `/api/bots/${off.id}`, { composio: false })).status).toBe(200);
-      const switchedOff = await setupTurn(off.id);
-      expect(switchedOff.mcpConfig.mcpServers.composio).toBeUndefined();
-      expect(switchedOff.systemPrompt).toContain("ask the user to turn on Connected apps in your settings under Access");
-      expect(switchedOff.systemPrompt).not.toContain("COMPOSIO_MANAGE_CONNECTIONS");
-    } finally {
-      for (const bot of [on, off]) {
-        await api("POST", `/api/bots/${bot.id}/interrupt`);
-        await api("DELETE", `/api/bots/${bot.id}`);
-      }
-    }
-  });
+  // Upstream's "/setup turn connects an app itself" (Composio's
+  // COMPOSIO_MANAGE_CONNECTIONS) is not here: Sagax removed Composio.
 
   it("never lets an out-of-band SOUL.md edit reach the prompt, and surfaces it as drift instead", async () => {
     const bot = (await api("POST", "/api/bots", { name: "Kiwi", title: "Tracker" })).body.bot;

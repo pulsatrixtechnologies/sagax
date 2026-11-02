@@ -368,7 +368,11 @@ posixOnly("mid-turn steering e2e", () => {
       const followUp = nativeRows
         .filter((row) => row.dir === "out" && row.source === "claude.sdk.message")
         .at(-1)?.msg;
-      expect(followUp.message.content.map((block: any) => block.type === "text" ? { ...block, text: withoutTurnClock(block.text) } : block)).toEqual([
+      // The Claude driver puts a changed volatile half of the instructions
+      // ahead of the words as a <system-reminder> (drivers/claude.ts
+      // withReminder); the words themselves follow it unchanged.
+      const withoutReminders = (text: string) => text.replace(/^(?:<system-reminder>[\s\S]*?<\/system-reminder>\n\n)+/, "");
+      expect(followUp.message.content.map((block: any) => block.type === "text" ? { ...block, text: withoutReminders(withoutTurnClock(block.text)) } : block)).toEqual([
         {
           type: "image",
           source: { type: "base64", media_type: "image/png", data: "[image data: 12 base64 chars]" },

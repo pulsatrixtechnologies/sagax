@@ -99,10 +99,23 @@ export function grokRoundContextUsage(msg: any): number | undefined {
   return input + cached > 0 ? input + cached : undefined;
 }
 
+/** Prod 2026-11-02 (routine "Overdue invoices report"): Grok's use_tool also
+ * takes `file` and `tool_input_file`, read from the disk of the Grok process
+ * on the Sagax server. A bot's files live in its own environment
+ * (sagax-environment write_file / run_command, /workspace), which that
+ * process cannot see, so every file form failed "Cannot read complete MCP
+ * source file: ... No such file or directory" before any MCP call was sent.
+ * Only the inline form can work here. */
+const GROK_INLINE_ARGUMENTS_HINT_TEXT =
+  " Always call use_tool with tool_name and inline tool_input, even for large arguments." +
+  " Never use its file or tool_input_file forms: they read the Sagax server's disk, not your environment," +
+  " so a file you wrote with write_file or a command is never found there.";
+
 export const GROK_TOOL_REUSE_HINT =
   "\n\nTool calls: each search_tool call costs a full extra round trip. When search_tool already showed you a tool earlier in this conversation," +
   " call it again directly with use_tool (same tool_name, arguments per the schema you saw) instead of searching again. Use search_tool only for a tool you have not seen yet," +
-  " and when one search returns several tools you need, call them without searching again.";
+  " and when one search returns several tools you need, call them without searching again." +
+  GROK_INLINE_ARGUMENTS_HINT_TEXT;
 
 const SLUG = /^[a-z0-9][a-z0-9._-]*$/i;
 

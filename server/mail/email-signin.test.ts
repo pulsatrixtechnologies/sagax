@@ -1,6 +1,6 @@
 // End to end: a hosted server with a sign-in allow-list lets a remote browser
 // sign in with a code the server emails itself (server/account-signin.ts,
-// server/email-otp.ts) and ends up with the same cookie session a pairing
+// server/mail/email-otp.ts) and ends up with the same cookie session a pairing
 // code would give. SAGAX_MAIL_CAPTURE_FILE (server/index.ts) stands in for a
 // real mail provider: the spawned server appends each message it would have
 // sent as a JSON line instead, and this file reads the code back from there.
@@ -12,9 +12,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { openSse } from "./testing/sse.ts";
-import { freePortBlock } from "./testing/ports.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
+import { openSse } from "../testing/sse.ts";
+import { freePortBlock } from "../testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(SERVER_DIR, "..");
@@ -37,7 +37,7 @@ function capturedMail(): CapturedMail[] {
 }
 
 /** The newest code this server emailed to `email`, read back from the
- * capture file (server/mailer.ts createCaptureMailer). */
+ * capture file (server/mail/mailer.ts createCaptureMailer). */
 function latestCode(email: string): string {
   const messages = capturedMail().filter((m) => m.to.toLowerCase() === email.toLowerCase());
   const match = messages.length ? /Your code is (\d{8})/.exec(messages[messages.length - 1]!.text) : null;
@@ -233,7 +233,7 @@ describe("sign in with your email on a hosted server", () => {
     expect(config.status).toBe(403);
 
     // A different local part than "anyone@agentada.test" below: that address
-    // is signed in three times in a later test (server/email-otp.ts caps
+    // is signed in three times in a later test (server/mail/email-otp.ts caps
     // sends per address at OTP_SENDS_PER_ADDRESS within the send window).
     await call("/api/auth/email/start", { body: { email: "someone@agentada.test" } });
     const colleague = await call("/api/auth/email/verify", { body: { email: "someone@agentada.test", code: latestCode("someone@agentada.test") } });

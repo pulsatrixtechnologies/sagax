@@ -1207,7 +1207,7 @@ export interface OptionCardData extends WaitCardField {
    * The notification waits. Cleared when the verdict lands or the card stays. */
   reviewing?: boolean;
   /** An email draft waiting for its Send approval
-   * (server/email-draft-send.ts). Status follows the send. */
+   * (server/mail/email-draft-send.ts). Status follows the send. */
   emailSendRequest?: EmailSendRequestCard;
 }
 

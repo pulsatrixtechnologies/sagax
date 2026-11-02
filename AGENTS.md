@@ -3317,13 +3317,13 @@ Each bot of an organization server has its own address,
 inbound provider, MX and the safety rules live there). Mail only wakes a
 routine. Wire contract v2 of 2026-10-21 (Perspicax <-> Sagax, Perspicax
 #419). Rules, none optional,
-covered by `server/bot-inbound-mail.test.ts`,
-`server/bot-mail-addresses.test.ts`, `server/routes/bot-inbound-mail.test.ts`,
+covered by `server/mail/bot-inbound-mail.test.ts`,
+`server/mail/bot-mail-addresses.test.ts`, `server/routes/bot-inbound-mail.test.ts`,
 `server/oidc-rp.test.ts`, `server/org/org-member-api.e2e.test.ts` (M10),
 `src/components/bot-settings/BotEmailAddress.test.ts`,
 `src/components/TypedTriggers.test.ts` and iOS `BotInboundMailTests`:
 
-- Delivery: `POST /api/org/inbound-mail` (`server/bot-inbound-mail.ts`),
+- Delivery: `POST /api/org/inbound-mail` (`server/mail/bot-inbound-mail.ts`),
   answered before the session gate and loopback trust, next to the member
   API. The only credential is a console assertion (typ
   `pulsabot-console+jwt`, at most 120 s, single-use `jti`, `aud` this
@@ -3376,7 +3376,7 @@ covered by `server/bot-inbound-mail.test.ts`,
   (case-insensitive, `containsFilters`), `keyword` over subject and text.
 - Confined runs (S2): a run woken by a `botmail` trigger is confined like a
   guest's turn (`botmailConfined` in server/index.ts, `botmailRunConfined`
-  in server/bot-inbound-mail.ts): no shell or WebFetch (`guestConfined`,
+  in server/mail/bot-inbound-mail.ts): no shell or WebFetch (`guestConfined`,
   Claude `--restricted`), Ask whatever the bot's level (no Full, no Auto),
   no rule the owner saved and no kept card answers for it, no self-apply.
   An engine that cannot run confined refuses the run. The trigger's owner
@@ -3410,7 +3410,7 @@ covered by `server/bot-inbound-mail.test.ts`,
   trigger counts and the FULL sender address (decision 3), never the
   subject or the text. Confidential threads are not
   touched: a mail starts a routine run in its own thread.
-- Addresses: `server/bot-mail-addresses.ts` asks Perspicax
+- Addresses: `server/mail/bot-mail-addresses.ts` asks Perspicax
   (`POST /api/v1/pulsabot/inbound-mail/addresses`, link token) for every bot
   with a Perspicax owner in ONE call (at most 500), with `complete: true`
   only when that is every such bot (Perspicax then drops the rows of bots
@@ -3951,7 +3951,7 @@ in `server/routes/security-keys.ts`. Rules, covered by
   desktop app's own person does. The same rule gates the vault export for a
   person without a key. Tests: `server/recent-sign-in.test.ts`,
   `server/recent-sign-in.e2e.test.ts`, `server/oidc-login.test.ts` (the
-  auth_time and `fresh` cases), `server/email-signin.test.ts`, C5 in
+  auth_time and `fresh` cases), `server/mail/email-signin.test.ts`, C5 in
   `server/org/org-admin-console.e2e.test.ts`. The last key removed
   clears the classes.
 - Recovery when every key is lost: stop the server, remove the person's
@@ -4376,10 +4376,10 @@ One page (`EnginesSettings.tsx`, section id `engines`) replaced Integrations
 
 ## Mail settings
 
-Settings > Email (`src/components/MailSettings.tsx`, `server/mail-routes.ts`,
-`server/mail-config.ts`, field ids in `shared/mail-settings.ts`) configures
+Settings > Email (`src/components/MailSettings.tsx`, `server/mail/mail-routes.ts`,
+`server/mail/mail-config.ts`, field ids in `shared/mail-settings.ts`) configures
 the mail of a solo server. Keep these rules, each covered by a test in
-`server/mail-routes.test.ts` or `server/mail-config.test.ts`:
+`server/mail/mail-routes.test.ts` or `server/mail/mail-config.test.ts`:
 
 - `GET /api/mail/settings` never returns a secret or any part of one: a
   password, API key or key secret is only `configured: true|false`.
@@ -4859,8 +4859,8 @@ covered by `shared/custom-rules.test.ts`, `server/auto-approve.custom-rules.test
   the four reviews; add each new bypass there.
 
 Email drafts (`src/components/EmailCard.tsx`, `shared/email-draft-send.ts`,
-`server/email-draft-send.ts`), covered by `server/email-draft-send.test.ts`
-and `server/email-draft-send.e2e.test.ts`: To, Cc, Subject and body are
+`server/mail/email-draft-send.ts`), covered by `server/mail/email-draft-send.test.ts`
+and `server/mail/email-draft-send.e2e.test.ts`: To, Cc, Subject and body are
 editable (no invisible or direction character; a non-ASCII domain is shown
 as punycode); Envoyer writes an approval card (`POST
 /api/threads/:id/email-drafts`) and never sends. Allow sends once: through

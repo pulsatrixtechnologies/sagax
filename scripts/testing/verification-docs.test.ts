@@ -35,7 +35,7 @@ const routeModules = readdirSync(ROUTES_DIR).filter((name) => name.endsWith(".ts
 // Organization features register theirs from server/org/*-routes.ts and
 // server/org/org-export.ts, which server/index.ts mounts. Other domains may
 // keep *-routes.ts at the server root until they move.
-const featureRouteDirs = [join(ROOT, "server"), join(ROOT, "server", "org")];
+const featureRouteDirs = [join(ROOT, "server"), join(ROOT, "server", "org"), join(ROOT, "server", "mail")];
 const featureRouteModules = featureRouteDirs
   .flatMap((dir) => readdirSync(dir)
     .filter((name) => name.endsWith("-routes.ts") || name === "org-export.ts")

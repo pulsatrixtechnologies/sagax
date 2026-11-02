@@ -128,7 +128,7 @@ Speech-to-Speech (rejeté : il remplacerait le cerveau).
 ### 2.2 Twilio dans Sagax
 
 - **Courriel seulement** : le fournisseur `twilio` de l'envoi de courriel
-  (Twilio Email API, `server/mail-config.ts`, `shared/mail-settings.ts`,
+  (Twilio Email API, `server/mail/mail-config.ts`, `shared/mail-settings.ts`,
   `SAGAX_TWILIO_API_KEY_SID` / `SAGAX_TWILIO_API_KEY_SECRET`, PR #1 et #4).
   Il n'est pas réutilisé : la téléphonie prend ses droits Twilio dans le
   profil Perspicax de la personne (décision 1).

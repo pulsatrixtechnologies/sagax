@@ -15,7 +15,7 @@ import {
   normalizeDraftForSend,
   outboundMailNeedsDraftCard,
   type EmailDraftToSend,
-} from "../shared/email-draft-send.ts";
+} from "../../shared/email-draft-send.ts";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

@@ -19,7 +19,7 @@ import {
   type MailFieldView,
   type MailProvider,
   type MailSettingsView,
-} from "../shared/mail-settings.ts";
+} from "../../shared/mail-settings.ts";
 
 export { DEFAULT_MAIL_FROM_NAME, MAIL_FIELDS, MAIL_SECRET_FIELDS };
 export type { MailField, MailFieldSource, MailFieldView, MailProvider, MailSettingsView };

@@ -1,4 +1,4 @@
-// Settings > Email, as the server (server/mail-config.ts, server/mail-routes.ts)
+// Settings > Email, as the server (server/mail/mail-config.ts, server/mail/mail-routes.ts)
 // and the app (src/components/MailSettings.tsx) both read it: the field ids,
 // which of them are write-only secrets, and the shape GET /api/mail/settings
 // answers with. Nothing here ever holds a secret value.

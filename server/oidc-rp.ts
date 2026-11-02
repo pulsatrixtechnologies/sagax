@@ -567,7 +567,7 @@ export function parseGrantClaim(value: unknown): ConsoleGrant | null {
  * console; the member API (server/org/org-member-routes.ts) accepts the console
  * and `perspicax-mcp`; `perspicax-mail` (the Perspicax mail relay,
  * 2026-10-21) is accepted by `POST /api/org/inbound-mail` alone
- * (server/bot-inbound-mail.ts); `perspicax-voice` (Perspicax Voice,
+ * (server/mail/bot-inbound-mail.ts); `perspicax-voice` (Perspicax Voice,
  * 2026-10-26) by `POST /api/org/telephony/inbound` alone
  * (server/bot-inbound-telephony.ts). */
 export const CONSOLE_ASSERTION_ACTORS = ["console", "perspicax-mcp", "perspicax-mail", "perspicax-voice"] as const;

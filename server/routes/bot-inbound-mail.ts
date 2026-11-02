@@ -1,6 +1,6 @@
 // GET /api/bots/:id/inbound-mail (contract C, 2026-10-21, B21 / iOS CO5):
 // the bot's own email address, given by the Perspicax relay
-// (server/bot-mail-addresses.ts), for the bot profile row and the botmail
+// (server/mail/bot-mail-addresses.ts), for the bot profile row and the botmail
 // trigger editor. `{ available, address, enabled, canChange }`:
 // `available: false` on a solo server, an older Perspicax, inbound mail
 // off, or any failure (the app then shows nothing). `enabled: false` is an
@@ -18,7 +18,7 @@
 // Client-scoped in server/request-auth.ts; the bot visibility check every
 // client route passes (bot-visibility.ts pathSubject) answers a hidden bot
 // as missing before this runs.
-import { BOT_MAIL_LOCAL_PART, NO_BOT_MAIL, type BotInboundMail, type LocalPartResult } from "../bot-mail-addresses.ts";
+import { BOT_MAIL_LOCAL_PART, NO_BOT_MAIL, type BotInboundMail, type LocalPartResult } from "../mail/bot-mail-addresses.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

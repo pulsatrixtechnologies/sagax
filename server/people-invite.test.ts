@@ -1,6 +1,6 @@
 // End to end: adding people to a hosted workspace. The owner bootstraps the
 // first admin from the box, that admin signs in with a code this server
-// emails itself (server/account-signin.ts, server/email-otp.ts) and, through
+// emails itself (server/account-signin.ts, server/mail/email-otp.ts) and, through
 // the same requests Settings → People sends, invites a member, promotes them
 // and removes them, immediately ending their account sessions. Everything
 // the People card reads answers in the shape it renders.
@@ -41,7 +41,7 @@ function capturedMail(): CapturedMail[] {
 }
 
 /** The newest code this server emailed to `email`, read back from the
- * capture file (server/mailer.ts createCaptureMailer). */
+ * capture file (server/mail/mailer.ts createCaptureMailer). */
 function latestCode(email: string): string {
   const messages = capturedMail().filter((m) => m.to.toLowerCase() === email.toLowerCase());
   const match = messages.length ? /Your code is (\d{8})/.exec(messages[messages.length - 1]!.text) : null;

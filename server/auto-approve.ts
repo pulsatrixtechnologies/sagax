@@ -169,7 +169,7 @@ export type AutoVerdictSource =
   | "custom-rule-ask"
   | "custom-rule-deny"
   /** The person allowed this exact email draft on its approval card
-   * (server/email-draft-send.ts): one send, these recipients and subject. */
+   * (server/mail/email-draft-send.ts): one send, these recipients and subject. */
   | "email-draft-approval"
   /** 2026-10-16: one of Sagax's own person-scoped tools
    * (server/sagax-internal-tools.ts: Data, the agents tools in the bot's own

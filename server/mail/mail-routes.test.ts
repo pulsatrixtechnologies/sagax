@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { MailSettings } from "./mail-config.ts";
 import { createMailSettingsRoutes, MAIL_TEST_LIMIT, type MailSettingsRouteDeps } from "./mail-routes.ts";
 import type { Mailer } from "./mailer.ts";
-import type { RequestAuth } from "./request-auth.ts";
-import { PASS, type RouteContext } from "./routes/table.ts";
-import type { SessionRecord } from "./sessions.ts";
+import type { RequestAuth } from "../request-auth.ts";
+import { PASS, type RouteContext } from "../routes/table.ts";
+import type { SessionRecord } from "../sessions.ts";
 
 // Fake values only. Long and distinct so a fragment would be caught too.
 const SAVED_SECRET = "zq9Xw7LmPr4tVb2Nk8Yd";

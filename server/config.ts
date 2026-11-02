@@ -21,7 +21,7 @@ import { isModelVariant, type InstanceConfigMap, type ModelSelection } from "./c
 import { DEFAULT_WINDOW_MINUTES, MAX_WINDOW_MINUTES } from "./cache-keepwarm.ts";
 import { PROVIDER_ICON_PRESETS, providerIconError } from "../shared/provider-icon.ts";
 import type { McpServerSpec } from "./contracts.ts";
-import type { MailSettings } from "./mail-config.ts";
+import type { MailSettings } from "./mail/mail-config.ts";
 import { isRemoteMcpServer, parseStoredMcpServer, reservedMcpServerLog, reservedMcpServerName } from "./mcp-registry.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "./schema.ts";
 import { isPersonalBrowserProfileId } from "../shared/person-settings.ts";
@@ -531,8 +531,8 @@ const appConfigSchema = z.object({
     revokedAt: z.number().optional(),
   })).max(5000).optional(),
   /** Mail transport for server-issued sign-in codes and invitations
-   * (server/mail-config.ts, server/mailer.ts). Saved by Settings > Email
-   * (server/mail-routes.ts), never by a generic config patch; a saved field
+   * (server/mail/mail-config.ts, server/mail/mailer.ts). Saved by Settings > Email
+   * (server/mail/mail-routes.ts), never by a generic config patch; a saved field
    * wins over its SAGAX_MAIL_* environment default. */
   mail: z.object({
     provider: z.enum(["smtp", "sendgrid", "twilio"]).optional(),

@@ -710,7 +710,7 @@ import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { createAutoApprovalNotes, type ToolAutoApproval } from "./tool-auto-approval.ts";
 import { createEmailDraftRoutes } from "./routes/email-drafts.ts";
 import { createThreadWarmRoutes } from "./routes/thread-warm.ts";
-import { createEmailSendPasses, emailSendCard, sendWithMailer } from "./email-draft-send.ts";
+import { createEmailSendPasses, emailSendCard, sendWithMailer } from "./mail/email-draft-send.ts";
 import {
   EMAIL_SEND_REQUEST_PREFIX,
   emailDraftKey,
@@ -1500,10 +1500,10 @@ import {
 } from "./engine-transcripts.ts";
 import { createCustomDomainVerifier, customDomainIpv4, normalizeCustomDomain } from "./custom-domain.ts";
 import { allowedScopes, createServerEmailSignIn, parseAllowList } from "./account-signin.ts";
-import { EmailOtpStore } from "./email-otp.ts";
-import { resolveMailSettings } from "./mail-config.ts";
-import { createCaptureMailer, createMailer, type Mailer } from "./mailer.ts";
-import { createMailSettingsRoutes } from "./mail-routes.ts";
+import { EmailOtpStore } from "./mail/email-otp.ts";
+import { resolveMailSettings } from "./mail/mail-config.ts";
+import { createCaptureMailer, createMailer, type Mailer } from "./mail/mailer.ts";
+import { createMailSettingsRoutes } from "./mail/mail-routes.ts";
 import {
   createVoiceModeRoutes,
   resolveVoiceKey,
@@ -1927,10 +1927,10 @@ import {
   botmailTaggedPrompt,
   createBotInboundMailRoute,
   senderDomain
-} from "./bot-inbound-mail.ts";
+} from "./mail/bot-inbound-mail.ts";
 import { TELEPHONY_ASSERTION_ACTORS, createBotInboundTelephonyRoute } from "./bot-inbound-telephony.ts";
 import { SmsConversation } from "./sms-conversation.ts";
-import { BotMailAddresses } from "./bot-mail-addresses.ts";
+import { BotMailAddresses } from "./mail/bot-mail-addresses.ts";
 import { createBotPresetRoutes } from "./routes/bot-presets.ts";
 import { createBotCatalogRoutes, memberImportReset } from "./routes/bot-catalog.ts";
 import { createBotZipRoutes } from "./routes/bot-zip.ts";
@@ -3375,8 +3375,8 @@ bindConfidentialDecisions((threadId) => deletedConfidentialThreads.has(threadId)
 // save applies to the next decision. It never throws into a turn.
 const decider = createDecider({ config: () => cfg, dataDir: DATA_DIR });
 const customDomainVerifier = createCustomDomainVerifier({ environmentId: ENVIRONMENT_ID });
-// Server-issued sign-in codes (server/email-otp.ts) and the mail that
-// carries them (server/mail-config.ts, server/mailer.ts). Settings are
+// Server-issued sign-in codes (server/mail/email-otp.ts) and the mail that
+// carries them (server/mail/mail-config.ts, server/mail/mailer.ts). Settings are
 // resolved per call so a Settings change or a Docker env bootstrap applies
 // without a restart; the mailer is cached by a hash of the resolved settings
 // so a new transport is not built on every call (and no secret sits around
@@ -18695,7 +18695,7 @@ bus.subscribe((event: RuntimeEvent) => {
       const safetyName = event.mcpTool ?? event.tool;
       const safetyText = [event.mcpTool, event.tool, event.command?.command, event.summary, event.input].filter((part): part is string => typeof part === "string" && part.length > 0).join("\n");
       // The person already allowed this exact email draft on its own card
-      // (server/email-draft-send.ts): the pass is bound to this bot, the
+      // (server/mail/email-draft-send.ts): the pass is bound to this bot, the
       // approved connector, recipients, subject and body, and is used here,
       // once. Only then is the outbound step of the safety review (a draft,
       // then a confirmation) taken as answered; every other check stays.
@@ -31082,8 +31082,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
 ];
 ROUTES.push(createHostedSlackRoutes({ bot: (id) => store.bot(id), hostedReady: () => Boolean(workspaceAccess) && entitled("admin") }));
 // 2026-10-21 (B21 / iOS CO5): the bots' own email addresses, from the
-// Perspicax relay (server/bot-mail-addresses.ts, contract B), and the
-// delivery route (server/bot-inbound-mail.ts, contract A, wired before the
+// Perspicax relay (server/mail/bot-mail-addresses.ts, contract B), and the
+// delivery route (server/mail/bot-inbound-mail.ts, contract A, wired before the
 // session gate with the member API).
 const botMailAddresses = new BotMailAddresses({
   link: () => (IDENTITY.kind === "perspicax" ? perspicaxDirectory : null),
@@ -31899,7 +31899,7 @@ ROUTES.push(createSecurityKeyRoutes({
   })
 }));
 // 2026-10-16: an email draft's Send: an approval card, then the send on Allow
-// (server/routes/email-drafts.ts, server/email-draft-send.ts).
+// (server/routes/email-drafts.ts, server/mail/email-draft-send.ts).
 ROUTES.push(createEmailDraftRoutes({ ask: requestEmailDraftSend, status: emailDraftStatus }));
 ROUTES.push(createThreadWarmRoutes({ warm: threadWarmRequest }));
 /** POST /api/bots/:id/warm (server/routes/thread-warm.ts): same access as a
@@ -34311,7 +34311,7 @@ async function settleConfidentialMemoryCard(auth: RequestAuth, threadId: string,
   return { status: 200, body: { ok: true, outcome: "allowed-once" } };
 }
 
-// ── email drafts sent from their card (server/email-draft-send.ts) ──────
+// ── email drafts sent from their card (server/mail/email-draft-send.ts) ──────
 const emailSendPasses = createEmailSendPasses();
 
 /** The bot a thread's email draft speaks for, and whether the caller may ask
@@ -38455,7 +38455,7 @@ if (IDENTITY.kind !== "perspicax") ROUTES.push(createSoloOrgRoutes({
   }
 }));
 
-// Settings > Email (server/mail-routes.ts): the mail transport of a solo
+// Settings > Email (server/mail/mail-routes.ts): the mail transport of a solo
 // server, admin only. Saved fields go to config.json's `mail` block and win
 // over the SAGAX_MAIL_* environment; an organization server answers 403
 // identity_perspicax (Perspicax sends its mail).

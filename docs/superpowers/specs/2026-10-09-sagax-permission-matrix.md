@@ -166,7 +166,7 @@ key leaves everyone on `mine`, as before.
 |---|---|---|---|---|
 | `backup.workspace` | Back up and restore the server | `/api/workspace-backup/*` (admin scope), `manageBackups` | no | **yes** |
 | `host.shell` | Run commands on the server | `server/engine-access.ts:136` `memberBotAdminApproval` (a member bot's host-level tools wait for an admin), `server/index.ts:7838` (answering those cards), `:30495` command rules, `:30531` always-allow, `/api/mcp/servers*` `:33968`, engine `cli`/`configDir`, `/api/cli-test`, installation computers (`/api/computers/*` `:33029`, `/api/local-computer*`) | no | **yes** |
-| `server.settings` | Change the server's settings | every other admin-scope route: `PUT /api/config`, keys, mail (`server/mail-routes.ts:94`), webhooks (`server/index.ts:28261`), `PATCH /api/org/settings` (`server/perspicax-org-routes.ts:209`), budgets | no | **yes** |
+| `server.settings` | Change the server's settings | every other admin-scope route: `PUT /api/config`, keys, mail (`server/mail/mail-routes.ts:94`), webhooks (`server/index.ts:28261`), `PATCH /api/org/settings` (`server/perspicax-org-routes.ts:209`), budgets | no | **yes** |
 | `server.link` | Link the server | the link file, sign-in list, invites, interim attach window | no | **yes** |
 
 ### Summary

@@ -34,12 +34,12 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 
-import { planMailDelivery, plusTag, type MailTagRoutine } from "../shared/routine-mail-alias.ts";
-import { isRelaySource, isTriggerSourceType, type NormalizedTriggerEvent, type TriggerSourceConfig } from "../shared/trigger-sources.ts";
-import type { ConsoleAssertion, ConsoleAssertionActor } from "./oidc-rp.ts";
-import { AssertionReplayCache } from "./org/org-admin-routes.ts";
-import { EMAIL_WATCH_PAYLOAD_MAX_CHARS } from "./cold-prompt-budget.ts";
-import { BOTMAIL_RUN_RULES, defang, type WebhookReceiveResult } from "./webhooks.ts";
+import { planMailDelivery, plusTag, type MailTagRoutine } from "../../shared/routine-mail-alias.ts";
+import { isRelaySource, isTriggerSourceType, type NormalizedTriggerEvent, type TriggerSourceConfig } from "../../shared/trigger-sources.ts";
+import type { ConsoleAssertion, ConsoleAssertionActor } from "../oidc-rp.ts";
+import { AssertionReplayCache } from "../org/org-admin-routes.ts";
+import { EMAIL_WATCH_PAYLOAD_MAX_CHARS } from "../cold-prompt-budget.ts";
+import { BOTMAIL_RUN_RULES, defang, type WebhookReceiveResult } from "../webhooks.ts";
 
 export const BOT_MAIL_PATH = "/api/org/inbound-mail";
 /** The only actor this route accepts, and the only route that accepts it. */

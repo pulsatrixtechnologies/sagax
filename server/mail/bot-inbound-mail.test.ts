@@ -1,5 +1,5 @@
 // Bot inbound mail, the Sagax side (contract v1 of 2026-10-21, Perspicax
-// relay; server/bot-inbound-mail.ts): the `botmail` source in the typed
+// relay; server/mail/bot-inbound-mail.ts): the `botmail` source in the typed
 // trigger catalog, the delivery route `POST /api/org/inbound-mail` with a
 // fake assertion verifier and a real WebhookManager behind it, the filters
 // (subject contains, sender exact or glob), the fence and the run prompt.
@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { TRIGGER_SOURCES, TRIGGER_SOURCE_TYPES, isRelaySource } from "../shared/trigger-sources.ts";
+import { TRIGGER_SOURCES, TRIGGER_SOURCE_TYPES, isRelaySource } from "../../shared/trigger-sources.ts";
 import {
   BOT_MAIL_PATH,
   BOT_MAIL_BODY_MAX,
@@ -24,9 +24,9 @@ import {
   BOTMAIL_CONFINED_PEER_REFUSED,
   type BotMailRouteDeps,
 } from "./bot-inbound-mail.ts";
-import type { ConsoleAssertion } from "./oidc-rp.ts";
-import { matchSourceFilters, verifySource } from "./trigger-sources.ts";
-import { WebhookManager } from "./webhooks.ts";
+import type { ConsoleAssertion } from "../oidc-rp.ts";
+import { matchSourceFilters, verifySource } from "../trigger-sources.ts";
+import { WebhookManager } from "../webhooks.ts";
 
 const ORIGIN = "https://sagax.example";
 const ISS = "https://perspicax.example";

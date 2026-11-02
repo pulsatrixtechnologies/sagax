@@ -9,7 +9,7 @@
 // PIN check and the choice of bot (its IVR may offer several of the
 // person's bots) all happen there. It then posts the event here.
 //
-// Delivery, chosen to match bot email (server/bot-inbound-mail.ts) rather
+// Delivery, chosen to match bot email (server/mail/bot-inbound-mail.ts) rather
 // than the person's conversation: an event only wakes a routine. Every
 // ENABLED typed trigger of source `telephony` ("Bot phone") on the chosen
 // bot goes through `WebhookManager.ingest(id, event, eventId)`, so filters,

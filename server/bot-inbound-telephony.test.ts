@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { TRIGGER_SOURCES, TRIGGER_SOURCE_TYPES, isRelaySource } from "../shared/trigger-sources.ts";
-import { BOT_MAIL_ASSERTION_ACTORS, botmailRunConfined } from "./bot-inbound-mail.ts";
+import { BOT_MAIL_ASSERTION_ACTORS, botmailRunConfined } from "./mail/bot-inbound-mail.ts";
 import {
   TELEPHONY_ASSERTION_ACTORS,
   TELEPHONY_BODY_MAX,

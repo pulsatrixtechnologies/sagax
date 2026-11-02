@@ -7,9 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import { emailDraftKey } from "../shared/email-draft-send.ts";
-import type { WireMessage } from "../shared/wire.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import { emailDraftKey } from "../../shared/email-draft-send.ts";
+import type { WireMessage } from "../../shared/wire.ts";
 
 it("sends an email draft only after its approval card is allowed, once", async () => {
   const mailDir = mkdtempSync(join(tmpdir(), "sagax-draft-mail-"));

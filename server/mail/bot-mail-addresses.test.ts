@@ -1,5 +1,5 @@
 // The bots' email addresses read from a fake Perspicax over real HTTP
-// (contract B of 2026-10-21, server/bot-mail-addresses.ts): one batched call
+// (contract B of 2026-10-21, server/mail/bot-mail-addresses.ts): one batched call
 // for the server's bots with the link token, a 5 minute cache, and
 // `available: false` on a 404, an error, an answer that is not the
 // contract's, inbound mail off, or no link.
@@ -11,8 +11,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { BOT_MAIL_ADDRESSES_PATH, BOT_MAIL_CACHE_MS, BotMailAddresses, type BotMailBot } from "./bot-mail-addresses.ts";
-import { PerspicaxDirectory } from "./perspicax-link.ts";
-import { PrincipalRegistry } from "./principals.ts";
+import { PerspicaxDirectory } from "../perspicax-link.ts";
+import { PrincipalRegistry } from "../principals.ts";
 
 const ISSUER = "https://px.example.test";
 const ORIGIN = "https://bot.example.test";

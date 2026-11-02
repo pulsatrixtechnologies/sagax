@@ -109,7 +109,7 @@
   "server/drivers/codex.test.ts": 98,
   "server/drivers/openai-chat-tools.test.ts": 20,
   "server/drivers/pi.test.ts": 17,
-  "server/email-draft-send.e2e.test.ts": 4,
+  "server/mail/email-draft-send.e2e.test.ts": 4,
   "server/engine-api-keys.e2e.test.ts": 3,
   "server/external-runtime-busy.e2e.test.ts": 10,
   "server/external-runtime-timeout.e2e.test.ts": 19,

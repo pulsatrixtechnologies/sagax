@@ -713,7 +713,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // a ConnectWise widget's change: an approval card for whoever may answer it (server/cw-widget-actions.ts)
   { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/cw-actions$/ },
   // an email draft's Send: an approval card for the bot's owner, then the send
-  // once they allow it (server/email-draft-send.ts)
+  // once they allow it (server/mail/email-draft-send.ts)
   { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/email-drafts$/ },
   { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/email-drafts\/[\w-]+$/ },
   // published pages: a person's own pages only (server/routes/published-pages.ts

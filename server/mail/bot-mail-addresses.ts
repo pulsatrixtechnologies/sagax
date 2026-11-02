@@ -1,5 +1,5 @@
 // The bots' own email addresses, read from Perspicax (contract B of
-// 2026-10-21, B21 / iOS CO5; the delivery side is server/bot-inbound-mail.ts).
+// 2026-10-21, B21 / iOS CO5; the delivery side is server/mail/bot-inbound-mail.ts).
 //
 //   POST <perspicax>/api/v1/pulsabot/inbound-mail/addresses   (link token)
 //   { "bots": [ { "id", "name", "owner_sub" } ] }   at most 500
@@ -21,7 +21,7 @@
 // not ask for it keeps getting the one call for every bot, as before (there
 // `complete` speaks for the whole server, so it never gets one owner's list
 // marked complete).
-import { isSubjectRefusal, type LinkPostLimits, type LinkPostResult } from "./perspicax-link.ts";
+import { isSubjectRefusal, type LinkPostLimits, type LinkPostResult } from "../perspicax-link.ts";
 
 export const BOT_MAIL_ADDRESSES_PATH = "/api/v1/pulsabot/inbound-mail/addresses";
 export const BOT_MAIL_CACHE_MS = 5 * 60_000;

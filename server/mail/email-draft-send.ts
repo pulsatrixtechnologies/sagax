@@ -15,9 +15,9 @@ import {
   type EmailConnector,
   type EmailDraftToSend,
   type EmailSendRequestCard,
-} from "../shared/email-draft-send.ts";
+} from "../../shared/email-draft-send.ts";
 import { MailPartialSendError, type Mailer } from "./mailer.ts";
-import { redactSecrets } from "./redact.ts";
+import { redactSecrets } from "../redact.ts";
 
 export function emailSendCard(input: { draft: EmailDraftToSend; draftKey: string; connector: EmailConnector; by: string; now?: number }): EmailSendRequestCard {
   return {

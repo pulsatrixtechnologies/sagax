@@ -71,17 +71,14 @@ describe("DialogLayer (release notes close button, 2026-10-18)", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("stays on the update notes, the update check and About; release notes stay a content page", () => {
+  it("is what the release notes, the update prompt and About use (all three stay windows)", () => {
+    for (const file of ["ReleaseNotesPrompt.tsx", "UpdateBanner.tsx", "AboutDialog.tsx"]) {
+      const source = readFileSync(resolve(process.cwd(), "src/components", file), "utf8");
+      expect(source, file).toContain("<DialogLayer");
+      expect(source, file).not.toContain("DIALOG.backdrop");
+    }
     const update = readFileSync(resolve(process.cwd(), "src/components/UpdateBanner.tsx"), "utf8");
-    expect(update).toContain("<DialogLayer");
     expect(update).not.toContain('role="alertdialog"');
-    expect(update).not.toContain("DIALOG.backdrop");
-    const about = readFileSync(resolve(process.cwd(), "src/components/AboutDialog.tsx"), "utf8");
-    expect(about).toContain("<DialogLayer");
-    expect(about).not.toContain("DIALOG.backdrop");
-    const notes = readFileSync(resolve(process.cwd(), "src/components/ReleaseNotesPrompt.tsx"), "utf8");
-    expect(notes).not.toContain("<DialogLayer");
-    expect(notes).not.toContain("DIALOG.backdrop");
   });
 
   it("keeps the backdrop and dialogs out of the drag regions (styles.css)", () => {

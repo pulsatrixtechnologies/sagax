@@ -475,7 +475,7 @@ function Shell() {
 
   return (
     <div className="flex h-full flex-col" data-app-shell="">
-      {/* What's new sits above the update dialog. Both are outside the layout flow. */}
+      {/* What's new is a centred window above the update dialog. Both sit outside the layout flow. */}
       <ReleaseNotesPrompt />
       {/* About: centred modal from Settings > About, the profile menu, the app menu. */}
       <AboutPrompt />

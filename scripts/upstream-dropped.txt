@@ -119,3 +119,20 @@ src/lib/cloud-plan.ts
 src/lib/cloud-setup.test.ts
 src/lib/cloud-setup.ts
 src/locales/vocabulary.test.ts
+
+# Removed 2026-11-02 (repo tidy): the OMB Cloud control plane Worker. JC
+# retired OMB Cloud on 2026-10-04; the desktop client only reaches a control
+# plane named by SAGAX_CONTROL_PLANE_URL.
+cloudflare/control-plane
+
+# Removed 2026-11-02 (repo tidy): the OMB Cloud Pro home machine on Fly (its
+# image and cloud-home-start were already gone).
+deploy/fly
+
+# Removed 2026-11-02 (repo tidy): an upstream icon render page nothing loads
+# (scripts/generate-app-icon.mjs renders from a data: URL).
+build/icon.html
+
+# Moved 2026-11-02 (repo tidy) to deploy/local/maus.ps1, beside the README that
+# documents it.
+maus.ps1

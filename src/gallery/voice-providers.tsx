@@ -2,7 +2,7 @@
  * (2026-10-29): Edit bot > Voice, its new provider group above the bot's
  * voice, read aloud and voice notes, and the person's own group of
  * Settings > Voice. `?before=1` draws the page without the new group.
- * The capture script (scripts/capture-voice-providers.mjs) answers /api
+ * The capture script (scripts/capture/voice-providers.mjs) answers /api
  * itself. Not shipped. ?skin=<id>&lang=<code>&before=1 */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";

@@ -1,7 +1,7 @@
 // Decoding, against bytes the server actually sent.
 //
 // These fixtures are bytes the server sent, captured by
-// `scripts/capture-companion-fixtures.mjs` against a harness started on a
+// `scripts/capture/companion-fixtures.mjs` against a harness started on a
 // temporary HOME. That matters more than it sounds: hand-written test JSON
 // tests our idea of the API, and the whole risk in a two-language client is
 // that our idea drifts from the API without anything failing. When a server
@@ -20,7 +20,7 @@ final class DecodingTests: XCTestCase {
         guard let url = Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Fixtures")
             ?? Bundle.module.url(forResource: name, withExtension: "json")
         else {
-            XCTFail("missing fixture \(name).json — run scripts/capture-companion-fixtures.mjs")
+            XCTFail("missing fixture \(name).json — run scripts/capture/companion-fixtures.mjs")
             throw CocoaError(.fileNoSuchFile)
         }
         return try Data(contentsOf: url)

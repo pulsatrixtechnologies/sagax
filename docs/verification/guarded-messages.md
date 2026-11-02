@@ -112,7 +112,7 @@ Run the isolated request/continuation checks:
 
 ```sh
 pnpm exec vitest run server/guarded-requests.test.ts server/guarded-messages-api.test.ts server/direct-coordination.e2e.test.ts server/team-setup.e2e.test.ts server/turn-dispatch-guard.test.ts server/request-auth.test.ts
-pnpm exec tsc -p tsconfig.server.json --noEmit
+pnpm exec tsc -p server/tsconfig.json --noEmit
 ```
 
 These checks include immutable Stop targets, the null-provider-ID setup race,

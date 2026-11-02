@@ -104,7 +104,7 @@ export async function listVoices(key: string, api: string): Promise<Voice[]> {
     .filter((v: Voice) => v.id);
 }
 
-// tsconfig.server.json targets ES2023: Promise.withResolvers is ES2024.
+// server/tsconfig.json targets ES2023: Promise.withResolvers is ES2024.
 function withResolvers<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;

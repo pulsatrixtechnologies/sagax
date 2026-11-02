@@ -9,7 +9,7 @@
  * presence (the capture script serves /api/people/<id>/avatar).
  * &bulk=1: an organization where Atlas, Iris and Lina differ (model, works
  * on, Perspicax profiles) for Edit N bots; Lina's engine refuses a change
- * (scripts/capture-bulk-edit-bots.mjs). */
+ * (scripts/capture/bulk-edit-bots.mjs). */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { loadLocale } from "../lib/i18n";

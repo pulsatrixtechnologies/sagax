@@ -21,7 +21,7 @@
 //   engine: gemini | qwen | kimi | opencode | droid | hermes | grok
 // Disposable HOME; nothing of the person running it is read or written.
 // SAGAX_TOOL_INVENTORY_OUT=<file> also writes the native tools each turn
-// offered (scripts/capture-engine-native-tools.ts reads it).
+// offered (scripts/capture/engine-native-tools.ts reads it).
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";

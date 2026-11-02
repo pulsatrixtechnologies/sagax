@@ -2,7 +2,7 @@
  * Coding (pull requests, branches, commits) above Routines, so the two
  * cards compare side by side (2026-10-19: "le même encadré"). Branches:
  * not pushed, pushed, pull request open, merged, and one archived. The
- * capture script (scripts/capture-bot-panel-coding.mjs) answers /api itself
+ * capture script (scripts/capture/bot-panel-coding.mjs) answers /api itself
  * with each branch read now. Not shipped in the app.
  * ?skin=<id>&lang=<code> */
 import { StrictMode } from "react";

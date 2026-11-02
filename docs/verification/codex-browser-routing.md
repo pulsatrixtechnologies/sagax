@@ -6,7 +6,7 @@ Codex bot processes use Sagax's selected browser/desktop bridge. Process-local o
 
 ```sh
 pnpm exec vitest run server/browser/browser-runtime.test.ts server/harness-mcp-proxy.test.ts server/surface.test.ts server/drivers/codex.test.ts scripts/testing/native-search-evidence.test.ts
-pnpm exec tsc --noEmit -p tsconfig.server.json
+pnpm exec tsc --noEmit -p server/tsconfig.json
 ```
 
 Check navigation errors stay errors, failed navigation is not replayed, and successful navigation returns a compact snapshot from the same authorized session. A snapshot failure must be reported as such, without claiming navigation failed. Human takeover and scope checks still apply.

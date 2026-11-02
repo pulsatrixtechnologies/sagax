@@ -1,7 +1,7 @@
 {
   "_comment": [
     "The native tools each pinned engine CLI exposes (solo) and offers a withheld",
-    "organization turn (org), as scripts/capture-engine-native-tools.ts recorded them.",
+    "organization turn (org), as scripts/capture/engine-native-tools.ts recorded them.",
     "Regenerate an engine after bumping it in engines.lock.json; never edit by hand.",
     "server/drivers/engine-tools.test.ts checks each tool against ORG_ENGINE_TOOLS."
   ],

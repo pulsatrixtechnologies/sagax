@@ -26,7 +26,7 @@ Use `skin=daylight` for the light capture.
 All in [`real-chatview/`](real-chatview/). The gallery
 `src/gallery/page-chat-real.html` mounts the real `ChatView` (real
 `Composer`, `PageSurface`, page cards, reducer) on synthetic data; the
-script `scripts/capture-page-chat-real.mjs` drives it like a person (scroll
+script `scripts/capture/page-chat-real.mjs` drives it like a person (scroll
 the transcript, open the v1 card from the keyboard, Show conversation, send,
 Escape / Back to chat) and records the DOM facts in `before-capture.json`
 and `after-capture.json`. Before = the same gallery served from a checkout of

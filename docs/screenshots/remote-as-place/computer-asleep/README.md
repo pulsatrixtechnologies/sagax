@@ -15,7 +15,7 @@ dropdown.
 ## After (headless gallery)
 
 `src/gallery/remote-as-place.html?view=calm|rename`, captured with
-`node scripts/capture-remote-as-place.mjs`.
+`node scripts/capture/remote-as-place.mjs`.
 
 - [after-asleep.png](after-asleep.png): generic muted monochrome bot glyph,
   z Z glyphs, one line "Cloud is asleep", no badge, no transport bar.

@@ -6,7 +6,7 @@
  * ?section=account|security|credentials|providers|engines|voice &skin=<id> &lang=<code>
  * &providers=1: several engines, keys, a named server and a local server
  * &org=1: an organization server, the viewer an admin (with providers=1)
- * scripts/capture-settings-pages.mjs shoots each page in light and dark. */
+ * scripts/capture/settings-pages.mjs shoots each page in light and dark. */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { ModelPicker } from "../components/ModelPicker";

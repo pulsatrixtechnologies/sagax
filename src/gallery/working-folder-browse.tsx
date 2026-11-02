@@ -1,7 +1,7 @@
 /** Isolated gallery for the working-folder field with its Parcourir dropdown
  * (src/components/remote-session/RemoteFolderField.tsx): the bot's Windows
  * computer connected, and a bot with no computer. The capture script
- * (scripts/capture-working-folder-browse.mjs) answers /api itself.
+ * (scripts/capture/working-folder-browse.mjs) answers /api itself.
  * Not shipped in the app. ?skin=<id>&lang=<code>&width=<px> */
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";

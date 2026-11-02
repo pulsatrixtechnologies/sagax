@@ -2,7 +2,7 @@
  * AppSidebar (menu button, scrim, Sidebar) beside the real ChatView, laid out
  * like App.tsx's shell row, on a synthetic store. Below 640px a drawer, 640
  * to 768px the automatic icons rail, above the person's own density.
- * Captured by scripts/capture-sidebar-rail.mjs. Every name is synthetic.
+ * Captured by scripts/capture/sidebar-rail.mjs. Every name is synthetic.
  * ?skin=<id>&lang=en|fr&density=comfortable|compact|icons&drawer=1 */
 import { StrictMode, useCallback, useMemo, useReducer, useState } from "react";
 import { createRoot } from "react-dom/client";

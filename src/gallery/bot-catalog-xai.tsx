@@ -2,7 +2,7 @@
  * section (no server). Not shipped in the app. Names are neutral.
  * ?skin=<id>&lang=<code>&view=home|all|detail&xai=0 (the home as it was
  * before the source)&state=error|loading
- * scripts/capture-bot-catalog-xai.mjs takes the shots. */
+ * scripts/capture/bot-catalog-xai.mjs takes the shots. */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BotCatalogView } from "../components/bot-catalog/BotCatalogView";

@@ -694,7 +694,7 @@ export interface VoiceCallMark {
 
 /** The header a client sends with a routine switched on or off while a
  * conversation is open: that conversation's thread id, where the server
- * writes its "Disabled · 1 routine" line (server/routine-chat-events.ts). */
+ * writes its "Disabled · 1 routine" line (server/routines/routine-chat-events.ts). */
 export const ROUTINE_CONVERSATION_HEADER = "x-sagax-conversation";
 
 /** WireMessage.routineToggle: a routine change this turn made, as one quiet
@@ -736,7 +736,7 @@ export interface WireMessage extends WaitLineField {
   kind: "text" | "options" | "activity" | "screen" | "video" | "secret" | "routine.run" | "goal.run" | "digest" | "compaction" | "access" | "nudge" | "call" | "widget" | "app" | "routines" | "roster";
   text?: string;
   /** kind "routines" (2026-10-15): one compact line in the conversation
-   * saying this turn turned routines on or off (server/routine-chat-events.ts).
+   * saying this turn turned routines on or off (server/routines/routine-chat-events.ts).
    * Each viewer receives only the routines they can see; `text` is the
    * fallback line ("Disabled 5 routines") for clients that do not know the
    * kind, recounted for that viewer. */

@@ -8,7 +8,7 @@ import { redactCutSecrets } from "../../shared/redact.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
-import type { Routine } from "../routines.ts";
+import type { Routine } from "../routines/routines.ts";
 import type { Store } from "../store.ts";
 import { createTeamBackup } from "../team-backup.ts";
 

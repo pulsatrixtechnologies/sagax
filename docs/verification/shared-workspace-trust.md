@@ -126,7 +126,7 @@ On a disposable worktree rebased onto Sagax main `0bb37982`:
 `pnpm typecheck`, `pnpm lint`, `pnpm i18n:check`, `pnpm test:packaged-server`,
 and the files above plus `server/index.test.ts`,
 `server/chat-followups-restart.test.ts`, `server/steer-e2e.test.ts`,
-`server/routines-startup.test.ts`, `server/enterprise.test.ts`,
+`server/routines/routines-startup.test.ts`, `server/enterprise.test.ts`,
 `server/store.test.ts`, `server/cli-lifecycle.test.ts`,
 `server/cli-pair.test.ts`, `server/cli.test.ts` and
 `scripts/testing/verification-docs.test.ts` passed on macOS. Mutation checks,

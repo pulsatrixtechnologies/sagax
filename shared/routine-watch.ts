@@ -5,7 +5,7 @@
 // of a read-only MCP tool called with fixed arguments. The scheduler checks it
 // on each due occurrence, without any model turn; the run's turn starts only
 // when the result changed (or when a condition on it holds). The server
-// validates and runs it (server/routine-precheck.ts, server/routine-watch.ts);
+// validates and runs it (server/routines/routine-precheck.ts, server/routines/routine-watch.ts);
 // this module holds the shapes and the limits the screens show.
 
 export type RoutineWatchSource =

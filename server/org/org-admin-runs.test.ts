@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { compileRoutes, matchRoutes, ok } from "./org-admin-console.ts";
 import { PLANNED_PER_ROUTINE_MAX, routineRunsRoutes, runsWindow, type RoutineRunsDeps } from "./org-admin-runs.ts";
-import { nextOccurrence, type Routine, type RoutineRun } from "../routines.ts";
+import { nextOccurrence, type Routine, type RoutineRun } from "../routines/routines.ts";
 import { fakeConsole } from "../testing/console-context.ts";
 
 const HOUR = 60 * 60_000;

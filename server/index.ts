@@ -1210,15 +1210,15 @@ import {
   savedStepsEnabled
 } from "./saved-steps/saved-steps.ts";
 import { redactSecretsInText } from "./redact.ts";
-import { routineRunCard } from "./routine-run-card.ts";
+import { routineRunCard } from "./routines/routine-run-card.ts";
 
-import { routineReportOutcome, routineRunReportable } from "./routine-report.ts";
+import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import type { HeadlessBot } from "./headless-cli.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
 import * as vps from "./vps-computer.ts";
-import { runAsRefusal, type RunAsChooser, type RunAsPerson } from "./routine-run-as.ts";
-import type { RoutineScopeCaller, RoutineScopeDeps, RoutineScopeFacts } from "./routine-scope.ts";
-import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routine-chat-events.ts";
+import { runAsRefusal, type RunAsChooser, type RunAsPerson } from "./routines/routine-run-as.ts";
+import type { RoutineScopeCaller, RoutineScopeDeps, RoutineScopeFacts } from "./routines/routine-scope.ts";
+import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routines/routine-chat-events.ts";
 import { botReplyQuoteId } from "./reply-to-turn.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
 import {
@@ -1235,7 +1235,7 @@ import {
   type RoutineRunOn,
   type RoutineRunTrigger,
   type RoutineSuspendReason
-} from "./routines.ts";
+} from "./routines/routines.ts";
 import { RoutineConsents, routineRenewMs, type RoutineConsentEnd } from "./org/org-routine-consent.ts";
 import { CalendarCallManager, type CalendarCall } from "./calendar-calls.ts";
 import { BUILT_IN_BROWSER_SYSTEM_PROMPT, pauseBrowserStream } from "./browser-engine.ts";
@@ -1264,7 +1264,7 @@ import {
   screenTouchingTool,
   settledFrameIsNews
 } from "./screen-frame-gate.ts";
-import { RoutineRequestService } from "./routine-requests.ts";
+import { RoutineRequestService } from "./routines/routine-requests.ts";
 import { directApply, UNDO_STALE, type DirectApply } from "./direct-apply.ts";
 import { createAgentCard } from "./chat-widgets.ts";
 import { buildBotOverview, type BotOverview } from "./bot-overview.ts";
@@ -2263,7 +2263,7 @@ import {
   type RoutineWatchDeps,
   type WatchPlace,
   type WatchRoutine
-} from "./routine-watch.ts";
+} from "./routines/routine-watch.ts";
 import { RemoteMcpClient } from "./mcp-http.ts";
 import { createMeetingService, type MeetingService } from "./meetings/meeting-requests.ts";
 import { parseEvalJson } from "./meetings/meet-scripts.ts";
@@ -2288,7 +2288,7 @@ import {
   LocalAwayTracker,
   verdictFromPresence,
   type AwayVerdict
-} from "./routine-away.ts";
+} from "./routines/routine-away.ts";
 import { createPersonLabelRoutes } from "./routes/person-labels.ts";
 import { createMeAvatarRoutes } from "./routes/me-avatar.ts";
 import { createShapeAvatarGenerateInternalRoutes, createShapeAvatarGenerateRoutes } from "./routes/shape-avatar-generate.ts";
@@ -2475,7 +2475,7 @@ import {
   perspicaxSelfAnswer,
   perspicaxSelfAnswerAt
 } from "./owner-autonomy.ts";
-import { routineOwnerAuthorization } from "./routine-authorization.ts";
+import { routineOwnerAuthorization } from "./routines/routine-authorization.ts";
 import { runPermissionModeMigration } from "./approval-level-migration.ts";
 import {
   MEMBER_AUTO_NOT_ALLOWED,
@@ -15179,7 +15179,7 @@ function threadStillExists(threadId: string): boolean {
     bot.threadId === threadId || Boolean(bot.tasks?.some((task) => task.threadId === threadId)));
 }
 
-/** A routines line (server/routine-chat-events.ts) as this viewer gets it:
+/** A routines line (server/routines/routine-chat-events.ts) as this viewer gets it:
  * the routines they can see (the Automations page's own rule, the person
  * signed in), or null. A viewer with no person (a service) gets none. */
 function routineToggleForApprovalViewer<T>(message: T, viewer: ApprovalViewer): T | null {
@@ -20310,7 +20310,7 @@ async function routineAdmission(run: RoutineRun, _routine: Routine | undefined):
   if (!routineConsents) return { ok: false, error: "Perspicax is unreachable; this run is skipped" };
   const prepared = await routineConsents.prepare(principalId);
   if (prepared.ok) return { ok: true };
-  // Fix 2: a rate limit keeps the run queued (server/routines.ts retries it).
+  // Fix 2: a rate limit keeps the run queued (server/routines/routines.ts retries it).
   if (prepared.error === "rate_limited") return { ok: false, error: "Perspicax is rate limiting this server; this run is retried", retryAfterMs: prepared.retryAfterMs };
   if (prepared.error === "missing" || prepared.error === "ended") return { ok: false, error: `Perspicax did not issue ${name}'s routine access yet; this run is skipped and the next one tries again` };
   return { ok: false, error: "Perspicax is unreachable; this run is skipped" };
@@ -20387,7 +20387,7 @@ function effectiveRunAs(run: { runAs?: string; botId: string }): string | undefi
   const bot = store.bot(run.botId);
   return bot ? effectiveBotOwner(bot) || undefined : undefined;
 }
-/** The routine modal's run-as chooser (server/routine-run-as.ts): the
+/** The routine modal's run-as chooser (server/routines/routine-run-as.ts): the
  * signed-in person of an organization request, null otherwise. */
 function runAsChooserFor(auth: RequestAuth): RunAsChooser | null {
   if (IDENTITY.kind !== "perspicax" || auth.kind !== "session") return null;
@@ -20538,7 +20538,7 @@ function auditRoutineRunsCleared(auth: RequestAuth, count: number): void {
     actor: IDENTITY.kind === "perspicax" ? orgAuditActor(auth) : decisionActorFor(auth)
   });
 }
-/** The Automations page scope (server/routine-scope.ts, 2026-10-09): who
+/** The Automations page scope (server/routines/routine-scope.ts, 2026-10-09): who
  * the caller is for the scope rules. */
 function routineScopeCaller(auth: RequestAuth, viewerId: string | undefined): RoutineScopeCaller {
   return {
@@ -23473,7 +23473,7 @@ function routineEffectivePostResults(run: Pick<RoutineRun, "routineId" | "proact
 
 /** 2026-10-22 a run works in the background, in its own hidden task.
  * Nothing reaches the person's conversation while it is queued or running,
- * nor when it ends with nothing to report (server/routine-report.ts): no
+ * nor when it ends with nothing to report (server/routines/routine-report.ts): no
  * card, no unread, no sidebar bump; the bot's status shows the work and
  * Automations keeps the whole record. A run that has something for the
  * person (its report, a question or approval waiting on them, an error)
@@ -23749,7 +23749,7 @@ loadDelegationReceipts();
 // SAGAX_DEFAULT_TIME_ZONE, else America/Toronto on a UTC host.
 setRoutineTimeZone(() => botSettings.server().timeZone
   ?? (IDENTITY.kind === "perspicax" ? defaultOrgTimeZone(hostTimeZone(), process.env.SAGAX_DEFAULT_TIME_ZONE) ?? undefined : undefined));
-/** A solo server's person, from their pages' beats (server/routine-away.ts). */
+/** A solo server's person, from their pages' beats (server/routines/routine-away.ts). */
 const localRoutineAway = new LocalAwayTracker();
 /** Whether the person a routine runs as is there now. Presence on an
  * organization server (declared further down; read only once routines tick). */
@@ -23757,7 +23757,7 @@ function routineAwayVerdict(principalId: string | undefined): AwayVerdict {
   if (IDENTITY.kind === "perspicax") return principalId ? verdictFromPresence(presence.view(principalId).state) : "unknown";
   return localRoutineAway.verdict(Date.now());
 }
-/** Routines that run when something changes (2026-10-26, server/routine-watch.ts):
+/** Routines that run when something changes (2026-10-26, server/routines/routine-watch.ts):
  * where a routine's watch reads, and how it calls its read tool. */
 const routineWatchStates = new RoutineWatchStates(join(DATA_DIR, "routine-watch"));
 /** Where the bot of a routine works, reached without waking anything:
@@ -23843,7 +23843,7 @@ function routineWatchPlace(routine: WatchRoutine): WatchPlace {
 /** A read tool for a watch: one of the bot's remote MCP servers (its own
  * sign-in, the tool not switched off), else a Perspicax tool in the name of
  * the person the routine runs as, through their routine delegation. The
- * read-only rule itself is server/routine-watch-tools.ts. */
+ * read-only rule itself is server/routines/routine-watch-tools.ts. */
 async function routineWatchCallTool(routine: WatchRoutine, tool: string, args: Record<string, unknown>, signal: AbortSignal): Promise<ToolAnswer | { error: string }> {
   const bot = store.bot(routine.botId);
   if (!bot) return { error: "The bot of this routine is gone" };
@@ -23945,12 +23945,12 @@ routines = new RoutineManager({
     onResumed: (routine: Routine) => routineAudit("routine.resumed", effectiveRunAs(routine), { routine })
   } : {}),
   teammatesContinue: (threadId) => coordinator.awaitsTeammates(threadId),
-  // 2026-11-01: a run ends as its teammates' work did (server/routines.ts settleCompleted).
+  // 2026-11-01: a run ends as its teammates' work did (server/routines/routines.ts settleCompleted).
   handedOutOutcome: (threadId, since) => {
     const outcome = coordinator.handedOutOutcome(threadId, since);
     return outcome && { ...outcome, failed: outcome.failed.map(({ botId, ...rest }) => ({ name: store.bot(botId)?.name ?? "A teammate", ...rest })) };
   },
-  // 2026-11-01: a running run whose turn is gone ends as lost (server/routines.ts endLostTurns).
+  // 2026-11-01: a running run whose turn is gone ends as lost (server/routines/routines.ts endLostTurns).
   // Read lazily at tick time; a value declared later in this module still
   // initializing counts as alive, never as lost.
   turnAlive: (botId, threadId) => {
@@ -24017,7 +24017,7 @@ routines = new RoutineManager({
     return task;
   },
   // 2026-10-19wake the person's server environment before a
-  // scheduled bot run (PREWAKE_LEAD_MS, server/routines.ts), so the run does
+  // scheduled bot run (PREWAKE_LEAD_MS, server/routines/routines.ts), so the run does
   // not spend its first ten minutes on a stopped cluster and give up.
   prewake: (routine) => {
     if (!userSandbox || IDENTITY.kind !== "perspicax" || routine.target !== "bot") return;
@@ -24071,7 +24071,7 @@ routines = new RoutineManager({
     return group && !group.dm ? { threadId: group.threadId } : null;
   },
   // 2026-10-15: "Disabled · 5 routines" in the conversation the change came
-  // from (server/routine-chat-events.ts); each viewer sees their own.
+  // from (server/routines/routine-chat-events.ts); each viewer sees their own.
   onEnabledChanged: (routine, change) => {
     if (!threadStillExists(change.threadId)) return;
     recordRoutineToggle(store, {
@@ -24088,7 +24088,7 @@ routines = new RoutineManager({
     });
   },
   // 2026-10-21 "Created/Updated/Deleted routine · <name>" in the
-  // conversation a bot's routine change came from (server/routine-chat-events.ts).
+  // conversation a bot's routine change came from (server/routines/routine-chat-events.ts).
   onRoutineChanged: (routine, change) => {
     if (!threadStillExists(change.threadId)) return;
     recordRoutineChange(store, {
@@ -24312,7 +24312,7 @@ routines = new RoutineManager({
       ), card);
     }
   },
-  // 2026-10-16: "Only when I'm here" (server/routine-away.ts): the routine's
+  // 2026-10-16: "Only when I'm here" (server/routines/routine-away.ts): the routine's
   // person's presence on an organization server, the page's beat on a solo one.
   presence: (routine) => routineAwayVerdict(effectiveRunAs(routine)),
   onAwaySkipsReported: (routine, skips) => {
@@ -37936,7 +37936,7 @@ ROUTES.push(createPresenceRoutes({
   hidden: presenceHiddenFor,
   heartbeat: (principalId, sessionId, beat) => presence.heartbeat(principalId, sessionId, beat)
 }));
-// "Only when I'm here" routines (server/routine-away.ts, routes/routine-away.ts).
+// "Only when I'm here" routines (server/routines/routine-away.ts, routes/routine-away.ts).
 ROUTES.push(createLimitResetRoutes({
   clock: limitReset.clock,
   routines: routines!,

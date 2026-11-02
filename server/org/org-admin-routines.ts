@@ -21,7 +21,7 @@ import {
   type ConsoleRoute,
 } from "./org-admin-console.ts";
 import { problemReason, reasonLabel } from "./org-problem-log.ts";
-import type { Routine, RoutineRun } from "../routines.ts";
+import type { Routine, RoutineRun } from "../routines/routines.ts";
 import type { UsageRow } from "../usage-ledger.ts";
 
 const DAY_MS = 24 * 60 * 60_000;

@@ -124,9 +124,9 @@ MCP servers (`/api/mcp/servers`, `server/index.ts:33968`) are `host.shell`.
 
 | Key | Label | Today's gate | Default | adminOnly |
 |---|---|---|---|---|
-| `routines.runAsAnyone` | Choose anyone a routine runs as | `server/index.ts:10939` (`admin: orgAdminCaller`), `server/routine-run-as.ts:127` `run_as_not_allowed` | no | no |
+| `routines.runAsAnyone` | Choose anyone a routine runs as | `server/index.ts:10939` (`admin: orgAdminCaller`), `server/routines/routine-run-as.ts:127` `run_as_not_allowed` | no | no |
 | `routines.runNowAny` | Run any routine now | `server/index.ts:11003` `mayRunRoutineNow`, `:28098` `run_now_not_allowed` | no | no |
-| `routines.viewTeam` | See their teams' routines (added 2026-10-09, routine scope) | new: `GET /api/routines?scope=team` and `DELETE /api/routine-runs?scope=team` (`server/routine-scope.ts`, 403 `routine_scope_not_allowed`); client scope control "My teams" (`src/components/routines/RoutineScopeBar.tsx`) | no | no |
+| `routines.viewTeam` | See their teams' routines (added 2026-10-09, routine scope) | new: `GET /api/routines?scope=team` and `DELETE /api/routine-runs?scope=team` (`server/routines/routine-scope.ts`, 403 `routine_scope_not_allowed`); client scope control "My teams" (`src/components/routines/RoutineScopeBar.tsx`) | no | no |
 | `routines.viewAll` | See every routine of the organization (added 2026-10-09, routine scope) | new: `GET /api/routines?scope=all`, Clear logs over every run with `DELETE /api/routine-runs?scope=all`; client scope control "Everyone" | no | no |
 
 Team managers keep reaching their teams' people (run as, labels) without a

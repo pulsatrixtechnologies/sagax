@@ -861,7 +861,7 @@ run's task as the run's detail and an older results thread as the
 conversation: no column for a report. Old results threads stay readable
 from the run's detail and Run logs; they are not merged into the stream
 (`routineResults` is never a segment). Tests:
-`server/routine-results.e2e.test.ts`, `server/routines.test.ts`
+`server/routines/routine-results.e2e.test.ts`, `server/routines/routines.test.ts`
 ("clears saved destinations"), `src/state/routine-run-open.test.ts`,
 `src/components/RoutineResultsNavigation.test.ts`,
 `ios/Tests/CompanionCoreTests/RoutineContinueTests.swift`.
@@ -3033,7 +3033,7 @@ lui-même." On every server (solo and organization):
 ## Routines pause themselves after failures in a row (2026-10-26)
 
 - After N failed runs in a row a routine pauses itself (`RoutineManager.failRun`
-  -> `autoPauseAfterFailure`, `server/routines.ts`; rules in
+  -> `autoPauseAfterFailure`, `server/routines/routines.ts`; rules in
   `shared/routine-auto-pause.ts`). N is the routine's own `autoPauseAfter`,
   set by the person in the routine editor (desktop Advanced, iOS
   `RoutineEditorView`), never an admin or an organization permission: absent
@@ -3058,7 +3058,7 @@ lui-même." On every server (solo and organization):
   behind a resumed run, or behind another queued scheduled run, becomes
   missed (`ROUTINE_ONE_RUN_AFTER_RESTART`). Manual and webhook runs stay.
 - Not copied: no interval floor, no routine cap, no admin permission.
-- Tests: `server/routines.test.ts` ("auto-pause after failures in a row",
+- Tests: `server/routines/routines.test.ts` ("auto-pause after failures in a row",
   "runs at most once"), `shared/routine-auto-pause.test.ts`,
   `shared/transient-notices.test.ts`, `src/lib/transient-notice.test.ts`,
   `src/components/RoutineRunCard.test.ts`,
@@ -3078,7 +3078,7 @@ you don't tell me anything in the chat."
   `features.routinesInConversation` switch is ignored and gone from Settings.
   While queued or running nothing reaches the chat or the sidebar; the bot's
   status (working dot, "Handling it") is the only live signal.
-- `server/routine-report.ts`: the contract (`ROUTINE_REPORT_CONTRACT`, in
+- `server/routines/routine-report.ts`: the contract (`ROUTINE_REPORT_CONTRACT`, in
   `ROUTINE_EXECUTION_PROMPT`) tells the bot to end with `NOTHING_TO_REPORT`
   when nothing needs the person and never to restate the instructions.
   `routineReportOutcome` reads the final message (the marker, else a short
@@ -3108,8 +3108,8 @@ you don't tell me anything in the chat."
   `taskCountsAsBotUnread`, iOS `BotTask.isHiddenFromPerson`).
 - No "Showing saved messages" banner over an archived conversation
   (`SavedMessagesNotice` removed); offline keeps `ChatStaleBanner`.
-- Tests: `server/routine-report.test.ts`, `server/routines.test.ts` ("background
-  runs"), `server/routine-silent-runs.e2e.test.ts`, `src/lib/routine-quiet.test.ts`,
+- Tests: `server/routines/routine-report.test.ts`, `server/routines/routines.test.ts` ("background
+  runs"), `server/routines/routine-silent-runs.e2e.test.ts`, `src/lib/routine-quiet.test.ts`,
   `src/components/RoutineRunCard.test.ts`.
 
 ## Routines that run when something changes (2026-10-26)
@@ -3123,14 +3123,14 @@ changes. Doc: `docs/routine-schedules.md` ("Only when something changes").
 - Shape and bounds: `shared/routine-watch.ts` (`ROUTINE_WATCH_LIMITS`: one
   check per 5 min at most, 15 s, 256 KB, 5 000 entries, depth 8, 500 items,
   64 KB of state, 4 000-character note). Validation in
-  `server/routine-precheck.ts` (`kind: "watch"` beside `condition`).
-- Reading and deciding: `server/routine-watch.ts` (fingerprint, `track`,
+  `server/routines/routine-precheck.ts` (`kind: "watch"` beside `condition`).
+- Reading and deciding: `server/routines/routine-watch.ts` (fingerprint, `track`,
   conditions, note, `RoutineWatchStates` in `<data dir>/routine-watch/`).
-  Read tools only: `server/routine-watch-tools.ts` reuses
+  Read tools only: `server/routines/routine-watch-tools.ts` reuses
   `perspicaxReadTool`, `connectorCallReads`, `isOutboundTool`,
   `connectorWriteKind`, `perspicaxWriteOnceTool`; checked on save and at
   every check.
-- Scheduler (`server/routines.ts`): a watch is read beside the pass
+- Scheduler (`server/routines/routines.ts`): a watch is read beside the pass
   (`startWatch`, `watchSettled`), never awaited inside it; the answer quiets
   the run (`nothing_to_report`, as for any pre-check) or wakes it with
   `RoutineRun.watchNote`, which the turn reads fenced as untrusted data
@@ -3158,8 +3158,8 @@ changes. Doc: `docs/routine-schedules.md` ("Only when something changes").
   a condition pre-check is never touched. Check now is a member's own
   (`CLIENT_ALLOW`) and a paired phone's (`companion/src/routes.ts`).
 - Cost: `pnpm bench:routine-watch` (numbers in the doc).
-- Tests: `server/routine-watch.test.ts`, `server/routine-precheck.test.ts`,
-  `server/routines.test.ts` ("routine watch"), `server/routine-requests.test.ts`,
+- Tests: `server/routines/routine-watch.test.ts`, `server/routines/routine-precheck.test.ts`,
+  `server/routines/routines.test.ts` ("routine watch"), `server/routines/routine-requests.test.ts`,
   `src/components/routines/WatchFields.test.ts`.
 
 ## Routines and webhooks: bearer token on every webhook (2026-10-08)
@@ -4202,7 +4202,7 @@ it (its `docs/memory.md` "Work log" and "Duplicate detector"). Sagax feeds
 them with the link token (`server/perspicax-memory.ts`, `linkPostJson` in
 `server/perspicax-link.ts`). Keep these rules, covered by
 `server/perspicax-memory.test.ts` (a fake Perspicax over HTTP) and
-`server/routines.test.ts` ("the organization memory before a run"):
+`server/routines/routines.test.ts` ("the organization memory before a run"):
 
 - A turn that mounts Perspicax profiles (`perspicaxTurnIntegration`, not a
   quiet call warm) queues one `POST /api/v1/memory/work` row: the person's
@@ -4462,7 +4462,7 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
   deleted account still stops its routines. Needs Perspicax to accept that
   exchange (it refuses it up to 1.8.13: the run is then skipped).
 - Who a routine runs as is chosen in the routine modal (2026-10-08;
-  `server/routine-run-as.ts`, `src/components/routines/RunAsField.tsx`).
+  `server/routines/routine-run-as.ts`, `src/components/routines/RunAsField.tsx`).
   The record keeps `runAs` (a principal id); a routine without one runs as
   its bot's owner (`effectiveRunAs`), so older records need no migration.
   `POST /api/routines` and `PATCH /api/routines/:id` accept `runAs`; an
@@ -4590,10 +4590,10 @@ Perspicax have it read now. Keep these rules, covered by
 ## Automations scope (organization mode, 2026-10-09)
 
 Anyone may be allowed to see the automation schedule beyond their own
-routines. `server/routine-scope.ts` (rules), `shared/routine-scope.ts`
+routines. `server/routines/routine-scope.ts` (rules), `shared/routine-scope.ts`
 (names), `src/components/routines/RoutineScopeBar.tsx` and
 `src/lib/use-routine-scope.ts` (page). Rules, covered by
-`server/routine-scope.test.ts`, `server/org/org-routines-scope.e2e.test.ts` and
+`server/routines/routine-scope.test.ts`, `server/org/org-routines-scope.e2e.test.ts` and
 `src/components/routines/RoutineScopeBar.test.ts`:
 
 - `GET /api/routines?scope=mine|team|all&teamId&botId&ownerId&status`. No
@@ -9335,7 +9335,7 @@ the person asked for are not views.
 
 - A turn that turns routines on or off leaves ONE line per action and per
   turn in that conversation, "Disabled · 5 routines" (kind `routines`,
-  `routineToggle`, `server/routine-chat-events.ts`). It is written from
+  `routineToggle`, `server/routines/routine-chat-events.ts`). It is written from
   `RoutineManager.update` (`onEnabledChanged`) when the change names its
   conversation: a routine card (its request), its Undo, or the person's own
   switch while the routine's bot conversation is open (the client sends
@@ -9420,7 +9420,7 @@ Parity with the reference design (audit items 10, 11, 14 and the emoji picker). 
   (`seed`) and connections never go into a link (`publicTemplateDocument`).
   Import from a link: Templates > Import (`/api/template-links/import`;
   another server's link through its JSON, public addresses only).
-- Only when I'm here (`server/routine-away.ts`, editor switch, off by
+- Only when I'm here (`server/routines/routine-away.ts`, editor switch, off by
   default): while the routine's person is away a recurring occurrence is
   skipped and counted (`awaySkips`), a one-time routine waits and runs late
   on return; on return the count is reported once (notification, the

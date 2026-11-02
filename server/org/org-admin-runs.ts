@@ -5,7 +5,7 @@
 //   GET routines/runs?from&to&scope=mine|team|all&bot&routine&state&limit&cursor
 //
 // Who sees what is the console's reach and the Automations scope together
-// (server/routine-scope.ts, shared/routine-scope.ts):
+// (server/routines/routine-scope.ts, shared/routine-scope.ts):
 //   mine  the routines whose bot the caller owns or that run as them
 //   team  mine, plus every routine whose bot owner or run-as person is in
 //         one of the caller's teams, or whose bot is shared with one of
@@ -30,7 +30,7 @@ import {
   type ConsoleRoute,
 } from "./org-admin-console.ts";
 import { runReason, runStatus } from "./org-admin-routines.ts";
-import type { Routine, RoutineRun, RoutineSchedule } from "../routines.ts";
+import type { Routine, RoutineRun, RoutineSchedule } from "../routines/routines.ts";
 
 const DAY_MS = 24 * 60 * 60_000;
 export const RUNS_WINDOW_MAX_DAYS = 92;

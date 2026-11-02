@@ -20,7 +20,7 @@ async function installation() {
   vi.stubEnv("HOME", home);
   vi.stubEnv("USERPROFILE", home);
   const { Store } = await import("./store.ts");
-  const { RoutineManager } = await import("./routines.ts");
+  const { RoutineManager } = await import("./routines/routines.ts");
   const skills = await import("./skills.ts");
   const workspace = await import("./workspace.ts");
   const sections = await import("./section-context.ts");

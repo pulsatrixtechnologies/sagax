@@ -168,7 +168,7 @@ export interface Routine {
   /** Slice 6: paused because its person is out or lost the right to run
    * the bot (never for lack of a delegation since 2026-10-08). */
   suspended?: { reason: RoutineSuspendReason; at: number };
-  /** 2026-10-16: runs only while its person is there (server/routine-away.ts). */
+  /** 2026-10-16: runs only while its person is there (server/routines/routine-away.ts). */
   onlyWhenPresent?: boolean;
   /** 2026-10-22 whether this routine's completed runs post their
    * result message in the person's conversation. `true` posts (as a visible
@@ -184,7 +184,7 @@ export interface Routine {
   /** Occurrences skipped while the person was away; `reportedAt` once they
    * are back. Cleared by POST /api/routines/:id/away-seen. */
   awaySkips?: { count: number; firstAt: number; lastAt: number; reportedAt?: number };
-  /** A pre-check run before each scheduled turn (server/routine-precheck.ts):
+  /** A pre-check run before each scheduled turn (server/routines/routine-precheck.ts):
    * a condition on its own receipts, or (2026-10-26) a watch that starts the
    * run only when something changes (shared/routine-watch.ts). */
   precheck?: RoutineWatchPrecheck | { kind: "condition"; test: string; [field: string]: unknown };
@@ -205,7 +205,7 @@ export interface Routine {
   lastFiredNominalAt?: number;
   createdAt: number;
   updatedAt: number;
-  /** 2026-10-09 (GET /api/routines, server/routine-scope.ts): its bot's
+  /** 2026-10-09 (GET /api/routines, server/routines/routine-scope.ts): its bot's
    * owner, the teams it belongs to (the owner's and run-as person's teams
    * and the teams its bot is shared with), its bot, and whether this viewer
    * may run it now or edit it. Absent on a live frame or an older server. */
@@ -252,7 +252,7 @@ export interface RoutineRun {
   finishedAt?: number;
   output?: string;
   /** 2026-10-22: a completed run that had nothing for the person; nothing
-   * was posted to their conversation (server/routine-report.ts). */
+   * was posted to their conversation (server/routines/routine-report.ts). */
   quiet?: true;
   /** 2026-11-01: completed, but not all of it went right: why ("Completed
    * with problems"). Counts as a problem run. */
@@ -280,7 +280,7 @@ export interface RoutineRun {
   /** Slice 6: how many times admission was retried after a rate limit. */
   admitAttempts?: number;
   /** Someone else's run seen through a wider scope: output, instructions
-   * and threads withheld (server/routine-scope.ts). */
+   * and threads withheld (server/routines/routine-scope.ts). */
   redacted?: true;
   /** Snapshot of the routine's confined access for this run. */
   access?: RoutineAccess;
@@ -303,7 +303,7 @@ export interface RoutineInput {
   overlap?: "skip" | "queue";
   /** Each run starts with the previous run's report. */
   continuity?: boolean;
-  /** 2026-10-16: runs only while its person is there (server/routine-away.ts). */
+  /** 2026-10-16: runs only while its person is there (server/routines/routine-away.ts). */
   onlyWhenPresent?: boolean;
   /** 2026-10-22: post this routine's results in the conversation. `null`
    * clears it back to the installation default; omission preserves it. */

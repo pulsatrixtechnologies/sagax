@@ -582,7 +582,7 @@ function waitingChipText(store: Store, target: BotRecord, item: PendingDelegatio
 
 - [ ] **Step 5: Run the tests**
 
-Run: `pnpm vitest run server/delegations.test.ts server/routines-startup.test.ts`
+Run: `pnpm vitest run server/delegations.test.ts server/routines/routines-startup.test.ts`
 Expected: PASS. `routines-startup` writes legacy `attempts: 0` items, and the loader now ignores that field.
 
 Run: `grep -n "MAX_BUSY_ATTEMPTS\|attempts" server/delegations.ts server/delegations.test.ts`
@@ -1004,7 +1004,7 @@ Run:
 
 ```bash
 pnpm vitest run server/delegations.test.ts server/peer-roster.test.ts server/chief-of-staff.test.ts \
-  server/drivers/agents-proxy.test.ts server/routines-startup.test.ts server/comms.test.ts \
+  server/drivers/agents-proxy.test.ts server/routines/routines-startup.test.ts server/comms.test.ts \
   server/thread-aware-bots.e2e.test.ts server/peer-allowlist.e2e.test.ts
 ```
 

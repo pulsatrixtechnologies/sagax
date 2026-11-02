@@ -4,7 +4,7 @@
 // without the key the choice stays visible, disabled, and its tooltip names
 // the missing permission. Simple mode keeps the scope control, and under
 // Mine the Owner filter too (#1676: Me vs shared bots). The server decides
-// what each scope answers (server/routine-scope.ts).
+// what each scope answers (server/routines/routine-scope.ts).
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { personLabel } from "@/lib/human-label";

@@ -137,7 +137,7 @@ This ran on macOS (arm64) against disposable fixtures only. These passed:
   `SAGAX_UI_E2E=1`;
 - `server/package-import.test.ts`, `server/package-export.test.ts`,
   `shared/package-format.test.ts`, `server/bot-package.test.ts`,
-  `server/skills.test.ts`, `server/routines.test.ts`, `server/store.test.ts`,
+  `server/skills.test.ts`, `server/routines/routines.test.ts`, `server/store.test.ts`,
   `server/team-share.e2e.test.ts`, `src/components/ShareTeamDialog.test.ts`
   and `src/lib/team-import.test.ts`.
 

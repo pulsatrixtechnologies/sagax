@@ -2,7 +2,7 @@
 // calendar shows, server side and in the server's time zone): "Every hour",
 // "Every weekday at 09:00", "Custom schedule", "Once on 2026-10-09 14:00".
 import { cronScheduleLabel } from "../../shared/cron-label.ts";
-import type { RoutineSchedule } from "../routines.ts";
+import type { RoutineSchedule } from "../routines/routines.ts";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 

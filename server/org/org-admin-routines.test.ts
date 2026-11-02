@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import type { DecisionRow } from "../decision-log.ts";
 import { routinesRoutes, runReason, runStatus, type RoutinesDeps } from "./org-admin-routines.ts";
-import type { Routine, RoutineRun } from "../routines.ts";
+import type { Routine, RoutineRun } from "../routines/routines.ts";
 import { fakeConsole } from "../testing/console-context.ts";
 
 const NOW = Date.UTC(2026, 9, 8, 12);

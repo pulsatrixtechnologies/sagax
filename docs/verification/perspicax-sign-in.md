@@ -459,10 +459,10 @@ slice 5 acceptance:
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/org/org-routine-consent.test.ts server/routines.test.ts server/idp-session.test.ts \
+pnpm exec vitest run server/org/org-routine-consent.test.ts server/routines/routines.test.ts server/idp-session.test.ts \
   server/perspicax-mcp.test.ts server/authz.test.ts server/request-auth.test.ts \
   server/org/org-routines.e2e.test.ts server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts \
-  server/oidc-session.e2e.test.ts server/routine-delegation.e2e.test.ts \
+  server/oidc-session.e2e.test.ts server/routines/routine-delegation.e2e.test.ts \
   server/perspicax-link.test.ts server/oidc-login.test.ts \
   src/components/routines/RoutineOwnerName.test.ts
 pnpm -s i18n:check
@@ -501,7 +501,7 @@ to 1.8.13 (`invalid_request`).
   a principal or on a solo server) is tabled in `docs/verification/routines.md`
   ("Slice 6: rate limits at Perspicax"), with the rate limit behavior and the
   durable revocation queue.
-- `server/routines.test.ts` ("slice 6: routines in their person's name"):
+- `server/routines/routines.test.ts` ("slice 6: routines in their person's name"):
   `runAs` from the creator and moved by a work-field edit, snapshotted on the
   run, a refused run suspending its routine once (`no_right`,
   `person_out`), a transient refusal failing without suspending, a new

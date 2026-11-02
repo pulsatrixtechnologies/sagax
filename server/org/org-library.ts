@@ -48,7 +48,7 @@ import {
 } from "../package-import.ts";
 import { pair, partHash, sha256Hex, type PartPair, type TeamPart } from "../package-parts.ts";
 import { storedPresetObject, type StoredPreset } from "../presets.ts";
-import type { RoutineManager } from "../routines.ts";
+import type { RoutineManager } from "../routines/routines.ts";
 import type { SkillListing, SkillPackageStamp } from "../skills.ts";
 import { sectionKey, type InstalledPackageMetadata, type Store, type StoreChange } from "../store.ts";
 import {

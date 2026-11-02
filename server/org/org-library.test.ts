@@ -85,7 +85,7 @@ async function installation(from?: string) {
   vi.stubEnv("USERPROFILE", home);
   vi.stubEnv("SAGAX_DATA_DIR", join(home, ".sagax"));
   const { Store } = await import("../store.ts");
-  const { RoutineManager } = await import("../routines.ts");
+  const { RoutineManager } = await import("../routines/routines.ts");
   const skills = await import("../skills.ts");
   const workspace = await import("../workspace.ts");
   const sections = await import("../section-context.ts");

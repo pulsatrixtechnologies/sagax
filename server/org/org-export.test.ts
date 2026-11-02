@@ -9,7 +9,7 @@ import { createLinkedSubjectsRoute, createOrgImportDocument, parseOrgExportChoic
 import { PrincipalRegistry } from "../principals.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import type { RouteContext } from "../routes/table.ts";
-import { RoutineManager } from "../routines.ts";
+import { RoutineManager } from "../routines/routines.ts";
 import { Store, titleFromMessage } from "../store.ts";
 import { appendMemoryLog, writeMemoryFile, writeMemoryTopic } from "../workspace.ts";
 

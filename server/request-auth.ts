@@ -802,7 +802,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/voice\/speak$/ },
   // routines: a scheduled message; the input carries no cwd or permission field
   { methods: ["GET"], path: /^\/api\/routines$/ },
-  // the routine modal's "Runs as" choices (server/routine-run-as.ts)
+  // the routine modal's "Runs as" choices (server/routines/routine-run-as.ts)
   { methods: ["GET"], path: /^\/api\/routines\/run-as-options$/ },
   { methods: ["POST"], path: /^\/api\/routines$/ },
   { methods: ["PATCH", "DELETE"], path: /^\/api\/routines\/[\w-]+$/ },

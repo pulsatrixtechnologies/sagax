@@ -7,8 +7,8 @@
 import type { IncomingMessage } from "node:http";
 
 import type { RequestAuth } from "../request-auth.ts";
-import type { RunAsChooser, RunAsPerson } from "../routine-run-as.ts";
-import { runAsOptions } from "../routine-run-as.ts";
+import type { RunAsChooser, RunAsPerson } from "../routines/routine-run-as.ts";
+import { runAsOptions } from "../routines/routine-run-as.ts";
 import {
   parseRoutineScopeQuery,
   routineRunClearable,
@@ -17,8 +17,8 @@ import {
   scopedRoutineListing,
   type RoutineScopeCaller,
   type RoutineScopeDeps,
-} from "../routine-scope.ts";
-import type { Routine, RoutineRun } from "../routines.ts";
+} from "../routines/routine-scope.ts";
+import type { Routine, RoutineRun } from "../routines/routines.ts";
 import {
   routineRunInFlightRefusal,
   routineRunReceipt,

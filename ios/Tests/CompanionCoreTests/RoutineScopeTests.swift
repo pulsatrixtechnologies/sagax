@@ -3,7 +3,7 @@ import XCTest
 @testable import CompanionCore
 
 // AU20: the Automations scope (Mine, My teams, Everyone) over the scoped
-// listing of GET /api/routines (server/routine-scope.ts).
+// listing of GET /api/routines (server/routines/routine-scope.ts).
 final class RoutineScopeTests: XCTestCase {
     private let listing = Data(#"""
     {

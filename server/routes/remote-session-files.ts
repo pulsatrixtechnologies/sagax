@@ -7,7 +7,7 @@ import type { IncomingMessage } from "node:http";
 import { PASS } from "./table.ts";
 import type { RouteHandler } from "./table.ts";
 import type { RequestAuth } from "../request-auth.ts";
-import type { RemoteSessionService } from "../remote-sessions.ts";
+import type { RemoteSessionService } from "../remote-support/remote-sessions.ts";
 
 /** Set by performBotActRoute (server/index.ts) on every request a bot makes
  * through `act`. It only ever narrows what a request may do, so it needs no

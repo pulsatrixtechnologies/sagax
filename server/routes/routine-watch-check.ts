@@ -2,12 +2,12 @@
 //
 //   POST /api/routines/watch-check   { botId, precheck, routineId?, runOn? }
 //
-// One reading of a watch (server/routine-watch.ts) where the routine would
+// One reading of a watch (server/routines/routine-watch.ts) where the routine would
 // read it, no model, no state kept. The same rights as saving a routine of
 // that bot.
-import { parseRoutinePrecheck } from "../routine-precheck.ts";
-import type { RoutineWatchDeps, WatchRoutine } from "../routine-watch.ts";
-import { previewWatch } from "../routine-watch.ts";
+import { parseRoutinePrecheck } from "../routines/routine-precheck.ts";
+import type { RoutineWatchDeps, WatchRoutine } from "../routines/routine-watch.ts";
+import { previewWatch } from "../routines/routine-watch.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

@@ -22,7 +22,7 @@
 //   logged or written until the person saves the path.
 import { createHash, randomUUID } from "node:crypto";
 
-import { TEACH_DESCRIBE_ELEMENT } from "../../browser-teach.ts";
+import { TEACH_DESCRIBE_ELEMENT } from "../browser-teach.ts";
 import {
   cleanPageText,
   cleanTarget,

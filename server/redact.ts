@@ -37,8 +37,8 @@ import {
 } from "../shared/redact.ts";
 // Side effect: registers the filled-vault scrubber on the shared held API
 // (Lot A0). Import before any redactSecretsInText call on the server.
-import "./filled-secret-guard.ts";
-import { redactFilledSecrets } from "./filled-secret-guard.ts";
+import "./vault/filled-secret-guard.ts";
+import { redactFilledSecrets } from "./vault/filled-secret-guard.ts";
 
 // Text-shaped secret redaction lives in shared/redact.ts so the client (task
 // timeline) and the server scrub the same shapes without the client bundling

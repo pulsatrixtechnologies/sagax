@@ -17,7 +17,7 @@ export const BROWSER_TAKE_NOTICE_MS = 300;
 // The input queue halts beyond 32 unsent inputs, and a slow take can buffer more.
 const FLUSH_BATCH = 16;
 const MODIFIER_KEYS = new Set(["Alt", "Control", "Meta", "Shift"]);
-// input() in server/browser-live.ts sends these, like shortcuts, as one whole press.
+// input() in server/browser/browser-live.ts sends these, like shortcuts, as one whole press.
 const DISCRETE_KEYS = new Set(["Backspace", "Enter", "Tab", "Escape", "Delete", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]);
 // Toolbar actions that mean the same whatever the page shows by then.
 const ABSOLUTE_COMMANDS = new Set(["navigate", "tab-new"]);

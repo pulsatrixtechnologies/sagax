@@ -171,13 +171,13 @@ const FLOW_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const FLOW_VERSION = /^[A-Za-z0-9][A-Za-z0-9.+-]{0,63}$/;
 /** Perspicax 2026-10-19 (its flow_marketplace.rs): Pulsatrix Flow for every
  * member, from the private marketplace Perspicax serves behind each person's
- * identity (server/org-flow-plugins.ts). Names, versions, the manifest URL
+ * identity (server/org/org-flow-plugins.ts). Names, versions, the manifest URL
  * and the token audience only, never a secret. */
 export const flowPluginsSchema = z.object({
   enabled: z.boolean(),
   /** Perspicax 2026-10-26: `enforce` while its Flow server guard runs the
    * pack's own hook on every write a member can make. Anything else, or
-   * absent, and Sagax installs nothing (server/org-flow-plugins.ts). */
+   * absent, and Sagax installs nothing (server/org/org-flow-plugins.ts). */
   guard: z.string().max(32).optional(),
   /** Why Perspicax holds the install back (`flow_guard_not_enforced`, ...). */
   reason: z.string().max(64).optional(),
@@ -1021,7 +1021,7 @@ export class PerspicaxDirectory {
   }
 
   /** 2026-10-11: POST a JSON body to a Perspicax route that takes the link
-   * token (the memory signals, server/perspicax-memory.ts). A 401 re-reads
+   * token (the memory signals, server/memory/perspicax-memory.ts). A 401 re-reads
    * the link file once. Bounded by `timeoutMs` and `maxBytes`; never throws,
    * never logs the token or the body. With `subject`, the person's token
    * (options.subjectToken) rides along in SUBJECT_TOKEN_HEADER when there is

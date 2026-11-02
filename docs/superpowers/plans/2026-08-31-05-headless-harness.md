@@ -29,7 +29,7 @@ Today the always-on path is: Electron starts, `electron/companion.mjs` spawns th
 sidecar on `:8810`, `electron/companion-origin-gateway.mjs` opens the managed origin on
 `:8812`, `electron/managed-companion-tunnel.mjs` runs `cloudflared` against it, and
 `cloudflare/control-plane` maps one opaque hostname to that installation. Close the app
-and all four stop, taking routines (`server/routines.ts`) and the webhook receiver
+and all four stop, taking routines (`server/routines/routines.ts`) and the webhook receiver
 (`server/webhook-ingress.ts`, `:8800`) with them. The README says this plainly in its
 Status section, and it is the single biggest gap between Pulsa Bot and an "AI employee".
 

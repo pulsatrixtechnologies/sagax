@@ -9,7 +9,7 @@
 // else their Primary Bot): it runs with the person's own engine sign-in, in
 // a routine run of its own (Automations shows it, named "Reach me (Teams)").
 // The run has no trigger behind it, so it is confined like every relayed
-// run (Ask, no shell; server/bot-inbound-mail.ts botmailRunConfined).
+// run (Ask, no shell; server/mail/bot-inbound-mail.ts botmailRunConfined).
 //
 // - Send: one run, Sagax's own prompt, sends the card's message to the
 //   person's own self chat. That one Teams send is the person's choice of

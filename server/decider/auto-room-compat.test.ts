@@ -13,7 +13,7 @@ import { parseTeamBackup } from "../../shared/team-backup.ts";
 import { DATA_DIR } from "../config.ts";
 import { selectGroupGoalCoordinator } from "../group-goal-run.ts";
 import { createTeamPackageExport } from "../package-export.ts";
-import { RoutineManager } from "../routines.ts";
+import { RoutineManager } from "../routines/routines.ts";
 import { Store, normalizeGroupDefaultResponder, roomResponders, type BotRecord, type GroupRecord } from "../store.ts";
 import { createTeamBackup, importTeamBackup } from "../team-backup.ts";
 import { parseTeamManifest } from "../team-manifest.ts";

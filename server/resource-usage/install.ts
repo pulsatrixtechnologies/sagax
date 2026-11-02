@@ -5,8 +5,8 @@ import { hostname } from "node:os";
 
 import type { ResourceUsageView } from "../../shared/resource-usage.ts";
 import { augmentedPath } from "../env-path.ts";
-import { flowHome, readTunnel } from "../remote-session-probe.ts";
-import type { RemoteSessionService } from "../remote-sessions.ts";
+import { flowHome, readTunnel } from "../remote-support/remote-session-probe.ts";
+import type { RemoteSessionService } from "../remote-support/remote-sessions.ts";
 import type { InternalRouteHandler } from "../routes/internal-route.ts";
 import { createResourceUsageInternalRoutes, createResourceUsageRoutes } from "../routes/resource-usage.ts";
 import type { RouteHandler } from "../routes/table.ts";

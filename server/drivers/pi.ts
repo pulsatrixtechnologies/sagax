@@ -27,7 +27,7 @@ import { randomUUID } from "node:crypto";
 
 import { readAtRestSync } from "../content-at-rest.ts";
 import { PROVIDER_CREDENTIAL_ENV, stripWorkspaceCredentialEnv } from "../config.ts";
-import { applyEngineCommandVariables } from "../credential-command-env.ts";
+import { applyEngineCommandVariables } from "../vault/credential-command-env.ts";
 import { openStartupModelCatalog, writeStartupModelCache } from "../startup-model-catalog.ts";
 import { augmentedPath } from "../env-path.ts";
 import { describeSpawnFailure, execCli, killCliTree, spawnCli } from "../procs.ts";
@@ -1047,7 +1047,7 @@ export function piAccessEnvironment(env: Record<string, string | undefined>, acc
 }
 
 /** One turn's environment: the command variables the person exposed to
- * this bot (server/credential-command-env.ts) join the process pi runs its
+ * this bot (server/vault/credential-command-env.ts) join the process pi runs its
  * bash tool in, never a provider key name pi would bill. pi starts for every
  * turn, so a change or a revoke holds at the next one. */
 export function piTurnEnvironment(env: Record<string, string | undefined>, commandEnvironment: Record<string, string> | undefined): Record<string, string | undefined> {

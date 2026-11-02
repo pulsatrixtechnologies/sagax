@@ -115,7 +115,7 @@ service.
 ```sh
 pnpm typecheck
 pnpm lint
-pnpm exec vitest run server/hosted-access.test.ts server/email-signin.test.ts server/sessions.test.ts server/request-auth.test.ts server/enterprise.test.ts server/browser-live.test.ts server/fleet.test.ts server/fleet-cli.test.ts server/fleet-agent.test.ts server/fleet-cli-filesystem.test.ts src/components/WorkspacesSection.test.ts
+pnpm exec vitest run server/hosted-access.test.ts server/mail/email-signin.test.ts server/sessions.test.ts server/request-auth.test.ts server/enterprise.test.ts server/browser/browser-live.test.ts server/fleet.test.ts server/fleet-cli.test.ts server/fleet-agent.test.ts server/fleet-cli-filesystem.test.ts src/components/WorkspacesSection.test.ts
 pnpm test:packaged-server
 ```
 

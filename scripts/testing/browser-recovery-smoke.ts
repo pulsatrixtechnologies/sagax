@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
-import { BrowserRuntime } from "../../server/browser-runtime.ts";
+import { BrowserRuntime } from "../../server/browser/browser-runtime.ts";
 
 export async function verifyBrowserRecovery(input: {
   binaryPath: string; executablePath: string; dataDir: string; previewUrl: string; testPage: string;

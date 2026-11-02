@@ -51,10 +51,10 @@ capability. Native session identity and encryption keys stay in the server.
 
 ### 1. Headless engine (servers, and the fallback everywhere) — shipped
 
-- `server/browser-engine.ts`: resolve the pinned agent-browser binary
+- `server/browser/browser-engine.ts`: resolve the pinned agent-browser binary
   (`SAGAX_AGENT_BROWSER_PATH` → `$SAGAX_DATA_DIR/tools/agent-browser/<version>/` →
   PATH); download from the GitHub release with per-platform SHA-256 pinned in
-  `server/browser-engine-release.ts` (same pattern as `antigravity-release.ts`
+  `server/browser/browser-engine-release.ts` (same pattern as `antigravity-release.ts`
   and `prepare-cloudflared.mjs`); ensure Chrome with `agent-browser install`;
   report `unavailable` with the reason rather than degrading silently.
 - `browserIntegration()`: when no desktop connection exists and the engine is

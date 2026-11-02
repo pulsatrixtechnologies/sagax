@@ -7,7 +7,7 @@
 // Resume (the passing notice's one click, the switch, the editor) turns the
 // routine back on and starts the count again from zero.
 //
-// Read by the server (server/routines.ts), the desktop and, through
+// Read by the server (server/routines/routines.ts), the desktop and, through
 // ios/Tests/CompanionCoreTests/Fixtures/transient-notices.json, the iOS core.
 
 export const ROUTINE_AUTO_PAUSE_DEFAULT = 5;

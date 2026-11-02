@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createReadAndDraft, draftReply, READ_AND_DRAFT_REFUSAL, recordsAnswer, refusedConnectorCall } from "./read-and-draft.ts";
-import type { RoutineRun } from "./routines.ts";
+import type { RoutineRun } from "./routines/routines.ts";
 
 const call = (slug: string, args: Record<string, unknown> = {}) => ({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "COMPOSIO_MULTI_EXECUTE_TOOL", arguments: { tools: [{ tool_slug: slug, arguments: args }] } } });
 const run = (access?: "read-and-draft"): RoutineRun => ({

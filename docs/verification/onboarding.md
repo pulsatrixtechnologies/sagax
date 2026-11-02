@@ -63,7 +63,7 @@ What each first-run surface depends on, and how it was checked:
 
 `GET /api/auth/session` adds `hosted: true` for a session on a hosted
 workspace and is otherwise unchanged (`server/hosted-access.test.ts`,
-`server/email-signin.test.ts`).
+`server/mail/email-signin.test.ts`).
 
 On a fresh `ui launch` fixture, the recipe above still passed end to end
 through the new session check. In the same fixture browser, a client-scope

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Fake of the Claude Code plugin commands server/org-flow-plugins.ts runs,
+// Fake of the Claude Code plugin commands server/org/org-flow-plugins.ts runs,
 // for its tests. It behaves like Claude Code 2.1.303 where it matters:
 //   - a headless session start (`-p --input-format stream-json`) registers
 //     the marketplaces declared in <CLAUDE_CONFIG_DIR>/settings.json

@@ -1,6 +1,6 @@
 // The card of an outward action a bot asks for (message field `outbound`,
 // shared/wire.ts): a phone call (server/outbound-calls.ts) or a purchase
-// with a saved card (server/credential-vault.ts). Parité Grok Bot V4, 59, 83.
+// with a saved card (server/vault/credential-vault.ts). Parité Grok Bot V4, 59, 83.
 //
 // One answer covers one action: Call or Cancel, Pay or Cancel.
 // No Always allow here. The card shows the full number to its own person,

@@ -1,7 +1,7 @@
 // Teach by demonstration: the person shows a task in the bot's browser while
 // a recording runs, the steps come back as an editable list, and the list is
 // saved as a skill the bot replays with its own browser tools (and its usual
-// approvals). Pure: the server's recorder (server/browser-teach.ts) masks with
+// approvals). Pure: the server's recorder (server/browser/browser-teach.ts) masks with
 // these rules, and the renderer builds the SKILL.md with them.
 //
 // Privacy rules, each covered by shared/teach-recording.test.ts:

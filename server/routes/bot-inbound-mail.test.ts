@@ -7,7 +7,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import type { BotInboundMail, LocalPartResult } from "../bot-mail-addresses.ts";
+import type { BotInboundMail, LocalPartResult } from "../mail/bot-mail-addresses.ts";
 import { createBotInboundMailReadRoutes, type BotInboundMailReadDeps } from "./bot-inbound-mail.ts";
 import { dispatchRoutes } from "./table.ts";
 

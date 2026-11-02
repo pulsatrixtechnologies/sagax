@@ -39,8 +39,8 @@ Ces cinq cas sont ceux qu'un oubli laisserait passer. Chaque ligne a son test da
 ### Task 1: Règles pures d'invitation et de rôle
 
 **Files:**
-- Create: `server/org-directory.ts`
-- Test: `server/org-directory.test.ts`
+- Create: `server/org/org-directory.ts`
+- Test: `server/org/org-directory.test.ts`
 
 **Interfaces:**
 - Consumes: rien
@@ -103,7 +103,7 @@ describe("roleOf", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm exec vitest run server/org-directory.test.ts`
+Run: `pnpm exec vitest run server/org/org-directory.test.ts`
 Expected: FAIL, cannot find module `./org-directory.ts`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -140,25 +140,25 @@ export function roleOf(input: { ownerUserId: string; admins: string[]; members: 
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/org-directory.test.ts`
+Run: `pnpm exec vitest run server/org/org-directory.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/org-directory.ts server/org-directory.test.ts
+git add server/org/org-directory.ts server/org/org-directory.test.ts
 git commit -m "feat: add org invite and role rules"
 ```
 
 ### Task 2: Enregistrement de l'organisation sur l'hôte
 
 **Files:**
-- Create: `server/org-record.ts`
-- Test: `server/org-record.test.ts`
+- Create: `server/org/org-record.ts`
+- Test: `server/org/org-record.test.ts`
 - Modify: `server/config.ts` (le bloc `signIn` existant, autour de la ligne 360)
 
 **Interfaces:**
-- Consumes: `OrgRole`, `OrgInvite`, `INVITE_TTL_MS`, `roleOf` from `server/org-directory.ts`
+- Consumes: `OrgRole`, `OrgInvite`, `INVITE_TTL_MS`, `roleOf` from `server/org/org-directory.ts`
 - Produces:
   - `export interface OrgRecord { name: string; host: { kind: "this-computer" } | { kind: "server"; url: string }; ownerUserId: string }`
   - `export function createOrg(input: { name: string; ownerUserId: string; host: OrgRecord["host"] }): OrgRecord`
@@ -199,7 +199,7 @@ describe("org record", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm exec vitest run server/org-record.test.ts`
+Run: `pnpm exec vitest run server/org/org-record.test.ts`
 Expected: FAIL, module missing
 
 - [ ] **Step 3: Write minimal implementation**
@@ -239,21 +239,21 @@ La liste persistée reste `config.signIn.members`. Pas de second tableau de memb
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/org-record.test.ts server/org-directory.test.ts`
+Run: `pnpm exec vitest run server/org/org-record.test.ts server/org/org-directory.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/org-record.ts server/org-record.test.ts
+git add server/org/org-record.ts server/org/org-record.test.ts
 git commit -m "feat: record the fleet organization and its invites"
 ```
 
 ### Task 3: Routes créer, inviter, accepter
 
 **Files:**
-- Create: `server/org-routes.ts`
-- Test: `server/org-routes.test.ts`
+- Create: `server/org/org-routes.ts`
+- Test: `server/org/org-routes.test.ts`
 - Modify: `server/index.ts` (monter les routes à côté des routes `/api/config` existantes)
 
 **Interfaces:**
@@ -284,7 +284,7 @@ Ajouter un cas 403: `actorId` est un member déjà accepté, `issueInviteRoute` 
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm exec vitest run server/org-routes.test.ts`
+Run: `pnpm exec vitest run server/org/org-routes.test.ts`
 Expected: FAIL, handlers missing
 
 - [ ] **Step 3: Write minimal implementation**
@@ -295,13 +295,13 @@ Monter les trois chemins dans `server/index.ts` en déléguant à ces handlers. 
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/org-routes.test.ts server/org-record.test.ts`
+Run: `pnpm exec vitest run server/org/org-routes.test.ts server/org/org-record.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/org-routes.ts server/org-routes.test.ts server/index.ts
+git add server/org/org-routes.ts server/org/org-routes.test.ts server/index.ts
 git commit -m "feat: add org create and invite routes"
 ```
 

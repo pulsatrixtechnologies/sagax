@@ -1,5 +1,5 @@
 // The group panel's Memory tab: the group's shared memory
-// (server/group-memory.ts), the bot panel's memory look at group scope.
+// (server/memory/group-memory.ts), the bot panel's memory look at group scope.
 // Every bot of the group reads it at each turn there and writes it only with
 // group_memory_update. The owner edits it and switches it off; the group's
 // other people read it.

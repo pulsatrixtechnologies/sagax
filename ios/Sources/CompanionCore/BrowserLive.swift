@@ -1,6 +1,6 @@
 // The bot's live browser, watched from the phone (browser mode of the
 // Computer tab; the desktop's LiveBrowser, src/components/BrowserPanel.tsx).
-// The stream is `GET /api/bots/:id/browser/live` (server/browser-live.ts):
+// The stream is `GET /api/bots/:id/browser/live` (server/browser/browser-live.ts):
 // `event: <type>` lines with a JSON body. Each frame is acknowledged with
 // `POST /api/bots/:id/browser/action {viewerId, type: "ack", seq}`, which is
 // what lets the next one come. The Computer tab's card watches a preview
@@ -156,7 +156,7 @@ public struct BrowserPageSize: Equatable, Sendable {
 }
 
 /// What the person does to the bot's browser from the take-control window
-/// (`parseBrowserLiveAction` in server/browser-live.ts). Coordinates are page
+/// (`parseBrowserLiveAction` in server/browser/browser-live.ts). Coordinates are page
 /// pixels.
 public enum BrowserLiveAction: Equatable, Sendable {
     case take, release

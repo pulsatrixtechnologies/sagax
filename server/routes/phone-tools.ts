@@ -1,4 +1,4 @@
-// Phone tools over HTTP (server/phone-tools.ts, shared/phone-tools.ts).
+// Phone tools over HTTP (server/phone/phone-tools.ts, shared/phone-tools.ts).
 //
 // The phone (a person's paired iPhone; never a bot, never another member):
 //   POST   /api/me/phone-tools/device         { deviceName?, tools }  what this phone can do now
@@ -14,7 +14,7 @@ import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
 import { parsePhoneToolArgs, phoneAnswerSchema, phoneDeviceSchema, PHONE_TOOL_CALL_WAIT_MS } from "../../shared/phone-tools.ts";
-import { PhoneToolUnavailable, type PhoneToolBroker } from "../phone-tools.ts";
+import { PhoneToolUnavailable, type PhoneToolBroker } from "../phone/phone-tools.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { isCardSealPublicKey } from "../../shared/phone-card-seal.ts";
 import type { PhoneTransport } from "../../shared/phone-transport.ts";

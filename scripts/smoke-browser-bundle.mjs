@@ -13,7 +13,7 @@ import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
 import { inflateSync } from "node:zlib";
 import { openGate } from "../server/browser/egress/gate.ts";
-import { browserBundlePaths, browserBundleSpec } from "../server/browser-bundle-release.ts";
+import { browserBundlePaths, browserBundleSpec } from "../server/browser/browser-bundle-release.ts";
 import { executableTarget } from "./prepare-cloudflared.mjs";
 import { WINDOWS_VENDOR_VERSION, verifyVendorCandidate, verifyVendorPatch } from "./build-windows-browser-vendor.mjs";
 
@@ -267,7 +267,7 @@ const interrupt = () => { for (const proc of children) proc.kill("SIGTERM"); };
 process.once("SIGINT", interrupt);
 process.once("SIGTERM", interrupt);
 try {
-  const { browserEngineStatus, agentBrowserIntegration, prepareBrowserSessionState, closeBrowserSession: closeSession } = await import("../server/browser-engine.ts");
+  const { browserEngineStatus, agentBrowserIntegration, prepareBrowserSessionState, closeBrowserSession: closeSession } = await import("../server/browser/browser-engine.ts");
   closeBrowserSession = closeSession;
   const status = browserEngineStatus({ dataDir: env.SAGAX_DATA_DIR, env });
   assert.equal(status.kind, "ready", `Fresh-home runtime did not discover the bundle: ${JSON.stringify(status)}`);

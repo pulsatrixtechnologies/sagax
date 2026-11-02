@@ -13,8 +13,8 @@
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
-import { journalMemoryDelete, journalMemoryWrite } from "../memory-journal.ts";
-import { MemoryStoreError, readMemoryDoc } from "../memory-store.ts";
+import { journalMemoryDelete, journalMemoryWrite } from "../memory/memory-journal.ts";
+import { MemoryStoreError, readMemoryDoc } from "../memory/memory-store.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import {
   RULE_SET_NAME_MAX,

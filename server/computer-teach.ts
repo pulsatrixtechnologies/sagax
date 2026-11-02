@@ -1,5 +1,5 @@
 // Teach by demonstration on the bot's whole computer (parity R7, system 11,
-// chat 71, iOS C12), next to the browser recorder (server/browser-teach.ts).
+// chat 71, iOS C12), next to the browser recorder (server/browser/browser-teach.ts).
 // While the person holds control of the bot's computer, the desktop viewer
 // reports their clicks (where, as fractions of the screen), Enter, Tab and
 // Escape, and that they type: never what. The server adds the focused

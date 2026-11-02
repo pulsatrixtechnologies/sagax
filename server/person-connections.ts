@@ -21,7 +21,7 @@ import { writeFileAtomic } from "./atomic.ts";
 import { capabilityPluginStateSchema, capabilityPluginValuesSchema, type CapabilityPluginState, type CapabilityPluginValues } from "./capability-plugin-state.ts";
 import { isPublicDomainAddress } from "./custom-domain.ts";
 import { isReservedMcpEnvEntry, mcpServerNameError } from "./mcp-registry.ts";
-import type { VaultKeySource } from "./vault-key-source.ts";
+import type { VaultKeySource } from "./vault/vault-key-source.ts";
 
 export const MAX_PERSONAL_MCP_SERVERS = 20;
 const AAD = Buffer.from("sagax person-capabilities v2");

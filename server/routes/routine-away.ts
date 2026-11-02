@@ -1,4 +1,4 @@
-// Routines that run only while their person is there (server/routine-away.ts).
+// Routines that run only while their person is there (server/routines/routine-away.ts).
 //
 //   POST /api/routines/away/beat   { idleMs, systemIdle? }
 //        A solo server's page says how long its person has not used it (the
@@ -13,7 +13,7 @@
 //        The routine's person (who it runs as) or an admin; 404 otherwise.
 import { z } from "zod";
 
-import type { AwayVerdict } from "../routine-away.ts";
+import type { AwayVerdict } from "../routines/routine-away.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { SYSTEM_IDLE_STATES } from "../../shared/presence.ts";
 import { PASS, type RouteHandler } from "./table.ts";

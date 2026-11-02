@@ -1,4 +1,4 @@
-// "Routines paused while you were away" (server/routine-away.ts): on the
+// "Routines paused while you were away" (server/routines/routine-away.ts): on the
 // Automations page, once the person is back, the routines set to "Only when
 // I'm here" that skipped runs meanwhile, each with how many and when. Run it
 // now (the routine's ordinary Run now) or mark it seen (POST

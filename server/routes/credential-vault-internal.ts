@@ -7,14 +7,14 @@
 //
 //   POST /api/internal/credentials/http { handle, method?, url, headers?, body? }
 //     200 { text, isError? }   vault_http_request (2026-10-26): the server
-//     adds the API key to the request (server/credential-http.ts)
+//     adds the API key to the request (server/vault/credential-http.ts)
 //
 // The answer names handles, sites and which fields exist, never a value. A
 // card is the person's to answer (server/routes/credential-vault.ts).
 import { botVaultPrincipal, normalizeVaultDomain, vaultHandle, type VaultItemListing } from "../../shared/credential-vault.ts";
 import type { SecretRequestCardData } from "../../shared/wire.ts";
-import { outcomeText, sendWithInjectedKey, type CredentialHttpOptions } from "../credential-http.ts";
-import type { CredentialVault, OnePasswordFieldReader } from "../credential-vault.ts";
+import { outcomeText, sendWithInjectedKey, type CredentialHttpOptions } from "../vault/credential-http.ts";
+import type { CredentialVault, OnePasswordFieldReader } from "../vault/credential-vault.ts";
 import type { InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 import { vaultRequestCard } from "./credential-vault.ts";
@@ -30,7 +30,7 @@ export interface CredentialVaultInternalDeps {
   /** Who answers a card for the bot's shared logins (its owner); null: the speaker. */
   botOwner?(botId: string): string | null;
   /** A new card replaces the open one: a person's own sign-in begun from it
-   * ends (server/browser-runtime.ts endPersonSignIn). */
+   * ends (server/browser/browser-runtime.ts endPersonSignIn). */
   endPersonSignIn?(botId: string, threadId: string): Promise<void>;
   /** vault_http_request: the resolver and address checks (tests inject them). */
   http?: CredentialHttpOptions;

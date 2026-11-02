@@ -17,7 +17,7 @@ Events Sagax already receives wake the bot they concern
 
 | Source | Offered from | Wakes when |
 |---|---|---|
-| mail | a bot email no routine trigger took (`server/bot-inbound-mail.ts`) | always; the wake is confined like a mail-woken run |
+| mail | a bot email no routine trigger took (`server/mail/bot-inbound-mail.ts`) | always; the wake is confined like a mail-woken run |
 | calendar | a one-bot calendar entry coming due | always |
 | run | `onRunFailed` of the routine manager | the run failed (see fix 1) |
 | bot | another bot's post in a room the bot is in | the post names the bot (`textNamesBot`) |

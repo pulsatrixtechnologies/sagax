@@ -31,7 +31,7 @@ import {
   mayDeleteGroup,
   type GroupActor,
 } from "../group-ownership.ts";
-import { deleteGroupMemory } from "../group-memory.ts";
+import { deleteGroupMemory } from "../memory/group-memory.ts";
 import type { HarnessCommandCatalog, HarnessCommandSource } from "../harness-commands.ts";
 import { typedCommandForTurn, unavailableCommandError } from "../harness-commands.ts";
 import { cancelledChatFollowup } from "../message-db.ts";

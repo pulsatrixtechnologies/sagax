@@ -1,10 +1,10 @@
 // Fill a vault field into the computer's focused form control. The bot names
 // a handle only; Sagax resolves the value, types it, and never returns it.
-// Same redaction guard as the browser path (server/filled-secret-guard.ts).
+// Same redaction guard as the browser path (server/vault/filled-secret-guard.ts).
 import { botVaultPrincipal, isVaultFillField, type VaultFillField } from "../shared/credential-vault.ts";
-import { LOGIN_MODE, REDACTED_CREDENTIAL, type FillRequest } from "./credential-fill.ts";
-import type { CredentialVault, FillResolution, OnePasswordFieldReader } from "./credential-vault.ts";
-import { noteFilledSecret } from "./filled-secret-guard.ts";
+import { LOGIN_MODE, REDACTED_CREDENTIAL, type FillRequest } from "./vault/credential-fill.ts";
+import type { CredentialVault, FillResolution, OnePasswordFieldReader } from "./vault/credential-vault.ts";
+import { noteFilledSecret } from "./vault/filled-secret-guard.ts";
 
 export const COMPUTER_FILL_CREDENTIAL_TOOL = "fill_credential";
 

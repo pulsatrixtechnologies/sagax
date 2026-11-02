@@ -28,7 +28,7 @@ describe("containerExec", () => {
     expect(calls[0]!.timeout).toBe(50_000);
   });
 
-  // Command variables (server/credential-command-env.ts): a script of exports
+  // Command variables (server/vault/credential-command-env.ts): a script of exports
   // on stdin, the command line holds only the names' reader.
   it("hands command variables on stdin, never on the command line, and nothing without them", async () => {
     const value = "fake-command-variable-value";

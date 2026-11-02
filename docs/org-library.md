@@ -14,7 +14,7 @@ is reported.
 ## What Add does
 
 The package goes through the same importer as a file (`server/package-import.ts`),
-called with `trust: "org"` from `server/org-library.ts` and nowhere else.
+called with `trust: "org"` from `server/org/org-library.ts` and nowhere else.
 Compared with a file:
 
 - **Skills arrive switched on.** The organization's Admin published them,

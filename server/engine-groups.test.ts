@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ListedProcess } from "./browser-processes.ts";
+import type { ListedProcess } from "./browser/browser-processes.ts";
 import { orphanedEngineGroups, reapOrphanEngineGroups, recordedEngineGroups, resetEngineGroupsForTests } from "./engine-groups.ts";
 import { killCliTree, spawnCli } from "./procs.ts";
 

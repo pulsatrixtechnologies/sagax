@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
-import { RULE_SETS_DIR, RULES_PATH } from "./memory-store.ts";
+import { RULE_SETS_DIR, RULES_PATH } from "./memory/memory-store.ts";
 import { ensureWorkspace, memoryLineCount, readMemoryText, workspaceDir } from "./workspace.ts";
 
 export { RULE_SETS_DIR };

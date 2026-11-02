@@ -331,7 +331,7 @@ server refuses a model off by name (`modelSwitchRefusal`: 403 on a choice,
 `run_with_engine`'s candidates (the bot owner's switches), and moves a bot on
 it to Auto on the same engine (`applyModelSwitches`). Tests:
 `shared/offered-models.test.ts`, `server/routes/model-switches.test.ts`,
-`server/org-admin-ops.test.ts`, `ModelSwitchesSettings.test.ts`. Native iOS
+`server/org/org-admin-ops.test.ts`, `ModelSwitchesSettings.test.ts`. Native iOS
 `ConfigStatus` carries both disabled lists into `ModelMenu.sections`; a
 disabled model stays out of provider, current, search, favorite and follow-bot
 rows. Auto's fast choices use the same switches: disabled choices are refused
@@ -437,7 +437,7 @@ organization admin's only. Tests: `shared/offered-engines.test.ts`,
 `shared/org-engine-readiness.test.ts`, `server/engine-credentials.test.ts`,
 `server/openai-compat-servers.test.ts`, `server/desktop-local-models.test.ts`,
 `src/lib/model-payers.test.ts`, `ModelPicker.interaction.test.ts`, C5 in
-`server/org-admin-console.e2e.test.ts`.
+`server/org/org-admin-console.e2e.test.ts`.
 ## Azure AI Foundry / Azure OpenAI (2026-10-30)
 
 The OpenAI-compatible connection (`openaiCompat`) treats an Azure resource
@@ -554,7 +554,7 @@ migrated and nothing a turn mounts changed: `resolveBotCapabilities`
 (`server/routes/bot-capabilities.ts`, member scope `orgDirectory`, the
 handler checks `viewerBotLevel`; `?engine=<instanceId>` previews another
 engine), by the console admin API's `GET bots/{id}/capabilities`
-(`server/org-admin-bots.ts`, lot 1d: the same list for the console person,
+(`server/org/org-admin-bots.ts`, lot 1d: the same list for the console person,
 manager in reach or the owner by `own-bot`, `docs/org-admin-api.md`) and by
 the main bot's `sagax_settings` get `bot.capabilities` (read only).
 Every screen reads this list (Capabilities > Installed in the
@@ -682,7 +682,7 @@ per-person or per-bot root through the installation bridge (2026-11-01:
 two persons' Me skills collided and leaked into the room prompt). The
 one-time repair `skills-library-person-split` returns entries a dev build
 misplaced. Regression: `server/skill-library.test.ts` ("library roots"),
-`server/org-harness-commands.e2e.test.ts` (two persons, Me skills and
+`server/org/org-harness-commands.e2e.test.ts` (two persons, Me skills and
 personal MCP secrets apart from each other and from the installation).
 
 Canonical routes: `GET /api/me/capabilities`,
@@ -861,7 +861,7 @@ run's task as the run's detail and an older results thread as the
 conversation: no column for a report. Old results threads stay readable
 from the run's detail and Run logs; they are not merged into the stream
 (`routineResults` is never a segment). Tests:
-`server/routine-results.e2e.test.ts`, `server/routines.test.ts`
+`server/routines/routine-results.e2e.test.ts`, `server/routines/routines.test.ts`
 ("clears saved destinations"), `src/state/routine-run-open.test.ts`,
 `src/components/RoutineResultsNavigation.test.ts`,
 `ios/Tests/CompanionCoreTests/RoutineContinueTests.swift`.
@@ -1296,7 +1296,7 @@ on the notification, 2026-10-29), since the client that asked carries it. One ru
 rule); `agentConversationFor` in server/index.ts opens or reuses it per bot,
 person and client; the name is the `client_name` Perspicax signs into the
 member assertion. The turn still runs as the person. Tests:
-`shared/agent-conversation.test.ts`, `server/org-member-api.e2e.test.ts`
+`shared/agent-conversation.test.ts`, `server/org/org-member-api.e2e.test.ts`
 (M1, M6, M7), `src/components/BotConversations.sheet.test.ts`, iOS
 `BotConversationsTests`.
 
@@ -1501,7 +1501,7 @@ bot's approval level is the only barrier (no "a human must click" case).
   cancelled before it bills, daily), `unused-subscriptions` (weekly) and
   `renewal-prices` (weekly). The bot cancels once the person says so.
 - Tests: `shared/widget.test.ts` (products), `shared/order-tracking.test.ts`,
-  `server/order-follow-ups.test.ts`, `server/credential-vault.orders.test.ts`,
+  `server/order-follow-ups.test.ts`, `server/vault/credential-vault.orders.test.ts`,
   iOS `ChatWidgetTests` (fixtures). Gallery: `src/gallery/chat-widgets.html?only=shopping`,
   `src/gallery/outbound-cards.html?only=purchase`.
 
@@ -2138,12 +2138,12 @@ SearXNG (base URL, optional key).
 
 A saved session (a bot's own browser, a shared profile) runs Chrome on
 `<data dir>/agent-browser-profiles/<sha256(session)>` (`AGENT_BROWSER_PROFILE`,
-`server/browser-engine.ts` `browserProfileDirectory`), so localStorage and
+`server/browser/browser-engine.ts` `browserProfileDirectory`), so localStorage and
 IndexedDB sign-ins survive restart, idle close, app restart and a crash; the
 restore file still carries cookies. Never for the temporary browser,
 confidential threads, meetings, or My Chrome / a CDP attach (no profile, no
 gate bypass; My Chrome rules of #838/#859 unchanged). The disk cache is capped
-at 64 MB. `releaseBrowserProfile` (`server/browser-processes.ts`) stops a Chrome
+at 64 MB. `releaseBrowserProfile` (`server/browser/browser-processes.ts`) stops a Chrome
 orphaned on the profile and drops a stale SingletonLock before a launch; the
 orphan sweep finds Chromes on kept profiles but only ever removes temporary
 ones. Deleting a bot or profile deletes its kept profile
@@ -2166,7 +2166,7 @@ never shows on another's.
 
 ## Tailcat remote sessions
 
-A connected Tailcat session is a first-class card (`remoteSession` on the message) and a Sessions à distance section in the bot panel. The address and the client key stay in the Flow session folder on this host. Never accept them as tool arguments, never put them in an API answer, a log line, or visible text. The support code is the label. The 12-hex folder id stays off the screen. Screenshot in the Computer tab is read-only. Shell reuses the in-chat terminal (`provider: tailcat`). Sagax ships tailcat 0.7.0 beside the app (`dist-native/tailcat`, then the app resources) and in the server image at `/usr/local/bin/tailcat`. Do not tell a bot to install it onto the system PATH. The panel section always renders (empty state when none). A session the bot opened with `remote_support_open` registers itself through `PerspicaxMcp.relay` -> `server/remote-session-register.ts` when the status says connected; Sagax does not wait for the person to say the script is launched: `server/remote-support-watch.ts` polls the status in the opener's name from the open until connected (#1499); its tunnel is in `<data dir>/remote-support/sessions/<CODE>/`, and resolves only for the person and bot named in that folder's `open.json` (the speaker whose Perspicax credentials opened it; never the conversation owner, never the 12-hex id alone). Prendre le contrôle opens the Computer tab in every mode (`startRemoteControl`, `visiblePanelTabs`); the screen stays read-only until live control lands over `RemoteSessionScreen`. Bot guidance (standard rights, three calls, script in the first reply, no jpg, no Preview) lives in the tool descriptions and the `remote-support` guide. See `docs/remote-sessions.md`.
+A connected Tailcat session is a first-class card (`remoteSession` on the message) and a Sessions à distance section in the bot panel. The address and the client key stay in the Flow session folder on this host. Never accept them as tool arguments, never put them in an API answer, a log line, or visible text. The support code is the label. The 12-hex folder id stays off the screen. Screenshot in the Computer tab is read-only. Shell reuses the in-chat terminal (`provider: tailcat`). Sagax ships tailcat 0.7.0 beside the app (`dist-native/tailcat`, then the app resources) and in the server image at `/usr/local/bin/tailcat`. Do not tell a bot to install it onto the system PATH. The panel section always renders (empty state when none). A session the bot opened with `remote_support_open` registers itself through `PerspicaxMcp.relay` -> `server/remote-support/remote-session-register.ts` when the status says connected; Sagax does not wait for the person to say the script is launched: `server/remote-support/remote-support-watch.ts` polls the status in the opener's name from the open until connected (#1499); its tunnel is in `<data dir>/remote-support/sessions/<CODE>/`, and resolves only for the person and bot named in that folder's `open.json` (the speaker whose Perspicax credentials opened it; never the conversation owner, never the 12-hex id alone). Prendre le contrôle opens the Computer tab in every mode (`startRemoteControl`, `visiblePanelTabs`); the screen stays read-only until live control lands over `RemoteSessionScreen`. Bot guidance (standard rights, three calls, script in the first reply, no jpg, no Preview) lives in the tool descriptions and the `remote-support` guide. See `docs/remote-sessions.md`.
 
 ## Switching accounts is instant and never signs out (2026-10-27)
 
@@ -2563,7 +2563,7 @@ Settings > Security (`MyApprovalRules`, also `rules.owner` and
   `@stripe/link-cli` 0.30 (README); Shop Pay's CLI is assumed to take the
   same commands. Tests (fake CLI only, nothing charged):
   `shared/single-use-card.test.ts`, `server/wallet-issuer.test.ts`,
-  `server/credential-vault.coffre.test.ts`, `server/credential-vault.payment.test.ts`.
+  `server/vault/credential-vault.coffre.test.ts`, `server/vault/credential-vault.payment.test.ts`.
 - **Show a password or key** (2026-10-29): Settings > Vault shows a local
   item's password or API key to its owner (desktop "Show password"/"Show
   key", iOS behind `VaultRevealGate`), so a secret a bot made with
@@ -2575,7 +2575,7 @@ Settings > Security (`MyApprovalRules`, also `rules.owner` and
   from the bus) forgets it at the end (`turn.completed`, ok or not, or
   `session.exited`) of the first turn that started after it was lent, or
   after VAULT_TURN_LEND_MS (15 min) at most. The bot is told "for this turn
-  only". Tests: `server/credential-vault.coffre.test.ts`,
+  only". Tests: `server/vault/credential-vault.coffre.test.ts`,
   `server/routes/credential-vault.test.ts`.
 - Not done: a device tool on the phone (row 81): Sagax has no phone tools.
 - Tests: `shared/computer-app.test.ts`, `server/computer-app.test.ts`,
@@ -2993,7 +2993,7 @@ for a bot or a conversation any more:
 - Linux: Auto never takes this computer (`server/local-routing.ts`), so a
   Linux bot that worked on This computer loses it (narrower, not wider).
 - The Perspicax console lists an Auto bot under both the server
-  environment and the desktop (`server/org-admin-computers.ts`).
+  environment and the desktop (`server/org/org-admin-computers.ts`).
 - Test seam `SAGAX_TEST_FIXED_WORKSPACE=1` (with VITEST or
   `SAGAX_TEST_SEAMS=1`, never production): the suites that drive fixed
   places through the API keep them. Tests:
@@ -3033,7 +3033,7 @@ lui-même." On every server (solo and organization):
 ## Routines pause themselves after failures in a row (2026-10-26)
 
 - After N failed runs in a row a routine pauses itself (`RoutineManager.failRun`
-  -> `autoPauseAfterFailure`, `server/routines.ts`; rules in
+  -> `autoPauseAfterFailure`, `server/routines/routines.ts`; rules in
   `shared/routine-auto-pause.ts`). N is the routine's own `autoPauseAfter`,
   set by the person in the routine editor (desktop Advanced, iOS
   `RoutineEditorView`), never an admin or an organization permission: absent
@@ -3058,7 +3058,7 @@ lui-même." On every server (solo and organization):
   behind a resumed run, or behind another queued scheduled run, becomes
   missed (`ROUTINE_ONE_RUN_AFTER_RESTART`). Manual and webhook runs stay.
 - Not copied: no interval floor, no routine cap, no admin permission.
-- Tests: `server/routines.test.ts` ("auto-pause after failures in a row",
+- Tests: `server/routines/routines.test.ts` ("auto-pause after failures in a row",
   "runs at most once"), `shared/routine-auto-pause.test.ts`,
   `shared/transient-notices.test.ts`, `src/lib/transient-notice.test.ts`,
   `src/components/RoutineRunCard.test.ts`,
@@ -3078,7 +3078,7 @@ you don't tell me anything in the chat."
   `features.routinesInConversation` switch is ignored and gone from Settings.
   While queued or running nothing reaches the chat or the sidebar; the bot's
   status (working dot, "Handling it") is the only live signal.
-- `server/routine-report.ts`: the contract (`ROUTINE_REPORT_CONTRACT`, in
+- `server/routines/routine-report.ts`: the contract (`ROUTINE_REPORT_CONTRACT`, in
   `ROUTINE_EXECUTION_PROMPT`) tells the bot to end with `NOTHING_TO_REPORT`
   when nothing needs the person and never to restate the instructions.
   `routineReportOutcome` reads the final message (the marker, else a short
@@ -3108,8 +3108,8 @@ you don't tell me anything in the chat."
   `taskCountsAsBotUnread`, iOS `BotTask.isHiddenFromPerson`).
 - No "Showing saved messages" banner over an archived conversation
   (`SavedMessagesNotice` removed); offline keeps `ChatStaleBanner`.
-- Tests: `server/routine-report.test.ts`, `server/routines.test.ts` ("background
-  runs"), `server/routine-silent-runs.e2e.test.ts`, `src/lib/routine-quiet.test.ts`,
+- Tests: `server/routines/routine-report.test.ts`, `server/routines/routines.test.ts` ("background
+  runs"), `server/routines/routine-silent-runs.e2e.test.ts`, `src/lib/routine-quiet.test.ts`,
   `src/components/RoutineRunCard.test.ts`.
 
 ## Routines that run when something changes (2026-10-26)
@@ -3123,14 +3123,14 @@ changes. Doc: `docs/routine-schedules.md` ("Only when something changes").
 - Shape and bounds: `shared/routine-watch.ts` (`ROUTINE_WATCH_LIMITS`: one
   check per 5 min at most, 15 s, 256 KB, 5 000 entries, depth 8, 500 items,
   64 KB of state, 4 000-character note). Validation in
-  `server/routine-precheck.ts` (`kind: "watch"` beside `condition`).
-- Reading and deciding: `server/routine-watch.ts` (fingerprint, `track`,
+  `server/routines/routine-precheck.ts` (`kind: "watch"` beside `condition`).
+- Reading and deciding: `server/routines/routine-watch.ts` (fingerprint, `track`,
   conditions, note, `RoutineWatchStates` in `<data dir>/routine-watch/`).
-  Read tools only: `server/routine-watch-tools.ts` reuses
+  Read tools only: `server/routines/routine-watch-tools.ts` reuses
   `perspicaxReadTool`, `connectorCallReads`, `isOutboundTool`,
   `connectorWriteKind`, `perspicaxWriteOnceTool`; checked on save and at
   every check.
-- Scheduler (`server/routines.ts`): a watch is read beside the pass
+- Scheduler (`server/routines/routines.ts`): a watch is read beside the pass
   (`startWatch`, `watchSettled`), never awaited inside it; the answer quiets
   the run (`nothing_to_report`, as for any pre-check) or wakes it with
   `RoutineRun.watchNote`, which the turn reads fenced as untrusted data
@@ -3158,8 +3158,8 @@ changes. Doc: `docs/routine-schedules.md` ("Only when something changes").
   a condition pre-check is never touched. Check now is a member's own
   (`CLIENT_ALLOW`) and a paired phone's (`companion/src/routes.ts`).
 - Cost: `pnpm bench:routine-watch` (numbers in the doc).
-- Tests: `server/routine-watch.test.ts`, `server/routine-precheck.test.ts`,
-  `server/routines.test.ts` ("routine watch"), `server/routine-requests.test.ts`,
+- Tests: `server/routines/routine-watch.test.ts`, `server/routines/routine-precheck.test.ts`,
+  `server/routines/routines.test.ts` ("routine watch"), `server/routines/routine-requests.test.ts`,
   `src/components/routines/WatchFields.test.ts`.
 
 ## Routines and webhooks: bearer token on every webhook (2026-10-08)
@@ -3317,13 +3317,13 @@ Each bot of an organization server has its own address,
 inbound provider, MX and the safety rules live there). Mail only wakes a
 routine. Wire contract v2 of 2026-10-21 (Perspicax <-> Sagax, Perspicax
 #419). Rules, none optional,
-covered by `server/bot-inbound-mail.test.ts`,
-`server/bot-mail-addresses.test.ts`, `server/routes/bot-inbound-mail.test.ts`,
-`server/oidc-rp.test.ts`, `server/org-member-api.e2e.test.ts` (M10),
+covered by `server/mail/bot-inbound-mail.test.ts`,
+`server/mail/bot-mail-addresses.test.ts`, `server/routes/bot-inbound-mail.test.ts`,
+`server/oidc-rp.test.ts`, `server/org/org-member-api.e2e.test.ts` (M10),
 `src/components/bot-settings/BotEmailAddress.test.ts`,
 `src/components/TypedTriggers.test.ts` and iOS `BotInboundMailTests`:
 
-- Delivery: `POST /api/org/inbound-mail` (`server/bot-inbound-mail.ts`),
+- Delivery: `POST /api/org/inbound-mail` (`server/mail/bot-inbound-mail.ts`),
   answered before the session gate and loopback trust, next to the member
   API. The only credential is a console assertion (typ
   `pulsabot-console+jwt`, at most 120 s, single-use `jti`, `aud` this
@@ -3376,7 +3376,7 @@ covered by `server/bot-inbound-mail.test.ts`,
   (case-insensitive, `containsFilters`), `keyword` over subject and text.
 - Confined runs (S2): a run woken by a `botmail` trigger is confined like a
   guest's turn (`botmailConfined` in server/index.ts, `botmailRunConfined`
-  in server/bot-inbound-mail.ts): no shell or WebFetch (`guestConfined`,
+  in server/mail/bot-inbound-mail.ts): no shell or WebFetch (`guestConfined`,
   Claude `--restricted`), Ask whatever the bot's level (no Full, no Auto),
   no rule the owner saved and no kept card answers for it, no self-apply.
   An engine that cannot run confined refuses the run. The trigger's owner
@@ -3410,7 +3410,7 @@ covered by `server/bot-inbound-mail.test.ts`,
   trigger counts and the FULL sender address (decision 3), never the
   subject or the text. Confidential threads are not
   touched: a mail starts a routine run in its own thread.
-- Addresses: `server/bot-mail-addresses.ts` asks Perspicax
+- Addresses: `server/mail/bot-mail-addresses.ts` asks Perspicax
   (`POST /api/v1/pulsabot/inbound-mail/addresses`, link token) for every bot
   with a Perspicax owner in ONE call (at most 500), with `complete: true`
   only when that is every such bot (Perspicax then drops the rows of bots
@@ -3951,8 +3951,8 @@ in `server/routes/security-keys.ts`. Rules, covered by
   desktop app's own person does. The same rule gates the vault export for a
   person without a key. Tests: `server/recent-sign-in.test.ts`,
   `server/recent-sign-in.e2e.test.ts`, `server/oidc-login.test.ts` (the
-  auth_time and `fresh` cases), `server/email-signin.test.ts`, C5 in
-  `server/org-admin-console.e2e.test.ts`. The last key removed
+  auth_time and `fresh` cases), `server/mail/email-signin.test.ts`, C5 in
+  `server/org/org-admin-console.e2e.test.ts`. The last key removed
   clears the classes.
 - Recovery when every key is lost: stop the server, remove the person's
   entry from `security-keys.json`, start it again. The file's digest
@@ -4039,7 +4039,7 @@ and `server/routes/group-folders.ts`. Keep these rules, covered by
 
 - An AI client writing through the member API (Pulsatrix `sagax_send`,
   any actor but the Sagax console) uses its own **hidden** conversation
-  with the bot (`task.hidden`, `server/org-member-routes.ts`): never in the
+  with the bot (`task.hidden`, `server/org/org-member-routes.ts`): never in the
   person's sidebar, previews, typing dots, unread, badge or notifications,
   and it never moves their selected conversation. It stays reachable from
   the bot's Activity panel and links. The server drops hidden tasks from
@@ -4089,7 +4089,7 @@ organization server signed in with Perspicax, `useOrgMemoryAuto` (App.tsx)
 calls `org-memory:auto` at load and every 15 minutes. Main asks the active
 organization server (`currentBundledOrigin`, the person's own session
 cookie) `GET /api/me/memory-sync-token` (who is signed in, no token) then,
-when needed, `POST` (their token: `server/perspicax-memory-sync-token.ts`,
+when needed, `POST` (their token: `server/memory/perspicax-memory-sync-token.ts`,
 which asks Perspicax through the link `POST
 /api/v1/pulsabot/people/{sub}/memory-sync-token`, Perspicax 1.8.27+, for the
 session's own `idp.sub` only, `no-store`, never logged). The token goes from
@@ -4106,7 +4106,7 @@ connection made by hand before as it was and says the update is needed.
 Tests: `electron/org-memory-cache.node-test.mjs` (real git on bare
 repositories, the whole lifecycle, auto included), `src/lib/org-memory.test.ts`,
 `src/components/OrgMemorySettings.test.ts`,
-`server/perspicax-memory-sync-token.test.ts`. Not done yet: a file watcher
+`server/memory/perspicax-memory-sync-token.test.ts`. Not done yet: a file watcher
 (the sync runs on its timer).
 
 ## Perspicax GO requests as approval cards (2026-10-26)
@@ -4146,13 +4146,13 @@ active pack determine availability. The host adds pack provenance to the
 answer. Existing read-only treatment stays limited to harness-owned
 Perspicax bridges (`PERSPICAX_FLOW_COMPUTE_TOOLS` is permission vocabulary,
 not an implementation). No write tool receives that permission.
-Tests: `server/org-mcp.e2e.test.ts` proves forwarding as the speaker and
+Tests: `server/org/org-mcp.e2e.test.ts` proves forwarding as the speaker and
 absence of the old mount; Grok read-only/gate tests reject impostor proxies.
 Python parity and runner tests live in the Flow and Perspicax repositories.
 
 ## Pulsatrix Flow installation (lot 3, 2026-10-30)
 
-`server/org-flow-plugins.ts` downloads the private manifest and archives
+`server/org/org-flow-plugins.ts` downloads the private manifest and archives
 with the installation's live link token (`PerspicaxDirectory.linkBearer`),
 without a member sign-in or Claude CLI. The guard declaration remains
 required: `enabled` and `guard: "enforce"`; off/shadow removes the copies.
@@ -4162,7 +4162,7 @@ Manifest name, declared plugin/version, SHA-256 and archive identity must
 agree. `ZipReader` rejects traversal, links and oversized archives. Staged
 sanitized copies keep executable scripts and replace the prior copy only
 after validation; a failed download/update preserves the usable old copy.
-Tests: `server/org-flow-plugins.test.ts` (real HTTP/ZIP, no CLI).
+Tests: `server/org/org-flow-plugins.test.ts` (real HTTP/ZIP, no CLI).
 
 `RemoteMcpClient` discards a closed legacy SSE endpoint. The next operation
 opens a stream and repeats initialize/initialized once, sharing concurrent
@@ -4179,7 +4179,7 @@ channel only), `capability_marketplaces` and
 `capability_marketplace_policy`. Null policy keeps this server's historical
 `organization.pluginMarketplaces` rule; it is never read as `any`.
 
-Sagax installs once under `DATA_DIR/org-capabilities` (`server/org-capabilities.ts`):
+Sagax installs once under `DATA_DIR/org-capabilities` (`server/org/org-capabilities.ts`):
 a plugin whole (hooks stripped), a skill as one linked folder, an MCP
 declaration kept in memory. Offered: off until the person turns it on in
 their Me state (`capabilities.enc` `orgCapabilities`). Imposed: on, not
@@ -4192,17 +4192,17 @@ through this server's link with the admin's live sign-in token
 (`server/routes/org-capabilities.ts`). A member's own switch is
 `/api/me/org-capabilities`. No Capabilities tab in the bot panel: the
 resolved list lives in Plugins > Installed (JC, 2026-11-01). Form mirror:
-`shared/org-capability-form.ts`. Tests: `server/org-capabilities.test.ts`,
+`shared/org-capability-form.ts`. Tests: `server/org/org-capabilities.test.ts`,
 `server/routes/org-capabilities.test.ts`, `shared/org-capability-form.test.ts`.
 
 ## Organization memory signals (2026-10-11)
 
 Perspicax keeps the organization's work log and a duplicate detector over
 it (its `docs/memory.md` "Work log" and "Duplicate detector"). Sagax feeds
-them with the link token (`server/perspicax-memory.ts`, `linkPostJson` in
+them with the link token (`server/memory/perspicax-memory.ts`, `linkPostJson` in
 `server/perspicax-link.ts`). Keep these rules, covered by
-`server/perspicax-memory.test.ts` (a fake Perspicax over HTTP) and
-`server/routines.test.ts` ("the organization memory before a run"):
+`server/memory/perspicax-memory.test.ts` (a fake Perspicax over HTTP) and
+`server/routines/routines.test.ts` ("the organization memory before a run"):
 
 - A turn that mounts Perspicax profiles (`perspicaxTurnIntegration`, not a
   quiet call warm) queues one `POST /api/v1/memory/work` row: the person's
@@ -4278,7 +4278,7 @@ it for one of its bots.
   `server/engine-access.test.ts`, `server/harness-connectors.test.ts`
   (isolation), `server/routes/bot-runtime-settings.test.ts`,
   `server/routes/group-bot-payer.test.ts`, `src/components/AccessCard.payer.test.ts`,
-  S4-9 in `server/org-rights.e2e.test.ts` (owner's subscription by default,
+  S4-9 in `server/org/org-rights.e2e.test.ts` (owner's subscription by default,
   each person with their default model).
 
 ## Each turn runs on a model its payer can pay for (#1154, 2026-10-27)
@@ -4318,7 +4318,7 @@ keep the owner's credentials and model.
 - Tests: `shared/payable-model.test.ts`, `server/turn-model-routing.test.ts`,
   `server/model-auto.test.ts`, `server/principal-engine-logins.test.ts`,
   `server/turn-run.test.ts`, `src/components/TurnRunLine.test.ts`, S4-9 in
-  `server/org-rights.e2e.test.ts` (another engine, starred model, a group).
+  `server/org/org-rights.e2e.test.ts` (another engine, starred model, a group).
 
 ## Per-bot runtime settings (2026-10-15)
 
@@ -4376,10 +4376,10 @@ One page (`EnginesSettings.tsx`, section id `engines`) replaced Integrations
 
 ## Mail settings
 
-Settings > Email (`src/components/MailSettings.tsx`, `server/mail-routes.ts`,
-`server/mail-config.ts`, field ids in `shared/mail-settings.ts`) configures
+Settings > Email (`src/components/MailSettings.tsx`, `server/mail/mail-routes.ts`,
+`server/mail/mail-config.ts`, field ids in `shared/mail-settings.ts`) configures
 the mail of a solo server. Keep these rules, each covered by a test in
-`server/mail-routes.test.ts` or `server/mail-config.test.ts`:
+`server/mail/mail-routes.test.ts` or `server/mail/mail-config.test.ts`:
 
 - `GET /api/mail/settings` never returns a secret or any part of one: a
   password, API key or key secret is only `configured: true|false`.
@@ -4402,7 +4402,7 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
 `src/components/EnginesSettings.org.test.ts`,
 `src/components/Sidebar.header.test.ts`,
 `src/components/routines/RoutineOwnerName.test.ts` and
-`server/org-bot-force.test.ts`:
+`server/org/org-bot-force.test.ts`:
 
 - Connected apps is experimental (`features.connectedApps`, off):
   off hides the sidebar entry, the Settings > Connected apps page and the tour's
@@ -4428,7 +4428,7 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
   cards hold only their own access (`data-member-engine`); changing an
   engine stays admin. Before 2026-10-02 that route was admin-only and a
   member saw an empty Model providers page, hence no sign-in
-  (`server/org-member-access.e2e.test.ts` MA-1, MA-2).
+  (`server/org/org-member-access.e2e.test.ts` MA-1, MA-2).
 - Bot rights come from Perspicax (1.8.6, `sagax_bots` on each directory
   person, set by an admin on the person's sheet; default and absent mean
   `manage`). `use` makes the person read-only (`personBotsReadOnly`,
@@ -4462,7 +4462,7 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
   deleted account still stops its routines. Needs Perspicax to accept that
   exchange (it refuses it up to 1.8.13: the run is then skipped).
 - Who a routine runs as is chosen in the routine modal (2026-10-08;
-  `server/routine-run-as.ts`, `src/components/routines/RunAsField.tsx`).
+  `server/routines/routine-run-as.ts`, `src/components/routines/RunAsField.tsx`).
   The record keeps `runAs` (a principal id); a routine without one runs as
   its bot's owner (`effectiveRunAs`), so older records need no migration.
   `POST /api/routines` and `PATCH /api/routines/:id` accept `runAs`; an
@@ -4528,8 +4528,8 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
   shows Export disabled with the reason. Imports are not affected. Each
   change is an `org.settings` audit row. Tests:
   `server/routes/credential-vault.test.ts`,
-  `server/perspicax-org-routes.test.ts`, `server/org-admin-ops.test.ts`, C5
-  in `server/org-admin-console.e2e.test.ts`.
+  `server/perspicax-org-routes.test.ts`, `server/org/org-admin-ops.test.ts`, C5
+  in `server/org/org-admin-console.e2e.test.ts`.
 - Sharing in the organization is one compact row per bot (avatar, owner,
   sharing count, running or idle from `/api/org/bots` `look`/`running`);
   the grants open inline, the force actions sit in an admin-only row menu
@@ -4548,7 +4548,7 @@ named permission (`shared/permissions.ts`, spec
   `bots.fullAccess`, `sharing.grants`, `apps.ownIntegrations`, exactly what a
   member could do before. Unknown keys are ignored with one log line.
 - Every gate asks `callerCan(auth, key)` (`server/index.ts`, built on `can`
-  and `server/org-permissions.ts`). An admin holds every key. The five
+  and `server/org/org-permissions.ts`). An admin holds every key. The five
   `adminOnly` keys (`host.shell`, `people.manage`, `backup.workspace`,
   `server.settings`, `server.link`) are never granted by a profile; keep that
   list tiny and justify any addition in the spec.
@@ -4565,17 +4565,17 @@ named permission (`shared/permissions.ts`, spec
   `sagax_integrations` is ignored (removed 2026-10-30).
 - `GET /api/org/admin/capabilities` (api 3) returns the catalogue for the
   Perspicax matrix; `GET /api/org/admin/people/{principal}` returns the
-  person's effective keys. Covered by `server/org-permissions.e2e.test.ts`
+  person's effective keys. Covered by `server/org/org-permissions.e2e.test.ts`
   (PM-1 to PM-5), `shared/permissions.test.ts`,
-  `server/org-permissions.test.ts` and `server/request-auth.test.ts`.
+  `server/org/org-permissions.test.ts` and `server/request-auth.test.ts`.
 
 ## Directory refresh on demand (organization mode, 2026-10-11)
 
 Rights changed in Perspicax reach Sagax through the directory, read every
 `SAGAX_PERSPICAX_DIRECTORY_SECONDS` (300). `POST
-/api/org/link/directory-refresh` (`server/org-link-routes.ts`) lets
+/api/org/link/directory-refresh` (`server/org/org-link-routes.ts`) lets
 Perspicax have it read now. Keep these rules, covered by
-`server/org-link-routes.test.ts` and `server/perspicax-link.test.ts`:
+`server/org/org-link-routes.test.ts` and `server/perspicax-link.test.ts`:
 
 - The only credential is the link token of the link file, `Authorization:
   Bearer`, compared in constant time (`PerspicaxDirectory.linkTokenMatches`,
@@ -4590,10 +4590,10 @@ Perspicax have it read now. Keep these rules, covered by
 ## Automations scope (organization mode, 2026-10-09)
 
 Anyone may be allowed to see the automation schedule beyond their own
-routines. `server/routine-scope.ts` (rules), `shared/routine-scope.ts`
+routines. `server/routines/routine-scope.ts` (rules), `shared/routine-scope.ts`
 (names), `src/components/routines/RoutineScopeBar.tsx` and
 `src/lib/use-routine-scope.ts` (page). Rules, covered by
-`server/routine-scope.test.ts`, `server/org-routines-scope.e2e.test.ts` and
+`server/routines/routine-scope.test.ts`, `server/org/org-routines-scope.e2e.test.ts` and
 `src/components/routines/RoutineScopeBar.test.ts`:
 
 - `GET /api/routines?scope=mine|team|all&teamId&botId&ownerId&status`. No
@@ -4651,9 +4651,9 @@ unchanged. Tests: `src/components/routines/UpcomingPanel.test.ts`.
 
 On a solo server Full access is granted only through the packaged desktop
 app's private channel. On an organization server the bot's owner grants it
-over HTTP (`server/org-full-access.ts`, client `src/lib/full-access.ts`).
-Keep these rules, each covered by `server/org-full-access.test.ts`,
-`server/org-full-access.e2e.test.ts`, `server/org-sharing.e2e.test.ts` (S3-7),
+over HTTP (`server/org/org-full-access.ts`, client `src/lib/full-access.ts`).
+Keep these rules, each covered by `server/org/org-full-access.test.ts`,
+`server/org/org-full-access.e2e.test.ts`, `server/org/org-sharing.e2e.test.ts` (S3-7),
 the driver tests or `src/components/ApprovalModeSelector.fullAccess.test.ts`:
 
 - Only the bot's owner, signed in (a session principal), grants Full:
@@ -4690,7 +4690,7 @@ the driver tests or `src/components/ApprovalModeSelector.fullAccess.test.ts`:
 Approve for me (`approvalMode: "auto"`) is the mode a bot starts on, on a
 solo server. On an organization server the organization's policy decides.
 Keep these rules, covered by `server/independent-task-store.test.ts` ("moves
-Ask bots and threads to Approve for me once"), `server/org-full-access.test.ts`
+Ask bots and threads to Approve for me once"), `server/org/org-full-access.test.ts`
 and `server/store.org-approval-default.test.ts`:
 
 - `createBot` writes the Store's `newBotApprovalMode()` on the bot and its
@@ -4719,7 +4719,7 @@ and `server/store.org-approval-default.test.ts`:
 A bot acts with its owner's rights (spec
 `docs/superpowers/specs/2026-10-14-bot-owner-permissions.md`). Keep these
 rules, covered by `server/owner-approval.test.ts`,
-`server/engine-access.test.ts` and `server/org-sharing.e2e.test.ts` (S3-7d):
+`server/engine-access.test.ts` and `server/org/org-sharing.e2e.test.ts` (S3-7d):
 
 - Only what goes beyond the owner's rights is an admin card
   (`memberBotAdminApproval`): a server command, a file outside the bot's
@@ -4859,8 +4859,8 @@ covered by `shared/custom-rules.test.ts`, `server/auto-approve.custom-rules.test
   the four reviews; add each new bypass there.
 
 Email drafts (`src/components/EmailCard.tsx`, `shared/email-draft-send.ts`,
-`server/email-draft-send.ts`), covered by `server/email-draft-send.test.ts`
-and `server/email-draft-send.e2e.test.ts`: To, Cc, Subject and body are
+`server/mail/email-draft-send.ts`), covered by `server/mail/email-draft-send.test.ts`
+and `server/mail/email-draft-send.e2e.test.ts`: To, Cc, Subject and body are
 editable (no invisible or direction character; a non-ASCII domain is shown
 as punycode); Envoyer writes an approval card (`POST
 /api/threads/:id/email-drafts`) and never sends. Allow sends once: through
@@ -4908,7 +4908,7 @@ draft shows the status and a send error inline; Retry asks again.
 - A permission card whose own timeout passed with no answer
   (`request.resolved` with `source: "timeout"`) writes a decision row
   `expired` (source `timeout`), and `GET approvals/history` answers it as
-  `decision: "expired"` with `by` null (`server/org-admin-routines.test.ts`).
+  `decision: "expired"` with `by` null (`server/org/org-admin-routines.test.ts`).
   The bot activity log reads it as denied (nothing ran).
 
 ## One look for every interactive question (2026-10-20)
@@ -4953,8 +4953,8 @@ web test covers `approvalCardStaysInChat` yet.
 
 On an organization server (`SAGAX_IDENTITY=perspicax`) a signed-in person's
 name and email belong to Perspicax. Keep these rules, each covered by a test
-in `server/member-identity.e2e.test.ts`, `server/org-identity.e2e.test.ts`,
-`server/org-profile.e2e.test.ts`, `server/oidc-login.test.ts` or the
+in `server/member-identity.e2e.test.ts`, `server/org/org-identity.e2e.test.ts`,
+`server/org/org-profile.e2e.test.ts`, `server/oidc-login.test.ts` or the
 onboarding tests:
 
 - `GET /api/auth/session` and the config's `viewer` carry
@@ -4973,7 +4973,7 @@ onboarding tests:
 - A person reads as `personDisplayName` (`server/viewer-identity.ts`): the
   Perspicax display name, else the address's local part, else the login; a
   directory name equal to the login is not a display name.
-- Avatar (`server/org-profile.e2e.test.ts`): Sagax keeps only a version
+- Avatar (`server/org/org-profile.e2e.test.ts`): Sagax keeps only a version
   (`Principal.avatar`) from the id_token `picture` claim (a URL on the
   issuer's origin with `?v=<version>`) or the directory's `avatar`
   (null removes it), reads the PNG or JPEG through the link
@@ -5048,10 +5048,10 @@ short guide with an outline, and the block bots read
 
 ## Group memory and direct messages between people
 
-A user-created group keeps one shared memory (`server/group-memory.ts`,
+A user-created group keeps one shared memory (`server/memory/group-memory.ts`,
 `DATA_DIR/group-memory/<groupId>/MEMORY.md`), separate from every bot's own
-workspace. Keep these rules, each covered by `server/group-memory.test.ts`,
-`server/group-memory.e2e.test.ts` or `server/people-dms.e2e.test.ts`:
+workspace. Keep these rules, each covered by `server/memory/group-memory.test.ts`,
+`server/memory/group-memory.e2e.test.ts` or `server/people-dms.e2e.test.ts`:
 
 - Every bot of the group reads it in each room turn there (the
   `group-memory` prompt section); a bot writes it only with
@@ -5700,7 +5700,7 @@ timeout, 429, 403, 5xx or an expired access token next to a refresh token
 again". `ok` and `error` stay on each row for the phone apps. Tests:
 `server/plan-usage.test.ts`, `server/plan-usage.modes.test.ts`,
 `src/components/PlanUsage.test.ts`, MA-5 in
-`server/org-member-access.e2e.test.ts`.
+`server/org/org-member-access.e2e.test.ts`.
 
 ## Every engine preinstalled on an organization server (2026-10-08)
 
@@ -5775,7 +5775,7 @@ the model call plus the MCP tools Sagax injects (agents, Perspicax, the
 person's allowed MCP servers through the desktop link) and nothing else
 (decision 2026-10-04, widened to every provider at the maintainer's request on
 2026-10-08). The driver says so with `withholdsHostTools`; the server checks
-it on every turn (`server/org-engine-admission.ts`) and otherwise answers
+it on every turn (`server/org/org-engine-admission.ts`) and otherwise answers
 409 `host_tools` with the engine's reason (`shared/org-engines.ts`), the
 words the picker and the engine card show
 (`src/components/OrgHostToolsNote.tsx`, `model.org.hostTools*`). Running the
@@ -5810,7 +5810,7 @@ and the pinned inventory catches a new tool at the bump. A solo turn, or a
 turn in the person's own environment, is unchanged.
 
 Keep these rules, each covered by `server/drivers/acp/org-host-tools.test.ts`,
-`server/org-engine-admission.test.ts`, `src/components/EnginesSettings.org.test.ts`
+`server/org/org-engine-admission.test.ts`, `src/components/EnginesSettings.org.test.ts`
 or `src/components/ModelPicker.interaction.test.ts`:
 
 - A withheld ACP turn also declines any `session/request_permission` to run
@@ -5855,7 +5855,7 @@ pays for but has not given the person (`sagax_server_engines`,
 - Keys rows (Settings > Models and voice) stay: a key can serve voice or
   another engine. Real check: `scripts/verify-org-hidden-providers.ts`.
   Tests: `shared/offered-engines.test.ts`, `ModelPicker.interaction.test.ts`,
-  `src/lib/activity-runs.test.ts`, C5 in `server/org-admin-console.e2e.test.ts`.
+  `src/lib/activity-runs.test.ts`, C5 in `server/org/org-admin-console.e2e.test.ts`.
 
 ## First engine at an organization sign-in (2026-10-18)
 
@@ -6707,12 +6707,12 @@ a desktop rebuild.
 ## Bot files for the Perspicax console (2026-10-08)
 
 The Perspicax console's file browser reads a bot's files through the
-organization admin API (`server/org-admin-files.ts`, under
+organization admin API (`server/org/org-admin-files.ts`, under
 `/api/org/admin/files/<bot>/*`, the console assertion as the only
 credential; `docs/verification/perspicax-sign-in.md`). Slice 1 is read only:
 roots, list, stat, read (128 KiB) and download (100 MiB). Keep these rules,
-each covered by `server/org-admin-files.test.ts` or
-`server/org-admin.e2e.test.ts` (S7-G):
+each covered by `server/org/org-admin-files.test.ts` or
+`server/org/org-admin.e2e.test.ts` (S7-G):
 
 - Managers in reach and admins only (the bots route's `botInReach`); a bot
   out of reach is 404, never 403.
@@ -6733,26 +6733,26 @@ each covered by `server/org-admin-files.test.ts` or
 The organization admin API (`docs/org-admin-api.md`) also serves the
 console's bots gallery, routines calendar and computers. Keep these rules:
 
-- `look` (`server/org-admin-look.ts`) resolves a bot's appearance as
+- `look` (`server/org/org-admin-look.ts`) resolves a bot's appearance as
   `src/components/Avatar.tsx` does (a picture only when its crop is not
   `mascot`); `shared/mascot-catalog.ts` names each character's family and
   skins for `GET capabilities`, and
   `src/components/floating-bots/mascot-catalog.test.ts` fails when it
   disagrees with the registry: a new character is an entry in both.
   `GET bots/{id}/avatar` never names a file and opens it with O_NOFOLLOW.
-- `GET routines/runs` (`server/org-admin-runs.ts`) joins the console reach
+- `GET routines/runs` (`server/org/org-admin-runs.ts`) joins the console reach
   with the Automations scope (`routines.viewTeam`, `routines.viewAll`); a
   run outside the caller's reach comes `redacted`, without its thread.
-- `computers` (`server/org-admin-computers.ts`): a server environment is
+- `computers` (`server/org/org-admin-computers.ts`): a server environment is
   acted on only through `UserSandboxManager` (start, stop, pause, resume,
   update, reset, delete; reset and delete need `confirm: true`, stop,
   pause and update need it while a bot works there), each action one
   `computer` row of the admin activity log. A person's desktop is listed
   read only (name, platform, presence, last contact, `localVm`) through
   `DesktopBridges.inventory()`; no route acts on it, reads its files, its
-  system facts or its Local VM. Tests: `server/org-admin-*.test.ts`,
-  `server/org-admin-computers.e2e.test.ts`, C6 and C7 of
-  `server/org-admin-console.e2e.test.ts`.
+  system facts or its Local VM. Tests: `server/org/org-admin-*.test.ts`,
+  `server/org/org-admin-computers.e2e.test.ts`, C6 and C7 of
+  `server/org/org-admin-console.e2e.test.ts`.
 
 ## A person's own connections, plugins and skills (organization mode, 2026-10-02)
 
@@ -6761,9 +6761,9 @@ install plugins. Why: the server-wide MCP list was admin-only, hidden with
 Connected apps, shared one token by all and ran commands on the host;
 `claude plugin ...` typed by a bot hit the host Bash denial whatever
 `SAGAX_CLAUDE_ALLOW` said; skills routes were admin-only; the environment
-had no gh. Keep these rules, each covered by `server/org-connections.e2e.test.ts`
+had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.test.ts`
 (OC-1 to OC-9), `server/person-connections.test.ts`,
-`server/org-person-connections.test.ts`,
+`server/org/org-person-connections.test.ts`,
 `server/github-connect.test.ts`, `server/bot-plugins.test.ts`,
 `server/plugin-turn.test.ts`, `server/bot-plugin-act.test.ts`,
 `server/sandbox-stdio-mcp.test.ts`, `server/sandboxd.test.ts` or
@@ -6808,7 +6808,7 @@ had no gh. Keep these rules, each covered by `server/org-connections.e2e.test.ts
   changed by an organization admin through `POST /api/me/github/credentials`
   `{ scope: "org" }` (a bot through `act` on that route). `PATCH
   /api/org/settings` no longer takes `githubTokens` and `GET /api/org` no
-  longer lists them. `server/org-github-tokens.ts` stays as the reader the
+  longer lists them. `server/org/org-github-tokens.ts` stays as the reader the
   migration uses.
 - Plugins (`server/bot-plugins.ts`, `/api/bots/:id/plugins/*`): per bot, the
   owner or a person with manage changes them, use reads. One marketplace
@@ -6867,7 +6867,7 @@ had no gh. Keep these rules, each covered by `server/org-connections.e2e.test.ts
   bot plugins and skills for them.
 - An organization admin lists and removes another person's connections
   (`GET /api/org/people/<principalId>/connections` and
-  `POST .../connections/revoke`, `server/org-person-connections.ts`): admin
+  `POST .../connections/revoke`, `server/org/org-person-connections.ts`): admin
   scope, `orgAdminCaller` (a service loopback is not an admin), not in
   `CLIENT_ALLOW`. A solo server answers 403 `identity_perspicax`. The list
   names MCP servers (hostname or command only), the GitHub connection
@@ -6879,7 +6879,7 @@ had no gh. Keep these rules, each covered by `server/org-connections.e2e.test.ts
   only when something was removed. One target that is missing is 404 with
   no audit; remove-all of nothing is 200 and no audit.
   Tests: `server/person-integrations.test.ts`,
-  `server/perspicax-link.test.ts`, `server/org-person-connections.test.ts`,
+  `server/perspicax-link.test.ts`, `server/org/org-person-connections.test.ts`,
   OC-7, OC-8 and OC-9, `MyConnectionsSettings.test.ts`,
   `PersonConnectionsSection.test.ts`.
 
@@ -7281,7 +7281,7 @@ the bot engine's (`shared/harness-commands.ts`, `server/harness-commands.ts`,
   carries a key). Live session additions are kept per bot and account.
   The client caches the lists per viewer (`src/lib/harness-commands.ts`):
   another person signing in to the same tab never sees the last one's.
-  Covered end to end by `server/org-harness-commands.e2e.test.ts`.
+  Covered end to end by `server/org/org-harness-commands.e2e.test.ts`.
 - `scripts/smoke-harness-commands.ts` checks the real CLIs.
 
 ## Bot panel
@@ -7373,7 +7373,7 @@ of that thread. The owner's notification of such a run names no thread, only
 `server/routes/bot-activity.test.ts`, `server/activity-coding.test.ts`,
 `server/activity-code-work.test.ts`, `ActivitySection.test.ts`,
 `InlineEditableText.test.ts`, `BotSettingsDialog.caption.test.ts`,
-`server/org-routines.e2e.test.ts` (owner pays).
+`server/org/org-routines.e2e.test.ts` (owner pays).
 
 ## Coding branches: the person acts on them (2026-10-19)
 
@@ -7679,7 +7679,7 @@ none optional:
   (confidential, bot-opened, hidden) open alone with the way back.
 - Tests: `shared/single-stream.test.ts`, `server/single-stream.test.ts`,
   `server/single-stream.e2e.test.ts`, PT-5 in
-  `server/org-private-threads.e2e.test.ts`,
+  `server/org/org-private-threads.e2e.test.ts`,
   `server/drivers/agents-catalog-single-stream.test.ts`,
   `src/lib/single-stream.test.ts`, `src/components/ChatView.stream.test.ts`,
   `src/lib/use-segment-transcript.test.ts`.
@@ -7977,7 +7977,7 @@ empty for everyone, so the section rule of `reachablePeers`
 Each bot's roster, `list_bots`, @mentions, `ask_bot`, `delegate_bot` and
 peer threads reached the whole organization. Keep these rules, covered by
 `server/peer-scope.test.ts`, `server/incidents.test.ts` and S3-12 in
-`server/org-sharing.e2e.test.ts`:
+`server/org/org-sharing.e2e.test.ts`:
 
 - On an organization server a bot reaches only its owner's bots and the
   bots shared with that owner (any level, `botLevel`), the bots the owner
@@ -8250,7 +8250,7 @@ working folder (empty means each bot's own folder). Keep these rules:
 On an organization server (`SAGAX_IDENTITY=perspicax`) only a group's owner
 changes its settings (`server/group-ownership.ts`, client
 `src/lib/group-owner.ts`; covered by `server/group-ownership.test.ts` and
-PT-4 in `server/org-private-threads.e2e.test.ts`):
+PT-4 in `server/org/org-private-threads.e2e.test.ts`):
 
 - The owner is `createdBy`, else the first person in `humanIds`, else
   nobody, and then the organization admins act as owner. The wire group
@@ -8511,7 +8511,7 @@ Bot (rules in `server/bot-creation.ts`). Keep:
 - Tests: `server/bot-creation.test.ts`,
   `server/drivers/agents-catalog-create-bots.test.ts`,
   `server/team-setup-requests.test.ts`, `server/create-bot-any-bot.e2e.test.ts`,
-  `server/org-member-access.e2e.test.ts` (MA-4b).
+  `server/org/org-member-access.e2e.test.ts` (MA-4b).
 
 ## Legacy names kept for compatibility
 
@@ -8636,7 +8636,7 @@ A production organization server (5 GiB container) was OOM-killed four times on 
 the kernel's task lists showed 11 to 15 `claude` CLIs (~125 MiB each) and
 133 to 174 Node MCP proxies (~21 MiB each, ~13 per Claude session), so about
 400 MiB per live session, kept ten minutes after each turn with no bound;
-the kernel then killed the server itself. `server/engine-memory-guard.ts`:
+the kernel then killed the server itself. `server/memory/engine-memory-guard.ts`:
 
 - `IdleEnginePool`: at most `SAGAX_MAX_IDLE_ENGINE_SESSIONS` finished
   sessions stay warm (default 4 on a Linux server, unbounded on desktop);
@@ -8855,7 +8855,7 @@ telemetry. Keep these rules, each covered by a test:
   Admin portal, Pro link, team catalog (`SAGAX_TEAM_LIBRARY_URL`).
 - `pnpm check:no-phone-home` (run by `package:prepare` and
   `electron/no-phone-home.node-test.mjs`) fails when a bundle names a blocked
-  host outside its reviewed allowlist; `server/no-phone-home.e2e.test.ts`
+  host outside its reviewed allowlist; `server/phone/no-phone-home.e2e.test.ts`
   audits a server start and a chat turn.
 
 ## Sensitive fields masked from the bot (2026-10-26)
@@ -8868,7 +8868,7 @@ select whose `autocomplete` has `current-password`, `new-password`,
 (any value but `"false"`, which never makes a password ordinary); and a
 field already seen sensitive (`data-sagax-sensitive`, so a "show password"
 toggle keeps it hidden). Teach by demonstration uses the same rule
-(`isSecretField`). `server/browser-runtime.ts` reads what those fields hold
+(`isSecretField`). `server/browser/browser-runtime.ts` reads what those fields hold
 (`SENSITIVE_VALUES_SCRIPT`, in the page, its open shadow roots and
 same-origin frames) after every tool whose answer can carry page text
 (snapshot, read, get_text, eval, open and any unknown tool; not
@@ -8883,7 +8883,7 @@ Nothing writes a field's value: the page and its forms keep the real one.
 Out of reach: a cross-origin frame (a payment widget's own frame), pixels
 of a desktop computer, and the live view and preview frames, which only the
 person sees. Tests: `shared/sensitive-fields.test.ts`,
-`server/browser-runtime.sensitive.test.ts`.
+`server/browser/browser-runtime.sensitive.test.ts`.
 
 ## Credential vault and secure form fill (2026-10-16)
 
@@ -8891,7 +8891,7 @@ Settings > Credentials (`src/components/settings/CredentialsSettings.tsx`)
 keeps a person's logins (user name, password, one-time code seed), API keys,
 notes, cards, addresses and contacts, each bound to sites, with the bots
 allowed to use it and when one last did. Storage is
-`server/credential-vault.ts`: one AES-256-GCM file per owner
+`server/vault/credential-vault.ts`: one AES-256-GCM file per owner
 (`credential-vault.enc`), key derived by HKDF from the vault key of
 `mcp-oauth.enc` (desktop: OS keychain via safeStorage, `SAGAX_MCP_OAUTH_KEY`;
 server: 0600 key file). Layout: solo or desktop at the data root; a person on
@@ -8902,7 +8902,7 @@ admin) CRUD via `POST/PATCH/DELETE /api/bots/:id/credentials*`
 (`server/routes/team-bot-vault.ts`, Edit bot > Details > Shared vault;
 iOS bot panel > Permissions > Shared vault). A file that does not open is
 never overwritten. Never a plaintext store. Filled values are remembered only
-in process memory for redaction (`server/filled-secret-guard.ts`) and never
+in process memory for redaction (`server/vault/filled-secret-guard.ts`) and never
 enter transcripts, memory, logs or tool results. Fills happen in the bot's
 browser only; the computer surface has no fill tool. A team bot's login is
 allowed by a card to the bot's owner (once, or always for that bot), never
@@ -8914,8 +8914,8 @@ card with `target: "vaultLogin"` (`src/components/VaultRequestCard.tsx`)
 where the person picks or saves a login and allows it this time (the
 conversation, 15 minutes) or always for that bot; the bot resumes with the
 handle (`server/routes/credential-vault.ts`, `grantedNote`). The browser's
-harness tool `fill_credential` (`server/credential-fill.ts`, run by
-`server/browser-runtime.ts`) holds the session alone (`holdExclusive`: other
+harness tool `fill_credential` (`server/vault/credential-fill.ts`, run by
+`server/browser/browser-runtime.ts`) holds the session alone (`holdExclusive`: other
 agent actions are refused, running ones drain), reads the page's URL through
 the engine (`agent_browser_get_url`, `location.href`), focuses the ref,
 probes with a script that has no secret (origin guard first; top frame; a
@@ -9001,7 +9001,7 @@ refused login, another site; what the bot sees and what the process prints
 hold no value nor encoding), the card blocks of
 `server/routes/credential-vault.test.ts` and
 `src/components/VaultRequestCard.test.ts`, and the data-folder sweep of
-`server/credential-vault.e2e.test.ts`.
+`server/vault/credential-vault.e2e.test.ts`.
 
 Reads of the vault are POSTs (`/api/me/credentials/list`, `/notes`, the
 1Password picker): a packaged desktop answers loopback GETs from any local
@@ -9010,7 +9010,7 @@ process. The agent tool policy keeps `/api/me/credentials*` and
 and read-only: Connect (`OP_CONNECT_HOST`, `OP_CONNECT_TOKEN`) or the `op`
 CLI with the desktop app integration or a service account, never on an
 organization server; a picked item is a reference read at fill time. Tests:
-`server/credential-vault.test.ts`, `server/credential-fill.test.ts` (a
+`server/vault/credential-vault.test.ts`, `server/vault/credential-fill.test.ts` (a
 happy-dom page behind a fake engine), `server/routes/credential-vault.test.ts`,
 `server/onepassword.test.ts`, `server/totp.test.ts`,
 `src/components/VaultRequestCard.test.ts`.
@@ -9047,10 +9047,10 @@ headless server's loopback never does. Import refuses the same callers. The
 200. Both routes write an admin-activity row (category security)
 with counts only. No organization policy blocks an export yet; iOS has no
 vault. Tests: `shared/credential-vault-transfer.test.ts`, the import and
-export blocks of `server/credential-vault.test.ts` and
+export blocks of `server/vault/credential-vault.test.ts` and
 `server/routes/credential-vault.test.ts`,
 `src/components/settings/CredentialsTransfer.test.ts`, and
-`server/credential-vault-transfer.e2e.test.ts` (a real desktop-mode server:
+`server/vault/credential-vault-transfer.e2e.test.ts` (a real desktop-mode server:
 the launcher forwards a throwaway `SAGAX_MCP_OAUTH_KEY` and sends the owner
 capability on its own starter rename).
 
@@ -9060,7 +9060,7 @@ An API key of the vault can be sent by Sagax on a bot's request: the item's
 `injection` (Bearer, named header, Basic, query parameter, optional base path)
 and its Sites are the binding; the bot calls `vault_http_request` (listed only
 with `SAGAX_VAULT_HTTP=1`, `CredentialVault.injectable`) with the handle and
-never sees the key. `server/credential-http.ts`: https only, public addresses
+never sees the key. `server/vault/credential-http.ts`: https only, public addresses
 only (`addressClass`, pinned connection), same-origin redirects only, 30 s,
 1 MB, every echo of the key and its encodings removed from body, headers and
 errors; audit has host, method, status only. `commandVariable` (off by
@@ -9072,9 +9072,9 @@ env, never an engine's own credential name: `engineCommandVariables`; Codex
 in the thread's `shell_environment_policy.set`, names only in the native
 log); `vm_exec` on stdin (`commandVariablesScript`); the desktop bridge's
 `run_command`/`vm_run_command` `env`. Not the cloud computer's `exec`.
-Do not log a resolved value; do not touch `server/credential-fill.ts` for it.
-Doc: `docs/api-key-injection.md`. Tests: `server/credential-http.test.ts`,
-`server/credential-command-env.test.ts`.
+Do not log a resolved value; do not touch `server/vault/credential-fill.ts` for it.
+Doc: `docs/api-key-injection.md`. Tests: `server/vault/credential-http.test.ts`,
+`server/vault/credential-command-env.test.ts`.
 
 ## My Chrome: a bot drives the person's own Chrome (2026-10-19)
 
@@ -9335,7 +9335,7 @@ the person asked for are not views.
 
 - A turn that turns routines on or off leaves ONE line per action and per
   turn in that conversation, "Disabled · 5 routines" (kind `routines`,
-  `routineToggle`, `server/routine-chat-events.ts`). It is written from
+  `routineToggle`, `server/routines/routine-chat-events.ts`). It is written from
   `RoutineManager.update` (`onEnabledChanged`) when the change names its
   conversation: a routine card (its request), its Undo, or the person's own
   switch while the routine's bot conversation is open (the client sends
@@ -9405,7 +9405,7 @@ Parity with the reference design (audit items 10, 11, 14 and the emoji picker). 
   starts from the source bot's persona (the drafted text one click away),
   copies its rule sets, copies each ticked plugin's saved configuration
   (never a secret field) and joins its team, whose shared memory
-  (`server/team-memory.ts`) then follows; it never takes a conversation or
+  (`server/memory/team-memory.ts`) then follows; it never takes a conversation or
   the bot's own memory: `POST /api/bots/:id/team-bot-carry` answers 410
   `private_memory_never` and writes nothing, and the draft lists no notes.
   The bot is created by
@@ -9420,7 +9420,7 @@ Parity with the reference design (audit items 10, 11, 14 and the emoji picker). 
   (`seed`) and connections never go into a link (`publicTemplateDocument`).
   Import from a link: Templates > Import (`/api/template-links/import`;
   another server's link through its JSON, public addresses only).
-- Only when I'm here (`server/routine-away.ts`, editor switch, off by
+- Only when I'm here (`server/routines/routine-away.ts`, editor switch, off by
   default): while the routine's person is away a recurring occurrence is
   skipped and counted (`awaySkips`), a one-time routine waits and runs late
   on return; on return the count is reported once (notification, the
@@ -9702,11 +9702,11 @@ in the browser" beside "Describe it in words" (`/learn`, unchanged). Showing
 opens the bot's browser window (Computer tab) and starts a recording; the
 browser menu has the same Teach by demonstration / Stop recording entry.
 Pieces: `shared/teach-recording.ts` (masking rules, SKILL.md builder),
-`server/browser-teach.ts` (recorder), the `record-start`, `record-stop` and
-`record-discard` actions of `server/browser-live.ts`,
+`server/browser/browser-teach.ts` (recorder), the `record-start`, `record-stop` and
+`record-discard` actions of `server/browser/browser-live.ts`,
 `src/components/TeachStepsDialog.tsx` (editor and chooser),
 `src/lib/teach-request.ts`. Rules, covered by `shared/teach-recording.test.ts`
-and `server/browser-teach.test.ts`:
+and `server/browser/browser-teach.test.ts`:
 
 - Only the person's own input through the live view is recorded (clicks,
   typed text, Enter/Tab/Escape, toolbar commands), never the bot's tool

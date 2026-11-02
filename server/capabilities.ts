@@ -94,7 +94,7 @@ export interface SkillInput {
 }
 
 /** Capabilities lot 4: one organization declaration from Perspicax, as the
- * resolver reads it for the person looking (server/org-capabilities.ts).
+ * resolver reads it for the person looking (server/org/org-capabilities.ts).
  * Never its configuration. */
 export interface OrgDeclarationInput {
   id: string;

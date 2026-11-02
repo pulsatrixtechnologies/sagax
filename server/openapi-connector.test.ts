@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { sendPinnedHttp } from "./credential-http.ts";
+import { sendPinnedHttp } from "./vault/credential-http.ts";
 import { buildOpenApiRequest, OpenApiStore, openApiScope, openApiUrlRefusal } from "./openapi-connector.ts";
 import { parseOpenApiSpec } from "./openapi-tools.ts";
 

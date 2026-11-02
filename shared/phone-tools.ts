@@ -7,7 +7,7 @@
 // the bot's turn. Nothing runs in the background, nothing is kept: the
 // server holds a result only until the waiting turn reads it.
 //
-// This file is the wire contract shared by the harness (server/phone-tools.ts,
+// This file is the wire contract shared by the harness (server/phone/phone-tools.ts,
 // server/routes/phone-tools.ts), the agents catalog
 // (server/drivers/agents-phone-tools.ts) and the iOS app
 // (ios/Sources/CompanionCore/PhoneTools.swift). The result schemas are also

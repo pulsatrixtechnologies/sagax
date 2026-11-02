@@ -116,7 +116,7 @@ Code: `server/capability-route-deprecation.ts`,
   installation store"): two persons' Me libraries apart from each other
   and from the installation index; the organization's index read through
   the bridge only.
-- `server/org-harness-commands.e2e.test.ts`: on one organization server,
+- `server/org/org-harness-commands.e2e.test.ts`: on one organization server,
   two persons' Me skills and personal MCP servers (and their secret) never
   reach the other person, `config.json` or any plaintext file.
 - `server/capability-route-deprecation.test.ts`: headers, alias window,

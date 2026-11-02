@@ -19,11 +19,11 @@
 //                             automatically, with no consent and no revoke
 //
 // Registered before the interim organization routes, which answer only in
-// solo mode (server/org-routes.ts).
+// solo mode (server/org/org-routes.ts).
 import type { OrgBotSecretPublic } from "../shared/org-bot-secrets.ts";
 import type { DirectoryPerson, DirectoryState } from "./perspicax-link.ts";
-import { OrgBotSecretsError, parseOrgBotSecretChange, type OrgBotSecretChange } from "./org-bot-secrets.ts";
-import type { OrgFlowPluginsStatus } from "./org-flow-plugins.ts";
+import { OrgBotSecretsError, parseOrgBotSecretChange, type OrgBotSecretChange } from "./org/org-bot-secrets.ts";
+import type { OrgFlowPluginsStatus } from "./org/org-flow-plugins.ts";
 import type { Principal } from "./principals.ts";
 import type { RequestAuth } from "./request-auth.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";
@@ -37,7 +37,7 @@ export interface OrgSettings {
   /** Slice 8: the window to attach people from before Perspicax. `until`
    * is null when it never opened or is closed; `people` still waiting. */
   interimAttach?: { until: number | null; people: number };
-  /** Whether bots may run with Full access (server/org-full-access.ts):
+  /** Whether bots may run with Full access (server/org/org-full-access.ts):
    * on by default, an admin turns it off. */
   allowFullAccess: boolean;
   /** 2026-10-16: a bot a member owns runs commands in its owner's own
@@ -61,7 +61,7 @@ export interface OrgSettings {
   /** lot 4: "perspicax" when Perspicax owns the rule (written there). */
   pluginMarketplacesOwner?: "perspicax" | "local";
   /** 2026-10-18: Pulsatrix Flow's default plugins as this server installed
-   * them (server/org-flow-plugins.ts); read only, declared in Perspicax. */
+   * them (server/org/org-flow-plugins.ts); read only, declared in Perspicax. */
   flowPlugins?: OrgFlowPluginsStatus;
   /** The organization's GitHub OAuth App for "Connecter GitHub" (a public
    * client id; null: people paste a token). `fromEnvironment` when it comes

@@ -8,7 +8,7 @@ import { parseOrgLibraryCatalog as parseSharedOrgLibraryCatalog } from "./org-li
 // The organization library channel in Electron main (contract 60 §5). Admin
 // advertises capabilities.library; the session carries a small pointer; the
 // catalog and each release's bytes come from fixed routes with their own caps.
-// Main verifies, caches and relays them. The local runtime (server/org-library.ts)
+// Main verifies, caches and relays them. The local runtime (server/org/org-library.ts)
 // installs, and reports back what it holds. Nothing here asks anyone anything:
 // what an organization offers is decided in Admin, adding it is a person's click.
 

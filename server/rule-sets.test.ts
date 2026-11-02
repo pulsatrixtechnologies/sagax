@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DATA_DIR } from "./config.ts";
-import { flushMemoryJournal, readMemoryJournal, resetMemoryJournalState } from "./memory-journal.ts";
+import { flushMemoryJournal, readMemoryJournal, resetMemoryJournalState } from "./memory/memory-journal.ts";
 import { closeMessageDb } from "./message-db.ts";
 import {
   RULES_MAX_LINES,

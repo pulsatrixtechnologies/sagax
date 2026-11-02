@@ -1072,7 +1072,7 @@ the server's own voice routes.
   the sentence splitter.
 - `server/voice-call-reliability.e2e.test.ts`: every call turn marked on
   every path, no duplicate steer, heard and unheard, the unanswered
-  watchdog, words sent while a turn stops; `server/org-mcp.e2e.test.ts`:
+  watchdog, words sent while a turn stops; `server/org/org-mcp.e2e.test.ts`:
   one Perspicax exchange for a whole call; `server/delta-context.e2e.test.ts`:
   a steer the engine echoed is never offered again.
 - `src/lib/voice-mode/player.test.ts`, `stt-stream.test.ts`: what was heard

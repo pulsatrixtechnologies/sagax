@@ -135,7 +135,7 @@ const startKey = (value: TurnStart | null | undefined) => cleanStart(value) ?? "
 const registry: { store: CustomRuleStore | null } = { store: null };
 
 /** The server's store (the last one made: one per server), for the
- * organization console routes (server/org-admin-ops.ts). */
+ * organization console routes (server/org/org-admin-ops.ts). */
 export function registeredCustomRuleStore(): CustomRuleStore | null {
   return registry.store;
 }

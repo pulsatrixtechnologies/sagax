@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RoutineManager } from "./routines.ts";
+import { RoutineManager } from "./routines/routines.ts";
 
 describe("proactive wake lane and dry runs", () => {
   let dir: string;

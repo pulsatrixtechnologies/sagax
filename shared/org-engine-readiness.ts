@@ -72,7 +72,7 @@ export interface OrgEngineReadiness<I extends ReadinessInstance = ReadinessInsta
 }
 
 /** On an organization server an engine runs a turn only when it withholds
- * its own host tools (server/org-engine-admission.ts, 409 host_tools). */
+ * its own host tools (server/org/org-engine-admission.ts, 409 host_tools). */
 export function admittedOnOrg(instance: ReadinessInstance): boolean {
   return instance.capabilities?.withholdsHostTools === true;
 }

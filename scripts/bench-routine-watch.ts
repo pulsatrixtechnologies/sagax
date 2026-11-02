@@ -1,4 +1,4 @@
-// Cost of one routine watch check (2026-10-26, server/routine-watch.ts):
+// Cost of one routine watch check (2026-10-26, server/routines/routine-watch.ts):
 // wall time, CPU time, event-loop delay and memory of the scheduler's
 // evaluator for realistic sources, on disposable fixtures only.
 //
@@ -17,7 +17,7 @@ import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 
 const directory = mkdtempSync(join(tmpdir(), "routine-watch-bench-"));
 process.env.SAGAX_DATA_DIR = join(directory, "data");
-const { createRoutineWatchEvaluator, RoutineWatchStates } = await import("../server/routine-watch.ts");
+const { createRoutineWatchEvaluator, RoutineWatchStates } = await import("../server/routines/routine-watch.ts");
 type Watch = import("../shared/routine-watch.ts").RoutineWatchPrecheck;
 
 const runsArg = process.argv.indexOf("--runs");

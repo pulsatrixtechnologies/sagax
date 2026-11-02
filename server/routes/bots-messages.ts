@@ -60,7 +60,7 @@ import { introAdvance } from "../intro-tour.ts";
 import { spokenLineFields } from "../live-call-record.ts";
 import { cancelledChatFollowup } from "../message-db.ts";
 import { misuseRefusal } from "../misuse-guardrails.ts";
-import { ORG_FULL_ACCESS_DISABLED } from "../org-full-access.ts";
+import { ORG_FULL_ACCESS_DISABLED } from "../org/org-full-access.ts";
 import { resolvePeerComms } from "../peer-approval.ts";
 import { promptWithReply } from "../replies.ts";
 import {

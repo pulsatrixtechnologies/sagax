@@ -1,11 +1,11 @@
 // The credential vault's shapes and rules shared by the server and the app
-// (server/credential-vault.ts keeps the encrypted store). Pure: no secret
+// (server/vault/credential-vault.ts keeps the encrypted store). Pure: no secret
 // value ever appears in a type here, only whether one is saved.
 //
 // A login is filled into a page by reference: the bot names the item's
 // handle, the browser runtime resolves the value at fill time and only on a
 // page whose top-level origin matches one of the item's domains
-// (server/credential-fill.ts). The bot never reads the value back.
+// (server/vault/credential-fill.ts). The bot never reads the value back.
 
 /** The fixed target of a vault request card (kind "secret", target
  * vaultLogin). It is not one of the API keys of shared/credential-request.ts:
@@ -299,11 +299,11 @@ export const ONE_PASSWORD_WAITING = "notice: Waiting for 1Password: approve the 
 
 // ── API keys the server injects (2026-10-26) ─────────────────────────────
 // An API key item can be sent by Sagax itself on a bot's HTTP request to
-// the item's own sites (server/credential-http.ts, agents tool
+// the item's own sites (server/vault/credential-http.ts, agents tool
 // vault_http_request): the bot names the handle, the server adds the key to
 // the request and the bot never reads it back. Optionally the person also
 // exposes it as a variable of their bots' commands
-// (server/credential-command-env.ts): that one the bot can read.
+// (server/vault/credential-command-env.ts): that one the bot can read.
 
 /** How the key rides the request: `Authorization: Bearer <key>`, a header
  * the person names, `Authorization: Basic base64(user:key)`, or a query

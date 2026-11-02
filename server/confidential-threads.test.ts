@@ -24,8 +24,8 @@ import {
   perspicaxMemoryVerdict,
 } from "./confidential-threads.ts";
 import { appendDecision, bindConfidentialDecisions, flushDecisionLog, readDecisions, scrubThreadDecisions } from "./decision-log.ts";
-import { CaptureBuffer } from "./memory-capture.ts";
-import { answerBotFiles, type BotFileRoot } from "./org-admin-files.ts";
+import { CaptureBuffer } from "./memory/memory-capture.ts";
+import { answerBotFiles, type BotFileRoot } from "./org/org-admin-files.ts";
 import { createPerspicaxToolInternalRoutes } from "./routes/perspicax-tool-internal.ts";
 import { turnStartLogLine } from "./turn-log.ts";
 import { sandboxPrincipalForTurn } from "./user-sandbox-routing.ts";

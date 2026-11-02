@@ -1,5 +1,5 @@
 // The console's Test for an MCP server started by command (stdio):
-// POST connections/test { kind: "mcp" } (server/org-admin-ops.ts). The
+// POST connections/test { kind: "mcp" } (server/org/org-admin-ops.ts). The
 // command starts with its configured arguments and variables, answers the
 // MCP initialize handshake and lists its tools within a time limit, and is
 // always stopped after. The answer has the shape of every other line's test,
@@ -18,7 +18,7 @@ import type { Duplex } from "node:stream";
 
 import { createLineSplitter } from "./mcp-bridge.ts";
 import { probeEnvironment, STDIO_PROBE_TIMEOUT_MS } from "./mcp-probe.ts";
-import type { TestResult } from "./org-admin-ops.ts";
+import type { TestResult } from "./org/org-admin-ops.ts";
 import { killCliTree, spawnCli } from "./procs.ts";
 import { redactSecretsInText } from "./redact.ts";
 

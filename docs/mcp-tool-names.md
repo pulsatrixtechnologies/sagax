@@ -25,7 +25,7 @@ The CLI only wrote `Skipping MCP tool` to its own log; the bot saw nothing.
   name`; a `tools/call` is translated through that map before any check.
   `cw_psa__query` becomes `cw_psa_query`. Every `__` in a tool name, on
   any API, collapses to one `_`.
-- **The bot never sees a name it cannot call (2026-11-02).** A Grok bot
+- **The bot never sees a name it cannot call (2026-11-02).** A bot on Grok
   copied `cw_psa__query` from Perspicax's text, called
   `<server>__cw_psa__query`, and Grok answered "Tool not found" before the
   call reached the gate. The gate now rewrites every renamed tool's

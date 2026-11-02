@@ -161,17 +161,23 @@ export const PERSPICAX_SESSION_RESET = "Perspicax had dropped this MCP session (
 
 /** The answer a write that was not sent again carries in front of the first one's. */
 export const PERSPICAX_WRITE_REPLAYED = "Not sent again: another run made this same write with the same arguments moments ago (one write per execution key). Its answer follows; the record already exists.";
-/** The tools whose name says they change data: a connector's `<api>__write`,
- * `__action` or `__<x>_write`, its named writes (`log_time`, `book_*`,
+/** The tools whose name says they change data: a connector's `<api>_write`,
+ * `_action` or `_<x>_write` (`__` before Perspicax 1.9.19), its named writes (`log_time`, `book_*`,
  * `update_*`, `create_*`, `delete_*`), and the host's own. Reads, polls
  * (await_turn) and leases (claim*, per holder, renewals must reach
  * Perspicax) are never answered from a previous call. */
 const WRITE_SUFFIX = /^(write|action|log_time|(book|update|create|delete)_[a-z0-9_]+|[A-Za-z0-9_]+_write)$/;
 const HOST_WRITES = new Set(["memory_write", "memory_propose", "memory_promote", "memory_forget", "create_agent", "delete_agent",
   "sagax_send", "sagax_routine_run", "sagax_nudge", "remote_support_open", "remote_support_close"]);
+/** A connector's write with one `_` (Perspicax 1.9.19: `cw_psa_write`,
+ * `cw_psa_time_entries_write`, `cw_psa_log_time`, `cw_psa_update_ticket`);
+ * its read_action is a read. */
+const PROFILE_WRITE = /_(?:write|action|log_time)$|_(?:book|update|create|delete)_[a-z0-9_]+$/;
 export function perspicaxWriteOnceTool(name: string): boolean {
   const at = name.lastIndexOf("__");
-  return at > 0 ? WRITE_SUFFIX.test(name.slice(at + 2)) : HOST_WRITES.has(name);
+  if (at > 0) return WRITE_SUFFIX.test(name.slice(at + 2));
+  if (HOST_WRITES.has(name)) return true;
+  return !name.endsWith("_read_action") && PROFILE_WRITE.test(name);
 }
 
 /** Requests that only read, safe to send again on a new session. */
@@ -252,6 +258,17 @@ function telephonyBlock(frame: Json, twilioTools: ReadonlySet<string> | undefine
   if (frame.method !== "tools/call") return null;
   const params = isObject(frame.params) ? frame.params : {};
   return telephonyRefusal(String(params.name ?? ""), params.arguments, twilioTools ? { twilioTools } : {});
+}
+
+/** The spelling a Perspicax profile serves for a tool Sagax names with one
+ * `_` (`twilio_api_write`): itself when served or when nothing is known,
+ * else the served name that is the same tool with `__` (an earlier
+ * Perspicax: `twilio_api__write`). */
+export function servedSpelling(name: string, served: ReadonlySet<string> | undefined): string {
+  if (!served || served.has(name)) return name;
+  const folded = name.replace(/_{2,}/g, "_");
+  for (const candidate of served) if (candidate.replace(/_{2,}/g, "_") === folded) return candidate;
+  return name;
 }
 
 /** The tools of a tools/list answer that target Twilio under another name:
@@ -413,6 +430,9 @@ export class PerspicaxMcp {
   private readonly apiNamesPending = new Set<string>();
   /** Per profile: tools whose tools/list entry names Twilio (telephony guard). */
   private readonly twilioTools = new Map<string, Set<string>>();
+  /** Per profile, the tool names its tools/list served (bounded): a native
+   * call (callTool) uses the spelling the server serves. */
+  private readonly servedTools = new Map<string, Set<string>>();
   /** "At the same time": a 5 minute window, then a write is sent again. */
   private readonly writes = new WriteOnce<PerspicaxRelayAnswer>({ ttlMs: 5 * 60_000 });
 
@@ -700,6 +720,9 @@ export class PerspicaxMcp {
     try {
       const body = parseMcpBody(text, id);
       if (frame.method === "tools/list" && body !== null) {
+        const served = isObject(body) && isObject(body.result) && Array.isArray(body.result.tools)
+          ? body.result.tools.filter((tool): tool is Json => isObject(tool) && typeof tool.name === "string").map((tool) => String(tool.name)) : [];
+        if (served.length) this.servedTools.set(input.profileId, new Set([...(this.servedTools.get(input.profileId) ?? []), ...served].slice(-2000)));
         const named = twilioToolsOf(body);
         if (named.length) this.twilioTools.set(input.profileId, new Set([...(this.twilioTools.get(input.profileId) ?? []), ...named].slice(-500)));
       }
@@ -788,7 +811,17 @@ export class PerspicaxMcp {
    * authenticated caller. A session is opened first when the entry has
    * none, since a call that can change data is never replayed on a new one.
    * Never throws; no token is logged or returned. */
-  async callTool(input: { threadId: string; generation: string; botId: string; name: string; args: Json }): Promise<PerspicaxToolAnswer> {
+  async callTool(input: { threadId: string; generation: string; botId: string; name: string; args: Json; legacyName?: string }): Promise<PerspicaxToolAnswer> {
+    const answer = await this.callToolOnce(input, input.name);
+    // A server before Perspicax 1.9.19 serves the `__` spelling only; when
+    // this turn never listed its tools, the one `_` name is unknown there.
+    if (input.legacyName && !answer.ok && answer.code === "rpc_error" && /unknown tool/i.test(answer.error)) {
+      return this.callToolOnce(input, input.legacyName);
+    }
+    return answer;
+  }
+
+  private async callToolOnce(input: { threadId: string; generation: string; botId: string; args: Json }, requested: string): Promise<PerspicaxToolAnswer> {
     const entry = this.turnEntry(input.threadId, input.generation, input.botId);
     if (!entry) return { ok: false, code: "profile_not_mounted", error: "no Perspicax profile is mounted in this turn" };
     const link = this.options.link();
@@ -799,12 +832,13 @@ export class PerspicaxMcp {
         : { ok: false, code: "unreachable", error: "Perspicax is unavailable" };
     }
     const id = `sagax-native-${++this.nativeCalls}`;
+    const name = servedSpelling(requested, this.servedTools.get(entry.profileId));
     const answer = await this.relay({
       threadId: input.threadId,
       generation: input.generation,
       botId: input.botId,
       profileId: entry.profileId,
-      frame: { jsonrpc: "2.0", id, method: "tools/call", params: { name: input.name, arguments: input.args } },
+      frame: { jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: input.args } },
       judged: true,
     });
     const body = answer.body;

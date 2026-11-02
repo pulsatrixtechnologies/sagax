@@ -252,7 +252,7 @@ describe("voice_call becomes place_phone_call by every entry point", () => {
 });
 
 describe("voice_sms is a text like a Twilio Messages create", () => {
-  const twilio = { tool: "mcp__perspicax_gox__twilio_api__write", input: JSON.stringify({ resource: "Messages", action: "create", set: { To: NUMBER, Body: "Bonjour" } }) };
+  const twilio = { tool: "mcp__perspicax_gox__twilio_api_write", input: JSON.stringify({ resource: "Messages", action: "create", set: { To: NUMBER, Body: "Bonjour" } }) };
   const names = ["mcp__perspicax_gox__voice_sms", "perspicax_gox__voice_sms", "voice_sms"];
 
   it.each(names)("%s: an outbound text, with its recipient read", (tool) => {

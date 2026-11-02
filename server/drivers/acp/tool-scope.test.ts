@@ -301,7 +301,7 @@ it("shows the unknown-model notice once per conversation, even when the process 
   expect(f.recorder.events.filter(event => event.type === "runtime.notice")).toHaveLength(2);
 });
 
-it("mounts every Grok MCP server through the gate so cw_psa__query is registered, never skipped", async () => {
+it("mounts every Grok MCP server through the gate so cw_psa_query is registered, never skipped", async () => {
   const f = await fixture(GrokAgentDriver, { FAKE_ACP_GROK_VERSION: "1.0.41" });
   await f.instance.adapter.sendTurn({ threadId: "grok-names", text: "Fixture", integrations: {
     custom: { perspicax_profil_ottoline_limited: { command: "node", args: ["bridge.js"], env: {} } },
@@ -317,7 +317,7 @@ it("mounts every Grok MCP server through the gate so cw_psa__query is registered
 });
 
 it("accepts a Grok alias of an allowed tool in the selected catalog", () => {
-  const scope = { allow: ["native:*", "mcp:perspicax_owner:cw_psa__query"] };
+  const scope = { allow: ["native:*", "mcp:perspicax_owner:cw_psa_query"] };
   expect(allowsRegisteredTool(scope, "perspicax_owner", "cw_psa_query")).toBe(true);
   expect(allowsRegisteredTool(scope, "perspicax_owner", "cw_psa_write")).toBe(false);
 });

@@ -179,10 +179,11 @@ const READ_ONLY_PERSPICAX_TOOLS = new Set([
   "query", "await_turn", "sagax_bots", "sagax_thread",
 ]);
 const READ_ONLY_PREFIX = /^(?:find|get|read|list)_[A-Za-z0-9_]*$/;
+const PROFILE_READ = /^[a-z0-9][a-z0-9_]*_(?:query|read_action)$/;
 
 /** The verdict for any Perspicax call from a confidential thread: memory
  * as perspicaxMemoryVerdict; a known read (READ_ONLY_PERSPICAX_TOOLS,
- * `<profile>__query`, `find_*`, `get_*`, `read_*`, `list_*`) passes; every
+ * `<profile>_query`, `find_*`, `get_*`, `read_*`, `list_*`) passes; every
  * other call, known or not, waits for the owner's card. */
 export function perspicaxConfidentialVerdict(name: string, args: Record<string, unknown> | undefined): PerspicaxMemoryVerdict {
   const memory = perspicaxMemoryVerdict(name, args);
@@ -197,9 +198,12 @@ export function perspicaxConfidentialVerdict(name: string, args: Record<string, 
     return steps.every((step) => step && typeof step === "object" && typeof (step as { tool?: unknown }).tool === "string"
       && perspicaxConfidentialVerdict((step as { tool: string }).tool, (step as { args?: Record<string, unknown> }).args) === "pass") ? "pass" : "confirm";
   }
-  // A profile's tools (`<profile>__...`): only its query and read_action read.
+  // A profile's tools (`<profile>_...`): only its query and read_action read.
   if (prefixed) return tool === "query" || tool === "read_action" ? "pass" : "confirm";
   if (READ_ONLY_PERSPICAX_TOOLS.has(tool) || READ_ONLY_PREFIX.test(tool)) return "pass";
+  // A profile's query and read_action with one `_` (Perspicax 1.9.19:
+  // `cw_psa_query`, `edr_read_action`): reads too.
+  if (PROFILE_READ.test(tool)) return "pass";
   return "confirm";
 }
 

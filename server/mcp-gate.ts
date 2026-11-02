@@ -624,7 +624,9 @@ function routeLine(line: string): void {
     if (!id || typeof params?.name !== "string") return rejectRequest(message.id, -32602, "Invalid tool call");
     const target = callTarget(params.name, params.arguments);
     // The directory answers a call naming no tool itself; nothing runs.
-    if (target !== undefined && !READ_ONLY.has(target)) {
+    // A reviewed name is listed with one `_` (cw_psa_query); an earlier
+    // Perspicax serves the same tool as cw_psa__query.
+    if (target !== undefined && !READ_ONLY.has(target) && !READ_ONLY.has(target.replace(/_{2,}/g, "_"))) {
       const callId = message.id;
       const held = askApproval(NAME, target, params.arguments)
         .then((decision) => {

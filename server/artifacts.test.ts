@@ -26,7 +26,7 @@ describe("artifact store", () => {
   it("creates an artifact for its bot, saves it 0600 and says so live", () => {
     const { file, frames, open } = setup();
     const store = open();
-    const made = store.create("bot-a", "t1", { ...widget, source: { kind: "tool", tool: "cw_psa__query", args: { resource: "tickets" } }, interval_seconds: 60 });
+    const made = store.create("bot-a", "t1", { ...widget, source: { kind: "tool", tool: "cw_psa_query", args: { resource: "tickets" } }, interval_seconds: 60 });
     expect(made.ok).toBe(true);
     if (!made.ok) return;
     expect(made.artifact).toMatchObject({ botId: "bot-a", threadId: "t1", title: "Open tickets", favorite: false, popped: false, rev: 1, intervalSeconds: 60, refresh: { state: "idle", failures: 0 } });

@@ -158,7 +158,7 @@ export function mapJsonStrings(value: unknown, map: (text: string) => string): u
  *
  * 2026-11-02: the bot must never see a connector name Grok cannot call.
  * Perspicax's instructions, its api_search / api_describe / api_list
- * results and its error texts name `cw_psa__query`; a Grok bot copied it,
+ * results and its error texts name `cw_psa__query`; a bot on Grok copied it,
  * called `<server>__cw_psa__query` and Grok answered "Tool not found"
  * before the call reached the gate. `toAliases` rewrites those names to the
  * registered alias (a pure name mapping, nothing else in the text changes)

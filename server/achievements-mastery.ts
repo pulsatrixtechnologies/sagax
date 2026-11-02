@@ -20,7 +20,7 @@ const BUILT_IN_SERVERS: ReadonlySet<string> = new Set(["agents", "browser", "com
 /**
  * The integration a tool line used: `mcp__<server>__<tool>` names its MCP
  * server; a Perspicax profile (`perspicax_<slug>`) serves several APIs, each
- * one an integration (`mcp__perspicax_example__cw_psa__query` is perspicax:cw_psa).
+ * one an integration (`mcp__perspicax_example__cw_psa_query` is perspicax:cw_psa).
  */
 export function integrationOfTool(name: string): string | null {
   const parts = name.split("__");
@@ -28,6 +28,9 @@ export function integrationOfTool(name: string): string | null {
   const server = parts[1]!.toLowerCase();
   if (!server || BUILT_IN_SERVERS.has(server)) return null;
   if (server.startsWith("perspicax") && parts.length >= 4 && parts[2]) return `perspicax:${parts[2].toLowerCase()}`;
+  // one `_` since Perspicax 1.9.19: the api is what comes before the kind
+  const api = server.startsWith("perspicax") && parts.length === 3 ? /^([a-z0-9][a-z0-9_]*?)_(?:read_action|query|write|action)$/i.exec(parts[2] ?? "") : null;
+  if (api) return `perspicax:${api[1]!.toLowerCase()}`;
   return server;
 }
 
@@ -49,15 +52,17 @@ export function skillOfTool(name: string, input: unknown): string | null {
 
 /**
  * Would this tool change a system? A cheap reading of its name: Perspicax
- * `__write` and `__action` tools, file edits, shell commands, and MCP tools
- * whose verb creates, updates, deletes or sends. A read (`__query`, `Read`,
+ * `_write` and `_action` tools, file edits, shell commands, and MCP tools
+ * whose verb creates, updates, deletes or sends. A read (`_query`, `Read`,
  * `Grep`, a search) is not.
  */
 export function toolWrites(tool: string | undefined): boolean {
   if (!tool) return false;
   const name = tool.toLowerCase();
-  if (/__(?:write|action)$/.test(name)) return true;
-  if (/__(?:query|read|list|get|search|describe|lookup|read_action)$/.test(name)) return false;
+  // `_write` since Perspicax 1.9.19 (`cw_psa_write`), `__write` before
+  if (/_(?:read_action)$/.test(name)) return false;
+  if (/_(?:write|action)$/.test(name)) return true;
+  if (/__(?:query|read|list|get|search|describe|lookup)$/.test(name) || name.endsWith("_query")) return false;
   if (/^(?:write|edit|multiedit|notebookedit|bash|shell|apply_patch|computer_exec)$/.test(name)) return true;
   return /(?:^|[_.-])(?:create|update|delete|remove|send|post|put|patch|write|insert|upload|move|rename|execute|run)(?:[_.-]|$)/.test(name);
 }

@@ -3,8 +3,8 @@ import { readMcpGatewayCall, readUseToolCall } from "./mcp-gateway-call";
 
 describe("readMcpGatewayCall", () => {
   it("names the server and tool a pi-mcp-adapter call ran, with the tool's own arguments", () => {
-    expect(readMcpGatewayCall("mcp", { server: "pulsatrix-psa", tool: "cw_psa__query", args: { resource: "service.tickets" } })).toEqual({
-      kind: "tool", server: "pulsatrix-psa", tool: "cw_psa__query", id: "mcp__pulsatrix-psa__cw_psa__query", args: { resource: "service.tickets" },
+    expect(readMcpGatewayCall("mcp", { server: "pulsatrix-psa", tool: "cw_psa_query", args: { resource: "service.tickets" } })).toEqual({
+      kind: "tool", server: "pulsatrix-psa", tool: "cw_psa_query", id: "mcp__pulsatrix-psa__cw_psa_query", args: { resource: "service.tickets" },
     });
     // stored as text, arguments as JSON text
     expect(readMcpGatewayCall("mcp", JSON.stringify({ tool: "pulsatrix-psa_api_search", args: "{\"query\": \"schedule today\"}" }))).toMatchObject({
@@ -29,8 +29,8 @@ describe("readMcpGatewayCall", () => {
 
 describe("readUseToolCall", () => {
   it("reads Grok's use_tool as the MCP tool it runs", () => {
-    expect(readUseToolCall({ variant: "UseTool", tool_name: "perspicax__cw_psa__query", tool_input: { resource: "service.tickets" } })).toEqual({
-      id: "mcp__perspicax__cw_psa__query", args: { resource: "service.tickets" },
+    expect(readUseToolCall({ variant: "UseTool", tool_name: "perspicax__cw_psa_query", tool_input: { resource: "service.tickets" } })).toEqual({
+      id: "mcp__perspicax__cw_psa_query", args: { resource: "service.tickets" },
     });
     expect(readUseToolCall({ variant: "UseTool" })).toBeUndefined();
     expect(readUseToolCall({ command: "ls" })).toBeUndefined();

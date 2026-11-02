@@ -3534,7 +3534,7 @@ export class RoutineManager {
         const blocked = flowRunBlockedReason(output);
         if (blocked) trouble.flowBlocked = blocked;
       }
-      // Keyed by the tool, not its exact title: a Grok bot that calls a
+      // Keyed by the tool, not its exact title: a bot on Grok that calls a
       // renamed connector tool by the connector's own name
       // (`mcp__server__cw_psa__query`, which Grok cannot register and
       // answers "Tool not found") and then by its alias

@@ -4,7 +4,7 @@
 // One approval places one call:
 //   1. the bot calls place_phone_call: Sagax builds the call (fixed AI
 //      disclosure, the bot's words, no Url or Twiml of the bot's), checks it
-//      with a dry run of twilio_api__write on the person's Perspicax profile,
+//      with a dry run of twilio_api_write on the person's Perspicax profile,
 //      and shows the card "Call +1 514 555 0142?" in the conversation;
 //   2. the person (or their Primary Bot, when they ask) answers Call or Do
 //      not call. There is no Always allow;
@@ -462,7 +462,7 @@ type ToolAnswer = { ok: true; isError: boolean; value: unknown } | { ok: false; 
 
 export interface PlaceCallDeps {
   calls: OutboundCalls;
-  /** twilio_api__write as the person who speaks in this turn (perspicaxMcp.callTool). */
+  /** twilio_api_write as the person who speaks in this turn (perspicaxMcp.callTool). */
   twilio(args: Record<string, unknown>): Promise<ToolAnswer>;
   /** voice_call as the person who speaks in this turn: their own Perspicax
    * Voice line and Twilio key (a conversation call). */
@@ -548,7 +548,7 @@ export async function placePhoneCall(deps: PlaceCallDeps, context: { principalId
     deps.card(settled, settled.messageId);
     deps.log?.(`outbound call ${settled.status} to ${maskPhone(request.to)}`);
     if (!placed) return { text: `The call to ${maskPhone(request.to)} was not placed: ${settled.error ?? "no answer from Twilio"}. Tell the person; do not retry without a new approval.`, isError: true };
-    return { text: `Call placed to ${maskPhone(request.to)}: it says the AI disclosure, your purpose and your message, then hangs up. Tell the person it was placed. The outcome shows in Twilio's call log (twilio_api__query Calls).` };
+    return { text: `Call placed to ${maskPhone(request.to)}: it says the AI disclosure, your purpose and your message, then hangs up. Tell the person it was placed. The outcome shows in Twilio's call log (twilio_api_query Calls).` };
   }
   const waiting = deps.calls.pending(context.principalId).some((row) => row.botId === context.botId && row.threadId === context.threadId && row.request.to === request.to && row.request.message === request.message && row.request.purpose === request.purpose);
   const capped = waiting ? null : deps.calls.overLimit(context.principalId, "cards");

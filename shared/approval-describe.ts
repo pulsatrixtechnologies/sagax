@@ -217,8 +217,17 @@ export function productFor(parsed: ParsedToolId, hints?: Pick<ToolHints, "produc
   }
   const prefix = PRODUCT_PREFIX.exec(lower)?.[1];
   if (prefix) return { product: declared ?? titleCase(prefix), prefixTokens: prefix.split(/_+/).filter(Boolean).length };
-  if (declared) return { product: declared, prefixTokens: 0 };
+  // Perspicax names its tools with one `_` since 1.9.19 (`cw_psa_write`,
+  // `cw_psa_update_ticket`): without a declared product, the words before
+  // the first verb are the product (`cw_psa`), so the verb and the
+  // arguments still say what the call does (a delete stays a delete).
   const server = parsed.server;
+  if (server && PRODUCT_BY_SERVER.some(([pattern]) => pattern.test(server))) {
+    const words = lower.split(/_+/).filter(Boolean);
+    const verb = words.findIndex((word) => operationOf(word) !== undefined);
+    if (verb > 0) return { product: declared ?? titleCase(words.slice(0, verb).join("_")), prefixTokens: verb };
+  }
+  if (declared) return { product: declared, prefixTokens: 0 };
   if (!server || INTERNAL_SERVERS.has(server.toLowerCase())) return { prefixTokens: 0 };
   for (const [pattern, product] of PRODUCT_BY_SERVER) {
     if (pattern.test(server)) return { product, prefixTokens: 0 };

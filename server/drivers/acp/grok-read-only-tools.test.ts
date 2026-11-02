@@ -12,7 +12,7 @@ const bridge = (profile = "pr_1") => ({
 const agents = { command: "node", args: ["/fixture/agents-proxy.mjs"], env: {} };
 
 const WRITES = [
-  "cw_psa__write", "cw_psa__action", "cw_psa__update_ticket", "cw_psa__log_time",
+  "cw_psa_write", "cw_psa_action", "cw_psa_update_ticket", "cw_psa_log_time",
   "memory_write", "memory_forget", "memory_promote", "memory_propose", "memory_feedback",
   "memory_save", "memory_remove", "memory_suggestions",
   "sagax_send", "sagax_approve", "sagax_nudge", "sagax_routine_run",
@@ -29,10 +29,18 @@ describe("grokReadOnlyAllowRules", () => {
 
   it("allows only the reviewed read tools on a Perspicax bridge", () => {
     const rules = grokReadOnlyAllowRules({ custom: { perspicax_owner: bridge() } });
-    expect(rules).toEqual([...PERSPICAX_READ_ONLY_TOOLS, "cw_psa_query"].map((n) => `MCPTool(perspicax_owner__${n})`).sort());
-    expect(rules).toContain("MCPTool(perspicax_owner__cw_psa__query)");
+    expect(rules).toEqual([...PERSPICAX_READ_ONLY_TOOLS].map((n) => `MCPTool(perspicax_owner__${n})`).sort());
+    expect(rules).toContain("MCPTool(perspicax_owner__cw_psa_query)");
     expect(rules).toContain("MCPTool(perspicax_owner__memory_search)");
     for (const tool of PERSPICAX_FLOW_COMPUTE_TOOLS) expect(rules).toContain(`MCPTool(perspicax_owner__${tool})`);
+  });
+
+  it("knows a reviewed read under either Perspicax spelling (2026-11-02)", () => {
+    expect(PERSPICAX_READ_ONLY_TOOLS.has("cw_psa_query")).toBe(true);
+    expect(PERSPICAX_READ_ONLY_TOOLS.has("cw_psa__query")).toBe(true);
+    expect([...PERSPICAX_READ_ONLY_TOOLS].some((name) => name.includes("__"))).toBe(false);
+    expect(PERSPICAX_READ_ONLY_TOOLS.has("cw_psa_write")).toBe(false);
+    expect(PERSPICAX_READ_ONLY_TOOLS.has("cw_psa__write")).toBe(false);
   });
 
   it("never allows a write, action, send, approval or command tool", () => {
@@ -41,10 +49,8 @@ describe("grokReadOnlyAllowRules", () => {
       expect(rules.some((rule) => rule.endsWith(`__${tool})`))).toBe(false);
     }
     expect(rules.some((rule) => rule.includes("sagax-environment__run_command"))).toBe(false);
-    // nor their gate aliases (cw_psa__write -> cw_psa_write)
-    for (const alias of ["cw_psa_write", "cw_psa_action"]) {
-      expect(rules.some((rule) => rule.endsWith(`__${alias})`))).toBe(false);
-    }
+    // no rule keeps a second `__` after its server
+    for (const rule of rules) expect(rule.replace(/^MCPTool\([^_]+(?:_[^_]+)*__/, "")).not.toContain("__");
     // agents write tools stay gated too
     for (const tool of ["create_bot", "send_message", "delegate", "workspace_write", "create_routine"]) {
       expect(rules).not.toContain(`MCPTool(agents__${tool})`);

@@ -25,9 +25,9 @@ Reading the table:
 - Tool names are the ones Perspicax 1.8.28 serves (connector
   `mcp/meta_tools.rs`, `mcp/memory_tools.rs`, `mcp/flow_tools.rs`,
   `mcp/sagax_tools.rs`). The per-profile tools are matched by name pattern:
-  `<profile>__query` (read), `<profile>__write` or `<profile>__<resource>_write`
-  (write), `<profile>__action` (action), `<profile>__read_action` (read), any
-  other `<profile>__<operation>` (an operation's own tool, judged as an
+  `<profile>_query` (read), `<profile>_write` or `<profile>_<resource>_write`
+  (write), `<profile>_action` (action), `<profile>_read_action` (read), any
+  other `<profile>_<operation>` (an operation's own tool, judged as an
   action). The `-` separator (`cw_psa-query`) is read too.
 - Per-resource fine grain (a ticket update in the PSA) is not a separate
   registry row: it is the kind's permission narrowed by a resource rule,
@@ -187,11 +187,11 @@ Reading the table:
 | remotesupport:open | perspicax | `remote_support_open` | `remotesupport:open` | covered |
 | remotesupport:status | perspicax | `remote_support_status` | `remotesupport:status` | covered |
 | remotesupport:close | perspicax | `remote_support_close` | `remotesupport:close` | covered |
-| api:query | perspicax | `<profile>__query` | `api:query` | covered (bridge) |
-| api:write | perspicax | `<profile>__write`, `<profile>__<resource>_write` | `api:write` | covered (bridge) |
-| api:action | perspicax | `<profile>__action` | `api:action` | covered (bridge) |
-| api:action.read | perspicax | `<profile>__read_action` | `api:action.read` | covered (bridge) |
-| api:operation | perspicax | `<profile>__<operation>` | `api:operation` | covered (bridge) |
+| api:query | perspicax | `<profile>_query` | `api:query` | covered (bridge) |
+| api:write | perspicax | `<profile>_write`, `<profile>_<resource>_write` | `api:write` | covered (bridge) |
+| api:action | perspicax | `<profile>_action` | `api:action` | covered (bridge) |
+| api:action.read | perspicax | `<profile>_read_action` | `api:action.read` | covered (bridge) |
+| api:operation | perspicax | `<profile>_<operation>` | `api:operation` | covered (bridge) |
 | pairing:manage | sagax | `manage_pairing` | `pairing:manage` | covered |
 | settings:manage | sagax | `manage_settings` | `settings:manage` | covered |
 | settings:change | sagax | `sagax_settings` | `settings:change` | covered |

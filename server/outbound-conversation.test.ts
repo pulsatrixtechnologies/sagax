@@ -148,7 +148,7 @@ function makeWiring() {
     botName: () => "Rocket",
     personName: () => "Organisation Exemple",
     language: () => "fr",
-    twilio: async () => ({ ok: false, code: "rpc_error", error: "a conversation never uses twilio_api__write" }),
+    twilio: async () => ({ ok: false, code: "rpc_error", error: "a conversation never uses twilio_api_write" }),
     voice: (turn, args) => voice.call(turn.threadId === THREAD.sam ? "sam" : "alex", args),
     principalName: (principalId) => Object.values(PEOPLE).find((person) => person.principalId === principalId)?.name,
     principalSub: (principalId) => Object.values(PEOPLE).find((person) => person.principalId === principalId)?.sub ?? null,

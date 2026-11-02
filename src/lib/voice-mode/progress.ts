@@ -56,7 +56,7 @@ const EXACT: Array<[RegExp, ProgressKind]> = [
 ];
 
 /** Otherwise the first verb of a connector tool's name ("find_tickets",
- * "cw_psa__update_ticket", "tickets.list"). */
+ * "cw_psa_update_ticket", "tickets.list"). */
 const VERBS: Array<[RegExp, ProgressKind]> = [
   [/^(search|find|lookup|grep|query)$/, "search"],
   [/^(get|list|read|fetch|describe|check|status|show|view|count|recall|load|download|export|inspect|preview|api)$/, "check"],

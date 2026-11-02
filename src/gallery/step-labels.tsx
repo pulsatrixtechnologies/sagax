@@ -34,10 +34,10 @@ const step = (id: string, name: string, ok: boolean | undefined, input: Record<s
 
 const sheetSteps: BotActivityStep[] = [
   step("s1", "search_tool", true, { query: "perspicax tickets" }, NOW + 1_000),
-  step("s2", "use_tool", true, { tool_name: "perspicax__acme_desk__query", tool_input: { resource: "service.tickets" } }, NOW + 2_000),
+  step("s2", "use_tool", true, { tool_name: "perspicax__acme_desk_query", tool_input: { resource: "service.tickets" } }, NOW + 2_000),
   step("s3", "search_tool", true, { query: "remote session" }, NOW + 3_000),
-  step("s4", "use_tool", true, { tool_name: "perspicax__acme_desk__query", tool_input: { resource: "service.tickets" } }, NOW + 4_000),
-  step("s5", "use_tool", true, { tool_name: "perspicax__acme_desk__query", tool_input: { resource: "service.tickets" } }, NOW + 5_000),
+  step("s4", "use_tool", true, { tool_name: "perspicax__acme_desk_query", tool_input: { resource: "service.tickets" } }, NOW + 4_000),
+  step("s5", "use_tool", true, { tool_name: "perspicax__acme_desk_query", tool_input: { resource: "service.tickets" } }, NOW + 5_000),
   step("s6", "ToolSearch", true, { query: "select:Bash" }, NOW + 6_000),
   step("s7", "Bash", true, { command: `ls ${PLUGIN_DIR}` }, NOW + 7_000),
   step("s8", "Bash", true, { command: `python ${BOT_DIR}/workspace/scripts/check_health.py --bot a1b2c3d4-e5f6-7890-abcd-ef1234567890` }, NOW + 8_000),

@@ -40,27 +40,27 @@ const ticketsOf = (widget: CwWidget | null): CwTicket[] => {
 describe("ConnectWise tool names", () => {
   it("recognises every spelling the engines use", () => {
     for (const name of [
-      "cw_psa__query",
       "cw_psa_query",
-      "mcp__perspicax_pulsatrix_flow_owner__cw_psa__query",
-      "mcp__claude_ai_Connectwise_PSA__cw_psa__query",
-      "cw_psa_schedule__query",
+      "cw_psa_query",
+      "mcp__perspicax_pulsatrix_flow_owner__cw_psa_query",
+      "mcp__claude_ai_Connectwise_PSA__cw_psa_query",
+      "cw_psa_schedule_query",
       "mcp__connectwise__get_ticket",
     ]) expect(isCwTool(name), name).toBe(true);
     for (const name of ["Bash", "mcp__agents__list_bots", "cw_rmm__query", "mcp__github__get_issue", "screenconnect__list"]) {
       expect(isCwTool(name), name).toBe(false);
     }
-    expect(cwToolWords("mcp__perspicax_x__cw_psa_schedule__query")).toEqual(["cw", "psa", "schedule", "query"]);
+    expect(cwToolWords("mcp__perspicax_x__cw_psa_schedule_query")).toEqual(["cw", "psa", "schedule", "query"]);
   });
 
   it("tells reads from writes, and counts an unclear name as a write", () => {
-    expect(isCwWriteTool("cw_psa__query")).toBe(false);
-    expect(isCwWriteTool("mcp__p__cw_psa__get_ticket")).toBe(false);
-    expect(isCwWriteTool("cw_psa__write")).toBe(true);
-    expect(isCwWriteTool("cw_psa__action")).toBe(true);
-    expect(isCwWriteTool("cw_psa_tickets__update")).toBe(true);
-    expect(isCwWriteTool("cw_psa__log_time")).toBe(true);
-    expect(isCwWriteTool("cw_psa__ticket")).toBe(true);
+    expect(isCwWriteTool("cw_psa_query")).toBe(false);
+    expect(isCwWriteTool("mcp__p__cw_psa_get_ticket")).toBe(false);
+    expect(isCwWriteTool("cw_psa_write")).toBe(true);
+    expect(isCwWriteTool("cw_psa_action")).toBe(true);
+    expect(isCwWriteTool("cw_psa_tickets_update")).toBe(true);
+    expect(isCwWriteTool("cw_psa_log_time")).toBe(true);
+    expect(isCwWriteTool("cw_psa_ticket")).toBe(true);
     expect(isCwWriteTool("mcp__github__create_issue")).toBe(false);
   });
 });
@@ -88,7 +88,7 @@ describe("cwWidgetFromToolCall: tickets", () => {
   const input = JSON.stringify({ resource: "service/tickets", conditions: "closedFlag=false", pageSize: 25 });
 
   it("maps a ticket query to a list, with the site read from _info", () => {
-    const widget = cwWidgetFromToolCall("mcp__perspicax_x__cw_psa__query", input, fixtureQueryResult(FIXTURE_TICKETS, 112));
+    const widget = cwWidgetFromToolCall("mcp__perspicax_x__cw_psa_query", input, fixtureQueryResult(FIXTURE_TICKETS, 112));
     expect(widget?.view).toBe("list");
     expect(widget?.total).toBe(112);
     expect(widget?.site).toEqual({ host: "na.myconnectwise.net" });
@@ -113,7 +113,7 @@ describe("cwWidgetFromToolCall: tickets", () => {
 
   it("maps one ticket to a card, through MCP text blocks, with the server's site", () => {
     const widget = cwWidgetFromToolCall(
-      "cw_psa__query",
+      "cw_psa_query",
       JSON.stringify({ resource: "service/tickets/48213" }),
       fixtureMcpContent(FIXTURE_TICKETS[0]),
       { site: { host: "cw.example.ca", company: "acme" } },
@@ -126,7 +126,7 @@ describe("cwWidgetFromToolCall: tickets", () => {
 
   it("maps a ticket's notes to its timeline, newest first", () => {
     const widget = cwWidgetFromToolCall(
-      "cw_psa__query",
+      "cw_psa_query",
       JSON.stringify({ resource: "service/tickets/48213/notes", orderBy: "id asc" }),
       JSON.stringify([...FIXTURE_TICKET_NOTES].reverse()),
     );
@@ -140,33 +140,33 @@ describe("cwWidgetFromToolCall: tickets", () => {
 
   it("draws the ticket a write answers with", () => {
     const updated = { ...FIXTURE_TICKETS[0], status: { id: 18, name: "Résolu" } };
-    const widget = cwWidgetFromToolCall("cw_psa__write", JSON.stringify({ resource: "service/tickets/48213", operation: "patch" }), JSON.stringify(updated));
+    const widget = cwWidgetFromToolCall("cw_psa_write", JSON.stringify({ resource: "service/tickets/48213", operation: "patch" }), JSON.stringify(updated));
     expect(ticketsOf(widget)[0]!.status).toBe("Résolu");
   });
 
   it("reads a cut-short input preview without guessing", () => {
-    const widget = cwWidgetFromToolCall("cw_psa__query", '{"resource":"service/tickets/48213/notes","conditions":"…', JSON.stringify(FIXTURE_TICKET_NOTES));
+    const widget = cwWidgetFromToolCall("cw_psa_query", '{"resource":"service/tickets/48213/notes","conditions":"…', JSON.stringify(FIXTURE_TICKET_NOTES));
     expect(ticketsOf(widget)[0]!.id).toBe(48213);
   });
 
   it("maps nothing for other tools, errors, prose or empty results", () => {
     expect(cwWidgetFromToolCall("Bash", input, fixtureQueryResult(FIXTURE_TICKETS))).toBeNull();
-    expect(cwWidgetFromToolCall("cw_psa__query", input, "Error: 401 Unauthorized")).toBeNull();
-    expect(cwWidgetFromToolCall("cw_psa__query", input, "[]")).toBeNull();
-    expect(cwWidgetFromToolCall("cw_psa__query", input, JSON.stringify([{ id: 4, name: "Something else" }]))).toBeNull();
-    expect(cwWidgetFromToolCall("cw_psa__query", input, undefined)).toBeNull();
+    expect(cwWidgetFromToolCall("cw_psa_query", input, "Error: 401 Unauthorized")).toBeNull();
+    expect(cwWidgetFromToolCall("cw_psa_query", input, "[]")).toBeNull();
+    expect(cwWidgetFromToolCall("cw_psa_query", input, JSON.stringify([{ id: 4, name: "Something else" }]))).toBeNull();
+    expect(cwWidgetFromToolCall("cw_psa_query", input, undefined)).toBeNull();
   });
 
   it("keeps at most 50 records and says how many there were", () => {
     const many = Array.from({ length: 70 }, (_, index) => ({ ...FIXTURE_TICKETS[1], id: 50000 + index }));
-    const widget = cwWidgetFromToolCall("cw_psa__query", input, JSON.stringify(many));
+    const widget = cwWidgetFromToolCall("cw_psa_query", input, JSON.stringify(many));
     expect(ticketsOf(widget)).toHaveLength(50);
     expect(widget?.total).toBe(70);
   });
 });
 
 describe("ticket list filters and sorting", () => {
-  const tickets = ticketsOf(cwWidgetFromToolCall("cw_psa__query", "{}", JSON.stringify(FIXTURE_TICKETS)));
+  const tickets = ticketsOf(cwWidgetFromToolCall("cw_psa_query", "{}", JSON.stringify(FIXTURE_TICKETS)));
 
   it("sorts priorities by their number, not their words", () => {
     const sorted = filterSortTickets(tickets, {}, { key: "priority", dir: "asc" });
@@ -188,15 +188,15 @@ describe("ticket list filters and sorting", () => {
 
 describe("mergeCwWidgets", () => {
   it("joins a ticket's notes to its card and names a notes-only card from the list", () => {
-    const card = cwWidgetFromToolCall("cw_psa__query", JSON.stringify({ resource: "service/tickets/48213" }), JSON.stringify(FIXTURE_TICKETS[0]))!;
-    const notes = cwWidgetFromToolCall("cw_psa__query", JSON.stringify({ resource: "service/tickets/48213/notes" }), JSON.stringify(FIXTURE_TICKET_NOTES))!;
+    const card = cwWidgetFromToolCall("cw_psa_query", JSON.stringify({ resource: "service/tickets/48213" }), JSON.stringify(FIXTURE_TICKETS[0]))!;
+    const notes = cwWidgetFromToolCall("cw_psa_query", JSON.stringify({ resource: "service/tickets/48213/notes" }), JSON.stringify(FIXTURE_TICKET_NOTES))!;
     const merged = mergeCwWidgets([{ key: "a", widget: card }, { key: "b", widget: notes }]);
     expect(merged).toHaveLength(1);
     const [ticket] = ticketsOf(merged[0]!.widget);
     expect(ticket!.summary).toBe("Imprimante du 2e étage hors ligne");
     expect(ticket!.notes).toHaveLength(2);
 
-    const list = cwWidgetFromToolCall("cw_psa__query", "{}", JSON.stringify(FIXTURE_TICKETS))!;
+    const list = cwWidgetFromToolCall("cw_psa_query", "{}", JSON.stringify(FIXTURE_TICKETS))!;
     const named = mergeCwWidgets([{ key: "a", widget: list }, { key: "b", widget: notes }]);
     expect(named).toHaveLength(2);
     expect(ticketsOf(named[1]!.widget)[0]!.summary).toBe("Imprimante du 2e étage hors ligne");
@@ -271,18 +271,18 @@ describe("widget actions", () => {
   });
 
   it("maps time, schedule, agreements and companies, and drops a foreign website", () => {
-    const time = cwWidgetFromToolCall("cw_psa__query", JSON.stringify({ resource: "time/entries" }), fixtureQueryResult(FIXTURE_TIME));
+    const time = cwWidgetFromToolCall("cw_psa_query", JSON.stringify({ resource: "time/entries" }), fixtureQueryResult(FIXTURE_TIME));
     expect(time).toMatchObject({ family: "time", view: "list" });
     expect(time?.family === "time" && time.records[0]).toMatchObject({ id: 88021, charge: "Ticket #48213", billable: "Billable", hours: 1.25 });
 
-    const schedule = cwWidgetFromToolCall("cw_psa__query", JSON.stringify({ resource: "schedule/entries/33011" }), fixtureQueryResult([FIXTURE_SCHEDULE[0]]));
+    const schedule = cwWidgetFromToolCall("cw_psa_query", JSON.stringify({ resource: "schedule/entries/33011" }), fixtureQueryResult([FIXTURE_SCHEDULE[0]]));
     expect(schedule).toMatchObject({ family: "schedule", view: "card" });
     expect(schedule?.family === "schedule" && schedule.records[0]?.done).toBe(false);
 
-    const agreements = cwWidgetFromToolCall("cw_psa__query", JSON.stringify({ resource: "finance/agreements" }), fixtureQueryResult(FIXTURE_AGREEMENTS));
+    const agreements = cwWidgetFromToolCall("cw_psa_query", JSON.stringify({ resource: "finance/agreements" }), fixtureQueryResult(FIXTURE_AGREEMENTS));
     expect(agreements).toMatchObject({ family: "agreement", view: "list" });
 
-    const companies = cwWidgetFromToolCall("cw_psa__query", JSON.stringify({ resource: "company/companies" }), fixtureQueryResult(FIXTURE_COMPANIES));
+    const companies = cwWidgetFromToolCall("cw_psa_query", JSON.stringify({ resource: "company/companies" }), fixtureQueryResult(FIXTURE_COMPANIES));
     expect(companies?.family === "company" && companies.records.map((company) => company.website)).toEqual(["https://clinique.example/", undefined]);
   });
 

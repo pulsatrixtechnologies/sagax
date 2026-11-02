@@ -30,7 +30,7 @@ export interface McpPermission {
    * already stands for (sagax_send is send_to_bot), or a name a Perspicax
    * build behind a switch serves (memory v2, Perspicax #326). */
   aliases?: readonly string[];
-  /** A per-profile Perspicax tool (`<profile>__query`, ...): `tool` is then a
+  /** A per-profile Perspicax tool (`<profile>_query`, ...): `tool` is then a
    * display name and the call is matched by profileToolCall. */
   profileKind?: ProfileToolKind;
 }
@@ -40,11 +40,11 @@ const p = (key: string, tier: PermissionTier, tool: string | null, source: "saga
 const profileTool = (key: string, tier: PermissionTier, kind: ProfileToolKind, tool: string): McpPermission => ({ key, tier, tool, source: "perspicax", profileKind: kind });
 
 /** The kinds of per-profile tool Perspicax 1.8.28 serves (connector-core
- * tools/compact.rs and tools/name.rs): `<profile>__query` reads a resource,
- * `<profile>__write` creates, updates or deletes one (`<profile>__<resource>_write`
- * when the profile is not compacted), `<profile>__action` runs an action,
- * `<profile>__read_action` runs a read-only one, and any other
- * `<profile>__<operation>` is one operation's own tool. */
+ * tools/compact.rs and tools/name.rs): `<profile>_query` reads a resource,
+ * `<profile>_write` creates, updates or deletes one (`<profile>_<resource>_write`
+ * when the profile is not compacted), `<profile>_action` runs an action,
+ * `<profile>_read_action` runs a read-only one, and any other
+ * `<profile>_<operation>` is one operation's own tool. */
 export type ProfileToolKind = "query" | "write" | "action" | "read_action" | "operation";
 
 export const MCP_PERMISSIONS: readonly McpPermission[] = [
@@ -235,11 +235,11 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("remotesupport:close", "own", "remote_support_close", "perspicax"),
   // Per-profile Perspicax tools, matched by name (profileToolCall). An
   // operation's own tool is not known to be a read, so it needs dispatch.
-  profileTool("api:query", "read", "query", "<profile>__query"),
-  profileTool("api:write", "dispatch", "write", "<profile>__write"),
-  profileTool("api:action", "dispatch", "action", "<profile>__action"),
-  profileTool("api:action.read", "read", "read_action", "<profile>__read_action"),
-  profileTool("api:operation", "dispatch", "operation", "<profile>__<operation>"),
+  profileTool("api:query", "read", "query", "<profile>_query"),
+  profileTool("api:write", "dispatch", "write", "<profile>_write"),
+  profileTool("api:action", "dispatch", "action", "<profile>_action"),
+  profileTool("api:action.read", "read", "read_action", "<profile>_read_action"),
+  profileTool("api:operation", "dispatch", "operation", "<profile>_<operation>"),
   // act on /api/config as the person: their own rights decide (#1269)
   p("settings:manage", "own", "manage_settings"),
   // every setting as the person (server/settings-actions.ts): the person's
@@ -261,28 +261,45 @@ const BY_TOOL = new Map<string, McpPermission>(MCP_PERMISSIONS.filter((x) => x.t
 const BY_KEY = new Map<string, McpPermission>(MCP_PERMISSIONS.map((x) => [x.key, x]));
 const BY_PROFILE_KIND = new Map<ProfileToolKind, McpPermission>(MCP_PERMISSIONS.filter((x) => x.profileKind).map((x) => [x.profileKind as ProfileToolKind, x]));
 
-/** A per-profile Perspicax tool name, split: `cw_psa__query` is profile
- * cw_psa, kind query. The `-` spelling (`cw_psa-query`, Perspicax
- * tool_name_separator) is read too. Null for any other name: a Sagax tool or a
- * meta-tool never carries `__` or `-`. */
-export function profileToolCall(tool: string): { profile: string; kind: ProfileToolKind; name: string } | null {
-  const m = /^([a-z0-9][a-z0-9_]*?)(?:__|-)([A-Za-z0-9][A-Za-z0-9_]*)$/.exec(tool);
-  if (!m) return null;
-  const [, profile, name] = m as unknown as [string, string, string];
-  const kind: ProfileToolKind = name === "query" || name === "write" || name === "action" || name === "read_action"
-    ? name
-    : name.endsWith("_write") ? "write" : "operation";
-  return { profile, kind, name };
+/** A per-profile Perspicax tool name, split: `cw_psa_query` is profile
+ * cw_psa, kind query. Perspicax names them with one `_` since 1.9.19
+ * (2026-11-02: no `__` anywhere); the earlier `cw_psa__query` and the `-`
+ * spelling (`cw_psa-query`, Perspicax tool_name_separator) are read too.
+ * With one `_` the profile is the longest api id of `apis` (the catalog)
+ * the name starts with; without a catalog, a name ending in `_query`,
+ * `_write`, `_action` or `_read_action` splits before that word. Null for
+ * any other name, and for a Sagax tool or meta-tool (named in the
+ * registry). */
+/** Perspicax's own tool namespaces, never an api id: without a catalog,
+ * `api_query` or `memory_action` is an unknown tool, not a profile's. */
+const RESERVED_PREFIXES = new Set(["api", "memory", "flow", "sagax", "claim", "work", "voice", "identity", "remote", "review", "agent", "agents", "profile", "read"]);
+
+export function profileToolCall(tool: string, apis?: Iterable<string>): { profile: string; kind: ProfileToolKind; name: string } | null {
+  const classify = (profile: string, name: string) => {
+    const kind: ProfileToolKind = name === "query" || name === "write" || name === "action" || name === "read_action"
+      ? name
+      : name.endsWith("_write") ? "write" : "operation";
+    return { profile, kind, name };
+  };
+  const legacy = /^([a-z0-9][a-z0-9_]*?)(?:__|-)([A-Za-z0-9][A-Za-z0-9_]*)$/.exec(tool);
+  if (legacy) return classify(legacy[1]!, legacy[2]!);
+  if (BY_TOOL.has(tool) || !/^[a-z0-9][a-z0-9_]*_[A-Za-z0-9][A-Za-z0-9_]*$/.test(tool)) return null;
+  if (apis) {
+    const profile = [...apis].filter((api) => tool.startsWith(`${api}_`) && tool.length > api.length + 1).sort((a, b) => b.length - a.length)[0];
+    return profile === undefined ? null : classify(profile, tool.slice(profile.length + 1));
+  }
+  const suffixed = /^([a-z0-9][a-z0-9_]*?)_(read_action|query|write|action)$/.exec(tool);
+  return suffixed && !RESERVED_PREFIXES.has(suffixed[1]!.split("_")[0]!) ? classify(suffixed[1]!, suffixed[2]!) : null;
 }
 
 /** The permission of a tool: by name (or alias), else by the per-profile pattern. */
 const OPENAPI_TOOL = /^openapi_[a-z][a-z0-9_]{0,48}$/;
 
-export const permissionForTool = (tool: string): McpPermission | undefined => {
+export const permissionForTool = (tool: string, apis?: Iterable<string>): McpPermission | undefined => {
   const named = BY_TOOL.get(tool);
   if (named) return named;
   if (OPENAPI_TOOL.test(tool)) return BY_KEY.get("openapi:call");
-  const profile = profileToolCall(tool);
+  const profile = profileToolCall(tool, apis);
   return profile ? BY_PROFILE_KIND.get(profile.kind) : undefined;
 };
 export const permissionByKey = (key: string): McpPermission | undefined => BY_KEY.get(key);
@@ -374,8 +391,8 @@ function grantedScope(role: McpRole, perm: McpPermission): McpScope | null {
 /** `external`: the call goes to a person's external MCP server (the
  * Perspicax relay), so a tool Sagax does not list is judged as mcp:external,
  * not refused as unknown. */
-export function decide(principal: McpPrincipal, tool: string, target: McpScope = "self", options?: { external?: boolean }): McpDecision {
-  const perm = permissionForTool(tool) ?? (options?.external ? EXTERNAL_MCP_PERMISSION : undefined);
+export function decide(principal: McpPrincipal, tool: string, target: McpScope = "self", options?: { external?: boolean; apis?: Iterable<string> }): McpDecision {
+  const perm = permissionForTool(tool, options?.apis) ?? (options?.external ? EXTERNAL_MCP_PERMISSION : undefined);
   if (!perm) return { allowed: false, permission: tool, requiredScope: target, grantedScope: null, reason: "unknown_tool" };
   if (!(MCP_ROLES as readonly string[]).includes(principal.role)) {
     return { allowed: false, permission: perm.key, requiredScope: target, grantedScope: null, reason: "unknown_role" };
@@ -468,18 +485,18 @@ export type ApiCatalog = ReadonlyMap<string, ReadonlySet<string>>;
 
 /** The per-resource key of a per-profile Perspicax call, from its name and
  * arguments: `<profile>:<resource>.<verb>`.
- *   - `cw_psa__query` { resource: "tickets" }               cw_psa:tickets.read
- *   - `cw_psa__write` { resource: "tickets", action: "update" } cw_psa:tickets.update
- *   - `cw_psa__tickets_write` { action: "delete" }            cw_psa:tickets.delete
- *   - `cw_psa__action` { action: "merge" }                    cw_psa:merge.run
- *   - `cw_psa__read_action` { action: "usage" }               cw_psa:usage.read
- *   - `cw_psa__find_tickets`                                  cw_psa:find_tickets.run
+ *   - `cw_psa_query` { resource: "tickets" }               cw_psa:tickets.read
+ *   - `cw_psa_write` { resource: "tickets", action: "update" } cw_psa:tickets.update
+ *   - `cw_psa_tickets_write` { action: "delete" }            cw_psa:tickets.delete
+ *   - `cw_psa_action` { action: "merge" }                    cw_psa:merge.run
+ *   - `cw_psa_read_action` { action: "usage" }               cw_psa:usage.read
+ *   - `cw_psa_find_tickets`                                  cw_psa:find_tickets.run
  * Null for any other tool, or when a segment is missing or not a plain slug.
  * With a catalog, a profile it does not list, or a query or write on a
  * resource it does not list, gives null, so a made up name can never match a
  * grant or a deny. */
 export function resourceKeyForCall(tool: string, args: Record<string, unknown> | undefined, catalog?: ApiCatalog): string | null {
-  const call = profileToolCall(tool);
+  const call = profileToolCall(tool, catalog?.keys());
   if (!call) return null;
   const clean = (v: unknown) => (typeof v === "string" && SEGMENT.test(v.trim().toLowerCase()) ? v.trim().toLowerCase() : null);
   const a = args ?? {};
@@ -600,7 +617,7 @@ export function auditSampleFromEnv(env: NodeJS.ProcessEnv): number {
 export async function guardToolCall<R extends GuardedResult>(options: GuardOptions, tool: string, args: Record<string, unknown> | undefined, run: () => Promise<R>): Promise<R | GuardedResult> {
   if (options.mode === "off") return run();
   const scope = scopeForCall(args, options.ownBotId, options.owners, tool);
-  let decision = decide(options.principal, tool, scope, { external: options.external === true });
+  let decision = decide(options.principal, tool, scope, { external: options.external === true, ...(options.catalog ? { apis: options.catalog.keys() } : {}) });
   const resource = resourceKeyForCall(tool, args, options.catalog) ?? undefined;
   if (decision.allowed && resource && resourceDenied(resource, options.deniedResources ?? [])) {
     decision = { ...decision, allowed: false, permission: resource, reason: "resource_denied" };

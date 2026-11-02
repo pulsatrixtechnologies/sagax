@@ -345,7 +345,7 @@ function namedProducts(list: readonly string[], products: readonly RuleProduct[]
 }
 
 /** Which products a tool belongs to, by id: its whole server id, or behind
- * the platform's gateway (`perspicax_<slug>__<api>__<verb>`) the platform
+ * the platform's gateway (`perspicax_<slug>__<api>_<verb>`) the platform
  * and the API id; and the kinds their words name. The ids are the ones a
  * server declares (RuleProduct.id), so a rule's named product compares to
  * them whatever the names say. */
@@ -1032,7 +1032,7 @@ export function ruleCoversCall(compiled: CompiledRule, facts: CallFacts, behavio
       }
     }
   }
-  // a tool is named whole, its server included (`perspicax_quasar__cw_psa__query`)
+  // a tool is named whole, its server included (`perspicax_quasar__cw_psa_query`)
   if (compiled.tools.length && !compiled.tools.includes(facts.tool)) return false;
   if (compiled.products.length && !compiled.products.some((product) => facts.products.includes(product))) return false;
   return true;

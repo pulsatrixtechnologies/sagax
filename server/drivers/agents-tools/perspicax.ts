@@ -15,7 +15,7 @@ import type { Json } from "../agents-client.ts";
 // mounted in the turn, in the speaker's name; Perspicax applies that person's
 // grants and answers an unknown tool itself (review_write without a write
 // approval policy, flow without a pack). The per-profile tools
-// (`<profile>__query`, `__write`, `__action`) are not here: they depend on the
+// (`<profile>_query`, `__write`, `__action`) are not here: they depend on the
 // profile and stay on the Perspicax bridge.
 const pxTool = (name: string, description: string, properties: Record<string, unknown> = {}, required: string[] = []) => ({
   name,

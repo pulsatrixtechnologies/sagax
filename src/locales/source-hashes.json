@@ -16243,7 +16243,16 @@
       "memoryManager.pickSource": "b4e6862ee8d5e41d9116d9bfcfaf4cd65e814ed594b9097d1e74f8fc21d466ed",
       "memoryManager.mapZoomIn": "0e47f09a748fa1321dbaee5c8983f8e8f2880b1212956fb4f21ae9d60b88a8b2",
       "memoryManager.mapZoomOut": "bc7b631a689b45ca5c51923515d31eb3597b2d9b129d88d0dbee066ee5c35453",
-      "memoryManager.mapFit": "9f872ed43d00d8bdb372b1c05bd345b22f2ad5f7f41e06656d05625602e065b1"
+      "memoryManager.mapFit": "9f872ed43d00d8bdb372b1c05bd345b22f2ad5f7f41e06656d05625602e065b1",
+      "botModels.backup.edit": "78125393f1b9ad743df569ac0aa00e972d00addc185b6566e2bd6f9b1740b9e1",
+      "botModels.backup.noneHelp": "50684bacc313e1fa8b98a3972063d3ae0fc09a25c7aa3e5219bdaec274cbce6c",
+      "botModels.bulk.setEffort": "ea31444c3e222dcac144227c5e3128a9e5b8859ac1d3575e7fa13de0e053278d",
+      "botModels.bulk.effortTitle": "ea31444c3e222dcac144227c5e3128a9e5b8859ac1d3575e7fa13de0e053278d",
+      "botModels.bulk.effortHelp": "19b97977f21336dec7820d4785220e8c98f91e9643b236feda301c99f8b3aba6",
+      "botModels.bulk.setBackup": "6170a9650a2c8285566e525e6b63c0865a8eb23c63a4736da93c96f4b934c336",
+      "botModels.bulk.backupTitle": "6170a9650a2c8285566e525e6b63c0865a8eb23c63a4736da93c96f4b934c336",
+      "botModels.bulk.backupHelp": "9ddacd60023842d491f1ce91ec24a672666de8c94a4daa505ab41339f27f26cb",
+      "botModels.bulk.clearBackup": "1d40c124805191308eea0e3c19aaaba9dc6d912951cb0cff43d99f4fec971bbe"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

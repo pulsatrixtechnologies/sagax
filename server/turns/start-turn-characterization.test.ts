@@ -71,11 +71,18 @@ describe("startTurn characterization (#1388 w4 step 3)", () => {
 
   it("held direct-machine turns return through holdDirectMachineTurn before admission", () => {
     const body = startTurnBody(startTurnSrc);
-    const holdAt = body.indexOf("holdDirectMachineTurn(");
-    const claimAt = body.indexOf("assertTurnAdmission(");
+    const prepareValidate = readFileSync(join(here, "start-turn-prepare-validate.ts"), "utf8");
+    expect(body).toMatch(/await prepareValidateStartTurn\(state\)/);
+    expect(body).toMatch(/await prepareAdmitStartTurn\(state\)/);
+    expect(body).toMatch(/await prepareClaimStartTurn\(state\)/);
+    const holdAt = prepareValidate.indexOf("holdDirectMachineTurn(");
+    const claimAt = prepareValidate.indexOf("assertTurnAdmission(");
     expect(holdAt).toBeGreaterThan(-1);
     expect(claimAt).toBeGreaterThan(holdAt);
-    expect(body).toMatch(/directMachinePlan\(\{ host: state\.bot\.host/);
+    expect(prepareValidate).toMatch(/directMachinePlan\(\{ host: state\.bot\.host/);
+    const prepareClaim = readFileSync(join(here, "start-turn-prepare-claim.ts"), "utf8");
+    expect(prepareClaim).toMatch(/state\.dispatchClaimId = randomUUID\(\)/);
+    expect(prepareClaim).toMatch(/watchdog\.watch\(/);
   });
 
   it("warm finally always settles onWarmSettled and clears the warm dispatch claim", () => {

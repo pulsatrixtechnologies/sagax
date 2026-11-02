@@ -1,18 +1,20 @@
 // #1388 wave 4 step 3: startTurn runtime (leaf phase modules re-exported).
 // Never imports server/index.ts.
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { LocalVmTarget, Runtime } from "../container-computer.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import { createTurnState } from "./start-turn-state.ts";
 import { createFinishStartTurn } from "./start-turn-finish.ts";
 import { createStreamStartTurn } from "./start-turn-stream.ts";
+import { createPrepareValidateStartTurn } from "./start-turn-prepare-validate.ts";
+import { createPrepareAdmitStartTurn } from "./start-turn-prepare-admit.ts";
+import { createPrepareClaimStartTurn } from "./start-turn-prepare-claim.ts";
 
 export type { StartTurnHost };
 
 export function createStartTurn(host: StartTurnHost) {
   const {
     AUTO_COMPUTER_RULES,
-    BOTMAIL_ENGINE_REFUSAL,
     BUILT_IN_BROWSER_SYSTEM_PROMPT,
     BUILT_IN_DATA_SYSTEM_PROMPT,
     CALL_RECALL_BUDGET,
@@ -20,7 +22,6 @@ export function createStartTurn(host: StartTurnHost) {
     COMPACT_VOLATILE_SECTIONS,
     CREDENTIAL_PROMPT,
     ComputerWaitParked,
-    DATA_DIR,
     DEFAULT_REBUILD_BYTES,
     DESKTOP_BRIDGE_MCP_NAME,
     DirectTurnSetupCancelled,
@@ -36,7 +37,6 @@ export function createStartTurn(host: StartTurnHost) {
     ROUTINE_EXECUTION_PROMPT,
     ROUTINE_PROMPT,
     SESSION_SEARCH_SYSTEM_PROMPT,
-    SMALL_TALK_TURN_NOTE,
     TEAM_MEMORY_PROMPT,
     THREADS_PROMPT,
     TurnAuthenticationRefusedError: _TurnAuthenticationRefusedError,
@@ -46,49 +46,34 @@ export function createStartTurn(host: StartTurnHost) {
     WIDGET_APPROVAL_PROMPT,
     WIDGET_PROMPT,
     WITHHELD_HOST_TOOLS_PROMPT,
-    accessCardFor,
     accountConnectorInput,
     activeInternalGenerationByThread,
-    activeRoutineRunForThread,
     activeVpsThreads: _activeVpsThreads,
     agentBrowserFrame,
     agentsIntegration,
     aiClientThreadPerson,
-    applyViewerModelOverride,
     approvalLevelPrompt,
     approvalModeForTurn,
     asPlaceFailure,
-    assertModelVariantSupported,
-    assertTurnAdmission,
-    assertWithinBudget,
     attachCustomMcp,
     attachTeamBoat,
     auditFullAccessTurn,
-    autoComputerStateFor,
     autoLocalVmAttachable,
-    autoModelRecord,
     autoPayerKey,
-    autoPickForTurn,
     autoRecallEnabled,
     autoRecallPrompt,
-    autoStartTarget,
-    autoTurnsByThread,
     autoVmClaims,
-    autoWorkspaceWanted,
     availableSkills,
-    beginInternalCapabilityGeneration,
     beginMemoryTurn,
     bindInternalCapabilityToProviderTurn: _bindInternalCapabilityToProviderTurn,
     bindTurnComputer,
     boat,
-    boatLifecycleBusyBots,
     boatNotConfigured,
     botCreationOffered,
     botProfilePrompt,
     botRecoveryBackups,
     botUserName,
     botUserProfile,
-    botmailConfined,
     browserIntegration,
     browserIsThePlace,
     browserRuntime,
@@ -112,14 +97,9 @@ export function createStartTurn(host: StartTurnHost) {
     clearCancelledProviderHandshake,
     clearDirectTurnDispatch,
     clearFailedAutoPin,
-    clearInternalTurn,
     clearTurnDigestState: _clearTurnDigestState,
-    clearUnattended,
     cloudEngine,
-    cloudGuestDriven,
-    cloudGuestDrivenHandoff,
     cloudGuestOpened,
-    cloudOnlyBot,
     cloudPlaceRefusal,
     cloudRoutineReadiness,
     compactConversation,
@@ -127,14 +107,10 @@ export function createStartTurn(host: StartTurnHost) {
     compactVolatileOrder,
     computerPlaceRefusal,
     computerPrompt,
-    computerSelectionMoves,
     computerSelectionTurns,
     computerSkippedNote,
     computerToolsRefusal,
-    confidentialThreadOwner,
     confinedWhy,
-    connectorSwitchForTurn,
-    connectorSwitchText,
     containerComputerFrame,
     containerComputerMcp,
     containerComputerStatus,
@@ -143,24 +119,17 @@ export function createStartTurn(host: StartTurnHost) {
     coordinator,
     customMcpPrompt,
     dataIntegration,
-    decideWorkplace,
-    delegationWakeBudget,
     deliverableNotification,
-    desktopBridges,
     desktopLocalModels,
     desktopModelPersonFor,
     devPodsPrompt,
     devPodsThreads,
     directContext,
-    directCoordinationSettlers,
-    directFollowupSettlers,
     directFollowupTurns: _directFollowupTurns,
-    directMachinePlan,
     directRequestOwners,
     directTurnBots,
     directTurnClaimExists,
     directTurnClaimIsCurrent,
-    directTurnDispatchClaims,
     directTurnGenerationByThread,
     docsIndexPrompt,
     drainComputerResumes,
@@ -169,15 +138,11 @@ export function createStartTurn(host: StartTurnHost) {
     drainSecretResumes,
     drainTeamSetupResumes,
     effectiveBotOwner,
-    effortAcceptedByEngine,
-    effortForModel,
     endMemoryTurn: _endMemoryTurn,
-    engineAccessNotice,
     engineConnectorsPromptFor,
     engineDisplayName,
     engineHasNativeWebSearch,
     engineIsFresh,
-    engineReference,
     engineStartGate,
     engineTurnLevel,
     enginesRead: _enginesRead,
@@ -186,36 +151,24 @@ export function createStartTurn(host: StartTurnHost) {
     expandLearnTurnText,
     expandSetupTurnText,
     expandSkillCommandTurnText,
-    explainPick,
-    extractTurnImages,
     failedTurnTool,
     finishUntilPrompt,
     fitTurnImagesForModel,
     forgetTurnCheckpoint,
     gatedLocalComputer,
-    generateThreadTitle,
     githubWithheldPrompt,
     grokCloudConnectorsForTurn,
     guardTurnDispatch,
-    guestDrivenTurns,
-    guestEngineRefusal,
     handedStateUsable,
     handoffs,
     harnessCommandSource,
     harnessCommands,
     hasQueuedSteeredMessages: _hasQueuedSteeredMessages,
-    healBotEngine,
-    healOrgRefusedThreadModel,
-    healThreadModel,
     holdBootEngineSlot,
-    holdBotMemoryPlain,
-    holdDirectMachineTurn,
-    holdTurnAttachments,
     honouredPin,
     hooksEnabled,
     hooksIntegration,
     hostScreenTurns,
-    hostedModels,
     idleEngines,
     inheritedTeamComputer,
     installedPlaybookInstructions,
@@ -223,15 +176,10 @@ export function createStartTurn(host: StartTurnHost) {
     isExternalContextMarker,
     isLocalModelId,
     isModelRefusal: _isModelRefusal,
-    isSmallTalk,
-    joinPrewarm,
     languageOfPerson,
     latestCompaction,
     lightenColdPrompt,
-    limitBackupRefusedInThread,
     limitFailover,
-    liveVoiceUtteranceByThread,
-    llmThreadTitlesEnabled,
     localPrincipalId,
     localVmActiveThreads,
     localVmIdleFor,
@@ -250,8 +198,6 @@ export function createStartTurn(host: StartTurnHost) {
     longCommandsPrompt,
     managedPolicy,
     markDirectTurnDispatching,
-    markInternalTurn,
-    markUnattended,
     markWorkspaceUse,
     mcpCallTimeoutMinutes,
     mcpServersAsPerson,
@@ -265,7 +211,6 @@ export function createStartTurn(host: StartTurnHost) {
     modelFallbackByThread,
     modelFallbackPayerKey,
     modelPrompt,
-    modelSwitchRefusal,
     mountBotBoat,
     mountBotVps,
     mountHostComputer,
@@ -274,54 +219,36 @@ export function createStartTurn(host: StartTurnHost) {
     mountUserSandbox,
     myChromePromptFor,
     namedTeammates,
-    namesEngine,
     nextInChain: _nextInChain,
-    noEngineError,
-    noteAutoWorkspace,
     noteBotRead,
     noteCallBesideConversation: _noteCallBesideConversation,
     noteTurnQueued,
     notify,
-    notifyAccess,
-    officeTurnText,
-    orgEngineRefusal,
-    orgEngineTurnRefusal,
     orgSpeakerPrincipal,
     orgTurnAccess,
     outstandingAssignmentsPrompt,
     ownerBotsReadOnly,
-    ownerModelOfflineRefusal,
     ownerPaysForMember,
     parseLocalPromptMode,
     peerContactPrompt,
-    peerHopTurn,
     peerName,
-    peerOwnerPrincipal,
     peerReviewRequired,
     peerRosterSystemPrompt,
-    peerThreadFor,
     pendingCancelledProviderHandshakes,
-    personAskAt,
     personalFeatureOn,
     personalSkillInputs,
     personalSkills,
+    pluginDirsFor,
     perspicaxTurnIntegration,
     phoneIntegration,
-    phoneToolTaintedThreads,
     pickFastSentenceModel,
-    pluginDirsFor,
-    policyModelRefusal,
     poolLocalVmTarget,
     prepareSemanticRecall,
     prewarmNamedTeammates,
     proactiveModeFor,
     proactivePrompt,
     promptSectionPaths,
-    promptWithDataContext,
     promptWithReply,
-    providerInstancesChanging,
-    providerTransitionForTurn,
-    quietTurnThreads,
     reachable: _reachable,
     reachablePeers,
     readCuaConnection,
@@ -329,13 +256,10 @@ export function createStartTurn(host: StartTurnHost) {
     recallQuery,
     recentWorkFor,
     recentWorkPrompt,
-    recordedBotOwner,
     redactSecretsInText,
     refreshMcpOAuth,
     refreshStreamDigests,
     registerComputerResume,
-    registeredWorkers,
-    registry,
     releaseBootEngineSlot: _releaseBootEngineSlot,
     releaseLocalVmThread,
     releasePlain: _releasePlain,
@@ -343,32 +267,23 @@ export function createStartTurn(host: StartTurnHost) {
     releaseTurnResources,
     rememberAutoRefusal: _rememberAutoRefusal,
     remoteComputerForTurn,
-    removedComputerInstanceIds,
     renderSkillInstructions,
     renderUnseen,
-    repeatsShownFailure,
     replaysNatively,
     reportIncident,
-    requestWorkOrigin,
     resolveComputerPromptKind,
     resolveEngineTurnEffort,
-    resolveTurnSpeaker,
     retireProviderTurn: _retireProviderTurn,
-    retryComputerEngineMove,
     retryDelegationsWaitingOn,
-    revokeEarlierTurnCapabilities,
     revokeInternalCapabilityGeneration,
     richOutputPrompt,
     roomHandoffProblem,
-    routineLineage,
-    routineRunSpeaker,
-    routines,
+    routines: _routines,
     rulesSystemPrompt,
     runAsBotEngine,
     runLifecycleEvent,
     runningTurnEngines,
     sameOwnerRosterMember,
-    sandboxPrincipalForTurn,
     savedSteps,
     scopedSkillsPrompt,
     screenPollers,
@@ -380,23 +295,16 @@ export function createStartTurn(host: StartTurnHost) {
     sessions: _sessions,
     settleDirectCoordination: _settleDirectCoordination,
     settleDirectFollowup,
-    settleInputRequests,
-    settleTrackedRequest,
     settlingResourceOwners: _settlingResourceOwners,
     setupModeActive,
     setupSystemPrompt,
-    sharedBotForViewer,
     shouldMountLocalComputer,
     skillAuthoringEnabled,
     skillCommandInline,
     skillDiscoveryAvailable,
     skillsLibraryEnabled,
-    smallTalkTurns,
     soloGoalSystemPrompt,
     soloGoals,
-    speakerPayerMode,
-    speakerTurnSelection,
-    spokenLineFields,
     startScreenPoller,
     stopScreenPoller,
     store,
@@ -410,84 +318,57 @@ export function createStartTurn(host: StartTurnHost) {
     teamComputerPrompt,
     teamMemory,
     threadBusy,
-    threadPrewarm,
     toolDefinitionBytes,
     toolErrorCorrectiveRoundsFor,
-    toolScopeForTurn,
     turnAccessByThread: _turnAccessByThread,
-    turnAnswers,
+    turnAnswers: _turnAnswers,
     turnCheckpoints,
-    turnClockEnabled,
     turnCommandEnvironment,
     turnComputerResources,
     turnConnectorsFor,
-    turnContext,
     turnContextBuckets,
-    turnHolder,
-    turnModelRequested,
-    turnModelSwitches,
     turnNetworkProxy,
     turnOrigin: _turnOrigin,
-    turnPayer,
     turnPromptBytes,
     turnReachPrompt,
     turnResourceOwners,
     turnResources,
-    turnRoutineLineage,
-    turnRoutinePayers,
-    turnRoutineTriggers,
-    turnRunByThread,
-    turnRunFor,
-    turnSpeakerPrincipals,
-    turnSpeakers,
-    turnStartLogLine,
-    turnSurfacePlan,
     turnTrace,
-    turnTriggers,
-    turnUsage,
-    turnWorksOn,
-    turnZoneFor,
     typedCommandForTurn,
     uniquePeerName,
     unseenMessages,
     userProfileSystemPrompt,
-    userSandbox,
     usesCompactPrompt,
     usesStablePrompt,
     vaultPrincipalForThread,
-    viewerBotOverrideStore,
     voiceBriefText,
-    voiceCallSection,
-    voiceCallTurnPrompt,
     voiceCalls,
     voiceLatency,
-    voicePickForTurn,
     voiceSessions,
     voiceTranscript,
     voiceUnseenBlock,
-    voiceWarmup,
     vps,
     vpsThreadEnded,
     vpsThreadStarted,
     wants: _wants,
-    warmPayerAccountModels,
     watchdog,
     webhooks: _webhooks,
     withDesktopModelPerson,
     withRecalled,
-    withTurnClock,
     withUnseenMessages,
-    withWorkplaceNote,
+    withWorkplaceNote: _withWorkplaceNote,
     withholdHostToolsFor,
-    workplacePreference,
-    workplaceTurnText,
     workspaceCwdPrompt,
     workspaceLocationsPrompt,
-    workspaceMaintenance
   } = host;
   void _activeVpsThreads; void _enginesRead; void _bindInternalCapabilityToProviderTurn; void _directFollowupTurns; void _noteCallBesideConversation; void _retireProviderTurn; void _settleDirectCoordination; void _settlingResourceOwners; void _EngineAccessLost; void _TurnAuthenticationRefusedError; void _TurnNotStartedError; void _checkedTaskModelSwitch; void _clearTurnDigestState; void _endMemoryTurn; void _hasQueuedSteeredMessages; void _isModelRefusal; void _nextInChain; void _releasePlain; void _rememberAutoRefusal; void _subscriptionExpiredCard; void _turnAccessByThread;
+  void _EngineAccessLost; void _TurnAuthenticationRefusedError; void _TurnNotStartedError; void _activeVpsThreads; void _bindInternalCapabilityToProviderTurn; void _bus; void _checkedTaskModelSwitch; void _clearTurnDigestState; void _directFollowupTurns; void _endMemoryTurn; void _enginesRead; void _hasQueuedSteeredMessages; void _isModelRefusal; void _localVmTargetForBot; void _nextInChain; void _noteCallBesideConversation; void _reachable; void _releaseBootEngineSlot; void _releasePlain; void _rememberAutoRefusal; void _retireProviderTurn; void _sessions; void _settleDirectCoordination; void _settlingResourceOwners; void _subscriptionExpiredCard; void _turnAccessByThread; void _turnOrigin; void _wants; void _webhooks;
+  void _routines; void _turnAnswers; void _withWorkplaceNote;
   const { finishCatch, finishFinally } = createFinishStartTurn(host);
-  const streamStartTurn = createStreamStartTurn(host); void _bus; void _localVmTargetForBot; void _reachable; void _sessions; void _turnOrigin; void _wants; void _webhooks; void _releaseBootEngineSlot;
+  const streamStartTurn = createStreamStartTurn(host);
+  const prepareValidateStartTurn = createPrepareValidateStartTurn(host);
+  const prepareAdmitStartTurn = createPrepareAdmitStartTurn(host);
+  const prepareClaimStartTurn = createPrepareClaimStartTurn(host); void _bus; void _localVmTargetForBot; void _reachable; void _sessions; void _turnOrigin; void _wants; void _webhooks; void _releaseBootEngineSlot;
 
   const startTurn = async function startTurn(
     botId: string,
@@ -495,767 +376,14 @@ export function createStartTurn(host: StartTurnHost) {
     opts?: any,
   ) {
     const state = createTurnState({ botId, text, opts, startTurn });
-  workspaceMaintenance.assertAvailable();
-  state.profile = store.bot(state.botId);
-  if (!state.profile) throw Object.assign(new Error("no such bot"), { status: 404 });
-  // No named thread: never a confidential one (peerThreadFor).
-  state.threadId = state.opts?.threadId ?? peerThreadFor(state.profile);
-  state.continuingRoutine = state.opts?.cardContinuation ? activeRoutineRunForThread(state.threadId) : null;
-  if (state.continuingRoutine) {
-    state.onDispatchError = state.opts?.onDispatchError;
-    state.opts = {
-      ...state.opts,
-      runOn: state.continuingRoutine.runOn,
-      automationSource: state.continuingRoutine.triggerSource ?? (state.continuingRoutine.manual ? "manual" : "schedule"),
-      // Slice 6: the routine still speaks as the person it runs as.
-      speaker: routineRunSpeaker(state.continuingRoutine),
-      onDispatchError: (message: any) => {
-        routines?.failThread(state.threadId, message);
-        state.onDispatchError?.(message);
-      }
-    };
-  }
-  // A thread whose own model can't run runs on its bot's from now on.
-  healThreadModel(state.botId, state.threadId);
-  // Organization server: the same, for a thread's own model that this
-  // turn's payer has no credentials for here (a model picked on a desktop,
-  // such as a local model on pi) while the bot's own model can run.
-  if (IDENTITY.kind === "perspicax") {
-    healOrgRefusedThreadModel(state.botId, state.threadId, resolveTurnSpeaker({
-      speaker: state.opts?.speaker,
-      sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.sender),
-      peerAsk: state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk),
-      trigger: state.opts?.trigger,
-      automationSource: state.opts?.automationSource
-    }));
-  }
-  // A usage limit (server/limit-failover-host.ts): back on the thread's own
-  // engine once it reset, or onto a backup while it is known to refuse.
-  // Never for a warm-up or a card's continuation of a running turn.
-  if (!state.opts?.warmOnly && !state.opts?.cardContinuation) {
-    const switching = limitFailover.beforeTurn(state.botId, state.threadId, resolveTurnSpeaker({
-      speaker: state.opts?.speaker,
-      sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.sender),
-      peerAsk: state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk),
-      trigger: state.opts?.trigger,
-      automationSource: state.opts?.automationSource
-    }));
-    if (switching) await switching;
-  }
-  state.bot = store.projectBotForTask(state.botId, state.threadId);
-  if (!state.bot) throw Object.assign(new Error("no such task"), { status: 404 });
-  // A bot pinned to a computer never starts on this server, including a 1:1.
-  // The desktop pulls the turn and runs it with the engines on that machine.
-  if (!state.opts?.warmOnly && directMachinePlan({ host: state.bot.host, workers: registeredWorkers }).kind === "hold") {
-    return holdDirectMachineTurn(state.bot, state.threadId, state.text, state.opts);
-  }
-  // A person who does not own this bot runs on their own model and effort
-  // when they set one. The stored bot and the thread stay the owner's.
-  if (IDENTITY.kind === "perspicax") {
-    const earlySpeaker = resolveTurnSpeaker({
-      speaker: state.opts?.speaker,
-      sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.sender),
-      peerAsk: state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk),
-      trigger: state.opts?.trigger,
-      automationSource: state.opts?.automationSource
-    });
-    state.person = earlySpeaker.origin === "person" ? earlySpeaker.principalId?.trim().toLowerCase() : "";
-    // #1137: when the owner pays, the bot answers on the owner's model, not
-    // on a model of the viewer's own.
-    const ownerPays = speakerPayerMode(state.bot, earlySpeaker) === "owner";
-    if (state.person && !ownerPays && sharedBotForViewer(recordedBotOwner(state.bot), state.person)) {
-      state.selection = applyViewerModelOverride(
-        state.bot.modelSelection,
-        viewerBotOverrideStore.getOne(state.person, state.bot.id),
-        (level: any, instanceId: any) => {
-          state.levels = registry.get(instanceId)?.adapter.capabilities.effortLevels;
-          return Array.isArray(state.levels) && effortAcceptedByEngine(level, state.levels);
-        },
-      );
-      if (state.selection !== state.bot.modelSelection) state.bot = { ...state.bot, modelSelection: state.selection };
+    {
+      const validated = await prepareValidateStartTurn(state);
+      if (validated.kind === "return") return validated.value;
+      const admitted = await prepareAdmitStartTurn(state);
+      if (admitted.kind === "return") return admitted.value;
+      const claimed = await prepareClaimStartTurn(state);
+      if (claimed.kind === "return") return claimed.value;
     }
-    // #1137, #1154: the bot's model cannot run for the person who pays (no
-    // credentials of theirs for its engine, or their session does not offer
-    // it), so it answers with a model they can run, for this turn only.
-    if (!state.opts?.warmOnly && !state.opts?.cardContinuation) warmPayerAccountModels(state.bot, earlySpeaker);
-    const switched = speakerTurnSelection(state.bot, earlySpeaker);
-    if (switched && !state.opts?.warmOnly) {
-      state.bot = { ...state.bot, modelSelection: switched.selection };
-      turnModelSwitches.set(state.threadId, { botId: state.bot.id, requested: switched.requested, actual: switched.selection, ...(state.person ? { principalId: state.person } : {}) });
-      turnModelRequested.set(state.threadId, switched.requested);
-    } else if (switched) {
-      state.bot = { ...state.bot, modelSelection: switched.selection };
-    } else {
-      turnModelSwitches.delete(state.threadId);
-      turnModelRequested.delete(state.threadId);
-    }
-  }
-  // Auto (docs/plans/2026-10-08-auto-model.md): this turn's model. A
-  // person's turn runs on the orchestration model; work a bot handed out
-  // (a peer hop, a routine, a parallel task it opened) on the model its
-  // class of work calls for; a continuation keeps the thread's last pick.
-  // The stored bot and thread keep Auto and their base model.
-  state.autoTurn = null;
-  let autoContinuing = false;
-  /** The thread's own selection (Auto and its base) before the pick replaced it. */
-  state.autoBaseSelection = state.bot.modelSelection;
-  if (state.bot.modelSelection.auto === true) {
-    const autoPeerAsk = state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk);
-    const autoSpeaker = resolveTurnSpeaker({
-      speaker: state.opts?.speaker,
-      sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.sender),
-      peerAsk: autoPeerAsk,
-      trigger: state.opts?.trigger,
-      automationSource: state.opts?.automationSource
-    });
-    // A fresh coordinate_bots hop rides a card continuation but is new work.
-    const freshAutoHop = Boolean(state.opts?.coordination && !state.opts.coordination.resumed);
-    autoContinuing = !freshAutoHop && Boolean(state.opts?.cardContinuation || state.opts?.computerSelectionContinuation || state.opts?.compactOnly || state.opts?.warmOnly);
-    const worker = Boolean(autoPeerAsk) || (state.opts?.commsDepth ?? 0) > 0 || state.opts?.automationSource !== undefined || state.opts?.autoWorker === true;
-    state.autoTurn = autoPickForTurn({
-      bot: state.bot, threadId: state.threadId, speaker: autoSpeaker, text: state.text,
-      role: autoContinuing && !state.opts?.autoSkip?.length ? "continue" : worker ? "worker" : "orchestration",
-      fallback: worker ? "worker" : "orchestration",
-      // A guest's turn on a Cloud home only goes to an engine that confines it.
-      guestConfined: cloudGuestDriven(state.threadId) || cloudGuestDrivenHandoff(state.opts?.coordination?.id) || botmailConfined(state.threadId),
-      ...(state.opts?.autoSkip ? { skip: state.opts.autoSkip } : {})
-    });
-    // Recorded on the task once the turn is admitted (below), never before.
-    if (state.autoTurn) state.bot = { ...state.bot, modelSelection: state.autoTurn.pick.selection };
-  }
-  // A request that needs a mail, calendar, Teams or SharePoint connector the
-  // bot's engine lacks runs on the engine of this person that has it, for
-  // this request only (server/connector-switch.ts). A card's continuation
-  // stays where the request went. Never for Auto (its own pick), a warm-up,
-  // work handed out or a routine.
-  // Only the person's own new message, never a card's continuation, a
-  // compaction or a computer choice (those stay on the bot's engine), and
-  // only its raw text (review of #943): a fresh or edited send's `text` is
-  // what they typed; a drained queue line passes the composed prompt (page,
-  // mail or data context, a quoted reply) as `text`, so only its stored
-  // message is read.
-  state.connectorSwitch = undefined;
-  const personText = state.opts?.userMessage
-    ? (state.opts.userMessage.role === "user" && state.opts.userMessage.kind === "text" ? state.opts.userMessage.text ?? "" : "")
-    : state.text;
-  if (!state.autoTurn && !state.opts?.warmOnly && !state.opts?.cardContinuation && !state.opts?.computerSelectionContinuation && !state.opts?.compactOnly && personText) {
-    const switchSpeaker = resolveTurnSpeaker({
-      speaker: state.opts?.speaker,
-      sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.sender),
-      peerAsk: state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk),
-      trigger: state.opts?.trigger,
-      automationSource: state.opts?.automationSource
-    });
-    const personsRequest = (switchSpeaker.origin === "person" || switchSpeaker.origin === "operator")
-      && !state.opts?.automationSource && !state.opts?.peerAsk && !state.opts?.userMessage?.peerAsk && !(state.opts?.commsDepth ?? 0) && !state.opts?.coordination;
-    state.connectorSwitch = personsRequest ? connectorSwitchForTurn(state.bot, state.threadId, switchSpeaker, personText) : null;
-    if (state.connectorSwitch) {
-      state.bot = { ...state.bot, modelSelection: { instanceId: state.connectorSwitch.instanceId, model: state.connectorSwitch.model, ...(state.connectorSwitch.effort ? { effort: state.connectorSwitch.effort } : {}), ...(state.connectorSwitch.account ? { account: state.connectorSwitch.account } : {}) } };
-    }
-  }
-  // A turn said on a live call, and the warm that prepares its process, run
-  // on a fast model (server/voice-turn.ts): the person waits in silence for
-  // the first word. Pinned or Auto alike; a request that needed another
-  // engine's connector keeps it. Heavy work is handed to a parallel task on
-  // the bot's main model by the call turn itself.
-  state.voiceTurnPick= null;
-  /** The turn runs in the call's own session, from a short view of the
-   * conversation (server/voice-turn.ts), not in the conversation's session. */
-  state.voiceCallTurn = false;
-  if (!state.connectorSwitch && voiceCalls.active(state.threadId) && !state.opts?.commsDepth && !state.opts?.coordination && !state.opts?.automationSource
-    && !state.opts?.compactOnly && !state.opts?.unattended && !(state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk))) {
-    const voiceSpeaker = resolveTurnSpeaker({
-      speaker: state.opts?.speaker,
-      sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.sender),
-      trigger: state.opts?.trigger,
-      automationSource: state.opts?.automationSource
-    });
-    state.voiceCallTurn = true;
-    state.voiceTurnPick = voicePickForTurn(state.bot, state.autoBaseSelection, voiceSpeaker,
-      cloudGuestDriven(state.threadId) || cloudGuestDrivenHandoff(state.opts?.coordination?.id) || botmailConfined(state.threadId));
-    if (state.voiceTurnPick) {
-      state.bot = { ...state.bot, modelSelection: state.voiceTurnPick.selection };
-      state.autoTurn = null;
-    }
-  } else if (!voiceCalls.active(state.threadId) && voiceSessions.has(state.threadId)) {
-    // the call expired without a hang-up: its session is gone with it
-    voiceSessions.end(state.threadId);
-  }
-  // 2026-10-30: a proactive wake runs on the fast model when there is one,
-  // the same pick as a call turn (#1694): most wakes are a quick look.
-  // Auto keeps its own pick; a request that needed a connector keeps it.
-  // Wakes use triggerSource "proactive"; legacy rows may still be webhook+proactive.
-  const proactiveWake =
-    state.opts?.automationSource === "proactive" ||
-    (state.opts?.automationSource === "webhook" && activeRoutineRunForThread(state.threadId)?.proactive);
-  if (!state.voiceTurnPick && !state.autoTurn && !state.connectorSwitch && !state.opts?.warmOnly && proactiveWake) {
-    const wakePick = voicePickForTurn(state.bot, state.autoBaseSelection, resolveTurnSpeaker({ speaker: state.opts?.speaker, automationSource: state.opts?.automationSource }), botmailConfined(state.threadId));
-    if (wakePick) state.bot = { ...state.bot, modelSelection: wakePick.selection };
-  }
-  // Routines and legacy peer delivery already have their own completion
-  // owners. Only ordinary chats opt into this scheduler; its child turns
-  // carry an exact node id rather than inheriting a routine's lifetime.
-  // A teammate's warm is shaped as the coordinate_bots turn it precedes.
-  state.coordinated = Boolean(state.opts?.coordination) || (state.opts?.warmOnly === true && state.opts.warmCoordination === true);
-  // Lot 3 (docs/runtime-contract.md §9 step 2): a routine or webhook run's
-  // own conversation hands work out on the job runtime too, like a chat;
-  // its run waits on that work (hasPendingDelegations) and the resume turn,
-  // on the same thread, completes it. A room goal keeps its orchestrator.
-  const routineRun = state.opts?.automationSource ? activeRoutineRunForThread(state.threadId) : null;
-  const routineRunThread = Boolean(routineRun && routineRun.target !== "room-goal");
-  state.boundedCoordination = (!state.opts?.automationSource || routineRunThread) && (!state.opts?.commsDepth || state.coordinated);
-  if (state.bot.approvalGrant) {
-    throw Object.assign(new Error("this bot's approval level is still being confirmed — try again"), { status: 409, code: "settling" });
-  }
-  // A turn answering a Team incidents report needs no computer: one it
-  // cannot have right now — mid-change here, unpaid or missing at dispatch —
-  // leaves it without one (computerSkipped, and the prompt says why) where
-  // any other turn is refused. Deciding what a report needs never waits on
-  // a screen; a report refused for it was a report lost.
-  state.answer = turnAnswers(state.threadId, state.opts);
-  state.computerSkipped = undefined;
-  const transitionError = providerTransitionForTurn(state.bot, state.opts?.runOn, state.threadId);
-  if (transitionError && !state.answer.incident) throw Object.assign(new Error(transitionError), { status: 409 });
-  if (transitionError) state.computerSkipped = transitionError;
-  // Only a turn on an engine being replaced waits; the others run on.
-  if (providerInstancesChanging.has(state.bot.modelSelection.instanceId)) {
-    throw Object.assign(new Error("this provider account is being updated — try again shortly"), { status: 409, code: "settling" });
-  }
-  // A workspace at its monthly spend limit starts no turn of any kind: a
-  // person's message, a routine, a peer hop or a webhook all stop here.
-  assertWithinBudget(cfg, DATA_DIR);
-  if (boatLifecycleBusyBots.has(state.botId)) {
-    const changing = "this bot's cloud computer is being changed — wait for it to finish";
-    if (!state.answer.incident) throw Object.assign(new Error(changing), { status: 409, code: "settling" });
-    state.computerSkipped ??= changing;
-  }
-  state.warmOnly = state.opts?.warmOnly === true;
-  if (!state.warmOnly) turnTrace(state.threadId, state.opts?.automationSource ? `start:${state.opts.automationSource}` : state.opts?.cardContinuation ? "start:continuation" : "start", !state.opts?.automationSource);
-  // The engine for a live call is already starting. This turn waits for it
-  // and reuses the process. The warm itself must not wait.
-  if (!state.warmOnly && voiceCalls.active(state.threadId)) await voiceWarmup.join(state.threadId);
-  // A pre-warm (opened conversation, composer, routine) still starting: this
-  // turn waits for it and takes its process over.
-  if (!state.warmOnly && threadPrewarm.has(state.threadId)) await joinPrewarm(state.threadId);
-  if (!state.warmOnly) turnTrace(state.threadId, "prewarm-joined");
-  assertTurnAdmission(state.botId, state.threadId);
-  // Steering is never a cancel. A message sent while teammates are working
-  // runs now, with their assignments still attached: they keep running and
-  // their results still return here (outstandingAssignmentsPrompt tells this
-  // turn which are still out). Stop, in this conversation, is the gesture
-  // that ends coordination — see interruptDirectThread.
-  // Revoke anything a previous turn left behind before minting this turn's
-  // integrations. Completion and interrupt paths do the same; a proxy the
-  // warm engine kept is honoured again only through this turn's records.
-  revokeEarlierTurnCapabilities(state.threadId);
-  // a webhook turn, or one inherited from a bot already running unattended
-  if (state.opts?.automationSource === "webhook" || state.opts?.unattended) markUnattended(state.bot.id, state.threadId);
-  // a person typing into this bot ends the unattended window immediately
-  else if (state.opts?.automationSource === undefined && !state.opts?.commsDepth && !state.opts?.cardContinuation && !state.warmOnly) {
-    clearUnattended(state.threadId);
-    delegationWakeBudget.reset(state.threadId);
-  }
-  state.task = store.taskByThread(state.bot.id, state.threadId);
-  if (!state.task) throw Object.assign(new Error("no such task"), { status: 404 });
-  if (hostedModels && !hostedModels.allows(state.bot.modelSelection)) throw Object.assign(new Error(hostedModels.error()), { status: 409 });
-  // A fresh request decides where to work again: a select_computer move
-  // held only the request it was made in.
-  if (!state.opts?.computerSelectionContinuation && !state.opts?.compactOnly && !state.warmOnly && (!state.opts?.cardContinuation || Boolean(state.opts?.coordination && !state.opts.coordination.resumed))) {
-    computerSelectionMoves.delete(state.threadId);
-  }
-  state.plan = turnSurfacePlan(state.bot, state.opts?.runOn, state.threadId);
-  if (!namesEngine(state.bot.modelSelection)) {
-    // No engine at all: the default one, or a plain sentence, never `provider instance ""`.
-    const healed = healBotEngine(state.bot);
-    if (!namesEngine(healed.modelSelection)) throw noEngineError();
-    state.bot = healed;
-  }
-  state.instance = registry.get(state.bot.modelSelection.instanceId);
-  if (!state.instance) {
-    // Still on the removed Computer engine: its move failed or found no
-    // engine. Try it again now, so the next message runs on the new engine.
-    if (removedComputerInstanceIds(cfg.instances).has(state.bot.modelSelection.instanceId)) void retryComputerEngineMove();
-    throw Object.assign(
-      new Error(`${engineReference(state.bot.modelSelection.instanceId)} is unavailable — pick another model in settings`),
-      { status: 409 },
-    );
-  }
-  const policyRefusal = policyModelRefusal(state.instance);
-  if (policyRefusal) throw Object.assign(new Error(policyRefusal), { status: 409, code: "managed_policy" });
-  // #1098: outside the organization's list, the turn runs only on its
-  // payer's own subscription or key
-  const orgRefusal = orgEngineTurnRefusal(state.bot, state.instance, resolveTurnSpeaker({
-    speaker: state.opts?.speaker,
-    sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.sender),
-    peerAsk: state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk),
-    trigger: state.opts?.trigger,
-    automationSource: state.opts?.automationSource
-  }));
-  if (orgRefusal) throw Object.assign(new Error(orgRefusal), { status: 409, code: "engine_not_allowed" });
-  // 2026-10-30 (lot 2): a model turned off never runs a turn by name
-  const modelRefusal = state.bot.modelSelection.auto === true ? undefined : modelSwitchRefusal(state.instance.instanceId, state.bot.modelSelection.model, effectiveBotOwner(state.bot));
-  if (modelRefusal) throw Object.assign(new Error(modelRefusal), { status: 409, code: "model_turned_off" });
-  state.toolScope = toolScopeForTurn(state.bot.id);
-  // On a Cloud home a guest's turn never gets a shell or reads outside its
-  // own folder (docs/cloud-pro.md): an engine that cannot run it that way is
-  // refused, in one plain line, before anything is recorded.
-  // (The thread is idle here: a mark a turn that never started left is stale.)
-  guestDrivenTurns.delete(state.threadId);
-  // A mail-woken routine run (bot email, S2) is confined the same way: no
-  // shell, no reads outside its folder.
-  const mailConfined = botmailConfined(state.threadId);
-  state.guestConfined = cloudGuestDriven(state.threadId) || cloudGuestDrivenHandoff(state.opts?.coordination?.id) || mailConfined;
-  if (state.guestConfined && state.instance.adapter.capabilities.guestTurns !== "confined") {
-    if (mailConfined && !cloudGuestDriven(state.threadId)) throw Object.assign(new Error(BOTMAIL_ENGINE_REFUSAL), { status: 409, code: "botmail_engine" });
-    throw Object.assign(new Error(guestEngineRefusal(state.threadId)), { status: 409, code: "guest_engine" });
-  }
-  // Codex and the API drivers cannot start without a prompt. Sending them
-  // an empty one would bill a turn and show it. Claude is the engine that
-  // can hold a process with stdin open and no model call.
-  if (state.warmOnly && state.instance.adapter.capabilities.warmSession !== true) {
-    console.error(`[voice-call] warm skipped: ${state.instance.driverKind}`);
-    state.opts?.onWarmSettled?.(false);
-    return {
-      id: `warm-${randomUUID()}`,
-      at: Date.now(),
-      role: "user" as const,
-      kind: "text" as const,
-      text: "",
-      ...(state.opts?.voiceCall ? { voiceCall: state.opts.voiceCall } : {})
-    };
-  }
-  // Resolve only transport tags from this newly submitted text. The original
-  // string remains the durable message. Native-image providers get a
-  // path-free prompt and bounded inputs instead of needing a Read tool;
-  // path-reading drivers retain the attachment tag as their compatibility route.
-  state.resolvedImages = extractTurnImages(state.text);
-  // Files sealed at rest go plain in place for the engine (server/content-at-rest.ts):
-  // this message's attachments before anything reads them; the bot's memory
-  // files in parallel with the rest of the setup, awaited before the engine
-  // starts (below).
-  if (!state.warmOnly && supportsWorkspaceFiles(state.instance.driverKind)) void holdBotMemoryPlain(state.bot.id, turnHolder(state.threadId));
-  const attachmentsHold = state.warmOnly ? undefined : holdTurnAttachments(state.threadId, [state.text], state.resolvedImages.images, { picturesByPath: state.instance.driverKind === "codex" });
-  if (attachmentsHold) {
-    await attachmentsHold;
-    // The wait yielded: another start may have taken this slot since the
-    // checks above. From here to the dispatch claim nothing yields again.
-    assertTurnAdmission(state.botId, state.threadId);
-  }
-  const usesNativeImageInput = state.instance.adapter.capabilities.nativeImageInput === true;
-  state.providerText = promptWithDataContext(usesNativeImageInput ? state.resolvedImages.text : state.text, state.opts?.dataContext);
-  state.turnImages = usesNativeImageInput ? state.resolvedImages.images : [];
-  state.commsDepth = state.opts?.commsDepth ?? 0;
-  // Classify the turn where the peer paths' depth actually arrives: by the
-  // time it settles, the fold has only a thread id to go on.
-  if (state.commsDepth > 0) markInternalTurn(state.threadId);
-  else clearInternalTurn(state.threadId);
-  if (state.answer.quiet) quietTurnThreads.add(state.threadId);
-  else quietTurnThreads.delete(state.threadId);
-  // a task takes its name from the first thing you asked it to do
-  if (!state.warmOnly && state.resolvedImages.text.trim() && !state.opts?.cardContinuation) {
-    const titled = store.titleTaskFromFirstMessage(state.bot.id, state.resolvedImages.text, state.threadId);
-    // The snippet is only the fallback name. A cheap one-shot may trade it
-    // for a title a person would have typed, but never on a peer-opened
-    // row: its title belongs to the assigned work. Everywhere else, the
-    // swap happens only while the row still carries the snippet — a rename
-    // by a person has already broken that equality by then.
-    const snippet = titled?.title;
-    if (titled && snippet && !titled.openedBy?.botId && personalFeatureOn("llmThreadTitles", llmThreadTitlesEnabled(cfg), vaultPrincipalForThread(state.threadId)) && state.instance.generateText) {
-      void generateThreadTitle(state.instance, state.resolvedImages.text)
-        .then((title: any) => {
-          if (title) store.retitleTask(state.bot.id, state.threadId, snippet, title);
-        })
-        .catch(() => undefined);
-    }
-  }
-
-  // Spoken words never reach the log. A direct send says so itself; a
-  // drained queue (or a continuation) carries it on the user lines it runs.
-  const turnLineIds = new Set(state.opts?.excludeMessageIds ?? []);
-  state.spoken = state.opts?.via === "call" || state.opts?.userMessage?.via === "call" ||
-    (turnLineIds.size > 0 && store.messagesFor(state.threadId).some((message: any) => turnLineIds.has(message.id) && message.via === "call"));
-  if (state.warmOnly) console.error(`[voice-call] warming thread ${state.threadId}`);
-  else console.error(turnStartLogLine({
-    botId: state.botId, text: state.resolvedImages.text, images: state.turnImages.length, depth: state.commsDepth, card: Boolean(state.opts?.cardContinuation), spoken: state.spoken,
-    confidential: store.isConfidentialThread(state.threadId)
-  }));
-  state.instanceId = state.instance.instanceId;
-  // A turn always runs on the bot's own engine, model, effort and variant,
-  // wherever it works: a cloud computer is a tool it mounts, never a reason
-  // to swap the engine (the provider_not_configured incident).
-  state.model = state.bot.modelSelection.model;
-  const askedEffort = state.bot.modelSelection.effort;
-  state.variant = state.bot.modelSelection.variant;
-  // What this turn runs on, kept for the bot text it writes (a quiet line
-  // under the reply shows it). A warm-up writes no reply.
-  if (!state.warmOnly) turnRunByThread.set(state.threadId, turnRunFor(state.bot.modelSelection, turnModelRequested.get(state.threadId)));
-  assertModelVariantSupported({ variant: state.variant, effort: askedEffort }, state.instance.adapter.capabilities);
-  // A selection can be persisted while its engine is offline. Re-check when
-  // the engine returns so an old or unsupported value never reaches a CLI.
-  if (askedEffort && !effortAcceptedByEngine(askedEffort, state.instance.adapter.capabilities.effortLevels ?? [])) {
-    throw Object.assign(
-      new Error(`effort "${askedEffort}" is not offered by this bot's engine — choose another level in settings`),
-      { status: 409 },
-    );
-  }
-  // The engine takes it but this model may not (shared/model-capabilities.ts):
-  // then nothing is sent and the model runs at its own default.
-  state.effort = effortForModel(askedEffort, state.instance.models.options.find((option: any) => option.id === state.bot.modelSelection.model),
-    state.instance.adapter.capabilities.effortLevels);
-
-  // an edit hands us its already-branched user message; a plain send appends
-  state.userMessage= state.opts?.userMessage;
-  if (state.opts?.editedMessageId) {
-    const edited = store.branchMessage(state.threadId, state.opts.editedMessageId, state.text, state.opts.sendId, state.opts.sender, state.opts.dataContext);
-    if (!edited) throw Object.assign(new Error("only a user text message can be edited"), { status: 400 });
-    store.patchTask(state.bot.id, state.threadId, { rewound: true });
-    state.userMessage = edited;
-  }
-  if (!state.userMessage) {
-    state.userMessage = state.warmOnly
-      ? { id: `warm-${randomUUID()}`, at: Date.now(), role: "user", kind: "text", text: "", ...(state.opts?.voiceCall ? { voiceCall: state.opts.voiceCall } : {}) }
-      : state.opts?.cardContinuation
-      ? { id: `card-${randomUUID()}`, at: Date.now(), role: "user", kind: "text", text: state.text }
-      : store.appendMessage(state.threadId, {
-          role: "user",
-          kind: "text",
-          text: state.text,
-          replyToId: state.opts?.replyTo?.id,
-          sendId: state.opts?.sendId,
-          ...(state.opts?.dataContext ? { dataContext: state.opts.dataContext } : {}),
-          peerAsk: state.opts?.peerAsk,
-          sender: state.opts?.sender,
-          ...(state.opts?.peerAsk && state.autoTurn?.pick.role === "worker" ? { autoModel: autoModelRecord(state.autoTurn.pick, Date.now()) } : {}),
-          ...(state.opts?.voiceCall ? { voiceCall: state.opts.voiceCall } : {}),
-          ...spokenLineFields(state.opts?.via, state.opts?.callId),
-          ...(state.opts?.relayed ? { relayed: true } : {})
-        });
-  }
-  // Runtime path only (coordinator.answer is always false on the legacy
-  // tree): a person's ordinary message into a thread whose coordinated
-  // assignment is parked on a question IS the answer. The assignment takes
-  // the words and the runtime runs the teammate's next turn itself (run
-  // hook, with the answer in its envelope), so no turn starts here. Only a
-  // person's own line counts: not a continuation, a wake, a routine, a peer
-  // hop or an edit. The early return happens before admission — no dispatch
-  // claim, request owner, busy flag or watchdog exists yet — so it settles
-  // only what callers read: the message route carries the stored user line
-  // in its receipt, and a drained queue holds its receipt until
-  // onTurnSettled; a turn that never started publishes no completion, so
-  // the drain is nudged as its own error path does (M2 in drainQueuedSends).
-  state.personLine = !state.opts?.coordination && !state.opts?.cardContinuation && !state.opts?.automationSource && !state.opts?.compactOnly
-    && !state.opts?.computerSelectionContinuation && !state.opts?.editedMessageId && !state.warmOnly && !state.commsDepth && !state.opts?.peerAsk && !state.userMessage.peerAsk;
-  if (state.personLine && coordinator.answer(state.threadId, state.text)) {
-    store.appendMessage(state.threadId, { role: "bot", kind: "activity", tool: { name: "Answer passed to the waiting work", ok: true } });
-    settleInputRequests(state.threadId);
-    state.opts?.onTurnSettled?.();
-    queueMicrotask(drainQueuedSends);
-    return state.userMessage;
-  }
-  if (!state.warmOnly && state.opts?.voiceCall?.utteranceId) {
-    liveVoiceUtteranceByThread.set(state.threadId, state.opts.voiceCall.utteranceId);
-  }
-  // Organization server (slice 3, D13): no turn without engine access. The
-  // person's message stays; the thread gets the card saying why, the owner
-  // a notification, and the sender an ordinary accepted send.
-  state.speaker = resolveTurnSpeaker({
-    speaker: state.opts?.speaker,
-    sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.userMessage.sender),
-    peerAsk: state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.userMessage.peerAsk),
-    trigger: state.opts?.trigger,
-    automationSource: state.opts?.automationSource
-  });
-  // an automatic recovery re-enters with these options: same speaker
-  state.opts = { ...state.opts, speaker: state.speaker };
-  // A voice call turn gets the hidden phone-call instruction; the first
-  // written turn after a call is told the call ended. Only a person's own
-  // turn: a continuation or a peer hop is not said on the phone.
-  // The thread is on a live call (server/voice-call-session.ts): the engine
-  // stays warm between turns and the turn's context stays short.
-  state.onCall = Boolean(voiceCalls.active(state.threadId)) && !state.opts?.commsDepth && !state.userMessage.peerAsk;
-  state.voiceCallText = state.opts?.cardContinuation || state.opts?.commsDepth || state.userMessage.peerAsk
-    ? ""
-    : voiceCallSection(
-      state.userMessage,
-      store.activePath(state.threadId).findLast((message: any) => message.role === "user" && message.id !== state.userMessage?.id && !message.peerAsk && message.at <= state.userMessage!.at),
-      state.userMessage.sender?.name ?? botUserName(state.bot),
-    );
-  // Organization server: where this turn's tools run, and for whom, decided
-  // once (server/desktop-bridge.ts); the speaker's own attachments are
-  // pointed there and small text ones given inline.
-  const turnRemote = remoteComputerForTurn({
-    organization: IDENTITY.kind === "perspicax",
-    runOnCloud: state.opts?.runOn === "cloud" || cloudOnlyBot(state.bot.id),
-    hasTeamComputer: Boolean(inheritedTeamComputer(state.bot))
-  });
-  const turnWorks = turnWorksOn(state.plan, turnRemote.forceCloud);
-  state.turnPrincipal = sandboxPrincipalForTurn({
-    botOwnerPrincipalId: effectiveBotOwner(state.bot),
-    confidentialOwnerPrincipalId: confidentialThreadOwner(state.threadId),
-    routine: routineLineage(state.speaker),
-    speakerPrincipalId: orgSpeakerPrincipal(state.bot, state.speaker)
-  });
-  const turnPersonAsked = !routineLineage(state.speaker) && Boolean(orgSpeakerPrincipal(state.bot, state.speaker));
-  // Auto (2026-10-15; routines 2026-11-01): a person-asked turn prefers
-  // the person's computer when connected, else the cloud. A routine starts
-  // in the cloud; routinesAllowed only permits an explicit computer_select
-  // to this_computer. A thread opened with a workspace starts there when
-  // allowed (server/auto-computer.ts).
-  const turnAutoWanted = turnWorks.auto ? autoWorkspaceWanted(state.bot, state.threadId) : null;
-  const turnAutoStart = turnWorks.auto && IDENTITY.kind === "perspicax" && state.turnPrincipal ? autoStartTarget({
-    wanted: turnAutoWanted,
-    routine: routineLineage(state.speaker),
-    personAsked: turnPersonAsked,
-    desktopConnected: desktopBridges.connected(state.turnPrincipal.trim().toLowerCase()),
-    routinesAllowed: workplacePreference(state.turnPrincipal.trim().toLowerCase()).routines,
-    sandboxConfigured: Boolean(userSandbox),
-    browserAvailable: state.plan.browser
-  }) : null;
-  state.turnPlace = decideWorkplace({
-    desktopTargeted: state.plan.computer === "local" || state.plan.computer === "vm" || turnAutoStart?.target === "this_computer" || turnAutoStart?.target === "local_vm",
-    routine: routineLineage(state.speaker),
-    principal: state.turnPrincipal,
-    personAsked: turnPersonAsked
-  });
-  state.turnAuto = autoComputerStateFor(state.turnPlace, turnWorks, routineLineage(state.speaker), turnAutoStart, state.plan.browser);
-  // Each call turn's words carry the call mark themselves: a live session
-  // gets the volatile call section only when it changed, so from the second
-  // call turn on the section alone never reached the engine.
-  if (state.userMessage.voiceCall && !state.opts.cardContinuation && !state.opts.commsDepth && !state.userMessage.peerAsk) {
-    state.providerText = voiceCallTurnPrompt(state.providerText, state.userMessage.voiceCall);
-  }
-  // A greeting, thanks or small talk alone (server/small-talk.ts) asks for
-  // no action: the engine is told so, and the cloud computer is not woken.
-  const smallTalk = !state.warmOnly && !state.opts.cardContinuation && !state.opts.commsDepth && !state.opts.automationSource && !state.userMessage.peerAsk
-    && !state.userMessage.voiceCall && !routineLineage(state.speaker) && isSmallTalk(state.userMessage.text, state.bot.name);
-  if (smallTalk) state.providerText += SMALL_TALK_TURN_NOTE;
-  if (!state.opts.cardContinuation && !state.warmOnly) {
-    // Pictures ride as image input only on Claude Code, which reads them for
-    // sure; another engine gets the saved picture files to read instead.
-    const office = officeTurnText(state.providerText, state.turnPlace.principal, usesNativeImageInput && state.instance.driverKind === "claudeAgent", state.turnImages);
-    state.providerText = office.text;
-    state.turnImages.push(...office.images);
-  }
-  state.placedText = state.opts.cardContinuation ? { text: state.providerText, staging: null } : workplaceTurnText(state.providerText, state.turnPlace);
-  state.providerText = withWorkplaceNote(state.placedText.text, state.turnPlace, state.turnAuto);
-  // The engine's container runs in UTC: tell it the time where its person is
-  // (server/turn-clock.ts), so times are said in their zone.
-  const clockZone = state.opts.cardContinuation || !turnClockEnabled() ? null : turnZoneFor(state.bot, state.speaker);
-  if (clockZone) state.providerText = withTurnClock(state.providerText, new Date(), clockZone);
-  // A compaction summarizes with the bot's engine too, so it is gated like
-  // a turn, and so is a fresh delegated turn (a hop, as ask_bot's is); other
-  // card continuations resume a turn already admitted.
-  const freshHop = Boolean(state.opts.coordination && !state.opts.coordination.resumed);
-  const accessRefusal = state.opts.cardContinuation && !state.opts.compactOnly && !freshHop ? null
-    : orgEngineRefusal(state.bot, state.instance, state.speaker, state.bot.modelSelection.model) ?? ownerModelOfflineRefusal(state.bot, state.instance, state.speaker, state.bot.modelSelection.model);
-  if (accessRefusal) {
-    if (state.warmOnly) {
-      console.error(`[voice-call] warm skipped: ${accessRefusal.reason}`);
-      state.opts?.onWarmSettled?.(false);
-      return state.userMessage;
-    }
-    state.engine = engineDisplayName(state.instance);
-    // A backup the usage-limit failover picked: one plain error, no card.
-    state.backupRefused = limitBackupRefusedInThread(state.botId, state.threadId, state.speaker);
-    state.card = accessCardFor(state.bot, accessRefusal, state.engine);
-    if (!state.backupRefused && !repeatsShownFailure(store.messagesFor(state.threadId), { role: "bot", kind: "access", access: state.card }, state.bot.id)) {
-      store.appendMessage(state.threadId, {
-        role: "bot",
-        kind: "access",
-        access: state.card
-      });
-    }
-    state.notice = state.backupRefused ?? engineAccessNotice(accessRefusal.reason, state.engine, accessRefusal);
-    const refusedRun = routineLineage(state.speaker) ? activeRoutineRunForThread(state.threadId)?.id : undefined;
-    notifyAccess(deliverableNotification("turn-failed", state.bot, state.threadId, state.notice, { avatarUrl: state.bot.avatarUrl }), state.card, refusedRun);
-    console.error(`[omb-turn] bot=${state.botId} refused: ${accessRefusal.reason}${accessRefusal.cause ? `/${accessRefusal.cause}` : ""} (${state.instance.instanceId})`);
-    state.opts?.coordination?.settle({ ok: false, text: state.notice });
-    state.opts?.onDispatchError?.(state.notice);
-    state.opts?.onTurnSettled?.();
-    return state.userMessage;
-  }
-  // Auto: one discreet line when this turn starts on another place than the
-  // thread last showed, or could not start where it was sent.
-  if (state.turnAuto?.auto && turnAutoStart && !state.warmOnly && !state.opts.cardContinuation) noteAutoWorkspace(state.threadId, turnAutoStart, turnAutoWanted !== null);
-  state.recoveryUserMessageId = state.opts?.coordination
-    ? store.activePath(state.threadId).findLast((m: any) => m.role === "user" && m.kind === "text")?.id
-    : state.userMessage.id;
-  // Auto: the pick is this thread's now that the turn is admitted, and
-  // work handed out gets its activity row (which model, and why).
-  if (state.autoTurn) {
-    const earlierPick = store.taskByThread(state.bot.id, state.threadId)?.autoModel;
-    store.patchTask(state.bot.id, state.threadId, { autoModel: autoModelRecord(state.autoTurn.pick, Date.now()) });
-    autoTurnsByThread.set(state.threadId, { payer: state.autoTurn.payer, entry: { instanceId: state.autoTurn.pick.selection.instanceId, model: state.autoTurn.pick.selection.model } });
-    // The person's own turn (2026-10-29): the words decide the model, so a
-    // turn that runs on another model than the last one says so in one
-    // line (the chip and the picker say it on the first turn).
-    const ownTurnMoved = state.autoTurn.pick.role === "orchestration" && earlierPick !== undefined &&
-      (earlierPick.instanceId !== state.autoTurn.pick.selection.instanceId || earlierPick.model !== state.autoTurn.pick.selection.model);
-    if ((state.autoTurn.pick.role === "worker" || ownTurnMoved) && !state.warmOnly && !autoContinuing) {
-      store.appendMessage(state.threadId, {
-        role: "bot",
-        kind: "activity",
-        autoModel: autoModelRecord(state.autoTurn.pick, Date.now()),
-        tool: { name: `notice: ${explainPick(state.autoTurn.pick)}`, ok: true }
-      });
-    }
-  } else autoTurnsByThread.delete(state.threadId);
-  if (state.connectorSwitch) {
-    state.line = { engine: state.connectorSwitch.engineLabel, connector: state.connectorSwitch.connector };
-    store.appendMessage(state.threadId, { role: "bot", kind: "activity", tool: { name: `notice: ${connectorSwitchText(state.line)}`, ok: true, connectorSwitch: state.line } });
-  }
-  // Admitted: every refusal above has passed and no other turn runs on this
-  // thread, so this is the one moment the ledger's "who asked" may change.
-  if (!state.warmOnly && state.opts?.trigger) turnTriggers.set(state.threadId, state.opts.trigger);
-  // A fresh delegated turn (coordinate_bots) is a new hop on its thread:
-  // it records its speaker so a hop it starts in turn carries the same one.
-  // A teammate's warm records the speaker its coordinate_bots turn will, so
-  // both are judged for the same person (mcpIdentityEnv).
-  if (!state.opts.cardContinuation || (state.opts.coordination && !state.opts.coordination.resumed) || (state.warmOnly && state.opts.warmCoordination === true)) {
-    turnSpeakers.set(state.threadId, state.speaker);
-    turnSpeakerPrincipals.set(state.threadId, orgSpeakerPrincipal(state.bot, state.speaker));
-    // a fresh turn of its own: an earlier aside no longer taints it (phone tools)
-    if (!state.warmOnly) phoneToolTaintedThreads.delete(state.threadId);
-    if (routineLineage(state.speaker)) {
-      turnRoutineLineage.add(state.threadId);
-      state.payer = turnPayer({ speaker: state.speaker, owner: { principalId: effectiveBotOwner(state.bot) }, peerOwnerPrincipalId: peerOwnerPrincipal(state.speaker) }).principalId;
-      if (state.payer) turnRoutinePayers.set(state.threadId, state.payer);
-      else turnRoutinePayers.delete(state.threadId);
-      state.trigger = directRequestOwners.get(state.threadId)?.automation ?? (state.speaker.origin === "peer" ? state.speaker.routineTrigger : undefined);
-      if (state.trigger) turnRoutineTriggers.set(state.threadId, state.trigger);
-      else turnRoutineTriggers.delete(state.threadId);
-    } else {
-      turnRoutineLineage.delete(state.threadId);
-      turnRoutinePayers.delete(state.threadId);
-      turnRoutineTriggers.delete(state.threadId);
-    }
-  }
-  // A card continuation neither starts nor ends the person's ask: it
-  // resumes the turn their last message began, so that record stands.
-  if (!state.warmOnly && !state.opts?.cardContinuation) {
-    if (state.commsDepth === 0 && state.opts?.automationSource === undefined && !state.opts?.unattended && !state.userMessage.peerAsk) {
-      personAskAt.set(state.threadId, state.userMessage.at);
-      // Where the person is now (server/main-thread.ts). A line relayed
-      // from Slack was written there, not in this conversation: the line
-      // says so (Message.relayed), also in a turn a computer switch continues.
-      if (!state.userMessage.relayed) store.setTaskAskedAt(state.bot.id, state.threadId, state.userMessage.at);
-      // Continuing an old run as a normal conversation makes that task
-      // visible again; these new replies are not routine report updates.
-      if (state.task.routineRunId) store.patchTask(state.bot.id, state.threadId, { routineRunId: undefined });
-    } else {
-      personAskAt.delete(state.threadId);
-    }
-  }
-
-  // 2026-10-28: every turn of an engine that mounts the agents server gets
-  // it; a teammate one hop away gets it without the peer tools (peerHop).
-  // The person-facing parts (setup, skill authoring, the computer choice,
-  // the team roster) stay with the turns that may reach a peer.
-  state.peerHop = peerHopTurn(state.commsDepth, state.coordinated);
-  state.agentsMounted = state.instance.adapter.capabilities.agentsMcp === true;
-  state.peerToolsMounted = state.agentsMounted && !state.peerHop;
-
-  // busy flips immediately so the composer locks; the dispatch itself runs
-  // in the background — boat provisioning can take ~90s and must never
-  // hang the HTTP request
-  state.dispatchClaimId = randomUUID();
-  // The same request again after its turn failed on a usage limit: the root
-  // that turn opened (the work it handed out) continues with this turn. Its
-  // own resume may have started meanwhile; then it answers the request, and
-  // this turn does not run (nothing of it is recorded yet).
-  if (!state.warmOnly && state.opts?.continuesGeneration &&
-      ["answered", "resumed"].includes(coordinator.continueRoot(state.opts.continuesGeneration, state.dispatchClaimId))) {
-    throw Object.assign(new Error("its teammates' results already answer this request"), { status: 409, code: "answered" });
-  }
-  if (smallTalk) {
-    smallTalkTurns.set(state.threadId, { generation: state.dispatchClaimId, messageId: state.userMessage.id });
-    if (smallTalkTurns.size > 2_000) smallTalkTurns.delete(smallTalkTurns.keys().next().value!);
-  }
-  // Guest-driven for as long as it runs, wherever it runs (cloudGuestDriven).
-  if (state.guestConfined) guestDrivenTurns.set(state.threadId, state.dispatchClaimId);
-  state.resourceOwner= { threadId: state.threadId, generation: state.dispatchClaimId };
-  turnResourceOwners.set(state.threadId, state.resourceOwner);
-  directTurnGenerationByThread.set(state.threadId, state.dispatchClaimId);
-  state.requestMessageId = state.opts?.cardContinuation ? state.opts.requestMessageId : state.userMessage.id;
-  const previousRequest = directRequestOwners.get(state.threadId);
-  // This request replaces the thread's last one, which may have finished a
-  // moment ago with its fence still up: its own settle waits on the digest,
-  // while a queued line (the next Team incidents report, a person's
-  // follow-up) drains at turn.completed. Close a finished one first, or it
-  // reads unsettled forever.
-  if (previousRequest && previousRequest.messageId !== state.requestMessageId) {
-    settleTrackedRequest(state.threadId, new Set([state.userMessage.id, ...(state.opts?.excludeMessageIds ?? [])]));
-    savedSteps.requestEnded(state.threadId, previousRequest.generations);
-  }
-  const requestGenerations = state.requestMessageId && previousRequest?.messageId === state.requestMessageId
-    ? previousRequest.generations : new Set<string>();
-  if (requestGenerations.size >= 500) { requestGenerations.clear(); state.requestMessageId = undefined; }
-  requestGenerations.add(state.dispatchClaimId);
-  // Settled once, for everything this request hands on. A continuation (a
-  // card answer, a wake, a resume after the person acted, a surface change)
-  // keeps the origin of the request it continues while that record is
-  // still its own, and never re-reads a stored line: nothing on one says a
-  // routine or a webhook wrote it.
-  const continuation = Boolean(state.opts?.cardContinuation || state.opts?.computerSelectionContinuation);
-  const continued = previousRequest && !previousRequest.stopped &&
-    (state.requestMessageId ? previousRequest.messageId === state.requestMessageId : state.opts?.cardContinuation) ? previousRequest.origin : undefined;
-  const requestOrigin = requestWorkOrigin({ trigger: state.opts?.automationSource, guest: state.guestConfined, handed: state.opts?.origin, continued,
-    line: !continuation && state.requestMessageId === state.userMessage.id ? state.userMessage : undefined });
-  directRequestOwners.set(state.threadId, { generation: state.dispatchClaimId, messageId: state.requestMessageId,
-    generations: requestGenerations, turnId: null, ...(state.opts?.automationSource ? { automation: state.opts.automationSource } : {}), origin: requestOrigin,
-    ...(state.userMessage.voiceCall || state.opts?.voiceCall ? { voiceCall: true as const } : {}),
-    ...(state.personLine || (continued && previousRequest?.personLine) ? { personLine: true as const } : {}) });
-  // On a Cloud home, a turn that is not provably the owner's leaves this
-  // bot's memory "pending" until it ends (server/lending-memory.ts).
-  // An unknown control-plane wake may invalidate a prior final, but it must
-  // never acquire authority by guessing the latest user as its origin.
-  const pendingSource = state.requestMessageId ?? store.activePath(state.threadId).findLast((message: any) => message.role === "user")?.id;
-  if (!state.warmOnly && pendingSource) store.patchMessage(state.threadId, pendingSource, { requestPending: true });
-  if (!state.warmOnly && state.opts?.coordination) directCoordinationSettlers.set(state.dispatchClaimId, state.opts.coordination.settle);
-  // Ordinary sources need the same exact completion ownership as queued
-  // follow-ups: any normal turn may ask teammates to coordinate work.
-  // A warm has no turn to settle.
-  if (!state.warmOnly) directFollowupSettlers.set(state.dispatchClaimId, { threadId: state.threadId, settle: state.opts?.onTurnSettled });
-  directTurnDispatchClaims.set(state.threadId, { id: state.dispatchClaimId, botId: state.botId, threadId: state.threadId, phase: "setup", ...(state.warmOnly ? { warm: true } : {}) });
-  directTurnBots.set(state.threadId, state.bot);
-  beginInternalCapabilityGeneration(state.threadId, state.dispatchClaimId);
-  // The surface paragraph is part of the stable prompt. A call warm has no
-  // saved user row, so it cannot register a selection, but the first spoken
-  // turn will. Predict that paragraph or the engine relaunches on the first
-  // words.
-  const sharedComputerBlocksSelect = !remoteComputerForTurn({
-    organization: IDENTITY.kind === "perspicax",
-    runOnCloud: state.opts?.runOn === "cloud",
-    hasTeamComputer: Boolean(inheritedTeamComputer(state.bot))
-  }).skipRemote && Boolean(inheritedTeamComputer(state.bot));
-  state.maySelectComputer = !state.opts?.computerSelectionContinuation && !state.opts?.cardContinuation && !state.opts?.automationSource && !state.opts?.unattended &&
-      !state.opts?.commsDepth && !state.opts?.coordination && !sharedComputerBlocksSelect && state.bot.computer !== "off" && state.agentsMounted;
-  if (!state.warmOnly && state.maySelectComputer) {
-    state.source = store.activePath(state.threadId).findLast((message: any) => message.id === state.userMessage?.id && message.role === "user" && !message.peerAsk);
-    if (state.source) computerSelectionTurns.set(state.threadId, { generation: state.dispatchClaimId, botId: state.bot.id, source: state.source, text: state.text, dataContext: state.opts?.dataContext });
-  }
-  // A warm must not look like work: no busy flag, no watchdog, no reopen
-  // of a closed thread, no cleared badge. The first utterance joins it.
-  if (!state.warmOnly) {
-    store.setTaskActivity(state.bot.id, state.threadId, "working");
-    // Watch from admission, not dispatch: a turn can wedge in setup — context
-    // compaction that never returns, a hung browser or VM mount — long before
-    // any provider event exists, and a watch armed only at dispatch never saw
-    // those. Every setup exit below settles or throws into the catch, which
-    // settles under the same generation ownership it already enforces.
-    watchdog.watch(state.threadId, state.bot.id);
-    // A closed thread that gets a new turn is open again: the person (or the
-    // opener) picked it back up, so its row returns to the sidebar and
-    // list_threads stops calling it closed. No-op on an open thread.
-    store.setTaskClosedBy(state.bot.id, state.threadId, null);
-    // The badge is "this bot answered you, and you have not looked yet". A
-    // person starting a turn has looked; a teammate's hop has not — the fold
-    // never re-marks an internal turn, so clearing here would silently spend
-    // a signal the person still owes a glance to.
-    if (state.commsDepth === 0) store.patchTask(state.bot.id, state.threadId, { unread: false });
-    turnUsage.delete(state.threadId);
-    turnContext.delete(state.threadId);
-  }
 
     void (async () => {
     state.warmOk = false;

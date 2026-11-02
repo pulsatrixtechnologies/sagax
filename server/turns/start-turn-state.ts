@@ -55,6 +55,7 @@ export type TurnState = {
   resolvedImages: any;
   resourceOwner: any;
   selection: any;
+  smallTalk: any;
   source: any;
   speaker: any;
   spoken: any;
@@ -163,6 +164,7 @@ export function createTurnState(init: {
     resolvedImages: undefined,
     resourceOwner: undefined,
     selection: undefined,
+    smallTalk: undefined,
     source: undefined,
     speaker: undefined,
     spoken: undefined,

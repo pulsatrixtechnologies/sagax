@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,6 +19,19 @@ describe("startTurn leaf modules (#1388 w4 step 3)", () => {
     expect(src).toMatch(/export type TurnState/);
     expect(src).toMatch(/export function createTurnState/);
     expect(src).not.toMatch(/from ["'].*\/index\.ts["']/);
+  });
+
+  it("calls start-turn-finish handlers from the orchestrator try/catch/finally", () => {
+    const src = readFileSync(join(here, "start-turn.ts"), "utf8");
+    expect(existsSync(join(here, "start-turn-finish.ts"))).toBe(true);
+    expect(src).toMatch(/createFinishStartTurn\(host\)/);
+    expect(src).toMatch(/await finishCatch\(state,/);
+    expect(src).toMatch(/await finishFinally\(state\)/);
+    const finish = readFileSync(join(here, "start-turn-finish.ts"), "utf8");
+    expect(finish).toMatch(/export function createFinishStartTurn/);
+    expect(finish).not.toMatch(/from ["'].*\/index\.ts["']/);
+    // No destructure of TurnState into locals (the failed split's TDZ pattern).
+    expect(finish).not.toMatch(/let \{[^}]*\} = (?:state|ctx)/);
   });
 
 

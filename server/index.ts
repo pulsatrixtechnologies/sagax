@@ -2965,6 +2965,12 @@ function masteryPrice(model: string | undefined): number | null {
   const price = model ? listPriceFor(model) : null;
   return price ? price.inputPerMillion + price.outputPerMillion : null;
 }
+/** The thread's running Auto pick and its payer, for the refusal memory.
+ * Declared before the frame observers that read it: a restart re-parks open
+ * questions from a store listener while the module still loads, and the
+ * packaged bundle (esbuild, top-level const as var) read it as undefined
+ * there ("change listener threw ... reading 'get'", 0.8.29 on GOX). */
+const autoTurnsByThread = new Map<string, { payer: string; entry: AutoChainEntry }>();
 /** The model a thread's turn ran on: Auto's pick, else the thread's, else the bot's. */
 function masteryThreadModel(threadId: string): string | null {
   const bot = store.botByThread(threadId);
@@ -29076,8 +29082,6 @@ function autoCatalogLookup(driverKind: string, modelId: string): CatalogFacts | 
   autoCatalogMemo.set(memoKey, facts);
   return facts ?? undefined;
 }
-/** The thread's running Auto pick and its payer, for the refusal memory. */
-const autoTurnsByThread = new Map<string, { payer: string; entry: AutoChainEntry }>();
 /** Models a refusal took out, per payer, for 30 minutes. */
 const AUTO_REFUSAL_TTL_MS = 30 * 60_000;
 const autoRefusals = new Map<string, number>();

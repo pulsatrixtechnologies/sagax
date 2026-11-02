@@ -101,6 +101,11 @@ describe("coding classification", () => {
     expect(run("/bin/zsh -lc \"git commit -m 'Fix the card'\"")).toBe(true);
     expect(run("bash -lc 'gh issue view 1905 && git log --oneline -5'")).toBe(false);
     expect(run("bash -lc 'gh issue comment 1905 --body \"git push origin check\"'")).toBe(false);
+    // a here-string's or an ANSI-C quote's text is data, not a command
+    expect(run("cat <<< \"git push origin main\"")).toBe(false);
+    expect(run("printf $'git push origin main\\n'")).toBe(false);
+    // a quote escaped inside a quoted text stays text in a POSIX shell
+    expect(run("gh issue comment 1905 --body \"Run \\\"git push origin main\\\" to publish\"")).toBe(false);
   });
 
   // A call's name, summary and input each carry its command: the input
@@ -120,6 +125,13 @@ describe("coding classification", () => {
     expect(vcsBy("cd \"/Users/someone/Library/Mobile Documents/com~apple~CloudDocs/Projects/acme/app\" && git push origin main")).toEqual(all);
     expect(vcsBy("cd /work/app && echo \"Publishing the branch now, a message long enough to pass the cut of the title\" && git push origin HEAD")).toEqual(all);
     expect(vcsBy("/bin/zsh -lc \"cd /work/app && git push origin HEAD\"")).toEqual(all);
+    // what comes after an ANSI-C quote, a here-string or a quoted redirection target
+    expect(vcsBy("echo $'it\\'s' && git push origin main")).toEqual(all);
+    expect(vcsBy("cat <<< \"two words\" && git push origin main")).toEqual(all);
+    expect(vcsBy("echo done > \"build log.txt\" && git push origin main")).toEqual(all);
+    // a Windows path that ends in a backslash, quoted, as PowerShell or cmd
+    // run it: there a backslash escapes nothing
+    expect(vcsBy("cd \"C:\\Users\\someone\\app\\\" && git push origin main")).toEqual(all);
     // a call titled in words: an apostrophe there is not a quote of the command
     expect(codingSignals([{ name: "Run the bot's release step", summary: "git push origin HEAD", input: toolDetailPreview({ command: "git push origin HEAD" }) }]).vcs).toBe(true);
     // a row that kept no input is read off its summary, then its name, apart

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import { readStep, stepArgs, stepDuration, stepJson, stepLabel, stepPhase, stepResult } from "./step-label";
+import { readStep, stepArgs, stepDuration, stepJson, stepLabel, stepPhase, stepResult, stuckNoticeKey } from "./step-label";
 
 afterEach(() => {
   setLocale("en");
@@ -100,6 +100,16 @@ describe("step labels in plain words", () => {
     expect(readStep({ name: "Same call repeated 10× - other: sagax-environment__run_command - it may be stuck", ok: false }))
       .toMatchObject({ label: "Same call repeated 10 times. It may be stuck", target: "sagax-environment__run_command" });
     expect(readStep({ name: "Same call repeated 20× - Bash: npm test - it may be stuck", ok: false }).target).toBe("Bash: npm test");
+    // a call quoted on several lines, as the guard wrote an ACP or Codex
+    // title up to 0.8.28: read on one line, and the same notice with long
+    // dashes is the same notice
+    const lines = "tool: cd /work/app\npnpm lint\npnpm test";
+    const multi = `Same call repeated 5× - ${lines} - it may be stuck`;
+    expect(readStep({ name: multi, ok: false }))
+      .toEqual({ label: "Same call repeated 5 times. It may be stuck", target: "cd /work/app pnpm lint pnpm test", title: "cd /work/app\npnpm lint\npnpm test" });
+    expect(stuckNoticeKey(`Same call repeated 5× ${dash} ${lines} ${dash} it may be stuck`)).toBe(stuckNoticeKey(multi));
+    expect(stuckNoticeKey(multi)).toBe("5 tool: cd /work/app pnpm lint pnpm test");
+    expect(stuckNoticeKey("Same call repeated 10× - tool: git status - it may be stuck")).not.toBe(stuckNoticeKey(notice.name));
     setLocale("fr");
     const french = readStep(notice);
     expect(french).toEqual({ label: "Même appel répété 5 fois. Il est peut-être bloqué", target: "git status", title: "git status" });

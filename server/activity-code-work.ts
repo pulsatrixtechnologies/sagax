@@ -11,7 +11,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import type { BotCodeBranch, BotCodeCommit, BotCodePullAction, BotCodePullRequest, BotCodeWork } from "../shared/bot-activity.ts";
-import { commandTexts, gitArgs, shellCommands, shellProgram } from "./activity-coding.ts";
+import { commandTexts, gitArgs, runCommands, shellProgram } from "./activity-coding.ts";
 
 export interface CodeWorkToolCall {
   name: string;
@@ -149,20 +149,26 @@ export class CodeWorkCollector {
       return;
     }
     // each text on its own: a cut preview's open quote never reaches the
-    // whole command (commandTexts)
-    const commands = commandTexts(tool).flatMap((text) => (/\b(?:git|gh)\b/.test(text) ? shellCommands(text) : []));
+    // whole command (commandTexts); a shell's own script (`/bin/zsh -lc
+    // '...'`, how Codex reports a command) is read as the commands it runs,
+    // as the coding check reads it
+    const commands = commandTexts(tool).flatMap((text) => (/\b(?:git|gh)\b/.test(text) ? runCommands(text) : []));
     if (!commands.length) return;
     const output = outputLines(tool.output);
     let committed = false;
     let pushed = false;
     for (const words of commands) {
       const args = shellProgram(words);
-      if (args[0] === "git") {
+      // as the coding check reads it: git or gh by any path, and a dry run
+      // (a push's prints its refs) produced nothing
+      if (args.includes("--dry-run")) continue;
+      const program = args[0]?.replace(/^.*[\\/]/, "");
+      if (program === "git") {
         const sub = gitArgs(args);
         if (sub[0] === "commit") committed = true;
         else if (sub[0] === "push") { pushed = true; this.gitPush(sub.slice(1), output, at); }
         else this.gitBranch(sub, at);
-      } else if (args[0] === "gh" && args[1] === "pr" && args[2]) {
+      } else if (program === "gh" && args[1] === "pr" && args[2]) {
         this.ghPr(args[2], args.slice(3), output, at);
       }
     }

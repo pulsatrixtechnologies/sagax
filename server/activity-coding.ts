@@ -90,16 +90,52 @@ function commandOf(input: unknown): string {
   }
 }
 
+/** Where the shell word that starts at `start` ends, its quotes honored
+ * (`'...'`, `"..."`, ANSI-C `$'...'`) and, in a POSIX shell (`escapes`), a
+ * backslash escaping the next character: a redirection's target is one
+ * word, `"two words"` included. */
+function wordEnd(text: string, start: number, escapes: boolean): number {
+  let index = start;
+  while (index < text.length && !/[\s;&|()`<>]/.test(text[index]!)) {
+    const char = text[index]!;
+    if (char === "\\" && escapes) index += 2;
+    else if (char === "'" || char === "\"" || (char === "$" && text[index + 1] === "'")) {
+      const close = char === "\"" ? "\"" : "'";
+      // backslashes escape inside ANSI-C quotes, and inside double quotes
+      // in a POSIX shell
+      const escaping = char === "$" || (char === "\"" && escapes);
+      index += char === "$" ? 2 : 1;
+      while (index < text.length && text[index] !== close) index += escaping && text[index] === "\\" ? 2 : 1;
+      index++;
+    } else index++;
+  }
+  return Math.min(index, text.length);
+}
+
+const ANSI_C_ESCAPES: Record<string, string> = { n: "\n", t: "\t", r: "\r" };
+
 /** A shell command's words, split into the commands it chains (`;`, `&&`,
- * `||`, `|`, a subshell or a new line). Quotes are honored, so a quoted
- * text that lists commands on its own lines stays one word; redirections
- * are dropped. */
+ * `||`, `|`, a subshell or a new line). Quotes are honored, ANSI-C quotes
+ * (`$'it\'s'`) included, so a quoted text that lists commands on its own
+ * lines stays one word; redirections and their targets (`2>&1`,
+ * `> "out file.log"`, a here-string's `<<< "text"`) are dropped. A double
+ * quote a backslash left open to the end breaks a POSIX shell's command,
+ * and in PowerShell or cmd, where a backslash escapes nothing, it is a
+ * Windows path that ends in one (`cd "C:\work\app\" && git push`): such a
+ * command is read again that way. */
 export function shellCommands(text: string): string[][] {
+  const posix = readShell(text, true);
+  return posix.open === "\"" && text.includes("\\\"") ? readShell(text, false).commands : posix.commands;
+}
+
+/** shellCommands' reader: `escapes` is a POSIX shell's backslash. `open` is
+ * the quote still open at the end of the text, if any. */
+function readShell(text: string, escapes: boolean): { commands: string[][]; open: "'" | "\"" | "$'" | null } {
   const commands: string[][] = [];
   let words: string[] = [];
   let word = "";
   let has = false;
-  let quote: "'" | "\"" | null = null;
+  let quote: "'" | "\"" | "$'" | null = null;
   const endWord = () => {
     if (has) words.push(word);
     word = "";
@@ -113,13 +149,16 @@ export function shellCommands(text: string): string[][] {
   for (let index = 0; index < text.length; index++) {
     const char = text[index]!;
     if (quote) {
-      if (char === quote) quote = null;
-      else if (char === "\\" && quote === "\"" && index + 1 < text.length) word += text[++index];
-      else word += char;
+      if (char === (quote === "\"" ? "\"" : "'")) quote = null;
+      else if (char === "\\" && (quote === "$'" || (quote === "\"" && escapes)) && index + 1 < text.length) {
+        const next = text[++index]!;
+        word += quote === "$'" ? ANSI_C_ESCAPES[next] ?? next : next;
+      } else word += char;
       continue;
     }
+    if (char === "$" && text[index + 1] === "'") { quote = "$'"; has = true; index++; continue; }
     if (char === "'" || char === "\"") { quote = char; has = true; continue; }
-    if (char === "\\" && index + 1 < text.length) {
+    if (char === "\\" && escapes && index + 1 < text.length) {
       const next = text[++index]!;
       if (next !== "\n") { word += next; has = true; }
       continue;
@@ -134,7 +173,7 @@ export function shellCommands(text: string): string[][] {
         while (/[\d-]/.test(text[next] ?? "")) next++;
       } else {
         while (text[next] === " " || text[next] === "\t") next++;
-        while (next < text.length && !/[\s;&|()`]/.test(text[next]!)) next++;
+        next = wordEnd(text, next, escapes);
       }
       index = next - 1;
       continue;
@@ -146,7 +185,7 @@ export function shellCommands(text: string): string[][] {
     has = true;
   }
   endCommand();
-  return commands;
+  return { commands, open: quote };
 }
 
 /** The command a chain runs, without `sudo`, `env`, `VAR=value` or `time`. */
@@ -178,13 +217,20 @@ function shellScript(args: readonly string[]): string | undefined {
   return undefined;
 }
 
+/** The commands a text runs (shellCommands), a shell's own script read as
+ * the commands it runs in its place, three shells deep at most. */
+export function runCommands(text: string, depth = 0): string[][] {
+  return shellCommands(text).flatMap((words) => {
+    const script = depth < 3 ? shellScript(shellProgram(words)) : undefined;
+    return script === undefined ? [words] : runCommands(script, depth + 1);
+  });
+}
+
 /** One command of a chain writes version control: a commit, push, merge,
  * rebase or cherry-pick, a new branch or worktree, or a pull request opened
  * or changed. A dry run writes nothing. */
-function writesVersionControl(words: string[], depth = 0): boolean {
+function writesVersionControl(words: string[]): boolean {
   const args = shellProgram(words);
-  const script = depth < 3 ? shellScript(args) : undefined;
-  if (script !== undefined) return shellCommands(script).some((inner) => writesVersionControl(inner, depth + 1));
   if (args.includes("--dry-run")) return false;
   const program = args[0]?.replace(/^.*[\\/]/, "");
   if (program === "gh") return args[1] === "pr" && GH_PR_WRITES.has(args[2] ?? "");
@@ -218,7 +264,7 @@ export function commandTexts(tool: { name: string; summary?: string; input?: unk
  * that quotes "git push" is not version control, nor is a read such as
  * `git merge-base`. */
 function ranVersionControl(tool: CodingToolCall): boolean {
-  return commandTexts(tool).some((text) => /\b(?:git|gh)\b/.test(text) && shellCommands(text).some((words) => writesVersionControl(words)));
+  return commandTexts(tool).some((text) => /\b(?:git|gh)\b/.test(text) && runCommands(text).some(writesVersionControl));
 }
 
 /** Adds one tool call to the signals so far (a scan can resume). */

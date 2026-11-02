@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { codeWork, remoteRepo, repositoryInfo, type CodeWorkToolCall } from "./activity-code-work.ts";
-import { shellCommands } from "./activity-coding.ts";
+import { codingSignals, shellCommands } from "./activity-coding.ts";
 import { commandSummary, toolDetailPreview } from "./tool-summary.ts";
 
 const bash = (command: string, output: string, ok: boolean | "running" = true): CodeWorkToolCall => ({ name: "Bash", input: JSON.stringify({ command }), output, ...(ok === "running" ? {} : { ok }) });
@@ -79,6 +79,38 @@ describe("code work of a conversation", () => {
     expect(codeWork(at([push]), origin).branches.map((branch) => [branch.name, branch.pushed])).toEqual([["fix/card", true]]);
   });
 
+  // The coding check read a shell's own script and the collector did not:
+  // a Codex push made the entry Coding with nothing listed in its code work.
+  it("reads a Codex command through its shell's script, as the coding check does", () => {
+    // as the store keeps a Codex command (drivers/codex/stream.ts): the
+    // whole command as the name, commandSummary, toolDetailPreview({ command, cwd })
+    const codex = (command: string, output: string): CodeWorkToolCall =>
+      ({ name: command, ok: true, summary: commandSummary({ command }), input: toolDetailPreview({ command, cwd: "/work/app" }), output });
+    const origin = { repo: "acme/app", url: "https://github.com/acme/app" };
+    const pushed = codeWork(at([
+      codex("/bin/zsh -lc 'git push -u origin fix/card'", "To github.com:acme/app.git\n * [new branch]      fix/card -> fix/card\nbranch 'fix/card' set up to track 'origin/fix/card'."),
+    ]), origin);
+    expect(pushed.branches).toEqual([{ name: "fix/card", repo: "acme/app", pushed: true, url: "https://github.com/acme/app/tree/fix/card", at: 1_000 }]);
+    const opened = codeWork(at([
+      codex("bash -lc \"cd /work/app && gh pr create --head fix/card --title 'Fix the card' --body 'One card per approval.'\"", "https://github.com/acme/app/pull/12\n"),
+    ]), origin);
+    expect(opened.pullRequests).toEqual([{ repo: "acme/app", number: 12, url: "https://github.com/acme/app/pull/12", title: "Fix the card", branch: "fix/card", action: "opened", at: 1_000 }]);
+    // its script's reads list nothing
+    expect(codeWork(at([codex("/bin/zsh -lc 'gh pr view 12 && git log --oneline -3'", "https://github.com/acme/app/pull/12")]), origin))
+      .toEqual({ pullRequests: [], branches: [], commits: [] });
+  });
+
+  it("reads git and gh by any path, and lists nothing a dry run printed, as the coding check does", () => {
+    const origin = { repo: "acme/app", url: "https://github.com/acme/app" };
+    const printed = "To github.com:acme/app.git\n * [new branch]      fix/card -> fix/card";
+    const dry = bash("git push --dry-run -u origin fix/card", printed);
+    expect(codeWork(at([dry]), origin)).toEqual({ pullRequests: [], branches: [], commits: [] });
+    expect(codingSignals([dry]).vcs).toBe(false);
+    const byPath = bash("/usr/bin/git push -u origin fix/card", printed);
+    expect(codeWork(at([byPath]), origin).branches.map((branch) => [branch.name, branch.pushed])).toEqual([["fix/card", true]]);
+    expect(codingSignals([byPath]).vcs).toBe(true);
+  });
+
   it("knows a branch created but not pushed, and a bare push of the current branch", () => {
     const local = codeWork(at([bash("git worktree add -b spike ../spike main", "Preparing worktree (new branch 'spike')")]));
     expect(local.branches).toEqual([{ name: "spike", pushed: false, at: 1_000 }]);
@@ -93,6 +125,15 @@ describe("code work of a conversation", () => {
 describe("shell and remotes", () => {
   it("splits chained commands, honors quotes, drops redirections", () => {
     expect(shellCommands("cd /repo && git commit -m 'a; b' 2>&1 | tail -1")).toEqual([["cd", "/repo"], ["git", "commit", "-m", "a; b"], ["tail", "-1"]]);
+    // an ANSI-C quote, where \' does not close it
+    expect(shellCommands("echo $'it\\'s; done' && git push origin main")).toEqual([["echo", "it's; done"], ["git", "push", "origin", "main"]]);
+    // a redirection's target is one word, quotes and all, a here-string's too
+    expect(shellCommands("cat <<< \"two words\" && echo hi > \"out file.log\" && git push origin main"))
+      .toEqual([["cat"], ["echo", "hi"], ["git", "push", "origin", "main"]]);
+    // a quote escaped inside double quotes (POSIX); a Windows path that ends
+    // in a backslash, which only PowerShell or cmd closes, read their way
+    expect(shellCommands("echo \"say \\\"hi\\\"\" && git push")).toEqual([["echo", "say \"hi\""], ["git", "push"]]);
+    expect(shellCommands("cd \"C:\\work\\app\\\" && git push origin main")).toEqual([["cd", "C:\\work\\app\\"], ["git", "push", "origin", "main"]]);
   });
 
   it("turns a remote into owner/name and a web page, without credentials, GitHub only", () => {

@@ -363,8 +363,9 @@ function serverSentence(name: string): string | undefined {
 
 /** The loop guard's notice (server/host/loop-guard.ts), "Same call repeated
  * 5× - tool: git status - it may be stuck"; rows written before 2026-11-02
- * carry long dashes where it has hyphens. */
-const STUCK_NOTICE = /^Same call repeated (\d+)× [-\u2013\u2014] (.+) [-\u2013\u2014] it may be stuck$/;
+ * carry long dashes where it has hyphens, and a call quoted on several
+ * lines (an ACP or Codex title, before the guard folded it to one). */
+const STUCK_NOTICE = /^Same call repeated (\d+)× [-\u2013\u2014] ([\s\S]+) [-\u2013\u2014] it may be stuck$/;
 /** The guard's word for a call it knows by its title, and an ACP agent's
  * kind for an MCP call: neither says anything to a person. */
 const GENERIC_CALL = /^(?:tool|other): /;

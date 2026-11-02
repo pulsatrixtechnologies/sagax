@@ -1130,6 +1130,12 @@ function handle(msg: any) {
         // FAKE_ACP_REASONING_LEAK_TEXT: also stream a leaked assistant delta
         // before the error (production Grok sometimes does); recovery must
         // still nudge / soft-settle, never the raw Internal error (#1820).
+        // FAKE_ACP_REASONING_TOOL_FIRST: a finished tool call before the
+        // reasoning on the first prompt (a routine's turn always ran tools).
+        if (process.env.FAKE_ACP_REASONING_TOOL_FIRST && reasoningErrors === 0) {
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "tool_call", toolCallId: "tc-reason-first", title: "agents__list_bots", kind: "other", status: "pending", rawInput: {} } } });
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "tool_call_update", toolCallId: "tc-reason-first", status: "completed", rawOutput: { output: "two bots" } } } });
+        }
         out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_thought_chunk", content: { text: "thinking hard, producing no answer" } } } });
         if (process.env.FAKE_ACP_REASONING_LEAK_TEXT) {
           out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: process.env.FAKE_ACP_REASONING_LEAK_TEXT } } } });

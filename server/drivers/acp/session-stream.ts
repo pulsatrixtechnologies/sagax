@@ -84,6 +84,7 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
               if (content?.type === "image" && typeof content.data === "string" && content.data) {
                 current.flushAssistantText();
                 current.state.producedItem = true;
+                current.state.producedReply = true;
                 emit({
                   ...base(threadId, current.turnId),
                   type: "item.completed",

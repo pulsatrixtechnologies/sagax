@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { RealtimeCallBridge, realtimeHistoryItems, realtimeInstructions, realtimeSessionUpdate, realtimeUrl, type RealtimeBridgeDeps, type RealtimeSocket, type RealtimeWorkResult } from "./realtime-call.ts";
+import { RealtimeCallBridge, realtimeDropReason, realtimeHistoryItems, realtimeInstructions, realtimeSessionUpdate, realtimeUrl, type RealtimeBridgeDeps, type RealtimeSocket, type RealtimeWorkResult } from "./realtime-call.ts";
 
 class FakeUpstream implements RealtimeSocket {
   readyState = 0;
@@ -192,6 +192,17 @@ describe("realtime call bridge", () => {
     upstream.onclose?.({});
     expect(await bridge.ready).toBe(false);
     expect(bridge.lastError).toMatch(/rejected the key/);
+  });
+
+  it("a call the voice ended says why to the page: key, server or network", () => {
+    expect(realtimeDropReason(1008)).toBe("key");
+    expect(realtimeDropReason(1006, "xAI rejected the key or its TTS permissions. Check the xAI key in Settings.")).toBe("key");
+    expect(realtimeDropReason(1011)).toBe("server");
+    expect(realtimeDropReason(1006)).toBe("network");
+    expect(realtimeDropReason(undefined)).toBe("network");
+    const { upstream, frames } = setup();
+    upstream.onclose?.({ code: 1011 });
+    expect(frames.at(-1)).toEqual({ type: "ended", by: "upstream", reason: "server" });
   });
 
   it("logs counters only, never words", () => {

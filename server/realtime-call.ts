@@ -55,6 +55,23 @@ export function realtimeUrl(env: NodeJS.ProcessEnv = process.env): string {
   return /^ws:\/\/127\.0\.0\.1:\d{1,5}(\/[\w/.-]*)?$/.test(override) ? override : XAI_REALTIME_URL;
 }
 
+/** Why a call ended on the voice's side, in words the page maps to a
+ * plain sentence (src/lib/voice-mode/realtime-call.ts realtimeDropText):
+ * the key refused, the network, or the voice service's own failure. */
+export type RealtimeDropReason = "key" | "network" | "server";
+
+/** The upstream close code (and the last error the socket said) as a drop
+ * reason. 1008 and the 4xxx auth codes are a refused key, 1011 to 1014 a
+ * failure of the voice service; anything else (1006: no close frame) the
+ * network. */
+export function realtimeDropReason(code: number | undefined, lastError?: string): RealtimeDropReason {
+  if (code === 1008 || code === 4001 || code === 4003 || code === 4401 || code === 4403) return "key";
+  if (lastError && /rejected the key|api key|permission|credits/i.test(lastError)) return "key";
+  if (code !== undefined && code >= 1011 && code <= 1014) return "server";
+  if (code !== undefined && code >= 4500 && code < 4600) return "server";
+  return "network";
+}
+
 export interface RealtimeBot {
   name: string;
   title?: string;
@@ -268,9 +285,10 @@ export class RealtimeCallBridge {
       const said = (event as { message?: unknown } | null)?.message;
       this.lastError = typeof said === "string" && said ? said : this.lastError ?? "The realtime voice is not reachable.";
     };
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       this.readyResolve(false);
-      if (!this.closed) this.end("upstream");
+      const code = (event as { code?: unknown } | null)?.code;
+      if (!this.closed) this.end("upstream", realtimeDropReason(typeof code === "number" ? code : undefined, this.lastError));
     };
   }
 
@@ -291,7 +309,7 @@ export class RealtimeCallBridge {
   }
 
   /** The page went away, or the person hung up. */
-  end(by: "person" | "bot" | "upstream" | "page" = "page"): void {
+  end(by: "person" | "bot" | "upstream" | "page" = "page", reason?: RealtimeDropReason): void {
     if (this.closed) return;
     this.closed = true;
     for (const entry of this.work.values()) entry.abort.abort();
@@ -300,8 +318,8 @@ export class RealtimeCallBridge {
     this.deps.usage?.({ input: this.inputBytes / 2 / REALTIME_SAMPLE_RATE, output: this.outputBytes / 2 / REALTIME_SAMPLE_RATE });
     const first = this.stats.firstAudioMs;
     const median = first.length ? [...first].sort((a, b) => a - b)[Math.floor(first.length / 2)] : undefined;
-    this.deps.log(`[voice-realtime] call ended by=${by} turns=${this.stats.turns} works=${this.stats.works} joined=${this.stats.joined} cancelled=${this.stats.cancelled} dropped=${this.stats.dropped} answers=${this.stats.answers} approvals=${this.stats.approvals} firstAudioP50=${median ?? "?"}ms`);
-    this.deps.sendText({ type: "ended", by });
+    this.deps.log(`[voice-realtime] call ended by=${by}${reason ? ` reason=${reason}` : ""} turns=${this.stats.turns} works=${this.stats.works} joined=${this.stats.joined} cancelled=${this.stats.cancelled} dropped=${this.stats.dropped} answers=${this.stats.answers} approvals=${this.stats.approvals} firstAudioP50=${median ?? "?"}ms`);
+    this.deps.sendText({ type: "ended", by, ...(reason ? { reason } : {}) });
     this.deps.closePage(1000);
   }
 

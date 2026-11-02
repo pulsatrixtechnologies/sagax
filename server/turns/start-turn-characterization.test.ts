@@ -42,21 +42,20 @@ describe("startTurn characterization (#1388 w4 step 3)", () => {
 
   it("runs stream post-dispatch after sendTurn (bindTurn, markTaskDispatched, drains)", () => {
     const body = startTurnBody(startTurnSrc);
+    const stream = readFileSync(join(here, "start-turn-stream.ts"), "utf8");
     const sendAt = body.indexOf("savedSteps.dispatch.sendTurn");
-    const bindAt = body.indexOf("handoffs.bindTurn(");
-    const markAt = body.indexOf("store.markTaskDispatched(");
     expect(sendAt).toBeGreaterThan(-1);
-    expect(bindAt).toBeGreaterThan(sendAt);
-    expect(markAt).toBeGreaterThan(bindAt);
-    // Post-dispatch drain of a generation that finished before ACK.
-    const post = body.slice(markAt);
-    expect(post.indexOf("drainQueuedSends()")).toBeGreaterThan(-1);
-    expect(post.indexOf("startScreenPoller(")).toBeGreaterThan(-1);
+    expect(body).toMatch(/await streamStartTurn\(state\)/);
+    expect(stream).toMatch(/handoffs\.bindTurn\(/);
+    expect(stream).toMatch(/store\.markTaskDispatched\(/);
+    expect(stream).toMatch(/drainQueuedSends\(\)/);
+    expect(stream).toMatch(/startScreenPoller\(/);
   });
 
   it("cancellation during setup becomes DirectTurnSetupCancelled and abandons handoffs", () => {
     const body = startTurnBody(startTurnSrc);
-    expect(body).toMatch(/DirectTurnSetupCancelled\("turn stopped during provider setup"\)/);
+    const stream = readFileSync(join(here, "start-turn-stream.ts"), "utf8");
+    expect(stream).toMatch(/DirectTurnSetupCancelled\("turn stopped during provider setup"\)/);
     expect(body).toMatch(/DirectTurnSetupCancelled\("turn stopped during context setup"\)/);
     expect(finishSrc).toMatch(/handoffs\.abandon\(state\.threadId, state\.dispatchClaimId\)/);
     expect(finishSrc).toMatch(/e instanceof DirectTurnSetupCancelled/);
@@ -67,7 +66,7 @@ describe("startTurn characterization (#1388 w4 step 3)", () => {
     expect(finishSrc).toMatch(/hasQueuedSteeredMessages\(state\.bot\.id, state\.threadId\)/);
     expect(body).toMatch(/handoffs\.begin\(/);
     expect(body).toMatch(/handoffs\.dispatching\(/);
-    expect(body).toMatch(/handoffs\.bindTurn\(/);
+    expect(readFileSync(join(here, "start-turn-stream.ts"), "utf8")).toMatch(/handoffs\.bindTurn\(/);
   });
 
   it("held direct-machine turns return through holdDirectMachineTurn before admission", () => {

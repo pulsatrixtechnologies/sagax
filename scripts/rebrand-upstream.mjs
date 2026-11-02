@@ -81,7 +81,6 @@ const SKIP_EXACT = new Set([
   "server/fleet-agent.test.ts",
   // compose files read an operator's own .env (OMB_* interpolation)
   "compose.yaml",
-  "compose.mail-test.yaml",
   ".env.example",
   // generated from the docs and AGENTS.md: regenerate it (pnpm gen:self-knowledge)
   "server/self-knowledge/knowledge.generated.json",

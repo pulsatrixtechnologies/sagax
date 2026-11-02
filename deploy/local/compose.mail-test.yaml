@@ -1,7 +1,7 @@
 # Local mail testing: sign-in codes and invite mails land in Mailpit
 # (http://127.0.0.1:8025) instead of a real mailbox. Never for production.
 #
-#   docker compose -p pulsa -f compose.yaml -f compose.mail-test.yaml up -d
+#   docker compose -p pulsa -f compose.yaml -f deploy/local/compose.mail-test.yaml up -d
 services:
   omb:
     environment:

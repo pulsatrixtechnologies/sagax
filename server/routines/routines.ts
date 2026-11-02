@@ -63,9 +63,10 @@ import {
 } from "../engine-reconnect-ahead.ts";
 import type { LoginDriver } from "../principal-engine-logins.ts";
 import {
-  dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, retryNote, weekRuns,
+  dispatchRefusal, engineFacts, engineTakeovers, loadOwnerNotices, recoverRun, retryNote, ROUTINE_LIMIT_TAKEOVERS, weekRuns,
   type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
 } from "./routine-recovery.ts";
+import type { RoutineUsageLimit } from "./routine-limit-words.ts";
 import { ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_TURN_LOST_MS, skipNeedsNotice, supersededBy } from "./routine-execution.ts";
 
 export type { RoutineAccess };
@@ -339,6 +340,18 @@ export interface RoutineRun {
   retried?: RoutineRetryCause;
   /** A queued run starts no earlier than this. */
   retryAt?: number;
+  /** How many times a limit sent this run on at once to another model (at most ROUTINE_LIMIT_TAKEOVERS of them by
+   * another engine: routine-recovery.ts engineTakeovers). */
+  limitTakeovers?: number;
+  /** One of limitTakeovers went on on the conversation's own model, after a limit refused only Sagax's quick model of
+   * that same engine: no other engine took it, so it is not counted against ROUTINE_LIMIT_TAKEOVERS. */
+  limitModelRetry?: true;
+  /** The model this run's next start runs on: the one that took it over when a limit refused its turn
+   * (server/routines/routine-recovery.ts takeOver, read by startTurn). Absent: the bot's own, or Auto's pick. */
+  limitTakeover?: RoutineUsageLimit["selection"];
+  /** When the run's conversation goes back to its own model after limitTakeover moved it off: the reset of the limit
+   * that refused that model (server/limit-failover-host.ts takeOver records the return). */
+  limitTakeoverUntil?: number;
   /** When its current wait began; read only while the run is waiting. */
   waitingSince?: number;
   /** Times a restart cut this run and the next start resumed it in place
@@ -760,6 +773,11 @@ export interface RoutineManagerOptions {
   };
   /** A failed attempt went back to the queue: what the attempt left pending must not reach its second start. */
   onRunRequeued?: (run: RoutineRun) => void;
+  /** A bot run's failed turn, read by the usage-limit failover (server/limit-failover-host.ts routineLimit): null
+   * when it is no limit; else the engine that really refused (the model the turn ran on, a wake's fast model
+   * included), its reset, and, when `takeover` allows it, who runs the run now. A routine, a webhook run and a
+   * proactive wake alike go on at once on that engine instead of failing. */
+  usageLimit?: (run: RoutineRun, failure: string, facts: RoutineFailureFacts, takeover: boolean) => RoutineUsageLimit | null;
   /** A successful provider turn is intermediate while its peer work or
    * queued continuation still belongs to this detached execution. */
   hasPendingDelegations?: (threadId: string) => boolean;
@@ -3781,7 +3799,24 @@ export class RoutineManager {
     this.failureFacts.delete(run.id);
     this.runTrouble.delete(run.id);
     delete run.waitingOn;
-    const recovery = recoverRun(run, redactSecretsInText(failure), facts, this.now(), this.ownerNotices);
+    const said = redactSecretsInText(failure);
+    // The usage-limit failover reads which engine refused (and who takes the run over) before the run fails: a
+    // routine, a webhook run and a proactive wake go on at once on another engine instead of a failure that names
+    // "this bot's engine".
+    let limit: RoutineUsageLimit | null = null;
+    if (run.target === "bot" && this.options.usageLimit) {
+      try {
+        limit = this.options.usageLimit(cloneRun(run), said, facts, engineTakeovers(run) < ROUTINE_LIMIT_TAKEOVERS);
+      } catch (error) {
+        console.warn(`routine: usage limit read failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    const who = { botId: run.botId, ...(run.runAs ? { runAs: run.runAs } : {}) };
+    const language = this.options.languageFor?.(who);
+    const timeZone = this.options.timeZoneFor?.(who);
+    const recovery = recoverRun(run, said, limit ? { ...facts, limit } : facts, this.now(), this.ownerNotices, {
+      ...(language ? { language } : {}), ...(timeZone ? { timeZone } : {}),
+    });
     if ("waiting" in recovery && recovery.waiting) {
       this.wait(run, recovery.attention);
       delete run.error;

@@ -100,7 +100,9 @@ export type LimitResume = (
   retry?: true;
 };
 
-interface Block { key: string; until: number }
+/** `estimated`: the engine named no reset, so `until` is Sagax's estimate
+ * (a line never presents it as the engine's own time). */
+interface Block { key: string; until: number; estimated?: true }
 interface Fired { key: string; at: number }
 
 interface Saved {
@@ -171,13 +173,23 @@ export class LimitFailoverStore {
     return `${payer}\u0000${instanceId}`;
   }
 
-  /** This engine refuses this payer's turns until `until`. A later reset wins. */
-  block(payer: string, instanceId: string, until: number): void {
+  /** This engine refuses this payer's turns until `until`. A later reset
+   * wins. `estimated`: the engine named no reset and `until` is Sagax's. */
+  block(payer: string, instanceId: string, until: number, estimated = false): void {
     const key = LimitFailoverStore.key(payer, instanceId);
     const earlier = this.state.blocks.find((row) => row.key === key);
     if (earlier && earlier.until >= until) return;
-    this.state.blocks = [...this.state.blocks.filter((row) => row.key !== key), { key, until }].slice(-MAX_ROWS);
+    this.state.blocks = [...this.state.blocks.filter((row) => row.key !== key), { key, until, ...(estimated ? { estimated: true as const } : {}) }].slice(-MAX_ROWS);
     this.save();
+  }
+
+  /** The hold on this engine for this payer: until when, and whether that
+   * time is Sagax's estimate; null while it should work. */
+  holdOf(payer: string, instanceId: string): { until: number; estimated: boolean } | null {
+    const until = this.blockedUntil(payer, instanceId);
+    if (until === null) return null;
+    const row = this.state.blocks.find((candidate) => candidate.key === LimitFailoverStore.key(payer, instanceId));
+    return { until, estimated: row?.estimated === true };
   }
 
   /** A turn on this engine worked for this payer: its hold ends now. */

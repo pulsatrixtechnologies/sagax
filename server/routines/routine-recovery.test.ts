@@ -426,10 +426,11 @@ describe("an unattended run only its owner can fix", () => {
     const limit = "This Claude account has reached its 5-hour limit, which resets soon. Until then, switch this bot to another engine or Claude account.";
     const run = await h.start(h.routine().id);
     h.fail("thread-1", limit, { stopReason: "quota", limitResetsAt: resetsAt });
+    // No engine known to the run (no limit failover wired here): it names none rather than guess "this bot's engine".
     expect(h.run(run.id)).toMatchObject({ status: "queued", retried: "usage_limit", retryAt: resetsAt + MINUTE, threadId: "thread-1",
-      attention: expect.stringMatching(/^Waiting for the engine's usage limit to reset; this run starts again at /) });
+      attention: expect.stringMatching(/^This run's engine reached its usage limit\. It starts again at the reset, .+\.$/) });
     expect(h.failed).toEqual([]);
-    expect(h.deferred).toEqual([expect.objectContaining({ alert: { detail: expect.stringMatching(/^This bot's engine reached its usage limit\. This run starts again at .+\.$/) } })]);
+    expect(h.deferred).toEqual([expect.objectContaining({ alert: { detail: expect.stringMatching(/^This run's engine reached its usage limit\. It starts again at the reset, .+\.$/) } })]);
     expect(h.manager.wakeHold()).toEqual({ hold: false });
     expect(h.manager.wakeHold(3 * 3_600_000)).toEqual({ hold: true, reason: "due", at: resetsAt + MINUTE });
 
@@ -452,7 +453,7 @@ describe("an unattended run only its owner can fix", () => {
     const far = await h.start(h.routine("maus-2").id);
     h.fail(far.threadId!, "This Claude account has reached its weekly limit.", { stopReason: "quota", limitResetsAt: START + 13 * 3_600_000 });
     expect(h.run(far.id).status).toBe("failed");
-    const action = "This bot's engine reached its usage limit. Its routines work again once it resets, or choose another engine for this bot now.";
+    const action = "This run's engine reached its usage limit. Runs on it work again once it resets. Or choose another engine for this bot now.";
     expect(h.failed.map(({ alert }) => alert)).toEqual([{ detail: action }, { detail: action }]);
     expect(h.deferred).toEqual([]);
   });

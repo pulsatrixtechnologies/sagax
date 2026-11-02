@@ -933,6 +933,75 @@ plain words (`noModelLeftMessage`). Tests:
 `server/drivers/openai-responses.test.ts`, `server/refused-models.test.ts`,
 `server/limit-failover-host.test.ts`.
 
+## A refused run goes on elsewhere, and says who refused (2026-11-02)
+
+A routine run, a webhook run or a proactive wake whose turn a limit refused
+never fails as "This bot's engine reached its usage limit" any more (a
+Primary Bot relayed that as the bot being down while its own engine was
+answering: the wake had run on its fast model, #1694, on another engine,
+and the failover skipped it because the turn's model was not the thread's).
+Before the run fails, `RoutineManager` asks the limit failover
+(`usageLimit`, wired to `limitFailover.routineLimit`,
+`server/limit-failover-host.ts`), which reads the turn it saw dispatched:
+the engine and model that really refused, the reset (said or estimated) and
+who takes the run over: the conversation's own model when only a fast
+detour refused, else a backup as for a person's message (`pickLimitBackup`
+on `candidatesNow`), else Auto's next pick. The run then starts again at
+once in its own thread, the same run with the same webhook event
+(`takeOver`, `server/routines/routine-recovery.ts`: queued, `limitTakeover` the model
+of its next start, at most `ROUTINE_LIMIT_TAKEOVERS` takeovers by another
+engine, `engineTakeovers`: the one retry on the conversation's own model
+after only its engine's quick model refused, `limitModelRetry`, does not
+count), with no failure, notification or incident; `startTurn`
+(`server/turns/start-turn-prepare-validate.ts`) moves its thread there and
+skips the wake's fast pick (`limitFailover.takeOver`), and
+`server/turns/start-turn-prompt.ts` notes a turn on a fast pick as a detour
+(`LimitDispatch.detour`). The return is always recorded, at the
+reset of the limit that moved it (`limitTakeoverUntil`) or a later hold:
+a model-only refusal never leaves a conversation on the backup, the
+person's own chat included (a wait's follow-up runs there). A run that
+starts once that limit is over (it waited past the reset, its conversation
+busy) moves nothing: never to the backup and straight back, two switches
+that would replay its engine session. The engine's error row becomes the hidden
+switch notice, and the run's status reads "Continued on another model
+after a limit", never "Ran after the usage limit reset"
+(`routines.retried.limitSwitched`). A quick model Sagax picked is not the
+conversation's (`LimitDispatch.detour`, `RoutineUsageLimit.detour`,
+`LimitFailoverLine.detour`): its lines say Sagax skips it for quick turns
+until it resets, never that the run goes back to it nor to choose another
+engine for the bot. A call turn on such a model goes again at once when a
+limit refuses it (`turnFailed`, `detourFailed`), its conversation
+untouched and no incident filed. A fast model Sagax picked on the
+conversation's own engine (`LimitDispatch.detour`) holds only that model for
+the payer (`refuseModel`, Auto's refusal memory), never the whole engine,
+unless that engine's plan is spent. With no taker, a reset under 12 h is
+waited out, else the run fails. Every line names the engine (its model on a
+detour) and gives the real reset or says the engine gave none, in English
+or Quebec French by the person's language and zone
+(`server/routines/routine-limit-words.ts`); a rate limit is called one. Incidents
+and notification titles say "proactive wake" or "webhook run", failed or
+waiting (`routineRunTitle`, `server/notify.ts`), never "scheduled routine".
+
+What Sagax holds is per payer and per engine, and as accurate as it knows:
+a plan window the person's own usage report showed spent (J4,
+`GET /api/plan-usage` through `announcePlanThresholds`, `spentPlanUntil`,
+read as `planLimitUntil`) keeps Sagax's own picks (Auto, a wake's or a
+call's fast model, a backup) off that engine until a turn on it works again
+(`planWorked`, from `turnSucceeded`), and a refusal there that names
+no reset is held until that window's reset instead of the one-hour estimate.
+A person's chosen engine is still moved only after a real refusal. A
+refusal that binds one model (its extra-usage credits, its own weekly
+window) no longer marks its whole engine blocked in `/api/limit-resets`. A hold
+remembers when its time is only Sagax's estimate (`LimitFailoverStore.block`
+with `estimated`, `holdOf`), and every switch or wait line then says the
+engine gave no reset time instead of passing the estimate off as one
+(`LimitFailoverLine.estimated`, `limitFailover.*NoReset`). Tests:
+`server/limit-failover-runs.test.ts`, `server/limit-failover-runs.e2e.test.ts`
+(a wake on another engine's fast model, end to end),
+`server/routines/routine-limit-words.test.ts`, `server/limit-failover-host.test.ts`,
+`server/notify.test.ts`, `server/incidents.test.ts`, `server/plan-usage.test.ts`,
+`src/lib/limit-failover.test.ts`, `src/lib/routine-display.test.ts`.
+
 ## A reply is never an error (2026-10-29)
 
 A bot's reply always reads as a reply, its Markdown whole. Claude Code can
@@ -8789,10 +8858,11 @@ the rule: no card, the turn continues at once.
   the reset plus `AFTER_RESET_MS` goes back to the engine the thread started
   on, with one line. A thread someone moved since is left alone.
 - No backup: the line says the message is sent again at the reset, and it
-  is, once. A routine run is run again on the backup (`runNow`, once per
-  run), else at the reset (at most once per 12 h per routine). Other turns
-  (delegations, webhooks) only block the engine: their next turn starts on a
-  backup before it is refused (`beforeTurn` in `startTurn`).
+  is, once. A routine run, a webhook run or a proactive wake goes on at once
+  on the backup, else waits for a reset under 12 h or fails with the
+  engine's reset (2026-11-02, "A refused run goes on elsewhere" above).
+  Delegations only block the engine: their next turn starts on a backup
+  before it is refused (`beforeTurn` in `startTurn`).
 - Auto threads are left to Auto. Off with `SAGAX_LIMIT_FAILOVER=0`. Tests:
   `server/limit-reset-time.test.ts`, `server/limit-failover.test.ts`,
   `server/limit-failover-host.test.ts`, `src/lib/limit-failover.test.ts`,

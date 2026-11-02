@@ -14,6 +14,7 @@ import {
   parseCodexUsage,
   parseGrokUsage,
   planAccountsFromInstances,
+  spentPlanUntil,
   type PlanAccount,
   type PlanFetch,
   type PlanResponse,
@@ -446,5 +447,17 @@ describe("plan threshold alerts (J4)", () => {
   it("uses the configured line", () => {
     expect(newPlanUsageAlerts(report(60), "p", 50)).toHaveLength(1);
     expect(planUsageAlertText({ providerId: "c", provider: "Claude", window: "weekly", level: "warn", usedPercent: 82, resetsAt: null }).title).toBe("Claude: 82% of your weekly limit used");
+  });
+
+  // 2026-11-02: a spent window is what the usage-limit failover holds the
+  // engine on (its provider's own reset), never a guess.
+  it("says until when a plan is spent: the latest reset of its windows at 100 %", () => {
+    expect(spentPlanUntil(row(99) as never)).toBeNull();
+    expect(spentPlanUntil(row(100) as never)).toBe(Date.parse("2026-10-27T00:00:00Z"));
+    const both = { ...row(100, "2026-11-05T18:00:00Z"), fiveHour: { available: true, usedPercent: 100, remainingPercent: 0, resetsAt: "2026-11-02T18:00:00Z" } };
+    expect(spentPlanUntil(both as never)).toBe(Date.parse("2026-11-05T18:00:00Z"));
+    // A spent window with no reset, or a row that read no windows: Sagax cannot say until when.
+    expect(spentPlanUntil({ ...row(100), weekly: { available: true, usedPercent: 100, remainingPercent: 0, resetsAt: null } } as never)).toBeNull();
+    expect(spentPlanUntil({ ...row(100), state: "error" } as never)).toBeNull();
   });
 });

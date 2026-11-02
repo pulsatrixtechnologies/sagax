@@ -8,7 +8,8 @@ import type { LimitFailoverLine } from "../shared/limit-failover.ts";
 import type { ModelSelection } from "../shared/wire.ts";
 import { isEngineExhaustedRefusal } from "./drivers/openai-chat.ts";
 import { limitBackupAllowed, pickLimitBackup, type LimitCandidate, type LimitEngine, type LimitFailoverStore } from "./limit-failover.ts";
-import { limitKindOf, limitResetFromText, limitResetOrEstimate } from "./limit-reset-time.ts";
+import { limitKindOf, limitResetFromText, limitResetOrEstimate, type LimitKind } from "./limit-reset-time.ts";
+import type { RoutineUsageLimit } from "./routines/routine-limit-words.ts";
 
 /** What a turn ran on, noted when it was dispatched. */
 export interface LimitDispatch {
@@ -26,6 +27,10 @@ export interface LimitDispatch {
   /** The turn ran on a local or computer-shared model: it has no usage
    * limit, so its failure is never one (limitKindOf's `local`). */
   local?: boolean;
+  /** Sagax picked this turn's model instead of the conversation's own (a
+   * proactive wake's or a call's fast model, #1694): a limit that refuses it
+   * is that model's or that engine's, not the conversation's. */
+  detour?: true;
 }
 
 /** The request a person's own message started (directRequestOwners). */
@@ -47,6 +52,26 @@ export interface LimitFailoverHostDeps {
    * organization's allowedEngines and policy, sign-ins and keys, the
    * approval mode and the tools the thread needs (autoEnginesFor). */
   candidates: (botId: string, threadId: string, speaker: unknown) => Promise<LimitCandidate[]>;
+  /** The same list from what is known now, without reading the engines again:
+   * a routine run's failure decides at once who takes it over (routineLimit).
+   * Absent: no routine run is taken over. */
+  candidatesNow?: (botId: string, threadId: string, speaker: unknown) => LimitCandidate[];
+  /** A limit refused one model this payer's turn ran on instead of its
+   * conversation's own (a wake's or a call's fast model of the same engine):
+   * that model is not picked again for this payer before `until`, and the
+   * engine's other models stay theirs (Auto's refusal memory). */
+  refuseModel?: (payer: string, selection: ModelSelection, until: number) => void;
+  /** J4 plan usage: until when a plan window of this engine is spent for
+   * this payer (used at 100 %, with the reset its provider reported), from
+   * the last usage report Sagax read; null when none is known. Sagax's own
+   * picks (Auto, a fast model, a backup) skip such an engine, and a refusal
+   * on it that names no reset holds it until then instead of an estimate.
+   * A person's chosen engine is never moved on it alone. */
+  planLimitUntil?: (payer: string, instanceId: string) => number | null;
+  /** A turn on this engine just worked for this payer: a plan window Sagax
+   * read as spent for it is not (extra-usage credits, a plan upgrade, an
+   * early reset), so Sagax's own picks may land on it again. */
+  planWorked?: (payer: string, instanceId: string) => void;
   /** The bot's own backups, then the organization's default engine. */
   preferred: (botId: string, threadId: string) => Array<{ instanceId: string; model?: string }>;
   config: (instanceId: string) => { environment?: Record<string, string>; access?: string } | undefined;
@@ -111,6 +136,23 @@ export interface LimitFailoverHost {
     /** The routine run this failure just failed (RoutineManager.handleRuntimeEvent), if any. */
     routineRun?: { id: string; routineId: string } | null;
   }): boolean;
+  /** A routine run's, webhook run's or proactive wake's failed turn, read at
+   * once (RoutineManager's usageLimit, before the run fails): null when it is
+   * no limit. Otherwise the limit is held for the payer as turnFailed holds
+   * it, and the verdict names the engine that really refused (its model too
+   * when the turn ran on a model other than its conversation's own) and its
+   * reset; with `takeover`, also who runs the run now: the conversation's own
+   * model when only a detour refused, else a backup as for a person's
+   * message, else Auto's next pick. The turn is then this method's, not
+   * turnFailed's. Never throws. */
+  routineLimit(input: { threadId: string; cause: string | undefined; stopReason?: string | null; takeover: boolean }): RoutineUsageLimit | null;
+  /** Before a routine run's next start: its thread moves to the model that
+   * took the run over (RoutineRun.limitTakeover), and goes back to its own
+   * model after `returnsAt` (RoutineRun.limitTakeoverUntil: the reset of the
+   * limit that moved it off, model-only or not) or a later hold on its
+   * engine, as a person's conversation does (beforeTurn). A run that starts
+   * once that limit is over moves nothing. Never throws. */
+  takeOver(botId: string, threadId: string, to: ModelSelection, speaker: unknown, returnsAt?: number): void;
   /** A turn that completed: nothing to keep for it, and its engine plainly
    * has room again for its payer, so a stale hold on it ends. */
   turnSucceeded(threadId: string): void;
@@ -163,13 +205,92 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
   };
   const same = (left: ModelSelection | null | undefined, right: ModelSelection | null | undefined) =>
     Boolean(left && right && left.instanceId === right.instanceId && left.model === right.model);
+  /** A spent plan window of this engine for this payer, still to reset. */
+  const planUntil = (payer: string, instanceId: string): number | null => {
+    try {
+      const at = deps.planLimitUntil?.(payer, instanceId) ?? null;
+      return at !== null && at > deps.now() ? at : null;
+    } catch {
+      return null;
+    }
+  };
+  /** Until when this payer cannot use this engine, as far as Sagax knows: a
+   * refusal's hold, else a spent plan window. Sagax's own picks read this. */
+  const heldUntil = (payer: string, instanceId: string): number | null =>
+    store.blockedUntil(payer, instanceId) ?? planUntil(payer, instanceId);
+  /** A line's reset for this engine is only Sagax's estimate when the hold
+   * that sets it says so; `fallback` when no hold sets that time. */
+  const estimatedFor = (payer: string, instanceId: string, at: number, fallback: boolean): boolean => {
+    const held = store.holdOf(payer, instanceId);
+    return held !== null && held.until === at ? held.estimated : fallback;
+  };
   const pick = async (botId: string, threadId: string, speaker: unknown, from: LimitEngine, payer: string) => pickLimitBackup({
     from,
     preferred: deps.preferred(botId, threadId),
     candidates: await deps.candidates(botId, threadId, speaker),
-    blocked: (instanceId) => store.blockedUntil(payer, instanceId) !== null,
+    blocked: (instanceId) => heldUntil(payer, instanceId) !== null,
     config: deps.config,
   });
+
+  /** Sagax ran this turn on a model of its own pick (a fast model), not the conversation's. */
+  const detoured = (dispatch: LimitDispatch, current: ModelSelection | null): current is ModelSelection =>
+    dispatch.detour === true && Boolean(current) && current!.auto !== true && !same(current, dispatch.selection);
+  /** Holds what a limit refused for the payer, from now on whatever happens
+   * to the turn: no other turn of this payer starts on it before the reset.
+   * A refusal that binds only the turn's model (its extra-usage credits, its
+   * own weekly window) holds nothing engine-wide; neither does a fast model
+   * Sagax picked on the conversation's own engine (only that model is held:
+   * the conversation's own model is not at its limit for all Sagax knows),
+   * unless the engine's plan window is spent for this payer. Any other
+   * refusal holds its engine. `estimated`: the engine named no reset. */
+  const hold = (dispatch: LimitDispatch, current: ModelSelection | null, resetsAt: number, estimated: boolean, scope?: "model") => {
+    if (scope === "model") return;
+    if (detoured(dispatch, current) && current.instanceId === dispatch.engine.instanceId &&
+      planUntil(dispatch.payer, dispatch.engine.instanceId) === null) {
+      deps.refuseModel?.(dispatch.payer, dispatch.selection, resetsAt);
+      return;
+    }
+    store.block(dispatch.payer, dispatch.engine.instanceId, resetsAt, estimated);
+  };
+  /** When the limit a turn met resets: the engine's own time (its error, or
+   * its words), else the reset of its spent plan window for this payer, else
+   * an estimate. A rate limit or a model-only refusal is never a plan window. */
+  const resetOf = (dispatch: LimitDispatch, kind: LimitKind, cause: string | undefined,
+    error: { message: string; resetsAt?: number; scope?: "model" } | undefined) => {
+    const now = deps.now();
+    const said = error?.resetsAt ?? limitResetFromText(cause, now) ?? limitResetFromText(error?.message, now) ??
+      (kind === "quota" && error?.scope !== "model" ? planUntil(dispatch.payer, dispatch.engine.instanceId) ?? undefined : undefined);
+    return limitResetOrEstimate(kind, said, now);
+  };
+  const modelName = (selection: ModelSelection) => `${deps.engineName(selection.instanceId)} (${selection.model})`;
+  /** Who refused, in words: the engine, with its model when the turn was on a detour. */
+  const refusedName = (dispatch: LimitDispatch, current: ModelSelection | null) =>
+    detoured(dispatch, current) ? modelName(dispatch.selection) : deps.engineName(dispatch.engine.instanceId);
+  /** Who runs a routine run a limit refused: the conversation's own model
+   * when only a detour refused and it is free, else a backup picked as for
+   * a person's message, from what is known now. */
+  const routineBackup = (dispatch: LimitDispatch, current: ModelSelection, threadId: string): ModelSelection | null => {
+    const candidates = deps.candidatesNow?.(dispatch.botId, threadId, dispatch.speaker);
+    if (detoured(dispatch, current) && heldUntil(dispatch.payer, current.instanceId) === null &&
+      (!candidates || candidates.some((candidate) => candidate.instanceId === current.instanceId))) {
+      const { auto: _auto, ...own } = current;
+      return own;
+    }
+    if (!candidates) return null;
+    return pickLimitBackup({
+      from: dispatch.engine,
+      preferred: deps.preferred(dispatch.botId, threadId),
+      candidates,
+      blocked: (instanceId) => heldUntil(dispatch.payer, instanceId) !== null,
+      config: deps.config,
+    });
+  };
+  /** Auto has another model to pick for this payer: an engine not held, or
+   * another model of the refused one when only that model is held. */
+  const autoHasAnother = (dispatch: LimitDispatch, threadId: string, engineHeld: boolean): boolean =>
+    (deps.candidatesNow?.(dispatch.botId, threadId, dispatch.speaker) ?? []).some((candidate) =>
+      heldUntil(dispatch.payer, candidate.instanceId) === null &&
+      (candidate.instanceId !== dispatch.engine.instanceId || (!engineHeld && candidate.models.some((model) => model !== dispatch.selection.model))));
 
   /** Until the thread is free, at most SETTLE_WAIT_MS; false when it is not. */
   const settled = async (botId: string, threadId: string): Promise<boolean> => {
@@ -191,12 +312,15 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
 
   const failed = async (threadId: string, turnId: string | undefined, dispatch: LimitDispatch, resetsAt: number,
     own: { messageId: string } | null, run: { id: string; routineId: string } | null,
-    auto: { modelOnly: boolean } | null = null, exhausted = false) => {
+    auto: { modelOnly: boolean } | null = null, exhausted = false, estimated = false) => {
     const failover = store.failover(dispatch.botId, threadId);
     // The engine the thread goes back to: the one it started on.
     const home = failover && same(failover.to, dispatch.selection) ? failover : null;
     const homeEngine = home ? deps.engine(home.from.instanceId) ?? dispatch.engine : dispatch.engine;
     const homeReset = home ? Math.max(home.resetsAt, store.blockedUntil(dispatch.payer, home.from.instanceId) ?? 0) : resetsAt;
+    /** The line names the time Sagax tries `instanceId` again as a reset only when the engine said it. */
+    const noReset = (instanceId: string, at: number) =>
+      estimatedFor(dispatch.payer, instanceId, at, at === resetsAt && estimated) ? { estimated: true as const } : {};
     const backup = await pick(dispatch.botId, threadId, dispatch.speaker, dispatch.engine, dispatch.payer).catch(() => null);
     if (run) {
       if (backup && store.takeResend(`routine:${run.id}`)) {
@@ -222,6 +346,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           const kept = store.record({ botId: dispatch.botId, threadId, from: dispatch.selection, to: backup, resetsAt, at: deps.now() });
           deps.replaceFailure(threadId, turnId, {
             kind: "switched", from: deps.engineName(kept.from.instanceId), to: deps.engineName(backup.instanceId), resetsAt: kept.resetsAt,
+            ...noReset(kept.from.instanceId, kept.resetsAt),
           }, dispatch.at);
           if (deps.rerunRoutine(run.routineId, run.id)) return;
         } else {
@@ -234,7 +359,9 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       // scheduled resume restarts the routine.
       deps.clearRoutineRun?.(run.id);
       store.schedule({ kind: "routine", routineId: run.routineId, engine: homeEngine.instanceId, at: homeReset + store.afterResetMs });
-      deps.replaceFailure(threadId, turnId, { kind: "waitingRoutine", from: deps.engineName(homeEngine.instanceId), resetsAt: homeReset }, dispatch.at);
+      deps.replaceFailure(threadId, turnId, {
+        kind: "waitingRoutine", from: deps.engineName(homeEngine.instanceId), resetsAt: homeReset, ...noReset(homeEngine.instanceId, homeReset),
+      }, dispatch.at);
       arm();
       return;
     }
@@ -249,7 +376,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     if (auto && (backup || auto.modelOnly || exhausted) && store.takeResend(own.messageId, AUTO_MAX_RESENDS)) {
       const from = deps.engineName(dispatch.engine.instanceId);
       deps.replaceFailure(threadId, turnId, {
-        kind: "switched", from, to: "Auto", resetsAt, ...(exhausted ? { reason: "model" as const } : {}),
+        kind: "switched", from, to: "Auto", resetsAt, ...(exhausted ? { reason: "model" as const } : estimated ? { estimated: true as const } : {}),
       }, dispatch.at);
       await deps.resend(dispatch.botId, threadId, own.messageId, dispatch.speaker, dispatch.trigger, turnId ? { turnId } : {});
       return;
@@ -269,7 +396,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           const kept = store.record({ botId: dispatch.botId, threadId, from: dispatch.selection, to: backup, resetsAt, at: deps.now() });
           deps.replaceFailure(threadId, turnId, {
             kind: "switched", from: deps.engineName(kept.from.instanceId), to: deps.engineName(backup.instanceId), resetsAt: kept.resetsAt,
-            ...(dispatch.owner ? { owner: true as const } : {}),
+            ...(dispatch.owner ? { owner: true as const } : {}), ...noReset(kept.from.instanceId, kept.resetsAt),
           }, dispatch.at);
         }
         await deps.resend(dispatch.botId, threadId, own.messageId, dispatch.speaker, dispatch.trigger, turnId ? { turnId } : {});
@@ -287,15 +414,35 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     })) return;
     deps.replaceFailure(threadId, turnId, {
       kind: "waiting", from: deps.engineName(homeEngine.instanceId), resetsAt: homeReset, ...(dispatch.owner ? { owner: true as const } : {}),
+      ...noReset(homeEngine.instanceId, homeReset),
     }, dispatch.at);
     arm();
+  };
+
+  /** A person's message whose turn ran on a quick model Sagax picked (a
+   * call's, #1694) and that model's limit refused: the same message goes
+   * again at once and the conversation stays on its own model; the next
+   * quick pick skips what the limit holds now (hold), so it lands elsewhere.
+   * The failure row becomes one hidden line naming that quick model. */
+  const detourFailed = async (threadId: string, turnId: string | undefined, dispatch: LimitDispatch, current: ModelSelection,
+    resetsAt: number, estimated: boolean, own: { messageId: string }) => {
+    // A newer turn took the thread meanwhile: it runs, this one is left as it failed.
+    if (!await settled(dispatch.botId, threadId)) return;
+    deps.replaceFailure(threadId, turnId, {
+      kind: "switched", from: modelName(dispatch.selection), to: deps.engineName(current.instanceId), resetsAt, detour: true,
+      ...(estimated ? { estimated: true as const } : {}),
+    }, dispatch.at);
+    await deps.resend(dispatch.botId, threadId, own.messageId, dispatch.speaker, dispatch.trigger, turnId ? { turnId } : {});
   };
 
   const host: LimitFailoverHost = {
     autoExcluded(payer, engines) {
       const out = new Set<string>();
       try {
-        const limited = engines.filter((engine) => store.blockedUntil(payer, engine.instanceId) !== null);
+        // A refusal's hold, or a plan window Sagax already read as spent for
+        // this payer: Sagax's own pick (Auto, a wake's or a call's fast model)
+        // never lands on an engine it knows is out (2026-11-02).
+        const limited = engines.filter((engine) => heldUntil(payer, engine.instanceId) !== null);
         for (const engine of engines) {
           if (limited.some((at) => !limitBackupAllowed(at, engine, deps.config(engine.instanceId)))) out.add(engine.instanceId);
         }
@@ -314,13 +461,109 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       errors.set(threadId, { message, ...(limitResetsAt !== undefined ? { resetsAt: limitResetsAt } : {}), ...(scope ? { scope } : {}) });
     },
 
+    routineLimit({ threadId, cause, stopReason, takeover }) {
+      try {
+        const dispatch = dispatches.get(threadId);
+        if (!dispatch) return null;
+        const error = errors.get(threadId);
+        const kind: LimitKind | null = limitKindOf(cause ?? error?.message, stopReason, { local: dispatch.local === true });
+        // An exhausted catalog (#1696) and every other failure stay turnFailed's.
+        if (!kind) return null;
+        dispatches.delete(threadId);
+        errors.delete(threadId);
+        const { resetsAt, estimated } = resetOf(dispatch, kind, cause, error);
+        const current = deps.threadSelection(dispatch.botId, threadId);
+        hold(dispatch, current, resetsAt, estimated, error?.scope);
+        const auto = current?.auto === true;
+        if (auto) deps.autoRefuse?.(threadId, dispatch.payer, resetsAt);
+        const from = refusedName(dispatch, current);
+        // Only a quick model Sagax picked refused, not the conversation's own:
+        // the run's words say Sagax skips that model, never that the run goes
+        // back to it (routines/routine-limit-words.ts).
+        const detour = detoured(dispatch, current);
+        const verdict: RoutineUsageLimit = { kind, from, resetsAt, estimated, ...(detour ? { detour: true as const } : {}) };
+        if (!takeover || !deps.enabled() || !current) return verdict;
+        let to: ModelSelection | null = null;
+        let toName: string;
+        if (auto) {
+          const engineHeld = error?.scope !== "model";
+          if (!autoHasAnother(dispatch, threadId, engineHeld)) return verdict;
+          toName = "Auto";
+        } else {
+          to = routineBackup(dispatch, current, threadId);
+          if (!to) return verdict;
+          toName = to.instanceId === dispatch.engine.instanceId ? modelName(to) : deps.engineName(to.instanceId);
+        }
+        // When the run's conversation goes back to its own model once a
+        // takeover moved it off (takeOver records it, beforeTurn reads it):
+        // the reset of the limit that refused that model, model-only or not;
+        // after a detour, the hold on the conversation's own engine that
+        // kept the run off it.
+        const returnsAt = to && !same(to, current)
+          ? detour ? heldUntil(dispatch.payer, current.instanceId) ?? resetsAt : resetsAt
+          : undefined;
+        // The engine's error row of this turn becomes the switch line: a
+        // hidden notice, its words in the Events lens (limitFailoverRow).
+        const line: LimitFailoverLine = {
+          kind: "switched", from, to: toName, resetsAt, ...(estimated ? { estimated: true as const } : {}), ...(detour ? { detour: true as const } : {}),
+        };
+        track(Promise.resolve().then(() => deps.replaceFailure(threadId, undefined, line, dispatch.at)).catch((failure) => {
+          console.warn(`[limit-failover] ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
+        }));
+        return {
+          ...verdict, to: toName, ...(to ? { selection: to } : {}), ...(returnsAt !== undefined ? { returnsAt } : {}),
+          // A quick model of the conversation's own engine refused and the run
+          // goes on on the conversation's own model: no other engine took it.
+          ...(to && to.instanceId === dispatch.engine.instanceId ? { sameEngine: true as const } : {}),
+        };
+      } catch (failure) {
+        console.warn(`[limit-failover] ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
+        return null;
+      }
+    },
+
+    takeOver(botId, threadId, to, speaker, returnsAt) {
+      try {
+        const current = deps.threadSelection(botId, threadId);
+        if (!current || same(current, to)) return;
+        // Always back on its own model after the reset, as a person's
+        // conversation goes back (beforeTurn): a routine that joined a
+        // conversation (a wait's follow-up in the person's chat) leaves it
+        // where it was. A model-only refusal holds nothing engine-wide: the
+        // takeover's own reset still schedules the return, and a later hold
+        // on the engine delays it.
+        const held = heldUntil(deps.payer(botId, speaker), current.instanceId) ?? 0;
+        const until = Math.max(held, returnsAt ?? 0);
+        // That limit is already over when the run starts (it waited past the
+        // reset, its conversation busy): the run goes on where its
+        // conversation is, never moved to the backup and straight back
+        // (two switches, its engine session replayed for nothing).
+        if (until + store.afterResetMs <= deps.now()) return;
+        const refused = deps.switchThread(botId, threadId, to);
+        if (refused) {
+          console.warn(`[limit-failover] ${threadId}: could not move to ${to.instanceId}: ${refused}`);
+          return;
+        }
+        store.record({ botId, threadId, from: current, to, resetsAt: until, at: deps.now() });
+      } catch (failure) {
+        console.warn(`[limit-failover] take over ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
+      }
+    },
+
     turnSucceeded(threadId) {
       const dispatch = dispatches.get(threadId);
       dispatches.delete(threadId);
       errors.delete(threadId);
       // A reply on the engine proves the payer has room on it again (another
-      // model, plan or a reset come early): a hold left on it is stale.
-      if (dispatch) store.unblock(dispatch.payer, dispatch.engine.instanceId);
+      // model, plan or a reset come early): a hold left on it is stale, and
+      // so is a plan window Sagax read as spent for it.
+      if (!dispatch) return;
+      store.unblock(dispatch.payer, dispatch.engine.instanceId);
+      try {
+        deps.planWorked?.(dispatch.payer, dispatch.engine.instanceId);
+      } catch (failure) {
+        console.warn(`[limit-failover] plan worked: ${failure instanceof Error ? failure.message : String(failure)}`);
+      }
     },
 
     backupRefused(botId, threadId, speaker) {
@@ -353,29 +596,35 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         // engine or waiting for a reset.
         const exhausted = !kind && isEngineExhaustedRefusal(message);
         if (!kind && !exhausted) return false;
-        const now = deps.now();
-        const said = error?.resetsAt ?? limitResetFromText(cause, now) ?? limitResetFromText(error?.message, now);
-        const { resetsAt } = kind ? limitResetOrEstimate(kind, said, now) : { resetsAt: now };
-        // Known from now on, whatever happens to this turn: no other turn of
-        // this payer starts on it before the reset. A refusal that binds
-        // only this model (its extra-usage credits, its own weekly window)
-        // leaves the engine to the payer's other models. An exhausted catalog
-        // never blocks the whole engine: other models may still work later.
-        if (kind && error?.scope !== "model") store.block(dispatch.payer, dispatch.engine.instanceId, resetsAt);
-        if (!deps.enabled()) return false;
+        const { resetsAt, estimated } = kind ? resetOf(dispatch, kind, cause, error) : { resetsAt: deps.now(), estimated: false };
         const current = deps.threadSelection(dispatch.botId, threadId);
+        // Known from now on, whatever happens to this turn (hold). An
+        // exhausted catalog never blocks the whole engine: other models may
+        // still work later.
+        if (kind) hold(dispatch, current, resetsAt, estimated, error?.scope);
+        if (!deps.enabled()) return false;
         if (!current) return false;
         // Auto goes on with its own next pick (failed's `auto`); a chosen
         // model moves to a backup, unless the person changed it meanwhile.
         const auto = current.auto === true;
-        if (!auto && !same(current, dispatch.selection)) return false;
-        if (auto && kind) deps.autoRefuse?.(threadId, dispatch.payer, resetsAt);
         const run = routineRun ? { id: routineRun.id, routineId: routineRun.routineId } : null;
         const request = run ? undefined : deps.request(threadId);
         const own = request && !request.stopped && request.origin?.kind === "user" && request.messageId &&
           (!request.turnId || !turnId || request.turnId === turnId) ? { messageId: request.messageId } : null;
+        // The person's message ran on a quick model Sagax picked (a call
+        // turn's): it goes again at once, its conversation untouched, and no
+        // incident relays the raw limit as the bot's (detourFailed).
+        if (!auto && kind && !run && own && detoured(dispatch, current)) {
+          if (!store.takeResend(own.messageId)) return false;
+          track(detourFailed(threadId, turnId, dispatch, current, resetsAt, estimated, own).catch((failure) => {
+            console.warn(`[limit-failover] ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
+          }));
+          return true;
+        }
+        if (!auto && !same(current, dispatch.selection)) return false;
+        if (auto && kind) deps.autoRefuse?.(threadId, dispatch.payer, resetsAt);
         if (!run && !own) return false;
-        track(failed(threadId, turnId, dispatch, resetsAt, own, run, auto ? { modelOnly: error?.scope === "model" || exhausted } : null, exhausted).catch((failure) => {
+        track(failed(threadId, turnId, dispatch, resetsAt, own, run, auto ? { modelOnly: error?.scope === "model" || exhausted } : null, exhausted, estimated).catch((failure) => {
           console.warn(`[limit-failover] ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
         }));
         return true;
@@ -417,6 +666,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           deps.note(threadId, {
             kind: "switched", from: deps.engineName(kept.from.instanceId), to: deps.engineName(backup.instanceId), resetsAt: kept.resetsAt,
             ...(deps.ownerPays?.(botId, speaker) ? { owner: true as const } : {}),
+            ...(estimatedFor(payer, kept.from.instanceId, kept.resetsAt, false) ? { estimated: true as const } : {}),
           });
         }).catch((failure) => {
           console.warn(`[limit-failover] before turn ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);

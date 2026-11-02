@@ -633,7 +633,7 @@ import {
   type UsageTrigger
 } from "./usage-ledger.ts";
 import type { PlanUsageReport } from "./plan-usage.ts";
-import { newPlanUsageAlerts, planAccountsFromInstances, planUsageAlertText } from "./plan-usage.ts";
+import { newPlanUsageAlerts, planAccountsFromInstances, planUsageAlertText, spentPlanUntil } from "./plan-usage.ts";
 import { GroupUsageReader } from "./group-thread-usage.ts";
 import { ledgerCost, listPriceFor } from "./model-prices.ts";
 import type { PriceList } from "./prices.ts";
@@ -668,6 +668,7 @@ import {
   buildSpendNotification,
   deliverableNotification,
   quietForCall,
+  routineRunTitle,
   summarize,
   type Notification
 } from "./notify.ts";
@@ -753,7 +754,7 @@ import { recoveryCapabilityError } from "./automatic-recovery.ts";
 import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from "./cache-keepwarm.ts";
 import { createLimitResetHost } from "./limit-reset-host.ts";
 import { engineLabel } from "./limit-resets.ts";
-import { LimitFailoverStore } from "./limit-failover.ts";
+import { LimitFailoverStore, type LimitCandidate } from "./limit-failover.ts";
 import { createLimitFailoverHost, limitBackupRefusedText } from "./limit-failover-host.ts";
 import { sendBlockFor, type SendBlock } from "../shared/send-state.ts";
 import { repeatsShownFailure } from "../shared/failure-dedup.ts";
@@ -16115,7 +16116,9 @@ const limitFailoverStore = new LimitFailoverStore({ file: join(DATA_DIR, "limit-
 function limitFailoverRow(threadId: string, line: LimitFailoverLine): NonNullable<Message["tool"]> {
   const quiet = line.kind === "switched" || line.kind === "back";
   const words = line.kind === "switched" && line.to === "Auto" && line.reason !== "model"
-    ? `${line.from} reached its usage limit during this turn: Auto continued the same turn on another model that works, with the steps already taken; ${line.from} is picked again once its limit resets (around ${limitClockText(line.resetsAt)}).`
+    ? line.estimated
+      ? `${line.from} reached its usage limit during this turn and gave no reset time: Auto continued the same turn on another model that works, with the steps already taken; ${line.from} is tried again around ${limitClockText(line.resetsAt)}.`
+      : `${line.from} reached its usage limit during this turn: Auto continued the same turn on another model that works, with the steps already taken; ${line.from} is picked again once its limit resets (around ${limitClockText(line.resetsAt)}).`
     : limitFailoverText(line, limitClockText);
   if (quiet) {
     console.info(`[limit-failover] ${threadId}: ${words}`);
@@ -16140,6 +16143,39 @@ function limitResumeText(threadId: string, turnId: string, text: string): string
   if (!steps.length && !lastText?.trim()) return text;
   return renewalPrompt({ base: text, steps, ...(lastText ? { lastText } : {}), cause: "limit" });
 }
+/** 2026-11-02: per payer and engine, until when a plan window is spent, from
+ * the last plan usage report read for that payer (GET /api/plan-usage: the
+ * person's own, every few minutes while their app is open; the server's when
+ * solo). The scope is the payer's key (autoPayerKey). The usage-limit
+ * failover reads it (planLimitUntil): Sagax's own picks skip a spent engine,
+ * and a refusal on it that names no reset holds it until then. */
+const spentPlans = new Map<string, number>();
+function notePlanLimits(report: PlanUsageReport, scope: string): void {
+  const payer = scope.toLowerCase();
+  const now = Date.now();
+  for (const row of report.providers) {
+    const key = `${payer}\u0000${row.instanceId ?? row.id}`;
+    const until = spentPlanUntil(row);
+    if (until !== null && until > now) spentPlans.set(key, until);
+    else spentPlans.delete(key);
+  }
+  while (spentPlans.size > 2_000) spentPlans.delete(spentPlans.keys().next().value as string);
+}
+function planLimitUntil(payer: string, instanceId: string): number | null {
+  const until = spentPlans.get(`${payer}\u0000${instanceId}`);
+  return until !== undefined && until > Date.now() ? until : null;
+}
+/** The engines a turn of this speaker may run on, from what is known now
+ * (the probe cache on a solo server is not read again). */
+function limitCandidatesNow(botId: string, threadId: string, speaker: unknown): LimitCandidate[] {
+  const bot = store.projectBotForTask(botId, threadId);
+  if (!bot) return [];
+  const guestConfined = cloudGuestDriven(threadId) || botmailConfined(threadId);
+  return autoEnginesFor(bot, (speaker ?? { origin: "person" }) as TurnSpeaker, guestConfined).map((engine) => ({
+    instanceId: engine.instanceId, driverKind: engine.driverKind,
+    models: engine.models.options.map((option) => option.id), defaultModel: engine.models.default,
+  }));
+}
 const limitFailover = createLimitFailoverHost({
   store: limitFailoverStore,
   now: () => Date.now(),
@@ -16159,14 +16195,16 @@ const limitFailover = createLimitFailoverHost({
     if (IDENTITY.kind !== "perspicax" && (!engineProbes.size || [...engineProbes.values()].some((probe) => Date.now() - probe.at > ENGINE_PROBE_TTL_MS))) {
       await probeEngines().catch(() => {});
     }
-    const bot = store.projectBotForTask(botId, threadId);
-    if (!bot) return [];
-    const guestConfined = cloudGuestDriven(threadId) || botmailConfined(threadId);
-    return autoEnginesFor(bot, (speaker ?? { origin: "person" }) as TurnSpeaker, guestConfined).map((engine) => ({
-      instanceId: engine.instanceId, driverKind: engine.driverKind,
-      models: engine.models.options.map((option) => option.id), defaultModel: engine.models.default
-    }));
+    return limitCandidatesNow(botId, threadId, speaker);
   },
+  candidatesNow: limitCandidatesNow,
+  // A wake's or a call's fast model the limit refused is skipped by the
+  // next fast pick for this payer (voicePickForTurn reads autoRefusalsFor).
+  refuseModel: (payer, selection, until) => rememberAutoRefusal(payer, { instanceId: selection.instanceId, model: selection.model }, until),
+  // A plan window the person's usage report showed spent (J4), until a turn
+  // on that engine works for them again.
+  planLimitUntil: (payer, instanceId) => planLimitUntil(payer, instanceId),
+  planWorked: (payer, instanceId) => { spentPlans.delete(`${payer}\u0000${instanceId}`); },
   preferred: (botId, threadId) => {
     const bot = store.projectBotForTask(botId, threadId);
     const orgDefault = cfg.newBotDefaults?.profile.modelSelection ?? cfg.defaultModelSelection;
@@ -16435,7 +16473,9 @@ bus.subscribe((event: RuntimeEvent) => {
   if (shouldIgnoreProviderEvent(event)) return;
   if (event.type === "runtime.error") {
     limitFailover.noteError(event.threadId, event.message, event.limitResetsAt, event.limitScope);
-    limitReset.noteRefusal(runningTurnEngines.get(event.threadId)?.instanceId, event.limitResetsAt);
+    // A refusal that binds one model (its extra-usage credits, its own weekly
+    // window) is not the engine's limit: the engines' report stays accurate.
+    if (event.limitScope !== "model") limitReset.noteRefusal(runningTurnEngines.get(event.threadId)?.instanceId, event.limitResetsAt);
   } else if (event.type === "turn.completed" && event.ok) limitFailover.turnSucceeded(event.threadId);
 });
 /** Threads whose running turn a client abort ended (the abort sentence as
@@ -20956,7 +20996,7 @@ function incidentRefused(chief: BotRecord, incidentsThreadId: string, asks: Read
   }
 }
 
-function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: string; detail: string; routine?: { routineId: string; runAs?: string } }): void {
+function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: string; detail: string; routine?: { routineId: string; runAs?: string }; run?: Incident["run"] }): void {
   const { bot, threadId } = input;
   const task = store.taskByThread(bot.id, threadId);
   // A confidential thread's incident carries no text: no title, request,
@@ -20998,6 +21038,7 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
     title: task?.title ?? null,
     room: group?.name ?? null,
     detail: redactSecretsInText(input.detail),
+    ...(input.run ? { run: input.run } : {}),
     ...incidentContext(threadId)
   };
   const count = incidentLedger.note(threadId);
@@ -24198,6 +24239,12 @@ routines = new RoutineManager({
   handedOffWorkLive: (threadId) => coordinator.outstandingDirect(threadId).length > 0 ||
     [...delegationWatch.values()].some((watch) => watch.sourceThreadId === threadId) || pendingDelegationWakes.has(threadId),
   botState: unattendedDispatchState,
+  // A bot run's failed turn, read by the usage-limit failover before the run
+  // fails (server/limit-failover-host.ts routineLimit): which engine really
+  // refused, and who takes the run over now.
+  usageLimit: (run, failure, facts, takeover) => run.threadId
+    ? limitFailover.routineLimit({ threadId: run.threadId, cause: failure, stopReason: facts.stopReason, takeover })
+    : null,
   onTriggerRoutineRemoved: (routine) => { webhooks.removeOwnedRoutine(routine.id); },
   onTriggerRoutineUpdated: (routine) => {
     // 2026-10-29: a routine switched to "When a webhook arrives" in the app
@@ -24466,7 +24513,10 @@ routines = new RoutineManager({
     const said = alert?.detail ?? run.error;
     const detail = said ? `${run.routineName}: ${said}` : run.routineName;
     const notificationBot = routineSourceOwner(run)?.bot ?? bot;
-    notify(deliverableNotification("routine-failed", notificationBot, routineSourceThread(run) ?? run.threadId ?? bot.threadId, detail));
+    // A proactive wake or a webhook run is not "a routine": the title says which run failed.
+    const runKind = run.proactive ? "proactive" as const : run.webhookId ? "webhook" as const : "routine" as const;
+    const title = routineRunTitle(notificationBot.name, run, "failed");
+    notify(deliverableNotification("routine-failed", notificationBot, routineSourceThread(run) ?? run.threadId ?? bot.threadId, detail, title ? { title } : undefined));
     // 2026-10-30: the bot may look into its own failed run (never a failed wake of its own)
     // 2026-11-01: nor a restart's cut or a missed occurrence (runFailureWakesBot)
     if (runFailureWakesBot(run)) offerProactive({
@@ -24478,7 +24528,7 @@ routines = new RoutineManager({
       ...(run.proactive ? { ownWake: true, hops: run.proactive.hops } : { hops: 0 }),
       ...(run.runAs && !run.proactive ? { runAs: run.runAs } : {})
     });
-    reportIncident({ kind: "routine-failed", bot, threadId: run.threadId ?? bot.threadId, detail, routine: { routineId: run.routineId, ...(run.runAs ? { runAs: run.runAs } : {}) } });
+    reportIncident({ kind: "routine-failed", bot, threadId: run.threadId ?? bot.threadId, detail, routine: { routineId: run.routineId, ...(run.runAs ? { runAs: run.runAs } : {}) }, run: runKind });
   },
   onRunDeferred: (run, alert) => {
     const bot = store.bot(run.botId);
@@ -24488,7 +24538,9 @@ routines = new RoutineManager({
       : null;
     const detail = `${redactSecretsInText(run.routineName)}: ${alert?.detail ?? `target busy${minutes != null ? ` for ${minutes} minutes` : ""}`}`;
     const notificationBot = routineSourceOwner(run)?.bot ?? bot;
-    notify(deliverableNotification("routine-deferred", notificationBot, routineSourceThread(run) ?? bot.threadId, detail));
+    // A waiting proactive wake or webhook run (a limit's reset, a busy target) is not "a routine" either.
+    const title = routineRunTitle(notificationBot.name, run, "waiting");
+    notify(deliverableNotification("routine-deferred", notificationBot, routineSourceThread(run) ?? bot.threadId, detail, title ? { title } : undefined));
   },
   engineReconnect: {
     botDriver: (botId) => {
@@ -29228,6 +29280,11 @@ function autoPayerKey(bot: BotRecord, speaker: TurnSpeaker): string {
 /** J4: a plan window crossing the warning line (or spent) says so once, to
  * the person whose plan it is (everyone on the solo server). */
 function announcePlanThresholds(report: PlanUsageReport, scope: string): void {
+  try {
+    notePlanLimits(report, scope);
+  } catch (failure) {
+    console.warn(`[plan-usage] spent windows: ${failure instanceof Error ? failure.message : String(failure)}`);
+  }
   try {
     for (const alert of newPlanUsageAlerts(report, scope.toLowerCase(), cfg.budgets?.warnAtPercent)) {
       const text = planUsageAlertText(alert);

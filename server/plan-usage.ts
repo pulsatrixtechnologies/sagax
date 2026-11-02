@@ -499,6 +499,22 @@ export function newPlanUsageAlerts(report: PlanUsageReport, scope: string, thres
   return out;
 }
 
+/** 2026-11-02: until when this row's plan is spent, as its provider said:
+ * the latest reset among its windows used at 100 % (each must reset before
+ * a turn runs on it again). Null when none is spent, or when a spent one
+ * gave no reset (Sagax cannot say until when). */
+export function spentPlanUntil(row: PlanProviderRow): number | null {
+  if (row.state !== "windows") return null;
+  let until: number | null = null;
+  for (const window of [row.fiveHour, row.weekly]) {
+    if (!window.available || window.usedPercent === null || window.usedPercent < 100) continue;
+    const at = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN;
+    if (!Number.isFinite(at)) return null;
+    until = until === null ? at : Math.max(until, at);
+  }
+  return until;
+}
+
 /** The notice's words, English like the server's other notification titles. */
 export function planUsageAlertText(alert: PlanUsageAlert): { title: string; body: string } {
   const span = alert.window === "weekly" ? "weekly" : "5-hour";

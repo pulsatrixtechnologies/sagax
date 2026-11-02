@@ -37,6 +37,10 @@ export interface Incident {
   room?: string | null;
   /** the provider's stop reason, the dispatch error, the routine error */
   detail: string;
+  /** A routine-failed incident: what kind of run failed (a scheduled routine
+   * when absent), so the report never calls a proactive wake or a webhook
+   * run a scheduled routine. */
+  run?: "routine" | "webhook" | "proactive";
   /** the last thing the person (or the requester) asked in that thread */
   lastRequest?: string | null;
   /** the last thing the bot said there */
@@ -145,8 +149,10 @@ function whatHappened(incident: Incident): string {
       return `${incident.bot.name}'s run ${where} stalled after showing no activity${detail}`;
     case "could-not-start":
       return `${incident.bot.name}'s run ${where} could not start${detail}`;
-    case "routine-failed":
-      return `${incident.bot.name}'s scheduled routine ${where} failed${detail}`;
+    case "routine-failed": {
+      const what = incident.run === "proactive" ? "proactive wake" : incident.run === "webhook" ? "webhook run" : "scheduled routine";
+      return `${incident.bot.name}'s ${what} ${where} failed${detail}`;
+    }
     default:
       if (isEngineEmptyFailure(incident.detail)) {
         return `${incident.bot.name}'s run ${where} ended with an empty model response${detail}`;

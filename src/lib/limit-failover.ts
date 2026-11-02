@@ -18,12 +18,20 @@ export function limitFailoverLineText(line: LimitFailoverLine, now = Date.now())
           from: line.from, to: line.to,
         });
       }
+      // A quick model Sagax picked for this turn: the conversation never goes
+      // back to it, Sagax only skips it for quick turns until it resets.
+      if (line.detour) return t(line.estimated ? "limitFailover.detourNoReset" : "limitFailover.detour", { from: line.from, time });
+      // The engine named no reset: the time is only when Sagax tries it again.
+      if (line.estimated) {
+        return t(line.owner ? "limitFailover.ownerSwitchedNoReset" : "limitFailover.switchedNoReset", { from: line.from, to: line.to, time });
+      }
       return t(line.owner ? "limitFailover.ownerSwitched" : "limitFailover.switched", { from: line.from, to: line.to, time });
     case "back":
       return t("limitFailover.back", { engine: line.engine });
     case "waiting":
+      if (line.estimated) return t(line.owner ? "limitFailover.ownerWaitingNoReset" : "limitFailover.waitingNoReset", { from: line.from, time });
       return t(line.owner ? "limitFailover.ownerWaiting" : "limitFailover.waiting", { from: line.from, time });
     case "waitingRoutine":
-      return t("limitFailover.waitingRoutine", { from: line.from, time });
+      return t(line.estimated ? "limitFailover.waitingRoutineNoReset" : "limitFailover.waitingRoutine", { from: line.from, time });
   }
 }

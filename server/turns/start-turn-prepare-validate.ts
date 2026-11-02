@@ -109,17 +109,26 @@ export function createPrepareValidateStartTurn(host: StartTurnHost) {
       automationSource: state.opts?.automationSource
     }));
   }
+  // A routine run, webhook run or proactive wake a usage limit refused goes
+  // on with the model that took it over (server/routines/routine-recovery.ts
+  // takeOver): its thread moves there before anything reads its model.
+  const takenOverRun = !state.opts?.warmOnly && state.opts?.automationSource ? activeRoutineRunForThread(state.threadId) : null;
+  state.limitTakeover = takenOverRun?.limitTakeover;
   // A usage limit (server/limit-failover-host.ts): back on the thread's own
   // engine once it reset, or onto a backup while it is known to refuse.
   // Never for a warm-up or a card's continuation of a running turn.
   if (!state.opts?.warmOnly && !state.opts?.cardContinuation) {
-    const switching = limitFailover.beforeTurn(state.botId, state.threadId, resolveTurnSpeaker({
+    const limitSpeaker = resolveTurnSpeaker({
       speaker: state.opts?.speaker,
       sender: state.opts?.sender ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.sender),
       peerAsk: state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk),
       trigger: state.opts?.trigger,
       automationSource: state.opts?.automationSource
-    }));
+    });
+    // Back on the conversation's own model after that limit's reset
+    // (limitTakeoverUntil), even when the refusal held only one model.
+    if (state.limitTakeover) limitFailover.takeOver(state.botId, state.threadId, state.limitTakeover, limitSpeaker, takenOverRun?.limitTakeoverUntil);
+    const switching = limitFailover.beforeTurn(state.botId, state.threadId, limitSpeaker);
     if (switching) await switching;
   }
   state.bot = store.projectBotForTask(state.botId, state.threadId);
@@ -268,10 +277,16 @@ export function createPrepareValidateStartTurn(host: StartTurnHost) {
   const proactiveWake =
     state.opts?.automationSource === "proactive" ||
     (state.opts?.automationSource === "webhook" && activeRoutineRunForThread(state.threadId)?.proactive);
-  if (!state.voiceTurnPick && !state.autoTurn && !state.connectorSwitch && !state.opts?.warmOnly && proactiveWake) {
-    const wakePick = voicePickForTurn(state.bot, state.autoBaseSelection, resolveTurnSpeaker({ speaker: state.opts?.speaker, automationSource: state.opts?.automationSource }), botmailConfined(state.threadId));
+  // A wake a usage limit already moved (limitTakeover, above) runs on the
+  // model that took it over, never on the fast pick that was refused.
+  let wakePick = null;
+  if (!state.voiceTurnPick && !state.autoTurn && !state.connectorSwitch && !state.opts?.warmOnly && proactiveWake && !state.limitTakeover) {
+    wakePick = voicePickForTurn(state.bot, state.autoBaseSelection, resolveTurnSpeaker({ speaker: state.opts?.speaker, automationSource: state.opts?.automationSource }), botmailConfined(state.threadId));
     if (wakePick) state.bot = { ...state.bot, modelSelection: wakePick.selection };
   }
+  // Sagax runs this turn on a fast model of its own pick, not on the
+  // conversation's: a limit that refuses it is that model's (limit failover).
+  state.fastDetour = Boolean(state.voiceTurnPick ?? wakePick);
   // Routines and legacy peer delivery already have their own completion
   // owners. Only ordinary chats opt into this scheduler; its child turns
   // carry an exact node id rather than inheriting a routine's lifetime.

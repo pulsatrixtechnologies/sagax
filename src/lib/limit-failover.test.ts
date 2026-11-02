@@ -39,6 +39,45 @@ describe("the usage-limit line", () => {
       .toBe("OpenAI n'avait plus de modèle pour cette conversation : je continue sur Claude.");
   });
 
+  // 2026-11-02: an engine that named no reset never reads as one that did:
+  // the time is only when Sagax tries it again.
+  it("says the engine gave no reset time when Sagax only estimated it, in English and Quebec French", () => {
+    const guessed: LimitFailoverLine = { ...switched, estimated: true };
+    setLocale("en");
+    expect(limitFailoverLineText(guessed, NOW)).toBe("Limit reached on Claude, which gave no reset time: continuing on Codex; Claude is tried again around 2:05 PM.");
+    expect(limitFailoverLineText({ ...guessed, owner: true }, NOW)).toBe("This bot's owner has reached their usage limit on Claude, which gave no reset time: continuing on Codex; Claude is tried again around 2:05 PM.");
+    expect(limitFailoverLineText({ kind: "waiting", from: "Claude", resetsAt: AT, estimated: true }, NOW))
+      .toBe("Limit reached on Claude, which gave no reset time, and no other engine is available: your message will be sent again around 2:05 PM.");
+    expect(limitFailoverLineText({ kind: "waitingRoutine", from: "Claude", resetsAt: AT, estimated: true }, NOW))
+      .toBe("Limit reached on Claude, which gave no reset time, and no other engine is available: this routine runs again around 2:05 PM.");
+    setLocale("fr");
+    expect(limitFailoverLineText(guessed, NOW)).toBe("Limite atteinte sur Claude, qui n'a pas donné d'heure de réinitialisation : je continue sur Codex ; Claude sera réessayé vers 14 h 05.");
+    expect(limitFailoverLineText({ kind: "waiting", from: "Claude", resetsAt: AT, estimated: true, owner: true }, NOW))
+      .toBe("Le propriétaire de ce bot a atteint sa limite d'utilisation sur Claude, qui n'a pas donné d'heure de réinitialisation, et aucun autre moteur n'est disponible : votre message sera renvoyé vers 14 h 05.");
+    expect(limitFailoverLineText({ kind: "waitingRoutine", from: "Claude", resetsAt: AT, estimated: true }, NOW))
+      .toBe("Limite atteinte sur Claude, qui n'a pas donné d'heure de réinitialisation, et aucun autre moteur n'est disponible : cette routine sera relancée vers 14 h 05.");
+    // The English words other clients show say the same.
+    const clock = (at: number) => resetClockText(at, "en-US", undefined, NOW);
+    expect(limitFailoverText(guessed, clock)).toBe("Limit reached on Claude, which gave no reset time: continuing on Codex; Claude is tried again around 2:05 PM.");
+    expect(limitFailoverText({ kind: "waiting", from: "Claude", resetsAt: AT, estimated: true }, clock)).not.toMatch(/when it resets/);
+  });
+
+  // 2026-11-02: a quick model Sagax picked for the turn (a call's, a wake's)
+  // is not the conversation's: the line never says it goes back to it.
+  it("says Sagax skips a refused quick model it picked, never that the conversation goes back to it", () => {
+    const detour: LimitFailoverLine = { kind: "switched", from: "Codex (gpt-6.1-luna)", to: "Grok", resetsAt: AT, detour: true };
+    setLocale("en");
+    expect(limitFailoverLineText(detour, NOW)).toBe("Limit reached on Codex (gpt-6.1-luna), a quick model Sagax picked for this turn: continuing on another model. Sagax skips Codex (gpt-6.1-luna) for quick turns until it resets (around 2:05 PM).");
+    expect(limitFailoverLineText({ ...detour, estimated: true }, NOW)).toBe("Limit reached on Codex (gpt-6.1-luna), a quick model Sagax picked for this turn: continuing on another model. Codex (gpt-6.1-luna) gave no reset time: Sagax skips it for quick turns until around 2:05 PM.");
+    setLocale("fr");
+    expect(limitFailoverLineText(detour, NOW)).toBe("Limite atteinte sur Codex (gpt-6.1-luna), un modèle rapide choisi par Sagax pour ce tour : je continue sur un autre modèle. Sagax évite Codex (gpt-6.1-luna) pour les tours rapides jusqu'à sa réinitialisation (vers 14 h 05).");
+    expect(limitFailoverLineText({ ...detour, estimated: true }, NOW)).toBe("Limite atteinte sur Codex (gpt-6.1-luna), un modèle rapide choisi par Sagax pour ce tour : je continue sur un autre modèle. Codex (gpt-6.1-luna) n'a pas donné d'heure de réinitialisation : Sagax l'évite pour les tours rapides jusque vers 14 h 05.");
+    // The English words other clients show say the same.
+    const clock = (at: number) => resetClockText(at, "en-US", undefined, NOW);
+    expect(limitFailoverText(detour, clock)).toBe("Limit reached on Codex (gpt-6.1-luna), a quick model Sagax picked for this turn: continuing on another model. Sagax skips Codex (gpt-6.1-luna) for quick turns until it resets (around 2:05 PM).");
+    expect(limitFailoverText(detour, clock)).not.toMatch(/continuing on Grok|back on/i);
+  });
+
   it("is a recovery status row the transcript never folds, whatever its English words", () => {
     setLocale("fr");
     const message = { id: "x", at: NOW, role: "bot", kind: "activity",

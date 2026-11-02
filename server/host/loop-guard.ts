@@ -85,7 +85,7 @@ export function correctiveRounds(
     : 0;
 }
 
-type ActivityTool = { name: string; ok: false };
+type ActivityTool = { name: string; ok: false; output?: string };
 
 export interface LoopGuardDeps {
   /** Read on every tool start and completion, so a change reaches a running turn. Pass the thread so a per-bot off is honoured. */
@@ -117,6 +117,9 @@ interface CountedCall {
   key: string;
   tool: string;
   args: string;
+  /** An MCP call counts when it fails, not when it starts: a scroll or a
+   * poll repeats for good reasons, the same failing call does not. */
+  onFailure?: true;
 }
 
 const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
@@ -129,12 +132,39 @@ function shown(key: string | null): CountedCall | null {
 
 type ToolStart = Extract<RuntimeEvent, { type: "item.started" }>;
 
+/** An MCP tool id as engines title a call (`server__tool`, `mcp__server__tool`). */
+const MCP_TOOL_ID = /^(?:mcp__)?[a-z][\w-]{0,63}__[a-z][\w-]{0,127}$/i;
+
 function countedCall(event: RuntimeEvent): CountedCall | null {
-  if (event.type === "request.opened" && event.requestType === "permission") return shown(callKey(event.tool, event.summary));
+  if (event.type === "request.opened" && event.requestType === "permission") {
+    // 2026-11-02: an MCP ask (Grok's use_tool, kind "other") is titled with the
+    // bare tool id and carries no arguments: five different calls of one tool
+    // read as "the same call" (prod: cw_psa_query, 8 distinct calls, one 404).
+    // The call's own start counts it, with its arguments.
+    const summary = event.summary?.trim() ?? "";
+    if (event.mcpTool || MCP_TOOL_ID.test(summary)) return null;
+    return shown(callKey(event.tool, event.summary));
+  }
   if (event.type !== "item.started" || event.itemType !== "tool") return null;
+  const title = (event.title ?? "").trim();
+  // An MCP call is the tool with its arguments; with none, it names no call.
+  if (MCP_TOOL_ID.test(title)) {
+    return event.input?.trim() ? { key: `tool:${JSON.stringify([title, event.input.trim()])}`, tool: "tool", args: title, onFailure: true } : null;
+  }
   const key = toolItemKey(event.title, event.input);
   // The chip quotes the title only, never the input the key counts on.
-  return key ? { key, tool: "tool", args: (event.title ?? "").trim() } : null;
+  return key ? { key, tool: "tool", args: title } : null;
+}
+
+const CHIP_ERROR_MAX = 300;
+
+/** What the repeat chip says it found: the latest error of that very call, or
+ * that none of the earlier ones failed. Never empty, so the step never reads
+ * "failed and returned no error message". */
+function chipOutput(lastError: string | undefined): string {
+  return lastError
+    ? `The same call with the same arguments ran again. Its latest error:\n${lastError}`
+    : "The same call with the same arguments ran again; the earlier ones did not fail.";
 }
 
 /** Undefined for a start with no `summary` (it runs no shell command; ACP titles a read or a wait in words). Null when
@@ -171,6 +201,9 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
   const streaks = new RepeatStreak<CountedCall>({ maxPending: MAX_CALLS_PER_TURN });
   const acted = new Map<string, { stopped: boolean; steered: Set<string> }>();
   const turnOf = new Map<string, string>();
+  /** Per thread: the counted call each running item is, and each call's latest error. */
+  const callOfItem = new Map<string, Map<string, CountedCall>>();
+  const lastError = new Map<string, Map<string, string>>();
   const log = (what: string, threadId: string, streak: number) =>
     (deps.log ?? console.info)(`[loop-guard] ${what}: thread=${threadId} failures-in-a-row=${streak}`);
 
@@ -183,6 +216,8 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
     repeats.settle(threadId);
     startOver(threadId);
     turnOf.delete(threadId);
+    callOfItem.delete(threadId);
+    lastError.delete(threadId);
   };
 
   const steer = (threadId: string, note: string, streak: number) => {
@@ -239,12 +274,37 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
       return;
     }
 
+    const chip = (call: CountedCall) => {
+      const { threshold } = repeats.record(threadId, call.key);
+      if (!threshold) return;
+      const { tool, args } = call;
+      deps.append(threadId, {
+        name: `Same call repeated ${threshold}× - ${tool}: ${args.slice(0, 80)}${args.length > 80 ? "…" : ""} - it may be stuck`,
+        ok: false,
+        output: chipOutput(lastError.get(threadId)?.get(call.key)),
+      });
+    };
     const counted = countedCall(event);
     if (counted) {
-      const { threshold } = repeats.record(threadId, counted.key);
-      if (threshold) {
-        const { tool, args } = counted;
-        deps.append(threadId, { name: `Same call repeated ${threshold}× - ${tool}: ${args.slice(0, 80)}${args.length > 80 ? "…" : ""} - it may be stuck`, ok: false });
+      if (event.type === "item.started" && event.itemId) {
+        let items = callOfItem.get(threadId);
+        if (!items) callOfItem.set(threadId, (items = new Map()));
+        if (items.size >= MAX_CALLS_PER_TURN) items.delete(items.keys().next().value!);
+        items.set(event.itemId, counted);
+      }
+      if (!counted.onFailure) chip(counted);
+    }
+    if (event.type === "item.completed" && event.itemType === "tool" && event.itemId) {
+      const call = callOfItem.get(threadId)?.get(event.itemId);
+      if (call) {
+        callOfItem.get(threadId)!.delete(event.itemId);
+        let errors = lastError.get(threadId);
+        if (!event.ok && typeof event.output === "string" && event.output.trim()) {
+          if (!errors) lastError.set(threadId, (errors = new Map()));
+          if (errors.size >= MAX_CALLS_PER_TURN) errors.delete(errors.keys().next().value!);
+          errors.set(call.key, event.output.trim().slice(0, CHIP_ERROR_MAX));
+        } else if (event.ok) errors?.delete(call.key);
+        if (!event.ok && call.onFailure) chip(call);
       }
     }
 

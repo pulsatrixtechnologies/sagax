@@ -381,6 +381,7 @@ function Shell() {
   const [panelSlot, setPanelSlot] = useState<HTMLElement | null>(null);
   const botPanelOpen = !remoteClient && (state.settingsOpen || state.computerOpen) && panelBot !== undefined;
   const mainIsTeamMap = state.activeView === "team-map";
+  const mainIsMemory = state.activeView === "memory" || state.memoryManagerOpen;
   const mainIsCode = state.activeView === "code";
   const mainIsApprovals = state.activeView === "approvals";
   const mainIsRemoteSessions = state.activeView === "remote-sessions";
@@ -491,7 +492,7 @@ function Shell() {
       <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col" data-sidebar-follower="">
       {/* nothing answers this person on an organization server: say so above
           the conversation, with the way back to the first-run step */}
-      {org && (group || bot) && !calendarFillsMain && !mainIsTeamMap && !mainIsCode && !mainIsApprovals && !mainIsRemoteSessions && !mainIsAchievements && !mainIsApps && !mainIsArchivedBots && !mainIsOrgImport && !state.personaEditor && !state.botWizard && <OrgEngineNotice />}
+      {org && (group || bot) && !calendarFillsMain && !mainIsTeamMap && !mainIsMemory && !mainIsCode && !mainIsApprovals && !mainIsRemoteSessions && !mainIsAchievements && !mainIsApps && !mainIsArchivedBots && !mainIsOrgImport && !state.personaEditor && !state.botWizard && <OrgEngineNotice />}
       {/* The split view (#1504): the main view below is one section; others
           show more conversations beside it (src/lib/split-view.ts). */}
       <SplitWorkspace panelSlot={panelSlot} main={composeOpen && (group || bot) ? (
@@ -500,6 +501,8 @@ function Shell() {
         <RoutinesPage fill onBack={closeCalendar} onOpenRoom={openCalendarRoom} />
       ) : mainIsTeamMap ? (
         <TeamMapPage />
+      ) : mainIsMemory ? (
+        <MemoryManagerPanel />
       ) : mainIsCode ? (
         <CodePage />
       ) : mainIsApprovals ? (
@@ -509,8 +512,8 @@ function Shell() {
       ) : mainIsAchievements ? (
         <AchievementsScreen />
       ) : mainIsApps ? (
-        /* Connect apps over the wizard when Tools opens it (lot 4 + 5):
-           botWizard stays set; leaving apps returns to the wizard. */
+        /* Capabilities centred modal (decided exception like Settings).
+           Over the wizard when Tools opens it: botWizard stays set. */
         <PluginsPanel />
       ) : !remoteClient && state.botWizard ? (
         <BotWizard />
@@ -595,7 +598,6 @@ function Shell() {
       <div ref={setPanelSlot} data-split-panel-slot="" className="contents" />
       {remoteClient && state.settingsOpen && panelBot && <RemoteAgentSettingsPanel bot={panelBot} />}
       {state.personPanelId && <PersonPanel key={`person:${state.personPanelId}`} personId={state.personPanelId} />}
-      {state.memoryManagerOpen && <MemoryManagerPanel />}
       {remoteClient && state.computerOpen && bot && (
         <RemoteDesktopPanel key={`computer:${bot.id}`} bot={bot} />
       )}
@@ -604,9 +606,8 @@ function Shell() {
       {state.appSettingsOpen && <SettingsModal />}
       {!remoteClient && <ModelWindowHost />}
       {/* Lot 4: New bot / Edit bot fill the main column (botWizard, personaEditor).
-          Lot 5: Connect apps and archived bots also fill the main column.
-          defaultsMode still mounts NewBotDialog from Settings > Default bot settings.
-          Browse Bots is Connect apps' Bots tab; no catalog modal. */}
+          Capabilities is a centred modal (decided exception); archived bots
+          stay a content-frame page. Browse Bots is Capabilities' Bots tab. */}
       {state.shortcutsOpen && (
         <KeyboardShortcutsModal
           open={state.shortcutsOpen}

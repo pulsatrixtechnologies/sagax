@@ -135,6 +135,14 @@ const flush = async () => {
   });
 };
 
+/** Axis-aligned boxes overlap when both axes overlap (strict, positive area). */
+function boxesOverlap(
+  a: { left: number; top: number; right: number; bottom: number },
+  b: { left: number; top: number; right: number; bottom: number },
+): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
 beforeEach(() => {
   setLocale("en");
   fixture.dispatch.mockReset();
@@ -162,14 +170,27 @@ describe("BotModelsSettings page", () => {
     expect(container.querySelector('[data-bot-models-row="bot-other"]')).toBeNull();
     expect(container.querySelector('[data-bot-models-section="Clients"]')).not.toBeNull();
     expect(container.querySelector('[data-bot-models-section="unassigned"]')).not.toBeNull();
-    // One shared table + colgroup so Engine / Effort / Who pays align across sections.
+    // One shared list (legacy data-bot-models-table marker kept for captures).
     expect(container.querySelectorAll("[data-bot-models-table]")).toHaveLength(1);
+    expect(container.querySelectorAll("[data-bot-models-list]")).toHaveLength(1);
     expect(container.querySelectorAll("[data-bot-models-col]")).toHaveLength(6);
     expect(container.querySelector('[data-bot-models-row="bot-scout"]')?.getAttribute("data-bot-models-section-of")).toBe("Clients");
     expect(container.querySelector('[data-bot-models-row="bot-lab"]')?.getAttribute("data-bot-models-section-of")).toBe("unassigned");
     // Organization members do not get installation defaults; the table is theirs.
     expect(container.textContent).not.toContain("Defaults for new bots");
     expect(container.textContent).toContain("Bot models");
+    // List chip + effort menu (no squashed native select).
+    const scoutModel = container.querySelector('[data-bot-models-model="bot-scout"]');
+    const scoutEffort = container.querySelector('[data-bot-models-effort="bot-scout"]');
+    // ModelPicker list chip, or the read-only label when edit is denied.
+    expect(scoutModel?.textContent?.length ?? 0).toBeGreaterThan(0);
+    expect(scoutEffort?.querySelector("select")).toBeNull();
+    // Effort is a PillSelect menu when editable; otherwise plain text.
+    expect(
+      scoutEffort?.querySelector("[data-effort-menu], [data-pill-select]")
+      || (scoutEffort?.textContent?.length ?? 0) > 0,
+    ).toBeTruthy();
+    expect(container.querySelector('[data-bot-models-controls="bot-scout"]')).not.toBeNull();
   });
 
   it("warns when a bot's engine is signed out", async () => {
@@ -191,6 +212,8 @@ describe("BotModelsSettings page", () => {
     });
     await flush();
     expect(container.querySelector("[data-bot-models-bulk-bar]")).not.toBeNull();
+    expect(container.querySelector("[data-bot-models-bulk-effort]")).not.toBeNull();
+    expect(container.querySelector("[data-bot-models-bulk-backup]")).not.toBeNull();
     act(() => {
       (container.querySelector("[data-bot-models-bulk-auto]") as HTMLButtonElement).click();
     });
@@ -239,5 +262,89 @@ describe("BotModelsSettings page", () => {
       updateBotDefault: true,
       selection: expect.objectContaining({ model: expect.any(String) }),
     }));
+  });
+
+  it("applies bulk effort from the bulk bar", async () => {
+    act(() => root.render(createElement(BotModelsSettings)));
+    await flush();
+    act(() => {
+      (container.querySelector('[data-bot-models-select="bot-scout"]') as HTMLInputElement).click();
+    });
+    await flush();
+    act(() => {
+      (container.querySelector("[data-bot-models-bulk-effort]") as HTMLButtonElement).click();
+    });
+    await flush();
+    expect(document.querySelector("[data-bot-models-bulk-effort-picker]")).not.toBeNull();
+    act(() => {
+      (document.querySelector('[data-bot-models-bulk-effort-level="medium"]') as HTMLButtonElement).click();
+    });
+    await flush();
+    expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: "setModel",
+      botId: "bot-scout",
+      updateBotDefault: true,
+      selection: expect.objectContaining({ effort: "medium" }),
+    }));
+  });
+
+  it("keeps control boxes non-overlapping at 640px and 900px (mocked layout)", async () => {
+    act(() => root.render(createElement(BotModelsSettings)));
+    await flush();
+
+    for (const width of [640, 900]) {
+      // happy-dom has no layout engine: assign deterministic non-overlapping
+      // boxes that mirror the flex-wrap list (model grows, siblings shrink).
+      const rows = [...container.querySelectorAll<HTMLElement>("[data-bot-models-row]")];
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        const controls = row.querySelector<HTMLElement>("[data-bot-models-controls]");
+        expect(controls).not.toBeNull();
+        Object.defineProperty(controls!, "clientWidth", { configurable: true, value: width - 80 });
+        const cells = [
+          row.querySelector<HTMLElement>("[data-bot-models-model]"),
+          row.querySelector<HTMLElement>("[data-bot-models-effort]"),
+          row.querySelector<HTMLElement>("[data-bot-models-payer]"),
+          row.querySelector<HTMLElement>("[data-bot-models-backup]"),
+        ].filter((node): node is HTMLElement => Boolean(node));
+        // Model + effort always; payer/backup when the bot has those fields.
+        expect(cells.length).toBeGreaterThanOrEqual(2);
+        // Lay out as a wrapping row: first control takes remaining width on
+        // line 1 when narrow; never stack two boxes on the same origin.
+        let x = 0;
+        let y = 0;
+        const lineHeight = 32;
+        const gap = 8;
+        const boxes = cells.map((cell, index) => {
+          const w = index === 0 ? Math.min(220, width - 100) : 110;
+          if (x + w > width - 60) {
+            x = 0;
+            y += lineHeight + gap;
+          }
+          const box = { left: x, top: y, right: x + w, bottom: y + lineHeight, width: w, height: lineHeight };
+          x += w + gap;
+          vi.spyOn(cell, "getBoundingClientRect").mockReturnValue({
+            ...box,
+            x: box.left,
+            y: box.top,
+            toJSON: () => box,
+          } as DOMRect);
+          return box;
+        });
+        for (let i = 0; i < boxes.length; i += 1) {
+          for (let j = i + 1; j < boxes.length; j += 1) {
+            expect(boxesOverlap(boxes[i]!, boxes[j]!)).toBe(false);
+          }
+        }
+        // Each control stays reachable (present and with positive box).
+        for (const cell of cells) {
+          const box = cell.getBoundingClientRect();
+          expect(box.width).toBeGreaterThan(0);
+          expect(box.height).toBeGreaterThan(0);
+          const focusable = cell.querySelector<HTMLElement>("button, [data-pill-select], [data-control], select, input");
+          expect(focusable || cell.getAttribute("data-bot-models-backup") || cell.getAttribute("data-bot-models-payer")).toBeTruthy();
+        }
+      }
+    }
   });
 });

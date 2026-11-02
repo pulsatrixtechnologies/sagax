@@ -3,7 +3,7 @@
 Run the focused regression tests and the isolated HTTP workflow:
 
 ```sh
-pnpm exec vitest run server/peers/peer-approval.test.ts server/runtime/runtime.test.ts server/peers/peer-approval.e2e.test.ts server/routines/routine-delegation.e2e.test.ts
+pnpm exec vitest run server/peers/peer-approval.test.ts server/runtime/runtime.test.ts server/peers/peer-approval.e2e.test.ts server/routines/routine-delegation.e2e.test.ts server/routes/internal-bot-chat.test.ts server/peers/peer-delivery.test.ts
 ```
 
 The HTTP test uses `launchVerificationServer` and `control-omb` with disposable
@@ -26,6 +26,16 @@ The checks cover:
 - Receipt metadata survives reload, while old receipts remain readable.
 - A peer hidden and renamed while its approval is open is never dispatched;
   the failure receipt does not disclose its newly private name.
+- Isolation between people, on every receipt path: a teammate hidden,
+  unshared or renamed while a card or a wait is open gets no thread and no
+  work, and nothing written afterwards names it. ask_bot's refused review,
+  delegate_bot and coordinate_bots after an allow, a poll-only caller's
+  answers and the aside answer keep only the addressed id (`receiptName`,
+  `server/peer-delivery.ts`); a result withheld for that reason reaches the
+  requester as "Teammate" in its chip, its resume and the report in it
+  (`teammateNameFor`, `server/direct-coordination.e2e.test.ts`).
+  `server/org-sharing.e2e.test.ts` S3-13 proves it across two people: a bot
+  its owner unshares and renames while the asker's card is open.
 
 The fixture writes safe response/receipt evidence to
 `<server-log>.peer-approval.json` alongside the shared launcher's retained log.

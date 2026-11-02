@@ -15,9 +15,29 @@
 // that did not happen. A failed live hand-off may stay buffered for a later
 // drain, but its receipt stays failed.
 
-import { clip, peerName } from "./peer-roster.ts";
+import { canReachPeer, clip, peerName, type RosterMember } from "./peer-roster.ts";
 
 export type PeerDeliveryOutcome = "queued" | "injected" | "failed";
+
+/** The recipient's name a receipt, a notice or an answer may carry, as its
+ * sender may read it now: the current name while the sender can still reach
+ * the recipient (canReachPeer, the rule list_bots and the roster read), and
+ * nothing once it cannot. Isolation between people: a teammate hidden,
+ * unshared, moved out of the sender's scope or renamed while a card or a
+ * wait was open is another person's private bot now, so its new name never
+ * reaches the sender. The receipt then keeps only the id the caller
+ * addressed, and renderPeerDeliveryReceipts falls back to it.
+ *
+ * Pass the records as the store holds them now. A bot record is patched in
+ * place (Store.patchBot), so one read before an approval card already
+ * carries the new name after it: the check, not the read, is what makes it
+ * safe. */
+export function receiptName(
+  from: RosterMember | null | undefined,
+  to: RosterMember | null | undefined,
+): string | undefined {
+  return from && to && canReachPeer(from, to) ? to.name : undefined;
+}
 
 export interface PeerDeliveryReceipt {
   /** The recipient's bot id — the address the caller actually used. */

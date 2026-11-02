@@ -1,10 +1,11 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb, verificationServerEnvironment } from "../../scripts/control-omb.ts";
-import { waitForExit } from "../testing/cleanup.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 
 it("preserves peer approval expiry through real HTTP responses and durable delegation receipts", async () => {
   const fixture = await launchVerificationServer(process.env);
@@ -167,5 +168,95 @@ it("preserves peer approval expiry through real HTTP responses and durable deleg
     writeFileSync(evidencePath, JSON.stringify({ evidence }, null, 2));
     console.info(JSON.stringify({ logPath, evidencePath }));
     await fixture.close();
+  }
+}, 100_000);
+
+// Isolation between people: a teammate hidden and renamed while the person's
+// peer card is open is another person's private bot by the time the card is
+// answered. Every receipt path that answers then (ask_bot's refused review,
+// delegate_bot and coordinate_bots after an allow) names it by the id the
+// caller sent, never by its new name, and nothing reaches it.
+it("never names a teammate hidden and renamed while its peer card is open, on every receipt path", async () => {
+  const gates = mkdtempSync(join(tmpdir(), "peer-approval-gates-"));
+  const held = join(gates, "held");
+  const PRIVATE = "Private renamed teammate";
+  const fixture = await launchVerificationServer({ ...process.env, FAKE_CLAUDE_MODE: "slow", FAKE_CLAUDE_GATE_DIR: gates });
+  const { url } = fixture.info;
+  const api = async (method: string, path: string, body?: unknown, token?: string, expectedStatus?: number) => {
+    const response = await fetch(url + path, {
+      method, headers: { "content-type": "application/json", origin: url,
+        ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const result = await response.json();
+    if (expectedStatus !== undefined) expect(response.status, `${method} ${path}: ${JSON.stringify(result)}`).toBe(expectedStatus);
+    else expect(response.ok, `${method} ${path}: ${JSON.stringify(result)}`).toBe(true);
+    return result as any;
+  };
+  const cli = (...args: string[]) => runControlOmb([...args, "--url", url]) as Promise<any>;
+  const messages = async (threadId: string) => (await api("GET", `/api/threads/${threadId}/messages?limit=100`)).messages as any[];
+  try {
+    expect((await cli("doctor")).ok).toBe(true);
+    const from = (await cli("new-bot", "--name", "Privacy source")).bot;
+    const target = (await cli("new-bot", "--name", "Privacy teammate")).bot;
+    await api("PATCH", `/api/bots/${from.id}`, { approvePeerComms: true });
+    // One chat turn held open by its gate: its comms token stays active
+    // while each card waits on the person.
+    await cli("send", "--bot", from.id, "--task", from.activeTaskId, "--text", "Hold this turn while teammates are reviewed [gate:held]");
+    let token = "";
+    await expect.poll(() => {
+      try { token = JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8")).mcpConfig.mcpServers.agents.env.SAGAX_COMMS_TOKEN; }
+      catch { return false; }
+      return Boolean(token);
+    }, { timeout: 15_000 }).toBe(true);
+    const openCard = async () => {
+      let found: any;
+      await expect.poll(async () => {
+        found = (await messages(from.activeTaskId)).find(m => m.card?.requestId && !m.card.answered && !m.card.dismissed);
+        return Boolean(found);
+      }, { timeout: 15_000 }).toBe(true);
+      return found;
+    };
+    // The teammate turns private while the card is open, then the person answers.
+    const answerAfterHiding = async (pending: Promise<any>, behavior: "allow" | "deny") => {
+      void pending.catch(() => {}); // retained for the awaited assertion
+      const card = await openCard();
+      await api("PATCH", `/api/bots/${target.id}`, { hidden: true, name: PRIVATE });
+      await api("POST", `/api/threads/${from.activeTaskId}/respond`, { requestId: card.card.requestId, behavior });
+      const result = await pending;
+      await api("PATCH", `/api/bots/${target.id}`, { hidden: false, name: target.name });
+      return result;
+    };
+
+    const denied = await answerAfterHiding(api("POST", "/api/internal/ask-bot",
+      { toBotId: target.id, message: "Ask once the teammate is private" }, token), "deny");
+    expect(denied).toMatchObject({ approvalOutcome: "deny", approvalSource: "user", receipt: { botId: target.id, outcome: "failed" } });
+    expect(denied.receipt).not.toHaveProperty("botName");
+    expect(JSON.stringify(denied)).not.toContain(PRIVATE);
+
+    const delegated = await answerAfterHiding(api("POST", "/api/internal/delegate-bot",
+      { toBotId: target.id, message: "Delegate once the teammate is private" }, token), "allow");
+    expect(delegated).toMatchObject({ error: "that bot is no longer available to this bot", receipt: { botId: target.id, outcome: "failed" } });
+    expect(delegated.receipt).not.toHaveProperty("botName");
+    expect(JSON.stringify(delegated)).not.toContain(PRIVATE);
+
+    const coordinated = await answerAfterHiding(api("POST", "/api/internal/coordinate-bots",
+      { botIds: [target.id], message: "Coordinate once the teammate is private" }, token, 409), "allow");
+    expect(coordinated.receipts).toEqual([{ botId: target.id, outcome: "failed", detail: "that bot is no longer available to this bot" }]);
+    expect(JSON.stringify(coordinated)).not.toContain(PRIVATE);
+
+    // Nothing reached the teammate, not even an empty work thread, and the
+    // person's conversation never shows the new name.
+    const teammate = (await api("GET", "/api/bots?messages=0")).bots.find((bot: any) => bot.id === target.id);
+    expect(teammate.tasks.map((task: any) => task.threadId)).toEqual([target.activeTaskId]);
+    expect((await messages(target.activeTaskId)).some(m => m.role === "user")).toBe(false);
+    expect(JSON.stringify(await messages(from.activeTaskId))).not.toContain(PRIVATE);
+    writeFileSync(held, "finish");
+    expect((await cli("wait", "--bot", from.id, "--task", from.activeTaskId, "--timeout", "25")).status).toBe("settled");
+  } finally {
+    writeFileSync(held, "finish");
+    await fixture.close();
+    await removeTempDir(gates);
   }
 }, 100_000);

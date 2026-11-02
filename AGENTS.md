@@ -169,6 +169,26 @@ ledger and aside queue are gone. Still off the runtime: `run_with_engine`
 the server's `runtime.db`), `server/runtime/runtime.test.ts`. Evidence and
 route table: `docs/plans/grok-convergence-runtime-evidence.md`.
 
+## Peer receipts never name a teammate made private (2026-11-02)
+
+Isolation between people. A bot record is patched in place, so a teammate
+read before an approval card or a wait already carries its new name after
+it. Every receipt, `toBotName`, message, chip and report written after a
+wait reads the name at that moment, and only while the sender can still
+reach the teammate: `receiptName` (`server/peers/peer-delivery.ts`, canReachPeer)
+for ask_bot, delegate_bot and coordinate_bots; `teammateNameFor`
+(`server/index.ts`, the route check that withholds a result) for the
+report chip, the "Resumed with" chip and notification, and the resume's
+report names. A receipt then keeps only the `botId` the caller sent (no
+`botName`; the renderer falls back to the id); a person-facing chip says
+"Teammate". After an approval, `delegateOnRuntime` and coordinate_bots check
+the route again before any thread or work touches the teammate (ask_bot did
+until lot 3 moved it onto the runtime, 0.8.24). Never name a peer from a
+record read before an await. Tests: `server/routes/internal-bot-chat.test.ts`,
+`server/peers/peer-delivery.test.ts`, `server/peers/peer-approval.e2e.test.ts`,
+`server/direct-coordination.e2e.test.ts` (withheld report) and
+`server/org/org-sharing.e2e.test.ts` S3-13 (two people).
+
 ## Peer completion: done_when and no ack-as-done (2026-10-30, #1818)
 
 `coordinate_bots` accepts optional `done_when`. Structured clauses the harness

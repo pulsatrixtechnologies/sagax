@@ -13,7 +13,14 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
   switch (action.type) {
     case "select": {
       const leaving = Boolean(state.threadReturn) && action.id !== state.selectedId && action.id !== state.threadReturn?.ownerId;
-      const base = leaving ? { ...state, threadReturn: null } : state;
+      // Switching to another bot or room closes what was open over the chat
+      // (a routine run exchange, a bot-to-bot or routine thread), like the
+      // reference app: the new bot opens on its own conversation.
+      const switching = action.id !== state.selectedId;
+      const base = {
+        ...(leaving ? { ...state, threadReturn: null } : state),
+        ...(switching && state.routineRunSheet ? { routineRunSheet: null } : {}),
+      };
       const room = base.groups.find((g) => g.id === action.id);
       if (room) {
         return clearThreadReturnIfHome({

@@ -240,7 +240,7 @@ describe("CodexDriver turns (fake app-server)", () => {
     }
   });
 
-  // Command variables (server/credential-command-env.ts): only Codex's shell
+  // Command variables (server/vault/credential-command-env.ts): only Codex's shell
   // gets them, in the policy's `set` table on the thread (stdin), next to the
   // person's own entries; never the app-server's environment, argv or log.
   it("hands command variables to Codex's shell only, on new and resumed threads, and drops them at the revoke", async () => {

@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { DATA_DIR } from "./config.ts";
-import type { RoutineRunOn } from "./routines.ts";
+import type { RoutineRunOn } from "./routines/routines.ts";
 import { parseJson, schemaIssue, type JsonValue } from "./schema.ts";
 import {
   POLLER_INTERVAL_MAX,

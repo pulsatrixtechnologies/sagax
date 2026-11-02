@@ -59,7 +59,7 @@ export const GUIDES: Guide[] = [
     access: "Perspicax admins only; a bot cannot do it",
     keywords: "voix vocal mode voix voice mode xai equipe team teams donner assigner moteur engine membres",
     text: "An admin does it in the Perspicax console: Access > Bot rights, tab Who has what; pick the teams or people, then give the engine Voice mode (xAI) (Mode voix (xAI)). A person's rights are the union of their own and their teams'. One person can also get it on their sheet. On the Sagax organization server the organization's xAI key then serves voice to admins and to the people given that engine. The personal xAI key is in Settings > Providers. In solo mode each person sets their own voice engine in Settings > Voice.",
-    refs: ["px:console:/sagax/permissions", "setting:engines", "file:server/org-xai-media.ts", "file:docs/voice-mode-xai.md"],
+    refs: ["px:console:/sagax/permissions", "setting:engines", "file:server/org/org-xai-media.ts", "file:docs/voice-mode-xai.md"],
   },
   {
     id: "cloud-agents",

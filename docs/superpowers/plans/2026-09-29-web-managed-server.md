@@ -5,7 +5,7 @@
 **Goal:** L'opérateur d'un serveur Pulsa Bot dans Docker gère tout par le web. Il obtient le premier admin par un code lu dans le journal. Les codes de connexion et les invitations partent du serveur par SMTP ou SendGrid, avec une configuration dans Docker ou sur le web. L'admin redémarre le serveur et lit son journal depuis les réglages.
 
 **Architecture:**
-- **Courriels, trois modules purs:** `server/email-otp.ts` (codes à usage unique), `server/mail-config.ts` (résolution env + fichier, env prioritaire) et `server/mailer.ts` (SMTP via nodemailer, SendGrid via `fetch`).
+- **Courriels, trois modules purs:** `server/mail/email-otp.ts` (codes à usage unique), `server/mail/mail-config.ts` (résolution env + fichier, env prioritaire) et `server/mail/mailer.ts` (SMTP via nodemailer, SendGrid via `fetch`).
 - **Connexion par courriel:** `createServerEmailSignIn` remplace l'appel au control plane et garde la même interface `EmailSignIn`.
 - **Premier admin:** un module `server/first-admin.ts` décide s'il faut émettre le code au démarrage.
 - **Journal:** `server/log-buffer.ts` garde en anneau les dernières lignes de sortie du processus.
@@ -45,8 +45,8 @@
 ### Task 1: Codes de connexion émis par le serveur
 
 **Files:**
-- Create: `server/email-otp.ts`
-- Test: `server/email-otp.test.ts`
+- Create: `server/mail/email-otp.ts`
+- Test: `server/mail/email-otp.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -56,7 +56,7 @@
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// server/email-otp.test.ts
+// server/mail/email-otp.test.ts
 import { describe, expect, it } from "vitest";
 import { EmailOtpStore, OTP_TTL_MS } from "./email-otp.ts";
 
@@ -121,13 +121,13 @@ describe("email one-time codes", () => {
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `npx vitest run server/email-otp.test.ts`
+Run: `npx vitest run server/mail/email-otp.test.ts`
 Expected: FAIL, module not found.
 
 - [ ] **Step 3: Implement**
 
 ```ts
-// server/email-otp.ts
+// server/mail/email-otp.ts
 // Sign-in codes this server emails itself (no outside account service).
 // Only a sha256 of each code is held, in memory: a restart simply voids
 // codes in flight, which costs a person one more email.
@@ -194,7 +194,7 @@ export class EmailOtpStore {
 }
 ```
 
-- [ ] **Step 4: Run tests**, which must PASS: `npx vitest run server/email-otp.test.ts`.
+- [ ] **Step 4: Run tests**, which must PASS: `npx vitest run server/mail/email-otp.test.ts`.
 - [ ] **Step 5: Commit** `feat: issue email sign-in codes from the server`, followed by the Co-Authored-By line.
 
 ---
@@ -202,9 +202,9 @@ export class EmailOtpStore {
 ### Task 2: Configuration et envoi des courriels
 
 **Files:**
-- Create: `server/mail-config.ts`, `server/mailer.ts`
+- Create: `server/mail/mail-config.ts`, `server/mail/mailer.ts`
 - Modify: `package.json` + `pnpm-lock.yaml` (`pnpm add nodemailer@^7` and `pnpm add -D @types/nodemailer`)
-- Test: `server/mail-config.test.ts`, `server/mailer.test.ts`
+- Test: `server/mail/mail-config.test.ts`, `server/mail/mailer.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -218,7 +218,7 @@ export class EmailOtpStore {
 
 - [ ] **Step 1: Write the failing tests**
 
-`server/mail-config.test.ts`:
+`server/mail/mail-config.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -261,7 +261,7 @@ describe("mail settings", () => {
 });
 ```
 
-`server/mailer.test.ts`:
+`server/mail/mailer.test.ts`:
 
 ```ts
 import { describe, expect, it, vi } from "vitest";
@@ -300,14 +300,14 @@ describe("mailer", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail.** `npx vitest run server/mail-config.test.ts server/mailer.test.ts`
+- [ ] **Step 2: Run to verify they fail.** `npx vitest run server/mail/mail-config.test.ts server/mail/mailer.test.ts`
 - [ ] **Step 3: Implement**
-  - **`server/mail-config.ts`:**
+  - **`server/mail/mail-config.ts`:**
     - Env fields map to settings fields as follows: `SAGAX_MAIL_PROVIDER` → `provider` (only `smtp` | `sendgrid`; anything else is ignored), `SAGAX_MAIL_FROM` → `from`, `SAGAX_SMTP_HOST` → `smtp.host`, `SAGAX_SMTP_PORT` → `smtp.port` (integer 1-65535), `SAGAX_SMTP_SECURE` → `smtp.secure` (`tls` | `starttls` | `none`), `SAGAX_SMTP_USER` → `smtp.user`, `SAGAX_SMTP_PASSWORD` (or `_FILE`) → `smtp.password`, `SAGAX_SENDGRID_API_KEY` (or `_FILE`) → `sendgrid.apiKey`.
     - A `_FILE` value is read with `readFile` (default `fs.readFileSync(path, "utf8")`) and `.trim()`. An unreadable file is ignored with a `console.warn` that names the variable, never the content.
     - Start from a copy of `file`, apply each env field that is set and non-empty, and push its dotted name into `envManaged`.
     - `publicMailStatus` follows the Interfaces above. `mailReady` follows the test.
-  - **`server/mailer.ts`:**
+  - **`server/mail/mailer.ts`:**
     - **SendGrid:** POST `https://api.sendgrid.com/v3/mail/send` with headers `authorization: Bearer <key>` and `content-type: application/json`, and body `{ personalizations: [{ to: [{ email: to }] }], from: { email: from }, subject, content: [{ type: "text/plain", value: text }] }`. Any status other than 2xx throws `new Error(\`SendGrid refused the message (${status})\`)`.
     - **SMTP:** the default `smtpTransport` is `(o) => nodemailer.createTransport(o)`. Options: `{ host, port: port ?? (secure === "tls" ? 465 : 587), secure: secure === "tls", requireTLS: secure === "starttls", ignoreTLS: secure === "none", auth: user ? { user, pass: password ?? "" } : undefined }`. Call `sendMail({ from, to, subject, text })`. A failure throws `new Error(\`the mail server refused the message: ${error.message}\`)`; do not include the password.
 - [ ] **Step 4: Run the tests (PASS), then `pnpm -s typecheck`.**
@@ -319,7 +319,7 @@ describe("mailer", () => {
 
 **Files:**
 - Modify: `server/account-signin.ts` (add `createServerEmailSignIn`), `server/index.ts` (construction at ~698, `/api/auth/email/start|verify` routes ~13964-13994, org invites ~wire at `createOrgRoutes`)
-- Test: `server/account-signin.test.ts` (append; create the file if it does not exist), `server/org-identity.e2e.test.ts` (append one case)
+- Test: `server/account-signin.test.ts` (append; create the file if it does not exist), `server/org/org-identity.e2e.test.ts` (append one case)
 
 **Interfaces:**
 - Consumes: `EmailOtpStore` (Task 1); `Mailer`, `createMailer`, `resolveMailSettings`, `mailReady` (Task 2); the existing `EmailSignIn` interface and `allowedScopes` in `account-signin.ts`.
@@ -365,7 +365,7 @@ describe("server-issued email sign-in", () => {
 });
 ```
 
-For the last test: when sending fails, `start` voids the issued code. Call `otp.verify` with that code and discard the result, or add `otp.revoke(email)` to `EmailOtpStore`. If you add `revoke`, give it a unit test in `server/email-otp.test.ts`.
+For the last test: when sending fails, `start` voids the issued code. Call `otp.verify` with that code and discard the result, or add `otp.revoke(email)` to `EmailOtpStore`. If you add `revoke`, give it a unit test in `server/mail/email-otp.test.ts`.
 
 - [ ] **Step 2: Run to verify it fails.**
 - [ ] **Step 3: Implement**, then wire it in `server/index.ts`:
@@ -382,12 +382,12 @@ For the last test: when sending fails, `start` voids the issued code. Call `otp.
     - text: `<inviter> invited you. Sign in with this address at <publicUrl>/pair within 7 days.`
     - A send failure does not undo the invite. The route's JSON gains `mailed: boolean`.
   - **`AppConfig` (`server/config.ts`):** add `mail?: MailSettings` to the type and the Zod schema. It must round-trip through `saveConfig` (the save/patch logic belongs to Task 4).
-- Append an e2e case to `server/org-identity.e2e.test.ts`: boot with `SAGAX_MAIL_PROVIDER=sendgrid`, `SAGAX_MAIL_FROM`, `SAGAX_SENDGRID_API_KEY`, and `SAGAX_SIGNIN_EMAILS=owner@example.com`. Stub `globalThis.fetch` for `api.sendgrid.com` if the harness runs in-process. If it runs as a child process, add a `mailer` test seam the harness can set, e.g. env `SAGAX_MAIL_CAPTURE_FILE` that writes messages to a file instead of sending; name it in the report. Then:
+- Append an e2e case to `server/org/org-identity.e2e.test.ts`: boot with `SAGAX_MAIL_PROVIDER=sendgrid`, `SAGAX_MAIL_FROM`, `SAGAX_SENDGRID_API_KEY`, and `SAGAX_SIGNIN_EMAILS=owner@example.com`. Stub `globalThis.fetch` for `api.sendgrid.com` if the harness runs in-process. If it runs as a child process, add a `mailer` test seam the harness can set, e.g. env `SAGAX_MAIL_CAPTURE_FILE` that writes messages to a file instead of sending; name it in the report. Then:
   - `POST /api/auth/email/start` for owner@example.com;
   - read the code from the captured message;
   - `POST /api/auth/email/verify`;
   - expect a session whose `principalId` is the local operator's principal (profile email owner@example.com).
-- [ ] **Step 4:** Run `npx vitest run server/account-signin.test.ts server/email-otp.test.ts server/org-identity.e2e.test.ts server/org-routes.test.ts` and `pnpm -s typecheck`.
+- [ ] **Step 4:** Run `npx vitest run server/account-signin.test.ts server/mail/email-otp.test.ts server/org/org-identity.e2e.test.ts server/org/org-routes.test.ts` and `pnpm -s typecheck`.
 - [ ] **Step 5: Commit** `feat: sign in by email with codes this server sends`, followed by the Co-Authored-By line.
 
 ---
@@ -396,7 +396,7 @@ For the last test: when sending fails, `start` voids the issued code. Call `otp.
 
 **Files:**
 - Modify: `server/index.ts` (new routes near the other admin config routes; `configStatus` ~13208), `server/config.ts` (save path for `mail`)
-- Test: `server/mail-settings.e2e.test.ts` (new, same harness pattern as `server/org-identity.e2e.test.ts`)
+- Test: `server/mail-settings.e2e.test.ts` (new, same harness pattern as `server/org/org-identity.e2e.test.ts`)
 
 **Interfaces:**
 - Produces (all admin-scope; a client session gets 403, per the existing admin route gating in `request-auth.ts`):
@@ -422,7 +422,7 @@ For the last test: when sending fails, `start` voids the issued code. Call `otp.
 **Files:**
 - Create: `server/first-admin.ts`
 - Modify: `server/index.ts` (boot, after `sessions`, `principals` and `publicUrl()` exist, before `listen`)
-- Test: `server/first-admin.test.ts`, plus one e2e case in `server/org-identity.e2e.test.ts`
+- Test: `server/first-admin.test.ts`, plus one e2e case in `server/org/org-identity.e2e.test.ts`
 
 **Interfaces:**
 - Produces: `shouldIssueFirstAdminCode(input: { desktopManaged: boolean; liveSessions: number; admins: string[] }): boolean` and `firstAdminLine(input: { publicUrl: string | null; code: string; expiresAt: number }): string`.

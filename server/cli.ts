@@ -46,7 +46,7 @@ import { fleetLayout } from "./fleet.ts";
 import { browserSignInLines, pairingBlock } from "./cli-pairing.ts";
 import { explainTailscaleFailure, tailscaleServe, tailscaleServeOff, tailscaleStatus, type TailscaleStatus } from "./tailscale.ts";
 import { defaultSetupIo, SetupCancelled, type SetupIo } from "./cli-prompts.ts";
-import { normalizePhoneOrigin, phonePairingInstructions, runPhoneSetup } from "./cli-phone-setup.ts";
+import { normalizePhoneOrigin, phonePairingInstructions, runPhoneSetup } from "./phone/cli-phone-setup.ts";
 import type { AppConfig } from "./config.ts";
 import { defaultDataDir, ENVIRONMENT_PATH, fetchEnvironmentDescriptor, isOwnHealth, LEGACY_ENVIRONMENT_PATH } from "../electron/legacy-names.mjs";
 import {
@@ -812,7 +812,7 @@ export async function runLogout(options: CliOptions, io: CliIo = defaultIo()): P
 }
 
 export async function runBrowser(options: CliOptions, io: CliIo = defaultIo()): Promise<number> {
-  const { browserEngineStatus, describeBrowserEngine, ensureChrome, installAgentBrowserBinary, resolveAgentBrowserBinary } = await import("./browser-engine.ts");
+  const { browserEngineStatus, describeBrowserEngine, ensureChrome, installAgentBrowserBinary, resolveAgentBrowserBinary } = await import("./browser/browser-engine.ts");
   const status = browserEngineStatus({ dataDir: options.dataDir });
   if (options.browserAction === "status") {
     io.log(describeBrowserEngine(status));
@@ -923,7 +923,7 @@ async function planTunnel(options: CliOptions, log: (line: string) => void, reco
 }
 
 export async function runServe(options: CliOptions, log: (line: string) => void = console.log): Promise<number> {
-  const { browserEngineStatus, describeBrowserEngine } = await import("./browser-engine.ts");
+  const { browserEngineStatus, describeBrowserEngine } = await import("./browser/browser-engine.ts");
   if (await serverUp(options.port)) {
     console.error(`something already answers on http://127.0.0.1:${options.port}; use \`openmausbot pair\` against it, or --port for a second server`);
     return 1;

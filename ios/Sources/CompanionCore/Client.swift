@@ -621,7 +621,7 @@ private struct InstanceCapabilityResponse: Decodable {
 public struct CompanionClient: Sendable {
     public static let maximumImageUploadBytes = AttachmentPolicy.maximumImageBytes
     /// A bot's picture: the server keeps its own 10 MB cap for avatars
-    /// (BOT_AVATAR_MAX_BYTES in server/org-admin-look.ts, #945), apart from the
+    /// (BOT_AVATAR_MAX_BYTES in server/org/org-admin-look.ts, #945), apart from the
     /// 32 MiB a chat image may weigh.
     public static let maximumAvatarUploadBytes = 10 * 1_024 * 1_024
     public static let maximumFileUploadBytes = AttachmentPolicy.maximumFileBytes

@@ -6,14 +6,34 @@
 import type { Message } from "@/state/store";
 import type { ExchangeParty, ExchangeRun } from "@/lib/bot-exchange";
 import { isStatusActivity } from "@/lib/activity-runs";
+import type { MausColor } from "@/lib/mascot";
 import { isAppleMobileWebClient } from "@/lib/tool-activity-rows";
 import { failedTurnCause } from "@/lib/failed-turn";
 import { isCancelledTranscriptRow } from "../../shared/client-cancel";
 import { shownCwWidget } from "../../shared/cw-widgets/tool-call";
 
+/** A bot-to-bot conversation named on the wire (BotConversations), opened
+ * as the same quiet line an exchange uses. Kept distinct by thread so each
+ * link stays reachable in a grouped disclosure. */
+export type GotoConversationTarget = {
+  kind: "conversation";
+  key: string;
+  row: {
+    threadId: string;
+    otherBotId: string;
+    otherName: string;
+    direction: "in" | "out";
+    startedAt?: number;
+    updatedAt?: number;
+  };
+  /** Viewing bot; color matches Bot so BotConversationLine accepts it. */
+  self: { id: string; name: string; color: MausColor };
+};
+
 export type GotoTarget =
   | { kind: "exchange"; key: string; run: ExchangeRun }
-  | { kind: "thread"; key: string; message: Message };
+  | { kind: "thread"; key: string; message: Message }
+  | GotoConversationTarget;
 
 export interface GotoGroup {
   kind: "gotoGroup";
@@ -27,6 +47,7 @@ export interface GotoGroup {
 type AnyItem =
   | { kind: "exchange"; run: ExchangeRun }
   | { kind: "message"; message: Message }
+  | { kind: "conversation"; row: GotoConversationTarget["row"]; self: GotoConversationTarget["self"] }
   | { kind: string; messages: Message[] };
 
 function itemMessages(item: AnyItem): Message[] {
@@ -42,12 +63,61 @@ export function gotoTargetOf(item: AnyItem): GotoTarget | null {
     const party = item.run.party;
     return { kind: "exchange", key: `bot:${party.id ?? party.name}`, run: item.run };
   }
+  if (item.kind === "conversation" && "row" in item && "self" in item) {
+    return {
+      kind: "conversation",
+      key: `conversation:${item.row.threadId}`,
+      row: item.row,
+      self: item.self,
+    };
+  }
   if (item.kind === "message" && "message" in item) {
     const ref = item.message.threadRef;
     if (!ref || !item.message.tool) return null;
     return { kind: "thread", key: `thread:${ref.botId}:${ref.threadId}`, message: item.message };
   }
   return null;
+}
+
+/** Build a goto group from consecutive bot-conversation rows (same quiet
+ * "Go to conversation" lines). One row stays a lone line; two or more fold. */
+export function gotoGroupFromConversations(
+  rows: readonly GotoConversationTarget["row"][],
+  self: GotoConversationTarget["self"],
+): GotoGroup | null {
+  if (rows.length < 2) return null;
+  const targets: GotoTarget[] = rows.map((row) => ({
+    kind: "conversation",
+    key: `conversation:${row.threadId}`,
+    row,
+    self,
+  }));
+  return {
+    kind: "gotoGroup",
+    id: `goto:conversations:${rows[0]!.threadId}`,
+    targets,
+    messages: [],
+  };
+}
+
+/** Per-bot conversation counts for the compact chip label, highest count
+ * first: "3 conversations with Katarina, 1 with Ember". */
+export function gotoNamedCounts(
+  entries: readonly GotoEntryView[],
+): { name: string; count: number; bot: NonNullable<GotoEntryView["bot"]> }[] {
+  const order: { name: string; count: number; bot: NonNullable<GotoEntryView["bot"]>; key: string }[] = [];
+  for (const entry of [...entries].reverse()) {
+    if (!entry.agentKey || !entry.bot) continue;
+    const known = order.find((item) => item.key === entry.agentKey);
+    if (known) {
+      known.count += 1;
+      continue;
+    }
+    // Prefer the entry label (peer name on the wire for conversations) over
+    // the store bot's name, so a self/peer id collision cannot rename the chip.
+    order.push({ key: entry.agentKey, name: entry.label, count: 1, bot: entry.bot });
+  }
+  return order.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 }
 
 function partyKey(party: ExchangeParty): string {
@@ -160,6 +230,15 @@ export function gotoEntryView(
       bot: bot ?? { ...(party.id ? { id: party.id } : {}), name: party.name, ...(party.color ? { color: party.color } : {}) },
       label: party.name,
       agentKey: `bot:${partyKey(party)}`,
+    };
+  }
+  if (target.kind === "conversation") {
+    const bot = owners.bots.find((candidate) => candidate.id === target.row.otherBotId);
+    return {
+      key: target.key,
+      bot: bot ?? { id: target.row.otherBotId, name: target.row.otherName },
+      label: target.row.otherName,
+      agentKey: `bot:${target.row.otherBotId || target.row.otherName}`,
     };
   }
   const ref = target.message.threadRef!;

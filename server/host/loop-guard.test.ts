@@ -13,7 +13,7 @@ import { correctiveRounds, createLoopGuard, loopGuardSettings, type LoopGuardSet
 
 const T = "thread-1";
 
-type Row = { threadId: string; name: string; ok: boolean };
+type Row = { threadId: string; name: string; ok: boolean; output?: string };
 /** How a tool call came back. No `output`: the engine reported none. */
 type Result = { ok?: boolean; output?: string };
 type Start = { title?: string; summary?: string; input?: string };
@@ -68,7 +68,7 @@ function rig(options: {
   const guard = createLoopGuard({
     settings: (_threadId) => { state.settingsReads += 1; return state.settings; },
     append: (threadId, tool) => {
-      rows.push({ threadId, name: tool.name, ok: tool.ok });
+      rows.push({ threadId, name: tool.name, ok: tool.ok, ...(tool.output === undefined ? {} : { output: tool.output }) });
       did.push(failedTurnCause(tool.name) === null ? "notice" : "stop line");
     },
     live: () => state.live,
@@ -106,8 +106,8 @@ function rig(options: {
     run: (command = "git status", result: Result = SAME, threadId = T) => play(bash(command), result, threadId),
     /** `count` runs of one command, back to back, each coming back the same (failing, unless told otherwise). */
     loop(count: number, command = "git status", result: Result = SAME, threadId = T) { times(count, () => this.run(command, result, threadId)); },
-    ask: (tool = "Bash", summary = "npm test", threadId = T) =>
-      emit({ ...base(threadId), type: "request.opened", requestType: "permission", tool, summary }),
+    ask: (tool = "Bash", summary = "npm test", threadId = T, mcpTool?: string) =>
+      emit({ ...base(threadId), type: "request.opened", requestType: "permission", tool, summary, ...(mcpTool ? { mcpTool } : {}) }),
     /** One of the thousands of events a turn streams that are no tool call. */
     delta: (threadId = T) => emit({ ...base(threadId), type: "content.delta", streamKind: "assistant_text", delta: "…" }),
     began: (threadId = T) => emit({ ...base(threadId), type: "turn.started" }),
@@ -124,6 +124,7 @@ describe("loop guard, setting off", () => {
     r.repeat(25);
     expect(r.rows).toEqual([5, 10, 20].map((count) => ({
       threadId: T, name: `Same call repeated ${count}× - tool: git status - it may be stuck`, ok: false,
+      output: "The same call with the same arguments ran again; the earlier ones did not fail.",
     })));
     expect(r.steers).toEqual([]);
     expect(r.interrupts).toEqual([]);
@@ -150,6 +151,33 @@ describe("loop guard, setting off", () => {
       "Same call repeated 5× - Bash: npm test - it may be stuck",
       `Same call repeated 5× - tool: cat ${"x".repeat(76)}… - it may be stuck`,
     ]);
+  });
+
+  it("never reads different MCP calls of one tool as the same call (Grok asks carry only the tool id)", () => {
+    // prod 2026-11-02: eight cw_psa_query calls with eight different
+    // arguments, one 404, read as "Same call repeated 5×", twice
+    const r = rig({ settings: { enabled: false } });
+    const id = "perspicax_pulsatrix_flow_jc__cw_psa_query";
+    for (let i = 0; i < 8; i++) {
+      r.ask("other", id, T, id);
+      r.play({ title: id, input: JSON.stringify({ resource: "tickets", conditions: `id=${i}` }) }, { ok: i !== 0, output: i ? "[]" : "404" });
+    }
+    expect(r.notices()).toEqual([]);
+    // an ask whose summary is the bare id, without mcpTool, is not counted either
+    times(6, () => r.ask("other", id));
+    expect(r.notices()).toEqual([]);
+  });
+
+  it("counts the same MCP call failing with the same arguments, and the chip carries its latest error", () => {
+    const r = rig({ settings: { enabled: false } });
+    const id = "outlook__get_message";
+    const input = JSON.stringify({ message_id: "AAMkAGI2THVSAAA=" });
+    const error = "Managed MCP gateway tool call failed: Microsoft Graph API error: 404 Not Found";
+    times(5, () => r.play({ title: id, input }, { ok: false, output: error }));
+    expect(r.rows).toEqual([{
+      threadId: T, name: `Same call repeated 5× - tool: ${id} - it may be stuck`, ok: false,
+      output: `The same call with the same arguments ran again. Its latest error:\n${error}`,
+    }]);
   });
 
   it("does nothing about a command that keeps failing the same way, however often, even with a stop count set", () => {
@@ -705,7 +733,8 @@ describe("loop guard, the same command", () => {
   it("never acts on a call that runs no command: a read, a click and a scroll repeat for good reasons", () => {
     const r = rig({ settings: STOPS });
     times(25, () => r.play({ title: "Read", input: '{\n  "file_path": "/repo/src/x.ts"\n}' }));
-    times(25, () => r.play({ title: "mcp__browser__scroll", input: '{\n  "direction": "down"\n}' }));
+    // a scroll that works, again and again (an MCP call is counted when it fails)
+    times(25, () => r.play({ title: "mcp__browser__scroll", input: '{\n  "direction": "down"\n}' }, WAITING));
     times(25, () => r.play({ title: "Bash" }));
     expect(r.rows).toEqual([]);
     expect(r.steers).toEqual([]);

@@ -1,5 +1,5 @@
 // A solo server's "is the person here" signal for routines set to "Only
-// when I'm here" (server/routine-away.ts): every minute, how long this page
+// when I'm here" (server/routines/routine-away.ts): every minute, how long this page
 // has gone unused, the desktop app adding the computer's own idle time and
 // state (window.ogb.systemIdle: using the computer counts as being here).
 // Coming back after an idle spell beats at once. An organization server

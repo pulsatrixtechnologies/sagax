@@ -3,7 +3,7 @@
 The `ui` group of `control-omb` drives the real React renderer — the same
 `<App/>` the desktop shell loads, mounted by `scripts/testing/threads-preview.tsx`
 — in a headless Chrome through the agent-browser binary the harness pins
-(`server/browser-engine-release.ts`, implementation in
+(`server/browser/browser-engine-release.ts`, implementation in
 `scripts/testing/control-omb-ui.ts`). Everything it touches is disposable: the
 fake-engine fixture from `launch`, a Vite preview of the app, and one browser
 session whose `HOME` is the fixture's data directory. The user's app on port

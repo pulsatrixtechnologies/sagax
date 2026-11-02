@@ -19,7 +19,7 @@ export interface PerspicaxToolInternalDeps {
   confidential?(capability: InternalCapabilityView, tool: string, args: Record<string, unknown>): string | null;
   /** Whose credentials made this turn's call and which bot. A remote_support_*
    * answer carries it, so the support folder records the real opener
-   * (server/remote-support-local.ts), not an older speaker a kept proxy holds. */
+   * (server/remote-support/remote-support-local.ts), not an older speaker a kept proxy holds. */
   owner?(capability: InternalCapabilityView): { principalId: string; botId: string } | null;
   /** remote_support_status / remote_support_close: true when the support
    * folder for this code has no owner or names this very owner. Checked on the

@@ -3,7 +3,7 @@
 // folder button lists the folders of the current directory; a folder row goes
 // into it, the first row goes up, and "Choisir ce dossier" writes the absolute
 // path (Windows `C:\...` or POSIX `/...`, as the remote OS spells it) into the
-// field. It reuses the Tailcat directory listing (server/remote-session-files.ts);
+// field. It reuses the Tailcat directory listing (server/remote-support/remote-session-files.ts);
 // without a connected computer the button is disabled and typing still works.
 import { useEffect, useRef, useState, type InputHTMLAttributes, type Ref } from "react";
 import { ArrowUp, Check, Folder, FolderOpen, Loader2 } from "lucide-react";

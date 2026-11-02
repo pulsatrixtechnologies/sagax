@@ -433,7 +433,7 @@ function EventEditor({
   // 2026-10-26: failed runs in a row that pause this routine (0 never).
   const [autoPauseAfter, setAutoPauseAfter] = useState(() => template ? routineAutoPauseAfter(template) : ROUTINE_AUTO_PAUSE_DEFAULT);
   const [continuity, setContinuity] = useState(Boolean(template?.continuity));
-  // Only when I'm here (server/routine-away.ts): off unless chosen.
+  // Only when I'm here (server/routines/routine-away.ts): off unless chosen.
   const [onlyWhenPresent, setOnlyWhenPresent] = useState(template?.onlyWhenPresent === true);
   // #1648: delete once the finite schedule ends (once, or interval with endsAt).
   const [deleteWhenFinished, setDeleteWhenFinished] = useState(template?.deleteWhenFinished === true);

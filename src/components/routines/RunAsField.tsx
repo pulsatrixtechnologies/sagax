@@ -3,7 +3,7 @@
 // their rights on the bot. An admin may pick any active person, a team
 // manager the people of their teams (else themselves and the bot's owner);
 // anyone else sees only the line. The server decides whom
-// (GET /api/routines/run-as-options, server/routine-run-as.ts) and checks
+// (GET /api/routines/run-as-options, server/routines/routine-run-as.ts) and checks
 // the choice again on save. A solo server shows nothing.
 import { useEffect, useId, useMemo, useState } from "react";
 

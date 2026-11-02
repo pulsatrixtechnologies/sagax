@@ -4,7 +4,7 @@
 //   Get Sagax on mobile    (only once there is a public link to send)
 //   Help ›                 (Keyboard shortcuts, Release notes, Check for updates, About)
 //   Settings
-//   Tools ›                (Automations, Team map, Remote sessions, Achievements)
+//   Tools ›                (Automations, Memory, Team map, Remote sessions, Achievements)
 //   ──────────
 //   Switch organization ›  (this computer and the saved organization servers)
 //   Switch account ›       (a business session: the account in use, then any

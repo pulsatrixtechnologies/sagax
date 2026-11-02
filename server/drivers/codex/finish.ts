@@ -1,7 +1,7 @@
 /** Handshake, thread start/resume and turn/start for a Codex launch attempt. */
 import { homedir } from "node:os";
 import { serverVersion } from "../../environment.ts";
-import { cleanCommandVariables } from "../../credential-command-env.ts";
+import { cleanCommandVariables } from "../../vault/credential-command-env.ts";
 import { decodeCodexSelection } from "../codex-catalog.ts";
 import { codexDeveloperInstructions, syncCodexInstructions } from "../codex-instructions.ts";
 import { sectionFingerprints, volatileContextNote, volatileSectionsUpdate, withContextNote } from "../prompt-split.ts";
@@ -85,7 +85,7 @@ try {
       ...extendShellExclusions((rawPolicy ?? {}) as Record<string, unknown>, [...(s.plan ? ["SAGAX_CHATGPT_TOKEN"] : []), ...s.privateEnv]) };
   }
   // Command variables the person exposed to this bot
-  // (server/credential-command-env.ts): added to the shell policy's
+  // (server/vault/credential-command-env.ts): added to the shell policy's
   // `set` table on the thread, over stdin, so Codex's shell gets them
   // after its exclusions and the app-server's own environment never
   // does (no billing switch, nothing on argv). The person's own `set`

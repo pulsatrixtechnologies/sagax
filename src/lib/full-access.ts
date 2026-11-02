@@ -1,4 +1,4 @@
-// Full access in the approval menu (server/org-full-access.ts holds the
+// Full access in the approval menu (server/org/org-full-access.ts holds the
 // rules the server enforces). On a solo server Full is granted through the
 // packaged desktop app's private channel; on an organization server the
 // bot's owner grants it over HTTP while the organization allows it.

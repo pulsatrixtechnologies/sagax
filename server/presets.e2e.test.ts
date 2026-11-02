@@ -132,7 +132,7 @@ it("shares New bot defaults as a preset, imports it, and creates bots from file 
   }
 }, 120_000);
 
-// The same through the organization library (server/org-library.ts): a
+// The same through the organization library (server/org/org-library.ts): a
 // catalog relayed the way Electron relays it, the library package added from
 // the shelf, its preset in New bot with skills on, then withdrawn.
 it("offers an organization library's presets in New bot until the publisher withdraws the release", async () => {

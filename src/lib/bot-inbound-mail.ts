@@ -1,6 +1,6 @@
 // The bot's own email address (B21, contract C of 2026-10-21):
 // GET /api/bots/:id/inbound-mail answers { available, address, enabled },
-// from the Perspicax relay (server/bot-mail-addresses.ts). Nothing is shown
+// from the Perspicax relay (server/mail/bot-mail-addresses.ts). Nothing is shown
 // while it loads, on a solo server, or when the read fails.
 import { useEffect, useState } from "react";
 

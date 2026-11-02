@@ -27,7 +27,7 @@ export class NoVoiceConfigured extends Error {
 
 /** Who the speech is for may use the xAI key (2026-10-16): on an
  * organization server the caller passes whether the organization gave its
- * xAI voice to that person (server/org-xai-media.ts). Absent: allowed (a
+ * xAI voice to that person (server/org/org-xai-media.ts). Absent: allowed (a
  * solo server, or a provider that is not xAI). */
 export interface VoiceKeyAccess {
   xaiKeyGiven?: boolean;

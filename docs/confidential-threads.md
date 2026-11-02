@@ -7,7 +7,7 @@ organization's admins. It exists for the work a person would not want to
 land in a shared bot's memory, an export or an admin console.
 
 Code: `server/confidential-threads.ts` (the rules), with the enforcement in
-`server/index.ts`, `server/bot-zip.ts`, `server/org-admin-files.ts`,
+`server/index.ts`, `server/bot-zip.ts`, `server/org/org-admin-files.ts`,
 `server/decision-log.ts`, `server/workspace-backup.ts`,
 `server/turn-log.ts`, `server/user-sandbox-routing.ts`,
 `server/runtime/store.ts` (`forgetThread`), `server/message-db.ts`,

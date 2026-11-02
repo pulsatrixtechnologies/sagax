@@ -15,7 +15,7 @@
 //   desktop's own confirmation), and never turns on Auto for a bot that
 //   works on this computer (that needs its own warning).
 // - timeZone: an IANA zone, or null for the host's. Daily schedules, interval
-//   windows and weekdays of routines are read in it (server/routines.ts);
+//   windows and weekdays of routines are read in it (server/routines/routines.ts);
 //   cron routines keep the zone saved with them.
 // - timeZoneAuto: the phone's "Set Time Zone Automatically": when on, the
 //   phone sends its own zone. The server only keeps the choice.

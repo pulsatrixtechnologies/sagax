@@ -3,7 +3,7 @@
 // of a command run where the bot works, or a read-only MCP tool with fixed
 // arguments. Sagax checks it on each due time with no model turn and starts
 // the run only on a change, or while a condition holds
-// (shared/routine-watch.ts, server/routine-watch.ts). The person sets it on
+// (shared/routine-watch.ts, server/routines/routine-watch.ts). The person sets it on
 // their own bots; nothing here asks for an admin. "Check now" reads it once
 // where the routine would (POST /api/routines/watch-check), keeping nothing.
 import { useState } from "react";

@@ -1,8 +1,15 @@
-import { describe, expect, it } from "vitest";
-import { currentSettingsSection, mergedSettingsCard, openModelKeysSettings, openSettings, settingsLinkParts, settingsSectionLabel } from "./settings-link";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
+import { requestAbout } from "./about-ui";
+import { currentSettingsSection, mergedSettingsCard, openModelKeysSettings, openSettings, settingsLinkParts, settingsSectionLabel } from "./settings-link";
+
+vi.mock("./about-ui", () => ({ requestAbout: vi.fn() }));
 
 describe("settings links", () => {
+  beforeEach(() => {
+    vi.mocked(requestAbout).mockClear();
+  });
+
   it("names a section with the label Settings shows", () => {
     setLocale("en");
     expect(settingsSectionLabel("engines")).toBe("Models");
@@ -21,6 +28,7 @@ describe("settings links", () => {
     expect(settingsSectionLabel("credentials")).toBe("Vault");
     expect(settingsSectionLabel("pages")).toBe("Capabilities");
     expect(settingsSectionLabel("experimental")).toBe("Experimental");
+    expect(settingsSectionLabel("about")).toBe("About");
     setLocale("fr");
     expect(settingsSectionLabel("engines")).toBe("Modèles");
     expect(settingsSectionLabel("voice")).toBe("Voix");
@@ -28,6 +36,7 @@ describe("settings links", () => {
     expect(settingsSectionLabel("credentials")).toBe("Coffre");
     expect(settingsSectionLabel("privacy")).toBe("Notifications");
     expect(settingsSectionLabel("memory")).toBe("Organisation");
+    expect(settingsSectionLabel("about")).toBe("À propos");
     setLocale("en");
   });
 
@@ -89,6 +98,13 @@ describe("settings links", () => {
     const sent: unknown[] = [];
     openModelKeysSettings((action) => sent.push(action));
     expect(sent).toEqual([{ type: "toggleAppSettings", open: true, section: "providers" }]);
+  });
+
+  it("opens the About modal instead of a Settings pane", () => {
+    const sent: unknown[] = [];
+    openSettings((action) => sent.push(action), "about");
+    expect(sent).toEqual([]);
+    expect(requestAbout).toHaveBeenCalledTimes(1);
   });
 
   it("splits a sentence on its settings placeholders", () => {

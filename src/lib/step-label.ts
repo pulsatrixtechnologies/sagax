@@ -13,7 +13,7 @@ import { activeLocale, t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import * as shared from "../../shared/approval-describe";
 import { parseArgs, parseToolId } from "@/lib/approval-describe";
-import { isOpaqueId } from "../../shared/human-id";
+import { isOpaqueId, isOpaqueValue } from "../../shared/human-id";
 import { readMcpGatewayCall, readUseToolCall, type McpGatewayCall } from "../../shared/mcp-gateway-call";
 
 export type StepPhase = "running" | "done" | "failed";
@@ -430,12 +430,19 @@ const ARG_MAX = 6;
 
 /** The arguments a person can read: a few `key: value` pairs, long values
  * cut, nested ones counted. The full JSON stays one click further. */
-export function stepArgs(input: string | undefined): Array<{ key: string; value: string }> {
+export function stepArgs(input: string | undefined): Array<{ key: string; value: string; full?: string }> {
   const args = parseArgs(input);
   if (!args) return [];
-  const pairs: Array<{ key: string; value: string }> = [];
+  const pairs: Array<{ key: string; value: string; full?: string }> = [];
   for (const [key, value] of Object.entries(args)) {
     if (value === undefined || value === null || value === "") continue;
+    // An identifier a person cannot read (a GUID, a mail's message_id) reads
+    // as "…": the value stays in the tooltip and the folded JSON record.
+    if (typeof value === "string" && isOpaqueValue(value)) {
+      pairs.push({ key, value: "…", full: value });
+      if (pairs.length >= ARG_MAX) break;
+      continue;
+    }
     let shown: string;
     if (typeof value === "string") shown = oneLine(value, 120);
     else if (typeof value === "number" || typeof value === "boolean") shown = String(value);

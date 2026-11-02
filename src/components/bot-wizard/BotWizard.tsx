@@ -1,9 +1,8 @@
-// The bot creation view (2026-10-26; lot 4, 2026-11-01: content view, no
-// modal). One entry for New bot: this screen fills the content frame with a
-// named back. First step is quick create (name, shape, colour, Create);
-// guided and manual setup, the full template form, Browse templates and
-// Import (zip / Grok Bot / Claude Code) stay as paths under it. Nothing the
-// old New bot dialog offered is dropped.
+// The bot creation window (2026-10-26; restored centred dialog after UX lot 4).
+// One entry for New bot. First step is quick create (name, shape, colour,
+// Create); guided and manual setup, the full template form, Browse templates
+// and Import (zip / Grok Bot / Claude Code) stay as paths under it. Nothing
+// the old New bot dialog offered is dropped.
 //
 // - Guided never waits on a bot the person lacks: with no bot to guide, it
 //   creates the Bot designer (src/lib/bot-wizard.ts). With no engine, the
@@ -13,13 +12,12 @@
 //
 // Later (Escape, Back) keeps the draft: the bot stays a draft until Finish.
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Bot as BotIcon, ChevronLeft, ClipboardList, Download, LayoutTemplate, Library, Loader2, MessagesSquare, PlugZap, Send, Trash2 } from "lucide-react";
+import { Bot as BotIcon, ClipboardList, Download, LayoutTemplate, Library, Loader2, MessagesSquare, PlugZap, Send, Trash2 } from "lucide-react";
 
 import { useStore, type Bot } from "@/state/store";
 import { activeLocale, t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { isBackShortcut } from "@/lib/back-shortcut";
-import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { engineSummary, organisationSignIn } from "@/lib/onboarding";
 import { openModelKeysSettings } from "@/lib/settings-link";
 import { templatesEntryActions } from "@/lib/templates-entry";
@@ -72,8 +70,6 @@ import { engineReady } from "../EngineLibrary";
 import { BotZipImportPanel } from "../BotZipImport";
 import { AgentImportPanel } from "../AgentImport";
 import { NewBotForm } from "../lazy-new-bot";
-import { PageTopStrip } from "../content-page";
-import { useCaptionChrome } from "../DesktopCapabilities";
 import { readableError } from "@/lib/plain-error";
 
 /** How often the guided panel reads the draft back while the Primary Bot fills it. */
@@ -85,8 +81,7 @@ export function BotWizard() {
   const { state, dispatch } = useStore();
   const opened = state.botWizard;
   const language = activeLocale();
-  const { dragProps, noDragStyle } = useCaptionChrome();
-  const mainRef = useRef<HTMLElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const [botId, setBotId] = useState<string | null>(opened?.botId ?? null);
   const [draft, setDraft] = useState<WireWizardDraft | null>(null);
   const [phase, setPhase] = useState<WizardPhase>(opened?.botId ? "loading" : "choose");
@@ -114,7 +109,7 @@ export function BotWizard() {
 
   const close = useCallback(() => dispatch({ type: "closeBotWizard" }), [dispatch]);
   const fail = (cause: unknown) => setError(readableError(cause));
-  useEffect(() => { mainRef.current?.focus({ preventScroll: true }); }, []);
+  useEffect(() => { cardRef.current?.focus({ preventScroll: true }); }, []);
 
   // A bot's own wizard (Redo, Resume): its open draft resumes in its mode;
   // otherwise the mode choice, prefilled from the bot.
@@ -291,7 +286,8 @@ export function BotWizard() {
   const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented) return;
     const target = event.target as HTMLElement;
-    if (target.closest("[role=menu], [role=listbox], [role=dialog], [role=alertdialog]")) return;
+    // Nested menus/dialogs own the key; this window's own role=dialog does not.
+    if (target.closest("[role=menu], [role=listbox], [role=dialog]:not([data-bot-wizard]), [role=alertdialog]")) return;
     if (event.key === "Escape" && (phase === "template" || phase === "import-zip" || phase === "import-agent")) {
       if (target.closest("textarea, input")) return;
       event.preventDefault();
@@ -319,34 +315,35 @@ export function BotWizard() {
           : t("botWizard.title");
 
   return (
-    <main
-      ref={mainRef}
-      tabIndex={-1}
-      data-bot-wizard-screen=""
-      data-bot-wizard=""
-      aria-label={t("botWizard.dialog")}
-      className="flex h-full min-w-0 flex-1 flex-col bg-app outline-none"
-      onKeyDown={onKeyDown}
-    >
-      <PageTopStrip />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-6" data-bot-wizard-screen="">
+      <div
+        ref={cardRef}
+        role="dialog"
+        data-bot-wizard=""
+        aria-modal="true"
+        aria-label={t("botWizard.dialog")}
+        tabIndex={-1}
+        onKeyDown={onKeyDown}
+        className="welcome-card relative flex max-h-full w-full flex-col overflow-hidden rounded-2xl border border-hairline/40 bg-panel shadow-[0_30px_80px_-28px_rgba(0,0,0,0.45),0_8px_24px_-12px_rgba(0,0,0,0.25)] outline-none"
+        style={{ maxWidth: guided ? 1180 : 760, height: phase === "steps" ? "min(860px, 100%)" : undefined }}
+      >
       <header
         data-bot-wizard-header=""
-        className="content-topbar flex shrink-0 items-center gap-3 border-b border-hairline/50 px-4 py-3"
-        {...dragProps}
+        className="flex shrink-0 items-center gap-3 px-5 pb-3 pt-5 sm:px-8 sm:pt-7"
       >
-        <button type="button" aria-label={t("botWizard.back")} title={t("botWizard.back")} onClick={leaveSubPage} className={CIRCLE_BUTTON} style={noDragStyle} data-wizard-back-view="">
-          <ChevronLeft size={18} strokeWidth={1.75} />
-        </button>
-        <span className="flex shrink-0" style={noDragStyle}><PulsatrixMark size={28} ground="app" /></span>
-        <div className="min-w-0 flex-1" style={noDragStyle}>
+        {(phase === "template" || phase === "import-zip" || phase === "import-agent") && (
+          <QuietButton onClick={leaveSubPage} className="shrink-0" data-wizard-back-view="">{t("botWizard.back")}</QuietButton>
+        )}
+        <span className="flex shrink-0"><PulsatrixMark size={36} ground="app" /></span>
+        <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <BotIcon size={16} className="shrink-0 text-ink-secondary" aria-hidden="true" />
-            <h1 className="truncate text-[15px] font-medium text-ink">{title}</h1>
+            <h1 className="truncate text-[18px] font-semibold text-ink">{title}</h1>
           </div>
-          {phase === "steps" && bot && <p className="truncate text-[12px] text-ink-secondary">{t("botWizard.subtitle", { name: bot.name })}</p>}
+          {phase === "steps" && bot && <p className="truncate text-[12.5px] text-ink-secondary">{t("botWizard.subtitle", { name: bot.name })}</p>}
         </div>
         {phase === "steps" && draft && (
-          <div role="radiogroup" aria-label={t("botWizard.mode")} className="hidden shrink-0 gap-0.5 rounded-lg bg-control p-0.5 sm:flex" data-wizard-mode-switch="" style={noDragStyle}>
+          <div role="radiogroup" aria-label={t("botWizard.mode")} className="hidden shrink-0 gap-0.5 rounded-lg bg-control p-0.5 sm:flex" data-wizard-mode-switch="">
             {(["guided", "manual"] as const).map((mode) => (
               <button key={mode} type="button" role="radio" aria-checked={draft.mode === mode} data-wizard-mode={mode}
                 onClick={() => void switchMode(mode)}
@@ -358,7 +355,7 @@ export function BotWizard() {
             ))}
           </div>
         )}
-        <QuietButton onClick={close} className="shrink-0" data-wizard-later="" style={noDragStyle}>{t("botWizard.later")}</QuietButton>
+        <QuietButton onClick={close} className="shrink-0" data-wizard-later="">{t("botWizard.later")}</QuietButton>
       </header>
 
       <div className={cn("flex min-h-0 flex-1 flex-col", guided ? "mx-auto w-full max-w-[1180px]" : "mx-auto w-full max-w-[760px]")}>
@@ -401,7 +398,7 @@ export function BotWizard() {
 
         {phase === "template" && (
           <div className="min-h-0 flex-1 overflow-hidden" data-wizard-template="">
-            <NewBotForm onClose={close} onCreated={() => close()} presentation="view" />
+            <NewBotForm onClose={close} onCreated={() => close()} presentation="dialog" />
           </div>
         )}
 
@@ -463,7 +460,8 @@ export function BotWizard() {
           </div>
         )}
       </div>
-    </main>
+      </div>
+    </div>
   );
 }
 

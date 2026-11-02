@@ -259,7 +259,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
               <SuggestionsSection bot={bot} routineCount={derived.botRoutines.length} />
               <BotTaskSection botId={bot.id} />
               <ActivitySection bot={bot} />
-              {(bot.grants?.length || bot.directGrants?.length) && (viewerOwnsBot(state.config, bot) || canSetBotHost(state.config, bot)) && (
+              {Boolean(bot.grants?.length || bot.directGrants?.length) && (viewerOwnsBot(state.config, bot) || canSetBotHost(state.config, bot)) && (
                 <TeamBotVaultSection botId={bot.id} botName={bot.name} />
               )}
               {/* Temporary attended remote sessions: only while active, above Routines.

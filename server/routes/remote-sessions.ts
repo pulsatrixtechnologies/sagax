@@ -16,9 +16,9 @@ import { PASS } from "./table.ts";
 import type { RouteHandler } from "./table.ts";
 import type { InternalRouteHandler } from "./internal-route.ts";
 import type { RequestAuth } from "../request-auth.ts";
-import type { PublishRemoteSession, RemoteSessionService } from "../remote-sessions.ts";
+import type { PublishRemoteSession, RemoteSessionService } from "../remote-support/remote-sessions.ts";
 import { remoteCallerIsAgent } from "./remote-session-files.ts";
-import { consumeRemoteExecApproval, remoteCommandReadOnly } from "../remote-session-exec.ts";
+import { consumeRemoteExecApproval, remoteCommandReadOnly } from "../remote-support/remote-session-exec.ts";
 
 const LIST = /^\/api\/bots\/([\w-]{1,80})\/remote-sessions$/;
 const ONE = /^\/api\/bots\/([\w-]{1,80})\/remote-sessions\/([a-f0-9]{12})(?:\/(close|focus|shell|upload|download|screen|os))?$/;
@@ -193,7 +193,7 @@ export function createRemoteSessionInternalRoutes(deps: {
    * The session row goes to them, never to the conversation's owner. */
   speaker?(threadId: string): string | undefined;
   now?: () => number;
-  /** The person's yes for this exact command (server/remote-session-exec.ts). Tests inject it. */
+  /** The person's yes for this exact command (server/remote-support/remote-session-exec.ts). Tests inject it. */
   consumeApproval?(threadId: string, command: string): boolean;
 }): InternalRouteHandler {
   const now = deps.now ?? (() => Date.now());

@@ -603,7 +603,7 @@ phone opens a room the way the desktop remote client does
 merges: an interval schedule that omits `weekdays`, `window` or `endsAt` keeps
 the stored ones (explicit `null` clears one), and an omitted `overlap`,
 `attachments`, `continuity`, `resultsThreadId`, `target` or `groupId` keeps
-its value. The phone's editor body is pinned by `server/routines.test.ts`
+its value. The phone's editor body is pinned by `server/routines/routines.test.ts`
 ("keeps every field a phone editor does not send") and end to end through the
 sidecar by `companion/test/proxy.test.ts`.
 

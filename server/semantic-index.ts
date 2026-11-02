@@ -28,9 +28,9 @@ import { DatabaseSync } from "node:sqlite";
 
 import { fieldAad, open as openSealed, seal } from "./content-crypto.ts";
 import type { LiveKey } from "./content-keys.ts";
-import { withoutExpired } from "./memory-entries.ts";
-import { withoutWiderAudience } from "./memory-audience.ts";
-import { topicBody } from "./memory-topics.ts";
+import { withoutExpired } from "./memory/memory-entries.ts";
+import { withoutWiderAudience } from "./memory/memory-audience.ts";
+import { topicBody } from "./memory/memory-topics.ts";
 import { contentEncryptionOn, contentKeyById, contentKeyForBot, contentKeyForThread, messageThreadIds, onMessageChange, readMessageText, textMessagesAfter, type IndexableMessage } from "./message-db.ts";
 import {
   contentWords, EMBEDDING_MIN_SCORE, embedTexts, fingerprint, HASHED_MIN_SCORE, hashedVector, quantize, quantizedCosine,

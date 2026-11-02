@@ -1,5 +1,5 @@
 // The permissions of an organization server in the app (2026-10-09). The
-// server enforces them (shared/permissions.ts, server/org-permissions.ts);
+// server enforces them (shared/permissions.ts, server/org/org-permissions.ts);
 // the app hides or disables what the viewer's profile does not include and
 // words a refusal the same way everywhere.
 import { activeLocale, t } from "@/lib/i18n";

@@ -525,7 +525,7 @@ export interface ConsoleAssertion {
   /** `grant`: a narrow capability bound to one request, for a person below
    * a route's role who reaches something of their own. `own-computer`
    * (2026-10-26): the person's own server environment, on the routes that
-   * declare it (server/org-admin-computers.ts), for that method and path
+   * declare it (server/org/org-admin-computers.ts), for that method and path
    * below /api/org/admin/ only; the route then answers only what the person
    * owns. `own-bot` (their own bots: the list, a bot, its files, picture,
    * package, copy, archive, restore, model, stop, delete, its usage,
@@ -564,10 +564,10 @@ export function parseGrantClaim(value: unknown): ConsoleGrant | null {
 }
 
 /** The actors a console assertion may name. The admin API accepts only the
- * console; the member API (server/org-member-routes.ts) accepts the console
+ * console; the member API (server/org/org-member-routes.ts) accepts the console
  * and `perspicax-mcp`; `perspicax-mail` (the Perspicax mail relay,
  * 2026-10-21) is accepted by `POST /api/org/inbound-mail` alone
- * (server/bot-inbound-mail.ts); `perspicax-voice` (Perspicax Voice,
+ * (server/mail/bot-inbound-mail.ts); `perspicax-voice` (Perspicax Voice,
  * 2026-10-26) by `POST /api/org/telephony/inbound` alone
  * (server/bot-inbound-telephony.ts). */
 export const CONSOLE_ASSERTION_ACTORS = ["console", "perspicax-mcp", "perspicax-mail", "perspicax-voice"] as const;
@@ -588,7 +588,7 @@ const CONSOLE_ROLES = new Set(["admin", "manager", "employee"]);
  * server's public origin, header `typ` exactly `pulsabot-console+jwt`,
  * `act.sub` "console", no nonce, no events, exp - iat at most 120 s, a `jti`
  * of 16 to 256 characters, a role, the teams, and the server id when known.
- * The replay cache is the caller's (server/org-admin-routes.ts). */
+ * The replay cache is the caller's (server/org/org-admin-routes.ts). */
 export async function verifyConsoleAssertion(input: VerifyConsoleAssertionInput): Promise<ConsoleAssertion> {
   const kind = "console_assertion";
   const { header, claims } = await verifyJws({ ...input, skewSeconds: input.skewSeconds ?? CONSOLE_ASSERTION_SKEW_SECONDS }, kind);

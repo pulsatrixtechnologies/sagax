@@ -1,6 +1,6 @@
 // Connexions on a person's panel (an organization admin only): the MCP
 // servers, GitHub account and plugins saved for that person, and a remove
-// that asks first. The server never sends a token (server/org-person-connections.ts).
+// that asks first. The server never sends a token (server/org/org-person-connections.ts).
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { t, activeLocale } from "@/lib/i18n";

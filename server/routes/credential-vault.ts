@@ -1,4 +1,4 @@
-// Settings > Credentials and the vault request card (server/credential-vault.ts).
+// Settings > Credentials and the vault request card (server/vault/credential-vault.ts).
 //
 //   POST   /api/me/credentials/list                 { items, onePassword, unavailable?, exportBlocked? }
 //   POST   /api/me/credentials        {kind,name,username?,password?,totpSeed?,apiKey?,notes?,domains}
@@ -35,7 +35,7 @@ import { randomUUID } from "node:crypto";
 import { botVaultPrincipal, bindingUrl, isVaultGrantMode, normalizeVaultDomain, siteAddable, VAULT_ITEM_KINDS, vaultDomainMatches, VAULT_LOGIN_TARGET, vaultHandle, type VaultGrantMode, type VaultItemKind, type VaultItemListing } from "../../shared/credential-vault.ts";
 import { isVaultDuplicateMode, isVaultExportFormat, isVaultImportFormat, type VaultExportFormat, type VaultTransferItem } from "../../shared/credential-vault-transfer.ts";
 import type { SecretRequestCardData } from "../../shared/wire.ts";
-import { CredentialVaultError, type CredentialVault, type PurchaseListing, type VaultItemInput } from "../credential-vault.ts";
+import { CredentialVaultError, type CredentialVault, type PurchaseListing, type VaultItemInput } from "../vault/credential-vault.ts";
 import { isSingleUseWallet } from "../../shared/single-use-card.ts";
 import type { OnePassword } from "../onepassword.ts";
 import type { RequestAuth } from "../request-auth.ts";
@@ -49,7 +49,7 @@ export interface CredentialVaultRouteDeps {
   principal(auth: RequestAuth): string | null;
   botExists(botId: string): boolean;
   /** The bot's own browser for this conversation, for a person who signs in
-   * there themselves: null to go on, else why not (server/browser-runtime.ts
+   * there themselves: null to go on, else why not (server/browser/browser-runtime.ts
    * armForPerson, clearAfterPerson). Absent refuses that answer. */
   browser?: {
     armForPerson(botId: string, threadId: string): Promise<string | null>;

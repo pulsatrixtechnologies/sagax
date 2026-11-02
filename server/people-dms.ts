@@ -12,7 +12,7 @@
 //   both people to agree, and the first such bot would carry the transcript
 //   to its own owner; a group chat already is the place for that.
 // - Its people, name, section, folder and instructions never change, and it
-//   has no shared memory (server/group-memory.ts). Unread and the home pin
+//   has no shared memory (server/memory/group-memory.ts). Unread and the home pin
 //   are display flags, the same ones a member already sets on a room.
 // - A message is a person's message: it starts no turn, marks the
 //   conversation unread and notifies the other person only.

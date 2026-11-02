@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { vaultHandle } from "../../shared/credential-vault.ts";
-import { CredentialVault } from "../credential-vault.ts";
+import { CredentialVault } from "../vault/credential-vault.ts";
 import { json, readBody } from "../harness/http.ts";
 import { createTeamBotVaultRoutes, soloMayManage } from "./team-bot-vault.ts";
 import { dispatchRoutes } from "./table.ts";

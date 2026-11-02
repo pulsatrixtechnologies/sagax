@@ -1,9 +1,9 @@
 // The organization library routes that left server/index.ts. The shelf
-// itself stays covered by server/org-library.e2e.test.ts.
+// itself stays covered by server/org/org-library.e2e.test.ts.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 
-import type { OrgLibrary } from "../org-library.ts";
+import type { OrgLibrary } from "../org/org-library.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { createOrgLibraryRoutes } from "./org-library.ts";
 import { PASS, type RouteContext } from "./table.ts";

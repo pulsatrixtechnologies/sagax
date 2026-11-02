@@ -1,5 +1,5 @@
 // 2026-10-16: an email draft can be edited and sent, and Send only ever asks
-// for an approval card (server/email-draft-send.ts).
+// for an approval card (server/mail/email-draft-send.ts).
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";

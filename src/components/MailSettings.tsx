@@ -1,5 +1,5 @@
 // Settings > Email: how a solo server sends sign-in codes and invitations
-// (server/mail-routes.ts). Admin only. A secret is write-only here: the
+// (server/mail/mail-routes.ts). Admin only. A secret is write-only here: the
 // server says whether one is configured, and Replace opens an empty input.
 // A value the server's environment provides is the default; a saved value
 // wins, and "Revert to the server's value" removes the saved one. An

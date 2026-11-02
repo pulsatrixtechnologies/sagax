@@ -1,8 +1,8 @@
 // A console route context for unit tests of the org admin areas
-// (server/org-admin-*.ts): the viewer, the reach, the body, the records.
-import type { ConsoleAuditEntry, ConsoleContext, ConsoleRoute } from "../org-admin-console.ts";
-import { compileRoutes, ConsoleRefusal, matchRoutes } from "../org-admin-console.ts";
-import type { ConsoleRole } from "../org-admin-routes.ts";
+// (server/org/org-admin-*.ts): the viewer, the reach, the body, the records.
+import type { ConsoleAuditEntry, ConsoleContext, ConsoleRoute } from "../org/org-admin-console.ts";
+import { compileRoutes, ConsoleRefusal, matchRoutes } from "../org/org-admin-console.ts";
+import type { ConsoleRole } from "../org/org-admin-routes.ts";
 
 export interface FakeConsole {
   call(method: "GET" | "POST", path: string, input?: { role?: ConsoleRole; principalId?: string; reach?: string[] | null; body?: unknown; locale?: "en" | "fr"; request?: unknown; headers?: Record<string, string>; teams?: ConsoleContext["viewer"]["teams"] }): Promise<{ status: number; body: any; raw?: Buffer; headers?: Record<string, string> }>;
@@ -46,7 +46,7 @@ export function fakeConsole(routes: ConsoleRoute[], now = () => Date.now()): Fak
         if (answer.raw !== undefined) return { status: answer.status, body: answer.body as any, raw: Buffer.from(answer.raw), ...(answer.headers ? { headers: answer.headers } : {}) };
         return { status: answer.status, body: answer.body as any, ...(answer.headers ? { headers: answer.headers } : {}) };
       } catch (error) {
-        // as server/org-admin-routes.ts answers a thrown refusal
+        // as server/org/org-admin-routes.ts answers a thrown refusal
         if (error instanceof ConsoleRefusal) return { status: error.status, body: { code: error.code, message: error.message, reason: error.message } };
         throw error;
       }

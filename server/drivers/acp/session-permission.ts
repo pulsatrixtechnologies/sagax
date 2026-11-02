@@ -9,6 +9,11 @@ import { gatedMcpAsk } from "./gated-mcp-ask.ts";
 import { sessionOperationKey } from "./helpers.ts";
 import type { AcpSession, AcpSupport, AcpTurn } from "./types.ts";
 
+
+/** A permission's wait: the turn's own (a routine run's), else 15 minutes. */
+export function approvalWaitMs(turnWait: number | undefined): number {
+  return typeof turnWait === "number" && Number.isFinite(turnWait) && turnWait >= 1_000 ? turnWait : 15 * 60_000;
+}
 export type PermissionHandlerDeps = {
   support: AcpSupport;
   DRIVER_KIND: string;
@@ -207,15 +212,21 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
               type: "request.resolved",
               requestId,
               behavior: optionId && isQuestion ? "answer" : optionId && behavior === "allow" ? "allow" : "deny",
-              source: optionId ? source : "system",
+              // a timeout stays a timeout even when the engine offered no
+              // reject option to pick: the run says nobody answered it
+              source: optionId || source === "timeout" ? source : "system",
               approvalScope: current.controlsHost ? "local-computer" : undefined,
             });
             return !optionId ? "rejected" : isQuestion ? "answered" : behavior === "allow" ? "allowed-once" : "rejected";
           };
           const timer = setTimeout(() => {
-            emit({ ...base(threadId, current.turnId), type: "runtime.error", message: DENY_TIMEOUT_NOTE });
+            // 2026-11-02: nobody answering in time is not an engine failure.
+            // As runtime.error a routine read it as "The engine reported an
+            // error during the run" (prod, a mail routine); the resolved
+            // event (source timeout) carries the outcome, this says it.
+            emit({ ...base(threadId, current.turnId), type: "runtime.notice", message: DENY_TIMEOUT_NOTE });
             finish("deny", "timeout");
-          }, 15 * 60_000);
+          }, approvalWaitMs(current.turn.approvalWaitMs));
           timer.unref?.();
           current.asks.set(requestId, finish);
           emit({

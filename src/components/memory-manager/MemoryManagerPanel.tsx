@@ -1,14 +1,14 @@
-// Tools > Memory: right DetailPanel manager (2026-11-02). Navigation stays
-// inside the panel (sources → browse → note) with PanelPage back. Grok Bot
-// density: title + grey context, search, bulk bar, undo notice.
+// Tools > Memory: main-column page (Automations / Team map family, 2026-11-02).
+// Left list of sources and folders; notes list, note view, or map in the body.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Brain,
   Check,
-  ChevronRight,
   FileText,
   Folder,
+  List,
   Loader2,
+  Network,
   Plus,
   Search,
   Trash2,
@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
+import { buildMemoryMapGraph } from "@/lib/memory-map";
 import { api, useStore } from "@/state/store";
 import {
   browseBotSource,
@@ -39,11 +40,13 @@ import {
   type MemoryNoteDetail,
   type MemoryNoteRow,
 } from "@/lib/memory-manager";
-import { DetailPanel } from "../DetailPanel";
-import { PanelPage } from "../bot-settings/PanelPage";
+import { useCaptionChrome, useMacInsetChrome } from "../DesktopCapabilities";
+import { PageSegment } from "../content-page";
+import { confirmAsync } from "../ConfirmProvider";
 import { MarkdownEditor } from "../markdown/MarkdownEditor";
 import { DANGER_PILL, PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { MemoryJsonTree } from "./MemoryJsonTree";
+import { MemoryMapCanvas } from "./MemoryMapCanvas";
 
 type Page =
   | { kind: "sources" }
@@ -52,6 +55,8 @@ type Page =
   | { kind: "trash"; source: MemoryManagerSource }
   | { kind: "create"; source: MemoryManagerSource }
   | { kind: "move"; source: MemoryManagerSource; noteIds: string[] };
+
+type ViewMode = "list" | "map";
 
 interface Notice {
   text: string;
@@ -77,10 +82,14 @@ function ReadBody({ body, bodyKind }: { body: string; bodyKind: "markdown" | "js
   );
 }
 
+/** Full-page Memory manager (main column). */
 export function MemoryManagerPanel() {
   const { dispatch } = useStore();
+  const { dragProps, controlsShiftStyle } = useCaptionChrome();
+  const { macInset, browser } = useMacInsetChrome();
   const close = useCallback(() => dispatch({ type: "toggleMemoryManager", open: false }), [dispatch]);
   const [page, setPage] = useState<Page>({ kind: "sources" });
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [sources, setSources] = useState<MemoryManagerSource[] | null>(null);
   const [pxReason, setPxReason] = useState<string | undefined>();
   const [browse, setBrowse] = useState<MemoryBrowse | null>(null);
@@ -98,6 +107,7 @@ export function MemoryManagerPanel() {
   const [moveTopic, setMoveTopic] = useState("notes");
   const [moveScope, setMoveScope] = useState("me");
   const [trashRows, setTrashRows] = useState<Array<{ id: string; title: string; scope: string; may_manage?: boolean }>>([]);
+  const [mapBodies, setMapBodies] = useState<Record<string, string>>({});
 
   const loadSources = useCallback(async () => {
     try {
@@ -119,12 +129,30 @@ export function MemoryManagerPanel() {
     setBrowse(null);
     setSelected(new Set());
     try {
-      if (source.kind === "bot" && source.botId) setBrowse(await browseBotSource(source.botId));
-      else if (source.kind === "team") setBrowse(await browseTeamSource(source.section ?? ""));
-      else if (source.kind === "perspicax") setBrowse(await browsePerspicax(folder, source.scope));
+      let next: MemoryBrowse;
+      if (source.kind === "bot" && source.botId) next = await browseBotSource(source.botId);
+      else if (source.kind === "team") next = await browseTeamSource(source.section ?? "");
+      else if (source.kind === "perspicax") next = await browsePerspicax(folder, source.scope);
+      else next = { folders: [], notes: [], mayWrite: false };
+      setBrowse(next);
+      // Prefetch note bodies for [[links]] on the map (dense fixtures included).
+      const bodies: Record<string, string> = {};
+      for (const row of next.notes.slice(0, 64)) {
+        try {
+          let detail: MemoryNoteDetail | null = null;
+          if (source.kind === "bot" && source.botId && row.path) detail = await openBotNote(source.botId, row.path);
+          else if (source.kind === "team") detail = await openTeamNote(source.section ?? "", row.id);
+          else if (source.kind === "perspicax" && row.scope) detail = await openPerspicaxNote(row.scope, row.id);
+          if (detail) bodies[row.id] = detail.body;
+        } catch {
+          /* skip one note */
+        }
+      }
+      setMapBodies(bodies);
     } catch (cause) {
       setError(readableError(cause));
       setBrowse({ folders: [], notes: [], mayWrite: false });
+      setMapBodies({});
     } finally {
       setBusy(false);
     }
@@ -133,6 +161,8 @@ export function MemoryManagerPanel() {
   const openBrowse = (source: MemoryManagerSource, folder?: string) => {
     setPage({ kind: "browse", source, folder });
     setQuery("");
+    setNote(null);
+    setEditing(false);
     void loadBrowse(source, folder);
   };
 
@@ -141,6 +171,7 @@ export function MemoryManagerPanel() {
     setError(null);
     setNote(null);
     setEditing(false);
+    setViewMode("list");
     try {
       let detail: MemoryNoteDetail | null = null;
       if (source.kind === "bot" && source.botId && row.path) detail = await openBotNote(source.botId, row.path);
@@ -159,37 +190,19 @@ export function MemoryManagerPanel() {
     }
   };
 
-  const back = () => {
-    setError(null);
-    setNotice(null);
-    if (page.kind === "note" || page.kind === "trash" || page.kind === "create" || page.kind === "move") {
-      openBrowse(page.source);
-      return;
-    }
-    if (page.kind === "browse") {
-      setPage({ kind: "sources" });
-      setBrowse(null);
-      return;
-    }
-    close();
+  const openNoteById = (noteId: string) => {
+    const source = page.kind === "sources" ? null : "source" in page ? page.source : null;
+    const row = browse?.notes.find((entry) => entry.id === noteId);
+    if (!source || !row) return;
+    void openNote(source, row);
   };
 
-  const noteTitle = note?.title
-    || (page.kind === "note" && page.path ? page.path.split("/").pop()?.replace(/\.md$/i, "") : undefined)
-    || t("memoryManager.note");
-  const title = page.kind === "sources"
-    ? t("memoryManager.title")
-    : page.kind === "browse"
-      ? page.source.name
-      : page.kind === "trash"
-        ? t("memoryManager.trash")
-        : page.kind === "create"
-          ? t("memoryManager.newNote")
-          : page.kind === "move"
-            ? t("memoryManager.move")
-            : noteTitle;
-
   const visibleNotes = useMemo(() => filterNotes(browse?.notes ?? [], query), [browse, query]);
+
+  const mapGraph = useMemo(() => {
+    if (page.kind === "sources" || !("source" in page) || !browse) return null;
+    return buildMemoryMapGraph({ source: page.source, browse, bodies: mapBodies });
+  }, [page, browse, mapBodies]);
 
   const toggleSelect = (id: string) => {
     setSelected((current) => {
@@ -308,7 +321,13 @@ export function MemoryManagerPanel() {
     if (page.kind !== "browse" || !browse) return;
     const ids = [...selected];
     if (!ids.length) return;
-    if (!window.confirm(t("memoryManager.deleteConfirm", { count: ids.length }))) return;
+    const ok = await confirmAsync({
+      title: t("memoryManager.delete"),
+      body: t("memoryManager.deleteConfirm", { count: ids.length }),
+      confirmLabel: t("memoryManager.delete"),
+      tone: "danger",
+    });
+    if (!ok) return;
     setBusy(true);
     setError(null);
     try {
@@ -323,7 +342,7 @@ export function MemoryManagerPanel() {
       } else if (page.source.kind === "team") {
         const removed: Array<{ id: string; kind: string; name: string; detail: string }> = [];
         for (const id of ids) {
-          const row = (browse.notes).find((noteRow) => noteRow.id === id);
+          const row = browse.notes.find((noteRow) => noteRow.id === id);
           if (!row) continue;
           const detail = await openTeamNote(page.source.section ?? "", id);
           await api(`/api/team-memory/${id}?section=${encodeURIComponent(page.source.section ?? "")}`, { method: "DELETE" });
@@ -367,6 +386,7 @@ export function MemoryManagerPanel() {
 
   const openTrash = async (source: MemoryManagerSource) => {
     setPage({ kind: "trash", source });
+    setViewMode("list");
     setBusy(true);
     try {
       const list = await pxMemory<{ notes: Array<{ id: string; title: string; scope: string; may_manage?: boolean }> }>("/trash");
@@ -410,327 +430,364 @@ export function MemoryManagerPanel() {
     }
   };
 
-  const sourcesBody = (
-    <div className="flex flex-col gap-1 px-3 py-3" data-memory-sources="">
-      {sources === null && (
-        <div className="flex min-h-[120px] items-center justify-center text-ink-secondary">
-          <Loader2 size={18} className="animate-spin" aria-label={t("memoryManager.loading")} />
-        </div>
-      )}
-      {sources?.map((source) => (
-        <button
-          key={source.id}
-          type="button"
-          onClick={() => openBrowse(source)}
-          className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-raised"
-          data-memory-source={source.id}
-        >
-          {sourceIcon(source.kind)}
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-medium text-ink">{source.name}</span>
-            {source.detail && <span className="block truncate text-[12px] text-ink-secondary">{source.detail}</span>}
-          </span>
-          <ChevronRight size={16} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
-        </button>
-      ))}
-      {sources && sources.length === 0 && (
-        <p className="px-2 py-6 text-center text-[12.5px] text-ink-secondary">{t("memoryManager.emptySources")}</p>
-      )}
-      {pxReason === "link" && (
-        <p className="mt-2 px-2 text-[12px] text-ink-secondary">{t("memoryManager.pxLinkHint")}</p>
-      )}
-      {pxReason === "sign_in" && (
-        <p className="mt-2 px-2 text-[12px] text-ink-secondary">{t("memoryManager.pxSignInHint")}</p>
-      )}
-    </div>
-  );
+  const activeSource = page.kind === "sources" ? null : "source" in page ? page.source : null;
+  const showMap = viewMode === "map" && Boolean(activeSource && browse && mapGraph);
 
-  const browseBody = page.kind === "browse" && (
-    <div className="flex min-h-0 flex-1 flex-col" data-memory-browse="">
-      <div className="flex items-center gap-2 border-b border-hairline/40 px-3 py-2">
-        <Search size={14} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t("memoryManager.search")}
-          className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-tertiary"
-          data-memory-search=""
-        />
-        {page.source.mayWrite && (
-          <button type="button" className={cn(PILL, "shrink-0")} onClick={() => { setCreateTitle(""); setPage({ kind: "create", source: page.source }); }}>
-            <Plus size={13} aria-hidden="true" /> {t("memoryManager.new")}
-          </button>
-        )}
-      </div>
-      {selected.size > 0 && (
-        <div className="flex items-center gap-2 border-b border-hairline/40 bg-raised/40 px-3 py-2" data-memory-bulk="">
-          <span className="text-[12px] text-ink-secondary">{t("memoryManager.selected", { count: selected.size })}</span>
-          {page.source.kind === "perspicax" && (
+  return (
+    <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-app text-ink" data-memory-manager-page="" data-memory-manager-panel="">
+      {(macInset || browser) && <div className="content-topbar-strip" />}
+      <header {...dragProps} className="content-topbar flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-hairline/40 px-6 py-4 max-sm:pl-12">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <Brain size={18} className="text-ink-secondary" aria-hidden="true" />
+            <h1 className="text-[17px] font-semibold leading-6 tracking-[-0.008em]">{t("memoryManager.title")}</h1>
+          </div>
+          <p className="mt-1 text-[12px] text-ink-secondary">{t("memoryManager.pageSubtitle")}</p>
+        </div>
+        <div style={controlsShiftStyle} className="flex flex-wrap items-center gap-2">
+          <PageSegment
+            label={t("memoryManager.viewLabel")}
+            value={viewMode}
+            onChange={(next) => setViewMode(next)}
+            options={[
+              { value: "list", label: t("memoryManager.viewList"), icon: List },
+              { value: "map", label: t("memoryManager.viewMap"), icon: Network },
+            ]}
+          />
+          {activeSource?.mayWrite && viewMode === "list" && (
             <button
               type="button"
-              className={PILL}
+              className={cn(PRIMARY_PILL, "h-9")}
               onClick={() => {
-                setMoveTopic(page.folder || "notes");
-                setMoveScope(page.source.scope || "me");
-                setPage({ kind: "move", source: page.source, noteIds: [...selected] });
+                if (!activeSource) return;
+                setCreateTitle("");
+                setPage({ kind: "create", source: activeSource });
+                setViewMode("list");
               }}
             >
-              {t("memoryManager.move")}
+              <Plus size={14} aria-hidden="true" /> {t("memoryManager.new")}
             </button>
           )}
-          <button type="button" className={cn(DANGER_PILL, "ml-auto")} onClick={() => void deleteSelected()} disabled={busy}>
-            <Trash2 size={13} aria-hidden="true" /> {t("memoryManager.delete")}
+          <button type="button" aria-label={t("memoryManager.close")} className="flex size-9 items-center justify-center rounded-lg border border-hairline/50 bg-panel text-ink-secondary hover:bg-raised hover:text-ink" onClick={close}>
+            <X size={16} />
           </button>
         </div>
-      )}
-      {busy && !browse && (
-        <div className="flex min-h-[120px] items-center justify-center text-ink-secondary">
-          <Loader2 size={18} className="animate-spin" />
-        </div>
-      )}
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {browse && !query && browse.folders.map((folder) => (
-          <button
-            key={folder.id}
-            type="button"
-            onClick={() => openBrowse(page.source, folder.name)}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-raised"
-          >
-            <Folder size={14} className="text-ink-secondary" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{folder.name}</span>
-            <span className="text-[11px] tabular-nums text-ink-tertiary">{folder.count}</span>
-          </button>
-        ))}
-        {visibleNotes.map((row) => (
-          <div key={row.id} className="group flex items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-raised" data-memory-note-row={row.id}>
-            {browse?.mayWrite && (
-              <input
-                type="checkbox"
-                checked={selected.has(row.id)}
-                onChange={() => toggleSelect(row.id)}
-                className="mt-1"
-                aria-label={t("memoryManager.selectNote", { title: row.title })}
-              />
-            )}
-            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => void openNote(page.source, row)}>
-              <span className="block truncate text-[13px] font-medium text-ink">{row.title}</span>
-              <span className="block truncate text-[12px] text-ink-secondary">
-                {[row.folder, row.excerpt].filter(Boolean).join(" · ")}
-              </span>
-            </button>
-          </div>
-        ))}
-        {browse && visibleNotes.length === 0 && (
-          <p className="px-2 py-8 text-center text-[12.5px] text-ink-secondary">{t("memoryManager.emptyNotes")}</p>
-        )}
-      </div>
-      {page.source.kind === "perspicax" && (browse?.trashCount ?? 0) > 0 && (
-        <button type="button" className="border-t border-hairline/40 px-3 py-2 text-left text-[12.5px] text-ink-secondary hover:bg-raised" onClick={() => void openTrash(page.source)}>
-          {t("memoryManager.openTrash", { count: browse?.trashCount ?? 0 })}
-        </button>
-      )}
-    </div>
-  );
+      </header>
 
-  const noteBody = page.kind === "note" && note && (
-    <div className="flex min-h-0 flex-1 flex-col" data-memory-note="">
-      <div className="flex items-center gap-2 border-b border-hairline/40 px-3 py-2">
-        {editing ? (
-          <input
-            value={draftTitle}
-            onChange={(event) => setDraftTitle(event.target.value)}
-            className="min-w-0 flex-1 rounded-md border border-border bg-ink/[0.03] px-2 py-1 text-[13px] font-medium text-ink outline-none focus:border-border-strong"
-            aria-label={t("memoryManager.titleField")}
-            data-memory-rename=""
-          />
-        ) : (
-          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">{note.title}</span>
-        )}
-        {note.mayEdit && !editing && (
-          <>
-            {page.source.kind === "perspicax" && (
-              <button
-                type="button"
-                className={PILL}
-                onClick={() => {
-                  setMoveTopic(note.folder || "notes");
-                  setMoveScope(note.scope || "me");
-                  setPage({ kind: "move", source: page.source, noteIds: [note.id] });
-                }}
-              >
-                {t("memoryManager.move")}
+      {(error || notice) && (
+        <div className="shrink-0 border-b border-hairline/40 px-6 py-2">
+          {error && <p role="alert" className="rounded-xl bg-danger/10 px-3 py-2 text-[12.5px] text-danger">{error}</p>}
+          {notice && (
+            <div className="flex items-center gap-2 rounded-xl bg-raised px-3 py-2 text-[12.5px] text-ink" data-memory-notice="">
+              <Check size={14} className="shrink-0 text-success" aria-hidden="true" />
+              <span className="min-w-0 flex-1">{notice.text}</span>
+              {notice.undo && (
+                <button type="button" className="text-accent hover:underline" onClick={() => void notice.undo?.().then(() => setNotice(null))}>
+                  {t("common.undo")}
+                </button>
+              )}
+              <button type="button" aria-label={t("common.close")} onClick={() => setNotice(null)} className="text-ink-tertiary hover:text-ink">
+                <X size={13} />
               </button>
-            )}
-            <button type="button" className={PILL} onClick={() => { setDraftTitle(note.title); setDraftTags(note.tags.join(", ")); setEditing(true); }}>{t("memoryManager.edit")}</button>
-          </>
-        )}
-        {editing && (
-          <>
-            <button type="button" className={PILL} onClick={() => { setEditing(false); setDraft(note.body); setDraftTitle(note.title); setDraftTags(note.tags.join(", ")); }}>{t("common.cancel")}</button>
-            <button type="button" className={PRIMARY_PILL} disabled={busy} onClick={() => void saveNote()}>{t("common.save")}</button>
-          </>
-        )}
-      </div>
-      {(editing || note.tags.length > 0) && (
-        <div className="border-b border-hairline/30 px-3 py-2">
-          {editing && page.source.kind === "perspicax" ? (
-            <label className="block">
-              <span className="mb-1 block text-[11px] font-medium text-ink-secondary">{t("memoryManager.tags")}</span>
-              <input
-                value={draftTags}
-                onChange={(event) => setDraftTags(event.target.value)}
-                placeholder={t("memoryManager.tagsHint")}
-                className="w-full rounded-md border border-border bg-ink/[0.03] px-2 py-1 text-[12.5px] text-ink outline-none focus:border-border-strong"
-                data-memory-tags=""
-              />
-            </label>
-          ) : (
-            <div className="flex flex-wrap gap-1">
-              {note.tags.map((tag) => (
-                <span key={tag} className="rounded-md bg-raised px-1.5 py-0.5 text-[11px] text-ink-secondary">{tag}</span>
-              ))}
             </div>
           )}
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        {editing
-          ? <MarkdownEditor value={draft} onChange={setDraft} minHeight={220} showCount={false} dataField="memory-manager-note" ariaLabel={t("memoryManager.editorLabel")} />
-          : <ReadBody body={note.body} bodyKind={note.bodyKind} />}
+
+      <div className="flex min-h-0 flex-1">
+        <aside className="flex w-[240px] shrink-0 flex-col border-r border-hairline/40 bg-panel/40" data-memory-sources="">
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+            {sources === null && (
+              <div className="flex min-h-[120px] items-center justify-center text-ink-secondary">
+                <Loader2 size={18} className="animate-spin" aria-label={t("memoryManager.loading")} />
+              </div>
+            )}
+            {sources?.map((source) => {
+              const active = activeSource?.id === source.id;
+              return (
+                <button
+                  key={source.id}
+                  type="button"
+                  onClick={() => openBrowse(source)}
+                  className={cn(
+                    "mb-0.5 flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left",
+                    active ? "bg-selected" : "hover:bg-raised",
+                  )}
+                  data-memory-source={source.id}
+                >
+                  {sourceIcon(source.kind)}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-medium text-ink">{source.name}</span>
+                    {source.detail && <span className="block truncate text-[11.5px] text-ink-secondary">{source.detail}</span>}
+                  </span>
+                </button>
+              );
+            })}
+            {sources && sources.length === 0 && (
+              <p className="px-2 py-6 text-center text-[12.5px] text-ink-secondary">{t("memoryManager.emptySources")}</p>
+            )}
+            {pxReason === "link" && (
+              <p className="mt-2 px-2 text-[12px] text-ink-secondary">{t("memoryManager.pxLinkHint")}</p>
+            )}
+            {pxReason === "sign_in" && (
+              <p className="mt-2 px-2 text-[12px] text-ink-secondary">{t("memoryManager.pxSignInHint")}</p>
+            )}
+            {activeSource && browse && browse.folders.length > 0 && (
+              <div className="mt-3 border-t border-hairline/40 pt-3" data-memory-folders="">
+                <p className="mb-1 px-2 text-[11px] font-medium uppercase tracking-wide text-ink-tertiary">{t("memoryManager.folder")}</p>
+                {browse.folders.map((folder) => (
+                  <button
+                    key={folder.id}
+                    type="button"
+                    onClick={() => openBrowse(activeSource, folder.name)}
+                    className={cn(
+                      "mb-0.5 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left",
+                      page.kind === "browse" && page.folder === folder.name ? "bg-selected" : "hover:bg-raised",
+                    )}
+                  >
+                    <Folder size={14} className="text-ink-secondary" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{folder.name}</span>
+                    <span className="text-[11px] tabular-nums text-ink-tertiary">{folder.count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {activeSource?.kind === "perspicax" && (browse?.trashCount ?? 0) > 0 && (
+              <button
+                type="button"
+                className="mt-3 w-full border-t border-hairline/40 px-2.5 py-2 text-left text-[12.5px] text-ink-secondary hover:bg-raised"
+                onClick={() => void openTrash(activeSource)}
+              >
+                {t("memoryManager.openTrash", { count: browse?.trashCount ?? 0 })}
+              </button>
+            )}
+          </div>
+        </aside>
+
+        <section className="flex min-w-0 flex-1 flex-col">
+          {showMap && mapGraph ? (
+            <MemoryMapCanvas
+              graph={mapGraph}
+              selectedNoteId={page.kind === "note" ? page.noteId : null}
+              onOpenNote={openNoteById}
+            />
+          ) : (
+            <>
+              {activeSource && page.kind !== "create" && page.kind !== "move" && page.kind !== "trash" && (
+                <div className="flex items-center gap-2 border-b border-hairline/40 px-4 py-2">
+                  <Search size={14} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
+                  <input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={t("memoryManager.search")}
+                    className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-tertiary"
+                    data-memory-search=""
+                  />
+                </div>
+              )}
+              {selected.size > 0 && page.kind === "browse" && (
+                <div className="flex items-center gap-2 border-b border-hairline/40 bg-raised/40 px-4 py-2" data-memory-bulk="">
+                  <span className="text-[12px] text-ink-secondary">{t("memoryManager.selected", { count: selected.size })}</span>
+                  {page.source.kind === "perspicax" && (
+                    <button
+                      type="button"
+                      className={PILL}
+                      onClick={() => {
+                        setMoveTopic(page.folder || "notes");
+                        setMoveScope(page.source.scope || "me");
+                        setPage({ kind: "move", source: page.source, noteIds: [...selected] });
+                      }}
+                    >
+                      {t("memoryManager.move")}
+                    </button>
+                  )}
+                  <button type="button" className={cn(DANGER_PILL, "ml-auto")} onClick={() => void deleteSelected()} disabled={busy}>
+                    <Trash2 size={13} aria-hidden="true" /> {t("memoryManager.delete")}
+                  </button>
+                </div>
+              )}
+
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {!activeSource && (
+                  <p className="px-6 py-16 text-center text-[13px] text-ink-secondary">{t("memoryManager.pickSource")}</p>
+                )}
+                {busy && !browse && activeSource && page.kind === "browse" && (
+                  <div className="flex min-h-[160px] items-center justify-center text-ink-secondary">
+                    <Loader2 size={18} className="animate-spin" />
+                  </div>
+                )}
+                {page.kind === "browse" && browse && (
+                  <div className="px-3 py-2" data-memory-browse="">
+                    {visibleNotes.map((row) => (
+                      <div key={row.id} className="group flex items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-raised" data-memory-note-row={row.id}>
+                        {browse.mayWrite && (
+                          <input
+                            type="checkbox"
+                            checked={selected.has(row.id)}
+                            onChange={() => toggleSelect(row.id)}
+                            className="mt-1"
+                            aria-label={t("memoryManager.selectNote", { title: row.title })}
+                          />
+                        )}
+                        <button type="button" className="min-w-0 flex-1 text-left" onClick={() => void openNote(page.source, row)}>
+                          <span className="block truncate text-[13px] font-medium text-ink">{row.title}</span>
+                          <span className="block truncate text-[12px] text-ink-secondary">
+                            {[row.folder, row.excerpt].filter(Boolean).join(" · ")}
+                          </span>
+                        </button>
+                      </div>
+                    ))}
+                    {visibleNotes.length === 0 && (
+                      <p className="px-2 py-8 text-center text-[12.5px] text-ink-secondary">{t("memoryManager.emptyNotes")}</p>
+                    )}
+                  </div>
+                )}
+
+                {page.kind === "note" && note && (
+                  <div className="flex min-h-0 flex-1 flex-col" data-memory-note="">
+                    <div className="flex items-center gap-2 border-b border-hairline/40 px-4 py-2">
+                      {editing ? (
+                        <input
+                          value={draftTitle}
+                          onChange={(event) => setDraftTitle(event.target.value)}
+                          className="min-w-0 flex-1 rounded-md border border-border bg-ink/[0.03] px-2 py-1 text-[13px] font-medium text-ink outline-none focus:border-border-strong"
+                          aria-label={t("memoryManager.titleField")}
+                          data-memory-rename=""
+                        />
+                      ) : (
+                        <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink">{note.title}</span>
+                      )}
+                      {note.mayEdit && !editing && (
+                        <>
+                          {page.source.kind === "perspicax" && (
+                            <button
+                              type="button"
+                              className={PILL}
+                              onClick={() => {
+                                setMoveTopic(note.folder || "notes");
+                                setMoveScope(note.scope || "me");
+                                setPage({ kind: "move", source: page.source, noteIds: [note.id] });
+                              }}
+                            >
+                              {t("memoryManager.move")}
+                            </button>
+                          )}
+                          <button type="button" className={PILL} onClick={() => { setDraftTitle(note.title); setDraftTags(note.tags.join(", ")); setEditing(true); }}>{t("memoryManager.edit")}</button>
+                        </>
+                      )}
+                      {editing && (
+                        <>
+                          <button type="button" className={PILL} onClick={() => { setEditing(false); setDraft(note.body); setDraftTitle(note.title); setDraftTags(note.tags.join(", ")); }}>{t("common.cancel")}</button>
+                          <button type="button" className={PRIMARY_PILL} disabled={busy} onClick={() => void saveNote()}>{t("common.save")}</button>
+                        </>
+                      )}
+                    </div>
+                    {(editing || note.tags.length > 0) && (
+                      <div className="border-b border-hairline/30 px-4 py-2">
+                        {editing && page.source.kind === "perspicax" ? (
+                          <label className="block">
+                            <span className="mb-1 block text-[11px] font-medium text-ink-secondary">{t("memoryManager.tags")}</span>
+                            <input
+                              value={draftTags}
+                              onChange={(event) => setDraftTags(event.target.value)}
+                              placeholder={t("memoryManager.tagsHint")}
+                              className="w-full rounded-md border border-border bg-ink/[0.03] px-2 py-1 text-[12.5px] text-ink outline-none focus:border-border-strong"
+                              data-memory-tags=""
+                            />
+                          </label>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {note.tags.map((tag) => (
+                              <span key={tag} className="rounded-md bg-raised px-1.5 py-0.5 text-[11px] text-ink-secondary">{tag}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+                      {editing
+                        ? <MarkdownEditor value={draft} onChange={setDraft} minHeight={280} showCount={false} dataField="memory-manager-note" ariaLabel={t("memoryManager.editorLabel")} />
+                        : <ReadBody body={note.body} bodyKind={note.bodyKind} />}
+                    </div>
+                  </div>
+                )}
+
+                {page.kind === "create" && (
+                  <div className="flex flex-col gap-3 px-6 py-6" data-memory-create="">
+                    <label className="block">
+                      <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.titleField")}</span>
+                      <input
+                        value={createTitle}
+                        onChange={(event) => setCreateTitle(event.target.value)}
+                        className="w-full max-w-md rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-border-strong"
+                        data-initial-focus=""
+                      />
+                    </label>
+                    <button type="button" className={cn(PRIMARY_PILL, "self-start")} disabled={busy || !createTitle.trim()} onClick={() => void createNote()}>
+                      {t("memoryManager.create")}
+                    </button>
+                  </div>
+                )}
+
+                {page.kind === "move" && (
+                  <div className="flex flex-col gap-3 px-6 py-6" data-memory-move="">
+                    <p className="text-[12.5px] text-ink-secondary">{t("memoryManager.moveHint", { count: page.noteIds.length })}</p>
+                    <label className="block max-w-md">
+                      <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.folder")}</span>
+                      <input
+                        value={moveTopic}
+                        onChange={(event) => setMoveTopic(event.target.value)}
+                        className="w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-border-strong"
+                        data-memory-move-folder=""
+                      />
+                    </label>
+                    <label className="block max-w-md">
+                      <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.tier")}</span>
+                      <select
+                        value={moveScope}
+                        onChange={(event) => setMoveScope(event.target.value)}
+                        className="w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-border-strong"
+                        data-memory-move-tier=""
+                      >
+                        <option value="me">{t("memoryManager.tierMe")}</option>
+                        <option value="org">{t("memoryManager.tierOrg")}</option>
+                      </select>
+                    </label>
+                    <button type="button" className={cn(PRIMARY_PILL, "self-start")} disabled={busy || !moveTopic.trim()} onClick={() => void runMove()}>
+                      {t("memoryManager.moveConfirm")}
+                    </button>
+                  </div>
+                )}
+
+                {page.kind === "trash" && (
+                  <div className="px-3 py-2" data-memory-trash="">
+                    {trashRows.map((row) => (
+                      <div key={`${row.scope}:${row.id}`} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+                        <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{row.title}</span>
+                        {row.may_manage !== false && (
+                          <button
+                            type="button"
+                            className={PILL}
+                            onClick={() => void pxMemory("/bulk", {
+                              method: "POST",
+                              body: JSON.stringify({ action: "restore", items: [{ scope: row.scope, id: row.id }] }),
+                            }).then(() => openTrash(page.source))}
+                          >
+                            {t("memoryManager.restore")}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {trashRows.length === 0 && (
+                      <p className="px-2 py-8 text-center text-[12.5px] text-ink-secondary">{t("memoryManager.trashEmpty")}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </section>
       </div>
-    </div>
-  );
-
-  const moveBody = page.kind === "move" && (
-    <div className="flex flex-col gap-3 px-4 py-4" data-memory-move="">
-      <p className="text-[12.5px] text-ink-secondary">{t("memoryManager.moveHint", { count: page.noteIds.length })}</p>
-      <label className="block">
-        <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.folder")}</span>
-        <input
-          value={moveTopic}
-          onChange={(event) => setMoveTopic(event.target.value)}
-          className="w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-border-strong"
-          data-memory-move-folder=""
-        />
-      </label>
-      <label className="block">
-        <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.tier")}</span>
-        <select
-          value={moveScope}
-          onChange={(event) => setMoveScope(event.target.value)}
-          className="w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-border-strong"
-          data-memory-move-tier=""
-        >
-          <option value="me">{t("memoryManager.tierMe")}</option>
-          <option value="org">{t("memoryManager.tierOrg")}</option>
-        </select>
-      </label>
-      <button type="button" className={cn(PRIMARY_PILL, "self-end")} disabled={busy || !moveTopic.trim()} onClick={() => void runMove()}>
-        {t("memoryManager.moveConfirm")}
-      </button>
-    </div>
-  );
-
-  const createBody = page.kind === "create" && (
-    <div className="flex flex-col gap-3 px-4 py-4" data-memory-create="">
-      <label className="block">
-        <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.titleField")}</span>
-        <input
-          value={createTitle}
-          onChange={(event) => setCreateTitle(event.target.value)}
-          className="w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-border-strong"
-          data-initial-focus=""
-        />
-      </label>
-      <button type="button" className={cn(PRIMARY_PILL, "self-end")} disabled={busy || !createTitle.trim()} onClick={() => void createNote()}>
-        {t("memoryManager.create")}
-      </button>
-    </div>
-  );
-
-  const trashBody = page.kind === "trash" && (
-    <div className="px-2 py-2" data-memory-trash="">
-      {trashRows.map((row) => (
-        <div key={`${row.scope}:${row.id}`} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
-          <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{row.title}</span>
-          {row.may_manage !== false && (
-            <button
-              type="button"
-              className={PILL}
-              onClick={() => void pxMemory("/bulk", {
-                method: "POST",
-                body: JSON.stringify({ action: "restore", items: [{ scope: row.scope, id: row.id }] }),
-              }).then(() => openTrash(page.source))}
-            >
-              {t("memoryManager.restore")}
-            </button>
-          )}
-        </div>
-      ))}
-      {trashRows.length === 0 && (
-        <p className="px-2 py-8 text-center text-[12.5px] text-ink-secondary">{t("memoryManager.trashEmpty")}</p>
-      )}
-    </div>
-  );
-
-  const body = (
-    <>
-      {error && <p role="alert" className="mx-3 mt-2 rounded-xl bg-danger/10 px-3 py-2 text-[12.5px] text-danger">{error}</p>}
-      {notice && (
-        <div className="mx-3 mt-2 flex items-center gap-2 rounded-xl bg-raised px-3 py-2 text-[12.5px] text-ink" data-memory-notice="">
-          <Check size={14} className="shrink-0 text-success" aria-hidden="true" />
-          <span className="min-w-0 flex-1">{notice.text}</span>
-          {notice.undo && (
-            <button type="button" className="text-accent hover:underline" onClick={() => void notice.undo?.().then(() => setNotice(null))}>
-              {t("common.undo")}
-            </button>
-          )}
-          <button type="button" aria-label={t("common.close")} onClick={() => setNotice(null)} className="text-ink-tertiary hover:text-ink">
-            <X size={13} />
-          </button>
-        </div>
-      )}
-      {page.kind === "sources" && sourcesBody}
-      {browseBody}
-      {noteBody}
-      {createBody}
-      {moveBody}
-      {trashBody}
-    </>
-  );
-
-  if (page.kind === "sources") {
-    return (
-      <DetailPanel
-        label={t("memoryManager.title")}
-        title={
-          <span className="flex min-w-0 items-center gap-1.5">
-            <Brain size={16} className="shrink-0 text-ink-secondary" aria-hidden="true" />
-            <span className="truncate">{t("memoryManager.title")}</span>
-          </span>
-        }
-        onClose={close}
-        closeLabel={t("memoryManager.close")}
-        data-memory-manager-panel=""
-        bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
-      >
-        {body}
-      </DetailPanel>
-    );
-  }
-
-  return (
-    <DetailPanel
-      label={title}
-      bare
-      onClose={close}
-      closeLabel={t("memoryManager.close")}
-      data-memory-manager-panel=""
-      bodyClassName="relative flex min-h-0 flex-1 flex-col overflow-hidden p-0"
-    >
-      <PanelPage name={title} onBack={back} onClose={close} bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
-        {body}
-      </PanelPage>
-    </DetailPanel>
+    </main>
   );
 }

@@ -244,6 +244,7 @@ export type StartTurnHost = {
   markUnattended: any,
   markWorkspaceUse: any,
   mcpCallTimeoutMinutes: any,
+  routineApprovalWaitMs?: any,
   mcpServersAsPerson: any,
   measureContextBuckets: any,
   memoryPromptFor: any,

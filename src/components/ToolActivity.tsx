@@ -138,7 +138,7 @@ export function ToolStepDetail({ tool, status }: { tool: Tool; status: string })
               {args.map((pair) => (
                 <div key={pair.key} className="contents">
                   <dt className="font-mono text-[11.5px] text-ink-tertiary">{pair.key}</dt>
-                  <dd className="min-w-0 break-words text-ink">{pair.value}</dd>
+                  <dd className="min-w-0 break-words text-ink" title={pair.full}>{pair.value}</dd>
                 </div>
               ))}
             </dl>

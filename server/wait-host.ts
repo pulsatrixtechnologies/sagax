@@ -1,7 +1,7 @@
 import type { Notification } from "../shared/notification.ts";
 import type { RoutineRunOn } from "../shared/routines.ts";
 import { buildNotification } from "./notify.ts";
-import type { RoutineRun } from "./routines.ts";
+import type { RoutineRun } from "./routines/routines.ts";
 import { createWaitRoutes, type WaitRouteContext } from "./routes/waits.ts";
 import type { BotRecord, Store } from "./store.ts";
 import { WaitManager, type WaitManagerOptions } from "./waits.ts";

@@ -128,6 +128,16 @@ describe("Settings search after the move", () => {
       expect(sectionMatches(section("account"), query), query).toBe(false);
     }
   });
+  it("finds About on its own App entry, not on Updates", () => {
+    for (const query of ["about", "à propos", "license", "licence", "github", "documentation"]) {
+      expect(sectionMatches(section("about"), query), query).toBe(true);
+      expect(sectionMatches(section("updates"), query), query).toBe(false);
+    }
+    // "about me" stays on Account; license and github do not
+    for (const query of ["license", "licence", "github", "documentation"]) {
+      expect(sectionMatches(section("account"), query), query).toBe(false);
+    }
+  });
   it("finds the rows General holds now", () => {
     for (const query of ["theme", "thème", "dark", "sombre", "variante"]) {
       expect(sectionMatches(section("appearance"), query), query).toBe(true);

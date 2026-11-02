@@ -181,7 +181,7 @@ waking it. Dispatch repeats the check so a removed key or unavailable Boat fails
 the run before model execution. Explicit Cloud still permits creating/waking
 the bot’s own Boat; a missing assigned team computer requires explicit repair.
 
-Run `pnpm exec vitest run server/routine-requests.test.ts server/openai-boat.e2e.test.ts`
+Run `pnpm exec vitest run server/routines/routine-requests.test.ts server/openai-boat.e2e.test.ts`
 for target selection and the isolated direct/group/scheduled bridge fixture,
 including credentials removed after scheduling and a Boat outage at dispatch.
 The fixture also holds the Boat readiness response: the execution stays busy,

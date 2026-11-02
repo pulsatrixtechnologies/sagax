@@ -6,13 +6,15 @@
 // One target (the same bot twice) stays the plain line.
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Box, ChevronDown } from "lucide-react";
-import type { Bot } from "@/state/store";
+import { api, type Bot, type Message } from "@/state/store";
+import type { ExchangeRun } from "@/lib/bot-exchange";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { mausInk, type MausColor } from "@/lib/mascot";
-import { gotoAgents, gotoEntryView, type GotoGroup, type GotoTarget } from "@/lib/goto-lines";
+import { gotoAgents, gotoEntryView, gotoNamedCounts, type GotoGroup, type GotoTarget } from "@/lib/goto-lines";
 import { BotAvatar } from "./Avatar";
 import { BotExchangeChip, ExchangeSheet, avatarBot } from "./BotExchangeChip";
+import { BotConversationLine, creditedLines } from "./BotConversations";
 import { ConversationLink } from "./ConversationLink";
 import { useMenuMotion } from "./MenuMotion";
 
@@ -50,6 +52,16 @@ function SingleLine({
         showToolCalls={showToolCalls}
         forceOpen={forceOpen}
         onGo={() => onSelect(target)}
+      />
+    );
+  }
+  if (target.kind === "conversation") {
+    return (
+      <BotConversationLine
+        self={target.self}
+        row={target.row}
+        bots={owners.bots}
+        showToolCalls={showToolCalls}
       />
     );
   }
@@ -93,6 +105,9 @@ export function GotoGroupChip({
   const [open, setOpen] = useState(false);
   const motion = useMenuMotion(open);
   const [sheetKey, setSheetKey] = useState<string | null>(null);
+  const [conversationKey, setConversationKey] = useState<string | null>(null);
+  const [conversationRun, setConversationRun] = useState<ExchangeRun | null>(null);
+  const [conversationError, setConversationError] = useState(false);
   const [held, setHeld] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -128,6 +143,19 @@ export function GotoGroupChip({
   }
 
   const count = group.targets.length;
+  const named = gotoNamedCounts(entries);
+  // Per-bot counts when one bot appears more than once ("3 conversations
+  // with Katarina, 1 with Ember"); otherwise the faces + "N agents" line.
+  const namedSummary = named.some((entry) => entry.count > 1)
+    ? named
+        .map((entry, index) =>
+          t(index === 0 ? "chat.gotoGroup.namedLead" : "chat.gotoGroup.namedMore", {
+            count: entry.count,
+            name: entry.name,
+          }),
+        )
+        .join(", ")
+    : "";
   const agentsLabel = agents.length === 1 ? t("chat.gotoGroup.agentsOne") : t("chat.gotoGroup.agents", { count: agents.length });
   const shownSheet = sheetKey ?? (forcedKey && !held ? forcedKey : null);
   const sheetTarget = group.targets.find((target) => target.key === shownSheet && target.kind === "exchange");
@@ -136,13 +164,32 @@ export function GotoGroupChip({
     setOpen(false);
     if (refocus) triggerRef.current?.focus();
   };
+  const openConversation = (target: Extract<GotoTarget, { kind: "conversation" }>) => {
+    setConversationKey(target.key);
+    const other = avatarBot({ id: target.row.otherBotId, name: target.row.otherName }, bots);
+    void api<{ messages?: Message[] }>(`/api/threads/${target.row.threadId}/messages?limit=200`)
+      .then((page) => ({ messages: page.messages ?? [], failed: false }))
+      .catch(() => ({ messages: [] as Message[], failed: true }))
+      .then(({ messages, failed }) => {
+        const otherParty = { id: target.row.otherBotId, name: target.row.otherName, color: other.color };
+        setConversationError(failed);
+        setConversationRun({
+          id: `conversation:${target.row.threadId}`,
+          messages: creditedLines(messages, target.self, otherParty, target.row.direction),
+          party: otherParty,
+          ends: [{ id: target.self.id, name: target.self.name, color: target.self.color }, otherParty],
+        });
+      });
+  };
   const pick = (target: GotoTarget) => {
     setOpen(false);
     if (onSelect(target)) return;
     if (target.kind === "exchange") {
       setHeld(false);
       setSheetKey(target.key);
+      return;
     }
+    if (target.kind === "conversation") openConversation(target);
   };
   const onMenuKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const items = itemRefs.current.filter((item): item is HTMLButtonElement => Boolean(item));
@@ -171,7 +218,7 @@ export function GotoGroupChip({
           data-testid="goto-group-chip"
           aria-haspopup="menu"
           aria-expanded={open}
-          aria-label={t("chat.gotoGroup.aria", { count, agents: agentsLabel })}
+          aria-label={namedSummary ? t("chat.gotoGroup.summaryAria", { summary: namedSummary }) : t("chat.gotoGroup.aria", { count, agents: agentsLabel })}
           onClick={() => setOpen((value) => !value)}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown" && !open) {
@@ -184,17 +231,32 @@ export function GotoGroupChip({
             open && "bg-raised",
           )}
         >
-          <span>{agents.length ? t("chat.gotoGroup.with", { count }) : t("chat.gotoGroup.count", { count })}</span>
-          {agents.length > 0 && (
+          {namedSummary ? (
             <>
               <span className="flex items-center -space-x-1.5" aria-hidden="true">
-                {agents.slice(0, MAX_FACES).map((agent) => (
-                  <span key={agent.key} className="inline-flex rounded-full ring-2 ring-app">
+                {named.slice(0, MAX_FACES).map((agent) => (
+                  <span key={agent.name} className="inline-flex rounded-full ring-2 ring-app">
                     <BotAvatar bot={faceOf(agent.bot, bots) as Bot} state="happy" size={16} animated={false} />
                   </span>
                 ))}
               </span>
-              <span className="font-medium text-ink">{agentsLabel}</span>
+              <span>{namedSummary}</span>
+            </>
+          ) : (
+            <>
+              <span>{agents.length ? t("chat.gotoGroup.with", { count }) : t("chat.gotoGroup.count", { count })}</span>
+              {agents.length > 0 && (
+                <>
+                  <span className="flex items-center -space-x-1.5" aria-hidden="true">
+                    {agents.slice(0, MAX_FACES).map((agent) => (
+                      <span key={agent.key} className="inline-flex rounded-full ring-2 ring-app">
+                        <BotAvatar bot={faceOf(agent.bot, bots) as Bot} state="happy" size={16} animated={false} />
+                      </span>
+                    ))}
+                  </span>
+                  <span className="font-medium text-ink">{agentsLabel}</span>
+                </>
+              )}
             </>
           )}
           <ChevronDown size={12} aria-hidden="true" className={cn("transition-transform", open && "rotate-180")} />
@@ -250,6 +312,22 @@ export function GotoGroupChip({
           onClose={() => {
             setSheetKey(null);
             setHeld(true);
+          }}
+        />
+      )}
+      {conversationRun && (
+        <ExchangeSheet
+          run={conversationRun}
+          bots={bots}
+          showToolCalls={showToolCalls}
+          loadError={conversationError}
+          onRetry={() => {
+            const target = group.targets.find((entry) => entry.kind === "conversation" && entry.key === conversationKey);
+            if (target?.kind === "conversation") openConversation(target);
+          }}
+          onClose={() => {
+            setConversationRun(null);
+            setConversationKey(null);
           }}
         />
       )}

@@ -18,7 +18,7 @@ The first command needs no Electron, keychain, network or user data. Each test
 makes its own temporary folder and removes it. Admin is a fake `fetch` (or a
 fake `fetchBytes`) answering with the shapes of contract §5 and Admin's
 desktop library routes (catalog, release files and report); the runtime is a fake utility process that
-acknowledges every relay at once, as `server/org-library.ts` must. Release
+acknowledges every relay at once, as `server/org/org-library.ts` must. Release
 bytes are the committed `shared/package-fixtures/*.v2.json` files.
 
 It checks:
@@ -124,4 +124,4 @@ the OS keychain behind `company-library.bin`, a real utility process, or a
 real Admin. The cross-repository test in Admin (contract §7.4, after the
 runtime pin moves) drives this module against a real Admin fixture. The
 runtime's handling of `openmausbot:managed-library` and its
-`managed-library-state` snapshots belongs to `server/org-library.ts`.
+`managed-library-state` snapshots belongs to `server/org/org-library.ts`.

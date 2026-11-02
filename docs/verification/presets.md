@@ -106,7 +106,7 @@ headless-renderer run with `SAGAX_UI_E2E=1`), `server/team-share.e2e.test.ts`,
 `server/index.test.ts`, `server/request-auth.test.ts`,
 `server/new-bot-defaults.test.ts`, `server/new-bot-defaults.e2e.test.ts`,
 `server/bot-setup.e2e.test.ts`, `src/state/bot-creation.test.ts`,
-`server/org-library.test.ts`, `server/org-library.e2e.test.ts`,
+`server/org/org-library.test.ts`, `server/org/org-library.e2e.test.ts`,
 `src/lib/org-library.test.ts` and the Share team, organization library and
 New bot headless-renderer recipes passed; the presets
 headless recipe passed six runs in a row after its sidebar clicks learned to
@@ -128,7 +128,7 @@ library add skipping its presets; `state.json` leaving an install's
 
 ## 2026-09-24: review fixes (PR #1773)
 
-`server/org-library.test.ts` now wires the preset store into both the
+`server/org/org-library.test.ts` now wires the preset store into both the
 importer and the organization library, as `server/index.ts` does, so its
 existing re-add and lost-`state.json` tests run with presets. Added: a
 removed team is added again although a bot was made from its preset (one
@@ -157,7 +157,7 @@ state in memory) instead of a separate read of `org-library/state.json`, and
 an organization preset's skills get the skill-state stamp (§3.2) marked
 `via: "preset"`, which the library never counts toward the install.
 
-Added or changed: `server/org-library.test.ts` drives `GET /api/bot-presets`
+Added or changed: `server/org/org-library.test.ts` drives `GET /api/bot-presets`
 through the route module wired to `installStatuses()` while the file on disk
 disagrees both ways (a rebuild not yet written says "removed", an Add not yet
 written says "installed", the file deleted, then signed out); the preset-made
@@ -172,7 +172,7 @@ preset's skill has none. `server/presets.e2e.test.ts` writes a withdrawn
 
 Run on macOS (arm64) against disposable fixtures only: `pnpm typecheck`,
 `pnpm lint`, `pnpm i18n:check`, `server/presets.test.ts`,
-`server/org-library.test.ts`, `server/org-library.e2e.test.ts`,
+`server/org/org-library.test.ts`, `server/org/org-library.e2e.test.ts`,
 `server/routes/bot-presets.test.ts`, `server/package-import.test.ts`,
 `server/package-export.test.ts`, `server/presets.e2e.test.ts`,
 `server/team-share.e2e.test.ts`, `scripts/testing/verification-docs.test.ts`

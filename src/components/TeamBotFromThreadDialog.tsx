@@ -16,20 +16,16 @@
 //    bot's Sharing opens (grants through Perspicax); on this computer alone,
 //    the new bot opens. The app adds no multi-person view of its own.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, Loader2, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
+import { Check, Loader2, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
 
 import { activeLocale, t } from "@/lib/i18n";
-import { isBackShortcut } from "@/lib/back-shortcut";
-import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { cn } from "@/lib/cn";
 import { mcpServersForBot, useMcpServers } from "@/lib/mcp-servers";
 import { closeTeamBotFromThread, setTeamBotSources, useTeamBotFromThreadRequest, type TeamBotFromThreadRequest } from "@/lib/teambot-from-thread";
 import { viewerCanCreateBots } from "@/lib/viewer";
 import { api, useStore, type Bot } from "@/state/store";
 import { readableError } from "@/lib/plain-error";
-import { useCaptionChrome } from "./DesktopCapabilities";
-import { PageTopStrip } from "./content-page";
-import { PILL, PRIMARY_PILL } from "./SettingsPrimitives";
+import { DialogFrame, DialogLayer, PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 
 export interface TeamBotDraft { name: string; title: string; description: string; instructions: string; source: "model" | "excerpt" }
 interface DraftAnswer { draft: TeamBotDraft }
@@ -88,8 +84,7 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
   const { state, dispatch } = useStore();
   const source = state.bots.find((bot) => bot.id === request.botId);
   const { servers } = useMcpServers();
-  const { dragProps, noDragStyle, padClass } = useCaptionChrome();
-  const rootRef = useRef<HTMLElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [plugins, setPlugins] = useState<SourcePlugin[] | null>(null);
   const [form, setForm] = useState<TeamBotDraft | null>(null);
   const [choices, setChoices] = useState(() => initialCarryChoices({ plugins: [], connectors: [] }));
@@ -129,9 +124,7 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
   }, [connectors]);
 
   useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    rootRef.current?.focus({ preventScroll: true });
-    return () => { if (opener?.isConnected) opener.focus(); };
+    dialogRef.current?.focus();
   }, []);
 
   const toggle = (key: "plugins" | "connectors", value: string) => setChoices((current) => {
@@ -228,51 +221,36 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
   const busy = stage === "creating";
   const canCreate = viewerCanCreateBots(state.config);
 
-  // Full-height content panel without backdrop. App may later mount this in
-  // the main frame; the host still reacts to the module request.
   return (
-    <main
-      ref={rootRef}
-      tabIndex={-1}
-      data-teambot-from-thread=""
-      aria-labelledby="teambot-thread-title"
-      className="fixed inset-0 z-50 flex h-full min-w-0 flex-1 flex-col bg-app outline-none"
-      onKeyDown={(event) => {
-        if (event.defaultPrevented || busy) return;
-        if (event.key === "Escape" || isBackShortcut(event)) {
-          event.preventDefault();
-          event.stopPropagation();
-          onClose();
-        }
-      }}
-    >
-      <PageTopStrip />
-      <header
-        {...dragProps}
-        className={cn("content-topbar relative flex h-12 shrink-0 items-center gap-2 border-b border-hairline/50 px-3", padClass)}
+    <DialogLayer onBackdropMouseDown={() => { if (!busy) onClose(); }}>
+      <DialogFrame
+        titleId="teambot-thread-title"
+        title={<span className="flex items-center gap-2"><UsersRound size={17} aria-hidden="true" />{t("teamBotFromThread.title")}</span>}
+        subtitle={t("teamBotFromThread.intro", { title: request.title || t("teamBotFromThread.untitled") })}
+        width="lg"
+        closeLabel={t("common.cancel")}
+        onClose={onClose}
+        closeDisabled={busy}
+        frameRef={dialogRef}
+        frameProps={{ "data-teambot-from-thread": "" }}
+        footer={stage === "done" ? (
+          <>
+            <button type="button" onClick={onClose} className={PILL}>{t("teamShare.done")}</button>
+            <button type="button" data-teambot-publish onClick={publish} className={PRIMARY_PILL}>
+              {organization ? t("teamBotFromThread.publish") : t("teamBotFromThread.open")}
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" disabled={busy} onClick={onClose} className={PILL}>{t("common.cancel")}</button>
+            <button type="button" data-teambot-create disabled={busy || stage !== "ready" || !form?.name.trim() || !canCreate} onClick={() => void create()}
+              className={cn(PRIMARY_PILL, "gap-2 disabled:opacity-40")}>
+              {busy && <Loader2 size={14} className="animate-spin" />}
+              {busy ? t("teamBotFromThread.creating") : t("teamBotFromThread.create")}
+            </button>
+          </>
+        )}
       >
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={busy}
-          aria-label={t("breadcrumb.back")}
-          title={t("breadcrumb.back")}
-          data-teambot-back=""
-          style={noDragStyle}
-          className={cn(CIRCLE_BUTTON, "disabled:opacity-40")}
-        >
-          <ChevronLeft size={18} strokeWidth={1.75} />
-        </button>
-        <div className="min-w-0 flex-1" style={noDragStyle}>
-          <h1 id="teambot-thread-title" className="flex items-center gap-2 truncate text-[15px] font-medium leading-6 text-ink">
-            <UsersRound size={16} aria-hidden="true" className="shrink-0 text-ink-secondary" />
-            {t("teamBotFromThread.title")}
-          </h1>
-          <p className="truncate text-[12px] leading-4 text-ink-secondary">{t("teamBotFromThread.intro", { title: request.title || t("teamBotFromThread.untitled") })}</p>
-        </div>
-      </header>
-
-      <div className="mx-auto min-h-0 w-full max-w-xl flex-1 overflow-y-auto px-4 py-4 sm:px-6">
         {!canCreate && <p role="alert" className="rounded-lg bg-warning/10 px-3 py-2 text-[12.5px] text-warning">{t("teamBotFromThread.cannotCreate")}</p>}
         {stage === "done" && created ? (
           <div data-teambot-created>
@@ -340,29 +318,9 @@ function TeamBotFromThreadDialog({ request, onClose }: { request: TeamBotFromThr
             </p>
           </fieldset>
         )}
-      </div>
-
-      {error && <p role="alert" className="mx-4 mb-2 rounded-lg bg-danger/10 px-3 py-2 text-[12.5px] text-danger sm:mx-6">{error}</p>}
-      <footer className="flex shrink-0 justify-end gap-2 border-t border-hairline/35 px-4 py-3 sm:px-6">
-        {stage === "done" ? (
-          <>
-            <button type="button" onClick={onClose} className={PILL}>{t("teamShare.done")}</button>
-            <button type="button" data-teambot-publish onClick={publish} className={PRIMARY_PILL}>
-              {organization ? t("teamBotFromThread.publish") : t("teamBotFromThread.open")}
-            </button>
-          </>
-        ) : (
-          <>
-            <button type="button" disabled={busy} onClick={onClose} className={PILL}>{t("common.cancel")}</button>
-            <button type="button" data-teambot-create disabled={busy || stage !== "ready" || !form?.name.trim() || !canCreate} onClick={() => void create()}
-              className={cn(PRIMARY_PILL, "gap-2 disabled:opacity-40")}>
-              {busy && <Loader2 size={14} className="animate-spin" />}
-              {busy ? t("teamBotFromThread.creating") : t("teamBotFromThread.create")}
-            </button>
-          </>
-        )}
-      </footer>
-    </main>
+        {error && <p role="alert" className="mt-3 rounded-lg bg-danger/10 px-3 py-2 text-[12.5px] text-danger">{error}</p>}
+      </DialogFrame>
+    </DialogLayer>
   );
 }
 

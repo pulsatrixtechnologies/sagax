@@ -924,7 +924,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     { id: "host-tools", label: "Host tools", text: withholdHostToolsFor(instance) ? WITHHELD_HOST_TOOLS_PROMPT : "" },
     { id: "docs", label: "Documents index", text: docsIndexPrompt(bot.id, { tools: integrations.agents ? "agents" : workspace ? "files" : "none" }) },
     // The group's shared memory: every bot of the group reads it here; only
-    // explicit group_memory_update writes reach it (server/group-memory.ts).
+    // explicit group_memory_update writes reach it (server/memory/group-memory.ts).
     { id: "group-memory", label: "Group memory", text: (() => {
       const block = groupMemorySystemPrompt(readyGroup, { writes: Boolean(integrations.agents) && groupMemoryWritable(readyGroup, bot.id) });
       return block ? `\n${block}` : "";

@@ -7,7 +7,7 @@ import {
   TEAM_MEMORY_KINDS,
   type TeamMemoryEntry,
   type TeamMemoryKind,
-} from "../team-memory.ts";
+} from "../memory/team-memory.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export function teamMemoryWriteRefusal(auth: RequestAuth, method: string): string | null {

@@ -94,7 +94,7 @@ internal routes in `server/index.ts`:
 | `workspace_search` | full-text search over `docs/` | same FTS index as memory (`message-db.ts`, `memory_files`); `session_search` and automatic recall keep to memory files, `workspace_search` to `docs/` |
 
 Every change through these tools, the editor or the bot's own file tools lands in the memory
-journal (`server/memory-journal.ts`) and can be reverted from Memory's history, exactly like a
+journal (`server/memory/memory-journal.ts`) and can be reverted from Memory's history, exactly like a
 memory edit.
 
 ## The Files category

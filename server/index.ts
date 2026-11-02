@@ -4,7 +4,7 @@
 // First of all, SAGAX_* settings onto the names the code reads (step 1 of
 // the rename, electron/legacy-names.mjs).
 import { isReadOnlyCommand, runCommandOf } from "../shared/read-only-command.ts";
-import { grantRemoteExecApproval, noteRemoteExecRequest, remoteSessionToolCall } from "./remote-session-exec.ts";
+import { grantRemoteExecApproval, noteRemoteExecRequest, remoteSessionToolCall } from "./remote-support/remote-session-exec.ts";
 import "../electron/legacy-env-boot.mjs";
 import { ENVIRONMENT_PATHS, HEALTH_IDENTITY } from "../electron/legacy-names.mjs";
 import { healthzBody, healthzUnreadyBody } from "./healthz.ts";
@@ -231,7 +231,7 @@ import { markDeadThreadChip } from "./dead-thread-chips.ts";
 import { credentialResumeOutcome, credentialIsConfigured, isCredentialTargetId } from "../shared/credential-request.ts";
 import { VAULT_LOGIN_TARGET, ONE_PASSWORD_WAITING } from "../shared/credential-vault.ts";
 import { HOST_COMPUTER_RESOURCE, HOST_CONTROL_NOTICE } from "../shared/host-control.ts";
-import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./credential-vault.ts";
+import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./vault/credential-vault.ts";
 import { cliWalletIssuer } from "./wallet-issuer.ts";
 import { outboundWiring, primaryOutboundDecision, primaryPurchaseCard } from "./outbound-wiring.ts";
 import { followUpNote, OrderFollowUps } from "./order-follow-ups.ts";
@@ -239,7 +239,7 @@ import { OnePassword } from "./onepassword.ts";
 import { createCredentialVaultRoutes, vaultPrincipalFor } from "./routes/credential-vault.ts";
 import { createCredentialVaultInternalRoutes } from "./routes/credential-vault-internal.ts";
 import { createTeamBotVaultRoutes, soloMayManage } from "./routes/team-bot-vault.ts";
-import { withCommandVariables } from "./credential-command-env.ts";
+import { withCommandVariables } from "./vault/credential-command-env.ts";
 
 import { createRoomTurnLevels } from "./room-turn-level.ts";
 import {
@@ -263,7 +263,7 @@ import {
   requireBrowserCleanupAcknowledged,
   type BrowserCleanupRequest,
   type BrowserCleanupWireRequest
-} from "./browser-lifecycle-cleanup.ts";
+} from "./browser/browser-lifecycle-cleanup.ts";
 import * as checkpoints from "./checkpoints.ts";
 import { commandReceipt } from "./commands.ts";
 import {
@@ -420,16 +420,16 @@ import {
 import { prepareSemanticRecall, setSemanticIndex } from "./semantic-recall.ts";
 import { prepareEveryClaudeRetirement, retireEveryClaudeBot } from "./retire-every-claude.ts";
 import { LocalSemanticIndex, semanticIndexFile } from "./semantic-index.ts";
-import { withoutWiderAudience, type MemoryDestination } from "./memory-audience.ts";
+import { withoutWiderAudience, type MemoryDestination } from "./memory/memory-audience.ts";
 import { BriefStore, type BriefAppCall } from "./background-brief.ts";
 import { listBriefApps, readBriefTool } from "./background-brief-apps.ts";
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./background-brief-schedule.ts";
-import { createMemoryUpkeep, upkeepEnabled } from "./memory-upkeep.ts";
-import { CompanyMemoryCache, companyTextForBots } from "./memory-company.ts";
-import { COMPANY_TOPIC } from "./memory-dream.ts";
-import { procedureSignal, recordProcedure } from "./memory-procedures.ts";
-import type { CaptureTurn } from "./memory-capture.ts";
+import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
+import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.ts";
+import { COMPANY_TOPIC } from "./memory/memory-dream.ts";
+import { procedureSignal, recordProcedure } from "./memory/memory-procedures.ts";
+import type { CaptureTurn } from "./memory/memory-capture.ts";
 import { appendAboutMe, commitLearned, planLearned } from "./profile-learned.ts";
 import {
   archivedAgent,
@@ -560,7 +560,7 @@ import {
   markOomVictim,
   MemoryWatch,
   memoryGuardSettings
-} from "./engine-memory-guard.ts";
+} from "./memory/engine-memory-guard.ts";
 import { checkWidgetForTurn, WidgetCheckAttempts, WidgetRenderer } from "./widget-check.ts";
 import { bundledKnowledgeIndex } from "./self-knowledge.ts";
 import { createSelfKnowledgeInternalRoutes } from "./routes/self-knowledge-internal.ts";
@@ -637,7 +637,7 @@ import {
   type PermissionKey
 } from "../shared/permissions.ts";
 import { isMemberBotField } from "../shared/viewer-capabilities.ts";
-import { effectivePermissions, permissionList, type EffectivePermissions } from "./org-permissions.ts";
+import { effectivePermissions, permissionList, type EffectivePermissions } from "./org/org-permissions.ts";
 import { PROVIDER_KEY_KINDS } from "./provider-key-check.ts";
 import { forgetKey, onKeyRejectionChange } from "./key-rejections.ts";
 import { personalCapNotice, setPersonalCapOrganization } from "./personal-spend-cap.ts";
@@ -711,7 +711,7 @@ import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { createAutoApprovalNotes, type ToolAutoApproval } from "./tool-auto-approval.ts";
 import { createEmailDraftRoutes } from "./routes/email-drafts.ts";
 import { createThreadWarmRoutes } from "./routes/thread-warm.ts";
-import { createEmailSendPasses, emailSendCard, sendWithMailer } from "./email-draft-send.ts";
+import { createEmailSendPasses, emailSendCard, sendWithMailer } from "./mail/email-draft-send.ts";
 import {
   EMAIL_SEND_REQUEST_PREFIX,
   emailDraftKey,
@@ -823,7 +823,7 @@ import {
 import type { GroupGoalRunCardData, GroupGoalRunStatus } from "../shared/group-goal-run.ts";
 
 import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
-import { orgWithholdHostTools } from "./org-engine-admission.ts";
+import { orgWithholdHostTools } from "./org/org-engine-admission.ts";
 import { openCodeProviderKeysAllowed, setOpenCodeProviderKeyPolicy } from "./drivers/acp/opencode-go.ts";
 import { getOrCreateChannel, mirrorActivity, mirrorReply, type CommsBus } from "./comms-visibility.ts";
 import { openApprovalCardMessages, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./message-db.ts";
@@ -1101,7 +1101,7 @@ import {
   flushAllMemoryJournals,
   journalMemoryWrite,
   type MemoryJournalEntry
-} from "./memory-journal.ts";
+} from "./memory/memory-journal.ts";
 import {
   readSectionContext,
   readSections,
@@ -1193,7 +1193,6 @@ import { localVmStopReason, recordLocalVmIdleStop } from "./local-vm-stop-reason
 import { LocalVmIdleTimer } from "./local-vm-idle.ts";
 import { LocalVmLease, LocalVmLeasePool } from "./local-vm-lease.ts";
 import { LocalVmSeatPool, type LocalVmSeatHolder } from "./local-vm-seat-pool.ts";
-import { RepeatDetector, callKey } from "./repeat-detector.ts";
 import { TurnReplyRepeats } from "./turn-reply-repeats.ts";
 import { dispatchLoopStop, makeLoopStopSubscriber } from "./loop-detector.ts";
 import {
@@ -1213,15 +1212,15 @@ import {
   savedStepsEnabled
 } from "./saved-steps/saved-steps.ts";
 import { redactSecretsInText } from "./redact.ts";
-import { routineRunCard } from "./routine-run-card.ts";
+import { routineRunCard } from "./routines/routine-run-card.ts";
 
-import { routineReportOutcome, routineRunReportable } from "./routine-report.ts";
+import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import type { HeadlessBot } from "./headless-cli.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
 import * as vps from "./vps-computer.ts";
-import { runAsRefusal, type RunAsChooser, type RunAsPerson } from "./routine-run-as.ts";
-import type { RoutineScopeCaller, RoutineScopeDeps, RoutineScopeFacts } from "./routine-scope.ts";
-import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routine-chat-events.ts";
+import { runAsRefusal, type RunAsChooser, type RunAsPerson } from "./routines/routine-run-as.ts";
+import type { RoutineScopeCaller, RoutineScopeDeps, RoutineScopeFacts } from "./routines/routine-scope.ts";
+import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routines/routine-chat-events.ts";
 import { botReplyQuoteId } from "./reply-to-turn.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
 import {
@@ -1238,14 +1237,14 @@ import {
   type RoutineRunOn,
   type RoutineRunTrigger,
   type RoutineSuspendReason
-} from "./routines.ts";
-import { RoutineConsents, routineRenewMs, type RoutineConsentEnd } from "./org-routine-consent.ts";
+} from "./routines/routines.ts";
+import { RoutineConsents, routineRenewMs, type RoutineConsentEnd } from "./org/org-routine-consent.ts";
 import { CalendarCallManager, type CalendarCall } from "./calendar-calls.ts";
-import { BUILT_IN_BROWSER_SYSTEM_PROMPT, pauseBrowserStream } from "./browser-engine.ts";
-import { BrowserRuntime, browserProfileChangeRefusal, browserRuntimeEnv } from "./browser-runtime.ts";
+import { BUILT_IN_BROWSER_SYSTEM_PROMPT, pauseBrowserStream } from "./browser/browser-engine.ts";
+import { BrowserRuntime, browserProfileChangeRefusal, browserRuntimeEnv } from "./browser/browser-runtime.ts";
 import { browserEgress, sameOwnerBots as sameOwnerBrowserBots } from "./browser/egress/registry.ts";
-import { BrowserLive } from "./browser-live.ts";
-import { BrowserNetworkDebug } from "./browser-network-debug.ts";
+import { BrowserLive } from "./browser/browser-live.ts";
+import { BrowserNetworkDebug } from "./browser/browser-network-debug.ts";
 import {
   agentBrowserFrame,
   agentBrowserIntegration,
@@ -1259,7 +1258,7 @@ import {
   isTemporaryBrowserSession,
   describeBrowserEngine,
   setBrowserViewport
-} from "./browser-engine.ts";
+} from "./browser/browser-engine.ts";
 import { createScreenFrameSource, type ScreenCapture } from "./screen-frame-source.ts";
 import {
   screenFrameHash,
@@ -1267,7 +1266,7 @@ import {
   screenTouchingTool,
   settledFrameIsNews
 } from "./screen-frame-gate.ts";
-import { RoutineRequestService } from "./routine-requests.ts";
+import { RoutineRequestService } from "./routines/routine-requests.ts";
 import { directApply, UNDO_STALE, type DirectApply } from "./direct-apply.ts";
 import { createAgentCard } from "./chat-widgets.ts";
 import { buildBotOverview, type BotOverview } from "./bot-overview.ts";
@@ -1279,9 +1278,9 @@ import type { TeamSetupRequest } from "../shared/team-setup.ts";
 import { profileRevision, profileSnapshot } from "./profile-revision.ts";
 import { flushAllProfileHistory, flushProfileHistory, readHistory, recordProfileChange } from "./profile-versions.ts";
 import { BOT_PACKAGE_MAX_SKILLS, isBotPackage, packageSummary, parsePackageDocument, type PackageDocument } from "./bot-package.ts";
-import { TeamMemory } from "./team-memory.ts";
-import { teamMemoryReviewRefusal } from "./team-memory-review.ts";
-import { teamMemoryCardSettled, teamMemoryLateAnswer } from "./team-memory-cards.ts";
+import { TeamMemory } from "./memory/team-memory.ts";
+import { teamMemoryReviewRefusal } from "./memory/team-memory-review.ts";
+import { teamMemoryCardSettled, teamMemoryLateAnswer } from "./memory/team-memory-cards.ts";
 import {
   isTeamMemorySharing,
   storedTeamMemorySharing,
@@ -1376,7 +1375,7 @@ import {
   writePublishedLibrary
 } from "./presets.ts";
 import { readPublishedTeam, writePublishedTeam } from "./published-teams.ts";
-import { OrgLibrary } from "./org-library.ts";
+import { OrgLibrary } from "./org/org-library.ts";
 import { createTeamBackup, importTeamBackup } from "./team-backup.ts";
 import { shouldMountLocalComputer } from "./local-routing.ts";
 import { autoLocalVmAttachable, type ContainerComputerStatus } from "./container-computer.ts";
@@ -1470,13 +1469,13 @@ import {
   overviewRoutes,
   readBackupStatus,
   selfCheckEngines
-} from "./org-admin-overview.ts";
+} from "./org/org-admin-overview.ts";
 import {
   appendProblem,
   problemReason,
   pruneProblemLog,
   readProblems
-} from "./org-problem-log.ts";
+} from "./org/org-problem-log.ts";
 import { WorkspaceBackupMaintenance } from "./workspace-backup-maintenance.ts";
 import { createWorkspaceBackupRoutes, isWorkspaceBackupRoute, isWorkspaceBackupSessionControl } from "./workspace-backup-http.ts";
 import {
@@ -1503,10 +1502,10 @@ import {
 } from "./engine-transcripts.ts";
 import { createCustomDomainVerifier, customDomainIpv4, normalizeCustomDomain } from "./custom-domain.ts";
 import { allowedScopes, createServerEmailSignIn, parseAllowList } from "./account-signin.ts";
-import { EmailOtpStore } from "./email-otp.ts";
-import { resolveMailSettings } from "./mail-config.ts";
-import { createCaptureMailer, createMailer, type Mailer } from "./mailer.ts";
-import { createMailSettingsRoutes } from "./mail-routes.ts";
+import { EmailOtpStore } from "./mail/email-otp.ts";
+import { resolveMailSettings } from "./mail/mail-config.ts";
+import { createCaptureMailer, createMailer, type Mailer } from "./mail/mailer.ts";
+import { createMailSettingsRoutes } from "./mail/mail-routes.ts";
 import {
   createVoiceModeRoutes,
   resolveVoiceKey,
@@ -1527,22 +1526,22 @@ import {
   orgXaiMediaStatusFor,
   orgXaiRefusal,
   type OrgXaiMedia
-} from "./org-xai-media.ts";
+} from "./org/org-xai-media.ts";
 import { configuredKeyterms, VOICE_KEYTERM_RECENT_MESSAGES, voiceKeyterms } from "./voice-keyterms.ts";
 import { installTerminalFeature } from "./terminal-install.ts";
-import { createRemoteSessionService } from "./remote-sessions.ts";
-import { createRemoteSessionActionsAudit, readRemoteSessionLog } from "./remote-session-actions-audit.ts";
-import { createUnattendedConsentStore } from "./remote-session-consent-store.ts";
-import { createRemoteSessionsAdmin } from "./remote-sessions-admin.ts";
-import { createUnattendedHosts } from "./remote-unattended-hosts.ts";
-import { createRemoteSessionRegistrar } from "./remote-session-register.ts";
-import { handleRemoteSupportCall, recallSupportSession } from "./remote-support-local.ts";
-import { guardRemoteSupportOpen } from "./remote-support-open-guard.ts";
-import { createRemoteSupportWatcher, parseSupportCheck, type SupportWatchTarget } from "./remote-support-watch.ts";
-import { supportFolderOwner, supportOwnersOfId } from "./remote-session-probe.ts";
+import { createRemoteSessionService } from "./remote-support/remote-sessions.ts";
+import { createRemoteSessionActionsAudit, readRemoteSessionLog } from "./remote-support/remote-session-actions-audit.ts";
+import { createUnattendedConsentStore } from "./remote-support/remote-session-consent-store.ts";
+import { createRemoteSessionsAdmin } from "./remote-support/remote-sessions-admin.ts";
+import { createUnattendedHosts } from "./remote-support/remote-unattended-hosts.ts";
+import { createRemoteSessionRegistrar } from "./remote-support/remote-session-register.ts";
+import { handleRemoteSupportCall, recallSupportSession } from "./remote-support/remote-support-local.ts";
+import { guardRemoteSupportOpen } from "./remote-support/remote-support-open-guard.ts";
+import { createRemoteSupportWatcher, parseSupportCheck, type SupportWatchTarget } from "./remote-support/remote-support-watch.ts";
+import { supportFolderOwner, supportOwnersOfId } from "./remote-support/remote-session-probe.ts";
 import { createRemoteSessionInternalRoutes, createRemoteSessionRoutes } from "./routes/remote-sessions.ts";
 import { createRemoteSessionsAdminRoutes } from "./routes/remote-sessions-admin.ts";
-import { createRemoteBotHosts } from "./remote-bot-hosts.ts";
+import { createRemoteBotHosts } from "./remote-support/remote-bot-hosts.ts";
 import { createRemoteBotHostsRoutes } from "./routes/remote-bot-hosts.ts";
 import { createRemoteControlRoutes, isRemoteControlPath } from "./routes/remote-control.ts";
 import { BOT_ACT_ROUTE_HEADER, createRemoteSessionFileRoutes, remoteCallerIsAgent } from "./routes/remote-session-files.ts";
@@ -1647,7 +1646,7 @@ import {
   registerReachProvider
 } from "./turn-reach.ts";
 import { turnConnectorsRecord } from "./turn-connectors.ts";
-import { remoteSessionReach } from "./remote-session-reach.ts";
+import { remoteSessionReach } from "./remote-support/remote-session-reach.ts";
 import {
   commandListAccess,
   createHarnessCommandRoutes,
@@ -1704,7 +1703,7 @@ import {
   PrincipalRegistry,
   type Principal
 } from "./principals.ts";
-import { OrgTeams } from "./org-teams.ts";
+import { OrgTeams } from "./org/org-teams.ts";
 import { compatServers } from "./openai-compat-servers.ts";
 import { createOpenAiCompatServerRoutes } from "./routes/openai-compat-servers.ts";
 import {
@@ -1744,7 +1743,7 @@ import {
 } from "./section-channels.ts";
 import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bot-grants.ts";
 import { createBotPerspicaxRoutes } from "./bot-perspicax.ts";
-import { OrgFlowPlugins, guarded as orgFlowGuarded } from "./org-flow-plugins.ts";
+import { OrgFlowPlugins, guarded as orgFlowGuarded } from "./org/org-flow-plugins.ts";
 import { applyIdentityMigration, principalIdFor, rewritePeopleForAttach } from "./identity-migration.ts";
 import { ThreadStarters } from "./thread-starters.ts";
 import {
@@ -1785,7 +1784,7 @@ import {
   type Viewer
 } from "./bot-visibility.ts";
 import { serviceThreadViewer, serviceViewerClosed } from "./service-viewer.ts";
-import { browserNavigationRefusal } from "./browser-navigation.ts";
+import { browserNavigationRefusal } from "./browser/browser-navigation.ts";
 import { describeBrand, loadBrand } from "./brand.ts";
 import { deliverSseFrame } from "./sse-fanout.ts";
 import {
@@ -1796,7 +1795,7 @@ import {
   assertPhoneSecretRequestMatches,
   phoneSecretOperationId,
   type PhoneSecretContext
-} from "./phone-secret.ts";
+} from "./phone/phone-secret.ts";
 import {
   applyHumanIds,
   canEditHumans,
@@ -1853,7 +1852,7 @@ import {
 import { interBotWaiting } from "./inter-bot-approvals.ts";
 import { interBotConversations } from "./inter-bot-conversations.ts";
 import type { BotHost } from "./turn-route.ts";
-import { signInListWithOpenInvites, type OrgRole } from "./org-directory.ts";
+import { signInListWithOpenInvites, type OrgRole } from "./org/org-directory.ts";
 import { createOwnerAvatarRoute, OwnerIdentityStore, parseOwnerIdentityMessage } from "./owner-identity.ts";
 import {
   configForViewer,
@@ -1930,10 +1929,10 @@ import {
   botmailTaggedPrompt,
   createBotInboundMailRoute,
   senderDomain
-} from "./bot-inbound-mail.ts";
+} from "./mail/bot-inbound-mail.ts";
 import { TELEPHONY_ASSERTION_ACTORS, createBotInboundTelephonyRoute } from "./bot-inbound-telephony.ts";
 import { SmsConversation } from "./sms-conversation.ts";
-import { BotMailAddresses } from "./bot-mail-addresses.ts";
+import { BotMailAddresses } from "./mail/bot-mail-addresses.ts";
 import { createBotPresetRoutes } from "./routes/bot-presets.ts";
 import { createBotCatalogRoutes, memberImportReset } from "./routes/bot-catalog.ts";
 import { createBotZipRoutes } from "./routes/bot-zip.ts";
@@ -1948,8 +1947,8 @@ import {
   writeBotZip,
   type BotZipHost
 } from "./bot-zip.ts";
-import { MEMORY_INDEX, memoryOverview, readMemoryDoc } from "./memory-store.ts";
-import { isExpired as memoryEntryExpired, parseMemoryEntries } from "./memory-entries.ts";
+import { MEMORY_INDEX, memoryOverview, readMemoryDoc } from "./memory/memory-store.ts";
+import { isExpired as memoryEntryExpired, parseMemoryEntries } from "./memory/memory-entries.ts";
 import { createBotLibraryRoutes } from "./routes/bot-library.ts";
 import { createBotSettingsRoutes } from "./routes/bot-settings.ts";
 import { createAutoReviewRuleRoutes } from "./routes/auto-review-rules.ts";
@@ -2077,15 +2076,15 @@ import {
   githubTokenKind
 } from "./github-connect.ts";
 import { SANDBOX_PLUGINS_DIR, syncPluginsToSandbox } from "./sandbox-plugins.ts";
-import { OrgCapabilities, ORG_CAPABILITY_KEY_PREFIX, type OrgCapabilityMount } from "./org-capabilities.ts";
+import { OrgCapabilities, ORG_CAPABILITY_KEY_PREFIX, type OrgCapabilityMount } from "./org/org-capabilities.ts";
 import { createOrgCapabilityRoutes, ORG_CAPABILITIES_CALL, OrgSettingOwnedElsewhere } from "./routes/org-capabilities.ts";
-import { OrgGithubTokens } from "./org-github-tokens.ts";
+import { OrgGithubTokens } from "./org/org-github-tokens.ts";
 import { GithubCredentials, LOCAL_OWNER, ORG_OWNER } from "./github-credentials.ts";
 import { BotCapabilityStore } from "./bot-capability-store.ts";
 import { InstallationCapabilityStore } from "./installation-capability-store.ts";
 import { makeInstallationCapabilityBridge, setInstallationCapabilityBridge } from "./installation-capability-bridge.ts";
 import { discoverBotPluginIds, discoverPersonIds, migrateCapabilitiesStores } from "./capabilities-store-migration.ts";
-import { OrgBotSecrets } from "./org-bot-secrets.ts";
+import { OrgBotSecrets } from "./org/org-bot-secrets.ts";
 import { MarketplaceTokens } from "./marketplace-tokens.ts";
 import { type GithubCredential } from "./github-access.ts";
 import {
@@ -2242,7 +2241,7 @@ import { approvalTypeOf } from "./approval-type.ts";
 import { createMeetingInternalRoutes } from "./routes/meeting-internal.ts";
 // Phone tools (audit row 81): the person's own iPhone, approved on the phone.
 import { createPhoneCardScanRoutes, createPhoneToolInternalRoutes, createPhoneToolRoutes } from "./routes/phone-tools.ts";
-import { cardScanRequester, createPhoneToolBroker, phoneToolTurn } from "./phone-tools.ts";
+import { cardScanRequester, createPhoneToolBroker, phoneToolTurn } from "./phone/phone-tools.ts";
 import { phoneConnectionTransport } from "../shared/phone-transport.ts";
 import { ipcPeer } from "./request-auth.ts";
 import {
@@ -2266,7 +2265,7 @@ import {
   type RoutineWatchDeps,
   type WatchPlace,
   type WatchRoutine
-} from "./routine-watch.ts";
+} from "./routines/routine-watch.ts";
 import { RemoteMcpClient } from "./mcp-http.ts";
 import { createMeetingService, type MeetingService } from "./meetings/meeting-requests.ts";
 import { parseEvalJson } from "./meetings/meet-scripts.ts";
@@ -2291,7 +2290,7 @@ import {
   LocalAwayTracker,
   verdictFromPresence,
   type AwayVerdict
-} from "./routine-away.ts";
+} from "./routines/routine-away.ts";
 import { createPersonLabelRoutes } from "./routes/person-labels.ts";
 import { createMeAvatarRoutes } from "./routes/me-avatar.ts";
 import { createShapeAvatarGenerateInternalRoutes, createShapeAvatarGenerateRoutes } from "./routes/shape-avatar-generate.ts";
@@ -2338,8 +2337,8 @@ import {
 import { NudgeCooldown, nudgeFrameAllowed, recordNudgeLine } from "./nudge.ts";
 import { createUnfinishedTurnGuard, decideUnfinishedTurn, unfinishedTurnPrompt, type UnfinishedKind } from "./unfinished-turn.ts";
 import { findPeopleDm, isPeopleDmParticipant, otherPerson, PEOPLE_DM_THREADS_HEADER, PeopleDmSelections, peopleDmForViewer, peopleDmRouteRefusal, peopleDmThreadUnreadPatch } from "./people-dms.ts";
-import { groupMemoryEnabled, groupMemorySystemPrompt, updateGroupMemory } from "./group-memory.ts";
-import type { OrgRecord } from "./org-record.ts";
+import { groupMemoryEnabled, groupMemorySystemPrompt, updateGroupMemory } from "./memory/group-memory.ts";
+import type { OrgRecord } from "./org/org-record.ts";
 import {
   createOidcLoginRoutes,
   identityConfigFromEnv,
@@ -2353,15 +2352,15 @@ import {
   writesManagedProfile
 } from "./oidc-login.ts";
 import { OidcRelyingParty } from "./oidc-rp.ts";
-import type { BotAttachment, BotFileRoot } from "./org-admin-files.ts";
+import type { BotAttachment, BotFileRoot } from "./org/org-admin-files.ts";
 import { ADMIN_ACTIVITY_CATEGORIES } from "./admin-activity.ts";
 import {
   createOrgMemberRoutes,
   ORG_MEMBER_ASSERTION_ACTORS,
   type MemberPerson,
   type MemberRequest
-} from "./org-member-routes.ts";
-import { createOrgLinkRoutes, DirectoryRefreshScheduler } from "./org-link-routes.ts";
+} from "./org/org-member-routes.ts";
+import { createOrgLinkRoutes, DirectoryRefreshScheduler } from "./org/org-link-routes.ts";
 import { internalAgentApiTool } from "./routes/agent-api-internal.ts";
 import { isInternalVoiceCallEnd } from "./routes/voice-call-internal.ts";
 import {
@@ -2404,7 +2403,7 @@ import {
 import { type PriorityDelivery } from "./priority-wake.ts";
 import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./agent-threads.ts";
 import { MemberLiveText } from "./member-live-text.ts";
-import { computersRoutes, type ComputersDeps } from "./org-admin-computers.ts";
+import { computersRoutes, type ComputersDeps } from "./org/org-admin-computers.ts";
 import {
   createOrgAdminRoutes,
   wireAuditRow,
@@ -2416,7 +2415,7 @@ import {
   type AdminPerson,
   type ApprovalAnswer,
   type OrgAdminViewer
-} from "./org-admin-routes.ts";
+} from "./org/org-admin-routes.ts";
 import { RevocationQueue } from "./idp-revocations.ts";
 import {
   IDP_REFRESH_WAIT_MS,
@@ -2434,10 +2433,10 @@ import {
   inviteMailMessage,
   PUBLIC_INVITE_PATH,
   type OrgState
-} from "./org-routes.ts";
+} from "./org/org-routes.ts";
 import { createDirectGrantRoutes } from "./direct-grants.ts";
 import { directoryIntervalMs, PerspicaxDirectory, type ModelProvider } from "./perspicax-link.ts";
-import { duplicateNote, PerspicaxMemory } from "./perspicax-memory.ts";
+import { duplicateNote, PerspicaxMemory } from "./memory/perspicax-memory.ts";
 import { knownAgentToolName, PERSPICAX_TOOL_NAMES } from "./drivers/agents-catalog.ts";
 import { measureContextBuckets, toolDefinitionBytes } from "./context-buckets.ts";
 import {
@@ -2455,8 +2454,8 @@ import { createPerspicaxToolInternalRoutes } from "./routes/perspicax-tool-inter
 import { createMcpAuditInternalRoutes } from "./routes/mcp-audit-internal.ts";
 import { createRoutineRunInternalRoutes, routineRunNowAllowed } from "./routes/routine-run-internal.ts";
 import { createPerspicaxOrgRoutes, orgDirectoryEntries, type OrgSettings, type PendingAdminApproval } from "./perspicax-org-routes.ts";
-import { createMemorySyncTokenRoute } from "./perspicax-memory-sync-token.ts";
-import { PerspicaxMemoryNotesClient } from "./perspicax-memory-notes.ts";
+import { createMemorySyncTokenRoute } from "./memory/perspicax-memory-sync-token.ts";
+import { PerspicaxMemoryNotesClient } from "./memory/perspicax-memory-notes.ts";
 import { createMeMemoryNotesRoutes } from "./routes/me-memory-notes.ts";
 import { createMemoryManagerRoutes } from "./routes/memory-manager.ts";
 import {
@@ -2478,7 +2477,7 @@ import {
   perspicaxSelfAnswer,
   perspicaxSelfAnswerAt
 } from "./owner-autonomy.ts";
-import { routineOwnerAuthorization } from "./routine-authorization.ts";
+import { routineOwnerAuthorization } from "./routines/routine-authorization.ts";
 import { runPermissionModeMigration } from "./approval-level-migration.ts";
 import {
   MEMBER_AUTO_NOT_ALLOWED,
@@ -2502,35 +2501,35 @@ import {
   parseOrgFullAccessBody,
   threadFollowsFullGrant,
   trustedChannelFullRefusal
-} from "./org-full-access.ts";
+} from "./org/org-full-access.ts";
 import {
   createInterimAttachRoutes,
   INTERIM_WINDOW_DAYS,
   interimWindowUntil,
   windowWithDays
 } from "./interim-attach-routes.ts";
-import { createLinkedSubjectsRoute, createOrgExportRoute } from "./org-export.ts";
-import { createOrgBotForceRoutes } from "./org-bot-force.ts";
+import { createLinkedSubjectsRoute, createOrgExportRoute } from "./org/org-export.ts";
+import { createOrgBotForceRoutes } from "./org/org-bot-force.ts";
 import {
   createOrgPersonConnectionRoutes,
   orgConnectionListing,
   revokeOrgConnections,
   type OrgPersonConnectionsDeps
-} from "./org-person-connections.ts";
-import { peopleRoutes, type EngineVia, type PeopleDeps } from "./org-admin-people.ts";
-import { botsRoutes, type BotsDeps } from "./org-admin-bots.ts";
-import { botLook, botPersona, readBotAvatar } from "./org-admin-look.ts";
-import { ConsoleRefusal } from "./org-admin-console.ts";
-import { routineScheduleLabel } from "./org-admin-schedule.ts";
-import { routinesRoutes, type RoutinesDeps } from "./org-admin-routines.ts";
-import { routineRunsRoutes, type RoutineRunsDeps } from "./org-admin-runs.ts";
+} from "./org/org-person-connections.ts";
+import { peopleRoutes, type EngineVia, type PeopleDeps } from "./org/org-admin-people.ts";
+import { botsRoutes, type BotsDeps } from "./org/org-admin-bots.ts";
+import { botLook, botPersona, readBotAvatar } from "./org/org-admin-look.ts";
+import { ConsoleRefusal } from "./org/org-admin-console.ts";
+import { routineScheduleLabel } from "./org/org-admin-schedule.ts";
+import { routinesRoutes, type RoutinesDeps } from "./org/org-admin-routines.ts";
+import { routineRunsRoutes, type RoutineRunsDeps } from "./org/org-admin-runs.ts";
 import {
   opsRoutes,
   type ConnectionsView,
   type OpsDeps,
   type TestResult
-} from "./org-admin-ops.ts";
-import { createOrgImportRoute } from "./org-import-routes.ts";
+} from "./org/org-admin-ops.ts";
+import { createOrgImportRoute } from "./org/org-import-routes.ts";
 import { sandboxdKeySource } from "./sandboxd-auth.ts";
 import { sandboxBackendFor, sandboxRouteFromEnv } from "./sandbox-route.ts";
 import { sandboxdClient, sandboxdHealth } from "./user-sandbox-client.ts";
@@ -2910,7 +2909,7 @@ let reachMeWhatsApp: ReachWhatsApp | null = null;
 /** Turns another bot's words joined as an aside (tryAsideDelivery): no phone
  * tool for the rest of that turn (review of #960). Cleared when a turn starts. */
 const phoneToolTaintedThreads = new Set<string>();
-// Phone tools (server/phone-tools.ts): a frame tells the person's phones to
+// Phone tools (server/phone/phone-tools.ts): a frame tells the person's phones to
 // fetch, a push wakes a closed app; the audit names the decision, never data.
 const phoneTools = createPhoneToolBroker({
   dataDir: DATA_DIR,
@@ -3378,8 +3377,8 @@ bindConfidentialDecisions((threadId) => deletedConfidentialThreads.has(threadId)
 // save applies to the next decision. It never throws into a turn.
 const decider = createDecider({ config: () => cfg, dataDir: DATA_DIR });
 const customDomainVerifier = createCustomDomainVerifier({ environmentId: ENVIRONMENT_ID });
-// Server-issued sign-in codes (server/email-otp.ts) and the mail that
-// carries them (server/mail-config.ts, server/mailer.ts). Settings are
+// Server-issued sign-in codes (server/mail/email-otp.ts) and the mail that
+// carries them (server/mail/mail-config.ts, server/mail/mailer.ts). Settings are
 // resolved per call so a Settings change or a Docker env bootstrap applies
 // without a restart; the mailer is cached by a hash of the resolved settings
 // so a new transport is not built on every call (and no secret sits around
@@ -5000,7 +4999,7 @@ utilityParentPort?.on("message", event => {
   try { managedPolicy.apply(message.policy); } catch { ok = false; }
   utilityParentPort.postMessage({ type: "openmausbot:managed-desktop-result", requestId, ok });
 });
-// The organization library (server/org-library.ts): Electron relays the
+// The organization library (server/org/org-library.ts): Electron relays the
 // verified catalog; the runtime swaps it and acknowledges at once, then
 // reconciles and reports on its own. A relay that arrives before the library
 // exists waits for it (the acknowledgement does not).
@@ -5106,7 +5105,7 @@ const internalCapabilities = new Map<string, InternalCapability>();
  * reach it. */
 let perspicaxMcp: PerspicaxMcp | null = null;
 /** 2026-10-11: the work rows and duplicate checks sent to Perspicax's
- * organization memory (server/perspicax-memory.ts); null without a link. */
+ * organization memory (server/memory/perspicax-memory.ts); null without a link. */
 let perspicaxMemory: PerspicaxMemory | null = null;
 /** The revocations started by the last revokeAllInternalCapabilities (shutdown waits for them). */
 let perspicaxEnding: Promise<void> = Promise.resolve();
@@ -5467,7 +5466,7 @@ function agentsIntegration(
       SAGAX_AGENT_API: !store.groupByThread(threadId) && store.bot(botId) && agentApiMounted(store.bot(botId)!) ? "1" : "0",
       SAGAX_MEMORY_ENABLED: store.bot(botId)?.memoryEnabled === false ? "0" : "1",
       // A room turn in a group whose shared memory is on gets
-      // group_memory_update (server/group-memory.ts); the route re-checks.
+      // group_memory_update (server/memory/group-memory.ts); the route re-checks.
       SAGAX_GROUP_MEMORY: groupMemoryWritable(store.groupByThread(threadId), botId) ? "1" : "0",
       // The shared-computer tools are advertised only while the workspace
       // gate is on; the routes behind them refuse regardless.
@@ -5501,7 +5500,7 @@ function agentsIntegration(
       // (their own phone, on their bot or one shared with them, 2026-10-28),
       // and a phone of theirs offers tools now. The route re-checks.
       // vault_http_request: this bot may send an API key of the person here
-      // (server/credential-http.ts). The route re-checks every call.
+      // (server/vault/credential-http.ts). The route re-checks every call.
       SAGAX_VAULT_HTTP: vaultHttpMounted(botId, threadId) ? "1" : "0",
       SAGAX_PHONE_TOOLS: (() => {
         const bot = store.bot(botId);
@@ -6364,13 +6363,13 @@ const browserRuntime = new BrowserRuntime({
 });
 const browserLive = new BrowserLive({ runtime: browserRuntime });
 // The person's network debugger of a bot's browser (never the bot's: no tool
-// reaches it, see server/browser-network-debug.ts).
+// reaches it, see server/browser/browser-network-debug.ts).
 const browserNetworkDebug = new BrowserNetworkDebug();
 // Every browser session this server has used, with its launch settings.
 const usedBrowserSessions = new Map<string, { command: string; env: Record<string, string> }>();
 // The agent-browser daemon outlives its MCP transport and this server: the
 // sweep closes this data dir's browsers at boot, once idle, and at shutdown
-// (server/browser-lifecycle-cleanup.ts). A Chrome attached over CDP is the
+// (server/browser/browser-lifecycle-cleanup.ts). A Chrome attached over CDP is the
 // person's own and is never closed.
 const browserSweep = new BrowserSweep({
   // With a Chrome address configured every browser is attached to the person's own Chrome: none is ours to close.
@@ -7178,7 +7177,7 @@ async function stagePendingAttachments(threadId: string, generation: string): Pr
 
 /** Organization server: an engine never gets its own shell, file or fetch
  * tools on the Sagax server (server/drivers/host-tools.ts). An engine that
- * cannot withhold them is refused (409 host_tools, server/org-engine-admission.ts)
+ * cannot withhold them is refused (409 host_tools, server/org/org-engine-admission.ts)
  * rather than let loose in the container. */
 /** An engine in an error a person reads: `provider instance "ghost"` for a
  * readable id, "The selected engine" for an opaque one (no GUID on screen). */
@@ -8666,7 +8665,7 @@ function vaultKeySource(): VaultKeySource {
 }
 const personConnections = new PersonConnections(DATA_DIR, vaultKeySource);
 const personalSkills = new PersonalSkills(DATA_DIR, personConnections);
-// The credential vault (server/credential-vault.ts): each person's logins,
+// The credential vault (server/vault/credential-vault.ts): each person's logins,
 // API keys and notes, encrypted with a key derived from the same vault key
 // (the OS keychain on a desktop, a 0600 key file on a server). Bots fill a
 // login by reference through the browser (fill_credential); they never get
@@ -8790,7 +8789,7 @@ function vaultHttpMounted(botId: string, threadId: string): boolean {
   return Boolean(principalId) && credentialVault.injectable(principalId!, botId, threadId);
 }
 /** 2026-10-26: the API keys the person exposed to this bot's commands
- * (server/credential-command-env.ts), read again for every turn and command. */
+ * (server/vault/credential-command-env.ts), read again for every turn and command. */
 function commandVariablesFor(botId: string, threadId: string, principalId: string | null = vaultPrincipalForThread(threadId)): Record<string, string> {
   return principalId ? credentialVault.commandVariables(principalId, botId, threadId) : {};
 }
@@ -9379,7 +9378,7 @@ const orgFlowPlugins = new OrgFlowPlugins({
   isMember: (principalId) => orgMemberActive(principalId)
 });
 // Capabilities lot 4: the organization's declarations from Perspicax,
-// installed once for the whole installation (server/org-capabilities.ts).
+// installed once for the whole installation (server/org/org-capabilities.ts).
 // Its marketplace copies live apart from the installation's own catalog and
 // are read with no member credential.
 const orgCapabilityMarkets = new PluginMarketplaces({
@@ -15165,7 +15164,7 @@ function privateRowHidden(message: unknown, viewer: ApprovalViewer): boolean {
  * (routineAccessNotifications). */
 function notifyAccess(notification: Notification | null, access: WireAccessCard, routineRunId?: string): void {
   if (!notification) return;
-  // A refused turn, for the console's Overview (server/org-problem-log.ts).
+  // A refused turn, for the console's Overview (server/org/org-problem-log.ts).
   const refusedBot = store.bot(access.botId);
   // a confidential thread's row names nothing of it (server/confidential-threads.ts)
   const refusedConfidential = store.isConfidentialThread(notification.threadId);
@@ -15192,7 +15191,7 @@ function threadStillExists(threadId: string): boolean {
     bot.threadId === threadId || Boolean(bot.tasks?.some((task) => task.threadId === threadId)));
 }
 
-/** A routines line (server/routine-chat-events.ts) as this viewer gets it:
+/** A routines line (server/routines/routine-chat-events.ts) as this viewer gets it:
  * the routines they can see (the Automations page's own rule, the person
  * signed in), or null. A viewer with no person (a service) gets none. */
 function routineToggleForApprovalViewer<T>(message: T, viewer: ApprovalViewer): T | null {
@@ -16387,6 +16386,28 @@ const HIDDEN_APPROVAL_TTL_MS = (() => {
   return Number.isFinite(configured) && configured >= 1_000 ? configured : 15 * 60_000;
 })();
 
+/** 2026-11-02: how long an approval a routine run asks waits for its person
+ * (prod: a routine's approval expired after 15 minutes, the AI-client wait,
+ * before anyone saw it). The engine's own timer and the card's expiry both
+ * use it. SAGAX_ROUTINE_APPROVAL_WAIT_MS overrides it. */
+const ROUTINE_APPROVAL_WAIT_MS = (() => {
+  const configured = Number(process.env.SAGAX_ROUTINE_APPROVAL_WAIT_MS);
+  return Number.isFinite(configured) && configured >= 1_000 ? configured : 2 * 60 * 60_000;
+})();
+
+/** A routine run's own thread (its hidden execution task). */
+function routineRunThread(threadId: string | undefined): boolean {
+  if (!threadId) return false;
+  if (activeRoutineRunForThread(threadId)) return true;
+  const bot = store.botByThread(threadId);
+  return Boolean(bot && store.taskByThread(bot.id, threadId)?.routineRunId);
+}
+
+/** The approval wait a turn gets: a routine run's, else the driver's own. */
+function routineApprovalWaitMs(threadId: string): number | undefined {
+  return routineRunThread(threadId) ? ROUTINE_APPROVAL_WAIT_MS : undefined;
+}
+
 /** Decline an approval nobody answered by its expiresAt: the engine hears a
  * refusal (the action never runs), the card reads Expired, and the audit
  * log says why. Answered, dismissed or already expired cards are left alone. */
@@ -16482,7 +16503,10 @@ function notificationIsInterBotChatter(notification: Notification): boolean {
  * hidden one (#291): never on a phone or a watch, approvals included. */
 function notificationQuietOnPhones(notification: Notification): boolean {
   if (!notification.threadId) return false;
-  if (notificationInHiddenThread(notification.threadId)) return true;
+  // 2026-11-02: a routine run's thread is hidden, but what it asks is the
+  // person's (prod: an approval never reached the phone and expired). Only an
+  // AI client's hidden conversation stays off phones.
+  if (notificationInHiddenThread(notification.threadId) && !routineRunThread(notification.threadId)) return true;
   const bot = store.botByThread(notification.threadId);
   return Boolean(bot && isAgentConversation(store.taskByThread(bot.id, notification.threadId)));
 }
@@ -16521,7 +16545,6 @@ const turnContext = new Map<string, { tokens?: number; window?: number }>();
 // Bounded per active turn. OpenHands uses a bounded recent-event scan for
 // the same class of stuck-loop detection; retaining an unlimited set of
 // unique arguments would let one pathological turn grow the server forever.
-const repeats = new RepeatDetector({ thresholds: [5, 10, 20], maxKeysPerThread: 256 });
 
 // ── stall watchdog ─────────────────────────────────────────────────────
 // ask_bot has a short inline wait budget, while room turns have a separately
@@ -16585,7 +16608,7 @@ const watchdog = new TurnWatchdog({
     cancelDirectTurnDispatch(turn.botId, turn.threadId);
     const stalledVmTarget = localVmThreadTargets.get(turn.threadId);
     revokeInternalCapabilitiesForThread(turn.threadId);
-    repeats.settle(turn.threadId);
+    shellLoopGuard.settle(turn.threadId);
     const bot = botForThread(turn.botId, turn.threadId);
     const routineRun = activeRoutineRunForThread(turn.threadId);
     // The stopped process can never answer the approvals it raised: close
@@ -16724,7 +16747,7 @@ bus.subscribe(makeCapContinuationSubscriber({ store, reportsToRequester,
     coordinator.tick();
   } }));
 
-// Memory journal turn boundary (server/memory-journal.ts). A bot's own
+// Memory journal turn boundary (server/memory/memory-journal.ts). A bot's own
 // file-tool writes to MEMORY.md and memory/ have no hook to tap, so the
 // diff against the baseline taken at dispatch is made when the turn
 // settles — session.exited too, because a turn that died may still have
@@ -16747,7 +16770,7 @@ async function holdBootEngineSlot(threadId: string, label: string, instance: Pro
   watchdog.setWaitingOnComputer(threadId, true);
   try {
     // A container near its memory limit starts no routine engine until
-    // usage falls back (server/engine-memory-guard.ts); a person's own
+    // usage falls back (server/memory/engine-memory-guard.ts); a person's own
     // turn never waits here.
     if (memoryWatch.current() === "critical") console.log(`[memory] routine ${label} waits: memory critical`);
     // A bot that will start its browser also waits for room for it.
@@ -16802,7 +16825,7 @@ bus.subscribe((event: RuntimeEvent) => {
   }
 });
 
-// Memory upkeep (server/memory-upkeep.ts): background capture, About me
+// Memory upkeep (server/memory/memory-upkeep.ts): background capture, About me
 // suggestions and the nightly tidy-up, for bots with the switch on.
 const memoryUpkeep = createMemoryUpkeep({
   bots: () => store.bots,
@@ -17979,7 +18002,7 @@ function continueComputerSelection(threadId: string, generation: string | undefi
 /** The engine that dispatched each live turn. A bot's settings may change
  * mid-turn; an interrupt or steer must reach the engine actually running. */
 const runningTurnEngines = new Map<string, NonNullable<ReturnType<typeof registry.get>>>();
-/** Engine memory guard (server/engine-memory-guard.ts): bounds the finished
+/** Engine memory guard (server/memory/engine-memory-guard.ts): bounds the finished
  * sessions kept warm, closes them under memory pressure, holds routine
  * starts at the critical mark, and makes engines the kernel's OOM victims
  * instead of the server. */
@@ -18000,7 +18023,7 @@ const memoryWatch = new MemoryWatch({
   childOomScoreAdj: memoryGuard.childOomScoreAdj,
   liveEngines: () => runningTurnEngines.size
 });
-// The bots' browsers count too (server/browser-lifecycle-cleanup.ts engineBrowsers).
+// The bots' browsers count too (server/browser/browser-lifecycle-cleanup.ts engineBrowsers).
 memoryWatch.useBrowsers(engineBrowsers({
   threadBrowser: (threadId) => {
     const bot = store.botByThread(threadId);
@@ -18726,7 +18749,7 @@ bus.subscribe((event: RuntimeEvent) => {
       const safetyName = event.mcpTool ?? event.tool;
       const safetyText = [event.mcpTool, event.tool, event.command?.command, event.summary, event.input].filter((part): part is string => typeof part === "string" && part.length > 0).join("\n");
       // The person already allowed this exact email draft on its own card
-      // (server/email-draft-send.ts): the pass is bound to this bot, the
+      // (server/mail/email-draft-send.ts): the pass is bound to this bot, the
       // approved connector, recipients, subject and body, and is used here,
       // once. Only then is the outbound step of the safety review (a draft,
       // then a confirmation) taken as answered; every other check stays.
@@ -18792,7 +18815,7 @@ bus.subscribe((event: RuntimeEvent) => {
       // server of the turn could have spelled (sagax-internal-tools.ts).
       const foreignServers = permission && asker && event.requestId ? foreignMcpServerNames(asker, event.threadId) : [];
       const internalTool = permission && asker && event.requestId ? sagaxInternalTool(event.mcpTool ?? event.tool, foreignServers) : null;
-      // Tailcat (2026-10-22, server/remote-session-exec.ts): a command on a
+      // Tailcat (2026-10-22, server/remote-support/remote-session-exec.ts): a command on a
       // client's computer that does more than read is the person's call every
       // time: a card no level, rule or Always allow answers.
       const remoteInput = typeof event.input === "string" ? event.input : undefined;
@@ -19396,6 +19419,8 @@ bus.subscribe((event: RuntimeEvent) => {
       // its approval still reaches the person, and is declined when nobody
       // answers in time instead of holding the turn forever.
       const hiddenApproval = Boolean(permission && event.requestId && notificationInHiddenThread(event.threadId));
+      // a routine run's card waits as long as the engine does (2 h), not the AI-client 15 minutes
+      const hiddenApprovalTtl = routineApprovalWaitMs(event.threadId) ?? HIDDEN_APPROVAL_TTL_MS;
       // #1905 (2026-11-02): a may-I the model poses through its own question
       // tool ("Should I continue?", "May I contact the verifier?") under
       // Full access is the person's own answer already: the recommended
@@ -19499,7 +19524,7 @@ bus.subscribe((event: RuntimeEvent) => {
               return candidate ? { customRuleCandidate: candidate } : {};
             })()
             : {}),
-          ...(hiddenApproval ? { expiresAt: Date.now() + HIDDEN_APPROVAL_TTL_MS } : {})
+          ...(hiddenApproval ? { expiresAt: Date.now() + hiddenApprovalTtl } : {})
         }
       });
       if (event.requestId) askMessageByRequest.set(`${event.threadId}:${event.requestId}`, message.id);
@@ -19514,7 +19539,7 @@ bus.subscribe((event: RuntimeEvent) => {
       if (hiddenApproval && asker) scheduleApprovalExpiry({
         threadId: event.threadId, requestId: event.requestId!, messageId: message.id,
         instanceId: event.providerInstanceId ?? asker.modelSelection.instanceId, botId: asker.id, botName: asker.name
-      }, HIDDEN_APPROVAL_TTL_MS);
+      }, hiddenApprovalTtl);
       if (command && asker && event.requestId) pendingCommandRules.set(`${event.threadId}:${event.requestId}`, { botId: asker.id, candidate: command });
       // Every card that reaches a human is a decision too: "the provider
       // left this for you, in this mode". `question` marks the cards no
@@ -20371,7 +20396,7 @@ async function routineAdmission(run: RoutineRun, _routine: Routine | undefined):
   if (!routineConsents) return { ok: false, error: "Perspicax is unreachable; this run is skipped" };
   const prepared = await routineConsents.prepare(principalId);
   if (prepared.ok) return { ok: true };
-  // Fix 2: a rate limit keeps the run queued (server/routines.ts retries it).
+  // Fix 2: a rate limit keeps the run queued (server/routines/routines.ts retries it).
   if (prepared.error === "rate_limited") return { ok: false, error: "Perspicax is rate limiting this server; this run is retried", retryAfterMs: prepared.retryAfterMs };
   if (prepared.error === "missing" || prepared.error === "ended") return { ok: false, error: `Perspicax did not issue ${name}'s routine access yet; this run is skipped and the next one tries again` };
   return { ok: false, error: "Perspicax is unreachable; this run is skipped" };
@@ -20448,7 +20473,7 @@ function effectiveRunAs(run: { runAs?: string; botId: string }): string | undefi
   const bot = store.bot(run.botId);
   return bot ? effectiveBotOwner(bot) || undefined : undefined;
 }
-/** The routine modal's run-as chooser (server/routine-run-as.ts): the
+/** The routine modal's run-as chooser (server/routines/routine-run-as.ts): the
  * signed-in person of an organization request, null otherwise. */
 function runAsChooserFor(auth: RequestAuth): RunAsChooser | null {
   if (IDENTITY.kind !== "perspicax" || auth.kind !== "session") return null;
@@ -20599,7 +20624,7 @@ function auditRoutineRunsCleared(auth: RequestAuth, count: number): void {
     actor: IDENTITY.kind === "perspicax" ? orgAuditActor(auth) : decisionActorFor(auth)
   });
 }
-/** The Automations page scope (server/routine-scope.ts, 2026-10-09): who
+/** The Automations page scope (server/routines/routine-scope.ts, 2026-10-09): who
  * the caller is for the scope rules. */
 function routineScopeCaller(auth: RequestAuth, viewerId: string | undefined): RoutineScopeCaller {
   return {
@@ -20838,7 +20863,7 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
     notify(deliverableNotification("incident", bot, threadId, CONFIDENTIAL_INCIDENT_TEXT, { avatarUrl: bot.avatarUrl }));
     return;
   }
-  // The console's Overview and Incidents (server/org-problem-log.ts): every
+  // The console's Overview and Incidents (server/org/org-problem-log.ts): every
   // incident, before the delegation and storm rules below decide who hears.
   const failedCause = input.kind === "failed" ? latestFailedTurnCause(threadId) : null;
   void appendProblem(DATA_DIR, {
@@ -21598,34 +21623,9 @@ function finalizeDelegationWatch(
   return true;
 }
 
-// A bot going in circles — the same call with the same arguments, over and
-// over in one turn — gets a chip at 5, 10 and 20 repeats. Observe and say
-// so; the human has Stop. Keyed on tool + arguments, so a bare tool name
-// (Claude's item.started carries only that) is never counted: five "Bash"
-// may be five different commands. Arguments come from ACP item titles and
-// from every permission ask's summary (the command being approved).
-bus.subscribe((event: RuntimeEvent) => {
-  if (shouldIgnoreProviderEvent(event)) return;
-  if (event.type === "turn.completed" || event.type === "session.exited") return void repeats.settle(event.threadId);
-  let key: string | null = null;
-  if (event.type === "item.started" && event.itemType === "tool") {
-    // a title with more than a bare identifier is a call with arguments
-    // (ACP: "echo hi", "Read src/x.ts"); a bare "Bash" is not countable
-    const title = event.title ?? "";
-    if (/\s|\//.test(title.trim())) key = callKey("tool", title);
-  } else if (event.type === "request.opened" && event.requestType === "permission") key = callKey(event.tool, event.summary);
-  if (!key) return;
-  const { threshold } = repeats.record(event.threadId, key);
-  if (!threshold) return;
-  const [tool, ...rest] = key.split(":");
-  const args = rest.join(":");
-  store.appendMessage(event.threadId, {
-    role: "bot",
-    kind: "activity",
-    tool: { name: `Same call repeated ${threshold}× — ${tool}: ${args.slice(0, 80)}${args.length > 80 ? "…" : ""} — it may be stuck`, ok: false }
-  });
-});
-
+// 2026-11-02: the "Same call repeated" chip is the loop guard's alone
+// (server/host/loop-guard.ts). A second copy here wrote every chip twice and
+// counted an MCP ask by its bare tool name, so different calls read as one.
 // A run going in circles is stopped, not only flagged (server/loop-detector.ts):
 // the same call, the same result, the same error, or a short cycle of calls
 // whose results never change. A direct thread stops through stopDirectThread,
@@ -23549,7 +23549,7 @@ function routineEffectivePostResults(run: Pick<RoutineRun, "routineId" | "proact
 
 /** 2026-10-22 a run works in the background, in its own hidden task.
  * Nothing reaches the person's conversation while it is queued or running,
- * nor when it ends with nothing to report (server/routine-report.ts): no
+ * nor when it ends with nothing to report (server/routines/routine-report.ts): no
  * card, no unread, no sidebar bump; the bot's status shows the work and
  * Automations keeps the whole record. A run that has something for the
  * person (its report, a question or approval waiting on them, an error)
@@ -23780,7 +23780,7 @@ function botRunning(botId: string): boolean {
   return activeGroupTurnForBot(botId) !== null;
 }
 
-/** An organization admin's "Forcer l'arrêt" (server/org-bot-force.ts):
+/** An organization admin's "Forcer l'arrêt" (server/org/org-bot-force.ts):
  * every running turn of the bot stops, in its own threads, its routine run
  * and the room it is speaking in. Cancellation flags flip before any await. */
 async function forceStopBot(botId: string): Promise<void> {
@@ -23825,7 +23825,7 @@ loadDelegationReceipts();
 // SAGAX_DEFAULT_TIME_ZONE, else America/Toronto on a UTC host.
 setRoutineTimeZone(() => botSettings.server().timeZone
   ?? (IDENTITY.kind === "perspicax" ? defaultOrgTimeZone(hostTimeZone(), process.env.SAGAX_DEFAULT_TIME_ZONE) ?? undefined : undefined));
-/** A solo server's person, from their pages' beats (server/routine-away.ts). */
+/** A solo server's person, from their pages' beats (server/routines/routine-away.ts). */
 const localRoutineAway = new LocalAwayTracker();
 /** Whether the person a routine runs as is there now. Presence on an
  * organization server (declared further down; read only once routines tick). */
@@ -23833,7 +23833,7 @@ function routineAwayVerdict(principalId: string | undefined): AwayVerdict {
   if (IDENTITY.kind === "perspicax") return principalId ? verdictFromPresence(presence.view(principalId).state) : "unknown";
   return localRoutineAway.verdict(Date.now());
 }
-/** Routines that run when something changes (2026-10-26, server/routine-watch.ts):
+/** Routines that run when something changes (2026-10-26, server/routines/routine-watch.ts):
  * where a routine's watch reads, and how it calls its read tool. */
 const routineWatchStates = new RoutineWatchStates(join(DATA_DIR, "routine-watch"));
 /** Where the bot of a routine works, reached without waking anything:
@@ -23919,7 +23919,7 @@ function routineWatchPlace(routine: WatchRoutine): WatchPlace {
 /** A read tool for a watch: one of the bot's remote MCP servers (its own
  * sign-in, the tool not switched off), else a Perspicax tool in the name of
  * the person the routine runs as, through their routine delegation. The
- * read-only rule itself is server/routine-watch-tools.ts. */
+ * read-only rule itself is server/routines/routine-watch-tools.ts. */
 async function routineWatchCallTool(routine: WatchRoutine, tool: string, args: Record<string, unknown>, signal: AbortSignal): Promise<ToolAnswer | { error: string }> {
   const bot = store.bot(routine.botId);
   if (!bot) return { error: "The bot of this routine is gone" };
@@ -23998,6 +23998,7 @@ const directChatOf = (botId: string, threadId: string): boolean => {
   return source !== null && !source.group;
 };
 routines = new RoutineManager({
+  botName: (botId) => store.bot(botId)?.name,
   evaluateWatch: (routine, watch) => routineWatchEvaluator(routine, watch),
   forgetWatch: (routineId) => routineWatchStates.forget(routineId),
   languageFor: (routine) => {
@@ -24021,12 +24022,12 @@ routines = new RoutineManager({
     onResumed: (routine: Routine) => routineAudit("routine.resumed", effectiveRunAs(routine), { routine })
   } : {}),
   teammatesContinue: (threadId) => coordinator.awaitsTeammates(threadId),
-  // 2026-11-01: a run ends as its teammates' work did (server/routines.ts settleCompleted).
+  // 2026-11-01: a run ends as its teammates' work did (server/routines/routines.ts settleCompleted).
   handedOutOutcome: (threadId, since) => {
     const outcome = coordinator.handedOutOutcome(threadId, since);
     return outcome && { ...outcome, failed: outcome.failed.map(({ botId, ...rest }) => ({ name: store.bot(botId)?.name ?? "A teammate", ...rest })) };
   },
-  // 2026-11-01: a running run whose turn is gone ends as lost (server/routines.ts endLostTurns).
+  // 2026-11-01: a running run whose turn is gone ends as lost (server/routines/routines.ts endLostTurns).
   // Read lazily at tick time; a value declared later in this module still
   // initializing counts as alive, never as lost.
   turnAlive: (botId, threadId) => {
@@ -24093,7 +24094,7 @@ routines = new RoutineManager({
     return task;
   },
   // 2026-10-19wake the person's server environment before a
-  // scheduled bot run (PREWAKE_LEAD_MS, server/routines.ts), so the run does
+  // scheduled bot run (PREWAKE_LEAD_MS, server/routines/routines.ts), so the run does
   // not spend its first ten minutes on a stopped cluster and give up.
   prewake: (routine) => {
     if (!userSandbox || IDENTITY.kind !== "perspicax" || routine.target !== "bot") return;
@@ -24147,7 +24148,7 @@ routines = new RoutineManager({
     return group && !group.dm ? { threadId: group.threadId } : null;
   },
   // 2026-10-15: "Disabled · 5 routines" in the conversation the change came
-  // from (server/routine-chat-events.ts); each viewer sees their own.
+  // from (server/routines/routine-chat-events.ts); each viewer sees their own.
   onEnabledChanged: (routine, change) => {
     if (!threadStillExists(change.threadId)) return;
     recordRoutineToggle(store, {
@@ -24164,7 +24165,7 @@ routines = new RoutineManager({
     });
   },
   // 2026-10-21 "Created/Updated/Deleted routine · <name>" in the
-  // conversation a bot's routine change came from (server/routine-chat-events.ts).
+  // conversation a bot's routine change came from (server/routines/routine-chat-events.ts).
   onRoutineChanged: (routine, change) => {
     if (!threadStillExists(change.threadId)) return;
     recordRoutineChange(store, {
@@ -24388,7 +24389,7 @@ routines = new RoutineManager({
       ), card);
     }
   },
-  // 2026-10-16: "Only when I'm here" (server/routine-away.ts): the routine's
+  // 2026-10-16: "Only when I'm here" (server/routines/routine-away.ts): the routine's
   // person's presence on an organization server, the page's beat on a solo one.
   presence: (routine) => routineAwayVerdict(effectiveRunAs(routine)),
   onAwaySkipsReported: (routine, skips) => {
@@ -28875,7 +28876,7 @@ function serverEngineAllowedFor(principalId: string, instanceId: string): boolea
 }
 /** 2026-10-16: the organization's xAI key pays for speech (Grok voice) and
  * avatar images only for the people Perspicax gives them to, by the same
- * list (`xaiVoice`, `xaiImage`): server/org-xai-media.ts. Solo: always. */
+ * list (`xaiVoice`, `xaiImage`): server/org/org-xai-media.ts. Solo: always. */
 function orgXaiMediaGiven(media: OrgXaiMedia, principalId: string | null | undefined, ownerPrincipalId?: string | null): boolean {
   return orgXaiKeyAllowed(media, { organization: IDENTITY.kind === "perspicax", principalId, ownerPrincipalId, allowed: serverEngineAllowedFor });
 }
@@ -30497,7 +30498,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       return principalId ? { principalId: principalId.trim().toLowerCase(), botId: capability.botId } : null;
     },
     // status/close: the support folder must name this very owner, checked
-    // before Perspicax is called (server/remote-session-probe.ts). A folder
+    // before Perspicax is called (server/remote-support/remote-session-probe.ts). A folder
     // with no recorded owner (or none at all) is refused to everyone: nobody
     // status- or close- es a session no one is known to own.
     ownsSupportCode: (code, owner) => {
@@ -31160,8 +31161,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
 ];
 ROUTES.push(createHostedSlackRoutes({ bot: (id) => store.bot(id), hostedReady: () => Boolean(workspaceAccess) && hostedAccessEntitled() }));
 // 2026-10-21 (B21 / iOS CO5): the bots' own email addresses, from the
-// Perspicax relay (server/bot-mail-addresses.ts, contract B), and the
-// delivery route (server/bot-inbound-mail.ts, contract A, wired before the
+// Perspicax relay (server/mail/bot-mail-addresses.ts, contract B), and the
+// delivery route (server/mail/bot-inbound-mail.ts, contract A, wired before the
 // session gate with the member API).
 const botMailAddresses = new BotMailAddresses({
   link: () => (IDENTITY.kind === "perspicax" ? perspicaxDirectory : null),
@@ -31977,7 +31978,7 @@ ROUTES.push(createSecurityKeyRoutes({
   })
 }));
 // 2026-10-16: an email draft's Send: an approval card, then the send on Allow
-// (server/routes/email-drafts.ts, server/email-draft-send.ts).
+// (server/routes/email-drafts.ts, server/mail/email-draft-send.ts).
 ROUTES.push(createEmailDraftRoutes({ ask: requestEmailDraftSend, status: emailDraftStatus }));
 ROUTES.push(createThreadWarmRoutes({ warm: threadWarmRequest }));
 /** POST /api/bots/:id/warm (server/routes/thread-warm.ts): same access as a
@@ -33656,7 +33657,7 @@ function groupOwnerCaller(auth: RequestAuth, group: Pick<GroupRecord, "createdBy
   return ownsGroup(group, groupActor(auth));
 }
 // The people of a solo server: its email sign-in list and the invitations
-// that add to it (server/org-routes.ts). A solo server has no organization
+// that add to it (server/org/org-routes.ts). A solo server has no organization
 // (slice 8), so the invitations are issued in the name of this server: the
 // local operator is the owner and the links point at the public address.
 // An organization server never builds these routes (Perspicax owns accounts).
@@ -34396,7 +34397,7 @@ async function settleConfidentialMemoryCard(auth: RequestAuth, threadId: string,
   return { status: 200, body: { ok: true, outcome: "allowed-once" } };
 }
 
-// ── email drafts sent from their card (server/email-draft-send.ts) ──────
+// ── email drafts sent from their card (server/mail/email-draft-send.ts) ──────
 const emailSendPasses = createEmailSendPasses();
 
 /** The bot a thread's email draft speaks for, and whether the caller may ask
@@ -36781,7 +36782,7 @@ function personSheetBotsUseOnly(principalId: string): boolean {
   const sub = person?.subject && person.subject.iss === IDENTITY.issuer ? person.subject.sub : undefined;
   return Boolean(sub) && perspicaxDirectory?.botRights(sub!) === "use";
 }
-/** 2026-10-09: a person's effective permissions (server/org-permissions.ts):
+/** 2026-10-09: a person's effective permissions (server/org/org-permissions.ts):
  * an organization admin holds every key; anyone else the list Perspicax
  * sent (the union over their profiles), else the member defaults, narrowed
  * by their person sheet. `sessionAdmin: false` keeps an admin's chat-only
@@ -38024,7 +38025,7 @@ ROUTES.push(createPresenceRoutes({
   hidden: presenceHiddenFor,
   heartbeat: (principalId, sessionId, beat) => presence.heartbeat(principalId, sessionId, beat)
 }));
-// "Only when I'm here" routines (server/routine-away.ts, routes/routine-away.ts).
+// "Only when I'm here" routines (server/routines/routine-away.ts, routes/routine-away.ts).
 ROUTES.push(createLimitResetRoutes({
   clock: limitReset.clock,
   routines: routines!,
@@ -38396,7 +38397,7 @@ if (IDENTITY.kind === "perspicax") {
   }));
   // 2026-10-14: the desktop's Settings > Memory sets itself up with the
   // person's own memory sync token, asked through the link
-  // (server/perspicax-memory-sync-token.ts). Never logged.
+  // (server/memory/perspicax-memory-sync-token.ts). Never logged.
   ROUTES.push(createMemorySyncTokenRoute({
     issuer,
     linkPost: (path, body, limits) => (perspicaxDirectory
@@ -38543,7 +38544,7 @@ if (IDENTITY.kind !== "perspicax") ROUTES.push(createSoloOrgRoutes({
   }
 }));
 
-// Settings > Email (server/mail-routes.ts): the mail transport of a solo
+// Settings > Email (server/mail/mail-routes.ts): the mail transport of a solo
 // server, admin only. Saved fields go to config.json's `mail` block and win
 // over the SAGAX_MAIL_* environment; an organization server answers 403
 // identity_perspicax (Perspicax sends its mail).
@@ -39072,7 +39073,7 @@ ROUTES.push(createHarnessCommandRoutes({
 
 // Invite links (/join#token=...): public like /api/auth/email/start, and
 // counted against the same per-source lockout as pairing. Security model:
-// server/org-routes.ts `joinInviteRoute`.
+// server/org/org-routes.ts `joinInviteRoute`.
 const publicInvites = createPublicInviteRoutes({
   state: orgState,
   ownerEmail: () => (orgState.org ? principalEmail(orgState.org.ownerUserId) : undefined),
@@ -39285,7 +39286,7 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     // back) is an approval card on the thread; Full access and Approve for
     // me never answer it, only the person (confirmHeldCard).
     askGo: ({ threadId, botId, message }) => confirmHeldCard({ threadId, botId, tool: "perspicax", summary: message }),
-    // remote_support_open / status / close: the session shows in Sagax (server/remote-session-register.ts)
+    // remote_support_open / status / close: the session shows in Sagax (server/remote-support/remote-session-register.ts)
     onRemoteSupport: (call) => {
       const principalId = call.principalId || remoteSessionSpeaker(call.threadId);
       void remoteSessionRegistrar.observe({ ...call, ...(principalId ? { principalId } : {}) }).catch((error) => {
@@ -39491,7 +39492,7 @@ function orgConsolePeople(): Array<{ principalId: string; disabled: boolean }> {
     .map((entry) => ({ principalId: entry.principalId!, disabled: Boolean(entry.disabled) }));
 }
 
-/** The console's Overview (server/org-admin-overview.ts). */
+/** The console's Overview (server/org/org-admin-overview.ts). */
 const orgOverviewDeps = {
   version: releaseVersion,
   startedAt: SERVER_STARTED_AT,
@@ -39545,7 +39546,7 @@ function personEngineAccess(principalId: string): Array<{ id: string; via: Engin
   });
 }
 
-/** The console's People (server/org-admin-people.ts). */
+/** The console's People (server/org/org-admin-people.ts). */
 const orgPeopleDeps: PeopleDeps = {
   permissions: (principalId) => {
     const effective = principalPermissions(principalId);
@@ -39693,7 +39694,7 @@ async function importPackageFor(raw: unknown, ownerPrincipalId: string): Promise
   return { bots: result.bots, warnings: result.skipped.map((skip) => `${skip.part}: ${skip.reason}`) };
 }
 
-/** The console's Bots (server/org-admin-bots.ts). */
+/** The console's Bots (server/org/org-admin-bots.ts). */
 /** 2026-10-16, the console's "Approve for me" bulk action (POST
  * /api/org/admin/bots/bulk, action approvalMode): the bot's default level
  * to Ask or Approve for me, as the bot PATCH sets it. Never Full, Custom or
@@ -40104,7 +40105,7 @@ ROUTES.push(createBotZipRoutes({
   xaiMarketplaceBot: async (slug) => (await xaiMarketplace.bot(slug)).bot
 }));
 
-/** The console's Routines and Approvals (server/org-admin-routines.ts). */
+/** The console's Routines and Approvals (server/org/org-admin-routines.ts). */
 const orgRoutinesDeps: RoutinesDeps = {
   routines: () => routines?.listRoutines() ?? [],
   runs: (from) => routines?.listRuns(from) ?? [],
@@ -40131,7 +40132,7 @@ const orgRoutinesDeps: RoutinesDeps = {
   }
 };
 
-/** The console's routines calendar (server/org-admin-runs.ts): every run
+/** The console's routines calendar (server/org/org-admin-runs.ts): every run
  * in a window, past and planned, with the Automations scope rules. */
 const orgRoutineRunsDeps: RoutineRunsDeps = {
   routines: () => routines?.listRoutines() ?? [],
@@ -40147,7 +40148,7 @@ const orgRoutineRunsDeps: RoutineRunsDeps = {
   next: (schedule, after) => nextOccurrence(schedule, after)
 };
 
-/** The console's Computers (server/org-admin-computers.ts): every
+/** The console's Computers (server/org/org-admin-computers.ts): every
  * person's server environment, and every connected desktop, read only. */
 const orgComputersDeps: ComputersDeps = {
   people: () => orgConsolePeople(),
@@ -40207,7 +40208,7 @@ function orgMcpServers(): Array<{ name: string; transport: "remote" | "stdio"; u
   }).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** The console's Connections, Logs, Incidents and Settings (server/org-admin-ops.ts). */
+/** The console's Connections, Logs, Incidents and Settings (server/org/org-admin-ops.ts). */
 const orgOpsDeps: OpsDeps = {
   connections: async (): Promise<ConnectionsView> => {
     const people = orgPeopleDeps.people().filter((person) => !person.perspicaxDisabled && !person.consoleDisabled);
@@ -40773,7 +40774,7 @@ function insideDataDir(path: string): boolean {
 }
 
 /** The roots of a bot's files for the console's file browser
- * (server/org-admin-files.ts); never a path on the wire. */
+ * (server/org/org-admin-files.ts); never a path on the wire. */
 function orgBotFileRoots(bot: BotRecord): BotFileRoot[] {
   // A confidential thread's folder is never in the console (server/confidential-threads.ts).
   const confidential = new Set(store.tasks(bot.id).filter((task) => task.confidential === true).map((task) => task.threadId));
@@ -40817,7 +40818,7 @@ async function orgBotAttachments(bot: BotRecord): Promise<BotAttachment[]> {
   return out;
 }
 
-/** Slice 7: the console's admin API (server/org-admin-routes.ts), answered
+/** Slice 7: the console's admin API (server/org/org-admin-routes.ts), answered
  * before the auth gate with a console assertion only. */
 const orgAdmin = createOrgAdminRoutes({
   identity: IDENTITY.kind,
@@ -40846,7 +40847,7 @@ const orgAdmin = createOrgAdminRoutes({
   version: releaseVersion,
   engines: orgAdminEngines,
   recordAction: (principalId, entry) => appendAdminAction(DATA_DIR, { ...entry, actor: { kind: "person", principalId, via: "console" } }),
-  // The console routes of 2026-10-08 (server/org-admin-console.ts).
+  // The console routes of 2026-10-08 (server/org/org-admin-console.ts).
   console: [
     ...overviewRoutes(orgOverviewDeps),
     ...peopleRoutes(orgPeopleDeps),
@@ -40882,7 +40883,7 @@ const orgAdmin = createOrgAdminRoutes({
   }
 });
 /** 2026-10-11: Perspicax asks for an immediate directory fetch after a
- * rights change (server/org-link-routes.ts), with the link token only. */
+ * rights change (server/org/org-link-routes.ts), with the link token only. */
 const directoryRefresh = new DirectoryRefreshScheduler(() => perspicaxDirectory?.refresh("perspicax") ?? Promise.resolve());
 const orgLink = createOrgLinkRoutes({
   linked: () => IDENTITY.kind === "perspicax" && perspicaxDirectory !== null,
@@ -40896,7 +40897,7 @@ bus.subscribe((event: RuntimeEvent) => {
   if (shouldIgnoreProviderEvent(event)) return;
   memberLiveText.observe(event);
 });
-/** 2026-10-09 (lot C.1): the member API (server/org-member-routes.ts), for
+/** 2026-10-09 (lot C.1): the member API (server/org/org-member-routes.ts), for
  * an AI client attached to Perspicax acting for one person. Each route is
  * performed as that person through a 60 s session of theirs. */
 async function performAsMember(person: MemberPerson, request: MemberRequest): Promise<{ status: number; body: unknown }> {
@@ -46613,6 +46614,7 @@ const startTurnRunner = createStartTurn({
   mcpCallTimeoutMinutes,
   mcpServersAsPerson,
   measureContextBuckets,
+  routineApprovalWaitMs,
   memoryPromptFor,
   mentionPrompt,
   mentionedBots,

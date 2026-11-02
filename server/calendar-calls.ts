@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { DATA_DIR } from "./config.ts";
-import { nextOccurrence } from "./routines.ts";
+import { nextOccurrence } from "./routines/routines.ts";
 
 export type CalendarCallSchedule =
   | { type: "once"; at: number }

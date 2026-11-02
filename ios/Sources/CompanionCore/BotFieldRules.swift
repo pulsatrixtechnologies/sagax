@@ -83,7 +83,7 @@ public enum BotFieldRules {
 
     /// The keys about a person's own things that every member holds,
     /// whatever Perspicax sends (`MEMBER_ALWAYS_PERMISSIONS`; the server adds
-    /// them to the list in server/org-permissions.ts).
+    /// them to the list in server/org/org-permissions.ts).
     public static let memberAlwaysPermissions: Set<String> = [
         "bots.create", "bots.approvalLevel", "bots.fullAccess", "bots.behaviour", "bots.tools",
         "sharing.grants", "sharing.visibility", "apps.ownIntegrations",

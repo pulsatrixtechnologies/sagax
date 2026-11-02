@@ -217,6 +217,7 @@ export function paletteCommands(context: PaletteContext): PaletteItem[] {
     ["voice", "settings.section.voice", ["voice", "voix", "microphone", "micro", "live calls", "appels en direct"]],
   ];
   if (context.desktop) sections.push(["updates", "settings.updates.title", ["update", "version", "mise à jour", "beta"]]);
+  sections.push(["about", "sidebar.menu.about", ["about", "à propos", "version", "license", "licence", "github"]]);
   for (const [section, labelKey, words] of sections) {
     items.push({
       id: `settings:${section}`,

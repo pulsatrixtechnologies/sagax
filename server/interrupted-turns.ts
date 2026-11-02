@@ -4,7 +4,7 @@
 // (saveInterruptedTurns); the next start resumes each of them once in its
 // own conversation (takeInterruptedTurns, TURN_RESUME_PROMPT). Coordinated
 // teammate work and routine runs have their own restart policies
-// (server/runtime/, server/routines.ts); this file is for the direct turns.
+// (server/runtime/, server/routines/routines.ts); this file is for the direct turns.
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 

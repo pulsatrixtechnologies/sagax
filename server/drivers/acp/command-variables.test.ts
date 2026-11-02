@@ -1,4 +1,4 @@
-// Command variables (server/credential-command-env.ts) in the ACP engines'
+// Command variables (server/vault/credential-command-env.ts) in the ACP engines'
 // own shells: the engine process gets them only when the turn carries them,
 // never under a name an engine bills, and a revoke starts a fresh process.
 import { chmodSync, mkdtempSync, readFileSync } from "node:fs";

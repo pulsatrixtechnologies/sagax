@@ -2,7 +2,7 @@ import { parseBotPackage, type BotPackageDefinition, type BotPackagePlaybook, ty
 import type { DefaultsPreset, PublishedLibrary } from "./presets.ts";
 import type { PublishedTeam } from "./published-teams.ts";
 import { nextPatchRelease } from "./published-teams.ts";
-import type { Routine } from "./routines.ts";
+import type { Routine } from "./routines/routines.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
 import type { BotRecord, GroupRecord, InstalledPlaybook } from "./store.ts";
 import {

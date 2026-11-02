@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Headless screenshots of Tools > Memory (2026-11-02):
- * src/gallery/memory-manager.html, French and English, light and dark.
+ * Headless screenshots of Tools > Memory page (2026-11-02):
+ * src/gallery/memory-manager.html, list and map, light and dark.
+ * Dense map (?dense=1, 40 notes with links) included for layout polish.
  * Headless Chromium only: no window opens.
  * Usage: node scripts/capture-memory-manager.mjs [--out DIR] [--port N]
  */
@@ -14,8 +15,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const arg = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : undefined; };
 const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "memory-manager"));
 const port = Number(arg("--port") ?? 5341);
-const skins = [{ id: "daylight", label: "light" }, { id: "pulsatrix", label: "dark" }];
-const views = ["sources", "browse", "note"];
+const skins = [{ id: "pulsatrix-light", label: "light" }, { id: "pulsatrix", label: "dark" }];
+const shots = [
+  { view: "browse", dense: false, name: "browse" },
+  { view: "map", dense: false, name: "map" },
+  { view: "map", dense: true, name: "map-dense" },
+];
 
 async function waitForServer(url, ms = 120_000) {
   const start = Date.now();
@@ -26,7 +31,8 @@ async function waitForServer(url, ms = 120_000) {
   throw new Error(`gallery did not start at ${url}`);
 }
 
-const vite = spawn("pnpm", ["exec", "vite", "--config", "vite.gallery.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
+const viteBin = join(root, "node_modules", "vite", "bin", "vite.js");
+const vite = spawn(process.execPath, [viteBin, "--config", "vite.gallery.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
   cwd: root, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, NODE_ENV: "development" },
   detached: true,
 });
@@ -40,27 +46,31 @@ try {
   await waitForServer(base);
   const { chromium } = await import(process.env.SAGAX_VERIFY_PLAYWRIGHT || "playwright");
   await mkdir(outDir, { recursive: true });
-  browser = await chromium.launch({ headless: true, ...(process.env.SAGAX_VERIFY_BROWSER_CHROME ? { executablePath: process.env.SAGAX_VERIFY_BROWSER_CHROME } : {}) });
+  const chromePath = process.env.SAGAX_VERIFY_BROWSER_CHROME
+    || (process.platform === "darwin" ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : undefined);
+  browser = await chromium.launch({
+    headless: true,
+    ...(chromePath ? { executablePath: chromePath } : {}),
+  });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
-  for (const lang of ["fr", "en"]) {
-    for (const { id, label } of skins) {
-      for (const view of views) {
-        await page.goto(`${base}?skin=${id}&lang=${lang}&view=${view}`, { waitUntil: "load" });
-        await page.waitForSelector('[data-memory-manager-panel]');
-        await page.waitForSelector('[data-gallery-ready="1"]', { timeout: 15_000 }).catch(() => {});
-        if (view === "note") {
-          await page.waitForSelector("[data-memory-read-body], [data-memory-json-tree]", { timeout: 10_000 });
-          await page.waitForFunction(() => {
-            const text = document.querySelector("[data-memory-note]")?.textContent || "";
-            return /Dining|Prefers|likes/i.test(text);
-          }, { timeout: 10_000 }).catch(() => {});
-        }
-        if (view === "browse") {
-          await page.waitForSelector("[data-memory-browse]", { timeout: 10_000 }).catch(() => {});
-        }
-        await page.waitForTimeout(400);
-        await page.screenshot({ path: join(outDir, `memory-manager-${view}-${lang}-${label}.png`), fullPage: false });
+  for (const { id, label } of skins) {
+    for (const shot of shots) {
+      const query = new URLSearchParams({ skin: id, lang: "en", view: shot.view });
+      if (shot.dense) query.set("dense", "1");
+      await page.goto(`${base}?${query}`, { waitUntil: "load" });
+      await page.waitForSelector("[data-memory-manager-page]");
+      await page.waitForSelector('[data-gallery-ready="1"]', { timeout: 20_000 }).catch(() => {});
+      if (shot.view === "browse") {
+        await page.waitForSelector("[data-memory-browse]", { timeout: 10_000 }).catch(() => {});
       }
+      if (shot.view === "map") {
+        await page.waitForSelector("[data-memory-map]", { timeout: 10_000 }).catch(() => {});
+        if (shot.dense) {
+          await page.waitForSelector('[data-memory-map-node="note"]', { timeout: 15_000 }).catch(() => {});
+        }
+      }
+      await page.waitForTimeout(600);
+      await page.screenshot({ path: join(outDir, `memory-${shot.name}-${label}.png`), fullPage: false });
     }
   }
   console.log(`screenshots in ${outDir}`);

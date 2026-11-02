@@ -10,7 +10,7 @@ import { PILL } from "./SettingsPrimitives";
 export { formatBytes };
 
 /** One request as the server sends it: already redacted (no body, no
- * credential), headers only when asked for. See server/browser-network-debug.ts. */
+ * credential), headers only when asked for. See server/browser/browser-network-debug.ts. */
 export interface NetworkRow {
   id: number;
   method: string;

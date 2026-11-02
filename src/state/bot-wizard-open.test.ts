@@ -40,16 +40,16 @@ describe("the bot creation wizard's screen", () => {
     expect(back.botWizard).toEqual({ botId: "bot-1" });
   });
 
-  it("leaves Connect apps / archived so the wizard fills the main column", () => {
+  it("closes Connect apps overlays when the wizard opens", () => {
     const fromApps = reducer(
       { ...initialState, activeView: "apps" as const, pluginsOpen: true },
       { type: "openBotWizard" },
     );
     expect(fromApps).toMatchObject({ botWizard: { botId: null }, activeView: "chat", pluginsOpen: false });
     const fromArchived = reducer(
-      { ...initialState, activeView: "archived-bots" as const },
+      { ...initialState, archivedBotsOpen: true },
       { type: "openBotWizard", botId: "bot-1" },
     );
-    expect(fromArchived).toMatchObject({ botWizard: { botId: "bot-1" }, activeView: "chat" });
+    expect(fromArchived).toMatchObject({ botWizard: { botId: "bot-1" } });
   });
 });

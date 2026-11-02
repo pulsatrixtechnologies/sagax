@@ -35,7 +35,7 @@ alone cannot provide closed-app delivery.
 | Per-agent off means quiet; empty completions stay quiet; summaries are bounded | `server/notify.test.ts` |
 | Browser click returns the exact bot/task target | `src/lib/notify.test.ts` |
 | Store navigation selects the bot and switches the task | `src/state/store.test.ts` |
-| Routine failure receipt and callback occur once | `server/routines.test.ts` |
+| Routine failure receipt and callback occur once | `server/routines/routines.test.ts` |
 | Real failed routine emits one `routine-failed` notification and no duplicate `done` | `server/notification-wiring.test.ts` |
 | iOS target parsing and detached-task decision | `ios/Tests/CompanionCoreTests/DecodingTests.swift` |
 | Paired-device route policy remains default-deny | `companion/test/routes.test.ts` |

@@ -15,8 +15,8 @@
 // `memory_sign_in_again` (same idea as me-avatar), never 401 on the Sagax
 // session.
 import type { ServerResponse } from "node:http";
-import type { NotesCallResult, NotesMethod, PerspicaxMemoryNotesClient } from "../perspicax-memory-notes.ts";
-import { memoryReadPath } from "../perspicax-memory-notes.ts";
+import type { NotesCallResult, NotesMethod, PerspicaxMemoryNotesClient } from "../memory/perspicax-memory-notes.ts";
+import { memoryReadPath } from "../memory/perspicax-memory-notes.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

@@ -18,7 +18,7 @@ import {
   journalFile,
   journalMemoryWrite,
   resetMemoryJournalState,
-} from "./memory-journal.ts";
+} from "./memory/memory-journal.ts";
 import type { ModelSelection } from "./contracts.ts";
 import * as mdb from "./message-db.ts";
 import { peerAllowKey } from "./peer-approval-key.ts";

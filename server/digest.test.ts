@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildTurnDigest, digestPromptLine, renderDigest, type TurnDigest } from "./digest.ts";
-import type { MemoryJournalEntry } from "./memory-journal.ts";
+import type { MemoryJournalEntry } from "./memory/memory-journal.ts";
 import type { Message } from "./store.ts";
 
 const activity = (name: string, ok: boolean | undefined, summary?: string, turnId = "turn-1"): Message => ({

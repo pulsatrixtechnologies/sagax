@@ -4,7 +4,7 @@ Run the isolated integration recipe:
 
 ```sh
 pnpm exec vitest run server/full-access-workflows.e2e.test.ts
-pnpm exec vitest run server/team-setup-requests.test.ts server/profile-requests.test.ts server/routine-requests.test.ts
+pnpm exec vitest run server/team-setup-requests.test.ts server/profile-requests.test.ts server/routines/routine-requests.test.ts
 pnpm exec electron scripts/smoke-approval-modes.cjs --all-threads-only
 pnpm typecheck
 pnpm lint
@@ -64,7 +64,7 @@ Access through the desktop.
 
 ## Webhook and email routines
 
-`pnpm exec vitest run server/routine-full-approval.e2e.test.ts` starts an
+`pnpm exec vitest run server/routines/routine-full-approval.e2e.test.ts` starts an
 isolated real server, seeds confirmed Full only while its fixture is stopped,
 and relays one fixture email through WebhookManager and RoutineManager. With
 misuse guardrails in enforce, the actual Outlook `outlook__move_message`

@@ -152,7 +152,7 @@ key leaves everyone on `mine`, as before.
 |---|---|---|---|---|
 | `people.labelAnyone` | Change anyone's label | `server/index.ts:21085`, `server/routes/person-labels.ts` `person_label_forbidden` | no | no |
 | `people.activityLog` | Read the admin activity log | route `/api/admin-activity(.csv)` (admin scope, `server/index.ts:33513`); client `src/components/SettingsModal.tsx:1026` | no | no |
-| `people.manage` | Manage other people | `server/org-person-connections.ts:139`, `server/interim-attach-routes.ts:76`, `server/org-bot-force.ts:50`, console routes `people/{principal}/*` | no | **yes** |
+| `people.manage` | Manage other people | `server/org/org-person-connections.ts:139`, `server/interim-attach-routes.ts:76`, `server/org/org-bot-force.ts:50`, console routes `people/{principal}/*` | no | **yes** |
 
 ### usage (1)
 
@@ -229,7 +229,7 @@ permissions.
 
 - `shared/permissions.ts`: the catalogue, `can`, `normalizePermissions`,
   `BOT_FIELD_PERMISSIONS`, `permissionRefusal`, `permissionCatalogue`.
-- `server/org-permissions.ts`: `effectivePermissions` (admin, Perspicax
+- `server/org/org-permissions.ts`: `effectivePermissions` (admin, Perspicax
   list or defaults, person sheet narrowing).
 - `server/perspicax-link.ts`: the directory schema and `permissionsOf`.
 - `server/request-auth.ts`: `PERMISSION_ROUTES` and `routePermission`; the
@@ -245,12 +245,12 @@ permissions.
 ## 7. Tests
 
 - `shared/permissions.test.ts`: catalogue invariants, `can`, normalization.
-- `server/org-permissions.test.ts`: effective permissions.
+- `server/org/org-permissions.test.ts`: effective permissions.
 - `server/request-auth.test.ts`: permission routes and the gate.
 - `server/perspicax-link.test.ts`: the directory field.
-- `server/org-admin-routes.test.ts`, `server/org-admin-console.e2e.test.ts`:
+- `server/org/org-admin-routes.test.ts`, `server/org/org-admin-console.e2e.test.ts`:
   catalogue in capabilities, person permissions.
-- `server/org-permissions.e2e.test.ts` (PM-1 to PM-5): defaults, a route gate
+- `server/org/org-permissions.e2e.test.ts` (PM-1 to PM-5): defaults, a route gate
   (`usage.view`), field gates (`bots.approvalLevel`,
   `folders.botWorkingFolder`), `bots.create` and `sharing.grants`,
   `engines.manage` without `host.shell`, stray keys ignored; member without

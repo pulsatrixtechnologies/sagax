@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { t } from "@/lib/i18n";
 
-/** Consistent with `serverAddressOk` in server/org-record.ts: https for any
+/** Consistent with `serverAddressOk` in server/org/org-record.ts: https for any
  * host, http only for a Tailscale name or a local Docker server. */
 export function orgHostFromInput(value: string): { kind: "server"; url: string } | null {
   const url = value.trim();

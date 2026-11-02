@@ -66,7 +66,7 @@ import { z } from "zod";
 
 import type { NormalizedTriggerEvent } from "../shared/trigger-sources.ts";
 import type { ConsoleAssertion, ConsoleAssertionActor } from "./oidc-rp.ts";
-import { AssertionReplayCache } from "./org-admin-routes.ts";
+import { AssertionReplayCache } from "./org/org-admin-routes.ts";
 import { reachMeSmsReply } from "./reach-me/inbound.ts";
 import { isOwnText } from "./sms-conversation.ts";
 import { maskedCaller, type WebhookReceiveResult } from "./webhooks.ts";

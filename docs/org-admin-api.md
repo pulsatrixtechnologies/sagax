@@ -3,9 +3,9 @@
 The API the Perspicax console reads through its proxy to administer a Sagax
 organization server. Design: Perspicax
 `docs/superpowers/specs/2026-10-08-sagax-admin-console-design.md`, section 5.
-Code: `server/org-admin-routes.ts` (the gate and the first routes),
-`server/org-admin-console.ts` (the route table, paging, refusals) and one
-module per area (`server/org-admin-*.ts`).
+Code: `server/org/org-admin-routes.ts` (the gate and the first routes),
+`server/org/org-admin-console.ts` (the route table, paging, refusals) and one
+module per area (`server/org/org-admin-*.ts`).
 
 ## The gate
 
@@ -174,7 +174,7 @@ backup are server facts.
 - `presence`: Sagax knows online, away and offline; `idle` is always 0.
   Hidden presence counts as offline.
 - `errors`: failed, stalled and unstartable runs, failed routines and refused
-  turns of the last 24 hours (`server/org-problem-log.ts`), grouped by reason
+  turns of the last 24 hours (`server/org/org-problem-log.ts`), grouped by reason
   code. `label` is the readable reason in the assertion's language.
 - `latency`: from the duration each usage row now carries (`durationMs`, the
   turn's start to its settle); an engine whose rows predate it reads null.
@@ -395,7 +395,7 @@ instructions themselves; no message, memory or routine prompt is answered.
 ### A bot's look and persona
 
 `look` is what the bot wears, as the app resolves it
-(`server/org-admin-look.ts`, the rule of `src/components/Avatar.tsx`); the
+(`server/org/org-admin-look.ts`, the rule of `src/components/Avatar.tsx`); the
 console draws the character itself from it.
 
 ```json
@@ -1058,7 +1058,7 @@ no call of a member is ever signed above their own role:
 The transfer, `bots/bulk`, `bots/import` and every other route take no
 grant.
 
-Code: `server/org-admin-computers.ts`. A server environment is the
+Code: `server/org/org-admin-computers.ts`. A server environment is the
 organization's machine for one person (sagax-sandboxd,
 `docs/user-sandbox.md`): an admin acts on it with the calls the person's
 own Computer tab makes. A desktop computer is the person's own (the Sagax
@@ -1171,7 +1171,7 @@ The person is not told; their Computer tab shows the new state.
 Routes Perspicax calls on its own behalf, not for a person: their only
 credential is the link token Perspicax wrote to this server's link file
 (`SAGAX_PERSPICAX_LINK_FILE`, the `link_token` field), never a console
-assertion. Code: `server/org-link-routes.ts`.
+assertion. Code: `server/org/org-link-routes.ts`.
 
 | Method and path | Credential | What |
 |---|---|---|

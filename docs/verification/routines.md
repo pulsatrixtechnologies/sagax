@@ -313,9 +313,9 @@ Who reaches `/api/org/routine-delegation` (GET only, read-only status):
 ```sh
 pnpm exec vitest run server/oidc-rp.test.ts server/idp-token-pacer.test.ts \
   server/idp-revocations.test.ts server/idp-session.test.ts \
-  server/org-routine-consent.test.ts server/routines.test.ts \
+  server/org/org-routine-consent.test.ts server/routines.test.ts \
   server/perspicax-mcp.test.ts server/oidc-login.test.ts \
-  server/perspicax-org-routes.test.ts server/org-routines.e2e.test.ts \
+  server/perspicax-org-routes.test.ts server/org/org-routines.e2e.test.ts \
   server/perspicax-link.test.ts \
   src/pair/PairPage.test.ts src/components/routines/RoutineOwnerName.test.ts
 ```
@@ -332,5 +332,5 @@ pnpm exec vitest run server/oidc-rp.test.ts server/idp-token-pacer.test.ts \
   45, all within 4 minutes.
 - `server/routines.test.ts` ("slice 6"): a rate-limited run retried three
   times with back-off, then skipped without pausing the routine.
-- `server/org-routines.e2e.test.ts`: the gate's 401 and 403 above on a real
+- `server/org/org-routines.e2e.test.ts`: the gate's 401 and 403 above on a real
   server.

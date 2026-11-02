@@ -51,7 +51,7 @@ A preset from an organization release that was withdrawn, or from a team you
 deleted, is no longer offered, and a bot already made from a withdrawn one
 has that release's skills switched off (once; switching them back on is
 yours). Which presets are offered follows the organization library's own
-state (`OrgLibrary.installStatuses()` in `server/org-library.ts`), not a
+state (`OrgLibrary.installStatuses()` in `server/org/org-library.ts`), not a
 separate read of `state.json`, so New bot and the shelf never disagree. With
 no organization there are no installs and nothing is hidden. Adding the same organization package again, for example a
 team you deleted, refreshes its presets in place rather than adding copies. Organization presets are

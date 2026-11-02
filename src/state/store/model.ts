@@ -721,7 +721,7 @@ export interface Bot {
   /** Lowercased user id of the person who created this bot. */
   ownerUserId?: string;
   /** Who confirmed the Full access warning for this bot, once
-   * (server/org-full-access.ts). */
+   * (server/org/org-full-access.ts). */
   fullAccessConsent?: { principalId: string; at: number };
   directGrants?: string[];
   /** Slice 4: grants with levels (user: or team: targets). */

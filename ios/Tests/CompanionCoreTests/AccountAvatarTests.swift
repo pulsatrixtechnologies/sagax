@@ -2,7 +2,7 @@
 // Account): what `GET /api/auth/session` names, how the phone asks its own
 // server for it, and that nothing else becomes a request. Payloads are the
 // shapes server/index.ts answers (sessionPersonFields, computerOwnerFields)
-// and server/org-profile.e2e.test.ts pins.
+// and server/org/org-profile.e2e.test.ts pins.
 import Foundation
 import XCTest
 @testable import CompanionCore

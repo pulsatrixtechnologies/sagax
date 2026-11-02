@@ -931,7 +931,7 @@ export class SessionRegistry {
   }
 
   /** A 60-second session for one person, opened by the member API
-   * (server/org-member-routes.ts) once it verified a Perspicax assertion
+   * (server/org/org-member-routes.ts) once it verified a Perspicax assertion
    * naming them, so the request it performs meets every rule that person
    * meets in Sagax. Like a bot-act copy: memory only, not listed, not
    * renewed, no identity provider grant of its own. Null for scopes this

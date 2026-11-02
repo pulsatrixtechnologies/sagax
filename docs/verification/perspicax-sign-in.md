@@ -219,7 +219,7 @@ by hand.
 ```sh
 pnpm exec vitest run server/perspicax-link.test.ts server/engine-access.test.ts server/direct-grants.test.ts \
   server/principals.test.ts server/oidc-rp.test.ts server/oidc-login.test.ts server/idp-session.test.ts \
-  server/request-auth.test.ts server/channel-visibility.test.ts server/org-sharing.e2e.test.ts \
+  server/request-auth.test.ts server/channel-visibility.test.ts server/org/org-sharing.e2e.test.ts \
   server/oidc-session.e2e.test.ts server/oidc-login.e2e.test.ts server/environment.test.ts server/wire.test.ts \
   src/components/bot-settings
 ```
@@ -239,7 +239,7 @@ and `directoryTeams`, and `setDirectoryStatus(sub, status)`.
   notices (the speaker's, a routine's, a disabled payer's), the
   key_refused card and who sees its detail, and who answers a server
   command of a member's bot.
-- `server/org-sharing.e2e.test.ts` (real server, fake provider, fake Claude
+- `server/org/org-sharing.e2e.test.ts` (real server, fake provider, fake Claude
   CLI with `SAGAX_ANTHROPIC_API_KEY` and `FAKE_CLAUDE_DUMP`): S3-3 the
   directory before and after a sign-in, S3-11 the engines in the
   authenticated health (an admin and a member read them; a session-less
@@ -287,11 +287,11 @@ backstop when the back-channel push cannot arrive, and the engines in
 
 ```sh
 pnpm exec vitest run server/authz.test.ts server/bot-grants.test.ts server/engine-credentials.test.ts \
-  server/section-channels.test.ts server/principal-engine-logins.test.ts server/org-teams.test.ts \
+  server/section-channels.test.ts server/principal-engine-logins.test.ts server/org/org-teams.test.ts \
   server/principals.test.ts server/perspicax-link.test.ts server/oidc-rp.test.ts server/idp-session.test.ts \
   server/engine-access.test.ts server/direct-grants.test.ts server/channel-visibility.test.ts \
   server/request-auth.test.ts server/drivers/claude.test.ts server/drivers/codex.test.ts \
-  server/org-rights.e2e.test.ts server/org-sharing.e2e.test.ts server/oidc-session.e2e.test.ts \
+  server/org/org-rights.e2e.test.ts server/org/org-sharing.e2e.test.ts server/oidc-session.e2e.test.ts \
   server/oidc-login.e2e.test.ts src/components/bot-settings
 pnpm -s i18n:check
 ```
@@ -325,21 +325,21 @@ disabled person).
 - `server/section-channels.test.ts`: migration owner, private records,
   rename and delete kept in step, General refused, sharing with a team,
   readonly, moving bots in and out, the manager anchor on members.
-- `server/org-rights.e2e.test.ts` (real server): S4-1 teams in the session
+- `server/org/org-rights.e2e.test.ts` (real server): S4-1 teams in the session
   and the directory, S4-3 a person and a team grant, the speaker's own key
   answering them (never the owner's, 2026-10-01), S4-5 levels, S4-6 the manager, S4-7 an admin
   without a grant, S4-4 removal through the directory then through a
   refreshed id_token, S4-9 a personal Codex subscription (fake device
   login), S4-10 and S4-11 a section shared with a team and a room with a
   team.
-- Who pays (2026-10-01): `server/org-sharing.e2e.test.ts` (the org key by
+- Who pays (2026-10-01): `server/org/org-sharing.e2e.test.ts` (the org key by
   itself, cleared by an admin then refused with the speaker's card, an
   admin's own login-backed bot refused, the digest's `access`),
-  `server/org-routines.e2e.test.ts` (a routine started or rewritten by a
+  `server/org/org-routines.e2e.test.ts` (a routine started or rewritten by a
   shared user runs on the owner's key, never his own subscription or key;
   refused with the owner's card without credentials and once the owner is
   disabled; usage rows with `access` and `payerPrincipalId`) and
-  `server/org-admin.e2e.test.ts` (the retired switch refused, the usage
+  `server/org/org-admin.e2e.test.ts` (the retired switch refused, the usage
   split with `speaker-key`).
 
 ### Against a real Perspicax (manual)
@@ -378,7 +378,7 @@ regressions.
 | session-less loopback on an organization server, or anyone remote without a session | `{"app":"openmausbot"}` only |
 
 ```sh
-pnpm exec vitest run server/request-auth.test.ts server/org-sharing.e2e.test.ts server/hosted-access.test.ts
+pnpm exec vitest run server/request-auth.test.ts server/org/org-sharing.e2e.test.ts server/hosted-access.test.ts
 ```
 
 By hand on an isolated organization server (port 19092 below):
@@ -393,7 +393,7 @@ lists `engines`.
 ```sh
 pnpm exec vitest run server/perspicax-mcp.test.ts server/perspicax-mcp-bridge.test.ts server/bot-perspicax.test.ts \
   server/perspicax-link.test.ts server/idp-session.test.ts server/oidc-rp.test.ts server/request-auth.test.ts \
-  server/org-mcp.e2e.test.ts server/org-sharing.e2e.test.ts server/oidc-session.e2e.test.ts \
+  server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts server/oidc-session.e2e.test.ts \
   src/components/bot-settings/PerspicaxSection.test.ts
 pnpm -s i18n:check
 ```
@@ -416,7 +416,7 @@ and writes what it saw to `FAKE_CLAUDE_MCP_DUMP`.
   ends.
 - `server/bot-perspicax.test.ts`: `GET` and `PUT /api/bots/:id/perspicax`
   (`available`, `profile_not_held`, `needs_edit`, `unknown_profile`).
-- `server/org-mcp.e2e.test.ts` (real server): the editor offers alice's
+- `server/org/org-mcp.e2e.test.ts` (real server): the editor offers alice's
   profiles, scenario E (bob's turn reaches Perspicax as bob, client
   `pulsa-bot:<server id>`, `client_name` `Pulsa Bot (<bot id>)`, tokens
   revoked after it), T1 (no sign-in or Perspicax token in the engine's argv,
@@ -459,9 +459,9 @@ slice 5 acceptance:
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/org-routine-consent.test.ts server/routines.test.ts server/idp-session.test.ts \
+pnpm exec vitest run server/org/org-routine-consent.test.ts server/routines.test.ts server/idp-session.test.ts \
   server/perspicax-mcp.test.ts server/authz.test.ts server/request-auth.test.ts \
-  server/org-routines.e2e.test.ts server/org-mcp.e2e.test.ts server/org-sharing.e2e.test.ts \
+  server/org/org-routines.e2e.test.ts server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts \
   server/oidc-session.e2e.test.ts server/routine-delegation.e2e.test.ts \
   server/perspicax-link.test.ts server/oidc-login.test.ts \
   src/components/routines/RoutineOwnerName.test.ts
@@ -478,7 +478,7 @@ needs from Perspicax; `tamper.noDelegationExchange` answers like Perspicax up
 to 1.8.13 (`invalid_request`).
 `SAGAX_ROUTINE_RENEW_SECONDS` shortens the renewal window for tests.
 
-- `server/org-routine-consent.test.ts`: one delegation per person (a new
+- `server/org/org-routine-consent.test.ts`: one delegation per person (a new
   one revokes the previous one), the renewal reused for its window and
   refreshed once for concurrent runs, a refusal ending the delegation with
   one notice, a transient failure skipping the run, the refreshed claims
@@ -492,7 +492,7 @@ to 1.8.13 (`invalid_request`).
   Perspicax cannot issue it, nothing for a person who is out, and the daily
   slide while the person uses Sagax. The legacy consent callback's refusals (`routines_subject`, `binding`,
   `routines_session`, 401 without a session) are in
-  `server/oidc-login.test.ts` and `server/org-routines.e2e.test.ts`; the
+  `server/oidc-login.test.ts` and `server/org/org-routines.e2e.test.ts`; the
   solo server's 403 `identity_perspicax` is checked by hand (S6-12). Who gets
   401 and who gets 403 on `/api/org/routine-delegation` (the gate's 403 for a
   session-less local request under service trust, its 401 for an expired or
@@ -507,7 +507,7 @@ to 1.8.13 (`invalid_request`).
   `person_out`), a transient refusal failing without suspending, a new
   delegation resuming from now, and a routine paused for a delegation before
   2026-10-08 resuming from now at load.
-- `server/org-routines.e2e.test.ts` (real server): the delegation issued at
+- `server/org/org-routines.e2e.test.ts` (real server): the delegation issued at
   sign-in with no consent and a read-only route, scenario D (the routine
   runs while alice has no session, on her key and her delegation), renewal
   reused within the window, Perspicax unreachable (skipped, not suspended),
@@ -546,7 +546,7 @@ Walk S6-1 to S6-13 of the slice 6 acceptance:
 ## Slice 7: the Sagax console in Perspicax
 
 Spec sections 5 and 8. Sagax answers the Perspicax console at
-`/api/org/admin/*` (`server/org-admin-routes.ts`), before the auth gate and
+`/api/org/admin/*` (`server/org/org-admin-routes.ts`), before the auth gate and
 before loopback trust: the only credential is a console assertion Perspicax
 signs per proxied request (ES256 with the OIDC key, header typ
 `pulsabot-console+jwt`, `aud` = this server's `SAGAX_PUBLIC_URL` origin,
@@ -557,7 +557,7 @@ without an assertion is 401. Every answer carries `X-Sagax-Admin-Api: 1` and
 `/api/health` lists `capabilities.orgAdminApi: 1` on an organization server.
 
 Bot files (2026-10-08, slice 1 of the Perspicax file browser, read only,
-`server/org-admin-files.ts`): `GET /api/org/admin/files/<bot>/roots`,
+`server/org/org-admin-files.ts`): `GET /api/org/admin/files/<bot>/roots`,
 `list?root&path`, `stat?root&path`, `read?root&path&offset&length` (at most
 128 KiB, `binary` instead of `text` for bytes that are not UTF-8) and
 `download?root&path` (`application/octet-stream`, `Content-Disposition:
@@ -570,16 +570,16 @@ backslash or NUL, at most 1,024 bytes; a link anywhere is 403
 `link_refused`. Each read and download writes `bot.files.read` or
 `bot.files.download` (category `bot`, actor the console person, `after`
 root, path, bytes) to the admin activity log. `/api/health` adds
-`capabilities.orgAdminFiles: 1`. Tests: `server/org-admin-files.test.ts`,
-`server/org-admin.e2e.test.ts` (S7-G).
+`capabilities.orgAdminFiles: 1`. Tests: `server/org/org-admin-files.test.ts`,
+`server/org/org-admin.e2e.test.ts` (S7-G).
 
 ### Automated
 
 ```sh
-pnpm exec vitest run server/oidc-rp.test.ts server/org-admin-routes.test.ts server/org-admin-files.test.ts server/usage-ledger.test.ts \
+pnpm exec vitest run server/oidc-rp.test.ts server/org/org-admin-routes.test.ts server/org/org-admin-files.test.ts server/usage-ledger.test.ts \
   server/admin-activity.test.ts server/bot-grants.test.ts server/section-channels.test.ts \
-  src/lib/open-thread-hash.test.ts server/org-admin.e2e.test.ts \
-  server/org-routines.e2e.test.ts server/org-mcp.e2e.test.ts server/org-sharing.e2e.test.ts \
+  src/lib/open-thread-hash.test.ts server/org/org-admin.e2e.test.ts \
+  server/org/org-routines.e2e.test.ts server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts \
   server/oidc-session.e2e.test.ts server/peer-approval.e2e.test.ts
 pnpm -s typecheck && pnpm -s lint && pnpm -s i18n:check
 ```
@@ -593,7 +593,7 @@ header bent at a time).
   `none`, another key, an unknown kid, another issuer, the subject, the
   `jti` length, the role, the teams, another linked server), one JWKS
   refetch on rotation, and the three tokens never taken for one another.
-- `server/org-admin-routes.test.ts`: the gate (missing, forged, too long,
+- `server/org/org-admin-routes.test.ts`: the gate (missing, forged, too long,
   replayed, unknown and disabled people, solo), 404 and 405, the role per
   route, a manager's reach on bots and usage, approvals oldest first, the
   POST body (`allow` or `deny` only, never `always` or `rememberCommand`),
@@ -607,7 +607,7 @@ header bent at a time).
 - `server/bot-grants.test.ts` and `server/section-channels.test.ts`: one
   audit row per saved change (`grant.set`, `grant.remove`,
   `section.create` ... `section.bot.remove`), none for a refusal.
-- `server/org-admin.e2e.test.ts` (real server): every refusal of the gate
+- `server/org/org-admin.e2e.test.ts` (real server): every refusal of the gate
   (including a loopback request and a session cookie without an assertion,
   a replay, a logout token, another server id), the role gates, bots for an
   admin and a manager (metadata only), usage attributed to principals,
@@ -655,10 +655,10 @@ their own addresses).
 
 ```sh
 pnpm -s vitest run shared/org-import.test.ts server/identity-migration.test.ts \
-  server/org-export.test.ts server/org-import-routes.test.ts server/interim-attach-routes.test.ts \
-  server/principals.test.ts server/org-routes.test.ts server/perspicax-org-routes.test.ts \
-  server/org-import.e2e.test.ts server/org-interim-attach.e2e.test.ts \
-  server/member-identity.e2e.test.ts server/org-identity.e2e.test.ts \
+  server/org/org-export.test.ts server/org/org-import-routes.test.ts server/interim-attach-routes.test.ts \
+  server/principals.test.ts server/org/org-routes.test.ts server/perspicax-org-routes.test.ts \
+  server/org/org-import.e2e.test.ts server/org/org-interim-attach.e2e.test.ts \
+  server/member-identity.e2e.test.ts server/org/org-identity.e2e.test.ts \
   src/lib/org-join.test.ts src/components/OrgImportDialog.test.ts
 node --test electron/org-join.node-test.mjs
 ```

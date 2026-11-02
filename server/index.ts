@@ -636,7 +636,7 @@ import {
   type PermissionKey
 } from "../shared/permissions.ts";
 import { isMemberBotField } from "../shared/viewer-capabilities.ts";
-import { effectivePermissions, permissionList, type EffectivePermissions } from "./org-permissions.ts";
+import { effectivePermissions, permissionList, type EffectivePermissions } from "./org/org-permissions.ts";
 import { PROVIDER_KEY_KINDS } from "./provider-key-check.ts";
 import { forgetKey, onKeyRejectionChange } from "./key-rejections.ts";
 import { personalCapNotice, setPersonalCapOrganization } from "./personal-spend-cap.ts";
@@ -822,7 +822,7 @@ import {
 import type { GroupGoalRunCardData, GroupGoalRunStatus } from "../shared/group-goal-run.ts";
 
 import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
-import { orgWithholdHostTools } from "./org-engine-admission.ts";
+import { orgWithholdHostTools } from "./org/org-engine-admission.ts";
 import { openCodeProviderKeysAllowed, setOpenCodeProviderKeyPolicy } from "./drivers/acp/opencode-go.ts";
 import { getOrCreateChannel, mirrorActivity, mirrorReply, type CommsBus } from "./comms-visibility.ts";
 import { openApprovalCardMessages, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./message-db.ts";
@@ -1236,7 +1236,7 @@ import {
   type RoutineRunTrigger,
   type RoutineSuspendReason
 } from "./routines.ts";
-import { RoutineConsents, routineRenewMs, type RoutineConsentEnd } from "./org-routine-consent.ts";
+import { RoutineConsents, routineRenewMs, type RoutineConsentEnd } from "./org/org-routine-consent.ts";
 import { CalendarCallManager, type CalendarCall } from "./calendar-calls.ts";
 import { BUILT_IN_BROWSER_SYSTEM_PROMPT, pauseBrowserStream } from "./browser-engine.ts";
 import { BrowserRuntime, browserProfileChangeRefusal, browserRuntimeEnv } from "./browser-runtime.ts";
@@ -1373,7 +1373,7 @@ import {
   writePublishedLibrary
 } from "./presets.ts";
 import { readPublishedTeam, writePublishedTeam } from "./published-teams.ts";
-import { OrgLibrary } from "./org-library.ts";
+import { OrgLibrary } from "./org/org-library.ts";
 import { createTeamBackup, importTeamBackup } from "./team-backup.ts";
 import { shouldMountLocalComputer } from "./local-routing.ts";
 import { autoLocalVmAttachable, type ContainerComputerStatus } from "./container-computer.ts";
@@ -1467,13 +1467,13 @@ import {
   overviewRoutes,
   readBackupStatus,
   selfCheckEngines
-} from "./org-admin-overview.ts";
+} from "./org/org-admin-overview.ts";
 import {
   appendProblem,
   problemReason,
   pruneProblemLog,
   readProblems
-} from "./org-problem-log.ts";
+} from "./org/org-problem-log.ts";
 import { WorkspaceBackupMaintenance } from "./workspace-backup-maintenance.ts";
 import { createWorkspaceBackupRoutes, isWorkspaceBackupSessionControl } from "./workspace-backup-http.ts";
 import {
@@ -1524,7 +1524,7 @@ import {
   orgXaiMediaStatusFor,
   orgXaiRefusal,
   type OrgXaiMedia
-} from "./org-xai-media.ts";
+} from "./org/org-xai-media.ts";
 import { configuredKeyterms, VOICE_KEYTERM_RECENT_MESSAGES, voiceKeyterms } from "./voice-keyterms.ts";
 import { installTerminalFeature } from "./terminal-install.ts";
 import { createRemoteSessionService } from "./remote-sessions.ts";
@@ -1701,7 +1701,7 @@ import {
   PrincipalRegistry,
   type Principal
 } from "./principals.ts";
-import { OrgTeams } from "./org-teams.ts";
+import { OrgTeams } from "./org/org-teams.ts";
 import { compatServers } from "./openai-compat-servers.ts";
 import { createOpenAiCompatServerRoutes } from "./routes/openai-compat-servers.ts";
 import {
@@ -1741,7 +1741,7 @@ import {
 } from "./section-channels.ts";
 import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bot-grants.ts";
 import { createBotPerspicaxRoutes } from "./bot-perspicax.ts";
-import { OrgFlowPlugins, guarded as orgFlowGuarded } from "./org-flow-plugins.ts";
+import { OrgFlowPlugins, guarded as orgFlowGuarded } from "./org/org-flow-plugins.ts";
 import { applyIdentityMigration, principalIdFor, rewritePeopleForAttach } from "./identity-migration.ts";
 import { ThreadStarters } from "./thread-starters.ts";
 import {
@@ -1850,7 +1850,7 @@ import {
 import { interBotWaiting } from "./inter-bot-approvals.ts";
 import { interBotConversations } from "./inter-bot-conversations.ts";
 import type { BotHost } from "./turn-route.ts";
-import { signInListWithOpenInvites, type OrgRole } from "./org-directory.ts";
+import { signInListWithOpenInvites, type OrgRole } from "./org/org-directory.ts";
 import { createOwnerAvatarRoute, OwnerIdentityStore, parseOwnerIdentityMessage } from "./owner-identity.ts";
 import {
   configForViewer,
@@ -2074,15 +2074,15 @@ import {
   githubTokenKind
 } from "./github-connect.ts";
 import { SANDBOX_PLUGINS_DIR, syncPluginsToSandbox } from "./sandbox-plugins.ts";
-import { OrgCapabilities, ORG_CAPABILITY_KEY_PREFIX, type OrgCapabilityMount } from "./org-capabilities.ts";
+import { OrgCapabilities, ORG_CAPABILITY_KEY_PREFIX, type OrgCapabilityMount } from "./org/org-capabilities.ts";
 import { createOrgCapabilityRoutes, ORG_CAPABILITIES_CALL, OrgSettingOwnedElsewhere } from "./routes/org-capabilities.ts";
-import { OrgGithubTokens } from "./org-github-tokens.ts";
+import { OrgGithubTokens } from "./org/org-github-tokens.ts";
 import { GithubCredentials, LOCAL_OWNER, ORG_OWNER } from "./github-credentials.ts";
 import { BotCapabilityStore } from "./bot-capability-store.ts";
 import { InstallationCapabilityStore } from "./installation-capability-store.ts";
 import { makeInstallationCapabilityBridge, setInstallationCapabilityBridge } from "./installation-capability-bridge.ts";
 import { discoverBotPluginIds, discoverPersonIds, migrateCapabilitiesStores } from "./capabilities-store-migration.ts";
-import { OrgBotSecrets } from "./org-bot-secrets.ts";
+import { OrgBotSecrets } from "./org/org-bot-secrets.ts";
 import { MarketplaceTokens } from "./marketplace-tokens.ts";
 import { type GithubCredential } from "./github-access.ts";
 import {
@@ -2336,7 +2336,7 @@ import { NudgeCooldown, nudgeFrameAllowed, recordNudgeLine } from "./nudge.ts";
 import { createUnfinishedTurnGuard, decideUnfinishedTurn, unfinishedTurnPrompt, type UnfinishedKind } from "./unfinished-turn.ts";
 import { findPeopleDm, isPeopleDmParticipant, otherPerson, PEOPLE_DM_THREADS_HEADER, PeopleDmSelections, peopleDmForViewer, peopleDmRouteRefusal, peopleDmThreadUnreadPatch } from "./people-dms.ts";
 import { groupMemoryEnabled, groupMemorySystemPrompt, updateGroupMemory } from "./group-memory.ts";
-import type { OrgRecord } from "./org-record.ts";
+import type { OrgRecord } from "./org/org-record.ts";
 import {
   createOidcLoginRoutes,
   identityConfigFromEnv,
@@ -2350,15 +2350,15 @@ import {
   writesManagedProfile
 } from "./oidc-login.ts";
 import { OidcRelyingParty } from "./oidc-rp.ts";
-import type { BotAttachment, BotFileRoot } from "./org-admin-files.ts";
+import type { BotAttachment, BotFileRoot } from "./org/org-admin-files.ts";
 import { ADMIN_ACTIVITY_CATEGORIES } from "./admin-activity.ts";
 import {
   createOrgMemberRoutes,
   ORG_MEMBER_ASSERTION_ACTORS,
   type MemberPerson,
   type MemberRequest
-} from "./org-member-routes.ts";
-import { createOrgLinkRoutes, DirectoryRefreshScheduler } from "./org-link-routes.ts";
+} from "./org/org-member-routes.ts";
+import { createOrgLinkRoutes, DirectoryRefreshScheduler } from "./org/org-link-routes.ts";
 import { internalAgentApiTool } from "./routes/agent-api-internal.ts";
 import { isInternalVoiceCallEnd } from "./routes/voice-call-internal.ts";
 import {
@@ -2401,7 +2401,7 @@ import {
 import { type PriorityDelivery } from "./priority-wake.ts";
 import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./agent-threads.ts";
 import { MemberLiveText } from "./member-live-text.ts";
-import { computersRoutes, type ComputersDeps } from "./org-admin-computers.ts";
+import { computersRoutes, type ComputersDeps } from "./org/org-admin-computers.ts";
 import {
   createOrgAdminRoutes,
   wireAuditRow,
@@ -2413,7 +2413,7 @@ import {
   type AdminPerson,
   type ApprovalAnswer,
   type OrgAdminViewer
-} from "./org-admin-routes.ts";
+} from "./org/org-admin-routes.ts";
 import { RevocationQueue } from "./idp-revocations.ts";
 import {
   IDP_REFRESH_WAIT_MS,
@@ -2431,7 +2431,7 @@ import {
   inviteMailMessage,
   PUBLIC_INVITE_PATH,
   type OrgState
-} from "./org-routes.ts";
+} from "./org/org-routes.ts";
 import { createDirectGrantRoutes } from "./direct-grants.ts";
 import { directoryIntervalMs, PerspicaxDirectory, type ModelProvider } from "./perspicax-link.ts";
 import { duplicateNote, PerspicaxMemory } from "./perspicax-memory.ts";
@@ -2499,35 +2499,35 @@ import {
   parseOrgFullAccessBody,
   threadFollowsFullGrant,
   trustedChannelFullRefusal
-} from "./org-full-access.ts";
+} from "./org/org-full-access.ts";
 import {
   createInterimAttachRoutes,
   INTERIM_WINDOW_DAYS,
   interimWindowUntil,
   windowWithDays
 } from "./interim-attach-routes.ts";
-import { createLinkedSubjectsRoute, createOrgExportRoute } from "./org-export.ts";
-import { createOrgBotForceRoutes } from "./org-bot-force.ts";
+import { createLinkedSubjectsRoute, createOrgExportRoute } from "./org/org-export.ts";
+import { createOrgBotForceRoutes } from "./org/org-bot-force.ts";
 import {
   createOrgPersonConnectionRoutes,
   orgConnectionListing,
   revokeOrgConnections,
   type OrgPersonConnectionsDeps
-} from "./org-person-connections.ts";
-import { peopleRoutes, type EngineVia, type PeopleDeps } from "./org-admin-people.ts";
-import { botsRoutes, type BotsDeps } from "./org-admin-bots.ts";
-import { botLook, botPersona, readBotAvatar } from "./org-admin-look.ts";
-import { ConsoleRefusal } from "./org-admin-console.ts";
-import { routineScheduleLabel } from "./org-admin-schedule.ts";
-import { routinesRoutes, type RoutinesDeps } from "./org-admin-routines.ts";
-import { routineRunsRoutes, type RoutineRunsDeps } from "./org-admin-runs.ts";
+} from "./org/org-person-connections.ts";
+import { peopleRoutes, type EngineVia, type PeopleDeps } from "./org/org-admin-people.ts";
+import { botsRoutes, type BotsDeps } from "./org/org-admin-bots.ts";
+import { botLook, botPersona, readBotAvatar } from "./org/org-admin-look.ts";
+import { ConsoleRefusal } from "./org/org-admin-console.ts";
+import { routineScheduleLabel } from "./org/org-admin-schedule.ts";
+import { routinesRoutes, type RoutinesDeps } from "./org/org-admin-routines.ts";
+import { routineRunsRoutes, type RoutineRunsDeps } from "./org/org-admin-runs.ts";
 import {
   opsRoutes,
   type ConnectionsView,
   type OpsDeps,
   type TestResult
-} from "./org-admin-ops.ts";
-import { createOrgImportRoute } from "./org-import-routes.ts";
+} from "./org/org-admin-ops.ts";
+import { createOrgImportRoute } from "./org/org-import-routes.ts";
 import { sandboxdKeySource } from "./sandboxd-auth.ts";
 import { sandboxBackendFor, sandboxRouteFromEnv } from "./sandbox-route.ts";
 import { sandboxdClient, sandboxdHealth } from "./user-sandbox-client.ts";
@@ -4996,7 +4996,7 @@ utilityParentPort?.on("message", event => {
   try { managedPolicy.apply(message.policy); } catch { ok = false; }
   utilityParentPort.postMessage({ type: "openmausbot:managed-desktop-result", requestId, ok });
 });
-// The organization library (server/org-library.ts): Electron relays the
+// The organization library (server/org/org-library.ts): Electron relays the
 // verified catalog; the runtime swaps it and acknowledges at once, then
 // reconciles and reports on its own. A relay that arrives before the library
 // exists waits for it (the acknowledgement does not).
@@ -7174,7 +7174,7 @@ async function stagePendingAttachments(threadId: string, generation: string): Pr
 
 /** Organization server: an engine never gets its own shell, file or fetch
  * tools on the Sagax server (server/drivers/host-tools.ts). An engine that
- * cannot withhold them is refused (409 host_tools, server/org-engine-admission.ts)
+ * cannot withhold them is refused (409 host_tools, server/org/org-engine-admission.ts)
  * rather than let loose in the container. */
 /** An engine in an error a person reads: `provider instance "ghost"` for a
  * readable id, "The selected engine" for an opaque one (no GUID on screen). */
@@ -9375,7 +9375,7 @@ const orgFlowPlugins = new OrgFlowPlugins({
   isMember: (principalId) => orgMemberActive(principalId)
 });
 // Capabilities lot 4: the organization's declarations from Perspicax,
-// installed once for the whole installation (server/org-capabilities.ts).
+// installed once for the whole installation (server/org/org-capabilities.ts).
 // Its marketplace copies live apart from the installation's own catalog and
 // are read with no member credential.
 const orgCapabilityMarkets = new PluginMarketplaces({
@@ -15152,7 +15152,7 @@ function privateRowHidden(message: unknown, viewer: ApprovalViewer): boolean {
  * (routineAccessNotifications). */
 function notifyAccess(notification: Notification | null, access: WireAccessCard, routineRunId?: string): void {
   if (!notification) return;
-  // A refused turn, for the console's Overview (server/org-problem-log.ts).
+  // A refused turn, for the console's Overview (server/org/org-problem-log.ts).
   const refusedBot = store.bot(access.botId);
   // a confidential thread's row names nothing of it (server/confidential-threads.ts)
   const refusedConfidential = store.isConfidentialThread(notification.threadId);
@@ -20777,7 +20777,7 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
     notify(deliverableNotification("incident", bot, threadId, CONFIDENTIAL_INCIDENT_TEXT, { avatarUrl: bot.avatarUrl }));
     return;
   }
-  // The console's Overview and Incidents (server/org-problem-log.ts): every
+  // The console's Overview and Incidents (server/org/org-problem-log.ts): every
   // incident, before the delegation and storm rules below decide who hears.
   const failedCause = input.kind === "failed" ? latestFailedTurnCause(threadId) : null;
   void appendProblem(DATA_DIR, {
@@ -23704,7 +23704,7 @@ function botRunning(botId: string): boolean {
   return activeGroupTurnForBot(botId) !== null;
 }
 
-/** An organization admin's "Forcer l'arrêt" (server/org-bot-force.ts):
+/** An organization admin's "Forcer l'arrêt" (server/org/org-bot-force.ts):
  * every running turn of the bot stops, in its own threads, its routine run
  * and the room it is speaking in. Cancellation flags flip before any await. */
 async function forceStopBot(botId: string): Promise<void> {
@@ -28804,7 +28804,7 @@ function serverEngineAllowedFor(principalId: string, instanceId: string): boolea
 }
 /** 2026-10-16: the organization's xAI key pays for speech (Grok voice) and
  * avatar images only for the people Perspicax gives them to, by the same
- * list (`xaiVoice`, `xaiImage`): server/org-xai-media.ts. Solo: always. */
+ * list (`xaiVoice`, `xaiImage`): server/org/org-xai-media.ts. Solo: always. */
 function orgXaiMediaGiven(media: OrgXaiMedia, principalId: string | null | undefined, ownerPrincipalId?: string | null): boolean {
   return orgXaiKeyAllowed(media, { organization: IDENTITY.kind === "perspicax", principalId, ownerPrincipalId, allowed: serverEngineAllowedFor });
 }
@@ -33578,7 +33578,7 @@ function groupOwnerCaller(auth: RequestAuth, group: Pick<GroupRecord, "createdBy
   return ownsGroup(group, groupActor(auth));
 }
 // The people of a solo server: its email sign-in list and the invitations
-// that add to it (server/org-routes.ts). A solo server has no organization
+// that add to it (server/org/org-routes.ts). A solo server has no organization
 // (slice 8), so the invitations are issued in the name of this server: the
 // local operator is the owner and the links point at the public address.
 // An organization server never builds these routes (Perspicax owns accounts).
@@ -36693,7 +36693,7 @@ function personSheetBotsUseOnly(principalId: string): boolean {
   const sub = person?.subject && person.subject.iss === IDENTITY.issuer ? person.subject.sub : undefined;
   return Boolean(sub) && perspicaxDirectory?.botRights(sub!) === "use";
 }
-/** 2026-10-09: a person's effective permissions (server/org-permissions.ts):
+/** 2026-10-09: a person's effective permissions (server/org/org-permissions.ts):
  * an organization admin holds every key; anyone else the list Perspicax
  * sent (the union over their profiles), else the member defaults, narrowed
  * by their person sheet. `sessionAdmin: false` keeps an admin's chat-only
@@ -38984,7 +38984,7 @@ ROUTES.push(createHarnessCommandRoutes({
 
 // Invite links (/join#token=...): public like /api/auth/email/start, and
 // counted against the same per-source lockout as pairing. Security model:
-// server/org-routes.ts `joinInviteRoute`.
+// server/org/org-routes.ts `joinInviteRoute`.
 const publicInvites = createPublicInviteRoutes({
   state: orgState,
   ownerEmail: () => (orgState.org ? principalEmail(orgState.org.ownerUserId) : undefined),
@@ -39403,7 +39403,7 @@ function orgConsolePeople(): Array<{ principalId: string; disabled: boolean }> {
     .map((entry) => ({ principalId: entry.principalId!, disabled: Boolean(entry.disabled) }));
 }
 
-/** The console's Overview (server/org-admin-overview.ts). */
+/** The console's Overview (server/org/org-admin-overview.ts). */
 const orgOverviewDeps = {
   version: releaseVersion,
   startedAt: SERVER_STARTED_AT,
@@ -39457,7 +39457,7 @@ function personEngineAccess(principalId: string): Array<{ id: string; via: Engin
   });
 }
 
-/** The console's People (server/org-admin-people.ts). */
+/** The console's People (server/org/org-admin-people.ts). */
 const orgPeopleDeps: PeopleDeps = {
   permissions: (principalId) => {
     const effective = principalPermissions(principalId);
@@ -39605,7 +39605,7 @@ async function importPackageFor(raw: unknown, ownerPrincipalId: string): Promise
   return { bots: result.bots, warnings: result.skipped.map((skip) => `${skip.part}: ${skip.reason}`) };
 }
 
-/** The console's Bots (server/org-admin-bots.ts). */
+/** The console's Bots (server/org/org-admin-bots.ts). */
 /** 2026-10-16, the console's "Approve for me" bulk action (POST
  * /api/org/admin/bots/bulk, action approvalMode): the bot's default level
  * to Ask or Approve for me, as the bot PATCH sets it. Never Full, Custom or
@@ -40016,7 +40016,7 @@ ROUTES.push(createBotZipRoutes({
   xaiMarketplaceBot: async (slug) => (await xaiMarketplace.bot(slug)).bot
 }));
 
-/** The console's Routines and Approvals (server/org-admin-routines.ts). */
+/** The console's Routines and Approvals (server/org/org-admin-routines.ts). */
 const orgRoutinesDeps: RoutinesDeps = {
   routines: () => routines?.listRoutines() ?? [],
   runs: (from) => routines?.listRuns(from) ?? [],
@@ -40043,7 +40043,7 @@ const orgRoutinesDeps: RoutinesDeps = {
   }
 };
 
-/** The console's routines calendar (server/org-admin-runs.ts): every run
+/** The console's routines calendar (server/org/org-admin-runs.ts): every run
  * in a window, past and planned, with the Automations scope rules. */
 const orgRoutineRunsDeps: RoutineRunsDeps = {
   routines: () => routines?.listRoutines() ?? [],
@@ -40059,7 +40059,7 @@ const orgRoutineRunsDeps: RoutineRunsDeps = {
   next: (schedule, after) => nextOccurrence(schedule, after)
 };
 
-/** The console's Computers (server/org-admin-computers.ts): every
+/** The console's Computers (server/org/org-admin-computers.ts): every
  * person's server environment, and every connected desktop, read only. */
 const orgComputersDeps: ComputersDeps = {
   people: () => orgConsolePeople(),
@@ -40119,7 +40119,7 @@ function orgMcpServers(): Array<{ name: string; transport: "remote" | "stdio"; u
   }).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** The console's Connections, Logs, Incidents and Settings (server/org-admin-ops.ts). */
+/** The console's Connections, Logs, Incidents and Settings (server/org/org-admin-ops.ts). */
 const orgOpsDeps: OpsDeps = {
   connections: async (): Promise<ConnectionsView> => {
     const people = orgPeopleDeps.people().filter((person) => !person.perspicaxDisabled && !person.consoleDisabled);
@@ -40685,7 +40685,7 @@ function insideDataDir(path: string): boolean {
 }
 
 /** The roots of a bot's files for the console's file browser
- * (server/org-admin-files.ts); never a path on the wire. */
+ * (server/org/org-admin-files.ts); never a path on the wire. */
 function orgBotFileRoots(bot: BotRecord): BotFileRoot[] {
   // A confidential thread's folder is never in the console (server/confidential-threads.ts).
   const confidential = new Set(store.tasks(bot.id).filter((task) => task.confidential === true).map((task) => task.threadId));
@@ -40729,7 +40729,7 @@ async function orgBotAttachments(bot: BotRecord): Promise<BotAttachment[]> {
   return out;
 }
 
-/** Slice 7: the console's admin API (server/org-admin-routes.ts), answered
+/** Slice 7: the console's admin API (server/org/org-admin-routes.ts), answered
  * before the auth gate with a console assertion only. */
 const orgAdmin = createOrgAdminRoutes({
   identity: IDENTITY.kind,
@@ -40758,7 +40758,7 @@ const orgAdmin = createOrgAdminRoutes({
   version: releaseVersion,
   engines: orgAdminEngines,
   recordAction: (principalId, entry) => appendAdminAction(DATA_DIR, { ...entry, actor: { kind: "person", principalId, via: "console" } }),
-  // The console routes of 2026-10-08 (server/org-admin-console.ts).
+  // The console routes of 2026-10-08 (server/org/org-admin-console.ts).
   console: [
     ...overviewRoutes(orgOverviewDeps),
     ...peopleRoutes(orgPeopleDeps),
@@ -40794,7 +40794,7 @@ const orgAdmin = createOrgAdminRoutes({
   }
 });
 /** 2026-10-11: Perspicax asks for an immediate directory fetch after a
- * rights change (server/org-link-routes.ts), with the link token only. */
+ * rights change (server/org/org-link-routes.ts), with the link token only. */
 const directoryRefresh = new DirectoryRefreshScheduler(() => perspicaxDirectory?.refresh("perspicax") ?? Promise.resolve());
 const orgLink = createOrgLinkRoutes({
   linked: () => IDENTITY.kind === "perspicax" && perspicaxDirectory !== null,
@@ -40808,7 +40808,7 @@ bus.subscribe((event: RuntimeEvent) => {
   if (shouldIgnoreProviderEvent(event)) return;
   memberLiveText.observe(event);
 });
-/** 2026-10-09 (lot C.1): the member API (server/org-member-routes.ts), for
+/** 2026-10-09 (lot C.1): the member API (server/org/org-member-routes.ts), for
  * an AI client attached to Perspicax acting for one person. Each route is
  * performed as that person through a 60 s session of theirs. */
 async function performAsMember(person: MemberPerson, request: MemberRequest): Promise<{ status: number; body: unknown }> {

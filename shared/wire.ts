@@ -429,7 +429,7 @@ export interface WireBot {
   autoApprove?: boolean;
   /** Canonical approval level. Missing resolves through autoApprove. */
   /** Who confirmed the Full access warning for this bot, once
-   * (server/org-full-access.ts). Later grants by that person skip it. */
+   * (server/org/org-full-access.ts). Later grants by that person skip it. */
   fullAccessConsent?: { principalId: string; at: number };
   approvalMode?: ApprovalMode;
   /** 2026-10-28 (one source of truth): the bot's own approval level as its

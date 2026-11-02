@@ -319,7 +319,7 @@ describe("mailer", () => {
 
 **Files:**
 - Modify: `server/account-signin.ts` (add `createServerEmailSignIn`), `server/index.ts` (construction at ~698, `/api/auth/email/start|verify` routes ~13964-13994, org invites ~wire at `createOrgRoutes`)
-- Test: `server/account-signin.test.ts` (append; create the file if it does not exist), `server/org-identity.e2e.test.ts` (append one case)
+- Test: `server/account-signin.test.ts` (append; create the file if it does not exist), `server/org/org-identity.e2e.test.ts` (append one case)
 
 **Interfaces:**
 - Consumes: `EmailOtpStore` (Task 1); `Mailer`, `createMailer`, `resolveMailSettings`, `mailReady` (Task 2); the existing `EmailSignIn` interface and `allowedScopes` in `account-signin.ts`.
@@ -382,12 +382,12 @@ For the last test: when sending fails, `start` voids the issued code. Call `otp.
     - text: `<inviter> invited you. Sign in with this address at <publicUrl>/pair within 7 days.`
     - A send failure does not undo the invite. The route's JSON gains `mailed: boolean`.
   - **`AppConfig` (`server/config.ts`):** add `mail?: MailSettings` to the type and the Zod schema. It must round-trip through `saveConfig` (the save/patch logic belongs to Task 4).
-- Append an e2e case to `server/org-identity.e2e.test.ts`: boot with `SAGAX_MAIL_PROVIDER=sendgrid`, `SAGAX_MAIL_FROM`, `SAGAX_SENDGRID_API_KEY`, and `SAGAX_SIGNIN_EMAILS=owner@example.com`. Stub `globalThis.fetch` for `api.sendgrid.com` if the harness runs in-process. If it runs as a child process, add a `mailer` test seam the harness can set, e.g. env `SAGAX_MAIL_CAPTURE_FILE` that writes messages to a file instead of sending; name it in the report. Then:
+- Append an e2e case to `server/org/org-identity.e2e.test.ts`: boot with `SAGAX_MAIL_PROVIDER=sendgrid`, `SAGAX_MAIL_FROM`, `SAGAX_SENDGRID_API_KEY`, and `SAGAX_SIGNIN_EMAILS=owner@example.com`. Stub `globalThis.fetch` for `api.sendgrid.com` if the harness runs in-process. If it runs as a child process, add a `mailer` test seam the harness can set, e.g. env `SAGAX_MAIL_CAPTURE_FILE` that writes messages to a file instead of sending; name it in the report. Then:
   - `POST /api/auth/email/start` for owner@example.com;
   - read the code from the captured message;
   - `POST /api/auth/email/verify`;
   - expect a session whose `principalId` is the local operator's principal (profile email owner@example.com).
-- [ ] **Step 4:** Run `npx vitest run server/account-signin.test.ts server/email-otp.test.ts server/org-identity.e2e.test.ts server/org-routes.test.ts` and `pnpm -s typecheck`.
+- [ ] **Step 4:** Run `npx vitest run server/account-signin.test.ts server/email-otp.test.ts server/org/org-identity.e2e.test.ts server/org/org-routes.test.ts` and `pnpm -s typecheck`.
 - [ ] **Step 5: Commit** `feat: sign in by email with codes this server sends`, followed by the Co-Authored-By line.
 
 ---
@@ -396,7 +396,7 @@ For the last test: when sending fails, `start` voids the issued code. Call `otp.
 
 **Files:**
 - Modify: `server/index.ts` (new routes near the other admin config routes; `configStatus` ~13208), `server/config.ts` (save path for `mail`)
-- Test: `server/mail-settings.e2e.test.ts` (new, same harness pattern as `server/org-identity.e2e.test.ts`)
+- Test: `server/mail-settings.e2e.test.ts` (new, same harness pattern as `server/org/org-identity.e2e.test.ts`)
 
 **Interfaces:**
 - Produces (all admin-scope; a client session gets 403, per the existing admin route gating in `request-auth.ts`):
@@ -422,7 +422,7 @@ For the last test: when sending fails, `start` voids the issued code. Call `otp.
 **Files:**
 - Create: `server/first-admin.ts`
 - Modify: `server/index.ts` (boot, after `sessions`, `principals` and `publicUrl()` exist, before `listen`)
-- Test: `server/first-admin.test.ts`, plus one e2e case in `server/org-identity.e2e.test.ts`
+- Test: `server/first-admin.test.ts`, plus one e2e case in `server/org/org-identity.e2e.test.ts`
 
 **Interfaces:**
 - Produces: `shouldIssueFirstAdminCode(input: { desktopManaged: boolean; liveSessions: number; admins: string[] }): boolean` and `firstAdminLine(input: { publicUrl: string | null; code: string; expiresAt: number }): string`.

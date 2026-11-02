@@ -16,7 +16,7 @@
 //
 // Rules, none optional:
 //   - answered before the session gate and before loopback trust, like the
-//     member API (server/org-member-routes.ts). The only credential is a
+//     member API (server/org/org-member-routes.ts). The only credential is a
 //     console assertion Perspicax signs per request (typ
 //     `pulsabot-console+jwt`, at most 120 s, single-use jti, `aud` this
 //     server's public origin) whose `act.sub` is `perspicax-mail`: that
@@ -37,7 +37,7 @@ import { z } from "zod";
 import { planMailDelivery, plusTag, type MailTagRoutine } from "../shared/routine-mail-alias.ts";
 import { isRelaySource, isTriggerSourceType, type NormalizedTriggerEvent, type TriggerSourceConfig } from "../shared/trigger-sources.ts";
 import type { ConsoleAssertion, ConsoleAssertionActor } from "./oidc-rp.ts";
-import { AssertionReplayCache } from "./org-admin-routes.ts";
+import { AssertionReplayCache } from "./org/org-admin-routes.ts";
 import { EMAIL_WATCH_PAYLOAD_MAX_CHARS } from "./cold-prompt-budget.ts";
 import { BOTMAIL_RUN_RULES, defang, type WebhookReceiveResult } from "./webhooks.ts";
 

@@ -520,8 +520,8 @@ git commit -m "feat: bind sessions and pairing codes to a principal"
 ### Task 4: Rôles d'organisation par principal, serveur obligatoire
 
 **Files:**
-- Modify: `server/org-directory.ts` (`roleOf`), `server/org-record.ts` (`createOrg`), `server/org-routes.ts` (`OrgRouteDeps`, `parseHost`, every `roleOf` call, `orgPeople`)
-- Test: `server/org-directory.test.ts`, `server/org-record.test.ts`, `server/org-routes.test.ts`
+- Modify: `server/org/org-directory.ts` (`roleOf`), `server/org/org-record.ts` (`createOrg`), `server/org/org-routes.ts` (`OrgRouteDeps`, `parseHost`, every `roleOf` call, `orgPeople`)
+- Test: `server/org/org-directory.test.ts`, `server/org/org-record.test.ts`, `server/org/org-routes.test.ts`
 
 **Interfaces:**
 - Consumes: `isPrincipalId` (Task 1).
@@ -532,7 +532,7 @@ git commit -m "feat: bind sessions and pairing codes to a principal"
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `server/org-directory.test.ts`:
+Add to `server/org/org-directory.test.ts`:
 
 ```ts
 import { roleOf } from "./org-directory.ts";
@@ -553,7 +553,7 @@ describe("roles by principal", () => {
 
 The `@client.com` domain entry stays literal-only here (`roleOf` does not expand domains; sign-in does). This test pins that behavior.
 
-In `server/org-record.test.ts`, change the existing "records the creator" test to use `host: { kind: "server", url: "https://sagax.example.com" }` and expect that host. Then add:
+In `server/org/org-record.test.ts`, change the existing "records the creator" test to use `host: { kind: "server", url: "https://sagax.example.com" }` and expect that host. Then add:
 
 ```ts
   it("requires a server address for a new organization", () => {
@@ -570,16 +570,16 @@ In `server/org-record.test.ts`, change the existing "records the creator" test t
   });
 ```
 
-In `server/org-routes.test.ts`, update every `createOrgRoute` / `createOrgRoutes` fixture that uses `this-computer` to the `https://sagax.example.com` server host. Wherever deps are built, add `actorEmail: () => "<the email the test's actor had>"`.
+In `server/org/org-routes.test.ts`, update every `createOrgRoute` / `createOrgRoutes` fixture that uses `this-computer` to the `https://sagax.example.com` server host. Wherever deps are built, add `actorEmail: () => "<the email the test's actor had>"`.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `npx vitest run server/org-directory.test.ts server/org-record.test.ts server/org-routes.test.ts`
+Run: `npx vitest run server/org/org-directory.test.ts server/org/org-record.test.ts server/org/org-routes.test.ts`
 Expected: FAIL on the new cases.
 
 - [ ] **Step 3: Implement**
 
-`server/org-directory.ts`, replace `roleOf`:
+`server/org/org-directory.ts`, replace `roleOf`:
 
 ```ts
 export function roleOf(input: { ownerUserId: string; admins: string[]; members: string[]; userId: string; email?: string }): OrgRole | null {
@@ -596,7 +596,7 @@ export function roleOf(input: { ownerUserId: string; admins: string[]; members: 
 }
 ```
 
-`server/org-record.ts`, replace `createOrg`:
+`server/org/org-record.ts`, replace `createOrg`:
 
 ```ts
 export function serverAddressOk(url: string): boolean {
@@ -624,7 +624,7 @@ export function createOrg(input: { name: string; ownerUserId: string; host: OrgR
 
 Add `import { isPrincipalId } from "./principals.ts";` at the top of `org-record.ts`.
 
-`server/org-routes.ts`:
+`server/org/org-routes.ts`:
 - Add `actorEmail: (auth: RequestAuth) => string | undefined;` to `OrgRouteDeps`.
 - Add a `email?: string` parameter to `issueInviteRoute` and `revokeInviteRoute`. Pass it through to `roleOf` as `email: input.email`. In `createOrgRoutes`, call both with `email: deps.actorEmail(auth)`.
 - `orgPeople`: owners are principal ids and lists are emails. Keep the loop, but call `roleOf` with `email: id` for list entries and without `email` for the owner, so each entry resolves to its own role.
@@ -632,13 +632,13 @@ Add `import { isPrincipalId } from "./principals.ts";` at the top of `org-record
 
 - [ ] **Step 4: Run tests**
 
-Run: `npx vitest run server/org-directory.test.ts server/org-record.test.ts server/org-routes.test.ts`
+Run: `npx vitest run server/org/org-directory.test.ts server/org/org-record.test.ts server/org/org-routes.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/org-directory.ts server/org-record.ts server/org-routes.ts server/org-*.test.ts
+git add server/org/org-directory.ts server/org/org-record.ts server/org/org-routes.ts server/org/org-*.test.ts
 git commit -m "feat: resolve org roles by principal and require a server address"
 ```
 
@@ -720,7 +720,7 @@ git commit -m "fix: sessions without a principal see no org channel"
 
 **Files:**
 - Modify: `server/index.ts`
-- Test: `server/org-identity.e2e.test.ts` (new; model it on an existing `*.e2e.test.ts` that boots the server, e.g. `server/org-library.e2e.test.ts`: read how it starts the harness on a temp `DATA_DIR` and authenticates)
+- Test: `server/org/org-identity.e2e.test.ts` (new; model it on an existing `*.e2e.test.ts` that boots the server, e.g. `server/org/org-library.e2e.test.ts`: read how it starts the harness on a temp `DATA_DIR` and authenticates)
 
 **Interfaces:**
 - Consumes: Tasks 1 to 5.
@@ -749,7 +749,7 @@ Boot the harness on a temp `DATA_DIR`. Seed `config.json` with a profile email `
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `npx vitest run server/org-identity.e2e.test.ts`
+Run: `npx vitest run server/org/org-identity.e2e.test.ts`
 Expected: FAIL (step 1 returns 200 today).
 
 - [ ] **Step 3: Implement in `server/index.ts`**
@@ -801,7 +801,7 @@ const principal = principals.forAccount({ email: verified.email, controlPlaneUse
 
 - [ ] **Step 4: Run tests**
 
-Run: `npx vitest run server/org-identity.e2e.test.ts server/org-routes.test.ts server/channel-visibility.test.ts server/sessions.test.ts`
+Run: `npx vitest run server/org/org-identity.e2e.test.ts server/org/org-routes.test.ts server/channel-visibility.test.ts server/sessions.test.ts`
 Then: `pnpm -s typecheck`
 Then run the whole server suite and compare with the pre-change failure list, saved before starting via `npx vitest run server > /tmp/server-before.txt`: `npx vitest run server`
 Expected: the new e2e test passes, with no new failures.
@@ -809,7 +809,7 @@ Expected: the new e2e test passes, with no new failures.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/index.ts server/sessions.ts server/sessions.test.ts server/org-identity.e2e.test.ts
+git add server/index.ts server/sessions.ts server/sessions.test.ts server/org/org-identity.e2e.test.ts
 git commit -m "feat: key org ownership, channels and approvals on principals"
 ```
 

@@ -34,8 +34,8 @@ import {
   resolveBotCreationDefaults,
   type NewBotDefaults,
 } from "../new-bot-defaults.ts";
-import { newConversationFullAllowed } from "../org-full-access.ts";
-import { orgXaiRefusal } from "../org-xai-media.ts";
+import { newConversationFullAllowed } from "../org/org-full-access.ts";
+import { orgXaiRefusal } from "../org/org-xai-media.ts";
 import { peopleDmForViewer } from "../people-dms.ts";
 import { isPrincipalId } from "../principals.ts";
 import {

@@ -467,7 +467,7 @@ const appConfigSchema = z.object({
      * start that found any. */
     interimAttach: z.object({ since: z.number().finite().nonnegative(), days: z.number().int().min(0).max(90) }).optional(),
     /** Whether bots of the organization may run with Full access
-     * (server/org-full-access.ts). Absent means allowed; an admin turns it
+     * (server/org/org-full-access.ts). Absent means allowed; an admin turns it
      * off in Settings > Organization. */
     allowFullAccess: z.boolean().optional(),
     /** 2026-10-16: a bot a member owns runs its commands in its owner's

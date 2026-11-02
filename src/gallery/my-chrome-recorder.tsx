@@ -1,7 +1,7 @@
 /** Isolated gallery for Show a task in my Chrome
  * (src/components/MyChromeRecordDialog.tsx): the chooser, the popover before
  * and during a recording, and the steps panel. The capture script
- * (scripts/capture-my-chrome-recorder.mjs) answers /api itself.
+ * (scripts/capture/my-chrome-recorder.mjs) answers /api itself.
  * Not shipped in the app. ?view=chooser|setup|recording|steps&skin=<id>&lang=<code> */
 import { StrictMode, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";

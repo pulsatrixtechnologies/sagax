@@ -68,9 +68,9 @@ describe("ownerModeForTurn", () => {
   });
   it("still cards a destructive call, an ask rule and a security key under the implied auto", () => {
     const mode = ownerModeForTurn({ ...base, approvalMode: "auto" });
-    const del = { ownerId: OWNER, botId: "b", tool: "mcp__perspicax_x__cw_psa__write", input: JSON.stringify({ resource: "service.tickets", action: "delete", id: 1 }) };
+    const del = { ownerId: OWNER, botId: "b", tool: "mcp__perspicax_x__cw_psa_write", input: JSON.stringify({ resource: "service.tickets", action: "delete", id: 1 }) };
     expect(ownerDecision({ mode, rules: [], call: del }).kind).toBe("card");
-    const write = { ownerId: OWNER, botId: "b", tool: "mcp__perspicax_x__cw_psa__write", input: JSON.stringify({ resource: "service.tickets", action: "update", id: 1 }) };
+    const write = { ownerId: OWNER, botId: "b", tool: "mcp__perspicax_x__cw_psa_write", input: JSON.stringify({ resource: "service.tickets", action: "update", id: 1 }) };
     expect(ownerDecision({ mode, rules: [], call: write })).toMatchObject({ kind: "allow", source: "owner-auto" });
     expect(ownerDecision({ mode, rules: [], call: write, stepUpRequired: true }).kind).toBe("card");
     expect(ownerDecision({ mode, rules: [], call: write, autonomyRefused: true }).kind).toBe("card");
@@ -88,7 +88,7 @@ describe("perspicaxSelfAnswer", () => {
     }
   });
   it("never answers a write, an action, a send or another server", () => {
-    for (const tool of ["cw_psa__write", "cw_psa__action", "cw_psa__update_ticket", "cw_psa__log_time", "flow_action", "memory_write", "memory_forget",
+    for (const tool of ["cw_psa_write", "cw_psa_action", "cw_psa_update_ticket", "cw_psa_log_time", "flow_action", "memory_write", "memory_forget",
       "sagax_send", "sagax_approve", "lookups__query_write", "messaging__write", "create_agent", "phone_api__query", "vpn_api__query", "edr_api__query"]) {
       expect(perspicaxSelfAnswer(`mcp__perspicax_quasar_agent__${tool}`)).toBeNull();
     }
@@ -111,6 +111,15 @@ describe("perspicaxSelfAnswer", () => {
       "acme_desk__find_", "acme_desk__find_x__write", "vpn_api__query", "vpn_api__find_keys", "__query"]) {
       expect(perspicaxSelfAnswer(`mcp__perspicax_quasar_agent__${tool}`, marked)).toBeNull();
     }
+    // one `_` (Perspicax 1.9.19): the same reads, the same non-reads
+    for (const tool of ["acme_desk_query", "acme_desk_find_tickets", "acme_desk_get_ticket", "example_wiki_query"]) {
+      expect(perspicaxSelfAnswer(`mcp__perspicax_quasar_agent__${tool}`, marked), tool).toBe("read");
+      expect(perspicaxSelfAnswer(`mcp__perspicax_quasar_agent__${tool}`), tool).toBeNull();
+    }
+    for (const tool of ["acme_desk_write", "acme_desk_action", "acme_desk_update_ticket", "acme_desk_log_time", "acme_desk_query_write",
+      "acme_desk_find_x_write", "vpn_api_query", "vpn_api_find_keys"]) {
+      expect(perspicaxSelfAnswer(`mcp__perspicax_quasar_agent__${tool}`, marked), tool).toBeNull();
+    }
     const asked: string[] = [];
     perspicaxSelfAnswer("mcp__perspicax_quasar_agent__acme_desk__query", (api) => { asked.push(api); return true; });
     expect(asked).toEqual(["acme_desk"]);
@@ -129,7 +138,7 @@ describe("perspicaxSelfAnswer", () => {
     expect(autoVerdict("auto", tool, { perspicaxSelf: "lease", customRule: { behavior: "deny", id: "r" } }).approve).toBeNull();
     expect(autoVerdict("auto", tool, { perspicaxSelf: "lease", safetyHold: true }).approve).toBeNull();
     expect(autoVerdict("auto", tool, { perspicaxSelf: "lease", stepUpRequired: ["external-send"] }).approve).toBeNull();
-    expect(autoVerdict("auto", "mcp__perspicax_x__cw_psa__query", { perspicaxSelf: "read" })).toMatchObject({ source: "perspicax-read" });
+    expect(autoVerdict("auto", "mcp__perspicax_x__cw_psa_query", { perspicaxSelf: "read" })).toMatchObject({ source: "perspicax-read" });
   });
 });
 

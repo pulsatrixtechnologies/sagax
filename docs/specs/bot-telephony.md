@@ -139,7 +139,7 @@ Speech-to-Speech (rejeté : il remplacerait le cerveau).
   `destructiveKindOf()` classe `external-message` tout outil d'envoi ou toute
   ressource `messages|mail|emails|sms|calls` en création. Une telle action
   ouvre toujours une carte, même en mode `auto` (test
-  `owner-approval.test.ts` : un SMS par `twilio_api__write` donne
+  `owner-approval.test.ts` : un SMS par `twilio_api_write` donne
   `{ kind: "card", reason: "destructive" }`).
 
 ### 2.3 Permissions par bot (#546), Zone de travail Auto (#564), routines, notifications
@@ -180,8 +180,8 @@ Calls, Recordings, IncomingPhoneNumbers, Usage, sous-comptes),
 campagnes A2P 10DLC, vérifications sans frais) et `twilio_monitor` (alertes du
 débogueur, événements du compte).
 
-Comment un bot s'en sert aujourd'hui : par les outils MCP `twilio_api__query`
-et `twilio_api__write` (et équivalents), comme n'importe quel profil. Les
+Comment un bot s'en sert aujourd'hui : par les outils MCP `twilio_api_query`
+et `twilio_api_write` (et équivalents), comme n'importe quel profil. Les
 opérations d'écriture exposées incluent `CreateCall`, `CreateMessage`,
 `DeleteCall` et `CreateIncomingPhoneNumber` (achat de numéro).
 
@@ -322,7 +322,7 @@ Deux chemins mènent à Twilio, avec les mêmes garde-fous (R9) :
   `phone_call_person`, `phone_call_third_party`, `sms_send`), qui appelle
   Perspicax avec la délégation ou le jeton de la personne ;
 - les outils Twilio de Perspicax utilisés directement par le bot
-  (`twilio_api__write` : `CreateCall`, `CreateMessage`), permis par R9.
+  (`twilio_api_write` : `CreateCall`, `CreateMessage`), permis par R9.
 
 Les deux passent par la **garde téléphonique** de Sagax (6.5), placée dans le
 relais MCP Perspicax du serveur (`server/perspicax-mcp.ts`, qui voit déjà
@@ -818,7 +818,7 @@ réservé à un choix explicite (R3).
 
 ### 6.5 La garde téléphonique et les outils Twilio de Perspicax (R9)
 
-Les bots **peuvent** créer des appels et des SMS par `twilio_api__write`
+Les bots **peuvent** créer des appels et des SMS par `twilio_api_write`
 (`CreateCall`, `CreateMessage`), en plus des outils du service téléphonique.
 Pour que ce chemin n'échappe à aucun garde-fou, la **garde téléphonique**
 s'insère dans le relais MCP Perspicax de Sagax (`server/perspicax-mcp.ts`,
@@ -886,7 +886,7 @@ interne** (conditions de l'ÉFVP Loi 25 du 2026-10-22) :
   webhooks, flux, paiements, conférences, applications, domaines SIP, codes
   courts, identifiants d'appelant, clés, comptes. Les noms d'outils sont
   comparés séparateurs repliés (`twilio_api-write`) et par ressource
-  (`twilio_api__Calls_write`). Les `_dry_run` restent permis.
+  (`twilio_api_Calls_write`). Les `_dry_run` restent permis.
 - **Pilote désactivé par défaut** : un admin l'active dans Réglages >
   Organisation > Appels téléphoniques, y saisit le **numéro de rappel**
   (obligatoire : sans numéro, aucun appel) et tient la liste **« Ne pas
@@ -897,7 +897,7 @@ interne** (conditions de l'ÉFVP Loi 25 du 2026-10-22) :
   ne plus recevoir d'appels, dites-le au numéro de rappel »), puis objectif et
   message dits deux fois, rappel du numéro, raccroche (R16 : jamais l'`Url`
   ni le `Twiml` du bot ; pas de détection de répondeur). Essai à blanc par
-  `twilio_api__write` du profil Perspicax de la personne, puis carte « Appel
+  `twilio_api_write` du profil Perspicax de la personne, puis carte « Appel
   vers … » : la personne **coche le numéro pour le confirmer**, puis Appeler.
   Une approbation = un appel, liée au numéro, aux mots, au bot et au nom
   annoncé, 15 minutes ; jamais « Toujours permettre » (5.7). Le bot principal

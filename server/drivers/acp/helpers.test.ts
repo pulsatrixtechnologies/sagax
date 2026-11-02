@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   isReasoningOnlyEmpty,
+  lowerReasoningEffort,
   nextUnkeyedToolId,
   offeredModels,
+  REASONING_ONLY_SOFT_MESSAGE,
+  reasoningOnlySoftMessage,
   resetUnkeyedToolSeqForTests,
   sanitizeAcpToolMessage,
   sessionOperationKey,
@@ -123,5 +126,31 @@ describe("sanitizeAcpToolMessage", () => {
     const out = sanitized?.params?.update?.rawInput?.out as string;
     expect(out.length).toBeLessThan(big.length);
     expect(out).toContain("[Earlier output truncated]");
+  });
+});
+
+describe("reasoning-only recovery helpers", () => {
+  const opts = (...ids: string[]) => ids.map((id) => ({ id }));
+  it("lowers to low when offered below the current effort", () => {
+    expect(lowerReasoningEffort({ options: opts("low", "medium", "high", "xhigh"), currentValue: "high" })).toBe("low");
+    expect(lowerReasoningEffort({ options: opts("minimal", "low", "medium"), currentValue: "medium" })).toBe("low");
+  });
+  it("takes the next level below when low is not offered, never none", () => {
+    expect(lowerReasoningEffort({ options: opts("none", "medium", "high"), currentValue: "high" })).toBe("medium");
+    expect(lowerReasoningEffort({ options: opts("none", "minimal", "low"), currentValue: "low" })).toBe("minimal");
+  });
+  it("has nothing to lower when the effort is unknown or already lowest", () => {
+    expect(lowerReasoningEffort(undefined)).toBeNull();
+    expect(lowerReasoningEffort({ options: opts("low", "high") })).toBeNull();
+    expect(lowerReasoningEffort({ options: opts("low", "high"), currentValue: "low" })).toBeNull();
+    expect(lowerReasoningEffort({ options: opts("fast", "slow"), currentValue: "slow" })).toBeNull();
+  });
+  it("tells what happened: retried, lower effort, and whether steps ran", () => {
+    expect(reasoningOnlySoftMessage({ retried: false, loweredEffort: false, stepsRan: false })).toBe(REASONING_ONLY_SOFT_MESSAGE);
+    expect(reasoningOnlySoftMessage({ retried: true, loweredEffort: true, stepsRan: false }))
+      .toMatch(/even after Sagax asked it once more with lower reasoning effort\. Nothing was changed\./);
+    const ran = reasoningOnlySoftMessage({ retried: true, loweredEffort: false, stepsRan: true });
+    expect(ran).toMatch(/even after Sagax asked it once more\. The steps it already ran in this turn stand/);
+    expect(ran).not.toMatch(/Nothing was changed/);
   });
 });

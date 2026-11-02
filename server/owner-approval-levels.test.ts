@@ -14,7 +14,7 @@ import { ownerDecision, ownerVerdictOver, ruleCandidateFor, type OwnerRule, type
 import { ownerModeForTurn } from "./owner-autonomy.ts";
 
 const OWNER = "pr_alice";
-const TOOL = "mcp__perspicax_quasar__cw_psa__write";
+const TOOL = "mcp__perspicax_quasar__cw_psa_write";
 const INPUT = JSON.stringify({ resource: "service/tickets/4512", operation: "update", body: { status: "In progress" } });
 const LEVELS = ["ask", "edits", "auto", "full"] as const satisfies readonly ApprovalMode[];
 
@@ -80,7 +80,10 @@ describe("4 levels x a rule Deny / Ask / Allow / none", () => {
     const line = source.slice(start, source.indexOf("\n", start));
     expect(start).toBeGreaterThan(-1);
     expect(line).not.toContain("!baseVerdict?.approve");
-    // and both turn launches hand the engine its native level
-    expect(source.match(/approvalMode: engineTurnLevel\(/g)?.length).toBe(2);
+    // and both turn launches hand the engine its native level; they left
+    // index.ts for server/turns/ (9fe511cdb startTurn, 062d7c42e group member)
+    const launches = ["./turns/start-turn-dispatch.ts", "./turns/group-member-turn-launch.ts"]
+      .map((path) => readFileSync(new URL(path, import.meta.url), "utf8").match(/approvalMode: engineTurnLevel\(/g)?.length ?? 0);
+    expect(launches).toEqual([1, 1]);
   });
 });

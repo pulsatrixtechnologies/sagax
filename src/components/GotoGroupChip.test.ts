@@ -63,7 +63,8 @@ describe("GotoGroupChip", () => {
     });
   };
   const chip = () => host.querySelector<HTMLButtonElement>("[data-testid=goto-group-chip]")!;
-  const items = () => [...host.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
+  // The list is portalled into <body> (AnchoredPopover), never under the composer.
+  const items = () => [...document.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
 
   it("draws one chip for six lines, three targets with three faces", async () => {
     await render(ownerStack(), () => true);
@@ -88,7 +89,7 @@ describe("GotoGroupChip", () => {
     await render(ownerStack(), onSelect);
     await act(async () => chip().click());
     expect(chip().getAttribute("aria-expanded")).toBe("true");
-    expect(host.querySelector("[role=menu]")).not.toBeNull();
+    expect(document.querySelector("[role=menu]")).not.toBeNull();
     expect(items().map((item) => item.textContent)).toEqual(["Sales", "Agreements", "Timesheets"]);
     expect(document.activeElement).toBe(items()[0]);
     await act(async () => items()[1]!.click());
@@ -97,10 +98,38 @@ describe("GotoGroupChip", () => {
     expect(chip().getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("opens above the composer, outside the transcript, scrolling when long", async () => {
+    // A composer docked over the pane: its top is the lowest the list may reach.
+    const pane = document.createElement("div");
+    const dock = document.createElement("div");
+    dock.setAttribute("data-composer-dock", "");
+    dock.getBoundingClientRect = () => ({ top: 600, bottom: 700, left: 0, right: 800, width: 800, height: 100, x: 0, y: 600, toJSON: () => ({}) });
+    host.remove();
+    pane.append(host, dock);
+    document.body.append(pane);
+    await render(ownerStack(), () => true);
+    chip().getBoundingClientRect = () => ({ top: 560, bottom: 584, left: 300, right: 500, width: 200, height: 24, x: 300, y: 560, toJSON: () => ({}) });
+    await act(async () => chip().click());
+    const menu = document.querySelector<HTMLElement>("[data-testid=goto-group-menu]")!;
+    expect(host.contains(menu)).toBe(false);
+    expect(menu.parentElement).toBe(document.body);
+    expect(menu.className).toContain("z-[70]");
+    expect(menu.className).toContain("overflow-y-auto");
+    expect(menu.dataset.side).toBe("top");
+    expect(Number.parseFloat(menu.style.maxHeight)).toBeLessThanOrEqual(560);
+    // A press inside the portalled list is not an outside press.
+    await act(async () => { menu.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); });
+    expect(chip().getAttribute("aria-expanded")).toBe("true");
+    await act(async () => { document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); });
+    expect(chip().getAttribute("aria-expanded")).toBe("false");
+    pane.remove();
+    document.body.append(host);
+  });
+
   it("moves with the arrow keys and closes on Escape back to the chip", async () => {
     await render(ownerStack(), () => true);
     await act(async () => chip().click());
-    const menu = host.querySelector<HTMLElement>("[role=menu]")!;
+    const menu = document.querySelector<HTMLElement>("[role=menu]")!;
     const key = async (name: string) => {
       await act(async () => {
         (document.activeElement ?? menu).dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true }));
@@ -140,7 +169,7 @@ describe("GotoGroupChip", () => {
     expect(host.textContent).toContain("2 conversations with");
     expect(host.textContent).toContain("2 agents");
     await act(async () => chip().click());
-    const row = host.querySelector<HTMLButtonElement>('[data-goto-target="thread:ts:th9"]')!;
+    const row = document.querySelector<HTMLButtonElement>('[data-goto-target="thread:ts:th9"]')!;
     expect(row.textContent).toContain("PR #378");
     expect(row.textContent).toContain("Timesheets");
     expect(row.querySelector("svg.lucide-box")).not.toBeNull();

@@ -1817,5 +1817,8 @@
   "settings.streamReplies.title": "Mostrar las respuestas mientras se escriben",
   "settings.streamReplies.show": "Mostrar la respuesta de un bot palabra por palabra mientras se escribe, en lugar de toda de una vez al terminar",
   "bulkEdit.mixedOpen": "These fields differ across the selected bots: {fields}. Controls start empty for them; only what you set is written.",
-  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot."
+  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot.",
+  "orgComputer.diskFull": "El disco del entorno de servidor está lleno: {free} libres de {total}. Los bots ya no pueden guardar archivos. Elimina archivos grandes en /workspace.",
+  "orgComputer.diskAlmostFull": "El disco del entorno de servidor está casi lleno: {free} libres de {total}.",
+  "orgComputer.diskFree": "{free} libres"
 }

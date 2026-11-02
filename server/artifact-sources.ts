@@ -100,7 +100,7 @@ export function toolResultValue(result: unknown): ToolAnswer {
 }
 
 /** The Perspicax tool a source names, bare or behind its bridge's server
- * (mcp__<server>__cw_psa__query), when it is one reviewed as read-only. */
+ * (mcp__<server>__cw_psa_query), when it is one reviewed as read-only. */
 export function perspicaxReadTool(tool: string): string | null {
   if (PERSPICAX_READ_ONLY_TOOLS.has(tool)) return tool;
   const stripped = tool.replace(/^mcp__[A-Za-z0-9_.-]+?__/, "");

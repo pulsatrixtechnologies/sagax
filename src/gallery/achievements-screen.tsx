@@ -2,7 +2,7 @@
  * (AchievementsScreen.tsx, one column since 2026-10-28) next to Settings
  * (SettingsModal.tsx), so the two can be compared. The
  * snapshot is answered here; the capture script
- * (scripts/capture-achievements-screen.mjs) answers the other /api calls.
+ * (scripts/capture/achievements-screen.mjs) answers the other /api calls.
  * Fictional data only. Not shipped in the app.
  * ?view=achievements|settings &category=<id> &skin=<id> &lang=<code> */
 import { StrictMode, useEffect, useState } from "react";

@@ -1,8 +1,10 @@
 // Tools > Memory: main-column page (Automations / Team map family, 2026-11-02).
 // The header row and the body column are Automations' own pieces
 // (content-page.tsx: PageHeader, PageHeading, PAGE_SCROLL, PAGE_COLUMN); the
-// left column is the Perspicax console's notes explorer (MemorySidebar.tsx):
-// search, the views with their counts, then the tiers and their folders.
+// right column, where Automations puts its calendar rail (CalendarSidebar:
+// 280px, border on its left), is the Perspicax console's notes explorer
+// (MemorySidebar.tsx): search, the views with their counts, then the tiers
+// and their folders.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Brain,
@@ -24,7 +26,7 @@ import { t } from "@/lib/i18n";
 import { isMacPlatform } from "@/lib/keyboard-shortcuts";
 import { readableError } from "@/lib/plain-error";
 import { buildMemoryMapGraph } from "@/lib/memory-map";
-import { api, useStore } from "@/state/store";
+import { api, ApiError, useStore } from "@/state/store";
 import {
   browseBotSource,
   browsePerspicax,
@@ -55,7 +57,7 @@ import { MemoryJsonTree } from "./MemoryJsonTree";
 import { MemoryMapCanvas } from "./MemoryMapCanvas";
 import { MemorySidebar, type MemoryRowAction, type MemorySidebarFolder, type MemorySidebarNav, type MemorySidebarTier } from "./MemorySidebar";
 
-/** The views of the left column: every note, the team notes, the recent
+/** The views of the right column: every note, the team notes, the recent
  * ones, the proposals waiting for a review, and one tier's notes. */
 type NavView = "all" | "teams" | "recent" | "review" | "mine";
 
@@ -137,22 +139,32 @@ export function MemoryManagerPanel() {
   const [renaming, setRenaming] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const mac = useMemo(() => isMacPlatform(), []);
+  // The right column opens as Automations' calendar rail does: open from
+  // 1280px, folded into its 40px strip below, a press away either way.
+  const [explorerOpen, setExplorerOpen] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(min-width: 1280px)").matches);
+  const focusSearch = useRef(false);
 
-  // Every source's notes and folders, for the counts of the left column and
+  // Every source's notes and folders, for the counts of the right column and
   // the aggregated views (no note bodies: those load when a note opens).
   const loadOverviews = useCallback(async (list: MemoryManagerSource[]) => {
+    // A bot whose memory routes refuse this person (404 "no such bot", 403)
+    // is not theirs to open: its row would only show that error, so it
+    // leaves the column. The server already leaves such bots out.
+    const refused = new Set<string>();
     const entries = await Promise.all(list.map(async (source) => {
       try {
         if (source.kind === "bot" && source.botId) return [source.id, await browseBotSource(source.botId)] as const;
         if (source.kind === "team") return [source.id, await browseTeamSource(source.section ?? "")] as const;
         if (source.kind === "perspicax") return [source.id, await browsePerspicax()] as const;
-      } catch {
+      } catch (cause) {
         /* one source that does not answer keeps the others */
+        if (source.kind === "bot" && cause instanceof ApiError && (cause.status === 404 || cause.status === 403)) refused.add(source.id);
       }
       return null;
     }));
     const next: Record<string, MemoryBrowse> = {};
     for (const entry of entries) if (entry) next[entry[0]] = entry[1];
+    if (refused.size) setSources((current) => current?.filter((source) => !refused.has(source.id)) ?? current);
     setOverviews(next);
     setOverviewsReady(true);
   }, []);
@@ -172,6 +184,12 @@ export function MemoryManagerPanel() {
 
   useEffect(() => { void loadSources(); }, [loadSources]);
 
+  useEffect(() => {
+    if (!explorerOpen || !focusSearch.current) return;
+    focusSearch.current = false;
+    searchRef.current?.focus();
+  }, [explorerOpen]);
+
   const refreshOverviews = useCallback(() => {
     if (sources) void loadOverviews(sources);
   }, [sources, loadOverviews]);
@@ -181,8 +199,14 @@ export function MemoryManagerPanel() {
     const onKey = (event: KeyboardEvent) => {
       if (event.shiftKey || event.altKey || !(mac ? event.metaKey : event.ctrlKey) || event.key.toLowerCase() !== "o") return;
       event.preventDefault();
-      searchRef.current?.focus();
-      searchRef.current?.select();
+      if (!searchRef.current) {
+        // folded: open the column, then focus its field once it is drawn
+        focusSearch.current = true;
+        setExplorerOpen(true);
+        return;
+      }
+      searchRef.current.focus();
+      searchRef.current.select();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -618,7 +642,7 @@ export function MemoryManagerPanel() {
   const browsing = (source: MemoryManagerSource, folder?: string) =>
     page.kind === "browse" && page.source.id === source.id && (page.folder ?? "") === (folder ?? "");
 
-  // ---- the left column ----------------------------------------------------
+  // ---- the right column ---------------------------------------------------
 
   const nav: MemorySidebarNav[] = [
     { id: "all", label: t("memoryManager.nav.all"), icon: NotebookText, count: navRows.all.length, current: page.kind === "nav" && page.nav === "all", onOpen: () => openNav("all") },
@@ -882,19 +906,6 @@ export function MemoryManagerPanel() {
 
       <div data-memory-row="" className="relative flex min-h-0 min-w-0 flex-1">
         <div className="content-card-body flex min-h-0 min-w-0 flex-1">
-          <MemorySidebar
-            query={query}
-            onQuery={onQuery}
-            searchRef={searchRef}
-            shortcut={mac ? "⌘O" : "Ctrl+O"}
-            nav={nav}
-            tiers={tiers}
-            renaming={renaming}
-            onRenameDone={() => setRenaming(null)}
-            loading={sidebarLoading}
-            footer={sidebarFooter}
-          />
-
           <section className="flex min-h-0 min-w-0 flex-1 flex-col">
             {showMap && mapGraph ? (
               <MemoryMapCanvas
@@ -1129,6 +1140,26 @@ export function MemoryManagerPanel() {
               </div>
             )}
           </section>
+
+          {/* Automations' calendar rail: on the right of the body, 280px, after the content. */}
+          {explorerOpen ? <MemorySidebar
+            query={query}
+            onQuery={onQuery}
+            searchRef={searchRef}
+            shortcut={mac ? "⌘O" : "Ctrl+O"}
+            nav={nav}
+            tiers={tiers}
+            renaming={renaming}
+            onRenameDone={() => setRenaming(null)}
+            loading={sidebarLoading}
+            footer={sidebarFooter}
+            onCollapse={() => setExplorerOpen(false)}
+          /> : (
+            <button type="button" onClick={() => setExplorerOpen(true)} aria-label={t("memoryManager.explorerShow")} title={t("memoryManager.explorerShow")} className="flex w-10 shrink-0 flex-col items-center gap-2 border-l border-hairline/40 bg-panel px-1 py-4 text-[11px] text-ink-secondary hover:bg-raised hover:text-ink" data-memory-explorer-show="">
+              <Brain size={16} aria-hidden="true" />
+              <span className="[writing-mode:vertical-rl]">{t("memoryManager.sidebarLabel")}</span>
+            </button>
+          )}
         </div>
       </div>
     </main>

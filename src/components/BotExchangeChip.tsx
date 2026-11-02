@@ -3,7 +3,7 @@
 // stored; this only changes how they are drawn.
 import { createContext, useCallback, useContext, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeftRight, X } from "lucide-react";
+import { ArrowLeftRight } from "lucide-react";
 import { formatTime, type Bot } from "@/state/store";
 import { ConversationLink } from "./ConversationLink";
 import { PartyAvatar, isAgentParty } from "./PartyAvatar";
@@ -14,7 +14,7 @@ import { CHAT_BUBBLE_WIDTH_CLASS, CHAT_COLUMN_CLASS, chatBubbleWidth } from "@/l
 import { prefersWideBubble } from "@/lib/rich-blocks";
 import { runCorners } from "@/lib/room-authors";
 import { cn } from "@/lib/cn";
-import { CIRCLE_BUTTON } from "@/lib/circle-button";
+import { PILL } from "./SettingsPrimitives";
 import { getExchangeColumnHost, setExchangeColumnHost, subscribeExchangeColumnHost } from "@/lib/exchange-column-host";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ClusterLabel } from "./ClusterLabel";
@@ -91,7 +91,8 @@ export function TranscriptDate({ at }: { at: number }) {
  * again. With no line to show, the sheet says so rather than staying blank
  * (#1502). Routine runs reuse this sheet with an optional quiet meta line
  * under the header and an opaque footer band of actions (Continue, Stop, …).
- * Close sits in the header as a round X, like other side surfaces. */
+ * Close is one centered "Close Chat" pill at the bottom, in place of the
+ * composer, as in Grok Bot; Escape closes too. */
 export function ExchangeSheet({
   run,
   bots,
@@ -120,7 +121,7 @@ export function ExchangeSheet({
   ariaLabel?: string;
 }) {
   const column = useExchangePortalHost();
-  const closeText = closeLabel ?? t("common.close");
+  const closeText = closeLabel ?? t("chat.exchange.closeChat");
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
@@ -161,16 +162,6 @@ export function ExchangeSheet({
           })}
         </div>
         {meta && <div data-exchange-meta className="max-w-[min(92%,36rem)] px-4 text-center text-[12px] text-ink-secondary">{meta}</div>}
-        <button
-          type="button"
-          data-testid="bot-exchange-close"
-          onClick={onClose}
-          aria-label={closeText}
-          title={closeText}
-          className={cn(CIRCLE_BUTTON, "absolute end-3 top-3")}
-        >
-          <X size={17} strokeWidth={1.75} aria-hidden="true" />
-        </button>
       </div>
       {/* The same pane and column as a 1:1 chat (ChatView): the gutter, the
           960px column, Geist at 13px, the Markdown renderer and the bubble
@@ -258,15 +249,24 @@ export function ExchangeSheet({
         })}
       </div>
       </div>
-      {footer && (
-        <div
-          data-exchange-footer=""
-          className="shrink-0 border-t border-hairline/40 bg-app px-4 py-3"
-          onClick={(event) => event.stopPropagation()}
+      {/* In place of the composer (Grok Bot): one centered "Close Chat" pill
+          is the close. A routine run stacks its action row above it in the
+          same opaque band. */}
+      <div
+        data-exchange-footer={footer ? "" : undefined}
+        className={cn("flex shrink-0 flex-col items-center gap-3 bg-app px-4", footer ? "border-t border-hairline/40 py-3" : "pb-4 pt-2")}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {footer && <div className="w-full">{footer}</div>}
+        <button
+          type="button"
+          data-testid="bot-exchange-close"
+          onClick={onClose}
+          className={cn(PILL, "px-4 font-medium")}
         >
-          {footer}
-        </div>
-      )}
+          {closeText}
+        </button>
+      </div>
     </div>
   );
   // A column host (ChatView, GroupView, or the shared host) is the containing

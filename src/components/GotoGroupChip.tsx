@@ -17,6 +17,18 @@ import { BotExchangeChip, ExchangeSheet, avatarBot } from "./BotExchangeChip";
 import { BotConversationLine, creditedLines } from "./BotConversations";
 import { ConversationLink } from "./ConversationLink";
 import { useMenuMotion } from "./MenuMotion";
+import { AnchoredPopover } from "./AnchoredPopover";
+
+/** The top of the composer docked over this chat, when there is one: the
+ * list opens above it instead of under it (2026-11-02, cut off by the
+ * composer). Found from the chip itself, so each pane uses its own. */
+function composerFloor(anchor: HTMLElement): number | null {
+  for (let node: HTMLElement | null = anchor.parentElement; node; node = node.parentElement) {
+    const dock = node.querySelector<HTMLElement>("[data-composer-dock]");
+    if (dock && !dock.contains(anchor)) return dock.getBoundingClientRect().top;
+  }
+  return null;
+}
 
 const MAX_FACES = 3;
 
@@ -111,6 +123,7 @@ export function GotoGroupChip({
   const [held, setHeld] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLElement | null>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const forcedKey = focusedId
@@ -124,7 +137,7 @@ export function GotoGroupChip({
     if (!open) return;
     itemRefs.current[0]?.focus();
     const onPointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false);
+      if (event.target instanceof Node && !rootRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setOpen(false);
     };
     window.addEventListener("pointerdown", onPointerDown);
     return () => window.removeEventListener("pointerdown", onPointerDown);
@@ -191,7 +204,7 @@ export function GotoGroupChip({
     }
     if (target.kind === "conversation") openConversation(target);
   };
-  const onMenuKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const onMenuKey = (event: ReactKeyboardEvent<HTMLElement>) => {
     const items = itemRefs.current.filter((item): item is HTMLButtonElement => Boolean(item));
     const at = items.findIndex((item) => item === document.activeElement);
     const move = (next: number) => {
@@ -216,6 +229,7 @@ export function GotoGroupChip({
           ref={triggerRef}
           type="button"
           data-testid="goto-group-chip"
+          data-jump-pill-avoid=""
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label={namedSummary ? t("chat.gotoGroup.summaryAria", { summary: namedSummary }) : t("chat.gotoGroup.aria", { count, agents: agentsLabel })}
@@ -262,13 +276,18 @@ export function GotoGroupChip({
           <ChevronDown size={12} aria-hidden="true" className={cn("transition-transform", open && "rotate-180")} />
         </button>
         {motion.shown && (
-          <div
+          <AnchoredPopover
+            anchorRef={triggerRef}
+            popoverRef={menuRef}
+            side="top"
+            align="center"
+            floor={composerFloor}
             role="menu"
             aria-label={t("chat.gotoGroup.menu")}
             data-testid="goto-group-menu"
             onKeyDown={onMenuKey}
             className={cn(
-              "absolute left-1/2 top-full z-30 mt-1 flex w-[280px] max-w-[80vw] -translate-x-1/2 flex-col gap-0.5 overflow-hidden rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]",
+              "flex w-[280px] max-w-[80vw] flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]",
               motion.className,
             )}
             {...motion.exitProps}
@@ -287,7 +306,7 @@ export function GotoGroupChip({
                   data-goto-target={entry.key}
                   aria-label={t("chat.goToConversationWith", { name: entry.label })}
                   onClick={() => pick(target)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none"
+                  className="flex w-full shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none"
                 >
                   {face ? (
                     <BotAvatar bot={face as Bot} state="happy" size={18} animated={false} />
@@ -301,7 +320,7 @@ export function GotoGroupChip({
                 </button>
               );
             })}
-          </div>
+          </AnchoredPopover>
         )}
       </div>
       {sheetTarget?.kind === "exchange" && (

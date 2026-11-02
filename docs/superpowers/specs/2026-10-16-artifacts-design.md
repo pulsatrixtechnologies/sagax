@@ -96,7 +96,7 @@ Runner rules (`server/artifact-sources.ts`), checked before every run
   workspace (a JSON file it keeps up to date), through `readWorkspaceText`,
   which refuses a path outside the workspace, a link or a binary file.
 - Perspicax tool: only the reviewed read-only list
-  (`PERSPICAX_READ_ONLY_TOOLS`, e.g. `cw_psa__query`), in the name of the
+  (`PERSPICAX_READ_ONLY_TOOLS`, e.g. `cw_psa_query`), in the name of the
   artifact's owner (else the bot's owner), through the same delegated path a
   routine uses.
 - A tool on one of the bot's remote MCP servers: only when that exact tool is

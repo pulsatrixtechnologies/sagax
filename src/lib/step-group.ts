@@ -6,7 +6,7 @@
 import type { Message } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { isToolStep } from "@/lib/activity-runs";
-import { readStep, stepDuration, stepPhase, type StepNameOf, type StepPhase } from "@/lib/step-label";
+import { readStep, stepDuration, stepPhase, stuckNoticeKey, type StepNameOf, type StepPhase } from "@/lib/step-label";
 
 type ToolStep = Message & { tool: NonNullable<Message["tool"]> };
 
@@ -44,7 +44,13 @@ export function mergeSteps(messages: readonly Message[], nameOf?: StepNameOf): S
       continue;
     }
     const last = entries.at(-1);
-    if (last?.kind === "steps" && last.label === reading.label && last.phase === phase && phase !== "running") {
+    // A stuck notice right after the same notice is the copy an older server
+    // wrote beside it (stuckNoticeKey): it reads once, not "×2". Notices for
+    // different calls stay apart, each with the call it names.
+    const stuck = stuckNoticeKey(message.tool.name);
+    const lastStuck = last?.kind === "steps" ? stuckNoticeKey(last.messages.at(-1)!.tool.name) : undefined;
+    if (stuck && lastStuck === stuck) continue;
+    if (last?.kind === "steps" && last.label === reading.label && last.phase === phase && phase !== "running" && stuck === lastStuck) {
       last.messages.push(message);
       if (last.target !== reading.target) last.target = undefined;
       last.durationMs = last.durationMs !== undefined && message.tool.durationMs !== undefined ? last.durationMs + message.tool.durationMs : undefined;

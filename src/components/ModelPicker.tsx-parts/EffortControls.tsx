@@ -85,6 +85,7 @@ export function EffortRow({
   if (menu) return (
     <div className={cn("min-w-0", className)} data-effort-menu="">
       <PillSelect
+        fill
         value={current ?? ""}
         ariaLabel={t("model.effort.aria")}
         onChange={(next) => chooseEffort(levels.find((level) => level === next))}

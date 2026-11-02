@@ -367,6 +367,12 @@ describe("RICH_OUTPUT_PROMPT", () => {
       for (const name of match[1]!.split(/\s+/)) expect(WIDGET_KIT_CSS, name).toMatch(new RegExp(`\\.${name}(?![\\w-])`));
     }
     expect(RICH_OUTPUT_PROMPT).toContain("never set a background on html or body, your own colors, fonts or font sizes");
+    expect(RICH_OUTPUT_PROMPT).toContain("one step in from the title");
+    expect(RICH_OUTPUT_PROMPT).toContain("its text carries the meaning");
+    expect(RICH_OUTPUT_PROMPT).toContain(".snapshot-banner");
+    expect(RICH_OUTPUT_PROMPT).toContain(".shell-nav");
+    expect(RICH_OUTPUT_PROMPT).toContain(".finder");
+    expect(RICH_OUTPUT_PROMPT).toContain(".file");
     expect(RICH_OUTPUT_PROMPT).toContain("never inside a ```widget or a show_widget card");
   });
 

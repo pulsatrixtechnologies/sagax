@@ -682,7 +682,9 @@ export function SettingsModal() {
               groups its own (you, AI, the workspace, this app last). A
               heading shows while one of its entries does, a search too. */}
           {NAV_GROUPS.map((group) => {
-            const entries = visibleSections.filter((entry) => entry.group === group.id);
+            // 2026-11-02 (JC): About is not a row of this menu; it opens from
+            // the app menu and the sidebar, and a search still finds it.
+            const entries = visibleSections.filter((entry) => entry.group === group.id && entry.id !== "about");
             if (entries.length === 0) return null;
             const headingId = `app-settings-nav-${group.id}`;
             return (
@@ -763,7 +765,7 @@ export function SettingsModal() {
               className="w-full min-w-0 rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink focus:border-border-strong focus:outline-none sm:hidden"
             >
               {NAV_GROUPS.map((group) => {
-                const entries = availableSections.filter((entry) => entry.group === group.id);
+                const entries = availableSections.filter((entry) => entry.group === group.id && entry.id !== "about");
                 return entries.length === 0 ? null : (
                   <optgroup key={group.id} label={t(group.labelKey)}>
                     {entries.map(({ id, labelKey }) => (

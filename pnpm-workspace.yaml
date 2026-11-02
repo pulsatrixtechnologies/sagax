@@ -4,7 +4,6 @@
 packages:
   - "."
   - "apps/docs"
-  - "cloudflare/control-plane"
 # Packaging fetches optional binaries for both desktop CPU targets. This lived
 # in package.json's "pnpm" field, which pnpm 10.33 ignores — it printed a
 # warning on every command and, more to the point, silently was not applied.
@@ -20,23 +19,18 @@ onlyBuiltDependencies:
   - electron
   - esbuild
 # mermaid 12.1 still allows dompurify 3.4.13. Force the patched release.
-# Dependabot: transitive copies below the fixed versions (miniflare pins sharp
-# 0.35.4; mermaid and rehype-katex pull katex 0.16.x).
+# Dependabot: transitive copies below the fixed versions (mermaid and
+# rehype-katex pull katex 0.16.x).
 # dompurify 3.4.17 fixes the SAFE_FOR_TEMPLATES shadow-root bypass (critical),
 # the IN_PLACE detached-subtree hook gap (high) and the SMIL href guard (low).
-# @vitest/mocker 4.1.11 (dev-only, via @cloudflare/vitest-plugin -> vitest 4.x)
-# has a code-injection and a Windows traversal fix in 4.1.12; the bound keeps
-# vitest 5.x's own @vitest/mocker 5.x untouched.
 overrides:
-  # miniflare (via @cloudflare/vitest-plugin) pins undici 7.29.1. 7.30.1
-  # closes the open undici advisories. undici 6 stays on its own line.
+  # 7.30.1 closes the open undici advisories. undici 6 stays on its own line.
   "undici@>=7.0.0 <7.30.1": 7.30.1
-  # @cloudflare/vitest-plugin pins zod 4.4.3. The direct dependency is 4.6.6.
+  # One zod 4 for every package: the direct dependency is 4.6.6.
   "zod@>=4.0.0 <4.6.6": 4.6.6
   dompurify: 3.4.17
   # ajv 8.20 still allows fast-uri 3.1.8. 3.1.9 fixes the published advisories.
   fast-uri: 3.1.9
-  "@vitest/mocker@<4.1.12": 4.1.12
   sharp@<0.35.5: 0.35.5
   katex@<0.18.2: 0.18.2
   # @simplewebauthn/server (security keys): its certificate parsers stay on

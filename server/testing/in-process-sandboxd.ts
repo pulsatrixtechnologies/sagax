@@ -22,8 +22,8 @@ export function inProcessSandboxdClient(service: SandboxService, maxRunning = 3)
     exec: (key, input) => wire(() => service.exec(key, input)),
     desktopStream: (key, options) => wire(() => service.desktopStream(key, options)),
     stdioStream: (key, spec) => wire(() => service.stdioStream(key, spec)),
-    ttyStream: (key, size) => wire(async () => {
-      const tty = await service.ttyStream(key, size);
+    ttyStream: (key, size, cwd) => wire(async () => {
+      const tty = await service.ttyStream(key, size, cwd);
       return { stream: tty.stream, resize: (cols: number, rows: number) => void tty.resize({ cols, rows }) };
     }),
   };

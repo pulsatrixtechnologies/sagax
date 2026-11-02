@@ -10,7 +10,7 @@
  * Organization for that person. settings-subpage: a Settings sub-page in
  * the same window size, the navigation Connect apps' pages follow
  * (2026-10-28). The bot Rocket has its own plugins (For Rocket).
- * scripts/capture-connect-apps-manage.mjs clicks through the tabs. */
+ * scripts/capture/connect-apps-manage.mjs clicks through the tabs. */
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { X } from "lucide-react";

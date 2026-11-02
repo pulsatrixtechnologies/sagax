@@ -135,7 +135,7 @@ function Gallery() {
           </div>
         </Column>
       </div>
-      {params.get("takeover") === "1" && <RemoteTakeover botId="melonie" view={view} state="running" controls={{ pause: () => {}, stop: () => {} }} onClose={() => {}} />}
+      {params.get("takeover") === "1" && <RemoteTakeover botId="melonie" view={view} state="running" onClose={() => {}} />}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 /** The real ChatView (with its real Composer, PageSurface and page cards)
  * on a synthetic store, for lot 5 captures of Pages and chat
- * (scripts/capture-page-chat-real.mjs). No server: /api/pages answers from
+ * (scripts/capture/page-chat-real.mjs). No server: /api/pages answers from
  * this file, the preview frame is routed by the capture script. Every name
  * and text is synthetic. ?skin=<id>&lang=en|fr&busy=1
  * The script drives it like a person: open the card, Show conversation,

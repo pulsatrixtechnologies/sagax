@@ -15,7 +15,7 @@ device scale 2. Produced by:
 
 ```
 SAGAX_CHROMIUM="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  node scripts/capture-sidebar-rail.mjs
+  node scripts/capture/sidebar-rail.mjs
 ```
 
 | File | What it shows |

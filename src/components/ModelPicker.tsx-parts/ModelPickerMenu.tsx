@@ -1,5 +1,5 @@
 // Composer model menu (extracted from ModelPicker.tsx, #1383).
-import { type RefObject } from "react";
+import { type KeyboardEvent, type RefObject } from "react";
 import type { MenuMotion } from "../MenuMotion";
 import { ChevronRight } from "lucide-react";
 import type { Bot, InstanceInfo, ModelSelection } from "@/state/store";
@@ -13,6 +13,7 @@ import { toggleModelFavorite } from "@/lib/model-favorites";
 import { fastBaseOf, fastTwinOf, modelDefaultEffort, modelEffortLevels } from "../../../shared/model-capabilities";
 import type { EffortLevel } from "../../../shared/wire";
 import { MENU_WIDTH } from "./helpers";
+import { AnchoredPopover, enclosingWindowBounds } from "../AnchoredPopover";
 
 export function ModelPickerMenu({
   menuRef,
@@ -34,6 +35,7 @@ export function ModelPickerMenu({
   setEffort,
   pick,
   effortTitle,
+  anchorRef,
 }: {
   menuRef: RefObject<HTMLDivElement | null>;
   menuAt: { left?: number; right?: number; bottom: number } | null;
@@ -55,6 +57,9 @@ export function ModelPickerMenu({
   setEffort: (effort: EffortLevel | undefined) => void;
   pick: (instance: InstanceInfo, model: string, keepOpen?: boolean) => void;
   effortTitle: string;
+  /** Hang the menu off this chip (Settings > Models list): under it or over
+   * it, inside the window that holds it, above that window's layer. */
+  anchorRef?: RefObject<HTMLElement | null>;
 }) {
   // The settings of the model in use, under the composer's list (the maintainer,
   // 2026-10-13, Cursor's second panel): Fast when it has a fast twin and
@@ -87,34 +92,22 @@ export function ModelPickerMenu({
     />
   ) : null;
 
-  const menuPanel = (
-    <div
-      ref={menuRef}
-      data-model-menu
-      role="dialog"
-      aria-label={t("model.menu")}
-      style={menuAt ? { left: menuAt.left, right: menuAt.right, bottom: menuAt.bottom, width: MENU_WIDTH } : { width: MENU_WIDTH }}
-      onKeyDown={(event) => {
-        // a submenu of the + menu: its keys stay here (the + menu moves its own focus)
-        if (headless) event.stopPropagation();
-        // the left arrow from an empty search steps back to the + menu's row
-        if (headless && event.key === "ArrowLeft" && !event.defaultPrevented
-          && event.target instanceof HTMLInputElement && event.target.value === "") {
-          event.preventDefault();
-          closeMenu(true);
-          return;
-        }
-        if (event.key !== "Escape" || event.defaultPrevented) return;
-        event.preventDefault();
-        closeMenu(true);
-      }}
-      {...menuMotion.exitProps}
-      className={cn(
-        "z-50 flex max-h-[min(560px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
-        menuAt ? "fixed" : "absolute bottom-full right-0 mb-1.5",
-        menuMotion.className,
-      )}
-    >
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    // a submenu of the + menu: its keys stay here (the + menu moves its own focus)
+    if (headless) event.stopPropagation();
+    // the left arrow from an empty search steps back to the + menu's row
+    if (headless && event.key === "ArrowLeft" && !event.defaultPrevented
+      && event.target instanceof HTMLInputElement && event.target.value === "") {
+      event.preventDefault();
+      closeMenu(true);
+      return;
+    }
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    event.preventDefault();
+    closeMenu(true);
+  };
+  const content = (
+    <>
       <ModelSearchList variant="popover" autoFocus sections={menuSections} onPick={onRow} onEscape={() => closeMenu(true)} disabled={Boolean(bot.busy)}
         favorites={{ keys: favoriteKeys, onToggle: (row) => toggleModelFavorite(row.key) }} />
       {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
@@ -125,6 +118,49 @@ export function ModelPickerMenu({
           <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
         </ModelMenuItem>
       </div>
+    </>
+  );
+
+  if (anchorRef) return (
+    <AnchoredPopover
+      anchorRef={anchorRef}
+      popoverRef={menuRef as RefObject<HTMLElement | null>}
+      align="start"
+      gap={6}
+      maxHeight={560}
+      bounds={enclosingWindowBounds}
+      data-model-menu=""
+      data-model-menu-anchored=""
+      role="dialog"
+      aria-label={t("model.menu")}
+      style={{ width: MENU_WIDTH }}
+      onKeyDown={onKeyDown}
+      {...menuMotion.exitProps}
+      className={cn(
+        "flex max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
+        menuMotion.className,
+      )}
+    >
+      {content}
+    </AnchoredPopover>
+  );
+
+  const menuPanel = (
+    <div
+      ref={menuRef}
+      data-model-menu
+      role="dialog"
+      aria-label={t("model.menu")}
+      style={menuAt ? { left: menuAt.left, right: menuAt.right, bottom: menuAt.bottom, width: MENU_WIDTH } : { width: MENU_WIDTH }}
+      onKeyDown={onKeyDown}
+      {...menuMotion.exitProps}
+      className={cn(
+        "z-50 flex max-h-[min(560px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
+        menuAt ? "fixed" : "absolute bottom-full right-0 mb-1.5",
+        menuMotion.className,
+      )}
+    >
+      {content}
     </div>
   );
 

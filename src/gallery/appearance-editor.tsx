@@ -1,7 +1,7 @@
 /** Isolated gallery for headless screenshots of a bot's Edit bot >
  * Appearance page: the real persona editor (PersonaEditorModal) opened on
  * Appearance for a fictional bot wearing Shapes. The capture script
- * (scripts/capture-appearance-editor.mjs) clicks the tabs. Not shipped in
+ * (scripts/capture/appearance-editor.mjs) clicks the tabs. Not shipped in
  * the app. ?skin=<id>&lang=<code>&character=<id>&color=<name> */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";

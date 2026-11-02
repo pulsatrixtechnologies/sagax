@@ -72,3 +72,19 @@ describe("shouldEmptyResponseRetry", () => {
     expect({ retried, blocked, incidents, N }).toEqual({ retried: N, blocked: N, incidents: N, N });
   });
 });
+
+describe("shouldEmptyResponseRetry after a retry inside the turn", () => {
+  const base = { ok: false, stopped: false, limitTaken: false, isRoutine: false, empty: true };
+  it("does not resend the whole message when the driver already asked once more", () => {
+    // Prod 2026-11-02: Grok's own 15 retries ran twice (12 minutes) before
+    // the person saw the error, because the harness resent the message.
+    let taken = 0;
+    const detail = "Grok kept returning its reasoning without a final answer, even after Sagax asked it once more with lower reasoning effort. Nothing was changed.";
+    expect(shouldEmptyResponseRetry({ ...base, detail, take: () => { taken += 1; return true; } })).toBe(false);
+    expect(taken).toBe(0);
+  });
+  it("still resends once when the driver could not retry", () => {
+    const detail = "Grok kept returning its reasoning without a final answer. Nothing was changed. Send the message again, or lower this bot's reasoning effort.";
+    expect(shouldEmptyResponseRetry({ ...base, detail, take: () => true })).toBe(true);
+  });
+});

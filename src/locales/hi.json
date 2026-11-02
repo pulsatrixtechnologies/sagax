@@ -1807,5 +1807,8 @@
   "settings.streamReplies.title": "जवाब लिखे जाते समय दिखाएँ",
   "settings.streamReplies.show": "बॉट का जवाब पूरा होने पर एक साथ दिखाने के बजाय, लिखे जाते समय शब्द-दर-शब्द दिखाएँ",
   "bulkEdit.mixedOpen": "These fields differ across the selected bots: {fields}. Controls start empty for them; only what you set is written.",
-  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot."
+  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot.",
+  "orgComputer.diskFull": "सर्वर एनवायरनमेंट की डिस्क भर गई है: {total} में से {free} खाली। बॉट अब फ़ाइलें सहेज नहीं सकते। /workspace में बड़ी फ़ाइलें हटाएँ।",
+  "orgComputer.diskAlmostFull": "सर्वर एनवायरनमेंट की डिस्क लगभग भर गई है: {total} में से {free} खाली।",
+  "orgComputer.diskFree": "{free} खाली"
 }

@@ -646,7 +646,7 @@ export const HOST_TOOL_NAMES_BY_ENGINE: Readonly<Record<string, readonly string[
  * engines.lock.json: `allow` is every tool a withheld turn may be offered,
  * `deny` every tool it must not use. Each tool the pinned CLI exposes is on
  * exactly one of them (engine-tools.test.ts against engine-native-tools.json,
- * captured by scripts/capture-engine-native-tools.ts). `enforced` says how
+ * captured by scripts/capture/engine-native-tools.ts). `enforced` says how
  * a tool on neither stays off: the CLI takes the allowlist itself, or only
  * the pinned inventory (the image installs exactly the lock's version, and
  * bumping it fails the test until the new inventory is classified). */

@@ -31,8 +31,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   }
   if (msg.method === "tools/list") {
     process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { tools: [
-      { name: "cw_psa__query", inputSchema: { type: "object" } },
-      { name: "cw_psa__write", inputSchema: { type: "object" } },
+      { name: "cw_psa_query", inputSchema: { type: "object" } },
+      { name: "cw_psa_write", inputSchema: { type: "object" } },
       { name: "evil_write", inputSchema: { type: "object" }, annotations: { readOnlyHint: true } },
     ] } }) + "\\n");
     return;
@@ -43,7 +43,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 
 /** Every side-effecting tool the owner listed, plus generic writes. */
 const WRITE_TOOLS = [
-  "cw_psa__write", "cw_psa__action", "cw_psa__update_ticket", "cw_psa__log_time", "cw_psa__book_schedule_entry",
+  "cw_psa_write", "cw_psa_action", "cw_psa_update_ticket", "cw_psa_log_time", "cw_psa_book_schedule_entry",
   "memory_write", "memory_forget", "memory_promote", "memory_propose", "memory_feedback",
   "sagax_send", "sagax_approve", "sagax_nudge", "sagax_routine_run",
   "flow_action", "ask_person", "api_upload",
@@ -51,7 +51,7 @@ const WRITE_TOOLS = [
   "create_bot", "send_message", "delegate", "workspace_write",
   "computer_select", "a_brand_new_tool",
 ];
-const READ_ONLY = ["api_search", "cw_psa__query", "memory_search"];
+const READ_ONLY = ["api_search", "cw_psa_query", "memory_search"];
 
 type Policy = (ask: GateAsk) => "allow" | "deny" | "hang" | "close";
 
@@ -169,13 +169,13 @@ describe("mcp-gate approval", () => {
     start();
     let first = true;
     policy = () => { const decision = first ? "allow" : "deny"; first = false; return decision; };
-    const approved = await call(1, "cw_psa__write", { id: 7 });
-    expect(approved.result.content[0].text).toBe("ran cw_psa__write");
-    const again = await call(2, "cw_psa__write", { id: 7 });
+    const approved = await call(1, "cw_psa_write", { id: 7 });
+    expect(approved.result.content[0].text).toBe("ran cw_psa_write");
+    const again = await call(2, "cw_psa_write", { id: 7 });
     expect(again.result.isError).toBe(true);
     expect(asks).toHaveLength(2);
     expect(new Set(asks.map((ask) => ask.id)).size).toBe(2);
-    expect(upstreamCalls()).toEqual(["cw_psa__write"]);
+    expect(upstreamCalls()).toEqual(["cw_psa_write"]);
   });
 
   it("ignores a server's own readOnlyHint: an annotated tool still asks", async () => {
@@ -191,7 +191,7 @@ describe("mcp-gate approval", () => {
 
   it("declines when the broker is unreachable", async () => {
     start({ SAGAX_GATE_APPROVAL_SOCKET: join(scratch, "missing.sock") });
-    const reply = await call(1, "cw_psa__write");
+    const reply = await call(1, "cw_psa_write");
     expect(reply.result.isError).toBe(true);
     const read = await call(2, "api_search");
     expect(read.result.content[0].text).toBe("ran api_search");
@@ -227,20 +227,20 @@ describe("mcp-gate approval", () => {
     const names = list.result.tools.map((tool: { name: string }) => tool.name);
     expect(names).toEqual(expect.arrayContaining(["cw_psa_query", "cw_psa_write"]));
     const read = await call(2, "cw_psa_query");
-    expect(read.result.content[0].text).toBe("ran cw_psa__query");
+    expect(read.result.content[0].text).toBe("ran cw_psa_query");
     const write = await call(3, "cw_psa_write");
     expect(write.result.isError).toBe(true);
-    expect(asks.map((ask) => ask.tool)).toEqual(["cw_psa__write"]);
-    expect(upstreamCalls()).toEqual(["cw_psa__query"]);
+    expect(asks.map((ask) => ask.tool)).toEqual(["cw_psa_write"]);
+    expect(upstreamCalls()).toEqual(["cw_psa_query"]);
   });
 
   it("refuses batches and unreadable frames that could carry a call past the check", async () => {
     start();
-    send([{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "cw_psa__write", arguments: {} } }]);
+    send([{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "cw_psa_write", arguments: {} } }]);
     expect((await next()).error.code).toBe(-32600);
     send("{not json");
     expect((await next()).error.code).toBe(-32700);
-    send({ jsonrpc: "2.0", method: "tools/call", params: { name: "cw_psa__write", arguments: {} } });
+    send({ jsonrpc: "2.0", method: "tools/call", params: { name: "cw_psa_write", arguments: {} } });
     expect((await next()).error.code).toBe(-32602);
     expect(asks).toEqual([]);
     expect(upstreamCalls()).toEqual([]);

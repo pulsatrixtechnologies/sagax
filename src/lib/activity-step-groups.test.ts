@@ -37,6 +37,18 @@ describe("groupActivitySteps", () => {
     expect(groups[1]!.substeps!.map((group) => group.count)).toEqual([2]);
   });
 
+  it("reads a stuck notice an older server wrote twice, once with long dashes, as one row that names the call", () => {
+    const dash = "\u2014";
+    const groups = groupActivitySteps([
+      { id: "n1", name: `Same call repeated 5× ${dash} other: github__issue_read ${dash} it may be stuck`, at: NOW, ok: false },
+      { id: "n2", name: "Same call repeated 5× - other: github__issue_read - it may be stuck", at: NOW, ok: false },
+    ]);
+    expect(groups.map((group) => [group.label, group.phase, group.count, group.summary])).toEqual([
+      ["Same call repeated 5 times. It may be stuck", "failed", 1, "github__issue_read"],
+    ]);
+    expect(countFailedSteps(groups)).toBe(1);
+  });
+
   it("folds finished tool searches so the calls between them merge", () => {
     const groups = groupActivitySteps([
       { id: "s1", name: "search_tool", at: NOW, ok: true, input: JSON.stringify({ query: "perspicax" }) },

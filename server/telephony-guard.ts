@@ -13,13 +13,13 @@
 // accounts (a new key or auth token would let a bot reach Twilio around
 // Sagax). A `_dry_run` sends nothing and stays allowed.
 //
-// Tool names are compared with separators folded (`twilio_api__write`,
-// `twilio_api-write`, `mcp__perspicax_example__twilio_api__write`) and with
-// per-resource names (`twilio_api__Calls_write`).
+// Tool names are compared with separators folded (`twilio_api_write`,
+// `twilio_api-write`, `mcp__perspicax_example__twilio_api_write`) and with
+// per-resource names (`twilio_api_Calls_write`).
 //
 // Pure: no disk, no clock.
 
-/** Read tools: `<api>__query`, `<api>__read_action`, `<api>__find_<x>`... */
+/** Read tools: `<api>_query`, `<api>_read_action`, `<api>_find_<x>`... */
 const READ_TOOL = /_(?:query|read|list|get|fetch|search|describe|read_action)$|^twilio(?:_[a-z0-9]+)?_find_[a-z0-9_]+$/;
 /** A text that carries an address Twilio would fetch or call back. */
 const URL_FIELD = /(?:url|callback)$/i;

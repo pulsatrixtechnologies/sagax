@@ -34,7 +34,7 @@ import { lenientToolValidator, schemaProblems } from "./mcp-schema-validator.ts"
 import { parseGateSearch, searchedCatalog } from "./mcp-gate-search.ts";
 import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, answerQuery, describeShape, exampleQuery } from "./mcp-shape.ts";
 import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText, trimStructured } from "./mcp-trim.ts";
-import { ToolNameAliases } from "./mcp-tool-names.ts";
+import { ToolNameAliases, mapJsonStrings } from "./mcp-tool-names.ts";
 import { killCliTree } from "./procs.ts";
 import { misuseGateBlockText } from "../shared/misuse-guardrails.ts";
 import { BRIDGE_FIND_TOOL, BRIDGE_SERVER, readBridgeCall } from "../shared/searched-tool-call.ts";
@@ -350,6 +350,7 @@ function reportToolNames(advertised: string[], outcome: ReturnType<ToolNameAlias
     process.stderr.write(`mcp-gate(${NAME}): ERROR tool "${entry.upstream}" cannot be registered for Grok (${entry.reason}); it is NOT available to the bot\n`);
   }
   for (const problem of outcome.parity) process.stderr.write(`mcp-gate(${NAME}): ERROR tool parity: ${problem}\n`);
+  for (const problem of outcome.predictionMismatches) process.stderr.write(`mcp-gate(${NAME}): WARNING tool name in the instructions: ${problem}\n`);
   if (!REPORT_DIR) return;
   try {
     mkdirSync(REPORT_DIR, { recursive: true, mode: 0o700 });
@@ -577,8 +578,10 @@ function routeLine(line: string): void {
   // An alias resolves through the map, before any check sees the name.
   if (ALIASES && message?.method === "tools/call" && params && typeof params.name === "string") {
     const upstream = ALIASES.upstream(params.name);
-    if (upstream !== params.name) {
+    const args = params.arguments === undefined ? undefined : ALIASES.argumentsToUpstream(params.arguments);
+    if (upstream !== params.name || args !== params.arguments) {
       params.name = upstream;
+      if (args !== undefined) params.arguments = args as Json;
       line = JSON.stringify(message);
     }
   }
@@ -621,7 +624,9 @@ function routeLine(line: string): void {
     if (!id || typeof params?.name !== "string") return rejectRequest(message.id, -32602, "Invalid tool call");
     const target = callTarget(params.name, params.arguments);
     // The directory answers a call naming no tool itself; nothing runs.
-    if (target !== undefined && !READ_ONLY.has(target)) {
+    // A reviewed name is listed with one `_` (cw_psa_query); an earlier
+    // Perspicax serves the same tool as cw_psa__query.
+    if (target !== undefined && !READ_ONLY.has(target) && !READ_ONLY.has(target.replace(/_{2,}/g, "_"))) {
       const callId = message.id;
       const held = askApproval(NAME, target, params.arguments)
         .then((decision) => {
@@ -651,7 +656,7 @@ function misuseGateRefusal(params: Json | undefined): string | null {
 }
 
 function forward(line: string, message: Json | undefined, id: string | undefined, params: Json | undefined): void {
-  if (SEARCH && id && message?.method === "initialize") initializeIds.add(id);
+  if ((SEARCH || ALIASES) && id && message?.method === "initialize") initializeIds.add(id);
   if (id && typeof message?.method === "string") {
     if (scope && pending.has(id)) fail("duplicate request ID on a restricted connection");
     if (message.method === "tools/call") {
@@ -707,6 +712,7 @@ createInterface({ input: child.stdout }).on("line", (line) => {
     const info = isRecord(result.serverInfo) ? result.serverInfo : {};
     const title = typeof info.title === "string" ? info.title : typeof info.name === "string" ? info.name : undefined;
     if (title) searchContext.title = title;
+    if (ALIASES && typeof result.instructions === "string") result.instructions = ALIASES.instructionsToAliases(result.instructions);
     if (typeof result.instructions === "string") searchContext.instructions = result.instructions;
   }
   if (scope && request?.kind === "list" && message.error === undefined) {
@@ -727,6 +733,17 @@ createInterface({ input: child.stdout }).on("line", (line) => {
   // query_result rides the last page of the catalog, in place of any upstream tool of that name.
   if (BUDGET > 0 && request?.kind === "list" && message.error === undefined && isRecord(result) && Array.isArray(result.tools) && result.nextCursor === undefined) {
     result.tools = [...result.tools.filter((tool: unknown) => !isRecord(tool) || tool.name !== QUERY_TOOL_NAME), QUERY_TOOL];
+  }
+  // 2026-11-02: a connector name Grok cannot call never reaches the bot:
+  // the gateway's own tools (api_search, api_describe, api_list, flow...,
+  // no `__` in their name) and every error name tools by the connector's
+  // name. Product tools' results are vendor data and stay as they came.
+  if (ALIASES && request?.kind === "call") {
+    if (isRecord(message.error) && typeof message.error.message === "string") message.error.message = ALIASES.toAliases(message.error.message);
+    if (isRecord(result) && (!request.tool.includes("__") || result.isError === true)) {
+      if (Array.isArray(result.content)) result.content = mapJsonStrings(result.content, (text) => ALIASES.toAliases(text)) as Json[];
+      if (result.structuredContent !== undefined) result.structuredContent = mapJsonStrings(result.structuredContent, (text) => ALIASES.toAliases(text)) as Json;
+    }
   }
   if (request?.kind === "call" && request.trim && isRecord(result)) {
     try {

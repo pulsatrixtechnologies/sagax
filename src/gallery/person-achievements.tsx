@@ -1,7 +1,7 @@
 /** Isolated gallery for Playwright screenshots of a person's right panel,
  * Achievements tab (AchievementsPanel.tsx), at the docked panel's width:
  * a colleague with about twenty achievements unlocked and the rest locked.
- * The capture script (scripts/capture-person-achievements.mjs) answers /api
+ * The capture script (scripts/capture/person-achievements.mjs) answers /api
  * itself. Fictional names only. Not shipped in the app.
  * ?skin=<id>&lang=<code>&points=0 (a card without points) */
 import { StrictMode } from "react";

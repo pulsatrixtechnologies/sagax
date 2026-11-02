@@ -126,7 +126,7 @@ let wiring: ReturnType<typeof outboundWiring>;
 let messageCounter = 0;
 
 function makeWiring() {
-  return outboundWiring({
+  const made = outboundWiring({
     dataDir: dir,
     now: () => clock,
     store: {
@@ -148,12 +148,16 @@ function makeWiring() {
     botName: () => "Rocket",
     personName: () => "Organisation Exemple",
     language: () => "fr",
-    twilio: async () => ({ ok: false, code: "rpc_error", error: "a conversation never uses twilio_api__write" }),
+    twilio: async () => ({ ok: false, code: "rpc_error", error: "a conversation never uses twilio_api_write" }),
     voice: (turn, args) => voice.call(turn.threadId === THREAD.sam ? "sam" : "alex", args),
     principalName: (principalId) => Object.values(PEOPLE).find((person) => person.principalId === principalId)?.name,
     principalSub: (principalId) => Object.values(PEOPLE).find((person) => person.principalId === principalId)?.sub ?? null,
     wake: (botId, threadId, _messageId, prompt) => wakes.push({ botId, threadId, prompt }),
   });
+  // the one-time acceptable-use consent (5e792c845) is its own gate, tested in
+  // outbound-wiring.test.ts; these people accepted it already
+  for (const person of Object.values(PEOPLE)) made.consentStore.accept(person.principalId, "bot-rocket");
+  return made;
 }
 
 const placeAs = (who: keyof typeof PEOPLE, args: Record<string, unknown> = ARGS) =>

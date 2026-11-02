@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // Routine run exchange (2026-11-01): opens like Melonie <-> Katarina, Escape
-// closes, header X closes, footer keeps Run again / Continue / logs / configuration.
+// closes, the bottom Close Chat pill closes, footer keeps Run again / Continue / logs / configuration.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -99,7 +99,7 @@ function mountExchange(props: { run?: RoutineRun; onClose?: () => void; onRunAga
 }
 
 describe("RoutineRunExchange", () => {
-  it("portals into the exchange column with routine <-> bot header and a header close control", async () => {
+  it("portals into the exchange column with routine <-> bot header and a bottom Close Chat pill", async () => {
     mountExchange({ onClose: vi.fn(), onRunAgain: vi.fn(), onLogs: vi.fn() });
     await vi.waitFor(() => expect(column.querySelector("[data-testid=routine-run-exchange]")).not.toBeNull());
     const sheet = column.querySelector("[data-testid=routine-run-exchange]")!;
@@ -107,9 +107,13 @@ describe("RoutineRunExchange", () => {
     expect(sheet.textContent).toContain("Atlas");
     expect(sheet.querySelector("[data-routine-run-meta]")?.textContent).toMatch(/Completed/);
     const close = sheet.querySelector<HTMLButtonElement>("[data-testid=bot-exchange-close]")!;
-    expect(close.getAttribute("aria-label")).toBe("Close");
-    expect(close.textContent).not.toMatch(/Close Chat/i);
-    expect(sheet.querySelector("[data-exchange-footer]")).not.toBeNull();
+    expect(close.textContent).toBe("Close Chat");
+    expect(sheet.querySelectorAll("[data-testid=bot-exchange-close]")).toHaveLength(1);
+    const footer = sheet.querySelector("[data-exchange-footer]")!;
+    expect(footer).not.toBeNull();
+    // The pill closes below the action row, last in the band.
+    expect(footer.lastElementChild).toBe(close);
+    expect(footer.querySelector("[data-routine-run-actions]")).not.toBeNull();
     expect(sheet.querySelector("[data-run-continue]")).not.toBeNull();
     expect(document.body.innerHTML).not.toMatch(/run-1|r1\b/);
   });

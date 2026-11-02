@@ -16,6 +16,10 @@ export type AnchoredPlacement = {
   maxHeight: number;
 };
 
+/** The box the popover must stay inside (a window drawn over the app, such
+ * as Settings); the viewport when left out. */
+export type PlacementBounds = { left: number; top: number; right: number; bottom: number };
+
 export function placeAnchored({
   anchor,
   size,
@@ -24,6 +28,7 @@ export function placeAnchored({
   side = "bottom",
   gap = 4,
   margin = 8,
+  bounds,
 }: {
   anchor: PlacementRect;
   size: { width: number; height: number };
@@ -32,9 +37,16 @@ export function placeAnchored({
   side?: PopoverSide;
   gap?: number;
   margin?: number;
+  bounds?: PlacementBounds;
 }): AnchoredPlacement {
-  const below = viewport.height - anchor.bottom - gap - margin;
-  const above = anchor.top - gap - margin;
+  const box = {
+    left: Math.max(0, bounds?.left ?? 0),
+    top: Math.max(0, bounds?.top ?? 0),
+    right: Math.min(viewport.width, bounds?.right ?? viewport.width),
+    bottom: Math.min(viewport.height, bounds?.bottom ?? viewport.height),
+  };
+  const below = box.bottom - anchor.bottom - gap - margin;
+  const above = anchor.top - box.top - gap - margin;
   const wanted = side === "bottom" ? below : above;
   const other = side === "bottom" ? above : below;
   // Keep the preferred side while it fits (or is at least as roomy).
@@ -44,7 +56,7 @@ export function placeAnchored({
   const top = finalSide === "bottom" ? anchor.bottom + gap : anchor.top - gap - height;
 
   let left = align === "end" ? anchor.right - size.width : align === "center" ? anchor.left + anchor.width / 2 - size.width / 2 : anchor.left;
-  left = Math.min(left, viewport.width - size.width - margin);
-  left = Math.max(left, margin);
+  left = Math.min(left, box.right - size.width - margin);
+  left = Math.max(left, box.left + margin);
   return { top, left, side: finalSide, maxHeight: room };
 }

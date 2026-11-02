@@ -197,7 +197,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     // the setup prompt block, and the peer-comms integration below: a driver
     // that never mounts agent tools (or a turn already at the comms-depth cap)
     // must not be steered into — or told about — tools it cannot call.
-    state.skillAuthoring = personalFeatureOn("state.skillAuthoring", skillAuthoringEnabled(cfg), vaultPrincipalForThread(state.threadId)) && state.peerToolsMounted;
+    state.skillAuthoring = personalFeatureOn("skillAuthoring", skillAuthoringEnabled(cfg), vaultPrincipalForThread(state.threadId)) && state.peerToolsMounted;
     // Setup mode's turn-text rewrite (parseSetupCommand/expandSetupTurnText)
     // must not run ahead of a system prompt that can't explain it: a driver
     // without agent tools sees the user's literal "/setup ..." message. The
@@ -356,7 +356,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
       state.providerText,
       [
         ...(state.instance.adapter.capabilities.phoneMcp === true ? ["phoneMcp"] : []),
-        ...(state.skillAuthoring ? ["state.skillAuthoring"] : []),
+        ...(state.skillAuthoring ? ["skillAuthoring"] : []),
       ],
       availableSkills(),
     );

@@ -413,6 +413,8 @@ export function ModelPicker({
         setEffort,
         pick,
         effortTitle,
+        // Settings > Models list: hang off the chip, inside the Settings window.
+        anchorRef: listChip && !headless && !windowOnly ? triggerRef : undefined,
       }))}
     </div>
   );

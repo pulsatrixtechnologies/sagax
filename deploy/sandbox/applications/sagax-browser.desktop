@@ -1,7 +1,11 @@
 [Desktop Entry]
 Type=Application
 Name=Chromium
-Comment=Web browser
-Exec=sagax-desktop browser
+GenericName=Web browser
+Comment=Browse the web
+Exec=sagax-desktop browser %U
 Icon=chromium
 Terminal=false
+StartupWMClass=sagax-desktop-browser
+MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;image/svg+xml;
+Categories=Network;WebBrowser;

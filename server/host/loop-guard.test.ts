@@ -4,6 +4,7 @@
 // the configured stop count (10 when unset). A turn that is working (the same
 // command, a different failure), polling (the same command, succeeding with
 // the same output) or only waiting is never touched.
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import { failedTurnCause } from "../../shared/failed-turn.ts";
@@ -17,6 +18,7 @@ type Row = { threadId: string; name: string; ok: boolean; output?: string };
 /** How a tool call came back. No `output`: the engine reported none. */
 type Result = { ok?: boolean; output?: string };
 type Start = { title?: string; summary?: string; input?: string };
+type AskFields = { tool: string; summary: string; mcpTool?: string; input?: string; command?: { command: string; cwd: string } };
 
 /** The same failure every time: what a stuck command comes back with. */
 const SAME: Result = { ok: false, output: "fatal: not a git repository" };
@@ -108,6 +110,8 @@ function rig(options: {
     loop(count: number, command = "git status", result: Result = SAME, threadId = T) { times(count, () => this.run(command, result, threadId)); },
     ask: (tool = "Bash", summary = "npm test", threadId = T, mcpTool?: string) =>
       emit({ ...base(threadId), type: "request.opened", requestType: "permission", tool, summary, ...(mcpTool ? { mcpTool } : {}) }),
+    /** A permission ask with whatever an engine puts on it: its arguments, its whole command and folder. */
+    askFor: (fields: AskFields, threadId = T) => emit({ ...base(threadId), type: "request.opened", requestType: "permission", ...fields }),
     /** One of the thousands of events a turn streams that are no tool call. */
     delta: (threadId = T) => emit({ ...base(threadId), type: "content.delta", streamKind: "assistant_text", delta: "…" }),
     began: (threadId = T) => emit({ ...base(threadId), type: "turn.started" }),
@@ -178,6 +182,128 @@ describe("loop guard, setting off", () => {
       threadId: T, name: `Same call repeated 5× - tool: ${id} - it may be stuck`, ok: false,
       output: `The same call with the same arguments ran again. Its latest error:\n${error}`,
     }]);
+  });
+
+  // 2026-11-02: an ACP agent's MCP ask is its kind ("other") and, as its
+  // summary, often the tool's name alone: every issue read and every command
+  // of a run read as one call, « Same call repeated 10× - other:
+  // sagax-environment__run_command », and the old chip in index.ts wrote
+  // each notice a second time.
+  it("counts a permission ask only by its tool and its arguments, never an MCP ask, never by a tool's name alone", () => {
+    const r = rig({ settings: { enabled: false } });
+    // an MCP ask, whatever it carries: its call's own start counts it, when it fails
+    times(25, () => r.askFor({ tool: "other", summary: "sagax-environment__run_command", mcpTool: "sagax-environment__run_command" }));
+    times(25, () => r.askFor({ tool: "other", summary: "github__issue_read" }));
+    times(25, () => r.askFor({ tool: "other", summary: "sagax-environment__run_command", mcpTool: "sagax-environment__run_command", input: "{\"command\": \"git status\"}" }));
+    times(25, () => r.askFor({ tool: "mcp__github__issue_read", summary: JSON.stringify({ issue_number: 1905 }), input: JSON.stringify({ issue_number: 1905 }) }));
+    // Codex names the tool in a sentence, never its arguments, with or without its id
+    times(25, () => r.askFor({ tool: "issue_read", summary: "Allow the github MCP server to run tool \"issue_read\"?", mcpTool: "github__issue_read" }));
+    times(25, () => r.askFor({ tool: "issue_read", summary: "Allow the gh.enterprise MCP server to run tool \"issue_read\"?" }));
+    // a tool's name and nothing else
+    times(25, () => r.askFor({ tool: "WebFetch", summary: "WebFetch" }));
+    expect(r.notices()).toEqual([]);
+    // the same tool with different arguments is a different call: another
+    // command, another folder, another address
+    times(12, (index) => r.askFor({ tool: "shell", summary: `gh issue view ${1900 + index}`, command: { command: `gh issue view ${1900 + index}`, cwd: "/work/app" } }));
+    times(12, (index) => r.askFor({ tool: "shell", summary: "pnpm exec vitest run", command: { command: "pnpm exec vitest run", cwd: `/work/app-${index}` } }));
+    times(12, (index) => r.askFor({ tool: "WebFetch", summary: `https://example.com/issues/${1900 + index}`, input: JSON.stringify({ url: `https://example.com/issues/${1900 + index}`, prompt: "Summarize" }) }));
+    expect(r.notices()).toEqual([]);
+    // the same tool with the same arguments, whitespace aside, is the same call
+    times(5, () => r.askFor({ tool: "shell", summary: "git  status", command: { command: "git status\n", cwd: "/work/app" } }));
+    times(5, () => r.askFor({ tool: "WebFetch", summary: "https://example.com/a", input: JSON.stringify({ url: "https://example.com/a", prompt: "Summarize" }) }));
+    expect(r.notices()).toEqual([
+      "Same call repeated 5× - shell: git status - it may be stuck",
+      "Same call repeated 5× - WebFetch: https://example.com/a - it may be stuck",
+    ]);
+  });
+
+  it("counts a shell ask by its command and folder, never by the description Claude writes for each call", () => {
+    const r = rig({ settings: { enabled: false } });
+    // Claude's Bash ask: the description changes, the call does not
+    times(5, (index) => r.askFor({
+      tool: "Bash", summary: "git status",
+      input: JSON.stringify({ command: "git status", description: `Check the tree, take ${index + 1}` }, null, 2),
+      command: { command: "git status", cwd: "/work/app" },
+    }));
+    expect(r.notices()).toEqual(["Same call repeated 5× - Bash: git status - it may be stuck"]);
+  });
+
+  it("counts a Claude MCP call it asks for once: by its start, when it fails", () => {
+    const r = rig({ settings: { enabled: false } });
+    const id = "mcp__github__issue_read";
+    const input = JSON.stringify({ owner: "acme", repo: "app", issue_number: 1905 }, null, 2);
+    const error = "Not Found";
+    times(5, () => {
+      const item = r.start({ title: id, input });
+      r.askFor({ tool: id, summary: JSON.stringify({ owner: "acme", repo: "app", issue_number: 1905 }), input });
+      r.finish(item, { ok: false, output: error });
+    });
+    expect(r.rows).toEqual([{
+      threadId: T, name: `Same call repeated 5× - tool: ${id} - it may be stuck`, ok: false,
+      output: `The same call with the same arguments ran again. Its latest error:\n${error}`,
+    }]);
+  });
+
+  // An ACP agent or Codex titles a shell call with its command and, below
+  // Full access, asks for it too: one call, two events, counted under two
+  // keys, and each count showed twice (« tool: git status », « shell: git
+  // status »).
+  it("counts a call once when the engine reports both its start and its ask, whichever comes first", () => {
+    const r = rig({ settings: { enabled: false } });
+    const ask = (command: string, cwd = "/work/app") => r.askFor({ tool: "shell", summary: command, command: { command, cwd } });
+    // the start first (ACP, Codex), then its ask
+    times(5, () => { const item = r.start({ title: "git status", summary: "git status" }); ask("git status"); r.finish(item); });
+    expect(r.notices()).toEqual(["Same call repeated 5× - tool: git status - it may be stuck"]);
+    // the ask first, then its start
+    times(5, () => { ask("npm test"); r.play({ title: "npm test", summary: "npm test" }); });
+    expect(r.notices().slice(1)).toEqual(["Same call repeated 5× - shell: npm test - it may be stuck"]);
+    // two calls in flight at once still pair with their own asks
+    times(5, () => {
+      const lint = r.start({ title: "pnpm lint", summary: "pnpm lint" });
+      const build = r.start({ title: "pnpm build", summary: "pnpm build" });
+      ask("pnpm build");
+      ask("pnpm lint");
+      r.finish(lint);
+      r.finish(build);
+    });
+    expect(r.notices().slice(2)).toEqual([
+      "Same call repeated 5× - tool: pnpm lint - it may be stuck",
+      "Same call repeated 5× - tool: pnpm build - it may be stuck",
+    ]);
+    // an ask that matches no start (a call whose start names no command) still counts
+    times(5, () => ask("git fetch"));
+    expect(r.notices().slice(4)).toEqual(["Same call repeated 5× - shell: git fetch - it may be stuck"]);
+  });
+
+  it("pairs a Codex command's start and ask as stored, and the notice carries the error of the call it counted", () => {
+    const r = rig({ settings: { enabled: false } });
+    // the ask first: its start's failure is that ask's error
+    times(5, () => {
+      r.askFor({ tool: "shell", summary: "pnpm lint", command: { command: "pnpm lint", cwd: "/repo" } });
+      r.play(codex("pnpm lint"), { ok: false, output: "ELIFECYCLE Command failed with exit code 1." });
+    });
+    // the start first
+    times(5, () => {
+      const item = r.start(codex("git push origin main"));
+      r.askFor({ tool: "shell", summary: "git push origin main", command: { command: "git push origin main", cwd: "/repo" } });
+      r.finish(item, { ok: false, output: "fatal: could not read Username" });
+    });
+    expect(r.rows).toEqual([
+      { threadId: T, name: "Same call repeated 5× - shell: pnpm lint - it may be stuck", ok: false,
+        output: "The same call with the same arguments ran again. Its latest error:\nELIFECYCLE Command failed with exit code 1." },
+      { threadId: T, name: "Same call repeated 5× - tool: git push origin main - it may be stuck", ok: false,
+        output: "The same call with the same arguments ran again. Its latest error:\nfatal: could not read Username" },
+    ]);
+  });
+
+  it("is the only place that writes the notice, so each count shows once", () => {
+    const root = new URL("../", import.meta.url);
+    // a writer builds the notice with its count; a comment that names it is no writer
+    const writers = readdirSync(root, { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts") && !file.split(/[\\/]/).includes("node_modules"))
+      .filter((file) => /Same call repeated \$\{/.test(readFileSync(new URL(file, root), "utf8")))
+      .map((file) => file.split("\\").join("/"));
+    expect(writers).toEqual(["host/loop-guard.ts"]);
   });
 
   it("does nothing about a command that keeps failing the same way, however often, even with a stop count set", () => {

@@ -68,7 +68,7 @@ sends — not with anyone's memory of it.
 
 If a decoding test fails while the others pass, suspect the fixture is stale
 before suspecting the model: re-capture with
-`node scripts/capture-companion-fixtures.mjs` from the repo root and read the
+`node scripts/capture/companion-fixtures.mjs` from the repo root and read the
 diff.
 
 ---

@@ -1,10 +1,11 @@
 /** Isolated gallery for Playwright screenshots of a stack of "Go to
  * conversation" lines, before (one line each) and after (one chip). Not
- * shipped in the app. ?skin=<id>&lang=<code>&view=before|after|named */
-import { StrictMode } from "react";
+ * shipped in the app. ?skin=<id>&lang=<code>&view=before|after|named|chat */
+import { StrictMode, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { BotExchangeChip } from "../components/BotExchangeChip";
 import { GotoGroupChip } from "../components/GotoGroupChip";
+import { JumpToLatestPill } from "../components/JumpToLatestPill";
 import { collapseGotoLines, gotoGroupFromConversations, silentChatItem, type GotoGroup } from "../lib/goto-lines";
 import type { ExchangeRun } from "../lib/bot-exchange";
 import { loadLocale } from "../lib/i18n";
@@ -53,7 +54,29 @@ const namedRows = [
 ];
 const namedGroup = gotoGroupFromConversations(namedRows, self)!;
 
+/** A chat pane read in scrollback: the named chip sits just above the
+ * composer, with the Jump to latest pill and the docked composer over it. */
+function ChatPane() {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  return (
+    <div className="relative mx-auto h-[100dvh] max-w-2xl overflow-hidden bg-app text-ink" data-gallery="chat">
+      <div ref={scrollRef} className="absolute inset-0 overflow-y-auto px-6 pb-[110px] pt-6">
+        <div className="flex min-h-full flex-col justify-end gap-3">
+          <div className="self-end rounded-[18px] bg-accent px-3 py-2 text-[13px] text-white">Catch me up on the bot-to-bot threads</div>
+          <div className="self-start rounded-[18px] bg-card px-3 py-2 text-[13px] text-ink">Katarina asked three times about the invoices.</div>
+          <GotoGroupChip group={namedGroup} bots={bots} onSelect={() => false} />
+        </div>
+      </div>
+      <JumpToLatestPill onClick={() => {}} bottom={110} scrollRef={scrollRef} />
+      <div data-composer-dock="" className="absolute inset-x-0 bottom-0 z-[2] px-6 pb-4">
+        <div className="h-[86px] rounded-[22px] border border-hairline bg-card px-4 py-3 text-[13px] text-ink-tertiary">Message Dispatch</div>
+      </div>
+    </div>
+  );
+}
+
 function Gallery() {
+  if (view === "chat") return <ChatPane />;
   return (
     <div className="min-h-screen bg-app p-8 text-ink">
       <div className="relative mx-auto flex max-w-xl flex-col gap-3" data-gallery={view}>

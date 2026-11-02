@@ -15,7 +15,7 @@ import { ApprovalCard } from "./ApprovalCard";
 
 const dispatch = vi.fn();
 const store = { dispatch } as unknown as Parameters<typeof BotEditorStore>[0]["value"];
-const TWILIO = "mcp__perspicax_quasar__twilio_api__query";
+const TWILIO = "mcp__perspicax_quasar__twilio_api_query";
 const input = JSON.stringify({ resource: "Accounts", fields: ["sid", "friendlyName"], limit: 5 });
 
 function twilioAsk(extra: Partial<NonNullable<Message["card"]>> = {}): Message {
@@ -24,7 +24,7 @@ function twilioAsk(extra: Partial<NonNullable<Message["card"]>> = {}): Message {
     card: {
       title: "Approval needed", subtitle: input, toolInput: input, options: ["Allow", "Deny"],
       requestId: "req-twilio", requestType: "permission", tool: "other", mcpTool: TWILIO,
-      ownerRule: { tool: "perspicax_quasar__twilio_api__query", scope: { resource: "accounts" }, description: "View accounts in Twilio (accounts)" },
+      ownerRule: { tool: "perspicax_quasar__twilio_api_query", scope: { resource: "accounts" }, description: "View accounts in Twilio (accounts)" },
       ...extra,
     },
   } as Message;
@@ -73,7 +73,7 @@ describe("one approval card per request", () => {
   });
 
   it("opens on an earlier Allow rule (an allowKey) with Edit rule", () => {
-    mount(twilioAsk({ answered: "allow", ownerRule: undefined, alwaysAllowed: "mcp:perspicax_quasar__twilio_api__query" }));
+    mount(twilioAsk({ answered: "allow", ownerRule: undefined, alwaysAllowed: "mcp:perspicax_quasar__twilio_api_query" }));
     const row = host.querySelector<HTMLButtonElement>('[data-testid="approval-receipt-quiet"] button')!;
     expect(row.textContent).not.toContain("Toujours autorisé");
     act(() => row.click());

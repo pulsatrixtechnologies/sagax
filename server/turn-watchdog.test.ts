@@ -213,6 +213,9 @@ describe("the stall handler", () => {
       { id: "b", role: "bot", kind: "text", at: 2, turnId: "turn-1", text: "Exporting the second half now." } as Message,
     ];
     const settled: Array<{ generation?: string; text: string }> = [], delegations: string[] = [];
+    // the loop guard's counts end with the turn the watchdog stopped
+    const guardSettled: string[] = [];
+    const shellLoopGuard = { settle: (threadId: string) => { guardSettled.push(threadId); } };
     const context = vm.createContext({
       process: { env },
       RoomTurnStallRegistry: class { stall() {} },
@@ -221,7 +224,7 @@ describe("the stall handler", () => {
       store: { messagesFor: () => messages, activePath: () => messages, appendMessage() {} },
       turnResourceOwners: new Map(), directTurnGenerationByThread: new Map([["t1", "gen-1"]]), directRequestOwners: new Map(),
       localVmThreadTargets: new Map(), liveTurnByThread: new Map([["t1", "turn-1"]]), turnUsage: new Map(), turnContext: new Map(),
-      cancelDirectTurnDispatch() {}, revokeInternalCapabilitiesForThread() {}, repeats: { settle() {} }, closeOpenApprovals() {}, closeCutToolRows() { return 0; }, endedToolOutput: () => "",
+      cancelDirectTurnDispatch() {}, revokeInternalCapabilitiesForThread() {}, shellLoopGuard, closeOpenApprovals() {}, closeCutToolRows() { return 0; }, endedToolOutput: () => "",
       botForThread: () => ({ id: "eli" }), activeRoutineRunForThread: () => undefined,
       runningTurnInstance: () => ({ adapter: { interruptTurn: async () => {} } }),
       failedTurnTool: (name: string) => ({ name, ok: false }), reportIncident() {},
@@ -230,12 +233,13 @@ describe("the stall handler", () => {
       setTimeout: () => ({ unref() {} }),
     });
     vm.runInContext(code, context, { filename: "index.ts (stall handler fixture)" });
-    return { context, settled, delegations };
+    return { context, settled, delegations, guardSettled };
   }
 
   it("tells a stalled turn's requester why it stopped and what it did", () => {
-    const { context, settled, delegations } = load();
+    const { context, settled, delegations, guardSettled } = load();
     context.watchdog.options.onStall({ threadId: "t1", botId: "eli" }, 20 * 60_000);
+    expect(guardSettled).toEqual(["t1"]);
     const told = 'No activity for 20 minutes — the turn was stopped. Before it stopped it made 1 tool call: Bash ×1.\nIts last message, quoted: "Exporting the second half now."';
     expect(settled).toEqual([{ generation: "gen-1", text: told }]);
     expect(delegations).toEqual([`Delegated turn did not finish — ${told}`]);

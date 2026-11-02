@@ -16,6 +16,7 @@ import {
   RoutineManager,
   routineAskAction,
   routineWaitingLine,
+  troubleToolKey,
   RoutineScheduleError,
   RoutineInputError,
   type RoutineAdmission,
@@ -4798,6 +4799,37 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     done(h, "thread-1");
     expect(runOf(h).status).toBe("completed");
     expect(runOf(h).problems).toBeUndefined();
+  });
+
+  it("a Grok call by the connector's own tool name, then by the gate's alias, is the same tool and a clean run (2026-11-02)", async () => {
+    // Grok cannot register `cw_psa__query`; the gate registers it as
+    // `cw_psa_query`. A call by the connector name comes back "Tool not
+    // found" from Grok itself; the alias that follows ran the tool.
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const miss = "Tool not found: perspicax_profile__cw_psa__query";
+    tool(h, "thread-1", "a", "mcp__perspicax_profile__cw_psa__query", false, miss);
+    tool(h, "thread-1", "b", "mcp__perspicax_profile__cw_psa__query", false, miss);
+    tool(h, "thread-1", "c", "mcp__perspicax_profile__cw_psa__query", false, miss);
+    tool(h, "thread-1", "d", "perspicax_profile__cw_psa_query", true);
+    say(h, "thread-1", "Filed the email on the ticket.");
+    done(h, "thread-1");
+    expect(runOf(h).status).toBe("completed");
+    expect(runOf(h).problems).toBeUndefined();
+    expect(troubleToolKey("mcp__perspicax_profile__cw_psa__query")).toBe(troubleToolKey("perspicax_profile__cw_psa_query"));
+    expect(troubleToolKey("perspicax_profile__api_lookup")).not.toBe(troubleToolKey("perspicax_profile__api_search"));
+  });
+
+  it("a tool that kept failing under its alias still names the title it was first called by", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "mcp__perspicax_profile__cw_psa__query", false, "Tool not found: perspicax_profile__cw_psa__query");
+    tool(h, "thread-1", "b", "perspicax_profile__cw_psa_query", false, "upstream_error: 400");
+    done(h, "thread-1");
+    expect(runOf(h).problems).toContain("mcp__perspicax_profile__cw_psa__query failed 2 times");
+    expect(runOf(h).problems).toContain("upstream_error: 400");
   });
 
   it("one failed call the bot moved past (a search with no match, say) is not a problem: only a tool that kept failing is", async () => {

@@ -33,7 +33,10 @@ const send = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0
 createInterface({ input: process.stdin }).on("line", (line) => {
   const msg = JSON.parse(line);
   if (msg.method === "tools/list") return send(msg.id, { tools: names.map((name) => ({ name, description: "upstream " + name, inputSchema: { type: "object" } })) });
+  if (msg.method === "initialize") return send(msg.id, { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "fake" }, instructions: "Read with cw_psa__query; describe with api_describe." });
   if (msg.method === "tools/call") {
+    if (msg.params.name === "api_describe") return send(msg.id, { content: [{ type: "text", text: (names.includes(msg.params.arguments.name) ? "server knows " : "server does not know ") + "the name; call cw_psa__query (cw_psa_query works too)" }], structuredContent: { tool: "cw_psa__query" } });
+    if (msg.params.name === "api_plan") return process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: "unknown tool cw_psa__write in step 1" } }) + "\\n");
     if (!names.includes(msg.params.name)) return process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: "Tool not found: " + msg.params.name } }) + "\\n");
     return send(msg.id, { content: [{ type: "text", text: "ran " + msg.params.name }] });
   }
@@ -114,6 +117,22 @@ describe("mcp-gate tool names for Grok", () => {
     expect(report.status).toBe("renamed");
     expect(report.parity).toEqual([]);
     expect(report.unregistrable).toEqual([]);
+  });
+
+  it("the bot never reads a connector name it cannot call: instructions, results and errors carry the alias, an alias argument reaches the server as the connector name (2026-11-02)", async () => {
+    const rpc = startGate(["cw_psa__query", "cw_psa__write", "api_describe", "api_plan"]);
+    const init = await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } } });
+    expect(init.result.instructions).toBe("Read with cw_psa_query; describe with api_describe.");
+    const listed = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+    expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toEqual(["cw_psa_query", "cw_psa_write", "api_describe", "api_plan"]);
+    const described = await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "api_describe", arguments: { name: "cw_psa_query" } } });
+    expect(described.result.content[0].text).toBe("server knows the name; call cw_psa_query (cw_psa_query works too)");
+    expect(described.result.structuredContent).toEqual({ tool: "cw_psa_query" });
+    // a product tool's result is vendor data: as it came
+    const ran = await rpc({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "cw_psa_query", arguments: {} } });
+    expect(ran.result.content[0].text).toBe("ran cw_psa__query");
+    const refused = await rpc({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "api_plan", arguments: { steps: [{ tool: "cw_psa_write" }] } } });
+    expect(refused.error.message).toBe("unknown tool cw_psa_write in step 1");
   });
 
   it("gateServer mounts a URL-less, unscoped server through the gate when the engine needs tool names", () => {

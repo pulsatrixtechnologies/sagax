@@ -81,7 +81,6 @@ const SKIP_EXACT = new Set([
   "server/fleet-agent.test.ts",
   // compose files read an operator's own .env (OMB_* interpolation)
   "compose.yaml",
-  "compose.mail-test.yaml",
   ".env.example",
   // generated from the docs and AGENTS.md: regenerate it (pnpm gen:self-knowledge)
   "server/self-knowledge/knowledge.generated.json",
@@ -130,8 +129,6 @@ const PROTECT = [
   re(`\\bapp\\b[^\\n]{0,8}"${OLD}"`),
   // an engine's own environment variable
   re(`HERMES_${OLD_SHORT.toUpperCase()}_[A-Z_]+`),
-  // read by deploy/fly/Caddyfile, which no bridge reaches
-  re(`OMB_CLOUD_PUBLIC_HOST`),
   // the data folder lease capability and the migration breadcrumb (legacy-names)
   re(`${OLD.toUpperCase()}_INTERNAL_DATA_DIR_LEASE`),
   re(`MOVED_FROM_${OLD.toUpperCase()}`),

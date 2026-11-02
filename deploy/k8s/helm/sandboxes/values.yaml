@@ -25,7 +25,10 @@ sandbox:
   cpu: "1"
   pids: 512
   tmp: 512Mi
-  workspace: 2Gi
+  # 2026-11-02: 32 GiB per person (was 2 GiB; Azure Premium bills 20 GiB
+  # at the 32 GiB tier anyway). An existing smaller claim
+  # grows at its next start (the StorageClass allows expansion).
+  workspace: 32Gi
   uid: 1000
   workspaceMount: /workspace
   image: ghcr.io/pulsatrixtechnologies/sagax-sandbox:0.1.0
@@ -42,7 +45,8 @@ quota:
   pods: "8"
   requestsCpu: "8"
   requestsMemory: 12Gi
-  requestsStorage: 16Gi
+  # 8 claims of sandbox.workspace (32Gi)
+  requestsStorage: 256Gi
   persistentVolumeClaims: "8"
 
 # Encryption at rest is mandatory. The default provisioner is Longhorn,

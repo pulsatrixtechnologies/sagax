@@ -8,7 +8,7 @@ import { gateReadOnlyTools, GROK_APPROVAL_GATE_FILE, grokApprovalGateEnabled } f
 
 const bridge = { command: process.execPath, args: [SPAWNED_PROXIES.perspicax], env: { SAGAX_PERSPICAX_PROFILE: "pr_1" } };
 const WRITES = [
-  "cw_psa__write", "cw_psa__action", "memory_write", "memory_forget", "memory_promote", "memory_propose",
+  "cw_psa_write", "cw_psa_action", "memory_write", "memory_forget", "memory_promote", "memory_propose",
   "sagax_send", "sagax_approve", "sagax_nudge", "sagax_routine_run", "flow_action", "ask_person", "api_upload",
   "run_command", "write_file", "create_bot", "send_message", "workspace_write",
 ];
@@ -47,7 +47,7 @@ describe("gateReadOnlyTools", () => {
     const agents = gateReadOnlyTools({ name: "agents", builtin: true });
     const perspicax = gateReadOnlyTools({ name: "perspicax_owner", builtin: false, spec: bridge });
     expect(agents).toContain("list_bots");
-    expect(perspicax).toEqual(expect.arrayContaining(["api_search", "cw_psa__query", "memory_search", "flow"]));
+    expect(perspicax).toEqual(expect.arrayContaining(["api_search", "cw_psa_query", "memory_search", "flow"]));
     for (const tool of WRITES) {
       expect(agents).not.toContain(tool);
       expect(perspicax).not.toContain(tool);

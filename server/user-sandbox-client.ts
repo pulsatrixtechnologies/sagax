@@ -8,6 +8,7 @@ import { request as httpsRequest } from "node:https";
 import { Duplex } from "node:stream";
 
 import { ttyDataFrames, ttyResizeFrame } from "./sandbox-tty-frames.ts";
+import { BOT_FOLDER_RE } from "./sandbox-bot-folder.ts";
 import { signSandboxdRequest, SANDBOXD_AUTH_HEADER } from "./sandboxd-auth.ts";
 import type { SandboxExecInput, SandboxExecOutput, SandboxStats, SandboxStatus, SandboxStdioSpec } from "./sandboxd-core.ts";
 import { SANDBOX_KEY_RE } from "./user-sandbox-spec.ts";
@@ -55,7 +56,7 @@ export interface SandboxdClient {
   /** The in-chat terminal in this sandbox: the size rides the signed URL;
    * what is written is framed (server/sandbox-tty-frames.ts), what is read
    * is the terminal's raw output. Optional: a test double may lack it. */
-  ttyStream?(key: string, size: { cols: number; rows: number }): Promise<{ stream: Duplex; resize(cols: number, rows: number): void }>;
+  ttyStream?(key: string, size: { cols: number; rows: number }, cwd?: string): Promise<{ stream: Duplex; resize(cols: number, rows: number): void }>;
 }
 
 export interface SandboxdTls {
@@ -170,10 +171,13 @@ export function sandboxdClient(baseUrl: string, key: () => string, fetchImpl: ty
       socket.write(Buffer.concat([line, Buffer.from("\n")]));
       return socket;
     },
-    ttyStream: async (sandboxKey, size) => {
+    ttyStream: async (sandboxKey, size, cwd) => {
       const cols = Math.max(2, Math.min(1000, Math.floor(size.cols)));
       const rows = Math.max(1, Math.min(500, Math.floor(size.rows)));
-      const socket = await upgrade(keyPath(sandboxKey, `/tty?cols=${cols}&rows=${rows}`), "sagax-tty");
+      // The bot's own folder (server/sandbox-bot-folder.ts); an older
+      // provisioner ignores it and opens /workspace.
+      const where = cwd && BOT_FOLDER_RE.test(cwd) ? `&cwd=${encodeURIComponent(cwd)}` : "";
+      const socket = await upgrade(keyPath(sandboxKey, `/tty?cols=${cols}&rows=${rows}${where}`), "sagax-tty");
       // Keystrokes go framed; reads are the raw terminal output.
       const stream = new Duplex({
         read() { socket.resume(); },

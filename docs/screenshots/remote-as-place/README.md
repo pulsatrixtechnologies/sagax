@@ -21,7 +21,7 @@ Captured on the running app before this change:
 ## After (headless gallery)
 
 Synthetic gallery `src/gallery/remote-as-place.html`, captured with
-`node scripts/capture-remote-as-place.mjs` (Playwright headless). Set
+`node scripts/capture/remote-as-place.mjs` (Playwright headless). Set
 `SAGAX_VERIFY_BROWSER_CHROME` when the Playwright browser cache is missing.
 
 - [after-place-dropdown-with-host.png](after-place-dropdown-with-host.png):

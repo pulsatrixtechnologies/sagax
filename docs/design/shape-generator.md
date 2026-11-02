@@ -35,7 +35,7 @@ comment tout fonctionne et comment en ajouter une.
 | Données iOS générées | `ios/Sources/CompanionCore/ShapeGeometryData.swift` |
 | Cuisson des objets en rayons | `scripts/bake-object-shapes.mjs` |
 | Script de génération pour développeur | `scripts/generate-shape.mjs` |
-| Captures et contrôles visuels | `scripts/capture-shapes.mjs`, `src/gallery/shape-set.html` |
+| Captures et contrôles visuels | `scripts/capture/shapes.mjs`, `src/gallery/shape-set.html` |
 
 `server/shape-avatar.ts` garde `GENERATE_SHAPE_AVATAR_TOOL` : c'est la
 définition d'outil, appelable par un script, mais elle n'est plus branchée au
@@ -123,7 +123,7 @@ visage.
 
 ## Contrôles visuels (obligatoires)
 
-- `node scripts/capture-shapes.mjs` (headless, rien ne s'ouvre à l'écran) :
+- `node scripts/capture/shapes.mjs` (headless, rien ne s'ouvre à l'écran) :
   captures de chaque forme au repos, par peau, par humeur et à mi-mouvement,
   plus les contrôles sur la mise en page réelle du navigateur. Première fois
   pour une nouvelle forme : `--update` pour écrire ses références, puis

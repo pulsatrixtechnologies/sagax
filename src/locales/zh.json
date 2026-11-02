@@ -2592,5 +2592,8 @@
   "settings.streamReplies.title": "在撰写时显示回复",
   "settings.streamReplies.show": "在机器人撰写回复时逐字显示，而不是完成后一次显示",
   "bulkEdit.mixedOpen": "These fields differ across the selected bots: {fields}. Controls start empty for them; only what you set is written.",
-  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot."
+  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot.",
+  "orgComputer.diskFull": "服务器环境的磁盘已满：{total} 中剩余 {free}。机器人无法再保存文件。请删除 /workspace 中的大文件。",
+  "orgComputer.diskAlmostFull": "服务器环境的磁盘快满了：{total} 中剩余 {free}。",
+  "orgComputer.diskFree": "剩余 {free}"
 }

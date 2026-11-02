@@ -1126,7 +1126,7 @@ describe("PiDriver turns (fake CLI)", () => {
     await recorder.until((e) => e.type === "turn.completed");
     const started = recorder.events.filter((event) => event.type === "item.started") as Array<{ title: string; input?: string }>;
     expect(started.map((event) => event.title)).toEqual([
-      "mcp__pulsatrix-psa__cw_psa__query",
+      "mcp__pulsatrix-psa__cw_psa_query",
       "mcp__pulsatrix-psa__api_search",
       "mcp",
     ]);

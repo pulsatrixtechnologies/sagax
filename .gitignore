@@ -22,8 +22,6 @@ release
 .wrangler/
 .dev.vars
 .dev.vars.*
-!cloudflare/control-plane/.dev.vars.example
-cloudflare/control-plane/worker-configuration.d.ts
 .claude/worktrees/
 .vercel/
 .pi/

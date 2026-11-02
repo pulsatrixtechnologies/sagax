@@ -119,3 +119,8 @@ src/lib/cloud-plan.ts
 src/lib/cloud-setup.test.ts
 src/lib/cloud-setup.ts
 src/locales/vocabulary.test.ts
+
+# Removed 2026-11-02 (repo tidy): the OMB Cloud control plane Worker. JC
+# retired OMB Cloud on 2026-10-04; the desktop client only reaches a control
+# plane named by SAGAX_CONTROL_PLANE_URL.
+cloudflare/control-plane

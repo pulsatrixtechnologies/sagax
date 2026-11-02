@@ -97,10 +97,6 @@
     "package:linux:dir": "pnpm package:prepare && pnpm build:cua:linux && electron-builder --linux dir --x64 --publish never",
     "package": "pnpm package:mac",
     "test:packaged-server": "pnpm build:server && node scripts/smoke-packaged-server.mjs",
-    "control-plane:types": "pnpm --filter @sagax/control-plane types",
-    "control-plane:check": "pnpm --filter @sagax/control-plane check",
-    "control-plane:test": "pnpm --filter @sagax/control-plane test",
-    "control-plane:dry-run": "pnpm --filter @sagax/control-plane dry-run",
     "icons:generate": "electron scripts/generate-app-icon.mjs",
     "build:duckdb": "node scripts/prepare-duckdb.mjs"
   },

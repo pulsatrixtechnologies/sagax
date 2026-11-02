@@ -287,13 +287,12 @@ issue. Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 ## Contribution licensing
 
 - Sagax is owned by Pulsatrix Technologies inc. and licensed under the
-  [PolyForm Noncommercial License 1.0.0](LICENSE-POLYFORM-NC.md). Parts that come unchanged from
-  OpenMausBot stay under Apache 2.0. See [LICENSING.md](LICENSING.md).
-- **Your contribution is accepted under the same license** (PolyForm Noncommercial 1.0.0) as the rest
-  of Sagax. Submit only code you wrote or have the right to contribute.
+  [Apache License 2.0](LICENSE), like the original OpenMausBot project it is based on. See
+  [LICENSING.md](LICENSING.md).
+- **Your contribution is accepted under the same license** (Apache License 2.0, section 5) as the
+  rest of Sagax. Submit only code you wrote or have the right to contribute.
 - Outside contributions also need the signed contributor agreement in [CLA.md](CLA.md) before they
-  are merged; it lets Pulsatrix Technologies inc. also offer commercial licenses. Ask a maintainer
-  for it before you open a PR.
+  are merged. Ask a maintainer for it before you open a PR.
 - The cloud seam and the licensing files have code owners; a maintainer review is required there.
 - The `enterprise/` directory of the original project is not part of this tree and must not be
   copied into it.

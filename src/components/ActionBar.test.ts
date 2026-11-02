@@ -1,7 +1,7 @@
 // The routine page's action bar follows its own container width (2026-10-28):
 // every button keeps an aria-label and a tooltip, the labels carry the class
 // that hides them once the container is compact, and none can wrap. The real
-// widths are checked in a browser by scripts/capture-routine-detail-actions.mjs.
+// widths are checked in a browser by scripts/capture/routine-detail-actions.mjs.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";

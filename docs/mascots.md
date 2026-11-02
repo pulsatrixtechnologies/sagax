@@ -395,7 +395,7 @@ pointer gaze (`shape-engine.ts`). Geometry lives in
 bulb, say, sprout, tin, tome, ship), import/export/share JSON in code, and
 a generator kept for developers (no UI, no bot tool). Colour stays on the bot. Custom definitions
 store on `mascotLook.avatarDef`. Bodies never render disassembled
-(`shape-set.regression.test.ts`, `scripts/capture-shapes.mjs`).
+(`shape-set.regression.test.ts`, `scripts/capture/shapes.mjs`).
 
 ### Files
 
@@ -483,5 +483,5 @@ are desktop and web only in this pilot.
 **Checks.** `src/components/hd-mascots/hd-mascots.test.ts` (manifest,
 mapping, asset choice, fallback, switch on and off),
 `src/components/settings/HdMascotsGroup.test.ts`. Screenshots:
-`node scripts/capture-hd-mascots.mjs --out <dir>` (gallery
+`node scripts/capture/hd-mascots.mjs --out <dir>` (gallery
 `src/gallery/hd-mascots.html`).

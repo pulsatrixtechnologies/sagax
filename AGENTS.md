@@ -768,7 +768,7 @@ iOS already drew it (`ChatLiveTail`); it now follows the same key
 (`SidebarPrefs.streamReplies`, Appearance and desktop settings). Tests:
 `src/components/LiveReply.dom.test.ts`, `src/lib/live-markdown-blocks.test.ts`,
 `server/streaming-reply.e2e.test.ts` (fake CLI deltas end to end),
-`PersonPreferencesTests`. Captures `node scripts/capture-live-reply.mjs`.
+`PersonPreferencesTests`. Captures `node scripts/capture/live-reply.mjs`.
 
 ## A call turn runs fast (2026-10-29)
 
@@ -809,7 +809,7 @@ fails or reaches its limit gives way to the next one silently
 (`providerFallbackNotice`), first audio times too. Usage: `openai-tts`,
 `elevenlabs-tts` (`voice-cost.ts`). Bot-less routes `/api/voice/(status|voices|speak)`
 serve Settings. Telephony (Perspicax Voice) is untouched. Gallery
-`src/gallery/voice-providers.html`, captures `node scripts/capture-voice-providers.mjs`.
+`src/gallery/voice-providers.html`, captures `node scripts/capture/voice-providers.mjs`.
 
 ## Edit routine, Grok-simple (2026-11-01)
 
@@ -842,7 +842,7 @@ bot panel's routine page opens as an exchange sheet in the chat column
 (`RoutineRunExchange`), same shape as a person-to-bot chat. Edit and create
 use the side panel (`presentation="panel"`). Gallery
 `src/gallery/routines-in-sidebar.html`, captures
-`node scripts/capture-routines-in-sidebar.mjs`.
+`node scripts/capture/routines-in-sidebar.mjs`.
 
 ## A routine's schedule in words (2026-10-29)
 
@@ -865,7 +865,7 @@ days in the person's zone still saves as a daily schedule (the calendar can
 move it). A sentence no wording fits reads "Custom schedule", never the
 expression: the list, the routine page, approval cards and iOS included.
 iOS mirrors it (`RoutineScheduleModel.swift`, `RoutineScheduleForm`).
-Captures `node scripts/capture-routine-schedule-editor.mjs`.
+Captures `node scripts/capture/routine-schedule-editor.mjs`.
 
 ## A routine's report lands in the one conversation (2026-10-29)
 
@@ -948,7 +948,7 @@ failure without a reply. A usage limit in its plural words ("You have reached
 your usage limits") reads as one (`USAGE_LIMIT`), so the limit failover takes
 the turn instead of a raw "HTTP 400" card. Gallery
 `src/gallery/reply-flagged-error.html`, captures
-`node scripts/capture-reply-flagged-error.mjs`.
+`node scripts/capture/reply-flagged-error.mjs`.
 
 ## Edit several bots at once (2026-10-29)
 
@@ -985,7 +985,7 @@ Perspicax Profiles), not copies of them.
   `handleMany`).
 - Tests: `shared/bulk-bot-edit.test.ts`, `src/lib/bulk-bot-edit.test.ts`,
   `server/settings-actions.test.ts` ("several bots"). Captures:
-  `node scripts/capture-bulk-edit-bots.mjs` (sidebar gallery `?bulk=1`).
+  `node scripts/capture/bulk-edit-bots.mjs` (sidebar gallery `?bulk=1`).
 
 ## The task sheet, redone (2026-10-29)
 
@@ -1023,7 +1023,7 @@ routine run detail and any other sheet of work draw from the same ones.
   composer, at the bottom of the summary column.
 - Gallery `src/gallery/task-sheet.html` (a long run of the same action, a
   question, four sub-agents of which one waits on an approval); captures
-  `node scripts/capture-task-sheet.mjs` (desktop and narrow, light and
+  `node scripts/capture/task-sheet.mjs` (desktop and narrow, light and
   dark). iOS: `BotActivityDetailView` follows the same order (head with
   Stop and Open thread, "Waiting on you", sub-agents sorted by
   `BotActivitySubagents`, steps grouped by `BotActivityStepGroup`, facts
@@ -1058,7 +1058,7 @@ Thinking.
   line over.
 - End to end: `server/working-step.e2e.test.ts` (fake engine holds a call,
   the event stream carries the step, the turn ends and the line names
-  nothing). Captures: `node scripts/capture-working-step.mjs`.
+  nothing). Captures: `node scripts/capture/working-step.mjs`.
 
 ## A full context goes on in a fresh session (2026-10-29, #1697)
 
@@ -1193,7 +1193,7 @@ could also load its own Claude in Chrome extension. Now:
 Tests: `server/host-screen-web.e2e.test.ts`, `server/surface.test.ts`,
 `src/components/HostControlIndicator.dom.test.ts`,
 `src/lib/activity-runs.test.ts`, `shared/chat-notices.test.ts`, iOS
-`ChatNoticesTests`. Captures: `scripts/capture-host-control.mjs`,
+`ChatNoticesTests`. Captures: `scripts/capture/host-control.mjs`,
 docs/screenshots/host-control.
 ## Headless tasks run for real: sagax task give / task wait (2026-10-29)
 
@@ -1267,7 +1267,7 @@ local page: record clicks and typing, save, replay through My Chrome with
 cards and banner, replay in the background with no gate, final page state),
 `shared/teach-recording.test.ts`, `server/routes/my-chrome.test.ts`,
 `src/components/MyChromeRecordDialog.dom.test.ts`. Captures:
-`scripts/capture-my-chrome-recorder.mjs`.
+`scripts/capture/my-chrome-recorder.mjs`.
 ## Auto picks the person's own turn by its words (2026-10-29)
 
 A bot on Auto classifies the person's own message like a worker's task
@@ -1309,7 +1309,7 @@ the sentence and the bound under the bot's instructions (desktop
 Instructions on the phone and the iPad panel), through the profile PATCH;
 null clears the bound. Tests: `server/finish-until.test.ts`,
 `server/finish-until.e2e.test.ts`, iOS `FinishUntilTests`. Captures:
-`node scripts/capture-finish-until.mjs`.
+`node scripts/capture/finish-until.mjs`.
 
 ## An AI client talks to a bot as another agent (2026-10-29)
 
@@ -1401,7 +1401,7 @@ tab shows its list. A result opens its page or its tab and empties the field.
 Keyboard: arrows, Enter, Escape empties (then Escape steps back or closes as
 before). The tabs' own filters (category pills) stay in their tab. Tests:
 `src/lib/connect-apps-search.test.ts`, `src/components/PluginsPanel.gestures.test.ts`,
-captures `scripts/capture-bots-tab.mjs`.
+captures `scripts/capture/bots-tab.mjs`.
 
 ## A bot imports a skill from GitHub (2026-10-29)
 
@@ -1822,7 +1822,7 @@ skin's colors and sends `skin=` with its page previews. The prompt
 classes and variables. Same CSP and sandbox. Tests:
 `src/lib/page-theme.test.ts`, `server/published-pages.test.ts`,
 `ios/Tests/CompanionCoreTests/ContentThemeTests.swift`. Captures:
-`scripts/capture-bot-content-theme.ts`, docs/screenshots/bot-content-theme.
+`scripts/capture/bot-content-theme.ts`, docs/screenshots/bot-content-theme.
 
 ## Page view (2026-10-28; lot 5 layout 2026-10-31, stage default after native audit)
 
@@ -1880,7 +1880,7 @@ the empty docked composer, optional side conversation and its host-width
 fallback, split sections, exchange sheet, v1 card refresh),
 `src/components/PublishedPages.card-refresh.dom.test.ts`. The composer dock
 moves onto the page and back: `useComposerDockPad(ref, pageStage)` must
-re-observe it. Captures: `node scripts/capture-page-chat-real.mjs`
+re-observe it. Captures: `node scripts/capture/page-chat-real.mjs`
 (gallery `src/gallery/page-chat-real.html`, real ChatView; `--tree` serves
 another checkout for before shots), `docs/screenshots/grok-convergence/real-chatview/`.
 
@@ -1910,7 +1910,7 @@ voice engine and Live calls. Nothing was removed and no right changed.
 `CARD_HOME` (`src/lib/settings-sections.ts`) sends an old link's card to its
 new page; the self-knowledge builder reads it too. Tests:
 `src/components/SettingsModal.splitPages.dom.test.ts`. Captures:
-`scripts/capture-settings-pages.mjs`.
+`scripts/capture/settings-pages.mjs`.
 
 ## Shapes set and eyes (2026-10-28)
 
@@ -1944,7 +1944,7 @@ One source, one drawing (the "disassembled shape" fix, 2026-10-28):
 - Tests: `src/components/shape-set.regression.test.ts` (every shape, skin,
   face, blink, gaze and move at five moments, resting and rolled: eyes inside
   the face, slices touching it, the pair equal and level, back to rest);
-  `scripts/capture-shapes.mjs` (headless gallery of every scene into
+  `scripts/capture/shapes.mjs` (headless gallery of every scene into
   `docs/screenshots/shapes`, the same checks on the browser's own layout, and
   a pixel comparison to the references: run it on any PR that touches the
   mascots, the sidebar or the headers, and `--update` the references when a
@@ -2010,7 +2010,7 @@ random id (`x-sagax-reader`), shown as Anonyme. The page's person clears it
 (`DELETE /api/pages/:id/state`) or makes a key read-only (`PUT
 /api/pages/:id/state/lock`) from Page state in the reader's bar
 (`src/page-reader/ReaderState.tsx`). Captures:
-`scripts/capture-page-reader.ts`.
+`scripts/capture/page-reader.ts`.
 
 ## The reader's bar in its person's look (2026-10-29)
 
@@ -2037,7 +2037,7 @@ read the same variables. Sandbox and CSPs unchanged; the app's preview never
 takes it. No iOS change: the phone has no reader bar. Tests:
 `server/published-pages.test.ts` ("in its person's look"),
 `src/lib/page-look.test.ts`, `shared/page-reader.test.ts`. Captures:
-`node --experimental-strip-types scripts/capture-page-bar-theme.ts`,
+`node --experimental-strip-types scripts/capture/page-bar-theme.ts`,
 docs/screenshots/page-bar-theme.
 
 ## xAI Bot Marketplace in Browse Bots (2026-10-28)
@@ -2907,7 +2907,7 @@ refused, failed or expired, with what decided it. Rules:
 - Tests: `server/action-journal.test.ts`, `server/routes/my-tool-grants.test.ts`,
   `server/routes/bot-runtime-settings.test.ts`, `src/lib/action-journal.test.ts`,
   `ios/Tests/CompanionCoreTests/ActionJournalTests.swift`. Screenshots:
-  `node scripts/capture-action-journal.mjs`.
+  `node scripts/capture/action-journal.mjs`.
 
 ## Tests
 
@@ -3655,7 +3655,7 @@ for themself, for every bot they can see: no admin, no owner check.
   `server/routes/push-devices.test.ts`, `server/auto-approve.test.ts`,
   `src/components/bot-settings/BotReachMe.test.ts`,
   `src/lib/no-visible-ids.test.ts`, Android `FcmMessageTest`. Captures:
-  `node scripts/capture-reach-me.mjs`. Doc: `docs/reach-me.md`.
+  `node scripts/capture/reach-me.mjs`. Doc: `docs/reach-me.md`.
 
 ## Confidential threads: kept to their owner (2026-10-16)
 
@@ -5791,7 +5791,7 @@ driver's default `cli`.
   with 409 `host_tools` and hidden from the model picker.
 - Bumping an engine: change the lock (version, and the hashes for a
   native or Python engine), then capture its native tools with that CLI
-  (`node --experimental-strip-types scripts/capture-engine-native-tools.ts
+  (`node --experimental-strip-types scripts/capture/engine-native-tools.ts
   <engine> <cli>`) and classify any new one (next section). Perspicax reads
   the lock from the Sagax checkout at its next `build-push.sh`.
 
@@ -5829,7 +5829,7 @@ Every native tool of every pinned CLI is on its engine's allowlist or deny
 list (`ORG_ENGINE_TOOLS` in `server/drivers/host-tools.ts`), never on
 neither: `server/drivers/engine-tools.test.ts` checks the inventory the
 pinned CLI exposed (`server/drivers/engine-native-tools.json`, written by
-`scripts/capture-engine-native-tools.ts`), fails when the lock's version is
+`scripts/capture/engine-native-tools.ts`), fails when the lock's version is
 not the inventoried one, and names each unclassified tool with what to
 decide. Claude, Grok, pi, Qwen, Kimi, OpenCode and Hermes take the
 allowlist themselves, so a tool a CLI adds stays off; Codex and Gemini take
@@ -6558,7 +6558,7 @@ branding only (`docs/design/ux-reference-grokbot-cursor.md` §2.8bis).
   (`sagax:open-mac-messages`). iOS mirrors the same Installed > This Mac >
   Messages flow (`ios/App/Features/Plugins/MacMessagesSetupView.swift`).
 - Gallery: `src/gallery/mac-messages.html` (`?state=off|ready|enabled|unavailable`).
-  Captures: `node scripts/capture-mac-messages.mjs`.
+  Captures: `node scripts/capture/mac-messages.mjs`.
 
 Plugin lifecycle hooks are stripped from the folder Claude loads with
 `--plugin-dir`. The commands are kept under `bot-plugins/<bot>/computer-hooks/`
@@ -6927,7 +6927,7 @@ Tests: `src/components/plugins/ConnectAppsView.test.ts`,
 `src/components/PluginsPanel.layout.test.ts`, `src/lib/installed-model.test.ts`,
 `src/components/plugins/OrgSourcesAccess.test.ts`,
 `src/components/settings/MyConnectionsSettings.test.ts`; captures:
-`scripts/capture-connect-apps-manage.mjs` (`--role admin`, `--scheme light`;
+`scripts/capture/connect-apps-manage.mjs` (`--role admin`, `--scheme light`;
 gallery `connect-apps.html?view=manage|org-settings`).
 
 - Discover (where a person lands; `DiscoverView`): the catalog that can
@@ -7044,7 +7044,7 @@ connectors and My MCP servers only.
   `src/components/plugins/GithubAccountSection.test.ts`,
   `src/components/PluginsPanel.gestures.test.ts`,
   `src/components/plugins/ConnectAppsView.test.ts`. Captures:
-  `scripts/capture-github-plugin.mjs`, `docs/screenshots/github-plugin/`.
+  `scripts/capture/github-plugin.mjs`, `docs/screenshots/github-plugin/`.
 
 ## Capabilities on iPhone and iPad (lot 1c, 2026-10-30)
 
@@ -7480,7 +7480,7 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
 - Tests: `server/routes/bot-code-branches.e2e.test.ts` (real git, a bare
   local remote), `src/components/bot-settings/CodeBranchList.test.ts`,
   `ActivitySection.test.ts`, `server/activity-code-work.test.ts`.
-  Screenshots: `node scripts/capture-bot-panel-coding.mjs` (headless, the
+  Screenshots: `node scripts/capture/bot-panel-coding.mjs` (headless, the
   gallery `src/gallery/bot-panel-coding.html`).
 
 ## Parallel tasks (sending while the bot works, 2026-10-02)
@@ -7965,7 +7965,7 @@ breakpoints (`SIDEBAR_DRAWER_BELOW`, `SIDEBAR_AUTO_RAIL_BELOW`) equal to the
 Tailwind ones, and room for the drawer button with `sm:` (not `md:`). The rail
 foot (`SidebarRailFoot`) is the wide foot stacked: update, routines, round
 apps grid, avatar. Tests: `src/components/AppSidebar.layout.dom.test.ts`;
-captures `node scripts/capture-sidebar-rail.mjs` (gallery
+captures `node scripts/capture/sidebar-rail.mjs` (gallery
 `src/gallery/app-shell-sidebar.html`).
 
 ## Sidebar sections are personal
@@ -9948,7 +9948,7 @@ message) and answers the bot with the first sample in words.
   colored marks, a full volume shows an icon and a word, a Valeurs table
   shows the same numbers. Never an id on screen.
 - Gallery: `src/gallery/resource-usage.html`; captures
-  `node scripts/capture-resource-usage.mjs` (`SAGAX_CHROMIUM` for another
+  `node scripts/capture/resource-usage.mjs` (`SAGAX_CHROMIUM` for another
   headless shell); four of them are in `docs/screenshots/resource-usage/`.
 - iOS and Android show the row's text fallback (none yet): a native card is a
   follow-up.

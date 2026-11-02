@@ -5,7 +5,7 @@
  * pages, this computer's environments, pairing and computer sharing. Not
  * shipped. A mocked fetch and a mocked desktop bridge answer; nothing
  * connects. Fictitious names and numbers only. ?skin=<id>&lang=<code>
- * (scripts/capture-settings-forms.mjs). */
+ * (scripts/capture/settings-forms.mjs). */
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 

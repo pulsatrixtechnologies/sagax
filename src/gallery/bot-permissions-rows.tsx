@@ -1,6 +1,6 @@
 /** Isolated gallery for headless screenshots of a bot's Permissions card
  * (Approvals): the rows must share one inset, type and Switch. The capture
- * script (scripts/capture-bot-permissions-rows.mjs) answers /api itself.
+ * script (scripts/capture/bot-permissions-rows.mjs) answers /api itself.
  * Not shipped. ?skin=<id>&lang=<code> */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

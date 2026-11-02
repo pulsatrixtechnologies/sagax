@@ -1,6 +1,6 @@
 // Organization server: every native tool of every pinned engine CLI is
 // classified. The inventory (engine-native-tools.json) is what the pinned
-// CLI exposed, captured by scripts/capture-engine-native-tools.ts; each tool
+// CLI exposed, captured by scripts/capture/engine-native-tools.ts; each tool
 // must be on the engine's allowlist (kept on an organization server) or its
 // deny list (removed there), never on neither. Bumping an engine in
 // engines.lock.json fails here until its inventory is captured again, and a
@@ -13,7 +13,7 @@ import { ORG_ENGINE_TOOLS } from "./host-tools.ts";
 interface Inventory { version: string; captured: string; how: string; solo: string[]; org: string[] }
 const inventory = (JSON.parse(readFileSync(new URL("./engine-native-tools.json", import.meta.url), "utf8")) as { engines: Record<string, Inventory> }).engines;
 const lock = JSON.parse(readFileSync(new URL("../../engines.lock.json", import.meta.url), "utf8")) as { engines: Array<{ id: string; name: string; version: string }> };
-const capture = (id: string) => `node --experimental-strip-types scripts/capture-engine-native-tools.ts ${id} <path to the ${id} CLI>`;
+const capture = (id: string) => `node --experimental-strip-types scripts/capture/engine-native-tools.ts ${id} <path to the ${id} CLI>`;
 
 describe("native tools of the pinned engines on an organization server", () => {
   it("covers every engine an organization server admits, at its pinned version", () => {

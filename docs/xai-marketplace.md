@@ -52,4 +52,4 @@ Tests: `server/xai-marketplace.test.ts` (parser on
 names), `server/routes/xai-marketplace.test.ts`,
 `shared/xai-marketplace.test.ts`, `server/routes/bot-zip.test.ts`,
 `src/components/bot-catalog/bot-catalog.test.ts`, iOS `BotCatalogTests`.
-Screenshots: `scripts/capture-bot-catalog-xai.mjs`.
+Screenshots: `scripts/capture/bot-catalog-xai.mjs`.

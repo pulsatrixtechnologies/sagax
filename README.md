@@ -414,7 +414,7 @@ pnpm package:fork:mac   # macOS build into release/
 pnpm package:fork:win   # Windows build into release/
 ```
 
-The README's screenshots come from `node scripts/capture-readme-shots.mjs`,
+The README's screenshots come from `node scripts/capture/readme-shots.mjs`,
 headless, on a fixture of invented bots.
 
 ## Contributing

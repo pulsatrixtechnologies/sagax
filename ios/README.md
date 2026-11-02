@@ -174,7 +174,7 @@ all, *silently*, which looks exactly like "no computers on this network".
 Whenever the companion API changes:
 
 ```sh
-node scripts/capture-companion-fixtures.mjs   # from the repo root
+node scripts/capture/companion-fixtures.mjs   # from the repo root
 ```
 
 It boots a real harness against a throwaway home directory, drives the real

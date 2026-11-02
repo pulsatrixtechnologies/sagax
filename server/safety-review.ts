@@ -6,6 +6,11 @@
 // git operation, untrusted content, an unknown kind), then waits for an
 // explicit approval the person accepts. Denial and expiry are final. Any
 // other call is left to the person's approval mode.
+//
+// #1905 (2026-11-02): a turn at Full access is never held here. The level
+// reaches every review through setSafetyFullAccess (the server's one Full
+// access decision, full-access-gate.ts) or the caller's `fullAccess`. A
+// block stays a block.
 
 import { randomUUID } from "node:crypto";
 import { appendAdminAction } from "./admin-activity.ts";
@@ -80,9 +85,18 @@ const notes = new Map<string, string>();
 
 let confirmer: ((request: SafetyConfirmRequest) => Promise<SafetyAnswer>) | null = null;
 let dataDirForTests: string | null = null;
+/** #1905: whether the turn a review belongs to runs at Full access, read
+ * from the server's one decision (full-access-gate.ts) by bot and thread. */
+let fullAccessResolver: ((who: { botId?: string; threadId?: string }) => boolean) | null = null;
 
 export function setSafetyConfirm(fn: typeof confirmer): void {
   confirmer = fn;
+}
+
+/** The server registers this once: every review that names its bot and
+ * thread then reads the turn's Full access without each caller passing it. */
+export function setSafetyFullAccess(fn: typeof fullAccessResolver): void {
+  fullAccessResolver = fn;
 }
 
 export function setSafetyDataDirForTests(dir: string | null): void {
@@ -96,6 +110,7 @@ export function resetSafetyReviewForTests(): void {
   holds.clear();
   notes.clear();
   confirmer = null;
+  fullAccessResolver = null;
   dataDirForTests = null;
 }
 
@@ -213,6 +228,9 @@ function effectOf(input: SafetyHoldInput, verdict: SafetyVerdict, keys: readonly
   // 2026-10-27 (#1098): a call in the person's own environment is not held
   // and not approved here either: their approval mode answers it.
   if (verdict.code === "own_environment") return null;
+  // #1905: a turn at Full access is not held here; the one Full access
+  // decision answers it (auto-approve.ts, full-access-gate.ts).
+  if (verdict.code === "full_access") return null;
   if (verdict.action === "allow") return null;
   audit(verdict.action === "block" ? "safety.block" : "safety.review", input, verdict);
   applyRemember(keys, verdict);
@@ -223,11 +241,16 @@ function effectOf(input: SafetyHoldInput, verdict: SafetyVerdict, keys: readonly
 }
 
 /** The input with the person's own folders the harness registered
- * (misuse-guardrails.ts setMisuseOwnPaths), unless the caller gave them. */
+ * (misuse-guardrails.ts setMisuseOwnPaths), unless the caller gave them,
+ * and with the turn's Full access (setSafetyFullAccess) unless the caller
+ * read it already. full-access: safety-review */
 function withOwnPaths(input: SafetyHoldInput): SafetyHoldInput {
-  if (input.ownPaths) return input;
-  const ownPaths = misuseOwnPaths(input);
-  return ownPaths ? { ...input, ownPaths } : input;
+  const withFull = input.fullAccess === undefined && fullAccessResolver && (input.botId || input.threadId)
+    ? { ...input, fullAccess: fullAccessResolver({ ...(input.botId ? { botId: input.botId } : {}), ...(input.threadId ? { threadId: input.threadId } : {}) }) }
+    : input;
+  if (withFull.ownPaths) return withFull;
+  const ownPaths = misuseOwnPaths(withFull);
+  return ownPaths ? { ...withFull, ownPaths } : withFull;
 }
 
 /** Sync decision for a permission card. Off and shadow change nothing. */
@@ -246,6 +269,7 @@ export function safetyPermissionEffect(raw: SafetyHoldInput): SafetyEffect | nul
 
 /** A person's message. A stop is a 403. Ordinary chat is unchanged. */
 export function safetyHttpRefusal(input: SafetyHoldInput): { status: 403; code: "safety_blocked"; message: string } | null {
+  // a person's own message is never held, only blocked; full-access: safety-review
   const effect = safetyPermissionEffect({ ...input, surface: "message" });
   if (effect?.kind !== "stop") return null;
   return { status: 403, code: "safety_blocked", message: effect.message };

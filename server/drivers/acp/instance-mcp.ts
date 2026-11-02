@@ -102,6 +102,7 @@ export function createAcpMcp(deps: AcpMcpDeps) {
             ...base(threadId, current.turnId),
             type: "request.opened",
             requestId,
+            // judged in index.ts request.opened; full-access: engine-bridge
             requestType: "permission",
             tool: "other",
             summary: `${mcpTool}${preview}`.slice(0, 200),

@@ -43,6 +43,7 @@ const APPROVAL: Record<IntroLanguage, Card> = {
 };
 
 export function introTaskCard(language: IntroLanguage): { role: "bot"; kind: "options"; card: Card } {
+  // an onboarding card, no permission; full-access: exempt
   return { role: "bot", kind: "options", card: TASK[language] };
 }
 

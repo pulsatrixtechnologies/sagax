@@ -150,6 +150,7 @@ export function createTerminalRequestService(deps: TerminalRequestServiceDeps) {
       const bot = deps.store.bot(args.botId);
       // what Always allow keeps: this bot, this destination
       const rule = { tool: "sagax:terminal", scope: { destination: terminalResourceKey(resource.provider, resource.id) }, description: `Open a terminal on ${resource.hostLabel}` };
+      // applied without a card at Full (index.ts fullAccessForSource); full-access: proposal
       const message = deps.store.appendMessage(args.threadId, {
         role: "bot",
         kind: "options",

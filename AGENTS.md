@@ -16,6 +16,24 @@ isolated fixture; never verify mutations against the user's live app or data.
 
 UI work: read docs/design/ux-reference-grokbot-cursor.md first; do not re-scan Grok Bot unless the doc lacks the surface, then extend the doc.
 
+## Full access, one decision (#1065, #1819, #1905; 2026-11-02)
+
+`server/full-access-gate.ts` is the one place that says whether a turn at
+Full access acts without a card, and the only holds that stand under it:
+an organization or personal Refuse or Ask first rule, isolation between
+people, a sensitive path or the shared server, a real question. Every code
+path that emits an approval or a choice card carries `// full-access:
+<surface>` on its line, with the surface in `FULL_ACCESS_SURFACES`;
+`server/full-access-gate.guard.test.ts` (merge gate) fails a new emitter
+without one. The safety review reads the level through
+`setSafetyFullAccess` and never holds a Full turn; `autoVerdict` reads
+`fullAccessDecision` before the safety hold; a may-I `ask_choice` or
+question under Full is answered with its recommended option
+(`shared/permission-question.ts`). Never fix a Full access card on one
+surface alone: add the surface to the gate and its regression to
+`server/full-access-gate.regressions.test.ts`. `docs/approval-levels.md`,
+"Full access: one decision".
+
 ## Agents catalog budget (#1703, 2026-11-01)
 
 The agents `tools/list` wire is pinned and size-budgeted by

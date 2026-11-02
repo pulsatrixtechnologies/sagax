@@ -80,6 +80,11 @@ export type SafetyCode =
   | "read_only"
   | "admit"
   | "own_environment"
+  /** #1905 (2026-11-02): the turn runs at Full access, which the person
+   * chose for their own bot: the safer path and the confirmation are
+   * theirs to skip. A block (misuse, prompt secrecy, credentials) and the
+   * `security.triage` approval stay. */
+  | "full_access"
   | "safer"
   | "confirm"
   | "final"
@@ -106,6 +111,11 @@ export interface SafetyInput {
   /** The person's own folders and the attachment store (MisuseOwnPaths),
    * from the server, never from the text. */
   ownPaths?: MisuseOwnPaths;
+  /** #1905: the turn runs at Full access, as the server judged it
+   * (server/full-access-gate.ts fullAccessActs on the turn's level), never
+   * read from the text. The safer path and the confirmation are then not
+   * offered: the person already answered them. A block still blocks. */
+  fullAccess?: boolean;
 }
 
 export interface SafetyVerdict {
@@ -295,6 +305,12 @@ export function reviewSafety(input: SafetyInput, memory: SafetyMemory = emptySaf
     if (input.triage) return verdict("allow", "allow", "", fingerprint, classKey);
     return verdict("confirm", "confirm", CONFIRM_GUIDANCE, fingerprint, classKey);
   }
+
+  // #1905 (2026-11-02): Full access is the person's answer to the safer
+  // path and the confirmation (a send, a destructive git operation, a step
+  // driven by untrusted content, an unknown kind). Read after every block
+  // and after the `security.triage` approval, which a level never grants.
+  if (input.fullAccess === true) return verdict("allow", "full_access", "", fingerprint, classKey);
 
   if (input.surface === "message") return verdict("allow", "allow", "", fingerprint, classKey);
 

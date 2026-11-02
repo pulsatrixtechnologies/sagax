@@ -201,6 +201,8 @@ export function createMeetingService(deps: MeetingServiceDeps) {
         status: supported ? "pending" : "declined",
         ...(supported ? {} : { detail: `${MEETING_PROVIDER_LABELS[link.provider]} meetings are not supported yet; Google Meet is.` }),
       };
+      // other people are in that meeting: the isolation hold keeps this
+      // consent card at Full (full-access-gate.ts); full-access: isolation
       const message = deps.store.appendMessage(args.threadId, {
         role: "bot",
         kind: "options",

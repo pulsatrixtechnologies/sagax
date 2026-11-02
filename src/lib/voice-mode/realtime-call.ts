@@ -41,6 +41,18 @@ export interface RealtimeCallOptions {
   deviceId?: () => string | undefined;
   /** push to talk: the microphone is sent only while held */
   pushToTalk?: () => boolean;
+  /** The HTTP status of a URL, or "offline" (default: fetch). Used once
+   * when the socket closed before the call was ready. */
+  probe?: (url: string) => Promise<number | "offline">;
+}
+
+async function probeStatus(url: string): Promise<number | "offline"> {
+  try {
+    const res = await fetch(url, { cache: "no-store", credentials: "include" });
+    return res.status;
+  } catch {
+    return "offline";
+  }
 }
 
 const WORKLET = `
@@ -87,7 +99,51 @@ function level(samples: Float32Array): number {
 export function realtimeRefusalText(code: string | undefined, fallback: string): string {
   if (code === "realtime_key_refused") return "The realtime voice key was refused. Fix it in Settings > Voice.";
   if (code === "realtime_not_configured") return "No realtime voice is set up. Add an xAI key in Settings > Voice.";
+  if (code === "realtime_unreachable") return "The realtime voice service did not answer. Call again in a moment.";
   return fallback;
+}
+
+/** Why a call dropped, as the pill says it: the server refused the sign-in,
+ * the voice refused the key, the network, or a server error. */
+export type RealtimeDrop = "auth" | "key" | "network" | "server";
+
+export const REALTIME_DROP_TEXT: Record<RealtimeDrop, string> = {
+  auth: "The server refused the call: your sign-in was not accepted. Sign in again, then call back.",
+  key: "The realtime voice key was refused. Fix it in Settings > Voice.",
+  network: "The connection dropped. Check the network, then call again.",
+  server: "The server could not open the call. Try again in a moment; if it keeps failing, the server needs an update.",
+};
+
+/** A closed call socket as a drop reason. `ended` is the server's own
+ * reason (its "ended" frame, by the voice); otherwise the close code, and
+ * for a socket that closed before the call was ready (a refused upgrade:
+ * the browser only sees 1006) the HTTP status of the voice status route,
+ * fetched once to tell a sign-in refusal from a server error. */
+export function realtimeDrop(input: { ended?: unknown; code?: number; ready: boolean; status?: number | "offline" }): RealtimeDrop {
+  if (input.ended === "key" || input.ended === "network" || input.ended === "server") return input.ended;
+  const { code } = input;
+  if (code === 1008 || code === 4001 || code === 4003 || code === 4401 || code === 4403) return "auth";
+  if (code === 1011 || code === 1012 || code === 1013 || code === 1014) return "server";
+  if (input.status === "offline") return "network";
+  if (input.status === 401 || input.status === 403) return "auth";
+  if (typeof input.status === "number" && input.status >= 500) return "server";
+  // the server answers HTTP but refused the call's socket: it did not open it
+  if (!input.ready && typeof input.status === "number") return "server";
+  return "network";
+}
+
+/** The voice status route beside a call socket URL (ws(s)://host/api/bots/<id>/voice/realtime?...). */
+export function realtimeStatusUrl(socketUrl: string): string | null {
+  try {
+    const url = new URL(socketUrl);
+    if (!url.pathname.endsWith("/voice/realtime")) return null;
+    url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+    url.pathname = url.pathname.replace(/\/realtime$/, "/status");
+    url.search = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 export class RealtimeVoiceCall {
@@ -110,6 +166,10 @@ export class RealtimeVoiceCall {
   private held = false;
   /** the server refused the call (its words are the note) */
   refused = false;
+  /** the server said the call is ready */
+  private ready = false;
+  /** the server's reason when the voice ended the call */
+  private endedReason: unknown;
 
   constructor(options: RealtimeCallOptions) {
     this.o = options;
@@ -197,11 +257,30 @@ export class RealtimeVoiceCall {
     };
     socket.onclose = (event) => {
       if (this.socket !== socket || this.closed || this.refused) return;
-      const reason = (event as CloseEvent).reason;
-      this.emit("note", realtimeRefusalText(reason || undefined, "The call dropped. Try again."), reason || "dropped");
-      this.set({ phase: "ended" });
+      const { code, reason } = event as CloseEvent;
+      if (reason === "realtime_key_refused" || reason === "realtime_not_configured" || reason === "realtime_unreachable") {
+        this.emit("note", realtimeRefusalText(reason, REALTIME_DROP_TEXT.server), reason);
+        this.set({ phase: "ended" });
+        return;
+      }
+      void this.dropped(code);
     };
     this.ping = setInterval(() => this.sendJson({ type: "ping" }), PING_MS);
+  }
+
+  /** The socket closed without a word from the server: say why in plain
+   * words (realtimeDrop), never only "the call dropped". */
+  private async dropped(code: number | undefined): Promise<void> {
+    const ready = this.ready;
+    const known = realtimeDrop({ code, ready, ended: this.endedReason });
+    let drop = known;
+    // a refused upgrade is a 1006 with no frame: ask the server over HTTP once
+    if (!ready && known === "network" && this.endedReason === undefined) {
+      const statusUrl = realtimeStatusUrl(this.o.url);
+      if (statusUrl) drop = realtimeDrop({ code, ready, status: await (this.o.probe ?? probeStatus)(statusUrl) });
+    }
+    this.emit("note", REALTIME_DROP_TEXT[drop], `dropped_${drop}`);
+    this.set({ phase: "ended" });
   }
 
   private sendJson(frame: Record<string, unknown>): void {
@@ -231,6 +310,7 @@ export class RealtimeVoiceCall {
     try { frame = JSON.parse(text) as Record<string, unknown>; } catch { return; }
     switch (frame.type) {
       case "ready":
+        this.ready = true;
         this.set({ phase: "listening" });
         return;
       case "hearing":
@@ -271,6 +351,11 @@ export class RealtimeVoiceCall {
         return;
       }
       case "ended":
+        // the voice ended the call on its side: say why before hanging up
+        if (frame.by === "upstream") {
+          this.endedReason = frame.reason;
+          this.emit("note", REALTIME_DROP_TEXT[realtimeDrop({ ended: frame.reason, ready: this.ready })], `dropped_${realtimeDrop({ ended: frame.reason, ready: this.ready })}`);
+        }
         this.emit("ended", String(frame.by ?? ""));
         this.hangUp();
         return;

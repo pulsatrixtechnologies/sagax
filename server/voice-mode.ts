@@ -124,6 +124,15 @@ import type { Audio, Voice } from "./tts/elevenlabs.ts";
 
 const ROUTE = /^\/api\/bots\/([\w-]+)\/voice\/(status|voices|prepare|speak|transcribe|stream|listen|speech|call|realtime)$/;
 type Action = "status" | "voices" | "prepare" | "speak" | "transcribe" | "stream" | "listen" | "speech" | "call" | "realtime";
+/** The voice routes that are WebSockets: the server's upgrade gate
+ * (createDesktopViewer acceptsUpgrade in server/index.ts) must let each one
+ * through, or the upgrade is a bare 404 the page only sees as a dropped
+ * socket (0.8.29: /voice/realtime was left out, every call "dropped"). */
+export const VOICE_SOCKET_ACTIONS = ["listen", "speech", "realtime"] as const satisfies readonly Action[];
+const VOICE_SOCKET_ROUTE = /^\/api\/bots\/[\w-]+\/voice\/(?:listen|speech|realtime)$/;
+export function isVoiceSocketPath(path: string): boolean {
+  return VOICE_SOCKET_ROUTE.test(path);
+}
 /** The same answers for no bot: GET /api/voice/status, GET /api/voice/voices, POST /api/voice/speak. */
 const OWN_ROUTE = /^\/api\/voice\/(status|voices|speak)$/;
 const LEGACY_ROUTE = /^\/api\/tts\/(prepare|voices|speak)$/;

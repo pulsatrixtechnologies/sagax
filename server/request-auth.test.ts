@@ -370,9 +370,12 @@ describe("scopes", () => {
       ["POST", "/api/bots/x/voice/stream"], ["POST", "/api/bots/x/voice/transcribe"],
       ["POST", "/api/bots/x/voice/speak"], ["POST", "/api/bots/x/voice/prepare"], ["POST", "/api/bots/x/voice/call"],
       ["POST", "/api/bots/x/messages"], ["POST", "/api/bots/x/interrupt"], ["POST", "/api/groups/g/interrupt"],
+      // the call's sockets: a member calls their own bot without an admin right (0.8.29 left realtime admin only)
+      ["GET", "/api/bots/x/voice/listen"], ["GET", "/api/bots/x/voice/speech"], ["GET", "/api/bots/x/voice/realtime"],
     ] as const) expect(requiredScope(method, path), `${method} ${path}`).toBe("client");
     for (const [method, path] of [
       ["POST", "/api/bots/x/voice/status"], ["GET", "/api/bots/x/voice/stream"], ["POST", "/api/bots/x/voice/other"],
+      ["POST", "/api/bots/x/voice/realtime"],
     ] as const) expect(requiredScope(method, path), `${method} ${path}`).toBe("admin");
   });
 

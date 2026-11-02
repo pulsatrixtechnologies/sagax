@@ -2970,7 +2970,7 @@ function masteryPrice(model: string | undefined): number | null {
  * Declared before the frame observers that read it: a restart re-parks open
  * questions from a store listener while the module still loads, and the
  * packaged bundle (esbuild, top-level const as var) read it as undefined
- * there ("change listener threw ... reading 'get'", 0.8.29 on GOX). */
+ * there ("change listener threw ... reading 'get'", 0.8.29 on an organization server). */
 const autoTurnsByThread = new Map<string, { payer: string; entry: AutoChainEntry }>();
 /** The model a thread's turn ran on: Auto's pick, else the thread's, else the bot's. */
 function masteryThreadModel(threadId: string): string | null {
@@ -16630,10 +16630,6 @@ const routedRoomReplies = new Map<string, { botId: string; routedBy: RoutedBy }>
 const turnUsage = new Map<string, { input: number; output: number; cachedInput?: number }>();
 /** What the window held on the latest model call of the turn in flight, banked beside the totals at turn.completed. */
 const turnContext = new Map<string, { tokens?: number; window?: number }>();
-
-// Bounded per active turn. OpenHands uses a bounded recent-event scan for
-// the same class of stuck-loop detection; retaining an unlimited set of
-// unique arguments would let one pathological turn grow the server forever.
 
 // ── stall watchdog ─────────────────────────────────────────────────────
 // ask_bot has a short inline wait budget, while room turns have a separately

@@ -1572,6 +1572,47 @@ A bot repeated itself and answered late. The rules that keep it from doing so:
   past either, enqueue is a typed `budget` refusal telling it to report
   (server/runtime/runtime.ts). The window budgets still renew on progress.
 
+## One stuck notice per count, for one call (2026-11-02)
+
+"Same call repeated 5× - tool: git status - it may be stuck" (at 5, 10 and
+20 in a turn) is written by the loop guard only (`server/host/loop-guard.ts`);
+a second copy in index.ts, with long dashes, doubled every notice from 0.8.26
+until 0.8.28 removed it. A call is its tool and its arguments, whitespace
+aside, so reads of different issues or different commands are never "the
+same call":
+- An MCP call (titled `server__tool` or `mcp__server__tool`) counts by its
+  start, with its arguments, and only when it fails (`onFailure`): a scroll
+  or a poll repeats for good reasons. Its notice carries that call's latest
+  error as its `output` (`chipOutput`). Its permission ask is never counted:
+  an ask the engine marks `mcpTool`, titles with an MCP tool id (Claude's
+  `mcp__server__tool`) or sums up with that id (an ACP agent's kind "other",
+  Grok's use_tool) or with Codex's 'Allow the <server> MCP server to run tool
+  "<tool>"?' names the tool and not its arguments.
+- Any other permission ask (`askedCall`): a shell ask by its whole command
+  and its folder, never its summary or the description Claude writes anew
+  for each call; else by its summary and `input`. An ask that names the tool
+  alone is not counted; when the summary is only that name, the notice
+  quotes the arguments after it.
+- A call an engine reports twice (ACP and Codex title a shell call with its
+  command, then ask for it below Full access) counts once (`countedAs`): a
+  start and an ask charged when they are reported (never an MCP call, which
+  counts on failure) pair up when they share a text (title, command, input),
+  whichever comes first, and the call's errors go to the key it was first
+  counted under, so its notice keeps that error.
+
+The stall watchdog settles the guard's counts (`shellLoopGuard.settle`). The
+app reads the notice as `step.stuck` in the person's language with the call
+quiet after it (`src/lib/step-label.ts`); the `output` under it stays the
+guard's English text. Older rows read the same: long dashes, or a call the
+guard quoted on several lines (an ACP or Codex title, up to 0.8.28). The copy
+an older server wrote right after the same notice (same count, same call) is
+dropped (`stuckNoticeKey` in `mergeSteps`), so it reads once with its call,
+never "×2"; notices for different calls stay apart, each with its call.
+Tests: `server/host/loop-guard.test.ts` (the guard is the only writer, one
+call counts once, MCP calls by their failing start),
+`src/lib/step-label.test.ts`, `src/lib/step-group.test.ts`,
+`src/lib/activity-step-groups.test.ts`, `server/turn-watchdog.test.ts`.
+
 ## The person can always write (2026-10-29)
 
 The composer's box is never disabled by a pending approval: the card waits
@@ -7362,7 +7403,46 @@ tool calls and folder (`server/activity-coding.ts`: source edits, git
 commit/push/worktree, pull requests, file changes inside a repository;
 never the title, never the bot's own SOUL.md/MEMORY.md or its folder, never
 a sub-agent's request or a heredoc's text quoting git; a sub-agent's own
-calls count like any other). A coding entry carries `code`
+calls count like any other). Commands are read as shell words
+(`shellCommands`), so a read (`git merge-base`, `git merge-tree`, a
+`--dry-run`) or a quoted text that lists git commands (an issue comment)
+is not version control; a shell's own script (`bash -lc '...'`, how Codex
+reports a command) is read as commands (`runCommands`). Quotes are read as
+the shell reads them, ANSI-C quotes (`$'it\'s'`) included; a redirection's
+target, quoted or not, and a here-string's text (`<<< "..."`) are dropped,
+never read as commands. A double quote that a backslash leaves open to the
+end is read again the way PowerShell and cmd read it, where a backslash
+escapes nothing (`cd "C:\work\app\" && git push`). A stored call carries
+its command up to three times and only its input keeps it whole: the
+summary folds it and cuts it at 200 characters, an ACP title cuts it at 80,
+a title in words can hold an apostrophe. Each text is read on its own
+(`commandTexts`): the input's `command` alone when it has one, else the
+summary and the name apart, never joined into one script, where a quote a
+cut left open flipped the quoting of the rest (a comment's quoted git lines
+read as commands, a push after a long quoted path read as text); the code
+work collector reads them the same way, a shell's own script included,
+git and gh by any path, and lists nothing a `--dry-run` printed, so an
+entry that is Coding for a push lists that push. Tests build rows as the
+drivers store them
+(`commandSummary`, `toolDetailPreview`). A pull request opened, updated or
+merged counts, by gh or by a GitHub tool (`update_pull_request` included);
+reading issues or pull requests, or commenting on them, does not, nor does
+coordinating bots. Work another bot handed over (a work thread,
+`kind: "hop"`) is read request by request (2026-11-02): each request lands
+as that bot's line (`roomRequest`), which starts the turn as a person's
+line does, and an earlier request's code work never makes a later one
+Coding, folder a repository or not; the code work it produced stays in
+`code`. Its current step and its settled outcome are read from that request
+line on too: one that just started names no step of the request before it,
+and one that left no outcome does not read the earlier request's. A
+person's own line there reads like their conversation (in a
+repository, their turns stay Coding as a whole). A turn longer than the
+scanned page keeps what the last scan read of it while the page still
+holds that scan's newest message. An agent this bot launched through the
+agent API (`launchedAgents`, `server/launched-agents.ts`) is read the same
+way, from its newest prompt on (`turnStartIndex`): a prompt sent on to the
+same conversation is Coding for its own code work only, and a run that
+changed code stays Coding while it reads. A coding entry carries `code`
 (`server/activity-code-work.ts`): its folder's repository root, checked-out
 branch and origin (read from `.git` on the server, credentials stripped;
 a folder on the person's computer is not read), and the pull requests,

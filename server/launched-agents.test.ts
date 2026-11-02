@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { launchedAgentsForBot, type LaunchedAgentsDeps } from "./launched-agents.ts";
+import { launchedAgentsForBot, type LaunchedAgentMessage, type LaunchedAgentsDeps } from "./launched-agents.ts";
 
 const NOW = 1_800_000_000_000;
 
@@ -93,6 +93,28 @@ describe("launchedAgentsForBot", () => {
     expect(byId["thread:d1"]?.coding).toBeUndefined();
     expect(byId["thread:o1"]?.coding).toBeUndefined();
     expect(byId["thread:o1"]?.title).toBe("Orion: @Quasar · work");
+  });
+
+  // 2026-11-02: a prompt sent on to the same conversation (send_prompt with
+  // its thread_id) is its own run, as a request handed over is.
+  it("reads coding from the newest prompt on: an earlier prompt's commit never makes a read-only one coding", () => {
+    const task = { threadId: "t4", title: "Fix the card", createdAt: NOW - 60_000, updatedAt: NOW - 1_000, hidden: true as const, openedBy: { botId: "chief", at: NOW - 60_000 }, cwd: "/srv/repo" };
+    const prompt: LaunchedAgentMessage = { role: "user", kind: "text" };
+    const commit: LaunchedAgentMessage = { role: "bot", kind: "activity", tool: { name: "Bash", ok: true, input: { command: "git commit -am 'Fix the card'" } } };
+    const read: LaunchedAgentMessage = { role: "bot", kind: "activity", tool: { name: "Bash", ok: true, input: { command: "gh issue view 1905 && git log --oneline -5" } } };
+    const done: LaunchedAgentMessage = { role: "bot", kind: "text", turnSucceeded: true };
+    const row = (messages: LaunchedAgentMessage[]) => launchedAgentsForBot(deps({
+      tasks: () => [task],
+      messages: () => messages,
+      inRepository: () => true,
+      repository: () => ({ root: "/srv/repo", branch: "main" }),
+    }), undefined)[0];
+    // the first prompt committed, the one sent on only read
+    expect(row([prompt, commit, done, prompt, read, done])?.coding).toBeUndefined();
+    // a run that committed stays coding while it goes on reading
+    expect(row([prompt, read, done, prompt, commit, read, read])?.coding).toBe(true);
+    // a run longer than the page: the whole page is that run
+    expect(row([commit, read, read])?.coding).toBe(true);
   });
 
   it("a run a person stopped reads stopped, not failed", () => {

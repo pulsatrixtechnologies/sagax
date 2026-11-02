@@ -1695,6 +1695,7 @@
   "step.startThread.done": "A ouvert un fil",
   "step.startThread.failed": "N'a pas pu ouvrir un fil",
   "step.startThread.running": "Ouvre un fil",
+  "step.stuck": "Même appel répété {count} fois. Il est peut-être bloqué",
   "step.subagent.bare.done": "A lancé un sous-agent",
   "step.subagent.bare.failed": "Échec du sous-agent",
   "step.subagent.bare.running": "Lance un sous-agent",

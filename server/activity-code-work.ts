@@ -11,7 +11,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import type { BotCodeBranch, BotCodeCommit, BotCodePullAction, BotCodePullRequest, BotCodeWork } from "../shared/bot-activity.ts";
-import { commandOf, withoutHeredocs } from "./activity-coding.ts";
+import { commandTexts, gitArgs, runCommands, shellProgram } from "./activity-coding.ts";
 
 export interface CodeWorkToolCall {
   name: string;
@@ -57,80 +57,6 @@ export function remoteRepo(remote: string): { repo: string; url?: string } | und
   if (!host || parts.length < 2 || parts.some((part) => !/^[\w.-]+$/.test(part))) return undefined;
   const repo = parts.slice(-2).join("/");
   return { repo, ...(/github/i.test(host) ? { url: `https://${host}/${parts.join("/")}` } : {}) };
-}
-
-/** A shell command's words, split into the commands it chains (`;`, `&&`,
- * `||`, `|`, a subshell or a new line). Quotes are honored; redirections
- * are dropped. */
-export function shellCommands(text: string): string[][] {
-  const commands: string[][] = [];
-  let words: string[] = [];
-  let word = "";
-  let has = false;
-  let quote: "'" | "\"" | null = null;
-  const endWord = () => {
-    if (has) words.push(word);
-    word = "";
-    has = false;
-  };
-  const endCommand = () => {
-    endWord();
-    if (words.length) commands.push(words);
-    words = [];
-  };
-  for (let index = 0; index < text.length; index++) {
-    const char = text[index]!;
-    if (quote) {
-      if (char === quote) quote = null;
-      else if (char === "\\" && quote === "\"" && index + 1 < text.length) word += text[++index];
-      else word += char;
-      continue;
-    }
-    if (char === "'" || char === "\"") { quote = char; has = true; continue; }
-    if (char === "\\" && index + 1 < text.length) {
-      const next = text[++index]!;
-      if (next !== "\n") { word += next; has = true; }
-      continue;
-    }
-    if (char === ">" || char === "<") {
-      // a redirection and its target (`2>&1`, `> out.log`) are not words
-      if (/^\d*$/.test(word)) { word = ""; has = false; } else endWord();
-      let next = index + 1;
-      while (text[next] === ">" || text[next] === "<") next++;
-      if (text[next] === "&") {
-        next++;
-        while (/[\d-]/.test(text[next] ?? "")) next++;
-      } else {
-        while (text[next] === " " || text[next] === "\t") next++;
-        while (next < text.length && !/[\s;&|()`]/.test(text[next]!)) next++;
-      }
-      index = next - 1;
-      continue;
-    }
-    if (char === "$" && text[index + 1] === "(") { endCommand(); index++; continue; }
-    if ("\n;&|()`".includes(char)) { endCommand(); continue; }
-    if (char === " " || char === "\t") { endWord(); continue; }
-    word += char;
-    has = true;
-  }
-  endCommand();
-  return commands;
-}
-
-/** The command a chain runs, without `sudo`, `env`, `VAR=value` or `time`. */
-function program(words: string[]): string[] {
-  let start = 0;
-  while (start < words.length && (/^(?:sudo|env|time|command|exec|nohup)$/.test(words[start]!) || /^\w+=/.test(words[start]!))) start++;
-  return words.slice(start);
-}
-
-/** git's own options before the subcommand (`-C dir`, `-c k=v`, ...). */
-function gitArgs(words: string[]): string[] {
-  let index = 1;
-  while (index < words.length && words[index]!.startsWith("-")) {
-    index += words[index] === "-C" || words[index] === "-c" ? 2 : 1;
-  }
-  return words.slice(index);
 }
 
 function branchName(ref: string): string | undefined {
@@ -222,19 +148,27 @@ export class CodeWorkCollector {
       this.githubTool(github[1]!.toLowerCase(), tool, at);
       return;
     }
-    const command = withoutHeredocs([commandOf(tool.input), tool.summary, tool.name].filter(Boolean).join("\n"));
-    if (!/\b(?:git|gh)\b/.test(command)) return;
+    // each text on its own: a cut preview's open quote never reaches the
+    // whole command (commandTexts); a shell's own script (`/bin/zsh -lc
+    // '...'`, how Codex reports a command) is read as the commands it runs,
+    // as the coding check reads it
+    const commands = commandTexts(tool).flatMap((text) => (/\b(?:git|gh)\b/.test(text) ? runCommands(text) : []));
+    if (!commands.length) return;
     const output = outputLines(tool.output);
     let committed = false;
     let pushed = false;
-    for (const words of shellCommands(command)) {
-      const args = program(words);
-      if (args[0] === "git") {
+    for (const words of commands) {
+      const args = shellProgram(words);
+      // as the coding check reads it: git or gh by any path, and a dry run
+      // (a push's prints its refs) produced nothing
+      if (args.includes("--dry-run")) continue;
+      const program = args[0]?.replace(/^.*[\\/]/, "");
+      if (program === "git") {
         const sub = gitArgs(args);
         if (sub[0] === "commit") committed = true;
         else if (sub[0] === "push") { pushed = true; this.gitPush(sub.slice(1), output, at); }
         else this.gitBranch(sub, at);
-      } else if (args[0] === "gh" && args[1] === "pr" && args[2]) {
+      } else if (program === "gh" && args[1] === "pr" && args[2]) {
         this.ghPr(args[2], args.slice(3), output, at);
       }
     }

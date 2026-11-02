@@ -31,9 +31,9 @@ export type VerifyStep = RunStep;
 export { nameIsCommand } from "../../shared/tool-name";
 
 /** The command a tool chip ran: the driver's summary, which is the shell
- * command by construction. Never the name — server-authored status chips
- * quote commands in their name ("Same call repeated 3× — Bash: pnpm
- * control:omb doctor…") and must not become steps. */
+ * command by construction. Never the name: server-authored status chips
+ * quote commands in their name ("Same call repeated 5× - Bash: pnpm
+ * control:omb doctor… - it may be stuck") and must not become steps. */
 export function commandOf(m: Message): string | undefined {
   return m.kind === "activity" ? m.tool?.summary || undefined : undefined;
 }

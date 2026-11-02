@@ -50,11 +50,13 @@ admin. On copie une façon de ranger, jamais une fonction en moins.
    Restent permis parce qu'ils ne modifient aucun objet : la palette de commandes, le
    lanceur de recherche, l'aide des raccourcis, la visionneuse d'un fichier en lecture
    seule (fenêtre superposée, décision de JC du 2026-11-01, voir 2.13), un menu.
-   Exceptions décidées par JC : les **Réglages du bureau** (2026-11-01, voir 2.5) et
-   **Capacités** / Connecter des apps (2026-11-02, correction après le lot 5, voir
-   2.8) restent une grande fenêtre centrée, comme la référence. Ce n'est pas un
-   patron à reprendre ailleurs : aucun autre écran ne devient une fenêtre pour
-   « faire comme les Réglages ».
+   Exceptions décidées par JC (grande fenêtre centrée, comme la référence) :
+   les **Réglages du bureau** (2026-11-01, voir 2.5), **Capacités** / Connecter des
+   apps (2026-11-02, correction après le lot 5, voir 2.8), les **notes de version** /
+   « What's new » (2026-11-02, restauration après le lot bannières, voir 2.5 bis),
+   l'**accueil de première fois** (onboarding, voir 2.14). Ce n'est pas un patron à
+   reprendre ailleurs : aucun autre écran ne devient une fenêtre pour « faire comme
+   les Réglages ». Mémoire, Automations et la carte d'équipe restent des **pages**.
 6. **Clavier d'abord.** Tout se fait au clavier : palette, recherche, Échap pour reculer,
    flèches dans les listes, lettres pour répondre à une question, raccourcis visibles
    dans les menus et les info-bulles.
@@ -228,6 +230,23 @@ logo, version et droit d'auteur en bas. Chaque page poussée : retour rond à ga
 titre centré, action ronde (+) à droite au besoin. Page Compte : liste « changer de
 compte » avec coche, ajouter un compte, Se déconnecter (texte rouge, carte seule),
 Supprimer le compte (rouge avec icône de corbeille et une note de conséquence dessous).
+
+### 2.5 bis Notes de version / What's new
+
+**Forme de l'écran (décision de JC, 2026-11-02)** : les notes de version restent une
+**grande fenêtre centrée** (DialogLayer + DialogFrame, largeur `xl`, colonne de lecture
+comme les Réglages), exception au principe 5. Le lot « bannières » les avait passées en
+page de contenu avec une bannière d'annonce ; JC a corrigé : modal.
+
+- Après une mise à jour (une fois par version, jamais à la première installation, jamais
+  en build de développement) : la fenêtre « What's new » s'ouvre seule.
+- Depuis Réglages > Mises à jour > À propos > Notes de version, le menu du compte et la
+  palette : même fenêtre en mode parcours (sélecteur de version, « depuis ma dernière
+  version »).
+- La boîte « Mise à jour prête » garde son propre dépli « What's new » avec les notes de
+  la version téléchargée ; elle n'est pas cette fenêtre.
+- Contenu : markdown des fichiers `docs/releases`, liens, titres de version et date,
+  liste des versions. Échap et le × ferment. Voir `ReleaseNotesPrompt.tsx`.
 
 ### 2.6 Écrans d'ordinateur
 
@@ -457,9 +476,14 @@ gauche, télécharger et fermer en haut à droite, colonne de lecture centrée. 
 C'est l'exception de lecture du principe 5, confirmée par JC le 2026-11-01 (elle reste
 une fenêtre superposée, comme la palette) ; aucune modification ne s'y fait. Même règle
 pour le plein écran d'un artefact, d'un widget, d'un tableau, d'un PDF ou d'un
-diagramme et pour l'écran d'un ordinateur en grand.
+diagramme et pour l'écran d'un ordinateur en grand. Le **navigateur de fichiers
+distants** (télécharger / envoyer sur une session distante) reste la même famille :
+fenêtre centrée façon Réglages (restaurée le 2026-11-02 après un passage en panneau).
 
 ### 2.14 Accueil de première fois (onboarding)
+
+**Forme** : écrans en fenêtre (dialogue) sur l'app, exception décidée au principe 5
+avec les Réglages et Capacités. Pas une page de contenu.
 
 - Un écran par décision, une action principale, un lien discret pour passer.
 - Le logo Pulsatrix, jamais un hibou générique dans le chrome.

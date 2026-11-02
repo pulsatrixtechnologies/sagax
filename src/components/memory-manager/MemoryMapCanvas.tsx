@@ -4,11 +4,18 @@ import { Brain, FileText, Folder, Minus, Plus } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import type { MemoryMapEdge, MemoryMapGraph, MemoryMapNode } from "@/lib/memory-map";
+import {
+  MEMORY_NODE_HEIGHT,
+  MEMORY_NODE_WIDTH,
+  memoryEdgeEndpoints,
+  type MemoryMapEdge,
+  type MemoryMapGraph,
+  type MemoryMapNode,
+} from "@/lib/memory-map";
 import { wheelCanvasDelta, zoomAt, type Point, type View } from "@/lib/team-canvas";
 
-const NODE_W = 168;
-const NODE_H = 56;
+const NODE_W = MEMORY_NODE_WIDTH;
+const NODE_H = MEMORY_NODE_HEIGHT;
 
 function nodeIcon(kind: MemoryMapNode["kind"]) {
   if (kind === "source") return <Brain size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />;
@@ -16,11 +23,12 @@ function nodeIcon(kind: MemoryMapNode["kind"]) {
   return <FileText size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />;
 }
 
-function edgeStroke(kind: MemoryMapEdge["kind"]): string {
-  if (kind === "link") return "stroke-accent/50";
-  if (kind === "tag") return "stroke-ink-secondary/35";
-  if (kind === "folder") return "stroke-ink-secondary/25";
-  return "stroke-hairline";
+function edgeStroke(kind: MemoryMapEdge["kind"], active: boolean, dimmed: boolean): string {
+  if (dimmed) return "stroke-hairline/25";
+  if (kind === "link") return active ? "stroke-accent" : "stroke-accent/50";
+  if (kind === "tag") return active ? "stroke-ink-secondary/70" : "stroke-ink-secondary/35";
+  if (kind === "folder") return active ? "stroke-ink-secondary/55" : "stroke-ink-secondary/25";
+  return active ? "stroke-ink-secondary/70" : "stroke-hairline";
 }
 
 export function MemoryMapCanvas({
@@ -34,8 +42,21 @@ export function MemoryMapCanvas({
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<View>({ x: 40, y: 40, scale: 1 });
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const panRef = useRef<{ id: number; start: Point; view: View; moved: boolean } | null>(null);
   const nodeById = useMemo(() => new Map(graph.nodes.map((node) => [node.id, node])), [graph.nodes]);
+  const noteCount = useMemo(() => graph.nodes.filter((node) => node.kind === "note").length, [graph.nodes]);
+  const linkedIds = useMemo(() => {
+    if (!hoveredId) return null;
+    const ids = new Set<string>([hoveredId]);
+    for (const edge of graph.edges) {
+      if (edge.from === hoveredId || edge.to === hoveredId) {
+        ids.add(edge.from);
+        ids.add(edge.to);
+      }
+    }
+    return ids;
+  }, [graph.edges, hoveredId]);
 
   const fit = useCallback(() => {
     const el = viewportRef.current;
@@ -53,7 +74,9 @@ export function MemoryMapCanvas({
       maxY = Math.max(maxY, node.y + NODE_H);
     }
     const pad = 48;
-    const scale = Math.min(1.2, Math.max(0.45, Math.min((width - pad * 2) / Math.max(1, maxX - minX), (height - pad * 2) / Math.max(1, maxY - minY))));
+    const contentWidth = Math.max(1, maxX - minX);
+    const contentHeight = Math.max(1, maxY - minY);
+    const scale = Math.min(1.2, Math.max(0.35, Math.min((width - pad * 2) / contentWidth, (height - pad * 2) / contentHeight)));
     setView({
       x: (width - (minX + maxX) * scale) / 2,
       y: (height - (minY + maxY) * scale) / 2,
@@ -82,6 +105,17 @@ export function MemoryMapCanvas({
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
+
+  const zoomBy = (factor: number) => {
+    const el = viewportRef.current;
+    const point = el
+      ? { x: el.clientWidth / 2, y: el.clientHeight / 2 }
+      : { x: 200, y: 200 };
+    setView((current) => {
+      const next = Math.min(2.4, Math.max(0.35, current.scale * factor));
+      return zoomAt(current, next, point);
+    });
+  };
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -118,94 +152,113 @@ export function MemoryMapCanvas({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        <div
-          className="absolute left-0 top-0 origin-top-left will-change-transform"
-          style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
-        >
-          <svg
-            className="pointer-events-none absolute left-0 top-0 overflow-visible"
-            width={1}
-            height={1}
-            aria-hidden="true"
+        {noteCount === 0 ? (
+          <div className="absolute inset-0 flex items-center justify-center px-8" data-memory-map-empty="">
+            <p className="max-w-sm text-center text-[13px] leading-relaxed text-ink-secondary">
+              {t("memoryManager.mapEmpty")}
+            </p>
+          </div>
+        ) : (
+          <div
+            className="absolute left-0 top-0 origin-top-left will-change-transform"
+            style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
+            data-memory-map-world=""
           >
-            {graph.edges.map((edge) => {
-              const from = nodeById.get(edge.from);
-              const to = nodeById.get(edge.to);
-              if (!from || !to) return null;
-              const x1 = from.x + NODE_W / 2;
-              const y1 = from.y + NODE_H / 2;
-              const x2 = to.x + NODE_W / 2;
-              const y2 = to.y + NODE_H / 2;
+            <svg
+              className="pointer-events-none absolute left-0 top-0 overflow-visible"
+              width={1}
+              height={1}
+              aria-hidden="true"
+            >
+              {graph.edges.map((edge) => {
+                const from = nodeById.get(edge.from);
+                const to = nodeById.get(edge.to);
+                if (!from || !to) return null;
+                const active = Boolean(linkedIds && (edge.from === hoveredId || edge.to === hoveredId));
+                const dimmed = Boolean(linkedIds && !active);
+                const { x1, y1, x2, y2 } = memoryEdgeEndpoints(from, to);
+                return (
+                  <line
+                    key={edge.id}
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    className={cn("stroke-[1.5] transition-opacity", edgeStroke(edge.kind, active, dimmed), active && "stroke-[2]")}
+                    data-memory-map-edge={edge.kind}
+                    data-memory-map-edge-active={active ? "1" : undefined}
+                  />
+                );
+              })}
+            </svg>
+            {graph.nodes.map((node) => {
+              const selected = node.kind === "note" && node.noteId === selectedNoteId;
+              const linked = linkedIds ? linkedIds.has(node.id) : true;
               return (
-                <line
-                  key={edge.id}
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  className={cn("stroke-[1.5]", edgeStroke(edge.kind))}
-                  data-memory-map-edge={edge.kind}
-                />
+                <button
+                  key={node.id}
+                  type="button"
+                  data-memory-map-node={node.kind}
+                  data-memory-map-node-id={node.id}
+                  data-memory-map-note-id={node.noteId}
+                  disabled={node.kind !== "note"}
+                  onMouseEnter={() => setHoveredId(node.id)}
+                  onMouseLeave={() => setHoveredId((current) => (current === node.id ? null : current))}
+                  onFocus={() => setHoveredId(node.id)}
+                  onBlur={() => setHoveredId((current) => (current === node.id ? null : current))}
+                  onClick={() => {
+                    if (node.kind === "note" && node.noteId) onOpenNote(node.noteId);
+                  }}
+                  style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
+                  className={cn(
+                    "absolute flex items-center gap-2 rounded-xl border px-3 text-left shadow-sm transition",
+                    !linked && "opacity-40",
+                    node.kind === "note"
+                      ? selected
+                        ? "border-accent/60 bg-card ring-1 ring-accent/20"
+                        : "border-hairline/50 bg-card hover:border-ink-secondary/40"
+                      : "cursor-default border-hairline/40 bg-raised/80",
+                  )}
+                >
+                  {nodeIcon(node.kind)}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[12.5px] font-medium text-ink">{node.label}</span>
+                    {node.detail && <span className="block truncate text-[10.5px] text-ink-secondary">{node.detail}</span>}
+                  </span>
+                </button>
               );
             })}
-          </svg>
-          {graph.nodes.map((node) => {
-            const selected = node.kind === "note" && node.noteId === selectedNoteId;
-            return (
-              <button
-                key={node.id}
-                type="button"
-                data-memory-map-node={node.kind}
-                data-memory-map-node-id={node.id}
-                data-memory-map-note-id={node.noteId}
-                disabled={node.kind !== "note"}
-                onClick={() => {
-                  if (node.kind === "note" && node.noteId) onOpenNote(node.noteId);
-                }}
-                style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
-                className={cn(
-                  "absolute flex items-center gap-2 rounded-xl border px-3 text-left shadow-sm transition",
-                  node.kind === "note"
-                    ? selected
-                      ? "border-accent/60 bg-card ring-1 ring-accent/20"
-                      : "border-hairline/50 bg-card hover:border-ink-secondary/40"
-                    : "cursor-default border-hairline/40 bg-raised/80",
-                )}
-              >
-                {nodeIcon(node.kind)}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[12.5px] font-medium text-ink">{node.label}</span>
-                  {node.detail && <span className="block truncate text-[10.5px] text-ink-secondary">{node.detail}</span>}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+          </div>
+        )}
       </div>
-      <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg border border-hairline/50 bg-elevated p-1 shadow-sm">
-        <button
-          type="button"
-          className="flex size-8 items-center justify-center rounded-md text-ink-secondary hover:bg-raised hover:text-ink"
-          aria-label={t("memoryManager.mapZoomOut")}
-          onClick={() => setView((current) => zoomAt(current, Math.max(0.35, current.scale * 0.85), { x: 200, y: 200 }))}
-        >
-          <Minus size={14} />
-        </button>
-        <button
-          type="button"
-          className="flex size-8 items-center justify-center rounded-md text-ink-secondary hover:bg-raised hover:text-ink"
-          aria-label={t("memoryManager.mapZoomIn")}
-          onClick={() => setView((current) => zoomAt(current, Math.min(2.4, current.scale * 1.15), { x: 200, y: 200 }))}
-        >
-          <Plus size={14} />
-        </button>
-        <button
-          type="button"
-          className="rounded-md px-2 py-1.5 text-[11px] font-medium text-ink-secondary hover:bg-raised hover:text-ink"
-          onClick={fit}
-        >
-          {t("memoryManager.mapFit")}
-        </button>
+      <div className="pointer-events-none absolute inset-x-5 bottom-5 flex items-end justify-end gap-3">
+        <div className="pointer-events-auto flex shrink-0 items-center gap-0.5 rounded-xl border border-hairline/60 bg-panel p-1 shadow-sm">
+          <button
+            type="button"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-secondary hover:bg-control hover:text-ink"
+            aria-label={t("memoryManager.mapZoomOut")}
+            onClick={() => zoomBy(1 / 1.2)}
+          >
+            <Minus size={15} />
+          </button>
+          <button
+            type="button"
+            className="min-w-12 rounded-md px-1 py-2 text-[11px] tabular-nums text-ink-secondary hover:bg-control"
+            aria-label={t("memoryManager.mapFit")}
+            title={t("memoryManager.mapFit")}
+            onClick={fit}
+          >
+            {Math.round(view.scale * 100)}%
+          </button>
+          <button
+            type="button"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-secondary hover:bg-control hover:text-ink"
+            aria-label={t("memoryManager.mapZoomIn")}
+            onClick={() => zoomBy(1.2)}
+          >
+            <Plus size={15} />
+          </button>
+        </div>
       </div>
     </div>
   );

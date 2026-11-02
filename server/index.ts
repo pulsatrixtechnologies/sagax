@@ -1793,7 +1793,7 @@ import {
   assertPhoneSecretRequestMatches,
   phoneSecretOperationId,
   type PhoneSecretContext
-} from "./phone-secret.ts";
+} from "./phone/phone-secret.ts";
 import {
   applyHumanIds,
   canEditHumans,
@@ -2239,7 +2239,7 @@ import { approvalTypeOf } from "./approval-type.ts";
 import { createMeetingInternalRoutes } from "./routes/meeting-internal.ts";
 // Phone tools (audit row 81): the person's own iPhone, approved on the phone.
 import { createPhoneCardScanRoutes, createPhoneToolInternalRoutes, createPhoneToolRoutes } from "./routes/phone-tools.ts";
-import { cardScanRequester, createPhoneToolBroker, phoneToolTurn } from "./phone-tools.ts";
+import { cardScanRequester, createPhoneToolBroker, phoneToolTurn } from "./phone/phone-tools.ts";
 import { phoneConnectionTransport } from "../shared/phone-transport.ts";
 import { ipcPeer } from "./request-auth.ts";
 import {
@@ -2907,7 +2907,7 @@ let reachMeWhatsApp: ReachWhatsApp | null = null;
 /** Turns another bot's words joined as an aside (tryAsideDelivery): no phone
  * tool for the rest of that turn (review of #960). Cleared when a turn starts. */
 const phoneToolTaintedThreads = new Set<string>();
-// Phone tools (server/phone-tools.ts): a frame tells the person's phones to
+// Phone tools (server/phone/phone-tools.ts): a frame tells the person's phones to
 // fetch, a push wakes a closed app; the audit names the decision, never data.
 const phoneTools = createPhoneToolBroker({
   dataDir: DATA_DIR,

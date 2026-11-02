@@ -150,7 +150,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("tasks:update", "own", "task_list"),
   // 2026-10-28: both reached the catalog without a permission, so enforce
   // refused them to everyone as unknown tools. The person's own iPhone (the
-  // phone asks for its own consent, server/phone-tools.ts) and the speaker's
+  // phone asks for its own consent, server/phone/phone-tools.ts) and the speaker's
   // own GitHub account (device flow).
   p("phone:tool", "own", "phone_tool"),
   p("github:connect", "own", "connect_github"),

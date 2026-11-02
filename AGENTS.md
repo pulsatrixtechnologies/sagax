@@ -8855,7 +8855,7 @@ telemetry. Keep these rules, each covered by a test:
   Admin portal, Pro link, team catalog (`SAGAX_TEAM_LIBRARY_URL`).
 - `pnpm check:no-phone-home` (run by `package:prepare` and
   `electron/no-phone-home.node-test.mjs`) fails when a bundle names a blocked
-  host outside its reviewed allowlist; `server/no-phone-home.e2e.test.ts`
+  host outside its reviewed allowlist; `server/phone/no-phone-home.e2e.test.ts`
   audits a server start and a chat turn.
 
 ## Sensitive fields masked from the bot (2026-10-26)

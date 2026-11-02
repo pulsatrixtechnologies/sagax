@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { freePortBlock } from "./testing/ports.ts";
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
+import { freePortBlock } from "../testing/ports.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 
 // Phone exclusivity on the real server (issue #1663): trigger-term matching
 // may mount the phone tools, but computer:phone is claimed only at the first

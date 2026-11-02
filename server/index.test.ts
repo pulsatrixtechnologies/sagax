@@ -35,7 +35,7 @@ import {
   PHONE_SECRET_INFO,
   phoneSecretAAD,
   type PhoneSecretContext,
-} from "./phone-secret.ts";
+} from "./phone/phone-secret.ts";
 import { InstallationCapabilityStore } from "./installation-capability-store.ts";
 import { resolveVaultKey } from "./mcp-oauth.ts";
 

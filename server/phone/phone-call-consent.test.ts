@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { PHONE_CALL_CONSENT_VERSION, phoneCallConsentBehavior } from "../shared/phone-call-consent.ts";
+import { PHONE_CALL_CONSENT_VERSION, phoneCallConsentBehavior } from "../../shared/phone-call-consent.ts";
 import { PhoneCallConsentStore } from "./phone-call-consent.ts";
 
 const dirs: string[] = [];

@@ -46,7 +46,7 @@ import { fleetLayout } from "./fleet.ts";
 import { browserSignInLines, pairingBlock } from "./cli-pairing.ts";
 import { explainTailscaleFailure, tailscaleServe, tailscaleServeOff, tailscaleStatus, type TailscaleStatus } from "./tailscale.ts";
 import { defaultSetupIo, SetupCancelled, type SetupIo } from "./cli-prompts.ts";
-import { normalizePhoneOrigin, phonePairingInstructions, runPhoneSetup } from "./cli-phone-setup.ts";
+import { normalizePhoneOrigin, phonePairingInstructions, runPhoneSetup } from "./phone/cli-phone-setup.ts";
 import type { AppConfig } from "./config.ts";
 import { defaultDataDir, ENVIRONMENT_PATH, fetchEnvironmentDescriptor, isOwnHealth, LEGACY_ENVIRONMENT_PATH } from "../electron/legacy-names.mjs";
 import {

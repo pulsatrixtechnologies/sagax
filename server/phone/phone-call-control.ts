@@ -3,10 +3,10 @@
 // never a bot's own Twilio frame) through the person's Perspicax access,
 // the same link place_phone_call already uses. Pure helpers plus the async
 // runners that take a mocked or live Twilio write.
-import { normalizePhone } from "../shared/allowed-recipients.ts";
-import { canadianNumber, formatPhone, maskPhone } from "../shared/outbound-call.ts";
-import { parseDtmfDigits, type PhoneCallEventKind, type PhoneCallLiveEvent, type PhoneCallPhase } from "../shared/phone-call-live.ts";
-import type { OutboundCallRecord, OutboundCalls } from "./outbound-calls.ts";
+import { normalizePhone } from "../../shared/allowed-recipients.ts";
+import { canadianNumber, formatPhone, maskPhone } from "../../shared/outbound-call.ts";
+import { parseDtmfDigits, type PhoneCallEventKind, type PhoneCallLiveEvent, type PhoneCallPhase } from "../../shared/phone-call-live.ts";
+import type { OutboundCallRecord, OutboundCalls } from "../outbound-calls.ts";
 
 type ToolAnswer = { ok: true; isError: boolean; value: unknown } | { ok: false; code: string; error: string };
 

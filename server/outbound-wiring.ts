@@ -20,8 +20,8 @@ import {
   applyResult, callAnswerNote, callCard, callCardText, callResultNote, OutboundCalls, placePhoneCall,
   type IncomingCallResult, type OutboundCallRecord, type PlaceCallDeps,
 } from "./outbound-calls.ts";
-import { hangUpLiveCall, sendDtmfLiveCall, transferLiveCall, type LiveCallPatch } from "./phone-call-control.ts";
-import { PhoneCallConsentStore } from "./phone-call-consent.ts";
+import { hangUpLiveCall, sendDtmfLiveCall, transferLiveCall, type LiveCallPatch } from "./phone/phone-call-control.ts";
+import { PhoneCallConsentStore } from "./phone/phone-call-consent.ts";
 import type { PrimaryCard } from "./primary-approvals.ts";
 import { createOutboundCallRoutes, type OutboundCallRouteDeps } from "./routes/outbound-calls.ts";
 import type { InternalRouteHandler } from "./routes/internal-route.ts";

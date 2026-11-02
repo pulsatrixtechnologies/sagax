@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 
-import { isBlockedHost } from "../electron/upstream-hosts.mjs";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
+import { isBlockedHost } from "../../electron/upstream-hosts.mjs";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
 
 it("starts and runs a chat turn without contacting a blocked host", async () => {
   const auditDir = mkdtempSync(join(tmpdir(), "sagax-network-audit-"));

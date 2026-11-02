@@ -9,9 +9,9 @@ import {
   PHONE_CALL_CONSENT_VERSION,
   phoneCallConsentAllowsCalls,
   type PhoneCallConsentCardData,
-} from "../shared/phone-call-consent.ts";
-import { writeFileAtomic } from "./atomic.ts";
-import { personSettingsPrincipal } from "./person-settings.ts";
+} from "../../shared/phone-call-consent.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { personSettingsPrincipal } from "../person-settings.ts";
 
 export const PHONE_CALL_CONSENT_FILE = "phone-call-consent.json";
 

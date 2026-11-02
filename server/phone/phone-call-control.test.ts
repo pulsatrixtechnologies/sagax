@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { OutboundCalls } from "./outbound-calls.ts";
+import { OutboundCalls } from "../outbound-calls.ts";
 import { hangUpLiveCall, sendDtmfLiveCall, transferLiveCall, type LiveCallPatch } from "./phone-call-control.ts";
 
 const dirs: string[] = [];

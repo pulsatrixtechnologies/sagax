@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import {
   checkPhoneToolResult,
   isPhoneTool,
@@ -33,7 +33,7 @@ import {
   type PhoneRequestKind,
   type PhoneToolId,
   type PhoneToolRequestWire,
-} from "../shared/phone-tools.ts";
+} from "../../shared/phone-tools.ts";
 
 /** A phone that registered within this long is "around". */
 export const PHONE_ONLINE_MS = 15 * 60_000;

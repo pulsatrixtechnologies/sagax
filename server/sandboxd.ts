@@ -193,7 +193,8 @@ export function createSandboxdUpgradeHandler(service: SandboxService, verifier: 
       const cols = Number(url.searchParams.get("cols"));
       const rows = Number(url.searchParams.get("rows"));
       socket.pause();
-      void service.ttyStream(tty[1]!, { cols, rows }).then((terminal) => {
+      const cwd = url.searchParams.get("cwd") ?? undefined;
+      void service.ttyStream(tty[1]!, { cols, rows }, cwd).then((terminal) => {
         const stream = terminal.stream;
         if (socket.destroyed) { stream.destroy(); return; }
         socket.write(`HTTP/1.1 101 Switching Protocols\r\nconnection: Upgrade\r\nupgrade: ${SANDBOXD_TTY_UPGRADE}\r\n\r\n`);

@@ -2311,5 +2311,8 @@
   "settings.streamReplies.title": "Показувати відповіді під час написання",
   "settings.streamReplies.show": "Показувати відповідь бота слово за словом під час написання, а не всю одразу після завершення",
   "bulkEdit.mixedOpen": "These fields differ across the selected bots: {fields}. Controls start empty for them; only what you set is written.",
-  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot."
+  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot.",
+  "orgComputer.diskFull": "Диск серверного середовища заповнений: вільно {free} з {total}. Боти більше не можуть зберігати файли. Видаліть великі файли в /workspace.",
+  "orgComputer.diskAlmostFull": "Диск серверного середовища майже заповнений: вільно {free} з {total}.",
+  "orgComputer.diskFree": "вільно {free}"
 }

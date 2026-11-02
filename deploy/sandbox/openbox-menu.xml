@@ -3,7 +3,15 @@
 <openbox_menu xmlns="http://openbox.org/3.4/menu">
   <menu id="root-menu" label="Sagax">
     <item label="Chromium"><action name="Execute"><command>sagax-desktop browser</command></action></item>
-    <item label="Terminal"><action name="Execute"><command>sagax-desktop terminal</command></action></item>
     <item label="Files"><action name="Execute"><command>sagax-desktop files</command></action></item>
+    <item label="Terminal"><action name="Execute"><command>sagax-desktop terminal</command></action></item>
+    <separator />
+    <item label="Text editor"><action name="Execute"><command>mousepad</command></action></item>
+    <item label="Writer"><action name="Execute"><command>libreoffice --writer</command></action></item>
+    <item label="Calc"><action name="Execute"><command>libreoffice --calc</command></action></item>
+    <item label="Impress"><action name="Execute"><command>libreoffice --impress</command></action></item>
+    <item label="Draw"><action name="Execute"><command>libreoffice --draw</command></action></item>
+    <item label="Pictures"><action name="Execute"><command>ristretto</command></action></item>
+    <item label="Videos"><action name="Execute"><command>parole</command></action></item>
   </menu>
 </openbox_menu>

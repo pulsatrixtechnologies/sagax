@@ -378,6 +378,15 @@ export function quantityBytes(bytes: number): string {
   return `${Math.floor(bytes)}`;
 }
 
+/** A storage quantity ("2Gi", "2048Mi", "21474836480", "20G") in bytes,
+ * or null when it is not one. */
+export function quantityToBytes(value: string): number | null {
+  const match = /^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|Pi|k|M|G|T|P)?$/.exec(value.trim());
+  if (!match) return null;
+  const units: Record<string, number> = { Ki: 1024, Mi: 1024 ** 2, Gi: 1024 ** 3, Ti: 1024 ** 4, Pi: 1024 ** 5, k: 1e3, M: 1e6, G: 1e9, T: 1e12, P: 1e15 };
+  return Math.floor(Number(match[1]) * (match[2] ? units[match[2]]! : 1));
+}
+
 export function quantityCpu(nanoCpus: number): string {
   if (!Number.isFinite(nanoCpus) || nanoCpus <= 0) throw new Error("cpu must be positive");
   return `${Math.round(nanoCpus / 1e6)}m`;

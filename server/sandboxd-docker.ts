@@ -85,6 +85,10 @@ export interface DockerApi {
   createNetwork(spec: Record<string, unknown>): Promise<void>;
   removeNetwork(name: string): Promise<void>;
   inspectVolume(name: string): Promise<{ labels: Record<string, string> } | null>;
+  /** Kubernetes: raise an existing workspace claim to the configured size
+   * when it was made smaller (the default grew from 2 GiB to 32 GiB on
+   * 2026-11-02). Best effort; Docker volumes have no size to grow. */
+  growVolume?(name: string): Promise<void>;
   createVolume(spec: Record<string, unknown>): Promise<void>;
   removeVolume(name: string): Promise<void>;
   /** Run to completion. `stdin`, when given, is written to the command's

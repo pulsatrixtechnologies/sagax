@@ -25,7 +25,9 @@
 // from the session); nothing here names a bot or another person.
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
-import { Check, ChevronDown, Cpu, Ellipsis, Globe, HardDrive, Info, Laptop, MemoryStick, Monitor, Server, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Cpu, Ellipsis, Globe, HardDrive, Info, Laptop, MemoryStick, Monitor, Server, type LucideIcon } from "lucide-react";
+import { workspaceDiskLevel } from "../../../shared/workspace-disk";
+import { cn } from "@/lib/cn";
 
 import { hostPlaceKey, parseHostPlaceKey, remoteHostPlaces } from "../../../shared/remote-bot-hosts";
 import type { UnattendedHostRow } from "../../../shared/remote-unattended-host";
@@ -838,13 +840,26 @@ export function UsagePanel() {
     return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener(SERVER_ENVIRONMENT_CHANGED, changed); };
   }, [visible, running]);
   const live = stats?.state === "running";
+  // The volume itself (df): a quota larger than the disk must not hide a
+  // full one (2026-11-02). The bots see the same warning in their answers.
+  const disk = typeof stats?.workspaceFreeBytes === "number" && typeof stats.workspaceTotalBytes === "number"
+    ? { freeBytes: stats.workspaceFreeBytes, totalBytes: stats.workspaceTotalBytes } : null;
+  const diskLevel = workspaceDiskLevel(disk);
   return (
+    <>
+    {disk && diskLevel !== "normal" && (
+      <p role="alert" data-disk-level={diskLevel} className={cn("flex items-start gap-2 rounded-xl border px-3 py-2 text-[12px]", diskLevel === "full" ? "border-danger/40 text-danger" : "border-hairline text-warning")}>
+        <AlertTriangle size={14} aria-hidden="true" className="mt-0.5 shrink-0" />
+        <span>{t(diskLevel === "full" ? "orgComputer.diskFull" : "orgComputer.diskAlmostFull", { free: formatBytes(disk.freeBytes), total: formatBytes(disk.totalBytes) })}</span>
+      </p>
+    )}
     <dl aria-label={t("orgComputer.usage")} className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-xl border border-hairline p-3 text-[12px]">
-      <Row icon={HardDrive} label={t("orgComputer.disk")} value={stats ? t("orgComputer.usedOf", { used: formatBytes(stats.workspaceBytes), limit: formatBytes(stats.workspaceQuotaBytes) }) : "?"} />
+      <Row icon={HardDrive} label={t("orgComputer.disk")} value={stats ? t("orgComputer.usedOf", { used: formatBytes(stats.workspaceBytes), limit: formatBytes(disk ? Math.min(disk.totalBytes, stats.workspaceQuotaBytes) : stats.workspaceQuotaBytes) }) : "?"} detail={disk ? t("orgComputer.diskFree", { free: formatBytes(disk.freeBytes) }) : undefined} />
       <Row icon={Cpu} label={t("orgComputer.cpu")} value={live && stats.cpuPercent !== null ? t("orgComputer.cpuValue", { percent: Math.round(stats.cpuPercent) }) : "?"} />
       <Row icon={MemoryStick} label={t("orgComputer.memory")} value={stats ? t("orgComputer.usedOf", { used: live ? formatBytes(stats.memoryBytes) : "?", limit: formatBytes(stats.memoryLimitBytes) }) : "?"} />
       <Row icon={Server} label={t("orgComputer.os")} value={stats ? [stats.os, stats.arch].filter(Boolean).join(" ") || "Linux" : "?"} detail={stats?.image} />
     </dl>
+    </>
   );
 }
 

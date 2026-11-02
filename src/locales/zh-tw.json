@@ -3590,5 +3590,8 @@
   "settings.streamReplies.title": "在撰寫時顯示回覆",
   "settings.streamReplies.show": "在機器人撰寫回覆時逐字顯示，而不是完成後一次顯示",
   "bulkEdit.mixedOpen": "These fields differ across the selected bots: {fields}. Controls start empty for them; only what you set is written.",
-  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot."
+  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot.",
+  "orgComputer.diskFull": "伺服器環境的磁碟已滿：{total} 中剩餘 {free}。機器人無法再儲存檔案。請刪除 /workspace 中的大型檔案。",
+  "orgComputer.diskAlmostFull": "伺服器環境的磁碟快滿了：{total} 中剩餘 {free}。",
+  "orgComputer.diskFree": "剩餘 {free}"
 }

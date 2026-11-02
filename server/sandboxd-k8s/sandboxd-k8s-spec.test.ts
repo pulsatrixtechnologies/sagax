@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
+  quantityToBytes,
   dedicatedFor,
   dedicatedFromEnv,
   defaultDenyNetworkPolicy,
@@ -432,5 +433,16 @@ describe("image scripts and manifests", () => {
     expect(allow).toContain("6443");
     expect(allow).toContain("k8s-app: kube-dns");
     expect(allow).toMatch(/protocol: UDP\r?\n\s+port: 53/);
+  });
+});
+
+describe("quantityToBytes (2026-11-02)", () => {
+  it("reads the storage quantities a claim carries", () => {
+    expect(quantityToBytes("2Gi")).toBe(2 * 1024 ** 3);
+    expect(quantityToBytes("2048Mi")).toBe(2 * 1024 ** 3);
+    expect(quantityToBytes("20480Mi")).toBe(20 * 1024 ** 3);
+    expect(quantityToBytes("21474836480")).toBe(20 * 1024 ** 3);
+    expect(quantityToBytes("20G")).toBe(20e9);
+    expect(quantityToBytes("lots")).toBeNull();
   });
 });

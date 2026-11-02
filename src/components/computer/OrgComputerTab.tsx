@@ -1,6 +1,6 @@
 // The Computer tab on an organization server, self-contained so it slots
 // into any bot panel layout. It looks like the solo panel: one large screen
-// (ComputerScreen) with Play / Pause / Stop on it and "<Bot>'s screen" below,
+// (ComputerScreen), no Play / Pause / Stop on it, and "<Bot>'s screen" below,
 // showing the computer this bot uses, as its Works on says
 // (src/lib/place.ts orgComputerFor):
 //
@@ -656,11 +656,10 @@ export function ServerComputerScreen({ caption, initial = null, bot = null, comp
     : state === "error" ? t("computerScreen.serverUnavailable")
     : undefined;
   const hint = waking && wakingSeen ? wakingHint(wakingSeen.elapsedMs + Math.max(0, Date.now() - wakingSeen.at)) : undefined;
+  // Only the wake on the calm asleep screen: no Play / Pause / Stop on a
+  // bot's computer, its lifecycle runs on its own (JC 2026-11-02).
   const controls: ScreenControls = {
     play: status?.configured && power === "off" && state !== "starting" ? () => void act("start") : undefined,
-    resume: power === "paused" ? () => void act("resume") : undefined,
-    pause: power === "running" ? () => void act("pause") : undefined,
-    stop: power === "running" || power === "paused" ? () => void act("shutdown") : undefined,
   };
   // While the large window has control, the square shows no second live
   // view (one VNC stream, and the window's passwords stay the valid ones).
@@ -687,7 +686,7 @@ export function ServerComputerScreen({ caption, initial = null, bot = null, comp
         controls={controls}
       />
       {takeover && (
-        <SandboxDesktopModal title={caption} state={state} controls={controls} busy={busy}
+        <SandboxDesktopModal title={caption} state={state}
           onClose={() => setTakeover(false)} onConnected={() => void load()} />
       )}
     </>
@@ -801,12 +800,7 @@ export function LocalComputerScreen({ bridge, caption, initial = null, desktopId
         computerName={computerName ?? desktop?.name ?? t("computerScreen.computer")}
         actions={actions}
         live={frame ? <img src={frame} alt={caption} className="h-full w-full object-contain" /> : undefined}
-        controls={{
-          play: view.canPlay ? setUp : undefined,
-          resume: view.canResume ? () => void vm.act("resume") : undefined,
-          pause: view.canPause ? () => void vm.act("pause") : undefined,
-          stop: view.canStop ? () => void vm.act("stop") : undefined,
-        }}
+        controls={{ play: view.canPlay ? setUp : undefined }}
       />
       {setup?.state === "done" && setup.previousFolder && (
         <p className="text-[11.5px] text-ink-secondary">{t("localVm.previousFolder", { folder: setup.previousFolder })}</p>

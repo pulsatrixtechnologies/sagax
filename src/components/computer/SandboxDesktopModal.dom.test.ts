@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // Large computer window: calm chrome, Watching | Take control segments,
-// power in the "..." menu, close and collapse back to the panel.
+// one full screen button (no Play / Pause / Stop), one collapse that closes.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,16 +26,14 @@ afterEach(() => {
 
 function mount(props: Partial<Parameters<typeof SandboxDesktopModal>[0]> = {}) {
   const onClose = props.onClose ?? vi.fn();
-  const controls = props.controls ?? { play: vi.fn(), pause: vi.fn(), stop: vi.fn() };
   act(() => root.render(createElement(SandboxDesktopModal, {
     title: "Luna's screen",
     state: "running",
-    controls,
     onClose,
     screen: () => createElement("div", { "data-fake-screen": "", "data-control": "1" }),
     ...props,
   })));
-  return { onClose, controls };
+  return { onClose };
 }
 
 describe("SandboxDesktopModal calm window", () => {
@@ -59,33 +57,37 @@ describe("SandboxDesktopModal calm window", () => {
     expect(takeover.textContent).toContain("You have control");
   });
 
-  it("keeps power reachable in the more menu, not in the header", () => {
-    const pause = vi.fn();
-    const stop = vi.fn();
-    mount({ controls: { pause, stop } });
+  it("shows no Play / Pause / Stop, only one full screen button with a tooltip", () => {
+    mount();
     expect(document.querySelector("[data-takeover-power]")).toBeNull();
-    act(() => (document.querySelector("[data-takeover-more]") as HTMLButtonElement).click());
-    expect(document.querySelector("[data-takeover-power='pause']")).not.toBeNull();
-    expect(document.querySelector("[data-takeover-power='stop']")).not.toBeNull();
-    expect(document.querySelector("[data-takeover-fullscreen]")).not.toBeNull();
-    act(() => (document.querySelector("[data-takeover-power='pause']") as HTMLButtonElement).click());
-    expect(pause).toHaveBeenCalledTimes(1);
-    expect(document.querySelector("[data-takeover-power]")).toBeNull();
+    expect(document.querySelector("[data-takeover-more]")).toBeNull();
+    expect(document.querySelector("[role=menu]")).toBeNull();
+    const full = document.querySelector<HTMLButtonElement>("[data-takeover-fullscreen]")!;
+    expect(full.getAttribute("aria-label")).toBe("Full screen");
+    expect(full.getAttribute("title")).toBe("Full screen");
+    const request = vi.fn(() => Promise.resolve());
+    (document.querySelector("[role=dialog]") as HTMLElement).requestFullscreen = request;
+    act(() => full.click());
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
-  it("closes and collapses back to the panel", () => {
+  it("closes with the one collapse button (no red close dot) and with Escape", () => {
     const { onClose } = mount();
-    act(() => (document.querySelector("[data-takeover-close]") as HTMLButtonElement).click());
+    expect(document.querySelectorAll("[data-takeover-close]")).toHaveLength(1);
+    const collapse = document.querySelector<HTMLButtonElement>("[data-takeover-collapse]")!;
+    expect(collapse.hasAttribute("data-takeover-close")).toBe(true);
+    expect(collapse.getAttribute("aria-label")).toMatch(/^Close and release control/);
+    act(() => collapse.click());
     expect(onClose).toHaveBeenCalledTimes(1);
-    act(() => (document.querySelector("[data-takeover-collapse]") as HTMLButtonElement).click());
+    act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
   it("omits the control segments for the browser window", () => {
-    mount({ kind: "browser", controls: undefined });
+    mount({ kind: "browser" });
     expect(document.querySelector("[data-takeover-segments]")).toBeNull();
     expect(document.querySelector("[data-takeover-control]")).toBeNull();
-    expect(document.querySelector("[data-takeover-more]")).not.toBeNull();
+    expect(document.querySelector("[data-takeover-fullscreen]")).not.toBeNull();
     expect(document.querySelector("[data-takeover-close]")).not.toBeNull();
   });
 });

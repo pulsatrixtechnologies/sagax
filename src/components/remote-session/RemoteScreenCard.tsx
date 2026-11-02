@@ -1,13 +1,14 @@
 // A Tailcat remote session's screen in the chat, drawn exactly like the bot's
 // own computer screen (ComputerScreen): the live picture with rounded
-// corners, "Take control" in the middle on intent (TakeControlPill), Play /
-// Pause / Stop at the bottom, and "<POSTE>'s screen" under it. Play / Pause
-// pause the live picture; Stop ends the session, on a second press.
+// corners, "Take control" in the middle on intent (TakeControlPill), Pause /
+// Stop at the bottom (a remote session, unlike a bot's computer, has no
+// lifecycle of its own), and "<POSTE>'s screen" under it. Pause pauses the
+// live picture; Stop ends the session, on a second press.
 //
 // Take control opens the same large window as the bot's server environment
-// (SandboxDesktopModal): calm chrome (close, collapse to panel), the live
-// screen, Watching | Take control / You have control under it, and Play /
-// Pause / Stop plus full screen in the "..." menu. Inside it the live
+// (SandboxDesktopModal): calm chrome (one collapse button closes it), the live
+// screen, Watching | Take control / You have control under it, and full
+// screen beside it (pause / stop stay on the card). Inside it the live
 // control WebSocket (#950) streams the frames and carries the mouse and the
 // keyboard while control is held. The Computer tab is never opened for a
 // remote session anymore.
@@ -177,18 +178,16 @@ export function RemoteLiveScreen({ botId, view, control }: { botId: string; view
 }
 
 /** The take-over window for one session: the bot computer's own window. */
-export function RemoteTakeover({ botId, view, state, controls, onClose }: {
+export function RemoteTakeover({ botId, view, state, onClose }: {
   botId: string;
   view: RemoteSessionView;
   state: ScreenState;
-  controls?: ScreenControls;
   onClose: () => void;
 }) {
   return (
     <SandboxDesktopModal
       title={remoteScreenCaption(view)}
       state={state === "paused" ? "running" : state}
-      {...(controls ? { controls } : {})}
       onClose={onClose}
       screen={(control) => <RemoteLiveScreen botId={botId} view={view} control={control} />}
     />
@@ -248,7 +247,7 @@ export function RemoteScreenCard({ botId, view }: { botId: string; view: RemoteS
         <p role="status" data-remote-stop-confirm="" className="mt-1 text-center text-[12px] text-danger">{t("remoteSession.confirmStop")}</p>
       )}
       {takeover && connected && (
-        <RemoteTakeover botId={botId} view={view} state={state} controls={controls} onClose={() => setTakeover(false)} />
+        <RemoteTakeover botId={botId} view={view} state={state} onClose={() => setTakeover(false)} />
       )}
     </div>
   );

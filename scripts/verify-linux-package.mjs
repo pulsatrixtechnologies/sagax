@@ -383,8 +383,8 @@ function verifyCloudflaredResources(resources, label, { directoryMode = 0o755 } 
     requireRegularMode(path.join(licenses, name), 0o644);
     requireContained(licenses, path.join(licenses, name));
   }
-  // electron-builder copies LICENSE-APACHE here. Root LICENSE is Sagax's own notice.
-  if (sha256(path.join(licenses, "cloudflared-LICENSE.txt")) !== sha256(path.join(root, "LICENSE-APACHE"))) {
+  // electron-builder copies the root LICENSE here: the Apache 2.0 text, cloudflared's license too.
+  if (sha256(path.join(licenses, "cloudflared-LICENSE.txt")) !== sha256(path.join(root, "LICENSE"))) {
     fail(`${label} cloudflared license text differs from the reviewed Apache 2.0 text`);
   }
   if (

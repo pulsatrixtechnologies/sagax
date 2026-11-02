@@ -2,6 +2,7 @@
   "name": "@sagax/docs",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "assets:sync": "node scripts/sync-assets.mjs",
     "prebuild": "pnpm assets:sync",

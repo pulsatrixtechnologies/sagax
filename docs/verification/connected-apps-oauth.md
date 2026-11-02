@@ -3,10 +3,13 @@
 Run from the repository root:
 
 ```sh
-node --experimental-strip-types scripts/verify-connected-apps.ts
 pnpm exec vitest run shared/connector-setup.test.ts src/components/connector-setup/ConnectorSetupCard.test.ts src/components/PluginsPanel.layout.test.ts src/components/PluginsPanel.i18n.test.ts
 pnpm exec vitest run server/index.test.ts -t 'second-account cards|retries abandoned connector OAuth'
 ```
+
+The Chromium probe `verify-connected-apps.ts` was removed on
+2026-11-02: it mounted `ConnectorCard`, retired with the Composio
+integration on 2026-10-22 (#1014).
 
 Engine connector sign-in (grok.com and claude.ai) is the connector-setup
 tests in that command.

@@ -136,3 +136,10 @@ build/icon.html
 # Moved 2026-11-02 (repo tidy) to deploy/local/maus.ps1, beside the README that
 # documents it.
 maus.ps1
+
+# Removed 2026-11-02 (repo tidy 2): dead probes. They mounted components the
+# app no longer has (CompanyBackupSettings, dropped 2026-10-15; ConnectorCard,
+# retired with Composio 2026-10-22), so they could no longer run.
+scripts/verify-company-backups.mjs
+scripts/verify-connected-apps.ts
+scripts/testing/connected-apps-preview.tsx

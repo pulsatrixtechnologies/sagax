@@ -141,6 +141,9 @@ export interface BotActivityStep {
   files?: string[];
   /** The call's arguments as the chat shows them (bounded, redacted). */
   input?: string;
+  /** 2026-11-02: a failed call's own error (bounded, redacted), so the run's
+   * steps say why it failed instead of "returned no error message". */
+  error?: string;
   /** A call a sub-agent made: the step of the Agent call that started it. */
   parentId?: string;
   /** On a sub-agent's own step (Claude's Agent tool): what it was asked

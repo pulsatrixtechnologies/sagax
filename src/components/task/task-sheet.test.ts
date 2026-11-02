@@ -17,7 +17,8 @@ vi.mock("@/state/store", () => ({
 import type { BotActivityDetail, BotActivityItem, BotActivityStep } from "../../../shared/bot-activity";
 import type { Bot, Message } from "@/state/store";
 import { ActivityDetailBody, waitingSources } from "../bot-settings/ActivityDetailModal";
-import { ActivityStepGroups } from "./ActivityStepGroups";
+import { ActivityStepGroups, GroupDetail } from "./ActivityStepGroups";
+import { groupActivitySteps } from "@/lib/activity-step-groups";
 import { SubagentList, sortSubagents } from "./SubagentList";
 import { TaskStatusHeader, taskStatusWords } from "./TaskStatusHeader";
 import { WaitingOnYou, waitingKind } from "./WaitingOnYou";
@@ -152,6 +153,19 @@ describe("grouped steps", () => {
     // one chevron per group, the technical detail closed
     expect(html).not.toContain("data-activity-technical");
     expect(html.match(/aria-expanded="false"/g)).toHaveLength(4);
+  });
+
+  it("an opened failed step says its error, and an opaque id in its arguments reads as \"…\" (2026-11-02)", () => {
+    const messageId = "AAMkAGI2NGVhZTVlLTI1OGMtNDI4My1iZmE5LTA5OGJiZGEzMzQ0NwBGAAAAAAA-xfvW_8d3SL=";
+    const steps: BotActivityStep[] = [
+      { id: "g1", name: "mcp__outlook__get_message", at: NOW - MIN, ok: false, input: JSON.stringify({ message_id: messageId }), error: "Microsoft Graph API error: 404 Not Found (ErrorItemNotFound)" },
+    ];
+    const html = renderToStaticMarkup(createElement(GroupDetail, { group: groupActivitySteps(steps)[0]! }));
+    expect(html).toContain("data-activity-step-error");
+    expect(html).toContain("404 Not Found (ErrorItemNotFound)");
+    expect(html).toMatch(/>…</);
+    // only in the tooltip, never as text
+    expect(html.replace(/title="[^"]*"/g, "")).not.toContain(messageId);
   });
 
   it("folds finished tool searches like ActivityRun and shortens runCommand targets", () => {

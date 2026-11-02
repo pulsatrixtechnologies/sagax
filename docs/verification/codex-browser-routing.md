@@ -23,8 +23,8 @@ These checks spend real model quota. Each script launches a temporary server and
 For browser acceptance, also set `SAGAX_VERIFY_BROWSER_BINARY` to the installed pinned agent-browser executable and `SAGAX_VERIFY_BROWSER_CHROME` to Chrome. Run:
 
 ```sh
-node --experimental-strip-types scripts/verify-codex-browser-acceptance.ts
-node --experimental-strip-types scripts/verify-codex-search-acceptance.ts
+node --experimental-strip-types scripts/verify/dev/verify-codex-browser-acceptance.ts
+node --experimental-strip-types scripts/verify/dev/verify-codex-search-acceptance.ts
 ```
 
 The browser check gives goal-only prompts to open Google Calendar and read the public project page. It independently observes the active browser URL and saves screenshots. Calendar's public landing page or sign-in page proves navigation only, not authenticated calendar access. It approves only the fixture's navigation/observation tools; shell, login and unrelated requests remain blocked. The search check requires successful native search and openPage records, and the answer must cite the same official URL returned by that page fetch. Missing actions, other actions, failed fetches, and unrelated citations do not pass. Report-writing failures still run fixture cleanup.

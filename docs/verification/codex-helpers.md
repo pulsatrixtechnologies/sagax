@@ -12,7 +12,7 @@ test fails on the old driver: it emits the child's final and kills the parent
 before its next approval. The fixed driver answers that approval and completes
 only after the parent final, with parent usage.
 
-For the real chat path, run `node scripts/verify-codex-helpers.ts` in the foreground
+For the real chat path, run `node scripts/verify/dev/verify-codex-helpers.ts` in the foreground
 and open its printed preview URL. This uses the standard isolated launcher and
 an offline Codex protocol fixture; no real provider or user account is used.
 Select **Codex Helper Fixture**, send a message, and check that **echo parent

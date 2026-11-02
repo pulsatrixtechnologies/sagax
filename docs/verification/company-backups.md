@@ -52,13 +52,11 @@ storage, with the production-integration limits below.
 
 ## Run
 
-From the repository with its dependencies, including Electron, installed:
+The Electron probe that ran this check (`verify-company-backups.mjs`)
+was removed on 2026-11-02: it mounted `CompanyBackupSettings`, which Settings
+dropped on 2026-10-15 (#518). The notes below record what it covered.
 
-```sh
-node scripts/verify-company-backups.mjs
-```
-
-The script accepts no external URL. It creates its own loopback renderer,
+The script accepted no external URL. It created its own loopback renderer,
 fake-engine workspace, synthetic Admin and object-storage endpoints, temporary
 home, and Electron profile. Linux requires a graphical session, or run the
 command through `xvfb-run -a`.

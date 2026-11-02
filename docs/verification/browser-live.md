@@ -6,7 +6,7 @@ uses the operator's browser profiles, OMB home, provider logins, or API keys.
 ```sh
 SAGAX_VERIFY_BROWSER_BINARY=/absolute/path/to/agent-browser \
 SAGAX_VERIFY_BROWSER_CHROME=/absolute/path/to/chrome-headless-shell \
-node --experimental-strip-types scripts/verify-browser-live.ts
+node --experimental-strip-types scripts/verify/dev/verify-browser-live.ts
 ```
 
 The launcher uses `launchVerificationServer` with a temporary home and fake
@@ -87,7 +87,7 @@ automatic native acceptance pass, close its browsers and exit:
 SAGAX_VERIFY_BROWSER_BINARY=/absolute/path/to/agent-browser \
 SAGAX_VERIFY_BROWSER_CHROME=/absolute/path/to/chrome-headless-shell \
 SAGAX_VERIFY_PLAYWRIGHT=/absolute/path/to/playwright/index.mjs \
-node --experimental-strip-types scripts/verify-browser-live.ts --recovery
+node --experimental-strip-types scripts/verify/dev/verify-browser-live.ts --recovery
 ```
 
 This leaves a native document and unsaved form idle for 65 seconds using the
@@ -140,7 +140,7 @@ Never point its requests at the user's running app.
 SAGAX_VERIFY_CODEX_CLI=/absolute/path/to/codex \
 SAGAX_VERIFY_CODEX_AUTH=/absolute/path/to/auth.json \
 SAGAX_VERIFY_CODEX_MODEL=your-supported-model \
-node --experimental-strip-types scripts/verify-codex-surface-live.ts
+node --experimental-strip-types scripts/verify/dev/verify-codex-surface-live.ts
 ```
 
 Open the printed preview, select Ziggy, and send ordinary requests without tool

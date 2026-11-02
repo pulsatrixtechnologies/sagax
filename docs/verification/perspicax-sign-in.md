@@ -176,8 +176,8 @@ real preload on a second local server acting as the remote environment
 
 ```sh
 pnpm exec vite build
-node --experimental-strip-types scripts/verify-desktop-sign-in.ts               # PASS: signed in, back on /
-node --experimental-strip-types scripts/verify-desktop-sign-in.ts --old-target  # PASS: the 0.3.x delivery stays signed out
+node --experimental-strip-types scripts/verify/dev/verify-desktop-sign-in.ts               # PASS: signed in, back on /
+node --experimental-strip-types scripts/verify/dev/verify-desktop-sign-in.ts --old-target  # PASS: the 0.3.x delivery stays signed out
 ```
 
 Server mode's UI is checked the same way, with the second server serving a
@@ -192,8 +192,8 @@ the signed-in person), Open in the app, and the owl, shape and Trombi:
 
 ```sh
 pnpm exec vite build
-node --experimental-strip-types scripts/verify-server-mode.ts         # PASS (32/32), built bundle
-node --experimental-strip-types scripts/verify-server-mode.ts --dev   # the same, UI from Vite as in the dev app
+node --experimental-strip-types scripts/verify/dev/verify-server-mode.ts         # PASS (32/32), built bundle
+node --experimental-strip-types scripts/verify/dev/verify-server-mode.ts --dev   # the same, UI from Vite as in the dev app
 ```
 
 The window already shows `<origin>/pair` when the credential comes back, so

@@ -204,7 +204,7 @@ export function LiveCallEngine({ bot }: { bot: Bot }) {
       getUserMedia: (constraints) => getUserMediaWithFallback(constraints),
     });
     setCall(live);
-    // the real-Electron check (scripts/verify-voice-mode.ts) drives the call
+    // the real-Electron check (scripts/verify/dev/verify-voice-mode.ts) drives the call
     // through this handle; it exists only when that check turns it on
     try {
       if (localStorage.getItem("omb.voiceCall.debug") === "1") (window as unknown as { __sagaxVoiceCall?: VoiceCall }).__sagaxVoiceCall = live;

@@ -707,13 +707,13 @@ export function ensureGrokInjectSlug(
 }
 
 /** Grok 1.0.25 and later 1.x consume native image blocks but advertise image:false.
- * Verified with the real CLI and a loopback model: scripts/verify-grok-images.ts.
+ * Verified with the real CLI and a loopback model: scripts/verify/dev/verify-grok-images.ts.
  * Keep unknown/older runtimes on the normal capability negotiation path. */
 export function grokAcceptsUnadvertisedImages(init: unknown): boolean {
   const meta = (init as { _meta?: { grokShell?: unknown; agentVersion?: unknown } } | null)?._meta;
   if (meta?.grokShell !== true || typeof meta.agentVersion !== "string") return false;
   // Any 1.x release from 1.0.25 on (grok 1.0.62 on 2026-10-19). A 2.x stays
-  // unknown until scripts/verify-grok-images.ts checks it; so does a
+  // unknown until scripts/verify/dev/verify-grok-images.ts checks it; so does a
   // pre-release suffix.
   const version = /^(\d+)\.(\d+)\.(\d+)$/.exec(meta.agentVersion);
   if (!version) return false;

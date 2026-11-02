@@ -10,7 +10,7 @@ pnpm exec vitest run server/index.test.ts -t 'MCP OAuth|OAuth URL MCP'
 Run the real MCP settings panel against a disposable fake-engine workspace:
 
 ```sh
-node --experimental-strip-types scripts/verify-mcp-sign-in.ts
+node --experimental-strip-types scripts/verify/dev/verify-mcp-sign-in.ts
 ```
 
 The fixture uses `launchVerificationServer` and the existing isolated Vite

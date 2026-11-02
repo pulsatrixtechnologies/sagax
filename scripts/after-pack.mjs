@@ -8,7 +8,7 @@ import {
 import { tailcatExecutableTarget, verifyTailcatExecutable } from "./prepare-tailcat.mjs";
 import { fileURLToPath } from "node:url";
 import { verifyBrowserBundle } from "./prepare-browser.mjs";
-import { verifyWindowsNatives } from "./verify-win-natives.mjs";
+import { verifyWindowsNatives } from "./verify/release/verify-win-natives.mjs";
 import { isVendorExecutable, signFile, signingConfig } from "./win-trusted-signing.mjs";
 import { pinnedDuckdbVersion, pinnedResvgVersion, verifyDuckdbTree } from "./prepare-duckdb.mjs";
 import { LIPO_ARCH, isMachO, writeThinMachO } from "./mac-thin.mjs";

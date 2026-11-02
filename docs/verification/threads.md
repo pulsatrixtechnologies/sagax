@@ -4,7 +4,7 @@ Launch the real renderer and server with only an offline provider and a
 disposable data directory:
 
 ```sh
-node --experimental-strip-types scripts/verify-threads.ts
+node --experimental-strip-types scripts/verify/dev/verify-threads.ts
 ```
 
 Open the printed `previewUrl`. The fixture seeds Pepper with three threads,

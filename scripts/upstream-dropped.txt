@@ -136,3 +136,65 @@ build/icon.html
 # Moved 2026-11-02 (repo tidy) to deploy/local/maus.ps1, beside the README that
 # documents it.
 maus.ps1
+
+# Removed 2026-11-02 (repo tidy 2): dead probes. They mounted components the
+# app no longer has (CompanyBackupSettings, dropped 2026-10-15; ConnectorCard,
+# retired with Composio 2026-10-22), so they could no longer run.
+scripts/verify-company-backups.mjs
+scripts/verify-connected-apps.ts
+scripts/testing/connected-apps-preview.tsx
+
+# Moved 2026-11-02 (repo tidy 2) to scripts/verify/release/, with the other
+# release, CI and pre-push gates.
+scripts/verify-linux-package.mjs
+
+# Moved 2026-11-02 (repo tidy 2) to scripts/verify/dev/, the one-off dev
+# probes (isolated fixtures, real Electron or real CLIs).
+scripts/verify-avatar-providers.ts
+scripts/verify-bidi.ts
+scripts/verify-bot-settings.ts
+scripts/verify-browser-live.ts
+scripts/verify-chat-polish.ts
+scripts/verify-chatgpt-plan.mjs
+scripts/verify-claude-account.ts
+scripts/verify-claude-auth-settings.ts
+scripts/verify-cloud-preview.ts
+scripts/verify-codex-account.ts
+scripts/verify-codex-browser-acceptance.ts
+scripts/verify-codex-helpers.ts
+scripts/verify-codex-instructions.mjs
+scripts/verify-codex-sandbox.mjs
+scripts/verify-codex-search-acceptance.ts
+scripts/verify-codex-surface-live.ts
+scripts/verify-command-allowlist-ui.ts
+scripts/verify-computer-files.ts
+scripts/verify-data.ts
+scripts/verify-desktop-viewer.ts
+scripts/verify-engines-ui.test.mjs
+scripts/verify-engines-ui.ts
+scripts/verify-grok-images.ts
+scripts/verify-group-vm.ts
+scripts/verify-ios-local-vm.ts
+scripts/verify-japanese-desktop.ts
+scripts/verify-local-tool-selection.ts
+scripts/verify-local-vm-resume.ts
+scripts/verify-mcp-sign-in.ts
+scripts/verify-mentions.ts
+scripts/verify-onboarding-ui.ts
+scripts/verify-opencode-permissions.ts
+scripts/verify-organization-settings.mjs
+scripts/verify-pi-tool-scope.ts
+scripts/verify-podman-firefox.ts
+scripts/verify-provider-setup.ts
+scripts/verify-qwen-models.ts
+scripts/verify-rich-tables.ts
+scripts/verify-routines.ts
+scripts/verify-server-connection.mjs
+scripts/verify-server-recovery.mjs
+scripts/verify-sidebar.ts
+scripts/verify-startup-tray.mjs
+scripts/verify-team-backup.ts
+scripts/verify-threads.ts
+scripts/verify-tool-scope.ts
+scripts/verify-whop.ts
+scripts/verify-workspace-backup.ts

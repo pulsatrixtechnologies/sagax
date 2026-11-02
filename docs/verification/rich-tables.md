@@ -3,7 +3,7 @@
 Start the isolated fake-engine server and renderer:
 
 ```sh
-node --experimental-strip-types scripts/verify-rich-tables.ts
+node --experimental-strip-types scripts/verify/dev/verify-rich-tables.ts
 ```
 
 Open its printed `previewUrl`. It contains a real persisted assistant reply with

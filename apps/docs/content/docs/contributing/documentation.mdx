@@ -6,6 +6,11 @@ icon: FilePenLine
 
 Public documentation lives in `apps/docs/content/docs`. Internal design notes and implementation plans can remain in the repository's top-level `docs` folder.
 
+Each page has one source. A site page that must also stay readable at an older
+repository path (for example `docs/deploy-vps.md`) keeps a generated copy
+there: edit the `.mdx`, then run `pnpm docs:copies`. The copies are listed in
+`scripts/docs-copies.mjs`; never edit one by hand.
+
 ## Add a page
 
 Create a `.mdx` file with a title and description:

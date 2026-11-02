@@ -395,7 +395,7 @@ describe("image scripts and manifests", () => {
     expect(build).toContain("SANDBOX_IMAGE_PUSH");
     const scan = readFileSync(new URL("../../scripts/scan-sandbox-image.sh", import.meta.url), "utf8");
     expect(scan).toContain("not scanned");
-    const verify = readFileSync(new URL("../../scripts/verify-sandbox-image-signature.sh", import.meta.url), "utf8");
+    const verify = readFileSync(new URL("../../scripts/verify/release/verify-sandbox-image-signature.sh", import.meta.url), "utf8");
     expect(verify).toContain("did not verify a signature");
     const workflow = readFileSync(new URL("../../.github/workflows/sandbox-image.yml", import.meta.url), "utf8");
     expect(workflow).toContain("workflow_dispatch");

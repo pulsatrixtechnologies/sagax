@@ -337,7 +337,7 @@ Agent, Antigravity, a custom ACP agent) is still refused on an organization
 server.
 `scripts/smoke-host-tools.ts` starts the real Claude Code CLI with the
 driver's flags (no model request) and checks its tool list has no `Bash`.
-`scripts/verify-org-host-tools.ts <engine>` drives a real ACP CLI through
+`scripts/verify/dev/verify-org-host-tools.ts <engine>` drives a real ACP CLI through
 its driver against a fake model on 127.0.0.1 and checks the tools it offers
 the model, that a shell or file request does not act, and that the Sagax
 MCP tools still work.

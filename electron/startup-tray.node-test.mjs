@@ -223,6 +223,6 @@ test("the loading page renders the failure actions behind the bridge", async () 
   assert.match(html, /window\.startupScreen\.openLogs\(\)/);
   assert.match(html, /window\.startupScreen\.retry\(\)/);
   assert.match(html, /window\.startupScreen\.onState/);
-  // The close button stays first: scripts/verify-startup-tray.mjs clicks it.
+  // The close button stays first: scripts/verify/dev/verify-startup-tray.mjs clicks it.
   assert.ok(html.indexOf('aria-label="Close"') < html.indexOf('id="open-logs"'));
 });

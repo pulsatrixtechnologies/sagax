@@ -4,7 +4,7 @@ Use only the disposable offline fixture. It never invokes a real Claude
 executable or reads a real credential store.
 
 ```sh
-node --experimental-strip-types scripts/verify-claude-account.ts
+node --experimental-strip-types scripts/verify/dev/verify-claude-account.ts
 ```
 
 The launcher prints its API URL, preview URL, command log, disposable home,

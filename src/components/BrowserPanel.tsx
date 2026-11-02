@@ -30,7 +30,7 @@ const RECONNECT_DELAYS = [1_000, 2_000, 4_000, 8_000, 15_000];
 
 const NO_CONTROL = { held: false, controlling: false, owned: false };
 /** Where the window takes a browser that shows a blank page (the server
- * launches a closed one there too: BROWSER_START_URL in server/browser-live.ts). */
+ * launches a closed one there too: BROWSER_START_URL in server/browser/browser-live.ts). */
 export const BROWSER_START_URL = "https://www.google.com/";
 
 /** Closing a panel releases its lease. A new connection never silently
@@ -64,7 +64,7 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
   const [reconnecting, setReconnecting] = useState(false);
   // The person's network debugger (never the bot's).
   const [showNetwork, setShowNetwork] = useState(false);
-  // Teach by demonstration (server/browser-teach.ts): a recording runs, then
+  // Teach by demonstration (server/browser/browser-teach.ts): a recording runs, then
   // its steps open in the editor. Never null: the test fixture gives every
   // useState(null) the frame.
   const [recording, setRecording] = useState(false);

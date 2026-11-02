@@ -224,7 +224,7 @@ export interface WidgetRendererOptions {
   /** Close the warm browser after this long without a check. */
   idleMs?: number;
   /** false while the server is short of memory: no browser is started and a
-   * warm one is closed (server/engine-memory-guard.ts). */
+   * warm one is closed (server/memory/engine-memory-guard.ts). */
   memoryOk?: () => boolean;
   /** Called with the browser's pid once it runs (OOM score). */
   onSpawn?: (pid: number) => void;

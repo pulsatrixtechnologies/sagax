@@ -226,7 +226,7 @@ describe("the sagax-desktop tools", () => {
     const refused = await handleDesktopBridgeMcp("tools/call", { name: "run_command", arguments: { command: "ls" } }, async () => { throw new Error("Your computer is not connected right now."); });
     expect(refused).toEqual({ content: [{ type: "text", text: "Your computer is not connected right now." }], isError: true });
   });
-  // Command variables (server/credential-command-env.ts), read for each command.
+  // Command variables (server/vault/credential-command-env.ts), read for each command.
   it("adds command variables to run_command after the refusal checks, and an older desktop runs without them", async () => {
     const value = "fake-command-variable-value";
     const sent: Array<Record<string, unknown>> = [];

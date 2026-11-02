@@ -1,7 +1,7 @@
 // Team secrets of a Perspicax organization (the maintainer's decision, 2026-10-21): an
 // admin assigns a named secret, or a service account, to a team bot. Members
 // never receive the list. The value is write-only. The bot's own shell does
-// not receive it (server/org-bot-secrets.ts): a connector process may.
+// not receive it (server/org/org-bot-secrets.ts): a connector process may.
 
 export const ORG_BOT_SECRET_KINDS = ["secret", "serviceAccount"] as const;
 export type OrgBotSecretKind = (typeof ORG_BOT_SECRET_KINDS)[number];

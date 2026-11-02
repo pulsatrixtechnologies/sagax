@@ -28,7 +28,7 @@
 //   - since 2026-10-14 it sets itself up (auto()): on an organization
 //     server signed in with Perspicax, the main process asks that server for
 //     the person's own memory sync token (POST /api/me/memory-sync-token,
-//     the person's session cookie; server/perspicax-memory-sync-token.ts),
+//     the person's session cookie; server/memory/perspicax-memory-sync-token.ts),
 //     keeps it as above, mints a new one when fewer than RENEW_BEFORE_MS
 //     remain or Perspicax refuses it, and erases the copy (revoking the
 //     token) when the person is no longer of the organization. No token is

@@ -1,5 +1,5 @@
 // vault_http_request, the agents tool that calls an API with a key from the
-// person's vault that Sagax adds itself (2026-10-26, server/credential-http.ts,
+// person's vault that Sagax adds itself (2026-10-26, server/vault/credential-http.ts,
 // route /api/internal/credentials/http). Shown only when the harness says
 // this bot may send at least one API key of the person here
 // (SAGAX_VAULT_HTTP=1, CredentialVault.injectable); the route re-checks the

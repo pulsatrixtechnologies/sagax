@@ -5,7 +5,7 @@ Codex bot processes use Sagax's selected browser/desktop bridge. Process-local o
 ## Regression checks
 
 ```sh
-pnpm exec vitest run server/browser-runtime.test.ts server/harness-mcp-proxy.test.ts server/surface.test.ts server/drivers/codex.test.ts scripts/testing/native-search-evidence.test.ts
+pnpm exec vitest run server/browser/browser-runtime.test.ts server/harness-mcp-proxy.test.ts server/surface.test.ts server/drivers/codex.test.ts scripts/testing/native-search-evidence.test.ts
 pnpm exec tsc --noEmit -p tsconfig.server.json
 ```
 

@@ -1,4 +1,4 @@
-// Client helpers for Tools > Memory (right-panel manager, 2026-11-02).
+// Client helpers for Tools > Memory (main-column page, 2026-11-02).
 import { api } from "@/state/store";
 import {
   deleteMemoryDoc,

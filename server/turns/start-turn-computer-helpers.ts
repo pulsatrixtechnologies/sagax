@@ -56,7 +56,6 @@ export function createComputerHelpersStartTurn(host: StartTurnHost) {
     threadBusy,
     turnComputerResources,
     turnResources,
-    vps,
   } = host;
 
   return async function(state: TurnState): Promise<void> {

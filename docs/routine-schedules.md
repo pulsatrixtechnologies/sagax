@@ -77,7 +77,7 @@ use an appropriate event/webhook workflow instead of a fake weekly schedule.
   instead". An occurrence skipped behind a wait that is still held leaves one
   Missed receipt per wait, so the owner hears of it.
 - An unattended bot run recovers from a passing failure by itself
-  (`server/routine-recovery.ts`):
+  (`server/routines/routine-recovery.ts`):
   - Its engine stalled, the provider rate-limited it or failed for a moment
     (or Sagax restarted while it ran): it starts once more in the same
     conversation after a short wait (15 s; a minute after a rate limit), told
@@ -178,7 +178,7 @@ Set it in the routine modal ("Only when something changes", with
 or with `propose_routine` (`watch`). The person does it on their own bots;
 no admin is involved.
 
-What a watch reads (`shared/routine-watch.ts`, `server/routine-watch.ts`):
+What a watch reads (`shared/routine-watch.ts`, `server/routines/routine-watch.ts`):
 
 - **Files**: a file or a folder of the bot's own folder, optionally with its
   subfolders: names, sizes and modification times, never the contents.
@@ -197,7 +197,7 @@ What a watch reads (`shared/routine-watch.ts`, `server/routine-watch.ts`):
   Perspicax tool reviewed as read-only, else a name with a read verb and no
   action, no draft, no send (`connectorCallReads`, `isOutboundTool`,
   `connectorWriteKind`, `perspicaxWriteOnceTool`;
-  `server/routine-watch-tools.ts`). A personal stdio server and an engine's
+  `server/routines/routine-watch-tools.ts`). A personal stdio server and an engine's
   own connectors are reachable only inside a turn.
 
 When the run starts:

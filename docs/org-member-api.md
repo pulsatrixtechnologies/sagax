@@ -4,7 +4,7 @@ What a person may do with their own Sagax bots from an AI client attached to
 Perspicax (Claude Code, claude.ai, Cursor, any MCP client), under their own
 identity. Perspicax serves it as its `sagax_*` tools. Plan: Perspicax
 `docs/superpowers/plans/2026-10-09-master-implementation-plan.md`, lot C.1.
-Code: `server/org-member-routes.ts`, wired in `server/index.ts`
+Code: `server/org/org-member-routes.ts`, wired in `server/index.ts`
 (`createOrgMemberRoutes`, `performAsMember`).
 
 ## The gate

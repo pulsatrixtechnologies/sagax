@@ -237,6 +237,7 @@ export function callStepUpClasses(call: {
   command?: string;
   hints?: OptionCardData["toolHints"];
 }, context: ActionClassContext = {}): StepUpClass[] {
+  // a card shape for the risk classes, never shown; full-access: exempt
   const card: OptionCardData = {
     title: "", subtitle: call.summary ?? "", options: [], requestType: "permission", tool: call.tool,
     ...(call.mcpTool ? { mcpTool: call.mcpTool } : {}),

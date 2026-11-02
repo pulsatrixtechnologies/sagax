@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { Message, Store } from "./store.ts";
 import { TerminalResourceRegistry } from "./terminal-resources/registry.ts";
-import { createRemoteSessionService, type RemoteSessionService } from "./remote-sessions.ts";
-import { decodeWindowsScript, type RunCommand } from "./remote-session-probe.ts";
+import { createRemoteSessionService, type RemoteSessionService } from "./remote-support/remote-sessions.ts";
+import { decodeWindowsScript, type RunCommand } from "./remote-support/remote-session-probe.ts";
 import { parsePublishBody } from "./routes/remote-sessions.ts";
 import { resolveTailcatBinary } from "./tailcat-bin.ts";
 

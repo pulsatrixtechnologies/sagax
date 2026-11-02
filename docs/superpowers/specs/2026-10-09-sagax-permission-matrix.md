@@ -124,9 +124,9 @@ MCP servers (`/api/mcp/servers`, `server/index.ts:33968`) are `host.shell`.
 
 | Key | Label | Today's gate | Default | adminOnly |
 |---|---|---|---|---|
-| `routines.runAsAnyone` | Choose anyone a routine runs as | `server/index.ts:10939` (`admin: orgAdminCaller`), `server/routine-run-as.ts:127` `run_as_not_allowed` | no | no |
+| `routines.runAsAnyone` | Choose anyone a routine runs as | `server/index.ts:10939` (`admin: orgAdminCaller`), `server/routines/routine-run-as.ts:127` `run_as_not_allowed` | no | no |
 | `routines.runNowAny` | Run any routine now | `server/index.ts:11003` `mayRunRoutineNow`, `:28098` `run_now_not_allowed` | no | no |
-| `routines.viewTeam` | See their teams' routines (added 2026-10-09, routine scope) | new: `GET /api/routines?scope=team` and `DELETE /api/routine-runs?scope=team` (`server/routine-scope.ts`, 403 `routine_scope_not_allowed`); client scope control "My teams" (`src/components/routines/RoutineScopeBar.tsx`) | no | no |
+| `routines.viewTeam` | See their teams' routines (added 2026-10-09, routine scope) | new: `GET /api/routines?scope=team` and `DELETE /api/routine-runs?scope=team` (`server/routines/routine-scope.ts`, 403 `routine_scope_not_allowed`); client scope control "My teams" (`src/components/routines/RoutineScopeBar.tsx`) | no | no |
 | `routines.viewAll` | See every routine of the organization (added 2026-10-09, routine scope) | new: `GET /api/routines?scope=all`, Clear logs over every run with `DELETE /api/routine-runs?scope=all`; client scope control "Everyone" | no | no |
 
 Team managers keep reaching their teams' people (run as, labels) without a
@@ -152,7 +152,7 @@ key leaves everyone on `mine`, as before.
 |---|---|---|---|---|
 | `people.labelAnyone` | Change anyone's label | `server/index.ts:21085`, `server/routes/person-labels.ts` `person_label_forbidden` | no | no |
 | `people.activityLog` | Read the admin activity log | route `/api/admin-activity(.csv)` (admin scope, `server/index.ts:33513`); client `src/components/SettingsModal.tsx:1026` | no | no |
-| `people.manage` | Manage other people | `server/org-person-connections.ts:139`, `server/interim-attach-routes.ts:76`, `server/org-bot-force.ts:50`, console routes `people/{principal}/*` | no | **yes** |
+| `people.manage` | Manage other people | `server/org/org-person-connections.ts:139`, `server/interim-attach-routes.ts:76`, `server/org/org-bot-force.ts:50`, console routes `people/{principal}/*` | no | **yes** |
 
 ### usage (1)
 
@@ -166,7 +166,7 @@ key leaves everyone on `mine`, as before.
 |---|---|---|---|---|
 | `backup.workspace` | Back up and restore the server | `/api/workspace-backup/*` (admin scope), `manageBackups` | no | **yes** |
 | `host.shell` | Run commands on the server | `server/engine-access.ts:136` `memberBotAdminApproval` (a member bot's host-level tools wait for an admin), `server/index.ts:7838` (answering those cards), `:30495` command rules, `:30531` always-allow, `/api/mcp/servers*` `:33968`, engine `cli`/`configDir`, `/api/cli-test`, installation computers (`/api/computers/*` `:33029`, `/api/local-computer*`) | no | **yes** |
-| `server.settings` | Change the server's settings | every other admin-scope route: `PUT /api/config`, keys, mail (`server/mail-routes.ts:94`), webhooks (`server/index.ts:28261`), `PATCH /api/org/settings` (`server/perspicax-org-routes.ts:209`), budgets | no | **yes** |
+| `server.settings` | Change the server's settings | every other admin-scope route: `PUT /api/config`, keys, mail (`server/mail/mail-routes.ts:94`), webhooks (`server/index.ts:28261`), `PATCH /api/org/settings` (`server/perspicax-org-routes.ts:209`), budgets | no | **yes** |
 | `server.link` | Link the server | the link file, sign-in list, invites, interim attach window | no | **yes** |
 
 ### Summary
@@ -229,7 +229,7 @@ permissions.
 
 - `shared/permissions.ts`: the catalogue, `can`, `normalizePermissions`,
   `BOT_FIELD_PERMISSIONS`, `permissionRefusal`, `permissionCatalogue`.
-- `server/org-permissions.ts`: `effectivePermissions` (admin, Perspicax
+- `server/org/org-permissions.ts`: `effectivePermissions` (admin, Perspicax
   list or defaults, person sheet narrowing).
 - `server/perspicax-link.ts`: the directory schema and `permissionsOf`.
 - `server/request-auth.ts`: `PERMISSION_ROUTES` and `routePermission`; the
@@ -245,12 +245,12 @@ permissions.
 ## 7. Tests
 
 - `shared/permissions.test.ts`: catalogue invariants, `can`, normalization.
-- `server/org-permissions.test.ts`: effective permissions.
+- `server/org/org-permissions.test.ts`: effective permissions.
 - `server/request-auth.test.ts`: permission routes and the gate.
 - `server/perspicax-link.test.ts`: the directory field.
-- `server/org-admin-routes.test.ts`, `server/org-admin-console.e2e.test.ts`:
+- `server/org/org-admin-routes.test.ts`, `server/org/org-admin-console.e2e.test.ts`:
   catalogue in capabilities, person permissions.
-- `server/org-permissions.e2e.test.ts` (PM-1 to PM-5): defaults, a route gate
+- `server/org/org-permissions.e2e.test.ts` (PM-1 to PM-5): defaults, a route gate
   (`usage.view`), field gates (`bots.approvalLevel`,
   `folders.botWorkingFolder`), `bots.create` and `sharing.grants`,
   `engines.manage` without `host.shell`, stray keys ignored; member without

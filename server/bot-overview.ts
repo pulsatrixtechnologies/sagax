@@ -4,7 +4,7 @@
 // state (engine capabilities, connected-apps inventory, history); everything
 // here is pure and takes that state already gathered as OverviewFacts.
 import type { BotRecord } from "./store.ts";
-import type { Routine } from "./routines.ts";
+import type { Routine } from "./routines/routines.ts";
 import type { RoutineRequestSchedule } from "../shared/routine-request.ts";
 import { approvalModeFor } from "../shared/approval-mode.ts";
 import { cronScheduleLabel } from "../shared/cron-label.ts";

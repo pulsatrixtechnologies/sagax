@@ -1,7 +1,7 @@
 import type { Notification } from "../shared/notification.ts";
 import type { RoutineRunOn } from "../shared/routines.ts";
 import { buildNotification } from "./notify.ts";
-import type { RoutineRun } from "./routines.ts";
+import type { RoutineRun } from "./routines/routines.ts";
 import { createWaitRoutes, type WaitRouteContext } from "./routes/waits.ts";
 import type { BotRecord, Store } from "./store.ts";
 import { WaitManager, type WaitManagerOptions } from "./waits.ts";
@@ -100,6 +100,7 @@ export function createWaitHost(deps: WaitHostDeps): Pick<WaitManagerOptions, "so
     showCard(wait) {
       const bot = store.bot(wait.botId);
       if (!bot) return undefined;
+      // a settled receipt of a wait, no permission; full-access: exempt
       const message = store.appendMessage(wait.threadId, {
         role: "bot",
         kind: "options",

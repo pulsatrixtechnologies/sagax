@@ -1,6 +1,6 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: startTurn prepare leaf. Never imports server/index.ts.
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
 
@@ -57,7 +57,6 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
     repeatsShownFailure,
     resolveTurnSpeaker,
     routineLineage,
-    routines,
     sandboxPrincipalForTurn,
     settleInputRequests,
     spokenLineFields,
@@ -76,7 +75,6 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
     voiceCallSection,
     voiceCallTurnPrompt,
     voiceCalls,
-    watchdog,
     withTurnClock,
     withWorkplaceNote,
     workplacePreference,

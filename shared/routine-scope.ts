@@ -2,7 +2,7 @@
 // user may view the automation schedule at large; admins see all of them;
 // filter by global, team, bot").
 //
-// Browser-safe: the server computes the scope (server/routine-scope.ts) and
+// Browser-safe: the server computes the scope (server/routines/routine-scope.ts) and
 // the app draws the scope control and the filters from these names.
 //
 //   mine  what the person saw before: the routines of the bots and rooms

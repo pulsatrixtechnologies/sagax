@@ -12,7 +12,7 @@ started with `SAGAX_TEST_ORG_LIBRARY_KEY`.
 ## Library units
 
 ```sh
-pnpm exec vitest run server/org-library.test.ts
+pnpm exec vitest run server/org/org-library.test.ts
 ```
 
 This test uses a real store, routine manager and skill store in a throwaway
@@ -76,7 +76,7 @@ checks the following:
 ## HTTP through a fixture server
 
 ```sh
-pnpm exec vitest run server/org-library.e2e.test.ts --silent=false
+pnpm exec vitest run server/org/org-library.e2e.test.ts --silent=false
 ```
 
 This launches and cleans its own fake-engine fixture with
@@ -137,7 +137,7 @@ This ran on macOS (arm64) against disposable fixtures only. These passed:
   `SAGAX_UI_E2E=1`;
 - `server/package-import.test.ts`, `server/package-export.test.ts`,
   `shared/package-format.test.ts`, `server/bot-package.test.ts`,
-  `server/skills.test.ts`, `server/routines.test.ts`, `server/store.test.ts`,
+  `server/skills.test.ts`, `server/routines/routines.test.ts`, `server/store.test.ts`,
   `server/team-share.e2e.test.ts`, `src/components/ShareTeamDialog.test.ts`
   and `src/lib/team-import.test.ts`.
 
@@ -228,8 +228,8 @@ them, and a team deleted whole notes all of its parts as well as becoming
 `removed`. Run on macOS (arm64) against disposable fixtures only.
 
 These passed: `pnpm typecheck`, `pnpm lint`, `pnpm i18n:check`, and
-`pnpm exec vitest run` on `server/org-library.test.ts`,
-`server/org-library.e2e.test.ts`, `src/lib/org-library.test.ts`,
+`pnpm exec vitest run` on `server/org/org-library.test.ts`,
+`server/org/org-library.e2e.test.ts`, `src/lib/org-library.test.ts`,
 `server/package-import.test.ts` and
 `scripts/testing/verification-docs.test.ts`.
 

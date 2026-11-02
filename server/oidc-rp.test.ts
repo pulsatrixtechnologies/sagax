@@ -3,9 +3,9 @@
 // HTTP. Every refusal the spec lists (T10) is proven by bending one thing.
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { BOT_MAIL_ASSERTION_ACTORS } from "./bot-inbound-mail.ts";
+import { BOT_MAIL_ASSERTION_ACTORS } from "./mail/bot-inbound-mail.ts";
 import { TELEPHONY_ASSERTION_ACTORS } from "./bot-inbound-telephony.ts";
-import { ORG_MEMBER_ASSERTION_ACTORS } from "./org-member-routes.ts";
+import { ORG_MEMBER_ASSERTION_ACTORS } from "./org/org-member-routes.ts";
 import { ACCOUNT_PURGED_EVENT, CONSOLE_ASSERTION_ACTORS, accessExpiresIn, avatarVersionFromPicture, OIDC_MAX_PENDING_FLOWS, ROUTINE_DELEGATION_SCOPES, OIDC_PENDING_FLOW_TTL_MS, OidcRelyingParty, parseRetryAfter, parseTeamsClaim, validIssuer } from "./oidc-rp.ts";
 import { startFakeOidcProvider, type FakeOidcProvider } from "./testing/fake-oidc-provider.ts";
 

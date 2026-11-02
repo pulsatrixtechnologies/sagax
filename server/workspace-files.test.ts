@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DATA_DIR } from "./config.ts";
-import { beginMemoryTurn, endMemoryTurn, flushMemoryJournal, readMemoryJournal, resetMemoryJournalState } from "./memory-journal.ts";
+import { beginMemoryTurn, endMemoryTurn, flushMemoryJournal, readMemoryJournal, resetMemoryJournalState } from "./memory/memory-journal.ts";
 import { closeMessageDb } from "./message-db.ts";
 import { createBotWorkspaceRoutes } from "./routes/bot-workspace.ts";
 import { PASS } from "./routes/table.ts";

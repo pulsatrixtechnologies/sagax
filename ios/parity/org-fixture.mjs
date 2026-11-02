@@ -1,7 +1,7 @@
 // The organization side of the parity fixture (PARITY_ORG=1 in
 // fixture-server.mjs): what turns the solo dataset into an organization
 // server, so the desktop references can show the screens that exist only
-// there (a bot's Sharing and Perspicax tools, Settings > Workspaces, the
+// there (a bot's Sharing and Perspicax tools, Settings > Installations, the
 // Slack link of a hosted workspace).
 //
 // - Identity: OMB_IDENTITY=perspicax against the repository's own stub
@@ -16,9 +16,10 @@
 //   admin "Alex Martin"; the session cookie it mints is what the seeding
 //   uses and what the desktop capture puts in its browser.
 // - Hosted workspace (portal membership) with a stub enterprise layer that
-//   grants "admin" and authorizes every session: the bot panel's Slack link.
+//   grants every feature, as the product runs with, and authorizes every
+//   session: the bot panel's Slack link.
 // - A stub fleet agent on a Unix socket (OMB_FLEET_SOCKET): Settings >
-//   Workspaces lists three placeholder client workspaces.
+//   Installations lists three placeholder client workspaces.
 //
 // Every name is placeholder; nothing leaves this machine (the hosted and
 // admin addresses are under .test and never resolve).
@@ -166,12 +167,14 @@ export function orgServerEnv(org) {
   };
 }
 
-/** The enterprise stub of the organization fixture: budgets and admin, and
- * a hosted-workspace bridge that authorizes every session. */
+/** The enterprise stub of the organization fixture, there for its
+ * hosted-workspace bridge that authorizes every session. A present layer
+ * alone decides the features, so it grants every one the open-source edition
+ * runs with: the captures match the product. */
 export function orgEnterpriseStub(dir) {
   mkdirSync(join(dir, "server"), { recursive: true });
   writeFileSync(join(dir, "server", "index.ts"), [
-    'export function register() { return { customer: "Parity fixture", features: ["admin", "budgets"], expiresAt: null }; }',
+    'export function register() { return { customer: "Parity fixture", features: ["admin", "billing", "budgets", "whitelabel"], expiresAt: null }; }',
     "export function createWorkspaceAccess() { return { handlePublic: async () => false, authorize: async () => null, revalidate: async () => {} }; }",
     "",
   ].join("\n"));

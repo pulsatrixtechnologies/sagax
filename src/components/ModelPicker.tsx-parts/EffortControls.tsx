@@ -27,6 +27,7 @@ export function EffortRow({
   className,
   label,
   compact = false,
+  menu = false,
   pill,
 }: {
   bot: Bot;
@@ -37,6 +38,8 @@ export function EffortRow({
   className?: string;
   label?: ReactNode;
   compact?: boolean;
+  /** Pill menu only (Bot models list): no native select, no DescribedRow. */
+  menu?: boolean;
   /** A Settings row (the bot editor, 2026-10-16): the label at the left,
    * the levels in a pill menu at the right. */
   pill?: { label: string; help?: ReactNode };
@@ -63,18 +66,31 @@ export function EffortRow({
     dispatch({ type: "setModel", botId: bot.id, threadId, ...(updateBotDefault ? { updateBotDefault: true } : {}), selection: { ...selection, effort } });
   };
 
+  const effortOptions = [
+    { value: "", label: modelDefault ? t("model.effort.defaultWith", { level: effortLabel(modelDefault) }) : t("model.defaultTag") },
+    ...levels.map((level) => ({ value: level, label: effortLabel(level) })),
+  ];
+
   if (pill) return (
     <DescribedRow label={pill.label} help={pill.help} rowId="effort">
       <PillSelect
         value={current ?? ""}
         ariaLabel={t("model.effort.aria")}
         onChange={(next) => chooseEffort(levels.find((level) => level === next))}
-        options={[
-          { value: "", label: modelDefault ? t("model.effort.defaultWith", { level: effortLabel(modelDefault) }) : t("model.defaultTag") },
-          ...levels.map((level) => ({ value: level, label: effortLabel(level) })),
-        ]}
+        options={effortOptions}
       />
     </DescribedRow>
+  );
+
+  if (menu) return (
+    <div className={cn("min-w-0", className)} data-effort-menu="">
+      <PillSelect
+        value={current ?? ""}
+        ariaLabel={t("model.effort.aria")}
+        onChange={(next) => chooseEffort(levels.find((level) => level === next))}
+        options={effortOptions}
+      />
+    </div>
   );
 
   if (compact) return (

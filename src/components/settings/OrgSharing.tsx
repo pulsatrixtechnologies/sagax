@@ -5,7 +5,7 @@
 // bot (its avatar, owner, how widely it is shared, whether it is working);
 // a row opens the same grant editor as the bot's own Sharing section. An
 // organization admin also gets "Forcer l'arrêt" and "Forcer la suppression"
-// in the row's menu (server/org-bot-force.ts decides; the owner is
+// in the row's menu (server/org/org-bot-force.ts decides; the owner is
 // notified); the result shows as a toast.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";

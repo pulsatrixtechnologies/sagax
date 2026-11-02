@@ -186,7 +186,7 @@ const definitions = [
   {
     // 2026-10-28 (#1098): where their own bot works is theirs. The server
     // still checks the path (server/bot-cwd.ts), and a person sheet with
-    // `sagax_bots: use` still takes it away (server/org-permissions.ts).
+    // `sagax_bots: use` still takes it away (server/org/org-permissions.ts).
     key: "folders.botWorkingFolder", group: "folders", memberDefault: true, adminOnly: false, memberAlways: true,
     label: { en: "Set the working folder of their bots", fr: "Choisir le dossier de travail de leurs bots" },
     description: {
@@ -324,7 +324,7 @@ const definitions = [
   // apps, the decision model, the data window, the meeting notetaker). These
   // are server-wide switches, so it is implied by server.settings (a person
   // who may change the settings may always manage the experiments): see
-  // server/org-permissions.ts. A person given only this key never reaches any
+  // server/org/org-permissions.ts. A person given only this key never reaches any
   // other installation setting.
   {
     key: "server.experimental", group: "server", memberDefault: false, adminOnly: false,
@@ -348,7 +348,7 @@ const definitions = [
   },
   // 2026-10-09 (Perspicax plan, lot C.1): what a person may do with their
   // bots from an AI client attached to Perspicax (Claude Code, claude.ai,
-  // Cursor), through the member API (server/org-member-routes.ts). Each key
+  // Cursor), through the member API (server/org/org-member-routes.ts). Each key
   // is checked on top of the rule the same action meets in Sagax.
   {
     key: "clients.botsRead", group: "clients", memberDefault: true, adminOnly: false, memberAlways: true,
@@ -454,7 +454,7 @@ export const MEMBER_DEFAULT_PERMISSIONS: readonly PermissionKey[] = PERMISSIONS
   .map((entry) => entry.key);
 
 /** 2026-10-26: the keys every member holds on their own things, whatever
- * Perspicax sends (server/org-permissions.ts adds them to the list). */
+ * Perspicax sends (server/org/org-permissions.ts adds them to the list). */
 export const MEMBER_ALWAYS_PERMISSIONS: readonly PermissionKey[] = PERMISSIONS
   .filter((entry) => (entry as PermissionDefinition).memberAlways === true && !entry.adminOnly)
   .map((entry) => entry.key);

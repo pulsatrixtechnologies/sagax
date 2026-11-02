@@ -8,7 +8,6 @@ export function createPrepareClaimStartTurn(host: StartTurnHost) {
   const {
     IDENTITY,
     beginInternalCapabilityGeneration,
-    cloudGuestDriven,
     computerSelectionTurns,
     coordinator,
     directCoordinationSettlers,

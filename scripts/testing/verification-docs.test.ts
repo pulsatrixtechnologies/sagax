@@ -32,11 +32,15 @@ helpVerbs.add("help");
 // paths without registering them, so they do not count.
 const ROUTES_DIR = join(ROOT, "server", "routes");
 const routeModules = readdirSync(ROUTES_DIR).filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts")).sort();
-// Organization features register theirs from server/*-routes.ts and
-// server/org-export.ts, which server/index.ts mounts.
-const featureRouteModules = readdirSync(join(ROOT, "server"))
-  .filter((name) => name.endsWith("-routes.ts") || name === "org-export.ts").sort()
-  .map((name) => join(ROOT, "server", name));
+// Organization features register theirs from server/org/*-routes.ts and
+// server/org/org-export.ts, which server/index.ts mounts. Other domains may
+// keep *-routes.ts at the server root until they move.
+const featureRouteDirs = [join(ROOT, "server"), join(ROOT, "server", "org"), join(ROOT, "server", "mail")];
+const featureRouteModules = featureRouteDirs
+  .flatMap((dir) => readdirSync(dir)
+    .filter((name) => name.endsWith("-routes.ts") || name === "org-export.ts")
+    .map((name) => join(dir, name)))
+  .sort();
 const serverSource = [join(ROOT, "server", "index.ts"), ...routeModules.map((name) => join(ROUTES_DIR, name)), ...featureRouteModules]
   .map((file) => readFileSync(file, "utf8")).join("\n");
 const hooksSource = readFileSync(join(ROOT, "server", "webhook-ingress.ts"), "utf8");

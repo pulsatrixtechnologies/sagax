@@ -1,6 +1,6 @@
 // Real model picker and chat transport against disposable provider CLIs.
 import { expect, it } from "vitest";
-import { closeBrowserSession } from "../../server/browser-engine.ts";
+import { closeBrowserSession } from "../../server/browser/browser-engine.ts";
 import { launchVerificationServer, runControlOmb } from "../control-omb.ts";
 import { agentBrowser, ensureUiBrowser, sessionEnv } from "./control-omb-ui.ts";
 import { mountPreview } from "./preview-fixture.ts";

@@ -38,13 +38,13 @@ https URL, optional headers and an optional body. The server
 5. stops after 30 s, cuts the answer at 1 MB, drops `Set-Cookie`, and removes the key
    from the body, the headers, the final URL and any error text, with its encodings
    (base64 padded or not, URL-safe, hex, URL and form encodings, JSON, HTML, the Basic
-   pair; `server/credential-fill.ts` `variants`).
+   pair; `server/vault/credential-fill.ts` `variants`).
 
 The audit hook receives the bot, host, method and status (or the refusal code), never
 the key, the path or the query. The item's "last used" line is updated. There is no
 administrator approval: the person decides with the grant.
 
-Code: `server/credential-http.ts`. Tests: `server/credential-http.test.ts` (a local HTTP
+Code: `server/vault/credential-http.ts`. Tests: `server/vault/credential-http.test.ts` (a local HTTP
 server stands for the API; the resolver and the address classes are injected).
 
 ## Command variable (the person's choice: the bot can read it)
@@ -55,7 +55,7 @@ commands, read again for every command (a revoke holds at the next one):
 
 - the person's server environment on an organization server (`run_command`): the
   values ride `SAGAX_CMDVAR_<n>` (the sandbox takes only `SAGAX_*`) and a prelude made
-  of the names exports them (`server/credential-command-env.ts` `withCommandVariables`);
+  of the names exports them (`server/vault/credential-command-env.ts` `withCommandVariables`);
   the value is never on the command line;
 - the engine's own shell on this computer, for every engine with a shell. The turn's
   `commandEnvironment` (`SendTurnInput`) carries them, read again for every turn:
@@ -93,7 +93,7 @@ The key's row says it in one line ("Readable by your allowed bots in their shell
 $NAME"). Names a shell or the engines need are refused (`PATH`, `HOME`, `LD_*`,
 `SAGAX_*`, `ANTHROPIC_*`...: `shared/credential-vault.ts` `parseCommandVariable`).
 1Password keys are not exposed as variables (their value is read only at use).
-Tests: `server/credential-command-env.test.ts`, `server/drivers/acp/command-variables.test.ts`,
+Tests: `server/vault/credential-command-env.test.ts`, `server/drivers/acp/command-variables.test.ts`,
 `server/drivers/codex.test.ts`, `server/drivers/pi.test.ts`, `server/container-exec.test.ts`,
 `server/desktop-bridge.test.ts`, `electron/desktop-bridge.node-test.mjs`.
 

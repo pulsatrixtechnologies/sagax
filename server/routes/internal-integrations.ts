@@ -441,6 +441,7 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
           return json(res, 200, { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: perspicaxMisuse }], isError: true } });
         }
         const who = deps.safetyPrincipal(capability.threadId);
+        // full-access: safety-review
         const perspicaxHeld = await deps.safetyToolHold({
           text: perspicaxText,
           surface: perspicaxText.includes("flow_action") ? "flow" : "mcp",

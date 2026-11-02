@@ -16,6 +16,7 @@ export function ModelPickerTrigger({
   inComposer,
   headless,
   contained,
+  listChip = false,
   bot,
   threadId,
   triggerRef,
@@ -37,6 +38,8 @@ export function ModelPickerTrigger({
   inComposer: boolean;
   headless: boolean;
   contained: boolean;
+  /** Settings list row: full-width readable pill, no effort suffix (effort is a sibling control). */
+  listChip?: boolean;
   bot: Bot;
   threadId?: string;
   triggerRef: RefObject<HTMLButtonElement | null>;
@@ -90,16 +93,17 @@ export function ModelPickerTrigger({
       // provider mark; the model name rides the tooltip (a bot with no
       // resolved engine keeps its label: the mark is what would hide it).
       // Multiple Claude accounts keep their name even in the compact chip.
-      !contained && active && !showActiveAccount && COMPACT_SQUARE,
+      !contained && !listChip && active && !showActiveAccount && COMPACT_SQUARE,
+      listChip && "w-full max-w-full justify-between",
     )}
     title={bot.busy ? `${summary}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${summary}${followLine}`}
   >
     {autoInstance && <InstanceProviderMark instance={autoInstance} size={14} />}
-    {!contained && active && showActiveAccount && (
+    {!contained && !listChip && active && showActiveAccount && (
       <span data-model-account-compact className="hidden max-w-20 truncate @max-4xl/chathead:inline">{active.displayName}</span>
     )}
-    <span className={cn("flex min-w-0 flex-nowrap items-center gap-1", !contained && active && "@max-4xl/chathead:hidden")}>
-      <span className="max-w-[160px] truncate">
+    <span className={cn("flex min-w-0 flex-nowrap items-center gap-1", !contained && !listChip && active && "@max-4xl/chathead:hidden")}>
+      <span className={cn("truncate", listChip ? "max-w-full" : "max-w-[160px]")}>
         {active && showActiveAccount && !autoOn && (
           <span data-model-account className="text-ink-secondary">{active.displayName} · </span>
         )}
@@ -110,8 +114,10 @@ export function ModelPickerTrigger({
       </span>
       {/* Effort / variant on the contained settings chip only. The chat
           header is the bot pill alone (UX reference): a stray effort label
-          must never sit under that pill. Effort stays in the picker menu. */}
-      {contained && (selectedVariantLabel !== undefined ? (
+          must never sit under that pill. Effort stays in the picker menu.
+          List rows keep effort in a sibling control, so the chip stays the
+          engine and model alone. */}
+      {contained && !listChip && (selectedVariantLabel !== undefined ? (
         <span data-model-variant className="max-w-[120px] truncate text-ink-secondary">· {selectedVariantLabel}</span>
       ) : advanced && selection.effort && (
         <span
@@ -127,7 +133,7 @@ export function ModelPickerTrigger({
       className={cn(
         "shrink-0 text-ink-secondary transition-transform",
         menu && "rotate-180",
-        !contained && active && "@max-4xl/chathead:hidden",
+        !contained && !listChip && active && "@max-4xl/chathead:hidden",
       )}
     />
   </button>

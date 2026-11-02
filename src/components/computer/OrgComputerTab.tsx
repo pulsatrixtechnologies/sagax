@@ -667,7 +667,7 @@ export function ServerComputerScreen({ caption, initial = null, bot = null, comp
   // Open pill on ComputerScreen opens the window; no second Take control pill.
   const live = takeover
     ? <div data-sandbox-takeover-open className="flex h-full w-full items-center justify-center p-4 text-center text-[12px] text-ink-secondary">{t("sandboxDesktop.inWindow")}</div>
-    : <SandboxDesktopView embedded onConnected={() => void load()} />;
+    : <SandboxDesktopView embedded control={false} onConnected={() => void load()} />;
   return (
     <>
       <ComputerScreen

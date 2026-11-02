@@ -41,7 +41,7 @@ const ALLOWED_TOOLS: ReadonlySet<string> = new Set([
   "agent_browser_back", "agent_browser_forward", "agent_browser_reload", "agent_browser_close",
   "agent_browser_tab_new", "agent_browser_tab_list", "agent_browser_tab_switch", "agent_browser_tab_close",
   "agent_browser_read",
-  // harness-owned (server/browser-runtime.ts): the vault's fill and the restart
+  // harness-owned (server/browser/browser-runtime.ts): the vault's fill and the restart
   "fill_credential", "restart_browser",
 ]);
 

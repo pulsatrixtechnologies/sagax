@@ -168,7 +168,7 @@ topic") in the same stream, never a new place.
   its digest at once. A confidential thread draws on no stream either.
 - Per-person streams: `streamCandidates` applies `privateRecallFilter`, so on
   a shared or organization bot each person's digest and recall hold only
-  their own threads (covered by PT-5 in `server/org-private-threads.e2e.test.ts`).
+  their own threads (covered by PT-5 in `server/org/org-private-threads.e2e.test.ts`).
   On a Cloud home, `cloudOwnerOnlyThread` applies as for recall.
 - AI-client hidden conversations: never a segment, never in the digest or
   `recall_topic`. (They keep their existing line in the recent-work brief,
@@ -293,7 +293,7 @@ Release note text:
   prompt, background model digest, `recall_topic` list and read, refusal of
   a confidential topic, hidden and confidential exclusions, thread mode on
   unchanged, a topic made confidential later.
-- `server/org-private-threads.e2e.test.ts` PT-5: per-person streams on a
+- `server/org/org-private-threads.e2e.test.ts` PT-5: per-person streams on a
   shared bot.
 - `src/lib/single-stream.test.ts`, `src/lib/use-segment-transcript.test.ts`,
   `src/components/ChatView.stream.test.ts` (earlier topic above the live one,

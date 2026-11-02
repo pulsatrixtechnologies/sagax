@@ -6,7 +6,7 @@ import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from "nod
 import { createServer } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { closeBrowserSession } from "../server/browser-engine.ts";
+import { closeBrowserSession } from "../server/browser/browser-engine.ts";
 import { waitForExit } from "../server/testing/cleanup.ts";
 import { DATA_ROUTES, DATA_TOOL_NAMES, type DataSheet } from "../shared/data-surface.ts";
 import { launchVerificationServer, runControlOmb, verificationServerEnvironment } from "./control-omb.ts";

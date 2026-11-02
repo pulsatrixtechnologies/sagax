@@ -1,5 +1,5 @@
 // A YAML file of steps that send, wait, ask the person, then continue.
-// Nothing here calls a model. Routines (server/routines.ts) are a different
+// Nothing here calls a model. Routines (server/routines/routines.ts) are a different
 // path and stay as they are. An approval step does not continue until the
 // person answers.
 import { createHash, randomBytes } from "node:crypto";

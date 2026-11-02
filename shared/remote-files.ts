@@ -1,7 +1,7 @@
 // The remote file browser of a Tailcat session: which folder paths a request
 // may name, how a listing reads, and the path arithmetic the browser needs.
 // A path is data: the server hands it to the remote computer encoded, never
-// pasted into a command (server/remote-session-files.ts).
+// pasted into a command (server/remote-support/remote-session-files.ts).
 import type { RemoteSessionOs } from "./remote-session.ts";
 
 /** Entries kept from one folder; the rest is reported as cut. */

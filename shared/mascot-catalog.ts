@@ -1,7 +1,7 @@
 /**
  * The characters a bot can wear, as data a reader without the app's
  * renderers needs (the Perspicax console draws them itself from a bot's
- * `look`, server/org-admin-look.ts): each character's family (the
+ * `look`, server/org/org-admin-look.ts): each character's family (the
  * Appearance gallery's chips, src/components/floating-bots/wardrobe.ts),
  * whether it takes the bot's color, its skins in the picker's order and the
  * skin it wears by default. The app's registry

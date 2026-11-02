@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import type { RoutineRun } from "./routines.ts";
+import type { RoutineRun } from "./routines/routines.ts";
 import { waitForExit } from "./testing/cleanup.ts";
 
 it("does not run a delivery twice after a process dies between the queue and ingress commits", async () => {

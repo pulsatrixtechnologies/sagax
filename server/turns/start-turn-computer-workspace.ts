@@ -20,7 +20,6 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
     renderSkillInstructions,
     store,
     supportsWorkspaceFiles,
-    vps,
   } = host;
 
   return async function(state: TurnState): Promise<void> {

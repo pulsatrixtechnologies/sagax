@@ -17,7 +17,7 @@ import {
   type AutoComputerState,
 } from "../auto-computer.ts";
 import { MY_CHROME_PROFILE, runMyChromeTool, toolName as browserToolName } from "../browser/my-chrome/pilot.ts";
-import { browserNavigationRefusal } from "../browser-navigation.ts";
+import { browserNavigationRefusal } from "../browser/browser-navigation.ts";
 import { pickComputer } from "../computer-selection.ts";
 import type { Surface } from "../surface.ts";
 
@@ -31,7 +31,7 @@ export type SelectableComputer = {
   canCreate: boolean;
   reason?: string;
 };
-import { withCommandVariables } from "../credential-command-env.ts";
+import { withCommandVariables } from "../vault/credential-command-env.ts";
 import type { DesktopBridgeOperation } from "../desktop-bridge.ts";
 import { handleDesktopBridgeMcp } from "../desktop-bridge-tools.ts";
 import { handleMessagesMcp } from "../imessage-mcp.ts";
@@ -513,6 +513,7 @@ export function createInternalEnvironmentsRoutes(deps: InternalEnvironmentsDeps)
           beforeCall: (name, detail) => {
             const who = deps.safetyPrincipal(capability.threadId);
             const principalId = who.principalId ?? ownerId;
+            // full-access: safety-review
             return deps.safetyToolHold({
               text: detail,
               surface: name.includes("computer") ? "computer" : name === "run_command" ? "shell" : "file",
@@ -567,6 +568,7 @@ export function createInternalEnvironmentsRoutes(deps: InternalEnvironmentsDeps)
         );
         if (personalMisuse) return json(res, 200, answerError(personalMisuse));
         const who = deps.safetyPrincipal(capability.threadId);
+        // full-access: safety-review
         const personalHeld = await deps.safetyToolHold({
           text: personalFrame,
           surface: personalFrame.includes("flow_action") ? "flow" : "mcp",
@@ -640,6 +642,7 @@ export function createInternalEnvironmentsRoutes(deps: InternalEnvironmentsDeps)
           const desktopParams = frame?.params as { name?: unknown; arguments?: unknown } | undefined;
           const desktopTool = typeof desktopParams?.name === "string" ? desktopParams.name : "";
           const who = deps.safetyPrincipal(capability.threadId);
+          // full-access: safety-review
           const desktopHeld = await deps.safetyToolHold({
             text: `${desktopTool}\n${desktopParams?.arguments === undefined ? "" : JSON.stringify(desktopParams.arguments)}`,
             surface: /computer/i.test(desktopTool) ? "computer" : "shell",
@@ -820,6 +823,8 @@ export function createInternalEnvironmentsRoutes(deps: InternalEnvironmentsDeps)
         openCard: (pending) => {
           const preview = pending.text.length > 240 ? `${pending.text.slice(0, 240)}...` : pending.text;
           const line = pending.fileName ? `${preview ? `${preview} ` : ""}File: ${pending.fileName}` : preview;
+          // an iMessage send's card, below Full only (imessage-cards.ts
+          // reads the bot's level through its deps); full-access: send
           const message = deps.appendMessage(capability.threadId, {
             role: "bot",
             kind: "options",
@@ -829,6 +834,7 @@ export function createInternalEnvironmentsRoutes(deps: InternalEnvironmentsDeps)
               subtitle: `Message to ${pending.to}: ${line}`,
               options: ["Allow", "Deny"],
               requestId: pending.requestId,
+              // full-access: send
               requestType: "permission",
               tool: "send_message",
               toolInput: JSON.stringify({
@@ -927,6 +933,7 @@ export function createInternalEnvironmentsRoutes(deps: InternalEnvironmentsDeps)
         : parsed.data.action === "computer_call"
         ? "computer_use"
         : parsed.data.action;
+      // full-access: safety-review
       const terminalHeld = await deps.safetyToolHold({
         text: terminalText || parsed.data.action,
         surface: parsed.data.action === "run_command"

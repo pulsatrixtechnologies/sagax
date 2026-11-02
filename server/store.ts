@@ -22,7 +22,7 @@ import { peerAllowKey, type PeerAction } from "./peer-approval-key.ts";
 import { DATA_DIR, EVENTS_DIR, NATIVE_DIR, loadBrowserProfileIdAliases } from "./config.ts";
 import * as mdb from "./message-db.ts";
 import { ThreadCache, type ThreadState } from "./thread-cache.ts";
-import { forgetBotMemoryJournal, journalFile } from "./memory-journal.ts";
+import { forgetBotMemoryJournal, journalFile } from "./memory/memory-journal.ts";
 import { forgetLogMemory } from "./content-at-rest.ts";
 import { forgetWorkspaceUsage } from "./workspace-usage.ts";
 import { nextContext } from "./context-reading.ts";

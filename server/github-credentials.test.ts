@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { GithubCredentials, LOCAL_OWNER, ORG_OWNER, parseCredentialChange, WORKSPACE_SCOPE } from "./github-credentials.ts";
 import { MarketplaceTokens } from "./marketplace-tokens.ts";
-import { OrgGithubTokens } from "./org-github-tokens.ts";
+import { OrgGithubTokens } from "./org/org-github-tokens.ts";
 
 const ORG_A = "fake-org-alpha-token-1111";
 const ORG_B = "fake-org-bravo-token-2222";

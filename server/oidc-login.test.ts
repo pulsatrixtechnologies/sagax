@@ -11,7 +11,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { AccountReauth } from "./account-reauth.ts";
 import { IDP_SWEEP_SLACK_MS, IdpGrantVault, IdpSessionManager } from "./idp-session.ts";
 import { BACKCHANNEL_MAX_BODY_BYTES, OIDC_NATIVE_BIND_GRACE_MS, OIDC_NATIVE_PAIRING_TTL_MS, createOidcLoginRoutes, type OidcGrantKeeper, desktopReturnLink, identityConfigFromEnv, identityDescriptor, isInterimSignInRoute, orgRoleForRole, phoneErrorLink, phoneReturnLink, profileManagement, sagaxReturnLink, scopesForRole, validLoopbackReturn, webPageReturn, writesManagedProfile } from "./oidc-login.ts";
-import { RoutineConsents } from "./org-routine-consent.ts";
+import { RoutineConsents } from "./org/org-routine-consent.ts";
 import { ACCOUNT_PURGED_EVENT, OidcRelyingParty } from "./oidc-rp.ts";
 import { PrincipalRegistry } from "./principals.ts";
 import { recentInteractiveSignIn } from "./recent-sign-in.ts";

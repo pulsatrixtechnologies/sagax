@@ -16,6 +16,8 @@ import type { MausColor } from "../shared/wire.ts";
 import { createAppCard, isAppTool } from "./chat-apps.ts";
 import { createOptionsCard } from "./options-card.ts";
 import { ASK_CHOICE_TOOL, parseAskChoiceInput } from "../shared/options-card.ts";
+import type { ApprovalMode } from "../shared/approval-mode.ts";
+import { fullAccessChoiceAnswer } from "./full-access-gate.ts";
 import { isSecretName, mask, redactSecretsInText } from "./redact.ts";
 import type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 
@@ -126,9 +128,13 @@ export function createAgentCard(args: {
    * never a published one. Absent: the tool is refused. */
   proposePage?(input: { pageId?: string; title: string; kind: PageKind; content: string }):
     { ok: true; pageId: string; version: number } | { ok: false; status: 400 | 404 | 409; error: string };
+  /** #1905: the level the calling turn runs at (index.ts sourceApprovalMode),
+   * so a may-I ask_choice under Full access is answered, not drawn. */
+  approvalLevel?: ApprovalMode;
 }): AgentCardResult {
   const { store, bot, threadId, input } = args;
   if (!isRecord(input) || input.tool === undefined) return createOptionsCard(args);
+  // full-access: ask-choice
   if (input.tool === ASK_CHOICE_TOOL) return createChoiceCard(args, input);
   if (input.tool === "propose_page") return proposePageCard(args, input);
   if (isAppTool(input.tool)) return createAppCard({ store, bot, threadId, input, authored: args.authored });
@@ -163,14 +169,31 @@ export function createAgentCard(args: {
   return { ok: true, messageId: patched.id, ...(widget.masked ? { masked: true as const } : {}) };
 }
 
-/** ask_choice: any bot may draw the passive choice card. */
+/** ask_choice: any bot may draw the passive choice card. #1905 (2026-11-02):
+ * under Full access a may-I ("May I continue?", "Should I contact the
+ * verifier?") is the person's own answer already (full-access-gate.ts
+ * fullAccessChoiceAnswer): the card is drawn settled on the recommended
+ * option, the first one, and the tool result tells the model to go on. A
+ * real decision, or a fact only the person can supply, keeps its card. */
 function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Record<string, unknown>): AgentCardResult {
   const parsed = parseAskChoiceInput(input);
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
+  const from = args.store.groupByThread(args.threadId) ? { from: { botId: args.bot.id, name: args.bot.name, color: args.bot.color } } : {};
+  const answered = fullAccessChoiceAnswer(args.approvalLevel, { title: parsed.value.title, question: parsed.value.subtitle, options: parsed.value.options });
+  if (answered) {
+    // full-access: ask-choice
+    const settled = args.store.appendMessage(args.threadId, {
+      role: "bot", kind: "options", card: { ...parsed.value, answered: "answer", answeredText: answered.choice, autoApplied: true },
+      ...from,
+    });
+    args.authored?.(settled.id);
+    return { ok: true, messageId: settled.id, answered: { choice: answered.choice, question: parsed.value.subtitle } };
+  }
+  // a direct thread replays a bot row that carries `from` as another bot's line
+  // full-access: ask-choice
   const message = args.store.appendMessage(args.threadId, {
     role: "bot", kind: "options", card: parsed.value,
-    // a direct thread replays a bot row that carries `from` as another bot's line
-    ...(args.store.groupByThread(args.threadId) ? { from: { botId: args.bot.id, name: args.bot.name, color: args.bot.color } } : {}),
+    ...from,
   });
   args.authored?.(message.id);
   return { ok: true, messageId: message.id };

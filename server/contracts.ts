@@ -177,7 +177,7 @@ export interface SendTurnInput {
    * credentials this one turn runs with. Absent in solo mode: the instance's
    * own configuration, as always. */
   access?: TurnAccessInput;
-  /** 2026-10-26 (server/credential-command-env.ts): API keys the person
+  /** 2026-10-26 (server/vault/credential-command-env.ts): API keys the person
    * exposed to this bot's commands, by the names they chose. A driver whose
    * engine runs commands in its own shell adds them to that process's
    * environment, and starts a fresh process when they change. */

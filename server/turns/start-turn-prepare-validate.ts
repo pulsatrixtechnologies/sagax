@@ -1,6 +1,5 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: startTurn prepare leaf. Never imports server/index.ts.
-import { createHash, randomUUID } from "node:crypto";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
 
@@ -34,7 +33,6 @@ export function createPrepareValidateStartTurn(host: StartTurnHost) {
     healThreadModel,
     holdDirectMachineTurn,
     hostedModels,
-    interruptDirectThread,
     joinPrewarm,
     limitFailover,
     markUnattended,
@@ -42,7 +40,6 @@ export function createPrepareValidateStartTurn(host: StartTurnHost) {
     namesEngine,
     noEngineError,
     orgEngineTurnRefusal,
-    outstandingAssignmentsPrompt,
     peerThreadFor,
     policyModelRefusal,
     providerInstancesChanging,

@@ -16,6 +16,7 @@ import { DISPLAY_NAME } from "./app-name.mjs";
  * @param {() => void} input.onConnect
  * @param {(id: string) => void} input.onForget
  * @param {() => void} input.onOpenSettings
+ * @param {() => void} [input.onOpenAbout]  in-app About modal (Sagax > About / Help > About)
  * @param {string | null} [input.serverModeId]  server mode: the one server this app shows
  * @param {() => void} [input.onLeaveServerMode]
  * @param {{ artifactId: string, title: string }[]} [input.artifactWindows]  artifacts open in a window of their own
@@ -46,7 +47,7 @@ export function windowMenuTemplate({ artifactWindows = [], onShowArtifactWindow,
   };
 }
 
-export function applicationMenuTemplate({ environments, activeId, onSwitch, onAddFromClipboard, onConnect, onForget, onOpenSettings, serverModeId = null, onLeaveServerMode, artifactWindows = [], onShowArtifactWindow, platform = process.platform }) {
+export function applicationMenuTemplate({ environments, activeId, onSwitch, onAddFromClipboard, onConnect, onForget, onOpenSettings, onOpenAbout, serverModeId = null, onLeaveServerMode, artifactWindows = [], onShowArtifactWindow, platform = process.platform }) {
   const isMac = platform === "darwin";
   const active = environments.find((e) => e.id === activeId) ?? null;
   const locked = serverModeId ? environments.find((e) => e.id === serverModeId) ?? null : null;
@@ -81,14 +82,20 @@ export function applicationMenuTemplate({ environments, activeId, onSwitch, onAd
       },
     ],
   };
+  const aboutItem = {
+    label: isMac ? `About ${DISPLAY_NAME}` : "About",
+    click: () => onOpenAbout?.(),
+  };
   const template = [
     // app.name is the runtime name (openmausbot), which the roles would print
-    ...(isMac ? [{ label: DISPLAY_NAME, submenu: [{ role: "about", label: `About ${DISPLAY_NAME}` }, { label: "Preferences…", accelerator: "CmdOrCtrl+,", click: () => onOpenSettings() }, { type: "separator" }, { role: "hide", label: `Hide ${DISPLAY_NAME}` }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit", label: `Quit ${DISPLAY_NAME}` }] }] : []),
+    ...(isMac ? [{ label: DISPLAY_NAME, submenu: [aboutItem, { label: "Preferences…", accelerator: "CmdOrCtrl+,", click: () => onOpenSettings() }, { type: "separator" }, { role: "hide", label: `Hide ${DISPLAY_NAME}` }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit", label: `Quit ${DISPLAY_NAME}` }] }] : []),
     { role: "fileMenu" },
     { role: "editMenu" },
     server,
     { role: "viewMenu" },
     windowMenuTemplate({ artifactWindows, onShowArtifactWindow, platform }),
+    // Windows/Linux: Help > About opens the in-app About modal (macOS uses the app menu).
+    ...(!isMac ? [{ role: "help", submenu: [aboutItem] }] : []),
   ];
   return template;
 }

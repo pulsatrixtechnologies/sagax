@@ -175,7 +175,7 @@ export function verifySource(
   config?: Pick<TriggerSourceConfig, "tenantId">,
 ): VerifyResult {
   // Bot email has no endpoint: it arrives only through the Perspicax relay's
-  // own route (server/bot-inbound-mail.ts), whatever is presented here.
+  // own route (server/mail/bot-inbound-mail.ts), whatever is presented here.
   if (TRIGGER_SOURCES[type].secretMode === "relay") return { ok: false, reason: `${TRIGGER_SOURCES[type].label} arrives only through the Perspicax relay` };
   if (!secret) return { ok: false, reason: "No signing secret is set for this trigger" };
   const { headers, rawBody, now } = request;

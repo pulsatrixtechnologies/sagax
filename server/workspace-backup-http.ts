@@ -32,6 +32,12 @@ export function isWorkspaceBackupSessionControl(method: string, path: string): b
     (method === "DELETE" && /^\/api\/auth\/sessions\/[\w-]+$/.test(path));
 }
 
+/** The backup routes take the workspace themselves (workspaceMaintenance.run),
+ * so the open-request counter in server/index.ts leaves them out (#1909). */
+export function isWorkspaceBackupRoute(path: string): boolean {
+  return path.startsWith(`${PREFIX}/`);
+}
+
 /** All routes remain admin-only in request-auth. Passwords and raw credential
  * metadata never appear in URLs, responses, logs, or event broadcasts. */
 export function createWorkspaceBackupRoutes(options: {

@@ -80,6 +80,7 @@ export function ModelPicker({
   threadId,
   className,
   contained = false,
+  listChip = false,
   inComposer = false,
   viewerLocal = false,
   label,
@@ -99,6 +100,8 @@ export function ModelPicker({
    * menu. The profile card already has Effort, so the menu does not
    * repeat it. */
   contained?: boolean;
+  /** Bot models list: full-width readable pill, no effort on the chip. */
+  listChip?: boolean;
   /** Sit in the composer as a text row that opens the model menu. */
   inComposer?: boolean;
   /** Settings of a shared bot: save this person's model, not the owner's. */
@@ -353,6 +356,7 @@ export function ModelPicker({
     inComposer,
     headless,
     contained,
+    listChip,
     bot,
     threadId,
     triggerRef,
@@ -373,8 +377,13 @@ export function ModelPicker({
 
   const portal = (node: ReactNode) => (typeof document === "undefined" ? node : createPortal(node, document.body));
   return (
-    <div ref={rootRef} className={cn(contained ? "w-full" : "relative", className)}>
-      {contained ? (
+    <div ref={rootRef} className={cn(contained || listChip ? "w-full min-w-0" : "relative", className)}>
+      {listChip ? (
+        <div className="min-w-0 w-full">
+          {trigger}
+          {!viewerLocal && <ModelNoEngineNotice className="mt-1 w-full" />}
+        </div>
+      ) : contained ? (
         <div className="flex w-full flex-wrap items-center justify-between gap-x-5 gap-y-2">
           <div className="min-w-0 flex-1 basis-[200px]">{label}</div>
           <div className="ml-auto shrink-0">{trigger}</div>

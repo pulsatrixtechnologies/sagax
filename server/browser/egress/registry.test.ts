@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { agentBrowserDevToolsPorts, agentBrowserStreamPorts } from "../../browser-engine.ts";
+import { agentBrowserDevToolsPorts, agentBrowserStreamPorts } from "../browser-engine.ts";
 import { refusalFor } from "./policy.ts";
 import { BrowserEgress, OwnListeners, sameOwnerBots, staticOwnPorts } from "./registry.ts";
 import type { ListenerOwnership } from "./ownership.ts";

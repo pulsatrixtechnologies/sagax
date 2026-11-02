@@ -50,10 +50,13 @@ admin. On copie une façon de ranger, jamais une fonction en moins.
    Restent permis parce qu'ils ne modifient aucun objet : la palette de commandes, le
    lanceur de recherche, l'aide des raccourcis, la visionneuse d'un fichier en lecture
    seule (fenêtre superposée, décision de JC du 2026-11-01, voir 2.13), un menu.
-   Exception décidée par JC le 2026-11-01 : les **Réglages du bureau** restent une
-   grande fenêtre centrée, comme la référence (voir 2.5). Ce n'est pas un patron à
+   Exceptions décidées par JC (grande fenêtre centrée, comme la référence) :
+   les **Réglages du bureau** (2026-11-01, voir 2.5), **Capacités** / Connecter des
+   apps (2026-11-02, correction après le lot 5, voir 2.8), les **notes de version** /
+   « What's new » (2026-11-02, restauration après le lot bannières, voir 2.5 bis),
+   l'**accueil de première fois** (onboarding, voir 2.14). Ce n'est pas un patron à
    reprendre ailleurs : aucun autre écran ne devient une fenêtre pour « faire comme
-   les Réglages ».
+   les Réglages ». Mémoire, Automations et la carte d'équipe restent des **pages**.
 6. **Clavier d'abord.** Tout se fait au clavier : palette, recherche, Échap pour reculer,
    flèches dans les listes, lettres pour répondre à une question, raccourcis visibles
    dans les menus et les info-bulles.
@@ -66,7 +69,7 @@ admin. On copie une façon de ranger, jamais une fonction en moins.
 | Besoin | Forme | Exemples |
 |---|---|---|
 | Un contexte qui accompagne la conversation et qu'on garde ouvert en parlant | **Panneau latéral** à droite, redimensionnable, se ferme par son × ou en recliquant la pastille du bot | Panneau du bot (Détails, Bibliothèque, Ordinateur), fil à côté, filtres d'une liste |
-| Un objet qu'on lit ou qu'on modifie, ou une liste complète | **Vue** (page) qui prend la zone de contenu, avec retour nommé ; la vue d'origine reste montée et retrouve son défilement | Connecter des apps, page publiée, exécution d'une routine, sous-page d'un réglage |
+| Un objet qu'on lit ou qu'on modifie, ou une liste complète | **Vue** (page) qui prend la zone de contenu, avec retour nommé ; la vue d'origine reste montée et retrouve son défilement | Mémoire, Automations, carte d'équipe, page publiée, exécution d'une routine, sous-page d'un réglage |
 | Le détail d'un élément d'une page qu'on parcourt (calendrier, liste, journal), ou son éditeur, pendant qu'on garde la page sous les yeux | **Panneau de détail** à droite (`DetailPanel`), même bord, même allure et même poignée que le panneau du bot ; il remplace le contenu au lieu de s'empiler | Détails d'une routine ou d'un appel du calendrier, éditeur de routine, routines en pause (voir 2.17) |
 | Un choix court, sans saisie longue, qui se referme seul | **Popover ou menu** ancré au contrôle qui l'ouvre | Menu + du compositeur, menu du compte, choix de modèle, partage d'une page, sélecteur de valeur |
 | Une décision irréversible | **Confirmation** (seule fenêtre permise) qui dit ce qui va disparaître | Supprimer un bot, réinitialiser l'ordinateur, retirer une capacité |
@@ -228,6 +231,23 @@ titre centré, action ronde (+) à droite au besoin. Page Compte : liste « chan
 compte » avec coche, ajouter un compte, Se déconnecter (texte rouge, carte seule),
 Supprimer le compte (rouge avec icône de corbeille et une note de conséquence dessous).
 
+### 2.5 bis Notes de version / What's new
+
+**Forme de l'écran (décision de JC, 2026-11-02)** : les notes de version restent une
+**grande fenêtre centrée** (DialogLayer + DialogFrame, largeur `xl`, colonne de lecture
+comme les Réglages), exception au principe 5. Le lot « bannières » les avait passées en
+page de contenu avec une bannière d'annonce ; JC a corrigé : modal.
+
+- Après une mise à jour (une fois par version, jamais à la première installation, jamais
+  en build de développement) : la fenêtre « What's new » s'ouvre seule.
+- Depuis Réglages > Mises à jour > À propos > Notes de version, le menu du compte et la
+  palette : même fenêtre en mode parcours (sélecteur de version, « depuis ma dernière
+  version »).
+- La boîte « Mise à jour prête » garde son propre dépli « What's new » avec les notes de
+  la version téléchargée ; elle n'est pas cette fenêtre.
+- Contenu : markdown des fichiers `docs/releases`, liens, titres de version et date,
+  liste des versions. Échap et le × ferment. Voir `ReleaseNotesPrompt.tsx`.
+
 ### 2.6 Écrans d'ordinateur
 
 Une carte écran dans l'onglet Ordinateur, au ratio de l'écran, avec une légende grise
@@ -255,6 +275,21 @@ dessous (« écran de » suivi du nom du bot).
   l'écran en grand pour regarder ou reprendre la main. Au toucher, un tap ouvre. *À
   vérifier* contre la référence : position exacte de la pilule et intensité du voile
   (l'état en marche n'est pas dans les captures).
+- **Grande fenêtre d'ordinateur** (environnement serveur, VM, session à distance,
+  même coquille pour le navigateur du bot) : fenêtre sombre, calme, centrée. Chrome
+  seulement en haut : fermer à gauche (feu rouge façon macOS, ou un seul ×), et à
+  droite l'icône qui replie la fenêtre vers le panneau. Pas de barre d'outils pleine
+  (pas d'état « En marche · Vous avez le contrôle », pas de pilule Rendre le contrôle,
+  pas de Play / Pause / Arrêter ni de plein écran dans l'en-tête). L'écran vivant est
+  centré, marges égales, coins arrondis. Sous l'écran, **un seul** contrôle segmenté
+  centré : « Observation » (icône œil, le bot conduit) | « Prendre le contrôle »
+  (vous conduisez) ; le segment actif est mis en évidence. Quand vous avez le
+  contrôle, les segments lisent « Observation » | « Vous avez le contrôle », et
+  choisir Observation rend la main. Play / Pause / Arrêter et le plein écran restent
+  joignables dans un petit menu « … » (jamais dans l'en-tête). Échap et
+  Cmd/Ctrl+Maj+Échap ferment toujours la fenêtre selon les règles clavier existantes ;
+  fermer ou replier rend le contrôle. Pour le navigateur du bot, la coquille est la
+  même sans le contrôle segmenté (sa propre barre dit qui conduit).
 - Réglages de l'ordinateur (Réglages > Ordinateur) : exécution sur cet ordinateur
   (demander, toujours, jamais), routage du trafic par cet ordinateur avec une phrase
   qui dit l'état actuel, liste des appareils (icône, nom, point vert « en ligne
@@ -286,7 +321,12 @@ dessous (« écran de » suivi du nom du bot).
 
 ### 2.8 Bibliothèque, skills, Connecter des apps
 
-- **Connecter des apps** (Capacités) est une seule vue : titre à gauche après le retour,
+- **Forme de l'écran (décision de JC, 2026-11-02)** : Capacités / Connecter des apps
+  reste une **grande fenêtre centrée** (même coquille que Browse Bots utilisait, taille
+  Settings), exception au principe 5 comme les Réglages. Le lot 5 l'avait passée en
+  page de contenu ; JC a corrigé : modal. Onglets, recherche, Tailscale, Paiements et
+  Messages restent. Les bots archivés restent une page de contenu.
+- **Connecter des apps** (Capacités) est une seule surface dans cette fenêtre : titre,
   une capsule « N connectées » à droite (avec les logos empilés), puis des puces de
   catégories qui défilent à l'horizontale (Tout, iPhone, Gestionnaires de mots de passe,
   Productivité...), la choisie en blanc plein.
@@ -451,9 +491,14 @@ gauche, télécharger et fermer en haut à droite, colonne de lecture centrée. 
 C'est l'exception de lecture du principe 5, confirmée par JC le 2026-11-01 (elle reste
 une fenêtre superposée, comme la palette) ; aucune modification ne s'y fait. Même règle
 pour le plein écran d'un artefact, d'un widget, d'un tableau, d'un PDF ou d'un
-diagramme et pour l'écran d'un ordinateur en grand.
+diagramme et pour l'écran d'un ordinateur en grand. Le **navigateur de fichiers
+distants** (télécharger / envoyer sur une session distante) reste la même famille :
+fenêtre centrée façon Réglages (restaurée le 2026-11-02 après un passage en panneau).
 
 ### 2.14 Accueil de première fois (onboarding)
+
+**Forme** : écrans en fenêtre (dialogue) sur l'app, exception décidée au principe 5
+avec les Réglages et Capacités. Pas une page de contenu.
 
 - Un écran par décision, une action principale, un lien discret pour passer.
 - Le logo Pulsatrix, jamais un hibou générique dans le chrome.
@@ -625,6 +670,23 @@ sur l'app au prochain audit.
   boucle traite, ni sur le tour déjà repris. Inscrit au journal des étapes
   (`sagax.unfinished_turn`). Code : `server/unfinished-turn.ts`.
 
+### 2.21 Mémoire (page principale)
+
+Ajouté le 2026-11-02 (correction de JC : Mémoire n'est pas une entrée du panneau de
+droite ; c'est une page comme Automations et la carte d'équipe).
+
+- **Où ça vit.** Menu Outils › Mémoire. Page qui remplit la colonne principale : en-tête
+  avec titre, sous-titre gris, bascule Liste / Carte, recherche, Nouveau. Pas de panneau
+  de droite pour cette surface.
+- **Liste.** Colonne gauche : sources (bots, équipe, Perspicax), dossiers et corbeille.
+  Corps : liste des notes, lecture, édition, sélection multiple, déplacer, supprimer avec
+  annulation, arbre JSON pour les notes JSON.
+- **Carte.** Même langage visuel que la carte d'équipe (zoom, pan, nœuds arrondis) :
+  sources, dossiers et notes en nœuds ; liens `[[notes]]`, mêmes étiquettes et même
+  dossier en arêtes. Un clic sur une note l'ouvre. iOS : inchangé sauf renommage du menu
+  Outils si besoin.
+- Code : `src/components/memory-manager/MemoryManagerPanel.tsx`,
+  `MemoryMapCanvas.tsx`, `src/lib/memory-map.ts`.
 
 ---
 

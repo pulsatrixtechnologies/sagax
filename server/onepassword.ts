@@ -21,7 +21,7 @@ import { realpathSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { bindingUrl, normalizeVaultDomain, vaultDomainMatches, vaultSiteOf, type VaultFillField } from "../shared/credential-vault.ts";
-import type { OnePasswordRef } from "./credential-vault.ts";
+import type { OnePasswordRef } from "./vault/credential-vault.ts";
 
 export type OnePasswordVia = "cli" | "connect";
 

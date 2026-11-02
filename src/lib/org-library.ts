@@ -1,4 +1,4 @@
-// The organization library as the renderer sees it (server/org-library.ts):
+// The organization library as the renderer sees it (server/org/org-library.ts):
 // the shelf under Templates → From {Organization}, the preview, the
 // provenance line on added bots, and the skills offered under Bot → Skills.
 // Pure helpers here; the components fetch.

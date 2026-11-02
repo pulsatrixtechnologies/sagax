@@ -12,7 +12,7 @@ import type { RuntimeEvent } from "../shared/runtime-events.ts";
 import type { ProviderAdapter } from "./contracts.ts";
 import type { DecisionRow } from "./decision-log.ts";
 import { recordsText } from "./records-block.ts";
-import type { RoutineRun } from "./routines.ts";
+import type { RoutineRun } from "./routines/routines.ts";
 
 type RequestOpened = Extract<RuntimeEvent, { type: "request.opened" }>;
 type Adapter = Pick<ProviderAdapter, "respondToRequest" | "interruptTurn">;

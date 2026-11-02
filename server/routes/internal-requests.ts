@@ -468,6 +468,7 @@ export function createInternalRequestsRoutes(deps: InternalRequestsDeps): Intern
       // turn acts for the owner (their own conversation, or a run of a
       // routine that is theirs), both before the change.
       const routineWho = deps.safetyPrincipal(fromThreadId);
+      // full-access: safety-review
       const routineSafety = deps.safetyPermissionEffect({
         text: JSON.stringify(body),
         surface: "routine",

@@ -409,6 +409,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
         // Same gate ask_bot carries, aimed at the room instead of a peer:
         // a bot the user asked to be consulted about must be consulted here
         // too, or the newest way to reach other bots is the one way round it.
+        // full-access: peer-contact
         const verdict = await requestPeerApproval(
           approvalBus,
           from as never,

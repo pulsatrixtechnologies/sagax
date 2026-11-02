@@ -50,7 +50,7 @@ describe("Settings nav groups", () => {
       "account", "security", "credentials", "appearance", "notifications",
       "providers", "engines", "voice",
       "organization", "computer", "usage", "backups", "import",
-      "updates", "experimental",
+      "updates", "experimental", "about",
     ]);
   });
 
@@ -67,6 +67,7 @@ describe("Settings nav groups", () => {
     expect(rail).not.toContain("data-settings-automations");
     const app = rail.slice(rail.indexOf('data-settings-nav-group="app"'));
     expect(app.indexOf(">Updates</button>")).toBeLessThan(app.indexOf(">Experimental</button>"));
+    expect(app.indexOf(">Experimental</button>")).toBeLessThan(app.indexOf(">About</button>"));
     // each group is labelled by its heading for assistive tech
     expect(rail).toMatch(/role="group" aria-labelledby="app-settings-nav-you"/);
   });
@@ -129,25 +130,32 @@ describe("Settings nav groups", () => {
     const html = render();
     expect(html).toContain('<optgroup label="Personal"><option value="account" selected="">Account</option>');
     expect(html).toContain('<optgroup label="App"><option value="updates">Updates</option>');
+    expect(html).toContain('<option value="about">About</option>');
+    expect(html.indexOf('<option value="experimental">')).toBeLessThan(html.indexOf('<option value="about">'));
   });
 
-  it("leaves out a heading with nothing under it (no updater: App keeps Experimental only)", () => {
+  it("keeps About under App when there is no updater; members still see About", () => {
     vi.stubGlobal("window", {});
     const rail = nav(render());
     expect(rail).toContain('data-settings-nav-group="app"');
     expect(rail).not.toContain(">Updates</button>");
-    // a member who cannot edit the installation has no Experimental either
+    expect(rail).toContain(">About</button>");
+    // a member who cannot edit the installation has no Experimental, still About
     fixture.config = { rooms: { turnTimeoutMinutes: 5 }, viewer: { operator: false, role: "member" } };
     vi.stubGlobal("window", {});
-    expect(nav(render())).not.toContain('data-settings-nav-group="app"');
+    const member = nav(render());
+    expect(member).toContain('data-settings-nav-group="app"');
+    expect(member).toContain(">About</button>");
+    expect(member).not.toContain(">Experimental</button>");
   });
 
-  it("titles the Updates page's card", () => {
+  it("titles the Updates page's card and no longer nests About there", () => {
     fixture.section = "updates";
     const html = render();
     expect(html).toContain('data-settings-group="updates"');
     expect(html).toMatch(/<h3[^>]*>This app<\/h3>/);
     expect(html).toContain("Check for updates");
+    expect(html).not.toContain("data-about-section");
   });
 
   it("reads in French, with no long dash", () => {

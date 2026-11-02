@@ -12,7 +12,7 @@ Access, OMB also applies its own configuration tools without another approval.
 | **Ask for approval** | Requests approval for commands and file changes, the way the provider's supervised mode does. |
 | **Auto-accept edits** | Approves file edits automatically; other actions can still require approval. Offered where the provider has such a mode (Claude, Grok, Antigravity). |
 | **Approve for me** | Uses the provider's automatic review on Codex, Claude, Cursor, and Grok to approve routine actions and ask about others. Providers without an equivalent fall back to asking. |
-| **Full access** | Enables the provider's permissive mode for commands, edits, and selected-computer actions, including potentially destructive or sensitive work. Residual native permission prompts are answered for you. OMB profile changes, routine actions, team setup, bot deletion, and enabled skill authoring apply without a second approval. Peer-review prompts are skipped within the bot's authorized scope. Delegation uses the receiving bot's setting, never the sender's — except from a Primary Bot, whose level flows down (below). Actual questions and missing credentials still need your input. |
+| **Full access** | Enables the provider's permissive mode for commands, edits, and selected-computer actions, including potentially destructive or sensitive work. Residual native permission prompts are answered for you, the safety review's safer path and confirmation too, and a may-I the model poses (`ask_choice` or its question tool) is answered with its recommended option (#1905). OMB profile changes, routine actions, team setup, bot deletion, and enabled skill authoring apply without a second approval. Peer-review prompts are skipped within the bot's authorized scope. Delegation uses the receiving bot's setting, never the sender's, except from a Primary Bot, whose level flows down (below). Actual questions and missing credentials still need your input. |
 | **Custom (`config.toml`)** | Codex only. Sagax reads and reapplies the effective approval and sandbox settings from your Codex configuration. |
 
 The composer is the same in Simple and Advanced mode (Settings, Appearance,
@@ -292,6 +292,52 @@ Full Primary Bot's work reaches it as Approve for me. The teammate's own default
 and its other conversations do not change, and an ordinary bot's delegation
 still uses the recipient's setting. Questions and missing credentials still
 reach you.
+
+## Full access: one decision (#1065, #1819, #1905; 2026-11-02)
+
+Full access came back as a card three times, each time from a surface the
+previous fix had not touched: the owner's own computer (#1065), a may-I
+`ask_choice` the model invented (#1819, fixed in the prompt only), and the
+safety review holding a send (`send_to_bot` is a send by its name) before
+the level was read (#1905, a Grok turn in `default` mode because the
+account's connectors were loaded, so every Sagax tool asked). Since
+2026-11-02 one module decides: `server/full-access-gate.ts`
+(`fullAccessDecision`). Under Full access the bot acts, and only these
+holds stand, nothing else:
+
+- an organization rule set to Refuse or Ask first, and the person's own
+  Refuse or Ask first rule (their words, or one saved from a card; a
+  security key class on a gate card counts as one);
+- isolation between people: a guest's turn, someone else's environment or
+  data, a confidential thread the answerer cannot answer, the team's memory,
+  a meeting with other people;
+- a sensitive path or the shared server itself (an organization admin's
+  card on a member's bot);
+- a real question: the model's own options about a decision the person did
+  not make, or a fact only they can supply.
+
+What this changes for a turn at Full access:
+
+- the safety review (`docs/security/misuse-guardrails.md`) offers no safer
+  path and holds no confirmation; a misuse block stays a refusal;
+- a may-I the model still poses, through `ask_choice` or its own question
+  tool ("May I continue?", "Should I contact the verifier?", "Puis-je
+  envoyer?"), is answered for the person with the recommended option, the
+  first one (`shared/permission-question.ts`): the card is drawn settled,
+  the chip and the Journal say Full access answered it, and the turn goes
+  on. A real decision, a form of several questions and a missing fact keep
+  their card;
+- the chat-completions engines answer their own tool gate through the same
+  decision; the peer card, the proposals (profile, routine, team setup,
+  model, rule, terminal) and the outbound guard read it as before.
+
+Every code path that can put an approval or a choice card between the bot
+and the person carries a marker comment, `// full-access: <surface>`, with
+the surface listed in `FULL_ACCESS_SURFACES`;
+`server/full-access-gate.guard.test.ts` (run by `pnpm verify:merge`) fails a
+card without one, a marker naming no surface, and a deciding file that
+stopped reading the gate. `server/full-access-gate.regressions.test.ts`
+holds the three incidents as tests.
 
 ## Answering a request
 

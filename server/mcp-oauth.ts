@@ -24,7 +24,7 @@ import { z } from "zod";
 import { writeFileAtomic } from "./atomic.ts";
 import type { McpServerSpec, RemoteMcpSpec } from "./contracts.ts";
 import { guardedFetch } from "./public-fetch.ts";
-import type { VaultKeySource } from "./vault-key-source.ts";
+import type { VaultKeySource } from "./vault/vault-key-source.ts";
 
 export type { VaultKeySource };
 

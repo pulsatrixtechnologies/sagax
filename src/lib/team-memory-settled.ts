@@ -1,7 +1,7 @@
 // A late click on a "Remember this for the team?" card that someone already
 // settled (on another card, or an admin on the team-memory page): the server
 // answers 409 with code "team_memory_settled" and the real outcome
-// (server/team-memory-cards.ts). The card shows that outcome and the person
+// (server/memory/team-memory-cards.ts). The card shows that outcome and the person
 // reads who settled it, in their language.
 
 import { t } from "@/lib/i18n";

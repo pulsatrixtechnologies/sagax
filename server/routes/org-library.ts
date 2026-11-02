@@ -1,4 +1,4 @@
-// The organization library shelf (server/org-library.ts).
+// The organization library shelf (server/org/org-library.ts).
 //
 // Admin scope, like every route not opened in server/request-auth.ts: one
 // install per server that the organization keeps up to date, its skills and
@@ -13,7 +13,7 @@
 //   POST /api/org-library/skills
 import { z } from "zod";
 
-import type { OrgLibrary } from "../org-library.ts";
+import type { OrgLibrary } from "../org/org-library.ts";
 import type { PackageImportDeps } from "../package-import.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import type { BotRecord, GroupRecord } from "../store.ts";

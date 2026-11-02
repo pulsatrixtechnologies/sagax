@@ -169,7 +169,7 @@ COPY --from=build --chmod=0755 /src/dist-native/tailcat/linux/tailcat /usr/local
 COPY --from=build --chown=maus:maus /src/dist-server ./dist-server
 COPY --from=build --chown=maus:maus /src/dist ./dist
 # Licence terms and notices ship with the code (T3 Code, MIT: the bots' browser egress gate).
-COPY --from=build --chown=maus:maus /src/NOTICE /src/LICENSE /src/LICENSE-APACHE /src/LICENSE-POLYFORM-NC.md ./licenses/
+COPY --from=build --chown=maus:maus /src/NOTICE /src/LICENSE ./licenses/
 COPY --from=build --chown=maus:maus /src/third_party/t3-code/LICENSE ./licenses/t3-code-LICENSE.txt
 # Keep the baked-in browser outside both root's private home and /data,
 # which may be an existing mounted volume. Session state still lives in HOME.

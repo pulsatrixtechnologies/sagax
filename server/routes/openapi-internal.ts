@@ -1,12 +1,12 @@
 // POST /api/internal/openapi: one operation of the turn's person's API.
 // The headers stored with the spec are added here and never returned.
-// The call uses the address that was checked (server/credential-http.ts
+// The call uses the address that was checked (server/vault/credential-http.ts
 // sendPinnedHttp): one resolution, every address classified, no second
 // lookup, a byte cap, no redirect. Headers are not written to a log.
 import { isIP } from "node:net";
 
 import { wrapUntrusted } from "../../shared/safety-review.ts";
-import { sendPinnedHttp } from "../credential-http.ts";
+import { sendPinnedHttp } from "../vault/credential-http.ts";
 import { buildOpenApiRequest, type OpenApiRecord } from "../openapi-connector.ts";
 import { isOpenApiTool } from "../openapi-tools.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";

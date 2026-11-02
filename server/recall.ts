@@ -10,10 +10,10 @@
 // content; passages are numbered and dated; fence markers inside a passage
 // are neutralised so a note cannot close the block; the block is capped.
 import { recallMessages, recallTerms, type MemoryHit, type RecallHit } from "./message-db.ts";
-import { parseTopicHeader, readTopicHead, topicBody, topicWords } from "./memory-topics.ts";
+import { parseTopicHeader, readTopicHead, topicBody, topicWords } from "./memory/memory-topics.ts";
 import { listMemoryTopics, memoryDate, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, workspaceDir } from "./workspace.ts";
-import { withoutExpired } from "./memory-entries.ts";
-import { memoryHitMayShow, memoryMayShow, memoryReadersOf, withoutWiderAudience, type MemoryDestination } from "./memory-audience.ts";
+import { withoutExpired } from "./memory/memory-entries.ts";
+import { memoryHitMayShow, memoryMayShow, memoryReadersOf, withoutWiderAudience, type MemoryDestination } from "./memory/memory-audience.ts";
 import { fusePassages, semanticPassages } from "./semantic-recall.ts";
 import { join } from "node:path";
 

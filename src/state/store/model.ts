@@ -721,7 +721,7 @@ export interface Bot {
   /** Lowercased user id of the person who created this bot. */
   ownerUserId?: string;
   /** Who confirmed the Full access warning for this bot, once
-   * (server/org-full-access.ts). */
+   * (server/org/org-full-access.ts). */
   fullAccessConsent?: { principalId: string; at: number };
   directGrants?: string[];
   /** Slice 4: grants with levels (user: or team: targets). */
@@ -898,15 +898,13 @@ export interface ConfigStatus {
   /** Capabilities lot 4: changes when the organization's declarations do
    * (Plugins reads its capabilities again). */
   orgCapabilities?: { revision: string };
-  /** what this server is entitled to; Settings shows only what works here.
-   * `license` reaches admins only, and only while the key is inside its
-   * warning window or grace period. */
+  /** the features this server runs with (every one in the open-source
+   * edition); Settings shows only what works here. */
   edition?: {
     edition: "oss" | "enterprise";
     features: string[];
-    license?: { expiresAt: string; expiresInDays: number; graceEndsAt?: string };
   };
-  /** a fleet agent exists on this server (Settings → Workspaces) */
+  /** a fleet agent exists on this server (Settings → Installations) */
   fleet?: { available: boolean };
   budgets?: { monthlyUsd?: number; warnAtPercent?: number };
   billing?: { currency?: string; prices?: Record<string, { inputPerMillion: number; outputPerMillion: number; cachedInputPerMillion?: number }> };
@@ -1284,7 +1282,7 @@ export interface AppState {
   /** The person's sidebar hidden keys (src/lib/sidebar-hidden.ts): a
    * restored or fallback selection never lands on one of them. */
   sidebarHiddenKeys: ReadonlySet<string>;
-  activeView: "chat" | "team-map" | "routines" | "code" | "approvals" | "remote-sessions" | "achievements" | "apps" | "archived-bots" | "org-import";
+  activeView: "chat" | "team-map" | "routines" | "code" | "approvals" | "remote-sessions" | "achievements" | "apps" | "archived-bots" | "org-import" | "memory";
   /** Staged solo-Sagax copy for the org-import content view (lot 6). */
   orgImportStaged: OrgImportDocument | null;
   routines: Routine[];
@@ -1310,9 +1308,9 @@ export interface AppState {
   /** The person whose details fill the right panel (principal id), or null.
    * Shares the right slot with bot settings, the computer and app settings. */
   personPanelId: string | null;
-  /** True while Connect apps fills the content frame (activeView "apps",
-   * 2026-11-01 lot 5: no modal). Kept in sync with activeView for callers
-   * that still read pluginsOpen. */
+  /** True while Capabilities (Connect apps) is open as its centred modal
+   * (activeView "apps"). Kept in sync with activeView for callers that
+   * still read pluginsOpen. */
   pluginsOpen: boolean;
   /** Which tab the Plugins panel opens on; "mcp" when a bot's tools
    * sent the user there to add a server. */
@@ -1338,7 +1336,7 @@ export interface AppState {
    * opens Automations > Webhooks instead; this stays false. Kept so older
    * bot-act callers and tests still type-check. */
   triggersOpen: boolean;
-  /** Tools > Memory: right DetailPanel manager (2026-11-02). */
+  /** Tools > Memory: main-column page (activeView "memory", 2026-11-02). */
   memoryManagerOpen: boolean;
   /** The "New bot" role picker. */
   newBotOpen: boolean;

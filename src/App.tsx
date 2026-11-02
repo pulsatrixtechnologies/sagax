@@ -28,6 +28,7 @@ import {
 } from "@/components/lazy-screens";
 import { ArchivedBotsPage } from "@/components/ArchivedBotsPage";
 import { WorkspaceBackupRecovery } from "@/components/WorkspaceBackupSettings";
+import { AboutPrompt } from "@/components/AboutDialog";
 import { ReleaseNotesPrompt } from "@/components/ReleaseNotesPrompt";
 import { TermsGate } from "@/components/TermsGate";
 import { UpdateBanner } from "@/components/UpdateBanner";
@@ -56,6 +57,7 @@ import { effectiveLanguage, useLanguageChoice } from "@/lib/language-preference"
 import { normalizeInboxDeepLink } from "@/lib/inbox-deep-link";
 import { openThreadVisible, pageOpenThreadTarget, type OpenThreadTarget } from "@/lib/open-thread-hash";
 import { clearLeftViewHash, watchViewHash } from "@/lib/view-hash";
+import { requestAbout } from "@/lib/about-ui";
 import { takeSettingsReturn } from "@/lib/settings-return";
 import { saveSidebarAttentionPinned, toggleSidebarCollapsed } from "@/lib/sidebar-preferences";
 import { botShowsUnread } from "@/lib/bot-unread";
@@ -138,7 +140,12 @@ function Shell() {
   // first key needs a fresh one): that page opens again.
   useEffect(() => {
     const section = takeSettingsReturn();
-    if (section) dispatch({ type: "toggleAppSettings", open: true, section: section as AppSettingsSection });
+    if (!section) return;
+    if (section === "about") {
+      requestAbout();
+      return;
+    }
+    dispatch({ type: "toggleAppSettings", open: true, section: section as AppSettingsSection });
   }, [dispatch]);
   // "Use your Cloud on your phone" opens the Cloud in this window at
   // /?desktop-settings=phone: its own phone pairing, in any window, on any
@@ -381,6 +388,7 @@ function Shell() {
   const [panelSlot, setPanelSlot] = useState<HTMLElement | null>(null);
   const botPanelOpen = !remoteClient && (state.settingsOpen || state.computerOpen) && panelBot !== undefined;
   const mainIsTeamMap = state.activeView === "team-map";
+  const mainIsMemory = state.activeView === "memory" || state.memoryManagerOpen;
   const mainIsCode = state.activeView === "code";
   const mainIsApprovals = state.activeView === "approvals";
   const mainIsRemoteSessions = state.activeView === "remote-sessions";
@@ -467,8 +475,10 @@ function Shell() {
 
   return (
     <div className="flex h-full flex-col" data-app-shell="">
-      {/* What's new sits above the update dialog. Both are outside the layout flow. */}
+      {/* What's new is a centred window above the update dialog. Both sit outside the layout flow. */}
       <ReleaseNotesPrompt />
+      {/* About: centred modal from Settings > About, the profile menu, the app menu. */}
+      <AboutPrompt />
       {/* The terms of use, once per account (App Store 1.2). */}
       <TermsGate />
       <UpdateBanner />
@@ -491,7 +501,7 @@ function Shell() {
       <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col" data-sidebar-follower="">
       {/* nothing answers this person on an organization server: say so above
           the conversation, with the way back to the first-run step */}
-      {org && (group || bot) && !calendarFillsMain && !mainIsTeamMap && !mainIsCode && !mainIsApprovals && !mainIsRemoteSessions && !mainIsAchievements && !mainIsApps && !mainIsArchivedBots && !mainIsOrgImport && !state.personaEditor && !state.botWizard && <OrgEngineNotice />}
+      {org && (group || bot) && !calendarFillsMain && !mainIsTeamMap && !mainIsMemory && !mainIsCode && !mainIsApprovals && !mainIsRemoteSessions && !mainIsAchievements && !mainIsApps && !mainIsArchivedBots && !mainIsOrgImport && !state.personaEditor && !state.botWizard && <OrgEngineNotice />}
       {/* The split view (#1504): the main view below is one section; others
           show more conversations beside it (src/lib/split-view.ts). */}
       <SplitWorkspace panelSlot={panelSlot} main={composeOpen && (group || bot) ? (
@@ -500,6 +510,8 @@ function Shell() {
         <RoutinesPage fill onBack={closeCalendar} onOpenRoom={openCalendarRoom} />
       ) : mainIsTeamMap ? (
         <TeamMapPage />
+      ) : mainIsMemory ? (
+        <MemoryManagerPanel />
       ) : mainIsCode ? (
         <CodePage />
       ) : mainIsApprovals ? (
@@ -509,8 +521,8 @@ function Shell() {
       ) : mainIsAchievements ? (
         <AchievementsScreen />
       ) : mainIsApps ? (
-        /* Connect apps over the wizard when Tools opens it (lot 4 + 5):
-           botWizard stays set; leaving apps returns to the wizard. */
+        /* Capabilities centred modal (decided exception like Settings).
+           Over the wizard when Tools opens it: botWizard stays set. */
         <PluginsPanel />
       ) : !remoteClient && state.botWizard ? (
         <BotWizard />
@@ -595,7 +607,6 @@ function Shell() {
       <div ref={setPanelSlot} data-split-panel-slot="" className="contents" />
       {remoteClient && state.settingsOpen && panelBot && <RemoteAgentSettingsPanel bot={panelBot} />}
       {state.personPanelId && <PersonPanel key={`person:${state.personPanelId}`} personId={state.personPanelId} />}
-      {state.memoryManagerOpen && <MemoryManagerPanel />}
       {remoteClient && state.computerOpen && bot && (
         <RemoteDesktopPanel key={`computer:${bot.id}`} bot={bot} />
       )}
@@ -604,9 +615,8 @@ function Shell() {
       {state.appSettingsOpen && <SettingsModal />}
       {!remoteClient && <ModelWindowHost />}
       {/* Lot 4: New bot / Edit bot fill the main column (botWizard, personaEditor).
-          Lot 5: Connect apps and archived bots also fill the main column.
-          defaultsMode still mounts NewBotDialog from Settings > Default bot settings.
-          Browse Bots is Connect apps' Bots tab; no catalog modal. */}
+          Capabilities is a centred modal (decided exception); archived bots
+          stay a content-frame page. Browse Bots is Capabilities' Bots tab. */}
       {state.shortcutsOpen && (
         <KeyboardShortcutsModal
           open={state.shortcutsOpen}

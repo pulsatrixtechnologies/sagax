@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { RoutineManager } from "./routines.ts";
+import { RoutineManager } from "./routines/routines.ts";
 import { WebhookManager } from "./webhooks.ts";
 
 const dirs: string[] = [];

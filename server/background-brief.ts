@@ -5,7 +5,7 @@
 // model, never a larger one by default. A number in a suggestion must name
 // the piece it came from and that piece's date. A suggestion they rejected
 // is not proposed again. A fact they keep is stamped for them alone
-// (server/memory-audience.ts), so it does not leave into a room.
+// (server/memory/memory-audience.ts), so it does not leave into a room.
 
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -14,7 +14,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { localClock, validTimeZone } from "../shared/reach-me.ts";
-import { memoryMayShow, type MemoryReaders } from "./memory-audience.ts";
+import { memoryMayShow, type MemoryReaders } from "./memory/memory-audience.ts";
 import { memoryEntry } from "./workspace.ts";
 
 export const BRIEF_MIN_HOURS = 1;

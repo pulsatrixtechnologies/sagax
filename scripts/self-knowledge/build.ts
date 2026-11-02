@@ -357,7 +357,7 @@ function walk(root: string, dir: string, keep: (path: string) => boolean): strin
 
 /** docs/*.md left out: plans, process notes and records for maintainers. */
 const DOCS_LEFT_OUT = new Set([
-  "docs/TODO.md", "docs/ci.md", "docs/releasing.md", "docs/history-rewrite-plan.md", "docs/localization.md",
+  "docs/TODO.md", "docs/ci.md", "docs/releasing.md", "docs/notes/history-rewrite-plan.md", "docs/localization.md",
   "docs/mascots.md", "docs/team-incidents.md",
   // infrastructure of a deployment, not what the app does
   "docs/sandbox-kubernetes.md", "docs/user-sandbox-perspicax-infra.md", "docs/runtime-contract.md", "docs/browser-packaging.md",

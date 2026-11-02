@@ -22,7 +22,7 @@ import { repositoryInfo } from "../activity-code-work.ts";
 import { BranchArchive, BranchPulls, hostGit, parseStatus, proposedMessage, redactPaths, validBranchName, type GitExec } from "../code-branches.ts";
 import type { BotBranchInfo } from "../../shared/bot-code-branches.ts";
 import { createBotCodeBranchRoutes, type BotCodeBranchRouteDeps, type BranchCredentials, type RemoteBranchDeps, type RemoteBranchReach } from "./bot-code-branches.ts";
-import type { RemoteExec } from "../remote-code-branches.ts";
+import type { RemoteExec } from "../remote-support/remote-code-branches.ts";
 import { dispatchRoutes } from "./table.ts";
 
 const NOW = 1_800_000_000_000;

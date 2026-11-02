@@ -70,7 +70,7 @@ import type { BotPlugins } from "./bot-plugins.ts";
 import { profilePatchSchema } from "./bot-profile.ts";
 import { autoOnlyDestination } from "./surface.ts";
 import { memberImportReset } from "./routes/bot-catalog.ts";
-import type { Routine, RoutineManager } from "./routines.ts";
+import type { Routine, RoutineManager } from "./routines/routines.ts";
 import { restoreSkillManifest, setSkillEnabled, skillManifestForExport } from "./skills.ts";
 import { cleanBotGrants, cleanBotPerspicax, type BotRecord, type Message, type Store, type TaskRecord } from "./store.ts";
 import type { WebhookTrigger } from "./webhooks.ts";

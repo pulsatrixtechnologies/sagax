@@ -5,8 +5,9 @@
 // pause the live picture; Stop ends the session, on a second press.
 //
 // Take control opens the same large window as the bot's server environment
-// (SandboxDesktopModal): its title, "Running · You have control", Release
-// control, Play / Pause / Stop, full screen and close. Inside it the live
+// (SandboxDesktopModal): calm chrome (close, collapse to panel), the live
+// screen, Watching | Take control / You have control under it, and Play /
+// Pause / Stop plus full screen in the "..." menu. Inside it the live
 // control WebSocket (#950) streams the frames and carries the mouse and the
 // keyboard while control is held. The Computer tab is never opened for a
 // remote session anymore.

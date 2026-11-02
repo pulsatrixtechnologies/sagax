@@ -60,7 +60,7 @@ import { introAdvance } from "../intro-tour.ts";
 import { spokenLineFields } from "../live-call-record.ts";
 import { cancelledChatFollowup } from "../message-db.ts";
 import { misuseRefusal } from "../misuse-guardrails.ts";
-import { ORG_FULL_ACCESS_DISABLED } from "../org-full-access.ts";
+import { ORG_FULL_ACCESS_DISABLED } from "../org/org-full-access.ts";
 import { resolvePeerComms } from "../peer-approval.ts";
 import { promptWithReply } from "../replies.ts";
 import {
@@ -328,6 +328,7 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       const intro = !guarded && !pressed && !voiceCall ? introAdvance(store.messagesFor(threadId), typed) : null;
       if (intro) {
         const message = store.appendMessage(threadId, { role: "user", kind: "text", text: typed, ...(sendId ? { sendId } : {}) });
+        // an onboarding card, no permission; full-access: exempt
         if (intro.kind === "card") store.appendMessage(threadId, { role: "bot", kind: "options", card: intro.card });
         else store.appendMessage(threadId, { role: "bot", kind: "text", text: intro.text });
         return json(res, 202, { ok: true, threadId, message });

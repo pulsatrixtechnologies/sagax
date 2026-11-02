@@ -14,7 +14,7 @@ struct FreshTopicHeader: View {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 11, weight: .semibold))
-                    Text("Earlier topics")
+                    Text("Back to the previous topic")
                         .font(.footnote)
                 }
                 .foregroundStyle(.secondary)

@@ -19,10 +19,20 @@ FROM debian:trixie-slim
 ARG WITH_BROWSER=1
 # The on-demand desktop (docs/user-sandbox.md, "Desktop"): Xvnc (an X server
 # with a VNC server bound to 127.0.0.1 inside the sandbox only), openbox,
-# xdotool and scrot for computer use, xterm and pcmanfm, a background
-# (hsetroot) and a launcher bar (tint2). Nothing of it runs
-# until a computer-use tool or the person's live view starts it.
+# xdotool and scrot for computer use, a light gradient background
+# (hsetroot), a bottom dock (Plank, with xcompmgr for its transparency)
+# holding Chromium, Files (Thunar) and Terminal (Xfce Terminal), and the
+# Papirus icon theme so folders, terminal, browser and file types each have
+# their own icon (an SVG theme: librsvg2-common is its loader, without it
+# GTK falls back to the bare default icons). Nothing of it runs until a computer-use tool or the
+# person's live view starts it.
 ARG WITH_DESKTOP=1
+# 2026-11-02: the everyday apps of that desktop, each the default for its
+# files (deploy/sandbox/mimeapps.list): Ristretto (pictures), Parole and mpv
+# (audio and video), LibreOffice Writer, Calc, Impress and Draw, Atril (PDF),
+# Xarchiver (archives, also from Thunar's menu) and Mousepad (text).
+# LibreOffice is most of the size; WITH_APPS=0 builds without them.
+ARG WITH_APPS=1
 # gh, node and npm: the person's GitHub connection (Settings > Mes connexions
 # writes gh's hosts.yml and git's credentials into /workspace) and the MCP
 # servers a person runs here themselves (npx ...; server/sandbox-stdio-mcp.ts).
@@ -36,9 +46,22 @@ RUN set -eux; \
     fi; \
     if [ "$WITH_DESKTOP" = "1" ]; then \
       apt-get install -y --no-install-recommends \
-        tigervnc-standalone-server tigervnc-tools openbox xdotool scrot xterm pcmanfm fonts-dejavu-core \
-        tint2 hsetroot; \
+        tigervnc-standalone-server tigervnc-tools openbox xdotool scrot fonts-dejavu-core hsetroot \
+        dbus-x11 xdg-utils shared-mime-info desktop-file-utils \
+        xfce4-terminal thunar thunar-archive-plugin tumbler plank xcompmgr papirus-icon-theme librsvg2-common; \
+      # Papirus only (light): its dark and ePapirus variants are not used.
+      rm -rf /usr/share/icons/Papirus-Dark /usr/share/icons/ePapirus /usr/share/icons/ePapirus-Dark; \
+      gtk-update-icon-cache -q -f /usr/share/icons/Papirus 2>/dev/null || true; \
     fi; \
+    if [ "$WITH_DESKTOP" = "1" ] && [ "$WITH_APPS" = "1" ]; then \
+      apt-get install -y --no-install-recommends \
+        ristretto parole gstreamer1.0-plugins-good gstreamer1.0-libav mpv \
+        libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-draw libreoffice-gtk3 fonts-liberation \
+        atril xarchiver 7zip mousepad; \
+      rm -rf /usr/share/doc/* /usr/share/help/* /usr/share/gnome/help/* 2>/dev/null || true; \
+    fi; \
+    # A session bus wants a machine id; the root is read-only at run time.
+    if command -v dbus-uuidgen >/dev/null 2>&1; then dbus-uuidgen --ensure=/etc/machine-id; fi; \
     rm -rf /var/lib/apt/lists/*; \
     groupadd --gid 1000 sandbox; \
     useradd --uid 1000 --gid 1000 --home-dir /workspace --no-create-home --shell /bin/bash sandbox; \
@@ -98,8 +121,12 @@ RUN set -eux; \
     echo "${daemon_sha}  /usr/local/bin/tailscaled" | sha256sum -c -; \
     /usr/local/bin/tailscale version | grep -F "${TAILSCALE_VERSION}"
 COPY deploy/sandbox/openbox-menu.xml /etc/xdg/openbox/menu.xml
-COPY deploy/sandbox/tint2rc /etc/xdg/sagax/tint2rc
-COPY deploy/sandbox/applications/ /usr/share/sagax/applications/
+COPY deploy/sandbox/applications/ /usr/share/applications/
+COPY deploy/sandbox/mimeapps.list /etc/xdg/mimeapps.list
+COPY deploy/sandbox/mimeapps.list /usr/share/applications/mimeapps.list
+COPY deploy/sandbox/gtk-settings.ini /etc/xdg/gtk-3.0/settings.ini
+COPY deploy/sandbox/terminalrc /etc/xdg/xfce4/terminal/terminalrc
+RUN update-desktop-database -q /usr/share/applications 2>/dev/null || true
 
 ENV HOME=/workspace LANG=C.UTF-8 SAGAX_ENVIRONMENT=user-sandbox
 WORKDIR /workspace

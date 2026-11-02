@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Files
-Comment=Browse /workspace
-Exec=sagax-desktop files
-Icon=system-file-manager
-Terminal=false

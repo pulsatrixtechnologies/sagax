@@ -9,10 +9,17 @@
 //   POST /api/bots/<id>/voice/stream      {text, voice?, speed?, language?, threadId?} -> raw PCM as xAI makes it
 //   GET  /api/bots/<id>/voice/listen      WebSocket (?language=&locale=&threadId=): PCM frames in, transcripts out
 //   GET  /api/bots/<id>/voice/speech      WebSocket (?voice=&speed=&language=&threadId=): clauses in, PCM out
+//   GET  /api/bots/<id>/voice/realtime    WebSocket (?voice=&language=&threadId=): a call, PCM16 24 kHz both ways,
+//                                         at xAI's realtime voice (server/realtime-call.ts)
 //   POST /api/bots/<id>/voice/call        {threadId, callId, state: start|alive|end, language?}: the thread is on a call
 //                                         {threadId, callId, state: heard, audio}: a call turn's audio stages (ms)
 //   GET  /api/voice/status, GET /api/voice/voices, POST /api/voice/speak: the same for no bot (Settings > Voice)
 //
+// 2026-11-02 (the maintainer): a call is a realtime voice session, never text to
+// speech: GET /voice/realtime bridges the page to xAI's Voice Agent API and
+// the bot's work to its `work` function (server/realtime-call.ts). The
+// paragraphs below describe the older pipeline, kept for reading a message
+// aloud and for clients that have not moved yet.
 // A live call (src/lib/voice-mode/call.ts) uses the last two: the person's
 // audio streams to xAI's streaming speech to text while they speak, and each
 // sentence of the bot's answer is synthesized as soon as the bot has written
@@ -46,6 +53,7 @@
 // Every request names a bot the person may use (the visibility gate already
 // hides the others) and, when given, a thread they may post to. Each speak
 // and transcribe is recorded in the usage ledger with `access` (the via).
+import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 
@@ -73,6 +81,7 @@ import { speakableDelta } from "./tts/speech-text.ts";
 import { createListenSession } from "./voice-listen-session.ts";
 import { grokVoiceFailure, type GrokVoiceFailure, type SpeechStream, type SpeechStreamHandlers, type SynthesizeOptions, type TranscriptionHandlers, type TranscriptionStream } from "./tts/grok.ts";
 import { createSpeechSession } from "./voice-speech-session.ts";
+import { RealtimeCallBridge, REALTIME_SAMPLE_RATE, type RealtimeBot, type RealtimeHistoryLine, type RealtimeSocket, type RealtimeWorkResult } from "./realtime-call.ts";
 import { firstAudioNotice, parseVoiceAudioTiming, providerFallbackNotice, streamedTranscriptNotice, uploadedTranscriptNotice, type VoiceAudioTiming } from "./voice-timing.ts";
 import { openHttpSpeechStream } from "./tts/http-speech-stream.ts";
 import {
@@ -113,8 +122,8 @@ import type { RequestAuth } from "./request-auth.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";
 import type { Audio, Voice } from "./tts/elevenlabs.ts";
 
-const ROUTE = /^\/api\/bots\/([\w-]+)\/voice\/(status|voices|prepare|speak|transcribe|stream|listen|speech|call)$/;
-type Action = "status" | "voices" | "prepare" | "speak" | "transcribe" | "stream" | "listen" | "speech" | "call";
+const ROUTE = /^\/api\/bots\/([\w-]+)\/voice\/(status|voices|prepare|speak|transcribe|stream|listen|speech|call|realtime)$/;
+type Action = "status" | "voices" | "prepare" | "speak" | "transcribe" | "stream" | "listen" | "speech" | "call" | "realtime";
 /** The same answers for no bot: GET /api/voice/status, GET /api/voice/voices, POST /api/voice/speak. */
 const OWN_ROUTE = /^\/api\/voice\/(status|voices|speak)$/;
 const LEGACY_ROUTE = /^\/api\/tts\/(prepare|voices|speak)$/;
@@ -126,6 +135,8 @@ export const VOICE_LISTEN_MAX_BYTES = 16_000 * 2 * 60 * 60 * 2;
 const LISTEN_READY_MS = 8_000;
 /** xAI's speech socket must open this soon, else the page speaks over POST. */
 export const SPEECH_READY_MS = 1_500;
+/** The realtime session must answer its configuration within this. */
+export const REALTIME_READY_MS = 5_000;
 /** The PCM rate of the streaming voice (tts/grok.ts VOICE_STREAM_RATE). */
 const VOICE_SPEECH_RATE = 24_000;
 const THREAD_ID = /^[\w-]{1,128}$/;
@@ -152,7 +163,7 @@ export type VoiceKey =
   | { ok: true; key: string; via: VoiceModeVia; payerPrincipalId?: string }
   | { ok: false; cause: VoiceModeRefusalCause };
 
-export type VoiceUsageModel = "grok-tts" | "grok-stt" | "openai-tts" | "openai-stt" | "elevenlabs-tts" | "fish-tts" | "system-tts" | "chatterbox-tts";
+export type VoiceUsageModel = "grok-realtime" | "grok-tts" | "grok-stt" | "openai-tts" | "openai-stt" | "elevenlabs-tts" | "fish-tts" | "system-tts" | "chatterbox-tts";
 
 export interface VoiceUsage {
   target: VoiceTarget;
@@ -263,6 +274,18 @@ export interface VoiceModeDeps {
    * speech to text took, numbers only, never the words
    * (server/voice-timing.ts). */
   notice?(threadId: string, message: string): void;
+  /** A realtime call's link to the bot (server/realtime-call-host.ts): its
+   * name and recent lines for the voice, and its `work` and permission
+   * answers as the person who speaks. Absent: no realtime calls. */
+  realtime?: {
+    openUpstream(key: string): RealtimeSocket;
+    session(target: VoiceTarget, auth: RequestAuth, callId: string): {
+      bot: RealtimeBot;
+      history: RealtimeHistoryLine[];
+      work(request: string, signal: AbortSignal): Promise<RealtimeWorkResult>;
+      respond(requestId: string, behavior: "allow" | "deny"): Promise<boolean>;
+    };
+  };
   /** The thread is on a live call (server/voice-call-session.ts): every
    * send to it while the call lasts is a call turn. */
   callSession?: {
@@ -558,6 +581,94 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
     json(res, 502, { error: "no voice key" });
   }
 
+  /** GET /voice/realtime: one call as a realtime voice session
+   * (server/realtime-call.ts). The page sends PCM16 at 24 kHz and JSON
+   * (interrupt, ping, hangup); it gets the voice's PCM16 and the call's
+   * state. The socket is accepted first, so a refusal reaches the page in
+   * words ({"type":"refused","code"}): a browser never reads the body of a
+   * refused upgrade. A key refused for itself gives way to the next xAI
+   * key. Never text to speech: no realtime voice, no call. */
+  async function realtime(req: IncomingMessage, res: import("node:http").ServerResponse, url: URL, json: Json, keys: VoiceKeyCandidate[], refusals: VoiceKeyRefusals, who: string, usageFor: UsageFor, target: VoiceTarget, auth: RequestAuth, blocked?: string): Promise<void> {
+    const upgrade = deps.upgrade?.(req);
+    if (!upgrade) { json(res, 426, { error: "WebSocket upgrade required" }); return; }
+    const shake = handshake(req);
+    if ("status" in shake) { json(res, shake.status, { error: shake.error }); return; }
+    const language = url.searchParams.get("language") ?? "auto";
+    if (!isVoiceModeLanguage(language)) { json(res, 400, { error: "unknown language" }); return; }
+    const voice = url.searchParams.get("voice") ?? undefined;
+    const { socket } = upgrade;
+    upgrade.release();
+    const head = upgrade.head;
+    res.detachSocket(socket as import("node:net").Socket);
+    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${websocketAccept(shake.key)}\r\n\r\n`);
+    let bridge: RealtimeCallBridge | null = null;
+    let gone = false;
+    const page = webSocketSession(socket, {
+      onBinary: (data) => bridge?.audio(new Uint8Array(data)),
+      onText: (text) => bridge?.pageMessage(text),
+      onClose: () => { gone = true; bridge?.end("page"); },
+    });
+    if (head.length) socket.unshift(head);
+    const refuse = (code: string, message: string, extra: Record<string, unknown> = {}) => {
+      page.sendText(JSON.stringify({ type: "refused", code, error: message, ...extra }));
+      page.close(4000);
+    };
+    if (!deps.realtime) return refuse("realtime_unavailable", "Realtime calls are not available on this server.");
+    if (blocked) return refuse("spend_cap", blocked);
+    if (!keys.length) return refuse("realtime_not_configured", "No realtime voice is set up for you. Add an xAI key in Settings > Voice.");
+    const callId = randomUUID();
+    const link = deps.realtime.session(target, auth, callId);
+    const tried: VoiceKeyRefusal[] = [];
+    const ordered = refusals.order(who, keys).map((entry) => entry.candidate);
+    for (const candidate of ordered) {
+      const early: Array<Record<string, unknown>> = [];
+      let live = false;
+      const usage = usageFor(candidate);
+      const attempt = new RealtimeCallBridge({
+        callId,
+        openUpstream: () => deps.realtime!.openUpstream(candidate.key),
+        sendText: (frame) => (live ? page.sendText(JSON.stringify(frame)) : early.push(frame)),
+        sendBinary: (pcm) => { if (live) page.sendBinary(pcm); },
+        closePage: (code) => { if (live) page.close(code); },
+        work: link.work,
+        respond: link.respond,
+        bot: link.bot,
+        history: link.history,
+        ...(voice ? { voice } : {}),
+        language,
+        usage: (seconds) => usage("grok-realtime", Math.round(seconds.input + seconds.output)),
+        log: (line) => (deps.log ?? console.warn)(line),
+        now,
+      });
+      attempt.start();
+      const opened = await Promise.race([
+        attempt.ready,
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), REALTIME_READY_MS).unref()),
+      ]);
+      if (gone) { attempt.end("page"); return; }
+      if (!opened) {
+        attempt.end("upstream");
+        const message = scrub(attempt.lastError ?? "not reachable", candidate.key);
+        const failure = grokVoiceFailure(message);
+        tried.push({ ...voiceKeyRef(candidate), failure });
+        if (voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
+        (deps.log ?? console.warn)(`[voice-realtime] xAI realtime refused the ${describeVoiceKey(candidate)} (${failure})`);
+        continue;
+      }
+      refusals.forget(who, voiceKeyRef(candidate));
+      bridge = attempt;
+      live = true;
+      page.sendText(JSON.stringify({ type: "ready", sampleRate: REALTIME_SAMPLE_RATE, callId, key: voiceKeyRef(candidate), ...(tried.length ? { skipped: tried } : {}) }));
+      for (const frame of early.splice(0)) page.sendText(JSON.stringify(frame));
+      return;
+    }
+    // every key refused for itself: say which to fix, never fall back to text to speech
+    const keyRefused = tried.length > 0 && tried.every((entry) => entry.failure === "key" || entry.failure === "quota");
+    refuse(keyRefused ? "realtime_key_refused" : "realtime_unreachable",
+      keyRefused ? "The realtime voice key was refused. Fix it in Settings > Voice." : "The realtime voice is not reachable. Try the call again.",
+      { tried });
+  }
+
   /** GET /voice/listen: one live call's streaming speech to text. The page
    * sends 16 kHz 16-bit PCM frames while the person speaks (its own voice
    * activity detector decides when) and `{"type":"finalize"}` when they
@@ -708,7 +819,7 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
     if (!match) return PASS;
     const [, botId, action] = match as unknown as [string, string, Action];
     res.setHeader("cache-control", "no-store");
-    const expected = action === "status" || action === "voices" || action === "listen" || action === "speech" ? "GET" : "POST";
+    const expected = action === "status" || action === "voices" || action === "listen" || action === "speech" || action === "realtime" ? "GET" : "POST";
     if (method !== expected) return json(res, 405, { error: "method not allowed" });
 
     const speaker = deps.speaker(auth);
@@ -732,7 +843,7 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
         }
       }
     }
-    const rawThread = action === "transcribe" || action === "listen" || action === "speech" ? url.searchParams.get("threadId") ?? undefined : (body as Record<string, unknown> | null)?.threadId;
+    const rawThread = action === "transcribe" || action === "listen" || action === "speech" || action === "realtime" ? url.searchParams.get("threadId") ?? undefined : (body as Record<string, unknown> | null)?.threadId;
     if (rawThread !== undefined && rawThread !== null && (typeof rawThread !== "string" || !THREAD_ID.test(rawThread))) return json(res, 400, { error: "threadId must be a task id" });
     const target: VoiceTarget | { status: number; error: string } = own
       ? { botId: "", botName: "", threadId: "" }
@@ -812,6 +923,8 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
         const firstStt = refusals.order(who, sttKeys)[0]!.candidate;
         status = {
           provider: "xai", available: true, ...org, via: first.via, key: voiceKeyRef(first), keys,
+          // a call is a realtime voice session (xAI's Voice Agent API)
+          ...(deps.realtime && (byProvider.get("xai")?.length ?? 0) > 0 ? { realtime: true } : {}),
           providers: {
             tts: VOICE_TTS_PROVIDERS.filter((provider) => offered<VoiceTtsProvider>(ttsKeys).includes(provider)),
             stt: VOICE_STT_PROVIDERS.filter((provider) => offered<VoiceSttProvider>(sttKeys).includes(provider)),
@@ -830,6 +943,16 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
         }
       }
       return json(res, 200, status);
+    }
+    if (action === "realtime") {
+      let blocked: string | undefined;
+      try { deps.assertWithinBudget?.(); } catch (error) { blocked = error instanceof Error ? error.message : String(error); }
+      const usageFor: UsageFor = (candidate) => (model, input) => deps.recordUsage({
+        target, speaker, via: candidate.via, model, input,
+        ...(candidate.payerPrincipalId ? { payerPrincipalId: candidate.payerPrincipalId } : {}),
+      });
+      const xaiKeys = speaker.disabled ? [] : byProvider.get("xai") ?? [];
+      return realtime(req, res, url, json, xaiKeys, refusals, who, usageFor, target, auth, blocked);
     }
     const roleOf = action === "transcribe" || action === "listen" ? "stt" : "tts";
     const keys = roleOf === "stt" ? sttKeys : ttsKeys;

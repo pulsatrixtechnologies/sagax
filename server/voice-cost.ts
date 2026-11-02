@@ -13,8 +13,13 @@ const OPENAI_TTS_USD_PER_MILLION_CHARACTERS = 16.7;
 const OPENAI_STT_USD_PER_HOUR = 0.36;
 const ELEVENLABS_TTS_USD_PER_MILLION_CHARACTERS = 50;
 
+// xAI's Voice Agent API: about $0.05 a minute of connected call (list
+// price, 2026-10); `input` is seconds of audio in and out.
+const REALTIME_USD_PER_MINUTE = 0.05;
+
 export function voiceCostUsd(model: string, input: number): number | null {
   const amount = Number.isFinite(input) && input > 0 ? input : 0;
+  if (model === "grok-realtime") return (amount / 60) * REALTIME_USD_PER_MINUTE;
   if (model === "grok-tts") return (amount / 1_000_000) * TTS_USD_PER_MILLION_CHARACTERS;
   if (model === "grok-stt") return (amount / STT_BYTES_PER_SECOND / 3600) * STT_USD_PER_HOUR;
   if (model === "openai-tts") return (amount / 1_000_000) * OPENAI_TTS_USD_PER_MILLION_CHARACTERS;

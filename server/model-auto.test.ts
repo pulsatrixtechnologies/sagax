@@ -516,6 +516,23 @@ describe("pickVoiceModel", () => {
     expect(pickVoiceModel({ base: claudeBase, engines: [noFast, grok], catalog })?.selection.model).toBe("grok-4-fast");
     expect(pickVoiceModel({ base: claudeBase, engines: [noFast], catalog })).toBeNull();
   });
+
+  // 2026-11-02 (the maintainer's call on a Grok 4.7 Fast bot): models.dev has no row for
+  // "grok-4.7-build-fast", so the own engine looked fast-less and the call
+  // went to Codex, whose ChatGPT usage limit came back as the bot's error.
+  it("keeps a Grok bot on its own fast model even when the catalogue does not list it", () => {
+    const grokCli: AutoEngine = {
+      instanceId: "grok", driverKind: "grokAgent", displayName: "Grok", effortLevels: ["low", "medium", "high"],
+      models: { default: "grok-4.7", options: [{ id: "grok-4.7", label: "Grok 4.7" }, { id: "grok-4.7-build-fast", label: "Grok 4.7 Fast" }] },
+    };
+    const engines = [grokCli, codex, claude];
+    const onFast = pickVoiceModel({ base: { instanceId: "grok", model: "grok-4.7-build-fast" }, engines, catalog });
+    expect(onFast?.selection).toEqual({ instanceId: "grok", model: "grok-4.7-build-fast" });
+    const onTop = pickVoiceModel({ base: { instanceId: "grok", model: "grok-4.7", effort: "high" }, engines, catalog });
+    expect(onTop?.selection).toEqual({ instanceId: "grok", model: "grok-4.7-build-fast", effort: "high" });
+    // a catalogued fast model of the engine still wins
+    expect(pickVoiceModel({ base: { instanceId: "grok-build", model: "grok-4.7" }, engines: [grok, codex], catalog })?.selection.model).toBe("grok-4-fast");
+  });
 });
 
 

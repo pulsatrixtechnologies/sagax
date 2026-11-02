@@ -623,12 +623,47 @@ export function pickVoiceModel(request: AutoRequest): AutoPick | null {
   const fast = pickFast(request, "orchestration", "fast", "quick");
   if (fast) return fast;
   const own = request.engines.filter((engine) => engine.instanceId === request.base.instanceId);
+  // 2026-11-02: the bot's own engine first, even for a fast model the
+  // catalogue does not list yet (Grok's "grok-4.7-build-fast"): a call of a
+  // bot on that model went to Codex because models.dev had no row for it, and Codex's
+  // usage limit came back as the bot's error.
+  const ownFast = ownEngineFast(request, own[0]);
+  if (ownFast) return ownFast;
   for (const engines of [own, request.engines]) {
     if (!engines.length) continue;
     const pick = pickTier({ ...request, engines }, "fast", "orchestration", "quick");
     if (pick.tier === "fast" && pick.reason !== "base" && pick.reason !== "tier-fallback") return pick;
   }
   return null;
+}
+
+/** The fast model a call turn takes on the bot's own engine without the
+ * catalogue: the bot's model when it is already a fast one, else the first
+ * model the engine lists whose id is its family's fast tier. Null when the
+ * engine lists none (the catalogue's pick, then another engine, decide). */
+function ownEngineFast(request: AutoRequest, engine: AutoEngine | undefined): AutoPick | null {
+  if (!engine) return null;
+  const skip = request.skip ?? [];
+  const listed = engine.models.options.filter((option) => !option.custom && !/unverified/i.test(option.label)
+    && !skip.some((entry) => entry.instanceId === engine.instanceId && entry.model === option.id));
+  const isFast = (id: string) => tierOfModel(engine.driverKind, id) === "fast";
+  const base = listed.find((option) => option.id === request.base.model && isFast(option.id));
+  // a catalogued fast model of the engine wins over an uncatalogued one
+  const catalogued = base ? null : modelForTier(engine, "fast", request.catalog, skip);
+  if (catalogued && isFast(catalogued.id)) return null;
+  const chosen = base ?? listed.find((option) => isFast(option.id));
+  if (!chosen) return null;
+  return {
+    role: "orchestration",
+    selection: selectionOn(engine, chosen.id, request.base),
+    engineLabel: engine.displayName,
+    modelLabel: chosen.label || chosen.id,
+    tier: "fast",
+    taskClass: "quick",
+    reason: "strongest-own",
+    ...(engine.via ? { via: engine.via } : {}),
+    chain: [{ instanceId: engine.instanceId, model: chosen.id }],
+  };
 }
 
 /** Work the bot hands out: classify it, then the tier's model; the fast

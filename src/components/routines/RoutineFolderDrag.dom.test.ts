@@ -168,23 +168,22 @@ describe("the row's state word (2026-10-28)", () => {
     expect(row("r1").querySelector("[data-routine-running]")).toBeNull();
   });
 
-  it("Running for a live run, as quiet text that opens that run in Automations", async () => {
+  it("Running for a live run takes the last-run line, and the row opens that run", async () => {
     runs.push({ id: "run-9", routineId: "r1", status: "running" });
     await mount();
-    const word = row("r1").querySelector("[data-routine-running]") as HTMLButtonElement;
-    expect(word.textContent).toBe("Running");
-    expect(word.getAttribute("aria-label")).toBe("Running: Morning");
-    expect(word.className).not.toMatch(/underline|border|bg-(?!transparent)/);
+    const line = row("r1").querySelector("[data-routine-running]") as HTMLElement;
+    expect(line.textContent).toMatch(/^Running·/);
+    expect(line.getAttribute("aria-label")).toBe("Running: Morning");
     expect(row("r2").querySelector("[data-routine-running]")).toBeNull();
-    act(() => { word.click(); });
+    act(() => { (line.closest("button") as HTMLButtonElement).click(); });
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "showRoutines", section: "logs", botId: "bot-1", routineId: "r1", runStatus: "running", runId: "run-9" });
   });
 
-  it("shows Running once: the last-run line skips the run the Running word already shows", async () => {
+  it("shows Running instead of the last result: no Completed and no age of the old run", async () => {
     runs.push({ id: "run-8", routineId: "r1", status: "completed" }, { id: "run-9", routineId: "r1", status: "running" });
     await mount();
     expect(row("r1").querySelector("[data-routine-running]")).not.toBeNull();
-    expect(row("r1").querySelector("[data-routine-last-run]")?.getAttribute("data-routine-last-run")).toBe("completed");
+    expect(row("r1").querySelector("[data-routine-last-run]")).toBeNull();
     expect(row("r1").textContent?.match(/Running/g)?.length).toBe(1);
   });
 });

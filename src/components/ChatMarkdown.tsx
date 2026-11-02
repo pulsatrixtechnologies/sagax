@@ -48,6 +48,7 @@ import {
   getLanguageDisplayName,
   getSnippetFileName,
 } from "../lib/code-block";
+import { wrapCodeChildren } from "../lib/code-wrap";
 import { repairMarkdownTables } from "../lib/markdown-tables";
 import { TRANSCRIPT_WINDOW_SIZE } from "../lib/transcript-window";
 import { windowsPathDestinations } from "../../shared/markdown-windows-paths";
@@ -1444,12 +1445,10 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         );
       },
       code({ children }: { children?: ReactNode }) {
-        // break-words because a path or an identifier can be longer than
-        // the bubble is wide, and an unbreakable token has nowhere to go
-        // but outside it, off the left edge in a right-to-left paragraph,
-        // where the line ends.
+        // Compact monospace chip: wrap at path separators (see code-wrap.ts)
+        // so a long cron or script path never falls to one glyph per line.
         return (
-          <code dir="ltr" className="rounded bg-inset px-1 py-px text-[12px] break-words [unicode-bidi:isolate]">{children}</code>
+          <code dir="ltr" className="ui-code-chip break-words [unicode-bidi:isolate]">{wrapCodeChildren(children)}</code>
         );
       },
       // markdown never emits a span itself (no raw HTML); the only

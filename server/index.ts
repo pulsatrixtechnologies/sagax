@@ -1475,7 +1475,7 @@ import {
   readProblems
 } from "./org-problem-log.ts";
 import { WorkspaceBackupMaintenance } from "./workspace-backup-maintenance.ts";
-import { createWorkspaceBackupRoutes, isWorkspaceBackupSessionControl } from "./workspace-backup-http.ts";
+import { createWorkspaceBackupRoutes, isWorkspaceBackupRoute, isWorkspaceBackupSessionControl } from "./workspace-backup-http.ts";
 import {
   applyPendingWorkspaceRestore,
   CONFIDENTIAL_FORGOTTEN_MARKER,
@@ -43979,7 +43979,7 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
   // (workspaceMaintenance.run), and an export counted as an open request
   // would always find one and answer 409 (they ran before this count until
   // the route-table split).
-  if (path.startsWith("/api/") && path !== "/api/events" && path !== "/api/health" && !path.startsWith("/api/shared-computers/") && !path.startsWith("/api/workspace-backup/") && !isWorkspaceBackupSessionControl(method, path)) {
+  if (path.startsWith("/api/") && path !== "/api/events" && path !== "/api/health" && !path.startsWith("/api/shared-computers/") && !isWorkspaceBackupRoute(path) && !isWorkspaceBackupSessionControl(method, path)) {
     state.releaseWorkspaceRequest = workspaceMaintenance.request();
   }
 

@@ -1,11 +1,12 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb, verificationServerEnvironment } from "../../scripts/control-omb.ts";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
+import { handoffOutcome, readHandoffs } from "../testing/handoff-rows.ts";
 
 it("preserves peer approval expiry through real HTTP responses and durable delegation receipts", async () => {
   const fixture = await launchVerificationServer(process.env);
@@ -105,23 +106,29 @@ it("preserves peer approval expiry through real HTTP responses and durable deleg
     evidence.push({ operation: "ask-bot-after-visibility-revocation", result: unavailableResult, targetDispatched: false });
     await api("PATCH", `/api/bots/${target.id}`, { hidden: false, name: target.name });
 
+    // A routine's delegate_bot runs on the job runtime since lot 3 (0.8.24,
+    // docs/runtime-contract.md): its durable receipt is the runtime's row in
+    // runtime.db, the one check_delegation reads back. delegation-receipts.json
+    // keeps run_with_engine parts only. The call is not held on the card: the
+    // work waits queued for the person's review (reviewHolds), and a card
+    // nobody answers refuses it at the next tick. The row ends failed (outcome
+    // refused), never completed, with the expiry as its result and no turn
+    // started; the system dismissed the card, the person never answered it.
     const queued = await api("POST", "/api/internal/delegate-bot", { toBotId: target.id, message: "Fixture delegation awaiting approval" }, token);
+    expect(queued).toMatchObject({ queued: true, approvalRequired: true, receipt: { botId: target.id, outcome: "queued" } });
     writeFileSync(gate, "finish");
     const approval = await card(from.threadId);
     writeFileSync(expiry, "expire");
     let receipt: any;
-    await expect.poll(() => {
-      const path = join(dataDir, "delegation-receipts.json");
-      if (!existsSync(path)) return false;
-      receipt = JSON.parse(readFileSync(path, "utf8")).find((r: any) => r.id === queued.taskId);
-      return Boolean(receipt);
-    }, { timeout: 15_000 }).toBe(true);
-    expect(receipt).toMatchObject({ status: "expired", approvalOutcome: "expired", approvalSource: "system",
-      result: "the approval card expired without an answer" });
-    expect((await messages(from.threadId)).find(m => m.id === approval.id).card.dismissed).toBe(true);
+    await expect.poll(() => (receipt = readHandoffs(dataDir).find(row => row.id === queued.taskId))?.status,
+      { timeout: 15_000 }).toBe("failed");
+    expect(receipt).toMatchObject({ botId: target.id, executions: 0, approvalGranted: false,
+      result: "the approval card expired without an answer; no work sent." });
+    expect(handoffOutcome(dataDir, queued.taskId)).toBe("refused");
+    expect((await messages(from.threadId)).find(m => m.id === approval.id).card).toMatchObject({ answered: "deny", dismissed: true });
     expect((await messages(target.threadId)).some(m => m.role === "user")).toBe(false);
     expect((await api("GET", "/api/bots?messages=0")).bots.find((bot: any) => bot.id === target.id).busy).toBe(false);
-    evidence.push({ operation: "delegate-bot", receipt, targetDispatched: false });
+    evidence.push({ operation: "delegate-bot", receipt, outcome: "refused", targetDispatched: false });
     expect((await cli("wait", "--bot", from.id, "--task", from.threadId, "--timeout", "25")).status).toBe("settled");
 
     // Ordinary chat's multi-target gate must retain each refusal's origin,
@@ -136,8 +143,9 @@ it("preserves peer approval expiry through real HTTP responses and durable deleg
       catch { return false; }
       return Boolean(token);
     }, { timeout: 15_000 }).toBe(true);
+    // check_delegation reads the same runtime row back, in its own words.
     const readback = await api("GET", `/api/internal/delegations/${queued.taskId}?fromBotId=${from.id}&fromThreadId=${from.threadId}`, undefined, token);
-    expect(readback).toMatchObject({ status: "expired", approvalOutcome: "expired", approvalSource: "system" });
+    expect(readback).toMatchObject({ status: "failed", result: "the approval card expired without an answer; no work sent." });
     const pendingBatch = api("POST", "/api/internal/coordinate-bots", {
       botIds: [target.id, other.id], message: "Neither teammate should start", requestKey: "approval-fixture-batch",
     }, token, 403);

@@ -19,8 +19,14 @@ The checks cover:
 - Deleted peers and interrupted threads cancel approvals without attributing
   a decision to the user; late answers cannot revive settled requests.
 - Routine `ask_bot` distinguishes an explicit denial from an unanswered card.
-- A routine delegation expires without dispatching its target. Its durable
-  receipt and HTTP readback preserve the approval outcome and decision source.
+- A routine delegation expires without dispatching its target. It runs on the
+  job runtime (lot 3, 0.8.24): its durable receipt is the runtime's row in
+  `runtime.db` (`server/testing/handoff-rows.ts`), which `check_delegation`
+  reads back; `delegation-receipts.json` keeps `run_with_engine` parts only.
+  The unanswered review card refuses the work (`reviewHolds`): the row ends
+  `failed` with outcome `refused` and no turn started, the row and the
+  readback say the card expired without an answer, and the card is dismissed
+  by the system, never answered for the person.
 - Ordinary chat's multi-target `coordinate_bots` preserves mixed denial/expiry
   results and sends no work when any required approval fails.
 - Receipt metadata survives reload, while old receipts remain readable.
@@ -34,7 +40,7 @@ The checks cover:
   `server/peer-delivery.ts`); a result withheld for that reason reaches the
   requester as "Teammate" in its chip, its resume and the report in it
   (`teammateNameFor`, `server/direct-coordination.e2e.test.ts`).
-  `server/org-sharing.e2e.test.ts` S3-13 proves it across two people: a bot
+  `server/org/org-sharing.e2e.test.ts` S3-13 proves it across two people: a bot
   its owner unshares and renames while the asker's card is open.
 
 The fixture writes safe response/receipt evidence to

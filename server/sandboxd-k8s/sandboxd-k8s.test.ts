@@ -264,6 +264,29 @@ describe("kubernetes sandbox lifecycle", () => {
     expect(exec?.detail).toEqual({ argv0: "echo", exit: 3 });
     expect(readFileSync(auditFile, "utf8")).not.toContain("super-secret");
   });
+
+  it("Stop aborts in-flight sandbox execs so the job process tree does not outlive the pod", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-k8s-stop-"));
+    let released = false;
+    const hanging: K8sClient["exec"] = (_ns, _pod, _command, _stdin, signal) => new Promise((_resolve, reject) => {
+      const onAbort = () => {
+        released = true;
+        reject(Object.assign(new Error("the exec was cancelled"), { code: "ABORT_ERR", name: "AbortError" }));
+      };
+      if (signal?.aborted) { onAbort(); return; }
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
+    const { service, api, auditFile } = harness(dir, hanging);
+    await service.installEgressPolicy();
+    await service.ensure(person);
+    const names = sandboxNames(person);
+    const running = api.exec(names.container, { Cmd: ["sleep", "999"], User: "1000:1000", Env: [], WorkingDir: "/workspace" }, 1024);
+    await expect(service.stop(person)).resolves.toMatchObject({ state: "stopped" });
+    await expect(running).resolves.toMatchObject({ exitCode: 137 });
+    expect(released).toBe(true);
+    const lines = readFileSync(auditFile, "utf8").trim().split("\n").map((line) => JSON.parse(line) as { action: string; outcome?: string; detail?: Record<string, unknown> });
+    expect(lines.some((line) => line.action === "sandbox.exec" && line.outcome === "denied" && line.detail?.reason === "stopped")).toBe(true);
+  });
 });
 
 describe("sandbox audit log", () => {

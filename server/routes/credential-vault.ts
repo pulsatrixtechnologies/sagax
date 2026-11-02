@@ -32,7 +32,7 @@
 // only answered to the person's own app.
 import { randomUUID } from "node:crypto";
 
-import { bindingUrl, isVaultGrantMode, normalizeVaultDomain, siteAddable, VAULT_ITEM_KINDS, vaultDomainMatches, VAULT_LOGIN_TARGET, vaultHandle, type VaultGrantMode, type VaultItemKind, type VaultItemListing } from "../../shared/credential-vault.ts";
+import { botVaultPrincipal, bindingUrl, isVaultGrantMode, normalizeVaultDomain, siteAddable, VAULT_ITEM_KINDS, vaultDomainMatches, VAULT_LOGIN_TARGET, vaultHandle, type VaultGrantMode, type VaultItemKind, type VaultItemListing } from "../../shared/credential-vault.ts";
 import { isVaultDuplicateMode, isVaultExportFormat, isVaultImportFormat, type VaultExportFormat, type VaultTransferItem } from "../../shared/credential-vault-transfer.ts";
 import type { SecretRequestCardData } from "../../shared/wire.ts";
 import { CredentialVaultError, type CredentialVault, type PurchaseListing, type VaultItemInput } from "../credential-vault.ts";
@@ -255,6 +255,25 @@ export function createCredentialVaultRoutes(deps: CredentialVaultRouteDeps): Rou
           }
           return json(res, 200, { item: lent });
         }
+        if (secret.vault.team) {
+          // The bot's shared login: the owner picks one the card listed and
+          // allows it once or always. Nothing is created, lent or edited.
+          const picked = typeof input.itemId === "string" ? secret.vault.teamItems?.find((row) => row.id === input.itemId) : undefined;
+          if (!picked || input.turnOnly === true || input.addSite === true || input.onePassword || input.item) {
+            return json(res, 400, { error: "Choose one of this bot's shared logins.", code: "unknown_item" });
+          }
+          const teamPrincipal = botVaultPrincipal(botId!);
+          const shared = deps.vault.item(teamPrincipal, picked.id);
+          if (!shared || (shared.kind !== "login" && shared.kind !== "apiKey") || !shared.domains.length) return json(res, 404, { error: "No such item", code: "unknown_item" });
+          const teamGrant = deps.vault.grant(teamPrincipal, shared.id, { botId: botId!, mode, threadId, ...(shared.source === "1password" ? { singleUse: true } : {}) });
+          await deps.browser?.endForPerson(botId!, threadId);
+          deps.audit?.("credentials.grant", auth, { id: shared.id, botId, mode, via: "team-card" });
+          deps.cards.patch(botId!, threadId, messageId!, { ...secret, vault: { ...secret.vault, itemId: shared.id, itemName: shared.name, mode } });
+          if (!deps.cards.resume(botId!, threadId, messageId!, "provided", grantedNote(teamGrant, mode))) {
+            return json(res, 409, { error: "this login request is no longer available" });
+          }
+          return json(res, 200, { item: teamGrant });
+        }
         if (input.addSite === true && mode !== "always") return json(res, 400, { error: "A site is added to a login only with Always: a one-time grant changes nothing for good.", code: "add_site_once" });
         if (input.addSite === true && typeof input.itemId !== "string") return json(res, 400, { error: "Type the sites of a new login yourself.", code: "invalid_domains" });
         let item: VaultItemListing | null;
@@ -474,6 +493,8 @@ export function createCredentialVaultRoutes(deps: CredentialVaultRouteDeps): Rou
 export function vaultPrincipalFor(auth: RequestAuth, context: { organization: boolean; desktop: boolean; loopbackOptIn: boolean; localPrincipal: string }): string | null {
   if (context.organization) {
     const id = auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() : undefined;
+    // "bot:" is the team vault namespace; a person never lives there.
+    if (id?.startsWith("bot:")) return null;
     return id || null;
   }
   if (auth.kind === "session") return context.localPrincipal;
@@ -482,7 +503,7 @@ export function vaultPrincipalFor(auth: RequestAuth, context: { organization: bo
 }
 
 /** A fresh vault card for a bot's request_login (kind "secret"). */
-export function vaultRequestCard(input: { principalId: string; botName: string; name?: string; domain?: string; reason?: string }): SecretRequestCardData {
+export function vaultRequestCard(input: { principalId: string; botName: string; name?: string; domain?: string; reason?: string; teamItems?: Array<{ id: string; name: string; domains: string[] }> }): SecretRequestCardData {
   const what = input.domain ?? input.name ?? "a site";
   return {
     target: VAULT_LOGIN_TARGET,
@@ -493,6 +514,7 @@ export function vaultRequestCard(input: { principalId: string; botName: string; 
     requestKey: randomUUID(),
     vault: {
       principalId: input.principalId,
+      ...(input.teamItems?.length ? { team: true as const, teamItems: input.teamItems } : {}),
       ...(input.name ? { name: input.name } : {}),
       ...(input.domain ? { domain: input.domain } : {}),
     },

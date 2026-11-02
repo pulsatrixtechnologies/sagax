@@ -16,6 +16,7 @@ const COPY = {
   waiting: { label: "routines.status.waiting", tone: "text-warning" },
   completed: { label: "routines.status.completed", tone: "text-ink-secondary" },
   failed: { label: "routines.status.failed", tone: "text-danger" },
+  blocked: { label: "routines.status.blocked", tone: "text-danger" },
   cancelled: { label: "routines.status.cancelled", tone: "text-ink-secondary" },
   missed: { label: "routines.status.missed", tone: "text-danger" },
   nothing_to_report: { label: "routines.status.nothing_to_report", tone: "text-ink-secondary" },

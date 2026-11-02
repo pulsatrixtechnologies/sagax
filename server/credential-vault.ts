@@ -1,21 +1,19 @@
 // The credential vault: logins (user name, password, one-time code seed),
-// API keys and notes a person keeps for their bots, with the bots each item
-// is granted to. One encrypted file per person:
+// API keys, notes, cards, addresses and contacts. One sealed file per owner:
 //
 //   solo or desktop       DATA_DIR/credential-vault.enc
-//   organization server   DATA_DIR/principals/<pid>/credential-vault.enc
+//   organization person   DATA_DIR/principals/<pid>/credential-vault.enc
+//   team bot (shared)     DATA_DIR/bots/<botId>/credential-vault.enc
 //
 // AES-256-GCM with a key derived (HKDF) from the server's vault key, the one
 // mcp-oauth.enc uses (server/mcp-oauth.ts resolveVaultKey): on the desktop
 // that key lives in the OS keychain through Electron safeStorage
 // (credentials.bin) and reaches the server as SAGAX_MCP_OAUTH_KEY; a
 // headless server keeps it in a 0600 key file beside its data. The
-// additional data names the person, so a file copied into another person's
-// folder does not open.
-//
-// Nothing here returns a value to a caller other than resolveForFill, which
-// only the browser runtime's fill path calls (server/credential-fill.ts),
-// after the grant and the page's origin are checked. Listings carry booleans.
+// additional data names the owner (person or bot:<id>), so a file copied
+// into another folder does not open. Never a plaintext store: values leave
+// only through resolveForFill / resolveForComputerFill (browser and computer
+// fill paths), after grant checks. Listings carry booleans.
 import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -23,6 +21,8 @@ import { z } from "zod";
 
 import {
   bindingUrl,
+  botIdFromVaultPrincipal,
+  botVaultPrincipal,
   MAX_VAULT_DOMAINS,
   MAX_VAULT_ITEMS,
   VAULT_GRANT_MODES,
@@ -45,6 +45,7 @@ import {
   type VaultItemKind,
   type VaultItemListing,
 } from "../shared/credential-vault.ts";
+
 import {
   cardExpiryText,
   isPaymentFillField,
@@ -432,7 +433,21 @@ export class CredentialVault {
 
   private file(principalId: string): string {
     if (principalId === LOCAL_VAULT_PRINCIPAL) return join(this.dataDir, FILE);
+    const botId = botIdFromVaultPrincipal(principalId);
+    // Same layout as server/bot-folder.ts, under this vault's dataDir so
+    // tests and a real server stay isolated.
+    if (botId) return join(this.dataDir, "bots", botId, FILE);
     return join(principalDir(this.dataDir, principalId), FILE);
+  }
+
+  /** A login (or card, contact, ...) saved in a team bot's own vault. No
+   * grant is set: the first request_login on a site asks the bot's owner
+   * with a card (once, or always for the bot); managers alone write this
+   * store (server/routes/team-bot-vault.ts). */
+  createForTeamBot(botId: string, input: VaultItemInput, extra: { source?: "local" | "1password"; onePassword?: OnePasswordRef } = {}): VaultItemListing {
+    if (!BOT_ID.test(botId)) throw new CredentialVaultError("invalid bot", "invalid_bot");
+    const principalId = botVaultPrincipal(botId);
+    return this.create(principalId, input, extra);
   }
 
   private key(): Buffer {
@@ -483,7 +498,7 @@ export class CredentialVault {
     const data = Buffer.concat([cipher.update(JSON.stringify(document), "utf8"), cipher.final()]);
     const envelope = { v: 1, iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64"), data: data.toString("base64") };
     const file = this.file(principalId);
-    mkdirSync(join(file, ".."), { recursive: true });
+    mkdirSync(join(file, ".."), { recursive: true, mode: 0o700 });
     writeFileAtomic(file, `${JSON.stringify(envelope)}\n`, { mode: 0o600 });
     this.cache.set(principalId, document);
   }
@@ -799,6 +814,32 @@ export class CredentialVault {
       // the fill still happens; only "last used" is not recorded
     }
     return { ok: true, value, item: listingOf(item, now), field: request.field };
+  }
+
+  /** Fill a granted field into the computer's focused form control. No page
+   * origin check: the person already allowed the login for this bot. The
+   * caller types the value (server/computer-credential-fill.ts) and must
+   * never put it in a tool result, transcript, memory or log. */
+  async resolveForComputerFill(
+    principalId: string,
+    request: { handle: unknown; field: VaultFillField; botId: string; threadId: string },
+    readOnePassword?: OnePasswordFieldReader,
+  ): Promise<FillResolution> {
+    // Reuse the browser path with a synthetic https URL that matches the
+    // item's first site when one is bound; unbound notes refuse.
+    let item: StoredVaultItem | undefined;
+    const itemId = itemIdFromHandle(request.handle);
+    try {
+      item = itemId ? this.load(principalId).items[itemId] ?? this.lentItem(principalId, itemId) : undefined;
+    } catch (error) {
+      return { ok: false, code: "unavailable", message: error instanceof Error ? error.message : "The credential vault is unavailable." };
+    }
+    if (!item) return { ok: false, code: "unknown_item", message: "No saved credential has this handle. Call request_login to ask the person for one." };
+    const pageUrl = item.domains[0] ? bindingUrl(item.domains[0]) : "https://computer.local/";
+    if (!item.domains.length && (item.kind === "login" || item.kind === "apiKey")) {
+      return { ok: false, code: "wrong_origin", message: `${botName(item)} has no site bound; nothing was filled on the computer.` };
+    }
+    return this.resolveForFill(principalId, { ...request, pageUrl }, readOnePassword);
   }
 
   /** 2026-10-26: the API key to send on a bot's HTTP request
@@ -1407,6 +1448,11 @@ export class CredentialVault {
     };
   }
 
+  /** Evict a vault's decrypted copy from memory (a deleted bot); the file is the folder's. */
+  forget(principalId: string): void {
+    this.cache.delete(principalId);
+  }
+
   /** Forget a person's whole vault (their account is deleted). */
   drop(principalId: string): void {
     rmSync(this.file(principalId), { force: true });
@@ -1587,13 +1633,22 @@ export function fillResolverFor(
   recordPurchase(input: { pageUrl: string; orderRef?: string; total?: string; items?: PurchaseItem[]; flights?: PurchaseFlightLeg[]; tracking?: TrackingInput }): { ok: true; message: string } | { ok: false; message: string };
   updateTracking(input: { orderRef?: string; tracking: TrackingInput; checkAgainHours: number }): { ok: true; message: string } | { ok: false; message: string };
 } {
+  const teamPrincipal = botVaultPrincipal(context.botId);
+  const labelOf = (resolved: Extract<FillResolution, { ok: true }>) =>
+    resolved.item.source === "1password" ? "a 1Password login" : resolved.item.name;
   return {
     async resolve(request) {
+      // Team bot vault first (shared logins), then the person's own vault.
+      const fromTeam = await vault.resolveForFill(teamPrincipal, { ...request, botId: context.botId, threadId: context.threadId }, readOnePassword);
+      if (fromTeam.ok) return { ok: true as const, value: fromTeam.value, label: labelOf(fromTeam) };
+      if (fromTeam.code !== "unknown_item" && fromTeam.code !== "unavailable") {
+        return { ok: false as const, message: fromTeam.message, code: fromTeam.code };
+      }
       const resolved = await vault.resolveForFill(context.principalId, { ...request, botId: context.botId, threadId: context.threadId }, readOnePassword);
       // a 1Password item's own title never reaches the bot (review of #954)
-      return resolved.ok ? { ok: true, value: resolved.value, label: resolved.item.source === "1password" ? "a 1Password login" : resolved.item.name } : { ok: false, message: resolved.message, code: resolved.code };
+      return resolved.ok ? { ok: true as const, value: resolved.value, label: labelOf(resolved) } : { ok: false as const, message: resolved.message, code: resolved.code };
     },
-    armed: () => vault.armed(context.principalId, context.botId, context.threadId),
+    armed: () => vault.armed(context.principalId, context.botId, context.threadId) || vault.armed(teamPrincipal, context.botId, context.threadId),
     requestPurchase(input) {
       try {
         const opened = vault.openPurchase(context.principalId, {

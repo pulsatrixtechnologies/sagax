@@ -261,6 +261,9 @@ export class ProfileRequestService {
     from?: { botId: string; name: string; color: string };
     /** 2026-10-20: the person asked their Primary Bot for this now (server/index.ts primaryAskedProposal). */
     primaryAsked?: boolean;
+    /** A quote was given and did not prove the ask: a card for the person,
+     * never an automatic apply (not even as the bot's own work). */
+    quoteRefused?: boolean;
   }): { requestId: string; messageId: string; title: string; summary: string; detail: string } {
     return this.prepare(args);
   }
@@ -328,7 +331,7 @@ export class ProfileRequestService {
     };
 
     const copy = profileCardCopy({ name: targetName, crossBot }, snapshot, before, finalChanges, reason);
-    const grant = submitted ? (args.primaryAsked ? "primary-bot" as const : this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null) : null;
+    const grant = submitted && !args.quoteRefused ? (args.primaryAsked ? "primary-bot" as const : this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null) : null;
     // A new working folder widens what the bot's tools read and write
     // without asking, so below Full access it keeps today's card.
     const automatic = grant === "full-access" || ((grant === "self" || grant === "primary-bot") && finalChanges.cwd === undefined);

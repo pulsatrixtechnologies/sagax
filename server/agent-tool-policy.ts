@@ -17,6 +17,7 @@ export const READ_ONLY_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "recall_topic",
   "tool_result_read",
   "list_routines",
+  "list_waits",
   "skills_list",
   "workspace_read",
   "workspace_search",

@@ -31,14 +31,14 @@ export type RunStatus = "ok" | "failed" | "skipped" | "running";
 
 export function runStatus(status: RoutineRun["status"]): RunStatus {
   if (status === "completed") return "ok";
-  if (status === "failed") return "failed";
+  if (status === "failed" || status === "blocked") return "failed";
   if (status === "cancelled" || status === "missed" || status === "nothing_to_report") return "skipped";
   return "running";
 }
 
 /** The reason code and readable words of a run that did not complete. */
 export function runReason(run: Pick<RoutineRun, "status" | "error">, locale: ConsoleLocale): { reason: string | null; label: string | null } {
-  if (run.status === "failed") {
+  if (run.status === "failed" || run.status === "blocked") {
     const reason = problemReason("routine-failed", run.error ?? "");
     return { reason, label: reasonLabel(reason, locale) };
   }

@@ -28,10 +28,12 @@ export type LocalComputerConnection = {
 };
 
 /** Keep the platform descriptor intact, but acquire computer authority only
- * when the first actual tool call reaches the shared stdio gate. */
+ * when the first actual tool call reaches the shared stdio gate.
+ * `journal`: the bridge records each computer call for saved steps. */
 export function gatedLocalComputer(
   connection: LocalComputerConnection,
   control: { url: string; token: string },
+  journal = false,
 ): LocalComputerConnection {
   return {
     ...connection,
@@ -47,6 +49,7 @@ export function gatedLocalComputer(
       SAGAX_CUA_ARGS: JSON.stringify(connection.args),
       SAGAX_CONTROL_URL: control.url,
       SAGAX_CONTROL_TOKEN: control.token,
+      SAGAX_COMPUTER_JOURNAL: journal ? "1" : "0",
     },
   };
 }

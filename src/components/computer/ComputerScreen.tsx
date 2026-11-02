@@ -76,7 +76,7 @@ export function SleepGlyphs() {
 
 export function ComputerScreen({
   state, caption, live, message, hint, actions = [], controls, busy = false, error, source, icon,
-  bot, computerName, onOpen,
+  bot, computerName, onOpen, openAlwaysShown = false,
 }: {
   state: ScreenState;
   caption: string;
@@ -101,6 +101,8 @@ export function ComputerScreen({
   computerName?: string;
   /** Opens the full computer view (centered Open pill while running). */
   onOpen?: (() => void) | undefined;
+  /** Keep the Open pill visible (not only on hover): the bot waits on the person. */
+  openAlwaysShown?: boolean;
 }) {
   const showLive = Boolean(live) && (state === "running" || state === "paused");
   // Setup / install primary actions keep the actionable empty state; a plain
@@ -150,8 +152,9 @@ export function ComputerScreen({
         onClick={(event) => { event.stopPropagation(); onOpen(); }}
         className={cn(
           "pointer-events-auto flex min-h-[44px] items-center gap-2 rounded-full bg-black/65 px-4 py-2 text-[13px] font-medium text-white shadow-md backdrop-blur-sm hover:bg-black/80 md:min-h-0",
-          REVEALED_CONTROL,
+          openAlwaysShown ? "opacity-100" : REVEALED_CONTROL,
         )}
+        data-open-pill={openAlwaysShown ? "shown" : "hover"}
       >
         <Maximize2 size={15} aria-hidden="true" />
         {t("computerScreen.open")}

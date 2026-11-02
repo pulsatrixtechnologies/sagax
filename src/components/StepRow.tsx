@@ -76,7 +76,7 @@ export function StepRow({
       >
         {label}
       </span>
-      {target && <span data-step-target className="min-w-0 shrink-[2] truncate text-ink-tertiary" title={target}>{target}</span>}
+      {target && <span data-step-target className="min-w-0 shrink-[2] truncate text-ink-tertiary" title={title ?? target}>{target}</span>}
       {extra}
       {duration && <span data-step-duration className="shrink-0 tabular-nums text-ink-tertiary opacity-80">{duration}</span>}
       {expandable && (

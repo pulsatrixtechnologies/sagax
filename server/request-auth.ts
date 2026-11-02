@@ -813,6 +813,11 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // Several routines of one bot on, off or deleted at once (server/routine-bulk.ts,
   // 2026-10-29): each one with the same rights as its own PATCH or DELETE
   { methods: ["POST"], path: /^\/api\/routines\/bulk$/ },
+  // Limit-reset automations (routes/limit-resets.ts): the person's own engines
+  // and bots. Continue and after-reset go through routine submit / defer; a
+  // member uses them in their sandbox without an admin right.
+  { methods: ["GET"], path: /^\/api\/limit-resets$/ },
+  { methods: ["POST"], path: /^\/api\/limit-resets\/(?:continue|after-reset)$/ },
   // "Only when I'm here" (routes/routine-away.ts): the page's beat, the
   // person's own state, and dismissing their report (the route checks whose)
   // "Create a Team Bot from this conversation" (routes/team-bot-from-thread.ts):
@@ -1178,6 +1183,12 @@ export function clientSessionIsComputerOwner(
   return Boolean(email && operator && email === operator);
 }
 
+/** The signed-in person's principal id, or null for loopback / a session
+ * without one. Shared by the route slices that leave server/index.ts (#1388). */
+export function sessionPrincipal(auth: RequestAuth): string | null {
+  return auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() || null : null;
+}
+
 /** Same for a room: name, reading state, and the roster. humanIds and
  * memberIds are not refused here. canEditHumans and canPlaceBot decide them. */
 const CLIENT_GROUP_PATCH_FIELDS = new Set(["name", "bulletin", "unread", "pinned", "pinnedMessageId", "section", "humanIds", "memberIds", "turnTimeoutMinutes"]);
@@ -1270,6 +1281,9 @@ function mutatingPublicRoute(method: string, path: string): boolean {
   // machine, so this read needs the desktop owner header. The list and
   // screenshot routes are not this path.
   if (upper === "GET" && /^\/api\/(?:bots\/[\w-]+\/)?local-computer$/.test(path)) return true;
+  // Hand out a stored webhook secret or address (port of upstream 14265e33c).
+  // Sagax reveal is POST today; the GET address form stays gated if added.
+  if (upper === "GET" && /^\/api\/webhooks\/[\w-]+\/(?:address|reveal)$/.test(path)) return true;
   if (["GET", "HEAD", "OPTIONS"].includes(upper)) return false;
   // Agent integrations have their own high-entropy, per-boot authorization
   // and narrower route semantics. Pairing-code exchange is intentionally

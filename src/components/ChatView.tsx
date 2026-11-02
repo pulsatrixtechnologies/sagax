@@ -146,6 +146,7 @@ import { Composer } from "./Composer";
 import { BackgroundEffectLayer, useBackgroundEffectShown } from "./BackgroundEffectLayer";
 import { ChatErrorBanner, ChatNotice, ChatReconnectBanner, ChatStaleBanner } from "./ChatErrorBanner";
 import { WeeklyLimitNotice } from "./ChatUsageNotices";
+import { EngineLimitNotice, useLimitResetContinue } from "./LimitResetContinue";
 import { ChatFindBar } from "./ChatFindBar";
 import { ReplyQuote } from "./ReplyQuote";
 import { SecretRequestCard } from "./SecretRequestCard";
@@ -374,7 +375,7 @@ export function ErrorRow({
     ? macCuaPermissionMessage(currentPermissions)
     : null;
   const headline = macCuaReason ?? plainHeadline ?? message;
-  const usageUrl = message.includes("subscription_sharing_usage_limit_exceeded") ? CHATGPT_USAGE_URL : codexUsageLimitReached(message) ? CODEX_USAGE_URL : null;
+  const usageUrl = action ? null : message.includes("subscription_sharing_usage_limit_exceeded") ? CHATGPT_USAGE_URL : codexUsageLimitReached(message) ? CODEX_USAGE_URL : null;
   return (
     <div className="flex justify-start">
       <div className="w-fit max-w-[min(42rem,78%)] rounded-xl border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-[13px] leading-5 text-danger">
@@ -474,6 +475,7 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
 }) {
   "use memo";
   const config = useStoreSelector((current) => current.config);
+  const resume = useLimitResetContinue(botId, threadId, tool.limitResetsAt);
   if (tool.place && botId) return <PlaceFailedRow place={tool.place} botId={botId} threadId={threadId} onRetry={onRetry} />;
   const signedOut = signedOutEngine(tool, engine);
   // A signed-out engine: its sign-in card is the whole answer, no error row or
@@ -508,6 +510,7 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
         ? t("chat.claudeUpdate.unavailable")
         : signedOut ? t("chat.error.signedOut", { name: signedOut.displayName }) : plainErrorLine(cause)}
       onRetry={pinnedUnavailable ? undefined : onRetry}
+      action={resume}
       setupInstance={tool.setup && !pinnedUnavailable ? engine : undefined}
       claudeUpdateInstance={updateTarget}
     />
@@ -2455,6 +2458,9 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           <DevPodsToggle bot={bot} />
           {!showThreads && <NewTopicButton bot={bot} />}
           <TaskPicker bot={bot} />
+          {/* Upstream sits this next to ThreadContextWarning; this fork has no
+              context-warning chip, so the notice stays in the header controls. */}
+          <EngineLimitNotice engine={bot.modelSelection?.instanceId} />
         </div>
       </div>}
 

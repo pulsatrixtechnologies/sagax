@@ -102,11 +102,17 @@ export class BotCreationDraft {
     const normalizedSchedule = schedule.type === "interval" ? {
       ...schedule, weekdays: schedule.weekdays ?? undefined,
       window: schedule.window ?? undefined, endsAt: schedule.endsAt ?? undefined,
+    } : schedule.type === "limit_reset" ? {
+      type: "limit_reset" as const,
+      engine: schedule.engine,
+      repeat: schedule.repeat === "every_reset" ? "every_reset" as const : "once" as const,
+      at: schedule.at ?? null,
     } : schedule;
     return {
       id: previous?.id ?? `draft-${crypto.randomUUID()}`, createdAt: previous?.createdAt ?? Date.now(),
       updatedAt: Date.now(), nextRunAt: null, runOn: "maus", ...previous, ...fields,
       precheck: input.precheck === undefined ? previous?.precheck : input.precheck ?? undefined,
+      access: input.access === undefined ? previous?.access : input.access ?? undefined,
       enabled: input.enabled ?? previous?.enabled ?? true, target: "bot", botId: this.id,
       timeoutMinutes: input.timeoutMinutes ?? undefined,
       postResults: input.postResults ?? undefined,

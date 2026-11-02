@@ -34,7 +34,10 @@ export type NotifyKind =
   /** Someone commented on, or replied on, a published page (2026-10-28,
    * Annotate). Sent to the page's person only (`audience`), never for their
    * own comment; opens the conversation the page came from. */
-  | "page-comment";
+  | "page-comment"
+  /** A wait_until condition fired: the person asked to be told when
+   * something happened, and it did (server/waits.ts). */
+  | "wait";
 
 export interface Notification {
   kind: NotifyKind;

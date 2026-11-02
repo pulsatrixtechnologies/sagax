@@ -27,6 +27,12 @@ export type RouteHandler = (ctx: RouteContext) => Promise<typeof PASS | void>;
 
 export const ROUTES: RouteHandler[] = [];
 
+/** Pre-auth routes (wave 4 of #1388): health, auth, pair, pairing, events,
+ * workspace-backup, shared-computers, custom-domain and similar paths that
+ * run before the session gate. Unused until wave 4 wires dispatch. Same
+ * handler shape as ROUTES; auth on the context may be null for these. */
+export const PRE_AUTH_ROUTES: RouteHandler[] = [];
+
 /** Runs handlers in order until one answers; true means stop routing. A
  * handler that wrote a response but returned PASS by mistake still counts as
  * answered, so the request can never reach a second handler. */

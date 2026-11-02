@@ -296,7 +296,9 @@ posixOnly("Perspicax organization: the permission matrix", () => {
     expect(names.text).not.toContain("pm6-mcp.example.test");
     const row = (names.body.servers as Array<Record<string, unknown>>).find((server) => server.name === "pm6fixture");
     expect(row).toBeDefined();
-    for (const key of Object.keys(row!)) expect(["name", "type", "enabled", "auth", "source", "managedBy"]).toContain(key);
+    // scope (person | installation, the only-me guard) tells the panel which store a name lives in; a label, never a value
+    for (const key of Object.keys(row!)) expect(["name", "type", "enabled", "auth", "source", "managedBy", "scope"]).toContain(key);
+    expect(["person", "installation"]).toContain(row!.scope);
 
     bob = await bobWith([...MEMBER_DEFAULT_PERMISSIONS, "server.settings", "host.shell", "backup.workspace", "people.manage"]);
     expect((await api("GET", "/api/config", bob)).body.viewer.capabilities).toMatchObject({ editConfig: true, manageKeys: true, manageComputers: true, manageBackups: true });

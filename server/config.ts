@@ -15,8 +15,10 @@ import { migrateConfigPlaintextKeys, readOnboardingEngineKey } from "./onboardin
 import { withoutComputerEngine } from "./computer-engine-removal.ts";
 import { newBotDefaultsSchema, type NewBotDefaults } from "./new-bot-defaults.ts";
 import { loopDetectorConfigSchema, type LoopDetectorConfig } from "./loop-detector.ts";
+import { loopGuardConfigSchema, type LoopGuardConfig } from "./host/loop-guard.ts";
 import { EFFORT_LEVELS, type LiveSettings } from "../shared/wire.ts";
 import { isModelVariant, type InstanceConfigMap, type ModelSelection } from "./contracts.ts";
+import { DEFAULT_WINDOW_MINUTES, MAX_WINDOW_MINUTES } from "./cache-keepwarm.ts";
 import { PROVIDER_ICON_PRESETS, providerIconError } from "../shared/provider-icon.ts";
 import type { McpServerSpec } from "./contracts.ts";
 import type { MailSettings } from "./mail-config.ts";
@@ -365,6 +367,9 @@ const featureConfigSchema = z.object({
   /** Skills referenced by bots instead of per-workspace copies.
    * Available unless explicitly switched off. */
   skillsLibrary: z.boolean().optional(),
+  /** Repeat a computer task from its saved steps (no AI). On unless false;
+   * macOS host computer only in v1 (see savedStepsEnabled / createSavedSteps). */
+  savedSteps: z.boolean().optional(),
 });
 /** First-run progress. Kept in the workspace config rather than a browser so
  * it survives cleared site data and is shared by every paired client. Hint
@@ -412,6 +417,14 @@ const automaticRecoverySchema = z.object({
   backup: defaultModelSelectionSchema.optional(),
 }).strict().refine((recovery) => !recovery.enabled || recovery.backup !== undefined,
   { message: "Choose a backup model before enabling automatic recovery", path: ["backup"] });
+/** Prompt-cache keep-warm (server/cache-keepwarm.ts). On by default; a bot's
+ * own `cacheKeepWarm` can turn it off. `enabled: false` in config turns the
+ * workspace default off. */
+const cacheKeepWarmSchema = z.object({
+  enabled: z.boolean(),
+  windowMinutes: z.number().int().min(15).max(MAX_WINDOW_MINUTES).optional(),
+}).strict();
+
 const threadsConfigSchema = z.object({
   maxConcurrentPerBot: z.number().int().min(1).max(MAX_CONCURRENT_BOT_THREADS),
   /** Parallel tasks (shared/parallel-tasks.ts) one person may have running on
@@ -537,6 +550,7 @@ const appConfigSchema = z.object({
   }).optional(),
   defaultModelSelection: defaultModelSelectionSchema.optional(),
   automaticRecovery: automaticRecoverySchema.optional(),
+  cacheKeepWarm: cacheKeepWarmSchema.optional(),
   newBotDefaults: newBotDefaultsSchema.optional(),
   /** CLI-only launch preferences. Never enable remote access implicitly. */
   cliStartup: z.object({
@@ -703,6 +717,10 @@ const appConfigSchema = z.object({
   /** Stops a run that repeats itself (server/loop-detector.ts). Absent
    * fields take the defaults; `enabled: false` turns it off. */
   loopDetector: loopDetectorConfigSchema.optional(),
+  /** Opt-in shell-failure streak guard (server/host/loop-guard.ts). Separate
+   * from loopDetector (identical-call loops). Off unless enabled or
+   * SAGAX_LOOP_GUARD=1. */
+  loopGuard: loopGuardConfigSchema.optional(),
   /** Memory upkeep timing, for bots with Memory upkeep switched on. */
   memory: z.object({
     /** Quiet time after a turn before its facts are captured (ms). */
@@ -805,6 +823,8 @@ export interface AppConfig {
   defaultModelSelection?: ModelSelection;
   /** Off by default; one backup attempt only before any work starts. */
   automaticRecovery?: { enabled: boolean; backup?: ModelSelection };
+  /** Keep idle Claude threads' prompt cache warm; on by default. */
+  cacheKeepWarm?: { enabled: boolean; windowMinutes?: number };
   /** UI creation template. Saving it never mutates a bot or grants access.
    * Its model selection effort is the only new-bot effort. */
   newBotDefaults?: NewBotDefaults;
@@ -855,6 +875,7 @@ export interface AppConfig {
   threads?: { maxConcurrentPerBot: number; maxParallelPerPerson?: number; eventLogMaxBytes?: number; eventLogRetentionDays?: number };
   context?: { rebuildBytes?: number; compactAt?: number; autoCompact?: boolean; autoCompactOffBots?: string[]; staleSessionHours?: number; staleSessionBytes?: number; staleSessionColdMinutes?: number };
   loopDetector?: LoopDetectorConfig;
+  loopGuard?: LoopGuardConfig;
   memory?: { captureQuietMs?: number; tidyHour?: number; semanticRecall?: boolean; embeddingsUrl?: string; embeddingsModel?: string };
   routines?: { newPaused?: boolean };
   /** Shared preserves the historical singleton. Per-bot gives every bot a
@@ -862,7 +883,7 @@ export interface AppConfig {
    * seats shared by all conversations, with per-thread affinity (#1654). */
   localVm?: { mode?: "shared" | "per-bot" | "pool"; maxInstances?: number; idleTimeoutMinutes?: number };
   /** Opt-in product experiments. Every flag defaults to disabled. */
-  features?: { skillAuthoring?: boolean; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; autoRecall?: boolean; routinesInConversation?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean };
+  features?: { skillAuthoring?: boolean; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; autoRecall?: boolean; routinesInConversation?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; savedSteps?: boolean };
   /** First-run progress; see onboardingConfigSchema. */
   onboarding?: { completedAt?: string; version?: number; reelSeen?: boolean; hintsSeen?: string[]; launchMode?: "solo" | "server"; firstTurnAt?: string };
   /** Named browser sessions any bot can be pointed at. */
@@ -1054,6 +1075,12 @@ export function roomTurnTimeoutMinutes(cfg: AppConfig): number {
 export function mcpCallTimeoutMinutes(cfg: AppConfig): number {
   return cfg.mcp?.callTimeoutMinutes ?? DEFAULT_MCP_CALL_TIMEOUT_MINUTES;
 }
+/** The workspace keep-warm setting with its defaults filled in. On unless
+ * the person turned it off (`enabled: false`). */
+export function cacheKeepWarmSettings(cfg: AppConfig): { enabled: boolean; windowMinutes: number } {
+  return { enabled: cfg.cacheKeepWarm?.enabled !== false, windowMinutes: cfg.cacheKeepWarm?.windowMinutes ?? DEFAULT_WINDOW_MINUTES };
+}
+
 
 export const LIVE_IDLE_MINUTES_DEFAULT = 5;
 
@@ -1872,7 +1899,7 @@ export function saveConfig(
   // back after we have successfully recognized the legacy list.
   const storedProfiles = storedBrowserProfilesSchema.safeParse(disk.browserProfiles);
   if (storedProfiles.success) disk.browserProfiles = storedProfiles.data;
-  for (const key of ["xai", "anthropic", "mistral", "cerebras", "groq", "openai", "openrouter", "openaiCompat", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "routines", "localVm", "features", "budgets", "billing", "decisions", "onboarding", "browserEngine"] as const) {
+  for (const key of ["xai", "anthropic", "mistral", "cerebras", "groq", "openai", "openrouter", "openaiCompat", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "routines", "localVm", "features", "budgets", "billing", "decisions", "loopGuard", "onboarding", "browserEngine"] as const) {
     const section = checkedPatch[key];
     if (!section) continue;
     const current = jsonObjectSchema.safeParse(disk[key]);
@@ -1909,6 +1936,7 @@ export function saveConfig(
   if (checkedPatch.mail !== undefined) disk.mail = checkedPatch.mail;
   // Replace the section so clearing a backup cannot revive the old selection.
   if (checkedPatch.automaticRecovery !== undefined) disk.automaticRecovery = checkedPatch.automaticRecovery;
+  if (checkedPatch.cacheKeepWarm !== undefined) disk.cacheKeepWarm = checkedPatch.cacheKeepWarm;
   // A selection is replaced as one value, so changing engines also clears
   // an effort level omitted from the new selection.
   if (checkedPatch.defaultModelSelection !== undefined) {

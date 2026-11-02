@@ -156,6 +156,44 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
   const pvcPath = (name: string) => `/api/v1/namespaces/${ns}/persistentvolumeclaims/${name}`;
   const netPath = (name: string) => `/apis/networking.k8s.io/v1/namespaces/${ns}/networkpolicies/${name}`;
 
+  /** In-flight pod execs. Stop/delete aborts them so the job's process tree
+   * does not outlive the sandbox lifecycle (Lot D / OpenMausBot 1d1559fb1). */
+  const activeExecs = new Map<string, Set<AbortController>>();
+
+  function trackExec(pod: string): AbortController {
+    const controller = new AbortController();
+    let set = activeExecs.get(pod);
+    if (!set) {
+      set = new Set();
+      activeExecs.set(pod, set);
+    }
+    set.add(controller);
+    controller.signal.addEventListener("abort", () => {
+      set!.delete(controller);
+      if (set!.size === 0) activeExecs.delete(pod);
+    }, { once: true });
+    return controller;
+  }
+
+  function releaseExec(pod: string, controller: AbortController): void {
+    const set = activeExecs.get(pod);
+    set?.delete(controller);
+    if (set && set.size === 0) activeExecs.delete(pod);
+  }
+
+  function cancelExecs(pod: string): number {
+    const set = activeExecs.get(pod);
+    if (!set) return 0;
+    const count = set.size;
+    // A copy on purpose: an abort listener may remove its controller from the set.
+    // oxlint-disable-next-line unicorn/no-useless-spread
+    for (const controller of [...set]) {
+      try { controller.abort(); } catch { /* already aborted */ }
+    }
+    activeExecs.delete(pod);
+    return count;
+  }
+
   async function read(path: string): Promise<Obj | null> {
     const response = await client.request("GET", path);
     if (response.status === 404) return null;
@@ -428,6 +466,9 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
     async stopContainer(name: string) {
       const key = sandboxKeyFromContainerName(name);
       const names = sandboxNames(key);
+      // Abort in-flight exec websockets before deleting the Pod so Stop does
+      // not report success while a sandbox job's process tree is still live.
+      cancelExecs(names.container);
       if (await read(pvcPath(names.volume))) {
         await merge(pvcPath(names.volume), { metadata: { annotations: { [PAUSED_ANNOTATION]: null } } });
       }
@@ -438,6 +479,7 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
     async pauseContainer(name: string) {
       const key = sandboxKeyFromContainerName(name);
       const names = sandboxNames(key);
+      cancelExecs(names.container);
       await merge(pvcPath(names.volume), { metadata: { annotations: { [PAUSED_ANNOTATION]: "true" } } });
       await remove(podPath(names.container));
       emit("sandbox.pod.pause", key);
@@ -458,6 +500,7 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
     },
     async removeContainer(name: string) {
       const key = sandboxKeyFromContainerName(name);
+      cancelExecs(name);
       await remove(podPath(name));
       emit("sandbox.pod.delete", key);
       void syncSpare();
@@ -509,7 +552,21 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
     },
     async exec(name: string, request: ExecRequest, maxBytes: number, stdin?: Buffer): Promise<ExecResult> {
       const call = withExecEnv(request.Cmd, request.Env ?? [], stdin ?? "null");
-      const result = await client.exec(ns, name, call.command, call.stdin);
+      const controller = trackExec(name);
+      let result: Awaited<ReturnType<K8sClient["exec"]>>;
+      try {
+        result = await client.exec(ns, name, call.command, call.stdin, controller.signal);
+      } catch (error) {
+        releaseExec(name, controller);
+        if ((error as { name?: string }).name === "AbortError") {
+          let key = "";
+          try { key = sandboxKeyFromContainerName(name); } catch { /* name already checked by the caller */ }
+          audit.record({ action: "sandbox.exec", outcome: "denied", ...(key ? { key } : {}), detail: { argv0: request.Cmd[0] ?? "", reason: "stopped" } });
+          return { exitCode: 137, stdout: Buffer.alloc(0), stderr: Buffer.from("sagax: the sandbox job was stopped\n"), truncated: false };
+        }
+        throw error;
+      }
+      releaseExec(name, controller);
       let stdout = result.stdout;
       let stderr = result.stderr;
       let truncated = false;

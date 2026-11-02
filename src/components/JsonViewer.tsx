@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Download, LoaderCircle } from "lucide-react";
 
-import { requestMessageFile, saveFailureText, useLocalFileSave, type MessageAttachmentContext } from "./AttachmentPreview";
+import { requestMessageFile, saveFailureText, useLocalFileSave, type MessageAttachmentContext } from "@/lib/message-file";
 import { ViewerDialog } from "./ViewerDialog";
 import { t } from "@/lib/i18n";
 import {

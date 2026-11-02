@@ -17,7 +17,10 @@ describe("bot panel: remote hosts placement", () => {
     expect(computer).toMatch(/OrgComputerTab/);
     expect(computer).toMatch(/remoteHosts=\{remoteHostRows\}/);
     expect(computer).toMatch(/activeRemoteSessions/);
-    // Only connected sessions feed the place screen.
-    expect(computer).toMatch(/filter\(\(row\) => row\.state === "connected"\)/);
+    // Only connected sessions feed the place screen. The filter moved into the
+    // panel's useRemoteHosts hook with the ComputerPanel split (2026-11-01).
+    expect(computer).toMatch(/useRemoteHosts\(bot\.id, bridgeStatus\)/);
+    const hosts = read("./ComputerPanel.tsx-parts/useRemoteHosts.ts");
+    expect(hosts).toMatch(/activeRemoteSessions = remoteSessionRows\.filter\(\(row\) => row\.state === "connected"\)/);
   });
 });

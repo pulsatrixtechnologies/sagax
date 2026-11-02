@@ -24,6 +24,7 @@ import type { ShapeAvatarDef } from "../../shared/shape-avatar-def";
 import {
   blendOutlines,
   liveOutlineFromDef,
+  pointInsideOutline,
   radiiFromOutlinePoints,
   smoothClosedOutline,
   type LiveShapeOutline,
@@ -306,6 +307,23 @@ function placeEye(yaw: number, pitch: number, roll: number, shape: EyeShape, ope
   return { points: eyeOutline(c[0], c[1], w, h, shape.tilt), center: [c[0], c[1]], w, h, tilt: shape.tilt, alpha: 1, depth: c[2] };
 }
 
+/** Half the width of a path body (box units) on the row through `at`, from the inside run that holds `at`. */
+function outlineHalfWidth(outline: readonly OutlinePoint[], at: Point): number {
+  const [x, y] = at;
+  if (!pointInsideOutline(outline, x, y)) return 0;
+  const reach = (dir: number) => {
+    let lo = 0;
+    let hi = 60;
+    for (let i = 0; i < 18; i += 1) {
+      const mid = (lo + hi) / 2;
+      if (pointInsideOutline(outline, x + dir * mid, y)) lo = mid;
+      else hi = mid;
+    }
+    return lo;
+  };
+  return (reach(1) + reach(-1)) / 2;
+}
+
 /** The face's middle at rest (no look, no face of its own), R: where a turn is measured from. */
 const restMids = new Map<number, Point>();
 function solveRest(roll: number): Point {
@@ -330,7 +348,7 @@ function solveRest(roll: number): Point {
  * (2026-10-28): the head's turn moves the face, never one eye above the other.
  * `anchor` is where the face rests on this body (R, shared/mascot-geometry.json).
  */
-export function solveEyes(radii: Radii, face: Expression, gaze: { yaw: number; pitch: number; roll: number }, open: { left: number; right: number }, anchor: Point = [EYE_SHIFT.x, EYE_SHIFT.y]): [PlacedEye, PlacedEye] {
+export function solveEyes(radii: Radii, face: Expression, gaze: { yaw: number; pitch: number; roll: number }, open: { left: number; right: number }, anchor: Point = [EYE_SHIFT.x, EYE_SHIFT.y], outline?: readonly OutlinePoint[]): [PlacedEye, PlacedEye] {
   const yaw = HEAD.yaw + face.yaw + gaze.yaw;
   const pitch = HEAD.pitch + FACE_DROP + face.pitch + gaze.pitch;
   const roll = face.roll * EYE_ROLL + gaze.roll;
@@ -343,7 +361,10 @@ export function solveEyes(radii: Radii, face: Expression, gaze: { yaw: number; p
   // the body's own width. The fit below pulls the middle in toward the body's middle.
   const mid: Point = [(left.center[0] + right.center[0]) / 2, (left.center[1] + right.center[1]) / 2];
   const rest = solveRest(roll);
-  const spread = radiusToward(radii, 1, 0) * 0.5 + radiusToward(radii, -1, 0) * 0.5;
+  // a path body's width is read on its own outline, across the face's row: its polar
+  // radii from the box's middle can miss the body there (a sprout's leaf seam, a tin's
+  // narrow can), which gathered the eyes until they no longer fit apart (2026-11-01)
+  const spread = outline && outline.length >= 3 ? outlineHalfWidth(outline, toBox(anchor)) / BODY.unit : radiusToward(radii, 1, 0) * 0.5 + radiusToward(radii, -1, 0) * 0.5;
   const sx = Math.max(0.35, Math.min(1.25, spread));
   const target: Point = [anchor[0] + (mid[0] - rest[0]) * EYE_GAZE, anchor[1] + (mid[1] - rest[1]) * EYE_GAZE];
   const place = (eyeAt: PlacedEye, s: number, k = 1): PlacedEye => {
@@ -355,20 +376,38 @@ export function solveEyes(radii: Radii, face: Expression, gaze: { yaw: number; p
   };
   // inside the outline with EYE_MARGIN to spare, and never touching each other
   const apart = (eyes: PlacedEye[]) => eyes.length < 2 || Math.abs(eyes[1].center[0] - eyes[0].center[0]) >= (eyes[0].w + eyes[1].w) / 2 + EYE_GAP * Math.max(eyes[0].w, eyes[1].w);
-  const fits = (eyes: PlacedEye[]) => apart(eyes) && eyes.every((e) => e.points.every(([x, y]) => Math.hypot(x, y) <= radiusToward(radii, x, y || -1e-6) - EYE_MARGIN));
+  // A path body (an object silhouette) is not star-shaped around the box's middle: a
+  // sprout's leaves pinch there, so its polar radii say "nothing fits" and the eyes
+  // collapsed to a dot (2026-11-01). Such a body is tested against its own outline,
+  // each eye point keeping EYE_MARGIN inside in every direction.
+  const margin = EYE_MARGIN * BODY.unit;
+  const inside = outline && outline.length >= 3
+    ? (x: number, y: number) => {
+        const [bx, by] = toBox([x, y]);
+        return [[0, 0], [margin, 0], [-margin, 0], [0, margin], [0, -margin]].every(([dx, dy]) => pointInsideOutline(outline, bx + dx, by + dy));
+      }
+    : (x: number, y: number) => Math.hypot(x, y) <= radiusToward(radii, x, y || -1e-6) - EYE_MARGIN;
+  const fits = (eyes: PlacedEye[]) => apart(eyes) && eyes.every((e) => e.points.every(([x, y]) => inside(x, y)));
+  // the eyes' distance does not move with the face (only their size does): a narrow path body
+  // that keeps them too close shrinks them first, so the face stays at its own anchor instead of
+  // collapsing to the box's middle (a tin, a ship, 2026-11-01). A polar body keeps k = 1.
+  let start = 1;
+  if (outline && outline.length >= 3) {
+    while (start > 0.1 && !apart([place(left, 1, start), place(right, 1, start)])) start *= 0.9;
+  }
   let lo = 0;
   let hi = 1;
-  if (!fits([place(left, 1), place(right, 1)])) {
+  if (!fits([place(left, 1, start), place(right, 1, start)])) {
     for (let i = 0; i < 18; i += 1) {
       const s = (lo + hi) / 2;
-      if (fits([place(left, s), place(right, s)])) lo = s;
+      if (fits([place(left, s, start), place(right, s, start)])) lo = s;
       else hi = s;
     }
     hi = lo;
   }
-  let placed: [PlacedEye, PlacedEye] = [place(left, hi), place(right, hi)];
+  let placed: [PlacedEye, PlacedEye] = [place(left, hi, start), place(right, hi, start)];
   // a body too small for these eyes even with the face in the middle: shrink both eyes alike
-  let shrink = 1;
+  let shrink = start;
   while (shrink > 0.1 && !fits(placed)) {
     shrink *= 0.9;
     placed = [place(left, hi, shrink), place(right, hi, shrink)];
@@ -544,7 +583,7 @@ function composeFrame(input: FrameInputs): ShapeFrame {
   const faceAnchor: Point = input.outline
     ? [((input.outline.face[0] - BODY.center[0]) / BODY.unit), ((input.outline.face[1] - BODY.center[1]) / BODY.unit)]
     : FACE_ANCHOR[input.shape];
-  const placed = input.eyes > 0.02 ? solveEyes(input.radii, input.face, input.gaze, input.open, faceAnchor) : [];
+  const placed = input.eyes > 0.02 ? solveEyes(input.radii, input.face, input.gaze, input.open, faceAnchor, input.outline?.points) : [];
   const shown = placed.map((e) => {
     // eyes fading out with a move shrink to nothing about their middle
     const s = clamp01(input.eyes);

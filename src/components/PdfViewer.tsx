@@ -14,7 +14,7 @@ import { bufferedPreviewMaxBytes as fileMaxBytes, soloAttachmentCeilings } from 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { clampPdfZoom, isPdfBytes, pdfFitWidthScale, pdfjsAssetOptions, pdfSearchPages, pdfZoomStep, readBoundedBytes } from "@/lib/pdf-view";
-import { requestMessageFile, saveFailureText, useLocalFileSave, type MessageAttachmentContext } from "./AttachmentPreview";
+import { requestMessageFile, saveFailureText, useLocalFileSave, type MessageAttachmentContext } from "@/lib/message-file";
 import { ViewerDialog } from "./ViewerDialog";
 
 type Pdfjs = typeof import("pdfjs-dist");

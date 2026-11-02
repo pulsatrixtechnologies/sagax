@@ -78,6 +78,39 @@ describe("phone tool routes", () => {
     expect((await call("POST", "/api/internal/phone-tools", { tool: "location" })).body.error).toMatch(/HTTPS or Tailscale/);
   });
 
+  it("refuses phone-tool routes when the session is no longer live (port of upstream 035101e08)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-phone-live-"));
+    dirs.push(dir);
+    const broker = createPhoneToolBroker({ dataDir: dir, notify: () => {} });
+    let live = true;
+    const routes = [createPhoneToolRoutes({
+      broker: () => broker,
+      phone: (req) => {
+        const who = req.headers["x-who"];
+        const device = req.headers["x-device"];
+        return typeof who === "string" && typeof device === "string"
+          ? { person: who, deviceId: device, transport: "protected" }
+          : null;
+      },
+      botName: () => "Wren",
+      live: () => live,
+    })];
+    const server = createServer(async (req, res) => {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      const auth = { kind: "session", session: { id: "sess-1" }, via: "bearer", scopes: ["admin"] } as unknown as RequestAuth;
+      const handled = await dispatchRoutes(routes, { req, res, url, path: url.pathname, method: req.method ?? "GET", auth, json, readBody });
+      if (!handled) json(res, 404, { from: "inline" });
+    });
+    servers.push(server);
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const headers = { "content-type": "application/json", "x-who": "ann", "x-device": "session:sess-1" };
+    expect((await fetch(`${base}/api/me/phone-tools/device`, { method: "POST", headers, body: JSON.stringify({ tools: ["status"] }) })).status).toBe(200);
+    live = false;
+    expect((await fetch(`${base}/api/me/phone-tools/requests`, { headers })).status).toBe(401);
+    expect((await fetch(`${base}/api/me/phone-tools/device`, { method: "POST", headers, body: JSON.stringify({ tools: ["status"] }) })).status).toBe(401);
+  });
+
   it("refuses anything that is not a person's phone", async () => {
     const { call } = await serve();
     expect((await call("POST", "/api/me/phone-tools/device", { tools: ["location"] })).status).toBe(403);

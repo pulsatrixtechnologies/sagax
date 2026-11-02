@@ -26,7 +26,7 @@ export function liveCardKind(card: OptionCardData | undefined): LiveCardKind | n
 /** A harness-native proposal decided by voice (#1098): its own resolver
  * settles it, never the engine's request. */
 export function liveProposal(card: OptionCardData | undefined): boolean {
-  return Boolean(card && (card.routineRequest || card.profileRequest || card.modelRequest || card.teamSetupRequest || card.meetingRequest));
+  return Boolean(card && (card.routineRequest || card.profileRequest || card.modelRequest || card.ruleRequest || card.teamSetupRequest || card.meetingRequest));
 }
 
 /** Why a decision made on a Live call must not reach this card, or null to

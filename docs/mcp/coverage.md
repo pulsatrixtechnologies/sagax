@@ -6,7 +6,7 @@ exposes to a bot or an AI client. The machine-readable form is the registry in
 `server/mcp-permissions.ts`; `server/mcp-permissions.test.ts` fails when a
 catalog tool has no permission.
 
-Totals: capabilities 152, covered 152, gaps 0.
+Totals: capabilities 156, covered 156, gaps 0.
 
 Sources read: the agents tool catalog, the internal routes it calls
 (`/api/internal/*`), the member API (`docs/org-member-api.md`), and the
@@ -102,6 +102,9 @@ Reading the table:
 | model:propose | sagax | `propose_model` | `model:propose` | covered |
 | routines:propose | sagax | `propose_routine` | `routines:propose` | covered |
 | routines:propose.action | sagax | `propose_routine_action` | `routines:propose.action` | covered |
+| waits:set | sagax | `wait_until` | `waits:set` | covered |
+| waits:list | sagax | `list_waits` | `waits:list` | covered |
+| waits:cancel | sagax | `cancel_wait` | `waits:cancel` | covered |
 | shapes:generate | sagax | `generate_shape_avatar` | `shapes:generate` | covered |
 | terminal:offer | sagax | `offer_shell_terminal` | `terminal:offer` | covered |
 | remote:publish | sagax | `publish_remote_session` | `remote:publish` | covered |
@@ -131,6 +134,7 @@ Reading the table:
 | teamsetup:propose | sagax | `propose_team_setup` | `teamsetup:propose` | covered |
 | teammemory:propose | sagax | `propose_team_memory` | `teammemory:propose` | covered |
 | rules:update | sagax | `rules_update` | `rules:update` | covered |
+| rules:propose | sagax | `propose_rule` | `rules:propose` | covered |
 | docs:update | sagax | `docs_update` | `docs:update` | covered |
 | mcp:add | sagax | `add_mcp_server` | `mcp:add` | covered |
 | credentials:request | sagax | `request_credential` | `credentials:request` | covered |

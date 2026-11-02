@@ -125,6 +125,10 @@ import { createAnswerErrorMessage, recoverCreatedRoutineAfterLostAnswer } from "
 import { RoutineScheduleNote } from "./RoutineScheduleNote";
 import { readTiming, RoutineTimingFields, withRoutineTiming } from "./routines/RoutineTimingFields";
 import { BOT_CALENDAR_DRAG_TYPE } from "@/lib/bot-drag";
+import { limitResetWhen, resetMarkers, useEngineLimits, type ResetMarker } from "@/lib/limit-resets";
+import { LimitWarnings } from "@/components/automations/LimitWarnings";
+import { LimitResetFields, type LimitResetChoice } from "@/components/routines/LimitResetFields";
+import { LimitResetMarker, type ResetDrop } from "@/components/routines/LimitResetMarkers";
 import { readableError } from "@/lib/plain-error";
 
 const HOUR_HEIGHT = 64;
@@ -141,7 +145,7 @@ type CalendarRecurrenceChoice = "none" | "daily" | "weekdays" | "weekly" | "cust
 /** A routine repeats on a pattern (HumanScheduleFields), every N minutes
  * (the interval's fields), or on a saved schedule no pattern fits
  * ("advanced", kept as it is). A call keeps the calendar's choices. */
-type RecurrenceChoice = CalendarRecurrenceChoice | "interval" | "pattern" | "advanced" | "webhook" | "email";
+type RecurrenceChoice = CalendarRecurrenceChoice | "interval" | "pattern" | "advanced" | "webhook" | "email" | "limit_reset";
 type IntervalDayChoice = "every-day" | "weekdays" | "custom";
 type IntervalWindowChoice = "all-day" | "custom";
 type IntervalEndChoice = "never" | "on-date";
@@ -171,6 +175,8 @@ type EventSeed = {
   call?: CalendarCall;
   /** 2026-10-28: a new routine made from a folder's + goes in that folder. */
   folder?: string;
+  /** Prefill a limit-reset schedule (calendar marker drop). */
+  limitReset?: { engine: string };
 };
 
 function activeRoomMembers(group: Group | undefined, bots: Bot[]): Bot[] {
@@ -229,6 +235,7 @@ function recurrenceFor(schedule: RoutineSchedule | CalendarCall["schedule"], at:
     const { draft, fits } = scheduleDraftFor(schedule, at);
     return !fits ? "advanced" : draft.model.frequency === "every" ? "interval" : "pattern";
   }
+  if (schedule.type === "limit_reset") return "limit_reset";
   if (routine) return "pattern";
   if (schedule.weekdays.length === 7) return "daily";
   if (schedule.weekdays.join(",") === "1,2,3,4,5") return "weekdays";
@@ -249,7 +256,7 @@ function makeCalendarSchedule(choice: CalendarRecurrenceChoice, at: number, week
 }
 
 function makeRoutineSchedule(
-  choice: Exclude<RecurrenceChoice, "pattern" | "advanced" | "webhook" | "email">,
+  choice: Exclude<RecurrenceChoice, "pattern" | "advanced" | "webhook" | "email" | "limit_reset">,
   at: number,
   weekdays: number[],
   everyMinutes: number,
@@ -436,7 +443,10 @@ function EventEditor({
   // choice, else the installation default. Off keeps a run in the background.
   const [postResults, setPostResults] = useState(template?.postResults ?? routinesInConversationEnabled(state.config));
   const [mailAlias, setMailAlias] = useState(template?.mailAlias ?? "");
-  const [recurrence, setRecurrence] = useState<RecurrenceChoice>(recurrenceFor(schedule, initialAt, (routinesOnly ? "routine" : seed.kind) === "routine"));
+  const [recurrence, setRecurrence] = useState<RecurrenceChoice>(seed.limitReset ? "limit_reset" : recurrenceFor(schedule, initialAt, (routinesOnly ? "routine" : seed.kind) === "routine"));
+  const [limitReset, setLimitReset] = useState<LimitResetChoice>(
+    schedule.type === "limit_reset" ? { engine: schedule.engine, repeat: schedule.repeat } : { engine: seed.limitReset?.engine ?? "", repeat: "once" },
+  );
   const initialTiming = readTiming(schedule);
   const [timingMode, setTimingMode] = useState<"exact" | "flexible">(initialTiming.mode);
   const [earlyMinutes, setEarlyMinutes] = useState(initialTiming.early);
@@ -494,9 +504,9 @@ function EventEditor({
   const roomMembers = activeRoomMembers(selectedRoom, state.bots);
   const isRoomGoal = kind === "routine" && routineTarget === "room-goal";
   // A watch checks on a repeating schedule, for one bot.
-  // Started by a webhook or an email, not the clock.
+  // Started by a webhook or an email, not the clock. Limit-reset waits on usage, not the clock.
   const triggered = recurrence === "webhook" || recurrence === "email";
-  const repeatsOnClock = recurrence !== "none" && !triggered;
+  const repeatsOnClock = recurrence !== "none" && recurrence !== "limit_reset" && !triggered;
   const watchAllowed = kind === "routine" && !isRoomGoal && repeatsOnClock;
   const at = fromLocalDateAndTime(date, startTime, template || existingCall ? initialAt : undefined);
   const endAt = at + durationMinutes * 60_000;
@@ -632,7 +642,12 @@ function EventEditor({
         if (recurrence === "interval" && intervalEndsAt != null && intervalEndsAt < nextIntervalForSave(savedAt, intervalMinutes, existingIntervalSchedule)) {
           throw new Error(t("routineCalendar.endAfterFirstRun"));
         }
-        const built = recurrence === "webhook"
+        const limitEngine = limitReset.engine
+          || bots.find((bot) => bot.id === (lockedBotId ?? botIds[0]))?.modelSelection?.instanceId
+          || "";
+        const built = recurrence === "limit_reset"
+          ? { type: "limit_reset" as const, engine: limitEngine, repeat: limitReset.repeat }
+          : recurrence === "webhook"
           ? { type: "webhook" as const }
           : recurrence === "email" && existingRoutine?.schedule.type === "event"
             ? existingRoutine.schedule
@@ -645,7 +660,7 @@ function EventEditor({
           endsAt: intervalEndsAt,
         });
         if (!built) throw new Error(pattern?.error || t("routineCalendar.validSchedule"));
-        const nextSchedule = triggered ? built : withRoutineTiming(built, recurrence !== "none", timingMode, earlyMinutes, lateMinutes);
+        const nextSchedule = recurrence === "limit_reset" || triggered ? built : withRoutineTiming(built, recurrence !== "none", timingMode, earlyMinutes, lateMinutes);
         // `runAs` (organization server): the person chosen in the modal.
         const input: RoutineInput & { runAs?: string } = {
           name,
@@ -680,7 +695,7 @@ function EventEditor({
         });
         dispatch({ type: "routinePatched", routine: response.routine });
       } else {
-        if (recurrence === "interval" || recurrence === "pattern" || recurrence === "advanced" || recurrence === "webhook" || recurrence === "email") throw new Error(t("routineCalendar.supportedCallSchedule"));
+        if (recurrence === "interval" || recurrence === "limit_reset" || recurrence === "pattern" || recurrence === "advanced" || recurrence === "webhook" || recurrence === "email") throw new Error(t("routineCalendar.supportedCallSchedule"));
         const nextSchedule = makeCalendarSchedule(recurrence, at, weekdays);
         const input: CalendarCallInput = {
           name,
@@ -752,6 +767,8 @@ function EventEditor({
         ? t("schedule.compact.webhook")
         : recurrence === "email"
           ? t("schedule.compact.email")
+          : recurrence === "limit_reset"
+            ? limitResetWhen({ engine: limitReset.engine || bots.find((bot) => bot.id === (lockedBotId ?? botIds[0]))?.modelSelection?.instanceId || "", repeat: limitReset.repeat })
           : recurrence === "interval"
             ? intervalLabel(intervalMinutes || 5)
             : scheduleLabelCompact({ type: "once", at }),
@@ -768,7 +785,7 @@ function EventEditor({
     setMoreOpen(open);
     rememberRoutineEditorMoreOpen(open);
   };
-  const editorSnapshot = JSON.stringify([kind, name, description, recurrence, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
+  const editorSnapshot = JSON.stringify([kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
   const openedSnapshot = useRef(editorSnapshot);
   const dirty = editorSnapshot !== openedSnapshot.current;
   const requestClose = () => {
@@ -810,8 +827,8 @@ function EventEditor({
         <div className="space-y-5 px-5 py-5 sm:px-8">
           {canSwitchKind && (
             <div className="ml-10 inline-flex rounded-lg bg-inset p-1">
-              <button type="button" onClick={() => { setKind("routine"); setBotIds((ids) => ids.slice(0, 1)); if (recurrence !== "none" && recurrence !== "interval" && recurrence !== "webhook" && recurrence !== "email") { setScheduleDraft(scheduleDraftFor(makeCalendarSchedule(recurrence as CalendarRecurrenceChoice, at, weekdays), at).draft); setRecurrence("pattern"); } }} className={cn("rounded-md px-4 py-1.5 text-[12.5px] font-medium", kind === "routine" ? "bg-raised text-ink shadow" : "text-ink-secondary")}>{t("botPanel.coding.kind.routine")}</button>
-              <button type="button" onClick={() => { setKind("call"); if (recurrence === "interval" || recurrence === "pattern" || recurrence === "advanced" || recurrence === "webhook" || recurrence === "email") setRecurrence("none"); }} className={cn("rounded-md px-4 py-1.5 text-[12.5px] font-medium", kind === "call" ? "bg-raised text-ink shadow" : "text-ink-secondary")}>{t("routineCalendar.kindCall")}</button>
+              <button type="button" onClick={() => { setKind("routine"); setBotIds((ids) => ids.slice(0, 1)); if (recurrence !== "none" && recurrence !== "interval" && recurrence !== "limit_reset" && recurrence !== "webhook" && recurrence !== "email") { setScheduleDraft(scheduleDraftFor(makeCalendarSchedule(recurrence as CalendarRecurrenceChoice, at, weekdays), at).draft); setRecurrence("pattern"); } }} className={cn("rounded-md px-4 py-1.5 text-[12.5px] font-medium", kind === "routine" ? "bg-raised text-ink shadow" : "text-ink-secondary")}>{t("botPanel.coding.kind.routine")}</button>
+              <button type="button" onClick={() => { setKind("call"); if (recurrence === "interval" || recurrence === "limit_reset" || recurrence === "pattern" || recurrence === "advanced" || recurrence === "webhook" || recurrence === "email") setRecurrence("none"); }} className={cn("rounded-md px-4 py-1.5 text-[12.5px] font-medium", kind === "call" ? "bg-raised text-ink shadow" : "text-ink-secondary")}>{t("routineCalendar.kindCall")}</button>
             </div>
           )}
 
@@ -878,6 +895,7 @@ function EventEditor({
                     <option value="none">{t("scheduleEditor.frequency.once")}</option>
                     {PICKER_FREQUENCIES.map((frequency) => <option key={frequency} value={frequency}>{t(`scheduleEditor.frequency.${frequency}`)}</option>)}
                     <option value="interval">{t("scheduleEditor.frequency.every")}</option>
+                    <option value="limit_reset">{t("routines.limitReset.option")}</option>
                     {recurrence === "advanced" && <option value="advanced">{t("scheduleEditor.frequency.advanced")}</option>}
                     {!isRoomGoal && <option value="webhook">{t("routineEditor.whenWebhook")}</option>}
                     {recurrence === "email" && <option value="email">{t("schedule.sentence.email")}</option>}
@@ -889,6 +907,13 @@ function EventEditor({
                   <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong [color-scheme:dark]" />
                   <input type="time" step={CALENDAR_SLOT_MINUTES * 60} value={startTime} onChange={(event) => setStartTime(event.target.value)} className="rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong [color-scheme:dark]" />
                 </div>
+              )}
+              {recurrence === "limit_reset" && kind === "routine" && (
+                <LimitResetFields
+                  value={limitReset}
+                  botEngine={bots.find((bot) => bot.id === (lockedBotId ?? botIds[0]))?.modelSelection?.instanceId}
+                  onChange={setLimitReset}
+                />
               )}
               {recurrence === "webhook" && <RoutineWebhookPanel routine={existingRoutine?.schedule.type === "webhook" ? existingRoutine : undefined} bot={bots.find((bot) => bot.id === botIds[0])} />}
               {recurrence === "email" && <p className="text-[11.5px] leading-relaxed text-ink-secondary">{t("routineEditor.emailTrigger")}</p>}
@@ -1215,6 +1240,7 @@ function EventEditor({
                     <option value="none">{t("scheduleEditor.frequency.once")}</option>
                     {PICKER_FREQUENCIES.map((frequency) => <option key={frequency} value={frequency}>{t(`scheduleEditor.frequency.${frequency}`)}</option>)}
                     <option value="interval">{t("scheduleEditor.frequency.every")}</option>
+                    <option value="limit_reset">{t("routines.limitReset.option")}</option>
                     {recurrence === "advanced" && <option value="advanced">{t("scheduleEditor.frequency.advanced")}</option>}
                   </select>
                 ) : (
@@ -1227,9 +1253,16 @@ function EventEditor({
                 </select>
                 )}
               </div>
+              {isRoutineKind && recurrence === "limit_reset" && (
+                <LimitResetFields
+                  value={limitReset}
+                  botEngine={bots.find((bot) => bot.id === (lockedBotId ?? botIds[0]))?.modelSelection?.instanceId}
+                  onChange={setLimitReset}
+                />
+              )}
               {isRoutineKind && recurrence === "pattern" && pattern && <HumanScheduleFields draft={scheduleDraft} value={pattern} onChange={changeScheduleDraft} />}
               {isRoutineKind && recurrence === "advanced" && pattern && <AdvancedScheduleFields value={pattern} onSimplify={simplifySchedule} />}
-              {isRoutineKind && recurrence !== "none" && (
+              {isRoutineKind && recurrence !== "none" && recurrence !== "limit_reset" && (
                 <RoutineTimingFields
                   mode={timingMode}
                   earlyMinutes={earlyMinutes}
@@ -1504,7 +1537,7 @@ export function QuickComposer({
   onSavedCall: (call: CalendarCall) => void;
 }) {
   const { state, dispatch } = useStore();
-  const [kind, setKind] = useState<EventKind>(routinesOnly ? "routine" : seed.kind);
+  const [kind, setKind] = useState<EventKind>(routinesOnly || seed.limitReset ? "routine" : seed.kind);
   const [name, setName] = useState(seed.name ?? "");
   const [description, setDescription] = useState(seed.description ?? "");
   const [botIds, setBotIds] = useState(seed.botIds.length ? seed.botIds : bots[0] ? [bots[0].id] : []);
@@ -1557,7 +1590,9 @@ export function QuickComposer({
             botId: botIds[0],
             runOn: "maus",
             enabled: true,
-            schedule: { type: "once", at: seed.at },
+            schedule: seed.limitReset
+              ? { type: "limit_reset", engine: seed.limitReset.engine, repeat: "once" }
+              : { type: "once", at: seed.at },
             durationMinutes,
             attachments: [],
           } satisfies RoutineInput),
@@ -1606,7 +1641,7 @@ export function QuickComposer({
       </div>
       <div className="space-y-3 p-4">
         <input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder={t("routineCalendar.addTitle")} onKeyDown={(event) => { if (event.key === "Enter" && valid) void save(); }} className="w-full border-b border-hairline/60 bg-transparent pb-2 text-[18px] font-medium text-ink outline-none placeholder:text-ink-secondary focus:border-border-strong" />
-        {!routinesOnly && (
+        {!routinesOnly && !seed.limitReset && (
           <div className="flex items-center gap-1 border-b border-hairline/35 pb-2">
             <button type="button" onClick={() => { setKind("routine"); setBotIds((ids) => ids.slice(0, 1)); }} className={cn("rounded-lg px-3 py-1.5 text-[12px] font-medium", kind === "routine" ? "bg-accent/15 text-accent" : "text-ink-secondary hover:bg-raised hover:text-ink")}>{t("botPanel.coding.kind.routine")}</button>
             <button type="button" onClick={() => setKind("call")} className={cn("rounded-lg px-3 py-1.5 text-[12px] font-medium", kind === "call" ? "bg-accent/15 text-accent" : "text-ink-secondary hover:bg-raised hover:text-ink")}>{t("routineCalendar.kindCall")}</button>
@@ -1614,7 +1649,9 @@ export function QuickComposer({
         )}
         <div className="flex items-start gap-3 text-[12.5px] text-ink">
           <Clock3 size={16} className="mt-0.5 shrink-0 text-ink-secondary" />
-          <div><div>{niceDate(seed.at)}</div><div className="mt-0.5 text-ink-secondary">{niceTime(seed.at)}{kind === "call" ? ` - ${niceTime(seed.at + durationMinutes * 60_000)}` : ""}</div></div>
+          {seed.limitReset
+            ? <div data-testid="quick-limit-reset">{limitResetWhen({ engine: seed.limitReset.engine, repeat: "once" })}</div>
+            : <div><div>{niceDate(seed.at)}</div><div className="mt-0.5 text-ink-secondary">{niceTime(seed.at)}{kind === "call" ? ` - ${niceTime(seed.at + durationMinutes * 60_000)}` : ""}</div></div>}
         </div>
         <div className="flex items-start gap-3">
           <UserRoundPlus size={16} className="mt-2.5 shrink-0 text-ink-secondary" />
@@ -1765,6 +1802,8 @@ function CalendarGrid({
   onCreate,
   onMove,
   onResize,
+  markers,
+  onDropOnReset,
 }: {
   anchor: number;
   days: number;
@@ -1775,6 +1814,8 @@ function CalendarGrid({
   onCreate: (seed: EventSeed) => void;
   onMove: (item: { kind: EventKind; id: string; at: number }, nextAt: number) => void;
   onResize: (item: CalendarEventItem, duration: number) => void;
+  markers?: ResetMarker[];
+  onDropOnReset?: (drop: ResetDrop, marker: ResetMarker) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<{ day: number; start: number; end: number } | null>(null);
@@ -1911,6 +1952,14 @@ function CalendarGrid({
               {selected && <div className="pointer-events-none absolute inset-x-1 z-10 rounded-md border border-accent/70 bg-accent/20" style={{ top: ((new Date(selected.start).getHours() * 60 + new Date(selected.start).getMinutes()) / 60) * HOUR_HEIGHT, height: Math.max(16, ((selected.end - selected.start) / 3_600_000) * HOUR_HEIGHT) }} />}
               {preview && <div className="pointer-events-none absolute inset-x-1 z-20 rounded-md border border-accent/80 bg-accent/25 shadow-sm" style={{ top: ((new Date(preview.at).getHours() * 60 + new Date(preview.at).getMinutes()) / 60) * HOUR_HEIGHT, height: HOUR_HEIGHT / 2 }}><div className="px-2 py-1 text-[9.5px] font-medium text-accent">{niceTime(preview.at)}</div></div>}
               {dayItems.map((item) => <CalendarEventCard key={item.id} item={item} bots={bots} groups={groups} compact={days === 7} layout={collisionLayouts.get(item.id) ?? { column: 0, columns: 1 }} reserveRight={crowded.has(item.id) ? 34 : 0} onOpen={() => onOpen(item)} onResize={(minutes) => onResize(item, minutes)} />)}
+              {(markers ?? []).filter((marker) => startOfDay(marker.at) === start).map((marker) => (
+                <LimitResetMarker
+                  key={marker.engine}
+                  marker={marker}
+                  hourHeight={HOUR_HEIGHT}
+                  onDrop={onDropOnReset ? (drop) => onDropOnReset(drop, marker) : undefined}
+                />
+              ))}
               {overflow.map((group) => {
                 const layout = collisionLayouts.get(group.id.slice("more-".length)) ?? { column: 0, columns: 1 };
                 const top = ((new Date(group.at).getHours() * 60 + new Date(group.at).getMinutes()) / 60) * HOUR_HEIGHT;
@@ -2309,6 +2358,8 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
   const visibleBots = state.bots.filter((bot) => !bot.hidden);
   const rangeStart = viewDays === 7 ? startOfWeek(anchor) : startOfDay(anchor);
   const rangeEnd = addDays(rangeStart, viewDays);
+  const engineLimits = useEngineLimits();
+  const markers = useMemo(() => resetMarkers(engineLimits, rangeStart, rangeEnd), [engineLimits, rangeStart, rangeEnd]);
 
   useEffect(() => {
     const focus = state.routinesFocus;
@@ -2391,7 +2442,7 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
     dispatch({ type: "routinePatched", routine: { ...routine, name } });
     dispatch({ type: "updateRoutine", routineId: routine.id, patch: { name } });
   };
-  const openRoutine = (routine: Routine) => setSelected({ kind: "routine", id: routine.id, at: routine.nextRunAt ?? (routine.schedule.type === "once" ? routine.schedule.at : routine.schedule.type === "interval" ? routine.schedule.anchorAt : routine.schedule.type === "webhook" || routine.schedule.type === "event" ? Date.now() : routine.schedule.type === "cron" ? nextHour() : atLocalTime(Date.now(), routine.schedule.time)), durationMinutes: routine.durationMinutes, routine, run: null });
+  const openRoutine = (routine: Routine) => setSelected({ kind: "routine", id: routine.id, at: routine.nextRunAt ?? (routine.schedule.type === "once" ? routine.schedule.at : routine.schedule.type === "interval" ? routine.schedule.anchorAt : routine.schedule.type === "webhook" || routine.schedule.type === "event" ? Date.now() : routine.schedule.type === "cron" ? nextHour() : routine.schedule.type === "limit_reset" ? (routine.schedule.at ?? Date.now()) : atLocalTime(Date.now(), routine.schedule.time)), durationMinutes: routine.durationMinutes, routine, run: null });
   // An upcoming row: the calendar moves to its next run, and its details open.
   const showUpcoming = (routine: Routine) => {
     if (routine.nextRunAt != null) setAnchor(startOfDay(routine.nextRunAt));
@@ -2463,6 +2514,28 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
         const response = await api(`/api/calendar-calls/${call.id}`, { method: "PATCH", body: JSON.stringify({ schedule: scheduleAt(call.schedule, dragged.at, nextAt) }) });
         upsertCall(response.call);
       }
+    } catch (cause) {
+      setError(readableError(cause));
+    }
+  };
+  /** A bot dropped on a reset opens the quick composer for a limit-reset automation; an automation dropped there runs
+   * at that reset instead of its time. */
+  const dropOnReset = async (drop: ResetDrop, marker: ResetMarker) => {
+    if ("botId" in drop) {
+      setSelected(null);
+      setQuick({ kind: "routine", at: marker.at, durationMinutes: 30, botIds: [drop.botId], limitReset: { engine: marker.engine } });
+      return;
+    }
+    if (drop.event.kind !== "routine") {
+      setError(t("limits.callNotOnReset"));
+      return;
+    }
+    try {
+      const response = await api(`/api/routines/${drop.event.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ schedule: { type: "limit_reset", engine: marker.engine, repeat: "once" } }),
+      });
+      dispatch({ type: "routinePatched", routine: response.routine });
     } catch (cause) {
       setError(readableError(cause));
     }
@@ -2622,6 +2695,7 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
       ) : scheduleView === "list" ? (
         <div className={PAGE_SCROLL}><div className={PAGE_COLUMN}>
           <PageHeading title={t("routines.title")} subtitle={t("routineCalendar.allSchedules")} />
+          <LimitWarnings botFilter={botFilter} />
           <RoutineList routines={filteredRoutines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine} onLogs={openLogs}
             onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
             renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />
@@ -2637,7 +2711,7 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
         </div></div>
       ) : (
         <div className="flex min-h-0 flex-1">
-          <CalendarGrid anchor={rangeStart} days={viewDays} items={items} bots={state.bots} groups={state.groups} onOpen={(item) => { setSelected(item); if (item.kind === "routine" && item.run && ["failed", "missed"].includes(item.run.status) && !item.run.seenAt && !item.run.redacted) dispatch({ type: "markRoutineRunSeen", runId: item.run.id }); }} onCreate={openCreate} onMove={(item, at) => void moveEvent(item, at)} onResize={(item, duration) => void resizeEvent(item, duration)} />
+          <CalendarGrid anchor={rangeStart} days={viewDays} items={items} bots={state.bots} groups={state.groups} onOpen={(item) => { setSelected(item); if (item.kind === "routine" && item.run && ["failed", "missed"].includes(item.run.status) && !item.run.seenAt && !item.run.redacted) dispatch({ type: "markRoutineRunSeen", runId: item.run.id }); }} onCreate={openCreate} onMove={(item, at) => void moveEvent(item, at)} onResize={(item, duration) => void resizeEvent(item, duration)} markers={markers} onDropOnReset={(drop, marker) => void dropOnReset(drop, marker)} />
           {botsOpen ? (
             <div className="hidden shrink-0 lg:block">
               <CalendarSidebar anchor={anchor} onSelectDate={(at) => setAnchor(startOfDay(at))} routines={upcoming} runs={scopedRuns} bots={state.bots} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && upcoming.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpenRoutine={showUpcoming} filteredOut={filteredRoutines.length > 0} onCollapse={() => setBotsOpen(false)} />
@@ -2664,7 +2738,7 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
         <EventEditor seed={editor} bots={visibleBots} routinesOnly={routinesOnly} onClose={() => setEditor(null)} onSavedCall={upsertCall} />
       ) : null}
       {liveSelected && <EventDetails key={`${liveSelected.kind}:${liveSelected.id}`} item={liveSelected} bots={state.bots} onClose={() => setSelected(null)} onEdit={() => { const seed: EventSeed = liveSelected.kind === "call" ? { kind: "call", at: liveSelected.at, durationMinutes: liveSelected.call.durationMinutes, botIds: liveSelected.call.botIds, call: liveSelected.call } : { kind: "routine", at: liveSelected.at, durationMinutes: liveSelected.routine?.durationMinutes ?? liveSelected.run?.durationMinutes ?? 30, botIds: [liveSelected.routine?.botId ?? liveSelected.run?.botId ?? ""].filter(Boolean), routine: liveSelected.routine ?? undefined }; setSelected(null); setEditor(seed); }} onDuplicate={(routine) => { setSelected(null); setEditor({ kind: "routine", at: routineEditorAt(routine), durationMinutes: routine.durationMinutes, botIds: [routine.botId], copyOf: routine }); }} onCallChanged={(id) => { if (id) setCalls((current) => current.filter((call) => call.id !== id)); else void loadCalls(); }} onOpenRoom={onOpenRoom} />}
-      {pausedOpen && <PausedList routines={paused} bots={state.bots} groups={state.groups} onClose={() => setPausedOpen(false)} onEdit={(routine) => { setPausedOpen(false); const at = routine.schedule.type === "once" ? routine.schedule.at : routine.schedule.type === "interval" ? routine.schedule.anchorAt : routine.schedule.type === "webhook" || routine.schedule.type === "event" ? Date.now() : routine.schedule.type === "cron" ? routine.nextRunAt ?? nextHour() : atLocalTime(Date.now(), routine.schedule.time); setEditor({ kind: "routine", at, durationMinutes: routine.durationMinutes, botIds: [routine.botId], routine }); }} onOpenRoom={onOpenRoom} />}
+      {pausedOpen && <PausedList routines={paused} bots={state.bots} groups={state.groups} onClose={() => setPausedOpen(false)} onEdit={(routine) => { setPausedOpen(false); const at = routine.schedule.type === "once" ? routine.schedule.at : routine.schedule.type === "interval" ? routine.schedule.anchorAt : routine.schedule.type === "webhook" || routine.schedule.type === "event" ? Date.now() : routine.schedule.type === "cron" ? routine.nextRunAt ?? nextHour() : routine.schedule.type === "limit_reset" ? (routine.schedule.at ?? Date.now()) : atLocalTime(Date.now(), routine.schedule.time); setEditor({ kind: "routine", at, durationMinutes: routine.durationMinutes, botIds: [routine.botId], routine }); }} onOpenRoom={onOpenRoom} />}
     </main>
   );
 }

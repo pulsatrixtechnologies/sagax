@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { RichTable } from "./RichTable";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { AttachedFileChip } from "./AttachmentPreview";
-import { readTableResponse } from "./TableFilePreview";
+import { readTableResponse } from "@/lib/table-data";
 import { TABLE_FILE_MAX_BYTES } from "@/lib/table-data";
 
 describe("rich table rendering", () => {

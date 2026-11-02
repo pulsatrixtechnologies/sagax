@@ -14,6 +14,7 @@ export interface RuleCardLike {
   routineRequest?: unknown;
   profileRequest?: unknown;
   modelRequest?: unknown;
+  ruleRequest?: unknown;
   skillRequest?: unknown;
   terminalRequest?: unknown;
   heldCode?: string;
@@ -21,6 +22,6 @@ export interface RuleCardLike {
 
 export function alwaysDenyOffered(card: RuleCardLike): boolean {
   if (!card.ownerRule || card.ownerRule.from === "admin") return false;
-  return !(card.botActRequest || card.cwActionRequest || card.outboundRequest || card.routineRequest || card.profileRequest || card.modelRequest || card.skillRequest || card.terminalRequest
+  return !(card.botActRequest || card.cwActionRequest || card.outboundRequest || card.routineRequest || card.profileRequest || card.modelRequest || card.ruleRequest || card.skillRequest || card.terminalRequest
     || card.heldCode === "approval.held.native");
 }

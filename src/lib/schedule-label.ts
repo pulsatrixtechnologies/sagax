@@ -85,6 +85,11 @@ export function scheduleLabel(schedule: RoutineSchedule | { type: "once"; at: nu
   }
   if (schedule.type === "webhook") return t("schedule.incomingWebhook");
   if (schedule.type === "event") return t("schedule.incomingEmail");
+  if (schedule.type === "limit_reset") {
+    return schedule.at === null
+      ? t("schedule.limitReset", { engine: schedule.engine })
+      : t("schedule.limitResetAt", { engine: schedule.engine, time: niceTime(schedule.at) });
+  }
   const days = schedule.weekdays;
   const label = days.length === 7
     ? t("computer.routine.everyDay")
@@ -92,7 +97,7 @@ export function scheduleLabel(schedule: RoutineSchedule | { type: "once"; at: nu
       ? t("schedule.everyWeekday")
       : days.length === 1
         ? t("schedule.weeklyOn", { day: dayNames()[days[0]!]! })
-        : days.map((day) => dayNames()[day]).join(", ");
+        : days.map((day: number) => dayNames()[day]).join(", ");
   const time = niceTime(atLocalTime(Date.now(), schedule.time));
   const note = windowNote(schedule);
   return note ? t("schedule.dailyAround", { label, time, note }) : t("schedule.dailyAt", { label, time });
@@ -125,6 +130,11 @@ export function scheduleSentence(schedule: RoutineSchedule): string {
   }
   if (schedule.type === "webhook") return t("schedule.sentence.webhook");
   if (schedule.type === "event") return t("schedule.sentence.email");
+  if (schedule.type === "limit_reset") {
+    return schedule.at === null
+      ? t("schedule.sentence.limitReset", { engine: schedule.engine })
+      : t("schedule.sentence.limitResetAt", { engine: schedule.engine, time: niceTime(schedule.at) });
+  }
   // type === "daily"
   const days = schedule.weekdays;
   const timeStr = niceTime(atLocalTime(Date.now(), schedule.time));

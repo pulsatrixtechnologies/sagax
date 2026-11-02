@@ -287,7 +287,7 @@ public enum ApprovalDockRules {
     /// A proposal is confirmed or cancelled; never remembered or batched.
     public static func isProposal(_ card: OptionCard) -> Bool {
         card.skillRequest != nil || card.routineRequest != nil || card.profileRequest != nil
-            || card.teamSetupRequest != nil
+            || card.ruleRequest != nil || card.teamSetupRequest != nil
     }
 
     /// Open approvals on a thread, oldest first. Questions are not here
@@ -308,7 +308,7 @@ public enum ApprovalDockRules {
         approvals.filter { pending in
             let card = pending.card
             guard card.adminApproval != true, !isProposal(card), card.modelRequest == nil,
-                  card.tighteningRequest == nil, card.questionRequest == nil
+                  card.ruleRequest == nil, card.tighteningRequest == nil, card.questionRequest == nil
             else { return false }
             return ApprovalRiskClassifier.risk(of: card) == .read
         }
@@ -336,13 +336,14 @@ public enum ApprovalDockRules {
         let routine = card.routineRequest != nil
         let skill = card.skillRequest != nil
         let profile = card.profileRequest != nil
+        let rule = card.ruleRequest != nil
         let teamSetup = card.teamSetupRequest != nil
-        let durable = routine || skill || profile || teamSetup
+        let durable = routine || skill || profile || rule || teamSetup
         let canRememberCommand = ownerOrAdmin && !durable && card.allowKey == nil && card.commandAllowlist != nil && card.ownerRule == nil
         // 2026-10-20 (owner): the card offers Deny, Always allow, Allow once;
         // the composer's stop button ends a turn
         actions.cancelTurn = false
-        actions.denyIsCancel = routine || profile || teamSetup
+        actions.denyIsCancel = routine || profile || rule || teamSetup
         // 2026-10-20 (owner): one "Always allow", one click; the card's owner
         // rule first (every card since #855), then the older grants
         actions.alwaysAllowRule = card.ownerRule != nil
@@ -355,7 +356,7 @@ public enum ApprovalDockRules {
             actions.primary = .option(card.options.first ?? "")
         } else if skill {
             actions.primary = card.skillRequest?.action == "update" ? .update : .enable
-        } else if routine || profile {
+        } else if routine || profile || rule {
             actions.primary = .confirm
         }
         actions.primaryDisabled = skill && card.skillRequest?.reviewedSha256 == nil
@@ -408,7 +409,7 @@ public enum ApprovalDockRules {
 public enum ApprovalOutcome: Hashable, Sendable {
     case expired, allowed, alwaysAllowed, denied, cancelled
     case routineScheduled, routineCreatedPaused, routineUpdated, routinePaused, routineResumed, routineRunQueued, routineDeleted
-    case skillEnabled, skillUpdated, profileUpdated
+    case skillEnabled, skillUpdated, profileUpdated, ruleUpdated
     case teamSetupApplied, botDeleted
 
     public static func of(_ card: OptionCard) -> ApprovalOutcome? {
@@ -431,6 +432,7 @@ public enum ApprovalOutcome: Hashable, Sendable {
         }
         if let skill = card.skillRequest { return skill.action == "update" ? .skillUpdated : .skillEnabled }
         if card.profileRequest != nil { return .profileUpdated }
+        if card.ruleRequest != nil { return .ruleUpdated }
         return .allowed
     }
 }
@@ -488,7 +490,7 @@ public enum QuestionIgnore {
     public static func canIgnore(_ card: OptionCard) -> Bool {
         guard card.isPending, !card.isPermission else { return false }
         if card.routineRequest != nil || card.skillRequest != nil || card.profileRequest != nil
-            || card.modelRequest != nil || card.teamSetupRequest != nil || card.tighteningRequest != nil
+            || card.modelRequest != nil || card.ruleRequest != nil || card.teamSetupRequest != nil || card.tighteningRequest != nil
             || card.adminApproval == true { return false }
         return true
     }
@@ -814,13 +816,14 @@ public enum AllowRuleText {
 /// the action; a proposal says what is being confirmed.
 public enum ApprovalHeading: Hashable, Sendable {
     case wantsTo(ApprovalToolAction)
-    case confirmRoutine, confirmPausedRoutine, confirmRoutineChange, enableSkill, updateSkill, confirmProfileChange
+    case confirmRoutine, confirmPausedRoutine, confirmRoutineChange, enableSkill, updateSkill, confirmProfileChange, confirmRuleChange
     case teamSetup(String)
 
     public static func of(_ card: OptionCard) -> ApprovalHeading {
         if card.teamSetupRequest != nil { return .teamSetup(card.title) }
         if let skill = card.skillRequest { return skill.action == "update" ? .updateSkill : .enableSkill }
         if card.profileRequest != nil { return .confirmProfileChange }
+        if card.ruleRequest != nil { return .confirmRuleChange }
         if let routine = card.routineRequest {
             if routine.operation?.action == "create" {
                 return routine.operation?.paused == true ? .confirmPausedRoutine : .confirmRoutine

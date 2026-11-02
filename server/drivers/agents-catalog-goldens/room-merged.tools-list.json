@@ -1079,7 +1079,7 @@
     },
     {
       "name": "request_login",
-      "description": "Ask to use a login saved in the person's Sagax vault for a site you must sign in to. When a sign-in page appears while you work, call it with that page's host (accounts.example.com, not only example.com). Returns its handle at once if already allowed; otherwise the person gets a card to allow it or to sign in themselves, and you end the turn (Sagax resumes you). Sign in with the browser's fill_credential, field login; you never see the value. Never ask for a password or code in chat.",
+      "description": "Ask to use a login saved in the person's Sagax vault or this team bot's shared vault for a site you must sign in to. When a sign-in page appears while you work, call it with that page's host (accounts.example.com, not only example.com). Returns its handle at once if already allowed; otherwise the person gets a card to allow it or to sign in themselves, and you end the turn (Sagax resumes you). Sign in with fill_credential in the browser (field login); you never see the value. Never ask for a password or code in chat.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1622,9 +1622,10 @@
                   "weekly",
                   "daily",
                   "interval",
-                  "cron"
+                  "cron",
+                  "limit_reset"
                 ],
-                "description": "once = a single future run; weekly = chosen weekdays; daily = every day; interval = every N elapsed minutes; cron = a calendar rule in an explicit timezone."
+                "description": "once = a single future run; weekly = chosen weekdays; daily = every day; interval = every N elapsed minutes; cron = a calendar rule in an explicit timezone; limit_reset = when an AI engine's usage limit resets."
               },
               "expression": {
                 "type": "string",
@@ -1639,6 +1640,18 @@
               "at": {
                 "type": "string",
                 "description": "Only for type once: future RFC3339 date-time with an explicit timezone offset, for example 2026-09-01T09:00:00+05:30 or 2026-09-01T03:30:00Z."
+              },
+              "engine": {
+                "type": "string",
+                "description": "Only for type limit_reset: the engine id whose limit to wait for, for example claude or codex. Omit for your own engine."
+              },
+              "repeat": {
+                "type": "string",
+                "enum": [
+                  "once",
+                  "every_reset"
+                ],
+                "description": "Only for type limit_reset: once (default) or every_reset."
               },
               "time": {
                 "type": "string",
@@ -1716,7 +1729,7 @@
             "required": [
               "type"
             ],
-            "description": "Use {\"type\":\"cron\",\"expression\":\"0 9 1 * *\",\"timeZone\":\"Asia/Kolkata\"} for 09:00 on the first of each month, once with at for one future run, weekly with time + weekdays, daily with time, or interval with every_minutes for elapsed-time repetition. Intervals can optionally be limited with weekdays, window_start + window_end, and ends_at."
+            "description": "Use {\"type\":\"cron\",\"expression\":\"0 9 1 * *\",\"timeZone\":\"Asia/Kolkata\"} for 09:00 on the first of each month, once with at for one future run, weekly with time + weekdays, daily with time, interval with every_minutes for elapsed-time repetition, or limit_reset to run when an AI usage limit resets (\"run this when my limit resets\", or to finish work your own limit stopped). Intervals can optionally be limited with weekdays, window_start + window_end, and ends_at."
           },
           "run_on": {
             "type": "string",
@@ -1833,7 +1846,7 @@
               "schedule": {
                 "type": "object",
                 "additionalProperties": false,
-                "description": "Use {\"type\":\"cron\",\"expression\":\"0 9 1 * *\",\"timeZone\":\"Asia/Kolkata\"} for 09:00 on the first of each month, once with at for one future run, weekly with time + weekdays, daily with time, or interval with every_minutes for elapsed-time repetition. Intervals can optionally be limited with weekdays, window_start + window_end, and ends_at.",
+                "description": "Use {\"type\":\"cron\",\"expression\":\"0 9 1 * *\",\"timeZone\":\"Asia/Kolkata\"} for 09:00 on the first of each month, once with at for one future run, weekly with time + weekdays, daily with time, interval with every_minutes for elapsed-time repetition, or limit_reset to run when an AI usage limit resets (\"run this when my limit resets\", or to finish work your own limit stopped). Intervals can optionally be limited with weekdays, window_start + window_end, and ends_at.",
                 "properties": {
                   "type": {
                     "type": "string",
@@ -1842,9 +1855,10 @@
                       "weekly",
                       "daily",
                       "interval",
-                      "cron"
+                      "cron",
+                      "limit_reset"
                     ],
-                    "description": "once = a single future run; weekly = chosen weekdays; daily = every day; interval = every N elapsed minutes; cron = a calendar rule in an explicit timezone."
+                    "description": "once = a single future run; weekly = chosen weekdays; daily = every day; interval = every N elapsed minutes; cron = a calendar rule in an explicit timezone; limit_reset = when an AI engine's usage limit resets."
                   },
                   "expression": {
                     "type": "string",
@@ -1859,6 +1873,18 @@
                   "at": {
                     "type": "string",
                     "description": "Only for type once: future RFC3339 date-time with an explicit timezone offset, for example 2026-09-01T09:00:00+05:30 or 2026-09-01T03:30:00Z."
+                  },
+                  "engine": {
+                    "type": "string",
+                    "description": "Only for type limit_reset: the engine id whose limit to wait for, for example claude or codex. Omit for your own engine."
+                  },
+                  "repeat": {
+                    "type": "string",
+                    "enum": [
+                      "once",
+                      "every_reset"
+                    ],
+                    "description": "Only for type limit_reset: once (default) or every_reset."
                   },
                   "time": {
                     "type": "string",
@@ -2112,6 +2138,121 @@
         },
         "required": [
           "model_selection",
+          "reason"
+        ]
+      }
+    },
+    {
+      "name": "propose_rule",
+      "description": "Propose add, change or remove of one personal Auto-review rule (allow / ask / deny) after the person confirms an action or asks in chat. Writes custom-approval-rules; org Ask/Deny still win. List/edit with sagax_settings (family rules). Confirm card unless a Primary Bot quote names the rule. Allow never auto-applies from Full alone. Read the result: granted Full Access may apply the change immediately. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success from the permission mode alone; report failed or cancelled results honestly. This does not elevate another bot's execution permissions.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "change",
+              "remove"
+            ],
+            "description": "add, change or remove."
+          },
+          "when": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "add: when-text (3+ words). change: prefer changes.when."
+          },
+          "behavior": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "ask",
+              "deny"
+            ],
+            "description": "add: allow, ask or deny. change: prefer changes.behavior."
+          },
+          "rule_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "change/remove: id from sagax_settings list (family rules)."
+          },
+          "scope_bot_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Omit = this bot; null = every bot of the person; or a bot id they own."
+          },
+          "risk_scope": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "destructive",
+                "irreversible",
+                "money",
+                "external-send"
+              ]
+            },
+            "description": "allow only: risk classes covered."
+          },
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "when": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "behavior": {
+                "type": "string",
+                "enum": [
+                  "allow",
+                  "ask",
+                  "deny"
+                ]
+              },
+              "botId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "riskScope": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "destructive",
+                    "irreversible",
+                    "money",
+                    "external-send"
+                  ]
+                }
+              }
+            },
+            "description": "change: at least one field."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "One sentence the user will see explaining why."
+          },
+          "quote": {
+            "type": "string",
+            "maxLength": 600,
+            "description": "Primary Bot: the person's own words asking this now (bot named); applies at once."
+          }
+        },
+        "required": [
+          "action",
           "reason"
         ]
       }

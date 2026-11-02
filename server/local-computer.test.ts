@@ -96,7 +96,9 @@ describe("local computer descriptor contract", () => {
     };
     const gated = gatedLocalComputer(connection, { url: "http://127.0.0.1:1234/control", token: "fixture-token" });
     expect(gated).toMatchObject({ command: process.execPath, args: ["--experimental-strip-types", SPAWNED_PROXIES.localComputer], platform: "linux", scope: "local-computer", generation: connection.generation });
-    expect(gated.env).toEqual({ ...connection.env, ELECTRON_RUN_AS_NODE: "1", SAGAX_CUA_COMMAND: connection.command, SAGAX_CUA_ARGS: JSON.stringify(connection.args), SAGAX_CONTROL_URL: "http://127.0.0.1:1234/control", SAGAX_CONTROL_TOKEN: "fixture-token" });
+    expect(gated.env).toEqual({ ...connection.env, ELECTRON_RUN_AS_NODE: "1", SAGAX_CUA_COMMAND: connection.command, SAGAX_CUA_ARGS: JSON.stringify(connection.args), SAGAX_CONTROL_URL: "http://127.0.0.1:1234/control", SAGAX_CONTROL_TOKEN: "fixture-token", SAGAX_COMPUTER_JOURNAL: "0" });
+    // the saved-steps journal tap is asked for explicitly, never inherited
+    expect(gatedLocalComputer(connection, { url: "http://127.0.0.1:1234/control", token: "fixture-token" }, true).env.SAGAX_COMPUTER_JOURNAL).toBe("1");
     expect(gated.args.join(" ")).not.toContain("fixture-token");
     expect(connection.env).not.toHaveProperty("SAGAX_CONTROL_TOKEN");
   });

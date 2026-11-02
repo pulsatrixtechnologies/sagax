@@ -50,6 +50,8 @@ type BotPatchBody = {
   mcpServers: string[] | null;
   mcpAccounts: Record<string, string> | null;
   modelSelection: ModelSelection;
+  /** Prompt-cache keep-warm override: true/false, or null to follow the workspace. */
+  cacheKeepWarm: boolean | null;
 };
 
 /** Every field written through the desktop's broad bot PATCH boundary. */

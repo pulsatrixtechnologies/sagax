@@ -311,6 +311,15 @@ struct BotPermissionsSection: View {
                 Label("Approval rules", systemImage: "checkmark.shield")
             }
             .accessibilityIdentifier("permissions-approval-grants")
+            // Only a team bot (shared with someone) has a shared vault.
+            if canEdit, !(current.directGrants ?? []).isEmpty {
+                NavigationLink {
+                    TeamBotVaultListView(botId: current.id, botName: current.name)
+                } label: {
+                    Label("Shared vault", systemImage: "key.fill")
+                }
+                .accessibilityIdentifier("permissions-team-vault")
+            }
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
                 Text(DesktopApprovalButton.detail(level))

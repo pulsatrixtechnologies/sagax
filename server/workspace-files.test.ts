@@ -256,6 +256,14 @@ describe("docs/", () => {
     for (const path of ["../other-bot/MEMORY.md", "docs/../../x", "/etc/passwd", "C:/Windows/win.ini", "docs\\onboarding.md", ".claude/settings.json", "docs/./onboarding.md", "", "docs/missing.md"]) {
       expect(() => readWorkspaceText(BOT, path), path).toThrow();
     }
+    // V4: a missing workspace file throws WorkspacePathError status 404 so the
+    // internal route can answer 200 { exists:false } without isError.
+    try {
+      readWorkspaceText(BOT, "SOUL.md");
+      expect.unreachable("SOUL.md should be missing");
+    } catch (error) {
+      expect(error).toMatchObject({ status: 404, message: expect.stringMatching(/no such file/i) });
+    }
     const outside = join(tmpdir(), `ws-outside-${process.pid}-${counter}`);
     mkdirSync(outside, { recursive: true });
     writeFileSync(join(outside, "secret.md"), "outside");

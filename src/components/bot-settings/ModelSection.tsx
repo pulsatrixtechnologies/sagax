@@ -91,6 +91,30 @@ export function ModelSection({ bot }: { bot: Bot }) {
           General > Advanced for every bot), then its ordered backups. */}
       {bot.host?.kind !== "machine" && advanced && !draft && canEditBotField(state.config, bot, "automaticRecovery") && <BotRecoverySettings key={`recovery:${bot.id}`} bot={bot} />}
       {bot.host?.kind !== "machine" && advanced && !draft && botRecovery(bot, state.config).enabled && canEditBotField(state.config, bot, "fallback") && <FallbackChain bot={bot} onChange={(fallback) => dispatch({ type: "updateBot", botId: bot.id, patch: { fallback } })} />}
+      {!draft && state.config?.cacheKeepWarm && (
+        <KeepWarmRow bot={bot} workspaceOn={state.config.cacheKeepWarm.enabled}
+          onChange={(cacheKeepWarm) => dispatch({ type: "updateBot", botId: bot.id, patch: { cacheKeepWarm } })} />
+      )}
+    </div>
+  );
+}
+
+/** Prompt-cache keep-warm for this bot: follow the workspace, or override it. */
+function KeepWarmRow({ bot, workspaceOn, onChange }: { bot: Bot; workspaceOn: boolean; onChange: (value: boolean | null) => void }) {
+  const value = bot.cacheKeepWarm === true ? "on" : bot.cacheKeepWarm === false ? "off" : "follow";
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-xl bg-card p-4">
+      <div className="min-w-0">
+        <label htmlFor="bot-cache-keepwarm" className="text-[15px] font-medium text-ink">{t("bot.keepWarm.title")}</label>
+        <div className="mt-0.5 text-[13px] text-ink-secondary">{t("bot.keepWarm.help")}</div>
+      </div>
+      <select id="bot-cache-keepwarm" value={value}
+        onChange={(event) => onChange(event.target.value === "on" ? true : event.target.value === "off" ? false : null)}
+        className="shrink-0 cursor-pointer rounded-lg border border-hairline/40 bg-inset px-3 py-2 text-[13px] text-ink">
+        <option value="follow">{t("bot.keepWarm.follow", { state: t(workspaceOn ? "bot.keepWarm.on" : "bot.keepWarm.off") })}</option>
+        <option value="on">{t("bot.keepWarm.on")}</option>
+        <option value="off">{t("bot.keepWarm.off")}</option>
+      </select>
     </div>
   );
 }

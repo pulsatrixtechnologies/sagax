@@ -74,6 +74,16 @@ describe("workspace_read", () => {
     const result = await callTool("workspace_read", { path: "../x" }, context({ error: "path leaves the workspace" }, [], 400));
     expect(result).toEqual({ text: "path leaves the workspace", isError: true });
   });
+
+  it("a missing file is exists:false without isError (V4)", async () => {
+    const result = await callTool(
+      "workspace_read",
+      { path: "SOUL.md" },
+      context({ exists: false, path: "SOUL.md", text: "", bytes: 0, offset: 0, nextOffset: null }, []),
+    );
+    expect(result.isError).toBeFalsy();
+    expect(result.text).toContain("No such file: SOUL.md");
+  });
 });
 
 describe("workspace_search", () => {

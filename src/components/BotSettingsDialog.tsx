@@ -29,7 +29,8 @@ import { ComputerPanel } from "./ComputerPanel";
 import { BotProfileAvatarCard } from "./BotProfileAvatarCard";
 import { useCaptionChrome, useMacInsetChrome } from "./DesktopCapabilities";
 import { t } from "@/lib/i18n";
-import { canEditBotField } from "@/lib/bot-capabilities";
+import { canEditBotField, canSetBotHost, viewerOwnsBot } from "@/lib/bot-capabilities";
+import { TeamBotVaultSection } from "./bot-settings/TeamBotVaultSection";
 import { viewerBotsReadOnly } from "@/lib/viewer";
 import { useBotSectionAvailability, useBotSectionContent } from "./bot-settings/useBotSectionContent";
 import { botsReadOnlyText } from "@/lib/permissions";
@@ -257,6 +258,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
               <SuggestionsSection bot={bot} routineCount={derived.botRoutines.length} />
               <BotTaskSection botId={bot.id} />
               <ActivitySection bot={bot} />
+              {(bot.grants?.length || bot.directGrants?.length) && (viewerOwnsBot(state.config, bot) || canSetBotHost(state.config, bot)) && (
+                <TeamBotVaultSection botId={bot.id} botName={bot.name} />
+              )}
               <section data-bot-settings-section="routines" className="flex flex-col gap-2">
                 <RoutinesSection bot={bot} routines={derived.botRoutines} runs={state.routineRuns} grouped />
               </section>

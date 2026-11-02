@@ -49,7 +49,7 @@ describe("canEditBotField", () => {
     }
     // 2026-10-26 (owner): every setting of their own bot, without an admin
     // 2026-10-28 (#1098): and its working folder (the server still checks the path)
-    for (const field of ["computer", "browser", "approvalMode", "proactiveMode", "mcpServers", "toolScope", "fallback", "memoryEnabled", "chiefOfStaff", "hidden", "section", "visibility", "outbound", "approvePeerComms", "cwd"]) {
+    for (const field of ["computer", "browser", "approvalMode", "proactiveMode", "mcpServers", "toolScope", "fallback", "memoryEnabled", "loopGuard", "chiefOfStaff", "hidden", "section", "visibility", "outbound", "approvePeerComms", "cwd"]) {
       expect(canEditBotField(member, own, field), field).toBe(true);
       expect(canEditBotField(member, other, field), field).toBe(false);
     }

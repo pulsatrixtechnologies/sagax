@@ -61,6 +61,24 @@ describe("step labels in plain words", () => {
     expect(readStep({ name: "weird_tool", ok: true, summary: "{\"a\":1}" }).target).toBeUndefined();
   });
 
+  it("shortens a runCommand target: no UUID, path to last segment, full command in title", () => {
+    const bot = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+    const full = `ls /data/.sagax/bots/${bot}/sagax-plugins`;
+    const reading = readStep({ name: "Bash", ok: true, input: JSON.stringify({ command: full }) });
+    expect(reading.target).toBe("ls sagax-plugins");
+    expect(reading.title).toBe(full);
+    expect(reading.target).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i);
+    expect(reading.target).not.toContain("/data/");
+    const script = readStep({
+      name: "run_command",
+      ok: true,
+      input: JSON.stringify({ command: `python /data/.sagax/bots/${bot}/workspace/scripts/check_health.py --bot ${bot}` }),
+    });
+    expect(script.target).toBe("python check_health.py");
+    expect(script.title).toContain(bot);
+    expect(script.target).not.toContain(bot);
+  });
+
   it("reads the server's coordination sentences again in the person's language", () => {
     expect(stepLabel({ name: "Resumed with Wren, Olive results, reviewing", ok: true })).toBe("Got results from Wren and Olive, reviewing");
     setLocale("fr");

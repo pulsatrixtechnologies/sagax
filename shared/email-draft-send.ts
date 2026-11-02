@@ -30,12 +30,34 @@ const MAX_SUBJECT = 300;
 const MAX_BODY = 50_000;
 const ADDRESS = /^[^\s@<>(),;:"[\]\\]+@[^\s@<>(),;:"[\]\\]+\.[^\s@<>(),;:"[\]\\]+$/;
 
+/** One attachment the draft keeps with the send. Bytes stay on the bot's
+ * side (a path or a content hash); the card shows the name and size. */
+export interface EmailDraftAttachment {
+  name: string;
+  type: string;
+  size: number;
+  /** Optional content id or workspace path the connector reads. */
+  ref?: string;
+}
+
 export interface EmailDraftToSend {
   to: string[];
   cc: string[];
   bcc: string[];
   subject: string;
   body: string;
+  /** Preserved through the draft card and the one-shot send pass. */
+  attachments?: EmailDraftAttachment[];
+}
+
+/** Unrequested outbound mail (routine, proactive, another bot) must become
+ * a draft card. A send the person asked for in their own turn follows their
+ * usual approval level (Ask / Auto / Full). */
+export function outboundMailNeedsDraftCard(input: {
+  personAsked: boolean;
+  ownerTurn: boolean;
+}): boolean {
+  return !(input.personAsked && input.ownerTurn);
 }
 
 export type EmailConnectorKind = "bot" | "smtp";
@@ -114,8 +136,42 @@ function addressList(value: unknown, field: string, problems: string[]): string[
   return list;
 }
 
+const ATTACHMENT_MAX = 20;
+const ATTACHMENT_NAME = /^[^\0\r\n]{1,255}$/;
+
+function attachmentList(value: unknown, problems: string[]): EmailDraftAttachment[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    problems.push("attachments must be a list");
+    return undefined;
+  }
+  if (value.length > ATTACHMENT_MAX) {
+    problems.push(`at most ${ATTACHMENT_MAX} attachments`);
+    return undefined;
+  }
+  const list: EmailDraftAttachment[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      problems.push("each attachment needs a name, type and size");
+      continue;
+    }
+    const row = item as Record<string, unknown>;
+    const name = typeof row.name === "string" ? row.name.trim() : "";
+    const type = typeof row.type === "string" ? row.type.trim() : "";
+    const size = typeof row.size === "number" && Number.isFinite(row.size) ? Math.floor(row.size) : NaN;
+    const ref = typeof row.ref === "string" ? row.ref.trim().slice(0, 500) : undefined;
+    if (!ATTACHMENT_NAME.test(name) || !type || !Number.isInteger(size) || size < 0) {
+      problems.push("each attachment needs a name, type and size");
+      continue;
+    }
+    list.push({ name, type: type.slice(0, 255), size, ...(ref ? { ref } : {}) });
+  }
+  return list;
+}
+
 /** The draft as it may be sent, or the reasons it may not. Header fields
- * never carry a line break (no header injection), addresses are plain. */
+ * never carry a line break (no header injection), addresses are plain.
+ * Attachments are kept with the draft for the approval card and the send. */
 export function normalizeDraftForSend(value: unknown): { draft: EmailDraftToSend } | { problems: string[] } {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { problems: ["draft must be an object"] };
   const input = value as Record<string, unknown>;
@@ -132,7 +188,14 @@ export function normalizeDraftForSend(value: unknown): { draft: EmailDraftToSend
   if (INVISIBLE.test(body)) problems.push("body holds invisible or direction characters");
   if (body.length > MAX_BODY) problems.push(`body is longer than ${MAX_BODY} characters`);
   if (!subject && !body.trim()) problems.push("an email needs a subject or a body");
-  return problems.length ? { problems } : { draft: { to, cc, bcc, subject, body } };
+  const attachments = attachmentList(input.attachments, problems);
+  if (problems.length) return { problems };
+  return {
+    draft: {
+      to, cc, bcc, subject, body,
+      ...(attachments?.length ? { attachments } : {}),
+    },
+  };
 }
 
 /** FNV-1a of the draft's fields: the same draft has the same key on every

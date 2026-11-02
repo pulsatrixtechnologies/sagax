@@ -59,6 +59,8 @@ export type McpServerListing = (StdioMcpListing | RemoteMcpListing) & {
   /** reads the person's GitHub account (the GitHub plugin's token
    * placeholder, server/github-mcp-token.ts): whether it is connected */
   github?: "connected" | "missing";
+  /** Lot B: installation = shared config; person = only-me (never send header values into shared). */
+  scope?: "installation" | "person";
 };
 
 /** A saved server whose name Sagax now reserves (`mcp`, `__`, `sagax-`...):
@@ -489,7 +491,13 @@ export function useMcpServers() {
       if (!name || !/^https?:\/\//i.test(url)) return { ok: false, error: { key: "mcp.err.nameAndUrl" } };
       const parsed = parseMcpHeaders(draft.headers, existing && isRemoteMcpListing(existing) ? existing.headerKeys : []);
       if (!parsed.ok) return parsed;
-      return { ok: true, body: { type: draft.type, url, headers: parsed.headers } };
+      // Lot B: person-scoped rows keep header names in shared config with
+      // blank values; the key lives under Settings > Connections. The server
+      // refuses non-empty or ambiguous personal headers if any slip through.
+      const headers = existing?.scope === "person"
+        ? Object.fromEntries(Object.keys(parsed.headers).map((key) => [key, ""]))
+        : parsed.headers;
+      return { ok: true, body: { type: draft.type, url, headers } };
     }
     const command = draft.command.trim();
     if (!name || !command) return { ok: false, error: { key: "mcp.err.nameAndCommand" } };

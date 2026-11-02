@@ -28,6 +28,7 @@ import {
   AGENT_MAX_SKILLS, PACKAGE_MAX_CONNECTIONS, parsePackageDocument, redactPackageSecrets, utf8Bytes,
   type PackageAgent, type PackageConnection, type PackageDocument,
 } from "./package-format.ts";
+import { holdsCredential } from "./redact.ts";
 import { SKILL_FILE_MAX_BYTES } from "./skill-md.ts";
 
 /** One file of the chosen folder, by its path inside that folder ("/"-separated). */
@@ -51,11 +52,17 @@ export function claudeCodeRelativePath(path: string, pickedFolderName = ""): str
   return clean;
 }
 
-const SECRET_NAME = /(?:^|\/)(?:\.env(?:\..*)?|\.envrc|\.netrc|\.npmrc|\.pypirc|\.credentials\.json|credentials(?:\.[\w-]+)?|auth\.json|secrets?(?:\.[\w-]+)?|settings\.local\.json|id_(?:rsa|dsa|ecdsa|ed25519)(?:\.pub)?|[^/]*\.(?:pem|key|p8|p12|pfx|keystore|jks))$/i;
+/** Key stores and env files by extension or well-known name (port of upstream d2caaef1a). */
+const KEY_STORES = /(?:^|\/)(?:\.env(?:\..*)?|\.envrc|\.netrc|\.npmrc|\.pypirc|settings\.local\.json|id_(?:rsa|dsa|ecdsa|ed25519)(?:\.pub)?|[^/]*\.(?:pem|key|p8|p12|pfx|keystore|jks))$/i;
+/** Data files named after a token, session, cookie, password, secret, credential, key, bearer, storage state or service account. */
+const SECRET_DATA = /(?:^|\/)[^/]*(?:o?auth|tokens?|sessions?|cookies?|passw\w*|secrets?|credentials?|api[-_]?keys?|keys?|bearer|storage[-_]?state|service[-_]?accounts?|private[-_]?keys?)[^/]*\.(?:json|jsonc|jsonl|yaml|yml|toml|ini|cfg|conf|txt|text|csv|tsv|xml)$/i;
+const SECRET_FOLDERS = /(?:^|\/)(?:secrets?|credentials?|sessions?|cookies?|tokens?|keys?|private[-_]?keys?|service[-_]?accounts?)(?:\/|$)/i;
+/** Exact credential filenames (not instructions like credentials.md). */
+const LEGACY_SECRET_NAME = /(?:^|\/)(?:\.credentials\.json|credentials(?:\.(?:json|jsonc|yml|yaml|toml|txt))?|auth\.json|secrets?(?:\.(?:json|jsonc|yml|yaml|toml|txt))?)$/i;
 
 /** A file this import never opens: it may hold a key, a token or a password. */
 export function claudeCodeSecretPath(path: string): boolean {
-  return SECRET_NAME.test(path);
+  return KEY_STORES.test(path) || SECRET_DATA.test(path) || SECRET_FOLDERS.test(path) || LEGACY_SECRET_NAME.test(path);
 }
 
 /** The files the import reads; everything else in the folder is ignored. */
@@ -268,12 +275,25 @@ export function claudeCodeToPackage(
   input: ClaudeCodeFile[],
   options: { folderName?: string; skippedSecrets?: string[]; timeZone?: string } = {},
 ): { document: PackageDocument; leftOut: GrokLeftOut[] } {
+  const leftOut: GrokLeftOut[] = [];
   const files = input
     .map((file) => ({ path: claudeCodeRelativePath(file.path, options.folderName), text: file.text }))
     .filter((file) => claudeCodeWantedPath(file.path))
+    .filter((file) => {
+      // Skills, commands and subagents only: .mcp.json may name header values that
+      // redactPackageSecrets strips, and CLAUDE.md is instructions the person wrote.
+      const skillLike = /^\.claude\/(?:skills|commands|agents)\//i.test(file.path);
+      if (!skillLike || !holdsCredential(file.text)) return true;
+      leftOut.push({
+        kind: "skill",
+        name: file.path,
+        reason: "it may hold a key or a password, so it was not opened. Add what the bot needs in Capabilities or the vault",
+        reasonKey: "leftOut.reason.secretFile",
+      });
+      return false;
+    })
     .sort((a, b) => a.path.localeCompare(b.path));
   const byPath = new Map(files.map((file) => [file.path, file.text]));
-  const leftOut: GrokLeftOut[] = [];
   const instructions = instructionsFrom(byPath, leftOut);
   const skills = skillsFrom(files);
   const hasAgents = files.some((file) => file.path.startsWith(".claude/agents/"));

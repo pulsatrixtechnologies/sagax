@@ -144,6 +144,29 @@ describe("grouped steps", () => {
     expect(html).not.toContain("data-activity-technical");
     expect(html.match(/aria-expanded="false"/g)).toHaveLength(4);
   });
+
+  it("folds finished tool searches like ActivityRun and shortens runCommand targets", () => {
+    const bot = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+    const full = `ls /data/.sagax/bots/${bot}/sagax-plugins`;
+    const steps: BotActivityStep[] = [
+      { id: "s1", name: "search_tool", at: NOW, ok: true, input: JSON.stringify({ query: "perspicax" }) },
+      { id: "u1", name: "use_tool", at: NOW, ok: true, input: JSON.stringify({ tool_name: "perspicax__acme_desk__query", tool_input: { resource: "service.tickets" } }) },
+      { id: "s2", name: "search_tool", at: NOW, ok: true, input: JSON.stringify({ query: "remote" }) },
+      { id: "u2", name: "use_tool", at: NOW, ok: true, input: JSON.stringify({ tool_name: "perspicax__acme_desk__query", tool_input: { resource: "service.tickets" } }) },
+      { id: "b1", name: "Bash", at: NOW, ok: true, where: "server", input: JSON.stringify({ command: full }), summary: full },
+    ];
+    const html = renderToStaticMarkup(createElement(ActivityStepGroups, { steps }));
+    expect(html).toContain("Looked for a tool");
+    expect(html).toContain('data-activity-step-count="2"');
+    expect(html).toContain("Viewed tickets in Acme Desk");
+    expect(html).toContain('data-step-target="true"');
+    expect(html).toMatch(/data-step-target[^>]*>ls sagax-plugins</);
+    // UUID and server path stay in the tooltip only (title=), never as the visible target
+    expect(html).toContain(`title="${full}"`);
+    const withoutTitles = html.replace(/\stitle="[^"]*"/g, "");
+    expect(withoutTitles).not.toContain(bot);
+    expect(withoutTitles).not.toContain("/data/.sagax");
+  });
 });
 
 describe("sub-agents", () => {

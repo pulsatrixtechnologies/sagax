@@ -1,0 +1,26 @@
+// One line for a thread's prompt-cache keep-warm status in the usage
+// popover (server/cache-keepwarm.ts): "cache warm · next ping 12:40 · last
+// ping read 154k for $0.05". Pure, so it can be tested without components.
+import type { CacheKeepWarmStatus } from "../../shared/wire";
+import { t } from "./i18n";
+import { formatTokens, formatUsd, hasFiniteCost } from "./usage";
+
+const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+export function keepWarmLine(status: CacheKeepWarmStatus | undefined, format: (at: number) => string = clock): string | null {
+  if (!status) return null;
+  const last = status.last
+    ? hasFiniteCost(status.last.costUsd)
+      ? t("chat.keepWarm.lastCost", { tokens: formatTokens(status.last.read), cost: formatUsd(status.last.costUsd) })
+      : t("chat.keepWarm.last", { tokens: formatTokens(status.last.read) })
+    : null;
+  if (status.state === "stopped") {
+    return [t("chat.keepWarm.stopped", { reason: status.stopped ?? "" }), last].filter(Boolean).join(" · ");
+  }
+  return [
+    t("chat.keepWarm.warm"),
+    status.nextPingAt !== undefined ? t("chat.keepWarm.next", { time: format(status.nextPingAt) }) : null,
+    last,
+    status.until !== undefined ? t("chat.keepWarm.until", { time: format(status.until) }) : null,
+  ].filter(Boolean).join(" · ");
+}

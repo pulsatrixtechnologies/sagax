@@ -28,12 +28,18 @@ vi.mock("@/state/store", async (importOriginal) => {
   };
 });
 
+const botUuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+const pluginCommand = `ls /data/.sagax/bots/${botUuid}/sagax-plugins`;
+
 vi.mock("@/lib/bot-activity", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/bot-activity")>(),
   loadBotActivityDetail: vi.fn(async () => ({
     id: "run:run-1", kind: "routine", botId: "atlas", title: "Morning brief", status: "finished",
     startedAt: run.startedAt, endedAt: run.finishedAt, updatedAt: run.finishedAt,
-    steps: [{ id: "s1", name: "read_mail", ok: true, at: run.startedAt, summary: "Inbox checked" }],
+    steps: [
+      { id: "s1", name: "read_mail", ok: true, at: run.startedAt, summary: "Inbox checked" },
+      { id: "s2", name: "Bash", ok: true, at: (run.startedAt ?? 0) + 1_000, input: JSON.stringify({ command: pluginCommand }), summary: pluginCommand },
+    ],
     stepsTruncated: false, files: [], children: [], canStop: false,
   })),
 }));
@@ -118,5 +124,14 @@ describe("RoutineRunExchange", () => {
     flushSync(() => column.querySelector<HTMLButtonElement>("[data-run-more]")!.click());
     expect(column.querySelector("[data-run-logs]")).not.toBeNull();
     expect(column.querySelector("[data-run-configuration]")).not.toBeNull();
+  });
+
+  it("uses the same short runCommand labels as the chat (no UUID or server path on screen)", async () => {
+    mountExchange({});
+    await vi.waitFor(() => expect([...column.querySelectorAll("[data-step-target]")].some((node) => node.textContent === "ls sagax-plugins")).toBe(true));
+    const target = [...column.querySelectorAll("[data-step-target]")].find((node) => node.textContent === "ls sagax-plugins")!;
+    expect(target.getAttribute("title")).toBe(pluginCommand);
+    expect(column.textContent).not.toContain(botUuid);
+    expect(column.textContent).not.toContain("/data/.sagax");
   });
 });

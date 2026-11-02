@@ -219,6 +219,9 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // the live catalog and refuses changes while the bot is working.
   { method: "PATCH", path: /^\/api\/bots\/[\w-]+\/model$/ },
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/avatar\/generate$/ },
+  // A shape mascot from a short description (the editor's Generate). The
+  // harness checks the bot and runs the bot's own text model.
+  { method: "POST", path: /^\/api\/bots\/[\w-]+\/shape-avatar\/generate$/ },
   // Full cloud desktop access. The route is narrow and the proxy applies a
   // second, per-device capability check before it reaches the harness.
   CLOUD_DESKTOP_JOIN_ROUTE,

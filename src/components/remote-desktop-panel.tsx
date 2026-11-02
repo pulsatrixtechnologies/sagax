@@ -42,13 +42,18 @@ function routineScheduleLabel(routine: Routine) {
       minute: "2-digit",
     })}`;
   }
+  if (routine.schedule.type === "limit_reset") {
+    return routine.schedule.at === null
+      ? `When ${routine.schedule.engine} limit resets`
+      : `When ${routine.schedule.engine} limit resets · ${new Date(routine.schedule.at).toLocaleString(activeLocale(), { hour: "numeric", minute: "2-digit" })}`;
+  }
   const days = routine.schedule.weekdays;
   const cadence =
     days.length === 7
       ? "Every day"
       : days.join(",") === "1,2,3,4,5"
         ? "Weekdays"
-        : days.map((day) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ");
+        : days.map((day: number) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ");
   const [hour, minute] = routine.schedule.time.split(":").map(Number);
   return `${cadence} · ${new Date(2000, 0, 1, hour, minute).toLocaleTimeString(activeLocale(), { hour: "numeric", minute: "2-digit" })}`;
 }

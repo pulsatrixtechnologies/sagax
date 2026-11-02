@@ -23,6 +23,7 @@ import { TASK_LIST_TOOL_DEFINITIONS } from "./agents-task-tools.ts";
 import { HELP_TOOL_DEFINITIONS } from "./agents-help-tools.ts";
 import { SETTINGS_TOOL_DEFINITIONS } from "./agents-settings-tools.ts";
 import { APPROVALS_TOOL_DEFINITIONS } from "./agents-approvals-tools.ts";
+import { WAIT_TOOL_DEFINITIONS, WAIT_TOOL_NAMES } from "./agents-wait-tools.ts";
 import { phoneToolDefinition, phoneToolsFromEnv } from "./agents-phone-tools.ts";
 import { videoToolDefinition } from "./agents-video.ts";
 import { WEB_SEARCH_TOOL_DEFINITION } from "./agents-web-search-tools.ts";
@@ -165,12 +166,12 @@ const ROUTINE_SCHEDULE_SCHEMA = {
   type: "object",
   additionalProperties: false,
   description:
-    'Use {"type":"cron","expression":"0 9 1 * *","timeZone":"Asia/Kolkata"} for 09:00 on the first of each month, once with at for one future run, weekly with time + weekdays, daily with time, or interval with every_minutes for elapsed-time repetition. Intervals can optionally be limited with weekdays, window_start + window_end, and ends_at.',
+    'Use {"type":"cron","expression":"0 9 1 * *","timeZone":"Asia/Kolkata"} for 09:00 on the first of each month, once with at for one future run, weekly with time + weekdays, daily with time, interval with every_minutes for elapsed-time repetition, or limit_reset to run when an AI usage limit resets ("run this when my limit resets", or to finish work your own limit stopped). Intervals can optionally be limited with weekdays, window_start + window_end, and ends_at.',
   properties: {
     type: {
       type: "string",
-      enum: ["once", "weekly", "daily", "interval", "cron"],
-      description: "once = a single future run; weekly = chosen weekdays; daily = every day; interval = every N elapsed minutes; cron = a calendar rule in an explicit timezone.",
+      enum: ["once", "weekly", "daily", "interval", "cron", "limit_reset"],
+      description: "once = a single future run; weekly = chosen weekdays; daily = every day; interval = every N elapsed minutes; cron = a calendar rule in an explicit timezone; limit_reset = when an AI engine's usage limit resets.",
     },
     expression: {
       type: "string",
@@ -186,6 +187,15 @@ const ROUTINE_SCHEDULE_SCHEMA = {
       type: "string",
       description:
         "Only for type once: future RFC3339 date-time with an explicit timezone offset, for example 2026-09-01T09:00:00+05:30 or 2026-09-01T03:30:00Z.",
+    },
+    engine: {
+      type: "string",
+      description: "Only for type limit_reset: the engine id whose limit to wait for, for example claude or codex. Omit for your own engine.",
+    },
+    repeat: {
+      type: "string",
+      enum: ["once", "every_reset"],
+      description: "Only for type limit_reset: once (default) or every_reset.",
     },
     time: {
       type: "string",
@@ -594,6 +604,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   ...HELP_TOOL_DEFINITIONS,
   ...SETTINGS_TOOL_DEFINITIONS,
   ...APPROVALS_TOOL_DEFINITIONS,
+  ...WAIT_TOOL_DEFINITIONS,
   {
     name: "post_to_room",
     description:
@@ -792,7 +803,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   {
     name: "request_login",
     description:
-      "Ask to use a login saved in the person's Sagax vault for a site you must sign in to. When a sign-in page appears while you work, call it with that page's host (accounts.example.com, not only example.com). Returns its handle at once if already allowed; otherwise the person gets a card to allow it or to sign in themselves, and you end the turn (Sagax resumes you). Sign in with the browser's fill_credential, field login; you never see the value. Never ask for a password or code in chat.",
+      "Ask to use a login saved in the person's Sagax vault or this team bot's shared vault for a site you must sign in to. When a sign-in page appears while you work, call it with that page's host (accounts.example.com, not only example.com). Returns its handle at once if already allowed; otherwise the person gets a card to allow it or to sign in themselves, and you end the turn (Sagax resumes you). Sign in with fill_credential in the browser (field login); you never see the value. Never ask for a password or code in chat.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1392,6 +1403,45 @@ const toolDefinitions = (externalRuntime: boolean) => [
     },
   },
   {
+    name: "propose_rule",
+    description:
+      "Propose add, change or remove of one personal Auto-review rule (allow / ask / deny) after the person confirms an action or asks in chat. Writes custom-approval-rules; org Ask/Deny still win. List/edit with sagax_settings (family rules). Confirm card unless a Primary Bot quote names the rule. Allow never auto-applies from Full alone." + PROPOSAL_OUTCOME,
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        action: { type: "string", enum: ["add", "change", "remove"], description: "add, change or remove." },
+        when: { type: "string", minLength: 1, maxLength: 500, description: "add: when-text (3+ words). change: prefer changes.when." },
+        behavior: { type: "string", enum: ["allow", "ask", "deny"], description: "add: allow, ask or deny. change: prefer changes.behavior." },
+        rule_id: { type: "string", minLength: 1, description: "change/remove: id from sagax_settings list (family rules)." },
+        scope_bot_id: { type: ["string", "null"], description: "Omit = this bot; null = every bot of the person; or a bot id they own." },
+        risk_scope: {
+          type: "array",
+          items: { type: "string", enum: ["destructive", "irreversible", "money", "external-send"] },
+          description: "allow only: risk classes covered.",
+        },
+        changes: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            when: { type: "string", minLength: 1, maxLength: 500 },
+            behavior: { type: "string", enum: ["allow", "ask", "deny"] },
+            botId: { type: ["string", "null"] },
+            enabled: { type: "boolean" },
+            riskScope: {
+              type: "array",
+              items: { type: "string", enum: ["destructive", "irreversible", "money", "external-send"] },
+            },
+          },
+          description: "change: at least one field.",
+        },
+        reason: { type: "string", minLength: 1, maxLength: 500, description: "One sentence the user will see explaining why." },
+        quote: PERSON_QUOTE,
+      },
+      required: ["action", "reason"],
+    },
+  },
+  {
     name: "generate_shape_avatar",
     description:
       "Build a portable Shape mascot definition (geometry JSON only) from a short description and apply it to this bot's look. "
@@ -1843,7 +1893,8 @@ const ROOM_REPLACED_TOOLS = new Set(["ask_bot", "delegate_bot", "check_delegatio
 // chat-apps.ts refuse a room): offered where they work, not where they fail.
 // run_with_engine starts a thread of the bot itself, which a room turn cannot
 // (startTurn: the bot is already working in that room).
-const ROOM_ABSENT_TOOLS = new Set(["propose_page", "page_comments", "show_widget", "update_widget", "show_html", "update_html", "run_with_engine"]);
+// Waits are one-to-one only (routes/waits.ts): a room holds no wait.
+const ROOM_ABSENT_TOOLS = new Set(["propose_page", "page_comments", "show_widget", "update_widget", "show_html", "update_html", "run_with_engine", ...WAIT_TOOL_NAMES]);
 // 2026-10-28: what a teammate's turn one hop away (profile.peerHop) is not
 // shown: every tool that would start another bot's turn, a job of its own,
 // or an agent-API prompt. The routes refuse these past one hop
@@ -1875,7 +1926,7 @@ const CLOUD_HOME_SURFACE = {
  * paging stay loaded, and so does any tool not named here. */
 export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "propose_routine", "propose_routine_action", "list_routines", "run_routine",
-  "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_bot_deletion", "archive_bot",
+  "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_rule", "propose_bot_deletion", "archive_bot",
   "propose_team_memory", "propose_page", "page_comments", "create_room", "manage_room", "create_bot",
   "add_mcp_server", "skill_manage", "rules_update", "docs_update",
   "launch_cloud_agent", "list_cloud_agents", "get_cloud_agent", "cancel_cloud_agent", "archive_cloud_agent",

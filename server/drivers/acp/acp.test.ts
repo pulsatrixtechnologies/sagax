@@ -272,6 +272,9 @@ describe("ACP turns (fake CLI)", () => {
     delete process.env.FAKE_ACP_REASONING_COUNT_FILE;
     delete process.env.FAKE_ACP_REASONING_LEAK_TEXT;
     delete process.env.FAKE_ACP_REASONING_TOOL_FIRST;
+    delete process.env.FAKE_ACP_REASONING_REPLY_FIRST;
+    delete process.env.FAKE_ACP_REASONING_EFFORT_LOG;
+    delete process.env.FAKE_ACP_VARIANTS;
     delete process.env.SAGAX_ACP_REASONING_CONTINUE_MAX;
     delete process.env.FAKE_ACP_RPC_FAILURE_AFTER_USAGE;
     delete process.env.FAKE_ACP_LOAD_ERROR;
@@ -2619,6 +2622,50 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(recorder.events.some((e) => e.type === "item.completed" && (e as any).itemType === "tool")).toBe(true);
     expect(recorder.events.some((e) => e.type === "item.completed" && (e as any).itemType === "assistant_text")).toBe(true);
     expect(recorder.events.some((e) => e.type === "runtime.error")).toBe(false);
+  });
+
+  it("a reasoning_only answer after a committed line and a finished tool is nudged at lower effort, then the effort is put back", async () => {
+    // Prod 2026-11-02 (Grok, 0.8.29): the turn said a line and reacted to a
+    // message, then answered reasoning_only. The nudge was gated on "no reply
+    // yet", so it ended after 0 continuations and the person saw the error.
+    const effortLog = join(scratch, "reasoning-effort.log");
+    process.env.FAKE_ACP_REASONING_FAIL_TIMES = "1";
+    process.env.FAKE_ACP_REASONING_REPLY_FIRST = "1";
+    process.env.FAKE_ACP_REASONING_EFFORT_LOG = effortLog;
+    process.env.FAKE_ACP_VARIANTS = JSON.stringify({ "": { id: "reasoning_effort", currentValue: "high", options: [
+      { value: "low", name: "Low" }, { value: "medium", name: "Medium" }, { value: "high", name: "High" },
+    ] } });
+    const dump = join(scratch, "acp-reason-reply-first.json");
+    process.env.FAKE_ACP_DUMP = dump;
+    await create(GrokAgentDriver, "reasoning-only-error");
+    await instance.adapter.sendTurn({ threadId: "t-reason-reply-first", text: "go" });
+    const done = await recorder.until((e) => e.type === "turn.completed");
+    expect(done).toMatchObject({ ok: true, stopReason: null });
+    expect(recorder.events.some((e) => e.type === "runtime.error")).toBe(false);
+    const texts = recorder.events.filter((e) => e.type === "item.completed" && (e as any).itemType === "assistant_text").map((e) => (e as any).text);
+    expect(texts).toContain("here is the answer after thinking");
+    // first prompt at the bot's effort, the nudge at low
+    expect(readFileSync(effortLog, "utf8").trim().split("\n")).toEqual(["high", "low"]);
+    // lowered for the nudge, then put back for the next turn
+    const config = JSON.parse(readFileSync(`${dump}.config.json`, "utf8")) as Array<{ params: { configId: string; value: string } }>;
+    expect(config.map((call) => [call.params.configId, call.params.value])).toEqual([["reasoning_effort", "low"], ["reasoning_effort", "high"]]);
+  });
+
+  it("a reasoning_only turn that ran steps and stays empty after the nudge says the steps stand", async () => {
+    process.env.FAKE_ACP_REASONING_FAIL_TIMES = "99";
+    process.env.FAKE_ACP_REASONING_REPLY_FIRST = "1";
+    process.env.FAKE_ACP_VARIANTS = JSON.stringify({ "": { id: "reasoning_effort", currentValue: "high", options: [
+      { value: "low", name: "Low" }, { value: "high", name: "High" },
+    ] } });
+    await create(GrokAgentDriver, "reasoning-only-error");
+    await instance.adapter.sendTurn({ threadId: "t-reason-steps-stand", text: "go" });
+    const done = await recorder.until((e) => e.type === "turn.completed");
+    expect(done).toMatchObject({ ok: false, stopReason: "reasoning_only" });
+    const err = recorder.events.find((e) => e.type === "runtime.error") as { message?: string } | undefined;
+    expect(err?.message).toMatch(/reasoning without a final answer, even after Sagax asked it once more with lower reasoning effort/);
+    expect(err?.message).toMatch(/steps it already ran in this turn stand/);
+    expect(err?.message).not.toMatch(/Nothing was changed|Internal error|reasoning_only/);
+    expect(instance.adapter.hasSession("t-reason-steps-stand")).toBe(false);
   });
 
   it("a genuine internal error without reasoning_only still surfaces (no swallowing)", async () => {

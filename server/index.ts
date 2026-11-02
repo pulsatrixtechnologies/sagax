@@ -20040,6 +20040,7 @@ bus.subscribe((event: RuntimeEvent) => {
         alreadyReported: lazyClaimAlreadyReported || computerParked,
         isRoutine: Boolean(routines?.runForThread(event.threadId) || routineRun),
         empty: isEngineEmptyFailure(emptyDetail),
+        detail: emptyDetail,
         take: () => emptyResponseRetry.take(event.threadId),
       });
       if (emptyRetried && bot) {

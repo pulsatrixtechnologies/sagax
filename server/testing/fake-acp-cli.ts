@@ -1132,6 +1132,18 @@ function handle(msg: any) {
         // still nudge / soft-settle, never the raw Internal error (#1820).
         // FAKE_ACP_REASONING_TOOL_FIRST: a finished tool call before the
         // reasoning on the first prompt (a routine's turn always ran tools).
+        // FAKE_ACP_REASONING_REPLY_FIRST: on the first prompt, a committed
+        // line of text and a finished tool call before the reasoning (prod
+        // 2026-11-02: Grok said a line and reacted to a message first).
+        // FAKE_ACP_REASONING_EFFORT_LOG: append the effort each prompt ran at.
+        if (process.env.FAKE_ACP_REASONING_EFFORT_LOG) {
+          try { appendFileSync(process.env.FAKE_ACP_REASONING_EFFORT_LOG, `${currentVariant ?? ""}\n`); } catch {}
+        }
+        if (process.env.FAKE_ACP_REASONING_REPLY_FIRST && reasoningErrors === 0) {
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: "On it." } } } });
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "tool_call", toolCallId: "tc-reply-first", title: "agents__react_to_message", kind: "other", status: "pending", rawInput: {} } } });
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "tool_call_update", toolCallId: "tc-reply-first", status: "completed", rawOutput: { output: "reacted" } } } });
+        }
         if (process.env.FAKE_ACP_REASONING_TOOL_FIRST && reasoningErrors === 0) {
           out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "tool_call", toolCallId: "tc-reason-first", title: "agents__list_bots", kind: "other", status: "pending", rawInput: {} } } });
           out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "tool_call_update", toolCallId: "tc-reason-first", status: "completed", rawOutput: { output: "two bots" } } } });

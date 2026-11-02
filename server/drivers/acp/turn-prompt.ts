@@ -8,8 +8,8 @@ import {
   ACP_PROMPT_RE_ANCHOR_TURNS, formatQuietLimit, promptIdleTimeoutMs,
 } from "./constants.ts";
 import {
-  acpVariantOption, isReasoningOnlyEmpty, readAcpImageBlocks, reasoningContinueMax,
-  REASONING_CONTINUE_NUDGE, REASONING_ONLY_SOFT_MESSAGE,
+  acpVariantOption, isReasoningOnlyEmpty, lowerReasoningEffort, readAcpImageBlocks, reasoningContinueMax,
+  REASONING_CONTINUE_NUDGE, reasoningOnlySoftMessage,
 } from "./helpers.ts";
 import { engineFailureKind, engineFailureMessage } from "../engine-errors.ts";
 import type { AcpTurnCtx } from "./turn-context.ts";
@@ -68,7 +68,6 @@ export async function promptAcpTurn(ctx: AcpTurnCtx): Promise<void> {
       },
     });
   };
-  void receiveModelVariants;
   const requestedVariantOption = () => {
     if (!support.modelVariants) throw new Error(`${support.displayName} does not support model variants`);
     const option = acpVariantOption(session.sessionConfigResult);
@@ -190,6 +189,43 @@ let result: any;
 // reasons ends gracefully rather than looping.
 const reasoningMax = reasoningContinueMax();
 let reasoningRetries = 0;
+// The effort a reasoning-only nudge lowered, to put back once the nudge
+// settles: a pooled process keeps its session for the next turn, and that
+// turn must run at the bot's own effort. A restore that fails closes the
+// process after this turn (the next one relaunches with the bot's flags).
+let loweredEffort: { configId: string; value: string } | null = null;
+let effortRestoreFailed = false;
+// Short on purpose: an effort switch is a local config write, and a hung one
+// must not hold the turn's settle.
+const EFFORT_SWITCH_TIMEOUT_MS = 15_000;
+const restoreEffort = async () => {
+  const lowered = loweredEffort;
+  if (!lowered) return;
+  loweredEffort = null;
+  if (session.child.exitCode !== null || session.closing) return;
+  try {
+    await request("session/set_config_option", { sessionId, configId: lowered.configId, value: lowered.value },
+      EFFORT_SWITCH_TIMEOUT_MS, receiveModelVariants);
+    if (acpVariantOption(session.sessionConfigResult)?.currentValue !== lowered.value) effortRestoreFailed = true;
+  } catch {
+    effortRestoreFailed = true;
+  }
+};
+let effortWasLowered = false;
+const lowerEffortForNudge = async () => {
+  const option = acpVariantOption(session.sessionConfigResult);
+  const lower = lowerReasoningEffort(option);
+  if (!option || !lower || option.currentValue === undefined) return;
+  try {
+    await request("session/set_config_option", { sessionId, configId: option.configId, value: lower },
+      EFFORT_SWITCH_TIMEOUT_MS, receiveModelVariants);
+    loweredEffort = { configId: option.configId, value: option.currentValue };
+    effortWasLowered = acpVariantOption(session.sessionConfigResult)?.currentValue === lower;
+  } catch (error) {
+    // The nudge still goes out at the bot's own effort.
+    console.warn(`[acp] ${support.displayName} kept its reasoning effort for the nudge: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
 for (;;) {
   try {
     if (reasoningRetries === 0 && stallMs > 0) {
@@ -225,8 +261,12 @@ for (;;) {
     // first, so it never got the nudge and failed outright). Uncommitted
     // assistant deltas are abandoned: they are not a final answer, and
     // keeping them used to force the raw Internal error through (#1820).
+    // 2026-11-02 (prod, Grok): a turn that said a line and reacted to a
+    // message before its reasoning-only answer was never nudged, so it
+    // failed after 0 continuations and the person waited twice for Grok's
+    // own 15 retries. What the bot already said or did stays in the live
+    // session; the nudge asks only for what is missing.
     const canNudge = reasoningOnly
-      && !state.producedReply
       && current.asks.size === 0
       && current.runningTools.size === 0
       && reasoningRetries < reasoningMax
@@ -236,8 +276,11 @@ for (;;) {
     if (canNudge) {
       state.text = "";
       reasoningRetries += 1;
+      // Ask at a lower effort when the session offers one: the same effort
+      // already spent the whole answer on reasoning.
+      if (reasoningRetries === 1) await lowerEffortForNudge();
       // Internal detail for the logs, not a row in the chat.
-      console.warn(`[acp] ${support.displayName} returned its reasoning without an answer, so Sagax asked it to finish.`);
+      console.warn(`[acp] ${support.displayName} returned its reasoning without an answer, so Sagax asked it to finish${effortWasLowered ? " with lower effort" : ""}.`);
       continue;
     }
     if (reasoningOnly) {
@@ -246,20 +289,28 @@ for (;;) {
       // Drop uncommitted deltas so settle does not flush a leak as
       // a reply beside the soft error.
       if (!state.producedItem) state.text = "";
+      loweredEffort = null; // the session closes below: nothing to restore
       console.log(`[acp] ${support.displayName} returned reasoning only after ${reasoningRetries} continuation(s); turn ended gracefully (${threadId})`);
       emit({
         ...base(threadId, turnId),
         type: "runtime.error",
-        message: `${support.displayName} ${REASONING_ONLY_SOFT_MESSAGE}`,
+        message: `${support.displayName} ${reasoningOnlySoftMessage({
+          retried: reasoningRetries > 0,
+          loweredEffort: effortWasLowered,
+          stepsRan: current.endedToolIds.size > 0,
+        })}`,
       });
       if (session.child.exitCode === null && !session.closing) closeSession(threadId, "reasoning-only");
       settle(threadId, session, false, "reasoning_only");
       return;
     }
+    await restoreEffort();
+    if (effortRestoreFailed && session.child.exitCode === null && !session.closing) closeSession(threadId, "effort-restore");
     throw promptError;
   }
   break;
 }
+await restoreEffort();
 if (pendingSplitReceipt) {
   // session/prompt resolving is the acceptance boundary: a
   // rejected prompt leaves the receipt unwritten, so the next
@@ -341,6 +392,9 @@ else {
   });
   settle(threadId, session, false, engineFailureKind(errorMessage) === "context_full" ? "context_full" : (reason ?? "failed"));
 }
+// The nudge's lower effort could not be put back: never let the next turn
+// run on it in this pooled process.
+if (effortRestoreFailed && session.child.exitCode === null && !session.closing) closeSession(threadId, "effort-restore");
 
   ctx.session = session;
   ctx.state = state;

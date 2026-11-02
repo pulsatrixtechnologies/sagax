@@ -126,7 +126,7 @@ let wiring: ReturnType<typeof outboundWiring>;
 let messageCounter = 0;
 
 function makeWiring() {
-  return outboundWiring({
+  const made = outboundWiring({
     dataDir: dir,
     now: () => clock,
     store: {
@@ -154,6 +154,10 @@ function makeWiring() {
     principalSub: (principalId) => Object.values(PEOPLE).find((person) => person.principalId === principalId)?.sub ?? null,
     wake: (botId, threadId, _messageId, prompt) => wakes.push({ botId, threadId, prompt }),
   });
+  // the one-time acceptable-use consent (5e792c845) is its own gate, tested in
+  // outbound-wiring.test.ts; these people accepted it already
+  for (const person of Object.values(PEOPLE)) made.consentStore.accept(person.principalId, "bot-rocket");
+  return made;
 }
 
 const placeAs = (who: keyof typeof PEOPLE, args: Record<string, unknown> = ARGS) =>

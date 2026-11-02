@@ -480,6 +480,8 @@ export interface PlaceCallDeps {
   /** Person's approval level is Auto and org Ask/Deny lets this call skip
    * the per-call request card (consent still required). */
   autoPlace?: boolean;
+  /** The server clock (the live card's liveStartedAt). */
+  now?: () => number;
 }
 
 /** A name said on the call: visible characters, cut at 80 on a word, never
@@ -600,7 +602,7 @@ async function placeConversation(
     const placed = answer.ok && !answer.isError && !/needs_confirmation/.test(shortError(answer.value, ""));
     const sid = placed ? sidOf(answer.value) : undefined;
     const settled = deps.calls.settle(approved.id, placed ? (sid ? { callSid: sid } : {}) : { error: answer.ok ? shortError(answer.value, "Perspicax refused the call") : answer.error })!;
-    const live = conversation && placed ? { phase: "dialing" as const, liveStartedAt: Date.now() } : undefined;
+    const live = conversation && placed ? { phase: "dialing" as const, liveStartedAt: (deps.now ?? Date.now)() } : undefined;
     deps.card(settled, settled.messageId, live);
     deps.log?.(`outbound ${conversation ? "conversation" : "line"} call ${settled.status} to ${maskPhone(request.to)}`);
     if (!placed) return { text: `The call to ${maskPhone(request.to)} was not placed: ${settled.error ?? "no answer from Perspicax"}. Tell the person; do not retry without a new approval.`, isError: true };
@@ -631,7 +633,7 @@ async function placeConversation(
       const sid = placed ? sidOf(answer.value) : undefined;
       const settled = deps.calls.settle(approved.id, placed ? (sid ? { callSid: sid } : {}) : { error: answer.ok ? shortError(answer.value, "Perspicax refused the call") : answer.error })!;
       const live = conversation && placed
-        ? { phase: "dialing" as const, liveStartedAt: (deps as { now?: () => number }).now?.() ?? Date.now() }
+        ? { phase: "dialing" as const, liveStartedAt: (deps.now ?? Date.now)() }
         : undefined;
       deps.card(settled, settled.messageId, live);
       if (!placed) return { text: `The call to ${maskPhone(request.to)} was not placed: ${settled.error ?? "no answer from Perspicax"}. Tell the person; do not retry without a new approval.`, isError: true };

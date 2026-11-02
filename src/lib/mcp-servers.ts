@@ -16,6 +16,8 @@ export interface McpServerSummary {
   accounts?: Array<{ id: string; label?: string; connected: boolean }>;
   /** absent when the server did not say: a local command has no sign-in */
   auth?: McpAuthState;
+  /** Lot B: installation = shared org config; person = only-me (skip personal key writes into shared). */
+  scope?: "installation" | "person";
 }
 
 /** A server as the list route answers it (or as already summed up). */
@@ -24,6 +26,7 @@ interface McpServerInput {
   enabled: boolean;
   accounts?: Array<{ id: string; label?: string; auth?: string; connected?: boolean }>;
   auth?: string;
+  scope?: "installation" | "person";
 }
 
 const AUTH_STATES: readonly McpAuthState[] = ["none", "required", "connected", "expired", "error"];
@@ -39,7 +42,14 @@ function summary(server: McpServerInput): McpServerSummary {
     connected: account.connected ?? account.auth === "connected",
   }));
   const auth = authState(server.auth);
-  return { name: server.name, enabled: Boolean(server.enabled), ...(accounts.length > 1 ? { accounts } : {}), ...(auth ? { auth } : {}) };
+  const scope = server.scope === "installation" || server.scope === "person" ? server.scope : undefined;
+  return {
+    name: server.name,
+    enabled: Boolean(server.enabled),
+    ...(accounts.length > 1 ? { accounts } : {}),
+    ...(auth ? { auth } : {}),
+    ...(scope ? { scope } : {}),
+  };
 }
 
 let cached: { servers: McpServerSummary[] | null; error: boolean } = { servers: null, error: false };

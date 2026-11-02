@@ -3,6 +3,7 @@
  * from the client's hand-maintained mirrors (src/lib/routines.ts) so the
  * frame union and every client consumer share one home; the client file
  * re-exports these under the same names. */
+import type { LimitResetSchedule, LimitResetScheduleInput } from "./limit-reset.ts";
 import type { RoutineWatchPrecheck } from "./routine-watch.ts";
 import type { RoutineCronSchedule } from "./routine-schedule.ts";
 import type { RoutineWindowTiming } from "./routine-timing.ts";
@@ -28,6 +29,8 @@ export type RoutineSchedule =
     /** Inclusive epoch-millisecond cutoff. Missing means never. */
     endsAt?: number;
   } & RoutineWindowTiming)
+  /** Runs when an engine's usage limit resets (shared/limit-reset.ts). */
+  | LimitResetSchedule
   | { type: "webhook" }
   | { type: "event"; source: "email" };
 
@@ -47,6 +50,7 @@ export function isTriggerSchedule(
 
 export type RoutineScheduleInput =
   | Extract<RoutineSchedule, { type: "once" | "daily" | "cron" | "webhook" | "event" }>
+  | LimitResetScheduleInput
   | ({
     type: "interval";
     everyMinutes: number;
@@ -60,6 +64,10 @@ export type RoutineScheduleInput =
   } & RoutineWindowTiming);
 
 export type RoutineRunOn = "maus" | "cloud";
+
+/** What a routine's runs may do. `read-and-draft`: read Gmail and Google Calendar and write reply drafts; every other
+ * tool is refused outright, never turned into a card. Missing means the bot's own level. */
+export type RoutineAccess = "read-and-draft";
 
 export type RoutineTarget = "bot" | "room-goal";
 export type RoutineGoalStatus =
@@ -87,6 +95,8 @@ export type RoutineRunStatus =
   | "waiting"
   | "completed"
   | "failed"
+  /** Flow refused run init (previous unclosed / unknown routine / run_exists). */
+  | "blocked"
   | "cancelled"
   | "missed"
   /** The routine's pre-check found nothing to do; no turn started. */
@@ -100,7 +110,7 @@ export type RoutineRetryCause = "stalled" | "restarted" | "rate_limited" | "prov
 /** The statuses both failure indicators count: a run that went wrong and has
  * not been acknowledged. One home so the sidebar dot, the errors pill, the
  * logs filter and the bulk-seen sweep cannot drift apart. */
-export const ROUTINE_PROBLEM_STATUSES: readonly RoutineRunStatus[] = ["failed", "missed"];
+export const ROUTINE_PROBLEM_STATUSES: readonly RoutineRunStatus[] = ["failed", "blocked", "missed"];
 
 export function isRoutineProblemRun(run: { status: RoutineRunStatus; problems?: string }): boolean {
   // 2026-11-01: a run that completed with problems counts as a problem too.
@@ -185,6 +195,8 @@ export interface Routine {
    * schedule with a known end (once, or interval with endsAt). Off by
    * default. Past runs stay in the calendar and the run log. */
   deleteWhenFinished?: boolean;
+  /** Confined runs: read Gmail/Calendar and write reply drafts only. */
+  access?: RoutineAccess;
   nextRunAt: number | null;
   /** Scheduled slot a flexible routine advances from. Absent for exact timing. */
   nominalRunAt?: number;
@@ -269,6 +281,10 @@ export interface RoutineRun {
   /** Someone else's run seen through a wider scope: output, instructions
    * and threads withheld (server/routine-scope.ts). */
   redacted?: true;
+  /** Snapshot of the routine's confined access for this run. */
+  access?: RoutineAccess;
+  /** Items its routine's checks handed this run, so they are kept or released once it ends. */
+  checkKey?: string;
 }
 
 export interface RoutineInput {
@@ -306,13 +322,16 @@ export interface RoutineInput {
   folder?: string | null;
   /** Delete once the schedule ends and the last run settles. Off unless true. */
   deleteWhenFinished?: boolean;
+  /** `null` clears confined access; omission preserves it on updates. */
+  access?: RoutineAccess | null;
 }
 
 /** True when the schedule has a known last occurrence: a one-time run, or
  * an interval with an endsAt cutoff. Cron, daily, webhook and email triggers
  * do not. */
-export function scheduleHasKnownEnd(schedule: { type: string; endsAt?: number | null } | null | undefined): boolean {
+export function scheduleHasKnownEnd(schedule: { type: string; endsAt?: number | null; repeat?: unknown } | null | undefined): boolean {
   if (!schedule) return false;
   if (schedule.type === "once") return true;
+  if (schedule.type === "limit_reset") return schedule.repeat !== "every_reset";
   return schedule.type === "interval" && typeof schedule.endsAt === "number";
 }

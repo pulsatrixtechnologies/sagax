@@ -57,7 +57,7 @@ const showFrame = async () => {
   await emit(source, "ready", { viewerId: "viewer-1" });
   await emit(source, "frame", FRAME);
 };
-const takeControl = () => act(async () => { (document.querySelector("[data-take-control]") as HTMLButtonElement).click(); });
+const takeControl = () => act(async () => { (document.querySelector("[data-computer-open]") as HTMLButtonElement).click(); });
 
 describe("browser tab: a live preview like the VM's screen", () => {
   it("draws the browser in the screen's frame and connects a watch-only preview at once", async () => {
@@ -65,7 +65,7 @@ describe("browser tab: a live preview like the VM's screen", () => {
     expect(screen()?.getAttribute("data-computer-source")).toBe("browser");
     expect(preview().map((source) => source.url)).toEqual(["/api/bots/quasar/browser/live?preview=1"]);
     expect(screen()?.getAttribute("data-computer-screen")).toBe("starting");
-    expect(document.body.textContent).toContain("Connecting to the browser…");
+    expect(document.body.textContent).toContain("Waking up…");
     expect(document.body.textContent).not.toMatch(/Nothing is streamed|full screen/);
     // No Play / Pause / Stop: a browser has no power of its own.
     expect(document.querySelector("[data-screen-controls]")).toBeNull();
@@ -92,9 +92,10 @@ describe("browser tab: a live preview like the VM's screen", () => {
     expect(image.alt).toBe("Assistant’s browser");
     await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(null))); });
     expect(api).toHaveBeenCalledWith("/api/bots/quasar/browser/action", expect.objectContaining({ method: "POST", body: JSON.stringify({ type: "ack", seq: 1, viewerId: "viewer-1" }) }));
-    expect(document.querySelector("[data-browser-preview][data-take-control]")?.textContent).toContain("Take control");
-    // Shown on hover, always on touch, not drawn over the page otherwise.
-    expect(document.querySelector("[data-take-control-pill]")?.className).toMatch(/opacity-0 .*group-hover\/preview:opacity-100 .*touch:opacity-100/);
+    // The screen's centered Open pill opens the window; revealed on hover or focus, not drawn over the page otherwise.
+    const open = document.querySelector("[data-computer-open]") as HTMLElement;
+    expect(open.textContent).toContain("Open");
+    expect(open.className).toContain("opacity-0");
     // The caption: one line, the whole name in its tooltip.
     const caption = document.querySelector("figcaption")!;
     expect(caption.className).toContain("truncate");
@@ -107,9 +108,10 @@ describe("browser tab: a live preview like the VM's screen", () => {
     await emit(preview()[0]!, "offline");
     expect(preview()[0]!.closed).toBe(true);
     expect(screen()?.getAttribute("data-computer-screen")).toBe("off");
-    expect(document.body.textContent).toContain("Assistant’s browser is closed.");
-    const take = [...document.querySelectorAll("[data-computer-screen] button")].find((button) => button.textContent === "Take control");
-    expect(take).toBeDefined();
+    expect(document.body.textContent).toContain("Browser is asleep");
+    // Asleep: clicking the sleeping screen is the way in (opens the window, never launches from the square).
+    const take = document.querySelector("[data-computer-screen] [data-screen-calm=asleep][role=button]");
+    expect(take).not.toBeNull();
     expect(document.querySelector("[data-screen-controls]")).toBeNull();
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     expect(preview()).toHaveLength(2);
@@ -205,19 +207,25 @@ describe("browser tab: take control opens the VM's window, not full screen", () 
     await emit(source, "frame", FRAME);
     expect(document.querySelector("[data-browser-preview] img")).toBeNull();
     expect(document.querySelector("[data-browser-blank]")?.textContent).toContain("The browser is not open");
-    expect(document.querySelector("[data-browser-blank] [data-take-control]")?.textContent).toContain("Take control");
+    expect(screen()?.getAttribute("data-computer-screen")).toBe("running");
+    expect(document.querySelector("[data-computer-open]")?.textContent).toContain("Open");
     await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(null))); });
     expect(api).toHaveBeenCalledWith("/api/bots/quasar/browser/action", expect.objectContaining({ body: JSON.stringify({ type: "ack", seq: 1, viewerId: "viewer-1" }) }));
     await emit(source, "url", { url: "https://www.google.com/" });
     expect(document.querySelector("[data-browser-preview] img")).not.toBeNull();
   });
 
-  it("keeps Take control in view while the bot waits on the person", async () => {
+  it("keeps Open in view while the bot waits on the person, and only on hover otherwise", async () => {
     await act(async () => root.render(createElement(BrowserComputerScreen, { bot: { ...bot, tasks: [{ threadId: "t", activity: "waiting-on-you" }] } as unknown as Bot })));
     await showFrame();
-    expect(document.querySelector("[data-take-control-pill]")?.getAttribute("data-take-control-pill")).toBe("shown");
-    expect(document.querySelector("[data-take-control-pill]")?.className).toContain("opacity-100");
-    expect(document.querySelector("[data-take-control-pill]")?.className).not.toContain("opacity-0");
+    const pill = document.querySelector("[data-computer-open]") as HTMLElement;
+    expect(pill.getAttribute("data-open-pill")).toBe("shown");
+    expect(pill.className).toContain("opacity-100");
+    expect(pill.className).not.toContain("opacity-0");
+    await act(async () => root.render(createElement(BrowserComputerScreen, { bot })));
+    const idle = document.querySelector("[data-computer-open]") as HTMLElement;
+    expect(idle.getAttribute("data-open-pill")).toBe("hover");
+    expect(idle.className).toContain("opacity-0");
   });
 
   it("closes on Escape outside the page, ends the live connection and resumes the preview", async () => {

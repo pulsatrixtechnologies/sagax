@@ -103,13 +103,13 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
   {
     id: "routines",
     title: "Routines and schedules",
-    tools: ["propose_routine", "propose_routine_action", "list_routines", "run_routine"],
+    tools: ["propose_routine", "propose_routine_action", "list_routines", "run_routine", "wait_until", "list_waits", "cancel_wait"],
   },
   {
     id: "team",
     title: "Team, bots, rooms and profile",
     tools: [
-      "propose_team_setup", "list_team_setup", "propose_profile", "propose_model",
+      "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_rule",
       "propose_bot_deletion", "archive_bot", "create_bot", "create_room", "manage_room",
       "propose_team_memory", "nudge_person", "retry_thread", "start_thread",
     ],

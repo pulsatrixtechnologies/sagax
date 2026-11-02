@@ -26,17 +26,30 @@ export function isSecretName(name: string): boolean {
   return /(^|[_.-])keys?$/.test(lower);
 }
 
-import { mask, redactSecretsInText as redactSecretPatterns } from "../shared/redact.ts";
+import {
+  addHeldSecretScrubber,
+  holdsCredential,
+  HELD_SECRET_MASK,
+  mask,
+  redactCutSecrets,
+  redactSecretsInText as redactSecretPatterns,
+  scrubHeldSecrets,
+} from "../shared/redact.ts";
+// Side effect: registers the filled-vault scrubber on the shared held API
+// (Lot A0). Import before any redactSecretsInText call on the server.
+import "./filled-secret-guard.ts";
 import { redactFilledSecrets } from "./filled-secret-guard.ts";
 
 // Text-shaped secret redaction lives in shared/redact.ts so the client (task
 // timeline) and the server scrub the same shapes without the client bundling
-// server code. The server pass also removes a vault value that was used to
-// fill a page: that value is not key-shaped, and it must not reach a prompt
-// or a journal. `mask` stays the shared one.
-export { mask };
+// server code. Held / filled vault values register through addHeldSecretScrubber
+// and run inside the shared pass. `mask` stays the shared one.
+export { addHeldSecretScrubber, holdsCredential, HELD_SECRET_MASK, mask, redactCutSecrets, scrubHeldSecrets };
 
 export function redactSecretsInText(text: string): string {
+  // Shared pass already runs held scrubbers (filled-secret-guard). Keep an
+  // explicit filled pass so a caller that imported shared/redact alone and
+  // then this module still gets vault fills scrubbed if registration raced.
   return redactFilledSecrets(redactSecretPatterns(text));
 }
 

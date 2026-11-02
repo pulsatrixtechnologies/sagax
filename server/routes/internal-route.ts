@@ -19,12 +19,19 @@ export interface InternalCapabilityView {
   depth?: number;
   sandboxPrincipalId?: string;
   desktopPrincipalId?: string;
+  /** react_to_message calls this turn has made. Mutable on the live capability. */
+  reactions?: number;
+  /** Group memory / workspace write refusals this turn. Mutable on the live capability. */
+  memoryRefusals?: number;
 }
 
 export interface InternalRouteContext {
   res: ServerResponse;
   path: string;
   method: string;
+  /** Request URL (query params for GET internal routes). Optional until every
+   * caller passes it; wave-1 slices that need query params read it. */
+  url?: URL;
   json: typeof json;
   capability: InternalCapabilityView;
   /** The internal block's body reader: it re-checks that the turn is live. */

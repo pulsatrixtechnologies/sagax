@@ -59,3 +59,26 @@ export function tableRowOrder(rows: readonly (readonly string[])[], query: strin
 export function tableCsv(headers: readonly string[], rows: readonly (readonly string[])[]): string {
   return Papa.unparse([headers, ...rows], { newline: "\r\n", escapeFormulae: true });
 }
+
+/** Bound chunked responses too; this is a preview limit, not a download limit.
+ * `maxBytes` lets HTML (and similar) previews use a tighter cap than tables. */
+export async function readTableResponse(response: Response, signal: AbortSignal, maxBytes = TABLE_FILE_MAX_BYTES): Promise<string> {
+  if (Number(response.headers.get("content-length")) > maxBytes) {
+    await response.body?.cancel(); throw new Error("size");
+  }
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let size = 0, text = "";
+  try {
+    while (true) {
+      signal.throwIfAborted();
+      const part = await reader.read();
+      if (part.done) break;
+      size += part.value.byteLength;
+      if (size > maxBytes) throw new Error("size");
+      text += decoder.decode(part.value, { stream: true });
+    }
+    return text + decoder.decode();
+  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+}

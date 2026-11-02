@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createEmailSendPasses, emailSendCard, sendWithMailer } from "./email-draft-send.ts";
-import { createMailer, type Mailer } from "./mailer.ts";
+import { createCaptureMailer, createMailer, type Mailer } from "./mailer.ts";
 import {
   EMAIL_SEND_PASS_MS,
   emailDraftKey,
@@ -13,10 +13,46 @@ import {
   emailSendSummary,
   mailConnectorsOf,
   normalizeDraftForSend,
+  outboundMailNeedsDraftCard,
   type EmailDraftToSend,
 } from "../shared/email-draft-send.ts";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const draft: EmailDraftToSend = { to: ["marie@example.com"], cc: ["luc@example.com"], bcc: [], subject: "Suivi du billet 48213", body: "Bonjour Marie,\n\nC'est réglé.\n" };
+
+describe("outboundMailNeedsDraftCard", () => {
+  it("requires a draft card when the person did not ask in their own turn", () => {
+    expect(outboundMailNeedsDraftCard({ personAsked: false, ownerTurn: false })).toBe(true);
+    expect(outboundMailNeedsDraftCard({ personAsked: true, ownerTurn: false })).toBe(true);
+    expect(outboundMailNeedsDraftCard({ personAsked: false, ownerTurn: true })).toBe(true);
+    expect(outboundMailNeedsDraftCard({ personAsked: true, ownerTurn: true })).toBe(false);
+  });
+});
+
+describe("fake mail transport", () => {
+  it("captures sends to a file and never talks to a real provider", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-mail-"));
+    const file = join(dir, "capture.jsonl");
+    try {
+      const mailer = createCaptureMailer(file);
+      expect(await sendWithMailer(mailer, draft)).toEqual({
+        ok: true,
+        sentTo: ["marie@example.com", "luc@example.com"],
+      });
+      const lines = readFileSync(file, "utf8").trim().split("\n");
+      expect(lines).toHaveLength(1);
+      expect(JSON.parse(lines[0]!)).toMatchObject({
+        to: "marie@example.com",
+        subject: draft.subject,
+        text: draft.body,
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("normalizeDraftForSend", () => {
   it("keeps plain addresses and refuses header injection or no recipient", () => {
@@ -26,6 +62,18 @@ describe("normalizeDraftForSend", () => {
     expect(normalizeDraftForSend({ to: [], subject: "x", body: "y" })).toEqual({ problems: ["to needs at least one address"] });
     expect("problems" in normalizeDraftForSend({ to: ["not an address"], subject: "x" })).toBe(true);
     expect("problems" in normalizeDraftForSend({ to: ["a@b.ca"], subject: "", body: " " })).toBe(true);
+  });
+
+  it("preserves attachments on the draft card", () => {
+    expect(normalizeDraftForSend({
+      to: ["marie@example.com"], subject: "Facture", body: "Voici.",
+      attachments: [{ name: "facture.pdf", type: "application/pdf", size: 48213, ref: "att-1" }],
+    })).toEqual({
+      draft: {
+        to: ["marie@example.com"], cc: [], bcc: [], subject: "Facture", body: "Voici.",
+        attachments: [{ name: "facture.pdf", type: "application/pdf", size: 48213, ref: "att-1" }],
+      },
+    });
   });
 
   it("gives the same key for the same draft", () => {

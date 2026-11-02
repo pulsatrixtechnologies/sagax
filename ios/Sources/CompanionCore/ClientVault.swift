@@ -89,9 +89,19 @@ public struct SecurityKeysList: Decodable, Equatable, Sendable {
     public var classes: [String]
 }
 
+public struct TeamBotVaultList: Decodable, Equatable, Sendable {
+    public var items: [VaultItemPublic]
+    public var botId: String
+}
+
 public extension CompanionClient {
     func vaultItems() async throws -> VaultList {
         try await send(makeRequest("POST", "/api/me/credentials/list", body: [:]), as: VaultList.self)
+    }
+
+    /// Shared logins of a team bot (managers only). Listings never carry a value.
+    func teamBotVaultItems(botId: String) async throws -> TeamBotVaultList {
+        try await send(makeRequest("POST", "/api/bots/\(botId)/credentials/list", body: [:]), as: TeamBotVaultList.self)
     }
 
     func revealVaultItem(id: String, field: String) async throws -> VaultReveal {

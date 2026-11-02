@@ -120,6 +120,8 @@ export function buildNotification(
                 ? `${who} hit a problem`
                 : kind === "delegation-settled"
                   ? `${who} resumed with results`
+                  : kind === "wait"
+                    ? `${who}'s wait is done`
                   : `${who} finished`;
 
   // A "finished" with nothing to say is not worth a notification — the

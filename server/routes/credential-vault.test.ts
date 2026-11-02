@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { vaultHandle } from "../../shared/credential-vault.ts";
+import { botVaultPrincipal, vaultHandle } from "../../shared/credential-vault.ts";
 import type { SecretRequestCardData } from "../../shared/wire.ts";
 import { CredentialVault, LOCAL_VAULT_PRINCIPAL } from "../credential-vault.ts";
 import { json, readBody } from "../harness/http.ts";
@@ -298,6 +298,11 @@ describe("whose vault a request reads", () => {
   const service: RequestAuth = { kind: "loopback", scopes: ["client"], trust: "service" };
   const session = (principalId?: string) => ({ kind: "session", via: "cookie", scopes: ["client"], session: { id: "s1", ...(principalId ? { principalId } : {}) } }) as unknown as RequestAuth;
   const solo = { organization: false, desktop: false, loopbackOptIn: false, localPrincipal: "local" };
+  it("never maps a person onto the team vault namespace", () => {
+    const org = { ...solo, organization: true };
+    expect(vaultPrincipalFor(session("bot:payroll"), org)).toBeNull();
+    expect(vaultPrincipalFor(session("pr_a"), org)).toBe("pr_a");
+  });
   it("answers loopback only on the desktop or with the operator's opt-in, never a service caller", () => {
     expect(vaultPrincipalFor(loopback, solo)).toBeNull();
     expect(vaultPrincipalFor(loopback, { ...solo, desktop: true })).toBe("local");
@@ -351,6 +356,51 @@ describe("request_login internal route", () => {
     expect(second).toMatchObject({ status: 200, body: { granted: [{ handle: vaultHandle(item.id), name: "Example", domains: ["example.test"], fields: ["username", "password", "totp"] }] } });
     expect(JSON.stringify(second)).not.toContain(FAKE_PASSWORD);
     expect(posted).toHaveLength(1);
+  });
+});
+
+describe("team bot login needs the owner's card", () => {
+  it("posts a card to the bot owner, and the card grants once or always", async () => {
+    const { call, cards, vault } = await serve({ principal: "pr_owner" });
+    const team = botVaultPrincipal("bot-a");
+    const shared = vault.createForTeamBot("bot-a", { kind: "login", name: "Shared SSO", username: "t@example.test", password: FAKE_PASSWORD, domains: ["sso.example.test"] });
+    const posted: SecretRequestCardData[] = [];
+    const routes = [createCredentialVaultInternalRoutes({
+      vault,
+      principalForThread: () => "pr_member",
+      botOwner: () => "pr_owner",
+      botName: () => "Ada",
+      postCard: (_botId, _threadId, secret) => { posted.push(secret); return `m${posted.length}`; },
+    })];
+    const ask = async () => {
+      let answer: { status: number; body: unknown } | null = null;
+      const res = { headersSent: false, writableEnded: false } as unknown as Parameters<typeof dispatchInternalRoutes>[1]["res"];
+      await dispatchInternalRoutes(routes, {
+        res, path: "/api/internal/credentials/request", method: "POST",
+        json: ((_res: unknown, status: number, value: unknown) => { answer = { status, body: value }; }) as never,
+        capability: { botId: "bot-a", threadId: "t1", generation: "g" },
+        readBody: async () => ({ domain: "sso.example.test" }),
+      });
+      return answer!;
+    };
+    // Not allowed at creation: the first request posts a card for the owner.
+    expect((await ask()).status).toBe(201);
+    expect(posted[0]).toMatchObject({ vault: { principalId: "pr_owner", team: true, teamItems: [{ id: shared.id, name: "Shared SSO" }] } });
+    expect(JSON.stringify(posted[0])).not.toContain(FAKE_PASSWORD);
+    expect(vault.granted(team, shared.id, "bot-a", "t1")).toBe(false);
+
+    cards.set("t1:team1", posted[0]!);
+    cards.set("t1:team2", { ...posted[0]!, vault: { ...posted[0]!.vault!, principalId: "pr_member" } });
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/team2/grant", { threadId: "t1", itemId: shared.id, mode: "once" })).status).toBe(403);
+    // Only an item the card listed; nothing created through a team card.
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/team1/grant", { threadId: "t1", itemId: "zzzzzzzzzzzz", mode: "once" })).status).toBe(400);
+    expect((await call("POST", "/api/bots/bot-a/vault-cards/team1/grant", { threadId: "t1", mode: "once", item: { kind: "login", name: "x", domains: ["a.test"] } })).status).toBe(400);
+    const once = await call("POST", "/api/bots/bot-a/vault-cards/team1/grant", { threadId: "t1", itemId: shared.id, mode: "once" });
+    expect(once.status).toBe(200);
+    expect(vault.granted(team, shared.id, "bot-a", "t1")).toBe(true);
+    expect(vault.granted(team, shared.id, "bot-a", "t2")).toBe(false);
+    // Now the handle comes back at once in this conversation.
+    expect(await ask()).toMatchObject({ status: 200, body: { granted: [{ handle: vaultHandle(shared.id) }] } });
   });
 });
 

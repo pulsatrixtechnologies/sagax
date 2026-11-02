@@ -89,7 +89,7 @@ export function approvalCardOutcome(card: OptionCardData): string | undefined {
   if (card.expired === true) return t("approval.status.expired");
   if (!card.answered) return undefined;
   if (card.undone === true) return t("approval.status.undone");
-  const isProposal = Boolean(card.routineRequest || card.skillRequest || card.profileRequest || card.modelRequest || card.teamSetupRequest);
+  const isProposal = Boolean(card.routineRequest || card.skillRequest || card.profileRequest || card.modelRequest || card.ruleRequest || card.teamSetupRequest);
   if (card.answered !== "allow") return card.teamSetupRequest?.suggestion ? t("approval.status.notNow") : isProposal ? t("approval.status.cancelled") : t("approval.status.denied");
   if (card.teamSetupRequest) return card.teamSetupRequest.deletion ? "Bot deleted" : "Team setup applied";
   const routineAction = card.routineRequest?.operation.action;
@@ -99,6 +99,11 @@ export function approvalCardOutcome(card: OptionCardData): string | undefined {
   if (skillAction) return t(SKILL_SETTLED_LABEL[skillAction]);
   if (card.profileRequest) return t("approval.status.profileUpdated");
   if (card.modelRequest) return t("approval.status.modelChanged");
+  if (card.ruleRequest) {
+    return card.ruleRequest.operation.action === "remove"
+      ? t("approval.status.ruleRemoved")
+      : t("approval.status.ruleUpdated");
+  }
   if (card.routineRequest) return t("approval.status.routineConfirmed");
   if (card.skillRequest) return t("approval.status.skillConfirmed");
   return t("approval.status.allowed");
@@ -216,6 +221,7 @@ export function toolLabel(tool?: string, input?: string, hints?: ToolHints): str
     stage_skill: "approval.tool.enableSkill",
     update_skill: "approval.tool.updateSkill",
     update_profile: "approval.tool.updateProfile",
+    propose_rule: "approval.tool.propose_rule",
     // An ACP driver can know the protocol's toolCall kind but not the
     // tool's name, and sends the kind as the card's tool
     // (server/drivers/acp/core.ts). Kinds are not verb phrases —
@@ -297,6 +303,8 @@ function plainWhen(schedule: RoutineRequestSchedule): string {
     return cronIsDescribed(schedule, cronLocale()) ? cronScheduleLabel(schedule, cronLocale()) : "";
   }
   if (schedule.type === "interval") return scheduleLabel({ ...schedule, anchorAt: schedule.anchorAt ?? 0 });
+  // Request wire omits derived `at`; label from engine + repeat only.
+  if (schedule.type === "limit_reset") return scheduleLabel({ ...schedule, at: null });
   return scheduleLabel(schedule);
 }
 
@@ -350,6 +358,16 @@ export function appliedChange(card: OptionCardData, name: string): { line: strin
       ? t("approval.applied.modelOwn", { name, title })
       : t("approval.applied.modelOther", { name, target: `@${model.targetName}`, title });
     return { line, canUndo: true };
+  }
+  const rule = card.ruleRequest;
+  if (rule) {
+    const title = rule.sentence;
+    const key = rule.operation.action === "add"
+      ? "approval.applied.ruleAdd"
+      : rule.operation.action === "change"
+        ? "approval.applied.ruleChange"
+        : "approval.applied.ruleRemove";
+    return { line: t(key, { name, title }), canUndo: false };
   }
   return undefined;
 }
@@ -458,6 +476,7 @@ export function ApprovalCard({
   const isRoutineRequest = Boolean(card.routineRequest);
   const isSkillRequest = Boolean(card.skillRequest);
   const isProfileRequest = Boolean(card.profileRequest);
+  const isRuleRequest = Boolean(card.ruleRequest);
   const isTeamSetup = Boolean(card.teamSetupRequest);
   const routineAction = card.routineRequest?.operation.action;
   const skillAction = card.skillRequest?.action;
@@ -469,6 +488,8 @@ export function ApprovalCard({
       ? skillAction === "update" ? "update_skill" : "stage_skill"
     : isProfileRequest
       ? "update_profile"
+    : isRuleRequest
+      ? "propose_rule"
     : card.tool;
   // A cross-bot profile card is shown in the PROPOSER's thread, so
   // "wants to update its profile" (fine for a bot editing itself) would
@@ -483,10 +504,12 @@ export function ApprovalCard({
         })
     : undefined;
 
-  const isProposal = isRoutineRequest || isSkillRequest || isProfileRequest || isTeamSetup;
+  const isProposal = isRoutineRequest || isSkillRequest || isProfileRequest || isRuleRequest || isTeamSetup;
   const view = isProposal ? undefined : toolApprovalView(card, bot?.name);
   const proposalTitle = isTeamSetup
     ? card.title
+    : isRuleRequest && card.title
+      ? card.title
     : profileHeader ?? (bot
       ? t("approval.card.namedWantsTo", { name: bot.name, action: toolLabel(displayTool) })
       : t("approval.card.wantsTo", { action: toolLabel(displayTool) }));
@@ -599,6 +622,8 @@ export function ApprovalCard({
               ? t("approval.aria.skillDetails")
               : isProfileRequest
                 ? t("approval.aria.profileChange")
+                : isRuleRequest
+                  ? t("approval.aria.ruleChange")
                 : t("approval.aria.details")
         }
         className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-inset px-3 py-2 font-mono text-[12.5px] leading-relaxed text-ink"

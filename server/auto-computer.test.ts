@@ -153,7 +153,8 @@ describe("Auto guidance (prompt fixture)", () => {
     expect(text).toMatch(/local_vm: isolated/);
     expect(text).toMatch(/browser: pure web work/);
     expect(text).toMatch(/cloud: work that must keep running while the person is away .*routine.*offline or asleep.*long job/);
-    expect(text).toContain("each new message starts over from the default (the person's computer when it is connected)");
+    expect(text).toContain("each new message starts over from the default (a person-asked turn: the person's computer when it is connected; a routine: the cloud)");
+    expect(text).toContain("Routines may call computer_select for this_computer or local_vm only when the owner allowed routines on their computer");
     expect(text).toMatch(/Sub-agents: start_thread .* and create_agent take a workspace too/);
   });
 
@@ -250,11 +251,21 @@ describe("where an Auto turn starts (Owner 2026-10-15)", () => {
     expect(autoStartTarget({ ...base, wanted: "browser", browserAvailable: false })).toEqual({ target: "this_computer", wanted: "browser", fallback: "unavailable" });
   });
 
-  it("sends a routine to the cloud unless the owner allowed their computer AND it is online", () => {
+  it("starts a routine in the cloud by default; routinesAllowed only permits an explicit computer_select", () => {
     const routine = { ...base, routine: true, personAsked: false };
+    // default is cloud even when the Mac is online and routines are allowed
     expect(autoStartTarget(routine)).toEqual({ target: "cloud", wanted: "cloud", fallback: null });
-    expect(autoStartTarget({ ...routine, routinesAllowed: true })).toEqual({ target: "this_computer", wanted: "this_computer", fallback: null });
-    expect(autoStartTarget({ ...routine, routinesAllowed: true, desktopConnected: false })).toEqual({ target: "cloud", wanted: "this_computer", fallback: "offline" });
+    expect(autoStartTarget({ ...routine, routinesAllowed: true })).toEqual({ target: "cloud", wanted: "cloud", fallback: null });
+    // offline before the first turn: never try the computer (default is already cloud)
+    expect(autoStartTarget({ ...routine, routinesAllowed: true, desktopConnected: false })).toEqual({ target: "cloud", wanted: "cloud", fallback: null });
+    // explicit this_computer with permission, online
+    expect(autoStartTarget({ ...routine, routinesAllowed: true, wanted: "this_computer" })).toEqual({
+      target: "this_computer", wanted: "this_computer", fallback: null,
+    });
+    // explicit this_computer with permission, offline: fall back and say so
+    expect(autoStartTarget({ ...routine, routinesAllowed: true, wanted: "this_computer", desktopConnected: false })).toEqual({
+      target: "cloud", wanted: "this_computer", fallback: "offline",
+    });
     // a routine sub-agent sent to the computer without that permission
     expect(autoStartTarget({ ...routine, wanted: "this_computer" })).toEqual({ target: "cloud", wanted: "this_computer", fallback: "routine-not-allowed" });
   });

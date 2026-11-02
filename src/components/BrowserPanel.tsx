@@ -511,14 +511,6 @@ export function isBlankPage(url: string): boolean {
   return trimmed === "" || trimmed === "about:blank" || trimmed.startsWith("chrome://newtab") || trimmed.startsWith("chrome://new-tab-page");
 }
 
-/** The Take control pill at the bottom of the picture: shown on hover or
- * keyboard focus, always on a touch screen (no hover there), and always
- * while the bot waits on the person. */
-export function takeControlPillClass(waiting: boolean): string {
-  return cn("pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-black/75 px-4 py-2 text-[13px] font-medium text-white shadow-md backdrop-blur-sm transition-opacity duration-150",
-    waiting ? "opacity-100" : "opacity-0 group-hover/preview:opacity-100 group-focus-within/preview:opacity-100 touch:opacity-100");
-}
-
 /** Acknowledges a frame that is not drawn (a blank page), so the server keeps
  * pacing frames and the picture comes back when a page opens. */
 function FrameAck({ frame, acknowledge }: { frame: PreviewFrame; acknowledge: (frame: PreviewFrame) => void }) {
@@ -553,6 +545,8 @@ export function BrowserComputerScreen({ bot }: { bot: Bot }) {
   const lastFrame = useRef<string | undefined>(undefined);
   if (preview.frame && !preview.blank) lastFrame.current = preview.frame.src;
   const open = () => setTakeover(true);
+  // The bot waits on the person (sign-in, captcha): keep Open in view.
+  const waiting = bot.tasks?.some((task) => task.activity === "waiting-on-you") === true;
   // The picker's dot: green while a browser session is live, neutral otherwise.
   const session = takeover || preview.state === "busy" || (preview.state === "live" && Boolean(preview.frame) && !preview.blank);
   useEffect(() => { reportScreenDot(`browser:${bot.id}`, browserDot(session)); }, [bot.id, session]);
@@ -562,9 +556,10 @@ export function BrowserComputerScreen({ bot }: { bot: Bot }) {
   const actions: ScreenAction[] = preview.state === "error"
     ? [{ label: t("computerScreen.retry"), onClick: preview.retry }, { label: t("computerScreen.open"), onClick: open }]
     : [];
-  // Offline → calm asleep. Connecting/busy → waking. Live frame → running;
+  // Offline → calm asleep. Connecting/busy → waking. Live frame (a blank page
+  // included, so Open stays reachable) → running;
   // ComputerScreen owns the centered Open pill (no second overlay here).
-  const screenState: ScreenState = takeover || (preview.state === "live" && preview.frame && !preview.blank) ? "running"
+  const screenState: ScreenState = takeover || (preview.state === "live" && preview.frame) ? "running"
     : preview.state === "offline" ? "off"
     : preview.state === "error" ? "error"
     : "starting";
@@ -590,6 +585,7 @@ export function BrowserComputerScreen({ bot }: { bot: Bot }) {
       bot={bot}
       computerName={t("computer.view.browser")}
       onOpen={screenState === "running" ? open : undefined}
+      openAlwaysShown={waiting}
       controls={screenState === "off" ? { play: open } : undefined}
     />
     {takeover && <SandboxDesktopModal kind="browser" title={caption} state="running" onClose={() => { setTakeover(false); setTeach(false); }}

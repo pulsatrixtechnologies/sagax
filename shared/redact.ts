@@ -1,8 +1,6 @@
-// Keeping secrets out of text that crosses a trust boundary — the native
-// protocol log, tool titles, activity chips. The log keeps the SHAPE and
-// loses the VALUES: a redacted entry still tells you a token was passed,
-// under which name, and how long it was — enough to debug "the proxy got
-// no token" without the token being there.
+// Keeping secrets out of text that crosses a trust boundary: the native
+// protocol log, tool titles, activity chips. The log keeps the shape (the
+// name, the length) and loses the values.
 //
 // Single home in shared/ so the client (task timeline) and the server
 // (redact.ts deep scrub, native tee) redact identically; server/redact.ts
@@ -36,8 +34,18 @@ const KEY_PREFIXES: RegExp[] = [
   /\bAKIA[0-9A-Z]{16}\b/g, // aws access key id
   /\bAIza[0-9A-Za-z_-]{30,}/g, // google api key
   /\bnpm_[A-Za-z0-9]{20,}/g, // npm
+  /\bwhsec_[A-Za-z0-9_-]{20,}/g, // webhook secrets, alone or in an automation's address (upstream tip)
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, // jwt
 ];
+const KEY_PREFIX_TESTS = KEY_PREFIXES.map((re) => new RegExp(re.source));
+const PRIVATE_KEY_BLOCK = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
+
+/** Only shapes that are unmistakably a credential (a provider's key prefix, a private key block), never a name or a
+ * placeholder: text holding one is a credential store, not instructions. */
+export function holdsCredential(text: string): boolean {
+  return PRIVATE_KEY_BLOCK.test(text) || KEY_PREFIX_TESTS.some((re) => re.test(text));
+}
+
 const BEARER = /(\bBearer\s+)([A-Za-z0-9._~+/=-]{12,})/g;
 /** `Authorization: Basic dXNlcjpwYXNz`: the base64 is `user:password` in the clear. Only after an
  * Authorization header, so prose like "Basic configuration" stays (upstream #3985). */
@@ -77,12 +85,13 @@ const KEY_SUFFIX_ASSIGNMENT = /\b([A-Za-z][A-Za-z0-9_-]*[_-]key)s?(=)(["']?)([A-
 /** `--token abc`, `--password=abc`: the flag names a secret; the value is
  * whatever single token follows, never another flag. */
 const SECRET_FLAG = /(--(?:token|password|passwd|api-key|apikey|secret|access-key|auth-token)(?:=|\s+))(["']?)(?!-)([A-Za-z0-9._~+/=-]+)\2/gi;
-/** `scheme://user:secret@host` — the password in a URL's userinfo. */
+/** `scheme://user:secret@host`: the password in a URL's userinfo. */
 const URL_USERINFO = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@'"]+:)([^\s/@'"«»]+)(@)/gi;
 
 /** A key shape cut by a "…": what a title or a preview kept of a key once
- * it was shortened. Too short for KEY_PREFIXES, still part of the key. */
-const CUT_KEY = /\b(?:om[dg]_|sk-|[sr]k_(?:live|test)_|xai-|gsk_|hf_|gh[pousr]_|github_pat_|xox[abposr]-|AKIA|AIza|npm_|eyJ)[A-Za-z0-9_-]*(?=…)/g;
+ * it was shortened. Too short for KEY_PREFIXES, still part of the key.
+ * Includes xapp-, glpat- family and whsec_ (Lot A0). */
+const CUT_KEY = /\b(?:om[dg]_|sk-|[sr]k_(?:live|test)_|xai-|gsk_|csk-|hf_|gh[pousr]_|github_pat_|xox[abposr]-|xapp-|gl(?:pat|dt|rtr?)-|AKIA|AIza|npm_|whsec_|eyJ)[A-Za-z0-9_.-]*(?=…)/g;
 
 /** Mask the start of a key left in front of an ellipsis by a cut made
  * before any redaction (an older automatic task title, say). */
@@ -90,9 +99,35 @@ export function redactCutSecrets(text: string): string {
   return text && text.includes("…") ? text.replace(CUT_KEY, (m) => mask(m)) : text;
 }
 
-export function redactSecretsInText(text: string): string {
-  if (!text || text.length < 8) return text;
+// A saved website password or a vault fill has no shape: it is known by value.
+// The server registers a scrubber for the values it holds (filled-secret-guard),
+// and every redaction below runs it first. Nothing registers one in a client,
+// where this is a no-op.
+
+/** What a held secret becomes wherever it would have appeared (upstream tip). */
+export const HELD_SECRET_MASK = "••••••";
+
+const heldSecretScrubbers = new Set<(text: string) => string>();
+
+/** Register a scrubber for held secret values; returns its removal. */
+export function addHeldSecretScrubber(scrub: (text: string) => string): () => void {
+  heldSecretScrubbers.add(scrub);
+  return () => { heldSecretScrubbers.delete(scrub); };
+}
+
+export function scrubHeldSecrets(text: string): string {
+  if (!text || heldSecretScrubbers.size === 0) return text;
   let out = text;
+  for (const scrub of heldSecretScrubbers) out = scrub(out);
+  return out;
+}
+
+export function redactSecretsInText(text: string): string {
+  if (!text) return text;
+  // Held values first: a short one-time code is still a secret.
+  const held = scrubHeldSecrets(text);
+  if (held.length < 8) return held;
+  let out = held;
   out = maskPemBlocks(out);
   for (const re of KEY_PREFIXES) out = out.replace(re, (m) => mask(m));
   out = out.replace(BEARER, (_m, lead: string, tok: string) => `${lead}${mask(tok)}`);
@@ -103,4 +138,3 @@ export function redactSecretsInText(text: string): string {
   out = out.replace(URL_USERINFO, (_m, lead: string, secret: string, at: string) => `${lead}${mask(secret)}${at}`);
   return out;
 }
-

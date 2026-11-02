@@ -8,6 +8,7 @@
  * app restart without asking the model to interpret the request again.
  */
 
+import type { LimitResetRepeat } from "./limit-reset.ts";
 import type { RoutineWatchPrecheck } from "./routine-watch.ts";
 import type { RoutineCronSchedule } from "./routine-schedule.ts";
 import type { RoutineWindowTiming } from "./routine-timing.ts";
@@ -21,6 +22,8 @@ export interface RoutineRequestIntervalWindow {
 
 export type RoutineRequestSchedule =
   | { type: "once"; at: number }
+  /** The time is the engine's, derived when the routine is saved. */
+  | { type: "limit_reset"; engine: string; repeat: LimitResetRepeat }
   | ({ type: "daily"; time: string; weekdays: number[] } & RoutineWindowTiming)
   | (RoutineCronSchedule & RoutineWindowTiming)
   | ({

@@ -142,6 +142,10 @@ function portableSchedule(schedule: Routine["schedule"]): PackageRoutineSchedule
   if (schedule.type === "webhook" || schedule.type === "event") {
     throw new Error("A trigger routine is not part of a package");
   }
+  // Limit-reset waits on this server's engines; it does not travel in a package.
+  if (schedule.type === "limit_reset") {
+    throw new Error("A limit-reset routine is not part of a package");
+  }
   if (schedule.type === "once") return { type: "once", at: schedule.at };
   if (schedule.type === "cron") return { ...schedule };
   if (schedule.type === "interval") {

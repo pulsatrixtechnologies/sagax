@@ -595,7 +595,7 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
     // the run asked for by id: its thread no longer names it once it ended
     const run = askedRun ?? (task.routineRunId ? runs.find((entry) => entry.id === task.routineRunId) : undefined);
     const selection = task.modelSelection ?? bot.modelSelection ?? undefined;
-    const note = run?.status === "waiting" ? run.attention : run?.status === "failed" ? run.error : undefined;
+    const note = run?.status === "waiting" ? run.attention : run?.status === "failed" || run?.status === "blocked" ? run.error : undefined;
     const card = run ? runCard(run, viewerId) : undefined;
     return {
       ...item,
@@ -616,7 +616,7 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
   }
 
   function runDetail(bot: ActivityBot, run: RoutineRun, viewerId: string | undefined): BotActivityDetail {
-    const note = run.status === "waiting" ? run.attention : run.status === "failed" ? run.error : undefined;
+    const note = run.status === "waiting" ? run.attention : run.status === "failed" || run.status === "blocked" ? run.error : undefined;
     const card = runCard(run, viewerId);
     return {
       ...runItem(bot, run),

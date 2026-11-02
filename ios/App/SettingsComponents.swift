@@ -232,6 +232,8 @@ struct SettingsRow: View {
     enum Style { case normal, destructive, action }
 
     let title: LocalizedStringKey
+    /// Typed text (a name a person wrote): shown as is, never read as a key.
+    var verbatimTitle: String?
     /// English source text, looked up in the app's chosen language.
     var subtitle: String?
     var systemImage: String?
@@ -265,6 +267,8 @@ struct SettingsRow: View {
         if case .toggle = accessory { return true }
         return false
     }
+
+    private var titleText: Text { verbatimTitle.map { Text(verbatim: $0) } ?? Text(title) }
 
     var body: some View {
         let row = Group {
@@ -306,7 +310,7 @@ struct SettingsRow: View {
                     .frame(width: 18, alignment: .leading)
                     .padding(.trailing, 9)
             }
-            Text(title)
+            titleText
                 .font(Theme.Font.rowTitle)
                 .tracking(SettingsMetrics.tracking135)
                 .foregroundStyle(titleColor)
@@ -326,7 +330,7 @@ struct SettingsRow: View {
         // the control's own sizing says, so lines wrap where the
         // reference's do.
         VStack(alignment: .leading, spacing: 2.3) {
-            Text(title)
+            titleText
                 .font(Theme.Font.rowTitle)
                 .tracking(SettingsMetrics.tracking135)
                 .foregroundStyle(titleColor)
@@ -383,7 +387,7 @@ struct SettingsRow: View {
             Toggle("", isOn: binding)
                 .labelsHidden()
                 .toggleStyle(ParityToggleStyle())
-                .accessibilityLabel(Text(title))
+                .accessibilityLabel(titleText)
                 .accessibilityIdentifier((identifier ?? "") + ".toggle")
         case .check:
             Image(systemName: "checkmark")

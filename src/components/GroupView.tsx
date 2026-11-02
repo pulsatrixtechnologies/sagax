@@ -179,7 +179,8 @@ export function RoomToolChip({ message, roomId }: { message: Message; roomId?: s
   if (message.inputRequest) return <InputRequestCard message={message} />;
   if (message.threadRef) return <ThreadChip message={message} />;
   if (failedTurnCause(tool.name) !== null) {
-    return <FailedTurnRow tool={tool} engine={botEngine(storeBots.find((b) => b.id === message.from?.botId), instances)} botId={message.from?.botId} />;
+    const roomThreadId = roomId ? storeGroups.find((group) => group.id === roomId)?.threadId : undefined;
+    return <FailedTurnRow tool={tool} engine={botEngine(storeBots.find((b) => b.id === message.from?.botId), instances)} botId={message.from?.botId} threadId={roomThreadId} />;
   }
   const comm = message.comm;
   const nameOf = botNames(storeBots);

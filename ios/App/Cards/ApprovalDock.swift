@@ -296,6 +296,7 @@ struct ApprovalDock: View {
         case .enableSkill: return String(localized: "Enable this learned skill")
         case .updateSkill: return String(localized: "Update this learned skill")
         case .confirmProfileChange: return String(localized: "Confirm this profile change")
+        case .confirmRuleChange: return String(localized: "Confirm this approval rule")
         case let .teamSetup(title): return title
         case .wantsTo:
             switch pending.card.tool ?? "" {
@@ -342,6 +343,7 @@ struct ApprovalDock: View {
         case .enableSkill: return String(localized: "Enable this learned skill")
         case .updateSkill: return String(localized: "Update this learned skill")
         case .confirmProfileChange: return String(localized: "Confirm this profile change")
+        case .confirmRuleChange: return String(localized: "Confirm this approval rule")
         case let .teamSetup(title): return title
         }
     }

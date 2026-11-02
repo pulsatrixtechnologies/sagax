@@ -78,6 +78,8 @@ export type DecisionSource =
   | "routine"
   | "skill"
   | "profile"
+  /** a bot proposed an approval rule from chat (propose_rule); the card waits */
+  | "rule"
   | "model"
   | "user"
   | "connector-scope"

@@ -66,6 +66,10 @@ export function isProfileApproval(pending: Pending): boolean {
   return Boolean(pending.message.card?.profileRequest);
 }
 
+export function isRuleApproval(pending: Pending): boolean {
+  return Boolean(pending.message.card?.ruleRequest);
+}
+
 /** Open approvals on a thread, oldest first — answered/dismissed drop out. */
 export function pendingApprovals(messages: Message[]): Pending[] {
   return messages
@@ -95,6 +99,7 @@ export function spokenApprovalPrompt(pending: Pending, requester: string): strin
   const isRoutineRequest = isRoutineApproval(pending);
   const isSkillRequest = isSkillApproval(pending);
   const isProfileRequest = isProfileApproval(pending);
+  const isRuleRequest = isRuleApproval(pending);
   if (isSkillRequest) {
     const updating = pending.message.card?.skillRequest?.action === "update";
     const title = pending.message.card?.title.trim() || t(
@@ -112,6 +117,10 @@ export function spokenApprovalPrompt(pending: Pending, requester: string): strin
     // routine/skill branches do, and let the user read the diff on screen.
     const title = pending.message.card?.title.trim() || t("approval.voice.defaultUpdateProfile");
     return t("approval.voice.profile", { requester, title });
+  }
+  if (isRuleRequest) {
+    const title = pending.message.card?.title.trim() || t("approval.voice.defaultUpdateRule");
+    return t("approval.voice.rule", { requester, title });
   }
   if (!isRoutineRequest) {
     // pending.tool can be an ACP toolCall kind rather than a tool name —
@@ -148,6 +157,9 @@ function label(pending: Pending): string {
   if (isProfileApproval(pending)) {
     return t("approval.label.confirmProfileChange");
   }
+  if (isRuleApproval(pending)) {
+    return t("approval.label.confirmRuleChange");
+  }
   if (isRoutineApproval(pending)) {
     return pending.message.card?.routineRequest?.operation.action === "create"
       ? t("approval.label.confirmRoutine")
@@ -172,7 +184,7 @@ export function readOnlyApprovals(approvals: Pending[]): Pending[] {
   return approvals.filter((pending) => {
     const card = pending.message.card;
     if (!card || card.adminApproval) return false;
-    if (card.routineRequest || card.skillRequest || card.profileRequest || card.teamSetupRequest || card.questionRequest || card.terminalRequest || card.meetingRequest) return false;
+    if (card.routineRequest || card.skillRequest || card.profileRequest || card.ruleRequest || card.teamSetupRequest || card.questionRequest || card.terminalRequest || card.meetingRequest) return false;
     return describeApproval(pending.tool, card.toolInput ?? card.subtitle, card.toolHints).risk === "read";
   });
 }
@@ -232,7 +244,7 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
   const heldNote = pending.heldCode && HELD_SILENT.has(pending.heldCode) ? undefined : tFromServer(pending.heldCode, pending.held);
   const card = pending.message.card;
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const proposal = isSkillApproval(pending) || isRoutineApproval(pending) || isProfileApproval(pending) || Boolean(card?.teamSetupRequest);
+  const proposal = isSkillApproval(pending) || isRoutineApproval(pending) || isProfileApproval(pending) || isRuleApproval(pending) || Boolean(card?.teamSetupRequest);
   const view = !proposal && card ? toolApprovalView(card, bot?.name) : undefined;
   // never truncated: long commands wrap and scroll
   const visibleText = proposal ? pending.detail : pending.commandAllowlist?.command ?? view?.plain;
@@ -246,6 +258,8 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
             ? t("approval.aria.pendingRoutine")
             : isProfileApproval(pending)
               ? t("approval.aria.pendingProfile")
+              : isRuleApproval(pending)
+                ? t("approval.aria.pendingRule")
               : t("approval.aria.pending")
       }
       className="px-4 pt-3"
@@ -327,6 +341,8 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
                 ? t("approval.aria.reviewRoutine")
                 : isProfileApproval(pending)
                   ? t("approval.aria.reviewProfile")
+                  : isRuleApproval(pending)
+                    ? t("approval.aria.reviewRule")
                   : t("approval.aria.reviewDetails")
           }
           className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-inset px-3 py-2 font-mono text-[12px] leading-relaxed text-ink"
@@ -374,9 +390,10 @@ export function PendingApprovalActions({
   const isRoutineRequest = isRoutineApproval(pending);
   const isSkillRequest = isSkillApproval(pending);
   const isProfileRequest = isProfileApproval(pending);
+  const isRuleRequest = isRuleApproval(pending);
   const isTeamSetup = Boolean(pending.message.card?.teamSetupRequest);
   const isSuggestion = Boolean(pending.message.card?.teamSetupRequest?.suggestion);
-  const durableRequest = isRoutineRequest || isSkillRequest || isProfileRequest || isTeamSetup;
+  const durableRequest = isRoutineRequest || isSkillRequest || isProfileRequest || isRuleRequest || isTeamSetup;
   // 2026-10-14: the owner's own rule this card can remember (Always allow /
   // Always deny), which replaces the older per-bot grants on the card.
   // 2026-10-19 ("Toujours permettre" on every card): an admin's card
@@ -435,10 +452,10 @@ export function PendingApprovalActions({
     ? pending.message.card?.skillRequest?.action === "update"
       ? t("approval.action.update")
       : t("approval.action.enable")
-    : isRoutineRequest || isProfileRequest
+    : isRoutineRequest || isProfileRequest || isRuleRequest
       ? t("approval.action.confirm")
       : t("approval.action.allowOnce");
-  const denyLabel = isSuggestion ? t("approval.action.notNow") : isRoutineRequest || isProfileRequest || isTeamSetup ? t("approval.action.cancel") : t("approval.action.deny");
+  const denyLabel = isSuggestion ? t("approval.action.notNow") : isRoutineRequest || isProfileRequest || isRuleRequest || isTeamSetup ? t("approval.action.cancel") : t("approval.action.deny");
   // 2026-10-20 (after the reference design): one "Always allow", one click. It
   // keeps the card's default rule (this bot, this kind of action or this
   // program, never a second panel), answers this request and closes the

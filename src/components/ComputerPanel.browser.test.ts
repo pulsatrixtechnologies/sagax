@@ -87,8 +87,9 @@ describe("Browser panel installation access", () => {
   it("does not offer an install on unsupported hosts and still shows a ready engine", () => {
     expect(renderBrowser({ features: { browser: true }, browserEngine: { kind: "unavailable", installable: false } })).not.toContain("Install the browser engine");
     // A ready engine opens the live screen at once. Watching is not an admin check.
+    // The screen is the calm one from 0.8.24: connecting reads "Waking up…" (BrowserPanel maps connecting to the starting state).
     const ready = renderBrowser({ features: { browser: true }, browserEngine: { kind: "engine" } });
-    expect(ready).toContain("Connecting to the browser…");
+    expect(ready).toContain("Waking up…");
     expect(ready).toContain('data-computer-source="browser"');
     expect(ready).not.toContain("Only admins of this installation");
   });

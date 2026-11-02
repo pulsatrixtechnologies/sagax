@@ -14,6 +14,17 @@ export function callKey(tool: string, args: string | undefined): string | null {
   return `${tool}:${a}`;
 }
 
+/** Cursor's ACP adapter titles every MCP call "MCP: tool" and sends an empty input: like a bare tool name, it names no call. */
+const NAMELESS_TITLE = /^MCP:\s*tool$/i;
+
+/** Antigravity's ACP adapter titles every call alike ("Running list_directory") and carries what differs only in the input. */
+export function toolItemKey(title: string | undefined, input: string | undefined): string | null {
+  const t = (title ?? "").trim();
+  if (!/\s|\//.test(t)) return null;
+  if (!input && NAMELESS_TITLE.test(t)) return null;
+  return input ? `tool:${JSON.stringify([t, input])}` : callKey("tool", t);
+}
+
 export class RepeatDetector {
   private readonly counts = new Map<string, Map<string, number>>();
   private readonly thresholds: readonly number[];

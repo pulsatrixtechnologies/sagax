@@ -3331,13 +3331,27 @@ covered by `server/bot-inbound-mail.test.ts`,
   `not_owner` (assertion `sub` is not the owner's Perspicax user id, or the
   bot has no Perspicax owner), 403 `owner_inactive`. Every answer carries
   `X-Sagax-Mail-Api: 1`.
-- Then every ENABLED typed trigger of source `botmail` on that bot goes
-  through `WebhookManager.ingest(id, event, dedupeKey)`: filters, dedupe on
-  Perspicax's `dedupeKey` (the Message-ID is shown, never the key), the per-trigger rate, the unfinished-runs cap and the
-  fence are the typed triggers' own. 202 `{triggers, delivered, duplicate,
-  ignored, reason?: "no_trigger"}`; 429 `rate_limited` only when every
-  trigger refused on its rate. A paused bot's triggers (`disableForBot`)
-  receive nothing.
+- Then delivery splits on the To address (`shared/routine-mail-alias.ts`
+  `planMailDelivery`, 2026-11-01 / Grok Bot 0.71):
+  - `name+tag@`: only enabled, unsuspended routines of that bot with
+    `mailAlias === tag` wake (`wakeRoutine` → `enqueueWebhook` with a
+    synthetic `mail-tag:<routineId>` id, confined like S2). Other bots'
+    routines with the same tag never wake. Botmail typed triggers stay
+    quiet. No matching routine: `reason: "no_trigger"` and proactive may
+    take it.
+  - plain `name@`: every ENABLED typed trigger of source `botmail` on that
+    bot goes through `WebhookManager.ingest(id, event, dedupeKey)` as
+    before. Tag-bound routines do not wake on the plain address.
+  Filters, dedupe on Perspicax's `dedupeKey` (the Message-ID is shown, never
+  the key), the per-trigger rate, the unfinished-runs cap and the fence are
+  the typed triggers' own. 202 `{triggers, delivered, duplicate, ignored,
+  reason?: "no_trigger"}`; 429 `rate_limited` only when every target refused
+  on its rate. A paused bot's triggers (`disableForBot`) receive nothing.
+  Settings: `BotEmailAddress` lists tag routing rows (copy tagged address,
+  open the routine). Outbound: unrequested mail sends force a draft card
+  (`email-draft-required`); person-asked mail in the owner's turn follows
+  Ask / Auto / Full. Attachments stay on the draft. Tests use a fake
+  capture mailer (no real send).
 - Dedupe window (second review, 2026-10-22): the keys live in the typed
   triggers' delivery ring (`MAX_DELIVERIES`, 2000, in server/webhooks.ts),
   ONE ring for every trigger of the server, kept in `webhooks.json`. A
@@ -6519,23 +6533,30 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   the speaker's desktop (when it is not connected, nothing runs there and
   the bot and the composer say so); Auto and Cloud, their server
   environment. The `place` of `sagax.botWorkplace.v1` no longer decides.
-  Routines use the owner's desktop only when the bot works on it, it is
-  connected AND the owner allowed it (off by default). Rooms: the person
-  whose message triggered the turn; a follow-up nobody asked for never.
-- Auto picks per step (2026-10-02, `server/auto-computer.ts`): an Auto turn
-  starts in the server environment as above, and also mounts
-  `sagax-computer` (`computer_select`, target `cloud`, `this_computer` or
-  `local_vm`, plus a reason) and, when the person's app is connected now (a
-  routine: and the owner allowed routines on it), `sagax-desktop` beside
-  `sagax-environment`. The selection (`TurnWorkplace.auto`) gates every
-  later call of the turn (`autoComputerToolRefusal`: Local VM allows only the
-  `local_vm` tool, and its `use` action sees and drives that VM's desktop,
-  never the person's own screen) and resets with each message; the egress proxy still
-  follows the turn's start. A fixed Works on gets the tool too and it
-  answers that the setting is fixed. Each switch is `computer.switch` in the
-  admin activity log (person, bot, from, to, reason); the transcript shows a
-  "Working on" chip. Claude pre-allows only `mcp__sagax-computer`. Rooms are
-  unchanged. Tests: `server/auto-computer.test.ts`,
+  Routines start in the server environment by default. They use the owner's
+  desktop only when Works on (or an Auto `computer_select`) targets it, it
+  is connected AND the owner allowed routines on it (off by default). Rooms:
+  the person whose message triggered the turn; a follow-up nobody asked for
+  never.
+- Auto picks per step (2026-10-02, routines default 2026-11-01,
+  `server/auto-computer.ts`): a person-asked Auto turn prefers the person's
+  computer when connected, else the cloud. A routine Auto turn starts in the
+  cloud; `routinesAllowed` only permits an explicit `computer_select` to
+  `this_computer` or `local_vm`. It mounts `sagax-computer` (`computer_select`,
+  target `cloud`, `this_computer`, `local_vm` or `browser`, plus a reason) and,
+  when the person's app is connected now (a routine: and the owner allowed
+  routines on it), `sagax-desktop` beside `sagax-environment`. The selection
+  (`TurnWorkplace.auto`) gates every later call of the turn
+  (`autoComputerToolRefusal`: Local VM allows only the `local_vm` tool, and
+  its `use` action sees and drives that VM's desktop, never the person's own
+  screen) and resets with each message; the egress proxy still follows the
+  turn's start. A fixed Works on gets the tool too and it answers that the
+  setting is fixed. Each switch is `computer.switch` in the admin activity
+  log (person, bot, from, to, reason); the transcript shows a "Working on"
+  chip. Workspace fallback notices keep distinct reasons (`offline`,
+  `routine-not-allowed`, `routine-default`; `shared/workspace-line.ts`).
+  Claude pre-allows only `mcp__sagax-computer`. Rooms are unchanged. Tests:
+  `server/auto-computer.test.ts`, `shared/workspace-line.test.ts`,
   `server/desktop-bridge.e2e.test.ts`.
 - Auto never becomes the conversation's setting: see "Workspace: Auto
   remembers no place" above. Where a turn worked never drops
@@ -8836,13 +8857,25 @@ person sees. Tests: `shared/sensitive-fields.test.ts`,
 ## Credential vault and secure form fill (2026-10-16)
 
 Settings > Credentials (`src/components/settings/CredentialsSettings.tsx`)
-keeps a person's logins (user name, password, one-time code seed), API keys
-and notes, each bound to sites, with the bots allowed to use it and when one
-last did. Storage is `server/credential-vault.ts`: one AES-256-GCM file per
-person (`credential-vault.enc`, under `principals/<pid>/` on an
-organization server), key derived by HKDF from the vault key of
+keeps a person's logins (user name, password, one-time code seed), API keys,
+notes, cards, addresses and contacts, each bound to sites, with the bots
+allowed to use it and when one last did. Storage is
+`server/credential-vault.ts`: one AES-256-GCM file per owner
+(`credential-vault.enc`), key derived by HKDF from the vault key of
 `mcp-oauth.enc` (desktop: OS keychain via safeStorage, `SAGAX_MCP_OAUTH_KEY`;
-server: 0600 key file). A file that does not open is never overwritten.
+server: 0600 key file). Layout: solo or desktop at the data root; a person on
+an organization server under `principals/<pid>/`; a team bot's shared vault
+under `bots/<botId>/` (principal `bot:<botId>`, AAD-bound so a copy under
+another bot does not open). Managers of that bot (owner, manage grant, org
+admin) CRUD via `POST/PATCH/DELETE /api/bots/:id/credentials*`
+(`server/routes/team-bot-vault.ts`, Edit bot > Details > Shared vault;
+iOS bot panel > Permissions > Shared vault). A file that does not open is
+never overwritten. Never a plaintext store. Filled values are remembered only
+in process memory for redaction (`server/filled-secret-guard.ts`) and never
+enter transcripts, memory, logs or tool results. Fills happen in the bot's
+browser only; the computer surface has no fill tool. A team bot's login is
+allowed by a card to the bot's owner (once, or always for that bot), never
+set at creation.
 
 A bot never gets a value. `request_login` (agents tool) returns a handle
 (`cred_<id>`) when the bot is already allowed, else posts a `kind: "secret"`

@@ -180,6 +180,9 @@ describe("RunService", () => {
     await service.create(body("run00003"));
     const stopped = await service.remove("run00003", { keepWorkspace: true });
     expect(stopped).toMatchObject({ phase: "stopped", pod: false, workspace: true, workspaceExpiresAt: "2026-10-19T13:00:00.000Z" });
+    // Stop must kill the job Pod at once (grace 0): a non-zero grace left
+    // sandbox work running after API success (Lot D / OpenMausBot 1d1559fb1).
+    expect(cluster.calls.some((call) => call.method === "DELETE" && call.path.includes(`/pods/run-run00003`) && call.path.includes("gracePeriodSeconds=0"))).toBe(true);
     expect(cluster.objects.has(secretPath("run00003"))).toBe(false);
     // the collector has not removed the old token yet: the create must
     cluster.objects.set(secretPath("run00003"), { metadata: { name: "run-run00003-token", labels: {} }, data: { token: "b2xk" } });

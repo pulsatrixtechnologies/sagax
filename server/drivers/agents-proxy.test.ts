@@ -724,6 +724,9 @@ describe("agents-proxy MCP surface", () => {
       "sagax_help",
       "sagax_settings",
       "sagax_approvals",
+      "wait_until",
+      "list_waits",
+      "cancel_wait",
       "post_to_room",
       "react_to_message",
       "remove_reaction",
@@ -767,6 +770,7 @@ describe("agents-proxy MCP surface", () => {
       "propose_routine_action",
       "propose_profile",
       "propose_model",
+      "propose_rule",
       "generate_shape_avatar",
       "propose_team_memory",
       "answer_approval",
@@ -868,6 +872,7 @@ describe("agents-proxy MCP surface", () => {
       "list_bots", "list_rooms", "check_delegation", "wait_delegation", "list_threads",
       "list_artifacts",
       "sagax_help",
+      "list_waits",
       "list_team_setup",
       "workspace_read", "workspace_search",
       "session_search", "session_read",
@@ -908,7 +913,7 @@ describe("agents-proxy MCP surface", () => {
     expect(JSON.stringify(create.inputSchema)).not.toMatch(/"oneOf"|"anyOf"|"allOf"|"const"/);
     expect(schedule.type).toBe("object");
     expect(schedule.required).toEqual(["type"]);
-    expect(schedule.properties.type.enum).toEqual(["once", "weekly", "daily", "interval", "cron"]);
+    expect(schedule.properties.type.enum).toEqual(["once", "weekly", "daily", "interval", "cron", "limit_reset"]);
     expect(schedule.properties.expression.description).toContain("0 9 L * *");
     expect(schedule.properties.expression.description).toContain("MON#2");
     expect(schedule.properties.timeZone.description).toContain("IANA");
@@ -1931,6 +1936,16 @@ describe("agents-proxy MCP surface", () => {
     });
     expect(res.result.isError).toBe(true);
     expect(lastRoutineRequestBody).toBeNull();
+  });
+
+  it("proposes a limit_reset routine for when an AI usage limit resets", async () => {
+    const res = await callTool("propose_routine", {
+      name: "Continue the report",
+      instructions: "Finish the report where it stopped.",
+      schedule: { type: "limit_reset", engine: "claude", repeat: "once" },
+    });
+    expect(res.result.isError).toBeFalsy();
+    expect(lastRoutineRequestBody.routine.schedule).toEqual({ type: "limit_reset", engine: "claude", repeat: "once" });
   });
 
   it("proposes a one-time routine with the explicit-offset timestamp intact", async () => {

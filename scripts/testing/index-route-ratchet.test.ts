@@ -25,7 +25,9 @@ const EXACT: Record<string, number> = {
   // 186: +3 the resumable upload phases (POST /api/attachments and /api/files with ?phase=, one guard
   // and two uses of the path in the handler), kept in index.ts beside the single-request routes they
   // share finalization with. Moving them to server/routes lowers this.
-  'path === "/': 186,
+  // 185: wave 0a removed the dead CLOUD_HOME email-sign-in refusal guard (#1388).
+  // 167: wave 1 I2 moved memory/context internal routes to server/routes/internal-memory.ts (#1388).
+  'path === "/': 167,
   // 90: the package preview path moved with the organization library routes.
   // 91: the thread file pin and the bot history routes moved to server/routes (#1099), after the
   // library pin (#1112) and the history owner rule (#1107) had taken it over 93.

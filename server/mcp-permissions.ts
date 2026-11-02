@@ -116,6 +116,10 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("model:propose", "own", "propose_model"),
   p("routines:propose", "own", "propose_routine"),
   p("routines:propose.action", "own", "propose_routine_action"),
+  // "tell me when" waits (server/waits.ts): plain checks for the speaker, no AI
+  p("waits:set", "own", "wait_until"),
+  p("waits:list", "read", "list_waits"),
+  p("waits:cancel", "own", "cancel_wait"),
   // Shape mascot from a short description (catalog generate_shape_avatar).
   p("shapes:generate", "own", "generate_shape_avatar"),
   p("terminal:offer", "own", "offer_shell_terminal"),
@@ -128,6 +132,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // person's own data or destinations, never an admin's.
   p("teamsetup:propose", "own", "propose_team_setup"),
   p("rules:update", "own", "rules_update"),
+  // a Confirm card to add, change or remove one of the speaker's own review rules (server/rule-requests.ts)
+  p("rules:propose", "own", "propose_rule"),
   p("docs:update", "own", "docs_update"),
   p("credentials:login", "own", "request_login"),
   // an API call with a vault key Sagax adds itself (server/credential-http.ts)

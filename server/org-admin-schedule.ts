@@ -35,6 +35,10 @@ export function routineScheduleLabel(schedule: RoutineSchedule): string {
     }
     case "webhook": return "Incoming webhook";
     case "event": return "Incoming email";
+    case "limit_reset":
+      return schedule.at === null
+        ? `When ${schedule.engine} limit resets`
+        : `When ${schedule.engine} limit resets (next ${iso(schedule.at)} UTC)`;
     default: {
       const unexpected: never = schedule;
       return unexpected;

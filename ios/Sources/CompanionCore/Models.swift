@@ -187,6 +187,7 @@ public struct OptionCard: Codable, Hashable, Sendable {
     public var routineRequest: ProposalRequestMarker? = nil
     public var profileRequest: ProposalRequestMarker? = nil
     public var modelRequest: ProposalRequestMarker? = nil
+    public var ruleRequest: ProposalRequestMarker? = nil
     public var tighteningRequest: ProposalRequestMarker? = nil
     public var teamSetupRequest: ProposalRequestMarker? = nil
 

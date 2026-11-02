@@ -127,6 +127,7 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   maxParallelPerPerson: "settings",
   busySend: "settings",
   automaticRecovery: "settings",
+  cacheKeepWarm: "settings",
   turnLimits: "settings",
   // #1137: who pays is its owner's choice on this server, and the default is computed
   turnPayer: { drop: "who pays is the owner's choice on this server" },
@@ -146,6 +147,7 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   voiceNotes: "settings",
   emailDrafts: "settings",
   memoryEnabled: "settings",
+  loopGuard: "settings",
   teamMemorySharing: "settings",
   memoryUpkeep: "settings",
   parkDirectMessages: "settings",
@@ -787,6 +789,7 @@ const settingsSchema = z.object({
   voiceNotes: z.boolean().optional(),
   emailDrafts: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),
+  loopGuard: z.boolean().optional(),
   // read as the bot reads it (shared/team-memory-sharing.ts): an archive
   // written before export normalized it still imports, unknown as private
   teamMemorySharing: z.unknown().optional(),
@@ -950,6 +953,7 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
       ...(settings.voiceNotes !== undefined ? { voiceNotes: settings.voiceNotes } : {}),
       ...(settings.emailDrafts !== undefined ? { emailDrafts: settings.emailDrafts } : {}),
       ...(settings.memoryEnabled !== undefined ? { memoryEnabled: settings.memoryEnabled } : {}),
+      ...(settings.loopGuard !== undefined ? { loopGuard: settings.loopGuard } : {}),
       ...(storedTeamMemorySharing(settings) ? { teamMemorySharing: "private" as const } : {}),
       ...(settings.memoryUpkeep !== undefined ? { memoryUpkeep: settings.memoryUpkeep } : {}),
       ...(settings.parkDirectMessages !== undefined ? { parkDirectMessages: settings.parkDirectMessages } : {}),
@@ -1003,7 +1007,12 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
     if (profiles && host.organization) store.setBotPerspicax(id, profiles.profiles);
 
     // the bot folder and the desk
-    for (const entry of reader.under("bot-folder/")) writeUnder(botFolder(id), entry.slice("bot-folder/".length), reader.read(entry));
+    for (const entry of reader.under("bot-folder/")) {
+      const rel = entry.slice("bot-folder/".length);
+      // A sealed vault is bound to its bot id; a planted one would only break the shared vault.
+      if (rel.split("/").pop() === "credential-vault.enc" || exportedSecretFile(rel, () => false)) continue;
+      writeUnder(botFolder(id), rel, reader.read(entry));
+    }
     const desk = workspaceDir(id);
     mkdirSync(desk, { recursive: true, mode: 0o700 });
     for (const entry of reader.under("workspace/")) writeUnder(desk, entry.slice("workspace/".length), reader.read(entry));

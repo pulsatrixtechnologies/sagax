@@ -16,6 +16,7 @@ describe("built-in agent tool read policy", () => {
       "recall_topic",
       "tool_result_read",
       "list_routines",
+      "list_waits",
       "skills_list",
       "workspace_read",
       "workspace_search",

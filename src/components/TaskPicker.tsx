@@ -22,6 +22,7 @@ import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { useMenuMotion } from "./MenuMotion";
 import { AnchoredPopover } from "./AnchoredPopover";
 import { t } from "@/lib/i18n";
+import { keepWarmLine } from "@/lib/cache-keepwarm";
 import { formatTaskTokens, headlineTokens, usageDetail } from "@/lib/usage";
 import { nextRename } from "@/lib/rename";
 import { BotProjectDialog, FolderActions, FolderIcon, NewThreadButton } from "./BotProjects";
@@ -76,22 +77,23 @@ function TaskUpdatedTime({ task, now }: { task: { updatedAt?: number; createdAt?
   return <time dateTime={new Date(stamp).toISOString()} title={formatUpdatedAt(stamp)}>{threadUpdatedLabel(stamp, now)}</time>;
 }
 
-/** Quiet per-task token tally; the hover title explains the cached share. */
-function TaskUsage({ usage }: { usage: Task["usage"] }) {
-  if (!usage) return null;
-  const label = formatTaskTokens(headlineTokens(usage));
-  if (!label) return null;
+/** Quiet per-task token tally; the hover title explains the cached share
+ * and any prompt-cache keep-warm line for the thread. */
+function TaskUsage({ usage, cacheKeepWarm }: { usage: Task["usage"]; cacheKeepWarm?: Task["cacheKeepWarm"] }) {
+  const warm = keepWarmLine(cacheKeepWarm);
+  const detail = [usage ? usageDetail(usage) : null, warm].filter(Boolean).join(" · ") || undefined;
+  if (!usage && !warm) return null;
+  const label = usage ? formatTaskTokens(headlineTokens(usage)) : null;
+  if (!label && !warm) return null;
   return (
-    <span
-      title={usageDetail(usage)}
-    >
+    <span title={detail}>
       {" · "}
-      {label}
+      {label ?? warm}
     </span>
   );
 }
 
-type PickerTask = Pick<Task, "threadId" | "title" | "createdAt" | "updatedAt" | "pinned" | "busy" | "activity" | "unread" | "projectId" | "openedBy" | "closedBy" | "archivedAt" | "snoozedUntil" | "waitingForTeammates" | "confidential"> & { usage?: Task["usage"] };
+type PickerTask = Pick<Task, "threadId" | "title" | "createdAt" | "updatedAt" | "pinned" | "busy" | "activity" | "unread" | "projectId" | "openedBy" | "closedBy" | "archivedAt" | "snoozedUntil" | "waitingForTeammates" | "confidential" | "cacheKeepWarm"> & { usage?: Task["usage"] };
 
 /** The full picker searches both thread titles and their project names.
  * Legacy/orphaned project IDs remain visible under Ungrouped. */
@@ -445,7 +447,7 @@ function ConversationTaskPicker({
                       <div className="text-[11px] text-popover-ink-secondary">
                         {task.activity === "waiting-on-you" ? `${t("task.waiting")} · ` : task.waitingForTeammates ? `${t("task.waitingOnTeammate")} · ` : task.busy ? `${t("chat.activity.working")} · ` : task.unread ? `${t("task.unread")} · ` : ""}
                         <TaskUpdatedTime task={task} now={now} />
-                        <TaskUsage usage={task.usage} />
+                        <TaskUsage usage={task.usage} cacheKeepWarm={task.cacheKeepWarm} />
                         {opener && ` · ${opener}`}
                       </div>
                     </button>

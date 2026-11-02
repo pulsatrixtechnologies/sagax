@@ -120,12 +120,18 @@ function schedulePhrase(schedule: OverviewFacts["routines"][number]["schedule"],
   }
   if (schedule.type === "webhook") return "When a webhook delivery arrives";
   if (schedule.type === "event") return "When email arrives";
+  if (schedule.type === "limit_reset") {
+    const at = "at" in schedule ? schedule.at : null;
+    return at === null
+      ? `When ${schedule.engine} limit resets`
+      : `When ${schedule.engine} limit resets (next ${time(at, timeZone)})`;
+  }
   const days = schedule.weekdays;
   const at = ` at ${clockTime(schedule.time)}`;
   if (days.length === 7) return `Every day${at}`;
   if (days.join(",") === "1,2,3,4,5") return `Every weekday${at}`;
   if (days.length === 1) return `Weekly on ${DAY_NAMES[days[0]!]}${at}`;
-  return `${days.map((day) => DAY_NAMES[day]).join(", ")}${at}`;
+  return `${days.map((day: number) => DAY_NAMES[day]).join(", ")}${at}`;
 }
 
 /** The most recent run for a routine, by (finishedAt ?? startedAt ??

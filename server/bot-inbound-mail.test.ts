@@ -308,6 +308,8 @@ let state: ReturnType<typeof manager>;
 let owners: Map<string, { principalId: string; sub: string | null; active: boolean }>;
 let rows: Array<Record<string, unknown>>;
 let unhandled: Array<{ botId: string; subject: string }>;
+let tagRoutines: Array<{ id: string; botId: string; name?: string; enabled: boolean; suspended?: boolean; mailAlias?: string }>;
+let woken: Array<{ routineId: string; dedupeKey: string; tag?: string }>;
 let identity: "solo" | "perspicax" = "perspicax";
 const deps: BotMailRouteDeps = {
   identity: () => identity,
@@ -324,6 +326,14 @@ const deps: BotMailRouteDeps = {
   owner: (id) => owners.get(id) ?? null,
   triggers: (botId) => state.hooks.list().filter((hook) => hook.enabled && hook.botId === botId && hook.source?.type === "botmail").map((hook) => hook.id),
   ingest: (id, event, key) => state.hooks.ingest(id, event, key),
+  routines: (botId) => tagRoutines.filter((routine) => routine.botId === botId),
+  wakeRoutine: (routineId, event, dedupeKey) => {
+    const prior = woken.find((row) => row.routineId === routineId && row.dedupeKey === dedupeKey);
+    if (prior) return { runId: `run-${routineId}`, deliveryId: dedupeKey, duplicate: true };
+    woken.push({ routineId, dedupeKey });
+    expect(event.text).toContain("Mail tag:");
+    return { runId: `run-${routineId}`, deliveryId: dedupeKey, duplicate: false };
+  },
   unhandled: (botId, mail) => { unhandled.push({ botId, subject: mail.subject }); },
   record: (row) => rows.push(row as unknown as Record<string, unknown>),
 };
@@ -353,6 +363,8 @@ beforeEach(() => {
   ]);
   rows = [];
   unhandled = [];
+  tagRoutines = [];
+  woken = [];
   identity = "perspicax";
 });
 
@@ -483,6 +495,41 @@ describe(`POST ${BOT_MAIL_PATH}`, () => {
       console.log = originalLog;
     }
     expect(lines.join("\n")).not.toMatch(/facture|ana@example/i);
+  });
+
+  it("routes name+tag@ to the routine bound to that tag and skips botmail triggers", async () => {
+    state.hooks.create(botmailTrigger());
+    tagRoutines = [
+      { id: "r-reports", botId: "bot_abc", name: "Reports", enabled: true, mailAlias: "reports" },
+      { id: "r-shop", botId: "bot_abc", name: "Shop", enabled: true, mailAlias: "shop" },
+      { id: "r-other", botId: "bot_other", name: "Other", enabled: true, mailAlias: "reports" },
+    ];
+    const got = await post(mail({ to: "cryptic+reports@bots.example.org", dedupeKey: "d".repeat(64) }), token("u_123"));
+    expect(got).toMatchObject({ status: 202, body: { triggers: 1, delivered: 1, duplicate: 0, ignored: 0 } });
+    expect(woken.map((row) => row.routineId)).toEqual(["r-reports"]);
+    expect(state.queued).toHaveLength(0);
+    expect(unhandled).toHaveLength(0);
+  });
+
+  it("does not wake another bot's routine with the same tag (isolation)", async () => {
+    tagRoutines = [
+      { id: "r-other", botId: "bot_other", enabled: true, mailAlias: "reports" },
+    ];
+    const got = await post(mail({ to: "cryptic+reports@bots.example.org", dedupeKey: "1".repeat(64) }), token("u_123"));
+    expect(got).toMatchObject({ status: 202, body: { triggers: 0, delivered: 0, reason: "no_trigger" } });
+    expect(woken).toEqual([]);
+    expect(unhandled).toEqual([{ botId: "bot_abc", subject: expect.any(String) }]);
+  });
+
+  it("keeps plain-address delivery on botmail triggers and ignores tag-bound routines", async () => {
+    state.hooks.create(botmailTrigger());
+    tagRoutines = [
+      { id: "r-reports", botId: "bot_abc", enabled: true, mailAlias: "reports" },
+    ];
+    const got = await post(mail({ dedupeKey: "2".repeat(64) }), token("u_123"));
+    expect(got).toMatchObject({ status: 202, body: { triggers: 1, delivered: 1 } });
+    expect(woken).toEqual([]);
+    expect(state.queued).toHaveLength(1);
   });
 });
 

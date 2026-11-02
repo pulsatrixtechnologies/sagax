@@ -34,6 +34,9 @@ function dialogTags(source: string): string[] {
 const ESCAPE_HOST: Record<string, string> = {
   // the mascot's balloon: FloatingBotView closes it on Escape
   "components/floating-bots/Balloon.tsx": "components/floating-bots/FloatingBotView.tsx",
+  // the model picker window: ModelPicker.tsx wires useModelPickerEffects, whose
+  // keydown effect closes the window on Escape (split out of ModelPicker.tsx, #1383)
+  "components/ModelPicker.tsx-parts/ModelPickerWindow.tsx": "components/ModelPicker.tsx-parts/useModelPickerEffects.ts",
 };
 
 const posix = (path: string) => relative(ROOT, path).split(sep).join("/");

@@ -101,6 +101,9 @@ const grantsFile = z.object({
   people: z.record(z.string(), z.record(z.string(), z.array(z.string()))),
 });
 
+/** Why a pending phone-tool wait ends when its session phone is gone (port of upstream 035101e08). */
+export const PHONE_ACCESS_CHANGED = "Phone access ended when the session was revoked.";
+
 export interface PhoneToolBroker {
   /** `transport` absent counts as plain local Wi-Fi: nothing is offered. */
   registerDevice(person: string, deviceId: string, device: { deviceName: string; tools: readonly PhoneRequestKind[]; transport?: PhoneTransport }): void;
@@ -110,6 +113,9 @@ export interface PhoneToolBroker {
   botTools(person: string): PhoneToolId[];
   /** A registered phone of this person (the answer route checks it). */
   hasDevice(person: string, deviceId: string): boolean;
+  /** Remove a device by id (any person). Pending waits that only that device
+   * could answer stay until expiry; the device can no longer answer. */
+  dropDevice(deviceId: string): boolean;
   request(input: { person: string; botId: string; botName: string; threadId: string; tool: PhoneRequestKind; args: Record<string, unknown> }): PhoneToolRequestWire;
   /** The person's own computer gives up on a request it made (card_scan). */
   cancel(person: string, requestId: string): boolean;
@@ -267,6 +273,30 @@ export function createPhoneToolBroker(deps: PhoneToolBrokerDeps): PhoneToolBroke
 
     hasDevice(person, deviceId) {
       return devices.get(personKey(person))?.has(deviceId) === true;
+    },
+
+    dropDevice(deviceId) {
+      if (!deviceId) return false;
+      let removed = false;
+      const emptied = new Set<string>();
+      for (const [person, mine] of devices) {
+        if (!mine.delete(deviceId)) continue;
+        removed = true;
+        if (!mine.size) {
+          devices.delete(person);
+          emptied.add(person);
+        } else devices.set(person, mine);
+      }
+      // End waits that no remaining phone of that person can answer (port of upstream 035101e08).
+      for (const person of emptied) {
+        for (const [id, request] of requests) {
+          if (request.person !== person || request.outcome) continue;
+          settle(request, { status: "failed", error: PHONE_ACCESS_CHANGED });
+          requests.delete(id);
+        }
+        deps.notify(person);
+      }
+      return removed;
     },
 
     request(input) {

@@ -11,7 +11,8 @@ import { forgetLegacyBotLooks, readLegacyBotLooks, type FloatingStorage } from "
 import { setGrokAccountLinked } from "@/lib/grok-account";
 import { NOTHING_LOCKED, type AchievementSnapshot } from "../../../shared/achievements";
 import { BotAvatar } from "@/components/Avatar";
-import { SHAPE_ART, shapeSkinPaint } from "@/components/ShapeMascot";
+import { avatarDefForShape, SHAPE_ART, shapeSkinPaint } from "@/components/ShapeMascot";
+import { liveOutlineFromDef } from "../../../shared/shape-avatar-outline";
 import { SHAPE_MOVES } from "@/components/shape-engine";
 import { botMascotLook, CHARACTER_PAINT, completeMascotLook, MASCOT_SHAPES, SHAPE_SKINS, TROMBI_SKINS } from "../../../shared/mascot-look";
 import { MASCOTS, mascotFor, motion25dTransform, SHAPE_CHOICES, trombiPoseFor } from "./mascots";
@@ -30,7 +31,12 @@ const eyeCuts = (html: string) => {
   // the eyes: their own opaque path on a turned body (2026-10-18), or cut out of a flat skin's fill
   const own = /<path d="([^"]+)"[^>]*data-shape-eyes=""/.exec(html)?.[1];
   if (own) return own.split("M").filter(Boolean);
-  return (/class="shape-fill" d="([^"]+)" fill-rule="evenodd"/.exec(html)?.[1] ?? "").split("M").filter(Boolean).slice(1);
+  // an object silhouette can be more than one subpath (the cup's handle hole), so skip all of the body's
+  const shape = /data-shape="([^"]+)"/.exec(html)?.[1] as keyof typeof SHAPE_ART | undefined;
+  const def = shape ? avatarDefForShape(shape) : undefined;
+  const bodyPath = def ? liveOutlineFromDef(def).path : "";
+  const body = bodyPath ? bodyPath.split("M").filter(Boolean).length : 1;
+  return (/class="shape-fill" d="([^"]+)" fill-rule="evenodd"/.exec(html)?.[1] ?? "").split("M").filter(Boolean).slice(body);
 };
 
 describe("the shapes (stored ids bean, pill, pick and drop kept)", () => {

@@ -90,15 +90,23 @@ it("keeps every scope discoverable with authoring off and revokes stale library 
     for (const bad of ["-1", "NaN", "Infinity", "1.5"]) expect((await api("GET", `/api/internal/skills?offset=${bad}`, undefined, token)).status).toBe(400);
     expect((await api("POST", "/api/internal/skills/stage", { action: "create", source: "conversation", skill_md: skillText("should-not-write") }, token)).status).toBe(403);
 
-    const libraryRead = () => api("GET", "/api/internal/workspace/read?path=skill-library/library-review/SKILL.md", undefined, token);
-    expect((await libraryRead()).status).toBe(200);
+    // A revoked alias reads as a missing file: since V4 (882f960bf) that is
+    // a non-result, 200 {exists:false} with no text, never the skill's bytes.
+    const libraryReadable = async () => {
+      const read = await api("GET", "/api/internal/workspace/read?path=skill-library/library-review/SKILL.md", undefined, token);
+      expect(read.status).toBe(200);
+      if (read.body.exists === false) { expect(read.body.text).toBe(""); return false; }
+      expect(read.body.text).toContain("library-review");
+      return true;
+    };
+    expect(await libraryReadable()).toBe(true);
     await api("PATCH", "/api/skills-library/library-review", { enabled: false });
-    expect((await libraryRead()).status).toBe(404);
+    expect(await libraryReadable()).toBe(false);
     await api("PATCH", "/api/skills-library/library-review", { enabled: true });
     await api("PUT", `/api/bots/${bot.id}/skills-library`, { skills: [] });
-    expect((await libraryRead()).status).toBe(404);
+    expect(await libraryReadable()).toBe(false);
     await api("PUT", `/api/bots/${bot.id}/skills-library`, { skills: ["library-review"] });
-    expect((await libraryRead()).status).toBe(200);
+    expect(await libraryReadable()).toBe(true);
     // Me vs library workspace-path ownership (create Me with the same name,
     // expect the library alias to revoke) is owned by the skill-library
     // isolation fix on another branch: org library create currently also

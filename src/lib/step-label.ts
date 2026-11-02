@@ -13,6 +13,7 @@ import { activeLocale, t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import * as shared from "../../shared/approval-describe";
 import { parseArgs, parseToolId } from "@/lib/approval-describe";
+import { isOpaqueId } from "../../shared/human-id";
 import { readMcpGatewayCall, readUseToolCall, type McpGatewayCall } from "../../shared/mcp-gateway-call";
 
 export type StepPhase = "running" | "done" | "failed";
@@ -146,6 +147,42 @@ function host(url: string): string {
   }
 }
 
+/** A UUID in a command token becomes "…". */
+const COMMAND_UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+
+/** One shell token as a short target piece: UUIDs become "…", a path keeps
+ * only its last readable segment (`…/sagax-plugins` -> `sagax-plugins`). */
+function shortCommandToken(token: string): string {
+  const bare = token.replace(/^['"]|['"]$/g, "");
+  if (!bare) return token;
+  if (isOpaqueId(bare)) return "…";
+  const masked = bare.replace(COMMAND_UUID, "…");
+  if (!/[/\\]/.test(masked)) return masked === bare ? bare : masked;
+  const parts = masked.replace(/[/\\]+$/, "").split(/[/\\]/).filter(Boolean);
+  const last = [...parts].reverse().find((part) => part !== "…") ?? parts.at(-1) ?? masked;
+  return last;
+}
+
+/** The quiet target for a shell step: the program and its first short
+ * argument (`ls sagax-plugins`). The full command stays in `title` for the
+ * tooltip and Copy. */
+export function commandAim(command: string): { target: string; title: string } {
+  const title = command.replace(/\s+/g, " ").trim();
+  const line = command.split("\n", 1)[0]!.trim();
+  const tokens = line.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? [];
+  if (!tokens.length) return { target: oneLine(title), title: title || command };
+  const program = shortCommandToken(tokens[0]!);
+  let arg: string | undefined;
+  for (const token of tokens.slice(1)) {
+    const plain = token.replace(/^['"]|['"]$/g, "");
+    if (plain.startsWith("-") && !/[/\\]/.test(plain)) continue;
+    arg = shortCommandToken(token);
+    break;
+  }
+  const target = oneLine(arg ? `${program} ${arg}` : program);
+  return { target, title: title || command };
+}
+
 /** The bare name of one of Sagax's own tools, or undefined. */
 function internalName(name: string): string | undefined {
   if (!INTERNAL.test(name)) return undefined;
@@ -196,9 +233,9 @@ function kindLabel(kind: Kind, phase: StepPhase, args: Record<string, unknown> |
   return t(`step.${kind}.${phase}` as LocaleKey);
 }
 
-/** The small grey words after the label: which file, which command, which
- * query. Never JSON. */
-function kindTarget(kind: Kind, args: Record<string, unknown> | undefined, tool: StepTool): string | undefined {
+/** What the step acted on: quiet target words, and an optional title when
+ * the target is a shortened form of something longer (a shell command). */
+function kindAim(kind: Kind, args: Record<string, unknown> | undefined, tool: StepTool): { target?: string; title?: string } {
   switch (kind) {
     case "readFile":
     case "writeFile":
@@ -206,33 +243,41 @@ function kindTarget(kind: Kind, args: Record<string, unknown> | undefined, tool:
     case "deleteFile":
     case "attachFile": {
       const path = str(args, "file_path", "path", "filePath", "notebook_path", "file", "filename");
-      return path ? basename(path) : undefined;
+      return path ? { target: basename(path) } : {};
     }
     case "runCommand": {
       const command = str(args, "command", "cmd", "script") ?? (tool.summary && tool.summary !== tool.name ? tool.summary : undefined);
-      return command ? oneLine(command.split("\n", 1)[0]!) : undefined;
+      return command ? commandAim(command) : {};
     }
-    case "searchFiles":
-      return oneLine(str(args, "pattern", "query", "glob", "regex") ?? "") || undefined;
-    case "searchWeb":
-      return oneLine(str(args, "query", "q", "search") ?? "") || undefined;
+    case "searchFiles": {
+      const target = oneLine(str(args, "pattern", "query", "glob", "regex") ?? "") || undefined;
+      return target ? { target } : {};
+    }
+    case "searchWeb": {
+      const target = oneLine(str(args, "query", "q", "search") ?? "") || undefined;
+      return target ? { target } : {};
+    }
     case "fetchPage":
     case "openPage": {
       const url = str(args, "url", "href", "uri");
-      return url ? host(url) : undefined;
+      return url ? { target: host(url) } : {};
     }
     case "memorySearch":
-    case "readConversations":
-      return oneLine(str(args, "query", "q") ?? "") || undefined;
+    case "readConversations": {
+      const target = oneLine(str(args, "query", "q") ?? "") || undefined;
+      return target ? { target } : {};
+    }
     case "phone": {
-      const tool = str(args, "tool");
-      return tool && PHONE_TOOL_LABELS.has(tool) ? t(`step.phone.tool.${tool}` as LocaleKey) : undefined;
+      const phone = str(args, "tool");
+      return phone && PHONE_TOOL_LABELS.has(phone) ? { target: t(`step.phone.tool.${phone}` as LocaleKey) } : {};
     }
     case "postRoom":
-    case "startThread":
-      return oneLine(str(args, "title", "room", "room_name") ?? "") || undefined;
+    case "startThread": {
+      const target = oneLine(str(args, "title", "room", "room_name") ?? "") || undefined;
+      return target ? { target } : {};
+    }
     default:
-      return undefined;
+      return {};
   }
 }
 
@@ -292,8 +337,10 @@ function capitalize(text: string): string {
 export type StepReading = {
   /** the sentence: "Read a file", "Coordinated Wren and Olive" */
   label: string;
-  /** what it acted on, quiet after the label: a file name, a command */
+  /** what it acted on, quiet after the label: a file name, a short command */
   target?: string;
+  /** the full target for the tooltip / Copy when `target` is shortened */
+  title?: string;
 };
 
 /** Server rows written in English as a sentence (server/index.ts), read
@@ -353,7 +400,10 @@ export function readStep(tool: StepTool, nameOf?: StepNameOf): StepReading {
   }
   const args = parseArgs(tool.input) ?? parseArgs(tool.summary);
   const kind = kindOf(name);
-  if (kind) return { label: kindLabel(kind, phase, args, nameOf), target: kindTarget(kind, args, tool) };
+  if (kind) {
+    const aim = kindAim(kind, args, tool);
+    return { label: kindLabel(kind, phase, args, nameOf), ...aim };
+  }
   const mcp = mcpLabel(tool, phase);
   if (mcp) return mcp;
   const display = name.replace(/_+/g, " ");

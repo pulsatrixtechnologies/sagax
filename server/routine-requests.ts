@@ -79,6 +79,11 @@ const routineToolScheduleSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("cron"), expression: z.string().max(1024), timeZone: z.string().max(128), ...toolTimingFields }).strict(),
   z.object({ type: z.literal("once"), at: z.string().max(64) }).strict(),
   z.object({
+    type: z.literal("limit_reset"),
+    engine: z.string().trim().min(1).max(128).optional(),
+    repeat: z.enum(["once", "every_reset"]).optional(),
+  }).strict(),
+  z.object({
     type: z.literal("weekly"),
     time: z.string().max(5),
     weekdays: z.array(z.string().max(9)).min(1).max(7),
@@ -189,9 +194,16 @@ const storedCronScheduleSchema = z.object({
     context.addIssue({ code: "custom", message: error instanceof Error ? error.message : "Invalid stored cron schedule" });
   }
 });
+const storedLimitResetScheduleSchema = z.object({
+  type: z.literal("limit_reset"),
+  engine: z.string().trim().min(1).max(128),
+  repeat: z.enum(["once", "every_reset"]),
+}).strict();
+
 const storedScheduleSchema = z.discriminatedUnion("type", [
   storedCronScheduleSchema,
   z.object({ type: z.literal("once"), at: z.number().int().nonnegative() }).strict(),
+  storedLimitResetScheduleSchema,
   z.object({
     type: z.literal("daily"),
     time: z.string().regex(TIME),
@@ -229,6 +241,7 @@ const storedScheduleSchema = z.discriminatedUnion("type", [
 const storedScheduleChangesSchema = z.discriminatedUnion("type", [
   storedCronScheduleSchema,
   z.object({ type: z.literal("once"), at: z.number().int().nonnegative() }).strict(),
+  storedLimitResetScheduleSchema,
   z.object({
     type: z.literal("daily"),
     time: z.string().regex(TIME),
@@ -624,8 +637,9 @@ function keptTiming(
   incoming: object,
 ): { timing?: "exact" | "flexible"; windowEarlyMinutes?: number; windowLateMinutes?: number } {
   if (isTriggerSchedule(current) || isTriggerSchedule(incoming as { type: string })) return {};
+  if (current.type === "limit_reset" || (incoming as { type?: string }).type === "limit_reset") return {};
   if (Object.hasOwn(incoming, "timing")) return timingCarry(incoming as Parameters<typeof timingCarry>[0]);
-  if (current.type !== "once" && current.timing === "flexible") return storedTiming(current);
+  if (current.type !== "once" && "timing" in current && current.timing === "flexible") return storedTiming(current);
   return {};
 }
 
@@ -634,7 +648,7 @@ function flexibleWindowUpdate(
   schedule: RoutineToolScheduleInput,
   current: { type: string; timing?: string; windowEarlyMinutes?: number; windowLateMinutes?: number } | undefined,
 ): RoutineToolScheduleInput {
-  if (schedule.type === "once" || !current || current.type === "once" || current.timing !== "flexible") return schedule;
+  if (schedule.type === "once" || schedule.type === "limit_reset" || !current || current.type === "once" || current.timing !== "flexible") return schedule;
   if (schedule.timing != null) return schedule;
   if (schedule.windowEarlyMinutes == null && schedule.windowLateMinutes == null) return schedule;
   return {
@@ -649,6 +663,7 @@ function normalizeSchedule(
   schedule: RoutineToolScheduleInput,
   now: number,
   current?: { type: string; timing?: string; windowEarlyMinutes?: number; windowLateMinutes?: number },
+  ownEngine?: string,
 ): RoutineRequestSchedule {
   const source = flexibleWindowUpdate(schedule, current);
   if (schedule.type === "cron") {
@@ -659,6 +674,11 @@ function normalizeSchedule(
       if (error instanceof RoutineRequestError) throw error;
       throw new RoutineRequestError(error instanceof Error ? error.message : "Invalid cron schedule");
     }
+  }
+  if (schedule.type === "limit_reset") {
+    const engine = (schedule.engine ?? ownEngine ?? "").trim();
+    if (!engine || engine.length > 128) throw new RoutineRequestError("engine must be an engine id such as claude or codex");
+    return { type: "limit_reset", engine, repeat: schedule.repeat ?? "once" };
   }
   if (schedule.type === "once") {
     const at = rfc3339Instant(
@@ -851,7 +871,7 @@ function normalizedOperation(
     throw new RoutineRequestError("That routine has no webhook or email trigger", 409);
   }
   // A trigger has no clock, so a null next run is not a reason to refuse resume.
-  if (validated.action === "resume" && !isTriggerSchedule(current.schedule) && nextOccurrence(current.schedule, now) === null) {
+  if (validated.action === "resume" && current.schedule.type !== "limit_reset" && !isTriggerSchedule(current.schedule) && nextOccurrence(current.schedule, now) === null) {
     throw new RoutineRequestError(noFutureResumeMessage(current.schedule), 409);
   }
   return {
@@ -864,6 +884,7 @@ function normalizedOperation(
 
 export function asSchedule(schedule: RoutineRequestSchedule, now: number): RoutineSchedule {
   if (schedule.type === "cron") return { ...schedule };
+  if (schedule.type === "limit_reset") return { type: "limit_reset", engine: schedule.engine, repeat: schedule.repeat, at: null };
   if (schedule.type === "once") return { type: "once", at: schedule.at };
   if (schedule.type === "interval") {
     return {
@@ -907,6 +928,7 @@ function effectiveSchedule(
   incoming: RoutineRequestScheduleChanges,
 ): RoutineRequestSchedule {
   if (incoming.type === "cron") return { ...incoming, ...keptTiming(current, incoming) };
+  if (incoming.type === "limit_reset") return { ...incoming };
   if (incoming.type === "webhook") return { type: "webhook" };
   if (incoming.type === "event") return { type: "event", source: "email" };
   if (incoming.type !== "interval") {
@@ -971,7 +993,7 @@ function formatInstant(at: number, timeZone: string): string {
 }
 
 function timingPhrase(schedule: RoutineRequestSchedule): string {
-  if (schedule.type === "once" || isTriggerSchedule(schedule) || schedule.timing !== "flexible") return "";
+  if (schedule.type === "once" || schedule.type === "limit_reset" || isTriggerSchedule(schedule) || schedule.timing !== "flexible") return "";
   return ` (-${schedule.windowEarlyMinutes ?? 0}/+${schedule.windowLateMinutes ?? 0} min)`;
 }
 
@@ -981,6 +1003,11 @@ export function scheduleText(schedule: RoutineRequestSchedule, timeZone: string)
     // The card says it in words; the expression stays under the hood (2026-10-29).
     const label = cronScheduleLabel(schedule);
     return phrase ? `${label} · around the time${phrase}` : label;
+  }
+  if (schedule.type === "limit_reset") {
+    return schedule.repeat === "every_reset"
+      ? `Each time the ${schedule.engine} usage limit resets`
+      : `When the ${schedule.engine} usage limit resets`;
   }
   if (schedule.type === "once") return `${formatInstant(schedule.at, timeZone)} (${timeZone})`;
   if (schedule.type === "interval") {
@@ -1019,11 +1046,16 @@ export function consequenceLine(schedule: RoutineRequestSchedule, continuity = f
   // over is the previous run's report, so say that rather than contradict
   // the Continuity line above it.
   const session = continuity ? "each run starts a fresh session with the previous run's report" : "each run starts a fresh session";
-  const window = schedule.type !== "once" && !isTriggerSchedule(schedule) && schedule.timing === "flexible"
+  const window = schedule.type !== "once" && schedule.type !== "limit_reset" && !isTriggerSchedule(schedule) && schedule.timing === "flexible"
     ? ` Starts up to ${schedule.windowEarlyMinutes ?? 0} min early and ${schedule.windowLateMinutes ?? 0} min late.`
     : "";
   if (schedule.type === "webhook") return "Runs when a webhook delivery arrives.";
   if (schedule.type === "event") return "Runs when email arrives.";
+  if (schedule.type === "limit_reset") {
+    return schedule.repeat === "every_reset"
+      ? `Will run each time the ${schedule.engine} usage limit resets; ${session}.`
+      : `Will run once when the ${schedule.engine} usage limit resets; that run starts a fresh session.`;
+  }
   if (schedule.type === "cron") return `Will run at matching calendar times in ${schedule.timeZone}; ${session}.${window}`;
   if (schedule.type === "once") return "Will run once; that run starts a fresh session.";
   if (schedule.type === "interval") {
@@ -1039,22 +1071,30 @@ export function consequenceLine(schedule: RoutineRequestSchedule, continuity = f
   return `Will run ${cadence}; ${session}.${window}`;
 }
 
+/** A stored routine's schedule as a request names it: a limit-reset time is the engine's, never part of the request. */
+function asRequestSchedule(schedule: RoutineSchedule): RoutineRequestSchedule | undefined {
+  if (schedule.type === "limit_reset") return { type: "limit_reset", engine: schedule.engine, repeat: schedule.repeat };
+  if (schedule.type === "interval") {
+    return {
+      ...schedule,
+      ...(schedule.weekdays ? { weekdays: [...schedule.weekdays] } : {}),
+      ...(schedule.window ? { window: { ...schedule.window } } : {}),
+    };
+  }
+  if (schedule.type === "daily") return { ...schedule, weekdays: [...schedule.weekdays] };
+  return { ...schedule };
+}
+
 function effectiveDefinition(operation: RoutineRequestOperation, manager: RoutineManager): RoutineRequestDefinition | null {
   if (operation.action === "create") return operation.routine;
   const existing = manager.listRoutines().find((routine) => routine.id === operation.routineId);
   if (!existing) return null;
+  const requestSchedule = asRequestSchedule(existing.schedule);
+  if (!requestSchedule) return null;
   const base: RoutineRequestDefinition = {
     name: existing.name,
     instructions: existing.prompt,
-    schedule: existing.schedule.type === "interval"
-      ? {
-          ...existing.schedule,
-          ...(existing.schedule.weekdays ? { weekdays: [...existing.schedule.weekdays] } : {}),
-          ...(existing.schedule.window ? { window: { ...existing.schedule.window } } : {}),
-        }
-      : existing.schedule.type === "daily"
-        ? { ...existing.schedule, weekdays: [...existing.schedule.weekdays] }
-        : { ...existing.schedule },
+    schedule: requestSchedule,
     runOn: existing.runOn,
     durationMinutes: existing.durationMinutes,
     ...(existing.timeoutMinutes === undefined ? {} : { timeoutMinutes: existing.timeoutMinutes }),
@@ -1344,21 +1384,11 @@ function revalidateOperation(operation: RoutineRequestOperation, manager: Routin
     throw new RoutineRequestError("That one-time schedule is now in the past. Ask the bot to propose a new time.", 409, { terminal: true });
   }
   if (schedule?.type === "interval") {
+    const currentRequest = current ? asRequestSchedule(current.schedule) : null;
     const base = operation.action === "create"
       ? operation.routine.schedule
-      : current
-        ? effectiveSchedule(
-            current.schedule.type === "interval"
-              ? {
-                  ...current.schedule,
-                  ...(current.schedule.weekdays ? { weekdays: [...current.schedule.weekdays] } : {}),
-                  ...(current.schedule.window ? { window: { ...current.schedule.window } } : {}),
-                }
-              : current.schedule.type === "daily"
-                ? { ...current.schedule, weekdays: [...current.schedule.weekdays] }
-                : { ...current.schedule },
-            schedule,
-          )
+      : currentRequest
+        ? effectiveSchedule(currentRequest, schedule)
         : null;
     const concrete = base ? asSchedule(base, now) : null;
     if (concrete) {
@@ -1393,10 +1423,12 @@ function revalidateOperation(operation: RoutineRequestOperation, manager: Routin
 function routineSnapshot(routine: Routine): RoutineRequestSnapshot | undefined {
   if (routine.attachments?.length) return undefined;
   if (redactSecretsInText(routine.name) !== routine.name || redactSecretsInText(routine.prompt) !== routine.prompt) return undefined;
+  const schedule = asRequestSchedule(routine.schedule);
+  if (!schedule) return undefined;
   const snapshot: RoutineRequestSnapshot = {
     name: routine.name,
     instructions: routine.prompt,
-    schedule: structuredClone(routine.schedule),
+    schedule: structuredClone(schedule),
     runOn: routine.runOn,
     durationMinutes: routine.durationMinutes,
     ...(routine.timeoutMinutes === undefined ? {} : { timeoutMinutes: routine.timeoutMinutes }),
@@ -1611,10 +1643,11 @@ export class RoutineRequestService {
       const action = payload.operation.action;
       const routineId = payload.operation.action === "create" ? payload.resultId : payload.operation.routineId;
       const after = routineId ? this.routines.listRoutines().find((routine) => routine.id === routineId) : undefined;
+      const undoSchedule = after ? asRequestSchedule(after.schedule) : definition?.schedule;
       const undo: RoutineRequestUndo = {
         name: redactSecretsInText(after?.name ?? definition?.name ?? before?.name ?? "routine"),
         ...(action === "create" || action === "update" || action === "resume"
-          ? { schedule: structuredClone(after?.schedule ?? definition?.schedule) }
+          ? { schedule: undoSchedule ? structuredClone(undoSchedule) : undefined }
           : {}),
         ...(after && (action === "update" || action === "pause" || action === "resume") ? { appliedUpdatedAt: after.updatedAt } : {}),
         ...(before ? { before } : {}),

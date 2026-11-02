@@ -4,7 +4,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { codingSignals, inGitRepository, isCodeFile, isCodingWork } from "./activity-coding.ts";
+import { codingSignals, commandTexts, inGitRepository, isCodeFile, isCodingWork } from "./activity-coding.ts";
+import { commandSummary, toolDetailPreview } from "./tool-summary.ts";
+
+// A call as the store keeps it (server/index.ts, item.started): the engine's
+// title as its name, commandSummary as its summary (newlines folded, cut at
+// 200) and toolDetailPreview as its input. ACP titles a shell call with its
+// command cut at 80 (drivers/acp/session-stream.ts), Codex with the whole
+// command (drivers/codex/stream.ts).
+const stored = (name: string, args: Record<string, unknown>) => ({ name, summary: commandSummary(args), input: toolDetailPreview(args) });
+const engines: Record<string, (command: string) => ReturnType<typeof stored>> = {
+  claude: (command) => stored("Bash", { command, description: "Run it" }),
+  environment: (command) => stored("sagax-environment__run_command", { command }),
+  acp: (command) => stored(command.slice(0, 80), { command }),
+  codex: (command) => stored(command, { command, cwd: "/work/app" }),
+};
+/** Which engines' rows of this command read as version control. */
+const vcsBy = (command: string) => Object.keys(engines).filter((engine) => codingSignals([engines[engine]!(command)]).vcs);
+const LONG_BODY = "Steps to reproduce:\ngit checkout -b check\ngit push origin check\nThen approve once and the card shows twice, which is what the screenshot attached to the issue shows as well, on a clean checkout of main.";
 
 describe("coding classification", () => {
   it("counts edits to source files as coding", () => {
@@ -84,6 +101,32 @@ describe("coding classification", () => {
     expect(run("/bin/zsh -lc \"git commit -m 'Fix the card'\"")).toBe(true);
     expect(run("bash -lc 'gh issue view 1905 && git log --oneline -5'")).toBe(false);
     expect(run("bash -lc 'gh issue comment 1905 --body \"git push origin check\"'")).toBe(false);
+  });
+
+  // A call's name, summary and input each carry its command: the input
+  // whole, the summary folded and cut at 200, an ACP title cut at 80. Read
+  // as one script, a quote a cut left open flipped the quoting of what came
+  // after it: a comment's quoted git lines read as commands, and a push
+  // after a long quoted path read as text.
+  it("reads each of a stored call's texts on its own, the whole command first", () => {
+    const longComment = `gh issue comment 1905 --body "${LONG_BODY}"`;
+    expect(longComment.length).toBeGreaterThan(200);
+    expect(vcsBy(longComment)).toEqual([]);
+    expect(vcsBy(`gh pr comment 1907 --body '${LONG_BODY}'`)).toEqual([]);
+    expect(vcsBy("gh issue comment 1905 --body \"Steps to reproduce:\ngit checkout -b check\ngit push origin check\"")).toEqual([]);
+    // a heredoc's text stays data: its newlines live in the command only
+    expect(vcsBy("cat > notes/README.md <<'EOF'\nTo publish:\ngit checkout -b check && git push origin check\nEOF")).toEqual([]);
+    const all = Object.keys(engines);
+    expect(vcsBy("cd \"/Users/someone/Library/Mobile Documents/com~apple~CloudDocs/Projects/acme/app\" && git push origin main")).toEqual(all);
+    expect(vcsBy("cd /work/app && echo \"Publishing the branch now, a message long enough to pass the cut of the title\" && git push origin HEAD")).toEqual(all);
+    expect(vcsBy("/bin/zsh -lc \"cd /work/app && git push origin HEAD\"")).toEqual(all);
+    // a call titled in words: an apostrophe there is not a quote of the command
+    expect(codingSignals([{ name: "Run the bot's release step", summary: "git push origin HEAD", input: toolDetailPreview({ command: "git push origin HEAD" }) }]).vcs).toBe(true);
+    // a row that kept no input is read off its summary, then its name, apart
+    expect(codingSignals([{ name: "Run the bot's release step", summary: "git push origin HEAD" }]).vcs).toBe(true);
+    expect(codingSignals([{ name: "git -C /work/app push origin HEAD", summary: "echo \"cut sho" }]).vcs).toBe(true);
+    expect(commandTexts({ name: "Bash", summary: "git push", input: toolDetailPreview({ command: "git push\necho done" }) })).toEqual(["git push\necho done"]);
+    expect(commandTexts({ name: "git push", summary: "git push origin HEAD" })).toEqual(["git push origin HEAD", "git push"]);
   });
 
   it("still counts a sub-agent that changed source files or ran version control", () => {

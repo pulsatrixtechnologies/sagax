@@ -7390,7 +7390,16 @@ calls count like any other). Commands are read as shell words
 (`shellCommands`), so a read (`git merge-base`, `git merge-tree`, a
 `--dry-run`) or a quoted text that lists git commands (an issue comment)
 is not version control; a shell's own script (`bash -lc '...'`, how Codex
-reports a command) is read as commands. A pull request opened, updated or
+reports a command) is read as commands. A stored call carries its command
+up to three times and only its input keeps it whole: the summary folds it
+and cuts it at 200 characters, an ACP title cuts it at 80, a title in words
+can hold an apostrophe. Each text is read on its own (`commandTexts`): the
+input's `command` alone when it has one, else the summary and the name
+apart, never joined into one script, where a quote a cut left open flipped
+the quoting of the rest (a comment's quoted git lines read as commands, a
+push after a long quoted path read as text); the code work collector reads
+them the same way. Tests build rows as the drivers store them
+(`commandSummary`, `toolDetailPreview`). A pull request opened, updated or
 merged counts, by gh or by a GitHub tool (`update_pull_request` included);
 reading issues or pull requests, or commenting on them, does not, nor does
 coordinating bots. Work another bot handed over (a work thread,
@@ -7398,7 +7407,10 @@ coordinating bots. Work another bot handed over (a work thread,
 as that bot's line (`roomRequest`), which starts the turn as a person's
 line does, and an earlier request's code work never makes a later one
 Coding, folder a repository or not; the code work it produced stays in
-`code`. A person's own line there reads like their conversation (in a
+`code`. Its current step and its settled outcome are read from that request
+line on too: one that just started names no step of the request before it,
+and one that left no outcome does not read the earlier request's. A
+person's own line there reads like their conversation (in a
 repository, their turns stay Coding as a whole). A turn longer than the
 scanned page keeps what the last scan read of it while the page still
 holds that scan's newest message. A coding entry carries `code`

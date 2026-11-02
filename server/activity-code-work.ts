@@ -11,7 +11,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import type { BotCodeBranch, BotCodeCommit, BotCodePullAction, BotCodePullRequest, BotCodeWork } from "../shared/bot-activity.ts";
-import { commandOf, gitArgs, shellCommands, shellProgram, withoutHeredocs } from "./activity-coding.ts";
+import { commandTexts, gitArgs, shellCommands, shellProgram } from "./activity-coding.ts";
 
 export interface CodeWorkToolCall {
   name: string;
@@ -148,12 +148,14 @@ export class CodeWorkCollector {
       this.githubTool(github[1]!.toLowerCase(), tool, at);
       return;
     }
-    const command = withoutHeredocs([commandOf(tool.input), tool.summary, tool.name].filter(Boolean).join("\n"));
-    if (!/\b(?:git|gh)\b/.test(command)) return;
+    // each text on its own: a cut preview's open quote never reaches the
+    // whole command (commandTexts)
+    const commands = commandTexts(tool).flatMap((text) => (/\b(?:git|gh)\b/.test(text) ? shellCommands(text) : []));
+    if (!commands.length) return;
     const output = outputLines(tool.output);
     let committed = false;
     let pushed = false;
-    for (const words of shellCommands(command)) {
+    for (const words of commands) {
       const args = shellProgram(words);
       if (args[0] === "git") {
         const sub = gitArgs(args);

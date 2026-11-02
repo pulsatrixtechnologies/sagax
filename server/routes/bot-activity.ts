@@ -205,11 +205,13 @@ function runStatus(status: RoutineRun["status"]): BotActivityStatus {
   }
 }
 
-/** A settled thread's outcome, read off its newest turn. */
+/** A settled thread's outcome, read off its newest turn: never past the
+ * line that asked for it (asksForWork), so a teammate's request that left
+ * no outcome does not read the request before it. */
 function settledStatus(messages: readonly ActivityMessage[]): BotActivityStatus {
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index]!;
-    if (message.role === "user") return "finished";
+    if (asksForWork(message)) return "finished";
     if (message.requestCancelled) return "stopped";
     if (message.status === "failed" || message.turnSucceeded === false) return "failed";
     if (message.turnSucceeded === true || message.kind === "digest") return "finished";
@@ -431,14 +433,15 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
   }
 
   /** A running entry's current step: the tool call in flight, else the
-   * newest one, else what a waiting run asks. */
+   * newest one, else what a waiting run asks. Only the newest turn's: a
+   * request that just started, a teammate's included, has none yet. */
   function currentStep(threadId: string, run: RoutineRun | undefined): string | undefined {
     if (run?.status === "waiting" && run.attention) return run.attention.slice(0, 160);
     const tail = deps.messages(threadId, CURRENT_SCAN).messages;
     let latest: string | undefined;
     for (let index = tail.length - 1; index >= 0; index--) {
       const message = tail[index]!;
-      if (message.role === "user") break;
+      if (asksForWork(message)) break;
       const tool = message.tool;
       if (!tool || tool.setup) continue;
       const label = (tool.summary?.trim() || tool.name).slice(0, 160);

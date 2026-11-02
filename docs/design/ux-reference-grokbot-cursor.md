@@ -50,10 +50,11 @@ admin. On copie une façon de ranger, jamais une fonction en moins.
    Restent permis parce qu'ils ne modifient aucun objet : la palette de commandes, le
    lanceur de recherche, l'aide des raccourcis, la visionneuse d'un fichier en lecture
    seule (fenêtre superposée, décision de JC du 2026-11-01, voir 2.13), un menu.
-   Exception décidée par JC le 2026-11-01 : les **Réglages du bureau** restent une
-   grande fenêtre centrée, comme la référence (voir 2.5). Ce n'est pas un patron à
-   reprendre ailleurs : aucun autre écran ne devient une fenêtre pour « faire comme
-   les Réglages ».
+   Exceptions décidées par JC : les **Réglages du bureau** (2026-11-01, voir 2.5) et
+   **Capacités** / Connecter des apps (2026-11-02, correction après le lot 5, voir
+   2.8) restent une grande fenêtre centrée, comme la référence. Ce n'est pas un
+   patron à reprendre ailleurs : aucun autre écran ne devient une fenêtre pour
+   « faire comme les Réglages ».
 6. **Clavier d'abord.** Tout se fait au clavier : palette, recherche, Échap pour reculer,
    flèches dans les listes, lettres pour répondre à une question, raccourcis visibles
    dans les menus et les info-bulles.
@@ -66,7 +67,7 @@ admin. On copie une façon de ranger, jamais une fonction en moins.
 | Besoin | Forme | Exemples |
 |---|---|---|
 | Un contexte qui accompagne la conversation et qu'on garde ouvert en parlant | **Panneau latéral** à droite, redimensionnable, se ferme par son × ou en recliquant la pastille du bot | Panneau du bot (Détails, Bibliothèque, Ordinateur), fil à côté, filtres d'une liste |
-| Un objet qu'on lit ou qu'on modifie, ou une liste complète | **Vue** (page) qui prend la zone de contenu, avec retour nommé ; la vue d'origine reste montée et retrouve son défilement | Connecter des apps, page publiée, exécution d'une routine, sous-page d'un réglage |
+| Un objet qu'on lit ou qu'on modifie, ou une liste complète | **Vue** (page) qui prend la zone de contenu, avec retour nommé ; la vue d'origine reste montée et retrouve son défilement | Mémoire, Automations, carte d'équipe, page publiée, exécution d'une routine, sous-page d'un réglage |
 | Le détail d'un élément d'une page qu'on parcourt (calendrier, liste, journal), ou son éditeur, pendant qu'on garde la page sous les yeux | **Panneau de détail** à droite (`DetailPanel`), même bord, même allure et même poignée que le panneau du bot ; il remplace le contenu au lieu de s'empiler | Détails d'une routine ou d'un appel du calendrier, éditeur de routine, routines en pause (voir 2.17) |
 | Un choix court, sans saisie longue, qui se referme seul | **Popover ou menu** ancré au contrôle qui l'ouvre | Menu + du compositeur, menu du compte, choix de modèle, partage d'une page, sélecteur de valeur |
 | Une décision irréversible | **Confirmation** (seule fenêtre permise) qui dit ce qui va disparaître | Supprimer un bot, réinitialiser l'ordinateur, retirer une capacité |
@@ -286,7 +287,12 @@ dessous (« écran de » suivi du nom du bot).
 
 ### 2.8 Bibliothèque, skills, Connecter des apps
 
-- **Connecter des apps** (Capacités) est une seule vue : titre à gauche après le retour,
+- **Forme de l'écran (décision de JC, 2026-11-02)** : Capacités / Connecter des apps
+  reste une **grande fenêtre centrée** (même coquille que Browse Bots utilisait, taille
+  Settings), exception au principe 5 comme les Réglages. Le lot 5 l'avait passée en
+  page de contenu ; JC a corrigé : modal. Onglets, recherche, Tailscale, Paiements et
+  Messages restent. Les bots archivés restent une page de contenu.
+- **Connecter des apps** (Capacités) est une seule surface dans cette fenêtre : titre,
   une capsule « N connectées » à droite (avec les logos empilés), puis des puces de
   catégories qui défilent à l'horizontale (Tout, iPhone, Gestionnaires de mots de passe,
   Productivité...), la choisie en blanc plein.
@@ -625,6 +631,23 @@ sur l'app au prochain audit.
   boucle traite, ni sur le tour déjà repris. Inscrit au journal des étapes
   (`sagax.unfinished_turn`). Code : `server/unfinished-turn.ts`.
 
+### 2.21 Mémoire (page principale)
+
+Ajouté le 2026-11-02 (correction de JC : Mémoire n'est pas une entrée du panneau de
+droite ; c'est une page comme Automations et la carte d'équipe).
+
+- **Où ça vit.** Menu Outils › Mémoire. Page qui remplit la colonne principale : en-tête
+  avec titre, sous-titre gris, bascule Liste / Carte, recherche, Nouveau. Pas de panneau
+  de droite pour cette surface.
+- **Liste.** Colonne gauche : sources (bots, équipe, Perspicax), dossiers et corbeille.
+  Corps : liste des notes, lecture, édition, sélection multiple, déplacer, supprimer avec
+  annulation, arbre JSON pour les notes JSON.
+- **Carte.** Même langage visuel que la carte d'équipe (zoom, pan, nœuds arrondis) :
+  sources, dossiers et notes en nœuds ; liens `[[notes]]`, mêmes étiquettes et même
+  dossier en arêtes. Un clic sur une note l'ouvre. iOS : inchangé sauf renommage du menu
+  Outils si besoin.
+- Code : `src/components/memory-manager/MemoryManagerPanel.tsx`,
+  `MemoryMapCanvas.tsx`, `src/lib/memory-map.ts`.
 
 ---
 

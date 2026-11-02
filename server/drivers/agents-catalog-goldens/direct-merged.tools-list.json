@@ -909,6 +909,96 @@
       }
     },
     {
+      "name": "wait_until",
+      "description": "Tell the person when something happens. No AI runs while you wait, only plain checks. Ends after hours (default 24, 1-168).",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "A noun phrase in the person's words, e.g. \"the build\"."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "url_contains",
+              "url_missing",
+              "file_exists",
+              "file_missing",
+              "file_changed",
+              "process_running",
+              "process_gone",
+              "bot_idle"
+            ],
+            "description": "url_*: the page at url has or lacks text. file_*: path exists, is gone or changes. process_*: process (name or pid) runs or stops. bot_idle: bot (name or id) finishes its work."
+          },
+          "url": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "process": {
+            "type": "string"
+          },
+          "bot": {
+            "type": "string"
+          },
+          "follow_up": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "Only if the person asked for something to be done then: that request, for a run that won't see this chat. You carry it out here."
+          },
+          "hours": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 168
+          }
+        },
+        "required": [
+          "label",
+          "kind"
+        ]
+      }
+    },
+    {
+      "name": "list_waits",
+      "description": "Your waits in this chat that have not ended (wait_until): id, label, what it checks, when it was made and when it stops.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "cancel_wait",
+      "description": "Stop one of your waits; its id comes from list_waits or wait_until's answer.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
       "name": "react_to_message",
       "description": "React with one emoji to a message in this conversation, like a colleague in a chat, when a short acknowledgement says it: 👍 noted, ✅ a small thing you were asked is done, 👀 you are starting on something that takes a while, ❤️ or 🙏 for a thank-you, 🎉 for good news. Sparingly: most messages get none, one per message at most, never on your own messages. Never instead of an answer the person needs, and never together with a sentence that says the same thing: if the reaction says it all, end the turn without text (no empty reply is shown). Omit message_id for the message you are answering.",
       "inputSchema": {
@@ -2443,30 +2533,6 @@
           "action",
           "reason"
         ]
-      }
-    },
-    {
-      "name": "generate_shape_avatar",
-      "description": "Build a portable Shape mascot definition (geometry JSON only) from a short description and apply it to this bot's look. Use when the person asks to make a mascot that looks like an object (mug, pad, bulb, speech bubble, plant, can, book, rocket, …). Colour stays the bot's colour. The definition is validated before it is stored. Read the result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result; report failed or cancelled results honestly. This does not elevate another bot's execution permissions.",
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "direction": {
-            "type": "string",
-            "maxLength": 400,
-            "description": "What the silhouette should look like, for example \"a friendly coffee mug\"."
-          },
-          "apply": {
-            "type": "boolean",
-            "description": "When true (default), save the definition on this bot's mascotLook. When false, only return the JSON."
-          },
-          "definition": {
-            "type": "object",
-            "additionalProperties": true,
-            "description": "Optional ready-made definition JSON to validate and apply instead of generating from direction."
-          }
-        }
       }
     },
     {

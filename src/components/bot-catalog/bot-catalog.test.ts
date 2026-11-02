@@ -372,10 +372,11 @@ describe("the detail pane", () => {
   });
 });
 
-describe("the modal", () => {
-  it("is a full-height dialog with its title, loading the catalogue", () => {
+describe("the catalog view shell (lot 5: no modal window)", () => {
+  it("fills a content frame with its title, loading the catalogue", () => {
     const html = renderToStaticMarkup(createElement(BotCatalogModal));
-    expect(html).toContain('role="dialog"');
+    expect(html).not.toContain('role="dialog"');
+    expect(html).not.toContain("aria-modal");
     expect(html).toContain('aria-labelledby="bot-catalog-title"');
     expect(html).toContain("data-bot-catalog-modal");
     expect(html).toContain("Loading the catalog");
@@ -473,14 +474,14 @@ describe("the Templates section (the old Templates library)", () => {
   });
 });
 
-describe("the modal shell", () => {
-  it("is the shared category modal shell, as Achievements and the persona editor", () => {
+describe("the catalog view shell layout", () => {
+  it("does not use the category modal backdrop or close button", () => {
     fixture.target = null;
     const html = renderToStaticMarkup(createElement(BotCatalogModal));
-    for (const classes of [CATEGORY_MODAL.backdrop, CATEGORY_MODAL.frame, CATEGORY_MODAL.content, CATEGORY_MODAL.close]) {
-      expect(html).toContain(`class="${classes}"`);
+    for (const classes of [CATEGORY_MODAL.backdrop, CATEGORY_MODAL.frame, CATEGORY_MODAL.close]) {
+      expect(html).not.toContain(`class="${classes}"`);
     }
-    expect(html).toContain(`class="${CATEGORY_MODAL.title}"`);
+    expect(html).toContain("data-gallery-frame");
   });
 
   it("opens on its Templates section for the old library's entry points", () => {

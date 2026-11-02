@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Children, createElement, isValidElement, type ReactNode } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
+
+const renderToStaticMarkup = (node: ReactNode) => renderMarkup(createElement(ConfirmProvider, null, node));
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppState, Bot } from "@/state/store";
 import type { RoutineRun } from "@/lib/routines";
@@ -146,15 +149,18 @@ describe("a routine's page (2026-10-29: its runs, then its Configuration, as clo
     return renderToStaticMarkup(createElement(EventDetails, { item, bots: [bot], onClose: vi.fn(), onEdit: vi.fn(), onDuplicate: vi.fn(), onCallChanged: vi.fn(), onOpenRoom: vi.fn() }));
   }
 
-  it("opens on the run history in a docked side panel (Grok Bot style), its summary opening the configuration", () => {
+  it("opens on the run history in the right detail panel (no modal, no scrim), its summary opening the configuration", () => {
     const html = details();
     expect(html).toContain("data-routine-detail");
     expect(html).toContain("data-routine-summary");
     expect(html).not.toContain('data-routine-view="configuration"');
     expect(html).toContain('data-event-details="routine"');
-    expect(html).toContain("absolute inset-y-0 right-0");
-    expect(html).toContain("max-w-[min(100vw,560px)]");
-    expect(html).toContain('aria-modal="false"');
+    // 2026-11-01: the shared DetailPanel, beside the calendar, not over it
+    expect(html).toContain("data-detail-panel");
+    expect(html).toContain('role="region"');
+    expect(html).not.toContain('role="dialog"');
+    expect(html).not.toContain("bg-black/");
+    expect(html).not.toContain("fixed inset-0");
     // the instructions live in the editor: the page leads with what happened
     expect(html).not.toContain("Read the board.");
   });

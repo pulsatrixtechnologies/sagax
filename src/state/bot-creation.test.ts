@@ -145,22 +145,23 @@ describe("setup navigation", () => {
     const pending = reducer(initialState, { type: "botCreationPending", on: true });
     const closed = reducer(pending, { type: "toggleNewBot", open: false });
     const reopened = reducer(closed, { type: "toggleNewBot", open: true });
-    expect(reopened).toMatchObject({ newBotOpen: true, botCreationPending: true });
-    expect(reducer(reopened, { type: "botCreationPending", on: false })).toMatchObject({ newBotOpen: true, botCreationPending: false });
+    // Lot 4: New bot is the creation view (botWizard), not newBotOpen.
+    expect(reopened).toMatchObject({ botWizard: { botId: null }, newBotOpen: false, botCreationPending: true });
+    expect(reducer(reopened, { type: "botCreationPending", on: false })).toMatchObject({ botWizard: { botId: null }, botCreationPending: false });
   });
 
-  it("never opens New bot for a viewer the server lets create none (a read-only person)", () => {
+  it("opens the creation view for a read-only person (note in place); Create still opens for others", () => {
     const readOnly = { ...initialState, config: { viewer: { operator: false, principalId: null, email: "", name: "", role: "member", canCreateBots: false, botsReadOnly: true } } } as unknown as typeof initialState;
-    expect(reducer(readOnly, { type: "toggleNewBot", open: true }).newBotOpen).toBe(false);
-    expect(reducer(readOnly, { type: "toggleNewBot" }).newBotOpen).toBe(false);
-    expect(reducer(initialState, { type: "toggleNewBot", open: true }).newBotOpen).toBe(true);
+    expect(reducer(readOnly, { type: "toggleNewBot", open: true }).botWizard).toEqual({ botId: null });
+    expect(reducer(readOnly, { type: "toggleNewBot" }).botWizard).toEqual({ botId: null });
+    expect(reducer(initialState, { type: "toggleNewBot", open: true }).botWizard).toEqual({ botId: null });
   });
 
-  it("opens one modal with exclusive keyboard ownership", () => {
+  it("opens the creation view and closes competing overlays", () => {
     const start = { ...initialState, settingsOpen: true, appSettingsOpen: true, pluginsOpen: true, shortcutsOpen: true, computerOpen: true };
     const next = reducer(start, { type: "toggleNewBot", open: true });
-    expect(next).toMatchObject({ newBotOpen: true, settingsOpen: false, appSettingsOpen: false, pluginsOpen: false, shortcutsOpen: false, computerOpen: true });
-    expect(reducer(next, { type: "toggleNewBot", open: false })).toMatchObject({ settingsOpen: false, pluginsOpen: false });
+    expect(next).toMatchObject({ botWizard: { botId: null }, newBotOpen: false, settingsOpen: false, appSettingsOpen: false, pluginsOpen: false, shortcutsOpen: false, computerOpen: true });
+    expect(reducer(next, { type: "toggleNewBot", open: false })).toMatchObject({ botWizard: null, settingsOpen: false, pluginsOpen: false });
   });
 
   it("opens the requested Plugins surface and remembers it on reopen", () => {

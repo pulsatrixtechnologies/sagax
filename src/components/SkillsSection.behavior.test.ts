@@ -19,8 +19,18 @@ vi.mock("react", async (original) => ({
   useEffect: () => {},
 }));
 vi.mock("@/hooks/use-modal-dialog", () => ({ useModalDialog: fixture.modal }));
-vi.mock("@/state/store", () => ({ useStore: () => ({ state: { bots: [{ id: "bot", name: "Pepper" }], config: { features: { skillsLibrary: true } } } }) }));
+vi.mock("@/state/store", () => ({ useStore: () => ({ state: { bots: [{ id: "bot", name: "Pepper" }], config: { features: { skillsLibrary: true } }, dispatch: () => {} } }) }));
 vi.mock("./bot-settings/BotEditorContext", () => ({ useBotEditor: () => ({ request: fixture.request }) }));
+vi.mock("./bot-settings/FilesSection", () => ({
+  PopoverMenu: ({ children }: { children: (close: () => void) => unknown }) => children(() => {}),
+  MenuItem: (props: Record<string, unknown>) => props,
+}));
+vi.mock("./bot-settings/SkillEditorPage", () => ({ SkillEditorPage: () => null }));
+vi.mock("@/components/ConfirmProvider", () => ({
+  useConfirm: () => async () => true,
+  confirmAsync: async () => true,
+  discardConfirmRequest: () => ({ title: "Close without saving?", confirmLabel: "Discard", tone: "danger" }),
+}));
 
 import { SkillsSection as BotSkillsSection } from "./bot-settings/SkillsSection";
 import type { Bot } from "@/state/store";
@@ -50,9 +60,9 @@ describe("A bot's library skills: review before enabling", () => {
   it("requires the same source review before enabling a per-bot library skill", async () => {
     // Hook call order: useManagedSkills (shared with the Simple bot panel) owns
     // skills…reviewing (0-8) and the assignment guard ref (9); the section then
-    // owns viewing, source, importing and importMessage (10-13).
+    // owns editing, source, importing and importMessage (10-13).
     fixture.values = [[{ ...skill(), origin: "library" }], ["order-audit"], [], "", [], false, "", "", null, { current: false }, null, "", false, ""];
-    fixture.request.mockImplementation(async (_url, options) => options?.method ? {} : { text: source });
+    fixture.request.mockImplementation(async (_url, options) => options?.method ? {} : { text: source, name: "order-audit" });
     named(render(), "Enable order-audit").props.onClick!();
     await flush();
     expect(fixture.request).toHaveBeenCalledTimes(1);

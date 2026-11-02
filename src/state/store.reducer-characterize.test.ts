@@ -257,20 +257,22 @@ describe("cards, computer, and catalog", () => {
     expect(held.computerControl.maya).toEqual({ held: true, helpReason: "need-help" });
   });
 
-  it("openBotCatalog and closeBotCatalog drive the Connect apps bots tab", () => {
+  it("openBotCatalog and closeBotCatalog drive the Connect apps bots tab as a view", () => {
     const opened = reducer(base(), openBotCatalog({ section: "templates" }));
     expect(opened.pluginsOpen).toBe(true);
+    expect(opened.activeView).toBe("apps");
     expect(opened.pluginsSurface).toBe("apps");
     expect(opened.pluginsPage).toBe("bots");
+    expect(opened.botCatalogOpen).toBe(false);
     expect(opened.botCatalogTarget).toEqual({ section: "templates" });
-    const already = reducer({ ...opened, botCatalogOpen: true }, openBotCatalog({ section: "templates" }));
-    // A later Browse Bots link updates the target while the window stays open.
-    expect(already.botCatalogTarget).toEqual({ section: "templates" });
-    const retargeted = reducer({ ...opened, botCatalogOpen: true }, openBotCatalog({ section: "templates", installUrl: "https://example.invalid/bot" }));
+    const retargeted = reducer(opened, openBotCatalog({ section: "templates", installUrl: "https://example.invalid/bot" }));
     expect(retargeted.botCatalogTarget).toEqual({ section: "templates", installUrl: "https://example.invalid/bot" });
-    expect(reducer({ ...opened, botCatalogOpen: true }, closeBotCatalog())).toMatchObject({
+    expect(retargeted.activeView).toBe("apps");
+    expect(reducer(opened, closeBotCatalog())).toMatchObject({
       botCatalogOpen: false,
       botCatalogTarget: null,
+      pluginsOpen: false,
+      activeView: "chat",
     });
   });
 });

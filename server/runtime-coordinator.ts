@@ -18,6 +18,7 @@ import { Runtime } from "./runtime/runtime.ts";
 import { importLegacyHandoffs } from "./runtime/import-legacy.ts";
 import { openRuntimeStore, type RuntimeStore } from "./runtime/store.ts";
 import { childrenSince, clip, isTerminal, path } from "./runtime/tree.ts";
+import { reservedSlotAdmission, wakeKind } from "./runtime/hold.ts";
 import type { Assignment, Origin, RunInput, RunResult, TurnRunner } from "./runtime/types.ts";
 
 /** Refusals the model and index.ts read; the words are the legacy tree's. */
@@ -226,7 +227,7 @@ export class RuntimeCoordinator implements Coordinator {
   enqueue(source: RoomAddress, generation: string, parentId: string | undefined, target: RoomAddress, _key: string, text: string,
     approvalGranted = false, rework = false, sourceText = "", requestBatchKey?: string, origin?: WorkOrigin,
     mode: "work" | "consult" | "notify" | "auto" = "work", person?: string, relay = false, doneWhen?: string, request?: string,
-    extra: { priority?: "now" } = {}): { node: HandoffView; duplicate: boolean; joined?: boolean } {
+    extra: { priority?: "now"; defaultAnswer?: string } = {}): { node: HandoffView; duplicate: boolean; joined?: boolean } {
     this.ready();
     let parent = parentId ? this.store.get(parentId) : this.store.get(this.continuing.get(generation) ?? generation);
     if (parent && parent.status !== "running") throw new Error(NOT_RUNNING);
@@ -278,6 +279,8 @@ export class RuntimeCoordinator implements Coordinator {
       // Only a direct thread relays: a room already shows every reply.
       ...(relay && !target.groupId ? { relay: true } : {}),
       ...(criterion ? { doneWhen: criterion } : {}),
+      ...(typeof extra.defaultAnswer === "string" && extra.defaultAnswer.trim()
+        ? { defaultAnswer: extra.defaultAnswer.trim() } : {}),
     });
     if (!result.ok) {
       if (result.outcome === "budget") throw new Error(BUDGET);
@@ -586,7 +589,22 @@ export class RuntimeCoordinator implements Coordinator {
     const host = this.host;
     return {
       validate: (a, parent) => host.validate(view(a, parent), parent && this.project(parent)),
-      canStart: a => !host.busy(this.project(a)),
+      // DEL-08: one slot past maxConcurrent is reserved for a person message
+      // or a status request; automatic work never consumes it. Hard blockers
+      // (thread busy, group turn, review hold) still refuse everyone.
+      canStart: a => {
+        const node = this.project(a);
+        const slots = host.slotUse?.(node);
+        if (slots) {
+          return reservedSlotAdmission({
+            wake: wakeKind(a),
+            usedSlots: slots.used,
+            maxSlots: slots.max,
+            hardBlocked: slots.hardBlocked,
+          });
+        }
+        return !host.busy(node);
+      },
       run: (a, input, signal) => this.run(a, input, signal),
       park: (a, question, restored) => host.park(this.project(a), question, restored),
       remind: (a, question, waitedMs) => host.remind?.(this.project(a), question, waitedMs),

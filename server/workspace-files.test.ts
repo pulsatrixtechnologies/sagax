@@ -385,7 +385,14 @@ describe("the Files list", () => {
     expect((await answer(`/api/bots/${BOT}/workspace/file?path=memory/a.md`)).reply!.status).toBe(400);
     // the Soul's gate: refused for anyone who may not edit the bot
     allowed = false;
-    for (const [path, method] of [[`/api/bots/${BOT}/workspace`, "GET"], [`/api/bots/${BOT}/workspace/file`, "PUT"], [`/api/bots/${BOT}/workspace/download?path=RULES.md`, "GET"], [`/api/bots/${BOT}/workspace/docs/rename`, "POST"]]) {
+    for (const [path, method] of [
+      [`/api/bots/${BOT}/workspace`, "GET"],
+      [`/api/bots/${BOT}/workspace/file`, "PUT"],
+      [`/api/bots/${BOT}/workspace/download?path=RULES.md`, "GET"],
+      [`/api/bots/${BOT}/workspace/docs/rename`, "POST"],
+      [`/api/bots/${BOT}/workspace/mkdir`, "POST"],
+      [`/api/bots/${BOT}/workspace/rename`, "POST"],
+    ]) {
       expect((await answer(path!, method!, { path: "RULES.md", text: "x", from: "docs/a.md", to: "docs/b.md" })).reply!.status, path).toBe(403);
     }
     expect(readFileSync(join(workspaceDir(BOT), "RULES.md"), "utf8")).toBe("- Ask first.\n");

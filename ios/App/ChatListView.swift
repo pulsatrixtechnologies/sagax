@@ -49,8 +49,12 @@ struct ChatListView: View {
     @State private var showingAutomations = false
     /// A routine-run push: the run's detail over the roster (#1700).
     @State private var openedNotificationRun: OpenedRoutineRun?
+    /// A widget `open_routine` press: the routine's page over the roster.
+    @State private var openedWidgetRoutine: Routine?
     /// WP15: the Team map (TM1), from a long press on "+".
     @State private var showingTeamMap = false
+    /// Tools > Memory manager (desktop MemoryManagerPanel, 2026-11-02).
+    @State private var showingMemory = false
     /// Connect apps and Templates as sheets (the iPhone list shows no places: they live in the avatar menu).
     @State private var showingConnectedApps = false
     /// The tab Connect apps opens on (Bots from the old Browse Bots link).
@@ -132,9 +136,25 @@ struct ChatListView: View {
                 showingUpdates = true
                 session.consumePendingInbox()
             }
+            .onValueChange(of: session.pendingWidgetDestination) { destination in
+                guard let destination else { return }
+                session.consumePendingWidgetDestination()
+                Task { await openWidgetDestination(destination) }
+            }
             .routineRunDetail(item: $openedNotificationRun) { opened in
                 RoutineRunDetailView(run: opened.run, routine: opened.routine)
                     .environmentObject(session)
+            }
+            .sheet(item: $openedWidgetRoutine) { routine in
+                NavigationStack {
+                    RoutineDetailView(routine: routine)
+                        .environmentObject(session)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button(String(localized: "Done")) { openedWidgetRoutine = nil }
+                            }
+                        }
+                }
             }
             .task {
                 if let chat = session.notificationChat {
@@ -180,6 +200,10 @@ struct ChatListView: View {
                     showingTeamMap = false
                     path.append(chat)
                 }
+            }
+            .sheet(isPresented: $showingMemory) {
+                MemoryManagerSheet()
+                    .environmentObject(session)
             }
             .sheet(isPresented: $showingConnectedApps) {
                 // the desktop's Connect apps panel (#203, #218)
@@ -839,6 +863,7 @@ struct ChatListView: View {
         case .settings: showingSettings = true
         case .teamMap: showingTeamMap = true
         case .automations: showingAutomations = true
+        case .memory: showingMemory = true
         case .archivedBots: accountSheet = .archivedBots
         case .achievements: accountSheet = .achievements
         case .releaseNotes: accountSheet = .releaseNotes
@@ -847,14 +872,54 @@ struct ChatListView: View {
         }
     }
 
+    /// A widget button that named a place: open the closest iPhone surface.
+    private func openWidgetDestination(_ destination: ChatWidgetDestination) async {
+        switch destination {
+        case .automations:
+            showingAutomations = true
+        case .updates:
+            showingUpdates = true
+        case .teamMap:
+            showingTeamMap = true
+        case .achievements:
+            accountSheet = .achievements
+        case let .botComputer(botId):
+            // Code and remote sessions: the bot's Computer page. ChatView
+            // opens the panel door once this chat is on screen.
+            if let bot = session.state.bot(botId) {
+                let chat = session.returning(to: .bot(bot))
+                if path.isEmpty { path.append(chat) }
+                session.requestPanelDoor(.computerButton)
+            }
+        case let .routine(routineId, _):
+            let listing = await session.loadRoutines()
+            if let routine = listing.routines.first(where: { $0.id == routineId }) {
+                openedWidgetRoutine = routine
+            } else {
+                showingAutomations = true
+            }
+        case let .run(runId, routineId):
+            let listing = await session.loadRoutines()
+            if let run = listing.runs.first(where: { $0.id == runId }) {
+                openedNotificationRun = OpenedRoutineRun(
+                    run: run,
+                    routine: listing.routines.first { $0.id == (routineId ?? run.routineId) }
+                )
+            } else {
+                showingAutomations = true
+            }
+        }
+    }
+
     /// New's entries: create, or open a bot's or a person's conversation.
     private func selectNew(_ item: NewMenuItem) {
         showingPlusMenu = false
         switch item {
         case .createBot:
-            // 2026-10-27: Create a bot, the wizard's first screen; the full
-            // form (this sheet), the imports and quick create stay there
-            BotWizardPresenter.shared.open()
+            // Lot 7 (2026-11-01): Create New Bot (quick create) first;
+            // Guided / Manual / imports / drafts under Other ways to start.
+            createBotSection = nil
+            showingCreateBot = true
         case .createGroup:
             showingNewGroup = true
         case let .bot(id):
@@ -1958,7 +2023,8 @@ extension ChatListView {
                     openSearchResult(destination)
                 } createBot: {
                     showingNewChat = false
-                    BotWizardPresenter.shared.open()
+                    createBotSection = nil
+                    showingCreateBot = true
                 } createGroup: {
                     showingNewChat = false
                     showingNewGroup = true

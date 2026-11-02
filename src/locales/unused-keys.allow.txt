@@ -117,7 +117,6 @@ call.live.proExplain
 call.live.proTitle
 call.live.startInstead
 call.mode.menu
-call.voiceSetup.open
 canvas.moving
 chat.advancedOnly
 chat.backToMainThread
@@ -401,7 +400,6 @@ pro.reauthShort
 pro.seePlans
 pro.settingsSummary
 question.status.waiting
-releaseNotes.notNow
 releaseNotes.update
 releaseNotes.updateReady
 releaseNotes.updateRestart

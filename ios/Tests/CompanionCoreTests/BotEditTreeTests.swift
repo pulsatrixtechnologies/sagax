@@ -1,19 +1,15 @@
 import XCTest
 @testable import CompanionCore
 
-/// Edit bot in the Grok Bot layout (2026-10-27) moves fields and actions,
-/// never drops one.
+/// Edit bot in the Grok-style single page (lots 2 and 3, 2026-11-01)
+/// moves fields onto the root and keeps every former action reachable.
 final class BotEditTreeTests: XCTestCase {
-    /// Every field and action Edit bot had before this layout, by its old
-    /// place: the phone's identity block (avatar, Name, Title, Description,
-    /// Appearance > Avatar, Voice calls), then its groups (Instructions,
-    /// Model and tools, Security, History and usage), which are also the
-    /// iPad editor's sections.
+    /// Every field and action Edit bot had before this layout.
     private let before: [BotEditItem] = [
         .avatar, .name, .role, .botDescription,
         .callVoice, .callSpeed, .callLanguage,
         .soul, .skills, .memory,
-        .model, .computer, .access, .slack, .voiceAlerts,
+        .model, .computer, .toolsApps, .slack, .voiceAlerts,
         .approvals, .perspicaxProfiles, .whoCanSee, .sharedWith,
         .overview, .usage, .changes,
     ]
@@ -33,55 +29,64 @@ final class BotEditTreeTests: XCTestCase {
         }
     }
 
-    func testEveryRowOfTheTreeIsReachable() {
-        let reachable = Set(BotEditTree.reachable(.everything).map(\.item))
-        XCTAssertEqual(reachable, Set(BotEditItem.allCases))
-    }
-
-    func testEachRowHasOnePlace() {
+    func testEveryDrawnRowIsReachableOnce() {
         let items = BotEditTree.reachable(.everything).map(\.item)
         XCTAssertEqual(items.count, Set(items).count, "a row shows in two places")
+        // Retired from the walk: header, identity, personality, access leaf, delete.
+        let retired: Set<BotEditItem> = [.header, .identity, .personality, .access, .delete]
+        XCTAssertTrue(retired.isDisjoint(with: Set(items)))
+        XCTAssertEqual(Set(items).union(retired), Set(BotEditItem.allCases))
     }
 
-    /// The header first, the main sections in the wizard's order, then
-    /// Advanced, then Archive and Delete apart.
-    func testTheRootFollowsTheWizardsOrder() {
+    /// Root: identity fields, appearance, voice calls, more voice options,
+    /// then Sagax rows, Advanced, Archive. No Delete (profile menu).
+    func testTheRootIsOneGrokStylePage() {
         let root = BotEditTree.cards(.root, .everything)
-        XCTAssertEqual(root.first, [.header])
-        XCTAssertEqual(root[1], [.identity, .personality, .model, .approvals, .toolsApps, .routines, .sharing])
-        XCTAssertEqual(root[2], [.advanced])
-        XCTAssertEqual(Array(root.suffix(2)), [[.archive], [.delete]])
-        XCTAssertTrue(root.suffix(2).joined().allSatisfy(\.destructive))
-        XCTAssertFalse(root.dropLast(2).joined().contains(where: \.destructive))
+        XCTAssertEqual(root[0], [.name, .role, .botDescription])
+        XCTAssertEqual(root[1], [.avatar])
+        XCTAssertEqual(root[2], [.callVoice, .callSpeed, .callLanguage])
+        XCTAssertEqual(root[3], [.voiceAlerts])
+        XCTAssertEqual(
+            root[4],
+            [.soul, .skills, .memory, .model, .approvals, .toolsApps, .computer, .perspicaxProfiles, .slack, .routines, .sharing]
+        )
+        XCTAssertEqual(root[5], [.advanced])
+        XCTAssertEqual(root.last, [.archive])
+        XCTAssertFalse(root.joined().contains(.delete))
+        XCTAssertFalse(root.joined().contains(.header))
+        XCTAssertFalse(root.joined().contains(.identity))
+        XCTAssertFalse(root.joined().contains(.personality))
     }
 
-    func testDetailIsOneLevelIn() {
-        XCTAssertEqual(BotEditTree.path(to: BotEditItem.name), [.identity])
-        XCTAssertEqual(BotEditTree.path(to: BotEditItem.callVoice), [.identity])
-        XCTAssertEqual(BotEditTree.path(to: BotEditItem.soul), [.personality])
-        XCTAssertEqual(BotEditTree.path(to: BotEditItem.access), [.toolsApps])
-        XCTAssertEqual(BotEditTree.path(to: BotEditItem.sharedWith), [.sharing])
-        XCTAssertEqual(BotEditTree.path(to: BotEditItem.changes), [.advanced])
+    func testDetailDepthIsAtMostOnePage() {
+        // Fields and voice sit on the root.
+        XCTAssertEqual(BotEditTree.path(to: BotEditItem.name), [])
+        XCTAssertEqual(BotEditTree.path(to: BotEditItem.callVoice), [])
+        XCTAssertEqual(BotEditTree.path(to: BotEditItem.soul), [])
+        XCTAssertEqual(BotEditTree.path(to: BotEditItem.voiceAlerts), [])
         XCTAssertEqual(BotEditTree.path(to: BotEditItem.model), [])
         XCTAssertEqual(BotEditTree.path(to: BotEditItem.approvals), [])
-        XCTAssertEqual(BotEditTree.path(to: BotEditItem.delete), [])
-        // a deep link to a section opens its page through its parents
-        XCTAssertEqual(BotEditTree.path(to: DesktopPanelSection.sharing), [.sharing])
+        XCTAssertEqual(BotEditTree.path(to: BotEditItem.toolsApps), [])
+        XCTAssertEqual(BotEditTree.path(to: BotEditItem.archive), [])
+        // One page in for Sharing and Advanced children.
+        XCTAssertEqual(BotEditTree.path(to: BotEditItem.sharedWith), [.sharing])
+        XCTAssertEqual(BotEditTree.path(to: BotEditItem.changes), [.advanced])
+        // Deep links: Access is the Tools and apps row (no intermediate page).
+        XCTAssertEqual(BotEditTree.path(to: DesktopPanelSection.access), [])
         XCTAssertEqual(BotEditTree.path(to: DesktopPanelSection.permissions), [])
         XCTAssertEqual(BotEditTree.path(to: DesktopPanelSection.history), [.advanced])
+        XCTAssertEqual(BotEditTree.path(to: DesktopPanelSection.sharing), [.sharing])
+        XCTAssertEqual(BotEditTree.item(for: .access), .toolsApps)
     }
 
-    /// Nothing technical on the first level: the engine's sections live
-    /// one page down.
-    func testNothingTechnicalOnTheRoot() {
-        let root = Set(BotEditTree.cards(.root, .everything).joined())
-        for item: BotEditItem in [.access, .perspicaxProfiles, .slack, .overview, .usage, .changes, .computer] {
-            XCTAssertFalse(root.contains(item), "\(item) is on the first level")
-        }
+    func testToolsAppsOpensAccessDirectly() {
+        XCTAssertNil(BotEditItem.toolsApps.opens)
+        XCTAssertEqual(BotEditItem.toolsApps.section, .access)
+        XCTAssertTrue(BotEditTree.cards(.toolsApps, .everything).isEmpty)
     }
 
     /// An organization member editing their own bot: the gate gives them
-    /// the owner's sections and their own Archive and Delete, no admin.
+    /// the owner's sections and their own Archive, no admin.
     func testAMemberEditsTheirOwnBot() {
         var bot = Bot.editFixture
         bot.ownerUserId = "member-1"
@@ -91,24 +96,26 @@ final class BotEditTreeTests: XCTestCase {
         )
         let context = BotEditContext(gate: gate, bot: bot)
         let rows = Set(BotEditTree.reachable(context).map(\.item))
-        for item: BotEditItem in [.identity, .personality, .soul, .model, .approvals, .toolsApps, .routines, .archive, .delete] {
+        for item: BotEditItem in [.soul, .model, .approvals, .toolsApps, .routines, .archive] {
             XCTAssertTrue(rows.contains(item), "a member cannot reach \(item) on their own bot")
         }
+        XCTAssertTrue(rows.contains(.name))
+        XCTAssertTrue(rows.contains(.callVoice))
     }
 
     /// A section the pairing cannot reach hides its row; a page with
     /// nothing left hides too.
     func testHiddenSectionsDropTheirRows() {
         let context = BotEditContext(sections: [.model, .voice], archive: false, delete: false)
-        let root = BotEditTree.cards(.root, context).joined()
+        let root = Set(BotEditTree.cards(.root, context).joined())
         XCTAssertTrue(root.contains(.model))
-        XCTAssertTrue(root.contains(.identity), "identity always shows")
+        XCTAssertTrue(root.contains(.name), "identity fields always show")
+        XCTAssertTrue(root.contains(.voiceAlerts))
         XCTAssertFalse(root.contains(.toolsApps))
         XCTAssertFalse(root.contains(.sharing))
         XCTAssertFalse(root.contains(.advanced))
         XCTAssertFalse(root.contains(.archive))
         XCTAssertFalse(root.contains(.delete))
-        XCTAssertTrue(BotEditTree.cards(.identity, context).joined().contains(.voiceAlerts))
     }
 
     func testTheSummariesReadTheBot() {
@@ -135,6 +142,14 @@ final class BotEditTreeTests: XCTestCase {
         XCTAssertEqual(counts.ask, 1)
         XCTAssertEqual(counts.deny, 2)
         XCTAssertEqual(counts.allow, 0)
+    }
+
+    func testModelNameIsReadable() {
+        let selection = ModelSelection(instanceId: "xai", model: "grok-4.5")
+        XCTAssertEqual(BotEditSummary.modelName(selection), "Grok 4.5")
+        XCTAssertEqual(BotEditSummary.modelName(selection, label: "Grok 4.5"), "Grok 4.5")
+        XCTAssertEqual(BotEditSummary.friendlyModelId("claude-sonnet-4"), "Claude Sonnet 4")
+        XCTAssertEqual(BotEditSummary.modelName(ModelSelection(instanceId: "x", model: "")), "Default")
     }
 }
 

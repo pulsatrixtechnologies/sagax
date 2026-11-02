@@ -379,35 +379,37 @@ export function AttachmentPreviewDialog({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              onClick={() => applyZoom((value) => steppedZoom(value, -1))}
-              disabled={zoom <= MIN_ZOOM}
-              className="flex size-9 items-center justify-center rounded-lg text-white/65 hover:bg-white/10 hover:text-white disabled:opacity-35 disabled:hover:bg-transparent"
-              aria-label={t("attach.zoomOut")}
-              title={t("attach.zoomOut")}
-            >
-              <ZoomOut size={17} />
-            </button>
-            <button
-              type="button"
-              onClick={() => applyZoom(1)}
-              className="min-w-12 rounded-lg px-1.5 py-1 text-[11.5px] tabular-nums text-white/65 hover:bg-white/10 hover:text-white"
-              aria-label={t("attach.zoomReset")}
-              title={t("attach.zoomReset")}
-            >
-              {Math.round(zoom * 100)}%
-            </button>
-            <button
-              type="button"
-              onClick={() => applyZoom((value) => steppedZoom(value, 1))}
-              disabled={zoom >= MAX_ZOOM}
-              className="flex size-9 items-center justify-center rounded-lg text-white/65 hover:bg-white/10 hover:text-white disabled:opacity-35 disabled:hover:bg-transparent"
-              aria-label={t("attach.zoomIn")}
-              title={t("attach.zoomIn")}
-            >
-              <ZoomIn size={17} />
-            </button>
+            {!current.media && <>
+              <button
+                type="button"
+                onClick={() => applyZoom((value) => steppedZoom(value, -1))}
+                disabled={zoom <= MIN_ZOOM}
+                className="flex size-9 items-center justify-center rounded-lg text-white/65 hover:bg-white/10 hover:text-white disabled:opacity-35 disabled:hover:bg-transparent"
+                aria-label={t("attach.zoomOut")}
+                title={t("attach.zoomOut")}
+              >
+                <ZoomOut size={17} />
+              </button>
+              <button
+                type="button"
+                onClick={() => applyZoom(1)}
+                className="min-w-12 rounded-lg px-1.5 py-1 text-[11.5px] tabular-nums text-white/65 hover:bg-white/10 hover:text-white"
+                aria-label={t("attach.zoomReset")}
+                title={t("attach.zoomReset")}
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => applyZoom((value) => steppedZoom(value, 1))}
+                disabled={zoom >= MAX_ZOOM}
+                className="flex size-9 items-center justify-center rounded-lg text-white/65 hover:bg-white/10 hover:text-white disabled:opacity-35 disabled:hover:bg-transparent"
+                aria-label={t("attach.zoomIn")}
+                title={t("attach.zoomIn")}
+              >
+                <ZoomIn size={17} />
+              </button>
+            </>}
             {current.downloadUrl && (
               <a
                 href={current.downloadUrl}
@@ -444,79 +446,124 @@ export function AttachmentPreviewDialog({
           </div>
         </header>
         <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 sm:p-8">
-          {!loaded && !failed && (
-            <div className="absolute inset-4 flex animate-pulse items-center justify-center rounded-xl bg-white/[0.055] sm:inset-8" role="status">
-              <span className="flex items-center gap-2 text-[13px] text-white/55">
-                <LoaderCircle size={17} className="animate-spin" /> Loading image…
-              </span>
-            </div>
-          )}
-          {failed ? (
-            <div className="flex flex-col items-center gap-3 text-white/60" role="alert">
-              <ImageOff size={34} />
-              <span className="text-[13px]">{t("attachment.imageFailed")}</span>
-              <button
-                type="button"
-                onClick={retry}
-                className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-[12px] text-white hover:bg-white/15"
-              >
-                <RotateCcw size={13} /> Retry
-              </button>
-            </div>
-          ) : (
-            <img
-              key={`${current.src}:${attempt}`}
-              src={current.src}
-              alt={current.name}
-              draggable={false}
-              onLoad={() => setLoadedSources((sources) => new Set(sources).add(current.src))}
-              onError={() => setFailedSource(current.src)}
-              onDoubleClick={() => applyZoom((value) => (value > 1 ? 1 : 2))}
-              onWheel={(event) => {
-                if (!event.ctrlKey && !event.metaKey) return;
-                event.preventDefault();
-                applyZoom((value) => steppedZoom(value, event.deltaY < 0 ? 1 : -1));
-              }}
-              onPointerDown={(event) => {
-                if (zoom <= 1) return;
-                event.currentTarget.setPointerCapture?.(event.pointerId);
-                drag.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
-              }}
-              onPointerMove={(event) => {
-                const start = drag.current;
-                if (!start) return;
-                setPan({ x: start.panX + (event.clientX - start.x) / zoom, y: start.panY + (event.clientY - start.y) / zoom });
-              }}
-              onPointerUp={() => { drag.current = null; }}
-              onPointerCancel={() => { drag.current = null; }}
-              style={zoom !== 1 ? { transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)` } : undefined}
-              className={cn(
-                "block max-h-full max-w-full rounded-lg object-contain shadow-2xl transition-[opacity,transform] duration-150 motion-reduce:transition-none",
-                zoom > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in",
-                loaded ? "opacity-100" : "opacity-0",
+          {current.media === "video" || current.media === "audio" ? (
+            <div className="relative flex min-h-[160px] w-full items-center justify-center">
+              {failed ? (
+                <div className="flex flex-col items-center gap-3 text-center text-white/70" role="alert">
+                  <p className="text-[13px]">{t(current.media === "video" ? "attach.videoUnavailable" : "attach.audioUnavailable")}</p>
+                  {current.downloadUrl && (
+                    <a href={current.downloadUrl} download={current.downloadName ?? current.name} className="flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 text-[13px] text-white hover:bg-white/10">
+                      <Download size={15} aria-hidden="true" /> {t("attach.download")}
+                    </a>
+                  )}
+                </div>
+              ) : current.media === "video" ? (
+                <video
+                  key={current.src}
+                  src={current.src}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="max-h-[75vh] max-w-full rounded-lg"
+                  aria-label={current.name}
+                  onLoadedMetadata={() => setLoadedSources((sources) => new Set(sources).add(current.src))}
+                  onCanPlay={() => setLoadedSources((sources) => new Set(sources).add(current.src))}
+                  onError={() => setFailedSource(current.src)}
+                />
+              ) : (
+                <audio
+                  key={current.src}
+                  src={current.src}
+                  controls
+                  preload="metadata"
+                  className="w-full max-w-md"
+                  aria-label={current.name}
+                  onLoadedMetadata={() => setLoadedSources((sources) => new Set(sources).add(current.src))}
+                  onCanPlay={() => setLoadedSources((sources) => new Set(sources).add(current.src))}
+                  onError={() => setFailedSource(current.src)}
+                />
               )}
-            />
-          )}
-          {items.length > 1 && (
-            <>
-              <button
-                type="button"
-                onClick={() => navigate(-1)}
-                aria-label={t("attach.previous")}
-                className="absolute left-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white/80 backdrop-blur-sm hover:bg-black/75 hover:text-white sm:left-4"
-              >
-                <ChevronLeft size={21} />
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate(1)}
-                aria-label={t("attach.next")}
-                className="absolute right-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white/80 backdrop-blur-sm hover:bg-black/75 hover:text-white sm:right-4"
-              >
-                <ChevronRight size={21} />
-              </button>
-            </>
-          )}
+              {!loaded && !failed && (
+                <span role="status" className="pointer-events-none absolute flex items-center gap-2 rounded-full bg-black/70 px-3 py-2 text-[13px] text-white/75">
+                  <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" /> {t("botPanel.files.previewLoading")}
+                </span>
+              )}
+            </div>
+          ) : <>
+            {!loaded && !failed && (
+              <div className="absolute inset-4 flex animate-pulse items-center justify-center rounded-xl bg-white/[0.055] sm:inset-8" role="status">
+                <span className="flex items-center gap-2 text-[13px] text-white/55">
+                  <LoaderCircle size={17} className="animate-spin" /> Loading image…
+                </span>
+              </div>
+            )}
+            {failed ? (
+              <div className="flex flex-col items-center gap-3 text-white/60" role="alert">
+                <ImageOff size={34} />
+                <span className="text-[13px]">{t("attachment.imageFailed")}</span>
+                <button
+                  type="button"
+                  onClick={retry}
+                  className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-[12px] text-white hover:bg-white/15"
+                >
+                  <RotateCcw size={13} /> Retry
+                </button>
+              </div>
+            ) : (
+              <img
+                key={`${current.src}:${attempt}`}
+                src={current.src}
+                alt={current.name}
+                draggable={false}
+                onLoad={() => setLoadedSources((sources) => new Set(sources).add(current.src))}
+                onError={() => setFailedSource(current.src)}
+                onDoubleClick={() => applyZoom((value) => (value > 1 ? 1 : 2))}
+                onWheel={(event) => {
+                  if (!event.ctrlKey && !event.metaKey) return;
+                  event.preventDefault();
+                  applyZoom((value) => steppedZoom(value, event.deltaY < 0 ? 1 : -1));
+                }}
+                onPointerDown={(event) => {
+                  if (zoom <= 1) return;
+                  event.currentTarget.setPointerCapture?.(event.pointerId);
+                  drag.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
+                }}
+                onPointerMove={(event) => {
+                  const start = drag.current;
+                  if (!start) return;
+                  setPan({ x: start.panX + (event.clientX - start.x) / zoom, y: start.panY + (event.clientY - start.y) / zoom });
+                }}
+                onPointerUp={() => { drag.current = null; }}
+                onPointerCancel={() => { drag.current = null; }}
+                style={zoom !== 1 ? { transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)` } : undefined}
+                className={cn(
+                  "block max-h-full max-w-full rounded-lg object-contain shadow-2xl transition-[opacity,transform] duration-150 motion-reduce:transition-none",
+                  zoom > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in",
+                  loaded ? "opacity-100" : "opacity-0",
+                )}
+              />
+            )}
+            {items.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => navigate(-1)}
+                  aria-label={t("attach.previous")}
+                  className="absolute left-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white/80 backdrop-blur-sm hover:bg-black/75 hover:text-white sm:left-4"
+                >
+                  <ChevronLeft size={21} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(1)}
+                  aria-label={t("attach.next")}
+                  className="absolute right-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white/80 backdrop-blur-sm hover:bg-black/75 hover:text-white sm:right-4"
+                >
+                  <ChevronRight size={21} />
+                </button>
+              </>
+            )}
+          </>}
         </div>
       </div>
     </div>,

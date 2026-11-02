@@ -19,7 +19,6 @@ import { t } from "@/lib/i18n";
 import { requestSettingsCard } from "./SettingsPrimitives";
 import { BrowserScreen, OrgComputerTab, ScreenPicker } from "./computer/OrgComputerTab";
 import { BrowserPanel } from "./BrowserPanel";
-import { BotRemoteHostsSection } from "./remote-session/BotRemoteHostsSection";
 import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
 import { RoutinesSection } from "./bot-settings/RoutinesSection";
 
@@ -138,7 +137,7 @@ export function ComputerPanel({
   // (src/components/computer/OrgComputerTab.tsx). Enrolled hosts attached
   // to this bot appear as places (2026-11-01).
   const {
-    activeRemoteSessions, remoteHostRows, reloadRemoteHosts, reloadRemoteSessions, onPickRemoteHost,
+    activeRemoteSessions, remoteHostRows, catalogHosts, onPickRemoteHost, onAttachRemoteHost, onDetachRemoteHost,
   } = useRemoteHosts(bot.id, bridgeStatus);
 
   const openVmSettings = () => {
@@ -281,10 +280,12 @@ export function ComputerPanel({
         inUse={livePlace === "auto" ? (autoSurfaceCurrent && autoSurface ? (autoSurface.surface ?? "unknown") : "unknown") : livePlace}
         browser={browserOffered ? <BrowserPanel bot={bot} /> : null}
         remoteHosts={remoteHostRows}
+        remoteCatalog={catalogHosts}
         remoteSessions={activeRemoteSessions}
         onPickRemoteHost={onPickRemoteHost}
+        onAttachRemoteHost={onAttachRemoteHost}
+        onDetachRemoteHost={onDetachRemoteHost}
       />
-      <BotRemoteHostsSection botId={bot.id} onChanged={() => { reloadRemoteHosts(); reloadRemoteSessions(); }} />
       {!embedded && <div className="mt-6">
         <RoutinesSection key={bot.id} bot={bot} routines={botRoutines} runs={state.routineRuns} defaultRunOn={cloudRoutineReady ? "cloud" : "maus"} />
       </div>}

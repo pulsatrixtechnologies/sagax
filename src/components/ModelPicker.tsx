@@ -1,11 +1,11 @@
-// Model picker: active models in one flat list, grouped by provider. A choice
-// applies to every thread of the bot. Connection controls live in Providers;
-// the window previews the payer, Auto chain and configured recovery choices.
-// Model and effort travel through the same action in the window and composer.
+// Model picker: active models in one menu, grouped by provider. A choice
+// applies to every thread of the bot. Connection controls live in Providers
+// (lot 7: the full window is gone; Auto chain and recovery live in Settings).
+// Model and effort travel through the same action from the chip and composer.
 import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useStore, type Bot, type ModelSelection } from "@/state/store";
-import { isDesktopModelId, localModelRows, localRowUnavailable } from "@/lib/local-models";
+import { isDesktopModelId, localRowUnavailable } from "@/lib/local-models";
 import { engineOffer } from "../../shared/offered-engines";
 import { engineOfferContext, modelSwitches } from "@/lib/offered-instances";
 import { configuredModelInstances, isClaudeAccount } from "@/lib/engine-rail";
@@ -23,7 +23,6 @@ import { effortLabel } from "@/lib/effort-label";
 import { isUltracodeEffort } from "../../shared/ultracode-effort";
 import { batchModelActions } from "@/lib/batch-bot-model";
 import { useModelFavorites } from "@/lib/model-favorites";
-import { modelOn } from "../../shared/offered-models";
 import type { EffortLevel } from "../../shared/wire";
 
 import {
@@ -45,10 +44,9 @@ import { EffortRow, ModelVariantRow, variantLabel } from "./ModelPicker.tsx-part
 import { ClaudeAccountSelect, ModelEngineRail } from "./ModelPicker.tsx-parts/ModelEngineRail";
 import { buildModelPickerSections } from "./ModelPicker.tsx-parts/buildSections";
 import { ModelPickerTrigger } from "./ModelPicker.tsx-parts/ModelPickerTrigger";
-import { ModelPickerWindow } from "./ModelPicker.tsx-parts/ModelPickerWindow";
 import { ModelPickerMenu } from "./ModelPicker.tsx-parts/ModelPickerMenu";
 import { useModelPickerEffects } from "./ModelPicker.tsx-parts/useModelPickerEffects";
-import { modelPickerComposerLabel, modelPickerEffectLine, modelPickerFollowLine, modelPickerSummary } from "./ModelPicker.tsx-parts/labels";
+import { modelPickerComposerLabel, modelPickerFollowLine, modelPickerSummary } from "./ModelPicker.tsx-parts/labels";
 
 export {
   COMPOSER_MODEL_EVENT,
@@ -98,7 +96,7 @@ export function ModelPicker({
   threadId?: string;
   className?: string;
   /** Profile row: the label sits above the pill, which opens the model
-   * window. The profile card already has Effort, so the window does not
+   * menu. The profile card already has Effort, so the menu does not
    * repeat it. */
   contained?: boolean;
   /** Sit in the composer as a text row that opens the model menu. */
@@ -106,8 +104,8 @@ export function ModelPicker({
   /** Settings of a shared bot: save this person's model, not the owner's. */
   viewerLocal?: boolean;
   label?: ReactNode;
-  /** No chip: the model window, open from the start (the sidebar's bot
-   * menu opens it through ModelWindowHost). */
+  /** No chip: the model menu, open from the start (the sidebar's bot
+   * menu opens it through ModelWindowHost). Lot 7: the full window is gone. */
   windowOnly?: boolean;
   onWindowClose?: () => void;
   /** With `inComposer`: no chip. The composer's + menu has a Model row
@@ -130,11 +128,13 @@ export function ModelPicker({
     });
     for (const action of batchModelActions(others, next)) dispatch(action);
   };
-  const [open, setOpen] = useState(windowOnly);
-  const [menu, setMenu] = useState(false);
-  const motion = useMenuMotion(open && !bot.busy);
+  const [menu, setMenu] = useState(windowOnly);
   const menuMotion = useMenuMotion(menu && !bot.busy);
-  const [menuAt, setMenuAt] = useState<{ left?: number; right?: number; bottom: number } | null>(null);
+  const [menuAt, setMenuAt] = useState<{ left?: number; right?: number; bottom: number } | null>(() => (
+    windowOnly && typeof window !== "undefined"
+      ? { left: 24, bottom: Math.max(8, window.innerHeight - 96) }
+      : null
+  ));
   const anchorRef = useRef<HTMLElement | null>(null);
   const [menuDoneCall, setMenuDoneCall] = useState<{ call: () => void } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -147,7 +147,7 @@ export function ModelPicker({
   const myEngines = useMyEngines();
   const orgMode = org !== null;
   const health = { orgMode, myEngines };
-  const anyOpen = open || menu;
+  const anyOpen = menu;
   const accountModels = useMyEngineModels(myEngines, anyOpen);
 
   const selection = bot.modelSelection;
@@ -174,12 +174,9 @@ export function ModelPicker({
   const showActiveAccount = (multipleClaudeAccounts && isClaudeAccount(active)) || Boolean(active?.snapshot.chatgptPlan);
   const railInstance = active;
   const displayedInstanceId = active?.instanceId;
-  const closeWindow = () => {
-    setOpen(false);
-    if (windowOnly) onWindowClose?.();
-  };
   const closeMenu = (refocus = false) => {
     setMenu(false);
+    if (windowOnly) onWindowClose?.();
     if (refocus) (anchorRef.current?.isConnected ? anchorRef.current : triggerRef.current ?? (headless ? fallbackAnchor?.() : null))?.focus();
   };
   const menuDone = () => {
@@ -214,8 +211,7 @@ export function ModelPicker({
     : "";
 
   const closeAll = () => {
-    setMenu(false);
-    closeWindow();
+    closeMenu();
     menuDone();
   };
 
@@ -280,21 +276,7 @@ export function ModelPicker({
     applyToOthers(next);
   };
 
-  const fastKey = (instanceId: string, model: string) => `${instanceId}\u0000${model}`;
-  const fastChoices = autoOn
-    ? selectable.flatMap((instance) => localModelRows(instance.models.options, orgMode)
-      .filter((option) => modelOn(switches, instance.instanceId, option.id) && !localRowUnavailable(instance.driverKind, option.id, option.anthropic))
-      .map((option) => ({ key: fastKey(instance.instanceId, option.id), label: `${instance.displayName} · ${option.label || option.id}` })))
-    : [];
-  const chooseFast = (key: string) => {
-    if (bot.busy || viewerLocal) return;
-    const [instanceId, model] = key.split("\u0000");
-    const { fast: _fast, ...rest } = selection;
-    const next = instanceId && model ? { ...rest, fast: { instanceId, model } } : rest;
-    dispatch({ type: "setModel", botId: bot.id, threadId: threadId ?? bot.threadId, updateBotDefault: true, selection: next });
-  };
-
-  const { flatSections, menuSections } = buildModelPickerSections({
+  const { menuSections } = buildModelPickerSections({
     orgMode,
     accountModels,
     selection,
@@ -315,18 +297,6 @@ export function ModelPicker({
     myEngines,
     ranOnName,
   });
-  const [previewRow, setPreviewRow] = useState<ModelMenuRow | null>(null);
-  const effectInstance = state.instances.find((instance) => instance.instanceId === previewRow?.instanceId) ?? active;
-  const effectName = previewRow?.kind === "model" ? previewRow.label : modelLabel(active, selection.model);
-  const effectAuto = previewRow?.kind === "auto" || (!previewRow && autoOn);
-  const effectLine = modelPickerEffectLine({
-    effectAuto, orgMode,
-    personalSettings: state.config?.personalSettings,
-    allowedEngines: state.config?.allowedEngines,
-    effectName,
-    provider: effectInstance?.displayName ?? selection.instanceId,
-  });
-
   const onRow = (row: ModelMenuRow) => {
     if (row.kind === "auto") return chooseAuto();
     if (row.kind === "follow") return pickBotModel();
@@ -338,18 +308,10 @@ export function ModelPicker({
   const followLine = modelPickerFollowLine({ follows, profileName: profile.name, fallbackLine });
   const composerLabel = modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel });
 
-  const openWindow = () => {
-    if (bot.busy) return;
-    setMenu(false);
-    setOpen(true);
-    menuDone();
-  };
-  const toggleWindow = () => (open ? closeWindow() : openWindow());
-
   const toggleMenu = (anchor: HTMLElement | null = null, onDone?: () => void) => {
     if (bot.busy) return;
     if (menu) {
-      setMenu(false);
+      closeMenu();
       return;
     }
     anchorRef.current = anchor;
@@ -360,16 +322,18 @@ export function ModelPicker({
       if (anchor && box) {
         const left = Math.max(8, Math.min(box.getBoundingClientRect().right + 6, window.innerWidth - MENU_WIDTH - 8));
         setMenuAt({ left, bottom: Math.max(8, window.innerHeight - rect.bottom - 6) });
-      } else if (headless) {
-        setMenuAt({ left: Math.max(8, Math.min(rect.left, window.innerWidth - MENU_WIDTH - 8)), bottom: window.innerHeight - rect.top + 6 });
+      } else if (headless || windowOnly) {
+        setMenuAt({ left: Math.max(8, Math.min(rect?.left ?? 24, window.innerWidth - MENU_WIDTH - 8)), bottom: Math.max(8, window.innerHeight - (rect?.top ?? 80) + 6) });
       } else {
         const right = Math.max(8, Math.min(window.innerWidth - rect.right, window.innerWidth - MENU_WIDTH - 8));
         setMenuAt({ right, bottom: window.innerHeight - rect.top + 6 });
       }
+    } else if (windowOnly) {
+      setMenuAt({ left: 24, bottom: Math.max(8, window.innerHeight - 96) });
     } else setMenuAt(null);
     setMenu(true);
   };
-  if (menuControl) menuControl.current = { toggle: (anchor, onDone) => toggleMenu(anchor, onDone), close: () => setMenu(false) };
+  if (menuControl) menuControl.current = { toggle: (anchor, onDone) => toggleMenu(anchor, onDone), close: () => closeMenu() };
 
   const composerTitle = bot.busy ? `${composerLabel}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${composerLabel}${followLine}`;
   const ultracodeChip = isUltracodeEffort(selection.effort);
@@ -377,8 +341,8 @@ export function ModelPicker({
 
   useModelPickerEffects({
     anyOpen, orgMode, refreshInstances, refreshInstanceModels, displayedInstanceId,
-    railDriverKind, railNeedsSetup, botBusy: Boolean(bot.busy), windowOnly, open, menu, setMenu, setOpen,
-    closeWindow, closeMenu, dialogRef, menuRef, triggerRef, anchorRef, headless, fallbackAnchor,
+    railDriverKind, railNeedsSetup, botBusy: Boolean(bot.busy), windowOnly, open: false, menu, setMenu, setOpen: () => undefined,
+    closeWindow: () => closeMenu(), closeMenu, dialogRef, menuRef, triggerRef, anchorRef, headless, fallbackAnchor,
     inComposer, botId: bot.id, toggleMenu, onChip, composerLabel, composerTitle, ultracodeChip, menuShownOpen,
   });
 
@@ -393,9 +357,7 @@ export function ModelPicker({
     threadId,
     triggerRef,
     menu,
-    open,
     toggleMenu: () => toggleMenu(),
-    toggleWindow,
     composerLabel,
     followLine,
     summary,
@@ -426,14 +388,14 @@ export function ModelPicker({
         menuRef,
         menuAt,
         menuMotion,
-        headless,
+        headless: headless || windowOnly,
         closeMenu,
         menuSections,
         onRow,
         bot,
         favoriteKeys,
         viewerLocal,
-        openWindow,
+        openProviders,
         advanced,
         threadId,
         selection,
@@ -443,27 +405,6 @@ export function ModelPicker({
         pick,
         effortTitle,
       }))}
-      {motion.shown && portal(ModelPickerWindow({
-        dialogRef,
-        motion,
-        closeWindow,
-        openProviders,
-        flatSections,
-        onRow,
-        setPreviewRow,
-        bot,
-        favoriteKeys,
-        effectLine,
-        autoOn,
-        viewerLocal,
-        fastChoices,
-        selection,
-        fastKey,
-        chooseFast,
-        autoStatus,
-        previewRow,
-      }))}
-
     </div>
   );
 }

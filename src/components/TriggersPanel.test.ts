@@ -5,8 +5,8 @@ import type { Bot } from "@/state/store";
 import type { WebhookTrigger } from "@/lib/webhooks";
 import { setLocale, t } from "@/lib/i18n";
 
-// The pop-up's own state, seeded by call order (effects never run under
-// server rendering): useWebhookActions owns 0–4, the builder 5–10.
+// The view's own state, seeded by call order (effects never run under
+// server rendering): useWebhookActions owns 0-4, the builder 5-12.
 const fixture = vi.hoisted(() => ({
   api: vi.fn(),
   dispatch: vi.fn(),
@@ -98,13 +98,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("Triggers pop-up", () => {
-  it("reads as a sentence in a Settings window: When [source] → [bot] should", () => {
+describe("Triggers / Automations > Webhooks view", () => {
+  it("reads as a sentence on the page: When [source] → [bot] should", () => {
     const { html, nodes: tree } = render();
+    expect(html).toContain('data-triggers-view=""');
     expect(html).toContain(">Triggers</h2>");
     expect(html).toContain("Start a task the moment something happens, without asking.");
     expect(html).not.toContain("glass-surface");
-    expect(html).toContain("data-dialog-close");
+    expect(html).not.toContain("data-dialog-close");
+    expect(html).not.toContain('role="dialog"');
     expect(html).toContain(">When</span>");
     expect(html).toContain(">should</span>");
     // The source and the bot are pill menus (PillSelect): their choices.
@@ -189,7 +191,7 @@ describe("Triggers pop-up", () => {
       fixture.dispatch.mockClear();
       const row = render().nodes.find((node) => (node.props.webhook as WebhookTrigger | undefined)?.id === "w1")!;
       (row.props.onOpenChat as (threadId: string) => void)("delivery-run");
-      return fixture.dispatch.mock.calls.map(([action]) => action).filter((action) => action.type !== "toggleTriggers");
+      return fixture.dispatch.mock.calls.map(([action]) => action);
     };
     // a thread opened by name is shown, never a fresh topic over it (#763)
     const cleared = { type: "freshTopic", botId: "scout", threadId: null };
@@ -197,13 +199,6 @@ describe("Triggers pop-up", () => {
     // The thread Scout was on keeps its unread mark: only its activity row reaches it.
     fixture.showThreads = false;
     expect(openChat()).toEqual([{ type: "switchTask", botId: "scout", threadId: "delivery-run" }, cleared]);
-  });
-
-  it("closes through the store", () => {
-    const { nodes: tree } = render();
-    const close = tree.find((node) => node.props.label === "Close triggers")!; // the round DialogCloseButton
-    (close.props.onClick as () => void)();
-    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "toggleTriggers", open: false });
   });
 
   it("disables every row while another trigger action is pending", () => {

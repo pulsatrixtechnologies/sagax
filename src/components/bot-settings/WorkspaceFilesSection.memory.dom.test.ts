@@ -5,6 +5,7 @@
 // memory's options are in the folder's "..." menu.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
@@ -17,6 +18,8 @@ const fixture = vi.hoisted(() => ({
   fetchMemoryDoc: vi.fn(),
   deleteMemoryDoc: vi.fn(),
   fetchWorkspace: vi.fn(),
+  deleteWorkspaceEntry: vi.fn(),
+  countWorkspaceFiles: vi.fn(),
   fetchMemoryJournal: vi.fn(),
   fetchUpkeepStatus: vi.fn(),
   fetchMemoryOverview: vi.fn(),
@@ -35,6 +38,8 @@ vi.mock("@/lib/memory", async (importOriginal) => ({
 vi.mock("@/lib/workspace-files", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/workspace-files")>()),
   fetchWorkspace: fixture.fetchWorkspace,
+  deleteWorkspaceEntry: fixture.deleteWorkspaceEntry,
+  countWorkspaceFiles: fixture.countWorkspaceFiles,
 }));
 vi.mock("@/state/store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/state/store")>()),
@@ -91,9 +96,9 @@ const type = async (selector: string, value: string) => {
 };
 
 function render(props: Partial<Parameters<typeof WorkspaceFilesSection>[0]> = {}) {
-  act(() => root.render(createElement(WorkspaceFilesSection, {
+  act(() => root.render(createElement(ConfirmProvider, null, createElement(WorkspaceFilesSection, {
     bot, active: false, onOpenSection: () => {}, initial: listing, initialExpanded: ["memory"], memoryEditable: true, ...props,
-  })));
+  }))));
 }
 
 beforeEach(() => {
@@ -132,8 +137,11 @@ describe("Bot folder: the memory's one interface", () => {
     fixture.fetchWorkspace.mockResolvedValue({ ...listing, entries: [...listing.entries, file("memory/Clients VIP.md", { load: "on-demand" })] });
     render();
     await click("[data-files-new-menu]");
-    expect(q('[data-files-create="doc"]')).not.toBeNull();
-    await click('[data-files-kind="topic"]');
+    const topic = document.querySelector<HTMLElement>('[data-files-kind="topic"]');
+    expect(topic).not.toBeNull();
+    await act(async () => { topic!.click(); });
+    await flush();
+    expect(q('[data-files-create="topic"]')).not.toBeNull();
     await type("[data-files-new-name]", "Clients VIP");
     await click("[data-files-new]");
     expect(fixture.saveMemoryDoc).toHaveBeenCalledWith("pepper", "memory/Clients VIP.md", expect.stringContaining("title: Clients VIP"), EMPTY_HASH);
@@ -141,12 +149,13 @@ describe("Bot folder: the memory's one interface", () => {
     expect(q("[data-files-create]")).toBeNull();
   });
 
-  it("offers only documents to a viewer who may not edit memory", async () => {
+  it("offers File and Folder to a viewer who may not edit memory, without a topic or folder options", async () => {
     render({ memoryEditable: false });
     await click("[data-files-new-menu]");
-    expect(q("[data-files-kind]")).toBeNull();
+    expect(document.querySelector('[data-files-kind="file"]')).not.toBeNull();
+    expect(document.querySelector('[data-files-kind="folder"]')).not.toBeNull();
+    expect(document.querySelector('[data-files-kind="topic"]')).toBeNull();
     expect(q("[data-files-options]")).toBeNull();
-    expect(q('[data-file-delete="memory/clients.md"]')).toBeNull();
   });
 
   it("edits MEMORY.md in place and saves it with the memory's conflict check", async () => {
@@ -162,17 +171,22 @@ describe("Bot folder: the memory's one interface", () => {
     expect(fixture.saveMemoryDoc).toHaveBeenCalledWith("pepper", "MEMORY.md", "- likes coffee\n", "h0");
   });
 
-  it("deletes a memory topic from its row, after the red confirmation", async () => {
-    fixture.deleteMemoryDoc.mockResolvedValue({ overview: {} });
+  it("deletes a memory topic from its row menu, after the red confirmation", async () => {
+    fixture.deleteWorkspaceEntry.mockResolvedValue({ ok: true, path: "memory/clients.md", removed: 1 });
+    fixture.countWorkspaceFiles.mockResolvedValue({ path: "memory/clients.md", count: 1 });
     render();
-    await click('[data-file-delete="memory/clients.md"]');
-    expect(fixture.deleteMemoryDoc).not.toHaveBeenCalled();
+    await click('[data-file-menu="memory/clients.md"]');
+    const del = document.querySelector<HTMLElement>('[data-file-delete="memory/clients.md"]');
+    expect(del).not.toBeNull();
+    await act(async () => { del!.click(); });
+    await flush();
+    expect(fixture.deleteWorkspaceEntry).not.toHaveBeenCalled();
     // the app's ConfirmDialog is portaled to the body
     const confirm = document.querySelector<HTMLButtonElement>("[data-confirm-action]")!;
     expect(document.querySelector('[data-confirm-tone="danger"]')).not.toBeNull();
     await act(async () => { confirm.click(); });
     await flush();
-    expect(fixture.deleteMemoryDoc).toHaveBeenCalledWith("pepper", "memory/clients.md");
+    expect(fixture.deleteWorkspaceEntry).toHaveBeenCalledWith("pepper", "memory/clients.md", { recursive: true });
   });
 
   it("keeps tidying and the memory's change log in the folder's ... menu", async () => {

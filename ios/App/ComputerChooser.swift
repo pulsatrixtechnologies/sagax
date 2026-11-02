@@ -70,6 +70,8 @@ struct ComputerChooser: View {
         let systemImage: String
         /// The bot works here: a dot, and VoiceOver says so.
         var here = false
+        /// Unattended host already attached to this bot (place menu).
+        var hostAttached: Bool? = nil
     }
 
     /// The key of browser mode's chip.
@@ -78,8 +80,8 @@ struct ComputerChooser: View {
     static let vmsKey = "vms"
 
     /// The chips: on an organization server Cloud and Other VMs, else Screen
-    /// alone; then Browser when the bot can show one.
-    static func items(bridge: PersonDesktopBridge?, organization: Bool, worksOnLocal: Bool, browser: Bool) -> [Item] {
+    /// alone; enrolled unattended hosts; then Browser when the bot can show one.
+    static func items(bridge: PersonDesktopBridge?, organization: Bool, worksOnLocal: Bool, browser: Bool, remoteHosts: [RemoteHostPlace] = []) -> [Item] {
         var items: [Item]
         if organization, let bridge {
             let here = bridge.worksOn(local: worksOnLocal)
@@ -91,6 +93,14 @@ struct ComputerChooser: View {
             }
         } else {
             items = [Item(key: "screen", label: String(localized: "Screen"), systemImage: "display")]
+        }
+        for host in remoteHosts {
+            items.append(Item(
+                key: RemoteBotHostsLogic.placeKey(hostId: host.hostId),
+                label: host.label,
+                systemImage: "desktopcomputer",
+                hostAttached: host.attached
+            ))
         }
         if browser { items.append(Item(key: browserKey, label: String(localized: "Browser"), systemImage: "globe")) }
         return items
@@ -119,6 +129,9 @@ struct ComputerChooser: View {
     let items: [Item]
     let chosen: String?
     let colors: Colors
+    var onAttachHost: ((String) -> Void)? = nil
+    var onDetachHost: ((String) -> Void)? = nil
+    /// Kept last so existing trailing-closure call sites still bind to pick.
     let pick: (String) -> Void
 
     var body: some View {
@@ -160,6 +173,15 @@ struct ComputerChooser: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if let attached = item.hostAttached, let hostId = RemoteBotHostsLogic.parsePlaceKey(item.key) {
+                if attached {
+                    Button(String(localized: "Remove")) { onDetachHost?(hostId) }
+                } else {
+                    Button(String(localized: "Add to this bot")) { onAttachHost?(hostId) }
+                }
+            }
+        }
         .accessibilityLabel(item.here ? Text("\(item.label): this bot works here") : Text(verbatim: item.label))
         .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
         .accessibilityIdentifier("computer-choice.\(item.key)")

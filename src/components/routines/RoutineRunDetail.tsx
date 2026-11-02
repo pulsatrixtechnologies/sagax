@@ -25,7 +25,7 @@ import { ChatMarkdown } from "../ChatMarkdown";
 import { waitingSources } from "../bot-settings/ActivityDetailModal";
 import { ActivityStepGroups } from "../task/ActivityStepGroups";
 import { TaskComposer } from "../task/TaskComposer";
-import { TaskStatusHeader } from "../task/TaskStatusHeader";
+import { activityJobStage, TaskStatusHeader } from "../task/TaskStatusHeader";
 import { WaitingOnYou, waitingKind, type WaitingNote } from "../task/WaitingOnYou";
 import { useWaitingCards, type WaitingItem } from "@/lib/use-waiting-cards";
 import { activityChip } from "../bot-settings/ActivityWindow";
@@ -152,14 +152,16 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
   const waitingItems: readonly (WaitingItem | WaitingNote)[] = run.status !== "waiting" || run.redacted ? []
     : waiting.length > 0 ? waiting
     : [{ kind: "note", text: run.attention || t("routineCalendar.runWaiting"), botId: run.botId, ...(threadId && onOpenThread ? { threadId } : {}) }];
+  // Quiet destructive: icon + label, not a loud red pill (Grok Bot bar).
   const stopButton = live && editable && onStop
-    ? <button type="button" data-run-stop onClick={onStop} disabled={working} title={t("routineRun.stop")} className={cn(PILL, "gap-1.5 text-danger")}>{working ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Square size={12} aria-hidden="true" fill="currentColor" />}{t("routineRun.stop")}</button>
+    ? <button type="button" data-run-stop onClick={onStop} disabled={working} title={t("routineRun.stop")} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[12.5px] text-danger hover:bg-danger/10 disabled:opacity-50">{working ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Square size={12} aria-hidden="true" fill="currentColor" />}{t("routineRun.stop")}</button>
     : null;
 
   // The head is the task sheet's own (TaskStatusHeader): the bot's pill,
   // the routine's name, the state in words with its time. Under it, what
   // only a run has: when it was due, what started it, its cost, and that
   // its routine is gone.
+  const waitingFor = waitingKind(waitingItems);
   const header = (
     <div data-run-state={run.status} className="flex flex-col gap-1.5">
       <TaskStatusHeader
@@ -171,7 +173,8 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
         startedAt={run.startedAt ?? run.scheduledFor}
         endedAt={run.finishedAt}
         now={now}
-        waitingFor={waitingKind(waitingItems)}
+        waitingFor={waitingFor}
+        stage={activityJobStage(status, waitingFor)}
         actions={stopButton}
         // The dialog's own head already names the routine.
         className="px-0 pb-0 pr-0 pt-0 [&_h2]:sr-only"
@@ -227,9 +230,9 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
   // works. The task sheet's composer, at the bottom where a composer sits.
   const composer = canReply ? <div className="shrink-0 px-4 pb-1 pt-2"><TaskComposer key={run.id} onSend={onReply!} /></div> : null;
   const footer = (
-    <div data-run-actions className="flex flex-wrap items-center gap-2 border-t border-hairline/40 px-4 py-3">
-      {!live && canRunAgain && onRunAgain && <button type="button" data-run-again onClick={onRunAgain} disabled={working || inFlight} title={inFlight ? t("routines.runNow.inFlight") : t("routineRun.runAgain")} className={cn(PRIMARY_PILL, "gap-1.5")}>{working ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <RotateCcw size={13} aria-hidden="true" />}{t("routineRun.runAgain")}</button>}
-      {canContinue && onContinue && <button type="button" data-run-continue onClick={onContinue} title={isRoomGoal ? t("routineCalendar.openGroupThread") : t("routineRun.continue")} className={cn(PILL, "gap-1.5")}><MessageSquareText size={13} aria-hidden="true" />{isRoomGoal ? t("routineCalendar.openGroupThread") : t("routineRun.continue")}</button>}
+    <div data-run-actions className="flex flex-wrap items-center gap-2 border-t border-hairline/40 bg-app px-4 py-3">
+      {canContinue && onContinue && <button type="button" data-run-continue onClick={onContinue} title={isRoomGoal ? t("routineCalendar.openGroupThread") : t("routineRun.continue")} className={cn(PRIMARY_PILL, "gap-1.5")}><MessageSquareText size={13} aria-hidden="true" />{isRoomGoal ? t("routineCalendar.openGroupThread") : t("routineRun.continue")}</button>}
+      {!live && canRunAgain && onRunAgain && <button type="button" data-run-again onClick={onRunAgain} disabled={working || inFlight} title={inFlight ? t("routines.runNow.inFlight") : t("routineRun.runAgain")} className={cn(PILL, "gap-1.5")}>{working ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <RotateCcw size={13} aria-hidden="true" />}{t("routineRun.runAgain")}</button>}
       <div className="ml-auto flex items-center gap-1">
         {routine && onOpenRoutine && <button type="button" data-run-open-routine onClick={onOpenRoutine} title={t("routineRun.openRoutine")} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] text-ink-secondary hover:bg-raised hover:text-ink"><CalendarClock size={13} aria-hidden="true" />{t("routineRun.openRoutine")}</button>}
         {onLogs && <button type="button" data-run-logs onClick={onLogs} title={t("routines.logs")} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] text-ink-secondary hover:bg-raised hover:text-ink"><History size={13} aria-hidden="true" />{t("routines.logs")}</button>}

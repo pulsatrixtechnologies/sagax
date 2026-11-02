@@ -1,10 +1,7 @@
 // The line the harness prints when a turn starts (stderr, which the desktop
-// app keeps in server.log). It shows the start of the prompt, so a stuck turn
-// can be traced to what was asked. Words spoken on a Live call are never
-// logged — the call's summary line (liveCallSummaryLine) has counters only —
-// so a turn carrying any of them shows `text=(spoken)` instead. A turn of a
-// confidential thread (server/confidential-threads.ts) logs no prompt at
-// all: `text=(confidential)`, whatever it carried.
+// app keeps in server.log). Loi 25: never log incoming message text or a
+// person's display name. Counts and ids only. Words spoken on a Live call
+// show `text=(spoken)`. A confidential thread shows `text=(confidential)`.
 
 export interface TurnStartLog {
   botId: string;
@@ -18,9 +15,16 @@ export interface TurnStartLog {
   confidential?: boolean;
 }
 
-const LOGGED_CHARS = 70;
-
 export function turnStartLogLine(turn: TurnStartLog): string {
-  const text = turn.confidential ? "(confidential)" : turn.spoken ? "(spoken)" : JSON.stringify(turn.text.slice(0, LOGGED_CHARS));
+  const text = turn.confidential
+    ? "(confidential)"
+    : turn.spoken
+      ? "(spoken)"
+      : `chars=${turn.text.length}`;
   return `[omb-turn] bot=${turn.botId} text=${text} images=${turn.images} depth=${turn.depth} card=${turn.card}`;
+}
+
+/** Loi 25: auto-recall progress with ids and counts only, never a display name. */
+export function autoRecallLogLine(botId: string, notes: number, conversations: number, threadId: string): string {
+  return `auto-recall: bot=${botId} notes=${notes} conversations=${conversations} thread=${threadId}`;
 }

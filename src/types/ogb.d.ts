@@ -321,7 +321,7 @@ const __BASE_VERSION__: string;
       /** Triggers the macOS microphone prompt; resolves true when granted. */
       permRequestMic(): Promise<boolean>;
       /** Opens System Settings on a privacy pane: mic|screen|speech|accessibility. */
-      permOpenSettings(pane: "mic" | "screen" | "speech" | "accessibility"): Promise<void>;
+      permOpenSettings(pane: "mic" | "screen" | "speech" | "accessibility" | "fullDisk" | "automation"): Promise<void>;
       /** Relaunch the local desktop app through its normal shutdown cleanup. */
       relaunch?(): Promise<boolean>;
       /** Copies an engine install command and opens a blank terminal. False

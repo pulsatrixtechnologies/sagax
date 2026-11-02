@@ -63,6 +63,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         computerOpen: open ? false : state.computerOpen,
         inspectorOpen: open ? false : state.inspectorOpen,
         appSettingsOpen: open ? false : state.appSettingsOpen,
+        memoryManagerOpen: open ? false : state.memoryManagerOpen,
       };
     }
     case "openRoutine": {
@@ -85,6 +86,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         appSettingsOpen: false,
         pluginsOpen: false,
         triggersOpen: false,
+        memoryManagerOpen: false,
       };
       if (bot && state.selectedId !== bot.id) {
         return { ...next, selectedId: bot.id };
@@ -101,47 +103,107 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
     case "botActivityOpened":
       return state.botActivityTarget ? { ...state, botActivityTarget: null } : state;
     case "togglePlugins": {
-      const open = action.open ?? !state.pluginsOpen;
+      // 2026-11-01 (lot 5, no modals): Connect apps fills the content frame
+      // (activeView "apps"), same place as Achievements and Automations.
+      const open = action.open ?? !(state.activeView === "apps" || state.pluginsOpen);
+      if (!open) {
+        return {
+          ...state,
+          pluginsOpen: false,
+          pluginsBotId: null,
+          pluginsPage: null,
+          pluginsFocusApps: null,
+          activeView: state.activeView === "apps" ? "chat" : state.activeView,
+          ...(state.botCatalogTarget && !state.botCatalogOpen ? { botCatalogTarget: null } : {}),
+        };
+      }
       return {
         ...state,
-        pluginsOpen: open,
+        activeView: "apps",
+        pluginsOpen: true,
         pluginsSurface: action.surface ?? state.pluginsSurface,
         // A bot panel opens it on that bot; a change of surface while it is
         // open keeps the bot it is on.
-        pluginsBotId: !open ? null : action.page ? null : action.botId !== undefined ? action.botId : state.pluginsOpen ? state.pluginsBotId : null,
-        pluginsPage: open ? (action.page === "accounts" ? "providers" : action.page ?? null) : null,
-        pluginsFocusApps: !open ? null : action.focusApps?.length ? action.focusApps : state.pluginsOpen ? state.pluginsFocusApps : null,
-        // where a link to Browse Bots asked it to open (its Templates) lasts
-        // while Connect apps is open (2026-10-29)
-        ...(!open && state.botCatalogTarget && !state.botCatalogOpen ? { botCatalogTarget: null } : {}),
-        ...(open ? { settingsOpen: false, appSettingsOpen: false, newBotOpen: false, shortcutsOpen: false, triggersOpen: false } : {}),
+        pluginsBotId: action.page ? null : action.botId !== undefined ? action.botId : state.pluginsOpen ? state.pluginsBotId : null,
+        pluginsPage: action.page === "accounts" ? "providers" : action.page ?? null,
+        pluginsFocusApps: action.focusApps?.length ? action.focusApps : state.pluginsOpen ? state.pluginsFocusApps : null,
+        botCatalogOpen: false,
+        settingsOpen: false,
+        appSettingsOpen: false,
+        newBotOpen: false,
+        shortcutsOpen: false,
+        triggersOpen: false,
+        memoryManagerOpen: false,
+      };
+    }
+    case "toggleMemoryManager": {
+      const open = action.open ?? !state.memoryManagerOpen;
+      if (!open) return state.memoryManagerOpen ? { ...state, memoryManagerOpen: false } : state;
+      return {
+        ...state,
+        memoryManagerOpen: true,
+        settingsOpen: false,
+        computerOpen: false,
+        personPanelId: null,
+        inspectorOpen: false,
+        appSettingsOpen: false,
       };
     }
     case "toggleTriggers": {
-      const open = action.open ?? !state.triggersOpen;
+      // 2026-11-01 (lot 2, no modals): Triggers is Automations > Webhooks, not
+      // a pop-up. Closing is a no-op on the view (the person leaves Automations).
+      if (action.open === false) return { ...state, triggersOpen: false };
       return {
         ...state,
-        triggersOpen: open,
-        ...(open ? { settingsOpen: false, appSettingsOpen: false, newBotOpen: false, shortcutsOpen: false, pluginsOpen: false } : {}),
+        activeView: "routines",
+        routinesFocus: {
+          section: "webhooks",
+          view: undefined,
+          botId: undefined,
+          routineId: undefined,
+          runStatus: undefined,
+          runId: undefined,
+          nonce: state.routinesFocus.nonce + 1,
+        },
+        triggersOpen: false,
+        memoryManagerOpen: false,
+        settingsOpen: false,
+        appSettingsOpen: false,
+        newBotOpen: false,
+        shortcutsOpen: false,
+        pluginsOpen: false,
+        personPanelId: null,
+        computerOpen: false,
+        inspectorOpen: false,
+        activityOpen: false,
       };
     }
     case "openBotWizard":
-      // Its own screen over the app: what was open closes, as New bot does.
-      // A new bot needs the right to create one (a bot's own Redo does not).
-      if (!action.botId && state.config?.viewer?.canCreateBots === false) return state;
+      // Content view (lot 4): one creation entry. Redo on an existing bot
+      // always opens; a new bot opens even when create is refused so the
+      // view can show the read-only note in place (no BotsReadOnly dialog).
+      // Leave Connect apps (activeView "apps") so the wizard is the main
+      // column; Tools can reopen apps over it without clearing botWizard.
       return {
         ...state,
         botWizard: { botId: action.botId ?? null, ...(action.redo ? { redo: true } : {}) },
+        personaEditor: null,
+        activeView: state.activeView === "apps" || state.activeView === "archived-bots" ? "chat" : state.activeView,
         newBotOpen: false, settingsOpen: false, appSettingsOpen: false, pluginsOpen: false, shortcutsOpen: false, triggersOpen: false,
+        memoryManagerOpen: false,
       };
     case "closeBotWizard":
       return { ...state, botWizard: null };
     case "toggleNewBot": {
-      const open = (action.open ?? !state.newBotOpen) && state.config?.viewer?.canCreateBots !== false;
-      return {
-        ...state, newBotOpen: open,
-        ...(open ? { settingsOpen: false, appSettingsOpen: false, pluginsOpen: false, shortcutsOpen: false, triggersOpen: false } : {}),
-      };
+      // Lot 4: New bot opens the creation view (one option, one place).
+      // Closing clears the wizard. defaultsMode still uses NewBotDialog locally.
+      const wantOpen = action.open ?? !state.botWizard;
+      if (!wantOpen) {
+        return state.botWizard || state.newBotOpen
+          ? { ...state, botWizard: null, newBotOpen: false }
+          : state;
+      }
+      return reduce(state, { type: "openBotWizard" });
     }
     case "revealThread":
       return { ...state, revealThread: { threadId: action.threadId, nonce: (state.revealThread?.nonce ?? 0) + 1 } };
@@ -230,26 +292,37 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
       };
     }
     case "openBotCatalog": {
-      // Browse Bots is Connect apps' Bots tab (2026-10-29): every link to it
-      // opens that tab, on its Templates when it asks (a new object, so an
-      // open tab follows a later link). Its own window (botCatalogOpen) keeps
-      // its content for a window that is already open.
+      // Browse Bots is Connect apps' Bots tab (2026-10-29 / lot 5): every
+      // link opens that tab in the content frame, on its Templates when it
+      // asks (a new object, so an open tab follows a later link). The old
+      // botCatalogOpen window is gone.
       const target = action.section ? { section: action.section, ...(action.installUrl ? { installUrl: action.installUrl } : {}) } : null;
-      if (state.botCatalogOpen) return action.section ? { ...state, botCatalogTarget: target } : state;
       const opened = reduce(state, { type: "togglePlugins", open: true, surface: "apps", page: "bots" });
-      return { ...opened, botCatalogTarget: target };
+      return { ...opened, botCatalogOpen: false, botCatalogTarget: target };
     }
     case "closeBotCatalog":
-      return state.botCatalogOpen ? { ...state, botCatalogOpen: false, botCatalogTarget: null } : state;
+      // Closing Browse Bots leaves Connect apps (its Bots tab was the only
+      // surface). Already on chat with no target: no-op.
+      if (state.activeView === "apps" || state.pluginsOpen) {
+        return reduce({ ...state, botCatalogTarget: null, botCatalogOpen: false }, { type: "togglePlugins", open: false });
+      }
+      return state.botCatalogTarget || state.botCatalogOpen
+        ? { ...state, botCatalogOpen: false, botCatalogTarget: null }
+        : state;
     case "openPersonaEditor":
       if (!state.bots.some((bot) => bot.id === action.botId)) return state;
       return {
         ...state,
         personaEditor: { botId: action.botId, section: action.section ?? "overview" },
+        botWizard: null,
+        // Same as openBotWizard: leave apps / archived so the editor fills
+        // the main column (Connect apps can still open over it later).
+        activeView: state.activeView === "apps" || state.activeView === "archived-bots" ? "chat" : state.activeView,
         appSettingsOpen: false,
         appSettingsSubPage: null,
         pluginsOpen: false,
         triggersOpen: false,
+        memoryManagerOpen: false,
         newBotOpen: false,
         shortcutsOpen: false,
       };

@@ -82,7 +82,7 @@ title; a stamp on a Markdown export the person makes of their own thread.
 | Incidents and refused turns | Primary Bot report with 300 characters of the request and reply; problem log row with title and notice | no text: the console's problem log and the owner's notification say only « un tour d'un fil confidentiel a échoué »; no Primary Bot report |
 | Notifications (in app, push relay, iOS banners, Live Activities, widgets, share sheet) | the reply's first words | « Fil confidentiel » only; widgets leave the thread out |
 | MCP permission audit rows | tool, permission, decision, resource | no resource |
-| `[omb-turn]` server log line | first 70 characters of the prompt | `text=(confidential)` |
+| `[omb-turn]` server log line | char count only (`text=chars=N`); never the prompt (Loi 25) | `text=(confidential)` |
 | Perspicax work log row | metadata row per turn | none |
 | Built-in browser | the bot's persistent profile (`bot-<id>`) or a shared one | a throwaway guest session of that thread (`conf-<thread>-<random>`), never saved, discarded at the end of each turn and when the thread is deleted |
 | Where it works | the speaker's or, for a routine, the bot owner's environment; the bot's project folder | always the thread owner's environment, and the thread's own folder (`task-workspaces/<bot>/<thread>`); a new confidential thread may not take another working folder |

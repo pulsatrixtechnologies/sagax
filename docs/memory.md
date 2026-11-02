@@ -115,8 +115,9 @@ changing half is re-sent whole whenever any part of it changes, and recall
 changes nearly every turn. Rooms, routine runs (which start fresh), and turns
 started by another bot, a webhook or a teammate hand-off, recall notes only — a private chat reaches a room
 through `session_search`, which discloses it. `features.autoRecall: false` in
-`config.json` switches recall off. The server log names every recall
-(`auto-recall: … got N note and M conversation passage(s)`).
+`config.json` switches recall off. The server log records every recall with
+ids and counts only (`auto-recall: bot=<id> notes=N conversations=M thread=<id>`),
+never a display name (Loi 25).
 
 ### Recall by meaning (2026-10-29)
 

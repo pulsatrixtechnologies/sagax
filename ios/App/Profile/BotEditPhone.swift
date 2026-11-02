@@ -1,11 +1,8 @@
-// Edit bot in the Grok Bot layout (2026-10-27), the iPhone's pages, drawn
-// from `BotEditTree` with the Settings cards (#1168): the bot's header
-// (avatar, name, role), the main sections with the wizard's recap line at
-// their end (Identity, Personality, Model, Approvals, Tools and apps,
-// Routines, Sharing), Advanced, then Archive and Delete apart, in red. A
-// row opens a page of the tree (Identity, Personality, Tools and apps,
-// Sharing, Advanced) or a section's own page, pushed on the bot panel's
-// stack, so Back walks the way in.
+// Edit bot in the Grok-style single page (lots 2 and 3, 2026-11-01):
+// Back + Done, mascot with pencil, Name / Role / Description on the root,
+// Appearance > Avatar, Voice calls (with More voice options), then Sagax
+// rows (Instructions, Skills, Memory, Model, Approvals, Tools and apps,
+// Routines, Sharing, Advanced). Drawn from `BotEditTree`.
 //
 // Rows keep the identifiers they had: a section is `panel-row.<section>`
 // wherever it now sits; a tree page is `panel-edit-page.<page>`.
@@ -35,6 +32,7 @@ extension BotEditActions {
     func open(_ item: BotEditItem, context: BotEditContext) {
         if item == .avatar { editAvatar(); return }
         if item == .routines { openRoutines(); return }
+        if item == .voiceAlerts { return } // disclosure on the root (lot 3)
         if let page = item.opens { openPage(page); return }
         if let section = item.section { openSection(section); return }
         if let page = BotEditTree.path(to: item, context)?.last { openPage(page) }
@@ -55,8 +53,7 @@ extension BotEditPageID {
 }
 
 extension BotEditItem {
-    /// The row's label (a section row keeps its section's name, except
-    /// Personality's Soul, the wizard's word for it).
+    /// The row's label (Instructions is the wizard's word for Soul).
     var title: LocalizedStringKey {
         switch self {
         case .header: "Edit bot"
@@ -77,7 +74,8 @@ extension BotEditItem {
         case .callVoice: "Voice"
         case .callSpeed: "Speed"
         case .callLanguage: "Language"
-        case .soul: "Soul"
+        case .voiceAlerts: "More voice options"
+        case .soul: "Instructions"
         default: section?.title ?? ""
         }
     }
@@ -95,17 +93,19 @@ struct BotEditSummaries {
     let bot: Bot
     let rules: [CustomRuleRow]?
     let routines: [Routine]?
+    /// Optional catalog label for the bot's model (`Grok 4.5`).
+    var modelLabel: String?
 
     func value(_ item: BotEditItem) -> String? {
         switch item {
         case .identity:
             let parts = [BotEditSummary.role(bot), bot.chiefOfStaff == true ? String(localized: "Primary Bot") : ""].filter { !$0.isEmpty }
             return parts.isEmpty ? nil : parts.joined(separator: " · ")
-        case .personality:
+        case .personality, .soul:
             return BotEditSummary.soulWritten(bot) ? String(localized: "Written") : String(localized: "Not written yet")
         case .model:
             let selection = bot.modelSelection
-            let name = selection.model.isEmpty ? String(localized: "Default") : selection.model
+            let name = BotEditSummary.modelName(selection, label: modelLabel)
             return selection.auto == true ? String(localized: "Auto · \(name)") : name
         case .approvals:
             let level = Self.levelTitle(ApprovalLevel.of(approvalMode: bot.approvalSettingMode, autoApprove: bot.autoApprove))
@@ -148,7 +148,8 @@ struct BotEditSummaries {
 
 // MARK: - Root
 
-/// Edit bot: the header, the main sections, Advanced, Archive and Delete.
+/// Edit bot: one Grok-style page (lots 2 and 3). Back + Done; drafts of
+/// Name / Role / Description save on Done; Back asks before discarding.
 struct PhoneBotEditRoot: View {
     @Environment(\.themePalette) var themePalette
     @EnvironmentObject private var session: Session
@@ -158,26 +159,32 @@ struct PhoneBotEditRoot: View {
     let actions: BotEditActions
 
     @State private var rules: [CustomRuleRow]?
-    @State private var query = ""
+    @State private var modelLabel: String?
+    @State private var identityDirty = false
+    @State private var confirmDiscard = false
+    @State private var identityCommit: (() -> Void)?
 
-    private var results: [BotEditItem] {
-        BotEditSearch.results(query, context: context) { $0.title.sourceText }
+    private var summaries: BotEditSummaries {
+        BotEditSummaries(bot: bot, rules: rules, routines: routines, modelLabel: modelLabel)
     }
-
-    private var summaries: BotEditSummaries { BotEditSummaries(bot: bot, rules: rules, routines: routines) }
 
     var body: some View {
         ScrollViewReader { proxy in
-            SettingsPage(title: "Edit bot", leading: .close(actions.close)) {
-                BotEditSearchField(query: $query)
-                SettingsSpacer(14)
-                if query.trimmingCharacters(in: .whitespaces).isEmpty {
-                    BotEditCards(page: .root, bot: bot, context: context, summaries: summaries, actions: actions)
-                } else {
-                    BotEditSearchResults(query: query, items: results, context: context, actions: actions)
-                }
+            SettingsPage(title: "Edit bot", leading: .back, trailing: { doneButton }) {
+                BotEditCards(
+                    page: .root,
+                    bot: bot,
+                    context: context,
+                    summaries: summaries,
+                    actions: actions,
+                    identityDirty: $identityDirty,
+                    identityCommit: $identityCommit
+                )
                 Color.clear.frame(height: 1).id("persona-end")
             }
+            // Intercept the glass Back: SettingsPage.back dismisses; we wrap
+            // close through a confirm when drafts are dirty.
+            .environment(\.settingsPop, { attemptClose() })
             .task {
                 #if DEBUG
                 if UserDefaults.standard.bool(forKey: "parityBotEditBottom") {
@@ -188,11 +195,49 @@ struct PhoneBotEditRoot: View {
             }
         }
         .task(id: bot.id) {
-            guard context.sections.contains(.permissions), let client = session.settingsClient else { return }
-            rules = (try? await client.customRules(botId: bot.id))?.rules
+            guard let client = session.settingsClient else { return }
+            if context.sections.contains(.permissions) {
+                rules = (try? await client.customRules(botId: bot.id))?.rules
+            }
+            if let instances = try? await client.instances() {
+                let selection = bot.modelSelection
+                modelLabel = instances.first { $0.instanceId == selection.instanceId }?
+                    .models.options.first { $0.id == selection.model }?.label
+            }
+        }
+        .confirmationDialog(
+            String(localized: "Discard changes?"),
+            isPresented: $confirmDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard changes", role: .destructive) { actions.close() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("Name, role or description still have edits that are not saved.")
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("panel-persona")
+    }
+
+    private var doneButton: some View {
+        Button {
+            identityCommit?()
+            identityDirty = false
+            actions.close()
+        } label: {
+            Text("Done")
+                .font(Theme.Font.rowTitle.weight(.semibold))
+                .foregroundStyle(Theme.textPrimary)
+        }
+        .accessibilityIdentifier("panel-edit-done")
+    }
+
+    private func attemptClose() {
+        if identityDirty {
+            confirmDiscard = true
+        } else {
+            actions.close()
+        }
     }
 }
 
@@ -207,7 +252,15 @@ struct PhoneBotEditPage: View {
     var body: some View {
         ScrollViewReader { proxy in
             SettingsPage(title: page.title) {
-                BotEditCards(page: page, bot: bot, context: context, summaries: BotEditSummaries(bot: bot, rules: nil, routines: nil), actions: actions)
+                BotEditCards(
+                    page: page,
+                    bot: bot,
+                    context: context,
+                    summaries: BotEditSummaries(bot: bot, rules: nil, routines: nil),
+                    actions: actions,
+                    identityDirty: .constant(false),
+                    identityCommit: .constant(nil)
+                )
                 Color.clear.frame(height: 1).id("edit-page-end")
             }
             .task {
@@ -224,66 +277,6 @@ struct PhoneBotEditPage: View {
     }
 }
 
-// MARK: - Search
-
-/// The box at the top of Edit bot: a word finds the row that holds it.
-private struct BotEditSearchField: View {
-    @Environment(\.themePalette) var themePalette
-    @Binding var query: String
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("Search", text: $query)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-                .accessibilityIdentifier("panel-edit-search")
-            if !query.isEmpty {
-                Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
-                    .accessibilityLabel(Text("Clear"))
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 40)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.06)))
-        .padding(.horizontal, SettingsMetrics.rowInset)
-    }
-}
-
-/// What the word found, or a clear line when nothing matches.
-private struct BotEditSearchResults: View {
-    let query: String
-    let items: [BotEditItem]
-    let context: BotEditContext
-    let actions: BotEditActions
-
-    var body: some View {
-        if items.isEmpty {
-            Text("Nothing matches “\(query.trimmingCharacters(in: .whitespaces))”")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
-                .accessibilityIdentifier("panel-edit-search-empty")
-        } else {
-            SettingsCard {
-                ForEach(Array(items.enumerated()), id: \.element) { position, item in
-                    if position > 0 { CardHairline(leadingInset: SettingsMetrics.rowInset) }
-                    SettingsRow(title: item.title, subtitle: parent(of: item), accessory: .chevron, height: 56,
-                                identifier: "panel-edit-result.\(item.rawValue)") { actions.open(item, context: context) }
-                }
-            }
-        }
-    }
-
-    /// The page the row sits on, under its name.
-    private func parent(of item: BotEditItem) -> String? {
-        guard let page = BotEditTree.path(to: item, context)?.last else { return nil }
-        return page.title.sourceText
-    }
-}
-
 // MARK: - Cards
 
 /// A page's cards, with the few labels and footers the layout keeps.
@@ -294,6 +287,8 @@ private struct BotEditCards: View {
     let context: BotEditContext
     let summaries: BotEditSummaries
     let actions: BotEditActions
+    @Binding var identityDirty: Bool
+    @Binding var identityCommit: (() -> Void)?
 
     var body: some View {
         let cards = BotEditTree.cards(page, context)
@@ -301,17 +296,21 @@ private struct BotEditCards: View {
             if let label = Self.label(card) {
                 SettingsSectionLabel(text: label)
             } else if index > 0, Self.footer(cards[index - 1]) == nil {
-                // a footer already leaves its gap under it
                 SettingsSpacer(SettingsMetrics.cardGap)
             }
             switch card.first {
-            case .header?:
-                BotEditHeaderRow(bot: bot) { actions.openPage(.identity) }
             case .name?:
-                // the identity fields are their own card (PhoneBotIdentityFields)
-                PhoneBotIdentityFields(bot: bot, onAvatar: actions.editAvatar)
+                PhoneBotIdentityFields(
+                    bot: bot,
+                    onAvatar: actions.editAvatar,
+                    autosave: false,
+                    isDirty: $identityDirty,
+                    registerCommit: { identityCommit = $0 }
+                )
             case .callVoice?:
                 PhoneBotCallVoiceCard(bot: bot)
+            case .voiceAlerts?:
+                PhoneBotMoreVoiceOptions(bot: bot)
             default:
                 SettingsCard {
                     ForEach(Array(card.enumerated()), id: \.element) { position, item in
@@ -343,6 +342,7 @@ private struct BotEditCards: View {
     private func open(_ item: BotEditItem) {
         if item == .avatar { actions.editAvatar(); return }
         if item == .routines { actions.openRoutines(); return }
+        if item == .voiceAlerts { return }
         if let page = item.opens { actions.openPage(page); return }
         if let section = item.section { actions.openSection(section) }
     }
@@ -357,7 +357,7 @@ private struct BotEditCards: View {
 
     private static func footer(_ card: [BotEditItem]) -> LocalizedStringKey? {
         switch card.first {
-        case .name?: "Shown in rosters, on the phone and to other bots. Standing instructions go in Personality."
+        case .name?: "Shown in rosters, on the phone and to other bots. Standing instructions go in Instructions."
         case .archive?: "Its conversations are kept. Archived bots in the account menu brings it back."
         case .delete?: "The bot and its conversations will be deleted. This cannot be undone."
         default: nil
@@ -365,47 +365,30 @@ private struct BotEditCards: View {
     }
 }
 
-/// The compact header: the avatar, the name and the role, opening Identity.
-private struct BotEditHeaderRow: View {
-    @Environment(\.themePalette) var themePalette
+/// More voice options under Voice calls (lot 3): engine, agent voice,
+/// preview, read replies aloud, voice notes. Notifications stay on the
+/// bot profile only.
+private struct PhoneBotMoreVoiceOptions: View {
     let bot: Bot
-    let action: () -> Void
+    @State private var expanded = false
 
     var body: some View {
-        SettingsCard {
-            Button {
-                Haptics.selection()
-                action()
-            } label: {
-                HStack(spacing: 0) {
-                    BotMascotView(bot: bot, size: 48, state: .idle, animated: false)
-                        .frame(width: 48, height: 48)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(verbatim: bot.name)
-                            .font(Theme.Font.rowTitle)
-                            .foregroundStyle(Theme.textPrimary)
-                            .lineLimit(1)
-                        let role = BotEditSummary.role(bot)
-                        Group {
-                            if role.isEmpty { Text("Add a role") } else { Text(verbatim: role) }
-                        }
-                        .font(Theme.Font.label)
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
-                    }
-                    .padding(.leading, 12)
-                    Spacer(minLength: 12)
-                    SettingsChevron()
-                }
-                .padding(.leading, SettingsMetrics.rowInset - 4)
-                .padding(.trailing, SettingsMetrics.chevronTrailing - 4)
-                .frame(height: 72)
-                .contentShape(Rectangle())
+        DisclosureGroup(isExpanded: $expanded) {
+            Form {
+                BotVoiceSections(bot: bot, showsNotifications: false)
             }
-            .buttonStyle(SettingsRowButtonStyle())
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityIdentifier("panel-edit-header")
+            .frame(minHeight: expanded ? 280 : 0)
+            .scrollDisabled(true)
+            .padding(.top, 4)
+        } label: {
+            Text("More voice options")
+                .font(Theme.Font.body)
+                .foregroundStyle(Theme.textPrimary)
         }
+        .padding(.horizontal, SettingsMetrics.rowInset)
+        .padding(.vertical, 10)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
+        .padding(.horizontal, SettingsMetrics.cardMargin)
+        .accessibilityIdentifier("panel-edit-more-voice")
     }
 }

@@ -103,7 +103,8 @@ export interface ActivityChildRef {
   botId: string;
   threadId?: string;
   title: string;
-  status: "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled";
+  /** expired: person-wait ran out (R6); not a failure. */
+  status: "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled" | "expired";
   startedAt: number;
   /** A parallel task of this conversation, not another bot's work. */
   parallel?: boolean;
@@ -521,7 +522,8 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
       for (const child of childItems(bot, parent.threadId, viewerId)) {
         // a parallel task is listed as its own entry already
         if (child.parallel) continue;
-        if (activityStatusActive(child.status) || child.startedAt >= since) out.push({ ...child, parentId: parent.id });
+        const childActive = child.status === "queued" || child.status === "running" || child.status === "waiting";
+        if (childActive || child.startedAt >= since) out.push({ ...child, parentId: parent.id });
       }
     }
     return out.sort(newestRunningFirst).slice(0, SUBAGENT_LIMIT);
@@ -531,7 +533,11 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
     return deps.children(bot.id, threadId).map((child, index) => {
       const other = deps.bot(child.botId);
       const readable = child.threadId ? deps.threadReadable(child.botId, child.threadId, viewerId) : false;
-      const settled: BotActivityStatus = child.status === "completed" ? "finished" : child.status === "cancelled" ? "stopped" : child.status;
+      // R6: expired (person did not answer) is not failed; panel reuses
+      // stopped until a dedicated Expired label ships with locales.
+      const settled: BotActivityStatus = child.status === "completed" ? "finished"
+        : child.status === "cancelled" || child.status === "expired" ? "stopped"
+        : child.status;
       // Waiting on the person means a place to answer: the teammate's own
       // conversation and its card. One this viewer cannot open is not their
       // wait; it reads as work in progress.

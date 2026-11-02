@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Cloud, Laptop, Loader2, Trash2 } from "lucide-react";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { Card, DANGER_PILL, DescribedRow, EditorBox, EditorField, FIELD, PILL, PRIMARY_PILL, SwitchRow } from "./SettingsPrimitives";
 import { t } from "@/lib/i18n";
 import { ComputerSharingSettings } from "./ComputerSharingSettings";
@@ -10,6 +11,7 @@ type SavedWorkspaces = Awaited<ReturnType<NonNullable<NonNullable<Window["ogb"]>
 
 /** These are this desktop's connections, not a fleet administration API. */
 export function ConnectedWorkspacesSettings() {
+  const confirm = useConfirm();
   const bridge = window.ogb?.environments;
   // Computer sharing is off unless this workspace's server turned it on. The
   // desktop bridge alone is not enough: never offer access the server refuses.
@@ -72,7 +74,6 @@ export function ConnectedWorkspacesSettings() {
     }
   };
   if (!bridge) return <p className="text-[13px] text-ink-secondary">{t("settings.servers.desktopOnly")}</p>;
-  const confirmAction = (message: string) => window.ogb?.confirm ? window.ogb.confirm(message) : window.confirm(message);
   const connected = saved?.environments.find(entry => entry.id === computerId);
   const computerWorkspace = connected?.origin ? { id: connected.id, name: connected.name, origin: connected.origin } : undefined;
   const locals = saved?.environments.filter(entry => entry.kind === "local") ?? [];
@@ -91,7 +92,11 @@ export function ConnectedWorkspacesSettings() {
             {active ? <span className="flex shrink-0 items-center gap-1 text-[12px] text-ink-secondary"><Check size={13} />{t("settings.servers.current")}</span> :
               <button type="button" disabled={busy} aria-label={t("envLocal.switchTo", { name: entry.name })}
                 onClick={() => void perform(async () => {
-                  if (!await confirmAction(t("envLocal.switchConfirm", { name: entry.name }))) return;
+                  if (!(await confirm({
+                    title: t("envLocal.switchConfirm", { name: entry.name }),
+                    confirmLabel: t("settings.servers.switch"),
+                    tone: "neutral",
+                  }))) return;
                   // Main's error strings are an open set ("dev", "busy", …):
                   // one generic sentence for all of them.
                   const result = await bridge.switch(entry.id);
@@ -166,7 +171,11 @@ export function ConnectedWorkspacesSettings() {
             {entry.id !== "local" && sharingOffered && <button type="button" disabled={busy} aria-label={t("settings.servers.accessFor", { name: entry.name })} onClick={() => setComputerId(entry.id)} className={PILL}>{t("settings.servers.access")}</button>}
             {entry.id !== "local" && <button type="button" disabled={busy} aria-label={t("settings.servers.forget", { name: entry.name })}
               onClick={() => void perform(async () => {
-                if (!await confirmAction(t("settings.servers.forgetConfirm", { name: entry.name }))) return;
+                if (!(await confirm({
+                  title: t("settings.servers.forgetConfirm", { name: entry.name }),
+                  confirmLabel: t("settings.servers.forgetShort"),
+                  tone: "danger",
+                }))) return;
                 return bridge.forget(entry.id);
               })} className={`${DANGER_PILL} min-h-[44px] md:min-h-0`}>{t("settings.servers.forgetShort")}</button>}
           </DescribedRow>

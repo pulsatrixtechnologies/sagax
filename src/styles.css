@@ -337,7 +337,7 @@
      check-skin-contrast); the star on it is decoration. */
   --color-primary-badge: #f48a29;
   --color-primary-badge-ink: #f3f3f3;
-  /* Top-of-window light wash (see Pulsatrix, below). "none" everywhere else. */
+  /* Top-of-window light wash. "none" on every base skin; a tint may still set one. */
   --app-glow: none;
 
   --font-sans: "Geist Variable", -apple-system, BlinkMacSystemFont, "SF Pro Text",
@@ -514,71 +514,65 @@
 }
 
 /* ── Pulsatrix ─────────────────────────────────────────────────────────────
-   Pulsatrix v3's own dark palette (console/src/index.css), carried over
-   verbatim: deep navy ground, blue-violet accent, and a soft ice-glow
-   radiating from the top of the window. The default skin for new installs
-   and for anyone who never picked one (see DEFAULT_SKIN in src/lib/skins.ts);
-   an explicit choice of Midnight or another skin is never overridden.
+   Neutral dark, on Sand Dark's ramp, with the Pulsatrix blue accent kept.
+   The ground matches Midnight: window #121212, rail #0e0e0e, pane #161616,
+   raised #1f1f1f, control #282828. Ink is near white (#f5f5f5), not the
+   old ice blue. The accent stays #3c76f4; its border, text, focus and
+   unread follow it. Filled accent, danger and success marks use #121212
+   so the fill clears 4.5:1. The top wash is none: a glow would tint the
+   window blue again. The default skin for new installs and for anyone who
+   never picked one (see DEFAULT_SKIN in src/lib/skins.ts); an explicit
+   choice of Midnight or another skin is never overridden.
 
-   --app-glow is this skin's one structural addition: v3's radial wash, at
-   its exact 16%/9% mix, applied via `.app-glow` on the chat/group `<main>`
-   rather than painted here — this token is just the single source of truth
-   for the expression. Every other skin declares it as "none".
-
-   Two fills would fall short of this file's 4.5:1 gate carrying white the
-   way v3 does (accent 4.13:1, danger 3.37:1), so both take the app's own
-   deep navy as ink instead — the same inversion Foundry uses for its brass:
-   a bright fill reads better with a dark mark than a light one forced onto
-   it. --color-ink-secondary is checked against every surface it can land on,
-   including raised-hover, the tightest of the lot at 5.62:1.
+   --color-ink-secondary and --color-ink-tertiary are Midnight's translucent
+   whites. The selected rail row keeps a blue wash so the accent still
+   marks it. Measured by pnpm check:contrast.
    ───────────────────────────────────────────────────────────────────────── */
 [data-skin="pulsatrix"] {
   --skin-swatch: #3c76f4;   /* the variant swatch in Settings > Appearance > Skin (decorative) */
   --code-color-scheme: dark;
-  --color-app: #030b17;
-  --color-panel: #060f20;
-  --color-raised: #16233c;
-  --color-raised-hover: #1d2d4c;
-  --color-composer: #16233c;    /* = raised: unchanged */
+  --color-app: #121212;
+  --color-panel: #161616;
+  --color-raised: #1f1f1f;
+  --color-raised-hover: #2c2c2c;
+  --color-composer: #1f1f1f;    /* = raised */
   --color-composer-ring: transparent;
-  --color-card: #0d192c;
-  --color-menu: #0d1729;
-  --color-popover-border: #5b667d;   /* field and popover outline: 3:1 on both */
-  --color-inset: #081225;   /* #081427 measured 1.03:1 on the menu: a search field in a popover did not read as a field */
-  --color-control: #16233c;       /* = raised: unchanged */
-  --color-hairline: #223353;
-  --color-sidebar: #060f20;              /* = panel: unchanged */
-  --color-sidebar-ink: #eef2fb;           /* = ink: unchanged */
-  --color-sidebar-ink-secondary: #9aa6c2; /* = ink-secondary: unchanged */
-  --color-sidebar-hover: #eef2fb0d;       /* v3 dark chrome's --sidebar-accent, rgb(238 242 251 / 5%) */
-  --color-sidebar-selected: #4f86f729;    /* v3 dark chrome's --sidebar-accent-active, rgb(79 134 247 / 16%) */
-  --color-sidebar-hairline: #223353;      /* = hairline: unchanged (v3's --border) */
+  --color-card: #1f1f1f;
+  --color-menu: #1f1f1f;
+  --color-popover-border: #707070;   /* field and popover outline: 3:1 on both */
+  --color-inset: #1b1b1b;
+  --color-control: #282828;
+  --color-hairline: #353535;
+  --color-sidebar: #0e0e0e;
+  --color-sidebar-ink: #f5f5f5;             /* = ink */
+  --color-sidebar-ink-secondary: #f5f5f5a8; /* = ink-secondary */
+  --color-sidebar-hover: #f5f5f50f;         /* 6% white */
+  --color-sidebar-selected: #4f86f729;      /* accent wash on the selected row */
+  --color-sidebar-hairline: #333333;
   --sidebar-mark-on-dark: inline-block;
   --sidebar-mark-on-light: none;
 
-  --color-ink: #eef2fb;
-  --color-ink-secondary: #9aa6c2;   /* 5.62:1 on raised-hover, the tightest surface */
-  --color-ink-tertiary: #8d99b5;   /* quiet text; clears 4.5:1 on raised-hover */
+  --color-ink: #f5f5f5;
+  --color-ink-secondary: #f5f5f5a8;   /* 66%, as Midnight */
+  --color-ink-tertiary: #f5f5f58a;    /* 54%, as Midnight */
 
   --color-accent: #3c76f4;
   --color-unread: var(--color-accent);
   --color-accent-border: #4f86f7;
   --color-accent-text: #c8e4ff;
   --color-focus: #4f86f7;
-  --color-accent-ink: #030b17;      /* white measures 4.13:1 here; see above */
-  --color-bubble-user: #1e3358;     /* blue-tinted, one step off the card */
-  --color-bubble-user-ink: #eef2fb;   /* = ink: unchanged */
+  --color-accent-ink: #121212;
+  --color-bubble-user: #3b3b3b;       /* neutral grey, not a blue plate */
+  --color-bubble-user-ink: #f5f5f5;   /* = ink */
 
   --color-success: #38d591;
-  --color-danger: #f25a64;
-  --color-danger-ink: #030b17;      /* white measures 3.37:1 here; see above */
-  --color-success-ink: #072114;
+  --color-danger: #fb6364;   /* #f25a64 was 4.16:1 on its 15% tint over the neutral card */
+  --color-danger-ink: #121212;
+  --color-success-ink: #121212;
   --color-warning: #ff9800;
-  --color-scrollbar: #2a3f66;
-  --color-maus-line: #9aa6c2;
-  --app-glow:
-    radial-gradient(ellipse 110% 62% at 50% 0%, color-mix(in oklch, var(--color-accent) 16%, transparent), transparent 70%),
-    radial-gradient(ellipse 72% 44% at 80% 0%, color-mix(in oklch, var(--color-accent) 9%, transparent), transparent 68%);
+  --color-scrollbar: #444444;
+  --color-maus-line: #f5f5f5;
+  --app-glow: none;
 
   /* Geist, as in the Perspicax v3 console (imported at the top of this file). */
   --font-sans: "Geist Variable", -apple-system, BlinkMacSystemFont, "SF Pro Text",
@@ -1396,8 +1390,8 @@
   text-align: start;
 }
 
-/* Soft top-of-window light (Pulsatrix only — every other skin sets
-   --app-glow to "none", so this rule is inert there). Painted on the chat
+/* Soft top-of-window light. Base skins set --app-glow to none (Pulsatrix
+   included); a tint may still set a wash. Painted on the chat
    and group shell (`<main>`, which holds bg-app), not on the scrolling
    transcript inside it, so the wash sits once behind the header and the
    thread instead of repeating or drifting with scroll position. `local`
@@ -2079,6 +2073,11 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   from { transform: translateX(28px); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
+/* A page's detail panel (DetailPanel.tsx) slides in, never under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .detail-panel { animation: none; }
+}
+:root[data-reduced-motion="true"] .detail-panel { animation: none; }
 @keyframes workspace-in {
   from { opacity: 0.92; }
   to { opacity: 1; }
@@ -3731,7 +3730,8 @@ select optgroup {
 [data-settings-filtering] [data-settings-search-miss] { display: none; }
 [data-settings-search-hit] { background: var(--color-selected); }
 
-/* Computer screen calm asleep / waking (2026-11-01, Grok Bot style). */
+/* Computer screen calm asleep / waking (2026-11-01, Grok Bot style):
+   generic muted bot glyph, monochrome zzz. */
 .computer-sleep-zzz {
   position: absolute;
   left: calc(100% - 4px);
@@ -3744,6 +3744,7 @@ select optgroup {
   line-height: 1;
   font-weight: 700;
   color: var(--color-ink);
+  opacity: 0.45;
   text-shadow:
     -1px -1px 0 var(--color-card),
     1px -1px 0 var(--color-card),
@@ -3772,6 +3773,18 @@ select optgroup {
   .computer-sleep-zzz span:nth-child(1) { transform: translate(0, 0); }
   .computer-sleep-zzz span:nth-child(2) { transform: translate(4px, -4px); }
   .computer-sleep-zzz span:nth-child(3) { transform: translate(8px, -8px); }
+}
+
+.computer-idle-bot-waking {
+  animation: computer-idle-bot-waking 1.8s ease-in-out infinite;
+}
+@keyframes computer-idle-bot-waking {
+  0%, 100% { opacity: 0.32; }
+  50% { opacity: 0.48; }
+}
+:root[data-reduced-motion] .computer-idle-bot-waking { animation: none; opacity: 0.4; }
+@media (prefers-reduced-motion: reduce) {
+  .computer-idle-bot-waking { animation: none; opacity: 0.4; }
 }
 
 .computer-waking-text[data-waking-shimmer] {

@@ -25,7 +25,7 @@ import {
   type ProactiveWakeBatch,
 } from "./proactive-wake.ts";
 
-function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number } = {}) {
+function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number; engineExpired?: (botId: string) => boolean } = {}) {
   let now = 1_000_000;
   const timers: Array<{ at: number; fn: () => void; live: boolean }> = [];
   const woken: ProactiveWakeBatch[] = [];
@@ -34,6 +34,7 @@ function harness(modes: Record<string, ProactiveMode | undefined | string>, opts
     bot: (botId) => (botId in modes ? { proactiveMode: modes[botId] } : undefined),
     wake: (batch) => woken.push(batch),
     log: (botId, line) => lines.push({ botId, line }),
+    ...(opts.engineExpired ? { engineExpired: opts.engineExpired } : {}),
     now: () => now,
     setTimer: (fn, ms) => {
       const timer = { at: now + ms, fn, live: true };
@@ -121,6 +122,14 @@ describe("off vs proactive", () => {
 });
 
 describe("no loop", () => {
+  it("skips new wakes while the bot's login engine is marked expired", () => {
+    const h = harness({ nova: "proactive" }, { engineExpired: (botId) => botId === "nova" });
+    expect(h.waker.offer(mail("nova"))).toBe("auth");
+    h.advance(60_000);
+    expect(h.modelCalls()).toBe(0);
+    expect(h.lines).toEqual([]);
+  });
+
   it("a bot never wakes on its own proactive work", () => {
     const h = harness({ nova: "proactive" });
     expect(h.waker.offer({ botId: "nova", source: "run", key: "run-1", label: "Routine failed: x", detail: "failed", failed: true, ownWake: true })).toBe("own");
@@ -283,13 +292,18 @@ describe("which failed runs wake the bot (2026-11-01)", () => {
     expect(runFailureWakesBot({ status: "failed", error: "x", proactive: { hops: 0 } })).toBe(false);
   });
 
-  it("never wakes for a Claude auth-expired or extra-usage credits failure (known reconnect condition)", async () => {
+  it("never wakes for a known engine auth-expired or Claude credits reconnect condition", async () => {
     const { CLAUDE_NEEDS_RECONNECTING, claudeSignInExpired } = await import("./drivers/claude-errors.ts");
+    const { codexSignInExpired } = await import("./drivers/codex-errors.ts");
+    const { engineNeedsReconnecting } = await import("./engine-reconnect-ahead.ts");
     const expired = claudeSignInExpired("OAuth session expired and could not be refreshed");
     const credits = "Claude refused this turn because this model runs on extra usage for your account, and those credits are used up.";
     expect(runFailureWakesBot({ status: "failed", error: expired })).toBe(false);
     expect(runFailureWakesBot({ status: "failed", error: credits })).toBe(false);
+    expect(runFailureWakesBot({ status: "failed", error: codexSignInExpired("ChatGPT login is required") })).toBe(false);
+    expect(runFailureWakesBot({ status: "failed", error: "This bot's engine is signed out. Sign in again in Settings → Model providers." })).toBe(false);
     expect(runFailureWakesBot({ status: "waiting", attention: CLAUDE_NEEDS_RECONNECTING } as { status: string })).toBe(false);
+    expect(runFailureWakesBot({ status: "waiting", attention: engineNeedsReconnecting("Codex") } as { status: string })).toBe(false);
     expect(runFailureWakesBot({ status: "failed", error: "401 Unauthorized from the CRM" })).toBe(true);
   });
 });

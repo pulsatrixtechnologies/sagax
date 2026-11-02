@@ -1,7 +1,6 @@
-// The iPhone's bot panel: the desktop's (`BotSettingsDialog.tsx`, tabs
-// `bot-settings/panel-tabs.ts`) and the iPad's (Desktop/BotPanel*.swift)
-// usage paths, drawn in the phone's own look (big mascot, cards, pill
-// tabs), full screen over the chat.
+// The iPhone's bot panel: the desktop's (`BotSettingsDialog.tsx`) and the
+// iPad's (Desktop/BotPanel*.swift) usage paths, drawn in the phone's own
+// look (big mascot, cards), full screen over the chat.
 //
 //   header   the mascot (a tap opens the avatar editor, a long press the
 //            owl's moves and style), the name (edited where it shows) and
@@ -10,21 +9,20 @@
 //            computer), and the bot's one "..." menu (`BotActionsMenu.tsx`,
 //            #518): Edit bot, Rename, Primary Bot; Export the conversation
 //            (copy, download) and the bot (.zip); Archive
-//   overview one grouped list (the reference design): Coding (n working,
-//            the Coding and Activity card), Routines (n on), Library
-//            (Files: the conversation's files by kind and the bot's links;
-//            Skills; Plugins) and Computer (its state), each its own page:
-//            the desktop's three tabs, Details split in two. Then the
-//            Notifications switch with its caption.
+//   overview one card of rows (Lot 4, Grok Bot profile): Routines (n on),
+//            Library, Computer (its state), Coding (n working, Sagax).
+//            Each row pushes its page; Back returns here. Then the
+//            Notifications switch with its caption. Routine switches live
+//            on the Routines page (Lot 5), not on this profile.
 //   Edit bot under "..." and as the "Edit" pill: the Grok Bot layout
 //            (`BotEditTree`, BotEditPhone.swift): the bot's header, the main
 //            sections in the wizard's order with its recap line, Advanced,
 //            then Archive and Delete in red; the detail one page in.
 //
-// Which tabs and sections a pairing shows is `DesktopPanelTab` /
-// `DesktopPanelSection` / `DesktopPersonaEditor` (CompanionCore, from
-// SurfaceGate), the same rules as the iPad's. Every door into it is a
-// `BotPanelDoor`.
+// Which sections a pairing shows is `DesktopPanelSection` /
+// `DesktopPersonaEditor` (CompanionCore, from SurfaceGate), the same rules
+// as the iPad's. Every door into it is a `BotPanelDoor` (a Library or
+// Computer door opens that page on the stack).
 //
 // Each sub-tree is type-erased (`AnyView`): a deep SwiftUI type overflowed
 // the iPad's main-thread stack once (I1, build 6).
@@ -73,13 +71,8 @@ private struct PhoneBotPanelContent: View {
     @StateObject private var owlHandle = OwlMascotHandle()
     @State private var draft: CharacterDraft
     @State private var libraryStart: BotLibraryChip = .files(.all)
-    /// Grok Bot's three tabs under the name (2026-11-01).
-    @State private var tab: DesktopPanelTab
-    /// Set when the person wakes the computer from its tab.
-    @State private var wakeRequestedAt: Date?
-    @State private var panelContentWidth: CGFloat = 402
 
-    // Details
+    // Overview
     @StateObject private var activity: BotActivityModel
     @State private var activityRoute: BotActivityRoute?
     @State private var routines: [Routine] = []
@@ -108,9 +101,14 @@ private struct PhoneBotPanelContent: View {
             // pairing hides has no page to land on anyway)
             for page in BotEditTree.path(to: startSection) ?? [] { start.append(page) }
             start.append(startSection)
+        } else {
+            // a Library or Computer door opens that page on the stack (Lot 4)
+            switch startTab {
+            case .library: start.append(PanelOverviewPage.library)
+            case .computer: start.append(PanelComputerRoute())
+            case .details: break
+            }
         }
-        // a door that names Library or Computer opens on that tab
-        _tab = State(initialValue: startSection == nil ? startTab : .details)
         _path = State(initialValue: start)
         _draft = State(initialValue: CharacterDraft(bot: bot))
         _activity = StateObject(wrappedValue: BotActivityModel(botId: bot.id))
@@ -118,7 +116,6 @@ private struct PhoneBotPanelContent: View {
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
     private var gate: SurfaceGate { session.surfaceGate }
-    private var tabs: [DesktopPanelTab] { DesktopPanelTab.visible(gate: gate, slack: slackURL != nil) }
     private var sections: [DesktopPanelSection] { DesktopPanelSection.visible(gate: gate, slack: slackURL != nil, bot: current) }
     private var botRoutines: [Routine] { DesktopRoutineList.of(botId: bot.id, in: routines) }
 
@@ -237,15 +234,7 @@ private struct PhoneBotPanelContent: View {
             ScrollView {
                 VStack(spacing: 0) {
                     AnyView(identity)
-                    PanelTabBar(tabs: tabs, selected: $tab)
-                        .padding(.top, 14)
-                    switch tab {
-                    case .details: AnyView(detailsTab)
-                    case .library:
-                        AnyView(PhoneBotLibrary(bot: current, start: libraryStart, onShowInChat: { file in showInChat(file) }, onShowLink: { link in showInChat(link) }))
-                            .padding(.top, 16)
-                    case .computer: AnyView(computerTab)
-                    }
+                    AnyView(overviewBody)
                     Color.clear.frame(height: 1).id("panel-end")
                 }
                 .padding(.top, 64)
@@ -311,9 +300,10 @@ private struct PhoneBotPanelContent: View {
         .padding(.top, 6)
     }
 
-    /// The bot's one "..." menu (`BotActionsMenuPlan`, the desktop's
-    /// `BotActionsMenu`): a divider between its groups, the export under
-    /// its heading.
+    /// The bot's one "..." menu (`BotActionsMenuPlan`, lot 6): Make primary,
+    /// Copy ID, Share as Template, Redo the wizard, Share (org), Export,
+    /// Archive, Delete. Edit bot and Rename stay off (the Edit button and
+    /// the Name field cover them).
     private var menuItems: [GlassMenuItem] {
         let plan = BotActionsMenuPlan(
             gate: gate, bot: current, viewerId: viewerId, editable: !sections.isEmpty,
@@ -322,34 +312,56 @@ private struct PhoneBotPanelContent: View {
             wizard: true
         )
         var out: [GlassMenuItem] = []
-        for (groupIndex, group) in plan.groups.enumerated() {
-            for (index, item) in group.enumerated() {
-                let divider = groupIndex > 0 && index == 0
-                let heading: Text? = item == .copyConversation ? Text("Export conversation") : nil
-                out.append(menuItem(item, plan: plan, divider: divider, heading: heading))
-            }
+        func add(_ item: BotActionsMenuItem, divider: Bool = false, heading: Text? = nil) {
+            guard plan.items.contains(item) else { return }
+            out.append(menuItem(item, plan: plan, divider: divider, heading: heading))
         }
-        // Copy ID (the reference design's profile menu), after the identity group
-        let copyId = GlassMenuItem(id: "copy-id", title: Text("Copy ID"), systemImage: "doc.on.clipboard") {
+        // Identity group: primary, Copy ID, Share as Template, Redo, Share
+        add(.makePrimary)
+        add(.replacePrimary)
+        out.append(GlassMenuItem(id: "copy-id", title: Text("Copy ID"), systemImage: "doc.on.clipboard") {
             UIPasteboard.general.string = current.id
             Haptics.selection()
             show(String(localized: "Copied"))
-        }
-        out.insert(copyId, at: out.firstIndex(where: \.dividerBefore) ?? out.endIndex)
-        let shareTemplate = GlassMenuItem(id: "share-template", title: Text("Share as Template"), systemImage: "link") {
+        })
+        out.append(GlassMenuItem(id: "share-template", title: Text("Share as Template"), systemImage: "link") {
             sharingTemplate = true
+        })
+        add(.redoWizard)
+        add(.share)
+        // Export
+        var firstExport = true
+        for item: BotActionsMenuItem in [.copyConversation, .downloadConversation, .exportZip] {
+            guard plan.items.contains(item) else { continue }
+            add(item, divider: firstExport, heading: firstExport ? Text("Export conversation") : nil)
+            firstExport = false
         }
-        out.insert(shareTemplate, at: out.firstIndex(where: \.dividerBefore) ?? out.endIndex)
+        // Archive, Delete, Inspector
+        var firstLast = true
+        for item: BotActionsMenuItem in [.archive, .delete, .inspector] {
+            guard plan.items.contains(item) else { continue }
+            add(item, divider: firstLast)
+            firstLast = false
+        }
         return out
     }
 
     private func menuItem(_ item: BotActionsMenuItem, plan: BotActionsMenuPlan, divider: Bool, heading: Text?) -> GlassMenuItem {
         switch item {
         case .editBot:
+            // Kept for exhaustiveness; Lot 6 removed it from the plan.
             return GlassMenuItem(id: "edit-bot", title: Text("Edit bot"), systemImage: "person.crop.circle.badge.pencil", dividerBefore: divider, heading: heading) { openPersona() }
         case .redoWizard:
             return GlassMenuItem(id: "redo-wizard", title: Text("Redo the wizard"), systemImage: "wand.and.stars", dividerBefore: divider, heading: heading) {
-                BotWizardPresenter.shared.open(botId: current.id)
+                // The panel is a fullScreenCover; the wizard is too. Close
+                // the panel first so the wizard can present (lot 6).
+                let botId = current.id
+                menuOpen = false
+                dismiss()
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    BotWizardPresenter.shared.open(botId: botId, redo: true)
+                }
             }
         case .rename:
             return GlassMenuItem(id: "rename", title: Text("Rename the bot"), systemImage: "pencil", dividerBefore: divider, heading: heading) {
@@ -378,6 +390,10 @@ private struct PhoneBotPanelContent: View {
         case .archive:
             return GlassMenuItem(id: "archive", title: Text("Archive…"), systemImage: "archivebox", disabled: !plan.enables(.archive), dividerBefore: divider, heading: heading) {
                 confirmingArchive = true
+            }
+        case .delete:
+            return GlassMenuItem(id: "delete-bot", title: Text("Delete bot…"), systemImage: "trash", destructive: true, dividerBefore: divider, heading: heading) {
+                confirmingDelete = true
             }
         case .inspector:
             return GlassMenuItem(id: "inspector", title: Text("Inspector"), systemImage: "ladybug", dividerBefore: divider, heading: heading) {}
@@ -429,12 +445,12 @@ private struct PhoneBotPanelContent: View {
         }
     }
 
-    // MARK: Tabs
+    // MARK: Overview
 
-    /// Details, as Grok Bot's: the notices and suggestions, the to-do list,
-    /// Coding, the routines with their switches, the email address and
-    /// notifications.
-    private var detailsTab: some View {
+    /// Notices, suggestions, tasks, the row card (Routines / Library /
+    /// Computer / Coding), email and Notifications. No routine switches
+    /// here (Lot 4): those live on the Routines page.
+    private var overviewBody: some View {
         VStack(spacing: 0) {
             BotPanelNoticesView(bot: current)
                 .padding(.top, 16)
@@ -448,8 +464,6 @@ private struct PhoneBotPanelContent: View {
                 AnyView(overviewCard)
                     .padding(.top, 8)
             }
-            AnyView(routinesSection)
-                .padding(.top, Theme.Profile.cardGap + 8)
             if let mailRow {
                 AnyView(emailCard(mailRow))
                     .padding(.top, Theme.Profile.cardGap + 12)
@@ -458,142 +472,6 @@ private struct PhoneBotPanelContent: View {
                 .padding(.top, Theme.Profile.cardGap + 12)
         }
     }
-
-    /// "Routines" over the bot's routines, each with its switch as in Grok
-    /// Bot; "All" opens the full page (folders, sort, run logs).
-    private var routinesSection: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Routines")
-                    .font(Theme.Profile.labelFont)
-                    .foregroundStyle(Theme.textTertiary)
-                Spacer()
-                Button {
-                    Haptics.selection()
-                    path.append(PanelOverviewPage.routines)
-                } label: {
-                    Text(routinesLoaded ? String(localized: "\(routinesOn) on") : String(localized: "All"))
-                        .font(Theme.Profile.labelFont)
-                        .foregroundStyle(Theme.accentText)
-                        .padding(.vertical, 6)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("All routines"))
-                .accessibilityIdentifier("panel-overview.routines")
-            }
-            .padding(.horizontal, Theme.Profile.cardMargin + Theme.Profile.textInset)
-            .padding(.bottom, 2)
-            ProfileCard {
-                if !routinesLoaded {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text("Loading routines…")
-                    }
-                    .font(Theme.Profile.labelFont)
-                    .foregroundStyle(Theme.textSecondary)
-                    .frame(maxWidth: .infinity, minHeight: Theme.Profile.row)
-                }
-                ForEach(botRoutines.prefix(PanelRoutinePreview.limit)) { routine in
-                    routineSwitchRow(routine)
-                    ProfileDivider(leading: Theme.Profile.textInset)
-                }
-                if botRoutines.count > PanelRoutinePreview.limit {
-                    Button {
-                        Haptics.selection()
-                        path.append(PanelOverviewPage.routines)
-                    } label: {
-                        ProfileRow(title: Text("Show all \(botRoutines.count)"), titleColor: Theme.accentText, height: Theme.Profile.row)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("panel-routines-all")
-                    ProfileDivider(leading: Theme.Profile.textInset)
-                }
-                Button {
-                    Haptics.selection()
-                    addingRoutine = true
-                } label: {
-                    ProfileRow(icon: ProfileRowIcon(systemImage: "plus", size: 18, color: Theme.blue),
-                               title: Text("Add routine"), titleColor: Theme.accentText, height: Theme.Profile.row)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("panel-add-routine")
-            }
-        }
-    }
-
-    /// A routine with its switch (Grok Bot's Details): the row opens the
-    /// routine, the switch turns it on or off where the person may.
-    private func routineSwitchRow(_ routine: Routine) -> some View {
-        HStack(spacing: 8) {
-            Button {
-                Haptics.selection()
-                path.append(PanelRoutineRoute(id: routine.id, instruction: false))
-            } label: {
-                ProfileRow(
-                    title: Text(verbatim: routine.name),
-                    subtitle: routine.enabled
-                        ? Text(verbatim: RoutineWording.subtitle(routine))
-                        : Text("Paused"),
-                    height: Theme.Profile.routineRow
-                )
-            }
-            .buttonStyle(.plain)
-            Toggle("", isOn: Binding(get: { routine.enabled }, set: { on in
-                Task { _ = await session.setRoutineEnabled(routine, enabled: on); await loadRoutines() }
-            }))
-            .labelsHidden()
-            .tint(MausPalette.color(current.color))
-            .disabled(!(routine.mayEdit && routine.canToggle()))
-            .padding(.trailing, Theme.Profile.textInset)
-            .accessibilityLabel(Text(verbatim: routine.name))
-            .accessibilityIdentifier("panel-routine-switch.\(routine.name)")
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("profile-routine.\(routine.name)")
-    }
-
-    /// Computer, as Grok Bot shows it: asleep (the mascot dozing, "z Z"),
-    /// waking up, or the live screen alone once it runs.
-    private var computerTab: some View {
-        let phase = BotComputerPhase.of(computer: current.computer, busy: current.busy == true,
-                                        wakeRequestedAt: wakeRequestedAt, now: Date())
-        return VStack(spacing: 0) {
-            switch phase {
-            case .running:
-                // the live screen alone, with its own caption (Grok Bot)
-                ComputerView(bot: current, embeddedWidth: panelContentWidth - 2 * Theme.Profile.cardMargin) {
-                    path.append(PanelComputerRoute())
-                }
-                .padding(.horizontal, Theme.Profile.cardMargin)
-                .accessibilityIdentifier("panel-computer-live")
-            case .asleep, .waking, .off:
-                BotComputerSleepCard(bot: current, phase: phase) {
-                    wakeRequestedAt = Date()
-                    Task {
-                        try? await Task.sleep(nanoseconds: UInt64(BotComputerPhase.wakeWindow * 1_000_000_000))
-                        // awake: the live screen takes the tab
-                        if wakeRequestedAt != nil { wakeRequestedAt = .distantPast }
-                    }
-                } open: {
-                    path.append(PanelComputerRoute())
-                }
-            }
-            if phase != .running {
-                Text("\(current.name)'s screen")
-                    .font(Theme.Profile.labelFont)
-                    .foregroundStyle(Theme.textTertiary)
-                    .padding(.top, 10)
-            }
-        }
-        .padding(.top, 16)
-        .background(GeometryReader { box in
-            Color.clear.onAppear { panelContentWidth = box.size.width }
-                .onValueChange(of: box.size.width) { panelContentWidth = $0 }
-        })
-    }
-
-    // MARK: Overview
 
     private var codingWorking: Int { (activity.coding ?? []).filter { $0.status.isActive }.count }
     private var routinesOn: Int { botRoutines.filter(\.enabled).count }
@@ -604,9 +482,8 @@ private struct PhoneBotPanelContent: View {
         return current.busy == true ? String(localized: "Working") : String(localized: "Idle")
     }
 
-    /// Coding, Routines, Library and Computer as one grouped list, each a
-    /// page of its own (the reference design's bot detail). The Library and
-    /// Computer rows keep the identifiers the tabs had.
+    /// Routines, Library, Computer and Coding as one grouped list, each a
+    /// page of its own (Lot 4). Identifiers stay `panel-overview.*`.
     private var overviewCard: some View {
         ProfileCard {
             ForEach(Array(overviewRows.enumerated()), id: \.element.id) { index, row in
@@ -640,13 +517,38 @@ private struct PhoneBotPanelContent: View {
     }
 
     private var overviewRows: [OverviewRow] {
-        var rows: [OverviewRow] = []
+        var rows: [OverviewRow] = [
+            OverviewRow(
+                id: "panel-overview.routines",
+                symbol: "clock",
+                title: Text("Routines"),
+                value: routinesLoaded ? String(localized: "\(routinesOn) on") : nil,
+                page: .page(.routines)
+            ),
+            OverviewRow(
+                id: "panel-overview.library",
+                symbol: "folder",
+                title: Text("Library"),
+                value: nil,
+                page: .page(.library)
+            ),
+            OverviewRow(
+                id: "panel-overview.computer",
+                symbol: "desktopcomputer",
+                title: Text("Computer"),
+                value: computerStatus,
+                page: .computer
+            ),
+        ]
         if gate.allows(.botActivity) {
-            rows.append(OverviewRow(id: "panel-overview.coding", symbol: "chevron.left.forwardslash.chevron.right", title: Text("Coding"),
-                                    value: String(localized: "\(codingWorking) working"), page: .page(.coding)))
+            rows.append(OverviewRow(
+                id: "panel-overview.coding",
+                symbol: "chevron.left.forwardslash.chevron.right",
+                title: Text("Coding"),
+                value: String(localized: "\(codingWorking) working"),
+                page: .page(.coding)
+            ))
         }
-        // Routines, Library and Computer are Details' section and the
-        // panel's tabs now (Grok Bot, 2026-11-01)
         return rows
     }
 
@@ -750,6 +652,18 @@ private struct PhoneBotPanelContent: View {
                     onOpen: { activityRoute = .detail($0) },
                     onHistory: { activityRoute = .history($0) }
                 )
+                // Empty Coding page when nothing runs (Lot 4).
+                if activity.list != nil, !activity.showsAnySection {
+                    ProfileCard {
+                        Text("No coding work in progress")
+                            .font(Theme.Profile.labelFont)
+                            .foregroundStyle(Theme.textTertiary)
+                            .frame(maxWidth: .infinity, minHeight: Theme.Profile.row, alignment: .leading)
+                            .padding(.horizontal, Theme.Profile.textInset)
+                    }
+                    .accessibilityIdentifier("panel-coding-empty")
+                    .padding(.top, Theme.Profile.cardGap)
+                }
             }
         }
     }
@@ -832,25 +746,45 @@ private struct PhoneBotPanelContent: View {
 
     private var folderOrder: [String] { RoutineFolders.ordered(routineFolders, routines: botRoutines) }
 
-    /// One routine of the card: opens its detail; the menu files it in a
-    /// folder, deletes it (the schedule is never shown as cron, 2026-10-29).
+    /// One routine of the card (Lot 5): opens its detail; Active toggle on
+    /// the row; swipe left deletes (with confirmation). The schedule is
+    /// never shown as cron (2026-10-29).
     @ViewBuilder
     private func routineCardRow(_ routine: Routine) -> some View {
-        Button {
-            Haptics.selection()
-            path.append(PanelRoutineRoute(id: routine.id, instruction: false))
-        } label: {
-            ProfileRow(
-                icon: ProfileRowIcon(systemImage: "clock", size: 17,
-                                     color: routine.enabled ? Theme.routineActive : Theme.routinePaused),
-                title: Text(verbatim: routine.name),
-                // #1202: "Runs on change" first, as the list's badge (a long schedule cuts its end)
-                subtitle: (routine.runsOnChange ? Text("Runs on change") + Text(verbatim: " · ") : Text(verbatim: ""))
-                    + Text(verbatim: RoutineWording.subtitle(routine)),
-                height: Theme.Profile.routineRow
-            ) { ProfileChevronTrailing() }
+        let canToggle = routine.mayEdit && routine.canToggle()
+        HStack(spacing: 0) {
+            Button {
+                Haptics.selection()
+                path.append(PanelRoutineRoute(id: routine.id, instruction: false))
+            } label: {
+                ProfileRow(
+                    icon: ProfileRowIcon(systemImage: "clock", size: 17,
+                                         color: routine.enabled ? Theme.routineActive : Theme.routinePaused),
+                    title: Text(verbatim: routine.name),
+                    // #1202: "Runs on change" first, as the list's badge (a long schedule cuts its end)
+                    subtitle: (routine.runsOnChange ? Text("Runs on change") + Text(verbatim: " · ") : Text(verbatim: ""))
+                        + Text(verbatim: RoutineWording.subtitle(routine)),
+                    height: Theme.Profile.routineRow
+                ) { EmptyView() }
+            }
+            .buttonStyle(.plain)
+            Toggle("", isOn: Binding(
+                get: { routine.enabled },
+                set: { value in
+                    Task { _ = await session.setRoutineEnabled(routine, enabled: value); await loadRoutines() }
+                }
+            ))
+            .labelsHidden()
+            .toggleStyle(ParityToggleStyle(width: Theme.Profile.toggle.width, height: Theme.Profile.toggle.height))
+            .padding(.trailing, Theme.Profile.textInset)
+            .disabled(!canToggle)
+            .accessibilityLabel(Text("Active: \(routine.name)"))
+            .accessibilityIdentifier("profile-routine-active.\(routine.name)")
         }
-        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .routineDeleteSwipe(enabled: gate.allows(.routineDelete), label: routine.name) {
+            deletingRoutine = routine
+        }
         .contextMenu {
             // 2026-10-29: the desktop's row menu, then the folder choice.
             let live = routineRuns.first { $0.routineId == routine.id && ($0.status == "running" || $0.status == "waiting" || $0.status == "queued") }
@@ -858,7 +792,7 @@ private struct PhoneBotPanelContent: View {
                 routine: routine,
                 runNow: routine.mayRun ? { Task { _ = await session.runRoutine(routine); await loadRoutines() } } : nil,
                 stop: live != nil && routine.mayEdit ? { if let live { Task { _ = await session.cancelRoutineRun(live); await loadRoutines() } } } : nil,
-                toggle: routine.mayEdit && routine.canToggle() ? { Task { _ = await session.setRoutineEnabled(routine, enabled: !routine.enabled); await loadRoutines() } } : nil,
+                toggle: canToggle ? { Task { _ = await session.setRoutineEnabled(routine, enabled: !routine.enabled); await loadRoutines() } } : nil,
                 rename: routine.mayEdit ? { renamingRoutine = routine } : nil,
                 open: { path.append(PanelRoutineRoute(id: routine.id, instruction: false)) },
                 duplicate: routine.mayEdit ? { duplicatingRoutine = routine } : nil,
@@ -899,10 +833,12 @@ private struct PhoneBotPanelContent: View {
     }
 
     /// Edit bot open on a section's page, through the tree's pages (Back
-    /// walks back the way a tap would have come).
+    /// walks back the way a tap would have come). Voice options live in the
+    /// Edit root disclosure (lot 3), so `.voice` only opens Edit.
     private func openEditor(at section: DesktopPanelSection) {
         path.append(PanelPersonaRoute())
         for page in BotEditTree.path(to: section, editContext) ?? [] { path.append(page) }
+        if section == .voice { return }
         path.append(section)
     }
 

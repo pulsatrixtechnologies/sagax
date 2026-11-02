@@ -199,8 +199,22 @@ export function NewBotDialog(props: Parameters<typeof LocalNewBotDialog>[0] = {}
   return <LocalNewBotDialog {...props} />;
 }
 
-export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCreated, preserveSelection = false }: {
+/** The creation form without dialog chrome (lot 4): used as a step of the
+ * bot creation view. Same fields as the old New bot window. */
+export function NewBotForm(props: {
+  onClose?: () => void;
+  onCreated?: (bot: Bot) => void | Promise<void>;
+  section?: string;
+  preserveSelection?: boolean;
+  presentation?: "dialog" | "view";
+}) {
+  return <LocalNewBotDialog {...props} presentation={props.presentation ?? "view"} />;
+}
+
+export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCreated, preserveSelection = false, presentation = "dialog" }: {
   defaultsMode?: boolean; onClose?: () => void; section?: string; onCreated?: (bot: Bot) => void | Promise<void>; preserveSelection?: boolean;
+  /** "view": no backdrop or dialog frame (embedded in the creation view). */
+  presentation?: "dialog" | "view";
 } = {}) {
   const parent = useStore();
   const [, render] = useState(0);
@@ -346,6 +360,7 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
     },
   };
   const title = defaultsMode ? t("newBot.defaults") : t("sidebar.newBot");
+  const asView = presentation === "view" && !defaultsMode;
   const visibilityRow = choosesVisibility ? (
     <div data-new-bot-visibility>
       <CompactRow label={t("botSettings.visibility.title")}>
@@ -374,15 +389,9 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
       )}
     </div>
   ) : null;
-  return <div className={cn(DIALOG.backdrop, "z-[70]")} hidden={!defaultsMode && parent.state.appSettingsOpen}>
-    <div ref={dialog} role="dialog" aria-modal="true" aria-label={title} aria-busy={saving} tabIndex={-1}
-      className={`${DIALOG.frame} h-[min(760px,94dvh)] max-w-[720px]`}>
-      <div className={DIALOG.header}>
-        <h2 className={DIALOG.title}>{title}</h2>
-        <button type="button" onClick={() => closeRef.current()} aria-label={t("common.close")}
-          className={cn(DIALOG.close, "disabled:opacity-40")}><X size={18} className="pointer-events-none" /></button>
-      </div>
-      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 pb-4 pt-2">
+  const body = (
+    <>
+      <div className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto", asView ? "px-5 pb-4 pt-4 sm:px-8" : "px-5 pb-4 pt-2")}>
         {!ready && !error && <div role="status" className="flex items-center gap-2 px-1 text-[13px] text-ink-secondary"><Loader2 size={16} className="animate-spin" />{t("newBot.loading")}</div>}
         {visibilityRow && <div className={cn(GROUP_CARD, "mx-auto mb-5 max-w-[640px]")}>{visibilityRow}</div>}
         {ready && <fieldset disabled={saving} className="mx-auto min-w-0 max-w-[640px]">
@@ -406,9 +415,8 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
           {t(startKind === "auto" ? "newBot.model.switchedAuto" : "newBot.model.switchedFirst")}
         </p>
       )}
-      <div className={DIALOG.footer}>
-        {/* 2026-10-26: the bot creation wizard, beside this quick dialog */}
-        {!defaultsMode && <button type="button" data-new-bot-wizard disabled={saving} onClick={() => { closeRef.current(); parent.dispatch({ type: "openBotWizard" }); }} className={cn(PILL, "mr-auto")}>
+      <div className={cn(asView ? "flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-hairline/40 px-5 py-4 sm:px-8" : DIALOG.footer)}>
+        {!defaultsMode && !asView && <button type="button" data-new-bot-wizard disabled={saving} onClick={() => { closeRef.current(); parent.dispatch({ type: "openBotWizard" }); }} className={cn(PILL, "mr-auto")}>
           <Wand2 size={14} aria-hidden="true" />{t("newBot.wizard")}
         </button>}
         <button type="button" onClick={() => closeRef.current()} className={PILL}>{t("common.cancel")}</button>
@@ -419,6 +427,25 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
       </div>
       <FullAccessWarning open={warning === "full"} onCancel={() => setWarning(null)} onConfirm={() => { draft.consent.confirmFullAccess = true; setWarning(null); void save(); }} />
       <LocalComputerAutoWarning open={warning === "local"} onCancel={() => setWarning(null)} onConfirm={() => { draft.consent.acknowledgeLocalAuto = true; setWarning(null); void save(); }} />
+    </>
+  );
+  if (asView) {
+    return (
+      <div ref={dialog} data-new-bot-form="" aria-label={title} aria-busy={saving} tabIndex={-1}
+        className="flex h-full min-h-0 flex-col outline-none">
+        {body}
+      </div>
+    );
+  }
+  return <div className={cn(DIALOG.backdrop, "z-[70]")} hidden={!defaultsMode && parent.state.appSettingsOpen}>
+    <div ref={dialog} role="dialog" aria-modal="true" aria-label={title} aria-busy={saving} tabIndex={-1}
+      className={`${DIALOG.frame} h-[min(760px,94dvh)] max-w-[720px]`}>
+      <div className={DIALOG.header}>
+        <h2 className={DIALOG.title}>{title}</h2>
+        <button type="button" onClick={() => closeRef.current()} aria-label={t("common.close")}
+          className={cn(DIALOG.close, "disabled:opacity-40")}><X size={18} className="pointer-events-none" /></button>
+      </div>
+      {body}
     </div>
   </div>;
 }
@@ -638,7 +665,7 @@ function DraftRoutines({ draft }: { draft: BotCreationDraft }) {
       </div>)}
     </div>}
     <div><button type="button" className={PILL} onClick={() => setEditing("new")}><Plus size={14} aria-hidden="true" />{t("computer.routines.create")}</button></div>
-    {editing && <RoutineEditor routine={editing === "new" ? undefined : editing} bots={[draft.bot]} lockedBotId={draft.id} onClose={() => setEditing(null)} />}
+    {editing && <RoutineEditor routine={editing === "new" ? undefined : editing} bots={[draft.bot]} lockedBotId={draft.id} presentation="panel" onClose={() => setEditing(null)} />}
   </div>;
 }
 
@@ -669,6 +696,7 @@ export function DefaultBotSettings() {
   const { state } = useStore();
   const [open, setOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const shareButtonRef = useRef<HTMLButtonElement>(null);
   const summary = newBotDefaultsSummary(state.config);
   // A read-only person reads why instead of a button that would open an
   // empty form. A guest of someone else's server (an organization member,
@@ -684,11 +712,11 @@ export function DefaultBotSettings() {
     <div className="flex items-center justify-between gap-4 px-3.5 py-2.5"><DefaultsTitle summary={summary} />
       <div className="flex shrink-0 gap-2">
         {/* The reference design's pills, as the other rows of General > System (0.5.6) */}
-        <button type="button" onClick={() => setSharing(true)} className="ui-button cursor-pointer bg-transparent text-ink-secondary hover:bg-hover hover:text-ink">{t("newBot.sharePreset")}</button>
+        <button ref={shareButtonRef} type="button" onClick={() => setSharing(true)} className="ui-button cursor-pointer bg-transparent text-ink-secondary hover:bg-hover hover:text-ink">{t("newBot.sharePreset")}</button>
         <button type="button" onClick={() => setOpen(true)} className="ui-button cursor-pointer">{t("newBot.edit")}</button>
       </div>
     </div>
     {open && <NewBotDialog defaultsMode onClose={() => setOpen(false)} />}
-    {sharing && <SharePresetDialog onClose={() => setSharing(false)} />}
+    <SharePresetDialog open={sharing} onClose={() => setSharing(false)} anchorRef={shareButtonRef} />
   </>;
 }

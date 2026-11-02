@@ -6,7 +6,7 @@ exposes to a bot or an AI client. The machine-readable form is the registry in
 `server/mcp-permissions.ts`; `server/mcp-permissions.test.ts` fails when a
 catalog tool has no permission.
 
-Totals: capabilities 156, covered 156, gaps 0.
+Totals: capabilities 158, covered 158, gaps 0.
 
 Sources read: the agents tool catalog, the internal routes it calls
 (`/api/internal/*`), the member API (`docs/org-member-api.md`), and the
@@ -89,6 +89,9 @@ Reading the table:
 | pages:propose | sagax | `propose_page` | `pages:propose` | covered |
 | pages:comments | sagax | `page_comments` | `pages:comments` | covered |
 | phone:call | sagax | `place_phone_call` | `phone:call` | covered |
+| phone:dtmf | sagax | `send_dtmf` | `phone:dtmf` | covered |
+| phone:transfer | sagax | `transfer` | `phone:transfer` | covered |
+| phone:hangup | sagax | `hang_up` | `phone:hangup` | covered |
 | cards:options | sagax | `create_options_card` | `cards:options` | covered |
 | cards:ask | sagax | `ask_choice` | `cards:ask` | covered |
 | rooms:react | sagax | `react_to_message` | `rooms:react` | covered |
@@ -105,7 +108,6 @@ Reading the table:
 | waits:set | sagax | `wait_until` | `waits:set` | covered |
 | waits:list | sagax | `list_waits` | `waits:list` | covered |
 | waits:cancel | sagax | `cancel_wait` | `waits:cancel` | covered |
-| shapes:generate | sagax | `generate_shape_avatar` | `shapes:generate` | covered |
 | terminal:offer | sagax | `offer_shell_terminal` | `terminal:offer` | covered |
 | remote:publish | sagax | `publish_remote_session` | `remote:publish` | covered |
 | remote:snapshot | sagax | `remote_session_snapshot` | `remote:snapshot` | covered |

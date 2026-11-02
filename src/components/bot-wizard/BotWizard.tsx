@@ -1,46 +1,33 @@
-// The bot creation wizard (2026-10-26): a dedicated screen with the look of
-// the guided first run (onboarding/GuidedFirstRun.tsx: the card, the mark,
-// the progress dots, Back and the step count), beside New bot's quick dialog.
+// The bot creation view (2026-10-26; lot 4, 2026-11-01: content view, no
+// modal). One entry for New bot: this screen fills the content frame with a
+// named back. First step is quick create (name, shape, colour, Create);
+// guided and manual setup, the full template form, Browse templates and
+// Import (zip / Grok Bot / Claude Code) stay as paths under it. Nothing the
+// old New bot dialog offered is dropped.
 //
-// - First screen: two cards, "Guided with my bot" and "I'll fill it in
-//   myself", and the drafts left to resume. Choosing one creates the bot
-//   (Auto defaults, as New bot) and its wizard draft on the server.
-//   2026-10-27: New bot opens this screen directly. What its old dialog
-//   offered stays under "Other ways to start": a template (the full form,
-//   with Start from and More options), Browse templates, Import (zip, Grok
-//   Bot or Claude Code, #1178) and Quick create (the server's defaults).
 // - Guided never waits on a bot the person lacks: with no bot to guide, it
-//   creates the Bot designer (src/lib/bot-wizard.ts), the person's own bot,
-//   which leads. With no engine connected, the card says so and opens
-//   Settings > Engines instead of a dead end.
-// - Six steps over that real bot (WizardSteps.tsx), each skippable. The mode
-//   can change at any time from the header; nothing is lost, it is one field
-//   of the same draft.
-// - Guided: the conversation with the person's Primary Bot on the left, the
-//   steps on the right, filled live (the bot changes the bot's fields with
-//   sagax_settings and the wizard's with bot.wizard; the panel reads them
-//   back) and editable by hand.
-// - Recap (2026-10-27): a compact read-only summary, the bot in one card and
-//   one line per step with Edit, and Try it, the first test message to the
-//   new bot, before Finish.
-// - Tools and apps is off the main path (2026-10-27): the Rules step asks
-//   whether the bot uses apps or a computer; "Yes" puts the step on the path,
-//   "Later" keeps the defaults. The recap's Edit opens it at any time.
+//   creates the Bot designer (src/lib/bot-wizard.ts). With no engine, the
+//   card says so and opens Settings > Engines.
+// - Six steps over that real bot (WizardSteps.tsx), each skippable.
+// - Recap: compact summary, Try it, then Finish.
 //
-// Later (Escape, Later) keeps the draft: the bot stays a draft until the
-// person finishes, and the creation menu or the bot's panel resume it.
+// Later (Escape, Back) keeps the draft: the bot stays a draft until Finish.
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { ClipboardList, Download, LayoutTemplate, Library, Loader2, MessagesSquare, PlugZap, Send, Trash2, Zap } from "lucide-react";
+import { Bot as BotIcon, ChevronLeft, ClipboardList, Download, LayoutTemplate, Library, Loader2, MessagesSquare, PlugZap, Send, Trash2 } from "lucide-react";
 
 import { useStore, type Bot } from "@/state/store";
 import { activeLocale, t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
+import { isBackShortcut } from "@/lib/back-shortcut";
+import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { engineSummary, organisationSignIn } from "@/lib/onboarding";
 import { openModelKeysSettings } from "@/lib/settings-link";
 import { templatesEntryActions } from "@/lib/templates-entry";
 import { showBotZipImport } from "@/lib/bot-zip";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { memberNewBotSettings } from "@/lib/member-new-bot-settings";
+import { botsReadOnlyText } from "@/lib/permissions";
+import { viewerBotsReadOnly, viewerCanCreateBots } from "@/lib/viewer";
 import {
   createDesignerBot,
   createWizardBot,
@@ -75,30 +62,37 @@ import { BotAvatar } from "../Avatar";
 import { ProgressDots } from "../onboarding/ProgressDots";
 import { PrimaryButton, QuietButton } from "../onboarding/beats/shared";
 import { StepBody, stepIntro, stepTitle, useRuleEffects, type StepProps } from "./WizardSteps";
+import { QuickCreate, type QuickCreateChoice } from "./QuickCreate";
 import { worksOnMode } from "../computer/WorksOnSetting";
 import { placeLabelKey } from "@/lib/place";
 import { BOT_ROLES } from "@/lib/bot-roles";
 import type { LocaleKey } from "@/locales";
 import { WizardConversation } from "./WizardConversation";
 import { engineReady } from "../EngineLibrary";
-import { BotZipImportDialog } from "../BotZipImport";
-import { AgentImportDialog } from "../AgentImport";
+import { BotZipImportPanel } from "../BotZipImport";
+import { AgentImportPanel } from "../AgentImport";
+import { NewBotForm } from "../lazy-new-bot";
+import { PageTopStrip } from "../content-page";
+import { useCaptionChrome } from "../DesktopCapabilities";
 import { readableError } from "@/lib/plain-error";
 
 /** How often the guided panel reads the draft back while the Primary Bot fills it. */
 const GUIDED_POLL_MS = 2_500;
 
+type WizardPhase = "loading" | "choose" | "template" | "import-zip" | "import-agent" | "steps";
+
 export function BotWizard() {
   const { state, dispatch } = useStore();
   const opened = state.botWizard;
   const language = activeLocale();
+  const { dragProps, noDragStyle } = useCaptionChrome();
+  const mainRef = useRef<HTMLElement>(null);
   const [botId, setBotId] = useState<string | null>(opened?.botId ?? null);
   const [draft, setDraft] = useState<WireWizardDraft | null>(null);
-  const [phase, setPhase] = useState<"loading" | "choose" | "steps">(opened?.botId ? "loading" : "choose");
+  const [phase, setPhase] = useState<WizardPhase>(opened?.botId ? "loading" : "choose");
   const [drafts, setDrafts] = useState<WireWizardDraft[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
   const draftRef = useRef<WireWizardDraft | null>(null);
   draftRef.current = draft;
   const bot = botId ? state.bots.find((candidate) => candidate.id === botId) ?? null : null;
@@ -106,6 +100,8 @@ export function BotWizard() {
     if (draft?.guidedBotId) return state.bots.find((candidate) => candidate.id === draft.guidedBotId) ?? null;
     return guideBot(state.bots, botId);
   }, [draft?.guidedBotId, state.bots, botId]);
+  const readOnly = viewerBotsReadOnly(state.config) || !viewerCanCreateBots(state.config);
+  const canImport = showBotZipImport(state.config);
 
   // An engine that can run the guide's turns (the first run's own test).
   const engineReadyNow = useMemo(() => {
@@ -115,10 +111,10 @@ export function BotWizard() {
     const summary = engineSummary(instances, engineReady, { company: Boolean(organisationSignIn(typeof window === "undefined" ? undefined : window.ogb, { hosted: false })) });
     return summary.ready.length > 0 || summary.company > 0 || instances.some(engineReady);
   }, [state.instances]);
-  const [importing, setImporting] = useState<"zip" | "agent" | null>(null);
 
   const close = useCallback(() => dispatch({ type: "closeBotWizard" }), [dispatch]);
   const fail = (cause: unknown) => setError(readableError(cause));
+  useEffect(() => { mainRef.current?.focus({ preventScroll: true }); }, []);
 
   // A bot's own wizard (Redo, Resume): its open draft resumes in its mode;
   // otherwise the mode choice, prefilled from the bot.
@@ -174,12 +170,24 @@ export function BotWizard() {
     openModelKeysSettings(dispatch);
   };
 
-  // Other ways to start: what New bot's old dialog offered, kept here.
-  const startFromTemplate = () => { close(); dispatch({ type: "toggleNewBot", open: true }); };
+  // Other paths stay inside this view (one entry, no second modal).
+  const startFromTemplate = () => { setError(null); setPhase("template"); };
   const browseTemplates = () => { for (const action of templatesEntryActions("botWizard")) dispatch(action); };
-  const quickCreate = () => {
-    if (state.botCreationPending) return;
-    dispatch({ type: "newBot", settings: memberNewBotSettings(state.config, {}), onCreated: () => close(), onError: (message) => setError(message) });
+  const quickCreate = (choice: QuickCreateChoice) => {
+    if (state.botCreationPending || busy) return;
+    setBusy("quick");
+    setError(null);
+    dispatch({
+      type: "newBot",
+      settings: {
+        ...memberNewBotSettings(state.config, {}),
+        name: choice.name,
+        color: choice.color,
+        mascotLook: { character: "shape", shape: choice.shape, skins: { shape: "plain" } },
+      },
+      onCreated: () => close(),
+      onError: (message) => { setError(message); setBusy(null); },
+    });
   };
 
   const choose = async (mode: WizardMode, resume?: WireWizardDraft) => {
@@ -272,12 +280,29 @@ export function BotWizard() {
     }
   };
 
-  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Escape" || event.defaultPrevented) return;
-    const target = event.target as HTMLElement;
-    if (target.closest("textarea, input, [role=menu], [role=dialog]:not([data-bot-wizard])")) return;
-    event.preventDefault();
+  const leaveSubPage = () => {
+    if (phase === "template" || phase === "import-zip" || phase === "import-agent") {
+      setPhase("choose");
+      return;
+    }
     close();
+  };
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.defaultPrevented) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("[role=menu], [role=listbox], [role=dialog], [role=alertdialog]")) return;
+    if (event.key === "Escape" && (phase === "template" || phase === "import-zip" || phase === "import-agent")) {
+      if (target.closest("textarea, input")) return;
+      event.preventDefault();
+      setPhase("choose");
+      return;
+    }
+    if (event.key === "Escape" || isBackShortcut(event)) {
+      if (target.closest("textarea, input") && event.key === "Escape") return;
+      event.preventDefault();
+      leaveSubPage();
+    }
   };
 
   const guided = phase === "steps" && draft?.mode === "guided";
@@ -287,45 +312,63 @@ export function BotWizard() {
   const previous = draft ? previousStepFor(draft) : null;
   const suggestions = useMemo(() => wizardSuggestions(draft?.roleId ?? "", language), [draft?.roleId, language]);
   const stepProps: StepProps | null = bot && draft ? { bot, draft, suggestions, patch, language } : null;
+  const title = phase === "steps" ? stepTitle(step)
+    : phase === "template" ? t("botWizard.other.template")
+      : phase === "import-zip" ? t("botWizard.other.importZip")
+        : phase === "import-agent" ? t("botWizard.other.importAgent")
+          : t("botWizard.title");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-app p-3 sm:p-6" data-bot-wizard-screen="">
-      <div
-        ref={cardRef}
-        role="dialog"
-        data-bot-wizard=""
-        aria-modal="true"
-        aria-label={t("botWizard.dialog")}
-        tabIndex={-1}
-        onKeyDown={onKeyDown}
-        className="welcome-card relative flex max-h-full w-full flex-col overflow-hidden rounded-2xl border border-hairline/40 bg-panel shadow-[0_30px_80px_-28px_rgba(0,0,0,0.45),0_8px_24px_-12px_rgba(0,0,0,0.25)] outline-none"
-        style={{ maxWidth: guided ? 1180 : 760, height: phase === "steps" ? "min(860px, 100%)" : undefined }}
+    <main
+      ref={mainRef}
+      tabIndex={-1}
+      data-bot-wizard-screen=""
+      data-bot-wizard=""
+      aria-label={t("botWizard.dialog")}
+      className="flex h-full min-w-0 flex-1 flex-col bg-app outline-none"
+      onKeyDown={onKeyDown}
+    >
+      <PageTopStrip />
+      <header
+        data-bot-wizard-header=""
+        className="content-topbar flex shrink-0 items-center gap-3 border-b border-hairline/50 px-4 py-3"
+        {...dragProps}
       >
-        <header className="flex shrink-0 items-center gap-3 px-5 pb-3 pt-5 sm:px-8 sm:pt-7">
-          <span className="flex shrink-0"><PulsatrixMark size={36} ground="app" /></span>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[18px] font-semibold text-ink">
-              {phase === "steps" ? stepTitle(step) : t("botWizard.title")}
-            </h1>
-            {phase === "steps" && bot && <p className="truncate text-[12.5px] text-ink-secondary">{t("botWizard.subtitle", { name: bot.name })}</p>}
+        <button type="button" aria-label={t("botWizard.back")} title={t("botWizard.back")} onClick={leaveSubPage} className={CIRCLE_BUTTON} style={noDragStyle} data-wizard-back-view="">
+          <ChevronLeft size={18} strokeWidth={1.75} />
+        </button>
+        <span className="flex shrink-0" style={noDragStyle}><PulsatrixMark size={28} ground="app" /></span>
+        <div className="min-w-0 flex-1" style={noDragStyle}>
+          <div className="flex min-w-0 items-center gap-2">
+            <BotIcon size={16} className="shrink-0 text-ink-secondary" aria-hidden="true" />
+            <h1 className="truncate text-[15px] font-medium text-ink">{title}</h1>
           </div>
-          {phase === "steps" && draft && (
-            <div role="radiogroup" aria-label={t("botWizard.mode")} className="hidden shrink-0 gap-0.5 rounded-lg bg-control p-0.5 sm:flex" data-wizard-mode-switch="">
-              {(["guided", "manual"] as const).map((mode) => (
-                <button key={mode} type="button" role="radio" aria-checked={draft.mode === mode} data-wizard-mode={mode}
-                  onClick={() => void switchMode(mode)}
-                  className={cn("flex min-h-[30px] items-center gap-1.5 rounded-md border px-2.5 text-[12px]",
-                    draft.mode === mode ? "border-accent-border bg-selected font-medium text-ink shadow-sm" : "border-transparent text-ink-secondary hover:bg-raised-hover hover:text-ink")}>
-                  {mode === "guided" ? <MessagesSquare size={13} aria-hidden="true" /> : <ClipboardList size={13} aria-hidden="true" />}
-                  {t(`botWizard.mode.${mode}.short`)}
-                </button>
-              ))}
-            </div>
-          )}
-          <QuietButton onClick={close} className="shrink-0" data-wizard-later="">{t("botWizard.later")}</QuietButton>
-        </header>
+          {phase === "steps" && bot && <p className="truncate text-[12px] text-ink-secondary">{t("botWizard.subtitle", { name: bot.name })}</p>}
+        </div>
+        {phase === "steps" && draft && (
+          <div role="radiogroup" aria-label={t("botWizard.mode")} className="hidden shrink-0 gap-0.5 rounded-lg bg-control p-0.5 sm:flex" data-wizard-mode-switch="" style={noDragStyle}>
+            {(["guided", "manual"] as const).map((mode) => (
+              <button key={mode} type="button" role="radio" aria-checked={draft.mode === mode} data-wizard-mode={mode}
+                onClick={() => void switchMode(mode)}
+                className={cn("flex min-h-[30px] items-center gap-1.5 rounded-md border px-2.5 text-[12px]",
+                  draft.mode === mode ? "border-accent-border bg-selected font-medium text-ink shadow-sm" : "border-transparent text-ink-secondary hover:bg-raised-hover hover:text-ink")}>
+                {mode === "guided" ? <MessagesSquare size={13} aria-hidden="true" /> : <ClipboardList size={13} aria-hidden="true" />}
+                {t(`botWizard.mode.${mode}.short`)}
+              </button>
+            ))}
+          </div>
+        )}
+        <QuietButton onClick={close} className="shrink-0" data-wizard-later="" style={noDragStyle}>{t("botWizard.later")}</QuietButton>
+      </header>
 
-        {error && <p role="alert" className="mx-5 mb-2 rounded-lg border border-danger/25 bg-danger/10 px-3 py-2 text-[13px] text-danger sm:mx-8">{error}</p>}
+      <div className={cn("flex min-h-0 flex-1 flex-col", guided ? "mx-auto w-full max-w-[1180px]" : "mx-auto w-full max-w-[760px]")}>
+        {error && <p role="alert" className="mx-5 mb-2 mt-3 rounded-lg border border-danger/25 bg-danger/10 px-3 py-2 text-[13px] text-danger sm:mx-8">{error}</p>}
+
+        {readOnly && phase === "choose" && !opened?.botId && (
+          <p role="note" data-bots-read-only className="mx-5 mt-6 rounded-xl border border-hairline/50 bg-raised/60 px-4 py-3 text-[13px] leading-relaxed text-ink-secondary sm:mx-8">
+            {botsReadOnlyText(state.config)}
+          </p>
+        )}
 
         {phase === "loading" && (
           <div role="status" className="flex items-center justify-center gap-2 px-8 py-16 text-[13px] text-ink-secondary">
@@ -333,21 +376,46 @@ export function BotWizard() {
           </div>
         )}
 
-        {phase === "choose" && (
-          <ModeChoice busy={busy} redoName={opened?.botId ? bot?.name : undefined} guideName={guide?.name ?? null}
-            engineReady={engineReadyNow} onConnectEngine={connectEngine}
-            drafts={drafts} onChoose={(mode) => void choose(mode)}
-            onResume={(entry) => void choose(entry.mode, entry)} onDiscard={(entry) => void discard(entry)}
-            otherStarts={opened?.botId ? undefined : {
-              onTemplate: startFromTemplate,
-              onBrowse: browseTemplates,
-              onImport: showBotZipImport(state.config) ? setImporting : undefined,
-              onQuick: quickCreate,
-              quickBusy: Boolean(state.botCreationPending),
-            }} />
+        {phase === "choose" && !readOnly && (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {!opened?.botId && (
+              <QuickCreate
+                busy={busy === "quick" || Boolean(state.botCreationPending)}
+                onCreate={quickCreate}
+                footer={
+                  <p className="mt-2 max-w-sm text-center text-[12.5px] text-ink-secondary">{t("botWizard.quick.hint")}</p>
+                }
+              />
+            )}
+            <ModeChoice busy={busy} redoName={opened?.botId ? bot?.name : undefined} guideName={guide?.name ?? null}
+              engineReady={engineReadyNow} onConnectEngine={connectEngine}
+              drafts={drafts} onChoose={(mode) => void choose(mode)}
+              onResume={(entry) => void choose(entry.mode, entry)} onDiscard={(entry) => void discard(entry)}
+              otherStarts={opened?.botId ? undefined : {
+                onTemplate: startFromTemplate,
+                onBrowse: browseTemplates,
+                onImport: canImport ? (kind) => setPhase(kind === "zip" ? "import-zip" : "import-agent") : undefined,
+              }} />
+          </div>
         )}
-        {importing === "zip" && <BotZipImportDialog onClose={() => setImporting(null)} onImported={() => close()} />}
-        {importing === "agent" && <AgentImportDialog onClose={() => setImporting(null)} onImported={() => close()} />}
+
+        {phase === "template" && (
+          <div className="min-h-0 flex-1 overflow-hidden" data-wizard-template="">
+            <NewBotForm onClose={close} onCreated={() => close()} presentation="view" />
+          </div>
+        )}
+
+        {phase === "import-zip" && (
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-8" data-wizard-import="zip">
+            <BotZipImportPanel onCancel={() => setPhase("choose")} onImported={() => close()} autoFocus />
+          </div>
+        )}
+
+        {phase === "import-agent" && (
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-8" data-wizard-import="agent">
+            <AgentImportPanel onCancel={() => setPhase("choose")} onImported={() => close()} />
+          </div>
+        )}
 
         {phase === "steps" && draft && !bot && (
           <div role="status" className="flex items-center justify-center gap-2 px-8 py-16 text-[13px] text-ink-secondary">
@@ -395,7 +463,7 @@ export function BotWizard() {
           </div>
         )}
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -419,9 +487,6 @@ export interface OtherStarts {
   onBrowse: () => void;
   /** Import a zip, or an agent from Grok Bot or Claude Code (#1178); absent where import is not offered. */
   onImport?: (kind: "zip" | "agent") => void;
-  /** Quick create: the server's defaults, no step. */
-  onQuick: () => void;
-  quickBusy?: boolean;
 }
 
 export function ModeChoice({ busy, redoName, guideName, engineReady = true, onConnectEngine, drafts, onChoose, onResume, onDiscard, otherStarts }: {
@@ -492,8 +557,8 @@ export function ModeChoice({ busy, redoName, guideName, engineReady = true, onCo
   );
 }
 
-/** New bot's old dialog, as secondary options: nothing it offered is lost. */
-function OtherStartsRow({ onTemplate, onBrowse, onImport, onQuick, quickBusy, busy }: OtherStarts & { busy: boolean }) {
+/** Paths beside quick create and the guided/manual cards: nothing offered before is lost. */
+function OtherStartsRow({ onTemplate, onBrowse, onImport, busy }: OtherStarts & { busy: boolean }) {
   const option = "ui-button inline-flex min-h-[36px] items-center gap-1.5 md:min-h-0 disabled:opacity-50";
   return (
     <section aria-labelledby="wizard-other-starts" className="flex flex-col gap-2 border-t border-hairline/40 pt-4" data-wizard-other-starts="">
@@ -513,9 +578,6 @@ function OtherStartsRow({ onTemplate, onBrowse, onImport, onQuick, quickBusy, bu
             <Download size={14} aria-hidden="true" />{t("botWizard.other.importZip")}
           </button>
         </>}
-        <button type="button" className={option} disabled={busy || quickBusy} onClick={onQuick} data-wizard-other="quick" title={t("botWizard.other.quickHint")}>
-          {quickBusy ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Zap size={14} aria-hidden="true" />}{t("botWizard.other.quick")}
-        </button>
       </div>
     </section>
   );

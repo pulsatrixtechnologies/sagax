@@ -1,5 +1,6 @@
 // One-place setup for the isolated Local VM image and its shared/per-bot policy.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { t, activeLocale } from "@/lib/i18n";
 import { waitForLocalVmReady } from "@/lib/local-vm-readiness";
 import type { LocaleKey } from "@/locales";
@@ -390,11 +391,11 @@ export function localVmResetPlan(perBot: boolean): ComputerActionPlan {
   };
 }
 
-export function confirmComputerAction(
+export async function confirmComputerAction(
   plan: ComputerActionPlan,
-  confirm: (message: string) => boolean,
-): ComputerApiRequest | null {
-  if (plan.confirmation !== null && !confirm(plan.confirmation)) return null;
+  confirm: (message: string) => Promise<boolean> | boolean,
+): Promise<ComputerApiRequest | null> {
+  if (plan.confirmation !== null && !(await confirm(plan.confirmation))) return null;
   return plan.request;
 }
 
@@ -1092,6 +1093,12 @@ export function LocalVmAutoStatus({ auto, perBot, busy, onEnsure, onReset }: {
 }
 
 export function LocalComputerSection() {
+  const confirm = useConfirm();
+  const confirmDanger = (message: string) => confirm({
+    title: message,
+    confirmLabel: t("common.confirm"),
+    tone: "danger",
+  });
   const { state: storeState } = useStore();
   // Installation inventories are admin routes. A member's own computer is
   // OrgComputerSettings; probing these every 5s only produces 403s.
@@ -1308,8 +1315,6 @@ export function LocalComputerSection() {
     return body as Status;
   };
 
-  const confirmAction = (message: string) => window.ogb?.confirm ? window.ogb.confirm(message) : window.confirm(message);
-
   const act = async (action: Action) => {
     if (pending !== null || actionController.current) return;
     const controller = new AbortController();
@@ -1317,8 +1322,8 @@ export function LocalComputerSection() {
     setPending(action);
     setError(null);
     try {
-      if (action === "remove" && !(await confirmAction(t("vm.confirm.deleteShared")))) return;
-      if (action === "recreate" && !(await confirmAction(t("vm.confirm.recreate")))) return;
+      if (action === "remove" && !(await confirmDanger(t("vm.confirm.deleteShared")))) return;
+      if (action === "recreate" && !(await confirmDanger(t("vm.confirm.recreate")))) return;
       let result: Status;
       if (action === "recreate") {
         await post("remove", controller.signal);
@@ -1387,10 +1392,7 @@ export function LocalComputerSection() {
       setInventoryError(t("vm.unmanagedError"));
       return;
     }
-    const request = confirmComputerAction(
-      perBotLocalVmDeletePlan(instance),
-      (message) => window.confirm(message),
-    );
+    const request = await confirmComputerAction(perBotLocalVmDeletePlan(instance), confirmDanger);
     if (!request) return;
     setDeletingBotId(instance.botId);
     setInventoryError(null);
@@ -1435,7 +1437,7 @@ export function LocalComputerSection() {
   const resetVm = async () => {
     if (autoBusy) return;
     const perBotNow = status?.mode === "per-bot";
-    const request = confirmComputerAction(localVmResetPlan(perBotNow), (message) => window.confirm(message));
+    const request = await confirmComputerAction(localVmResetPlan(perBotNow), confirmDanger);
     if (!request) return;
     setAutoPending("reset");
     setError(null);
@@ -1454,10 +1456,7 @@ export function LocalComputerSection() {
   };
 
   const actOnCloudComputer = async (action: CloudAction, instance: CloudComputerInventoryInstance) => {
-    const request = confirmComputerAction(
-      cloudComputerActionPlan(action, instance),
-      (message) => window.confirm(message),
-    );
+    const request = await confirmComputerAction(cloudComputerActionPlan(action, instance), confirmDanger);
     if (!request) return;
     setCloudPending({ boxId: instance.boxId, action });
     setCloudError(null);
@@ -1542,10 +1541,7 @@ export function LocalComputerSection() {
   };
 
   const removeVpsComputer = async (instance: VpsComputerInventoryInstance) => {
-    const request = confirmComputerAction(
-      vpsComputerRemovePlan(instance),
-      (message) => window.confirm(message),
-    );
+    const request = await confirmComputerAction(vpsComputerRemovePlan(instance), confirmDanger);
     if (!request) return;
     setVpsRemovingName(instance.name);
     setVpsError(null);

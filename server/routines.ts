@@ -53,10 +53,14 @@ import {
 } from "../shared/routine-folders.ts";
 import { ROUTINE_PARTS, type PartPair, type RoutinePart } from "./package-parts.ts";
 import {
-  CLAUDE_NEEDS_RECONNECTING,
-  CLAUDE_RECONNECT_AHEAD_DETAIL,
-  claudeReconnectAhead,
-} from "./claude-reconnect-ahead.ts";
+  engineNeedsReconnecting,
+  engineReconnectAhead,
+  engineReconnectAheadDetail,
+  engineNameFromReconnectAttention,
+  isEngineReconnectAttention,
+  LOGIN_ENGINE_LABEL,
+} from "./engine-reconnect-ahead.ts";
+import type { LoginDriver } from "./principal-engine-logins.ts";
 import {
   dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, retryNote, weekRuns,
   type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
@@ -660,13 +664,24 @@ export interface RoutineManagerOptions {
   onRunFailed?: (run: RoutineRun, alert?: RoutineAlert | null) => void;
   /** Raised once when a queued run has waited out the deferral notice window. */
   onRunDeferred?: (run: RoutineRun, alert?: RoutineAlert) => void;
-  /** Claude sign-in already expired ahead of scheduled Claude routines:
-   * notify the payer once, and pause those bots' due runs for reconnect. */
+  /** Login-engine sign-in already expired ahead of scheduled or proactive
+   * runs: notify the payer once (card + push), and pause those bots' due
+   * runs for reconnect. Claude-shaped `claudeReconnect` stays for older
+   * tests; prefer `engineReconnect`. */
+  engineReconnect?: {
+    /** Login driver of this bot's engine, or null when it is not one. */
+    botDriver: (botId: string) => LoginDriver | string | null | undefined;
+    payer: (botId: string) => string | null | undefined;
+    /** Cheap file-marker check: that person's sign-in for this driver is expired. */
+    expired: (principalId: string, driver: string) => boolean;
+    /** Person to notify before due routines fire (once per person+engine). */
+    onAheadNotify?: (principalId: string, detail: string, routineNames: string[], engineName: string) => void;
+  };
+  /** @deprecated Prefer engineReconnect. Kept for existing tests. */
   claudeReconnect?: {
     usesClaude: (botId: string) => boolean;
     payer: (botId: string) => string | null | undefined;
     expired: (principalId: string) => boolean;
-    /** Person to notify before morning (and other) Claude routines fire. */
     onAheadNotify?: (principalId: string, detail: string, routineNames: string[]) => void;
   };
   /** A failed attempt went back to the queue: what the attempt left pending must not reach its second start. */
@@ -1503,10 +1518,10 @@ export class RoutineManager {
   private passAgain = false;
   /** routine id -> the occurrence (nextRunAt) already pre-woken. */
   private readonly prewoken = new Map<string, number>();
-  /** People already told Claude is expired for the current expired spell. */
-  private readonly claudeReconnectNotified = new Set<string>();
-  /** Bots whose Claude is expired: their next scheduled starts wait for reconnect. */
-  private readonly claudeReconnectPauseBots = new Set<string>();
+  /** People+engine already told for the current expired spell (`person\0Engine`). */
+  private readonly engineReconnectNotified = new Set<string>();
+  /** Bots whose login engine is expired: their next starts wait for reconnect. */
+  private readonly engineReconnectPauseBots = new Map<string, string>();
   /** routine id -> the task reserved and warmed for its next occurrence. */
   private readonly reserved = new Map<string, { dueAt: number; botId: string; threadId: string; runAs?: string }>();
   /** run id -> the task a run got when the write that would start it
@@ -2769,15 +2784,31 @@ export class RoutineManager {
     if (this.prewoken.size > 2_000) this.prewoken.clear();
   }
 
-  /** Before morning (and other) Claude routines: if Claude is already
-   * expired, notify the payer once and mark those bots so their due runs wait. */
-  private checkClaudeReconnectAhead(now: number): void {
-    const gate = this.options.claudeReconnect;
+  /** Resolve the engine-reconnect gate: prefer engineReconnect, else wrap
+   * the legacy Claude-only option. */
+  private engineReconnectGate(): NonNullable<RoutineManagerOptions["engineReconnect"]> | null {
+    if (this.options.engineReconnect) return this.options.engineReconnect;
+    const legacy = this.options.claudeReconnect;
+    if (!legacy) return null;
+    return {
+      botDriver: (botId) => (legacy.usesClaude(botId) ? "claudeAgent" : null),
+      payer: legacy.payer,
+      expired: (principalId, driver) => driver === "claudeAgent" && legacy.expired(principalId),
+      onAheadNotify: legacy.onAheadNotify
+        ? (principalId, detail, routineNames, _engineName) => legacy.onAheadNotify!(principalId, detail, routineNames)
+        : undefined,
+    };
+  }
+
+  /** Before due scheduled (and held proactive) runs: if a login engine is
+   * already expired, notify the payer once and mark those bots so starts wait. */
+  private checkEngineReconnectAhead(now: number): void {
+    const gate = this.engineReconnectGate();
     if (!gate) {
-      this.claudeReconnectPauseBots.clear();
+      this.engineReconnectPauseBots.clear();
       return;
     }
-    const result = claudeReconnectAhead({
+    const result = engineReconnectAhead({
       now,
       routines: this.routines.map((routine) => ({
         id: routine.id,
@@ -2789,27 +2820,58 @@ export class RoutineManager {
         target: routine.target,
         ...(routine.runAs ? { runAs: routine.runAs } : {}),
       })),
-      botUsesClaude: gate.usesClaude,
+      botDriver: gate.botDriver,
       botPayer: gate.payer,
-      claudeExpired: gate.expired,
-      alreadyNotified: this.claudeReconnectNotified,
+      expired: gate.expired,
+      alreadyNotified: this.engineReconnectNotified,
     });
-    // Keep bots paused while Claude stays expired (including once their run is due).
-    for (const botId of Array.from(this.claudeReconnectPauseBots)) {
+    // Keep bots paused while their engine stays expired (including once due).
+    for (const botId of Array.from(this.engineReconnectPauseBots.keys())) {
+      const driver = gate.botDriver(botId);
       const payer = gate.payer(botId)?.trim();
-      if (!payer || !gate.usesClaude(botId) || !gate.expired(payer)) this.claudeReconnectPauseBots.delete(botId);
+      if (!driver || !payer || !gate.expired(payer, driver)) this.engineReconnectPauseBots.delete(botId);
     }
-    for (const botId of result.pauseBotIds) this.claudeReconnectPauseBots.add(botId);
+    for (const [botId, engineName] of result.pauseEngineByBot) {
+      this.engineReconnectPauseBots.set(botId, engineName);
+    }
     for (const entry of result.notify) {
-      this.claudeReconnectNotified.add(entry.principalId);
+      this.engineReconnectNotified.add(`${entry.principalId}\0${entry.engineName}`);
       try {
-        gate.onAheadNotify?.(entry.principalId, CLAUDE_RECONNECT_AHEAD_DETAIL, entry.routineNames);
+        gate.onAheadNotify?.(
+          entry.principalId,
+          engineReconnectAheadDetail(entry.engineName),
+          entry.routineNames,
+          entry.engineName,
+        );
       } catch { /* best effort */ }
     }
-    // Drop notify dedupe for people whose Claude is no longer expired.
-    for (const person of Array.from(this.claudeReconnectNotified)) {
-      if (!gate.expired(person)) this.claudeReconnectNotified.delete(person);
+    // Drop notify dedupe for people whose engine is no longer expired.
+    for (const key of Array.from(this.engineReconnectNotified)) {
+      const [person, engineName] = key.split("\0");
+      if (!person || !engineName) {
+        this.engineReconnectNotified.delete(key);
+        continue;
+      }
+      const driver = (Object.entries(LOGIN_ENGINE_LABEL) as Array<[LoginDriver, string]>)
+        .find(([, label]) => label === engineName)?.[0];
+      if (!driver || !gate.expired(person, driver)) this.engineReconnectNotified.delete(key);
     }
+  }
+
+  /** Cheap live check: is this bot's login engine marked expired right now? */
+  private botEngineExpired(botId: string): string | null {
+    const gate = this.engineReconnectGate();
+    if (!gate) return this.engineReconnectPauseBots.get(botId) ?? null;
+    const driver = gate.botDriver(botId);
+    if (!driver) return null;
+    const payer = gate.payer(botId)?.trim();
+    if (!payer || !gate.expired(payer, driver)) {
+      this.engineReconnectPauseBots.delete(botId);
+      return null;
+    }
+    const engineName = LOGIN_ENGINE_LABEL[driver as LoginDriver] ?? String(driver);
+    this.engineReconnectPauseBots.set(botId, engineName);
+    return engineName;
   }
 
   /** Reserve and warm the task of each scheduled bot run due within the
@@ -2939,7 +3001,7 @@ export class RoutineManager {
       this.endLostTurns(now);
       this.prewakeUpcoming(now);
       this.prewarmUpcoming(now);
-      this.checkClaudeReconnectAhead(now);
+      this.checkEngineReconnectAhead(now);
       // Only when I'm here (server/routine-away.ts): skip a recurring
       // occurrence, or hold a one-time routine, while the person is away.
       const awaySkipped: Routine[] = [];
@@ -3073,17 +3135,20 @@ export class RoutineManager {
         // dispatch. Manual runs and webhook deliveries retain their exact
         // requested/received timestamps.
         const triggerSource = run.triggerSource ?? (run.manual ? "manual" : "schedule");
-        // Claude already expired ahead of this scheduled run: wait for reconnect
-        // instead of starting a turn that would fail the same way again.
-        if (triggerSource === "schedule" && this.claudeReconnectPauseBots.has(run.botId) && run.target === "bot") {
-          if (run.status === "queued") {
-            this.wait(run, CLAUDE_NEEDS_RECONNECTING);
-            delete run.error;
-            this.save();
-            this.emitRun(run);
-            this.options.onRunDeferred?.(cloneRun(run), { detail: CLAUDE_RECONNECT_AHEAD_DETAIL });
+        // Login engine already expired: wait for reconnect instead of starting
+        // a turn that would fail the same way again (scheduled and proactive).
+        if ((triggerSource === "schedule" || triggerSource === "proactive") && run.target === "bot") {
+          const expiredEngine = this.engineReconnectPauseBots.get(run.botId) ?? this.botEngineExpired(run.botId);
+          if (expiredEngine) {
+            if (run.status === "queued") {
+              this.wait(run, engineNeedsReconnecting(expiredEngine));
+              delete run.error;
+              this.save();
+              this.emitRun(run);
+              this.options.onRunDeferred?.(cloneRun(run), { detail: engineReconnectAheadDetail(expiredEngine) });
+            }
+            continue;
           }
-          continue;
         }
         const definition = triggerSource === "schedule"
           ? this.routines.find((routine) => routine.id === run.routineId)
@@ -3634,31 +3699,54 @@ export class RoutineManager {
     queueMicrotask(() => this.tickInBackground());
   }
 
-  /** Resume runs that paused for Claude reconnect after the person signs in again.
-   * Requeues each once so the scheduled occurrence is not lost and not duplicated. */
-  resumeClaudeReconnectWaits(botIds?: ReadonlySet<string> | readonly string[]): RoutineRun[] {
+  /** Resume runs that paused for engine reconnect after the person signs in again.
+   * Requeues each once so the scheduled occurrence is not lost and not duplicated.
+   * When `engineName` is set, only waits for that engine resume. */
+  resumeEngineReconnectWaits(
+    botIds?: ReadonlySet<string> | readonly string[],
+    engineName?: string,
+  ): RoutineRun[] {
     const filter = botIds ? new Set(botIds) : null;
     const resumed: RoutineRun[] = [];
     const now = this.now();
     for (const run of this.runs) {
-      if (run.status !== "waiting" || run.attention !== CLAUDE_NEEDS_RECONNECTING) continue;
+      if (run.status !== "waiting" || !isEngineReconnectAttention(run.attention)) continue;
+      if (engineName) {
+        const waited = engineNameFromReconnectAttention(run.attention);
+        if (waited && waited.toLowerCase() !== engineName.toLowerCase()) continue;
+      }
       if (filter && !filter.has(run.botId)) continue;
       if (run.target !== "bot") continue;
+      const waitedEngine = engineNameFromReconnectAttention(run.attention) ?? engineName ?? "engine";
       run.status = "queued";
       run.retryAt = now;
-      run.attention = "Starting again after Claude reconnected";
+      run.attention = `Starting again after ${waitedEngine} reconnected`;
       delete run.waitingSince;
       delete run.waitingOn;
       delete run.error;
       resumed.push(run);
     }
     if (filter) {
-      for (const botId of filter) this.claudeReconnectPauseBots.delete(botId);
+      for (const botId of filter) {
+        if (!engineName || this.engineReconnectPauseBots.get(botId)?.toLowerCase() === engineName.toLowerCase()) {
+          this.engineReconnectPauseBots.delete(botId);
+        }
+      }
+    } else if (engineName) {
+      for (const [botId, name] of Array.from(this.engineReconnectPauseBots)) {
+        if (name.toLowerCase() === engineName.toLowerCase()) this.engineReconnectPauseBots.delete(botId);
+      }
     } else {
-      this.claudeReconnectPauseBots.clear();
+      this.engineReconnectPauseBots.clear();
     }
-    // Allow a fresh ahead notification if Claude expires again later.
-    this.claudeReconnectNotified.clear();
+    // Allow a fresh ahead notification if that engine expires again later.
+    if (engineName) {
+      for (const key of Array.from(this.engineReconnectNotified)) {
+        if (key.endsWith(`\0${engineName}`)) this.engineReconnectNotified.delete(key);
+      }
+    } else {
+      this.engineReconnectNotified.clear();
+    }
     if (!resumed.length) return [];
     this.save();
     for (const run of resumed) {
@@ -3667,6 +3755,11 @@ export class RoutineManager {
     }
     queueMicrotask(() => this.tickInBackground());
     return resumed.map(cloneRun);
+  }
+
+  /** @deprecated Prefer resumeEngineReconnectWaits. */
+  resumeClaudeReconnectWaits(botIds?: ReadonlySet<string> | readonly string[]): RoutineRun[] {
+    return this.resumeEngineReconnectWaits(botIds, "Claude");
   }
 
   finishGoalRun(runId: string, status: GroupGoalRunStatus, detail: string): RoutineRun | null {

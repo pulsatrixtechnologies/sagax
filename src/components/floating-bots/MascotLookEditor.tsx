@@ -61,7 +61,6 @@ import { colorGroupsFor, colorTabFor, colorTabs, nextTab, skinTabFor, skinTierTa
 import { MASCOTS, SHAPE_CHOICES, type CompleteLook, type MascotDefinition } from "./mascots";
 import { characterMoves, type OwlMove } from "./moves";
 import { filterWardrobe, MASCOT_FAMILY_LABEL, wardrobeFilters, wardrobeShelves, wardrobeStep, type WardrobeFilter, type WardrobeShelf } from "./wardrobe";
-import { ShapeAvatarPanel } from "./ShapeAvatarPanel";
 
 export interface MascotLookPatch {
   color?: MausColor;
@@ -1084,16 +1083,6 @@ export default function MascotLookEditor({ bot, disabled, onPatch: savePatch, on
                 <span className="w-full truncate text-center text-[11px] leading-4 text-ink-secondary" aria-hidden="true">{t(SHAPE_LABEL[shape])}</span>
               </button>
             ))}
-            <div className="col-span-full">
-              <ShapeAvatarPanel
-                look={look}
-                color={bot.color}
-                botId={bot.id}
-                disabled={optionsOff}
-                onApply={(next) => onPatch({ mascotLook: next })}
-                onColor={(next) => onPatch({ color: next })}
-              />
-            </div>
           </div>
         )}
         {tab === "color" && (

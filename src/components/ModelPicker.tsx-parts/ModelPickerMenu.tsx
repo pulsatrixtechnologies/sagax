@@ -25,7 +25,7 @@ export function ModelPickerMenu({
   bot,
   favoriteKeys,
   viewerLocal,
-  openWindow,
+  openProviders,
   advanced,
   threadId,
   selection,
@@ -45,7 +45,8 @@ export function ModelPickerMenu({
   bot: Bot;
   favoriteKeys: readonly string[];
   viewerLocal: boolean;
-  openWindow: () => void;
+  /** One place for connections: Settings > Providers (lot 7, no model window). */
+  openProviders: () => void;
   advanced: boolean;
   threadId?: string;
   selection: ModelSelection;
@@ -119,8 +120,8 @@ export function ModelPickerMenu({
       {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
       {advanced && settingsPanel}
       <div className="border-t border-popover-hairline px-1.5 pt-1">
-        <ModelMenuItem variant="popover" data-model-edit onClick={openWindow}>
-          <span>{t("model.edit")}</span>
+        <ModelMenuItem variant="popover" data-model-edit onClick={openProviders}>
+          <span>{t("settings.section.providers")}</span>
           <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
         </ModelMenuItem>
       </div>

@@ -299,7 +299,7 @@ describe("Runtime: one tree, one lane", () => {
     expect(w.store.events(stuck.id).at(-1)?.detail).toBe("waiting: builder is busy on another thread");
     w.clock.advance(1_001);
     w.runtime.tick();
-    expect(w.store.get(stuck.id)).toMatchObject({ status: "failed", outcome: "expired", outcomeDetail: "never started" });
+    expect(w.store.get(stuck.id)).toMatchObject({ status: "expired", outcome: "expired", outcomeDetail: "never started" });
     expect(w.runner.reports.map(r => r.a.id)).toEqual([stuck.id]);
     w.runner.canStartAnswer = true;
     w.runner.script = () => ({ kind: "needs_input", question: "Which bucket?" });
@@ -314,7 +314,7 @@ describe("Runtime: one tree, one lane", () => {
     expect(w.store.get(asks.id)?.status).toBe("needs_input");
     w.clock.advance(2);
     w.runtime.tick();
-    expect(w.store.get(asks.id)).toMatchObject({ status: "failed", outcome: "expired", outcomeDetail: "the person did not answer" });
+    expect(w.store.get(asks.id)).toMatchObject({ status: "expired", outcome: "expired", outcomeDetail: "the person did not answer" });
     expect(w.runner.reports.map(r => r.a.id)).toEqual([stuck.id, asks.id]);
     w.runtime.end(root.id, { ok: true, text: "" });
     w.runtime.tick(); await flush();
@@ -807,7 +807,7 @@ describe("Runtime: a teammate's question reaches the requester waiting on it", (
     expect(w.store.get(builder.id)?.status).toBe("needs_input");
     w.clock.advance(1);
     w.runtime.tick();
-    expect(w.store.get(builder.id)).toMatchObject({ status: "failed", outcome: "expired", outcomeDetail: "the person did not answer" });
+    expect(w.store.get(builder.id)).toMatchObject({ status: "expired", outcome: "expired", outcomeDetail: "the person did not answer" });
     expect(runsOf(w, root.id)).toHaveLength(2);
     expect(runsOf(w, root.id)[1]!.input.settled?.map(a => a.id)).toEqual([builder.id, tester.id]);
     await flush();
@@ -1052,7 +1052,7 @@ describe("Runtime: a requester that asked the person while its teammates worked"
     w.clock.advance(1_001);
     w.runtime.tick();
     expect(w.store.get(child.id)).toMatchObject({
-      status: "failed",
+      status: "expired",
       outcome: "expired",
       outcomeDetail: expect.stringMatching(/decision card never started while hub was busy/),
     });
@@ -1182,3 +1182,169 @@ describe("Runtime: one request, one root, across a provider limit", () => {
     expect(checkInvariants(w.store, w.runner.live()).some(p => p.startsWith("I11 "))).toBe(true);
   });
 });
+
+describe("Runtime: successive attempts and retry (DEL-02)", () => {
+  it("opens attempt 1 on the first launch and closes it when the job settles", async () => {
+    const w = world();
+    const root = w.runtime.begin(beginReq());
+    expect(w.store.attempts(root.id)).toEqual([
+      expect.objectContaining({ number: 1, outcome: "running", assignmentId: root.id }),
+    ]);
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id)));
+    w.runtime.tick();
+    await flush();
+    expect(w.store.attempts(child.id)).toEqual([
+      expect.objectContaining({ number: 1, outcome: "completed", finishedAt: expect.any(Number) }),
+    ]);
+    invariants(w);
+  });
+
+  it("retries a failed job in place: new attempt, same id, redelivers only undelivered inbox", async () => {
+    const w = world((a) => {
+      if (a.assignee.botId === "builder" && a.executions <= 1) {
+        return { kind: "failed", outcome: "provider_error", text: "model down" };
+      }
+      return undefined;
+    });
+    const root = w.runtime.begin(beginReq());
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id)));
+    // A sibling result that arrives while the builder runs stays undelivered
+    // on the root's lane until a resume; seed one as undelivered input for the
+    // builder's own lane to prove redelivery of delivered_at IS NULL only.
+    w.store.addInbox({
+      id: "undelivered-input",
+      ownerBotId: "builder",
+      ownerThreadId: "builder-work",
+      assignmentId: "peer-notice",
+      kind: "settled",
+      createdAt: w.clock.t,
+    });
+    w.store.addInbox({
+      id: "already-delivered",
+      ownerBotId: "builder",
+      ownerThreadId: "builder-work",
+      assignmentId: "old-peer",
+      kind: "settled",
+      createdAt: w.clock.t - 1,
+      deliveredAt: w.clock.t - 1,
+    });
+    w.runtime.tick();
+    await flush();
+    expect(w.store.get(child.id)).toMatchObject({ status: "failed", outcome: "provider_error" });
+    expect(w.store.attempts(child.id)[0]?.outcome).toBe("failed");
+
+    const retried = w.runtime.retry(child.id);
+    expect(retried.ok).toBe(true);
+    if (!retried.ok) throw new Error(retried.reason);
+    expect(retried.assignment.id).toBe(child.id);
+    expect(retried.assignment.status).toBe("queued");
+    expect(retried.attempt.number).toBe(2);
+    // Attempt 1 already closed as failed on settle; retry opens attempt 2.
+    expect(w.store.attempts(child.id).map(a => [a.number, a.outcome])).toEqual([
+      [1, "failed"],
+      [2, "running"],
+    ]);
+    // Same destination (session / branch).
+    expect(w.store.get(child.id)?.assignee.destination.threadId).toBe("builder-work");
+    // Undelivered stays; delivered stays delivered (never reset).
+    expect(w.store.inbox({ botId: "builder", threadId: "builder-work" }, true).map(i => i.id))
+      .toEqual(["undelivered-input"]);
+    expect(w.store.inbox({ botId: "builder", threadId: "builder-work" })
+      .find(i => i.id === "already-delivered")?.deliveredAt).toBeDefined();
+    // Prior wake about the failed child is gone so the new attempt can wake once.
+    expect(w.store.inbox({ threadId: "chief-chat" }).filter(i => i.assignmentId === child.id)).toEqual([]);
+
+    w.runtime.tick();
+    await flush();
+    expect(w.store.get(child.id)).toMatchObject({ status: "completed", outcome: "done" });
+    expect(w.store.attempts(child.id).map(a => [a.number, a.outcome])).toEqual([
+      [1, "failed"],
+      [2, "completed"],
+    ]);
+    invariants(w);
+  });
+
+  it("refuses retry on a live or completed assignment", async () => {
+    const w = world(() => "hold");
+    const root = w.runtime.begin(beginReq());
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id)));
+    w.runtime.tick();
+    expect(w.runtime.retry(child.id)).toMatchObject({ ok: false });
+    await w.runner.release(child.id, { kind: "completed", text: "done" });
+    expect(w.store.get(child.id)?.status).toBe("completed");
+    expect(w.runtime.retry(child.id)).toMatchObject({ ok: false, reason: expect.stringMatching(/failed/i) });
+    expect(w.runtime.retry("missing")).toMatchObject({ ok: false });
+    invariants(w);
+  });
+
+  it("at open, resumes a reported job only when an undelivered entry arrived after the report", async () => {
+    const w = world();
+    const root = w.runtime.begin(beginReq());
+    const child = ok(w.runtime.enqueue(toBot("builder", root.id)));
+    w.runtime.end(root.id, { ok: true, text: "Assigned" });
+    w.runtime.tick();
+    await flush();
+    w.runtime.tick();
+    await flush();
+    expect(w.store.get(root.id)).toMatchObject({ status: "completed", reportedAt: expect.any(Number) });
+    const reportedAt = w.store.get(root.id)!.reportedAt!;
+
+    // Simulate a late undelivered wake after the report: replace the delivered
+    // item with one created later (still one result per assignment for I3).
+    w.store.removeInboxForAssignment(child.id);
+    w.clock.advance(5_000);
+    w.store.addInbox({
+      id: "late-result",
+      ownerBotId: "chief",
+      ownerThreadId: "chief-chat",
+      assignmentId: child.id,
+      kind: "settled",
+      createdAt: w.clock.t,
+    });
+    expect(w.clock.t).toBeGreaterThan(reportedAt);
+
+    w.runtime.close();
+    const again = new Runtime(w.store, w.runner, { clock: w.clock, limits: w.limits, log: line => w.logs.push(line) });
+    again.open();
+    expect(w.store.get(root.id)?.status).toBe("resume");
+    expect(w.store.events(root.id).map(e => e.kind)).toContain("reopened");
+    expect(w.store.attempts(root.id).at(-1)).toMatchObject({ outcome: "running" });
+    again.tick();
+    await flush();
+    expect(w.store.get(root.id)?.status).toBe("completed");
+    invariants({ ...w, runtime: again });
+  });
+
+  it("admits the oldest queued job before a newer one when slots free", async () => {
+    const order: string[] = [];
+    const w = world((a) => {
+      if (a.assignee.botId.startsWith("worker")) {
+        order.push(a.assignee.botId);
+        return "hold";
+      }
+      return undefined;
+    });
+    w.runner.canStartAnswer = () => {
+      const running = [...w.runner.held.keys()].length;
+      return running < 1 ? true : "waiting for a free slot";
+    };
+    const root = w.runtime.begin(beginReq());
+    const early = ok(w.runtime.enqueue(toBot("worker-early", root.id, "early work", {
+      assignee: { botId: "worker-early", destination: { kind: "work_thread", threadId: "early-work" } },
+    })));
+    w.clock.advance(1_000);
+    const late = ok(w.runtime.enqueue(toBot("worker-late", root.id, "late work", {
+      assignee: { botId: "worker-late", destination: { kind: "work_thread", threadId: "late-work" } },
+    })));
+    expect(early.createdAt).toBeLessThan(late.createdAt);
+    w.runtime.tick();
+    expect(order).toEqual(["worker-early"]);
+    expect(w.store.get(late.id)?.status).toBe("queued");
+    await w.runner.release(early.id, { kind: "completed", text: "early done" });
+    w.runtime.tick();
+    expect(order).toEqual(["worker-early", "worker-late"]);
+    await w.runner.release(late.id, { kind: "completed", text: "late done" });
+    invariants(w);
+  });
+});
+

@@ -1,26 +1,33 @@
-// Remote sessions live in the Computer tab (2026-11-01), not Details.
-// Details must not keep showing temporary/ended sessions via RemoteSessionsSection.
+// Placement of remote computers (2026-11-01 JC):
+// - Unattended hosts: Computer place picker only (attach/detach in its menu).
+// - Temporary attended sessions: Details above Routines, only while active.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 
 describe("bot panel: remote hosts placement", () => {
-  it("keeps RemoteSessionsSection out of Details and wires hosts in Computer", () => {
+  it("puts temporary sessions in Details above routines and hosts in the Computer picker", () => {
     const details = read("./BotSettingsDialog.tsx");
-    expect(details).not.toMatch(/RemoteSessionsSection/);
-    expect(details).not.toMatch(/remote-session\/RemoteSessions/);
+    expect(details).toMatch(/RemoteSessionsSection/);
+    expect(details).toMatch(/remote-session\/RemoteSessions/);
     expect(details).toMatch(/ComputerPanel/);
+    const remoteAt = details.indexOf("<RemoteSessionsSection");
+    const routinesAt = details.indexOf('data-bot-settings-section="routines"');
+    expect(remoteAt).toBeGreaterThan(-1);
+    expect(routinesAt).toBeGreaterThan(-1);
+    expect(remoteAt).toBeLessThan(routinesAt);
 
     const computer = read("./ComputerPanel.tsx");
-    expect(computer).toMatch(/BotRemoteHostsSection/);
+    expect(computer).not.toMatch(/BotRemoteHostsSection/);
     expect(computer).toMatch(/OrgComputerTab/);
     expect(computer).toMatch(/remoteHosts=\{remoteHostRows\}/);
+    expect(computer).toMatch(/remoteCatalog=\{catalogHosts\}/);
+    expect(computer).toMatch(/onAttachRemoteHost/);
+    expect(computer).toMatch(/onDetachRemoteHost/);
     expect(computer).toMatch(/activeRemoteSessions/);
-    // Only connected sessions feed the place screen. The filter moved into the
-    // panel's useRemoteHosts hook with the ComputerPanel split (2026-11-01).
-    expect(computer).toMatch(/useRemoteHosts\(bot\.id, bridgeStatus\)/);
-    const hosts = read("./ComputerPanel.tsx-parts/useRemoteHosts.ts");
-    expect(hosts).toMatch(/activeRemoteSessions = remoteSessionRows\.filter\(\(row\) => row\.state === "connected"\)/);
+
+    const hostsHook = read("./ComputerPanel.tsx-parts/useRemoteHosts.ts");
+    expect(hostsHook).toMatch(/filter\(\(row\) => row\.state === "connected"\)/);
   });
 });

@@ -18,9 +18,8 @@ function bridge() {
 
 export function OpenAtLoginOffer() {
   const [state, setState] = useState<OpenAtLoginState | null>(null);
-  // Escape puts the card away for this session; nothing is chosen, so it
-  // is proposed again next time (every dialog closes on Escape,
-  // dialogs-close.test.ts).
+  // Escape puts the banner away for this session; nothing is chosen, so it
+  // is proposed again next time.
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
     const api = bridge();
@@ -32,8 +31,12 @@ export function OpenAtLoginOffer() {
   const offered = Boolean(state && state.platform === "darwin" && state.choice === "unset") && !dismissed;
   useEffect(() => {
     if (!offered) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setDismissed(true); };
-    window.addEventListener("keydown", onKey);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      setDismissed(true);
+    };
+    window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey);
   }, [offered]);
   if (!offered) return null;
@@ -42,7 +45,7 @@ export function OpenAtLoginOffer() {
   };
   return (
     <div
-      role="dialog"
+      role="region"
       aria-labelledby="open-at-login-title"
       data-open-at-login-offer=""
       className="fixed inset-x-0 bottom-6 z-40 mx-auto flex w-[min(440px,calc(100%-32px))] flex-col gap-3 rounded-2xl border border-hairline bg-elevated p-4 shadow-lg"

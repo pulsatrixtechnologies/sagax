@@ -59,20 +59,26 @@ try {
 
   await page.goto(`${base}?skin=pulsatrix&lang=${lang}`, { waitUntil: "networkidle" });
   await page.waitForSelector("[data-gallery-sample='place-dropdown']");
-  await page.waitForSelector("[data-bot-remote-hosts]");
+  await page.waitForSelector("[data-gallery-sample='details-clean']");
   await page.waitForTimeout(400);
   await page.locator("[data-gallery-sample='place-dropdown']").screenshot({ path: join(outDir, "after-computer-place-closed.png") });
   console.log("after-computer-place-closed.png");
-  await page.locator("[data-gallery-sample='endpoints']").screenshot({ path: join(outDir, "after-endpoints-section.png") });
-  console.log("after-endpoints-section.png");
   await page.locator("[data-gallery-sample='details-clean']").screenshot({ path: join(outDir, "after-details-no-sessions.png") });
   console.log("after-details-no-sessions.png");
+  await page.locator("[data-gallery-sample='details-active']").screenshot({ path: join(outDir, "after-details-active-session.png") });
+  console.log("after-details-active-session.png");
 
   await page.goto(`${base}?skin=pulsatrix&lang=${lang}&open=1`, { waitUntil: "networkidle" });
   await page.waitForSelector("[data-gallery-sample='place-dropdown'] [role='listbox']");
   await page.waitForTimeout(300);
   await page.locator("[data-gallery-sample='place-dropdown']").screenshot({ path: join(outDir, "after-place-dropdown-with-host.png") });
   console.log("after-place-dropdown-with-host.png");
+
+  await page.goto(`${base}?skin=pulsatrix&lang=${lang}&view=attach`, { waitUntil: "networkidle" });
+  await page.waitForSelector("[data-computer-host-menu]");
+  await page.waitForTimeout(300);
+  await page.locator("[data-gallery-sample='place-dropdown']").screenshot({ path: join(outDir, "after-place-attach-menu.png") });
+  console.log("after-place-attach-menu.png");
 
   await page.goto(`${base}?skin=pulsatrix&lang=${lang}&view=calm`, { waitUntil: "networkidle" });
   await page.waitForSelector("[data-gallery-sample='asleep'] [data-screen-calm='asleep']");

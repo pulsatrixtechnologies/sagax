@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { initialDesktopCapabilities } from "@/lib/desktop";
 
-// Where the centred glass pop-ups (Settings, Apps, Triggers) may sit. On macOS
+// Where the centred glass pop-ups (Settings, Apps) may sit. On macOS
 // the traffic lights are inset into the window's top-left corner, and on
 // Windows the renderer draws caption buttons across the top-right corner: a
 // pop-up that reaches either corner covers buttons people need. The frame

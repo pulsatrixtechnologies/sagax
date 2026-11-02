@@ -138,6 +138,8 @@ export interface PrincipalEngineLoginsOptions {
   now?: () => number;
   /** Own Claude login succeeded for this person. */
   onClaudeLinked?: (principalId: string) => void;
+  /** Any login-engine sign-in succeeded (Claude, Codex, Grok, Kimi): resume held routine runs. */
+  onEngineSignedIn?: (principalId: string, driver: LoginDriver) => void;
   /** Tests pass a fake; the default asks the person's own Grok CLI. */
   probeModels?: (cli: string, env: Record<string, string | undefined>) => Promise<Array<{ id: string }> | null>;
   /** 2026-10-29: what a Grok sign-in brings through grok.com (its
@@ -277,6 +279,7 @@ export class PrincipalEngineLogins {
       const onAuthenticated = async () => {
         this.markSignedIn(principalId, driver, slot);
         if (driver === "claudeAgent") this.options.onClaudeLinked?.(principalId);
+        try { this.options.onEngineSignedIn?.(principalId, driver); } catch { /* best effort */ }
         // what this Grok sign-in brings through grok.com, known before its first turn
         if (driver === "grokAgent") this.warmReach(principalId, instanceId, slot, true);
       };
@@ -298,7 +301,10 @@ export class PrincipalEngineLogins {
         getAuthentication: async (flowId: string) => {
           const status = await bound.get(flowId);
           // The marker follows the CLI's verdict even when the callback raced.
-          if (status.phase === "succeeded" && (!this.signedIn(principalId, driver, slot) || this.expired(principalId, driver, slot))) this.markSignedIn(principalId, driver, slot);
+          if (status.phase === "succeeded" && (!this.signedIn(principalId, driver, slot) || this.expired(principalId, driver, slot))) {
+            this.markSignedIn(principalId, driver, slot);
+            try { this.options.onEngineSignedIn?.(principalId, driver); } catch { /* best effort */ }
+          }
           return status;
         },
         ...(bound.complete ? { completeAuthentication: (flowId: string, pasted: string) => bound.complete!(flowId, pasted) } : {}),

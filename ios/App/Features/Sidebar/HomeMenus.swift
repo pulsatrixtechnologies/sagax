@@ -328,7 +328,7 @@ struct BotMoveToMenu: View {
 // MARK: - Account menu
 
 /// The photo's menu (`SidebarProfileMenu`): Archived bots, Settings,
-/// Team map, Automations, Achievements, About, Help Center.
+/// Team map, Automations, Memory, Achievements, About, Help Center.
 struct HomeAccountMenuItems: View {
     let select: (AccountMenuItem) -> Void
     @EnvironmentObject private var session: Session
@@ -366,6 +366,7 @@ struct HomeAccountMenuItems: View {
         case .settings: String(localized: "Settings")
         case .teamMap: String(localized: "Team map")
         case .automations: String(localized: "Automations")
+        case .memory: String(localized: "Memory")
         case .achievements: String(localized: "Achievements")
         case .releaseNotes: String(localized: "Release notes")
         case .about: String(localized: "About")
@@ -379,6 +380,7 @@ struct HomeAccountMenuItems: View {
         case .settings: "gearshape"
         case .teamMap: "point.3.connected.trianglepath.dotted"
         case .automations: "calendar"
+        case .memory: "text.book.closed"
         case .achievements: "trophy"
         case .releaseNotes: "scroll"
         case .about: "info.circle"

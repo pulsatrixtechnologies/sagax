@@ -1,8 +1,11 @@
 // Files: the whole workspace with when each file reaches the bot, sizes
 // against budgets, dates, last use and the forgotten marker; document
 // actions only on docs/; Simple mode keeps the badges, not their details.
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { createElement, type ReactNode } from "react";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
+
+const renderToStaticMarkup = (node: ReactNode) => renderMarkup(createElement(ConfirmProvider, null, node));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
@@ -106,16 +109,15 @@ describe("WorkspaceFilesSection", () => {
     expect(html).toContain("data-forgotten-badge");
   });
 
-  it("offers rename and delete on documents only, and download on every real file", () => {
+  it("offers a row menu on every entry, Upload any type, and New File/Folder", () => {
     const html = render(["docs"]);
-    expect(html).toContain('aria-label="Rename onboarding.md"');
-    expect(html).toContain('aria-label="Delete onboarding.md"');
-    expect(html).not.toContain('aria-label="Rename MEMORY.md"');
-    expect(html).not.toContain('aria-label="Delete RULES.md"');
-    expect(html).toContain('aria-label="Download report.pdf"');
-    expect(html).not.toContain('aria-label="Download SOUL.md"');
-    expect(html).toContain("data-files-new");
+    expect(html).toContain('data-file-menu="docs/onboarding.md"');
+    expect(html).toContain('data-file-menu="MEMORY.md"');
+    expect(html).toContain('data-file-menu="RULES.md"');
+    expect(html).toContain('data-core=""');
+    expect(html).toContain("data-files-new-menu");
     expect(html).toContain("data-files-upload");
-    expect(html).toContain('accept=".md,.markdown,text/markdown"');
+    expect(html).toContain("data-files-upload-input");
+    expect(html).not.toContain('accept=".md,.markdown,text/markdown"');
   });
 });

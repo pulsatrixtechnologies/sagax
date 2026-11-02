@@ -257,7 +257,7 @@ final class BotPanelDetailsUITests: XCTestCase {
             throw XCTSkip("the fixture seeds no file in Ara's thread")
         }
         let app = launchProfile()
-        element("panel-tab.library", in: app).tap()
+        openPage("panel-overview.library", in: app)
         XCTAssertTrue(element("thread-files", in: app).waitForExistence(timeout: 15))
         for file in files.prefix(3) {
             let fileName = try XCTUnwrap(file["name"] as? String)

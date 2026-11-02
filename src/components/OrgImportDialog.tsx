@@ -2,15 +2,18 @@
 // copy (a file the person chose, or the one their desktop staged for this
 // server), show what it holds, copy it in, then show the report. From the
 // desktop, each copied bot can then be removed from the person's computer.
+//
+// 2026-11-01 (lot 6): content-frame view (assistant), not a modal dialog.
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 import { MAX_ORG_IMPORT_BYTES, parseOrgImportDocument, type OrgImportDocument } from "../../shared/org-import.ts";
+import { isBackShortcut } from "@/lib/back-shortcut";
 import { t } from "@/lib/i18n";
-import { cn } from "@/lib/cn";
 import { api, ApiError, useStore } from "@/state/store";
-import { X } from "lucide-react";
-import { FieldRow, FoldRow, PILL, PRIMARY_PILL, SettingsGroup, DIALOG, GROUP_CARD } from "./SettingsPrimitives";
+import { FieldRow, FoldRow, PILL, PRIMARY_PILL, SettingsGroup, GROUP_CARD } from "./SettingsPrimitives";
+import { BackButton } from "./Breadcrumb";
+import { PAGE_COLUMN, PAGE_SCROLL, PageTopStrip } from "./content-page";
+import { useCaptionChrome } from "./DesktopCapabilities";
 
 export interface OrgImportReport {
   bots: { sourceKey: string; id: string; name: string; section: string; tasks: number; messages: number; memoryFiles: number }[];
@@ -47,9 +50,10 @@ export async function readCopyFile(file: { size: number; text(): Promise<string>
   }
 }
 
-export function OrgImportDialog({ staged, onClose }: { staged?: OrgImportDocument; onClose: () => void }) {
+export function OrgImportDialog({ staged, onClose }: { staged?: OrgImportDocument | null; onClose: () => void }) {
   const { dispatch } = useStore();
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const { dragProps, noDragStyle, controlsShiftStyle } = useCaptionChrome();
+  const mainRef = useRef<HTMLElement>(null);
   const [doc, setDoc] = useState<OrgImportDocument | null>(staged ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -58,10 +62,17 @@ export function OrgImportDialog({ staged, onClose }: { staged?: OrgImportDocumen
   const bridge = staged ? window.ogb?.orgJoin : undefined;
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog && !dialog.open) dialog.showModal?.();
-    return () => { if (dialog?.open) dialog.close(); };
+    mainRef.current?.focus({ preventScroll: true });
   }, []);
+
+  useEffect(() => {
+    setDoc(staged ?? null);
+  }, [staged]);
+
+  const back = () => {
+    if (busy) return;
+    onClose();
+  };
 
   const choose = async (file: File | undefined) => {
     if (!file) return;
@@ -101,89 +112,108 @@ export function OrgImportDialog({ staged, onClose }: { staged?: OrgImportDocumen
 
   const preview = doc ? copyPreview(doc) : null;
   const removedRefs = report?.removedPeople.reduce((sum, entry) => sum + entry.refs, 0) ?? 0;
-  return createPortal(
-    <dialog ref={dialogRef} aria-labelledby="org-import-title" data-org-import
-      className={`m-auto ${DIALOG.frame} w-[calc(100vw-2rem)] max-w-[560px] p-0 backdrop:bg-black/50`}
-      onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}>
-      <div className={DIALOG.header}>
-        <div className="min-w-0">
-          <h2 id="org-import-title" className={DIALOG.title}>{t("orgImport.dialogTitle")}</h2>
-          {staged && <p className={DIALOG.subtitle}>{t("orgImport.staged")}</p>}
+
+  return (
+    <main
+      ref={mainRef}
+      tabIndex={-1}
+      data-org-import=""
+      className="flex min-h-0 min-w-0 flex-1 flex-col bg-app text-ink outline-none"
+      onKeyDown={(event) => {
+        if (!isBackShortcut(event) || busy) return;
+        event.preventDefault();
+        back();
+      }}
+    >
+      <PageTopStrip />
+      <header {...dragProps} className="content-topbar flex shrink-0 items-center gap-3 border-b border-hairline/40 px-4 py-3 sm:px-6">
+        <span style={noDragStyle}>
+          <BackButton onBack={back} data={{ "data-org-import-back": "" }} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-[16px] font-medium text-ink">{t("orgImport.dialogTitle")}</h1>
+          {staged && <p className="truncate text-[12.5px] text-ink-secondary">{t("orgImport.staged")}</p>}
         </div>
-        <button type="button" disabled={busy} onClick={onClose} aria-label={t("orgImport.close")} className={cn(DIALOG.close, "disabled:opacity-40")}><X size={18} className="pointer-events-none" /></button>
-      </div>
-      <div className={DIALOG.body}>
-        {!staged && !report && (
-          <div className={GROUP_CARD}>
-            <FieldRow label={t("orgImport.choose")} hint={t("orgImport.intro")}>
-              <input type="file" accept=".json,application/json" disabled={busy} onChange={(event) => void choose(event.target.files?.[0])}
-                className="min-h-[44px] text-[13px] text-ink-secondary file:mr-3 file:h-[30px] file:cursor-pointer file:rounded-full file:border-0 file:bg-hover file:px-3 file:text-[13px] file:text-ink md:min-h-0" />
-            </FieldRow>
-          </div>
-        )}
-        {preview && !report && (
-          <SettingsGroup groupId="org-import-preview" title={t("orgImport.contents")}>
-            <FoldRow
-              cardId="orgImport.bots"
-              defaultOpen={preview.bots.length <= 5}
-              label={t("orgImport.bots")}
-              count={preview.bots.length}
-            >
-              <ul className="flex flex-col gap-1">
-                {preview.bots.map((bot) => (
-                  <li key={bot.key} className="break-words text-[12.5px] text-ink">{t("orgImport.bot", { name: bot.name, threads: bot.threads, messages: bot.messages, memory: bot.memory })}</li>
-                ))}
-              </ul>
-            </FoldRow>
-            <p className="px-3.5 py-2 text-[13px] text-ink">{t("orgImport.rooms", { count: preview.rooms })}</p>
-            {preview.routines > 0 && <p className="px-3.5 py-2 text-[13px] text-ink">{t("orgImport.routines", { count: preview.routines })}</p>}
-            {preview.people > 0 && <p className="px-3.5 py-2 text-[13px] text-ink-secondary">{t("orgImport.people", { count: preview.people })}</p>}
-          </SettingsGroup>
-        )}
-        {report && (
-          <div role="status" className="flex flex-col gap-5">
-            <SettingsGroup groupId="org-import-report" title={t("orgImport.done", { bots: report.bots.length, rooms: report.groups.length, routines: report.routines.length })}>
-              {report.bots.map((bot) => (
-                <div key={bot.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-3.5 py-2">
-                  <span className="min-w-0 break-words text-[13px] text-ink">{bot.name}</span>
-                  <span className="flex flex-wrap gap-2">
-                    {bridge && (removed.includes(bot.sourceKey)
-                      ? <span className="self-center text-[12.5px] text-ink-secondary">{t("orgImport.removedLocal")}</span>
-                      : <button type="button" className={`${PILL} bg-transparent text-danger enabled:hover:bg-danger/10`} onClick={() => void removeLocal(bot.sourceKey)}>{t("orgImport.removeLocal")}</button>)}
-                    <button type="button" className={PILL} onClick={() => { dispatch({ type: "select", id: bot.id }); onClose(); }}>{t("orgImport.open")}</button>
-                  </span>
-                </div>
-              ))}
+        <div style={controlsShiftStyle} className="flex shrink-0 items-center gap-2">
+          {!report && (
+            <button type="button" disabled={busy || !doc} onClick={() => void copyIn()} className={PRIMARY_PILL}>
+              {busy ? t("orgImport.copying") : t("orgImport.copy")}
+            </button>
+          )}
+        </div>
+      </header>
+      <div className={PAGE_SCROLL}>
+        <div className={PAGE_COLUMN}>
+          {!staged && !report && (
+            <div className={GROUP_CARD}>
+              <FieldRow label={t("orgImport.choose")} hint={t("orgImport.intro")}>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  disabled={busy}
+                  onChange={(event) => void choose(event.target.files?.[0])}
+                  className="min-h-[44px] text-[13px] text-ink-secondary file:mr-3 file:h-[30px] file:cursor-pointer file:rounded-full file:border-0 file:bg-hover file:px-3 file:text-[13px] file:text-ink md:min-h-0"
+                />
+              </FieldRow>
+            </div>
+          )}
+          {preview && !report && (
+            <SettingsGroup groupId="org-import-preview" title={t("orgImport.contents")}>
+              <FoldRow
+                cardId="orgImport.bots"
+                defaultOpen={preview.bots.length <= 5}
+                label={t("orgImport.bots")}
+                count={preview.bots.length}
+              >
+                <ul className="flex flex-col gap-1">
+                  {preview.bots.map((bot) => (
+                    <li key={bot.key} className="break-words text-[12.5px] text-ink">
+                      {t("orgImport.bot", { name: bot.name, threads: bot.threads, messages: bot.messages, memory: bot.memory })}
+                    </li>
+                  ))}
+                </ul>
+              </FoldRow>
+              <p className="px-3.5 py-2 text-[13px] text-ink">{t("orgImport.rooms", { count: preview.rooms })}</p>
+              {preview.routines > 0 && <p className="px-3.5 py-2 text-[13px] text-ink">{t("orgImport.routines", { count: preview.routines })}</p>}
+              {preview.people > 0 && <p className="px-3.5 py-2 text-[13px] text-ink-secondary">{t("orgImport.people", { count: preview.people })}</p>}
             </SettingsGroup>
-            {(removedRefs > 0 || report.warnings.length > 0) && (
-              <div className="flex flex-col gap-1 px-1 text-[12.5px] text-ink-secondary">
-                {removedRefs > 0 && report.removedPeople.map((entry) => (
-                  <p key={`${entry.object}:${entry.sourceKey}`}>{t("orgImport.removedPeople", { name: entry.name, count: entry.refs })}</p>
+          )}
+          {report && (
+            <div role="status" className="flex flex-col gap-5">
+              <SettingsGroup groupId="org-import-report" title={t("orgImport.done", { bots: report.bots.length, rooms: report.groups.length, routines: report.routines.length })}>
+                {report.bots.map((bot) => (
+                  <div key={bot.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-3.5 py-2">
+                    <span className="min-w-0 break-words text-[13px] text-ink">{bot.name}</span>
+                    <span className="flex flex-wrap gap-2">
+                      {bridge && (removed.includes(bot.sourceKey)
+                        ? <span className="self-center text-[12.5px] text-ink-secondary">{t("orgImport.removedLocal")}</span>
+                        : <button type="button" className={`${PILL} bg-transparent text-danger enabled:hover:bg-danger/10`} onClick={() => void removeLocal(bot.sourceKey)}>{t("orgImport.removeLocal")}</button>)}
+                      <button type="button" className={PILL} onClick={() => { dispatch({ type: "select", id: bot.id }); onClose(); }}>{t("orgImport.open")}</button>
+                    </span>
+                  </div>
                 ))}
-                {report.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
-              </div>
-            )}
-          </div>
-        )}
-        {error && <p role="alert" className="px-1 text-[12.5px] text-danger">{error}</p>}
+              </SettingsGroup>
+              {(removedRefs > 0 || report.warnings.length > 0) && (
+                <div className="flex flex-col gap-1 px-1 text-[12.5px] text-ink-secondary">
+                  {removedRefs > 0 && report.removedPeople.map((entry) => (
+                    <p key={`${entry.object}:${entry.sourceKey}`}>{t("orgImport.removedPeople", { name: entry.name, count: entry.refs })}</p>
+                  ))}
+                  {report.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
+                </div>
+              )}
+            </div>
+          )}
+          {error && <p role="alert" className="px-1 text-[12.5px] text-danger">{error}</p>}
+        </div>
       </div>
-      <div className={DIALOG.footer}>
-        <button type="button" className={PILL} disabled={busy} onClick={onClose}>{t("orgImport.close")}</button>
-        {!report && (
-          <button type="button" disabled={busy || !doc} onClick={() => void copyIn()} className={PRIMARY_PILL}>
-            {busy ? t("orgImport.copying") : t("orgImport.copy")}
-          </button>
-        )}
-      </div>
-    </dialog>,
-    document.body,
+    </main>
   );
 }
 
 /** On an organization server opened by the desktop with a staged copy for
- * it: take the copy once and open the dialog. Renders nothing otherwise. */
+ * it: take the copy once and open the content view. Renders nothing itself. */
 export function StagedOrgImport() {
-  const [doc, setDoc] = useState<OrgImportDocument | null>(null);
+  const { dispatch } = useStore();
   useEffect(() => {
     const bridge = window.ogb?.orgJoin;
     if (!bridge) return;
@@ -194,12 +224,12 @@ export function StagedOrgImport() {
         if (!staged || staged.origin !== window.location.origin) return;
         const taken = await bridge.take();
         if (!alive || !taken) return;
-        setDoc(parseOrgImportDocument(taken));
+        dispatch({ type: "showOrgImport", staged: parseOrgImportDocument(taken) });
       } catch {
         /* no copy for this page */
       }
     })();
     return () => { alive = false; };
-  }, []);
-  return doc ? <OrgImportDialog staged={doc} onClose={() => setDoc(null)} /> : null;
+  }, [dispatch]);
+  return null;
 }

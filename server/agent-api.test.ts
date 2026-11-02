@@ -608,6 +608,18 @@ describe("send_prompt / await_turn", () => {
     expect((await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: AWAIT_TIMEOUT_MS_DEFAULT, cursor: "nope" })).status).toBe(400);
   });
 
+  // Scorecard V8 (2026-11-02): held await_turn p95 was 45 s. Short default +
+  // cursor resume frees MCP slots; callers poll with recommended_wait_ms.
+  it("V8: default and recommended await waits are 15 s (was 45 s)", () => {
+    const beforeDefaultMs = 45_000;
+    const beforeHeldBudget = beforeDefaultMs * 118; // scorecard: 118 await_turn calls / 7 d
+    const afterHeldBudget = AWAIT_TIMEOUT_MS_DEFAULT * 118;
+    expect(AWAIT_TIMEOUT_MS_DEFAULT).toBe(15_000);
+    expect(AWAIT_RECOMMENDED_WAIT_MS).toBe(15_000);
+    expect(AWAIT_TIMEOUT_MS_MAX).toBe(55_000);
+    expect(afterHeldBudget).toBe(beforeHeldBudget / 3);
+  });
+
   it("handles are signed and expire with a discriminated reason", () => {
     const body = { a: "bot-a", t: "t1", m: "m1", i: 1000, c: "bot:x" };
     const handle = signHandle(SECRET, body);

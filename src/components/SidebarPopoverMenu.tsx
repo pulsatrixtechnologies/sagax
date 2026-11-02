@@ -78,8 +78,19 @@ export interface SidebarSubmenuEntry {
   tourId?: string;
   /** a tooltip on the row (a server's address under its name) */
   title?: string;
-  /** a small Rename button beside the row (its own button, not nested in the row) */
-  rename?: { label: string; onRename: () => void };
+  /** a small Rename button beside the row (its own button, not nested in the row).
+   * When `edit` is set, the row shows an inline field (lot 6: no rename window). */
+  rename?: {
+    label: string;
+    onRename: () => void;
+    edit?: {
+      value: string;
+      placeholder: string;
+      onChange: (value: string) => void;
+      onSave: () => void;
+      onCancel: () => void;
+    };
+  };
   onSelect?: () => void;
 }
 
@@ -344,6 +355,32 @@ export function SidebarPopoverMenu({
                           </span>
                           {entry.value && <span className="shrink-0 tabular-nums text-ink-secondary">{entry.value}</span>}
                         </div>
+                      ) : entry.rename?.edit ? (
+                        <form
+                          data-rename-inline={entry.key}
+                          className="flex items-center gap-1.5 rounded-md bg-selected px-2 py-1"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            entry.rename?.edit?.onSave();
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Escape") return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            entry.rename?.edit?.onCancel();
+                          }}
+                        >
+                          {entry.icon && <span className="flex size-5 shrink-0 items-center justify-center">{entry.icon}</span>}
+                          <input
+                            autoFocus
+                            value={entry.rename.edit.value}
+                            maxLength={80}
+                            placeholder={entry.rename.edit.placeholder}
+                            aria-label={entry.rename.label}
+                            onChange={(event) => entry.rename?.edit?.onChange(event.target.value)}
+                            className="min-w-0 flex-1 rounded-md border-[0.5px] border-border bg-elevated px-2 py-1 text-[13px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                          />
+                        </form>
                       ) : (
                         <div className="group/entry relative">
                         <button
@@ -380,8 +417,8 @@ export function SidebarPopoverMenu({
                             title={entry.rename.label}
                             aria-label={entry.rename.label}
                             onClick={() => {
+                              // Stay in the menu: the row becomes the field (lot 6).
                               entry.rename?.onRename();
-                              close();
                             }}
                             className="absolute right-8 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-tertiary opacity-50 hover:bg-hover hover:text-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus group-hover/entry:opacity-100 touch:opacity-100"
                           >

@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { RuntimeEvent } from "../shared/runtime-events.ts";
 import { CLAUDE_NEEDS_RECONNECTING, CLAUDE_SIGN_IN_EXPIRED, claudeSignInExpired } from "./drivers/claude-errors.ts";
+import { CODEX_SIGN_IN_EXPIRED, codexSignInExpired } from "./drivers/codex-errors.ts";
+import { engineNeedsReconnecting, engineReconnectAheadDetail } from "./engine-reconnect-ahead.ts";
 import {
   classifyRoutineFailure, dispatchRefusal, retryNote, ROUTINE_BUSY_RECHECK_MS, ROUTINE_BUSY_WAIT_MS, weekRuns, type RoutineAlert,
 } from "./routine-recovery.ts";
@@ -21,7 +23,6 @@ const MINUTE = 60_000;
 const ROUTING = "stream error: workspace routing discovery failed: error sending request";
 const STALL = "No activity for 20 minutes, the routine was stopped";
 const SIGNED_OUT = "Not logged in · Please run /login";
-const SIGN_IN_ACTION = "This bot's engine is signed out. Sign in again in Settings → Model providers.";
 const BUSY = "this thread is already working, interrupt it first";
 type EventBody = RuntimeEvent extends infer E ? E extends RuntimeEvent ? Omit<E, "eventId" | "provider" | "threadId" | "createdAt"> : never : never;
 
@@ -98,6 +99,9 @@ describe("classifyRoutineFailure", () => {
     ["Claude Code is too old for this model. Update it.", { setup: true, stopReason: "update_required" }, { kind: "owner", cause: "setup" }],
     ["The engine stopped without saying why (stop reason: cancelled).", { stopReason: "cancelled" }, { kind: "final" }],
     ["the turn was interrupted", {}, { kind: "final" }],
+    ["The model returned only its reasoning and no final answer.", { stopReason: "reasoning_only" }, { kind: "retry", cause: "empty_response" }],
+    ["empty response from model (reasoning_only)", {}, { kind: "retry", cause: "empty_response" }],
+    ["The engine ended the turn with no reply, image, or tool result.", { stopReason: "empty_turn" }, { kind: "retry", cause: "empty_response" }],
   ])("%s", (failure, facts, verdict) => {
     expect(classifyRoutineFailure(failure, facts)).toEqual(verdict);
   });
@@ -153,6 +157,19 @@ describe("an unattended run that fails for a passing reason", () => {
     expect(h.started).toHaveLength(1);
     await h.advance(2 * SECOND);
     expect(h.started).toHaveLength(2);
+  });
+
+  it("retries once after reasoning_only / empty model, then fails on a second empty", async () => {
+    const h = harness();
+    const run = await h.start(h.routine().id);
+    const empty = "The model returned only its reasoning and no final answer.";
+    h.fail("thread-1", empty, { stopReason: "reasoning_only" });
+    expect(h.run(run.id)).toMatchObject({ status: "queued", retried: "empty_response" });
+    expect(h.failed).toEqual([]);
+    await h.advance(16 * SECOND);
+    expect(h.started[1]!.prompt).toContain(retryNote("empty_response"));
+    h.fail("thread-1", empty, { stopReason: "reasoning_only" });
+    expect(h.run(run.id)).toMatchObject({ status: "failed", retried: "empty_response", error: `Failed after one automatic retry: ${empty}` });
   });
 
   it("starts again once after its engine stalled, ignores the stalled turn's own end, and fails on a second stall", async () => {
@@ -231,35 +248,35 @@ describe("an unattended run whose bot is busy when it starts", () => {
 });
 
 describe("an unattended run only its owner can fix", () => {
-  it("fails a sign-in error at once, and tells the owner once per bot until one of its runs completes", async () => {
+  it("pauses a generic sign-in error as waiting and tells the owner once per bot until reconnect", async () => {
     const h = harness();
     const first = await h.start(h.routine("maus-1", "Inbox sweep").id);
     h.fail("thread-1", SIGNED_OUT, { setup: true, stopReason: "auth_required" });
-    expect(h.run(first.id)).toMatchObject({ status: "failed", error: `${SIGN_IN_ACTION} The engine said: “${SIGNED_OUT}”` });
-    expect(h.run(first.id).retried).toBeUndefined();
-    expect(h.failed.map(({ alert }) => alert)).toEqual([{ detail: SIGN_IN_ACTION }]);
+    expect(h.run(first.id)).toMatchObject({
+      status: "waiting",
+      attention: engineNeedsReconnecting("Engine"),
+      waitingSince: START,
+    });
+    expect(h.run(first.id).error).toBeUndefined();
+    expect(h.failed).toEqual([]);
+    expect(h.deferred.map(({ alert }) => alert)).toEqual([{ detail: engineReconnectAheadDetail("Engine") }]);
     await h.advance(5 * MINUTE);
     expect(h.attempts).toHaveLength(1);
 
     const second = await h.start(h.routine("maus-1", "Calendar check").id);
     h.fail(second.threadId!, SIGNED_OUT, { setup: true, stopReason: "auth_required" });
+    expect(h.run(second.id).status).toBe("waiting");
+    // Same bot already notified: no second deferred alert.
+    expect(h.deferred).toHaveLength(1);
     const elsewhere = await h.start(h.routine("maus-2", "Other bot").id);
     h.fail(elsewhere.threadId!, SIGNED_OUT, { setup: true, stopReason: "auth_required" });
-    expect(h.failed.map(({ alert }) => alert)).toEqual([{ detail: SIGN_IN_ACTION }, null, { detail: SIGN_IN_ACTION }]);
+    expect(h.deferred.map(({ alert }) => alert)).toEqual([
+      { detail: engineReconnectAheadDetail("Engine") },
+      { detail: engineReconnectAheadDetail("Engine") },
+    ]);
     expect(JSON.parse(readFileSync(h.options.file!, "utf8")).ownerNotices).toMatchObject([
       { botId: "maus-1", cause: "signed_out" }, { botId: "maus-2", cause: "signed_out" },
     ]);
-
-    // Across a restart it stays told; a completed run of that bot is what clears it.
-    h.restart();
-    const third = await h.start(h.manager.listRoutines().find((routine) => routine.name === "Inbox sweep")!.id);
-    h.fail(third.threadId!, SIGNED_OUT, { setup: true, stopReason: "auth_required" });
-    expect(h.failed.at(-1)!.alert).toBeNull();
-    const fixed = await h.start(h.manager.listRoutines().find((routine) => routine.name === "Calendar check")!.id);
-    h.complete(fixed.threadId!);
-    const fourth = await h.start(h.manager.listRoutines().find((routine) => routine.name === "Inbox sweep")!.id);
-    h.fail(fourth.threadId!, SIGNED_OUT, { setup: true, stopReason: "auth_required" });
-    expect(h.failed.at(-1)!.alert).toEqual({ detail: SIGN_IN_ACTION });
   });
 
   it("fails an out-of-credit refusal at once with what to do", async () => {
@@ -288,6 +305,20 @@ describe("an unattended run only its owner can fix", () => {
       alert: { detail: expect.stringContaining("Reconnect Claude") },
     })]);
     expect(message.startsWith(CLAUDE_SIGN_IN_EXPIRED)).toBe(true);
+  });
+
+  it("pauses a Codex sign-in expiry as waiting, never fails it", async () => {
+    const h = harness();
+    const message = codexSignInExpired("workspace routing discovery unauthorized");
+    const run = await h.start(h.routine("maus-1").id);
+    h.fail("thread-1", message, { setup: true, stopReason: "auth_required" });
+    expect(h.run(run.id)).toMatchObject({
+      status: "waiting",
+      attention: engineNeedsReconnecting("Codex"),
+    });
+    expect(h.run(run.id).error).toBeUndefined();
+    expect(h.failed).toEqual([]);
+    expect(h.deferred[0]!.alert?.detail).toContain(CODEX_SIGN_IN_EXPIRED);
   });
 
   it("pauses Claude extra-usage credits exhaustion as waiting (Claude needs reconnecting)", async () => {
@@ -322,15 +353,27 @@ describe("an unattended run only its owner can fix", () => {
     expect(h.started.map((turn) => turn.threadId)).toEqual(["thread-1", "thread-1"]);
   });
 
+  it("resumes Codex waits when Codex reconnects, without touching Claude waits", async () => {
+    const h = harness();
+    const claudeRun = await h.start(h.routine("maus-1", "Claude job").id);
+    h.fail(claudeRun.threadId!, claudeSignInExpired("OAuth session expired"), { setup: true, stopReason: "auth_required" });
+    const codexRun = await h.start(h.routine("maus-2", "Codex job").id);
+    h.fail(codexRun.threadId!, codexSignInExpired("ChatGPT login is required"), { setup: true, stopReason: "auth_required" });
+    expect(h.run(claudeRun.id).attention).toBe(CLAUDE_NEEDS_RECONNECTING);
+    expect(h.run(codexRun.id).attention).toBe(engineNeedsReconnecting("Codex"));
+    expect(h.manager.resumeEngineReconnectWaits(["maus-1", "maus-2"], "Codex").map((run) => run.id)).toEqual([codexRun.id]);
+    expect(h.run(claudeRun.id).status).toBe("waiting");
+    expect(h.run(codexRun.id).status).toBe("queued");
+  });
 
   it("pauses a due Claude run ahead when the sign-in is already expired", async () => {
-    const notified: Array<{ person: string; detail: string; names: string[] }> = [];
+    const notified: Array<{ person: string; detail: string; names: string[]; engine?: string }> = [];
     const h = harness({
-      claudeReconnect: {
-        usesClaude: () => true,
+      engineReconnect: {
+        botDriver: () => "claudeAgent",
         payer: () => "pr_alice",
         expired: () => true,
-        onAheadNotify: (person, detail, names) => notified.push({ person, detail, names }),
+        onAheadNotify: (person, detail, names, engine) => notified.push({ person, detail, names, engine }),
       },
     });
     const routine = h.manager.create({
@@ -344,11 +387,35 @@ describe("an unattended run only its owner can fix", () => {
     expect(notified).toEqual([expect.objectContaining({
       person: "pr_alice",
       names: ["Morning brief"],
+      engine: "Claude",
     })]);
     // Advance past due so the run is queued, then paused for reconnect.
     await h.advance(31 * MINUTE);
     const run = h.runs().find((candidate) => candidate.routineId === routine.id);
     expect(run).toMatchObject({ status: "waiting", attention: CLAUDE_NEEDS_RECONNECTING });
+    expect(h.started).toEqual([]);
+    expect(h.failed).toEqual([]);
+  });
+
+  it("pauses a proactive wake when the engine is already expired, without starting a turn", async () => {
+    const h = harness({
+      engineReconnect: {
+        botDriver: () => "codex",
+        payer: () => "pr_alice",
+        expired: () => true,
+      },
+    });
+    const run = h.manager.enqueueProactive({
+      botId: "maus-1",
+      name: "Proactive: email",
+      prompt: "Handle mail",
+      proactive: { mode: "proactive", hops: 0, sources: ["mail"] },
+    });
+    await h.manager.tick();
+    expect(h.run(run.id)).toMatchObject({
+      status: "waiting",
+      attention: engineNeedsReconnecting("Codex"),
+    });
     expect(h.started).toEqual([]);
     expect(h.failed).toEqual([]);
   });

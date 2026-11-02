@@ -68,7 +68,7 @@ export interface CredentialVaultRouteDeps {
     /** Settle the card and wake the bot with this note. */
     resume(botId: string, threadId: string, messageId: string, outcome: "provided" | "dismissed", prompt: string): boolean;
   };
-  audit?(action: "credentials.create" | "credentials.delete" | "credentials.grant" | "credentials.revoke" | "credentials.import" | "credentials.export" | "credentials.signed_in" | "credentials.wallet", auth: RequestAuth, detail: Record<string, unknown>): void;
+  audit?(action: "credentials.create" | "credentials.delete" | "credentials.grant" | "credentials.revoke" | "credentials.import" | "credentials.export" | "credentials.signed_in" | "credentials.wallet" | "credentials.payments", auth: RequestAuth, detail: Record<string, unknown>): void;
   /** Whether this caller may take the vault's values out in a file now:
    * null to go on, else the refusal (a security key step-up, a sign-in
    * that is too old, a bot acting for its person). Absent refuses. */
@@ -344,7 +344,10 @@ export function createCredentialVaultRoutes(deps: CredentialVaultRouteDeps): Rou
         return json(res, 200, {
           items: unavailable ? [] : deps.vault.list(principalId),
           purchases: unavailable ? [] : deps.vault.pendingPurchases(principalId),
+          history: unavailable ? [] : deps.vault.listPurchases(principalId).filter((row) => row.status !== "pending").slice(0, 50),
           wallets: await deps.vault.walletLinksLive(principalId),
+          payments: unavailable ? {} : deps.vault.paymentsSettings(principalId),
+          methods: unavailable ? [] : deps.vault.paymentMethods(principalId),
           onePassword: await deps.onePassword.status(),
           ...(unavailable ? { unavailable } : {}),
           ...(deps.exportBlocked?.(auth) ? { exportBlocked: true } : {}),
@@ -418,6 +421,23 @@ export function createCredentialVaultRoutes(deps: CredentialVaultRouteDeps): Rou
       if (path === "/api/me/credentials/purchases") {
         if (method !== "POST") return json(res, 405, { error: "POST only" });
         return json(res, 200, { purchases: deps.vault.pendingPurchases(principalId) });
+      }
+      if (path === "/api/me/credentials/purchases/history") {
+        if (method !== "POST") return json(res, 405, { error: "POST only" });
+        return json(res, 200, {
+          purchases: deps.vault.listPurchases(principalId).filter((row) => row.status !== "pending").slice(0, 100),
+        });
+      }
+      if (path === "/api/me/credentials/payments" && (method === "POST" || method === "PATCH")) {
+        if (method === "POST") {
+          return json(res, 200, {
+            payments: deps.vault.paymentsSettings(principalId),
+            methods: deps.vault.paymentMethods(principalId),
+          });
+        }
+        const payments = deps.vault.setPaymentsSettings(principalId, await body());
+        deps.audit?.("credentials.payments", auth, { patched: true });
+        return json(res, 200, { payments, methods: deps.vault.paymentMethods(principalId) });
       }
       const purchase = /^\/api\/me\/credentials\/purchases\/(pay_[a-f0-9]{16})\/answer$/.exec(path);
       if (purchase) {

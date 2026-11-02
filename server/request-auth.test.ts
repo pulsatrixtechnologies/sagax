@@ -236,6 +236,8 @@ describe("scopes", () => {
       ["GET", "/api/bots/x/workspace"], ["GET", "/api/bots/x/workspace/download"],
       ["GET", "/api/bots/x/workspace/file"], ["PUT", "/api/bots/x/workspace/file"], ["DELETE", "/api/bots/x/workspace/file"],
       ["POST", "/api/bots/x/workspace/docs/rename"],
+      ["POST", "/api/bots/x/workspace/mkdir"], ["POST", "/api/bots/x/workspace/touch"], ["POST", "/api/bots/x/workspace/rename"],
+      ["POST", "/api/bots/x/workspace/upload"], ["DELETE", "/api/bots/x/workspace/entry"], ["GET", "/api/bots/x/workspace/count"],
       // 2026-10-26: the bot's memory and change history, owner checked in the handlers
       ["GET", "/api/bots/x/memory"], ["PUT", "/api/bots/x/memory"],
       ["GET", "/api/bots/x/memory/file"], ["PUT", "/api/bots/x/memory/file"], ["DELETE", "/api/bots/x/memory/file"],
@@ -307,15 +309,22 @@ describe("scopes", () => {
     })).toBeNull();
   });
 
-  it("lets the owner's paired phone switch a bot's memory, and nothing a member may not set besides", () => {
+  it("lets the owner's paired phone switch memory, permissions and access (Lot 1)", () => {
     expect(companionBotFieldViolation({ memoryEnabled: false, memoryUpkeep: true, name: "Scout", soul: "x", modelSelection: {} })).toBeNull();
     // the voice notes switch of the bot panel (row BA11)
     expect(companionBotFieldViolation({ voiceNotes: false })).toBeNull();
-    for (const field of ["approvalMode", "cwd", "computer", "mcpServers", "autoApprove", "browserProfile", "visibility", "hidden", "host"]) {
+    // Lot 1: Permissions / Approval / Proactive / Access from the phone
+    expect(companionBotFieldViolation({
+      approvalMode: "ask", proactiveMode: "proactive", chiefOfStaff: false, approvePeerComms: true,
+      browser: false, mcpServers: [], alwaysAllow: [], computer: "local", cwd: "/work",
+      confirmFullAccess: true, applyToAllThreads: true,
+    })).toBeNull();
+    // org sharing and host fields stay off the phone
+    for (const field of ["browserProfile", "visibility", "hidden", "host", "peers", "outbound", "fallback", "section"]) {
       expect(companionBotFieldViolation({ memoryEnabled: true, [field]: "x" }), field).toBe(field);
     }
     expect(companionBotFieldViolation([])).toBe("body");
-    // a member session still may not
+    // a member session still may not set memory without bots.behaviour
     expect(memberBotFieldViolation({ memoryEnabled: false })).toBe("memoryEnabled");
     expect(memberBotFieldViolation({ voiceNotes: false })).toBe("voiceNotes");
   });

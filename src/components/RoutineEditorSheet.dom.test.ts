@@ -5,7 +5,8 @@
 // unsaved changes said and confirmed before closing. Advanced schedule,
 // timing, overlap and auto-pause live under More and still save. A webhook
 // routine picks "When a webhook arrives" and manages its webhook in When.
-import { createElement } from "react";
+import { act, createElement, type ReactNode } from "react";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,8 +53,9 @@ const routine = (schedule: Routine["schedule"]): Routine => ({
 
 let host: HTMLDivElement;
 let root: Root;
+const hosted = (node: ReactNode) => createElement(ConfirmProvider, null, node);
 const mount = (value: Routine, onClose = vi.fn()) => {
-  flushSync(() => root.render(createElement(RoutineEditor, { routine: value, bots: [bot], lockedBotId: bot.id, onClose })));
+  flushSync(() => root.render(hosted(createElement(RoutineEditor, { routine: value, bots: [bot], lockedBotId: bot.id, onClose }))));
   return onClose;
 };
 
@@ -88,6 +90,17 @@ describe("Edit routine", () => {
     expect(more.textContent).toContain("Only when I'm here");
     expect(host.querySelector("[data-routine-editor-section=where] [data-routine-post-results]")).not.toBeNull();
     expect(host.querySelector("[data-markdown-editor]")?.querySelector("[data-md-full]")).not.toBeNull();
+    expect(host.querySelector("[data-markdown-editor]")?.getAttribute("data-md-compact")).toBe("");
+    // Compact: count stays hidden until the person focuses the editor.
+    expect(host.querySelector("[data-markdown-count]")).toBeNull();
+    // Section labels stay in sentence case (never all-caps).
+    for (const section of host.querySelectorAll("[data-routine-editor-section]")) {
+      const label = section.querySelector("h3")?.textContent ?? "";
+      expect(label).toBeTruthy();
+      expect(label).toBe(label[0]!.toUpperCase() + label.slice(1));
+      expect(label).not.toBe(label.toUpperCase());
+    }
+    expect(host.textContent).toContain("Passed to each local run.");
     expect(host.textContent).not.toMatch(/cron/i);
     expect(host.querySelector("[data-editor-dirty]")).toBeNull();
   });
@@ -156,45 +169,44 @@ describe("Edit routine", () => {
   });
 
   it("panel presentation edits in place with Back, without a modal overlay", () => {
-    flushSync(() => root.render(createElement(RoutineEditor, {
+    flushSync(() => root.render(hosted(createElement(RoutineEditor, {
       routine: routine({ type: "cron", expression: "0 9 * * *", timeZone: "UTC" }),
       bots: [bot],
       lockedBotId: bot.id,
       presentation: "panel",
       onClose: vi.fn(),
-    })));
+    }))));
     expect(host.querySelector("[data-routine-editor-presentation=panel]")).not.toBeNull();
     expect(host.querySelector("[data-editor-back]")).not.toBeNull();
     expect(host.querySelector(".fixed.inset-0.z-50")).toBeNull();
     expect(host.querySelector("[data-editor-title]")?.textContent).toBe("Edit routine");
   });
 
-  it("panel Back asks before discarding unsaved changes", () => {
+  it("panel Back asks before discarding unsaved changes", async () => {
     const onClose = vi.fn();
-    flushSync(() => root.render(createElement(RoutineEditor, {
+    flushSync(() => root.render(hosted(createElement(RoutineEditor, {
       routine: routine({ type: "cron", expression: "0 9 * * *", timeZone: "UTC" }),
       bots: [bot],
       lockedBotId: bot.id,
       presentation: "panel",
       onClose,
-    })));
+    }))));
     const name = host.querySelector<HTMLInputElement>("[data-routine-editor-name]")!;
     flushSync(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(name, "Renamed");
       name.dispatchEvent(new Event("input", { bubbles: true }));
     });
     expect(host.querySelector("[data-editor-dirty]")).not.toBeNull();
-    const confirm = vi.fn(() => false);
-    vi.stubGlobal("confirm", confirm);
-    flushSync(() => host.querySelector<HTMLButtonElement>("[data-editor-back]")!.click());
-    expect(confirm).toHaveBeenCalledWith("Close without saving your changes?");
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-editor-back]")!.click(); });
+    expect(document.getElementById("confirm-dialog-body")?.textContent).toBe("Close without saving your changes?");
+    await act(async () => { [...document.querySelectorAll("button")].find((button) => button.textContent === "Cancel")!.click(); });
     expect(onClose).not.toHaveBeenCalled();
-    confirm.mockReturnValue(true);
-    flushSync(() => host.querySelector<HTMLButtonElement>("[data-editor-back]")!.click());
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-editor-back]")!.click(); });
+    await act(async () => { (document.querySelector("[data-confirm-action]") as HTMLButtonElement).click(); });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("says a change is not saved and asks before closing over it", () => {
+  it("says a change is not saved and asks before closing over it", async () => {
     const onClose = mount(routine({ type: "cron", expression: "0 9 * * *", timeZone: "UTC" }));
     const name = host.querySelector<HTMLInputElement>("[data-routine-editor-name]")!;
     flushSync(() => {
@@ -202,21 +214,20 @@ describe("Edit routine", () => {
       name.dispatchEvent(new Event("input", { bubbles: true }));
     });
     expect(host.querySelector("[data-editor-dirty]")?.textContent).toBe("Not saved");
-    const confirm = vi.fn(() => false);
-    vi.stubGlobal("confirm", confirm);
     const cancel = [...host.querySelectorAll("button")].find((button) => button.textContent === "Cancel")!;
-    flushSync(() => cancel.click());
-    expect(confirm).toHaveBeenCalledWith("Close without saving your changes?");
+    await act(async () => { cancel.click(); });
+    expect(document.getElementById("confirm-dialog-body")?.textContent).toBe("Close without saving your changes?");
+    await act(async () => { [...document.querySelectorAll("button")].find((button) => button.textContent === "Cancel" && button.closest("[role=alertdialog]"))!.click(); });
     expect(onClose).not.toHaveBeenCalled();
-    confirm.mockReturnValue(true);
-    flushSync(() => cancel.click());
+    await act(async () => { cancel.click(); });
+    await act(async () => { (document.querySelector("[data-confirm-action]") as HTMLButtonElement).click(); });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("manages a webhook routine's webhook in When", () => {
     fixture.webhooks = [{ id: "w1", endpointId: "wh_abc", routineId: "r1", name: "Weekly digest", prompt: "", botId: bot.id, runOn: "maus", enabled: true, createdAt: 1, updatedAt: 1, deliveryCount: 2, tokenLast4: "k3Yz" }];
     mount(routine({ type: "webhook" }));
-    expect(host.querySelector<HTMLSelectElement>("[data-schedule-frequency]")?.value).toBe("webhook");
+    expect(host.querySelector("[data-schedule-frequency]")?.getAttribute("data-schedule-frequency")).toBe("webhook");
     const when = host.querySelector("[data-routine-editor-section=when]")!;
     expect(when.querySelector("[data-webhook-url]")?.textContent).toBe("https://hooks.example.test/hooks/wh_abc");
     expect(when.textContent).toContain("whsec_••••k3Yz");

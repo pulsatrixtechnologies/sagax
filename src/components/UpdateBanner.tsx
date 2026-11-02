@@ -3,15 +3,16 @@
 // opens a small "Update ready" dialog (Later, Restart to install) whose
 // release notes unfold under "What's new"; "Later" leaves the sidebar's
 // update button, which opens it again (openUpdatePrompt). Errors and the
-// Linux package hand-off stay on the small bottom-left card.
+// Linux package hand-off stay on the small bottom-left card, including a
+// failure of the person's own check (Try again, or Quit and reopen).
 //
 // The person's own "Check for updates" (requestUpdateCheck: account menu >
-// Help, Settings > Updates) opens the same dialog at once and follows the
+// Help, Settings > Updates) opens the dialog at once and follows the
 // check: searching, "Sagax X.Y.Z is available" with its notes and the
 // download's progress (Later leaves it downloading in the background, the
 // sidebar's pill shows the progress), "Update ready", "Sagax is up to date",
-// or the failure with Try again. Nothing installs from the menu: only this
-// dialog's "Restart to install", which tells main it was confirmed
+// or the failure on that same card. Nothing installs from the menu: only the
+// ready dialog's "Restart to install", which tells main it was confirmed
 // (2026-10-19: on Windows the menu item quit into a silent install).
 import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, Sparkles, X } from "lucide-react";
@@ -363,65 +364,17 @@ export function UpdateNotesDialog({
   );
 }
 
-/** A failure of the person's own check: in the dialog they are looking at. */
-export function UpdateProblemDialog({
-  state: s,
-  pending,
-  onDismiss,
-  onRetry,
-  onQuit,
-}: {
+/** A failure, on the same bottom-left card as a background error. The
+ * person's own check used to open an alertdialog; the card carries the
+ * error and Try again or Quit and reopen. */
+export function UpdateProblemDialog(props: {
   state: UpdaterState;
   pending: "install" | "check" | null;
   onDismiss: () => void;
   onRetry: () => void;
   onQuit?: () => void;
 }) {
-  const retryable = s.retryable !== false;
-  const primaryRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    primaryRef.current?.focus();
-  }, []);
-  useEscape(onDismiss, false);
-  const body = retryable
-    ? friendlyError(s.message)
-    : `${friendlyError(s.message?.split(" Quit and reopen ")[0])} ${t("updates.problem.reopen", { app: brand().name })}`;
-  return (
-    <DialogLayer className="z-[60]" onBackdropMouseDown={onDismiss}>
-      <DialogFrame
-        titleId="update-problem-title"
-        title={t("updates.problem.failedTitle")}
-        role="alertdialog"
-        frameProps={{ "aria-describedby": "update-problem-body", "data-update-dialog": "error" }}
-        footer={
-          <>
-            <button type="button" onClick={onDismiss} disabled={pending !== null} className={PILL}>
-              {t("releaseNotes.close")}
-            </button>
-            {retryable ? (
-              <button ref={primaryRef} type="button" onClick={onRetry} disabled={pending !== null} className={PRIMARY_PILL}>
-                {pending === "check" ? (
-                  <>
-                    <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> {t("common.checking")}
-                  </>
-                ) : (
-                  t("updates.problem.retry")
-                )}
-              </button>
-            ) : (
-              // The staging failed and cannot be retried in place: the remedy
-              // is to quit and reopen, so that action must stay clickable.
-              <button ref={primaryRef} type="button" onClick={onQuit} className={PRIMARY_PILL}>
-                {t("settings.updates.quitReopen")}
-              </button>
-            )}
-          </>
-        }
-      >
-        <p id="update-problem-body" className="-mt-2 text-[13px] leading-[19px] text-ink-secondary">{body}</p>
-      </DialogFrame>
-    </DialogLayer>
-  );
+  return <UpdateProblemCard {...props} focusPrimary />;
 }
 
 function UpdateProblemCard({
@@ -430,13 +383,29 @@ function UpdateProblemCard({
   onDismiss,
   onRetry,
   onQuit,
+  focusPrimary = false,
 }: {
   state: UpdaterState;
   pending: "install" | "check" | null;
   onDismiss: () => void;
   onRetry: () => void;
   onQuit?: () => void;
+  /** The person's own check: land on the remedy. */
+  focusPrimary?: boolean;
 }) {
+  const primaryRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (focusPrimary) primaryRef.current?.focus();
+  }, [focusPrimary]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || pending !== null) return;
+      event.preventDefault();
+      onDismiss();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onDismiss, pending]);
   const title = s.status === "handed-off" ? t("updates.problem.terminalTitle") : t("updates.problem.failedTitle");
   const subtitle =
     s.status === "handed-off"
@@ -454,7 +423,7 @@ function UpdateProblemCard({
           <Sparkles size={14} aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-semibold leading-[18px] text-ink">{title}</div>
+          <h2 className="text-[13px] font-semibold leading-[18px] text-ink">{title}</h2>
           <div className="mt-0.5 text-[12px] leading-4 text-ink-secondary" title={subtitle}>
             {subtitle}
           </div>
@@ -487,6 +456,7 @@ function UpdateProblemCard({
         </button>
         {s.status === "error" && s.retryable !== false && (
           <button
+            ref={primaryRef}
             type="button"
             onClick={onRetry}
             disabled={pending !== null}
@@ -504,7 +474,7 @@ function UpdateProblemCard({
         {s.status === "error" && s.retryable === false && (
           // The native staging failed and cannot be retried in place; the
           // only remedy is to quit and reopen, so keep that control clickable.
-          <button type="button" onClick={onQuit} className={PRIMARY_PILL}>
+          <button ref={primaryRef} type="button" onClick={onQuit} className={PRIMARY_PILL}>
             {t("settings.updates.quitReopen")}
           </button>
         )}

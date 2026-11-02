@@ -38,6 +38,7 @@ import { planMailDelivery, plusTag, type MailTagRoutine } from "../shared/routin
 import { isRelaySource, isTriggerSourceType, type NormalizedTriggerEvent, type TriggerSourceConfig } from "../shared/trigger-sources.ts";
 import type { ConsoleAssertion, ConsoleAssertionActor } from "./oidc-rp.ts";
 import { AssertionReplayCache } from "./org-admin-routes.ts";
+import { EMAIL_WATCH_PAYLOAD_MAX_CHARS } from "./cold-prompt-budget.ts";
 import { BOTMAIL_RUN_RULES, defang, type WebhookReceiveResult } from "./webhooks.ts";
 
 export const BOT_MAIL_PATH = "/api/org/inbound-mail";
@@ -146,7 +147,10 @@ export function botmailTaggedPrompt(
   const configured = instructions.trim()
     || "Review the email, summarize what happened and suggest the next step. Do not take external actions unless your instructions say so.";
   const boundary = `mail${deliveryId.replace(/[^a-z0-9]/gi, "").slice(0, 24) || "tag"}`;
-  const body = defang(JSON.stringify(event, null, 2));
+  let body = defang(JSON.stringify(event, null, 2));
+  if (body.length > EMAIL_WATCH_PAYLOAD_MAX_CHARS) {
+    body = `${body.slice(0, EMAIL_WATCH_PAYLOAD_MAX_CHARS)}\n\n[Payload truncated by Sagax]`;
+  }
   return [
     "[USER-CONFIGURED TRIGGER INSTRUCTIONS]",
     configured,

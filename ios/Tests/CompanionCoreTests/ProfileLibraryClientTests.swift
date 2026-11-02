@@ -111,6 +111,36 @@ final class ProfileLibraryClientTests: XCTestCase {
         XCTAssertTrue(object["avatarUrl"] is NSNull)
     }
 
+    /// Lot 9: Done builds a look PATCH from the Avatar draft; Back leaves it empty.
+    func testLookDiffOnlySendsChangedFieldsAndOptionalPictureClear() throws {
+        let same = BotProfileEdit.lookDiff(
+            fromColor: "purple", fromLook: .owl, fromSkin: .none,
+            toColor: "purple", toLook: .owl, toSkin: .none,
+            clearsPicture: false
+        )
+        XCTAssertTrue(same.isEmpty)
+
+        let colourOnly = BotProfileEdit.lookDiff(
+            fromColor: "purple", fromLook: .owl, fromSkin: .none,
+            toColor: "teal", toLook: .owl, toSkin: .none,
+            clearsPicture: false
+        )
+        XCTAssertEqual(colourOnly.color, "teal")
+        XCTAssertNil(colourOnly.mascotLook)
+        XCTAssertNil(colourOnly.mascotSkin)
+        XCTAssertNil(colourOnly.avatarUrl)
+
+        let reset = BotProfileEdit.lookDiff(
+            fromColor: "purple", fromLook: .owl, fromSkin: .frost,
+            toColor: "green", toLook: .owl, toSkin: .none,
+            clearsPicture: true
+        )
+        XCTAssertEqual(reset.color, "green")
+        XCTAssertEqual(reset.mascotSkin, MascotSkin.none)
+        XCTAssertEqual(reset.avatarCrop, .mascot)
+        XCTAssertEqual(reset.avatarUrl, .clear)
+    }
+
     func testFramingAndSoulEncode() throws {
         let edit = BotProfileEdit(avatarZoom: 1.5, avatarFocusX: 0.25, avatarFocusY: 0.75, notifications: true, soul: "Be brief.")
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(edit)) as? [String: Any])

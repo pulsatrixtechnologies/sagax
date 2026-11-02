@@ -8,7 +8,7 @@
 "use strict";
 
 const SKIN_CHROME = Object.freeze({
-  pulsatrix: Object.freeze({ color: "#030b17", symbolColor: "#9aa6c2" }),
+  pulsatrix: Object.freeze({ color: "#121212", symbolColor: "#a8a8a8" }),
   "pulsatrix-light": Object.freeze({ color: "#eef2f8", symbolColor: "#545e6e" }),
   midnight: Object.freeze({ color: "#121212", symbolColor: "#a8a8a8" }),
   atelier: Object.freeze({ color: "#f5f1eb", symbolColor: "#6b6559" }),

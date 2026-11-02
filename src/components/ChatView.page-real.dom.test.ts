@@ -244,7 +244,7 @@ describe("a page opened from its card in the real ChatView (stage default)", () 
 
 describe("the optional side conversation", () => {
   async function showConversation() {
-    await act(async () => { container.querySelector<HTMLButtonElement>("[data-page-more] > button")!.click(); });
+    await act(async () => { container.querySelector<HTMLButtonElement>("button[data-page-more]")!.click(); });
     const item = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find((node) => node.textContent?.includes(t("pages.showConversation")));
     expect(item).toBeDefined();
     await act(async () => { item!.click(); });
@@ -279,7 +279,7 @@ describe("the optional side conversation", () => {
     for (const width of [700, 390]) {
       await resize(width);
       await openTheCard();
-      await act(async () => { container.querySelector<HTMLButtonElement>("[data-page-more] > button")!.click(); });
+      await act(async () => { container.querySelector<HTMLButtonElement>("button[data-page-more]")!.click(); });
       const item = [...document.querySelectorAll<HTMLButtonElement>("[role=menuitem]")].find((node) => node.textContent?.includes(t("pages.showConversation")));
       expect(item?.disabled).toBe(true);
       expect(host().hasAttribute("data-page-cover")).toBe(true);
@@ -336,7 +336,7 @@ describe("split views and live version cards", () => {
     };
     await draw();
     await openTheCard();
-    await act(async () => { container.querySelector<HTMLButtonElement>("[data-page-more] > button")!.click(); });
+    await act(async () => { container.querySelector<HTMLButtonElement>("button[data-page-more]")!.click(); });
     const item = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find((node) => node.textContent?.includes(t("pages.showConversation")));
     await act(async () => { item!.click(); });
     const chip = container.querySelector<HTMLElement>('[data-testid="bot-exchange-chip"]');

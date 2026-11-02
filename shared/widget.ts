@@ -54,6 +54,46 @@ export interface WidgetAction {
   payload?: JsonValue;
 }
 
+/** In-app destinations a widget button can open on the person's device
+ * (2026-11-02, the reference design: a card button that names a place opens
+ * it at once, it does not ask the model to). `open_page.payload.page` is one
+ * of these. */
+export const WIDGET_APP_PAGES = ["routines", "approvals", "team_map", "achievements", "code", "remote_sessions"] as const;
+export type WidgetAppPage = (typeof WIDGET_APP_PAGES)[number];
+
+/** Actions the device performs itself. `open_url` opens a link and is never
+ * sent; the in-app ones open a Sagax page, a routine or a routine run, and
+ * the press is then recorded for the bot as already done (no turn runs). */
+export const WIDGET_APP_ACTIONS = ["open_page", "open_routine", "open_run"] as const;
+export type WidgetAppAction =
+  | { type: "open_page"; page: WidgetAppPage }
+  | { type: "open_routine"; routineId: string; botId?: string }
+  | { type: "open_run"; runId: string; routineId?: string };
+
+const ID_TEXT = /^[\w.:-]{1,128}$/;
+
+/** The in-app destination an action names, or undefined when it names none. */
+export function widgetAppAction(action: WidgetAction | undefined): WidgetAppAction | undefined {
+  if (!action || !isRecord(action.payload)) return undefined;
+  const payload = action.payload;
+  const id = (value: unknown) => (typeof value === "string" && ID_TEXT.test(value) ? value : undefined);
+  if (action.type === "open_page") {
+    const page = payload.page;
+    return typeof page === "string" && (WIDGET_APP_PAGES as readonly string[]).includes(page) ? { type: "open_page", page: page as WidgetAppPage } : undefined;
+  }
+  if (action.type === "open_routine") {
+    const routineId = id(payload.routineId);
+    const botId = id(payload.botId);
+    return routineId ? { type: "open_routine", routineId, ...(botId ? { botId } : {}) } : undefined;
+  }
+  if (action.type === "open_run") {
+    const runId = id(payload.runId);
+    const routineId = id(payload.routineId);
+    return runId ? { type: "open_run", runId, ...(routineId ? { routineId } : {}) } : undefined;
+  }
+  return undefined;
+}
+
 /** `confirm` and `cancel` on a root: the buttons under the card. */
 export interface WidgetButtonSpec {
   label: string;
@@ -300,6 +340,11 @@ const action: Reader = (raw, path) => {
   }
   if (out.type === "open_url" && !isWebUrl(isRecord(out.payload) ? out.payload.url : undefined, ["http:", "https:"])) {
     return fail(`${path}.payload.url`, "open_url needs an http or https url");
+  }
+  if ((WIDGET_APP_ACTIONS as readonly string[]).includes(out.type) && !widgetAppAction(out)) {
+    return fail(`${path}.payload`, out.type === "open_page"
+      ? `open_page needs {page} with one of ${WIDGET_APP_PAGES.join(", ")}`
+      : out.type === "open_routine" ? "open_routine needs {routineId, botId?}" : "open_run needs {runId, routineId?}");
   }
   return out;
 };
@@ -764,7 +809,9 @@ export interface WidgetActionEntry {
   action: WidgetAction;
   /** Present when the press settles the widget. */
   tone?: "confirm" | "cancel" | "submit";
-  /** Handled on the device and never sent (open_url). */
+  /** Handled on the device (open_url, and the in-app open_page, open_routine
+   * and open_run). An open_url press is never sent; an in-app one is sent
+   * only to be recorded as done, it starts no turn. */
   client?: true;
   kind: "button" | "item" | "confirm" | "cancel";
 }
@@ -802,7 +849,7 @@ function collectActions(root: WidgetRoot, strict: boolean): WidgetActionEntry[] 
   // A product's button always names its product: "Buy now: Trail shoes".
   return found.map(({ row, product, ...entry }) => ({
     ...entry,
-    ...(entry.action.type === "open_url" ? { client: true as const } : {}),
+    ...(entry.action.type === "open_url" || widgetAppAction(entry.action) ? { client: true as const } : {}),
     label: row && entry.label && (product || (counts.get(entry.label) ?? 0) > 1) ? `${entry.label}: ${row}`.slice(0, WIDGET_LIMITS.label * 2) : entry.label,
   }));
 }
@@ -874,16 +921,23 @@ export function widgetInitialValues(scope: WidgetNode): WidgetValues {
 }
 
 export type ResolvedWidgetAction =
-  | { ok: true; ref: string; label: string; action: WidgetAction; values: WidgetValues; text: string; tone?: "confirm" | "cancel" | "submit" }
+  | { ok: true; ref: string; label: string; action: WidgetAction; values: WidgetValues; text: string; tone?: "confirm" | "cancel" | "submit"; device?: WidgetAppAction }
   | { ok: false; status: 400 | 404 | 409; error: string };
 
 /** Check one press against the stored widget. `text` is the user message it
  * becomes: the label, then one "Field: value" line per filled field. */
 export function resolveWidgetAction(payload: WidgetPayload, ref: string, values: unknown): ResolvedWidgetAction {
-  if (payload.settled) return { ok: false, status: 409, error: "This was already answered." };
   const entry = widgetActions(payload.root).find((candidate) => candidate.ref === ref);
+  // Opening a place stays possible once the widget is answered.
+  if (payload.settled && !(entry?.client && widgetAppAction(entry.action))) return { ok: false, status: 409, error: "This was already answered." };
   if (!entry) return { ok: false, status: 404, error: "That button is no longer on this widget." };
-  if (entry.client) return { ok: false, status: 400, error: "That action opens on the device and is not sent." };
+  if (entry.client) {
+    // An in-app destination was opened on the device: the press is recorded
+    // so the bot knows, with no values and nothing to settle.
+    const device = widgetAppAction(entry.action);
+    if (!device) return { ok: false, status: 400, error: "That action opens on the device and is not sent." };
+    return { ok: true, ref, label: entry.label, action: entry.action, values: {}, text: entry.label, device };
+  }
   const done = (clean: WidgetValues, lines: string[]): ResolvedWidgetAction => ({
     ok: true, ref, label: entry.label, action: entry.action, values: clean, text: [entry.label, ...lines].join("\n"), ...(entry.tone ? { tone: entry.tone } : {}),
   });

@@ -9,12 +9,13 @@
 // re-reads, so notes the bot wrote mid-session show up on the next look.
 // The dialog keeps this mounted while hidden so an unsaved draft survives
 // a visit to another section. A file opens only when the person clicks it.
-import { FileText, RotateCcw, Trash2, X } from "lucide-react";
+import { FileText, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
+import { discardConfirmRequest, useConfirm } from "@/components/ConfirmProvider";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { PanelPage } from "./PanelPage";
 import {
   MEMORY_INDEX,
   capacityStatus,
@@ -118,8 +119,8 @@ export function TeamMemorySharingCard({ value, disabled, onChange }: { value: "s
 
 const errorText = (e: unknown) => (readableError(e));
 
-/** The file body lives in this dialog, not in the settings column. Escape
- * and the backdrop close it. A dirty draft asks before it is dropped. */
+/** The file body as a pushed page in the bot panel. Escape and Back ask
+ * before dropping a dirty draft (requestClose). Conflict notice kept. */
 export function MemoryEditorDialog({
   editing,
   botName,
@@ -134,6 +135,7 @@ export function MemoryEditorDialog({
   onOverwrite,
   onDismissDraft,
   onOpenIndex,
+  onPanelClose,
 }: {
   editing: Editing;
   botName: string;
@@ -148,136 +150,80 @@ export function MemoryEditorDialog({
   onOverwrite: () => void;
   onDismissDraft: () => void;
   onOpenIndex: () => void;
+  /** Closes the whole bot panel. Defaults to onClose. */
+  onPanelClose?: () => void;
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const root = dialogRef.current;
-    // the markdown editor's text area (or its textarea stand-in)
+    const root = bodyRef.current;
     const area = root?.querySelector<HTMLElement>('textarea, [contenteditable="true"]');
     if (area && !(area instanceof HTMLTextAreaElement && area.readOnly)) area.focus();
-    else root?.focus();
-
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab" || !root) return;
-      const focusable = [...root.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), [href], [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
-      )];
-      if (focusable.length === 0) {
-        event.preventDefault();
-        root.focus();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => {
-      window.removeEventListener("keydown", onKey, true);
-      previousFocus?.focus();
-    };
   }, [editing.path]);
 
-  const content = (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 sm:p-6"
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
-    >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="memory-editor-title"
-        tabIndex={-1}
-        className="animate-pop-in flex max-h-[min(820px,calc(100dvh-2rem))] w-full max-w-[760px] flex-col overflow-hidden rounded-[14px] border border-border bg-elevated outline-none"
-      >
-        <header className="flex items-center justify-between gap-3 border-b border-hairline/40 px-5 py-4">
-          <h2 id="memory-editor-title" className="min-w-0 truncate font-mono text-[13px] font-medium text-ink">
-            {editing.path}
-          </h2>
-          <div className="flex shrink-0 items-center gap-1">
+  return (
+    <PanelPage
+      name={editing.path}
+      onBack={onClose}
+      onClose={onPanelClose ?? onClose}
+      closeLabel={t("botPanel.memory.closeEditor")}
+      data-memory-editor-page=""
+      autoFocus={false}
+      bodyClassName="flex flex-col px-4 py-4"
+      footer={
+        editing.readOnly ? (
+          <p className="mr-auto text-[12px] text-ink-secondary">{t("botPanel.memory.logsReadOnly")}</p>
+        ) : (
+          <>
             {editing.path !== MEMORY_INDEX && (
               <button type="button" className={quietButtonCls} onClick={onOpenIndex}>
                 {t("botPanel.memory.back")}
               </button>
             )}
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={t("botPanel.memory.closeEditor")}
-              className="flex size-8 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/10 hover:text-ink"
-            >
-              <X size={18} />
+            <span className="flex-1" />
+            {editing.dirty && (
+              <button type="button" className={quietButtonCls} disabled={saving} onClick={onDiscard}>
+                {t("botPanel.memory.discard")}
+              </button>
+            )}
+            <button type="button" onClick={onSave} disabled={saving || !editing.dirty} className={buttonCls}>
+              {saving ? t("botPanel.memory.saving") : t("common.save")}
+            </button>
+          </>
+        )
+      }
+    >
+      <div ref={bodyRef} className="flex min-h-0 flex-1 flex-col">
+        {conflict && (
+          <ConflictNotice botName={botName} busy={saving} onReload={onReload} onOverwrite={onOverwrite} />
+        )}
+        <MarkdownEditor
+          className={cn("min-h-[320px] flex-1", conflict && "mt-2")}
+          minHeight={300}
+          maxHeight="none"
+          dataField="memory"
+          value={editing.text}
+          readOnly={editing.readOnly}
+          autoFocus={!editing.readOnly}
+          placeholder={editing.path === MEMORY_INDEX ? t("botPanel.memory.indexPlaceholder") : t("botPanel.memory.write")}
+          ariaLabel={editing.path === MEMORY_INDEX ? t("botPanel.memory.aria") : t("botPanel.memory.fileAria", { path: editing.path })}
+          onChange={onChange}
+        />
+        {savedDraft !== null && (
+          <div className="mt-3">
+            <div className="mb-1 text-[12px] text-ink-secondary">{t("botPanel.memory.draft")}</div>
+            <pre className="max-h-[160px] overflow-auto whitespace-pre-wrap rounded-lg border border-hairline/40 bg-inset p-3 font-mono text-[12px] leading-relaxed text-ink">
+              {savedDraft}
+            </pre>
+            <button type="button" className={cn(quietButtonCls, "mt-1")} onClick={onDismissDraft}>
+              {t("botPanel.memory.dismiss")}
             </button>
           </div>
-        </header>
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4">
-          {conflict && (
-            <ConflictNotice botName={botName} busy={saving} onReload={onReload} onOverwrite={onOverwrite} />
-          )}
-          <MarkdownEditor
-            className={cn("min-h-[320px] flex-1", conflict && "mt-2")}
-            minHeight={300}
-            maxHeight="none"
-            dataField="memory"
-            value={editing.text}
-            readOnly={editing.readOnly}
-            autoFocus={!editing.readOnly}
-            placeholder={editing.path === MEMORY_INDEX ? t("botPanel.memory.indexPlaceholder") : t("botPanel.memory.write")}
-            ariaLabel={editing.path === MEMORY_INDEX ? t("botPanel.memory.aria") : t("botPanel.memory.fileAria", { path: editing.path })}
-            onChange={onChange}
-          />
-          {savedDraft !== null && (
-            <div className="mt-3">
-              <div className="mb-1 text-[12px] text-ink-secondary">{t("botPanel.memory.draft")}</div>
-              <pre className="max-h-[160px] overflow-auto whitespace-pre-wrap rounded-lg border border-hairline/40 bg-inset p-3 font-mono text-[12px] leading-relaxed text-ink">
-                {savedDraft}
-              </pre>
-              <button type="button" className={cn(quietButtonCls, "mt-1")} onClick={onDismissDraft}>
-                {t("botPanel.memory.dismiss")}
-              </button>
-            </div>
-          )}
-        </div>
-        <footer className="flex items-center justify-end gap-2 border-t border-hairline/40 px-5 py-3">
-          {editing.readOnly ? (
-            <p className="mr-auto text-[12px] text-ink-secondary">{t("botPanel.memory.logsReadOnly")}</p>
-          ) : (
-            <>
-              {editing.dirty && (
-                <button type="button" className={quietButtonCls} disabled={saving} onClick={onDiscard}>
-                  {t("botPanel.memory.discard")}
-                </button>
-              )}
-              <button type="button" onClick={onSave} disabled={saving || !editing.dirty} className={buttonCls}>
-                {saving ? t("botPanel.memory.saving") : t("common.save")}
-              </button>
-            </>
-          )}
-        </footer>
+        )}
       </div>
-    </div>
+    </PanelPage>
   );
-
-  if (typeof document === "undefined" || !document.body) return content;
-  return createPortal(content, document.body);
 }
 
 /** On an OMB Cloud home: this bot's memory changed in a conversation the
@@ -307,6 +253,7 @@ export function LendingReviewNotice({ changed, stale, busy, onReviewed }: { chan
 }
 
 export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; active?: boolean; onToggle: (enabled: boolean) => void }) {
+  const confirm = useConfirm();
   const [overview, setOverview] = useState<MemoryOverview | null>(null);
   const [journal, setJournal] = useState<MemoryJournalRow[] | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -360,7 +307,7 @@ export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; acti
   }, [active, bot.id]);
 
   const open = async (path: string): Promise<boolean> => {
-    if (editing?.dirty && editing.path !== path && !window.confirm(t("botPanel.memory.closeDirty"))) return false;
+    if (editing?.dirty && editing.path !== path && !(await confirm(discardConfirmRequest(t("botPanel.memory.closeDirty"))))) return false;
     setError(null);
     setConflict(null);
     if (editing?.path !== path) setSavedDraft(null);
@@ -374,8 +321,8 @@ export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; acti
     }
   };
 
-  const requestClose = () => {
-    if (editing?.dirty && !window.confirm(t("botPanel.memory.closeDirty"))) return;
+  const requestClose = async () => {
+    if (editing?.dirty && !(await confirm(discardConfirmRequest(t("botPanel.memory.closeDirty"))))) return;
     setEditing(null);
     setConflict(null);
     setSavedDraft(null);
@@ -414,7 +361,11 @@ export function MemorySection({ bot, active = true, onToggle }: { bot: Bot; acti
   };
 
   const remove = async (file: MemoryFileInfo) => {
-    if (!window.confirm(t("botPanel.memory.confirmDelete", { name: file.name }))) return;
+    if (!(await confirm({
+      title: t("botPanel.memory.confirmDelete", { name: file.name }),
+      confirmLabel: t("common.delete"),
+      tone: "danger",
+    }))) return;
     setError(null);
     try {
       const { overview: next } = await deleteMemoryDoc(bot.id, file.path);

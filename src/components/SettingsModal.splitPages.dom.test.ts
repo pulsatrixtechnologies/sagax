@@ -46,7 +46,7 @@ const answers = (path: string): unknown => {
 
 vi.mock("@/state/store", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/state/store")>();
-  const state = () => ({ appSettingsSection: fixture.section, appSettingsSubPage: null, instances: fixture.instances, bots: [{ id: "bot-a", name: "Scout", modelSelection: { instanceId: "codex", model: "gpt-5" } }], groups: [], config: fixture.config });
+  const state = () => ({ appSettingsSection: fixture.section, appSettingsSubPage: null, instances: fixture.instances, bots: [{ id: "bot-a", name: "Scout", modelSelection: { instanceId: "grok", model: "grok-4" } }], groups: [], config: fixture.config });
   return {
     ...actual,
     api: vi.fn(async (path: string) => answers(path)),
@@ -185,7 +185,7 @@ describe("Settings split: every moved setting at its new place", () => {
     expect(card("security")).toBeNull();
   });
 
-  it("Voice holds the microphone, the voice engine and Live calls; Models keeps Auto and image generation, with one link to Providers", async () => {
+  it("Voice holds the microphone, the voice engine and Live calls; Models keeps Auto and image generation, Engines and Keys folded as the former view", async () => {
     await settings("voice");
     expect(pane().querySelector("h2")?.textContent).toBe("Voice");
     for (const id of ["connections.audio", "connections.voice", "voice.advanced"]) expect(card(id), id).not.toBeNull();
@@ -193,30 +193,31 @@ describe("Settings split: every moved setting at its new place", () => {
     await settings("engines");
     expect(pane().querySelector("h2")?.textContent).toBe("Models");
     expect(card("connections.image"), "connections.image").not.toBeNull();
-    expect(pane().querySelector("[data-auto-model-explainer]")).not.toBeNull();
-    // 2026-10-30 (#1812): the former Engines and Keys view left Models; one link opens Providers
-    expect(pane().querySelector("[data-open-providers]")).not.toBeNull();
-    for (const id of ["engines.legacy", "engines.list", "engines.keys"]) expect(card(id), id).toBeNull();
+    // 2026-10-30 (Providers, lot 1): the former engines list moved to Providers
+    expect(card("engines.legacy"), "engines.legacy").toBeNull();
+    // 2026-10-30: Engines and Keys are the former view, folded until asked for
+    for (const id of ["engines.list", "engines.keys"]) expect(card(id), id).toBeNull();
     await settings("providers");
     expect(pane().querySelector("h2")?.textContent).toBe("Providers");
     expect(card("providers.list"), "providers.list").not.toBeNull();
     for (const id of ["connections.audio", "connections.voice", "voice.advanced"]) expect(card(id), id).toBeNull();
   });
 
-  // 2026-10-30 (#1812): every key, the voice keys included, is managed on Providers; Voice no
-  // longer carries an "Add in Keys" row nor the member's own voice keys card.
-  it("Voice no longer manages keys: no Add in Keys row, the voice keys anchor opens Providers", async () => {
-    fixture.config = { rooms: { turnTimeoutMinutes: 5 }, tts: { configured: false, ready: false, voice: "", provider: "elevenlabs", keys: { elevenlabs: false, fish: false } }, live: { enabled: true, configured: false, voice: "", readTypedReplies: true, idleMinutes: 5 } };
-    await settings("voice");
-    expect(pane().querySelector('[data-add-in-keys]')).toBeNull();
-    expect(card("connections.voiceKeys")).toBeNull();
-    expect(currentSettingsSection("engines", "connections.voiceKeys")).toBe("providers");
+  it("the Add in Keys link of a section that uses a key opens Providers, with the key's dialog", async () => {
+    // 2026-10-30 (#1812): Voice no longer draws the key line; Image generation still does
+    const { KeyInKeys } = await import("./settings/ProviderKeys");
+    await render(createElement(KeyInKeys, { row: "elevenlabs", saved: false }));
+    const add = host.querySelector<HTMLButtonElement>('[data-add-in-keys="elevenlabs"]')!;
+    expect(add).not.toBeNull();
+    act(() => add.click());
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "toggleAppSettings", open: true, section: "providers" });
   });
 
-  it("an organization member's Voice page keeps the microphone, never the installation's voice engine", async () => {
+  it("keeps voice keys off an organization member's Voice page: they are managed on Providers", async () => {
     fixture.config = { rooms: { turnTimeoutMinutes: 5 }, viewer: { operator: false, role: "member" } };
     await settings("voice");
-    expect(card("connections.audio")).not.toBeNull();
+    expect(card("connections.voiceKeys")).toBeNull();
+    expect(pane().querySelector("[data-add-in-keys]")).toBeNull();
     // a member does not manage the installation: no voice engine, as before
     expect(card("connections.voice")).toBeNull();
   });
@@ -284,7 +285,7 @@ describe("Settings split: old links and anchors open the new page", () => {
     expect(opened("credentials")).toBe("credentials");
   });
 
-  it("sends Models and voice's voice anchors to Voice and the keys to Providers", () => {
+  it("sends Models and voice's voice anchors to Voice and the keys (voice keys included) to Providers", () => {
     expect(opened("engines", "connections.voice")).toBe("voice");
     expect(opened("engines", "voice.advanced")).toBe("voice");
     expect(opened("connections", "connections.audio")).toBe("voice");

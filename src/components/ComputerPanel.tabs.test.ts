@@ -2,6 +2,7 @@
 // The Computer tab shows the computer itself: Data moved to its own window
 // (the chat header's Data button, src/lib/data-window.ts).
 import { createElement } from "react";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -72,7 +73,7 @@ const open = async (bot: Bot) => {
     document.body.append(container);
     root = createRoot(container);
   }
-  flushSync(() => root!.render(createElement(BotEditorStore, { value: value(), children: createElement(ComputerPanel, { bot }) })));
+  flushSync(() => root!.render(createElement(BotEditorStore, { value: value(), children: createElement(ConfirmProvider, null, createElement(ComputerPanel, { bot })) })));
   await settle();
 };
 beforeAll(() => {

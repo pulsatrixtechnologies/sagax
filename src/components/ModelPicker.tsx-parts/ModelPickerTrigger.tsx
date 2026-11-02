@@ -20,9 +20,7 @@ export function ModelPickerTrigger({
   threadId,
   triggerRef,
   menu,
-  open,
   toggleMenu,
-  toggleWindow,
   composerLabel,
   followLine,
   summary,
@@ -43,9 +41,7 @@ export function ModelPickerTrigger({
   threadId?: string;
   triggerRef: RefObject<HTMLButtonElement | null>;
   menu: boolean;
-  open: boolean;
   toggleMenu: () => void;
-  toggleWindow: () => void;
   composerLabel: string;
   followLine: string;
   summary: string;
@@ -83,11 +79,13 @@ export function ModelPickerTrigger({
     ref={triggerRef}
     type="button"
     disabled={Boolean(bot.busy)}
-    onClick={toggleWindow}
-    aria-expanded={open && !bot.busy}
+    onClick={() => toggleMenu()}
+    aria-expanded={menu && !bot.busy}
     aria-haspopup="dialog"
     className={cn(
-      "flex items-center gap-1.5 rounded-full border border-hairline/40 bg-control/60 py-1 pl-2 pr-2.5 text-[13px] text-ink hover:bg-raised-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-control/60",
+      // One line only: effort must never wrap under the chip (or under the
+      // chat header's bot pill when this chip sat beside it).
+      "flex flex-nowrap items-center gap-1.5 whitespace-nowrap rounded-full border border-hairline/40 bg-control/60 py-1 pl-2 pr-2.5 text-[13px] text-ink hover:bg-raised-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-control/60",
       // in a narrow chat header fold to a rounded square with just the
       // provider mark; the model name rides the tooltip (a bot with no
       // resolved engine keeps its label: the mark is what would hide it).
@@ -100,7 +98,7 @@ export function ModelPickerTrigger({
     {!contained && active && showActiveAccount && (
       <span data-model-account-compact className="hidden max-w-20 truncate @max-4xl/chathead:inline">{active.displayName}</span>
     )}
-    <span className={cn("flex min-w-0 items-center gap-1", !contained && active && "@max-4xl/chathead:hidden")}>
+    <span className={cn("flex min-w-0 flex-nowrap items-center gap-1", !contained && active && "@max-4xl/chathead:hidden")}>
       <span className="max-w-[160px] truncate">
         {active && showActiveAccount && !autoOn && (
           <span data-model-account className="text-ink-secondary">{active.displayName} · </span>
@@ -110,9 +108,10 @@ export function ModelPickerTrigger({
           <span className="text-ink-secondary"> · {modelProvider(active, selection.model)}</span>
         )}
       </span>
-      {/* outside the truncating span: a long model name must not be what
-          hides the effort the header exists to surface */}
-      {selectedVariantLabel !== undefined ? (
+      {/* Effort / variant on the contained settings chip only. The chat
+          header is the bot pill alone (UX reference): a stray effort label
+          must never sit under that pill. Effort stays in the picker menu. */}
+      {contained && (selectedVariantLabel !== undefined ? (
         <span data-model-variant className="max-w-[120px] truncate text-ink-secondary">· {selectedVariantLabel}</span>
       ) : advanced && selection.effort && (
         <span
@@ -121,13 +120,13 @@ export function ModelPickerTrigger({
         >
           · {effortLabel(selection.effort)}
         </span>
-      )}
+      ))}
     </span>
     <ChevronDown
       size={14}
       className={cn(
-        "text-ink-secondary transition-transform",
-        open && "rotate-180",
+        "shrink-0 text-ink-secondary transition-transform",
+        menu && "rotate-180",
         !contained && active && "@max-4xl/chathead:hidden",
       )}
     />

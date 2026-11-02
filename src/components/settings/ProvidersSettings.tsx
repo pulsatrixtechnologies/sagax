@@ -39,10 +39,12 @@ import {
   MAIN_KEY_ROWS,
   MORE_KEY_ROWS,
   ProviderKeyDialog,
+  ProviderKeyEditor,
   keyRowForEngine,
   keyRowName,
   keyRowSaved,
   openProviderKeyDialog,
+  useOpenProviderKey,
   type KeyRowId,
 } from "./ProviderKeys";
 import { ServerForm } from "./OpenAiCompatServers";
@@ -146,7 +148,7 @@ function ProviderLine({ row, open, onToggle, nameOf, detail }: {
 }
 
 /** The detail of one row: where each part is managed, as before. */
-function ProviderDetail({ row, member, issuer }: { row: ProviderRow; member: boolean; issuer?: string }) {
+function ProviderDetail({ row, member, issuer, showKey }: { row: ProviderRow; member: boolean; issuer?: string; showKey: boolean }) {
   const { state, dispatch } = useStore();
   const mineAll = useMyEngines();
   const [editing, setEditing] = useState(false);
@@ -163,11 +165,15 @@ function ProviderDetail({ row, member, issuer }: { row: ProviderRow; member: boo
       ))}
       {/* the organization's or the server's key: its dialog */}
       {row.keyRow && row.manage && !row.voiceKey && !row.accountProvider && (
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={PILL} data-provider-key-open={row.keyRow} onClick={() => openProviderKeyDialog(row.keyRow!)}>
-            {keyRowSaved(row.keyRow, state.config) ? t("providerKeys.manage") : t("providerKeys.add")}
-          </button>
-        </div>
+        showKey
+          ? <ProviderKeyEditor id={row.keyRow} onClose={() => openProviderKeyDialog(null)} />
+          : (
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className={PILL} data-provider-key-open={row.keyRow} onClick={() => openProviderKeyDialog(row.keyRow!)}>
+                {keyRowSaved(row.keyRow, state.config) ? t("providerKeys.manage") : t("providerKeys.add")}
+              </button>
+            </div>
+          )
       )}
       {/* the person's own key in Perspicax */}
       {row.payer === "me" && row.keyWhere === "perspicax" && issuer && !row.accountProvider && !row.accountServer && (
@@ -360,6 +366,7 @@ export function ProvidersSettings() {
   const [filter, setFilter] = useState<ProviderFilter>("all");
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const editingKey = useOpenProviderKey();
   const issuer = org?.org.identity.issuer;
   const nameOf = (instanceId: string) => state.instances.find((entry) => entry.instanceId === instanceId)?.displayName ?? "";
 
@@ -382,10 +389,23 @@ export function ProvidersSettings() {
   }), [organization, offered, member, mine, state.instances, state.config, keys, accounts.view, local]);
   const { active, toConnect, off } = splitProviderRows(filterProviderRows(rows, filter));
   const filters: ProviderFilter[] = organization ? ["all", "mine", "org", "computer"] : ["all", "mine", "computer"];
+  const keyInline = (row: ProviderRow) => Boolean(
+    openRow === row.id && editingKey && row.keyRow === editingKey && row.manage && !row.voiceKey && !row.accountProvider,
+  );
+
+  useEffect(() => {
+    if (!editingKey) return;
+    const match = rows.find((row) => row.keyRow === editingKey);
+    if (!match) return;
+    setOpenRow(match.id);
+    const placed = splitProviderRows(rows);
+    if (placed.toConnect.some((row) => row.id === match.id)) requestSettingsCard("providers.toConnect");
+    if (placed.off.some((row) => row.id === match.id)) requestSettingsCard("providers.adminOff");
+  }, [editingKey, rows]);
 
   const line = (row: ProviderRow) => (
     <ProviderLine key={row.id} row={row} open={openRow === row.id} onToggle={() => setOpenRow(openRow === row.id ? null : row.id)} nameOf={nameOf}
-      detail={<ProviderDetail row={row} member={member} issuer={issuer} />} />
+      detail={<ProviderDetail row={row} member={member} issuer={issuer} showKey={keyInline(row)} />} />
   );
   const pick = (rowId: string) => {
     setAdding(false);
@@ -462,7 +482,7 @@ export function ProvidersSettings() {
           )}
         </SettingsGroup>
       </div>
-      <ProviderKeyDialog />
+      <ProviderKeyDialog hidden={rows.some((row) => keyInline(row))} />
     </div>
   );
 }

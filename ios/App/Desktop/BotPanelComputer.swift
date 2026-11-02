@@ -22,6 +22,7 @@ struct BotPanelComputer: View {
 
     @StateObject private var controller: ComputerController
     @StateObject private var choices = ComputerChoicesModel()
+    @StateObject private var remoteHosts: BotRemoteSessionsModel
     /// The screen the person picked, or browser mode; nil is the one the
     /// bot works on.
     @State private var picked: String?
@@ -32,6 +33,7 @@ struct BotPanelComputer: View {
     init(bot: Bot) {
         self.bot = bot
         _controller = StateObject(wrappedValue: ComputerController(botId: bot.id, client: { nil }))
+        _remoteHosts = StateObject(wrappedValue: BotRemoteSessionsModel(botId: bot.id))
     }
 
     private var streamFrame: ScreenFrame? { session.state.screens[bot.id] }
@@ -97,33 +99,67 @@ struct BotPanelComputer: View {
         }
         .onAppear {
             if session.surfaceGate.organization { choices.start { [weak session] in session?.computerClient } }
+            remoteHosts.start(client: session.profileClient ?? session.settingsClient)
         }
-        .onDisappear { choices.stop() }
+        .onDisappear {
+            choices.stop()
+            remoteHosts.stop()
+        }
         .task { config = await session.configStatus() }
     }
 
-    /// Cloud and each of the person's computers by name, when there is more
-    /// than one screen to look at.
+    /// Cloud, the person's computers, and enrolled unattended hosts, when
+    /// there is more than one screen to look at.
     @ViewBuilder
     private var chooser: some View {
-        let items = ComputerChooser.items(bridge: choices.bridge, organization: session.surfaceGate.organization,
-                                          worksOnLocal: showsLocalVm, browser: browserOffered)
+        let items = ComputerChooser.items(
+            bridge: choices.bridge,
+            organization: session.surfaceGate.organization,
+            worksOnLocal: showsLocalVm,
+            browser: browserOffered,
+            remoteHosts: remoteHosts.places
+        )
         if items.count > 1 {
             VStack(spacing: 6) {
                 ComputerChooser(
                     items: items,
-                    chosen: ComputerChooser.selectedKey(showsBrowser: showsBrowser, chosen: chosen),
-                    colors: .init(ink: theme.ink, secondary: theme.inkSecondary, track: theme.control, selected: theme.elevated, dot: theme.focus)
-                ) { picked = ComputerChooser.resolvePick($0, bridge: choices.bridge, current: chosen) }
+                    chosen: selectedChooserKey,
+                    colors: .init(ink: theme.ink, secondary: theme.inkSecondary, track: theme.control, selected: theme.elevated, dot: theme.focus),
+                    onAttachHost: { hostId in Task { await remoteHosts.attach(hostId: hostId) } },
+                    onDetachHost: { hostId in Task { await remoteHosts.detach(hostId: hostId) } }
+                ) { key in
+                    if let hostId = RemoteBotHostsLogic.parsePlaceKey(key) {
+                        picked = key
+                        let place = remoteHosts.places.first { $0.hostId == hostId }
+                        if place?.attached == true {
+                            Task { await remoteHosts.open(hostId: hostId) }
+                        } else {
+                            Task { await remoteHosts.attach(hostId: hostId) }
+                        }
+                        return
+                    }
+                    picked = ComputerChooser.resolvePick(key, bridge: choices.bridge, current: chosen)
+                }
                 ComputerChooser.provenance(
-                    bridge: choices.bridge, chosen: showsBrowser ? nil : chosen,
+                    bridge: choices.bridge, chosen: showsBrowser || isRemoteHostPick ? nil : chosen,
                     pick: { picked = $0 },
                     secondary: theme.inkSecondary
                 )
             }
             .padding(.top, 16)
             .padding(.horizontal, 16)
+            .accessibilityIdentifier("computer-picker-with-hosts")
         }
+    }
+
+    private var isRemoteHostPick: Bool {
+        guard let picked else { return false }
+        return RemoteBotHostsLogic.parsePlaceKey(picked) != nil
+    }
+
+    private var selectedChooserKey: String {
+        if let picked, RemoteBotHostsLogic.parsePlaceKey(picked) != nil { return picked }
+        return ComputerChooser.selectedKey(showsBrowser: showsBrowser, chosen: chosen)
     }
 
     private var sandbox: some View {

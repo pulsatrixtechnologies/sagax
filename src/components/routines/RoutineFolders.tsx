@@ -21,7 +21,7 @@
 // route" says the neutral "Available after the server update.", never a red
 // error.
 import { ArrowDown, ArrowUp, Check, ChevronRight, FolderInput, FolderPlus, MoreHorizontal, Pause, Pencil, Play, Plus, Trash2, X } from "lucide-react";
-import { Fragment, useEffect, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useImperativeHandle, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 import { api, useStore, type Bot } from "@/state/store";
@@ -45,9 +45,8 @@ import {
   type RoutineFolderAction,
   type RoutineFolderUndo,
 } from "../../../shared/routine-folders";
-import { navigateThreadMenu } from "../BotProjects";
 import { RoutineList } from "./RoutineList";
-import { routineRowActions, RoutineRowMenuItems } from "./RoutineRowMenu";
+import { routineRowActions, RoutineMenuPortal, RoutineRowMenuItems } from "./RoutineRowMenu";
 
 interface FolderAnswer { folders: string[]; routines: Routine[]; undo?: RoutineFolderUndo }
 
@@ -394,16 +393,7 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
       </div>;
     })}
 
-    {menu && createPortal(<div className="fixed inset-0 z-40" onMouseDown={() => closeMenu(false)} onContextMenu={(event) => { event.preventDefault(); closeMenu(false); }}>
-      <div role="menu" data-routine-folder-menu={menu.kind}
-        aria-label={menu.kind === "row" ? menu.routine.name : menu.kind === "folder" ? menu.folder : t("computer.tab.routines")}
-        style={{ left: Math.max(8, Math.min(menu.x, window.innerWidth - 248)), top: Math.max(8, Math.min(menu.y, window.innerHeight - 320)) }}
-        className="absolute flex max-h-[min(420px,80vh)] w-[240px] flex-col gap-0.5 overflow-y-auto rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] text-ink shadow-lg"
-        onMouseDown={(event) => event.stopPropagation()}
-        onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
-          if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); closeMenu(); return; }
-          if (!(event.target instanceof HTMLInputElement)) navigateThreadMenu(event);
-        }}>
+    {menu && <RoutineMenuPortal x={menu.x} y={menu.y} kind={menu.kind} label={menu.kind === "row" ? menu.routine.name : menu.kind === "folder" ? menu.folder : t("computer.tab.routines")} onClose={closeMenu}>
         {menu.kind === "section" ? (menu.naming
           ? <FolderNameInput label={t("routineFolders.newFolderLabel")} onCancel={() => closeMenu()} onSave={async (name) => { const answer = await act({ action: "create", botId: bot.id, name }); if (answer) closeMenu(); }} />
           : <>
@@ -429,8 +419,7 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
             canSortByPrefix={showSortAction}
             onSortByPrefix={() => { closeMenu(); void sortByPrefix(); }}
             onDelete={() => { closeMenu(false); void removeFolder(menu.folder); }} />}
-      </div>
-    </div>, document.body)}
+    </RoutineMenuPortal>}
   </div>;
 }
 

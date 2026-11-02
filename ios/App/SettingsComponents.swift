@@ -11,7 +11,14 @@ import UIKit
 enum SettingsMetrics {
     /// Glass circle: 17.33 pt in from the sheet's left and top edges.
     static let headerInset: CGFloat = 17.33
-    /// First card top, from the sheet top (213.84 - 123.67).
+    /// Floating sticky header height: inset + sheet glass circle (measure-settings).
+    /// Content and the top scroll-edge fade clear this so the first card and
+    /// its labels are never covered by the title (Lot 8 display hygiene).
+    static let headerClearance: CGFloat = headerInset + GlassCircleButton.Size.sheet.rawValue
+    /// Top scroll-edge fade over the sticky header (123.67 → 201 ≈ 78 pt).
+    static let headerFadeHeight: CGFloat = 78
+    /// First card top, from the sheet top (213.84 - 123.67). Clears the sticky
+    /// header so Identity's "Name" (and every other first row) stays readable.
     static let firstCardTop: CGFloat = 90.17
     /// Title ink starts 16.67 pt after the circle (x 84 on screen).
     static let titleGap: CGFloat = 15.67
@@ -59,7 +66,7 @@ struct SettingsPage<Trailing: View, Content: View>: View {
             Group {
                 if scrollable {
                     ScrollView(showsIndicators: false) { stack }
-                        .topScrollEdgeFade(height: 78, background: background)
+                        .topScrollEdgeFade(height: SettingsMetrics.headerFadeHeight, background: background)
                 } else {
                     stack
                 }

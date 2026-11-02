@@ -29,9 +29,15 @@ const bot = {
 } as unknown as Bot;
 const prompt = [
   "Every weekday morning, read the shared inbox and the calendar of the day.",
-  "Write a short briefing with three sections: what needs an answer today,",
-  "what is waiting on someone else, and what can wait.",
-].join(" ");
+  "",
+  "## Briefing",
+  "",
+  "- What needs an answer today",
+  "- What is waiting on someone else",
+  "- What can wait",
+  "",
+  "See the [team inbox](https://example.test/inbox) for open threads.",
+].join("\n");
 const routine = {
   id: "r1", botId: bot.id, name: "Morning briefing", prompt, target: "bot", runOn: "maus",
   enabled: true, durationMinutes: 30, timeoutMinutes: 45, createdAt: 1, updatedAt: 1,

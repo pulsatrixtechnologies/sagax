@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { Globe, Plus, Trash2 } from "lucide-react";
 import { api, ApiError, useStore, type Bot, type BotAnnouncement, type BrowserProfile, type ConfigStatus } from "@/state/store";
 import { browserProfileDeletionBlockReason, browserProfilesMutation, newBrowserProfileId } from "@/lib/browser-profiles";
@@ -16,6 +17,7 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
   onProfileChanged?: () => void;
   disabled?: boolean;
 }) {
+  const confirm = useConfirm();
   const { state, dispatch, flushBotPatches } = useStore();
   // #1098: on an organization server a person keeps their own profiles
   // (/api/me/experimental) beside the server's shared ones, which only
@@ -127,7 +129,7 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
     if (blocked) return setError(blocked);
     const users = bots.filter((candidate) => candidate.browserProfile === profile.id);
     const summary = users.length ? ` ${t("settings.profiles.deleteUsers", { names: users.map((candidate) => candidate.name).join(", ") })}` : "";
-    if (!window.confirm(t("settings.profiles.confirm", { name: profile.name, bots: summary }))) return;
+    if (!(await confirm({ title: t("settings.profiles.confirm", { name: profile.name, bots: summary }), confirmLabel: t("common.delete"), tone: "danger" }))) return;
     setBusy(true);
     setError("");
     try {

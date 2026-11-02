@@ -5,8 +5,8 @@ import { initialState, reducer } from "./store";
 describe("Connect apps opened from a bot", () => {
   it("remembers the bot a bot panel opened it on, and forgets it on close", () => {
     const opened = reducer(initialState, { type: "togglePlugins", open: true, botId: "maya" });
-    expect(opened).toMatchObject({ pluginsOpen: true, pluginsBotId: "maya" });
-    expect(reducer(opened, { type: "togglePlugins", open: false })).toMatchObject({ pluginsOpen: false, pluginsBotId: null });
+    expect(opened).toMatchObject({ pluginsOpen: true, activeView: "apps", pluginsBotId: "maya" });
+    expect(reducer(opened, { type: "togglePlugins", open: false })).toMatchObject({ pluginsOpen: false, pluginsBotId: null, activeView: "chat" });
   });
 
   it("keeps that bot while it stays open, and opens on no bot from anywhere else", () => {

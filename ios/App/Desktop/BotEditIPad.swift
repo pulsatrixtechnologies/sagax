@@ -1,12 +1,10 @@
-// Edit bot on the iPad (the Grok Bot layout, 2026-10-27), the sheet the
-// panel's pencil and "..." > Edit bot open: the same tree as the iPhone
-// (`BotEditTree`) in the desktop's cards. The header (avatar, name, role),
-// the main sections with the wizard's recap line (Identity, Personality,
-// Model, Approvals, Tools and apps, Routines, Sharing), Advanced, then
-// Archive and Delete apart, in red; a row opens its page in the sheet with
-// Back, a section opens the desktop's own section view (`BotPanelMore`).
-// The search the editor had stays on the first page: it finds a section by
-// its name or keywords and opens it through its page.
+// Edit bot on the iPad (lots 2 and 3, 2026-11-01): the same Grok-style
+// tree as the iPhone (`BotEditTree`) in the desktop's cards. Name, Role,
+// Description, Appearance, Voice calls and More voice options sit on the
+// root; Instructions, Skills, Memory, Model, Approvals, Tools and apps,
+// Routines, Sharing and Advanced are one tap away. A section opens the
+// desktop's own section view (`BotPanelMore`). Search stays on the iPad
+// first page (the phone root dropped it).
 import CompanionCore
 import SwiftUI
 
@@ -130,10 +128,10 @@ struct BotEditIPadSheet: View {
             BotPanelRoutines(bot: current)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
-        } else if page == .identity {
-            identityPage
         } else {
             VStack(spacing: 0) {
+                // Search retired on the phone Edit root (lot 2); iPad keeps it
+                // above the same Grok-style tree.
                 if page == .root { searchField }
                 if page == .root, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     results
@@ -155,9 +153,20 @@ struct BotEditIPadSheet: View {
         return VStack(spacing: 0) {
             ForEach(Array(cards.enumerated()), id: \.offset) { index, card in
                 if index > 0 { Color.clear.frame(height: card.first?.destructive == true ? 20 : 16) }
-                if card == [.header] {
-                    headerCard
-                } else {
+                switch card.first {
+                case .name?:
+                    PhoneBotIdentityFields(bot: current) { editAvatar() }
+                case .callVoice?:
+                    ProfileSectionLabel(text: "Voice calls", margin: 0)
+                    PhoneBotCallVoiceCard(bot: current)
+                case .voiceAlerts?:
+                    // iPad still opens the voice section; the phone uses a disclosure.
+                    VStack(spacing: 0) {
+                        ForEach(card, id: \.self) { row($0) }
+                    }
+                    .padding(1)
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
+                default:
                     VStack(spacing: 0) {
                         ForEach(Array(card.enumerated()), id: \.element) { position, item in
                             if position > 0 { Rectangle().fill(theme.hairlineWeak).frame(height: 1) }
@@ -181,46 +190,11 @@ struct BotEditIPadSheet: View {
 
     private func footer(_ card: [BotEditItem]) -> LocalizedStringKey? {
         switch card.first {
+        case .name?: "Shown in rosters, on the phone and to other bots. Standing instructions go in Instructions."
         case .archive?: "Its conversations are kept. Archived bots in the account menu brings it back."
         case .delete?: "The bot and its conversations will be deleted. This cannot be undone."
         default: nil
         }
-    }
-
-    private var headerCard: some View {
-        Button { open(.identity) } label: {
-            HStack(spacing: 12) {
-                BotMascotView(bot: current, size: 44, state: .idle, animated: false)
-                    .frame(width: 44, height: 44)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: current.name)
-                        .font(theme.font(14, .medium))
-                        .foregroundStyle(theme.ink)
-                        .lineLimit(1)
-                    let role = BotEditSummary.role(current)
-                    Group {
-                        if role.isEmpty { Text("Add a role") } else { Text(verbatim: role) }
-                    }
-                    .font(theme.font(12.5))
-                    .foregroundStyle(theme.inkSecondary)
-                    .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(theme.inkSecondary)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 64)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .hoverEffect(.highlight)
-        .padding(1)
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityIdentifier("desktop-edit-header")
     }
 
     private func row(_ item: BotEditItem) -> some View {
@@ -254,32 +228,6 @@ struct BotEditIPadSheet: View {
         .hoverEffect(.highlight)
         .accessibilityValue(Text(verbatim: value ?? ""))
         .accessibilityIdentifier(item.section.map { "desktop-panel-row.\($0.rawValue)" } ?? "desktop-edit-row.\(item.rawValue)")
-    }
-
-    /// Identity: the avatar and the Name, Role and Description fields, the
-    /// avatar editor, the call's voice and Voice & alerts.
-    private var identityPage: some View {
-        VStack(spacing: 0) {
-            PhoneBotIdentityFields(bot: current) { editAvatar() }
-            Color.clear.frame(height: 16)
-            ForEach(BotEditTree.cards(.identity, context).filter { $0.first != .name }, id: \.self) { card in
-                if card.first == .callVoice {
-                    ProfileSectionLabel(text: "Voice calls", margin: SettingsMetrics.cardMargin).padding(.top, 16)
-                    PhoneBotCallVoiceCard(bot: current)
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(card, id: \.self) { row($0) }
-                    }
-                    .padding(1)
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                }
-            }
-        }
-        .padding(.bottom, 24)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("desktop-edit.identity")
     }
 
     // MARK: Search

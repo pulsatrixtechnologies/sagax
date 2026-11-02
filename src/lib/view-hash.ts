@@ -1,5 +1,6 @@
 // The addresses that open a screen of the app (`#approvals`, `#approvals?…`,
-// `#code`, `#code/<run>`, `#achievements`, `#achievements/<category>`), read at load and on every hash change of an open
+// `#code`, `#code/<run>`, `#achievements`, `#achievements/<category>`,
+// `#new-bot`, `#edit-bot/<id>`), read at load and on every hash change of an open
 // tab. Any other hash (`#inbox`, a pairing `#code=…`) is left to its owner.
 import { isInboxHash } from "../../shared/approvals-inbox";
 import { ACHIEVEMENT_CATEGORIES } from "../../shared/achievements";
@@ -9,7 +10,9 @@ import type { AchievementsCategory } from "@/state/store";
 export type ViewHashAction =
   | { type: "showApprovals" }
   | { type: "showCode"; runId?: string }
-  | { type: "showAchievements"; category?: AchievementsCategory };
+  | { type: "showAchievements"; category?: AchievementsCategory }
+  | { type: "openBotWizard" }
+  | { type: "openPersonaEditor"; botId: string };
 
 const ACHIEVEMENTS_CATEGORIES: readonly string[] = ["all", ...ACHIEVEMENT_CATEGORIES, "settings"];
 
@@ -22,8 +25,26 @@ export function achievementsHashTarget(hash: string): { category?: AchievementsC
   return named && ACHIEVEMENTS_CATEGORIES.includes(named) ? { category: named as AchievementsCategory } : {};
 }
 
+/** `#new-bot` opens the creation view. Null for any other hash. */
+export function newBotHashTarget(hash: string): true | null {
+  return /^#new-bot\/?$/.test(hash) ? true : null;
+}
+
+/** `#edit-bot/<id>` opens Edit bot for that bot. Null when the hash is not
+ * that form (an empty id is rejected). */
+export function editBotHashTarget(hash: string): { botId: string } | null {
+  const match = /^#edit-bot\/([^/?#]+)\/?$/.exec(hash);
+  if (!match?.[1]) return null;
+  try {
+    return { botId: decodeURIComponent(match[1]) };
+  } catch {
+    return { botId: match[1] };
+  }
+}
+
 /** Opens the screen the hash names; true when it named one. The Approvals
- * screen keeps its filters in the address; `#code` leaves it. */
+ * screen keeps its filters in the address; `#code`, `#achievements`,
+ * `#new-bot` and `#edit-bot/…` clear after open so following them again works. */
 export function followViewHash(
   dispatch: (action: ViewHashAction) => void,
   loc: Pick<Location, "hash" | "pathname" | "search"> = location,
@@ -36,6 +57,17 @@ export function followViewHash(
   const achievements = achievementsHashTarget(loc.hash);
   if (achievements) {
     dispatch({ type: "showAchievements", ...achievements });
+    try { historyApi?.replaceState(historyApi.state, "", `${loc.pathname}${loc.search}`); } catch { /* ignore */ }
+    return true;
+  }
+  if (newBotHashTarget(loc.hash)) {
+    dispatch({ type: "openBotWizard" });
+    try { historyApi?.replaceState(historyApi.state, "", `${loc.pathname}${loc.search}`); } catch { /* ignore */ }
+    return true;
+  }
+  const editBot = editBotHashTarget(loc.hash);
+  if (editBot) {
+    dispatch({ type: "openPersonaEditor", botId: editBot.botId });
     try { historyApi?.replaceState(historyApi.state, "", `${loc.pathname}${loc.search}`); } catch { /* ignore */ }
     return true;
   }

@@ -69,7 +69,7 @@ describe("my bubble in a room", () => {
     expect(at).toBeGreaterThan(0);
     // Pulsatrix's dark accent exactly, with its button's ink
     expect(css.slice(at, css.indexOf("}", at))).toContain("var(--brand-bubble-user, #3c76f4)");
-    expect(css.slice(at, css.indexOf("}", at))).toContain("var(--brand-bubble-user-ink, #030b17)");
+    expect(css.slice(at, css.indexOf("}", at))).toContain("var(--brand-bubble-user-ink, #121212)");
     expect(read("src/components/GroupView.tsx")).toMatch(/data-room-bubble=""/);
   });
 });

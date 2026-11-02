@@ -17,18 +17,21 @@ import { ChatView } from "@/components/ChatView";
 import { GroupView } from "@/components/GroupView";
 import { SplitWorkspace, useBotPanelBot } from "@/components/SplitWorkspace";
 import { PersonPanel } from "@/components/PersonPanel";
+import { MemoryManagerPanel } from "@/components/memory-manager/MemoryManagerPanel";
 import { SideThreadPanel } from "@/components/SideThreadPanel";
 import { ComposeToPicker } from "@/components/ComposeToPicker";
 import { BotWizard } from "@/components/bot-wizard/BotWizard";
 import { PluginsPanel } from "@/components/PluginsPanel";
 import {
-  AchievementsScreen, ActivityPanel, ApprovalsPage, BotCatalogModal, BotSettingsDialog, CodePage, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace, NewBotDialog,
-  PersonaEditorModal, preloadScreens, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, SettingsModal, TeamMapPage, TriggersPanel,
+  AchievementsScreen, ActivityPanel, ApprovalsPage, BotSettingsDialog, CodePage, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace,
+  PersonaEditorModal, preloadScreens, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, SettingsModal, TeamMapPage,
 } from "@/components/lazy-screens";
+import { ArchivedBotsPage } from "@/components/ArchivedBotsPage";
 import { WorkspaceBackupRecovery } from "@/components/WorkspaceBackupSettings";
 import { ReleaseNotesPrompt } from "@/components/ReleaseNotesPrompt";
 import { TermsGate } from "@/components/TermsGate";
 import { UpdateBanner } from "@/components/UpdateBanner";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { DesktopCapabilitiesProvider, useCaptionChrome, useDesktopCapabilities, WindowDragStrip } from "@/components/DesktopCapabilities";
 import { WindowCaptionButtons } from "@/components/WindowCaptionButtons";
 import { NoEngines } from "@/components/NoEngines";
@@ -36,7 +39,7 @@ import { OrgEngineNotice } from "@/components/OrgEngineSetup";
 
 import { CommandPalette, openCommandPalette } from "@/components/CommandPalette";
 import { ArtifactsHost } from "@/components/artifacts/ArtifactsHost";
-import { StagedOrgImport } from "@/components/OrgImportDialog";
+import { OrgImportDialog, StagedOrgImport } from "@/components/OrgImportDialog";
 import { RetroAssistantHost } from "@/components/RetroAssistantHost";
 import { AchievementToaster } from "@/components/achievements/AchievementToaster";
 import { MyChromeIndicator } from "@/components/MyChromeIndicator";
@@ -382,6 +385,9 @@ function Shell() {
   const mainIsApprovals = state.activeView === "approvals";
   const mainIsRemoteSessions = state.activeView === "remote-sessions";
   const mainIsAchievements = state.activeView === "achievements";
+  const mainIsApps = state.activeView === "apps" || state.pluginsOpen;
+  const mainIsArchivedBots = state.activeView === "archived-bots";
+  const mainIsOrgImport = state.activeView === "org-import";
   const calendarFillsMain = calendarOpen;
 
   useEffect(() => {
@@ -423,9 +429,7 @@ function Shell() {
     state.inspectorOpen ||
     state.activityOpen ||
     state.appSettingsOpen ||
-    state.personaEditor !== null ||
-    state.pluginsOpen ||
-    state.triggersOpen;
+    state.personaEditor !== null;
 
   // The macOS app menu's Preferences… item lives in the desktop shell, so the
   // shell signals the request over the bridge (Cmd+, accelerates the item).
@@ -487,7 +491,7 @@ function Shell() {
       <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col" data-sidebar-follower="">
       {/* nothing answers this person on an organization server: say so above
           the conversation, with the way back to the first-run step */}
-      {org && (group || bot) && !calendarFillsMain && !mainIsTeamMap && !mainIsCode && !mainIsApprovals && !mainIsRemoteSessions && !mainIsAchievements && <OrgEngineNotice />}
+      {org && (group || bot) && !calendarFillsMain && !mainIsTeamMap && !mainIsCode && !mainIsApprovals && !mainIsRemoteSessions && !mainIsAchievements && !mainIsApps && !mainIsArchivedBots && !mainIsOrgImport && !state.personaEditor && !state.botWizard && <OrgEngineNotice />}
       {/* The split view (#1504): the main view below is one section; others
           show more conversations beside it (src/lib/split-view.ts). */}
       <SplitWorkspace panelSlot={panelSlot} main={composeOpen && (group || bot) ? (
@@ -504,6 +508,21 @@ function Shell() {
         <RemoteSessionsAdminPage />
       ) : mainIsAchievements ? (
         <AchievementsScreen />
+      ) : mainIsApps ? (
+        /* Connect apps over the wizard when Tools opens it (lot 4 + 5):
+           botWizard stays set; leaving apps returns to the wizard. */
+        <PluginsPanel />
+      ) : !remoteClient && state.botWizard ? (
+        <BotWizard />
+      ) : !remoteClient && state.personaEditor ? (
+        <PersonaEditorModal />
+      ) : mainIsArchivedBots ? (
+        <ArchivedBotsPage />
+      ) : mainIsOrgImport ? (
+        <OrgImportDialog
+          staged={state.orgImportStaged}
+          onClose={() => dispatch({ type: "showChat" })}
+        />
       ) : !remoteClient && localVmWorkspaceBotId ? (
         <LocalVmWorkspace
           primaryBotId={localVmWorkspaceBotId}
@@ -576,20 +595,18 @@ function Shell() {
       <div ref={setPanelSlot} data-split-panel-slot="" className="contents" />
       {remoteClient && state.settingsOpen && panelBot && <RemoteAgentSettingsPanel bot={panelBot} />}
       {state.personPanelId && <PersonPanel key={`person:${state.personPanelId}`} personId={state.personPanelId} />}
+      {state.memoryManagerOpen && <MemoryManagerPanel />}
       {remoteClient && state.computerOpen && bot && (
         <RemoteDesktopPanel key={`computer:${bot.id}`} bot={bot} />
       )}
       {!remoteClient && state.inspectorOpen && bot && <InspectorPanel key={bot.threadId} bot={bot} />}
       {!remoteClient && state.activityOpen && bot && <ActivityPanel key={`activity:${bot.id}`} bot={bot} />}
       {state.appSettingsOpen && <SettingsModal />}
-      {!remoteClient && state.personaEditor && <PersonaEditorModal />}
       {!remoteClient && <ModelWindowHost />}
-      {/* the bot creation wizard: its own screen, under Connect apps (opened from its Tools step) */}
-      {state.botWizard && <BotWizard />}
-      {state.botCatalogOpen && <BotCatalogModal />}
-      {state.pluginsOpen && <PluginsPanel />}
-      {state.triggersOpen && <TriggersPanel />}
-      {state.newBotOpen && <NewBotDialog />}
+      {/* Lot 4: New bot / Edit bot fill the main column (botWizard, personaEditor).
+          Lot 5: Connect apps and archived bots also fill the main column.
+          defaultsMode still mounts NewBotDialog from Settings > Default bot settings.
+          Browse Bots is Connect apps' Bots tab; no catalog modal. */}
       {state.shortcutsOpen && (
         <KeyboardShortcutsModal
           open={state.shortcutsOpen}
@@ -666,16 +683,18 @@ function Application() {
   return (
     <DesktopCapabilitiesProvider>
       <StoreProvider>
-        <ThreadRefsProvider>
-          <Shell />
-        </ThreadRefsProvider>
-        <WelcomeGate viewer={viewer} />
-        <GuidedTour />
-        <OpenAtLoginOffer />
-        <LiveCallHost />
-        <DataWindowViewSync />
-        <BotAccentSync />
-        <PageLookSync />
+        <ConfirmProvider>
+          <ThreadRefsProvider>
+            <Shell />
+          </ThreadRefsProvider>
+          <WelcomeGate viewer={viewer} />
+          <GuidedTour />
+          <OpenAtLoginOffer />
+          <LiveCallHost />
+          <DataWindowViewSync />
+          <BotAccentSync />
+          <PageLookSync />
+        </ConfirmProvider>
       </StoreProvider>
     </DesktopCapabilitiesProvider>
   );

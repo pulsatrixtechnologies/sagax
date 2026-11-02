@@ -228,10 +228,21 @@ public struct ConnectAppSources: Sendable {
     public var featured: [ConnectAppFeatured]
     public var skills: [LibrarySkill]
     public var marketplaces: [Marketplace]
+    /// Synthetic Tailscale row (Connect apps > Tailscale), when the person may join.
+    public var tailscale: BotTailscaleRowState?
 
-    public init(servers: [ConnectAppServer] = [], featured: [ConnectAppFeatured] = [], skills: [LibrarySkill] = [], marketplaces: [Marketplace] = []) {
+    public init(
+        servers: [ConnectAppServer] = [],
+        featured: [ConnectAppFeatured] = [],
+        skills: [LibrarySkill] = [],
+        marketplaces: [Marketplace] = [],
+        tailscale: BotTailscaleRowState? = nil
+    ) {
         self.servers = servers
-        self.featured = featured; self.skills = skills; self.marketplaces = marketplaces
+        self.featured = featured
+        self.skills = skills
+        self.marketplaces = marketplaces
+        self.tailscale = tailscale
     }
 }
 
@@ -265,6 +276,23 @@ public enum ConnectApps {
                 for server in plugin.servers { serverParent[server] = key }
                 for skill in plugin.skills { skillParent[skill] = key }
             }
+        }
+        if let tailscale = sources.tailscale {
+            let on = tailscale.connected || tailscale.pending
+            items.append(ConnectAppItem(
+                key: tailscaleConnectAppKey,
+                kind: .featured,
+                id: "tailscale",
+                name: "Tailscale",
+                description: tailscale.description,
+                domain: "tailscale.com",
+                category: .other,
+                installed: on,
+                status: tailscale.connected ? .connected : (tailscale.pending ? .pending : .available),
+                action: on ? nil : .connect,
+                source: "catalog",
+                recommended: true
+            ))
         }
         var serverURLs = Set<String>()
         for server in sources.servers {

@@ -214,6 +214,7 @@ struct BotMemorySection: View {
     @State private var newTopic = ""
     @State private var deleting: MemoryFileInfo?
     @State private var switching = false
+    @State private var showPath = false
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
     private var memoryOn: Bool { current.memoryEnabled != false }
@@ -226,12 +227,27 @@ struct BotMemorySection: View {
             .tint(Theme.toggleOn)
             .disabled(current.busy == true || switching)
             .accessibilityIdentifier("memory-enabled")
+            // Lot 8: the folder path (and any bot id in it) stays behind
+            // "Show path" with Copy; the open line never shows a UUID.
             if let path = model.overview?.workspacePath, !path.isEmpty {
-                Text(verbatim: path)
-                    .font(Theme.mono(12))
-                    .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                DisclosureGroup(isExpanded: $showPath) {
+                    Text(verbatim: DisplayHygiene.displayWorkspacePath(path))
+                        .font(Theme.mono(12))
+                        .foregroundStyle(Theme.textPrimary)
+                        .textSelection(.enabled)
+                        .accessibilityIdentifier("memory-path-display")
+                    Button(String(localized: "Copy path")) {
+                        PlatformBridge.copyToPasteboard(path)
+                    }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("memory-path-copy")
+                } label: {
+                    Text(String(localized: "Show path"))
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .accessibilityIdentifier("memory-show-path")
             }
         } header: {
             Text(String(localized: "Memory"))

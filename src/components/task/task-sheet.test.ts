@@ -63,6 +63,15 @@ describe("task status words", () => {
     expect(taskStatusWords({ status: "failed", startedAt: NOW - 3 * MIN, endedAt: NOW, now: NOW, handedBy: "Echo" })).toEqual(["Failed", "from Echo", "in 3m"]);
   });
 
+  it("names who is waited on when a derived job stage is set", () => {
+    expect(taskStatusWords({ status: "waiting", startedAt: NOW - 4 * MIN, now: NOW, stage: "awaiting_reply" }))
+      .toEqual(["Waiting for your reply", "4m so far"]);
+    expect(taskStatusWords({ status: "failed", startedAt: NOW - 3 * MIN, endedAt: NOW, now: NOW, stage: "held", handedBy: "Echo" }))
+      .toEqual(["Blocked: needs you", "from Echo", "in 3m"]);
+    expect(taskStatusWords({ status: "finished", startedAt: NOW - 12 * MIN, endedAt: NOW, now: NOW, stage: "to_review" }))
+      .toEqual(["Ready for your review", "in 12m"]);
+  });
+
   it("draws the bot's pill with its mascot, the title and the actions", () => {
     const html = renderToStaticMarkup(createElement(TaskStatusHeader, {
       title: "Follow up", bot: { name: "Wren", color: "green" } as never, status: "running", startedAt: NOW - MIN, now: NOW, stepLabel: "Read a file",

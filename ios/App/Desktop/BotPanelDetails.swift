@@ -144,11 +144,13 @@ struct BotPanelDetails: View {
     let bot: Bot
 
     @StateObject private var activity: BotActivityModel
+    @StateObject private var remoteSessions: BotRemoteSessionsModel
     @State private var route: BotActivityRoute?
 
     init(bot: Bot) {
         self.bot = bot
         _activity = StateObject(wrappedValue: BotActivityModel(botId: bot.id))
+        _remoteSessions = StateObject(wrappedValue: BotRemoteSessionsModel(botId: bot.id))
     }
 
     private var showsActivity: Bool { session.surfaceGate.allows(.botActivity) }
@@ -173,6 +175,8 @@ struct BotPanelDetails: View {
                     AnyView(allHistoryRow)
                 }
             }
+            // Temporary attended remote sessions: only while active, above Routines.
+            BotPanelRemoteSessions(model: remoteSessions)
             AnyView(BotPanelRoutines(bot: bot))
         }
         .padding(.top, 8)
@@ -183,9 +187,13 @@ struct BotPanelDetails: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: session.connection?.id) {
             if showsActivity { activity.start(client: session.profileClient) }
+            remoteSessions.start(client: session.profileClient ?? session.settingsClient)
         }
         .onValueChange(of: BotActivityRules.signature(bot.tasks)) { _ in Task { await activity.refresh() } }
-        .onDisappear { activity.stop() }
+        .onDisappear {
+            activity.stop()
+            remoteSessions.stop()
+        }
         .sheet(item: $route) { route in
             BotActivitySheet(botId: bot.id, route: route, model: activity) { _, threadId in
                 self.route = nil

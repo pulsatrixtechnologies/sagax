@@ -64,8 +64,8 @@ async function withFixture(test: (f: Fixture) => Promise<void>, options: { backu
       driver: "claudeAgent", displayName: "Backup fixture", config: { ...config.instances.claude.config },
       environment: { ...config.instances.claude.environment, ANTHROPIC_API_KEY: "fixture-only-not-a-key" },
     };
-    // The person chose that key as the backup: a catalog fallthrough never
-    // picks an engine billed per use on its own (limit-failover.ts, 3ed90a037).
+    // A pay-per-use engine is never picked from the catalog: the person has
+    // to choose it as the backup (3ed90a037), as the fixture's person does.
     if (options.backup !== false) config.automaticRecovery = { enabled: true, backup: BACKUP };
     writeFileSync(configPath, JSON.stringify(config));
     await start(options.env);

@@ -102,7 +102,12 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("artifacts:delete", "own", "delete_artifact"),
   p("pages:propose", "own", "propose_page"),
   p("pages:comments", "own", "page_comments"),
-  p("phone:call", "own", "place_phone_call"),
+  // place_call is the same tool under its compatibility name
+  p("phone:call", "own", "place_phone_call", "sagax", ["place_call"]),
+  // mid-call controls on the person's own live call (server/outbound-calls.ts)
+  p("phone:dtmf", "own", "send_dtmf"),
+  p("phone:transfer", "own", "transfer"),
+  p("phone:hangup", "own", "hang_up"),
   p("cards:options", "own", "create_options_card"),
   p("cards:ask", "own", "ask_choice"),
   p("rooms:react", "own", "react_to_message"),
@@ -120,8 +125,6 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("waits:set", "own", "wait_until"),
   p("waits:list", "read", "list_waits"),
   p("waits:cancel", "own", "cancel_wait"),
-  // Shape mascot from a short description (catalog generate_shape_avatar).
-  p("shapes:generate", "own", "generate_shape_avatar"),
   p("terminal:offer", "own", "offer_shell_terminal"),
   p("remote:publish", "own", "publish_remote_session"),
   // the person's own connected Tailcat session (owner and bot checked by the service)

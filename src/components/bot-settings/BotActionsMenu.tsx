@@ -9,7 +9,7 @@
 // the history (src/lib/bot-history-reset.ts: a new conversation, the open
 // ones archived; memory, files and routines kept; routine runs,
 // confidential threads, hidden client threads and bot-to-bot threads stay).
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Archive, Bug, Check, Copy, Database, Download, FileArchive, Link2, MoreHorizontal, Pencil, PictureInPicture2, RotateCcw, Star, UserRoundPen } from "lucide-react";
 
@@ -36,8 +36,10 @@ import { useAdvancedMode } from "@/lib/interface-mode";
 import { useHeldMenuMotion } from "../MenuMotion";
 import { navigateThreadMenu } from "../BotProjects";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { Switch } from "../SettingsPrimitives";
+import { PILL, PRIMARY_PILL, Switch } from "../SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
+import { AnchoredPopover, useAnchoredDismissRoot } from "../AnchoredPopover";
+import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 
 /** Where the menu opens: under the "..." button, or at a right click. */
 export interface BotActionsMenuAnchor {
@@ -269,7 +271,13 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data }: {
         </div>,
         document.body,
       )}
-      {zipOpen && <BotZipExportDialog bot={bot} onClose={() => { setZipOpen(false); buttonRef.current?.focus(); }} />}
+      {zipOpen && (
+        <BotZipExportPopover
+          bot={bot}
+          anchorRef={buttonRef}
+          onClose={() => { setZipOpen(false); buttonRef.current?.focus(); }}
+        />
+      )}
       <ConfirmDialog
         open={archiveOpen}
         title={t("sidebar.confirm.archiveTitle", { name: bot.name })}
@@ -296,65 +304,62 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data }: {
   );
 }
 
-/** Export the bot as a .sagaxbot.zip: what to include, then the download
- * (GET /api/bots/:id/export.zip, src/lib/bot-zip.ts). */
-function BotZipExportDialog({ bot, onClose }: { bot: Bot; onClose: () => void }) {
+/** Export the bot as a .sagaxbot.zip: what to include, then the download.
+ * Anchored popover under the "..." button (one choice, one download). */
+function BotZipExportPopover({ bot, anchorRef, onClose }: {
+  bot: Bot;
+  anchorRef: RefObject<HTMLElement | null>;
+  onClose: () => void;
+}) {
   const [withConversations, setWithConversations] = useState(false);
   const [withSharing, setWithSharing] = useState(false);
   const [exported, setExported] = useState(false);
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const dismissRoot = useAnchoredDismissRoot(wrapRef, popoverRef);
+  usePopoverDismiss(true, dismissRoot, onClose);
   const shared = (bot.grants?.length ?? 0) > 0 || bot.visibility !== undefined;
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
   useEffect(() => {
-    dialogRef.current?.querySelector<HTMLElement>("button")?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeRef.current();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    popoverRef.current?.querySelector<HTMLElement>("button")?.focus();
   }, []);
-  return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div
-        ref={dialogRef}
+  return (
+    <div ref={wrapRef} className="contents">
+      <AnchoredPopover
+        anchorRef={anchorRef}
+        popoverRef={popoverRef}
+        align="end"
+        side="bottom"
         role="dialog"
-        aria-modal="true"
-        aria-labelledby="bot-zip-export-title"
+        aria-label={t("chat.export.botZip")}
         data-bot-zip-export=""
-        className="flex w-[min(420px,calc(100vw-32px))] flex-col gap-3 rounded-2xl border-[0.5px] border-border bg-elevated p-5 text-[13px] text-ink shadow-xl"
+        className="w-[min(320px,calc(100vw-24px))] rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-3 text-[13px] text-ink shadow-xl"
       >
-        <h2 id="bot-zip-export-title" className="text-[15px] font-semibold">{t("chat.export.botZip")}</h2>
         <p className="text-ink-secondary">{t("botZip.exportBody", { name: bot.name })}</p>
-        <label className="flex items-center justify-between gap-3">
+        <label className="mt-3 flex items-center justify-between gap-3">
           <span className="min-w-0"><span className="block">{t("botZip.includeConversations")}</span><span className="block text-[12px] text-ink-secondary">{t("botZip.includeConversationsHint")}</span></span>
           <Switch checked={withConversations} onClick={() => setWithConversations((value) => !value)} aria-label={t("botZip.includeConversations")} data-bot-zip-conversations="" />
         </label>
         {shared && (
-          <label className="flex items-center justify-between gap-3">
+          <label className="mt-2 flex items-center justify-between gap-3">
             <span>{t("botZip.includeSharing")}</span>
             <Switch checked={withSharing} onClick={() => setWithSharing((value) => !value)} aria-label={t("botZip.includeSharing")} data-bot-zip-sharing="" />
           </label>
         )}
-        {exported && <span role="status" className="text-[12px] text-ink-secondary">{t("botZip.exportStarted")}</span>}
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-ink-secondary hover:bg-control hover:text-ink">
+        {exported && <span role="status" className="mt-2 block text-[12px] text-ink-secondary">{t("botZip.exportStarted")}</span>}
+        <div className="mt-3 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className={PILL}>
             {exported ? t("common.close") : t("common.cancel")}
           </button>
           <button
             type="button"
             data-bot-zip-download=""
             onClick={() => { downloadBotZip(bot.id, { conversations: withConversations, sharing: shared && withSharing }); setExported(true); }}
-            className="rounded-lg bg-control px-3 py-1.5 text-ink hover:bg-raised-hover"
+            className={PRIMARY_PILL}
           >
             {t("botZip.download")}
           </button>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </AnchoredPopover>
+    </div>
   );
 }

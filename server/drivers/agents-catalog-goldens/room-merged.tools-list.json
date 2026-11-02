@@ -198,6 +198,12 @@
             "minLength": 1,
             "maxLength": 500,
             "description": "Harness-checked criterion: tool:ask_choice and/or first_line:PASS|FAIL (join with \"; \"). Free text is advisory. Unmet or a work-mode ack-only reply ends failed(incomplete)."
+          },
+          "default_answer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "description": "Optional answer the harness applies if the person never replies to a question this work parks on them (R6). When used, the run resumes with a note that it was the requester's default. Leave out to expire the wait as status expired after the delay (and a mid-delay push reminder)."
           }
         },
         "required": [
@@ -2255,30 +2261,6 @@
           "action",
           "reason"
         ]
-      }
-    },
-    {
-      "name": "generate_shape_avatar",
-      "description": "Build a portable Shape mascot definition (geometry JSON only) from a short description and apply it to this bot's look. Use when the person asks to make a mascot that looks like an object (mug, pad, bulb, speech bubble, plant, can, book, rocket, …). Colour stays the bot's colour. The definition is validated before it is stored. Read the result: a change to your own routines, skills, profile or model applies immediately, and the person sees it with an Undo; a change for another bot may wait for the person's confirmation. If applied, continue the requested work without another confirmation. Only a pending result requires ending the turn and waiting for the in-app decision. Never claim success without an applied result; report failed or cancelled results honestly. This does not elevate another bot's execution permissions.",
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "direction": {
-            "type": "string",
-            "maxLength": 400,
-            "description": "What the silhouette should look like, for example \"a friendly coffee mug\"."
-          },
-          "apply": {
-            "type": "boolean",
-            "description": "When true (default), save the definition on this bot's mascotLook. When false, only return the JSON."
-          },
-          "definition": {
-            "type": "object",
-            "additionalProperties": true,
-            "description": "Optional ready-made definition JSON to validate and apply instead of generating from direction."
-          }
-        }
       }
     },
     {

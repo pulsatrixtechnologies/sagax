@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Search } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -7,6 +6,9 @@ import { t } from "@/lib/i18n";
 import { primaryBotChoices } from "@/lib/primary-bot";
 import type { Bot } from "@/state/store";
 import { BotAvatar } from "./Avatar";
+import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { AnchoredPopover, useAnchoredDismissRoot } from "./AnchoredPopover";
+import { PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 
 export interface PrimaryBotPickerProps {
   open: boolean;
@@ -16,21 +18,29 @@ export interface PrimaryBotPickerProps {
   currentId: string | null;
   pending?: boolean;
   error?: string | null;
+  /** The control that opened this (sidebar bot menu). */
+  anchorRef?: RefObject<HTMLElement | null>;
   onCancel: () => void;
   onConfirm: (botId: string) => void;
 }
 
 /** "Choose a primary Bot": search, the person's own bots (never the current
  * one), Cancel and Confirm. Confirm stays off until a different bot is
- * chosen. Portalled to <body> like ConfirmDialog, with Escape and a focus
- * trap. */
-export function PrimaryBotPicker({ open, bots, viewerId, currentId, pending = false, error, onCancel, onConfirm }: PrimaryBotPickerProps) {
+ * chosen. 2026-11-01 lot 7: anchored popover (search + list). */
+export function PrimaryBotPicker({ open, bots, viewerId, currentId, pending = false, error, anchorRef, onCancel, onConfirm }: PrimaryBotPickerProps) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const fallbackAnchor = useRef<HTMLDivElement>(null);
+  const resolvedAnchor = anchorRef ?? fallbackAnchor;
+  const popoverRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const triggerRoot = useRef<HTMLElement | null>(null);
+  triggerRoot.current = resolvedAnchor.current;
+  const dismissRoot = useAnchoredDismissRoot(triggerRoot, popoverRef);
   const cancelAction = useRef(onCancel);
   cancelAction.current = onCancel;
+
+  usePopoverDismiss(open && !pending, dismissRoot, () => cancelAction.current());
 
   useEffect(() => {
     if (!open) return;
@@ -38,55 +48,51 @@ export function PrimaryBotPicker({ open, bots, viewerId, currentId, pending = fa
     setSelected(null);
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     searchRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        cancelAction.current();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const controls = dialogRef.current?.querySelectorAll<HTMLElement>("input, button:not([disabled])");
-      if (!controls?.length) return;
-      const first = controls[0]!;
-      const last = controls[controls.length - 1]!;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
     return () => {
-      window.removeEventListener("keydown", onKey);
       if (opener?.isConnected && opener !== document.body) opener.focus();
     };
   }, [open]);
 
   if (!open) return null;
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onMouseDown={(event) => event.target === event.currentTarget && !pending && onCancel()}
-    >
-      <PrimaryBotPickerCard
-        ref={dialogRef}
-        searchRef={searchRef}
-        bots={bots}
-        viewerId={viewerId}
-        currentId={currentId}
-        query={query}
-        onQuery={setQuery}
-        selected={selected}
-        onSelect={setSelected}
-        pending={pending}
-        error={error}
-        onCancel={onCancel}
-        onConfirm={onConfirm}
-      />
-    </div>,
-    document.body,
+  return (
+    <>
+      {!anchorRef && <div ref={fallbackAnchor} className="pointer-events-none fixed left-4 bottom-24 size-0" aria-hidden="true" />}
+      <AnchoredPopover
+        anchorRef={resolvedAnchor}
+        popoverRef={popoverRef}
+        side="top"
+        align="start"
+        role="dialog"
+        tabIndex={-1}
+        aria-busy={pending || undefined}
+        aria-labelledby="primary-bot-picker-title"
+        aria-describedby="primary-bot-picker-hint"
+        data-testid="primary-bot-picker"
+        data-primary-bot-picker=""
+        className="flex max-h-[min(480px,calc(100dvh-32px))] w-[min(360px,calc(100vw-24px))] flex-col overflow-hidden rounded-xl border-[0.5px] border-border popover-surface bg-elevated text-ink shadow-xl outline-none"
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" || pending) return;
+          event.preventDefault();
+          event.stopPropagation();
+          cancelAction.current();
+        }}
+      >
+        <PrimaryBotPickerCard
+          searchRef={searchRef}
+          bots={bots}
+          viewerId={viewerId}
+          currentId={currentId}
+          query={query}
+          onQuery={setQuery}
+          selected={selected}
+          onSelect={setSelected}
+          pending={pending}
+          error={error}
+          onCancel={onCancel}
+          onConfirm={onConfirm}
+        />
+      </AnchoredPopover>
+    </>
   );
 }
 
@@ -125,17 +131,7 @@ export function PrimaryBotPickerCard({
   const choices = primaryBotChoices(bots, viewerId, currentId, query);
   const chosen = selected && selected !== currentId && choices.some((bot) => bot.id === selected) ? selected : null;
   return (
-    <div
-      ref={ref}
-      role="dialog"
-      tabIndex={-1}
-      aria-modal="true"
-      aria-busy={pending}
-      aria-labelledby="primary-bot-picker-title"
-      aria-describedby="primary-bot-picker-hint"
-      data-testid="primary-bot-picker"
-      className="flex max-h-[min(560px,calc(100dvh-32px))] w-full max-w-[400px] flex-col rounded-[14px] border border-border bg-elevated outline-none"
-    >
+    <div ref={ref} className="flex min-h-0 flex-1 flex-col">
       <div className="px-4 pt-4">
         <h2 id="primary-bot-picker-title" className="text-[15px] font-semibold leading-[22px] text-ink">{t("primaryBot.chooseTitle")}</h2>
         <p id="primary-bot-picker-hint" className="mt-0.5 text-[13px] leading-[18px] text-ink-tertiary">{t("primaryBot.chooseHint")}</p>
@@ -180,14 +176,14 @@ export function PrimaryBotPickerCard({
       </div>
       {error && <p role="alert" className="px-4 pt-2 text-[12px] text-danger">{error}</p>}
       <div className="flex justify-end gap-2 px-4 py-3">
-        <button type="button" onClick={onCancel} disabled={pending} className="ui-button disabled:opacity-50">
+        <button type="button" onClick={onCancel} disabled={pending} className={cn(PILL, "disabled:opacity-50")}>
           {t("common.cancel")}
         </button>
         <button
           type="button"
           onClick={() => chosen && onConfirm(chosen)}
           disabled={!chosen || pending}
-          className="ui-button ui-button-primary disabled:opacity-50"
+          className={cn(PRIMARY_PILL, "disabled:opacity-50")}
         >
           {t("primaryBot.confirm")}
         </button>

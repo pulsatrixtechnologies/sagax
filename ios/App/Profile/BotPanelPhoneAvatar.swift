@@ -1,12 +1,8 @@
-// The character editor the panel's mascot opens (`Edit avatar`). Same tabs
-// as the desktop popover and the iPad `BotAvatarEditor`: Character /
-// Generate / Upload, drawn as the reference design's Avatar page (a centred
-// segmented pill, the big preview, the grid in one card with Reset to
-// default at its foot). Each choice saves at once.
-// Track A (2026-10-28), as the desktop's Appearance: the preview on top on a
-// ground tinted with the bot's colour, with the character's name, then on
-// Character a segmented Mascot | Shape | Color | Skin, one grid at a time
-// (Shape for Shapes only, Color for every character but Trombi).
+// The character editor the panel's mascot opens (`Edit avatar`). Lot 9:
+// Back + Done like Grok Bot (Back cancels the look draft; Done saves), a
+// plain preview without the gradient card, and Mascot / Shape / Color /
+// Skin as scrolling sections (no secondary segmented control). Top tabs
+// stay Character / Generate / Upload. Sagax mascots stay ours.
 import CompanionCore
 import PhotosUI
 import SwiftUI
@@ -22,8 +18,9 @@ struct PhoneBotAvatarSheet: View {
     enum Tab: String, CaseIterable { case bot, generate, upload }
 
     @State private var tab: Tab = .bot
-    /// The one grid Character shows.
-    @State private var part: CharacterEditor.Section = .character
+    @State private var baseline = CharacterDraft()
+    @State private var clearsPicture = false
+    @State private var confirmDiscard = false
     @State private var unlocks: MascotUnlocks = .lockedUntilLoaded
     @State private var generating = false
     @State private var generatePrompt = ""
@@ -36,6 +33,7 @@ struct PhoneBotAvatarSheet: View {
     /// organization server (`SurfaceFeature.botAvatarGenerate`).
     private var canGenerate: Bool { session.surfaceGate.allows(.botAvatarGenerate, bot: bot) && config?.imageGen?.configured == true }
     private var working: Bool { generating }
+    private var dirty: Bool { draft != baseline || clearsPicture }
 
     var body: some View {
         NavigationStack {
@@ -45,23 +43,8 @@ struct PhoneBotAvatarSheet: View {
                     .padding(.top, 8)
                 ScrollView {
                     VStack(spacing: 0) {
-                        // the big preview over every tab, on a ground tinted with the bot's colour
-                        VStack(spacing: 6) {
-                            BotMascotView(bot: current, size: 112, state: .idle, animated: true)
-                                .frame(height: 128)
-                                .accessibilityHidden(true)
-                            Text(CharacterEditor.characterName(draft.character))
-                                .font(Theme.Font.bodyMedium)
-                                .foregroundStyle(Theme.textPrimary)
-                                .accessibilityIdentifier("avatar-preview-name")
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(
-                            RadialGradient(colors: [MausPalette.color(draft.color).opacity(0.28), Theme.card], center: .init(x: 0.5, y: 0.4), startRadius: 0, endRadius: 190),
-                            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        )
-                        .padding(.bottom, 20)
+                        preview
+                            .padding(.bottom, 20)
                         Group {
                             switch tab {
                             case .bot: botTab
@@ -80,18 +63,43 @@ struct PhoneBotAvatarSheet: View {
             .navigationTitle(Text("Avatar"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(String(localized: "Back")) { attemptBack() }
+                        .accessibilityIdentifier("avatar-back")
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Done")) { dismiss() }.accessibilityIdentifier("avatar-done")
+                    Button(String(localized: "Done")) {
+                        Task { await commitAndDismiss() }
+                    }
+                    .fontWeight(.semibold)
+                    .accessibilityIdentifier("avatar-done")
                 }
             }
+        }
+        .interactiveDismissDisabled(dirty)
+        .confirmationDialog(
+            String(localized: "Discard changes?"),
+            isPresented: $confirmDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard changes", role: .destructive) { discardAndDismiss() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("The avatar still has edits that are not saved.")
         }
         .sheet(isPresented: $framing) {
             PictureFramingSheet(bot: current) { zoom, x, y in
                 Task { await edit(BotProfileEdit(avatarZoom: zoom, avatarFocusX: x, avatarFocusY: y)) }
             }
         }
-        .onAppear { draft = CharacterDraft(bot: current) }
-        .onValueChange(of: CharacterDraft(bot: current)) { server in if !working { draft = server } }
+        .onAppear { syncFromServer(force: true) }
+        .onValueChange(of: CharacterDraft(bot: current)) { server in
+            if !working && !dirty {
+                draft = server
+                baseline = server
+                clearsPicture = false
+            }
+        }
         .onValueChange(of: photo) { item in
             guard let item else { return }
             Task { await upload(item) }
@@ -106,6 +114,28 @@ struct PhoneBotAvatarSheet: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Edit avatar"))
         .accessibilityIdentifier("phone-avatar-editor")
+    }
+
+    /// Plain centred preview (Lot 9): no gradient card. A stored picture
+    /// stays the face until the person clears it; otherwise the draft look.
+    private var preview: some View {
+        VStack(spacing: 6) {
+            if current.avatarUrl != nil, (current.avatarCrop ?? .mascot) != .mascot {
+                BotMascotView(bot: current, size: 96, state: .idle, animated: true)
+                    .frame(height: 112)
+                    .accessibilityHidden(true)
+            } else {
+                MascotCharacterView(look: draft.complete, color: draft.color, skin: draft.skin, size: 96, animated: true)
+                    .frame(height: 112)
+                    .accessibilityHidden(true)
+            }
+            Text(CharacterEditor.characterName(draft.character))
+                .font(Theme.Font.bodyMedium)
+                .foregroundStyle(Theme.textPrimary)
+                .accessibilityIdentifier("avatar-preview-name")
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
     }
 
     /// Character / Generate / Upload as one centred segmented pill: the
@@ -143,25 +173,14 @@ struct PhoneBotAvatarSheet: View {
         }
     }
 
-    /// The characters, shapes, skins and colours in one card, with Reset to
-    /// default at its foot.
+    /// Mascot, Shape, Color and Skin in one scrolling card, Reset at the foot.
     private var botTab: some View {
         VStack(spacing: 0) {
-            let parts = CharacterEditor.Section.offered(for: draft.character)
-            let shownPart = parts.contains(part) ? part : .character
-            Picker(String(localized: "Customize"), selection: Binding(get: { shownPart }, set: { Haptics.selection(); part = $0 })) {
-                ForEach(parts) { item in
-                    Text(partTitle(item)).tag(item)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
-            .accessibilityIdentifier("avatar-part")
             CharacterEditor(
-                draft: Binding(get: { draft }, set: { saveLook($0) }),
+                draft: $draft,
                 metrics: .createSheet,
-                section: shownPart,
+                section: nil,
+                showsSectionLabels: true,
                 showsPhotoRow: false,
                 showsReset: false,
                 unlocks: session.isDemo ? .demo : session.surfaceGate.allows(.characterExtras) ? unlocks : .nothingLocked
@@ -171,7 +190,7 @@ struct PhoneBotAvatarSheet: View {
             Button {
                 Haptics.selection()
                 draft = .default
-                Task { await edit(.resetLook) }
+                clearsPicture = true
             } label: {
                 Text("Reset to default")
                     .font(Theme.Font.body)
@@ -186,15 +205,6 @@ struct PhoneBotAvatarSheet: View {
         }
         .frame(maxWidth: .infinity)
         .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Metric.cardRadius, style: .continuous))
-    }
-
-    private func partTitle(_ part: CharacterEditor.Section) -> LocalizedStringKey {
-        switch part {
-        case .character: "Mascot"
-        case .shape: "Shape"
-        case .colour: "Color"
-        case .skin: "Skin"
-        }
     }
 
     private var generateTab: some View {
@@ -276,17 +286,42 @@ struct PhoneBotAvatarSheet: View {
         .padding(.top, 8)
     }
 
-    /// Shown at once, saved at once, put back if the server refuses.
-    private func saveLook(_ next: CharacterDraft) {
-        let previous = draft
-        guard next != previous else { return }
-        draft = next
-        var change = BotProfileEdit()
-        if next.color != previous.color { change.color = next.color }
-        if next.look != previous.look { change.mascotLook = next.look }
-        if next.skin != previous.skin { change.mascotSkin = next.skin }
-        guard !change.isEmpty else { return }
-        Task { await edit(change, revert: { draft = previous }) }
+    private func syncFromServer(force: Bool) {
+        let server = CharacterDraft(bot: current)
+        if force || !dirty {
+            draft = server
+            baseline = server
+            clearsPicture = false
+        }
+    }
+
+    private func attemptBack() {
+        if dirty {
+            confirmDiscard = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func discardAndDismiss() {
+        draft = baseline
+        clearsPicture = false
+        dismiss()
+    }
+
+    private func commitAndDismiss() async {
+        let change = BotProfileEdit.lookDiff(
+            fromColor: baseline.color, fromLook: baseline.look, fromSkin: baseline.skin,
+            toColor: draft.color, toLook: draft.look, toSkin: draft.skin,
+            clearsPicture: clearsPicture
+        )
+        if !change.isEmpty {
+            let ok = await edit(change, revert: { draft = baseline; clearsPicture = false })
+            guard ok else { return }
+        }
+        baseline = draft
+        clearsPicture = false
+        dismiss()
     }
 
     @discardableResult

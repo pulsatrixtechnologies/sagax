@@ -1,0 +1,138 @@
+#!/bin/bash
+# sagax-tailscale: join this Sagax server environment (the person's sandbox)
+# to their private Tailscale tailnet with userspace networking only. Never
+# runs on the Kubernetes node. DENY_HOSTS egress for everything outside the
+# tailnet stays as configured on the NetworkPolicy.
+#
+#   sagax-tailscale start     start userspace tailscaled (idempotent)
+#   sagax-tailscale up        bring the node up with SAGAX_TS_AUTHKEY
+#   sagax-tailscale status    print tailscale status --json (or "stopped")
+#   sagax-tailscale down      leave the tailnet
+#   sagax-tailscale stop      down + stop tailscaled
+#
+# Auth key arrives as SAGAX_TS_AUTHKEY and is unset before any long-lived
+# process starts, so /proc/<pid>/environ never keeps it.
+set -euo pipefail
+
+AUTHKEY="${SAGAX_TS_AUTHKEY:-}"
+HOSTNAME_ARG="${SAGAX_TS_HOSTNAME:-sagax-bot}"
+TAGS_ARG="${SAGAX_TS_TAGS:-tag:sagax}"
+unset SAGAX_TS_AUTHKEY SAGAX_TS_HOSTNAME SAGAX_TS_TAGS
+
+STATE="${SAGAX_TS_STATEDIR:-/workspace/.tailscale}"
+SOCK="${SAGAX_TS_SOCKET:-/run/tailscale/tailscaled.sock}"
+LOG="$STATE/tailscaled.log"
+HTTP_PROXY_LISTEN="${SAGAX_TS_HTTP_PROXY:-localhost:1054}"
+SOCKS_LISTEN="${SAGAX_TS_SOCKS:-localhost:1055}"
+
+export TS_SOCKET="$SOCK"
+
+log() { printf '%s\n' "$*" >&2; }
+
+running() {
+  pgrep -u "$(id -u)" -x tailscaled >/dev/null 2>&1
+}
+
+ensure_dirs() {
+  mkdir -p "$STATE" "$(dirname "$SOCK")"
+  chmod 0700 "$STATE" 2>/dev/null || true
+}
+
+start() {
+  ensure_dirs
+  exec 9>"$STATE/start.lock"
+  flock -w 25 9 || { log "another start of Tailscale is still running"; exit 1; }
+  if running; then
+    exec 9>&-
+    echo running
+    return 0
+  fi
+  if ! command -v tailscaled >/dev/null 2>&1; then
+    log "tailscaled is not installed in this sandbox image"
+    exit 127
+  fi
+  # Userspace only: the pod has no NET_ADMIN and no /dev/net/tun.
+  setsid tailscaled \
+    --tun=userspace-networking \
+    --outbound-http-proxy-listen="$HTTP_PROXY_LISTEN" \
+    --socks5-server="$SOCKS_LISTEN" \
+    --statedir="$STATE" \
+    --socket="$SOCK" \
+    >"$LOG" 2>&1 </dev/null 9>&- &
+  for _ in $(seq 1 50); do
+    if running && [ -S "$SOCK" ]; then break; fi
+    sleep 0.1
+  done
+  if ! running; then
+    log "tailscaled did not start"
+    tail -n 40 "$LOG" >&2 || true
+    exit 1
+  fi
+  exec 9>&-
+  echo running
+}
+
+up() {
+  start >/dev/null
+  if [ -z "$AUTHKEY" ]; then
+    log "SAGAX_TS_AUTHKEY is required for up"
+    exit 2
+  fi
+  if ! command -v tailscale >/dev/null 2>&1; then
+    log "tailscale is not installed in this sandbox image"
+    exit 127
+  fi
+  # --accept-routes is off: kernel routes to 100.64/10 would hit DENY_HOSTS.
+  # Reach tailnet hosts through the local SOCKS/HTTP proxies instead.
+  tailscale --socket="$SOCK" up \
+    --auth-key="$AUTHKEY" \
+    --hostname="$HOSTNAME_ARG" \
+    --advertise-tags="$TAGS_ARG" \
+    --accept-dns=false \
+    --accept-routes=false
+  echo up
+}
+
+status_cmd() {
+  if ! running; then
+    echo stopped
+    return 0
+  fi
+  if ! command -v tailscale >/dev/null 2>&1; then
+    echo stopped
+    return 0
+  fi
+  tailscale --socket="$SOCK" status --json
+}
+
+down_cmd() {
+  if running && command -v tailscale >/dev/null 2>&1; then
+    tailscale --socket="$SOCK" down 2>/dev/null || true
+  fi
+  echo down
+}
+
+stop_cmd() {
+  down_cmd >/dev/null
+  if running; then
+    pkill -u "$(id -u)" -x tailscaled 2>/dev/null || true
+    for _ in $(seq 1 30); do
+      if ! running; then break; fi
+      sleep 0.1
+    done
+  fi
+  echo stopped
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  start) start ;;
+  up) up ;;
+  status) status_cmd ;;
+  down) down_cmd ;;
+  stop) stop_cmd ;;
+  *)
+    log "usage: sagax-tailscale start|up|status|down|stop"
+    exit 2
+    ;;
+esac

@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { ArrowDown, ArrowUp, CheckCheck, Folder, Lock, MoreHorizontal, Pencil, Plus, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CheckCheck, Folder, Lock, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import type { NewThreadChoice } from "@/lib/confidential-thread";
 import { useStore, type Bot, type BotProject, type FolderOwnerKind } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { useHeldMenuMotion } from "./MenuMotion";
 import { t } from "@/lib/i18n";
+import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { AnchoredPopover, useAnchoredDismissRoot } from "./AnchoredPopover";
+import { PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 
 const FOLDER_EMOJI = ["📁", "💼", "🏠", "📬", "💡", "🚀", "🎨", "🧪", "📚", "🌱", "⭐", "🛠️"];
 
@@ -24,7 +27,7 @@ export function navigateThreadMenu(event: React.KeyboardEvent<HTMLDivElement>) {
   buttons[next]?.focus();
 }
 
-export function FolderActions({ project, canMoveUp, canMoveDown, canMarkRead, saving, menu, onMenuChange, onEdit, onMove, onMarkRead, onNewThread }: {
+export function FolderActions({ project, canMoveUp, canMoveDown, canMarkRead, saving, menu, onMenuChange, onEdit, onMove, onMarkRead, onNewThread, onDelete }: {
   project: BotProject;
   canMoveUp: boolean;
   canMoveDown: boolean;
@@ -36,6 +39,8 @@ export function FolderActions({ project, canMoveUp, canMoveDown, canMarkRead, sa
   onMove: (direction: -1 | 1, onSaved: () => void) => void;
   onMarkRead: (onSaved: () => void) => void;
   onNewThread?: () => void;
+  /** Absent: delete stays out of this menu (the create popover never offers it). */
+  onDelete?: () => void;
 }) {
   const actionRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -68,10 +73,11 @@ export function FolderActions({ project, canMoveUp, canMoveDown, canMarkRead, sa
       onMouseDown={(event) => event.stopPropagation()}
       onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } else navigateThreadMenu(event); }}>
       {onNewThread && <button type="button" role="menuitem" onClick={() => { close(); onNewThread(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><Plus size={12} />{t("task.newIn", { name: project.name })}</button>}
-      <button type="button" role="menuitem" onClick={() => { close(); onEdit(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><Pencil size={12} />{t("folder.settings")}</button>
+      <button type="button" role="menuitem" onClick={() => { close(); onEdit(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><Pencil size={12} />{t("folder.rename")}</button>
       <button type="button" role="menuitem" disabled={!canMarkRead || saving} onClick={() => onMarkRead(close)} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised disabled:opacity-40"><CheckCheck size={12} />{t("folder.markRead")}</button>
       <button type="button" role="menuitem" disabled={!canMoveUp || saving} onClick={() => move(-1)} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised disabled:opacity-40"><ArrowUp size={12} />{t("folder.moveUp")}</button>
       <button type="button" role="menuitem" disabled={!canMoveDown || saving} onClick={() => move(1)} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised disabled:opacity-40"><ArrowDown size={12} />{t("folder.moveDown")}</button>
+      {onDelete && <button type="button" role="menuitem" onClick={() => { close(); onDelete(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-danger hover:bg-raised"><Trash2 size={12} />{t("folder.delete")}</button>}
     </div>, document.body)}
   </>;
 }
@@ -81,97 +87,289 @@ export function FolderActions({ project, canMoveUp, canMoveDown, canMarkRead, sa
  * with a person (its threads and folders have the same shape). */
 export type FolderOwner = Pick<Bot, "id" | "name" | "threadId" | "projects"> & { tasks?: ReadonlyArray<{ threadId: string; projectId?: string }> };
 
-/** Folders only organize threads. The project-shaped API is retained for
- * compatibility; neither model settings nor working directories live here.
- * `bot` is the folders' owner: a bot, or a group with `owner: "group"`. */
-export function BotProjectDialog({ bot, owner, project, onClose, onCreated }: {
+/** Rename a folder where its name shows (2026-11-01 lot 7). Enter saves,
+ * Escape restores. */
+export function FolderRenameField({ name, onSave, onCancel }: {
+  name: string;
+  onSave: (next: string) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(name);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+  const finish = (save: boolean) => {
+    const next = draft.trim();
+    if (save && next && next !== name) onSave(next);
+    else onCancel();
+  };
+  return (
+    <input
+      ref={inputRef}
+      data-folder-rename=""
+      aria-label={t("folder.name")}
+      value={draft}
+      maxLength={80}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => finish(true)}
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+          event.preventDefault();
+          event.stopPropagation();
+          finish(true);
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          finish(false);
+        }
+      }}
+      className="min-w-0 flex-1 rounded-md border border-hairline/50 bg-inset px-1.5 py-0.5 text-[13px] font-semibold text-ink outline-none focus:ring-1 focus:ring-accent"
+    />
+  );
+}
+
+/** Icon chooser anchored to the folder's icon button (lot 7). */
+export function FolderIconPopover({ project, bot, owner, anchorRef, onClose }: {
+  project: BotProject;
   bot: FolderOwner;
   owner?: FolderOwnerKind;
+  anchorRef: RefObject<HTMLElement | null>;
+  onClose: () => void;
+}) {
+  const { dispatch } = useStore();
+  const [emoji, setEmoji] = useState(project.emoji ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const triggerRoot = useRef<HTMLElement | null>(null);
+  triggerRoot.current = anchorRef.current;
+  const dismissRoot = useAnchoredDismissRoot(triggerRoot, popoverRef);
+  usePopoverDismiss(!saving, dismissRoot, onClose);
+
+  const apply = (next: string) => {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    setEmoji(next);
+    dispatch({
+      type: "updateProject",
+      botId: bot.id,
+      owner,
+      projectId: project.id,
+      patch: { emoji: next.trim() || null },
+      onSaved: onClose,
+      onError: (message) => { setSaving(false); setError(message); setEmoji(project.emoji ?? ""); },
+    });
+  };
+
+  return (
+    <AnchoredPopover
+      anchorRef={anchorRef}
+      popoverRef={popoverRef}
+      side="bottom"
+      align="start"
+      role="dialog"
+      aria-label={t("folder.icon")}
+      data-folder-icon-popover=""
+      className="w-[min(280px,calc(100vw-24px))] rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-3 text-ink shadow-xl"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }}
+    >
+      <p className="mb-2 text-[12px] text-ink-secondary">{t("folder.emojiHint")}</p>
+      <div className="flex flex-wrap gap-1">
+        <button type="button" disabled={saving} aria-label={t("folder.defaultIcon")} aria-pressed={!emoji} onClick={() => apply("")} className="flex size-8 items-center justify-center rounded hover:bg-hover aria-pressed:bg-hover"><FolderIcon size={18} /></button>
+        {FOLDER_EMOJI.map((icon) => <button key={icon} type="button" disabled={saving} aria-label={icon} aria-pressed={emoji === icon} onClick={() => apply(icon)} className="size-8 rounded text-lg hover:bg-hover aria-pressed:bg-hover">{icon}</button>)}
+      </div>
+      {error && <p role="alert" className="mt-2 text-[12px] text-danger">{error}</p>}
+    </AnchoredPopover>
+  );
+}
+
+/** Create a thread folder: anchored popover with one name field (lot 7).
+ * Rename is in place on the row; icon change is FolderIconPopover. */
+export function BotProjectDialog({ bot, owner, project, anchorRef, onClose, onCreated }: {
+  bot: FolderOwner;
+  owner?: FolderOwnerKind;
+  /** Present only for legacy callers; edit is rename-in-place + icon popover. */
   project?: BotProject;
+  anchorRef?: RefObject<HTMLElement | null>;
+  onClose: () => void;
+  onCreated?: (project: BotProject) => void;
+}) {
+  // Edit path kept for a one-release bridge: open the icon popover content
+  // with name rename is handled by FolderRenameField at the call site.
+  if (project) {
+    return <FolderEditPopover bot={bot} owner={owner} project={project} anchorRef={anchorRef} onClose={onClose} />;
+  }
+  return <FolderCreatePopover bot={bot} owner={owner} anchorRef={anchorRef} onClose={onClose} onCreated={onCreated} />;
+}
+
+function FolderCreatePopover({ bot, owner, anchorRef, onClose, onCreated }: {
+  bot: FolderOwner;
+  owner?: FolderOwnerKind;
+  anchorRef?: RefObject<HTMLElement | null>;
   onClose: () => void;
   onCreated?: (project: BotProject) => void;
 }) {
   const { dispatch } = useStore();
-  const [name, setName] = useState(project?.name ?? "");
-  const [emoji, setEmoji] = useState(project?.emoji ?? "");
-  const [choosingIcon, setChoosingIcon] = useState(false);
+  const [name, setName] = useState("");
+  const [emoji, setEmoji] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const fallbackAnchor = useRef<HTMLDivElement>(null);
+  const resolvedAnchor = anchorRef ?? fallbackAnchor;
+  const popoverRef = useRef<HTMLDivElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
-  const iconRef = useRef<HTMLButtonElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  useEffect(() => {
-    if (saving) dialogRef.current?.focus();
-    else if (error) nameRef.current?.focus();
-  }, [saving, error]);
-  useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    nameRef.current?.focus();
-    return () => {
-      if (opener?.isConnected) opener.focus();
-      else document.querySelector<HTMLElement>(owner === "group" ? `[data-sidebar-group-row="${CSS.escape(bot.id)}"]` : `[data-sidebar-bot-row="${CSS.escape(bot.id)}"]`)?.focus();
-    };
-  }, []);
-  return createPortal(
-    <div data-thread-overlay className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
-      onMouseDown={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onClose(); }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onCloseRef.current(); }
-        if (event.key !== "Tab") return;
-        const controls = dialogRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled]), select:not([disabled])");
-        if (!controls?.length) return;
-        const first = controls[0]!;
-        const last = controls[controls.length - 1]!;
-        if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-      }}>
-      <div ref={dialogRef} role="dialog" tabIndex={-1} aria-modal="true" aria-busy={saving || undefined} aria-label={t(project ? "folder.settings" : "folder.create")}
-        className="max-h-[85dvh] w-full max-w-[420px] overflow-y-auto rounded-2xl border border-hairline/50 bg-panel p-5 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-[15px] font-semibold text-ink">{t(project ? "folder.settings" : "folder.create")}</h2>
-          <button type="button" onClick={onClose} aria-label={t("folder.close")} className="rounded p-1 text-ink-secondary hover:bg-raised"><X size={16} /></button>
-        </div>
+  const triggerRoot = useRef<HTMLElement | null>(null);
+  triggerRoot.current = resolvedAnchor.current;
+  const dismissRoot = useAnchoredDismissRoot(triggerRoot, popoverRef);
+  usePopoverDismiss(!saving, dismissRoot, onClose);
+  useEffect(() => { nameRef.current?.focus(); }, []);
+
+  return (
+    <>
+      {!anchorRef && <div ref={fallbackAnchor} className="pointer-events-none fixed left-4 top-24 size-0" aria-hidden="true" />}
+      <AnchoredPopover
+        anchorRef={resolvedAnchor}
+        popoverRef={popoverRef}
+        side="bottom"
+        align="start"
+        role="dialog"
+        aria-labelledby="folder-create-title"
+        data-folder-create=""
+        className="w-[min(320px,calc(100vw-24px))] rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-4 text-ink shadow-xl"
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }}
+      >
         <form onSubmit={(event) => {
           event.preventDefault();
           if (!name.trim() || saving) return;
           setSaving(true);
           setError(null);
-          const onError = (message: string) => { setSaving(false); setError(message); };
-          if (project) {
-            dispatch({ type: "updateProject", botId: bot.id, owner, projectId: project.id, patch: { name: name.trim(), emoji: emoji.trim() || null }, onSaved: onClose, onError });
-          } else {
-            dispatch({ type: "createProject", botId: bot.id, owner, name: name.trim(), emoji: emoji.trim() || null, onError,
-              onCreated: (created) => { onCreated?.(created); onClose(); } });
-          }
+          dispatch({
+            type: "createProject",
+            botId: bot.id,
+            owner,
+            name: name.trim(),
+            emoji: emoji.trim() || null,
+            onError: (message) => { setSaving(false); setError(message); },
+            onCreated: (created) => { onCreated?.(created); onClose(); },
+          });
         }}>
-          <label className="block text-[12px] text-ink-secondary">{t("folder.name")}
+          <h2 id="folder-create-title" className="text-[14px] font-medium">{t("folder.create")}</h2>
+          <label className="mt-3 block text-[12px] text-ink-secondary">{t("folder.name")}
             <input ref={nameRef} value={name} maxLength={80} disabled={saving} onChange={(event) => setName(event.target.value)}
               className="mt-1.5 w-full rounded-lg border border-hairline/50 bg-inset px-3 py-2 text-[13px] text-ink focus:border-accent/60 focus:outline-none" />
           </label>
-          <button ref={iconRef} type="button" disabled={saving} aria-label={t("folder.icon")} aria-expanded={choosingIcon} onClick={() => setChoosingIcon((open) => !open)}
-            className="mt-3 flex items-center gap-2 rounded-lg border border-hairline/50 px-2.5 py-2 text-[12px] text-ink-secondary hover:bg-raised"><FolderIcon emoji={emoji} size={18} />{t("folder.icon")}</button>
-          {choosingIcon && <div className="mt-2 rounded-lg border border-hairline/40 bg-inset p-3"
-            onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setChoosingIcon(false); iconRef.current?.focus(); } }}>
-            <p className="mb-2 text-[12px] text-ink-secondary">{t("folder.emojiHint")}</p>
+          <div className="mt-3" aria-label={t("folder.icon")}>
+            <p className="mb-1.5 text-[12px] text-ink-secondary">{t("folder.emojiHint")}</p>
             <div className="flex flex-wrap gap-1">
-              <button type="button" disabled={saving} aria-label={t("folder.defaultIcon")} aria-pressed={!emoji} onClick={() => setEmoji("")} className="flex size-8 items-center justify-center rounded hover:bg-raised aria-pressed:bg-raised"><FolderIcon size={18} /></button>
-              {FOLDER_EMOJI.map((icon) => <button key={icon} type="button" disabled={saving} aria-label={icon} aria-pressed={emoji === icon} onClick={() => setEmoji(icon)} className="size-8 rounded text-lg hover:bg-raised aria-pressed:bg-raised">{icon}</button>)}
+              <button type="button" disabled={saving} aria-label={t("folder.defaultIcon")} aria-pressed={!emoji} onClick={() => setEmoji("")} className="flex size-8 items-center justify-center rounded hover:bg-hover aria-pressed:bg-hover"><FolderIcon size={18} /></button>
+              {FOLDER_EMOJI.map((icon) => <button key={icon} type="button" disabled={saving} aria-label={icon} aria-pressed={emoji === icon} onClick={() => setEmoji(icon)} className="size-8 rounded text-lg hover:bg-hover aria-pressed:bg-hover">{icon}</button>)}
             </div>
-            <label className="mt-2 block text-[12px] text-ink-secondary">{t("folder.emoji")}
-              <input value={emoji} disabled={saving} maxLength={64} onChange={(event) => setEmoji(event.target.value)} className="mt-1 w-full rounded border border-hairline/50 bg-panel px-2 py-1.5 text-[14px] text-ink focus:outline-none" />
-            </label>
-          </div>}
+          </div>
           <p className="mt-2 text-[12px] leading-relaxed text-ink-secondary">{t("folder.detail", { name: bot.name })}</p>
-          {error && <p role="alert" className="mt-3 text-[12px] text-danger">{error}</p>}
-          <div className="mt-5 flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="rounded-lg px-3 py-2 text-[13px] text-ink-secondary hover:bg-raised">{t("common.cancel")}</button>
-            <button type="submit" disabled={!name.trim() || saving} className="rounded-lg bg-accent px-3 py-2 text-[13px] font-medium text-accent-ink disabled:opacity-40">{t(saving ? "folder.saving" : project ? "folder.save" : "folder.create")}</button>
+          {error && <p role="alert" className="mt-2 text-[12px] text-danger">{error}</p>}
+          <div className="mt-3 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className={PILL}>{t("common.cancel")}</button>
+            <button type="submit" disabled={!name.trim() || saving} className={PRIMARY_PILL}>{t(saving ? "folder.saving" : "folder.create")}</button>
           </div>
         </form>
-        {project && <div className="mt-4 border-t border-hairline/40 pt-3">
+      </AnchoredPopover>
+    </>
+  );
+}
+
+/** Legacy edit surface: name field + icon + delete, as a popover (at most
+ * two text fields). Prefer FolderRenameField + FolderIconPopover. */
+function FolderEditPopover({ bot, owner, project, anchorRef, onClose }: {
+  bot: FolderOwner;
+  owner?: FolderOwnerKind;
+  project: BotProject;
+  anchorRef?: RefObject<HTMLElement | null>;
+  onClose: () => void;
+}) {
+  const { dispatch } = useStore();
+  const [name, setName] = useState(project.name);
+  const [emoji, setEmoji] = useState(project.emoji ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const fallbackAnchor = useRef<HTMLDivElement>(null);
+  const resolvedAnchor = anchorRef ?? fallbackAnchor;
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const triggerRoot = useRef<HTMLElement | null>(null);
+  triggerRoot.current = resolvedAnchor.current;
+  const dismissRoot = useAnchoredDismissRoot(triggerRoot, popoverRef);
+  usePopoverDismiss(!saving, dismissRoot, onClose);
+  useEffect(() => { nameRef.current?.focus(); }, []);
+
+  return (
+    <>
+      {!anchorRef && <div ref={fallbackAnchor} className="pointer-events-none fixed left-4 top-24 size-0" aria-hidden="true" />}
+      <AnchoredPopover
+        anchorRef={resolvedAnchor}
+        popoverRef={popoverRef}
+        side="bottom"
+        align="start"
+        role="dialog"
+        aria-labelledby="folder-edit-title"
+        data-folder-edit=""
+        className="w-[min(320px,calc(100vw-24px))] rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-4 text-ink shadow-xl"
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }}
+      >
+        <form onSubmit={(event) => {
+          event.preventDefault();
+          if (!name.trim() || saving) return;
+          setSaving(true);
+          setError(null);
+          dispatch({
+            type: "updateProject",
+            botId: bot.id,
+            owner,
+            projectId: project.id,
+            patch: { name: name.trim(), emoji: emoji.trim() || null },
+            onSaved: onClose,
+            onError: (message) => { setSaving(false); setError(message); },
+          });
+        }}>
+          <h2 id="folder-edit-title" className="text-[14px] font-medium">{t("folder.settings")}</h2>
+          <label className="mt-3 block text-[12px] text-ink-secondary">{t("folder.name")}
+            <input ref={nameRef} value={name} maxLength={80} disabled={saving} onChange={(event) => setName(event.target.value)}
+              className="mt-1.5 w-full rounded-lg border border-hairline/50 bg-inset px-3 py-2 text-[13px] text-ink focus:border-accent/60 focus:outline-none" />
+          </label>
+          <div className="mt-3" aria-label={t("folder.icon")}>
+            <p className="mb-1.5 text-[12px] text-ink-secondary">{t("folder.emojiHint")}</p>
+            <div className="flex flex-wrap gap-1">
+              <button type="button" disabled={saving} aria-label={t("folder.defaultIcon")} aria-pressed={!emoji} onClick={() => setEmoji("")} className="flex size-8 items-center justify-center rounded hover:bg-hover aria-pressed:bg-hover"><FolderIcon size={18} /></button>
+              {FOLDER_EMOJI.map((icon) => <button key={icon} type="button" disabled={saving} aria-label={icon} aria-pressed={emoji === icon} onClick={() => setEmoji(icon)} className="size-8 rounded text-lg hover:bg-hover aria-pressed:bg-hover">{icon}</button>)}
+            </div>
+          </div>
+          {error && <p role="alert" className="mt-2 text-[12px] text-danger">{error}</p>}
+          <div className="mt-3 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className={PILL}>{t("common.cancel")}</button>
+            <button type="submit" disabled={!name.trim() || saving} className={PRIMARY_PILL}>{t(saving ? "folder.saving" : "folder.save")}</button>
+          </div>
+        </form>
+        <div className="mt-3 border-t border-hairline/40 pt-3">
           {deleting ? <>
             <p className="text-[12px] leading-relaxed text-ink-secondary">{t("folder.deleteBody")}</p>
             <div className="mt-2 flex items-center gap-3">
@@ -182,9 +380,9 @@ export function BotProjectDialog({ bot, owner, project, onClose, onCreated }: {
               <button type="button" onClick={() => setDeleting(false)} className="text-[12px] text-ink-secondary hover:underline">{t("common.cancel")}</button>
             </div>
           </> : <button type="button" disabled={saving} onClick={() => setDeleting(true)} className="text-[12px] text-danger hover:underline disabled:opacity-40">{t("folder.delete")}</button>}
-        </div>}
-      </div>
-    </div>, document.body,
+        </div>
+      </AnchoredPopover>
+    </>
   );
 }
 

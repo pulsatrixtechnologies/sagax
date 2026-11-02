@@ -9,15 +9,21 @@ export type ConfirmTone = "danger" | "neutral";
 export interface ConfirmDialogProps {
   open: boolean;
   title: string;
-  body: string;
+  /** Consequence in plain words. Omit when the title alone is enough. */
+  body?: string;
   confirmLabel: string;
   /** "danger" for irreversible actions (filled red button, red frame);
    * "neutral" for reversible ones like archiving. */
   tone?: ConfirmTone;
   icon?: ReactNode;
+  /** Optional controls between the body and the buttons (checkbox, list,
+   * reason field). Keep them short: this stays a confirmation, not a form. */
+  extra?: ReactNode;
   onCancel: () => void;
   onConfirm: () => void;
   pending?: boolean;
+  /** Disable only the confirm action (Cancel stays available). */
+  confirmDisabled?: boolean;
   /** Stable fallback when a context-menu trigger disappears before opening. */
   returnFocusRef?: RefObject<HTMLElement | null>;
   /** Opened from the header's thread picker: marks the dialog as one of its
@@ -76,16 +82,19 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
 
   if (!open) return null;
 
-  return createPortal(
+  const layer = (
     <div
       className={DIALOG.backdrop}
       data-thread-overlay={props.threadOverlay ? "" : undefined}
       onMouseDown={(event) => event.target === event.currentTarget && onCancel()}
     >
       <ConfirmDialogCard ref={dialogRef} cancelRef={cancelRef} {...props} />
-    </div>,
-    document.body,
+    </div>
   );
+  // Portal when a real document body exists (sidebar translate). Static
+  // markup tests and early SSR keep the layer inline.
+  if (typeof document === "undefined" || !document.body) return layer;
+  return createPortal(layer, document.body);
 }
 
 /** The card alone, without the portal or key handling — exported so it can be
@@ -96,18 +105,21 @@ export function ConfirmDialogCard({
   ref,
   cancelRef,
   title,
-  body,
+  body = "",
   confirmLabel,
   tone = "danger",
   icon,
+  extra,
   onCancel,
   onConfirm,
   pending = false,
+  confirmDisabled = false,
 }: ConfirmDialogProps & {
   ref?: React.Ref<HTMLDivElement>;
   cancelRef?: React.Ref<HTMLButtonElement>;
 }) {
   const danger = tone === "danger";
+  const describedBy = body ? "confirm-dialog-body" : undefined;
   return (
     <div
       ref={ref}
@@ -116,19 +128,22 @@ export function ConfirmDialogCard({
       aria-modal="true"
       aria-busy={pending}
       aria-labelledby="confirm-dialog-title"
-      aria-describedby="confirm-dialog-body"
+      aria-describedby={describedBy}
       data-confirm-tone={tone}
       className={cn(DIALOG.frame, DIALOG.width.md)}
     >
       <div className="flex items-start gap-2.5 px-5 pb-4 pt-5">
         {icon && <span aria-hidden="true" className={cn("mt-[3px] shrink-0", danger ? "text-danger" : "text-ink-secondary")}>{icon}</span>}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h2 id="confirm-dialog-title" className={DIALOG.title}>
             {title}
           </h2>
-          <p id="confirm-dialog-body" className="mt-1 text-[13px] leading-[19px] text-ink-secondary">
-            {body}
-          </p>
+          {body ? (
+            <p id="confirm-dialog-body" className="mt-1 text-[13px] leading-[19px] text-ink-secondary">
+              {body}
+            </p>
+          ) : null}
+          {extra ? <div className="mt-3">{extra}</div> : null}
         </div>
       </div>
       <div className={DIALOG.footer}>
@@ -144,7 +159,7 @@ export function ConfirmDialogCard({
         <button
           type="button"
           onClick={onConfirm}
-          disabled={pending}
+          disabled={pending || confirmDisabled}
           data-confirm-action=""
           className={cn(danger ? DANGER_PILL : PRIMARY_PILL, "min-h-[44px] md:min-h-0")}
         >

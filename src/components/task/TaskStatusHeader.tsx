@@ -21,9 +21,49 @@ import { DIALOG } from "../SettingsPrimitives";
 
 export type TaskWaitingKind = "approval" | "question";
 
+/** Derived stage of a delegated job (server/runtime/stage.ts, DEL-01). Each
+ * value maps to task.sheet.stage.* and says who is waited on and for what. */
+export type TaskJobStage =
+  | "delivery_failed"
+  | "awaiting_reply"
+  | "to_review"
+  | "held"
+  | "queued"
+  | "inactive"
+  | "working"
+  | "finished";
+
+const STAGE_KEYS: Record<TaskJobStage, `task.sheet.stage.${TaskJobStage}`> = {
+  delivery_failed: "task.sheet.stage.delivery_failed",
+  awaiting_reply: "task.sheet.stage.awaiting_reply",
+  to_review: "task.sheet.stage.to_review",
+  held: "task.sheet.stage.held",
+  queued: "task.sheet.stage.queued",
+  inactive: "task.sheet.stage.inactive",
+  working: "task.sheet.stage.working",
+  finished: "task.sheet.stage.finished",
+};
+
+/** Map a task-sheet activity status onto a derived job stage for the head
+ * line. When an approval or question card is open, waitingFor keeps the
+ * finer label; stage covers held / queued / working / finished. Full
+ * stageOf(assignment, events) lands when the activity API carries it. */
+export function activityJobStage(
+  status: BotActivityStatus,
+  waitingFor?: TaskWaitingKind,
+): TaskJobStage | undefined {
+  if (waitingFor) return undefined;
+  if (status === "failed") return "held";
+  if (status === "queued") return "queued";
+  if (status === "running") return "working";
+  if (status === "waiting") return "inactive";
+  if (status === "finished" || status === "stopped") return "finished";
+  return undefined;
+}
+
 /** The status line's words: the state in plain words, the step in flight,
  * the time, joined with " · ". */
-export function taskStatusWords({ status, startedAt, endedAt, now, step, stepLabel, waitingFor, parallel, handedBy }: {
+export function taskStatusWords({ status, startedAt, endedAt, now, step, stepLabel, waitingFor, parallel, handedBy, stage }: {
   status: BotActivityStatus;
   startedAt: number;
   endedAt?: number;
@@ -37,10 +77,26 @@ export function taskStatusWords({ status, startedAt, endedAt, now, step, stepLab
   parallel?: boolean;
   /** The bot that handed the work over, for a hop. */
   handedBy?: string;
+  /** Derived delegation stage: who is waited on and for what (DEL-01). */
+  stage?: TaskJobStage;
 }): string[] {
   const duration = formatActivityDuration((endedAt ?? now) - startedAt);
   const words: string[] = [];
   if (parallel) words.push(t("botPanel.activity.parallel"));
+  if (stage) {
+    words.push(t(STAGE_KEYS[stage]));
+    if (status === "running") {
+      if (step) words.push(workingStepLabel(step));
+      else if (stepLabel) words.push(stepLabel);
+      words.push(t("task.sheet.status.elapsed", { duration }));
+    } else if (status === "waiting" || status === "queued") {
+      words.push(t("task.sheet.status.elapsed", { duration }));
+    } else {
+      if (handedBy) words.push(t("botPanel.coding.handedBy", { name: handedBy }));
+      words.push(t("task.sheet.status.took", { duration }));
+    }
+    return words;
+  }
   if (status === "running") {
     words.push(t("task.sheet.status.working"));
     if (step) words.push(workingStepLabel(step));
@@ -59,7 +115,7 @@ export function taskStatusWords({ status, startedAt, endedAt, now, step, stepLab
   return words;
 }
 
-export function TaskStatusHeader({ title, titleId = "activity-detail-title", bot, botName, status, startedAt, endedAt, now, step, stepLabel, waitingFor, parallel, handedBy, actions, onBack, backLabel, className }: {
+export function TaskStatusHeader({ title, titleId = "activity-detail-title", bot, botName, status, startedAt, endedAt, now, step, stepLabel, waitingFor, parallel, handedBy, stage, actions, onBack, backLabel, className }: {
   title: string;
   titleId?: string;
   /** The bot the work runs on: its mascot and name in a pill. */
@@ -75,13 +131,15 @@ export function TaskStatusHeader({ title, titleId = "activity-detail-title", bot
   waitingFor?: TaskWaitingKind;
   parallel?: boolean;
   handedBy?: string;
+  /** Derived delegation stage (DEL-01). */
+  stage?: TaskJobStage;
   /** The main actions, at the right: Stop, Open conversation. */
   actions?: ReactNode;
   onBack?: () => void;
   backLabel?: string;
   className?: string;
 }) {
-  const words = taskStatusWords({ status, startedAt, endedAt, now, step, stepLabel, waitingFor, parallel, handedBy });
+  const words = taskStatusWords({ status, startedAt, endedAt, now, step, stepLabel, waitingFor, parallel, handedBy, stage });
   const active = activityStatusActive(status);
   const name = bot?.name ?? botName;
   return (

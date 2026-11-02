@@ -4,10 +4,14 @@
 // booleans that say one is saved. Values typed here go to the server once.
 import { api } from "@/state/store";
 import { bindingUrl, vaultDomainMatches, vaultSiteOf, type VaultGrantMode, type VaultItemKind, type VaultItemListing } from "../../shared/credential-vault";
-import type { WalletLinkView } from "../../shared/single-use-card";
+import type { OrderTracking } from "../../shared/order-tracking";
+import type { PurchaseFlightLeg, PurchaseItem } from "../../shared/payment-vault";
+import type { PaymentsSettings, PaymentMethodListing, PaymentMethodRef, BotPaymentAllowance } from "../../shared/payments-settings";
+import type { SingleUseWallet, WalletLinkView } from "../../shared/single-use-card";
 import type { VaultDuplicateMode, VaultExportFormat, VaultImportFormat, VaultTransferItem } from "../../shared/credential-vault-transfer";
 
 export type { VaultItemListing } from "../../shared/credential-vault";
+export type { PaymentsSettings, PaymentMethodListing, PaymentMethodRef, BotPaymentAllowance } from "../../shared/payments-settings";
 
 export interface OnePasswordStatus {
   available: boolean;
@@ -24,23 +28,44 @@ export interface OnePasswordItem {
   domains: string[];
 }
 
+/** A purchase the vault list or history returns. Never a card number. */
 export interface PurchaseListing {
   id: string;
+  botId: string;
+  threadId?: string;
   merchant: string;
+  domain: string;
   amount: string;
   currency: string;
   cardName: string;
   cardLast4: string;
+  cardBrand: string;
+  wallet?: SingleUseWallet;
+  addressName?: string;
+  contactName?: string;
   title: string;
   line: string;
   status: "pending" | "once" | "always" | "denied";
   via?: string;
+  createdAt: number;
+  orderRef?: string;
+  doneAt?: number;
+  items?: PurchaseItem[];
+  flights?: PurchaseFlightLeg[];
+  receipt?: { orderRef?: string; total?: string; items?: PurchaseItem[]; flights?: PurchaseFlightLeg[] };
+  mismatch?: boolean;
+  tracking?: OrderTracking;
 }
 
 export interface CredentialVaultState {
   items: VaultItemListing[];
+  /** Purchases still waiting on the person. */
   purchases?: PurchaseListing[];
+  /** Decided purchases (list endpoint, newest first, capped). */
+  history?: PurchaseListing[];
   wallets?: WalletLinkView;
+  payments?: PaymentsSettings;
+  methods?: PaymentMethodListing[];
   onePassword: OnePasswordStatus;
   /** The vault could not be opened on this launch (the keychain was busy). */
   unavailable?: string;
@@ -85,6 +110,18 @@ export const chooseSingleUseWallet = (wallet: "shop_pay" | "link", chosen: boole
   api<{ wallets: WalletLinkView }>("/api/me/credentials/wallets", { method: "POST", body: JSON.stringify({ wallet, chosen }) });
 export const answerPurchase = (id: string, decision: "deny" | "once") =>
   api<{ purchase: PurchaseListing }>(`/api/me/credentials/purchases/${encodeURIComponent(id)}/answer`, { method: "POST", body: JSON.stringify({ decision }) });
+/** Patch default method and per-bot allowances. null defaultMethod clears it. */
+export const patchPayments = (patch: {
+  defaultMethod?: PaymentMethodRef | null;
+  bots?: Record<string, BotPaymentAllowance | null>;
+}) =>
+  api<{ payments: PaymentsSettings; methods: PaymentMethodListing[] }>("/api/me/credentials/payments", {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+/** Decided purchases (not pending), newest first. */
+export const loadPurchaseHistory = () =>
+  api<{ purchases: PurchaseListing[] }>("/api/me/credentials/purchases/history", { method: "POST", body: "{}" });
 export const allowBotAlways = (id: string, botId: string) =>
   api<{ item: VaultItemListing }>(`${ITEM(id)}/grants`, { method: "POST", body: JSON.stringify({ botId, mode: "always" }) });
 export const revokeBot = (id: string, botId: string) =>

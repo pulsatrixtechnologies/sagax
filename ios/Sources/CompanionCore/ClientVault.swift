@@ -2,7 +2,8 @@ import Foundation
 
 // The person's vault and security keys (Settings). Listings never carry a
 // card number, a security code or a team secret. Reveal is a separate call
-// the phone makes only after Face ID.
+// the phone makes only after Face ID. Payments settings (default method and
+// per-bot allowances) ride on the same list response.
 
 public struct VaultCardPublic: Decodable, Equatable, Sendable {
     public var brand: String
@@ -50,21 +51,152 @@ public struct VaultItemPublic: Decodable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// What bots use first when they do not name a method. Never a PAN.
+public struct PaymentMethodRefPublic: Codable, Equatable, Sendable {
+    public var type: String
+    public var cardId: String?
+    public var wallet: String?
+
+    public init(type: String, cardId: String? = nil, wallet: String? = nil) {
+        self.type = type
+        self.cardId = cardId
+        self.wallet = wallet
+    }
+
+    public static func card(_ cardId: String) -> PaymentMethodRefPublic {
+        PaymentMethodRefPublic(type: "card", cardId: cardId)
+    }
+
+    public static func wallet(_ wallet: String) -> PaymentMethodRefPublic {
+        PaymentMethodRefPublic(type: "wallet", wallet: wallet)
+    }
+}
+
+/// One bot's spending rules. Absent enabled means the bot may pay.
+public struct BotPaymentAllowancePublic: Codable, Equatable, Sendable {
+    public var enabled: Bool?
+    public var perPurchaseLimit: String?
+    public var perMonthLimit: String?
+    public var merchants: [String]?
+
+    public init(
+        enabled: Bool? = nil,
+        perPurchaseLimit: String? = nil,
+        perMonthLimit: String? = nil,
+        merchants: [String]? = nil
+    ) {
+        self.enabled = enabled
+        self.perPurchaseLimit = perPurchaseLimit
+        self.perMonthLimit = perMonthLimit
+        self.merchants = merchants
+    }
+
+    /// Person autonomy: enabled absent = true.
+    public var mayPay: Bool { enabled != false }
+}
+
+public struct PaymentsSettingsPublic: Codable, Equatable, Sendable {
+    public var defaultMethod: PaymentMethodRefPublic?
+    public var bots: [String: BotPaymentAllowancePublic]?
+
+    public init(defaultMethod: PaymentMethodRefPublic? = nil, bots: [String: BotPaymentAllowancePublic]? = nil) {
+        self.defaultMethod = defaultMethod
+        self.bots = bots
+    }
+
+    public func allowance(for botId: String) -> BotPaymentAllowancePublic {
+        bots?[botId] ?? BotPaymentAllowancePublic()
+    }
+}
+
+/// A method the Payments screen can show or pick. Never a PAN.
+public struct PaymentMethodPublic: Decodable, Equatable, Sendable, Identifiable {
+    public var id: String
+    public var type: String
+    public var label: String
+    public var detail: String
+    public var brand: String?
+    public var last4: String?
+    public var wallet: String?
+    public var isDefault: Bool
+    public var ready: Bool?
+}
+
+/// PATCH /api/me/credentials/payments. Omitted fields stay; null clears.
+public struct PaymentsSettingsPatch: Encodable, Equatable, Sendable {
+    /// `.some(nil)` clears the default; `.none` leaves it alone.
+    public var defaultMethod: PaymentMethodRefPublic??
+    /// Bot id → allowance, or nil to remove that bot's row.
+    public var bots: [String: BotPaymentAllowancePublic?]?
+
+    public init(
+        defaultMethod: PaymentMethodRefPublic?? = nil,
+        bots: [String: BotPaymentAllowancePublic?]? = nil
+    ) {
+        self.defaultMethod = defaultMethod
+        self.bots = bots
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        if let defaultMethod {
+            if let value = defaultMethod {
+                try container.encode(value, forKey: .defaultMethod)
+            } else {
+                try container.encodeNil(forKey: .defaultMethod)
+            }
+        }
+        if let bots {
+            var nested = container.nestedContainer(keyedBy: DynamicCodingKey.self, forKey: .bots)
+            for (botId, allowance) in bots.sorted(by: { $0.key < $1.key }) {
+                let key = DynamicCodingKey(stringValue: botId)
+                if let allowance {
+                    try nested.encode(allowance, forKey: key)
+                } else {
+                    try nested.encodeNil(forKey: key)
+                }
+            }
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey { case defaultMethod, bots }
+}
+
+private struct DynamicCodingKey: CodingKey {
+    var stringValue: String
+    var intValue: Int? { nil }
+    init(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
+}
+
+public struct PaymentsSettingsResponse: Decodable, Equatable, Sendable {
+    public var payments: PaymentsSettingsPublic
+    public var methods: [PaymentMethodPublic]
+}
+
 public struct VaultList: Decodable, Equatable, Sendable {
     public var items: [VaultItemPublic]
     public var purchases: [VaultPurchasePublic]
+    public var history: [VaultPurchasePublic]
     public var wallets: [String: WalletLinkPublic]?
+    public var payments: PaymentsSettingsPublic?
+    public var methods: [PaymentMethodPublic]
     public var onePassword: OnePasswordStatusPublic?
 
     public init(from decoder: Decoder) throws {
         let row = try decoder.container(keyedBy: CodingKeys.self)
         items = try row.decode([VaultItemPublic].self, forKey: .items)
         purchases = try row.decodeIfPresent([VaultPurchasePublic].self, forKey: .purchases) ?? []
+        history = try row.decodeIfPresent([VaultPurchasePublic].self, forKey: .history) ?? []
         wallets = try row.decodeIfPresent([String: WalletLinkPublic].self, forKey: .wallets)
+        payments = try row.decodeIfPresent(PaymentsSettingsPublic.self, forKey: .payments)
+        methods = try row.decodeIfPresent([PaymentMethodPublic].self, forKey: .methods) ?? []
         onePassword = try row.decodeIfPresent(OnePasswordStatusPublic.self, forKey: .onePassword)
     }
 
-    private enum CodingKeys: String, CodingKey { case items, purchases, wallets, onePassword }
+    private enum CodingKeys: String, CodingKey {
+        case items, purchases, history, wallets, payments, methods, onePassword
+    }
 }
 
 public struct VaultPurchasePublic: Decodable, Equatable, Sendable, Identifiable {
@@ -72,6 +204,37 @@ public struct VaultPurchasePublic: Decodable, Equatable, Sendable, Identifiable 
     public var title: String
     public var line: String
     public var merchant: String
+    public var amount: String?
+    public var currency: String?
+    public var status: String?
+    public var cardName: String?
+    public var cardLast4: String?
+    public var wallet: String?
+    public var orderRef: String?
+    public var doneAt: Double?
+    public var createdAt: Double?
+
+    public init(from decoder: Decoder) throws {
+        let row = try decoder.container(keyedBy: CodingKeys.self)
+        id = try row.decode(String.self, forKey: .id)
+        title = try row.decode(String.self, forKey: .title)
+        line = try row.decode(String.self, forKey: .line)
+        merchant = try row.decode(String.self, forKey: .merchant)
+        amount = try row.decodeIfPresent(String.self, forKey: .amount)
+        currency = try row.decodeIfPresent(String.self, forKey: .currency)
+        status = try row.decodeIfPresent(String.self, forKey: .status)
+        cardName = try row.decodeIfPresent(String.self, forKey: .cardName)
+        cardLast4 = try row.decodeIfPresent(String.self, forKey: .cardLast4)
+        wallet = try row.decodeIfPresent(String.self, forKey: .wallet)
+        orderRef = try row.decodeIfPresent(String.self, forKey: .orderRef)
+        doneAt = try row.decodeIfPresent(Double.self, forKey: .doneAt)
+        createdAt = try row.decodeIfPresent(Double.self, forKey: .createdAt)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, line, merchant, amount, currency, status
+        case cardName, cardLast4, wallet, orderRef, doneAt, createdAt
+    }
 }
 
 public struct VaultReveal: Decodable, Equatable, Sendable {
@@ -92,6 +255,10 @@ public struct SecurityKeysList: Decodable, Equatable, Sendable {
 public struct TeamBotVaultList: Decodable, Equatable, Sendable {
     public var items: [VaultItemPublic]
     public var botId: String
+}
+
+private struct PurchaseHistoryBody: Decodable {
+    var purchases: [VaultPurchasePublic]
 }
 
 public extension CompanionClient {
@@ -128,6 +295,22 @@ public extension CompanionClient {
 
     func answerPurchase(id: String, decision: String) async throws {
         try await send(makeRequest("POST", "/api/me/credentials/purchases/\(id)/answer", body: ["decision": decision]))
+    }
+
+    /// Default method and per-bot allowances. Null defaultMethod clears it.
+    func patchPayments(_ patch: PaymentsSettingsPatch) async throws -> PaymentsSettingsResponse {
+        try await send(
+            makeRequest("PATCH", "/api/me/credentials/payments", encodedBody: patch),
+            as: PaymentsSettingsResponse.self
+        )
+    }
+
+    /// Settled purchases (not pending), newest first on the server.
+    func purchaseHistory() async throws -> [VaultPurchasePublic] {
+        try await send(
+            makeRequest("POST", "/api/me/credentials/purchases/history", body: [:]),
+            as: PurchaseHistoryBody.self
+        ).purchases
     }
 
     func securityKeys() async throws -> SecurityKeysList {

@@ -19,9 +19,12 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
         appSettingsOpen: false,
         pluginsOpen: false,
         triggersOpen: false,
+        memoryManagerOpen: false,
       };
     case "showChat":
-      return state.activeView === "chat" ? state : { ...state, activeView: "chat" };
+      return state.activeView === "chat" && !state.pluginsOpen
+        ? state
+        : { ...state, activeView: "chat", pluginsOpen: false, orgImportStaged: null };
     case "showCode":
       return {
         ...state,
@@ -34,6 +37,7 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
         appSettingsOpen: false,
         pluginsOpen: false,
         triggersOpen: false,
+        memoryManagerOpen: false,
       };
     case "showApprovals":
       return {
@@ -46,6 +50,7 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
         appSettingsOpen: false,
         pluginsOpen: false,
         triggersOpen: false,
+        memoryManagerOpen: false,
       };
     case "showRemoteSessions":
       return {
@@ -58,6 +63,7 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
         appSettingsOpen: false,
         pluginsOpen: false,
         triggersOpen: false,
+        memoryManagerOpen: false,
       };
     case "showAchievements":
       return {
@@ -73,9 +79,50 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
         appSettingsSubPage: null,
         pluginsOpen: false,
         triggersOpen: false,
+        memoryManagerOpen: false,
         newBotOpen: false,
         shortcutsOpen: false,
         personaEditor: null,
+        botWizard: null,
+      };
+    case "showArchivedBots":
+      // 2026-11-01 (lot 5): archived bots as a content-frame list, not a window.
+      return {
+        ...state,
+        activeView: "archived-bots",
+        settingsOpen: false,
+        personPanelId: null,
+        computerOpen: false,
+        inspectorOpen: false,
+        activityOpen: false,
+        appSettingsOpen: false,
+        pluginsOpen: false,
+        triggersOpen: false,
+        memoryManagerOpen: false,
+        newBotOpen: false,
+        shortcutsOpen: false,
+        personaEditor: null,
+        botWizard: null,
+      };
+    case "showOrgImport":
+      // 2026-11-01 (lot 6): bring bots from a solo Sagax as a content view.
+      return {
+        ...state,
+        activeView: "org-import",
+        orgImportStaged: action.staged ?? null,
+        settingsOpen: false,
+        personPanelId: null,
+        computerOpen: false,
+        inspectorOpen: false,
+        activityOpen: false,
+        appSettingsOpen: false,
+        pluginsOpen: false,
+        triggersOpen: false,
+        memoryManagerOpen: false,
+        newBotOpen: false,
+        shortcutsOpen: false,
+        personaEditor: null,
+        botWizard: null,
       };
     case "showTeamMap":
       return {
@@ -88,6 +135,7 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
         appSettingsOpen: false,
         pluginsOpen: false,
         triggersOpen: false,
+        memoryManagerOpen: false,
       };
   }
   return undefined;

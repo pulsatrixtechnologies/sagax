@@ -24,6 +24,9 @@ export interface CapabilityPromptOptions {
   managedTools?: boolean;
   /** discovery stopped early: more references may exist */
   incomplete?: boolean;
+  /** Cold / automation turn: list paths (or names) only, never inline whole
+   * instruction files, even on a chat engine. The model reads them on demand. */
+  indexOnly?: boolean;
 }
 export const CAPABILITY_PROMPT_MAX_BYTES = 4_000;
 export const CAPABILITY_PROMPT_MAX_FILES = 30;
@@ -33,7 +36,7 @@ export function capabilityPrompt(driverKind: string, groups: readonly Capability
   index: CapabilityPromptIndex;
   byCapability: Record<string, CapabilityPromptIndex>;
 } {
-  const inline = !engineWorksInFiles(driverKind);
+  const inline = !engineWorksInFiles(driverKind) && options.indexOnly !== true;
   const managed = options.managedTools === true;
   const byCapability: Record<string, CapabilityPromptIndex> = {};
   const blocks: string[] = [];

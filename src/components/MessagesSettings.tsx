@@ -1,13 +1,14 @@
-// Use Messages, on the Mac where this Sagax app runs. Hidden when the
-// server is not that Mac (an organization server answers 404).
+// Messages shortcut on Settings > Computer. The full setup lives under
+// Connect apps > Mac > Messages (parity with Grok Bot's placement).
 import { useEffect, useState } from "react";
 
 import { t } from "@/lib/i18n";
-import { api } from "@/state/store";
+import { api, useStore } from "@/state/store";
 import { SwitchRow } from "./SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 
 export function MessagesSettings() {
+  const { dispatch } = useStore();
   const [useMessages, setUseMessages] = useState(false);
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +39,12 @@ export function MessagesSettings() {
     });
   };
 
+  const openSetup = () => {
+    dispatch({ type: "togglePlugins", open: true, surface: "apps" });
+    // The Mac > Messages page is pushed once Connect apps is up.
+    window.dispatchEvent(new CustomEvent("sagax:open-mac-messages"));
+  };
+
   return (
     <section className="mt-4 rounded-xl border border-hairline/40 px-4 py-3" data-testid="messages-settings">
       <SwitchRow
@@ -47,6 +54,14 @@ export function MessagesSettings() {
         checked={useMessages}
         onChange={toggle}
       />
+      <button
+        type="button"
+        data-messages-open-setup
+        onClick={openSetup}
+        className="mt-2 text-[12.5px] font-medium text-accent-text hover:underline"
+      >
+        {t("settings.messages.openSetup")}
+      </button>
       {error && <p role="alert" className="mt-2 text-[12px] text-danger">{error}</p>}
     </section>
   );

@@ -52,8 +52,8 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
    * Resume to the routine's own page). */
   toggle?: boolean;
   /** `upcoming` (the calendar's side panel, 2026-10-18): soonest first, the
-   * bot and the next run in words on the second line, a state pill, no
-   * switch. The rows are otherwise the list's own. */
+   * bot and the next run in words on the second line, a Running or Failing
+   * pill (Active is omitted), no switch. The rows are otherwise the list's own. */
   variant?: "list" | "upcoming";
   emptyText?: string;
   /** 2026-10-28: the row's menu (right click, the "…" button, Shift+F10 or
@@ -89,7 +89,7 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
   return <div aria-label={label ?? (upcoming ? t("routines.upcoming.list") : t("routines.list"))}>
     {error && <div role="alert" className="rounded-lg bg-danger/10 p-3 text-[12px] text-danger">{t("routines.loadError")}</div>}
     {loading && <p role="status" className="flex items-center gap-2 p-3 text-[12px] text-ink-secondary"><Loader2 size={14} className="animate-spin" />{t("routines.loading")}</p>}
-    {!loading && !error && sorted.length === 0 && <div className="rounded-xl border border-dashed border-hairline/50 p-5 text-center text-[13px] text-ink-secondary"><Repeat2 size={20} className="mx-auto mb-2 opacity-60" />{emptyText ?? t("routines.empty")}</div>}
+    {!loading && !error && sorted.length === 0 && <div className="rounded-xl border border-dashed border-hairline/50 p-6 text-center text-[13px] text-ink-secondary"><Repeat2 size={20} className="mx-auto mb-2 opacity-60" />{emptyText ?? t("routines.empty")}</div>}
     {sorted.length > 0 && (
       <div className={grouped ? GROUPED_CARD : "flex flex-col gap-0.5"}>
         {sorted.map((routine) => {
@@ -130,7 +130,7 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                 onRowDragStart(routine, event);
               } : undefined}
               onContextMenu={onRowMenu && !readOnly ? (event) => { event.preventDefault(); openMenu(routine, event.currentTarget, { x: event.clientX, y: event.clientY }); } : undefined}
-              className={cn("group/routine", onRowDragStart && !readOnly && "cursor-grab select-none", grouped ? cn("flex items-center gap-2.5 hover:bg-hover", GROUPED_ROW, "py-1.5") : "flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-hover")}>
+              className={cn("group/routine", onRowDragStart && !readOnly && "cursor-grab select-none", grouped ? cn("flex items-center gap-2 hover:bg-hover", GROUPED_ROW, "py-1.5") : "flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover")}>
               {renamingId === routine.id && onRenameSave ? <RoutineNameInput initial={routine.name} onSave={(name) => onRenameSave(routine, name)} onCancel={() => onRenameCancel?.()} /> : <button type="button" onClick={() => onOpen(routine)}
                 onKeyDown={(onRowMenu || onRowStep || onRenameStart) && !readOnly ? (event: ReactKeyboardEvent<HTMLButtonElement>) => {
                   if (onRenameStart && event.key === "F2") { event.preventDefault(); onRenameStart(routine); }
@@ -139,7 +139,7 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                 } : undefined}
                 aria-keyshortcuts={onRowMenu && !readOnly ? (onRowStep ? "Shift+F10 Alt+ArrowUp Alt+ArrowDown" : "Shift+F10") : undefined}
                 className="min-w-0 flex-1 text-left">
-                {state ? (
+                {state && state.tone !== "neutral" ? (
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px] text-ink">{routine.name}</span>
                     <span data-routine-state className={`shrink-0 rounded-md ${UPCOMING_TONES[state.tone]} px-1.5 text-[11px] leading-[16px]`}>{state.label}</span>
@@ -164,14 +164,14 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                 )}
                 {(showPaused || routine.suspended || otherOwner || autoPaused) && (
                   <span className="mt-0.5 flex flex-wrap gap-1.5">
-                    {otherOwner && <RoutineOwnerBadge owner={otherOwner} size={14} className="max-w-full rounded-md bg-inset px-1.5 text-[11.5px] leading-[18px] text-ink-secondary" />}
-                    {showPaused && <span data-routine-paused className="truncate text-[11.5px] leading-[18px] text-ink-tertiary">{t("routines.pausedSchedule")}</span>}
-                    {autoPaused && <span data-routine-auto-paused={autoPaused.failures} className="truncate rounded-md bg-warning/15 px-1.5 text-[11.5px] leading-[18px] text-warning">{routineAutoPausedText(autoPaused.failures)}</span>}
-                    {routine.suspended && <span data-routine-suspended={routine.suspended.reason} className={`truncate rounded-md ${PILL_INFO} px-1.5 text-[11.5px] leading-[18px]`}>{routineSuspendedText(routine.suspended.reason)}</span>}
+                    {otherOwner && <RoutineOwnerBadge owner={otherOwner} size={14} className="max-w-full rounded-md bg-inset px-1.5 text-[12px] leading-[18px] text-ink-secondary" />}
+                    {showPaused && <span data-routine-paused className="truncate text-[12px] leading-[18px] text-ink-tertiary">{t("routines.pausedSchedule")}</span>}
+                    {autoPaused && <span data-routine-auto-paused={autoPaused.failures} className="truncate rounded-md bg-warning/15 px-1.5 text-[12px] leading-[18px] text-warning">{routineAutoPausedText(autoPaused.failures)}</span>}
+                    {routine.suspended && <span data-routine-suspended={routine.suspended.reason} className={`truncate rounded-md ${PILL_INFO} px-1.5 text-[12px] leading-[18px]`}>{routineSuspendedText(routine.suspended.reason)}</span>}
                   </span>
                 )}
                 {/* 2026-10-26: runs only when something changes (shared/routine-watch.ts). */}
-                {routine.precheck?.kind === "watch" && <span className="mt-0.5 flex"><span data-routine-watch className="truncate rounded-md bg-inset px-1.5 text-[11.5px] leading-[18px] text-ink-secondary">{t("routineWatch.badge")}</span></span>}
+                {routine.precheck?.kind === "watch" && <span className="mt-0.5 flex"><span data-routine-watch className="truncate rounded-md bg-inset px-1.5 text-[12px] leading-[18px] text-ink-secondary">{t("routineWatch.badge")}</span></span>}
               </button>}
               {runningRun && <button type="button" data-routine-running aria-label={`${t("routines.status.running")}: ${routine.name}`} onClick={() => onOpenRunning!(routine, runningRun)}
                 className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-sm bg-transparent p-0 text-[12px] leading-4 text-ink-secondary hover:text-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent/60">

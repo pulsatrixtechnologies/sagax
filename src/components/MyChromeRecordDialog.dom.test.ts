@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
 // Show a task in my Chrome, in the app: the chooser offers it, Start opens
 // the recording, a note joins it, Stop (here or in the tab) hands the steps
-// on, and the steps dialog lets the person pick where the bot replays it.
-import { act, createElement } from "react";
+// on, and the steps panel lets the person pick where the bot replays it.
+import { act, createElement, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({ api: vi.fn() }));
-vi.mock("@/state/store", () => ({ api: fixture.api }));
+vi.mock("@/state/store", () => ({ api: fixture.api, useStore: () => ({ state: {}, dispatch: vi.fn() }), useStoreOptional: () => null }));
 
 import { MyChromeRecordDialog, recordedStepLine } from "./MyChromeRecordDialog";
 import { TeachChooserDialog, TeachStepsDialog } from "./TeachStepsDialog";
@@ -15,17 +15,22 @@ import type { MyChromeRecording } from "@/lib/my-chrome";
 
 let root: Root;
 let container: HTMLDivElement;
+let anchor: HTMLButtonElement;
+const anchorRef = createRef<HTMLElement>();
 beforeEach(() => {
   fixture.api.mockReset();
-  HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) { this.setAttribute("open", ""); };
-  HTMLDialogElement.prototype.close ??= function close(this: HTMLDialogElement) { this.removeAttribute("open"); this.dispatchEvent(new Event("close")); };
   container = document.createElement("div");
   document.body.append(container);
+  anchor = document.createElement("button");
+  anchor.setAttribute("data-composer-plus", "");
+  document.body.append(anchor);
+  (anchorRef as { current: HTMLElement | null }).current = anchor;
   root = createRoot(container);
 });
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  anchor.remove();
   vi.useRealTimers();
 });
 const flush = async () => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); }); };
@@ -38,7 +43,7 @@ describe("Show a task in my Chrome", () => {
   it("is offered by the chooser beside the bot's browser and words", async () => {
     const picked: string[] = [];
     act(() => root.render(createElement(TeachChooserDialog, {
-      botName: "Nova", onShow: () => picked.push("browser"), onShowInMyChrome: () => picked.push("mine"), onDescribe: () => picked.push("words"), onClose: () => undefined,
+      botName: "Nova", anchorRef, onShow: () => picked.push("browser"), onShowInMyChrome: () => picked.push("mine"), onDescribe: () => picked.push("words"), onClose: () => undefined,
     })));
     expect(document.querySelector("[data-teach-show]")).not.toBeNull();
     expect(document.querySelector("[data-teach-describe]")).not.toBeNull();
@@ -65,9 +70,9 @@ describe("Show a task in my Chrome", () => {
       return {};
     });
     const done: unknown[] = [];
-    act(() => root.render(createElement(MyChromeRecordDialog, { botId: "b1", botName: "Nova", dictationEngine: null, onDone: (result) => done.push(result), onClose: () => undefined })));
+    act(() => root.render(createElement(MyChromeRecordDialog, { botId: "b1", botName: "Nova", dictationEngine: null, anchorRef, onDone: (result) => done.push(result), onClose: () => undefined })));
     await flush();
-    const url = document.querySelector("dialog input") as HTMLInputElement;
+    const url = document.querySelector("[data-my-chrome-record] input") as HTMLInputElement;
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
       setter.call(url, "https://app.example.com/");
@@ -76,7 +81,7 @@ describe("Show a task in my Chrome", () => {
     await click("[data-my-chrome-record-start]");
     expect(document.querySelector("[data-my-chrome-recording]")?.textContent).toContain("1");
     expect(document.querySelector("[data-my-chrome-recent]")?.textContent).toContain("https://app.example.com/");
-    const note = document.querySelector("[data-my-chrome-recording] ~ label input, dialog label input") as HTMLInputElement;
+    const note = document.querySelector("[data-my-chrome-recording] ~ label input, [data-my-chrome-record] label input") as HTMLInputElement;
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
       setter.call(note, "Pick the newest invoice");
@@ -100,7 +105,7 @@ describe("Show a task in my Chrome", () => {
     expect(document.querySelector("[data-teach-replay]")?.getAttribute("data-teach-replay")).toBe("my-chrome");
     const radios = document.querySelectorAll<HTMLInputElement>('input[name="teach-replay"]');
     await act(async () => { radios[0]!.click(); });
-    const title = document.querySelector("dialog input") as HTMLInputElement;
+    const title = document.querySelector("[data-teach-steps] input") as HTMLInputElement;
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
       setter.call(title, "Send the request");

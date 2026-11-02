@@ -11,11 +11,15 @@ import { parsePageProposal } from "../../shared/published-pages.ts";
 import { parseWidgetInput, widgetAdvice } from "../../shared/widget.ts";
 import { parseAppInput } from "../../shared/app.ts";
 import { PLACE_PHONE_CALL_TOOL } from "../../shared/outbound-call.ts";
+import { HANG_UP_TOOL, PLACE_CALL_TOOL, SEND_DTMF_TOOL, TRANSFER_CALL_TOOL } from "../../shared/phone-call-live.ts";
 
 import type { ToolCallContext, ToolCallResult } from "./agents-call.ts";
 import type { Json } from "./agents-client.ts";
 
-export const CARD_TOOL_NAMES: ReadonlySet<string> = new Set(["create_options_card", ASK_CHOICE_TOOL, "check_widget", "show_widget", "update_widget", "show_html", "update_html", "propose_page", "page_comments", PLACE_PHONE_CALL_TOOL]);
+export const CARD_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "create_options_card", ASK_CHOICE_TOOL, "check_widget", "show_widget", "update_widget", "show_html", "update_html",
+  "propose_page", "page_comments", PLACE_PHONE_CALL_TOOL, PLACE_CALL_TOOL, SEND_DTMF_TOOL, TRANSFER_CALL_TOOL, HANG_UP_TOOL,
+]);
 
 const CARD_ROUTE = "/api/internal/options-card";
 
@@ -58,11 +62,26 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     };
   }
 
-  // place_phone_call (server/outbound-calls.ts): the card first, the call
-  // once the person said Call; the harness builds every word sent to Twilio.
-  if (name === PLACE_PHONE_CALL_TOOL) {
+  // place_phone_call / place_call (server/outbound-calls.ts): consent once,
+  // then the request card (Ask) or Auto place; the harness builds every word.
+  if (name === PLACE_PHONE_CALL_TOOL || name === PLACE_CALL_TOOL) {
     const { ok, body } = await apiResponse("/api/internal/phone-call", { method: "POST", body: JSON.stringify(args) });
     if (!ok) return { text: String(body.error ?? "The call could not be prepared. Nothing was placed."), isError: true };
+    return { text: String(body.text ?? ""), ...(body.isError === true ? { isError: true } : {}) };
+  }
+  if (name === SEND_DTMF_TOOL) {
+    const { ok, body } = await apiResponse("/api/internal/phone-call/dtmf", { method: "POST", body: JSON.stringify(args) });
+    if (!ok) return { text: String(body.error ?? "Could not send keys."), isError: true };
+    return { text: String(body.text ?? ""), ...(body.isError === true ? { isError: true } : {}) };
+  }
+  if (name === TRANSFER_CALL_TOOL) {
+    const { ok, body } = await apiResponse("/api/internal/phone-call/transfer", { method: "POST", body: JSON.stringify(args) });
+    if (!ok) return { text: String(body.error ?? "Could not transfer."), isError: true };
+    return { text: String(body.text ?? ""), ...(body.isError === true ? { isError: true } : {}) };
+  }
+  if (name === HANG_UP_TOOL) {
+    const { ok, body } = await apiResponse("/api/internal/phone-call/hangup", { method: "POST", body: JSON.stringify(args ?? {}) });
+    if (!ok) return { text: String(body.error ?? "Could not hang up."), isError: true };
     return { text: String(body.text ?? ""), ...(body.isError === true ? { isError: true } : {}) };
   }
 

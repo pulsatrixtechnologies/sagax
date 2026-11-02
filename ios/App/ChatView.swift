@@ -102,6 +102,8 @@ struct ChatView: View {
     @State var shareFile: ShareFile?
     /// The bot's "Share as Template" sheet (a public template link).
     @State var sharingTemplate: Bot?
+    /// Lot 6: Delete from the chat "..." menu.
+    @State var confirmingDeleteBot = false
     @State var showingPhotoPicker = false
     /// The composer's "+" > Take Photo: the system camera.
     @State var showingCamera = false
@@ -337,6 +339,18 @@ struct ChatView: View {
             ShareTemplateSheet(bot: bot)
                 .environmentObject(session)
         }
+        .confirmationDialog(
+            Text(deleteBotConfirmTitle),
+            isPresented: $confirmingDeleteBot,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Delete"), role: .destructive) {
+                Task { await deleteBotFromChat() }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "The bot and its conversations will be deleted. This cannot be undone."))
+        }
         .photosPicker(
             isPresented: $showingPhotoPicker,
             selection: $selectedPhotos,
@@ -411,6 +425,12 @@ struct ChatView: View {
             guard case let .bot(bot) = current, (note.object as? String).map({ $0 == bot.id }) ?? true else { return }
             panelSection = .access
             showingPanel = true
+        }
+        .onValueChange(of: session.pendingPanelDoor) { door in
+            takePendingPanelDoor(door)
+        }
+        .task {
+            takePendingPanelDoor(session.pendingPanelDoor)
         }
         .onValueChange(of: showingPanel) { shown in
             if shown { dictation.stop() } else { panelSection = nil }

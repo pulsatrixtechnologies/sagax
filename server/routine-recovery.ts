@@ -3,8 +3,15 @@
 // once and is told to them once per bot and cause, until one of that bot's runs completes.
 import type { RuntimeEvent } from "../shared/runtime-events.ts";
 import type { RoutineRetryCause } from "../shared/routines.ts";
-import { CLAUDE_NEEDS_RECONNECTING, CLAUDE_SIGN_IN_EXPIRED, isClaudeReconnectCondition } from "./drivers/claude-errors.ts";
+import { CLAUDE_SIGN_IN_EXPIRED, isClaudeReconnectCondition } from "./drivers/claude-errors.ts";
+import {
+  engineNameFromReconnectFailure,
+  engineNeedsReconnecting,
+  engineReconnectAheadDetail,
+  isEngineReconnectCondition,
+} from "./engine-reconnect-ahead.ts";
 import { classifyError, USAGE_LIMIT } from "./drivers/retry.ts";
+import { isEngineEmptyFailure } from "./incidents.ts";
 import type { RoutineRun } from "./routines.ts";
 import { hostTimeZone } from "./turn-clock.ts";
 
@@ -62,19 +69,23 @@ const OWNER_ACTION: Record<Exclude<RoutineOwnerCause, "setup">, string> = {
   usage_limit: "This bot's engine reached its usage limit. Its routines work again once it resets, or choose another engine for this bot now.",
 };
 
-const CLAUDE_RECONNECT_ACTION =
-  `${CLAUDE_SIGN_IN_EXPIRED} Routines that use Claude wait until you reconnect; they resume on their own after.`;
 const RETRY_WHY: Record<Exclude<RoutineRetryCause, "usage_limit">, string> = {
   stalled: "the engine stalled", restarted: "Sagax restarted while it ran", rate_limited: "a rate limit", provider: "a temporary error",
+  empty_response: "an empty model response",
 };
 const FIRST_START: Record<RoutineRetryCause, string> = {
   stalled: "stopped when its engine stalled", restarted: "was cut off when Sagax restarted", rate_limited: "was stopped by a rate limit",
   provider: "failed on a temporary engine error", usage_limit: "was refused by the engine's usage limit",
+  empty_response: "ended with an empty model response (reasoning only or no final answer)",
 };
 
 export function classifyRoutineFailure(failure: string, facts: RoutineFailureFacts = {}): RoutineFailureClass {
   if (facts.cause === "busy") return { kind: "busy" };
   if (facts.cause === "stalled" || facts.stalled) return { kind: "retry", cause: "stalled" };
+  // reasoning_only / empty model: one automatic retry of the same turn.
+  if (facts.stopReason === "reasoning_only" || facts.stopReason === "empty_turn" || isEngineEmptyFailure(failure)) {
+    return { kind: "retry", cause: "empty_response" };
+  }
   const { reason, transient } = classifyError({ text: failure });
   if (OUT_OF_CREDITS.test(failure)) return { kind: "owner", cause: "credits" };
   // Claude extra-usage credits: model-only, no reset to wait for. Never a plan window.
@@ -158,21 +169,25 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
   if (reset && reset > now && reset - now <= LIMIT_WAIT_MS && requeueOnce(run, "usage_limit", failure, now, reset + AFTER_RESET_MS)) {
     return { queued: true, ...(first ? { alert: { detail: `This bot's engine reached its usage limit. This run starts again at ${when(reset + AFTER_RESET_MS)}.` } } : {}) };
   }
-  // Claude auth expired or extra-usage credits: pause the run until reconnect.
-  // No failed status, so the proactive waker never loops on the same cause.
-  if ((verdict.cause === "signed_out" || verdict.cause === "credits") && isClaudeReconnectCondition(failure)) {
+  // Auth expired / signed out, or Claude extra-usage credits: pause until
+  // reconnect. No failed status, so the proactive waker never loops on the
+  // same cause (Claude, Codex, Grok, Kimi, or the generic signed-out line).
+  if (verdict.cause === "signed_out" || (verdict.cause === "credits" && isClaudeReconnectCondition(failure))) {
+    const engine = engineNameFromReconnectFailure(failure);
     delete run.error;
     delete run.retryAt;
     delete run.retried;
     return {
       waiting: true,
-      attention: CLAUDE_NEEDS_RECONNECTING,
-      alert: first ? { detail: CLAUDE_RECONNECT_ACTION } : null,
+      attention: engineNeedsReconnecting(engine),
+      alert: first ? { detail: engineReconnectAheadDetail(engine) } : null,
     };
   }
   const action = verdict.cause === "setup" ? failure : OWNER_ACTION[verdict.cause];
-  return { queued: false, error: verdict.cause === "signed_out" ? `${action} The engine said: “${failure}”` : failure, alert: first ? { detail: action } : null };
+  return { queued: false, error: failure, alert: first ? { detail: action } : null };
 }
+
+export { isEngineReconnectCondition, CLAUDE_SIGN_IN_EXPIRED };
 
 export function loadOwnerNotices(value: unknown): RoutineOwnerNotice[] {
   if (!Array.isArray(value)) return [];

@@ -7814,7 +7814,7 @@
       "sandboxDesktop.takeControl": "fbf728c3c3bbd9166ea4557fb267479b842217ac50573a3d11ed1b2ce6b354cb",
       "sandboxDesktop.title": "b74077e899cb6276bc86ecfe672d163f1b0ca89255aef40b44163aca4c75c253",
       "sandboxDesktop.unavailable": "e1c080272ed1466df6260580692f0809351a90d76e57548f28cb2b5a77402902",
-      "sandboxDesktop.watching": "ac48eebdae9eed55cea201547dcc4e163c5e05bb930d36c6eb023499a16cf2e2",
+      "sandboxDesktop.watching": "fbc594054d512e5d877fd840baa6f8742d5891de3f488306a6b915de395f5707",
       "seen.by": "fa473155b9cfe964b77ac3a496a38c88231b3aa994b6196a819fb363dca85e3a",
       "seen.caption": "8894cf30aed05a787922b8da70ce6ec4e86879ac21f97fbf78a2da27bdae2b20",
       "seen.captionAt": "23244feab67e9b2a6b093f2f22e258bfd4fbf27227466859a637fcc792bb36be",
@@ -16243,7 +16243,10 @@
       "memoryManager.pickSource": "b4e6862ee8d5e41d9116d9bfcfaf4cd65e814ed594b9097d1e74f8fc21d466ed",
       "memoryManager.mapZoomIn": "0e47f09a748fa1321dbaee5c8983f8e8f2880b1212956fb4f21ae9d60b88a8b2",
       "memoryManager.mapZoomOut": "bc7b631a689b45ca5c51923515d31eb3597b2d9b129d88d0dbee066ee5c35453",
-      "memoryManager.mapFit": "9f872ed43d00d8bdb372b1c05bd345b22f2ad5f7f41e06656d05625602e065b1"
+      "memoryManager.mapFit": "9f872ed43d00d8bdb372b1c05bd345b22f2ad5f7f41e06656d05625602e065b1",
+      "sandboxDesktop.collapseToPanel": "700b6bb49886d685debb97cb8b2dae71128cc2f078f2443f733b6b670caf7b82",
+      "sandboxDesktop.controlMode": "f99aa82a3a54a073d8531a7dcfa1a4b95b3dc2cc0284759ff9d78e71a4548e81",
+      "sandboxDesktop.windowMenu": "d08462c307b81b2bc5f38169d57dbd3e18780c2d291dd21d0e863dbf2a1fa478"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

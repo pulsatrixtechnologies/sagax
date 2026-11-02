@@ -192,18 +192,19 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
       };
     }
     case "openBotWizard":
-      // Content view (lot 4): one creation entry. Redo on an existing bot
-      // always opens; a new bot opens even when create is refused so the
-      // view can show the read-only note in place (no BotsReadOnly dialog).
-      // Leave Connect apps (activeView "apps") so the wizard is the main
-      // column; Tools can reopen apps over it without clearing botWizard.
+      // Centred creation window. Redo on an existing bot always opens; a new
+      // bot opens even when create is refused so the window can show the
+      // read-only note in place (no BotsReadOnly dialog).
       return {
         ...state,
         botWizard: { botId: action.botId ?? null, ...(action.redo ? { redo: true } : {}) },
         personaEditor: null,
-        activeView: state.activeView === "apps" || state.activeView === "archived-bots" ? "chat" : state.activeView,
+        activeView: state.activeView === "apps" ? "chat" : state.activeView,
         newBotOpen: false, settingsOpen: false, appSettingsOpen: false, pluginsOpen: false, shortcutsOpen: false, triggersOpen: false,
         memoryManagerOpen: false,
+        archivedBotsOpen: false,
+        orgImportOpen: false,
+        botCatalogOpen: false,
       };
     case "closeBotWizard":
       return { ...state, botWizard: null };
@@ -305,21 +306,25 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
       };
     }
     case "openBotCatalog": {
-      // Browse Bots is Connect apps' Bots tab (2026-10-29 / lot 5): every
-      // link opens that tab in the content frame, on its Templates when it
-      // asks (a new object, so an open tab follows a later link). The old
-      // botCatalogOpen window is gone.
+      // Browse Bots as its own centred window (restored after UX lot 5).
+      // Capabilities still embeds the same pane on its Bots tab.
       const target = action.section ? { section: action.section, ...(action.installUrl ? { installUrl: action.installUrl } : {}) } : null;
-      const opened = reduce(state, { type: "togglePlugins", open: true, surface: "apps", page: "bots" });
-      return { ...opened, botCatalogOpen: false, botCatalogTarget: target };
+      if (state.botCatalogOpen) return action.section ? { ...state, botCatalogTarget: target } : state;
+      return {
+        ...state,
+        botCatalogOpen: true,
+        botCatalogTarget: target,
+        settingsOpen: false,
+        appSettingsOpen: false,
+        newBotOpen: false,
+        shortcutsOpen: false,
+        triggersOpen: false,
+        archivedBotsOpen: false,
+        orgImportOpen: false,
+      };
     }
     case "closeBotCatalog":
-      // Closing Browse Bots leaves Connect apps (its Bots tab was the only
-      // surface). Already on chat with no target: no-op.
-      if (state.activeView === "apps" || state.pluginsOpen) {
-        return reduce({ ...state, botCatalogTarget: null, botCatalogOpen: false }, { type: "togglePlugins", open: false });
-      }
-      return state.botCatalogTarget || state.botCatalogOpen
+      return state.botCatalogOpen || state.botCatalogTarget
         ? { ...state, botCatalogOpen: false, botCatalogTarget: null }
         : state;
     case "openPersonaEditor":
@@ -328,9 +333,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         ...state,
         personaEditor: { botId: action.botId, section: action.section ?? "overview" },
         botWizard: null,
-        // Same as openBotWizard: leave apps / archived so the editor fills
-        // the main column (Connect apps can still open over it later).
-        activeView: state.activeView === "apps" || state.activeView === "archived-bots" ? "chat" : state.activeView,
+        activeView: state.activeView === "apps" ? "chat" : state.activeView,
         appSettingsOpen: false,
         appSettingsSubPage: null,
         pluginsOpen: false,
@@ -338,6 +341,8 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         memoryManagerOpen: false,
         newBotOpen: false,
         shortcutsOpen: false,
+        archivedBotsOpen: false,
+        orgImportOpen: false,
       };
     case "personaEditorSection":
       return state.personaEditor && state.personaEditor.section !== action.section

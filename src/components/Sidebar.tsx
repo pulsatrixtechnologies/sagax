@@ -2087,15 +2087,20 @@ export function ArchivedBotsPanel({
     }
   };
 
-  // Lot 5: the live UI is ArchivedBotsPage in the content frame. This
-  // list shell stays for restore/delete unit tests (Sidebar.open-bot.test).
-  return (
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 sm:p-6"
+      onMouseDown={(event) => event.target === event.currentTarget && !locked && onClose()}
+      data-archived-bots-backdrop=""
+    >
     <div
       ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
       data-archived-bots-panel=""
       aria-labelledby="archived-bots-title"
       tabIndex={-1}
-      className="flex max-h-[min(680px,calc(100dvh-2rem))] w-full max-w-[760px] flex-col overflow-hidden rounded-[14px] border border-border bg-elevated outline-none"
+      className="animate-pop-in flex max-h-[min(680px,calc(100dvh-2rem))] w-full max-w-[760px] flex-col overflow-hidden rounded-[14px] border border-border bg-elevated outline-none"
     >
       <header className="flex items-start justify-between gap-4 px-6 pb-4 pt-6 sm:px-8 sm:pt-7">
         <div>
@@ -2172,6 +2177,8 @@ export function ArchivedBotsPanel({
         }}
       />
     </div>
+    </div>,
+    document.body,
   );
 }
 

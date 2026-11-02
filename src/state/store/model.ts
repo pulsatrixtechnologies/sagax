@@ -1284,9 +1284,13 @@ export interface AppState {
   /** The person's sidebar hidden keys (src/lib/sidebar-hidden.ts): a
    * restored or fallback selection never lands on one of them. */
   sidebarHiddenKeys: ReadonlySet<string>;
-  activeView: "chat" | "team-map" | "routines" | "code" | "approvals" | "remote-sessions" | "achievements" | "apps" | "archived-bots" | "org-import" | "memory";
-  /** Staged solo-Sagax copy for the org-import content view (lot 6). */
+  activeView: "chat" | "team-map" | "routines" | "code" | "approvals" | "remote-sessions" | "achievements" | "apps" | "memory";
+  /** Staged solo-Sagax copy for the org-import window. */
   orgImportStaged: OrgImportDocument | null;
+  /** Org import centred window is open. */
+  orgImportOpen: boolean;
+  /** Archived bots centred window is open. */
+  archivedBotsOpen: boolean;
   routines: Routine[];
   routineRuns: RoutineRun[];
   routinesLoadState: "loading" | "ready" | "error";
@@ -1578,9 +1582,11 @@ export type Action =
   | { type: "showRemoteSessions" }
   /** The Achievements page, on `category` when a link names one. */
   | { type: "showAchievements"; category?: AchievementsCategory }
-  /** Archived bots as a content-frame list (2026-11-01 lot 5). */
+  /** Archived bots centred window (restored after UX lot 5). */
   | { type: "showArchivedBots" }
+  | { type: "closeArchivedBots" }
   | { type: "showOrgImport"; staged?: OrgImportDocument | null }
+  | { type: "closeOrgImport" }
   | { type: "showChat" }
   | { type: "routinesHydrated"; routines: Routine[]; runs: RoutineRun[]; folders?: Record<string, string[]> }
   | { type: "routineFoldersPatched"; botId: string; folders: string[] }
@@ -2447,6 +2453,8 @@ export const initialState: AppState = {
   sidebarHiddenKeys: new Set<string>(),
   activeView: "chat",
   orgImportStaged: null,
+  orgImportOpen: false,
+  archivedBotsOpen: false,
   routines: [],
   routineRuns: [],
   routinesLoadState: "loading",

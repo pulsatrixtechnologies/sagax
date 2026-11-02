@@ -23,10 +23,10 @@ import { ComposeToPicker } from "@/components/ComposeToPicker";
 import { BotWizard } from "@/components/bot-wizard/BotWizard";
 import { PluginsPanel } from "@/components/PluginsPanel";
 import {
-  AchievementsScreen, ActivityPanel, ApprovalsPage, BotSettingsDialog, CodePage, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace,
+  AchievementsScreen, ActivityPanel, ApprovalsPage, BotCatalogModal, BotSettingsDialog, CodePage, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace,
   PersonaEditorModal, preloadScreens, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, SettingsModal, TeamMapPage,
 } from "@/components/lazy-screens";
-import { ArchivedBotsPage } from "@/components/ArchivedBotsPage";
+import { ArchivedBotsPanel } from "@/components/Sidebar";
 import { WorkspaceBackupRecovery } from "@/components/WorkspaceBackupSettings";
 import { AboutPrompt } from "@/components/AboutDialog";
 import { ReleaseNotesPrompt } from "@/components/ReleaseNotesPrompt";
@@ -394,8 +394,7 @@ function Shell() {
   const mainIsRemoteSessions = state.activeView === "remote-sessions";
   const mainIsAchievements = state.activeView === "achievements";
   const mainIsApps = state.activeView === "apps" || state.pluginsOpen;
-  const mainIsArchivedBots = state.activeView === "archived-bots";
-  const mainIsOrgImport = state.activeView === "org-import";
+  const archivedBots = useMemo(() => state.bots.filter((bot) => bot.hidden), [state.bots]);
   const calendarFillsMain = calendarOpen;
 
   useEffect(() => {
@@ -501,7 +500,7 @@ function Shell() {
       <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col" data-sidebar-follower="">
       {/* nothing answers this person on an organization server: say so above
           the conversation, with the way back to the first-run step */}
-      {org && (group || bot) && !calendarFillsMain && !mainIsTeamMap && !mainIsMemory && !mainIsCode && !mainIsApprovals && !mainIsRemoteSessions && !mainIsAchievements && !mainIsApps && !mainIsArchivedBots && !mainIsOrgImport && !state.personaEditor && !state.botWizard && <OrgEngineNotice />}
+      {org && (group || bot) && !calendarFillsMain && !mainIsTeamMap && !mainIsMemory && !mainIsCode && !mainIsApprovals && !mainIsRemoteSessions && !mainIsAchievements && !mainIsApps && <OrgEngineNotice />}
       {/* The split view (#1504): the main view below is one section; others
           show more conversations beside it (src/lib/split-view.ts). */}
       <SplitWorkspace panelSlot={panelSlot} main={composeOpen && (group || bot) ? (
@@ -524,17 +523,6 @@ function Shell() {
         /* Capabilities centred modal (decided exception like Settings).
            Over the wizard when Tools opens it: botWizard stays set. */
         <PluginsPanel />
-      ) : !remoteClient && state.botWizard ? (
-        <BotWizard />
-      ) : !remoteClient && state.personaEditor ? (
-        <PersonaEditorModal />
-      ) : mainIsArchivedBots ? (
-        <ArchivedBotsPage />
-      ) : mainIsOrgImport ? (
-        <OrgImportDialog
-          staged={state.orgImportStaged}
-          onClose={() => dispatch({ type: "showChat" })}
-        />
       ) : !remoteClient && localVmWorkspaceBotId ? (
         <LocalVmWorkspace
           primaryBotId={localVmWorkspaceBotId}
@@ -614,9 +602,24 @@ function Shell() {
       {!remoteClient && state.activityOpen && bot && <ActivityPanel key={`activity:${bot.id}`} bot={bot} />}
       {state.appSettingsOpen && <SettingsModal />}
       {!remoteClient && <ModelWindowHost />}
-      {/* Lot 4: New bot / Edit bot fill the main column (botWizard, personaEditor).
-          Capabilities is a centred modal (decided exception); archived bots
-          stay a content-frame page. Browse Bots is Capabilities' Bots tab. */}
+      {/* Restored centred windows: Edit bot, New bot wizard, Browse Bots,
+          archived bots, org import. Capabilities stays a decided modal. */}
+      {!remoteClient && state.personaEditor && <PersonaEditorModal />}
+      {!remoteClient && state.botWizard && <BotWizard />}
+      {state.botCatalogOpen && <BotCatalogModal />}
+      {state.archivedBotsOpen && (
+        <ArchivedBotsPanel
+          bots={archivedBots}
+          onClose={() => dispatch({ type: "closeArchivedBots" })}
+          onRestored={() => {}}
+        />
+      )}
+      {state.orgImportOpen && (
+        <OrgImportDialog
+          staged={state.orgImportStaged}
+          onClose={() => dispatch({ type: "closeOrgImport" })}
+        />
+      )}
       {state.shortcutsOpen && (
         <KeyboardShortcutsModal
           open={state.shortcutsOpen}

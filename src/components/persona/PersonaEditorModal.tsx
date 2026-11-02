@@ -1,30 +1,28 @@
-// The bot editor ("Edit bot"): a content view of the main frame (lot 4 of
-// the no-modals plan). Same rail of groups (lib/persona-sections.ts) as
-// Settings' grey headings, each section a page of its own (2026-10-15,
-// rail like Settings 2026-10-16), each the same body the bot panel used to
-// show (useBotSectionContent), so both save through the same paths. A
-// section this viewer may not change stays on its page and says why
-// (botSectionLock); nothing is hidden for lack of a permission. Opened from
-// the bot's "..." menu in the bot panel, and on Appearance from a click on
-// the bot's avatar (store action openPersonaEditor). Named back closes it.
+// The bot editor ("Edit bot"): one bot's whole profile in a centred modal
+// (category-modal.ts: a left column of categories, one scrolling pane, the
+// close button top right). The left column lists the groups
+// (lib/persona-sections.ts) as Settings' grey headings, each section an
+// entry of its own (2026-10-15, rail like Settings 2026-10-16), each the
+// same body the bot panel used to show (useBotSectionContent), so both save
+// through the same paths. A section this viewer may not change stays on its
+// page and says why (botSectionLock); nothing is hidden for lack of a
+// permission. Opened from the bot's "..." menu in the bot panel, and on
+// Appearance from a click on the bot's avatar (store action openPersonaEditor).
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { ChevronLeft, LayoutDashboard, Lock, Search } from "lucide-react";
+import { LayoutDashboard, Lock, Search, X } from "lucide-react";
 
 import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { simpleHidesBotSection } from "@/lib/interface-visibility";
 import { canEditBotField } from "@/lib/bot-capabilities";
-import { isBackShortcut } from "@/lib/back-shortcut";
-import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
 import { personaPagesMatching, stepPersonaResult } from "@/lib/persona-search";
 import { applySettingsSearch, clearSettingsSearch, focusSettingsSearchLabel, settingsQuery, settingsSearchLabels } from "@/lib/settings-search";
 import { useRetroSkin } from "../RetroChromeHost";
-import { useCaptionChrome } from "../DesktopCapabilities";
-import { PageTopStrip } from "../content-page";
-import { CATEGORY_MODAL, categoryNavItemClass, nextCategory } from "../category-modal";
+import { shortcutLabel } from "../ShortcutHint";
+import { CATEGORY_MODAL, categoryNavItemClass, nextCategory, useCategoryModalKeyboard } from "../category-modal";
 import { BOT_SECTIONS } from "../bot-settings/sections";
 import { RulesSection } from "../bot-settings/RulesSection";
 import { WorkspaceFilesSection } from "../bot-settings/WorkspaceFilesSection";
@@ -84,8 +82,7 @@ function PersonaEditor({ bot, section, onClose }: { bot: Bot; section: BotSettin
   const { state, dispatch } = useStore();
   const advanced = useAdvancedMode();
   const retroSkin = useRetroSkin();
-  const { dragProps, noDragStyle, padClass } = useCaptionChrome();
-  const rootRef = useRef<HTMLElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const focusNav = useRef(false);
@@ -94,8 +91,8 @@ function PersonaEditor({ bot, section, onClose }: { bot: Bot; section: BotSettin
   const [searchLabels, setSearchLabels] = useState<string[]>([]);
   const q = settingsQuery(query);
   const { available, slackUrl, perspicaxOrg } = useBotSectionAvailability(bot.id);
-  // Rules and Files keep their own Save and ConfirmDialog discard (lot 8).
-  // A single shell-level "close without saving" lands with the lot 4 view.
+  // TODO(lot 8): ConfirmDialog when leaving with unsaved Rules/Files drafts.
+  // Those sections keep their own Save; Escape and close close for now.
 
   // Simple mode hides the same sections it hides in the bot panel; their
   // saved values stay. A page this server does not offer (Slack without an
@@ -165,8 +162,8 @@ function PersonaEditor({ bot, section, onClose }: { bot: Bot; section: BotSettin
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
-      const root = rootRef.current;
-      if (!root || (event.target instanceof Node && event.target !== document.body && !root.contains(event.target))) return;
+      const dialog = dialogRef.current;
+      if (!dialog || (event.target instanceof Node && event.target !== document.body && !dialog.contains(event.target))) return;
       const field = searchRef.current;
       if (!field?.checkVisibility()) return;
       const find = (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "f";
@@ -220,7 +217,7 @@ function PersonaEditor({ bot, section, onClose }: { bot: Bot; section: BotSettin
       onClose();
       dispatch({ type: "toggleSettings", open: true, section: next, botId: bot.id });
     },
-    returnFocusRef: rootRef,
+    returnFocusRef: dialogRef,
     slackUrl,
   });
 
@@ -234,12 +231,7 @@ function PersonaEditor({ bot, section, onClose }: { bot: Bot; section: BotSettin
     nav?.querySelector<HTMLElement>(`[data-persona-page="${current}"]`)?.focus();
   }, [current, currentGroup]);
 
-  // Focus the view so Escape and Cmd/Ctrl+[ work at once.
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    rootRef.current?.focus({ preventScroll: true });
-    return () => { if (previous?.isConnected) previous.focus(); };
-  }, []);
+  useCategoryModalKeyboard(dialogRef, '[data-persona-nav] [aria-current="page"]', onClose);
 
   // Up and Down walk every page in order.
   const onNavKey = (event: ReactKeyboardEvent<HTMLElement>) => {
@@ -304,45 +296,20 @@ function PersonaEditor({ bot, section, onClose }: { bot: Bot; section: BotSettin
   const title = personaCategoryLabel(current);
 
   return (
-    <main
-      ref={rootRef}
-      tabIndex={-1}
-      data-persona-editor=""
-      aria-labelledby="persona-editor-title"
-      className="flex h-full min-w-0 flex-1 flex-col bg-app outline-none"
-      onKeyDown={(event) => {
-        if (event.defaultPrevented) return;
-        // A nested dialog (ConfirmDialog later) owns Escape while up.
-        const nested = rootRef.current?.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]');
-        if (nested && nested.getClientRects().length > 0) return;
-        if (event.key === "Escape" || isBackShortcut(event)) {
-          event.preventDefault();
-          onClose();
-        }
-      }}
+    <div
+      className={CATEGORY_MODAL.backdrop}
+      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
-      <PageTopStrip />
-      <header
-        {...dragProps}
-        className={cn("content-topbar relative flex h-12 shrink-0 items-center gap-2 border-b border-hairline/50 px-3", padClass)}
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="persona-modal-title"
+        tabIndex={-1}
+        data-persona-modal=""
+        className={CATEGORY_MODAL.frame}
       >
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t("breadcrumb.back")}
-          title={t("breadcrumb.back")}
-          data-persona-back=""
-          style={noDragStyle}
-          className={CIRCLE_BUTTON}
-        >
-          <ChevronLeft size={18} strokeWidth={1.75} />
-        </button>
-        <div className="min-w-0 flex-1" style={noDragStyle}>
-          <h1 id="persona-editor-title" className="truncate text-[15px] font-medium leading-6 text-ink">{t("persona.title")}</h1>
-          <p className="truncate text-[12px] leading-4 text-ink-secondary">{bot.name}</p>
-        </div>
-      </header>
-      <div className="flex min-h-0 min-w-0 flex-1">
+        <span id="persona-modal-title" className="sr-only">{t("persona.title")}: {bot.name}</span>
         <nav
           ref={navRef}
           data-persona-nav=""
@@ -350,6 +317,10 @@ function PersonaEditor({ bot, section, onClose }: { bot: Bot; section: BotSettin
           onKeyDown={onNavKey}
           className={CATEGORY_MODAL.nav}
         >
+          <div className={CATEGORY_MODAL.navTitle}>
+            <div className="truncate">{t("persona.title")}</div>
+            <div className="truncate text-[12px] font-normal text-ink-secondary">{bot.name}</div>
+          </div>
           {/* 2026-10-16: the rail of Settings (#605): each group a
               grey heading, every page an entry with its icon under it. */}
           <div className="mb-2 mt-1 flex shrink-0 items-center gap-2 rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 focus-within:border-border-strong">
@@ -424,6 +395,15 @@ function PersonaEditor({ bot, section, onClose }: { bot: Bot; section: BotSettin
         </nav>
 
         <div className={CATEGORY_MODAL.content}>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t("common.close")}
+            title={`${t("common.close")} (${shortcutLabel("close-panel")})`}
+            className={CATEGORY_MODAL.close}
+          >
+            <X size={18} />
+          </button>
           <div className={CATEGORY_MODAL.mobileBar}>
             <select
               aria-label={t("persona.categories")}
@@ -471,6 +451,6 @@ function PersonaEditor({ bot, section, onClose }: { bot: Bot; section: BotSettin
         </div>
       </div>
       {dialogs}
-    </main>
+    </div>
   );
 }

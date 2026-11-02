@@ -1104,6 +1104,7 @@ export function PluginsPanel() {
   } else if (page.page === "tailscale") {
     subpage = (
       <TailscaleConnectView
+        trail={trail}
         onBack={() => {
           back();
           void fetchBotTailscale().then(setTailscaleView).catch(() => undefined);

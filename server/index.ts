@@ -1190,7 +1190,6 @@ import { localVmStopReason, recordLocalVmIdleStop } from "./local-vm-stop-reason
 import { LocalVmIdleTimer } from "./local-vm-idle.ts";
 import { LocalVmLease, LocalVmLeasePool } from "./local-vm-lease.ts";
 import { LocalVmSeatPool, type LocalVmSeatHolder } from "./local-vm-seat-pool.ts";
-import { RepeatDetector, callKey } from "./repeat-detector.ts";
 import { TurnReplyRepeats } from "./turn-reply-repeats.ts";
 import { dispatchLoopStop, makeLoopStopSubscriber } from "./loop-detector.ts";
 import {
@@ -16374,6 +16373,28 @@ const HIDDEN_APPROVAL_TTL_MS = (() => {
   return Number.isFinite(configured) && configured >= 1_000 ? configured : 15 * 60_000;
 })();
 
+/** 2026-11-02: how long an approval a routine run asks waits for its person
+ * (prod: a routine's approval expired after 15 minutes, the AI-client wait,
+ * before anyone saw it). The engine's own timer and the card's expiry both
+ * use it. SAGAX_ROUTINE_APPROVAL_WAIT_MS overrides it. */
+const ROUTINE_APPROVAL_WAIT_MS = (() => {
+  const configured = Number(process.env.SAGAX_ROUTINE_APPROVAL_WAIT_MS);
+  return Number.isFinite(configured) && configured >= 1_000 ? configured : 2 * 60 * 60_000;
+})();
+
+/** A routine run's own thread (its hidden execution task). */
+function routineRunThread(threadId: string | undefined): boolean {
+  if (!threadId) return false;
+  if (activeRoutineRunForThread(threadId)) return true;
+  const bot = store.botByThread(threadId);
+  return Boolean(bot && store.taskByThread(bot.id, threadId)?.routineRunId);
+}
+
+/** The approval wait a turn gets: a routine run's, else the driver's own. */
+function routineApprovalWaitMs(threadId: string): number | undefined {
+  return routineRunThread(threadId) ? ROUTINE_APPROVAL_WAIT_MS : undefined;
+}
+
 /** Decline an approval nobody answered by its expiresAt: the engine hears a
  * refusal (the action never runs), the card reads Expired, and the audit
  * log says why. Answered, dismissed or already expired cards are left alone. */
@@ -16469,7 +16490,10 @@ function notificationIsInterBotChatter(notification: Notification): boolean {
  * hidden one (#291): never on a phone or a watch, approvals included. */
 function notificationQuietOnPhones(notification: Notification): boolean {
   if (!notification.threadId) return false;
-  if (notificationInHiddenThread(notification.threadId)) return true;
+  // 2026-11-02: a routine run's thread is hidden, but what it asks is the
+  // person's (prod: an approval never reached the phone and expired). Only an
+  // AI client's hidden conversation stays off phones.
+  if (notificationInHiddenThread(notification.threadId) && !routineRunThread(notification.threadId)) return true;
   const bot = store.botByThread(notification.threadId);
   return Boolean(bot && isAgentConversation(store.taskByThread(bot.id, notification.threadId)));
 }
@@ -16508,7 +16532,6 @@ const turnContext = new Map<string, { tokens?: number; window?: number }>();
 // Bounded per active turn. OpenHands uses a bounded recent-event scan for
 // the same class of stuck-loop detection; retaining an unlimited set of
 // unique arguments would let one pathological turn grow the server forever.
-const repeats = new RepeatDetector({ thresholds: [5, 10, 20], maxKeysPerThread: 256 });
 
 // ── stall watchdog ─────────────────────────────────────────────────────
 // ask_bot has a short inline wait budget, while room turns have a separately
@@ -16572,7 +16595,7 @@ const watchdog = new TurnWatchdog({
     cancelDirectTurnDispatch(turn.botId, turn.threadId);
     const stalledVmTarget = localVmThreadTargets.get(turn.threadId);
     revokeInternalCapabilitiesForThread(turn.threadId);
-    repeats.settle(turn.threadId);
+    shellLoopGuard.settle(turn.threadId);
     const bot = botForThread(turn.botId, turn.threadId);
     const routineRun = activeRoutineRunForThread(turn.threadId);
     // The stopped process can never answer the approvals it raised: close
@@ -19373,6 +19396,8 @@ bus.subscribe((event: RuntimeEvent) => {
       // its approval still reaches the person, and is declined when nobody
       // answers in time instead of holding the turn forever.
       const hiddenApproval = Boolean(permission && event.requestId && notificationInHiddenThread(event.threadId));
+      // a routine run's card waits as long as the engine does (2 h), not the AI-client 15 minutes
+      const hiddenApprovalTtl = routineApprovalWaitMs(event.threadId) ?? HIDDEN_APPROVAL_TTL_MS;
       const message = pushMessage({
         role: "bot",
         kind: "options",
@@ -19438,7 +19463,7 @@ bus.subscribe((event: RuntimeEvent) => {
               return candidate ? { customRuleCandidate: candidate } : {};
             })()
             : {}),
-          ...(hiddenApproval ? { expiresAt: Date.now() + HIDDEN_APPROVAL_TTL_MS } : {})
+          ...(hiddenApproval ? { expiresAt: Date.now() + hiddenApprovalTtl } : {})
         }
       });
       if (event.requestId) askMessageByRequest.set(`${event.threadId}:${event.requestId}`, message.id);
@@ -19453,7 +19478,7 @@ bus.subscribe((event: RuntimeEvent) => {
       if (hiddenApproval && asker) scheduleApprovalExpiry({
         threadId: event.threadId, requestId: event.requestId!, messageId: message.id,
         instanceId: event.providerInstanceId ?? asker.modelSelection.instanceId, botId: asker.id, botName: asker.name
-      }, HIDDEN_APPROVAL_TTL_MS);
+      }, hiddenApprovalTtl);
       if (command && asker && event.requestId) pendingCommandRules.set(`${event.threadId}:${event.requestId}`, { botId: asker.id, candidate: command });
       // Every card that reaches a human is a decision too: "the provider
       // left this for you, in this mode". `question` marks the cards no
@@ -21537,34 +21562,9 @@ function finalizeDelegationWatch(
   return true;
 }
 
-// A bot going in circles — the same call with the same arguments, over and
-// over in one turn — gets a chip at 5, 10 and 20 repeats. Observe and say
-// so; the human has Stop. Keyed on tool + arguments, so a bare tool name
-// (Claude's item.started carries only that) is never counted: five "Bash"
-// may be five different commands. Arguments come from ACP item titles and
-// from every permission ask's summary (the command being approved).
-bus.subscribe((event: RuntimeEvent) => {
-  if (shouldIgnoreProviderEvent(event)) return;
-  if (event.type === "turn.completed" || event.type === "session.exited") return void repeats.settle(event.threadId);
-  let key: string | null = null;
-  if (event.type === "item.started" && event.itemType === "tool") {
-    // a title with more than a bare identifier is a call with arguments
-    // (ACP: "echo hi", "Read src/x.ts"); a bare "Bash" is not countable
-    const title = event.title ?? "";
-    if (/\s|\//.test(title.trim())) key = callKey("tool", title);
-  } else if (event.type === "request.opened" && event.requestType === "permission") key = callKey(event.tool, event.summary);
-  if (!key) return;
-  const { threshold } = repeats.record(event.threadId, key);
-  if (!threshold) return;
-  const [tool, ...rest] = key.split(":");
-  const args = rest.join(":");
-  store.appendMessage(event.threadId, {
-    role: "bot",
-    kind: "activity",
-    tool: { name: `Same call repeated ${threshold}× — ${tool}: ${args.slice(0, 80)}${args.length > 80 ? "…" : ""} — it may be stuck`, ok: false }
-  });
-});
-
+// 2026-11-02: the "Same call repeated" chip is the loop guard's alone
+// (server/host/loop-guard.ts). A second copy here wrote every chip twice and
+// counted an MCP ask by its bare tool name, so different calls read as one.
 // A run going in circles is stopped, not only flagged (server/loop-detector.ts):
 // the same call, the same result, the same error, or a short cycle of calls
 // whose results never change. A direct thread stops through stopDirectThread,
@@ -23922,6 +23922,7 @@ const directChatOf = (botId: string, threadId: string): boolean => {
   return source !== null && !source.group;
 };
 routines = new RoutineManager({
+  botName: (botId) => store.bot(botId)?.name,
   evaluateWatch: (routine, watch) => routineWatchEvaluator(routine, watch),
   forgetWatch: (routineId) => routineWatchStates.forget(routineId),
   languageFor: (routine) => {
@@ -46519,6 +46520,7 @@ const startTurnRunner = createStartTurn({
   mcpCallTimeoutMinutes,
   mcpServersAsPerson,
   measureContextBuckets,
+  routineApprovalWaitMs,
   memoryPromptFor,
   mentionPrompt,
   mentionedBots,

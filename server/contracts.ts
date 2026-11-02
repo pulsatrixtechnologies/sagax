@@ -158,6 +158,10 @@ export interface SendTurnInput {
   /** #1276: compact tool list for this turn (Claude Code). Absent: the
    * full tools/list, as before. */
   compactPrompt?: CompactPromptInput;
+  /** 2026-11-02: how long a permission this turn asks waits for its person
+   * before the engine hears a refusal. A routine run's turn waits longer
+   * than a live chat's 15 minutes: nobody is watching it ask. */
+  approvalWaitMs?: number;
   /** The bot this turn belongs to. threadIds are meant to be unique per bot
    * task, but a driver's process-level resource maps (permission-broker
    * socket, CLI session) key off threadId alone — botId lets a driver namespace

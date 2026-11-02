@@ -36,6 +36,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     languageOfPerson,
     managedPolicy,
     mcpCallTimeoutMinutes,
+    routineApprovalWaitMs,
     noteBotRead,
     noteTurnQueued,
     orgSpeakerPrincipal,
@@ -185,6 +186,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       grokCloudConnectors: grokCloudConnectorsForTurn(accountConnectorInput(state.bot, state.instance, state.speaker, turnAccess?.via)),
       ...pluginDirsFor(state.bot, state.instance, orgSpeakerPrincipal(state.bot, state.speaker)),
       mcpCallTimeoutMs: mcpCallTimeoutMinutes(cfg) * 60_000,
+      ...(() => { const approvalWaitMs = routineApprovalWaitMs?.(state.threadId); return approvalWaitMs ? { approvalWaitMs } : {}; })(),
       cwd: state.cwd
     }, (input: any) => state.instance.adapter.sendTurn(input));
     })), () => !directTurnClaimExists(state.bot.id, state.dispatchClaimId, state.threadId), async () => {

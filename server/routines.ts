@@ -407,6 +407,42 @@ interface RunTrouble {
   engine?: string;
   /** Flow refused run init / unknown routine: first matching tool output. */
   flowBlocked?: string;
+  /** Open approval asks of the run, by request id: the action as a person reads it. */
+  asks?: Map<string, string>;
+  /** Actions whose approval nobody answered in time: they did not run. */
+  unanswered?: string[];
+}
+
+/** What a run waiting on its person says, in the conversation and the run
+ * (2026-11-02: it showed the bare tool id "agents__send_to_bot"). */
+export function routineWaitingLine(
+  event: { requestType?: string; input?: string; mcpTool?: string },
+  action: string | undefined,
+  botName?: (botId: string) => string | undefined,
+): string | undefined {
+  if (event.requestType === "question") return action ? `Waiting for your answer: ${action}` : "Waiting for your answer";
+  let target: string | undefined;
+  try {
+    const args = event.input ? JSON.parse(event.input) as Record<string, unknown> : undefined;
+    const id = typeof args?.bot_id === "string" ? args.bot_id : typeof args?.botId === "string" ? args.botId : undefined;
+    target = id ? botName?.(id) : undefined;
+  } catch { /* not JSON: no target */ }
+  if (target) return `Waiting for your approval to send this to ${target}`;
+  return action ? `Waiting for your approval: ${action}` : "Waiting for your approval";
+}
+
+/** An approval's action as the run's waiting line and outcome name it: an MCP
+ * ask titled with the bare tool id (`agents__send_to_bot`) reads as words
+ * ("send to bot"), never the id itself. */
+export function routineAskAction(summary: string | undefined, mcpTool?: string): string | undefined {
+  const text = redactSecretsInText(summary ?? "").replace(/\s+/g, " ").trim();
+  const bareId = /^(?:mcp__)?[a-z][\w-]{0,63}__[a-z][a-z0-9_]{0,63}$/i;
+  const id = text && (text === mcpTool || bareId.test(text)) ? text : !text && mcpTool ? mcpTool : undefined;
+  if (id) {
+    const name = id.replace(/^mcp__/i, "").split("__").pop() ?? id;
+    return name.replace(/[_-]+/g, " ").trim() || undefined;
+  }
+  return text.slice(0, 500) || undefined;
 }
 
 export interface RoutineHandedOutOutcome {
@@ -577,6 +613,8 @@ export function runTitleDate(at: number, language?: string): string {
 }
 
 export interface RoutineManagerOptions {
+  /** 2026-11-02: a bot's name, for a waiting line that names who a send goes to. */
+  botName?: (botId: string) => string | undefined;
   file?: string;
   now?: () => number;
   /** Keyed frames only: every payload on this bus is `{ kind, … }`, which
@@ -3499,10 +3537,21 @@ export class RoutineManager {
       run.attention = undefined;
       delete run.waitingOn;
     } else if (event.type === "request.opened") {
-      this.wait(run, redactSecretsInText(event.summary).trim().slice(0, 500) || undefined);
+      const action = routineAskAction(event.summary, event.mcpTool);
+      if (event.requestId && action && event.requestType !== "question") (this.troubleOf(run.id).asks ??= new Map()).set(event.requestId, action);
+      this.wait(run, routineWaitingLine(event, action, this.options.botName));
     } else if (event.type === "request.resolved") {
       run.status = "running";
       run.attention = undefined;
+      // 2026-11-02: an approval nobody answered in time is the run's outcome
+      // to tell ("that step did not run"), not an engine error.
+      const trouble = this.runTrouble.get(run.id);
+      const action = event.requestId ? trouble?.asks?.get(event.requestId) : undefined;
+      if (event.requestId) trouble?.asks?.delete(event.requestId);
+      if (trouble && action && event.source === "timeout") {
+        const list = (trouble.unanswered ??= []);
+        if (!list.includes(action) && list.length < 10) list.push(action);
+      }
     } else if (event.type === "item.completed" && event.itemType === "assistant_text") {
       run.output = redactSecretsInText(event.text).trim().slice(0, 2_000);
     } else if (event.type === "runtime.error") {
@@ -3656,6 +3705,10 @@ export class RoutineManager {
       // declare (RUN_STATUS, the report contract).
       if (failure.count < 2) continue;
       problems.push(`${title} failed ${failure.count} times and never succeeded after${failure.output ? `: ${failure.output}` : ""}`);
+    }
+    if (trouble?.unanswered?.length) {
+      const one = trouble.unanswered.length === 1;
+      problems.push(`Nobody answered the ${one ? "approval" : "approvals"} for ${trouble.unanswered.map((action) => `“${action}”`).join(", ")} in time, so ${one ? "that step" : "those steps"} did not run`);
     }
     if (trouble?.engine) problems.push(`The engine reported an error during the run: ${trouble.engine}`);
     run.status = "completed";

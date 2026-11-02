@@ -15,6 +15,7 @@ import {
   deliverFullAccessApproval,
   delegatedApprovalMode,
   delegationInheritsFullAccess,
+  isSagaxPeerSend,
 } from "./auto-approve.ts";
 
 describe("Full access delivery", () => {
@@ -201,6 +202,30 @@ describe("Reach me: the person's own Teams chat (2026-10-26)", () => {
     expect(autoVerdict("ask", tool, { reachMeSelf: true, safetyHold: true }).approve).toBeNull();
     expect(autoVerdict("ask", tool, { reachMeSelf: true, customRule: { behavior: "deny", id: "r1" } }).approve).toBeNull();
     expect(autoVerdict("ask", tool, { reachMeSelf: false })).toEqual({ approve: null, source: "outbound-guard" });
+  });
+});
+
+describe("Sagax's own bot-to-bot sends (2026-11-02)", () => {
+  // Grok asks for every use_tool: send_to_bot in a routine waited 15 minutes
+  // on an outbound card nobody answered. The server's own route applies the
+  // peer policy (approvePeerComms, reachable bots), so the outbound guard does not.
+  it("knows send_to_bot and post_to_room of the agents server, in either spelling", () => {
+    expect(isSagaxPeerSend("agents__send_to_bot")).toBe(true);
+    expect(isSagaxPeerSend("mcp__agents__post_to_room")).toBe(true);
+    expect(isSagaxPeerSend("acme__send_to_bot")).toBe(false);
+    expect(isSagaxPeerSend("agents__send_voice_note")).toBe(false);
+    expect(isSagaxPeerSend(undefined)).toBe(false);
+  });
+  it("a Sagax peer send answers itself like the other Sagax tools, at Ask too", () => {
+    expect(autoVerdict("ask", "other", { sagaxInternal: true, toolName: "agents__send_to_bot", outbound: true }))
+      .toEqual({ approve: "approved other (Sagax tool)", source: "sagax-internal" });
+  });
+  it("relaxes nothing else: not Sagax's own, a security key, an explicit approval, the person's rules", () => {
+    expect(autoVerdict("ask", "other", { toolName: "agents__send_to_bot", outbound: true })).toEqual({ approve: null, source: "outbound-guard" });
+    expect(autoVerdict("ask", "other", { sagaxInternal: true, toolName: "agents__send_to_bot", stepUpRequired: ["external-send"] }).approve).toBeNull();
+    expect(autoVerdict("ask", "other", { sagaxInternal: true, toolName: "agents__send_to_bot", requiresExplicitApproval: true }).approve).toBeNull();
+    expect(autoVerdict("ask", "other", { sagaxInternal: true, toolName: "agents__send_to_bot", customRule: { behavior: "ask", id: "r1" } }).approve).toBeNull();
+    expect(autoVerdict("ask", "other", { sagaxInternal: true, toolName: "agents__send_voice_note" }).approve).toBeNull();
   });
 });
 

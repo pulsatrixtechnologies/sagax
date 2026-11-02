@@ -11,6 +11,8 @@ import {
   PREWAKE_LEAD_MS,
   PREWARM_ENGINE_LEAD_MS,
   RoutineManager,
+  routineAskAction,
+  routineWaitingLine,
   RoutineScheduleError,
   RoutineInputError,
   type RoutineManagerOptions,
@@ -2997,7 +2999,7 @@ describe("RoutineManager", () => {
     const waiting = h.manager.handleRuntimeEvent({
       ...base, type: "request.opened", requestType: "permission", tool: "run", summary: "Approve the next step",
     });
-    expect(waiting).toMatchObject({ status: "waiting", attention: "Approve the next step" });
+    expect(waiting).toMatchObject({ status: "waiting", attention: "Waiting for your approval: Approve the next step" });
     expect(waiting?.goalStatus).toBeUndefined();
     expect(h.manager.handleRuntimeEvent({
       ...base, type: "request.resolved", behavior: "allow", source: "user",
@@ -4795,6 +4797,50 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(partial.problems).toBe("two PDFs could not be opened");
     expect(partial.quiet).toBeUndefined();
     expect(partial.output).toBe("Read 10 of 12 invoices.");
+  });
+
+  it("an approval nobody answered in time is the run's own outcome, named in words, never an engine error (2026-11-02)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    send(h, { threadId: "thread-1", type: "request.opened", requestId: "r1", requestType: "permission", tool: "other", summary: "agents__send_to_bot", mcpTool: "agents__send_to_bot" });
+    expect(runOf(h)).toMatchObject({ status: "waiting", attention: "Waiting for your approval: send to bot" });
+    send(h, { threadId: "thread-1", type: "runtime.notice", message: "Sagax: nobody answered this permission request in time. Skip this action and finish what you can without it." });
+    send(h, { threadId: "thread-1", type: "request.resolved", requestId: "r1", behavior: "deny", source: "timeout" });
+    say(h, "thread-1", "Done with the rest.");
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.status).toBe("completed");
+    expect(run.problems).toBe("Nobody answered the approval for “send to bot” in time, so that step did not run");
+    expect(run.problems).not.toMatch(/engine reported/);
+  });
+
+  it("a waiting line names who a send goes to, never a bare tool id", () => {
+    expect(routineWaitingLine({ requestType: "permission", input: JSON.stringify({ bot_id: "b-helper", title: "x" }) }, "send to bot", (id) => (id === "b-helper" ? "Helper" : undefined)))
+      .toBe("Waiting for your approval to send this to Helper");
+    expect(routineWaitingLine({ requestType: "permission" }, routineAskAction("agents__send_to_bot", "agents__send_to_bot"))).toBe("Waiting for your approval: send to bot");
+    expect(routineWaitingLine({ requestType: "question" }, undefined)).toBe("Waiting for your answer");
+  });
+
+  it("an approval someone answered leaves no problem", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    send(h, { threadId: "thread-1", type: "request.opened", requestId: "r1", requestType: "permission", tool: "shell", summary: "npm test" });
+    expect(runOf(h).attention).toBe("Waiting for your approval: npm test");
+    send(h, { threadId: "thread-1", type: "request.resolved", requestId: "r1", behavior: "allow", source: "user" });
+    say(h, "thread-1", "Done.");
+    done(h, "thread-1");
+    expect(runOf(h).problems).toBeUndefined();
+  });
+
+  it("Grok's reasoning-only end, as the driver reports it, gets the run's one automatic second start", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    send(h, { threadId: "thread-1", type: "runtime.error", message: "Grok kept returning its reasoning without a final answer. Nothing was changed. Send the message again, or lower this bot's reasoning effort." });
+    send(h, { threadId: "thread-1", type: "turn.completed", ok: false, stopReason: "reasoning_only" });
+    expect(runOf(h)).toMatchObject({ status: "queued", retried: "empty_response" });
   });
 
   it("an engine error the turn went past is a problem; a retried one is not", async () => {

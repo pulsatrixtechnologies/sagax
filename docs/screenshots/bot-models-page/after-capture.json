@@ -2,7 +2,7 @@
   "lang": "en",
   "scheme": "light",
   "skin": "pulsatrix-light",
-  "width": 1338,
+  "width": 900,
   "facts": {
     "rows": [
       "bot-2",
@@ -18,6 +18,7 @@
       "bot-1"
     ],
     "tables": 1,
+    "lists": 1,
     "cols": [
       "select",
       "bot",
@@ -26,71 +27,15 @@
       "payer",
       "backup"
     ],
-    "columnLayouts": [
-      {
-        "section": "unassigned",
-        "cells": [
-          {
-            "left": 459,
-            "width": 40
-          },
-          {
-            "left": 499,
-            "width": 108
-          },
-          {
-            "left": 607,
-            "width": 168
-          },
-          {
-            "left": 775,
-            "width": 84
-          },
-          {
-            "left": 859,
-            "width": 96
-          },
-          {
-            "left": 955,
-            "width": 144
-          }
-        ]
-      },
-      {
-        "section": "Clients",
-        "cells": [
-          {
-            "left": 459,
-            "width": 40
-          },
-          {
-            "left": 499,
-            "width": 108
-          },
-          {
-            "left": 607,
-            "width": 168
-          },
-          {
-            "left": 775,
-            "width": 84
-          },
-          {
-            "left": 859,
-            "width": 96
-          },
-          {
-            "left": 955,
-            "width": 144
-          }
-        ]
-      }
-    ],
-    "columnsAligned": true,
+    "nativeSelects": 0,
+    "overlapHits": [],
+    "unreachable": [],
     "hasDefaults": true,
     "selected": [
       "bot-0",
       "bot-1"
-    ]
+    ],
+    "bulkEffort": true,
+    "bulkBackup": true
   }
 }

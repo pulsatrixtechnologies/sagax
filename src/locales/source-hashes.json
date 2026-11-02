@@ -16241,7 +16241,16 @@
       "memoryManager.mapEmpty": "97e0d7e69792a82e2d24ee55f00f67accaa5add252798a47235690269cb70b00",
       "sandboxDesktop.collapseToPanel": "700b6bb49886d685debb97cb8b2dae71128cc2f078f2443f733b6b670caf7b82",
       "sandboxDesktop.controlMode": "f99aa82a3a54a073d8531a7dcfa1a4b95b3dc2cc0284759ff9d78e71a4548e81",
-      "sandboxDesktop.windowMenu": "d08462c307b81b2bc5f38169d57dbd3e18780c2d291dd21d0e863dbf2a1fa478"
+      "sandboxDesktop.windowMenu": "d08462c307b81b2bc5f38169d57dbd3e18780c2d291dd21d0e863dbf2a1fa478",
+      "botModels.backup.edit": "78125393f1b9ad743df569ac0aa00e972d00addc185b6566e2bd6f9b1740b9e1",
+      "botModels.backup.noneHelp": "50684bacc313e1fa8b98a3972063d3ae0fc09a25c7aa3e5219bdaec274cbce6c",
+      "botModels.bulk.setEffort": "ea31444c3e222dcac144227c5e3128a9e5b8859ac1d3575e7fa13de0e053278d",
+      "botModels.bulk.effortTitle": "ea31444c3e222dcac144227c5e3128a9e5b8859ac1d3575e7fa13de0e053278d",
+      "botModels.bulk.effortHelp": "19b97977f21336dec7820d4785220e8c98f91e9643b236feda301c99f8b3aba6",
+      "botModels.bulk.setBackup": "6170a9650a2c8285566e525e6b63c0865a8eb23c63a4736da93c96f4b934c336",
+      "botModels.bulk.backupTitle": "6170a9650a2c8285566e525e6b63c0865a8eb23c63a4736da93c96f4b934c336",
+      "botModels.bulk.backupHelp": "9ddacd60023842d491f1ce91ec24a672666de8c94a4daa505ab41339f27f26cb",
+      "botModels.bulk.clearBackup": "1d40c124805191308eea0e3c19aaaba9dc6d912951cb0cff43d99f4fec971bbe"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

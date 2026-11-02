@@ -409,6 +409,8 @@ const __BASE_VERSION__: string;
        * the channel, and the bridge is absent in the browser. "cloud" is the
        * sagax://cloud link (Settings → OMB Cloud, opened by the link). */
       onOpenAppSettings?(cb: (section?: "organization" | "cloud" | "cloud-settings") => void): () => void;
+      /** Sagax → About / Help → About: the in-app About modal. Absent in the browser. */
+      onOpenAbout?(cb: () => void): () => void;
       /** Help → Release notes. Absent in the browser and on a remote page. */
       /** Updates the native Dock/taskbar unread indicator. */
       setUnreadCount?(count: number): void;

@@ -4,7 +4,7 @@
 // machine your bots can borrow.
 import { useRetroSkin } from "./RetroChromeHost";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Archive, AudioLines, Bell, Coins, Download, FileText, FlaskConical, Import, KeyRound, Monitor, Palette, Plug, Search, ShieldCheck, Terminal, User, X, Building2 } from "lucide-react";
+import { Archive, AudioLines, Bell, Coins, Download, FileText, FlaskConical, Import, Info, KeyRound, Monitor, Palette, Plug, Search, ShieldCheck, Terminal, User, X, Building2 } from "lucide-react";
 import { api, useStore, type AppSettingsSection } from "@/state/store";
 import { decisionModelEnabled } from "@/lib/feature-flags";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -45,7 +45,7 @@ import { workspacesAvailable } from "./WorkspacesSection";
 import { AboutMeEditor, aboutMeFirstLine } from "./AboutMeSettings";
 import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
 import { AccountCard } from "./settings/AccountCard";
-import { AboutCard } from "./AboutDialog";
+import { requestAbout } from "@/lib/about-ui";
 import { AvatarCropPage } from "./settings/OwnAvatarField";
 import { OpenAtLoginRow } from "./OpenAtLoginOffer";
 import { WorkspaceBackupSettings } from "./WorkspaceBackupSettings";
@@ -101,7 +101,7 @@ export const SECTIONS: Array<{
   // 2026-10-26: Account comes first. 2026-10-28: Account keeps the account
   // (who is signed in, name, avatar, About me, language and time zone) and
   // what General held; Security and Vault are pages of their own again.
-  { id: "account", group: "you", labelKey: "settings.section.account", icon: User, keywords: ["account", "compte", "profile", "profil", "name", "nom", "email", "courriel", "copy email", "sign out", "se déconnecter", "déconnexion", "label", "avatar", "photo", "about me", "about", "à propos de moi", "open at login", "ouvrir à la connexion", "suggestions", "suggested", "memory", "effort", "new bots", "reasoning", "threads", "parallel", "concurrency", "cleanup", "retention", "event log", "event-log", "log size", "automatic recovery", "backup model", "fallback", "advanced", "avancé", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "nettoyage", "people's tool access", "language", "langue", "time zone", "timezone", "fuseau horaire", "fuseau", "tour", "tours", "visite", "welcome", "bienvenue", "system", "système", "server", "serveur"] },
+  { id: "account", group: "you", labelKey: "settings.section.account", icon: User, keywords: ["account", "compte", "profile", "profil", "name", "nom", "email", "courriel", "copy email", "sign out", "se déconnecter", "déconnexion", "label", "avatar", "photo", "about me", "à propos de moi", "open at login", "ouvrir à la connexion", "suggestions", "suggested", "memory", "effort", "new bots", "reasoning", "threads", "parallel", "concurrency", "cleanup", "retention", "event log", "event-log", "log size", "automatic recovery", "backup model", "fallback", "advanced", "avancé", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "nettoyage", "people's tool access", "language", "langue", "time zone", "timezone", "fuseau horaire", "fuseau", "tour", "tours", "visite", "welcome", "bienvenue", "system", "système", "server", "serveur"] },
   // 2026-10-28: Security, the person's own: security keys and passkeys, the
   // approval rules they saved (Always allow, Always deny, Ask first, paged)
   // and their tool access. Vault: the credential vault and the one-time card.
@@ -130,6 +130,8 @@ export const SECTIONS: Array<{
   // and General > Advanced). Shown where the desktop app answers.
   { id: "updates", group: "app", labelKey: "settings.updates.title", icon: Download, keywords: ["updates", "update", "version", "mise à jour", "mises à jour", "prerelease", "pre-release", "beta", "bêta", "restart"] },
   { id: "experimental", group: "app", labelKey: "settings.section.experimental", icon: FlaskConical, keywords: ["early", "preview", "learn", "skill", "authoring", "browser", "profiles", "experimental", "expérimental", "data window", "fenêtre data", "decision model", "modèle de décision", "compétences", "navigateur", "unavailable", "indisponible", "phone calls", "appels téléphoniques", "callback number", "numéro de rappel", "do not call", "ne pas appeler"] },
+  // About: last under App (like Grok Bot). Opens the centred About modal.
+  { id: "about", group: "app", labelKey: "sidebar.menu.about", icon: Info, keywords: ["about", "à propos", "version", "license", "licence", "github", "documentation", "docs", "release notes", "notes de version", "sagax", "openmausbot"] },
 ];
 
 /** Former sections that are a card of another page now (2026-10-14), by the
@@ -442,6 +444,10 @@ export function SettingsModal() {
   const [searchLabels, setSearchLabels] = useState<string[]>([]);
   // Closing goes back out of Settings with a quick page cross-fade.
   const closeSettings = () => navigate(() => dispatch({ type: "toggleAppSettings", open: false }), "back", "page");
+  const openAbout = useCallback(() => {
+    dispatch({ type: "toggleAppSettings", open: false });
+    requestAbout();
+  }, [dispatch]);
   const [query, setQuery] = useState("");
   useEffect(() => window.ogb?.environments?.onOpenSettings?.(() => setQuery("")), []);
   useEffect(() => window.ogb?.onOpenAppSettings?.(() => setQuery("")), []);
@@ -463,7 +469,7 @@ export function SettingsModal() {
   // show for this viewer. A card keeps the rules its section had.
   const allowed = (id: AppSettingsSection): boolean => {
     // a remote client shows the pages that are about this desktop
-    if (remoteActive && !["appearance", "organization", "privacy", "notifications", "memory", "updates"].includes(id)) return false;
+    if (remoteActive && !["appearance", "organization", "privacy", "notifications", "memory", "updates", "about"].includes(id)) return false;
     // this app's own updates: where the desktop app answers
     if (id === "updates" && !window.ogb?.updater) return false;
     // the organization memory's local cache is the desktop app's (main
@@ -549,6 +555,12 @@ export function SettingsModal() {
     // rendered results instead of a second filter with stale effect inputs.
     if (nextVisibleSection) dispatch({ type: "toggleAppSettings", open: true, section: nextVisibleSection });
   }, [dispatch, nextVisibleSection]);
+
+  // About is a Settings rail entry that opens the centred modal (not a pane).
+  useEffect(() => {
+    if (!state.appSettingsOpen || section !== "about") return;
+    openAbout();
+  }, [state.appSettingsOpen, section, openAbout]);
 
   // The open page hides the rows that do not match and scrolls to the first
   // one. A disclosure that opens later is filtered again, without jumping.
@@ -682,7 +694,7 @@ export function SettingsModal() {
                 {entries.map(({ id, labelKey, icon: Icon }) => (
                   <div key={id} className="flex min-w-0 flex-col">
                     <button
-                      onClick={() => dispatch({ type: "toggleAppSettings", open: true, section: id })}
+                      onClick={() => (id === "about" ? openAbout() : dispatch({ type: "toggleAppSettings", open: true, section: id }))}
                       aria-current={section === id ? "page" : undefined}
                       className={cn(
                         "flex items-center gap-[9px] rounded-lg px-[9px] py-[7px] text-left text-[13px] leading-[18px] text-ink transition-colors motion-reduce:transition-none",
@@ -745,7 +757,9 @@ export function SettingsModal() {
               value={section}
               onChange={(event) => {
                 setQuery("");
-                dispatch({ type: "toggleAppSettings", open: true, section: event.target.value as AppSettingsSection });
+                const next = event.target.value as AppSettingsSection;
+                if (next === "about") openAbout();
+                else dispatch({ type: "toggleAppSettings", open: true, section: next });
               }}
               className="w-full min-w-0 rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink focus:border-border-strong focus:outline-none sm:hidden"
             >
@@ -867,17 +881,14 @@ export function SettingsModal() {
             )}
 
             {section === "updates" && (
-              <>
-                <div data-settings-card="updates">
-                  {/* 2026-10-16: a titled card, as every other page's */}
-                  <SettingsGroup title={t("settings.updates.group")} groupId="updates">
-                    <UpdatesRow />
-                    <PrereleaseRow />
-                    <AutoInstallAwayRow />
-                  </SettingsGroup>
-                </div>
-                <AboutCard onOpenReleaseNotes={() => dispatch({ type: "toggleAppSettings", open: false })} />
-              </>
+              <div data-settings-card="updates">
+                {/* 2026-10-16: a titled card, as every other page's */}
+                <SettingsGroup title={t("settings.updates.group")} groupId="updates">
+                  <UpdatesRow />
+                  <PrereleaseRow />
+                  <AutoInstallAwayRow />
+                </SettingsGroup>
+              </div>
             )}
 
             {section === "appearance" && <AppearanceSettings />}

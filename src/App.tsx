@@ -28,6 +28,7 @@ import {
 } from "@/components/lazy-screens";
 import { ArchivedBotsPage } from "@/components/ArchivedBotsPage";
 import { WorkspaceBackupRecovery } from "@/components/WorkspaceBackupSettings";
+import { AboutPrompt } from "@/components/AboutDialog";
 import { ReleaseNotesPrompt } from "@/components/ReleaseNotesPrompt";
 import { TermsGate } from "@/components/TermsGate";
 import { UpdateBanner } from "@/components/UpdateBanner";
@@ -56,6 +57,7 @@ import { effectiveLanguage, useLanguageChoice } from "@/lib/language-preference"
 import { normalizeInboxDeepLink } from "@/lib/inbox-deep-link";
 import { openThreadVisible, pageOpenThreadTarget, type OpenThreadTarget } from "@/lib/open-thread-hash";
 import { clearLeftViewHash, watchViewHash } from "@/lib/view-hash";
+import { requestAbout } from "@/lib/about-ui";
 import { takeSettingsReturn } from "@/lib/settings-return";
 import { saveSidebarAttentionPinned, toggleSidebarCollapsed } from "@/lib/sidebar-preferences";
 import { botShowsUnread } from "@/lib/bot-unread";
@@ -138,7 +140,12 @@ function Shell() {
   // first key needs a fresh one): that page opens again.
   useEffect(() => {
     const section = takeSettingsReturn();
-    if (section) dispatch({ type: "toggleAppSettings", open: true, section: section as AppSettingsSection });
+    if (!section) return;
+    if (section === "about") {
+      requestAbout();
+      return;
+    }
+    dispatch({ type: "toggleAppSettings", open: true, section: section as AppSettingsSection });
   }, [dispatch]);
   // "Use your Cloud on your phone" opens the Cloud in this window at
   // /?desktop-settings=phone: its own phone pairing, in any window, on any
@@ -470,6 +477,8 @@ function Shell() {
     <div className="flex h-full flex-col" data-app-shell="">
       {/* What's new sits above the update dialog. Both are outside the layout flow. */}
       <ReleaseNotesPrompt />
+      {/* About: centred modal from Settings > About, the profile menu, the app menu. */}
+      <AboutPrompt />
       {/* The terms of use, once per account (App Store 1.2). */}
       <TermsGate />
       <UpdateBanner />

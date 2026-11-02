@@ -44,6 +44,8 @@ function world(options: {
   own?: ModelSelection; fast?: ModelSelection; allowed?: string[]; language?: string; plans?: Record<string, number>; chat?: boolean;
   /** Every run joins the person's conversation "chat" (a wait's follow-up does, wait-host.ts) instead of a hidden task. */
   joinChat?: boolean;
+  /** false: SAGAX_LIMIT_FAILOVER=0, automatic switching off on this server. */
+  failover?: boolean;
 } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "sagax-limit-runs-"));
   dirs.push(dir);
@@ -56,6 +58,10 @@ function world(options: {
   const busyThreads = new Set<string>();
   const lines: Array<{ threadId: string; line: LimitFailoverLine }> = [];
   const refusedModels: Array<{ payer: string; selection: ModelSelection; until: number }> = [];
+  /** Auto's refusal memory (server/index.ts rememberAutoRefusal): the model a thread's Auto turn ran on, until its reset. */
+  const autoRefused: Array<{ payer: string; selection: ModelSelection; until: number }> = [];
+  /** The model each thread's last turn ran on (server/index.ts autoTurnsByThread). */
+  const lastRan = new Map<string, ModelSelection>();
   const started: Array<{ runId: string; threadId: string; selection: ModelSelection; prompt: string }> = [];
   const failed: Array<{ run: RoutineRun; alert: RoutineAlert | null | undefined }> = [];
   const deferred: Array<{ run: RoutineRun; alert?: RoutineAlert }> = [];
@@ -67,7 +73,7 @@ function world(options: {
   const host = createLimitFailoverHost({
     store,
     now: () => clock.now,
-    enabled: () => true,
+    enabled: () => options.failover !== false,
     engineName: (id) => NAMES[id] ?? id,
     engine: (id) => DRIVERS[id] ? { instanceId: id, driverKind: DRIVERS[id]! } : undefined,
     candidates: async () => candidatesNow(),
@@ -84,7 +90,10 @@ function world(options: {
     replaceFailure: (threadId, _turnId, line) => { lines.push({ threadId, line }); },
     request: (threadId) => options.chat && threadId === "chat" ? { messageId: "msg-1", turnId: "turn-1", origin: { kind: "user" } } : undefined,
     resend: async (_bot, threadId, messageId) => { resent.push({ threadId, messageId, on: { ...threads.get(threadId)! } }); return true; },
-    autoRefuse: () => {},
+    autoRefuse: (threadId, payer, until) => {
+      const ran = lastRan.get(threadId);
+      if (ran) autoRefused.push({ payer, selection: { ...ran }, until });
+    },
     rerunRoutine: () => false,
     after: () => ({ cancel: () => {} }),
   });
@@ -106,10 +115,22 @@ function world(options: {
       if (run?.limitTakeover) host.takeOver(botId, threadId, run.limitTakeover, undefined, run.limitTakeoverUntil);
       await host.beforeTurn(botId, threadId, undefined);
       const thread = threads.get(threadId)!;
-      // voicePickForTurn: the fast pick skips an engine the payer is known to be out of.
-      const fastOut = options.fast ? host.autoExcluded("person", [{ instanceId: options.fast.instanceId, driverKind: DRIVERS[options.fast.instanceId]! }]).has(options.fast.instanceId) : true;
+      // voicePickForTurn: the fast pick skips an engine the payer is known to be out of, a spent plan included.
+      const fastOut = options.fast ? host.autoExcluded("person", [{ instanceId: options.fast.instanceId, driverKind: DRIVERS[options.fast.instanceId]! }], "quick").has(options.fast.instanceId) : true;
       const detour = Boolean(run?.proactive && options.fast && !run.limitTakeover && !fastOut);
-      const selection = detour ? options.fast! : thread;
+      let selection: ModelSelection = detour ? options.fast! : thread;
+      if (!detour && thread.auto) {
+        // autoPickForTurn: the first model of an engine Sagax does not hold for this payer, skipping a model a limit
+        // refused (its refusal memory); with every engine held, Auto keeps its list.
+        const engines = candidatesNow();
+        const held = host.autoExcluded("person", engines);
+        const open = engines.filter((engine) => !held.has(engine.instanceId));
+        const choice = (open.length ? open : engines).flatMap((engine) => engine.models.map((model) => ({ instanceId: engine.instanceId, model })))
+          .find((candidate) => !autoRefused.some((refused) => refused.until > clock.now &&
+            refused.selection.instanceId === candidate.instanceId && refused.selection.model === candidate.model));
+        selection = choice ?? { instanceId: thread.instanceId, model: thread.model };
+      }
+      lastRan.set(threadId, { ...selection });
       host.noteDispatch(threadId, {
         botId, engine: { instanceId: selection.instanceId, driverKind: DRIVERS[selection.instanceId]! }, selection,
         payer: "person", at: clock.now, ...(detour ? { detour: true as const } : {}),
@@ -135,7 +156,7 @@ function world(options: {
     return { run, taken: false };
   };
   return {
-    clock, threads, busyThreads, lines, refusedModels, started, failed, deferred, resent, switches, store, host, manager,
+    clock, threads, busyThreads, lines, refusedModels, autoRefused, started, failed, deferred, resent, switches, store, host, manager,
     run: (id: string) => manager.listRuns().find((candidate) => candidate.id === id)!,
     tick: async () => { await manager.tick(); },
     advance: async (ms: number) => { clock.now += ms; await manager.tick(); },
@@ -231,7 +252,7 @@ describe("a proactive wake whose fast model a limit refused", () => {
     const wake = w.wake();
     await w.tick();
     w.fail(w.started[0]!.threadId, LIMIT_2H);
-    expect(w.run(wake.id).attention).toBe("Limite d'utilisation atteinte sur Codex (gpt-6.1-luna) : cette exécution continue sur Grok. Sagax évite Codex (gpt-6.1-luna) pour les tours rapides jusqu'à sa réinitialisation, vers le 2 nov., 15 h 16 (UTC).");
+    expect(w.run(wake.id).attention).toBe("Limite d'utilisation atteinte sur Codex (gpt-6.1-luna) : cette exécution continue sur Grok. Sagax évite Codex (gpt-6.1-luna) pour les tours rapides jusqu'à sa réinitialisation, vers le 2 nov. à 15 h 16 (UTC).");
   });
 });
 
@@ -284,7 +305,7 @@ describe("a webhook run or a scheduled routine its engine's limit refused", () =
     });
   });
 
-  it("goes on at most twice, then says the truth about the last engine", async () => {
+  it("goes on at most twice, then waits for the bot's own engine and names it", async () => {
     const w = world({ own: CLAUDE });
     const queued = w.manager.enqueueWebhook({
       webhookId: "hook-3", webhookName: "New email", prompt: "mail", botId: "nova", runOn: "maus", deliveryId: "delivery-3", receivedAt: NOW,
@@ -294,14 +315,127 @@ describe("a webhook run or a scheduled routine its engine's limit refused", () =
     await w.tick();
     expect(w.started[1]!.selection.instanceId).toBe("codex");
     w.fail(w.started[1]!.threadId, LIMIT_2H);
-    expect(w.run(queued.id)).toMatchObject({ status: "queued", limitTakeovers: 2, limitTakeover: { instanceId: "grok", model: "grok-4.5" } });
+    // Codex stood in for Claude: the run goes back to Claude, never to Codex, at Claude's reset.
+    expect(w.run(queued.id)).toMatchObject({
+      status: "queued", limitTakeovers: 2, limitTakeover: { instanceId: "grok", model: "grok-4.5" },
+      attention: "Usage limit reached on Codex: this run continues on Grok. Back on Claude once it resets, around Nov 2, 3:16 PM (UTC).",
+    });
+    // Its thread's notice names both engines, and the return to Claude at Claude's reset, never to Codex.
+    await w.host.idle();
+    expect(w.lines.at(-1)).toEqual({ threadId: w.started[0]!.threadId, line: { kind: "switched", from: "Codex", to: "Grok", resetsAt: NOW + 2 * HOUR, home: "Claude" } });
     await w.tick();
     expect(w.started[2]!.selection.instanceId).toBe("grok");
+    expect(w.store.failover("nova", w.started[0]!.threadId)).toMatchObject({ from: CLAUDE, to: { instanceId: "grok" }, resetsAt: NOW + 2 * HOUR });
     w.fail(w.started[2]!.threadId, "You've hit your usage limit.");
-    expect(w.run(queued.id)).toMatchObject({ status: "failed", error: "You've hit your usage limit." });
-    expect(w.failed.map(({ alert }) => alert)).toEqual([{
-      detail: "Usage limit reached on Grok and no other engine could take this run. Grok gave no reset time; runs on it work again once it resets. Or choose another engine for this bot now.",
-    }]);
+    // Two takeovers already: nothing takes it a third time. Grok named no reset; Claude's is known and near.
+    const text = "Usage limit reached on Grok, which was standing in for Claude. Sagax already moved this run twice, the most it does for one run. This run starts again on Claude at its reset, Nov 2, 3:17 PM (UTC).";
+    expect(w.run(queued.id)).toMatchObject({ status: "queued", retried: "usage_limit", retryAt: NOW + 2 * HOUR + 60_000, attention: text });
+    expect(w.failed).toEqual([]);
+    expect(w.deferred.map(({ alert }) => alert)).toEqual([{ detail: text }]);
+    await w.advance(2 * HOUR + 60_000);
+    expect(w.started[3]).toMatchObject({ runId: queued.id, threadId: w.started[0]!.threadId, selection: CLAUDE });
+    w.complete(w.started[3]!.threadId);
+    expect(w.run(queued.id).status).toBe("completed");
+  });
+});
+
+// 2026-11-02 (review): a run another engine took over, whose new engine's limit refused it too. Before, the takeover
+// had used the run's one automatic retry, so the run failed at once, naming only the last engine and telling the
+// person to change the bot's engine while the bot's own engine came back sooner.
+describe("a run a second engine's limit refused after it took the run over", () => {
+  const LIMIT_3H = "You've hit your usage limit. Try again in 3 hours.";
+  const hook = (w: ReturnType<typeof world>, id: string) => w.manager.enqueueWebhook({
+    webhookId: id, webhookName: "New email", prompt: "mail", botId: "nova", runOn: "maus", deliveryId: `delivery-${id}`, receivedAt: NOW,
+  });
+
+  it("waits for the bot's own engine when it resets first, names it, and runs there", async () => {
+    const w = world({ own: CLAUDE, allowed: ["claude", "codex"] });
+    const queued = hook(w, "chain-1");
+    await w.tick();
+    w.fail(w.started[0]!.threadId, LIMIT_2H);
+    await w.tick();
+    expect(w.started[1]!.selection.instanceId).toBe("codex");
+    w.fail(w.started[1]!.threadId, LIMIT_3H);
+    const text = "Usage limit reached on Codex, which was standing in for Claude. No other engine can take over. This run starts again on Claude at its reset, Nov 2, 3:17 PM (UTC).";
+    expect(w.run(queued.id)).toMatchObject({ status: "queued", retried: "usage_limit", retryAt: NOW + 2 * HOUR + 60_000, attention: text });
+    // Its next start goes back to Claude, never to the backup that refused.
+    expect(w.run(queued.id).limitTakeover).toBeUndefined();
+    expect(w.failed).toEqual([]);
+    expect(w.deferred.map(({ alert }) => alert)).toEqual([{ detail: text }]);
+    expect(text).not.toMatch(/choose another engine/i);
+    await w.advance(2 * HOUR + 60_000);
+    expect(w.started[2]).toMatchObject({ runId: queued.id, threadId: w.started[0]!.threadId, selection: CLAUDE });
+    expect(w.lines.at(-1)).toEqual({ threadId: w.started[0]!.threadId, line: { kind: "back", engine: "Claude" } });
+    w.complete(w.started[2]!.threadId);
+    expect(w.run(queued.id).status).toBe("completed");
+  });
+
+  it("waits for the backup instead when its reset comes first, and stays on it", async () => {
+    const w = world({ own: CLAUDE, allowed: ["claude", "codex"] });
+    const queued = hook(w, "chain-2");
+    await w.tick();
+    w.fail(w.started[0]!.threadId, LIMIT_3H);
+    await w.tick();
+    w.fail(w.started[1]!.threadId, LIMIT_2H);
+    expect(w.run(queued.id)).toMatchObject({
+      status: "queued", retryAt: NOW + 2 * HOUR + 60_000, limitTakeover: { instanceId: "codex", model: "gpt-6.1-sol" },
+      attention: "Usage limit reached on Codex, which was standing in for Claude. No other engine can take over. This run starts again on Codex at its reset, Nov 2, 3:17 PM (UTC).",
+    });
+    await w.advance(2 * HOUR + 60_000);
+    expect(w.started[2]).toMatchObject({ runId: queued.id, selection: { instanceId: "codex", model: "gpt-6.1-sol" } });
+  });
+
+  it("goes back to the bot's own engine at once when its limit reset meanwhile", async () => {
+    const w = world({ own: CLAUDE, allowed: ["claude", "codex"] });
+    const queued = hook(w, "chain-3");
+    await w.tick();
+    w.fail(w.started[0]!.threadId, LIMIT_2H);
+    await w.tick();
+    // The run works on Codex past Claude's reset, then Codex refuses.
+    w.clock.now = NOW + 2 * HOUR + 2 * 60_000;
+    w.fail(w.started[1]!.threadId, LIMIT_3H);
+    expect(w.run(queued.id)).toMatchObject({
+      status: "queued", limitTakeovers: 2, limitTakeover: CLAUDE,
+      attention: "Usage limit reached on Codex: this run goes back to Claude, whose limit has reset.",
+    });
+    await w.host.idle();
+    expect(w.lines.at(-1)).toEqual({ threadId: w.started[0]!.threadId, line: { kind: "back", engine: "Claude", refused: "Codex" } });
+    await w.tick();
+    expect(w.started[2]).toMatchObject({ runId: queued.id, threadId: w.started[0]!.threadId, selection: CLAUDE });
+    // Its conversation is back on its own model: no takeover is left to undo.
+    expect(w.store.failover("nova", w.started[0]!.threadId)).toBeUndefined();
+    expect(w.threads.get(w.started[0]!.threadId)).toEqual(CLAUDE);
+  });
+
+  it("fails a weekly limit with the bot's own engine and its real reset, never advice to change the engine", async () => {
+    const w = world({ own: CLAUDE, allowed: ["claude", "codex"] });
+    const queued = hook(w, "chain-4");
+    await w.tick();
+    w.fail(w.started[0]!.threadId, "You've hit your usage limit.", { limitResetsAt: NOW + 3 * 24 * HOUR });
+    await w.tick();
+    w.fail(w.started[1]!.threadId, "You've hit your usage limit.", { limitResetsAt: NOW + 4 * 24 * HOUR });
+    const text = "Usage limit reached on Codex, which was standing in for Claude. No other engine can take over. Claude resets around Nov 5, 1:16 PM (UTC); runs on it work again then.";
+    // The run's own error says so too: its list row and any tool reading runs never get the raw engine words.
+    expect(w.run(queued.id)).toMatchObject({ status: "failed", error: text });
+    expect(w.failed.map(({ alert }) => alert)).toEqual([{ detail: text }]);
+  });
+
+  it("keeps the run's one retry for a stall on the engine that took it over", async () => {
+    const w = world({ own: CLAUDE });
+    const queued = hook(w, "chain-5");
+    await w.tick();
+    w.fail(w.started[0]!.threadId, LIMIT_2H);
+    await w.tick();
+    expect(w.started[1]!.selection.instanceId).toBe("codex");
+    w.fail(w.started[1]!.threadId, "The engine stopped responding.", { stalled: true });
+    expect(w.run(queued.id)).toMatchObject({ status: "queued", retried: "stalled" });
+    expect(w.failed).toEqual([]);
+    await w.advance(20_000);
+    expect(w.started[2]).toMatchObject({ runId: queued.id, selection: { instanceId: "codex", model: "gpt-6.1-sol" } });
+    // The takeover still tells the next start why its first one stopped.
+    expect(w.started[1]!.prompt).toContain(retryNote("usage_limit"));
+    w.complete(w.started[2]!.threadId);
+    expect(w.run(queued.id).status).toBe("completed");
   });
 });
 
@@ -313,7 +447,7 @@ describe("a run no other engine can take", () => {
     });
     await w.tick();
     w.fail(w.started[0]!.threadId, LIMIT_2H);
-    const text = "Usage limit reached on Claude and no other engine can take this run: it starts again at the reset, Nov 2, 3:17 PM (UTC).";
+    const text = "Usage limit reached on Claude. No other engine can take over. This run starts again at the reset, Nov 2, 3:17 PM (UTC).";
     expect(w.run(queued.id)).toMatchObject({ status: "queued", retryAt: NOW + 2 * HOUR + 60_000, attention: text });
     expect(w.deferred.map(({ alert }) => alert)).toEqual([{ detail: text }]);
     expect(w.failed).toEqual([]);
@@ -327,9 +461,26 @@ describe("a run no other engine can take", () => {
     w.fail(w.started[0]!.threadId, "You've hit your usage limit. Upgrade to Pro or try again at 2026-11-05T13:16:00Z.", { limitResetsAt: NOW + 3 * 24 * HOUR });
     expect(w.run(wake.id).status).toBe("failed");
     const detail = w.failed[0]!.alert!.detail;
-    expect(detail).toBe("Usage limit reached on Codex (gpt-6.1-luna) and no other engine could take this run. Sagax skips Codex (gpt-6.1-luna) for quick turns until it resets, around Nov 5, 1:16 PM (UTC).");
+    expect(detail).toBe("Usage limit reached on Codex (gpt-6.1-luna). No other engine can take over. Sagax skips Codex (gpt-6.1-luna) for quick turns until it resets, around Nov 5, 1:16 PM (UTC).");
+    expect(w.run(wake.id).error).toBe(detail);
     // That quick model is not the bot's engine: no advice to change the bot's engine.
     expect(detail).not.toMatch(/this bot's engine|stays down|choose another engine/i);
+  });
+
+  // 2026-11-02 (review): before, an out-of-credit quick model read "The Codex (gpt-6.1-luna) account is out of credit...
+  // or choose another engine for this bot", and the run's error kept the engine's raw words.
+  it("words a quick model out of credit as Sagax's pick, in the alert and in the run's own error", async () => {
+    const w = world({ own: GROK, fast: CODEX_FAST, allowed: ["codex"] });
+    const wake = w.wake();
+    await w.tick();
+    w.fail(w.started[0]!.threadId, "Payment required: insufficient credits on this account.");
+    const text = "Codex (gpt-6.1-luna), a quick model Sagax picked for this run, is out of credit: Sagax skips it for quick turns until around Nov 2, 2:16 PM (UTC). No other engine can take over.";
+    expect(w.run(wake.id)).toMatchObject({ status: "failed", error: text });
+    expect(w.failed.map(({ alert }) => alert)).toEqual([{ detail: text }]);
+    expect(text).not.toMatch(/this bot|choose another engine/i);
+    // Only that engine is held for its payer; the bot's own engine is not.
+    expect(w.store.blockedUntil("person", "codex")).toBe(NOW + HOUR);
+    expect(w.store.blockedUntil("person", "grok")).toBeNull();
   });
 });
 
@@ -436,7 +587,86 @@ describe("a limit Sagax already knew of from the person's plan usage (J4)", () =
     expect(w.run(run.id).status).toBe("failed");
     expect(w.store.holdOf("person", "claude")).toEqual({ until: weekly, estimated: false });
     expect(w.failed.map(({ alert }) => alert)).toEqual([{
-      detail: "Usage limit reached on Claude and no other engine could take this run. Claude resets around Nov 5, 1:16 PM (UTC); runs on it work again then. Or choose another engine for this bot now.",
+      detail: "Usage limit reached on Claude. No other engine can take over. Claude resets around Nov 5, 1:16 PM (UTC); runs on it work again then.",
     }]);
+  });
+
+  // 2026-11-02 (review): a window at 100 % is not a spent plan while extra usage is left, and what the report said is
+  // only a hint for Sagax's quick picks: a backup is picked from the refusals Sagax saw, never from a usage report.
+  it("still moves a person's message to an engine whose plan the report read as spent", async () => {
+    const w = world({ own: { instanceId: "codex", model: "gpt-6.1-sol" }, chat: true, allowed: ["claude", "codex"], plans: { claude: NOW + 3 * 24 * HOUR } });
+    w.threads.set("chat", { instanceId: "codex", model: "gpt-6.1-sol" });
+    w.host.noteDispatch("chat", { botId: "nova", engine: { instanceId: "codex", driverKind: "codex" }, selection: { instanceId: "codex", model: "gpt-6.1-sol" }, payer: "person", at: NOW });
+    expect(w.host.turnFailed({ threadId: "chat", turnId: "turn-1", cause: LIMIT_2H })).toBe(true);
+    await w.host.idle();
+    expect(w.resent).toEqual([{ threadId: "chat", messageId: "msg-1", on: CLAUDE }]);
+    expect(w.lines).toEqual([{ threadId: "chat", line: { kind: "switched", from: "Codex", to: "Claude", resetsAt: NOW + 2 * HOUR } }]);
+  });
+
+  it("still hands a refused run to an engine whose plan the report read as spent", async () => {
+    const w = world({ own: CLAUDE, allowed: ["claude", "codex"], plans: { codex: NOW + 3 * 24 * HOUR } });
+    const queued = w.manager.enqueueWebhook({
+      webhookId: "hook-plan", webhookName: "New email", prompt: "mail", botId: "nova", runOn: "maus", deliveryId: "delivery-plan", receivedAt: NOW,
+    });
+    await w.tick();
+    w.fail(w.started[0]!.threadId, LIMIT_2H);
+    expect(w.run(queued.id)).toMatchObject({ status: "queued", limitTakeover: { instanceId: "codex", model: "gpt-6.1-sol" } });
+    expect(w.failed).toEqual([]);
+  });
+});
+
+// 2026-11-02 (review): the takeover paths the first pass left without a behaviour test.
+describe("a run on Auto, or with automatic switching off", () => {
+  const AUTO: ModelSelection = { instanceId: "claude", model: "claude-sonnet-5", auto: true };
+
+  it("lets Auto pick again on its next start, skipping the model a limit refused", async () => {
+    const w = world({ own: AUTO });
+    const routine = w.manager.create({ name: "Inbox sweep", prompt: "Sweep the inbox", botId: "nova", schedule: { type: "daily", time: "09:00", weekdays: [1, 2, 3, 4, 5] } });
+    const run = w.manager.runNow(routine.id)!;
+    await w.tick();
+    expect(w.started[0]!.selection).toEqual(CLAUDE);
+    w.fail(w.started[0]!.threadId, LIMIT_2H);
+    expect(w.failed).toEqual([]);
+    expect(w.run(run.id)).toMatchObject({
+      status: "queued", limitTakeovers: 1,
+      attention: "Usage limit reached on Claude: Auto continues it on another model. Back on Claude once it resets, around Nov 2, 3:16 PM (UTC).",
+    });
+    // Auto picks again: no model is forced on the next start.
+    expect(w.run(run.id).limitTakeover).toBeUndefined();
+    expect(w.autoRefused).toEqual([{ payer: "person", selection: CLAUDE, until: NOW + 2 * HOUR }]);
+    await w.host.idle();
+    expect(w.lines).toEqual([{ threadId: w.started[0]!.threadId, line: { kind: "switched", from: "Claude", to: "Auto", resetsAt: NOW + 2 * HOUR } }]);
+    await w.tick();
+    expect(w.started[1]).toMatchObject({ runId: run.id, selection: { instanceId: "codex", model: "gpt-6.1-sol" } });
+    // The conversation stays on Auto: nothing to undo after the reset.
+    expect(w.threads.get(w.started[0]!.threadId)).toEqual(AUTO);
+    w.complete(w.started[1]!.threadId);
+    expect(w.run(run.id).status).toBe("completed");
+  });
+
+  it("takes nothing over with switching off, and says so with the real reset", async () => {
+    const w = world({ own: CLAUDE, failover: false });
+    const queued = w.manager.enqueueWebhook({
+      webhookId: "hook-off", webhookName: "New email", prompt: "mail", botId: "nova", runOn: "maus", deliveryId: "delivery-off", receivedAt: NOW,
+    });
+    await w.tick();
+    w.fail(w.started[0]!.threadId, LIMIT_2H);
+    const text = "Usage limit reached on Claude. Automatic switching to another engine is off on this server. This run starts again at the reset, Nov 2, 3:17 PM (UTC).";
+    expect(w.run(queued.id)).toMatchObject({ status: "queued", retryAt: NOW + 2 * HOUR + 60_000, attention: text });
+    expect(w.run(queued.id).limitTakeovers).toBeUndefined();
+    expect(w.store.failover("nova", w.started[0]!.threadId)).toBeUndefined();
+    // The limit is still held for the payer: Sagax's own picks skip it.
+    expect(w.store.blockedUntil("person", "claude")).toBe(NOW + 2 * HOUR);
+
+    const weekly = w.manager.enqueueWebhook({
+      webhookId: "hook-off-2", webhookName: "New email", prompt: "mail", botId: "nova", runOn: "maus", deliveryId: "delivery-off-2", receivedAt: NOW,
+    });
+    await w.tick();
+    const started = w.started.find((start) => start.runId === weekly.id)!;
+    w.fail(started.threadId, "You've hit your usage limit.", { limitResetsAt: NOW + 3 * 24 * HOUR });
+    expect(w.run(weekly.id)).toMatchObject({
+      status: "failed",
+      error: "Usage limit reached on Claude. Automatic switching to another engine is off on this server. Claude resets around Nov 5, 1:16 PM (UTC); runs on it work again then. Or choose another engine for this bot now.",
+    });
   });
 });

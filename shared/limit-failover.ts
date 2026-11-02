@@ -16,10 +16,15 @@ export type LimitFailoverLine =
    * picked for this turn (a call's, a proactive wake's, #1694), not the
    * conversation's own: the turn continues on another model, the
    * conversation never goes back to `from`, and Sagax skips it for quick
-   * turns until it resets (2026-11-02). */
-  | { kind: "switched"; from: string; to: string; resetsAt: number; owner?: true; reason?: "model"; estimated?: true; detour?: true }
-  /** `engine`'s limit has reset: the conversation is back on it. */
-  | { kind: "back"; engine: string }
+   * turns until it resets (2026-11-02). `home`: `from` was a backup standing
+   * in for `home`, the conversation's own engine (an earlier takeover): the
+   * conversation goes back to `home` at `resetsAt`, `home`'s own reset,
+   * never to `from` (2026-11-02). */
+  | { kind: "switched"; from: string; to: string; resetsAt: number; owner?: true; reason?: "model"; estimated?: true; detour?: true; home?: string }
+  /** `engine`'s limit has reset: the conversation is back on it. `refused`:
+   * a limit refused the backup that stood in for `engine`, so the
+   * conversation went back to `engine` at once (2026-11-02). */
+  | { kind: "back"; engine: string; refused?: string }
   /** No other engine this turn may use: the message is sent again on `from`
    * once it resets. */
   | { kind: "waiting"; from: string; resetsAt: number; owner?: true; estimated?: true }
@@ -57,6 +62,10 @@ export function limitFailoverText(line: LimitFailoverLine, clock: (at: number) =
         if (line.estimated) return `Limit reached on ${line.from}, a quick model Sagax picked for this turn: continuing on another model. ${line.from} gave no reset time: Sagax skips it for quick turns until around ${clock(line.resetsAt)}.`;
         return `Limit reached on ${line.from}, a quick model Sagax picked for this turn: continuing on another model. Sagax skips ${line.from} for quick turns until it resets (around ${clock(line.resetsAt)}).`;
       }
+      if (line.home) {
+        if (line.estimated) return `Limit reached on ${line.from}, which was standing in for ${line.home}: continuing on ${line.to}. ${line.home} gave no reset time: it is tried again around ${clock(line.resetsAt)}.`;
+        return `Limit reached on ${line.from}, which was standing in for ${line.home}: continuing on ${line.to}, back on ${line.home} when it resets (around ${clock(line.resetsAt)}).`;
+      }
       if (line.estimated) {
         if (line.owner) return `This bot's owner has reached their usage limit on ${line.from}, which gave no reset time: continuing on ${line.to}; ${line.from} is tried again around ${clock(line.resetsAt)}.`;
         return `Limit reached on ${line.from}, which gave no reset time: continuing on ${line.to}; ${line.from} is tried again around ${clock(line.resetsAt)}.`;
@@ -64,6 +73,7 @@ export function limitFailoverText(line: LimitFailoverLine, clock: (at: number) =
       if (line.owner) return `This bot's owner has reached their usage limit on ${line.from}: continuing on ${line.to} until it resets (around ${clock(line.resetsAt)}).`;
       return `Limit reached on ${line.from}: continuing on ${line.to} until it resets (around ${clock(line.resetsAt)}).`;
     case "back":
+      if (line.refused) return `Limit reached on ${line.refused}, which was standing in for ${line.engine}: back on ${line.engine}, whose limit has reset.`;
       return `${line.engine}'s limit has reset: back on ${line.engine}.`;
     case "waiting":
       if (line.estimated) {

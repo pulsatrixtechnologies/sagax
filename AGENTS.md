@@ -974,32 +974,68 @@ limit refuses it (`turnFailed`, `detourFailed`), its conversation
 untouched and no incident filed. A fast model Sagax picked on the
 conversation's own engine (`LimitDispatch.detour`) holds only that model for
 the payer (`refuseModel`, Auto's refusal memory), never the whole engine,
-unless that engine's plan is spent. With no taker, a reset under 12 h is
-waited out, else the run fails. Every line names the engine (its model on a
-detour) and gives the real reset or says the engine gave none, in English
-or Quebec French by the person's language and zone
-(`server/routines/routine-limit-words.ts`); a rate limit is called one. Incidents
+unless that engine's plan is spent. A takeover is not the run's one
+automatic retry: its start carries the limit's note (`retried`) with
+`takeoverRetried`, so a stall or an empty response on the engine that took
+the run over, or a wait for a reset after it, still gets that retry
+(`usedRetry`, `server/routines/routine-recovery.ts`); a restart's resume uses it.
+When the engine that refused was itself standing in for the run's
+conversation's own model (an earlier takeover, `homeOf`), the verdict names
+that model's engine and its own reset (`RoutineUsageLimit.home`): the run
+goes on elsewhere and back there at that reset, never to the backup that
+refused; it goes back at once when that limit is over (`backHome`, even past
+the two takeovers: it is no other engine; `takeOver` then ends the takeover
+with no second line); with no taker it waits for the earlier real reset
+under 12 h of the two (the bot's own engine on a tie, its next start naming
+no takeover model, so `beforeTurn` brings the conversation back), else
+fails with the bot's own engine and its reset. A backup never is another
+sign-in to a subscription engine this payer is held on, whatever engine
+refused (`outOf`, as `autoExcluded`): a chat backup, `beforeTurn` and a run's
+takeover agree, and the conversation's own engine is never a backup for its
+own refused model. With no taker the words say why (`noTaker`: no other
+engine this person may use, the two moves already made, or switching off
+with `SAGAX_LIMIT_FAILOVER=0`); they advise choosing another engine for the
+bot only when switching is off. A failed run's own error is those words
+(its row, any tool reading runs); the engine's raw words stay in its
+thread. Every line names the engine (its model on a detour) and gives the
+real reset or says the engine gave none, in English or Quebec French ("2 nov.
+à 15 h 16") by the person's language and zone
+(`server/routines/routine-limit-words.ts`); a rate limit is called one. The
+thread's notice names a backup standing in (`LimitFailoverLine.home`,
+`limitFailover.switchedStandIn`) and a return after its refusal
+(`back` with `refused`, `limitFailover.backAfterLimit`). Incidents
 and notification titles say "proactive wake" or "webhook run", failed or
 waiting (`routineRunTitle`, `server/notify.ts`), never "scheduled routine".
 
-What Sagax holds is per payer and per engine, and as accurate as it knows:
-a plan window the person's own usage report showed spent (J4,
-`GET /api/plan-usage` through `announcePlanThresholds`, `spentPlanUntil`,
-read as `planLimitUntil`) keeps Sagax's own picks (Auto, a wake's or a
-call's fast model, a backup) off that engine until a turn on it works again
-(`planWorked`, from `turnSucceeded`), and a refusal there that names
+What Sagax holds is per payer and per engine, and as accurate as it knows.
+Only a refusal Sagax saw holds an engine for Auto, its panel, a backup
+(chat, `beforeTurn`) and a run's takeover. A plan window the person's own
+usage report showed spent (J4, `GET /api/plan-usage` through
+`announcePlanThresholds`, `spentPlanUntil`, read as `planLimitUntil`) is a
+hint, since a report can be wrong: it never reads as spent while the row
+shows extra usage or credit left (Claude's "Extra Usage", a "Credits"
+line), it keeps only Sagax's quick pick (a wake's or a call's fast model,
+`autoExcluded(..., "quick")`) off that engine until a turn on it works again
+(`planWorked`, from `turnSucceeded`), and a real refusal there that names
 no reset is held until that window's reset instead of the one-hour estimate.
-A person's chosen engine is still moved only after a real refusal. A
-refusal that binds one model (its extra-usage credits, its own weekly
-window) no longer marks its whole engine blocked in `/api/limit-resets`. A hold
-remembers when its time is only Sagax's estimate (`LimitFailoverStore.block`
-with `estimated`, `holdOf`), and every switch or wait line then says the
-engine gave no reset time instead of passing the estimate off as one
-(`LimitFailoverLine.estimated`, `limitFailover.*NoReset`). Tests:
+A person's chosen engine is still moved only after a real refusal. The
+engines' report (`/api/limit-resets`) notes a refusal only when it holds the
+whole engine (`refusalHoldsEngine`): never one bound to one model (its
+extra-usage credits, its own weekly window), nor a fast model Sagax picked
+on the conversation's own engine. A hold, and a takeover's return
+(`LimitFailover.estimated`, `RoutineRun.limitTakeoverEstimated`), remember
+when their time is only Sagax's estimate (`LimitFailoverStore.block` with
+`estimated`, `holdOf`), and every switch or wait line then says the engine
+gave no reset time instead of passing the estimate off as one
+(`LimitFailoverLine.estimated`, `limitFailover.*NoReset`). A conversation a
+backup standing in for its engine moved on goes back at its own engine's
+reset, never at the later reset of that backup. Tests:
 `server/limit-failover-runs.test.ts`, `server/limit-failover-runs.e2e.test.ts`
-(a wake on another engine's fast model, end to end),
+(a wake on another engine's fast model, and a wake nothing could take with
+its notification and incident, end to end),
 `server/routines/routine-limit-words.test.ts`, `server/limit-failover-host.test.ts`,
-`server/notify.test.ts`, `server/incidents.test.ts`, `server/plan-usage.test.ts`,
+`server/routines/routine-recovery.test.ts`, `server/notify.test.ts`,
+`server/incidents.test.ts`, `server/plan-usage.test.ts`,
 `src/lib/limit-failover.test.ts`, `src/lib/routine-display.test.ts`.
 
 ## A reply is never an error (2026-10-29)

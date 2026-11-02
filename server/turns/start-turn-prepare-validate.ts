@@ -127,7 +127,9 @@ export function createPrepareValidateStartTurn(host: StartTurnHost) {
     });
     // Back on the conversation's own model after that limit's reset
     // (limitTakeoverUntil), even when the refusal held only one model.
-    if (state.limitTakeover) limitFailover.takeOver(state.botId, state.threadId, state.limitTakeover, limitSpeaker, takenOverRun?.limitTakeoverUntil);
+    if (state.limitTakeover) {
+      limitFailover.takeOver(state.botId, state.threadId, state.limitTakeover, limitSpeaker, takenOverRun?.limitTakeoverUntil, takenOverRun?.limitTakeoverEstimated === true);
+    }
     const switching = limitFailover.beforeTurn(state.botId, state.threadId, limitSpeaker);
     if (switching) await switching;
   }

@@ -23,6 +23,7 @@ import { expect, it } from "vitest";
 
 import { launchVerificationServer, runControlOmb, verificationServerEnvironment } from "../scripts/control-omb.ts";
 import { waitForExit } from "./testing/cleanup.ts";
+import { openSse } from "./testing/sse.ts";
 
 const PRIMARY = { instanceId: "primary", model: "fixture/primary" };
 const CATALOG_PROBE_FOLDER = ["", "providers", "opencode", "discovery"].join(sep);
@@ -244,6 +245,89 @@ it("a proactive wake whose fast model, on another engine, a limit refused runs o
   } finally {
     writeFileSync(`${boot.logPath}.limit-fast-wake.json`, JSON.stringify(evidence, null, 2));
     console.info(JSON.stringify({ logPath: boot.logPath, evidence: `${boot.logPath}.limit-fast-wake.json` }));
+    await boot.close();
+  }
+}, 180_000);
+
+// 2026-11-02 (review): a proactive wake nothing could take over, through the real server. Its fast model's engine (the
+// Claude fixture's) and the bot's own engine (Primary) are both at a weekly limit: the wake fails, and every word about
+// it is true. The notification says a proactive wake failed (never "a routine"), the run's own error and the notice
+// name the engine that refused last and its real reset (never "this bot's engine", "stays down" or advice to change
+// the engine), and the Primary Bot's incident calls it a proactive wake.
+it("a proactive wake no engine could take fails with true words in its notification, its error and its incident", async () => {
+  const boot = await bootWith((config, dataDir) => {
+    const cli = fileURLToPath(new URL("./testing/fake-acp-cli.ts", import.meta.url));
+    config.instances = {
+      primary: {
+        driver: "opencodeGo", displayName: "Primary fixture", config: { cli },
+        environment: {
+          FAKE_ACP_MODELS: PRIMARY.model, FAKE_ACP_RPC_APPEND_FILE: join(dataDir, "primary-rpc.jsonl"),
+          FAKE_ACP_RPC_FAILURE_FILE: join(dataDir, "primary-limited.json"), FAKE_ACP_RPC_FAILURE_WHILE_FILE: "1",
+        },
+      },
+      ...config.instances,
+    };
+    config.instances.claude.environment = {
+      ...config.instances.claude.environment, FAKE_CLAUDE_PROMPTS: join(dataDir, "claude-prompts.jsonl"), FAKE_CLAUDE_TOOL_CALLS: "[]",
+      FAKE_CLAUDE_LIMITED_FILE: join(dataDir, "claude-limited.json"),
+    };
+  });
+  const { api, dataDir } = boot;
+  const evidence: unknown[] = [];
+  const stream = await openSse(`${boot.url}/api/events`, { origin: boot.url });
+  try {
+    const bots = async () => (await api("GET", "/api/bots")).bots as any[];
+    if (!(await bots()).some((candidate) => candidate.chiefOfStaff)) {
+      const { bot: chief } = await runControlOmb(["new-bot", "--name", "Clive", "--url", boot.url]) as any;
+      await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true });
+    }
+    const { bot } = await runControlOmb(["new-bot", "--name", "Fast wakes", "--url", boot.url]) as any;
+    await api("PATCH", `/api/bots/${bot.id}/tasks/${bot.activeTaskId}`, { modelSelection: PRIMARY, updateBotDefault: true, approvalMode: "ask" });
+    await expect.poll(async () => ((await api("GET", `/api/bots/${bot.id}/auto-model`)).excluded as any[])
+      .some((entry) => entry.instanceId === "claude" && entry.reason === "offline"), { timeout: 30_000, interval: 500 }).toBe(false);
+    // Both engines' weekly windows are spent, three days to go: nothing can take the wake over, and it never waits.
+    const weekly = Math.ceil((Date.now() + 3 * 24 * 3_600_000) / 1_000) * 1_000;
+    writeFileSync(join(dataDir, "claude-limited.json"), JSON.stringify({ status: "rejected", rateLimitType: "seven_day", resetsAt: weekly / 1_000 }));
+    writeFileSync(join(dataDir, "primary-limited.json"), JSON.stringify({
+      code: -32603, message: "Internal error", data: { message: `You've hit your usage limit. Your plan resets at ${new Date(weekly).toISOString()}` },
+    }));
+    await deliverTo(api, bot.id, "post", "FAILED_WAKE_3T");
+    const runs = async () => ((await api("GET", "/api/routines")).runs as any[]).filter((run) => run.botId === bot.id);
+    await expect.poll(async () => (await runs()).find((run) => run.proactive)?.status, { timeout: 60_000, interval: 250 }).toBe("failed");
+    const wake = (await runs()).find((run) => run.proactive);
+    evidence.push({ wake });
+    // Its fast model was refused first (Claude's), then the bot's own engine took it and was refused in turn.
+    expect(JSON.stringify(jsonLines(join(dataDir, "claude-prompts.jsonl")))).toContain("Proactive wake");
+    expect(prompts(join(dataDir, "primary-rpc.jsonl")).length).toBeGreaterThanOrEqual(1);
+    expect(wake).toMatchObject({ limitTakeovers: 1, limitTakeover: PRIMARY });
+    const truth = /^Usage limit reached on Primary fixture\. No other engine can take over\. Primary fixture resets around .+; runs on it work again then\.$/;
+    expect(wake.error).toMatch(truth);
+    expect(wake.error).not.toMatch(/stays down|this bot's engine|choose another engine/i);
+    // The notification: a proactive wake failed, in its own words.
+    const failedNotice = await stream.until((frame) => frame.kind === "notify" && frame.notification?.kind === "routine-failed" && frame.notification?.botId === bot.id, 20_000);
+    evidence.push({ notification: failedNotice.notification });
+    expect(failedNotice.notification.title).toBe("Fast wakes's proactive wake failed");
+    expect(failedNotice.notification.body).toContain("Usage limit reached on Primary fixture.");
+    expect(failedNotice.notification.body).not.toMatch(/routine failed|stays down|this bot's engine/i);
+    // The Primary Bot's incident calls it a proactive wake, with the same words.
+    let chip = "";
+    await expect.poll(async () => {
+      for (const chief of (await bots()).filter((candidate) => candidate.chiefOfStaff)) {
+        const incidents = chief.tasks?.find((task: any) => task.title === "Team incidents");
+        if (!incidents) continue;
+        const rows = (await api("GET", `/api/threads/${incidents.threadId}/messages?limit=200`)).messages as any[];
+        chip = rows.find((row) => row.kind === "activity" && String(row.tool?.name ?? "").startsWith("Incident: Fast wakes's"))?.tool?.name ?? "";
+        if (chip) return true;
+      }
+      return false;
+    }, { timeout: 20_000, interval: 250 }).toBe(true);
+    evidence.push({ chip });
+    expect(chip).toMatch(/^Incident: Fast wakes's proactive wake .+ failed: .*Usage limit reached on Primary fixture\./);
+    expect(chip).not.toMatch(/scheduled routine|stays down|this bot's engine/i);
+  } finally {
+    stream.close();
+    writeFileSync(`${boot.logPath}.limit-failed-wake.json`, JSON.stringify(evidence, null, 2));
+    console.info(JSON.stringify({ logPath: boot.logPath, evidence: `${boot.logPath}.limit-failed-wake.json` }));
     await boot.close();
   }
 }, 180_000);

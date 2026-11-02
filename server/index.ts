@@ -16143,12 +16143,14 @@ function limitResumeText(threadId: string, turnId: string, text: string): string
   if (!steps.length && !lastText?.trim()) return text;
   return renewalPrompt({ base: text, steps, ...(lastText ? { lastText } : {}), cause: "limit" });
 }
-/** 2026-11-02: per payer and engine, until when a plan window is spent, from
- * the last plan usage report read for that payer (GET /api/plan-usage: the
- * person's own, every few minutes while their app is open; the server's when
- * solo). The scope is the payer's key (autoPayerKey). The usage-limit
- * failover reads it (planLimitUntil): Sagax's own picks skip a spent engine,
- * and a refusal on it that names no reset holds it until then. */
+/** 2026-11-02: per payer and engine, until when a plan window is spent (no
+ * extra usage or credit left), from the last plan usage report read for that
+ * payer (GET /api/plan-usage: the person's own, every few minutes while their
+ * app is open; the server's when solo). The scope is the payer's key
+ * (autoPayerKey). The usage-limit failover reads it (planLimitUntil) as a
+ * hint only: Sagax's quick pick (a wake's or a call's fast model) skips a
+ * spent engine, and a real refusal on it that names no reset holds it until
+ * then. Auto, a backup and a run's takeover read only real refusals. */
 const spentPlans = new Map<string, number>();
 function notePlanLimits(report: PlanUsageReport, scope: string): void {
   const payer = scope.toLowerCase();
@@ -16202,7 +16204,7 @@ const limitFailover = createLimitFailoverHost({
   // next fast pick for this payer (voicePickForTurn reads autoRefusalsFor).
   refuseModel: (payer, selection, until) => rememberAutoRefusal(payer, { instanceId: selection.instanceId, model: selection.model }, until),
   // A plan window the person's usage report showed spent (J4), until a turn
-  // on that engine works for them again.
+  // on that engine works for them again: only Sagax's quick pick skips it.
   planLimitUntil: (payer, instanceId) => planLimitUntil(payer, instanceId),
   planWorked: (payer, instanceId) => { spentPlans.delete(`${payer}\u0000${instanceId}`); },
   preferred: (botId, threadId) => {
@@ -16474,8 +16476,11 @@ bus.subscribe((event: RuntimeEvent) => {
   if (event.type === "runtime.error") {
     limitFailover.noteError(event.threadId, event.message, event.limitResetsAt, event.limitScope);
     // A refusal that binds one model (its extra-usage credits, its own weekly
-    // window) is not the engine's limit: the engines' report stays accurate.
-    if (event.limitScope !== "model") limitReset.noteRefusal(runningTurnEngines.get(event.threadId)?.instanceId, event.limitResetsAt);
+    // window), or one of a fast model Sagax picked on the conversation's own
+    // engine, is not the engine's limit: the engines' report stays accurate.
+    if (limitFailover.refusalHoldsEngine(event.threadId, event.limitScope)) {
+      limitReset.noteRefusal(runningTurnEngines.get(event.threadId)?.instanceId, event.limitResetsAt);
+    }
   } else if (event.type === "turn.completed" && event.ok) limitFailover.turnSucceeded(event.threadId);
 });
 /** Threads whose running turn a client abort ended (the abort sentence as
@@ -29517,7 +29522,9 @@ function autoPickForTurn(input: {
 function voicePickForTurn(bot: BotRecord, base: ModelSelection, speaker: TurnSpeaker, guestConfined: boolean): AutoPick | null {
   const payer = autoPayerKey(bot, speaker);
   const offered = autoEnginesFor({ ...bot, modelSelection: base }, speaker, guestConfined);
-  const limited = limitFailover.autoExcluded(payer, offered);
+  // Sagax's quick pick also skips an engine whose plan the payer's usage
+  // report showed spent (J4); Auto reads only the refusals Sagax saw.
+  const limited = limitFailover.autoExcluded(payer, offered, "quick");
   const engines = offered.filter((engine) => !limited.has(engine.instanceId));
   if (!engines.length) return null;
   return pickVoiceModel({ base, engines, catalog: autoCatalogLookup, skip: autoRefusalsFor(payer) });

@@ -499,12 +499,18 @@ export function newPlanUsageAlerts(report: PlanUsageReport, scope: string, thres
   return out;
 }
 
+/** An allowance a row shows past its windows: Claude's extra usage (paid
+ * past the plan), a credit balance. */
+const EXTRA_ALLOWANCE = /^(?:extra usage|credits?)$/i;
+
 /** 2026-11-02: until when this row's plan is spent, as its provider said:
  * the latest reset among its windows used at 100 % (each must reset before
- * a turn runs on it again). Null when none is spent, or when a spent one
- * gave no reset (Sagax cannot say until when). */
+ * a turn runs on it again). Null when none is spent, when a spent one gave
+ * no reset (Sagax cannot say until when), or while the row still shows extra
+ * usage or credit left: the engine answers on it (review, 2026-11-02). */
 export function spentPlanUntil(row: PlanProviderRow): number | null {
   if (row.state !== "windows") return null;
+  if (row.extra?.some((line) => EXTRA_ALLOWANCE.test(line.label.trim()) && line.remainingPercent > 0)) return null;
   let until: number | null = null;
   for (const window of [row.fiveHour, row.weekly]) {
     if (!window.available || window.usedPercent === null || window.usedPercent < 100) continue;

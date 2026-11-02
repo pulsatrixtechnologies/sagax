@@ -78,6 +78,27 @@ describe("the usage-limit line", () => {
     expect(limitFailoverText(detour, clock)).not.toMatch(/continuing on Grok|back on/i);
   });
 
+  // 2026-11-02 (review): a backup standing in for the conversation's own engine is refused in turn. The line names
+  // both, and the return is to the conversation's own engine at its own reset, never to the backup that refused.
+  it("names the engine a refused backup stood in for, and the return to it, in English and Quebec French", () => {
+    const standIn: LimitFailoverLine = { kind: "switched", from: "Codex", to: "Grok", resetsAt: AT, home: "Claude" };
+    const back: LimitFailoverLine = { kind: "back", engine: "Claude", refused: "Codex" };
+    setLocale("en");
+    expect(limitFailoverLineText(standIn, NOW)).toBe("Limit reached on Codex, which was standing in for Claude: continuing on Grok, back on Claude when it resets (around 2:05 PM).");
+    expect(limitFailoverLineText({ ...standIn, estimated: true }, NOW)).toBe("Limit reached on Codex, which was standing in for Claude: continuing on Grok. Claude gave no reset time: it is tried again around 2:05 PM.");
+    expect(limitFailoverLineText(back, NOW)).toBe("Limit reached on Codex, which was standing in for Claude: back on Claude, whose limit has reset.");
+    setLocale("fr");
+    expect(limitFailoverLineText(standIn, NOW)).toBe("Limite atteinte sur Codex, qui remplaçait Claude : je continue sur Grok, puis retour sur Claude à sa réinitialisation (vers 14 h 05).");
+    expect(limitFailoverLineText({ ...standIn, estimated: true }, NOW)).toBe("Limite atteinte sur Codex, qui remplaçait Claude : je continue sur Grok. Claude n'a pas donné d'heure de réinitialisation : il sera réessayé vers 14 h 05.");
+    expect(limitFailoverLineText(back, NOW)).toBe("Limite atteinte sur Codex, qui remplaçait Claude : retour sur Claude, dont la limite est réinitialisée.");
+    // The English words other clients show say the same.
+    const clock = (at: number) => resetClockText(at, "en-US", undefined, NOW);
+    expect(limitFailoverText(standIn, clock)).toBe("Limit reached on Codex, which was standing in for Claude: continuing on Grok, back on Claude when it resets (around 2:05 PM).");
+    expect(limitFailoverText({ ...standIn, estimated: true }, clock)).toBe("Limit reached on Codex, which was standing in for Claude: continuing on Grok. Claude gave no reset time: it is tried again around 2:05 PM.");
+    expect(limitFailoverText(back, clock)).toBe("Limit reached on Codex, which was standing in for Claude: back on Claude, whose limit has reset.");
+    expect(limitFailoverText(standIn, clock)).not.toMatch(/back on Codex|until it resets/);
+  });
+
   it("is a recovery status row the transcript never folds, whatever its English words", () => {
     setLocale("fr");
     const message = { id: "x", at: NOW, role: "bot", kind: "activity",

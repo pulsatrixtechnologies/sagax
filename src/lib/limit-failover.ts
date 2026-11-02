@@ -21,12 +21,18 @@ export function limitFailoverLineText(line: LimitFailoverLine, now = Date.now())
       // A quick model Sagax picked for this turn: the conversation never goes
       // back to it, Sagax only skips it for quick turns until it resets.
       if (line.detour) return t(line.estimated ? "limitFailover.detourNoReset" : "limitFailover.detour", { from: line.from, time });
+      // A backup standing in for the conversation's own engine refused in
+      // turn: the conversation goes back to its own engine, never to it.
+      if (line.home) {
+        return t(line.estimated ? "limitFailover.switchedStandInNoReset" : "limitFailover.switchedStandIn", { from: line.from, home: line.home, to: line.to, time });
+      }
       // The engine named no reset: the time is only when Sagax tries it again.
       if (line.estimated) {
         return t(line.owner ? "limitFailover.ownerSwitchedNoReset" : "limitFailover.switchedNoReset", { from: line.from, to: line.to, time });
       }
       return t(line.owner ? "limitFailover.ownerSwitched" : "limitFailover.switched", { from: line.from, to: line.to, time });
     case "back":
+      if (line.refused) return t("limitFailover.backAfterLimit", { refused: line.refused, engine: line.engine });
       return t("limitFailover.back", { engine: line.engine });
     case "waiting":
       if (line.estimated) return t(line.owner ? "limitFailover.ownerWaitingNoReset" : "limitFailover.waitingNoReset", { from: line.from, time });

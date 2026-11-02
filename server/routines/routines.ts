@@ -336,7 +336,8 @@ export interface RoutineRun {
   /** When the one-per-run deferral notice was raised, so restarts and repeat
    * ticks stay quiet. */
   deferredNoticeAt?: number;
-  /** Set when the run used its one automatic second start, and why. */
+  /** Set when the run used its one automatic second start, and why; also when a limit's takeover started it again
+   * (takeoverRetried: that second start is then still unused). Its next start's note reads it (retryNote). */
   retried?: RoutineRetryCause;
   /** A queued run starts no earlier than this. */
   retryAt?: number;
@@ -352,6 +353,12 @@ export interface RoutineRun {
   /** When the run's conversation goes back to its own model after limitTakeover moved it off: the reset of the limit
    * that refused that model (server/limit-failover-host.ts takeOver records the return). */
   limitTakeoverUntil?: number;
+  /** limitTakeoverUntil is Sagax's estimate: the engine that refused named no reset. */
+  limitTakeoverEstimated?: true;
+  /** `retried` was set by a limit's takeover (the note its start carries), not by the run's one automatic second
+   * start, which is still unused (routine-recovery.ts usedRetry): a stall on the engine that took the run over, or a
+   * wait for a reset after it, still gets it. */
+  takeoverRetried?: true;
   /** When its current wait began; read only while the run is waiting. */
   waitingSince?: number;
   /** Times a restart cut this run and the next start resumed it in place
@@ -1828,8 +1835,9 @@ export class RoutineManager {
         (run.restartResumes ?? 0) < ROUTINE_RESTART_RESUMES) {
         run.status = "running";
         run.restartResumes = (run.restartResumes ?? 0) + 1;
-        // The resume is its one automatic second start.
+        // The resume is its one automatic second start (a limit's takeover was not).
         run.retried ??= "restarted";
+        delete run.takeoverRetried;
         run.attention = undefined;
         this.restartResumes.push(run.id);
         resumable = true;

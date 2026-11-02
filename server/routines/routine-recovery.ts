@@ -14,7 +14,7 @@ import {
 import { classifyError, USAGE_LIMIT } from "../drivers/retry.ts";
 import { isEngineEmptyFailure } from "../incidents.ts";
 import {
-  routineLimitStoppedText, routineLimitSwitchedText, routineLimitUnknownEngineText, routineLimitWaitingText,
+  routineLimitCreditsText, routineLimitStoppedText, routineLimitSwitchedText, routineLimitUnknownEngineText, routineLimitWaitingText,
   type RoutineLimitWordsOptions, type RoutineUsageLimit,
 } from "./routine-limit-words.ts";
 import type { RoutineRun } from "./routines.ts";
@@ -85,13 +85,6 @@ const OWNER_ACTION: Record<Exclude<RoutineOwnerCause, "setup" | "usage_limit">, 
   credits: "This bot's engine account is out of credit. Add credit with the provider, or choose another engine for this bot.",
 };
 
-/** The credit refusal of the engine the host saw refuse, by its name. */
-function creditsText(from: string, language?: string): string {
-  return (language ?? "").toLowerCase().startsWith("fr")
-    ? `Le compte ${from} n'a plus de crédit. Ajoutez du crédit chez le fournisseur, ou choisissez un autre moteur pour ce bot.`
-    : `The ${from} account is out of credit. Add credit with the provider, or choose another engine for this bot.`;
-}
-
 const RETRY_WHY: Record<Exclude<RoutineRetryCause, "usage_limit">, string> = {
   stalled: "the engine stalled", restarted: "Sagax restarted while it ran", rate_limited: "a rate limit", provider: "a temporary error",
   empty_response: "an empty model response",
@@ -136,13 +129,21 @@ export function engineFacts({ setup, stalled, limitResetsAt, limitScope }: Runti
   return { setup, stalled, limitResetsAt, ...(limitScope === "model" ? { limitScope } : {}) };
 }
 
+/** The run used its one automatic second start. A limit's takeover records why its own start came (`retried`, for the
+ * start's note) but is not that second start (`takeoverRetried`): a stall on the engine that took the run over, or a
+ * wait for a reset after it, still has it. */
+export function usedRetry(run: Pick<RoutineRun, "retried" | "takeoverRetried">): boolean {
+  return run.retried !== undefined && run.takeoverRetried !== true;
+}
+
 /** Queues the run's one second start; false when it already had it or is not a bot's run. A usage limit's wait
  * passes its own line (which engine, and when the run starts again). */
 export function requeueOnce(run: RoutineRun, cause: RoutineRetryCause, failure: string, now: number,
   at = now + (cause === "rate_limited" ? RATE_LIMIT_RETRY_MS : RETRY_MS), attention?: string): boolean {
-  if (run.target !== "bot" || run.retried !== undefined) return false;
+  if (run.target !== "bot" || usedRetry(run)) return false;
   run.status = "queued";
   run.retried = cause;
+  delete run.takeoverRetried;
   run.retryAt = at;
   run.attention = (attention ?? (cause === "usage_limit"
     ? routineLimitUnknownEngineText({ timeZone: hostTimeZone() }, at)
@@ -157,16 +158,39 @@ export function requeueOnce(run: RoutineRun, cause: RoutineRetryCause, failure: 
 function takeOver(run: RoutineRun, limit: RoutineUsageLimit & { to: string }, now: number, words: RoutineLimitWordsOptions): void {
   run.status = "queued";
   run.retryAt = now;
-  run.retried ??= limit.kind === "rate_limited" ? "rate_limited" : "usage_limit";
+  // Its start tells the engine why the first one stopped (retryNote); the run's one automatic retry stays unused.
+  if (run.retried === undefined) {
+    run.retried = limit.kind === "rate_limited" ? "rate_limited" : "usage_limit";
+    run.takeoverRetried = true;
+  }
   run.limitTakeovers = (run.limitTakeovers ?? 0) + 1;
   if (limit.sameEngine) run.limitModelRetry = true;
   if (limit.selection) run.limitTakeover = { ...limit.selection };
   else delete run.limitTakeover;
   // When its conversation goes back to its own model (startTurn hands it to the limit failover's takeOver).
-  if (limit.selection && limit.returnsAt !== undefined) run.limitTakeoverUntil = limit.returnsAt;
-  else delete run.limitTakeoverUntil;
+  if (limit.selection && limit.returnsAt !== undefined) {
+    run.limitTakeoverUntil = limit.returnsAt;
+    if (limit.returnsEstimated) run.limitTakeoverEstimated = true;
+    else delete run.limitTakeoverEstimated;
+  } else {
+    delete run.limitTakeoverUntil;
+    delete run.limitTakeoverEstimated;
+  }
   run.attention = routineLimitSwitchedText(limit, words).slice(0, 500);
   delete run.error;
+}
+
+/** Past this, a reset is not waited for (LIMIT_WAIT_MS), and an estimate never is: when the run starts again after a
+ * limit nothing took it over from, and on which engine. The engine that refused was standing in for the bot's own
+ * (`home`): the earlier of the two real resets, the bot's own engine on a tie; else the refused engine's. */
+function limitWait(limit: RoutineUsageLimit, now: number): { at: number; home: boolean; on: string } | null {
+  const resets = [
+    ...(limit.home && !limit.home.estimated ? [{ reset: limit.home.resetsAt, home: true, on: limit.home.name }] : []),
+    ...(!limit.estimated ? [{ reset: limit.resetsAt, home: false, on: limit.from }] : []),
+  ].filter(({ reset }) => reset + AFTER_RESET_MS > now && reset - now <= LIMIT_WAIT_MS)
+    .sort((left, right) => left.reset - right.reset || Number(right.home) - Number(left.home));
+  const first = resets[0];
+  return first ? { at: first.reset + AFTER_RESET_MS, home: first.home, on: first.on } : null;
 }
 
 /** The second start's own line, so a run that already did part of its work does not do it twice. */
@@ -196,7 +220,7 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
   let verdict: RoutineFailureClass = run.target === "bot" ? classifyRoutineFailure(failure, facts) : { kind: "final" };
   // A spent quota the host read from the engine (its words, its stop, its reset) is one, whatever the words say.
   if (limit?.kind === "quota" && verdict.kind !== "owner") verdict = { kind: "owner", cause: "usage_limit" };
-  const again = run.retried ? `Failed after one automatic retry: ${failure}` : failure;
+  const again = usedRetry(run) ? `Failed after one automatic retry: ${failure}` : failure;
   if (verdict.kind === "busy") {
     run.deferredAt ??= now;
     if (now - run.deferredAt >= ROUTINE_BUSY_WAIT_MS) return { queued: false, error: `Did not start: still busy after ${ROUTINE_BUSY_WAIT_MS / 60_000} minutes (${failure})` };
@@ -210,15 +234,34 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
   if (verdict.kind === "final") return { queued: false, error: again };
   const first = firstNotice(notices, run.botId, verdict.cause, now);
   if (verdict.cause === "usage_limit") {
-    // The engine's own reset (the host also reads it from the engine's words), never an estimate passed off as one.
-    const reset = limit ? (limit.estimated ? undefined : limit.resetsAt) : verdict.resetsAt;
+    if (limit) {
+      // The engine's own reset (the host also reads it from the engine's words), never an estimate passed off as one;
+      // the bot's own engine's when the one that refused stood in for it and comes back first.
+      const wait = limitWait(limit, now);
+      if (wait) {
+        const text = routineLimitWaitingText(limit, wait.at, said, wait.on);
+        if (requeueOnce(run, "usage_limit", failure, now, wait.at, text)) {
+          // Back on the bot's own engine, never on the backup that refused: its conversation goes back there at the
+          // reset (the limit failover's beforeTurn), so the next start names no takeover model.
+          if (wait.home) {
+            delete run.limitTakeover;
+            delete run.limitTakeoverUntil;
+            delete run.limitTakeoverEstimated;
+          }
+          return { queued: true, ...(first ? { alert: { detail: text } } : {}) };
+        }
+      }
+      // The run's own error says it too (its row, any tool reading runs); the engine's raw words stay in its thread.
+      const text = routineLimitStoppedText(limit, said);
+      return { queued: false, error: text, alert: first ? { detail: text } : null };
+    }
+    const reset = verdict.resetsAt;
     if (reset && reset > now && reset - now <= LIMIT_WAIT_MS) {
       const at = reset + AFTER_RESET_MS;
-      const text = limit ? routineLimitWaitingText(limit, at, said) : routineLimitUnknownEngineText(said, at);
+      const text = routineLimitUnknownEngineText(said, at);
       if (requeueOnce(run, "usage_limit", failure, now, at, text)) return { queued: true, ...(first ? { alert: { detail: text } } : {}) };
     }
-    const text = limit ? routineLimitStoppedText(limit, said) : routineLimitUnknownEngineText(said);
-    return { queued: false, error: failure, alert: first ? { detail: text } : null };
+    return { queued: false, error: failure, alert: first ? { detail: routineLimitUnknownEngineText(said) } : null };
   }
   // Auth expired / signed out, or Claude extra-usage credits: pause until
   // reconnect. No failed status, so the proactive waker never loops on the
@@ -234,8 +277,13 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
       alert: first ? { detail: engineReconnectAheadDetail(engine) } : null,
     };
   }
-  const action = verdict.cause === "setup" ? failure
-    : verdict.cause === "credits" && limit ? creditsText(limit.from, said.language) : OWNER_ACTION[verdict.cause];
+  // The engine the host saw refuse, by its name: a quick model Sagax picked is skipped for quick turns (no advice to
+  // change the bot's engine), a backup standing in for the bot's own engine names when that one comes back.
+  if (verdict.cause === "credits" && limit) {
+    const text = routineLimitCreditsText(limit, said);
+    return { queued: false, error: text, alert: first ? { detail: text } : null };
+  }
+  const action = verdict.cause === "setup" ? failure : OWNER_ACTION[verdict.cause];
   return { queued: false, error: failure, alert: first ? { detail: action } : null };
 }
 

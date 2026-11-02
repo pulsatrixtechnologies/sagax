@@ -85,6 +85,8 @@ export interface LimitFailover {
   to: ModelSelection;
   /** When `from`'s limit resets (said or estimated). */
   resetsAt: number;
+  /** `resetsAt` is Sagax's estimate: the engine named no reset (2026-11-02). */
+  estimated?: true;
   at: number;
 }
 
@@ -218,8 +220,11 @@ export class LimitFailoverStore {
    * started on, so it still goes back there. */
   record(failover: LimitFailover): LimitFailover {
     const earlier = this.state.failovers.find((row) => row.threadId === failover.threadId && row.botId === failover.botId);
+    // The later reset wins, and with it whether that time is only Sagax's estimate.
+    const later = earlier && earlier.resetsAt > failover.resetsAt ? earlier : failover;
+    const { estimated: _estimated, ...moved } = failover;
     const kept = earlier && earlier.to.instanceId === failover.from.instanceId && earlier.to.model === failover.from.model
-      ? { ...failover, from: earlier.from, resetsAt: Math.max(earlier.resetsAt, failover.resetsAt) } : failover;
+      ? { ...moved, from: earlier.from, resetsAt: later.resetsAt, ...(later.estimated ? { estimated: true as const } : {}) } : failover;
     this.state.failovers = [...this.state.failovers.filter((row) => row.threadId !== failover.threadId), kept].slice(-MAX_ROWS);
     this.save();
     return kept;

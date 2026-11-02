@@ -204,11 +204,11 @@ describe("kubernetes sandbox lifecycle", () => {
     const names = sandboxNames(person);
     const claimPath = `/api/v1/namespaces/sandboxes/persistentvolumeclaims/${names.volume}`;
     const storage = () => (((objects.get(claimPath)!.spec as Obj).resources as Obj).requests as Obj).storage;
-    expect(storage()).toBe("20480Mi");
+    expect(storage()).toBe("32768Mi");
     (((objects.get(claimPath)!.spec as Obj).resources as Obj).requests as Obj).storage = "2Gi";
     await service.stop(person);
     expect((await service.ensure(person)).state).toBe("running");
-    expect(storage()).toBe("20480Mi");
+    expect(storage()).toBe("32768Mi");
     const lines = readFileSync(auditFile, "utf8").trim().split("\n").map((line) => JSON.parse(line) as { action: string });
     expect(lines.some((line) => line.action === "sandbox.pvc.grow")).toBe(true);
   });

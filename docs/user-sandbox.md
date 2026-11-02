@@ -173,9 +173,17 @@ not a dot entry nor in `SANDBOX_ROOT_KEEP` (`bots`, `shared`, `_unsorted`,
 whose conversations name `/workspace/<entry>` (or the bare name when it is
 distinctive), else into `_unsorted/<date>/`. A name already taken there gets
 ` (2)`. Nothing is deleted. Each move is a row of
-`_unsorted/MOVES-<date>.md` and an entry of `_unsorted/moves.json`. The
-routines of that person whose prompt or watch names a moved path are
-rewritten to the new path.
+`_unsorted/MOVES-<date>.md` (with whether a link was left) and an entry of
+`_unsorted/moves.json`. A symbolic link to the new place stays at each old
+path, so old absolute paths (`/workspace/routine24.txt`) and commands run
+from `/workspace` keep working. The links are listed in `/workspace/.hidden`:
+Thunar does not show them (GLib honours `.hidden`), the bot's `list_files`
+of `/workspace` leaves them out, and the next tidy leaves them in place;
+`ls` in a terminal still shows them. Delete a link once nothing uses it. The
+routines of that person whose prompt or watch names a moved path are also
+rewritten to the new path. A bare relative path from a bot's own folder
+resolves in that folder by design: files the tidy could attribute are
+moved there, so those still resolve.
 
 **Disk.** The provisioner measures the volume itself (`df`) beside the
 quota. Under 10% free (at most 1 GiB) every tool answer carries a "disk
@@ -277,7 +285,7 @@ shows where the person's bots do computer work right now:
   Public internet stays open. If the policy cannot be applied, the provisioner
   refuses to create environments (`SAGAX_SANDBOX_REQUIRE_EGRESS_POLICY=false`
   turns that off for a lab only).
-- **Disk:** `/workspace` has a soft quota (`SAGAX_SANDBOX_DISK_MB`, 20 GiB by
+- **Disk:** `/workspace` has a soft quota (`SAGAX_SANDBOX_DISK_MB`, 32 GiB by
   default since 2026-11-02, the claim's size on Kubernetes): over it,
   `write_file` is refused and Settings shows it; one file is capped by
   `SAGAX_SANDBOX_MAX_FILE_MB`. For a hard cap, put `/var/lib/docker` on xfs
@@ -366,7 +374,7 @@ api.githubcopilot.com are reachable; only private destinations are dropped.
 | `SAGAX_SANDBOX_CPUS` | 1 | per environment |
 | `SAGAX_SANDBOX_PIDS` | 512 | per environment (Chromium's processes and threads count) |
 | `SAGAX_SANDBOX_TMP_MB` | 512 | tmpfs `/tmp` (counts against memory only when used) |
-| `SAGAX_SANDBOX_DISK_MB` | 20480 | soft quota on `/workspace` (Kubernetes: the claim's size; a smaller existing claim grows at its next start) |
+| `SAGAX_SANDBOX_DISK_MB` | 32768 | soft quota on `/workspace` (Kubernetes: the claim's size; a smaller existing claim grows at its next start) |
 | `SAGAX_SANDBOX_MAX_FILE_MB` | 512 | largest single file |
 | `SAGAX_SANDBOX_MAX_RUNNING` | 2 | running or paused at once (3 GiB at most) |
 | `SAGAX_SANDBOX_IDLE_MINUTES` | 10 | idle stop |

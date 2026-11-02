@@ -18,7 +18,7 @@ StorageClass.
 | Object | Name | Notes |
 |---|---|---|
 | Pod | `sagax-user-<key>` | uid 1000, read-only root, drop all capabilities, seccomp RuntimeDefault, no token, no host namespaces, requests equal limits |
-| PVC | `sagax-user-<key>-workspace` | ReadWriteOnce, the operator StorageClass, size `SAGAX_SANDBOX_DISK_MB` (20480 by default; a smaller existing claim is grown before each start, `sandbox.pvc.grow` in the audit) |
+| PVC | `sagax-user-<key>-workspace` | ReadWriteOnce, the operator StorageClass, size `SAGAX_SANDBOX_DISK_MB` (32768 by default; a smaller existing claim is grown before each start, `sandbox.pvc.grow` in the audit) |
 | NetworkPolicy | `sagax-user-<key>-net` | no ingress; egress `0.0.0.0/0` except the deny list; no IPv6 |
 | NetworkPolicy | `sagax-default-deny` | every Pod in the namespace; no ingress and no egress |
 

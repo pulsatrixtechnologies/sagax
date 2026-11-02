@@ -1,7 +1,7 @@
 # Backup, restore, and the sandbox drill
 
 Workspaces are the per-person volumes (`SAGAX_SANDBOX_DISK_MB`, default
-20480 since 2026-11-02, was 2048). On the pool they are PersistentVolumeClaims in `sandboxes`,
+32768 since 2026-11-02, was 2048). On the pool they are PersistentVolumeClaims in `sandboxes`,
 reclaim `Retain`, on a disk class that detaches. The Docker volumes on
 the production VM stay the copy of record until that person has been cut over
 and one off-site backup of the PVC has succeeded.
@@ -27,7 +27,7 @@ turn it off as part of the sandbox cutover.
 | | Target | Basis |
 |---|---|---|
 | RPO | 24 hours | one successful daily snapshot |
-| RTO, one workspace | 30 minutes | snapshot restore of at most 20 GiB plus a pod start |
+| RTO, one workspace | 30 minutes | snapshot restore of at most 32 GiB plus a pod start |
 | RTO, the namespace | 90 minutes | every volume, then the provisioner Ready check |
 
 These are planning targets, not timings from a drill. The first drill

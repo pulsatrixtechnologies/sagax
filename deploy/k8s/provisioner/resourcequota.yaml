@@ -11,5 +11,5 @@ spec:
     pods: "10"
     limits.cpu: "8"
     limits.memory: 16Gi
-    # 25 people at SAGAX_SANDBOX_DISK_MB 20480 (20 GiB each, 2026-11-02)
-    requests.storage: 500Gi
+    # 25 people (one claim each) at SAGAX_SANDBOX_DISK_MB 32768 (32 GiB, 2026-11-02)
+    requests.storage: 800Gi

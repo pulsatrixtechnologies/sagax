@@ -16,8 +16,12 @@
 // a marker there says "this start was tidied"), the tidy moves every loose
 // file or folder of the root into the folder of the bot whose conversations
 // name it, else into _unsorted/<date>/. Nothing is deleted; each move is
-// written to _unsorted/MOVES-<date>.md (and moves.json). Routines whose
-// prompt or watch names a moved path are updated to the new path.
+// written to _unsorted/MOVES-<date>.md (and moves.json), and a link to the
+// new place is left at the old path, so old absolute paths and commands run
+// from the root keep working. The links are listed in /workspace/.hidden:
+// Thunar (GLib) and the bot's root listing do not show them, the next tidy
+// leaves them be. Routines whose prompt or watch names a moved path are
+// also updated to the new path.
 import { existsSync, readFileSync } from "node:fs";
 import { writeFileAtomic } from "./atomic.ts";
 import type { SandboxExecInput, SandboxExecOutput } from "./sandboxd-core.ts";
@@ -168,6 +172,14 @@ ROOT = os.environ.get('SAGAX_TIDY_ROOT') or '/workspace'
 MARK = os.environ.get('SAGAX_TIDY_MARK') or '/tmp/.sagax-workspace-tidy'
 mode = sys.argv[1]
 keep = set(json.loads(sys.argv[2]))
+HIDDEN = os.path.join(ROOT, '.hidden')
+def links():
+    # The links the tidy left at the root (listed in .hidden, still links).
+    try:
+        names = [line.strip() for line in open(HIDDEN, encoding='utf-8')]
+    except OSError:
+        return set()
+    return {n for n in names if n and '/' not in n and os.path.islink(os.path.join(ROOT, n))}
 def disk():
     try:
         s = os.statvfs(ROOT)
@@ -178,8 +190,9 @@ if mode == 'scan':
     tidied = os.path.exists(MARK)
     entries = []
     if not tidied:
+        ours = links()
         for name in sorted(os.listdir(ROOT)):
-            if name.startswith('.') or name in keep:
+            if name.startswith('.') or name in keep or name in ours:
                 continue
             path = os.path.join(ROOT, name)
             entries.append({'name': name, 'dir': os.path.isdir(path) and not os.path.islink(path)})
@@ -218,7 +231,15 @@ for move in plan.get('moves', []):
         os.makedirs(dest, exist_ok=True)
         target = free_name(dest, name)
         os.rename(source, target)
-        moved.append({'from': source, 'to': target})
+        # A link at the old path: absolute paths and commands run from the
+        # root still find it. Hidden from Thunar (.hidden) and the bot's
+        # root listing, never moved again.
+        try:
+            os.symlink(target, source)
+            linked = True
+        except OSError:
+            linked = False
+        moved.append({'from': source, 'to': target, 'link': linked})
     except OSError as error:
         sys.stderr.write('could not move %s: %s\n' % (source, error))
 if moved:
@@ -228,9 +249,19 @@ if moved:
     new = not os.path.exists(manifest)
     with open(manifest, 'a', encoding='utf-8') as out:
         if new:
-            out.write('# Files moved out of /workspace on %s\n\nEach loose file or folder of the /workspace root was moved into the folder of the bot that made it, or into _unsorted/%s/ when no bot could be found. Nothing was deleted.\n\n| Old path | New path |\n|---|---|\n' % (date, date))
+            out.write('# Files moved out of /workspace on %s\n\nEach loose file or folder of the /workspace root was moved into the folder of the bot that made it, or into _unsorted/%s/ when no bot could be found. Nothing was deleted. A link was left at each old path (hidden: listed in /workspace/.hidden), so old paths still work; delete a link once nothing uses it.\n\n| Old path | New path | Link at old path |\n|---|---|---|\n' % (date, date))
         for row in moved:
-            out.write('| %s | %s |\n' % (row['from'], row['to']))
+            out.write('| %s | %s | %s |\n' % (row['from'], row['to'], 'yes' if row['link'] else 'no'))
+    names = [os.path.basename(row['from']) for row in moved if row['link']]
+    if names:
+        try:
+            known_names = [line.rstrip('\n') for line in open(HIDDEN, encoding='utf-8')]
+        except OSError:
+            known_names = []
+        with open(HIDDEN, 'a', encoding='utf-8') as out:
+            for name in names:
+                if name not in known_names:
+                    out.write(name + '\n')
     index = os.path.join(unsorted, 'moves.json')
     try:
         with open(index, encoding='utf-8') as source:
@@ -271,6 +302,8 @@ print(json.dumps({'moved': moved, 'cleaned': cleaned, 'disk': disk()}))
 export interface TidyMove {
   from: string;
   to: string;
+  /** A link to the new place was left at the old path. */
+  link?: boolean;
 }
 
 export interface WorkspaceTidyDeps {

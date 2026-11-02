@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -148,19 +148,33 @@ describe("WorkspaceTidier", () => {
     expect(existsSync(join(root, "_unsorted", "2026-11-02", "adhoc-folder", "inside.md"))).toBe(true);
     for (const keep of [".gitconfig", "bots", "shared", "sagax-plugins", "lost+found"]) expect(existsSync(join(root, keep))).toBe(true);
     const manifest = readFileSync(join(root, "_unsorted", "MOVES-2026-11-02.md"), "utf8");
-    expect(manifest).toContain(`| ${root}/routine24.txt | ${root}/_unsorted/2026-11-02/routine24.txt |`);
+    expect(manifest).toContain(`| ${root}/routine24.txt | ${root}/_unsorted/2026-11-02/routine24.txt | yes |`);
+    // the old paths still lead to the files, through hidden links
+    expect(readFileSync(join(root, "routine24.txt"), "utf8")).toBe("routine24.txt");
+    expect(lstatSync(join(root, "routine24.txt")).isSymbolicLink()).toBe(true);
+    expect(readFileSync(join(root, "adhoc-folder", "inside.md"), "utf8")).toBe("x");
+    expect(readFileSync(join(root, ".hidden"), "utf8").split("\n")).toEqual(expect.arrayContaining(["routine24.txt", "adhoc-folder", "meloniemac-1.jpg", "pm-fleet-chunk-0.txt"]));
     expect(JSON.parse(readFileSync(join(root, "_unsorted", "moves.json"), "utf8"))[`${root}/routine24.txt`]).toBe(`${root}/_unsorted/2026-11-02/routine24.txt`);
     expect(moved).toHaveLength(4);
     expect(existsSync(join(root, "bots", "fleet", "tmp", "old.bin"))).toBe(false);
     expect(existsSync(join(root, "bots", "fleet", "tmp", "new.bin"))).toBe(true);
     expect(tidier.disk("person")?.totalBytes).toBeGreaterThan(0);
 
+    // A new start: the links are left in place, a new loose file moves.
+    rmSync(mark);
+    writeFileSync(join(root, "fresh.txt"), "fresh");
+    const next = new WorkspaceTidier({ exec, attribute: () => new Map(), folderOf: () => null, now: () => Date.parse("2026-11-03T12:00:00Z"), root });
+    await next.ensure("person");
+    expect(lstatSync(join(root, "routine24.txt")).isSymbolicLink()).toBe(true);
+    expect(existsSync(join(root, "_unsorted", "2026-11-03", "routine24.txt"))).toBe(false);
+    expect(existsSync(join(root, "_unsorted", "2026-11-03", "fresh.txt"))).toBe(true);
+
     // Same start: the marker stops a second pass, even after the recheck delay.
     writeFileSync(join(root, "late.txt"), "late");
     const later = new WorkspaceTidier({ exec, attribute: () => new Map(), folderOf: () => null });
     await later.ensure("person");
     expect(existsSync(join(root, "late.txt"))).toBe(true);
-    expect(calls.filter((call) => call.argv[4] === "apply")).toHaveLength(1);
+    expect(calls.filter((call) => call.argv[4] === "apply")).toHaveLength(2);
   });
 
   it("keeps the system folders in one list", () => {

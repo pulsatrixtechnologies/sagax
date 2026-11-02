@@ -86,7 +86,7 @@ export interface DockerApi {
   removeNetwork(name: string): Promise<void>;
   inspectVolume(name: string): Promise<{ labels: Record<string, string> } | null>;
   /** Kubernetes: raise an existing workspace claim to the configured size
-   * when it was made smaller (the default grew from 2 GiB to 20 GiB on
+   * when it was made smaller (the default grew from 2 GiB to 32 GiB on
    * 2026-11-02). Best effort; Docker volumes have no size to grow. */
   growVolume?(name: string): Promise<void>;
   createVolume(spec: Record<string, unknown>): Promise<void>;

@@ -179,9 +179,9 @@ describe("computer routes", () => {
 describe("sandboxStatus disk (2026-11-02)", () => {
   it("reports the volume full even when the quota says there is room", () => {
     const MiB = 1024 * 1024;
-    const full = sandboxStatus(view({ workspaceBytes: 100 * MiB, limits: { memoryMb: 1024, cpus: 1, pids: 256, diskMb: 20480, tmpMb: 256 }, workspaceFreeBytes: 11 * MiB, workspaceTotalBytes: 1946 * MiB }));
+    const full = sandboxStatus(view({ workspaceBytes: 100 * MiB, limits: { memoryMb: 1024, cpus: 1, pids: 256, diskMb: 32768, tmpMb: 256 }, workspaceFreeBytes: 11 * MiB, workspaceTotalBytes: 1946 * MiB }));
     expect(full.diskState).toBe("full");
-    const roomy = sandboxStatus(view({ workspaceBytes: 100 * MiB, limits: { memoryMb: 1024, cpus: 1, pids: 256, diskMb: 20480, tmpMb: 256 }, workspaceFreeBytes: 15_000 * MiB, workspaceTotalBytes: 20_000 * MiB }));
+    const roomy = sandboxStatus(view({ workspaceBytes: 100 * MiB, limits: { memoryMb: 1024, cpus: 1, pids: 256, diskMb: 32768, tmpMb: 256 }, workspaceFreeBytes: 15_000 * MiB, workspaceTotalBytes: 20_000 * MiB }));
     expect(roomy.diskState).toBe("normal");
   });
 });

@@ -108,6 +108,20 @@ export type TurnState = {
   selectedSkills: any;
   sessionConfig: any;
   decideContext: any;
+  skipComputer: any;
+  localVmPreviewFor: any;
+  claimAutoLocalVm: any;
+  surfaceLazyClaimRejection: any;
+  adoptClaimedCapture: any;
+  attachLocalVm: any;
+  cloudBackend: any;
+  mountsLocalComputer: any;
+  mountsComputerMcp: any;
+  remote: any;
+  inheritedComputer: any;
+  namedPlace: any;
+  autoVpsProblem: any;
+  autoVpsReachable: any;
   // Try-scoped fields that stream post-dispatch / finish may read.
   warmOk: boolean;
   browser: any;
@@ -251,6 +265,20 @@ export function createTurnState(init: {
     selectedSkills: undefined,
     sessionConfig: undefined,
     decideContext: undefined,
+    skipComputer: undefined,
+    localVmPreviewFor: undefined,
+    claimAutoLocalVm: undefined,
+    surfaceLazyClaimRejection: undefined,
+    adoptClaimedCapture: undefined,
+    attachLocalVm: undefined,
+    cloudBackend: undefined,
+    mountsLocalComputer: undefined,
+    mountsComputerMcp: undefined,
+    remote: undefined,
+    inheritedComputer: undefined,
+    namedPlace: undefined,
+    autoVpsProblem: undefined,
+    autoVpsReachable: undefined,
     warmOk: false,
     browser: undefined,
     browserCapture: undefined,

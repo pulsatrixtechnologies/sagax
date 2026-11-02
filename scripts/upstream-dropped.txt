@@ -128,3 +128,7 @@ cloudflare/control-plane
 # Removed 2026-11-02 (repo tidy): the OMB Cloud Pro home machine on Fly (its
 # image and cloud-home-start were already gone).
 deploy/fly
+
+# Removed 2026-11-02 (repo tidy): an upstream icon render page nothing loads
+# (scripts/generate-app-icon.mjs renders from a data: URL).
+build/icon.html

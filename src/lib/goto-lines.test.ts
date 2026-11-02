@@ -7,6 +7,8 @@ import {
   dedupeGotoTargets,
   gotoAgents,
   gotoEntryView,
+  gotoGroupFromConversations,
+  gotoNamedCounts,
   gotoTargetOf,
   silentChatItem,
   type GotoGroup,
@@ -165,5 +167,39 @@ describe("gotoEntryView / gotoAgents", () => {
     expect(room.agentKey).toBeUndefined();
     const agents = gotoAgents([ex, th, room], { bots });
     expect(agents.map((agent) => agent.key)).toEqual(["bot:scout", "bot:sales"]);
+  });
+});
+
+describe("gotoGroupFromConversations / gotoNamedCounts", () => {
+  const self = { id: "self", name: "Dispatch", color: "green" as const };
+  const row = (threadId: string, otherBotId: string, otherName: string) => ({
+    threadId, otherBotId, otherName, direction: "out" as const, startedAt: 1, updatedAt: 2,
+  });
+
+  it("folds two or more conversation rows and leaves a lone row alone", () => {
+    expect(gotoGroupFromConversations([row("a", "kat", "Katarina")], self)).toBeNull();
+    const group = gotoGroupFromConversations([
+      row("k1", "kat", "Katarina"),
+      row("k2", "kat", "Katarina"),
+      row("e1", "emb", "Ember"),
+    ], self);
+    expect(group?.targets.map((target) => target.key)).toEqual([
+      "conversation:k1", "conversation:k2", "conversation:e1",
+    ]);
+  });
+
+  it("counts conversations per bot for the compact label", () => {
+    const bots = [{ id: "kat", name: "Katarina" }, { id: "emb", name: "Ember" }];
+    const group = gotoGroupFromConversations([
+      row("k1", "kat", "Katarina"),
+      row("k2", "kat", "Katarina"),
+      row("k3", "kat", "Katarina"),
+      row("e1", "emb", "Ember"),
+    ], self)!;
+    const entries = group.targets.map((target) => gotoEntryView(target, { bots }));
+    expect(gotoNamedCounts(entries).map((entry) => [entry.name, entry.count])).toEqual([
+      ["Katarina", 3],
+      ["Ember", 1],
+    ]);
   });
 });

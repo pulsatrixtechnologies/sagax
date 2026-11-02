@@ -71,8 +71,29 @@ describe("bot-to-bot conversations in the chat", () => {
     const order = ["first question", 'data-thread-chip="w1"', "second question", 'data-thread-chip="w2"', "third question"].map((needle) => markup.indexOf(needle));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((x, y) => x - y));
+    // Two Melonie conversations sit at different times (between different
+    // person lines), so each stays its own quiet line.
     expect(markup.match(/data-testid="bot-exchange-chip"/g)).toHaveLength(2);
     expect(markup).toContain("Go to conversation");
+  });
+
+  it("folds consecutive Go to conversation rows at the same place into one chip", () => {
+    // Peer ids must differ from self (self is "kat"/Ottoline): otherwise the
+    // store lookup for otherBotId resolves to the viewing bot's face/name.
+    const stacked: NonNullable<Bot["botConversations"]> = [
+      { threadId: "k1", otherBotId: "katarina", otherName: "Katarina", direction: "out", startedAt: T + MIN, updatedAt: T + 2 * MIN },
+      { threadId: "k2", otherBotId: "katarina", otherName: "Katarina", direction: "in", startedAt: T + 2 * MIN, updatedAt: T + 3 * MIN },
+      { threadId: "k3", otherBotId: "katarina", otherName: "Katarina", direction: "out", startedAt: T + 3 * MIN, updatedAt: T + 4 * MIN },
+      { threadId: "e1", otherBotId: "emb", otherName: "Ember", direction: "out", startedAt: T + 4 * MIN, updatedAt: T + 5 * MIN },
+    ];
+    const self = ottoline([message("a", "hello", T), message("b", "thanks", T + 10 * MIN)], stacked);
+    fixture.bots = [self, { id: "katarina", threadId: "katarina-main", name: "Katarina", color: "purple" }, { id: "emb", threadId: "emb-main", name: "Ember", color: "orange" }];
+    const markup = renderToStaticMarkup(createElement(ChatView, { bot: self }));
+    expect(markup.match(/data-testid="goto-group-chip"/g)).toHaveLength(1);
+    expect(markup).toContain("3 conversations with Katarina");
+    expect(markup).toContain("1 with Ember");
+    expect(markup.match(/data-testid="bot-exchange-chip"/g) ?? []).toHaveLength(0);
+    expect((markup.match(/Go to conversation/g) ?? []).length).toBe(0);
   });
 
   it("skips a conversation the transcript already links to, and shows nothing outside the main chat", () => {

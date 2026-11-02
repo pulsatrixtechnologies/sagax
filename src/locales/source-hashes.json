@@ -16241,7 +16241,10 @@
       "memoryManager.mapEmpty": "97e0d7e69792a82e2d24ee55f00f67accaa5add252798a47235690269cb70b00",
       "sandboxDesktop.collapseToPanel": "700b6bb49886d685debb97cb8b2dae71128cc2f078f2443f733b6b670caf7b82",
       "sandboxDesktop.controlMode": "f99aa82a3a54a073d8531a7dcfa1a4b95b3dc2cc0284759ff9d78e71a4548e81",
-      "sandboxDesktop.windowMenu": "d08462c307b81b2bc5f38169d57dbd3e18780c2d291dd21d0e863dbf2a1fa478"
+      "sandboxDesktop.windowMenu": "d08462c307b81b2bc5f38169d57dbd3e18780c2d291dd21d0e863dbf2a1fa478",
+      "chat.gotoGroup.namedLead": "70d4e1872293f6a9008147de027d2fccc6cfd372e5b4400f5c9f99d08fce9904",
+      "chat.gotoGroup.namedMore": "a530d016db9f02e6880167762408702617c29006b8c5dbc6dcc046f5e91fb148",
+      "chat.gotoGroup.summaryAria": "da340a030f707bd710dc3db5c99f42929491b6b829611fb0dd90e6eb4de9556f"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

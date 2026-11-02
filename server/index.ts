@@ -1613,6 +1613,8 @@ import {
 } from "./turn-trace.ts";
 import { unansweredCallMessage, VOICE_CALL_WATCHDOG_MS, voiceCallRecoveryPrompt } from "./voice-call-watchdog.ts";
 import * as grokVoice from "./tts/grok.ts";
+import { realtimeUrl, WORK_TIMEOUT_MS as REALTIME_WORK_TIMEOUT_MS } from "./realtime-call.ts";
+import { realtimeWork } from "./realtime-call-host.ts";
 import { createOpenAiVoice } from "./tts/openai-voice.ts";
 import { createOpenAiStt } from "./tts/openai-stt.ts";
 import { createElevenLabsVoice } from "./tts/elevenlabs-voice.ts";
@@ -38768,6 +38770,41 @@ const voiceModeDeps: VoiceModeDeps = {
       configured: configuredKeyterms(process.env.SAGAX_VOICE_KEYTERMS),
       recentTexts
     });
+  },
+  // 2026-11-02 (the maintainer): a call is a realtime voice session; the bot's work
+  // comes through its `work` function as ordinary turns on the thread
+  realtime: {
+    openUpstream: (key) => grokVoice.openRealtimeSocket(key, realtimeUrl()),
+    session: (target, auth, callId) => {
+      const bot = store.bot(target.botId);
+      const threadId = target.threadId;
+      return {
+        bot: { name: bot?.name ?? target.botName, ...(bot?.title ? { title: bot.title } : {}), ...(bot?.description ? { description: bot.description } : {}) },
+        history: liveHistoryFor(threadId),
+        work: realtimeWork({
+          onChange: (listener) => store.onChange(listener),
+          threadId,
+          send: async (text) => {
+            if (!liveSignedIn(auth)) throw new Error("signed out");
+            const receipt = await acceptDirectSend({
+              botId: target.botId, threadId, text,
+              sendId: randomUUID().replaceAll("-", ""),
+              sender: messageSender(auth),
+              trigger: usageTriggerFor(auth),
+              speaker: speakerFor(auth),
+              via: "call",
+              callId,
+              personPresent: true
+            });
+            return "queued" in receipt ? { queued: true as const } : { messageId: receipt.message.id };
+          },
+          answer: async (requestId, text) => (await respondToCard({ auth, threadId, requestId, behavior: "answer", message: text, callId })).ok,
+          busy: () => Boolean(store.taskByThread(target.botId, threadId)?.busy),
+          timeoutMs: REALTIME_WORK_TIMEOUT_MS
+        }),
+        respond: async (requestId, behavior) => (await respondToCard({ auth, threadId, requestId, behavior, callId })).ok
+      };
+    }
   },
   callSession: {
     start: (target, callId, language, auth, heartbeat) => {

@@ -254,6 +254,10 @@ export interface VoiceKeyState extends VoiceKeyInfo {
 export interface VoiceModeStatus {
   provider: "xai";
   available: boolean;
+  /** 2026-11-02 (the maintainer): a call is a realtime voice session (xAI's Voice Agent
+   * API, GET /voice/realtime), never text to speech. False or absent: no
+   * call; the call button says to set up the realtime voice. */
+  realtime?: boolean;
   /** An organization server: voice mode is the only call there (no
    * dictation helper, no "This computer"), so the client never falls back
    * on the legacy call gate. */

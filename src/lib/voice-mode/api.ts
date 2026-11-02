@@ -542,6 +542,18 @@ export function voiceModeSpeechUrl(botId: string, settings: VoiceModeSettings, t
   return `${origin.replace(/^http/, "ws")}${base(botId)}/speech?${query}`;
 }
 
+/** A call's realtime voice socket (GET /voice/realtime, server/realtime-call.ts). */
+export function voiceModeRealtimeUrl(botId: string, settings: VoiceModeSettings, threadId?: string, origin = typeof location === "undefined" ? "http://localhost" : location.origin): string {
+  const view = voiceSettingsForBot(settings, botId);
+  const query = new URLSearchParams({ language: view.language, ...(view.voice ? { voice: view.voice } : {}), ...(threadId ? { threadId } : {}) });
+  return `${origin.replace(/^http/, "ws")}${base(botId)}/realtime?${query}`;
+}
+
+/** A call needs the realtime voice (the maintainer, 2026-11-02): never text to speech. */
+export function realtimeCallReady(status: VoiceModeStatus | null | undefined): boolean {
+  return status?.available === true && status.realtime === true;
+}
+
 /** The person's providers for this bot, or for no bot (Settings > Voice):
  * GET /api/bots/<id>/voice/status or GET /api/voice/status. */
 export async function fetchVoiceProviders(botId?: string, signal?: AbortSignal, choice?: { tts: VoiceTtsChoice; stt: VoiceSttChoice }): Promise<VoiceModeStatus> {

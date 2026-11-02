@@ -220,7 +220,7 @@ describe("the card's motion", () => {
 });
 
 describe("where the bar lives", () => {
-  it("ChatView puts it first in the banner stack, under the name chip; the overlay is the older call only", () => {
+  it("ChatView puts it first in the banner stack, under the name chip; the overlay draws no call any more", () => {
     const chat = readFileSync(new URL("../ChatView.tsx", import.meta.url), "utf8");
     // Only a confidential thread's classification band (#683, a marking at
     // the very top of the conversation) may come before the pill.
@@ -228,16 +228,18 @@ describe("where the bar lives", () => {
     const view = readFileSync(new URL("../CallView.tsx", import.meta.url), "utf8");
     const overlay = view.slice(view.indexOf("export function CallOverlay"), view.indexOf("export function VoiceCallDock"));
     expect(overlay).not.toContain("<LiveCall");
-    expect(overlay).toContain("voiceMode?.available === true) return null");
+    // 2026-11-02: a call is a realtime voice session, never the dictation plus text to speech overlay
+    expect(overlay).toContain("return null;");
+    expect(overlay).not.toContain("<Call ");
     // the collapsed pill keeps its own small row; the card hangs over the thread
-    const dock = view.slice(view.indexOf("export function VoiceCallDock"), view.indexOf("/** The older call: the macOS"));
+    const dock = view.slice(view.indexOf("export function VoiceCallDock"));
     expect(dock).toMatch(/className="animate-call-dock-in relative z-20 mb-2 h-16 px-3" data-voice-call-dock/);
     expect(dock).toContain('className="pointer-events-none absolute inset-x-3 top-0"');
   });
 
   it("on the desktop the pill is the whole call: no folded row, no chevron, no full-column stage (0.4.9 had them)", () => {
     const view = readFileSync(new URL("../CallView.tsx", import.meta.url), "utf8");
-    const dock = view.slice(view.indexOf("export function VoiceCallDock"), view.indexOf("/** The older call: the macOS"));
+    const dock = view.slice(view.indexOf("export function VoiceCallDock"));
     expect(dock).toContain("<LiveCall bot={bot} />");
     expect(dock).not.toContain("data-voice-stage");
     expect(dock).not.toContain("absolute inset-0");

@@ -17,7 +17,7 @@ import { t } from "@/lib/i18n";
 import { speaker } from "@/lib/tts";
 import { fetchVoiceModeVoices, useVoiceModeStatus, type VoiceOption } from "@/lib/voice-mode/api";
 import { voiceKeyLabel } from "@/lib/voice-mode/failure";
-import type { VoiceCall } from "@/lib/voice-mode/call";
+import type { CallControls } from "@/lib/voice-mode/live-call-store";
 import type { CallState } from "@/lib/voice-mode/call-machine";
 import { notifyCallSettings, useCallSettings, writeCallSettings } from "@/lib/voice-mode/call-settings";
 import { useVoiceModeSettings, voiceSettingsForBot, writeVoiceForBot, writeVoiceModeSettings } from "@/lib/voice-mode/settings";
@@ -62,8 +62,10 @@ export function voiceAccessCardText(card: VoiceAccessCard): string[] {
 }
 
 export interface VoiceModeBarProps {
+  /** the call runs on the realtime voice */
+  realtime?: boolean;
   bot: Bot;
-  call: VoiceCall;
+  call: CallControls;
   state: CallState;
   /** the words recognized so far in the person's turn */
   heard: string;
@@ -118,7 +120,7 @@ function amplitude(analyser: AnalyserNode | null, data: Uint8Array<ArrayBuffer>,
 /** Both sides of the call as a row of dots: each column grows taller and
  * brighter with the loudest side at that point (the bot's voice in the
  * accent, the person's in ink); a quiet line is one dim dot per column. */
-function Waveform({ call, state }: { call: VoiceCall; state: CallState }) {
+function Waveform({ call, state }: { call: CallControls; state: CallState }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const quiet = state.phase === "held" || state.phase === "connecting";
   const muted = state.muted;
@@ -429,6 +431,7 @@ export function VoiceModeBar(props: VoiceModeBarProps) {
       data-voice-utterance={metrics?.utteranceId}
       data-voice-endpoint-ms={call.endpointMs}
       data-voice-models={call.modelsReady ? "on-device" : "level"}
+      data-voice-engine={props.realtime ? "realtime" : "pipeline"}
     >
       <div className="flex h-16 items-center gap-2 px-3" data-voice-pill-row>
         <button

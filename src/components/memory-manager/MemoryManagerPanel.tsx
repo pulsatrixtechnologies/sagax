@@ -135,9 +135,9 @@ export function MemoryManagerPanel() {
       else if (source.kind === "perspicax") next = await browsePerspicax(folder, source.scope);
       else next = { folders: [], notes: [], mayWrite: false };
       setBrowse(next);
-      // Prefetch a few note bodies for [[links]] on the map.
+      // Prefetch note bodies for [[links]] on the map (dense fixtures included).
       const bodies: Record<string, string> = {};
-      for (const row of next.notes.slice(0, 24)) {
+      for (const row of next.notes.slice(0, 64)) {
         try {
           let detail: MemoryNoteDetail | null = null;
           if (source.kind === "bot" && source.botId && row.path) detail = await openBotNote(source.botId, row.path);

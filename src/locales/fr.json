@@ -1816,6 +1816,7 @@
   "memoryManager.mapZoomIn": "Zoom avant",
   "memoryManager.mapZoomOut": "Zoom arrière",
   "memoryManager.mapFit": "Ajuster",
+  "memoryManager.mapEmpty": "Aucune note à cartographier dans cette source.",
   "memoryManager.close": "Fermer la mémoire",
   "memoryManager.loading": "Chargement de la mémoire",
   "memoryManager.emptySources": "Aucune source de mémoire pour l'instant.",

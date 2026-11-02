@@ -2297,6 +2297,7 @@
   "memoryManager.mapZoomIn": "Zoom in",
   "memoryManager.mapZoomOut": "Zoom out",
   "memoryManager.mapFit": "Fit",
+  "memoryManager.mapEmpty": "No notes to map in this source.",
   "memoryManager.close": "Close memory",
   "memoryManager.loading": "Loading memory",
   "memoryManager.emptySources": "No memory sources yet.",

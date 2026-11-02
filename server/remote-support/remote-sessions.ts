@@ -17,14 +17,14 @@ import {
   type RemoteSessionFacts,
   type RemoteSessionOs,
   type RemoteSessionView,
-} from "../shared/remote-session.ts";
-import { TERMINAL_DEFAULT_COLS, TERMINAL_DEFAULT_ROWS, terminalResourceKey } from "../shared/terminal-resources.ts";
-import type { Store } from "./store.ts";
-import type { TerminalAccess } from "./terminal-resources/types.ts";
-import type { TerminalResourceRegistry } from "./terminal-resources/registry.ts";
-import type { createTerminalSessionManager } from "./terminal-sessions.ts";
-import { createTailcatAdapter } from "./terminal-resources/adapters/tailcat.ts";
-import { resolveSystemSsh, resolveTailcatBinary } from "./tailcat-bin.ts";
+} from "../../shared/remote-session.ts";
+import { TERMINAL_DEFAULT_COLS, TERMINAL_DEFAULT_ROWS, terminalResourceKey } from "../../shared/terminal-resources.ts";
+import type { Store } from "../store.ts";
+import type { TerminalAccess } from "../terminal-resources/types.ts";
+import type { TerminalResourceRegistry } from "../terminal-resources/registry.ts";
+import type { createTerminalSessionManager } from "../terminal-sessions.ts";
+import { createTailcatAdapter } from "../terminal-resources/adapters/tailcat.ts";
+import { resolveSystemSsh, resolveTailcatBinary } from "../tailcat-bin.ts";
 import { markSessionClosed } from "./remote-support-local.ts";
 import { createRemoteControlSessions, type ControlAuditEvent, type ControlHandle, type OpenControl, type SpawnControl } from "./remote-control-session.ts";
 import { createRemoteControlAudit } from "./remote-control-audit.ts";
@@ -54,8 +54,8 @@ import {
   type RunCommand,
 } from "./remote-session-probe.ts";
 import { existsCommand, LIST_TIMEOUT_MS, listDirCommand, readExists, readListing, type ListResult } from "./remote-session-files.ts";
-import { remoteJoin, safeRemoteDir, scpSafePath, sensitiveRemoteDir } from "../shared/remote-files.ts";
-import type { AdminSessionInput } from "../shared/remote-session-admin.ts";
+import { remoteJoin, safeRemoteDir, scpSafePath, sensitiveRemoteDir } from "../../shared/remote-files.ts";
+import type { AdminSessionInput } from "../../shared/remote-session-admin.ts";
 import type { RemoteSessionActionEvent } from "./remote-session-actions-audit.ts";
 import { remoteCommandReadOnly } from "./remote-session-exec.ts";
 
@@ -541,7 +541,7 @@ export function createRemoteSessionService(deps: {
       });
     },
     /** Every session this server knows, for the admin Remote Sessions page
-     * (server/remote-sessions-admin.ts). The page, not this store, decides who
+     * (server/remote-support/remote-sessions-admin.ts). The page, not this store, decides who
      * may see each row. No address or key leaves here. */
     adminRows(): AdminSessionInput[] {
       return rows.map((row) => ({
@@ -792,7 +792,7 @@ export function createRemoteSessionService(deps: {
     /** Run one command on the connected computer for the bot, through the
      * tunnel, and give back its exit code and output (capped). `id` names
      * the session; without it, the session in focus in this conversation.
-     * The approval gate decides before this runs (server/remote-session-exec.ts). */
+     * The approval gate decides before this runs (server/remote-support/remote-session-exec.ts). */
     async exec(input: { principalId: string; botId: string; threadId: string; id?: string; command: string; timeoutMs?: number }): Promise<RemoteExecResult | { error: string }> {
       const session = this.target(input);
       if (!session) return { error: "No remote session is connected in this conversation." };
@@ -829,13 +829,13 @@ export function createRemoteSessionService(deps: {
       return this.exec({ ...input, id: session.id, command: snapshotCommand(session.os), timeoutMs: 45_000 });
     },
     /** The connected session a turn would reach, for the turn's reach line
-     * (server/remote-session-reach.ts): its name and OS, never the address. */
+     * (server/remote-support/remote-session-reach.ts): its name and OS, never the address. */
     reachFor(input: { principalId: string; botId: string; threadId: string }): { host: string; os: RemoteSessionOs; known: boolean } | null {
       const session = this.target(input);
       return session ? { host: publicText(hostLabel(session)) ?? session.code, os: session.os, known: !session.osGuessed } : null;
     },
     /** The OS of the session a bot tool means, for the approval rule
-     * (server/remote-session-exec.ts); `known` false while it is guessed. */
+     * (server/remote-support/remote-session-exec.ts); `known` false while it is guessed. */
     osFor(input: { principalId: string; botId: string; threadId: string; id?: string }): { os: RemoteSessionOs; known: boolean } | null {
       const session = this.target(input);
       return session ? { os: session.os, known: !session.osGuessed } : null;

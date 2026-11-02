@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { PASS, type RouteHandler } from "./table.ts";
 import type { RequestAuth } from "../request-auth.ts";
-import type { RemoteBotHosts } from "../remote-bot-hosts.ts";
+import type { RemoteBotHosts } from "../remote-support/remote-bot-hosts.ts";
 import { UNATTENDED_HOST_ID } from "../../shared/remote-unattended-host.ts";
 
 const LIST = /^\/api\/bots\/([\w-]{1,80})\/remote-hosts$/;

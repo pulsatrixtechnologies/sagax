@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { BranchActionError } from "./code-branches.ts";
+import { BranchActionError } from "../code-branches.ts";
 import { RemoteBranchGit, type RemoteExec } from "./remote-code-branches.ts";
 
 let dir = "";

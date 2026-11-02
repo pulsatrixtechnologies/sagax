@@ -2,8 +2,8 @@
 // is fixed: the folder path travels as base64 data (an argument of `sh` on
 // macOS and Linux, a string literal of an -EncodedCommand script on Windows),
 // so no character of it is ever read as shell or PowerShell syntax.
-import { parseRemoteListing, REMOTE_LIST_MAX, type RemoteListing } from "../shared/remote-files.ts";
-import type { RemoteSessionOs } from "../shared/remote-session.ts";
+import { parseRemoteListing, REMOTE_LIST_MAX, type RemoteListing } from "../../shared/remote-files.ts";
+import type { RemoteSessionOs } from "../../shared/remote-session.ts";
 import type { CommandResult } from "./remote-session-probe.ts";
 
 export const LIST_TIMEOUT_MS = 20_000;

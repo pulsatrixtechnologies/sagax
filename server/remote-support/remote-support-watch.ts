@@ -2,10 +2,10 @@
 // say "it is launched" (#1499). From remote_support_open until the end
 // user's computer joins, it asks Perspicax for the state on its own, in the
 // opener's name, through the same status call the bot makes
-// (handleRemoteSupportCall in server/remote-support-local.ts): when the
+// (handleRemoteSupportCall in server/remote-support/remote-support-local.ts): when the
 // state says started, that call connects this computer with the session's
 // own key and marks it connected, and the registrar posts the session card
-// in the conversation (server/remote-session-register.ts). The watch ends
+// in the conversation (server/remote-support/remote-session-register.ts). The watch ends
 // on connected, ended, expired or cancelled, when the code leaked
 // (technician_side refused), when the session is closed, at its end, or
 // after WATCH_MAX_MS.

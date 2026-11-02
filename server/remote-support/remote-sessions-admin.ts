@@ -15,9 +15,9 @@ import {
   type AdminRowFilters,
   type AdminSessionInput,
   type RemoteSessionAdminRow,
-} from "../shared/remote-session-admin.ts";
-import type { RemoteSessionLogEntry } from "../shared/remote-session-admin.ts";
-import { isUnattendedActive, normalizeHostKey, type UnattendedConsent, type UnattendedConsentInput } from "../shared/remote-session-consent.ts";
+} from "../../shared/remote-session-admin.ts";
+import type { RemoteSessionLogEntry } from "../../shared/remote-session-admin.ts";
+import { isUnattendedActive, normalizeHostKey, type UnattendedConsent, type UnattendedConsentInput } from "../../shared/remote-session-consent.ts";
 import type { UnattendedConsentStore } from "./remote-session-consent-store.ts";
 
 export interface AdminViewer {

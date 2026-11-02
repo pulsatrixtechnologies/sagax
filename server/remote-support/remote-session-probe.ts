@@ -5,7 +5,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync 
 import { homedir } from "node:os";
 import path from "node:path";
 
-import { isTailcatAddress, parseRemoteSessionCode, REMOTE_SESSION_ID, type RemoteSessionOs } from "../shared/remote-session.ts";
+import { isTailcatAddress, parseRemoteSessionCode, REMOTE_SESSION_ID, type RemoteSessionOs } from "../../shared/remote-session.ts";
 
 export interface CommandResult {
   code: number;
@@ -191,7 +191,7 @@ export function pruneSupportSessions(dir: string, now: number, maxAgeMs = 48 * 6
   return removed;
 }
 
-/** A session Sagax opened itself (server/remote-support-local.ts): the key
+/** A session Sagax opened itself (server/remote-support/remote-support-local.ts): the key
  * made for this session only and the address are both in
  * `<dir>/sessions/<row.code>/`. The folder must hold this very id and name
  * this row's person and bot as its opener: the id alone (it is on the chat

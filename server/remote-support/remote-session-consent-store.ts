@@ -12,7 +12,7 @@ import {
   revokeUnattendedConsent,
   type UnattendedConsent,
   type UnattendedConsentInput,
-} from "../shared/remote-session-consent.ts";
+} from "../../shared/remote-session-consent.ts";
 
 const FILE = "remote-unattended-consent.json";
 /** Keep a revoked or expired record this long for the audit, then drop it. */

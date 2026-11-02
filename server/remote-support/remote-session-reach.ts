@@ -4,9 +4,9 @@
 // "check this computer" is one call. Owner-only (the contract in
 // turn-reach.ts): the speaker is the bot's owner and pays for the turn, never
 // in a room, and an unknown speaker gets nothing. Naming the tools grants
-// nothing: the approval rule (server/remote-session-exec.ts) still decides.
-import type { RemoteSessionOs } from "../shared/remote-session.ts";
-import type { ReachContext, ReachContribution } from "./turn-reach.ts";
+// nothing: the approval rule (server/remote-support/remote-session-exec.ts) still decides.
+import type { RemoteSessionOs } from "../../shared/remote-session.ts";
+import type { ReachContext, ReachContribution } from "../turn-reach.ts";
 
 export const REMOTE_SESSION_REACH_TOOLS = ["agents__remote_session_snapshot", "agents__remote_session_exec"] as const;
 

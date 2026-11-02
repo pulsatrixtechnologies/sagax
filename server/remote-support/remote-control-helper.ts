@@ -14,7 +14,7 @@
 // admin turned it on, records the script, and that antivirus may inspect an
 // `-EncodedCommand` or an `Add-Type` build. The end-user console window and
 // the on-screen notice keep the session visible and consented.
-import type { RemoteSessionOs } from "../shared/remote-session.ts";
+import type { RemoteSessionOs } from "../../shared/remote-session.ts";
 
 export interface ControlHelperOptions {
   /** Frames per second, 2..15. */

@@ -6,13 +6,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { isTailcatAddress, parseRemoteSessionEnd, TAILCAT_ADDRESS_MAX } from "../shared/remote-session.ts";
-import type { Message, Store } from "./store.ts";
-import { TerminalResourceRegistry } from "./terminal-resources/registry.ts";
+import { isTailcatAddress, parseRemoteSessionEnd, TAILCAT_ADDRESS_MAX } from "../../shared/remote-session.ts";
+import type { Message, Store } from "../store.ts";
+import { TerminalResourceRegistry } from "../terminal-resources/registry.ts";
 import { createRemoteSessionService } from "./remote-sessions.ts";
 import { readSupportTunnel, readTunnel, type RunCommand } from "./remote-session-probe.ts";
 import { createRemoteSessionRegistrar } from "./remote-session-register.ts";
-import { createRemoteSessionInternalRoutes } from "./routes/remote-sessions.ts";
+import { createRemoteSessionInternalRoutes } from "../routes/remote-sessions.ts";
 import { absorbStatus, handleRemoteSupportCall, recallSupportSession, rememberSession, type TailcatRun } from "./remote-support-local.ts";
 
 const ADDRESS = "tcABCDEFGHJKMNPQRSTUVWXYZ234567890abcd";

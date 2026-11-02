@@ -13,7 +13,7 @@ vi.mock("../../../electron/script-pty.mjs", () => ({
 }));
 
 import { createTailcatAdapter } from "./tailcat.ts";
-import { readTunnel } from "../../remote-session-probe.ts";
+import { readTunnel } from "../../remote-support/remote-session-probe.ts";
 
 const ADDRESS = "tcABCDEFGHJKMNPQRSTUVWXYZ234567890abcd";
 const ID = "0123456789ab";

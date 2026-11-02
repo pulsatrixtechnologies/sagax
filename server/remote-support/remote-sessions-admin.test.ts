@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createRemoteSessionsAdmin } from "./remote-sessions-admin.ts";
 import { createUnattendedConsentStore } from "./remote-session-consent-store.ts";
-import type { AdminSessionInput } from "../shared/remote-session-admin.ts";
+import type { AdminSessionInput } from "../../shared/remote-session-admin.ts";
 
 const NOW = Date.parse("2026-10-22T12:00:00.000Z");
 let dir: string;

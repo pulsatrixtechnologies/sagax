@@ -10,16 +10,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { json, readBody } from "./harness/http.ts";
-import type { Message, Store } from "./store.ts";
-import { TerminalResourceRegistry } from "./terminal-resources/registry.ts";
+import { json, readBody } from "../harness/http.ts";
+import type { Message, Store } from "../store.ts";
+import { TerminalResourceRegistry } from "../terminal-resources/registry.ts";
 import { createRemoteSessionService } from "./remote-sessions.ts";
 import type { RunCommand } from "./remote-session-probe.ts";
 import { rememberSession } from "./remote-support-local.ts";
 import { existsCommand, listDirCommand, readExists, readListing } from "./remote-session-files.ts";
-import { BOT_ACT_ROUTE_HEADER, createRemoteSessionFileRoutes, remoteCallerIsAgent } from "./routes/remote-session-files.ts";
-import { createRemoteSessionRoutes } from "./routes/remote-sessions.ts";
-import { dispatchRoutes } from "./routes/table.ts";
+import { BOT_ACT_ROUTE_HEADER, createRemoteSessionFileRoutes, remoteCallerIsAgent } from "../routes/remote-session-files.ts";
+import { createRemoteSessionRoutes } from "../routes/remote-sessions.ts";
+import { dispatchRoutes } from "../routes/table.ts";
 
 const ADDRESS = "tcABCDEFGHJKMNPQRSTUVWXYZ234567890abcd";
 const ID = "0123456789ab";

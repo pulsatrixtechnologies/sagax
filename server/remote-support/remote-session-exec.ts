@@ -16,9 +16,9 @@
 // that conversation, once.
 import { createHash } from "node:crypto";
 
-import type { RemoteSessionOs } from "../shared/remote-session.ts";
-import { isReadOnlyCommand, runCommandOf } from "../shared/read-only-command.ts";
-import { builtinAgentToolName } from "./member-tool-scope.ts";
+import type { RemoteSessionOs } from "../../shared/remote-session.ts";
+import { isReadOnlyCommand, runCommandOf } from "../../shared/read-only-command.ts";
+import { builtinAgentToolName } from "../member-tool-scope.ts";
 
 export interface RemoteSessionToolCall {
   /** One of the two remote session tools. */

@@ -9,7 +9,7 @@
 import { appendFileSync, mkdirSync, readFileSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { redactCommand, type RemoteSessionLogEntry, type RemoteSessionLogKind } from "../shared/remote-session-admin.ts";
+import { redactCommand, type RemoteSessionLogEntry, type RemoteSessionLogKind } from "../../shared/remote-session-admin.ts";
 
 const ACTIONS_FILE = "remote-session-actions.jsonl";
 const CONTROL_FILE = "remote-control.jsonl";

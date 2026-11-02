@@ -4,7 +4,7 @@
 import { agentToolAnnotations } from "../../agent-tool-policy.ts";
 import { CLAIM_TOOL_NAMES } from "../../perspicax-claims.ts";
 import { isClaimTool } from "../../perspicax-claims.ts";
-import { handleRemoteSupportCall } from "../../remote-support-local.ts";
+import { handleRemoteSupportCall } from "../../remote-support/remote-support-local.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
 
@@ -43,7 +43,7 @@ export const PERSPICAX_TOOLS = [
   pxTool("flow", "Pulsatrix Flow, read only: command catalog lists the actions of the active pack; command describe with args.name gives one action's params and bounds.", { command: { type: "string", enum: ["catalog", "describe"] }, args: { type: "object", properties: { name: { type: "string" } }, additionalProperties: false } }, ["command"]),
   pxTool("flow_action", "Run one Pulsatrix Flow action (see flow catalog). A write batch answers needs_confirmation with a preview first: ask the user, then call again with confirm: true. _dry_run previews every write; resume continues a run paused at choice_needed.", { name: { type: "string" }, params: { type: "object" }, _dry_run: { type: "boolean" }, confirm: { type: "boolean" }, resume: { type: "object", properties: { run_id: { type: "string" }, choice: {} }, required: ["run_id"], additionalProperties: false } }),
   // Remote support (Perspicax 1.8.43, Tailcat). The bot does not supply a
-  // nodekey: server/remote-support-local.ts creates a key for this session
+  // nodekey: server/remote-support/remote-support-local.ts creates a key for this session
   // only on this computer and forwards only the public half.
   pxTool("remote_support_open", "Remote support (Tailcat, assistance a distance). When the person asks for a link for their client, a remote session, or assistance a distance, call this with no key: it is the first of at most three calls (open, a status only if you need one, close). No schema search, no cloud fallback. Sagax creates a new key for this session only on this computer (the desktop PC or the bot's cloud computer), deletes it when the session is closed or past its end, and never sends the private key. Do not ask for a nodekey, a template or a session id, and do not run tailcat serve, an exit node or file sharing: never expose the person's own computer. Sagax ships tailcat 0.7.0 beside the app. Do not download tailcat and do not copy it into a system directory. Defaults, unless the person says otherwise: the technician is their name and organization, the session ends in 2 hours (24 hours at most), the page detects the OS, and rights stay standard, a session without administrator rights (pass rights elevated only when they ask). Answers a code, a page link and the script lines, already in code fences: put them in your first reply exactly as given, and never pass a line through a shell on this computer (a Mac shell eats its $ variables). Then Sagax watches the session by itself: as soon as the end user's computer joins, it connects it and posts the session card in this chat, with no message from the person, so do not wait for them to say it is launched. Always end with remote_support_close. Refused with remote_support_disabled while an admin has not turned it on, and absent without the remote support permission.", {
     rights: { type: "string", enum: ["standard", "elevated"], description: "standard unless the person asks for elevated (one administrator consent on the end user's computer)" },

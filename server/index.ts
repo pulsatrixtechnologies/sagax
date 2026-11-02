@@ -4,7 +4,7 @@
 // First of all, SAGAX_* settings onto the names the code reads (step 1 of
 // the rename, electron/legacy-names.mjs).
 import { isReadOnlyCommand, runCommandOf } from "../shared/read-only-command.ts";
-import { grantRemoteExecApproval, noteRemoteExecRequest, remoteSessionToolCall } from "./remote-session-exec.ts";
+import { grantRemoteExecApproval, noteRemoteExecRequest, remoteSessionToolCall } from "./remote-support/remote-session-exec.ts";
 import "../electron/legacy-env-boot.mjs";
 import { ENVIRONMENT_PATHS, HEALTH_IDENTITY } from "../electron/legacy-names.mjs";
 import { healthzBody, healthzUnreadyBody } from "./healthz.ts";
@@ -1527,19 +1527,19 @@ import {
 } from "./org/org-xai-media.ts";
 import { configuredKeyterms, VOICE_KEYTERM_RECENT_MESSAGES, voiceKeyterms } from "./voice-keyterms.ts";
 import { installTerminalFeature } from "./terminal-install.ts";
-import { createRemoteSessionService } from "./remote-sessions.ts";
-import { createRemoteSessionActionsAudit, readRemoteSessionLog } from "./remote-session-actions-audit.ts";
-import { createUnattendedConsentStore } from "./remote-session-consent-store.ts";
-import { createRemoteSessionsAdmin } from "./remote-sessions-admin.ts";
-import { createUnattendedHosts } from "./remote-unattended-hosts.ts";
-import { createRemoteSessionRegistrar } from "./remote-session-register.ts";
-import { handleRemoteSupportCall, recallSupportSession } from "./remote-support-local.ts";
-import { guardRemoteSupportOpen } from "./remote-support-open-guard.ts";
-import { createRemoteSupportWatcher, parseSupportCheck, type SupportWatchTarget } from "./remote-support-watch.ts";
-import { supportFolderOwner, supportOwnersOfId } from "./remote-session-probe.ts";
+import { createRemoteSessionService } from "./remote-support/remote-sessions.ts";
+import { createRemoteSessionActionsAudit, readRemoteSessionLog } from "./remote-support/remote-session-actions-audit.ts";
+import { createUnattendedConsentStore } from "./remote-support/remote-session-consent-store.ts";
+import { createRemoteSessionsAdmin } from "./remote-support/remote-sessions-admin.ts";
+import { createUnattendedHosts } from "./remote-support/remote-unattended-hosts.ts";
+import { createRemoteSessionRegistrar } from "./remote-support/remote-session-register.ts";
+import { handleRemoteSupportCall, recallSupportSession } from "./remote-support/remote-support-local.ts";
+import { guardRemoteSupportOpen } from "./remote-support/remote-support-open-guard.ts";
+import { createRemoteSupportWatcher, parseSupportCheck, type SupportWatchTarget } from "./remote-support/remote-support-watch.ts";
+import { supportFolderOwner, supportOwnersOfId } from "./remote-support/remote-session-probe.ts";
 import { createRemoteSessionInternalRoutes, createRemoteSessionRoutes } from "./routes/remote-sessions.ts";
 import { createRemoteSessionsAdminRoutes } from "./routes/remote-sessions-admin.ts";
-import { createRemoteBotHosts } from "./remote-bot-hosts.ts";
+import { createRemoteBotHosts } from "./remote-support/remote-bot-hosts.ts";
 import { createRemoteBotHostsRoutes } from "./routes/remote-bot-hosts.ts";
 import { createRemoteControlRoutes, isRemoteControlPath } from "./routes/remote-control.ts";
 import { BOT_ACT_ROUTE_HEADER, createRemoteSessionFileRoutes, remoteCallerIsAgent } from "./routes/remote-session-files.ts";
@@ -1644,7 +1644,7 @@ import {
   registerReachProvider
 } from "./turn-reach.ts";
 import { turnConnectorsRecord } from "./turn-connectors.ts";
-import { remoteSessionReach } from "./remote-session-reach.ts";
+import { remoteSessionReach } from "./remote-support/remote-session-reach.ts";
 import {
   commandListAccess,
   createHarnessCommandRoutes,
@@ -18769,7 +18769,7 @@ bus.subscribe((event: RuntimeEvent) => {
       // server of the turn could have spelled (sagax-internal-tools.ts).
       const foreignServers = permission && asker && event.requestId ? foreignMcpServerNames(asker, event.threadId) : [];
       const internalTool = permission && asker && event.requestId ? sagaxInternalTool(event.mcpTool ?? event.tool, foreignServers) : null;
-      // Tailcat (2026-10-22, server/remote-session-exec.ts): a command on a
+      // Tailcat (2026-10-22, server/remote-support/remote-session-exec.ts): a command on a
       // client's computer that does more than read is the person's call every
       // time: a card no level, rule or Always allow answers.
       const remoteInput = typeof event.input === "string" ? event.input : undefined;
@@ -30425,7 +30425,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       return principalId ? { principalId: principalId.trim().toLowerCase(), botId: capability.botId } : null;
     },
     // status/close: the support folder must name this very owner, checked
-    // before Perspicax is called (server/remote-session-probe.ts). A folder
+    // before Perspicax is called (server/remote-support/remote-session-probe.ts). A folder
     // with no recorded owner (or none at all) is refused to everyone: nobody
     // status- or close- es a session no one is known to own.
     ownsSupportCode: (code, owner) => {
@@ -39197,7 +39197,7 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     // back) is an approval card on the thread; Full access and Approve for
     // me never answer it, only the person (confirmHeldCard).
     askGo: ({ threadId, botId, message }) => confirmHeldCard({ threadId, botId, tool: "perspicax", summary: message }),
-    // remote_support_open / status / close: the session shows in Sagax (server/remote-session-register.ts)
+    // remote_support_open / status / close: the session shows in Sagax (server/remote-support/remote-session-register.ts)
     onRemoteSupport: (call) => {
       const principalId = call.principalId || remoteSessionSpeaker(call.threadId);
       void remoteSessionRegistrar.observe({ ...call, ...(principalId ? { principalId } : {}) }).catch((error) => {

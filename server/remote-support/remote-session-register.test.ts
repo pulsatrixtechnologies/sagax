@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { Message, Store } from "./store.ts";
-import { TerminalResourceRegistry } from "./terminal-resources/registry.ts";
+import type { Message, Store } from "../store.ts";
+import { TerminalResourceRegistry } from "../terminal-resources/registry.ts";
 import { createRemoteSessionService, osFromUname } from "./remote-sessions.ts";
 import { decodeWindowsScript, OS_PROBE_WINDOWS, readSupportTunnel, readTunnel, type RunCommand } from "./remote-session-probe.ts";
 import { createRemoteSessionRegistrar, toolResultObject } from "./remote-session-register.ts";

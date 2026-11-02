@@ -9,11 +9,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { SERVER_FEATURE_NAMES } from "../shared/server-features.ts";
-import { LOCKOUT } from "./sessions.ts";
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { openSse } from "./testing/sse.ts";
-import { freePortBlock } from "./testing/ports.ts";
+import { SERVER_FEATURE_NAMES } from "../../shared/server-features.ts";
+import { LOCKOUT } from "../sessions.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
+import { openSse } from "../testing/sse.ts";
+import { freePortBlock } from "../testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(SERVER_DIR, "..");

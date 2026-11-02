@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createUnattendedConsentStore } from "./remote-session-consent-store.ts";
-import { defaultUnattendedExpiry } from "../shared/remote-session-consent.ts";
+import { defaultUnattendedExpiry } from "../../shared/remote-session-consent.ts";
 
 const NOW = Date.parse("2026-10-22T12:00:00.000Z");
 let dir: string;

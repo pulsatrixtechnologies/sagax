@@ -6,12 +6,12 @@ import {
   attachRemoteHost,
   cleanRemoteHosts,
   detachRemoteHost,
-} from "../shared/remote-bot-hosts.ts";
+} from "../../shared/remote-bot-hosts.ts";
 import {
   hostOwnedByPerson,
   parseUnattendedHostId,
   type UnattendedHostRow,
-} from "../shared/remote-unattended-host.ts";
+} from "../../shared/remote-unattended-host.ts";
 import type { UnattendedHosts } from "./remote-unattended-hosts.ts";
 
 export type RemoteBotHostsOutcome =

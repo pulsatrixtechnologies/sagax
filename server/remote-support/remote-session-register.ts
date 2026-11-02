@@ -1,6 +1,6 @@
 // A remote support session the bot opened with its own tool call becomes a
 // Sagax session: a row in the bot panel and a card in the chat. Both the
-// agents catalog tool (server/remote-support-local.ts, through
+// agents catalog tool (server/remote-support/remote-support-local.ts, through
 // /api/internal/perspicax/tool) and a Perspicax MCP profile the engine mounts
 // directly reach Perspicax through PerspicaxMcp.relay, which hands every
 // remote_support_* answer here. Nothing here reads or keeps the tunnel
@@ -12,7 +12,7 @@ import {
   parseRemoteSessionId,
   parseRemoteSessionOs,
   type RemoteSessionOs,
-} from "../shared/remote-session.ts";
+} from "../../shared/remote-session.ts";
 
 export interface RemoteSupportCall {
   threadId: string;
@@ -72,7 +72,7 @@ export function createRemoteSessionRegistrar(deps: {
   /** Post or refresh the card and the panel row (RemoteSessionService.publish), for this person. */
   publish(input: { principalId: string; botId: string; threadId: string; open: RegisteredOpen }): Promise<unknown>;
   /** A session this person opened on this bot, in this conversation: Sagax
-   * watches it from here (server/remote-support-watch.ts) and connects it
+   * watches it from here (server/remote-support/remote-support-watch.ts) and connects it
    * when the end user's computer joins, without a word from the person. */
   opened?(input: { principalId: string; botId: string; threadId: string; open: RegisteredOpen }): void;
   /** Mark the card closed (RemoteSessionService.endByCode). */

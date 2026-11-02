@@ -10,8 +10,8 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { chmod, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { isTailcatAddress, TAILCAT_ADDRESS_MAX } from "../shared/remote-session.ts";
-import { parseUnattendedHostId } from "../shared/remote-unattended-host.ts";
+import { isTailcatAddress, TAILCAT_ADDRESS_MAX } from "../../shared/remote-session.ts";
+import { parseUnattendedHostId } from "../../shared/remote-unattended-host.ts";
 import {
   liveSupportKey,
   normPrincipal,
@@ -21,7 +21,7 @@ import {
   supportFolderOwner,
   sweepSupportKeys,
 } from "./remote-session-probe.ts";
-import { resolveTailcatBinary } from "./tailcat-bin.ts";
+import { resolveTailcatBinary } from "../tailcat-bin.ts";
 
 /** Frozen template Perspicax renders (gateway remote_support::template). */
 export const REMOTE_SUPPORT_TEMPLATE = "tailcat-0.7.0/2";

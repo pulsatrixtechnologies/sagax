@@ -2,10 +2,10 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { callTool, type ToolCallContext } from "./drivers/agents-call.ts";
-import { availableTools } from "./drivers/agents-catalog.ts";
-import type { HarnessClient } from "./drivers/agents-client.ts";
-import { GUIDES } from "../scripts/self-knowledge/guides.ts";
+import { callTool, type ToolCallContext } from "../drivers/agents-call.ts";
+import { availableTools } from "../drivers/agents-catalog.ts";
+import type { HarnessClient } from "../drivers/agents-client.ts";
+import { GUIDES } from "../../scripts/self-knowledge/guides.ts";
 import {
   CONNECTED_NOTE,
   REMOTE_SUPPORT_TEMPLATE,

@@ -8,8 +8,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { Message, Store } from "./store.ts";
-import { TerminalResourceRegistry } from "./terminal-resources/registry.ts";
+import type { Message, Store } from "../store.ts";
+import { TerminalResourceRegistry } from "../terminal-resources/registry.ts";
 import { createRemoteSessionService, INVENTORY_RETRY_MS, type PublishRemoteSession } from "./remote-sessions.ts";
 import {
   decodeWindowsScript,

@@ -11,7 +11,7 @@ import { websocketAccept } from "../ws-bridge.ts";
 import { webSocketSession } from "../ws-session.ts";
 import { parseControlEvent, type ControlEvent } from "../../shared/remote-control.ts";
 import { PASS, type RouteHandler } from "./table.ts";
-import type { ControlHandle, OpenControl } from "../remote-control-session.ts";
+import type { ControlHandle, OpenControl } from "../remote-support/remote-control-session.ts";
 
 const CONTROL = /^\/api\/bots\/([\w-]{1,80})\/remote-sessions\/([a-f0-9]{12})\/control$/;
 /** Enough for a burst of input; frames only go the other way. */

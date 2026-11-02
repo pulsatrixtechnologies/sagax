@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { HELPER_FRAME_JPEG, HELPER_FRAME_META, type ControlEvent } from "../shared/remote-control.ts";
+import { HELPER_FRAME_JPEG, HELPER_FRAME_META, type ControlEvent } from "../../shared/remote-control.ts";
 import { createRemoteControlSessions, type ControlAuditEvent, type ControlProcess, type OpenControl } from "./remote-control-session.ts";
 
 function frame(type: number, payload: Uint8Array): Uint8Array {

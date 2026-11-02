@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createRemoteBotHosts } from "./remote-bot-hosts.ts";
-import type { UnattendedHostRow } from "../shared/remote-unattended-host.ts";
+import type { UnattendedHostRow } from "../../shared/remote-unattended-host.ts";
 
 const HOST = `h_${"ab".repeat(16)}`;
 const OTHER = `h_${"cd".repeat(16)}`;

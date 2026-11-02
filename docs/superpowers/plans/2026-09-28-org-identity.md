@@ -505,7 +505,7 @@ Add `principalId?: string` to `PublicSession` and to `publicSession()` if that f
 
 - [ ] **Step 4: Run tests**
 
-Run: `npx vitest run server/sessions.test.ts server/remote-sessions.test.ts`
+Run: `npx vitest run server/sessions.test.ts server/remote-support/remote-sessions.test.ts`
 Expected: PASS, with no regressions in the existing tests.
 
 - [ ] **Step 5: Commit**

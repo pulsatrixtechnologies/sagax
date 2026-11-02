@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { remoteSupportDenyRules } from "./drivers/claude.ts";
-import { remoteSupportDir } from "./engine-protected-paths.ts";
+import { remoteSupportDenyRules } from "../drivers/claude.ts";
+import { remoteSupportDir } from "../engine-protected-paths.ts";
 import { bindFlowOwner, flowOwner, pruneSupportSessions, readTunnel, supportOwnersOfId } from "./remote-session-probe.ts";
 import { absorbStatus, forgetAddress, markSessionClosed, ownerOf, rememberSession } from "./remote-support-local.ts";
 

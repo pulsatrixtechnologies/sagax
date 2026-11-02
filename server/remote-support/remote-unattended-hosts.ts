@@ -25,7 +25,7 @@ import {
   parseUnattendedHostId,
   parseUnattendedHosts,
   type UnattendedHostRow,
-} from "../shared/remote-unattended-host.ts";
+} from "../../shared/remote-unattended-host.ts";
 import { handleRemoteSupportCall, openUnattendedSession, type RemoteSupportContext } from "./remote-support-local.ts";
 
 /** Perspicax tools this page calls (names frozen with Perspicax, contract

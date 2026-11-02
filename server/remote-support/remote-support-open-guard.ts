@@ -1,8 +1,8 @@
 // Direct Perspicax MCP relay for remote_support_open: the model must never
 // choose host_id, nodekey or session. Sagax fills them from the bot's attached
 // owned hosts and a key of its own (defense in depth beside Perspicax).
-import { botHasRemoteHost } from "../shared/remote-bot-hosts.ts";
-import { hostOwnedByPerson, parseUnattendedHostId } from "../shared/remote-unattended-host.ts";
+import { botHasRemoteHost } from "../../shared/remote-bot-hosts.ts";
+import { hostOwnedByPerson, parseUnattendedHostId } from "../../shared/remote-unattended-host.ts";
 import {
   handleRemoteSupportCall,
   openUnattendedSession,

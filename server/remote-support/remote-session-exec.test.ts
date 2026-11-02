@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { consumeRemoteExecApproval, grantRemoteExecApproval, noteRemoteExecRequest, remoteCommandReadOnly, remoteSessionToolCall } from "./remote-session-exec.ts";
-import { memberOwnScopeTool } from "./member-tool-scope.ts";
+import { memberOwnScopeTool } from "../member-tool-scope.ts";
 
 const exec = (command: string) => JSON.stringify({ command });
 
@@ -69,7 +69,7 @@ describe("the route's own approval check", () => {
 
 describe("POST /api/internal/remote-sessions/exec", () => {
   async function call(os: { os: "windows" | "macos" | "linux"; known: boolean } | null, command: string, approved: boolean) {
-    const { createRemoteSessionInternalRoutes } = await import("./routes/remote-sessions.ts");
+    const { createRemoteSessionInternalRoutes } = await import("../routes/remote-sessions.ts");
     const ran: string[] = [];
     const sessions = {
       osFor: () => os,

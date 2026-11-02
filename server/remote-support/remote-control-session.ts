@@ -14,8 +14,8 @@ import {
   parseControlEvent,
   type ControlEvent,
   type HelperMeta,
-} from "../shared/remote-control.ts";
-import type { RemoteSessionOs } from "../shared/remote-session.ts";
+} from "../../shared/remote-control.ts";
+import type { RemoteSessionOs } from "../../shared/remote-session.ts";
 import { controlHelperCommand, controlSupported } from "./remote-control-helper.ts";
 import { tailcatEnv, tailcatSshArgv } from "./remote-session-probe.ts";
 

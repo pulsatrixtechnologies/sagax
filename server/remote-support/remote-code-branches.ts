@@ -5,7 +5,7 @@
 //
 // The transport is one injected `RemoteExec`: it runs one shell command on
 // the bot's computer and gives back its exit code and output, or an error
-// when the computer cannot be reached (server/remote-sessions.ts exec,
+// when the computer cannot be reached (server/remote-support/remote-sessions.ts exec,
 // wired in server/index.ts; the Tailcat path of #965/#939 is reused, never
 // duplicated). The repository's working folder is the thread's own folder
 // (`cwd`), which is a path on that computer, so the checked-out worktree is
@@ -16,9 +16,9 @@
 // never touches the default branch; gh and git use the computer's OWN
 // sign-in (no token of the person's or the server's is ever sent to a
 // client's computer); offline and unknown-OS answers carry no address.
-import { parseUnifiedDiff } from "../shared/code-runs.ts";
-import type { BotBranchChange, BotBranchDiff, BotBranchPull, BotBranchState } from "../shared/bot-code-branches.ts";
-import { BranchActionError, firstLine, ghError, githubRepo, parseStatus, PROTECTED_BRANCHES, pushError, stripCredentials, validBranchName } from "./code-branches.ts";
+import { parseUnifiedDiff } from "../../shared/code-runs.ts";
+import type { BotBranchChange, BotBranchDiff, BotBranchPull, BotBranchState } from "../../shared/bot-code-branches.ts";
+import { BranchActionError, firstLine, ghError, githubRepo, parseStatus, PROTECTED_BRANCHES, pushError, stripCredentials, validBranchName } from "../code-branches.ts";
 
 export interface RemoteGitResult {
   exitCode: number;

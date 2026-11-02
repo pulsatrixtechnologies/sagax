@@ -1,5 +1,5 @@
 import type { HarnessClient, Json } from "./agents-client.ts";
-import type { RemoteSupportContext } from "../remote-support-local.ts";
+import type { RemoteSupportContext } from "../remote-support/remote-support-local.ts";
 
 // Leaf types shared by agents-call.ts and the tool modules it dispatches to,
 // so those modules never import agents-call.ts back.

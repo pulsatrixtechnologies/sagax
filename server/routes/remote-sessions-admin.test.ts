@@ -9,8 +9,8 @@ import { json, readBody } from "../harness/http.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { dispatchRoutes } from "./table.ts";
 import { createRemoteSessionsAdminRoutes } from "./remote-sessions-admin.ts";
-import { createRemoteSessionsAdmin } from "../remote-sessions-admin.ts";
-import { createUnattendedConsentStore } from "../remote-session-consent-store.ts";
+import { createRemoteSessionsAdmin } from "../remote-support/remote-sessions-admin.ts";
+import { createUnattendedConsentStore } from "../remote-support/remote-session-consent-store.ts";
 import { requiredScope } from "../request-auth.ts";
 import type { AdminSessionInput } from "../../shared/remote-session-admin.ts";
 

@@ -79,6 +79,32 @@ export type TurnState = {
   prompt: any;
   tagged: any;
   voiceBriefed: any;
+  builtPrompt: any;
+  coldPrompt: any;
+  computerKind: any;
+  computerPromptKind: any;
+  coordinationNode: any;
+  coordinationPrompt: any;
+  credentialPrompt: any;
+  githubWithheld: any;
+  learnPrompt: any;
+  mountedComputer: any;
+  packagePlaybooks: any;
+  persona: any;
+  perspicaxPrompt: any;
+  profilePrompt: any;
+  promptParts: any;
+  recallPrompt: any;
+  routinePrompt: any;
+  sectionPeers: any;
+  setupMode: any;
+  skillAuthoring: any;
+  skillInstructions: any;
+  stablePrompt: any;
+  streamPart: any;
+  teamComputer: any;
+  vpsUnavailableNote: any;
+  worksInWorkspace: any;
   // Try-scoped fields that stream post-dispatch / finish may read.
   warmOk: boolean;
   browser: any;
@@ -193,6 +219,32 @@ export function createTurnState(init: {
     prompt: undefined,
     tagged: undefined,
     voiceBriefed: undefined,
+    builtPrompt: undefined,
+    coldPrompt: undefined,
+    computerKind: undefined,
+    computerPromptKind: undefined,
+    coordinationNode: undefined,
+    coordinationPrompt: undefined,
+    credentialPrompt: undefined,
+    githubWithheld: undefined,
+    learnPrompt: undefined,
+    mountedComputer: undefined,
+    packagePlaybooks: undefined,
+    persona: undefined,
+    perspicaxPrompt: undefined,
+    profilePrompt: undefined,
+    promptParts: undefined,
+    recallPrompt: undefined,
+    routinePrompt: undefined,
+    sectionPeers: undefined,
+    setupMode: undefined,
+    skillAuthoring: undefined,
+    skillInstructions: undefined,
+    stablePrompt: undefined,
+    streamPart: undefined,
+    teamComputer: undefined,
+    vpsUnavailableNote: undefined,
+    worksInWorkspace: undefined,
     warmOk: false,
     browser: undefined,
     browserCapture: undefined,

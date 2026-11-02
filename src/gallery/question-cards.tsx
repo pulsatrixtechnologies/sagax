@@ -1,6 +1,6 @@
 // Dev gallery for every interactive question (the bot's ask, AskUserQuestion,
 // a flat ask_person card, a widget choice), each under a bot bubble the way a
-// chat shows it. Served by Vite in dev at /dev/previews/question-preview.html;
+// chat shows it. Served by Vite in dev at /src/gallery/question-cards.html;
 // not part of the packaged app. ?lang=fr|en&skin=<id>
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -12,10 +12,10 @@ import { loadLocale } from "@/lib/i18n";
 import { applySkin, type SkinId } from "@/lib/skins";
 import { CHAT_BUBBLE_WIDTH_CLASS } from "@/lib/chat-bubble-width";
 import { StoreProvider, type Message } from "@/state/store";
-import { WIDGET_SAMPLES } from "../shared/widget-samples";
-import { parseWidgetInput } from "../shared/widget";
-import type { AskQuestion } from "../shared/ask-question";
-import "./styles.css";
+import { WIDGET_SAMPLES } from "../../shared/widget-samples";
+import { parseWidgetInput } from "../../shared/widget";
+import type { AskQuestion } from "../../shared/ask-question";
+import "../styles.css";
 
 const params = new URLSearchParams(location.search);
 await loadLocale(params.get("lang") ?? "fr");

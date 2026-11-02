@@ -1,18 +1,18 @@
 // Dev preview of the Approvals screen (src/components/approvals/), for
 // headless captures: the real ApprovalsPage over a fixture list served by a
 // local fetch stand-in. Served by Vite in dev at
-// /dev/previews/approvals-preview.html; not part of the packaged app.
+// /src/gallery/approvals-page.html; not part of the packaged app.
 // ?n=0|3|40&lang=fr|en&skin=<id>&scope=org (adds organization and team cards)
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
-import type { InboxApproval, InboxHistoryEntry, InboxPayload } from "../shared/approvals-inbox";
+import type { InboxApproval, InboxHistoryEntry, InboxPayload } from "../../shared/approvals-inbox";
 import { DesktopCapabilitiesProvider } from "@/components/DesktopCapabilities";
 import { ApprovalsPage } from "@/components/approvals/ApprovalsPage";
 import { loadLocale } from "@/lib/i18n";
 import { applySkin, type SkinId } from "@/lib/skins";
 import { StoreProvider, useStore, type Bot, type Message } from "@/state/store";
-import "./styles.css";
+import "../styles.css";
 
 const params = new URLSearchParams(location.search);
 await loadLocale(params.get("lang") ?? "fr");

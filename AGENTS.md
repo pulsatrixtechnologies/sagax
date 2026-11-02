@@ -4962,7 +4962,7 @@ row marked and the others dimmed (never folded into a line).
   `QuestionCardView` and `FlatQuestionCardView` (a live flat ask; a
   permission or a proposal keeps `CardView`). `AskQuestionAnswer.byQuestion`
   and `.picks(in:labels:)` mirror `picksInAnswer`.
-- Gallery: `dev/previews/question-preview.html` (`?lang=fr&skin=midnight`);
+- Gallery: `src/gallery/question-cards.html` (`?lang=fr&skin=midnight`);
   the phone's `ios/parity/capture.sh cards` shows the same variants.
 - Tests: `QuestionSheet.test.ts`, `QuestionCard*.test.ts`,
   `OptionCard.test.ts`, `WidgetChoiceList.test.ts`, `AskQuestionTests.swift`.

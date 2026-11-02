@@ -22,10 +22,10 @@ import { AppearancePane } from "@/components/appearance/AppearancePane";
 import { OWL_WING_MOVES, type OwlWingMove } from "@/lib/owl/owl-art";
 import { StoreProvider, type Bot } from "@/state/store";
 import { loadAchievements, setAchievementsFetcher } from "@/lib/achievements";
-import { MASCOT_SKIN_IDS, botMascotSkin, type MascotSkinId } from "../shared/mascot-skins";
-import { botMascotLook } from "../shared/mascot-look";
-import "./styles.css";
-import "./mascot-preview.css";
+import { MASCOT_SKIN_IDS, botMascotSkin, type MascotSkinId } from "../../shared/mascot-skins";
+import { botMascotLook } from "../../shared/mascot-look";
+import "../styles.css";
+import "./mascot-catalog.css";
 
 interface ScenarioLabels extends Partial<Record<MausState, string>> {}
 

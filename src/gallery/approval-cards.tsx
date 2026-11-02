@@ -1,5 +1,5 @@
 // Dev gallery for the approval cards (chat card + composer panel), like
-// dev/previews/mascot-preview.html. Served by Vite in dev at /dev/previews/approval-preview.html;
+// src/gallery/mascot-catalog.html. Served by Vite in dev at /src/gallery/approval-cards.html;
 // not part of the packaged app. ?lang=fr|en&skin=<id>
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -9,7 +9,7 @@ import { PendingApprovalBox, pendingApprovals } from "@/components/PendingApprov
 import { loadLocale } from "@/lib/i18n";
 import { applySkin, type SkinId } from "@/lib/skins";
 import { StoreProvider, type Bot, type Message } from "@/state/store";
-import "./styles.css";
+import "../styles.css";
 
 const params = new URLSearchParams(location.search);
 await loadLocale(params.get("lang") ?? "fr");

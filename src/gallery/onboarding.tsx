@@ -1,7 +1,7 @@
-// Dev gallery for the welcome flow, like dev/previews/mascot-preview.html for the mascot:
+// Dev gallery for the welcome flow, like src/gallery/mascot-catalog.html for the mascot:
 // every beat, in every skin, with reduced motion on or off, without touching
 // the workspace's real onboarding record. Served by Vite in dev at
-// /dev/previews/onboarding-preview.html; not part of the packaged app.
+// /src/gallery/onboarding.html; not part of the packaged app.
 //
 // The flow talks to whatever harness the dev proxy points at, so the engines
 // and phone beats show real data when `pnpm dev:server` is running and their
@@ -15,7 +15,7 @@ import type { MausMotion } from "@/lib/mascot";
 import { type BeatId, beatsFor } from "@/lib/onboarding";
 import { SKINS, type SkinId } from "@/lib/skins";
 import { StoreProvider, type Bot } from "@/state/store";
-import "./styles.css";
+import "../styles.css";
 
 const PREVIEW_BOT = {
   id: "preview-bot",

@@ -74,6 +74,11 @@ export type TurnState = {
   voiceTurnPick: any;
   warmOnly: any;
 
+  activeMessages: any;
+  liveBot: any;
+  prompt: any;
+  tagged: any;
+  voiceBriefed: any;
   // Try-scoped fields that stream post-dispatch / finish may read.
   warmOk: boolean;
   browser: any;
@@ -183,6 +188,11 @@ export function createTurnState(init: {
     voiceTurnPick: undefined,
     warmOnly: undefined,
 
+    activeMessages: undefined,
+    liveBot: undefined,
+    prompt: undefined,
+    tagged: undefined,
+    voiceBriefed: undefined,
     warmOk: false,
     browser: undefined,
     browserCapture: undefined,

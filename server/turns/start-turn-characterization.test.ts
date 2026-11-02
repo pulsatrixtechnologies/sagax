@@ -43,9 +43,14 @@ describe("startTurn characterization (#1388 w4 step 3)", () => {
   it("runs stream post-dispatch after sendTurn (bindTurn, markTaskDispatched, drains)", () => {
     const body = startTurnBody(startTurnSrc);
     const stream = readFileSync(join(here, "start-turn-stream.ts"), "utf8");
-    const sendAt = body.indexOf("savedSteps.dispatch.sendTurn");
-    expect(sendAt).toBeGreaterThan(-1);
+    const dispatch = readFileSync(join(here, "start-turn-dispatch.ts"), "utf8");
+    expect(dispatch).toMatch(/savedSteps\.dispatch\.sendTurn/);
+    expect(body).toMatch(/await dispatchStartTurn\(state\)/);
     expect(body).toMatch(/await streamStartTurn\(state\)/);
+    const dispatchAt = body.indexOf("await dispatchStartTurn(state)");
+    const streamAt = body.indexOf("await streamStartTurn(state)");
+    expect(dispatchAt).toBeGreaterThan(-1);
+    expect(streamAt).toBeGreaterThan(dispatchAt);
     expect(stream).toMatch(/handoffs\.bindTurn\(/);
     expect(stream).toMatch(/store\.markTaskDispatched\(/);
     expect(stream).toMatch(/drainQueuedSends\(\)/);
@@ -63,9 +68,10 @@ describe("startTurn characterization (#1388 w4 step 3)", () => {
 
   it("steer-aware recovery refuses to climb while steered messages are queued", () => {
     const body = startTurnBody(startTurnSrc);
+    const dispatch = readFileSync(join(here, "start-turn-dispatch.ts"), "utf8");
     expect(finishSrc).toMatch(/hasQueuedSteeredMessages\(state\.bot\.id, state\.threadId\)/);
     expect(body).toMatch(/handoffs\.begin\(/);
-    expect(body).toMatch(/handoffs\.dispatching\(/);
+    expect(dispatch).toMatch(/handoffs\.dispatching\(/);
     expect(readFileSync(join(here, "start-turn-stream.ts"), "utf8")).toMatch(/handoffs\.bindTurn\(/);
   });
 

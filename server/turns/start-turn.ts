@@ -9,6 +9,7 @@ import { createStreamStartTurn } from "./start-turn-stream.ts";
 import { createPrepareValidateStartTurn } from "./start-turn-prepare-validate.ts";
 import { createPrepareAdmitStartTurn } from "./start-turn-prepare-admit.ts";
 import { createPrepareClaimStartTurn } from "./start-turn-prepare-claim.ts";
+import { createDispatchStartTurn } from "./start-turn-dispatch.ts";
 
 export type { StartTurnHost };
 
@@ -41,12 +42,12 @@ export function createStartTurn(host: StartTurnHost) {
     THREADS_PROMPT,
     TurnAuthenticationRefusedError: _TurnAuthenticationRefusedError,
     TurnNotStartedError: _TurnNotStartedError,
-    VOICE_FIRST_SENTENCE_SYSTEM,
+    VOICE_FIRST_SENTENCE_SYSTEM: _VOICE_FIRST_SENTENCE_SYSTEM,
     WEBHOOK_PROMPT,
     WIDGET_APPROVAL_PROMPT,
     WIDGET_PROMPT,
     WITHHELD_HOST_TOOLS_PROMPT,
-    accountConnectorInput,
+    accountConnectorInput: _accountConnectorInput,
     activeInternalGenerationByThread,
     activeVpsThreads: _activeVpsThreads,
     agentBrowserFrame,
@@ -57,7 +58,7 @@ export function createStartTurn(host: StartTurnHost) {
     asPlaceFailure,
     attachCustomMcp,
     attachTeamBoat,
-    auditFullAccessTurn,
+    auditFullAccessTurn: _auditFullAccessTurn,
     autoLocalVmAttachable,
     autoPayerKey,
     autoRecallEnabled,
@@ -71,11 +72,11 @@ export function createStartTurn(host: StartTurnHost) {
     boatNotConfigured,
     botCreationOffered,
     botProfilePrompt,
-    botRecoveryBackups,
+    botRecoveryBackups: _botRecoveryBackups,
     botUserName,
     botUserProfile,
     browserIntegration,
-    browserIsThePlace,
+    browserIsThePlace: _browserIsThePlace,
     browserRuntime,
     buildRecoveryText,
     buildSystemPrompt,
@@ -84,7 +85,7 @@ export function createStartTurn(host: StartTurnHost) {
     bus: _bus,
     callLinesBlock,
     callLinesSince,
-    callTurnEffort,
+    callTurnEffort: _callTurnEffort,
     canWorkOnCloud,
     cfg,
     checkSoulDrift,
@@ -92,9 +93,9 @@ export function createStartTurn(host: StartTurnHost) {
     checkpoints,
     chiefOfStaffSystemPrompt,
     claimTurnResource,
-    claudeAiConnectorsFor,
-    claudeUserMcpEnabled,
-    clearCancelledProviderHandshake,
+    claudeAiConnectorsFor: _claudeAiConnectorsFor,
+    claudeUserMcpEnabled: _claudeUserMcpEnabled,
+    clearCancelledProviderHandshake: _clearCancelledProviderHandshake,
     clearDirectTurnDispatch,
     clearFailedAutoPin,
     clearTurnDigestState: _clearTurnDigestState,
@@ -110,7 +111,7 @@ export function createStartTurn(host: StartTurnHost) {
     computerSelectionTurns,
     computerSkippedNote,
     computerToolsRefusal,
-    confinedWhy,
+    confinedWhy: _confinedWhy,
     containerComputerFrame,
     containerComputerMcp,
     containerComputerStatus,
@@ -120,15 +121,15 @@ export function createStartTurn(host: StartTurnHost) {
     customMcpPrompt,
     dataIntegration,
     deliverableNotification,
-    desktopLocalModels,
-    desktopModelPersonFor,
+    desktopLocalModels: _desktopLocalModels,
+    desktopModelPersonFor: _desktopModelPersonFor,
     devPodsPrompt,
     devPodsThreads,
     directContext,
     directFollowupTurns: _directFollowupTurns,
     directRequestOwners,
     directTurnBots,
-    directTurnClaimExists,
+    directTurnClaimExists: _directTurnClaimExists,
     directTurnClaimIsCurrent,
     directTurnGenerationByThread,
     docsIndexPrompt,
@@ -143,8 +144,8 @@ export function createStartTurn(host: StartTurnHost) {
     engineDisplayName,
     engineHasNativeWebSearch,
     engineIsFresh,
-    engineStartGate,
-    engineTurnLevel,
+    engineStartGate: _engineStartGate,
+    engineTurnLevel: _engineTurnLevel,
     enginesRead: _enginesRead,
     ensureTaskWorkspace,
     ensureWorkspace,
@@ -153,18 +154,18 @@ export function createStartTurn(host: StartTurnHost) {
     expandSkillCommandTurnText,
     failedTurnTool,
     finishUntilPrompt,
-    fitTurnImagesForModel,
+    fitTurnImagesForModel: _fitTurnImagesForModel,
     forgetTurnCheckpoint,
     gatedLocalComputer,
     githubWithheldPrompt,
-    grokCloudConnectorsForTurn,
-    guardTurnDispatch,
+    grokCloudConnectorsForTurn: _grokCloudConnectorsForTurn,
+    guardTurnDispatch: _guardTurnDispatch,
     handedStateUsable,
     handoffs,
-    harnessCommandSource,
-    harnessCommands,
+    harnessCommandSource: _harnessCommandSource,
+    harnessCommands: _harnessCommands,
     hasQueuedSteeredMessages: _hasQueuedSteeredMessages,
-    holdBootEngineSlot,
+    holdBootEngineSlot: _holdBootEngineSlot,
     honouredPin,
     hooksEnabled,
     hooksIntegration,
@@ -176,7 +177,7 @@ export function createStartTurn(host: StartTurnHost) {
     isExternalContextMarker,
     isLocalModelId,
     isModelRefusal: _isModelRefusal,
-    languageOfPerson,
+    languageOfPerson: _languageOfPerson,
     latestCompaction,
     lightenColdPrompt,
     limitFailover,
@@ -199,7 +200,7 @@ export function createStartTurn(host: StartTurnHost) {
     managedPolicy,
     markDirectTurnDispatching,
     markWorkspaceUse,
-    mcpCallTimeoutMinutes,
+    mcpCallTimeoutMinutes: _mcpCallTimeoutMinutes,
     mcpServersAsPerson,
     measureContextBuckets,
     memoryPromptFor,
@@ -220,12 +221,12 @@ export function createStartTurn(host: StartTurnHost) {
     myChromePromptFor,
     namedTeammates,
     nextInChain: _nextInChain,
-    noteBotRead,
+    noteBotRead: _noteBotRead,
     noteCallBesideConversation: _noteCallBesideConversation,
-    noteTurnQueued,
+    noteTurnQueued: _noteTurnQueued,
     notify,
     orgSpeakerPrincipal,
-    orgTurnAccess,
+    orgTurnAccess: _orgTurnAccess,
     outstandingAssignmentsPrompt,
     ownerBotsReadOnly,
     ownerPaysForMember,
@@ -238,10 +239,10 @@ export function createStartTurn(host: StartTurnHost) {
     personalFeatureOn,
     personalSkillInputs,
     personalSkills,
-    pluginDirsFor,
+    pluginDirsFor: _pluginDirsFor,
     perspicaxTurnIntegration,
     phoneIntegration,
-    pickFastSentenceModel,
+    pickFastSentenceModel: _pickFastSentenceModel,
     poolLocalVmTarget,
     prepareSemanticRecall,
     prewarmNamedTeammates,
@@ -272,7 +273,7 @@ export function createStartTurn(host: StartTurnHost) {
     replaysNatively,
     reportIncident,
     resolveComputerPromptKind,
-    resolveEngineTurnEffort,
+    resolveEngineTurnEffort: _resolveEngineTurnEffort,
     retireProviderTurn: _retireProviderTurn,
     retryDelegationsWaitingOn,
     revokeInternalCapabilityGeneration,
@@ -280,7 +281,7 @@ export function createStartTurn(host: StartTurnHost) {
     roomHandoffProblem,
     routines: _routines,
     rulesSystemPrompt,
-    runAsBotEngine,
+    runAsBotEngine: _runAsBotEngine,
     runLifecycleEvent,
     runningTurnEngines,
     sameOwnerRosterMember,
@@ -319,22 +320,22 @@ export function createStartTurn(host: StartTurnHost) {
     teamMemory,
     threadBusy,
     toolDefinitionBytes,
-    toolErrorCorrectiveRoundsFor,
+    toolErrorCorrectiveRoundsFor: _toolErrorCorrectiveRoundsFor,
     turnAccessByThread: _turnAccessByThread,
     turnAnswers: _turnAnswers,
     turnCheckpoints,
-    turnCommandEnvironment,
+    turnCommandEnvironment: _turnCommandEnvironment,
     turnComputerResources,
     turnConnectorsFor,
     turnContextBuckets,
-    turnNetworkProxy,
+    turnNetworkProxy: _turnNetworkProxy,
     turnOrigin: _turnOrigin,
     turnPromptBytes,
     turnReachPrompt,
     turnResourceOwners,
     turnResources,
     turnTrace,
-    typedCommandForTurn,
+    typedCommandForTurn: _typedCommandForTurn,
     uniquePeerName,
     unseenMessages,
     userProfileSystemPrompt,
@@ -343,7 +344,7 @@ export function createStartTurn(host: StartTurnHost) {
     vaultPrincipalForThread,
     voiceBriefText,
     voiceCalls,
-    voiceLatency,
+    voiceLatency: _voiceLatency,
     voiceSessions,
     voiceTranscript,
     voiceUnseenBlock,
@@ -353,8 +354,8 @@ export function createStartTurn(host: StartTurnHost) {
     wants: _wants,
     watchdog,
     webhooks: _webhooks,
-    withDesktopModelPerson,
-    withRecalled,
+    withDesktopModelPerson: _withDesktopModelPerson,
+    withRecalled: _withRecalled,
     withUnseenMessages,
     withWorkplaceNote: _withWorkplaceNote,
     withholdHostToolsFor,
@@ -368,7 +369,10 @@ export function createStartTurn(host: StartTurnHost) {
   const streamStartTurn = createStreamStartTurn(host);
   const prepareValidateStartTurn = createPrepareValidateStartTurn(host);
   const prepareAdmitStartTurn = createPrepareAdmitStartTurn(host);
-  const prepareClaimStartTurn = createPrepareClaimStartTurn(host); void _bus; void _localVmTargetForBot; void _reachable; void _sessions; void _turnOrigin; void _wants; void _webhooks; void _releaseBootEngineSlot;
+  const prepareClaimStartTurn = createPrepareClaimStartTurn(host);
+  const dispatchStartTurn = createDispatchStartTurn(host);
+  void _VOICE_FIRST_SENTENCE_SYSTEM; void _accountConnectorInput; void _auditFullAccessTurn; void _botRecoveryBackups; void _browserIsThePlace; void _callTurnEffort; void _claudeAiConnectorsFor; void _claudeUserMcpEnabled; void _clearCancelledProviderHandshake; void _confinedWhy; void _desktopLocalModels; void _desktopModelPersonFor; void _directTurnClaimExists; void _engineStartGate; void _engineTurnLevel; void _fitTurnImagesForModel; void _grokCloudConnectorsForTurn; void _guardTurnDispatch; void _harnessCommandSource; void _harnessCommands; void _holdBootEngineSlot; void _languageOfPerson; void _mcpCallTimeoutMinutes; void _noteBotRead; void _noteTurnQueued; void _orgTurnAccess; void _pluginDirsFor; void _pickFastSentenceModel; void _resolveEngineTurnEffort; void _runAsBotEngine; void _toolErrorCorrectiveRoundsFor; void _turnCommandEnvironment; void _turnNetworkProxy; void _typedCommandForTurn; void _voiceLatency; void _withDesktopModelPerson; void _withRecalled;
+ void _bus; void _localVmTargetForBot; void _reachable; void _sessions; void _turnOrigin; void _wants; void _webhooks; void _releaseBootEngineSlot;
 
   const startTurn = async function startTurn(
     botId: string,
@@ -435,18 +439,18 @@ export function createStartTurn(host: StartTurnHost) {
       // Keep the full branch order for delivery bookkeeping, but select actual
       // replay entries by bytes. A compacted prefix is represented by its record.
       const skipTranscript = new Set<string>([state.userMessage.id, ...(state.opts?.excludeMessageIds ?? [])]);
-      const activeMessages = store.activePath(state.threadId);
+      state.activeMessages = store.activePath(state.threadId);
       const coordinationChildren = state.opts?.coordination?.resumed
         ? new Set(coordinator.children(state.opts.coordination.id).map((child: any) => child.id)) : undefined;
-      for (const m of activeMessages) {
+      for (const m of state.activeMessages) {
         if (!state.opts?.coordination || !m.roomRequest) continue;
         if ((m.roomRequest.phase === "request" && m.roomRequest.id === state.opts.coordination.id) ||
           (m.roomRequest.phase === "result" && coordinationChildren?.has(m.roomRequest.id))) skipTranscript.add(m.id);
       }
-      const context = directContext(state.bot, state.threadId, activeMessages);
+      const context = directContext(state.bot, state.threadId, state.activeMessages);
       state.contextOrder = context.map((m: any) => m.id);
       const replayable = context.filter((m: any) => !skipTranscript.has(m.id));
-      state.record = latestCompaction(activeMessages, state.task);
+      state.record = latestCompaction(state.activeMessages, state.task);
       state.selection = selectReplay(context, { budgetBytes: cfg.context?.rebuildBytes ?? DEFAULT_REBUILD_BYTES, excludedIds: skipTranscript, compaction: state.record });
       state.transcript = state.selection.transcript.map(({ role, text }: any) => ({ role, text }));
       state.contextReset = state.selection.compacted > 0 && state.record?.id !== state.task.appliedCompactionId;
@@ -608,7 +612,7 @@ export function createStartTurn(host: StartTurnHost) {
       state.voiceView = liveCall ? voiceTranscript(context, { excludedIds: skipTranscript, ...(state.record ? { compaction: state.record } : {}) }) : null;
       state.voiceHanded = [];
       state.voiceAnchor = undefined;
-      let voiceBriefed = false;
+      state.voiceBriefed = false;
       if (liveCall && state.voiceView) {
         state.plan = voiceSessions.plan(state.threadId, { callId: liveCall.callId, instanceId: state.instanceId, model: String(state.model ?? "") });
         if (state.plan.fresh) {
@@ -617,7 +621,7 @@ export function createStartTurn(host: StartTurnHost) {
         }
         // the warm starts the call's process: the first spoken turn takes it as is
         if (state.warmOnly) voiceSessions.dispatched(state.threadId, []);
-        const byId = new Map<string, any>(activeMessages.map((message: any) => [message.id, message]));
+        const byId = new Map<string, any>(state.activeMessages.map((message: any) => [message.id, message]));
         const ownReply = (id: string) => {
           state.source = byId.get(byId.get(id)?.requestMessageId ?? "");
           return Boolean(state.source?.voiceCall);
@@ -630,7 +634,7 @@ export function createStartTurn(host: StartTurnHost) {
           : state.plan.brief ? brief : withUnseenMessages(voiceUnseenBlock(unseen), userTurnText);
         state.voiceHanded = state.warmOnly ? [] : [...(state.plan.brief ? state.voiceView.representedIds : unseen.map((m: any) => m.id)), ...skipTranscript];
         state.voiceAnchor = state.warmOnly ? undefined : (state.contextOrder.at(-1) ?? state.userMessage.id);
-        voiceBriefed = state.plan.brief;
+        state.voiceBriefed = state.plan.brief;
         state.dispatchContext = {
           turnText: state.text,
           resumeCursor: state.plan.cursor,
@@ -790,7 +794,7 @@ export function createStartTurn(host: StartTurnHost) {
       });
       /** A Team incidents turn's computer is optional (turnAnswers): a place
        * that cannot be prepared leaves it with none — any seat taken on the
-       * way let go — and the prompt names the cause, where any other turn
+       * way let go — and the state.prompt names the cause, where any other turn
        * fails. A stopped setup and a parked seat wait go on as for any turn. */
       const skipComputer = (error: unknown) => {
         if (!state.answer.incident || error instanceof DirectTurnSetupCancelled || error instanceof ComputerWaitParked) throw error;
@@ -1270,7 +1274,7 @@ export function createStartTurn(host: StartTurnHost) {
       // @mentions in the user's message (the composer's tagging UI) become
       // an explicit coordination nudge. The agent still chooses the matching
       // peer tool, so the harness stays the single owner of turns/permissions.
-      const tagged = state.integrations.agents && !state.peerHop
+      state.tagged = state.integrations.agents && !state.peerHop
         ? mentionedBots(
             state.providerText,
             sectionPeers,
@@ -1280,7 +1284,7 @@ export function createStartTurn(host: StartTurnHost) {
       // the work thread coordinate_bots would use, so the delegation does not
       // wait for a cold start (perf round 3).
       if (!state.warmOnly && state.integrations.agents && state.boundedCoordination && !state.commsDepth && !state.opts?.coordination && !store.groupByThread(state.threadId)) {
-        prewarmNamedTeammates(state.bot, state.threadId, namedTeammates(state.providerText, sectionPeers, tagged));
+        prewarmNamedTeammates(state.bot, state.threadId, namedTeammates(state.providerText, sectionPeers, state.tagged));
       }
       const coordinationPrompt = state.bot.chiefOfStaff
         ? chiefOfStaffSystemPrompt(
@@ -1328,15 +1332,15 @@ export function createStartTurn(host: StartTurnHost) {
       // Also the one bot snapshot setupModeActive and the prompt's soul
       // (below) share, so a soul saved mid-dispatch is seen by both instead
       // of the two disagreeing about whether setup mode is still active.
-      const liveBot = store.bot(state.bot.id);
+      state.liveBot = store.bot(state.bot.id);
       const setupMode =
         state.peerToolsMounted &&
         setupModeActive({
-          soul: liveBot?.soul ?? state.bot.soul,
-          description: liveBot?.description ?? state.bot.description,
+          soul: state.liveBot?.soul ?? state.bot.soul,
+          description: state.liveBot?.description ?? state.bot.description,
           text: state.providerText
         });
-      if (liveBot && state.instance.adapter.capabilities.dataMcp === true) {
+      if (state.liveBot && state.instance.adapter.capabilities.dataMcp === true) {
         const data = dataIntegration(state.bot.id, { threadId: state.threadId, generation: state.dispatchClaimId });
         if (data) state.integrations.data = data;
       }
@@ -1350,7 +1354,7 @@ export function createStartTurn(host: StartTurnHost) {
       if (computerKind === "local") hostScreenTurns.set(state.threadId, { botId: state.bot.id, generation: state.dispatchClaimId });
       else hostScreenTurns.delete(state.threadId);
       if (
-        liveBot &&
+        state.liveBot &&
         state.plan.browser &&
         !(state.plan.computer === undefined && mountedComputer && mountedComputer !== "local") &&
         // On the person's computer, web pages open in their own browser
@@ -1358,10 +1362,10 @@ export function createStartTurn(host: StartTurnHost) {
         // Auto keeps the built-in browser: it is one of the places it picks.
         !(state.turnPlace.target === "user-desktop" && !state.turnAuto?.auto && state.integrations.custom?.[DESKTOP_BRIDGE_MCP_NAME]) &&
         builtInBrowserEnabled(cfg) &&
-        liveBot.browser !== false &&
+        state.liveBot.browser !== false &&
         state.instance.adapter.capabilities.browserMcp === true
       ) {
-        const selectedProfile = liveBot.browserProfile;
+        const selectedProfile = state.liveBot.browserProfile;
         state.browser = await browserIntegration(state.bot.id, selectedProfile, { threadId: state.threadId, generation: state.dispatchClaimId });
         if (state.browser) state.integrations.browser = state.browser.integration;
         // The browser lost its frame source when the Electron surface was
@@ -1420,19 +1424,19 @@ export function createStartTurn(host: StartTurnHost) {
       // Stable prefix on every engine. Compact tool list on Claude Code only,
       // local or cloud: Grok, Codex and Pi discover tools from the full list.
       const promptMode = {
-        bot: parseLocalPromptMode((liveBot ?? state.bot).localPrompt),
+        bot: parseLocalPromptMode((state.liveBot ?? state.bot).localPrompt),
         engine: parseLocalPromptMode(process.env.SAGAX_LOCAL_PROMPT)
       };
       const stablePrompt = usesStablePrompt(promptMode);
       state.compactPrompt = usesCompactPrompt({ ...promptMode, driverKind: state.instance.driverKind, model: state.model })
-        ? compactPromptFor(liveBot ?? state.bot, typeof state.turnPrincipal === "string" && state.turnPrincipal ? state.turnPrincipal : effectiveBotOwner(state.bot))
+        ? compactPromptFor(state.liveBot ?? state.bot, typeof state.turnPrincipal === "string" && state.turnPrincipal ? state.turnPrincipal : effectiveBotOwner(state.bot))
         : undefined;
       const promptApprovalLevel = approvalModeForTurn(state.bot, state.commsDepth > 0, state.threadId);
       // Cold / automation turns (routines, webhooks, proactive): tighter
       // per-section budgets, lazy skill index, short rich-output (V1/R3).
       const coldPrompt = state.opts?.automationSource !== undefined;
       const promptParts = [
-        { id: "finish-until", label: "Do not finish until", text: finishUntilPrompt((liveBot ?? state.bot).finishUntil) },
+        { id: "finish-until", label: "Do not finish until", text: finishUntilPrompt((state.liveBot ?? state.bot).finishUntil) },
         // #1372: a 1:1 goal's instruction, while it works; never the person's message
         { id: "goal", label: "Goal", text: soloGoalSystemPrompt(soloGoals.get(state.threadId)) },
         { id: "user-profile", label: "About the user", text: userProfileSystemPrompt(botUserProfile(state.bot)) },
@@ -1441,8 +1445,8 @@ export function createStartTurn(host: StartTurnHost) {
         // first after the soul: the block names agent tools, so it only goes
         // to a turn whose engine actually mounted them (setupMode is already
         // false when they are not — see agentsMounted above)
-        { id: "setup", label: "Setup", text: setupSystemPrompt(setupMode, { skills: skillAuthoring, cwd: liveBot?.cwd ?? state.bot.cwd }) },
-        { id: "files", label: "File locations", text: worksInWorkspace ? workspaceLocationsPrompt(state.bot.id, state.cwd, liveBot?.cwd ?? state.bot.cwd, { attachFile: Boolean(state.integrations.agents) && !HOSTED_WORKSPACE, confidential: store.isConfidentialThread(state.threadId), relativePaths: state.instance.driverKind === "claudeAgent", ...(stablePrompt ? { cwdElsewhere: true } : {}) }) : "" },
+        { id: "setup", label: "Setup", text: setupSystemPrompt(setupMode, { skills: skillAuthoring, cwd: state.liveBot?.cwd ?? state.bot.cwd }) },
+        { id: "files", label: "File locations", text: worksInWorkspace ? workspaceLocationsPrompt(state.bot.id, state.cwd, state.liveBot?.cwd ?? state.bot.cwd, { attachFile: Boolean(state.integrations.agents) && !HOSTED_WORKSPACE, confidential: store.isConfidentialThread(state.threadId), relativePaths: state.instance.driverKind === "claudeAgent", ...(stablePrompt ? { cwdElsewhere: true } : {}) }) : "" },
         // The conversation's own folder, on its own line, so the rest of the
         // file locations is the same bytes in every conversation of this bot.
         { id: "files-cwd", label: "Current working folder", text: stablePrompt && worksInWorkspace ? workspaceCwdPrompt(state.cwd) : "" },
@@ -1459,18 +1463,18 @@ export function createStartTurn(host: StartTurnHost) {
         { id: "mcp", label: "MCP servers", text: customMcpPrompt(Object.keys(state.integrations.custom ?? {})) + githubWithheldPrompt(githubWithheld) },
         { id: "perspicax", label: "Perspicax", text: perspicaxPrompt },
         // run_with_engine is shown to a person's own direct turn only (not one hop away)
-        { id: "claude-ai", label: "Claude connectors", text: engineConnectorsPromptFor(liveBot ?? state.bot, state.instance, state.speaker, { level: promptApprovalLevel, relay: Boolean(state.integrations.agents) && state.commsDepth === 0 }) },
+        { id: "claude-ai", label: "Claude connectors", text: engineConnectorsPromptFor(state.liveBot ?? state.bot, state.instance, state.speaker, { level: promptApprovalLevel, relay: Boolean(state.integrations.agents) && state.commsDepth === 0 }) },
         // the level this turn really runs at (approvalModeForTurn), so Full never asks for a typed GO
         { id: "approval-level", label: "Approval level", text: approvalLevelPrompt(promptApprovalLevel) },
         // #1819: effective ask-before-contact (Full skips the Sagax peer card)
         { id: "peer-contact", label: "Peer contact", text: peerContactPrompt({
           canContact: Boolean(coordinationPrompt),
-          asksBeforeContact: peerReviewRequired(liveBot ?? state.bot, state.threadId)
+          asksBeforeContact: peerReviewRequired(state.liveBot ?? state.bot, state.threadId)
         }) },
         // 2026-10-30: the bot knows it is proactive, and how (server/proactive-wake.ts)
-        { id: "proactive", label: "Proactive", text: proactivePrompt(proactiveModeFor(liveBot ?? state.bot)) },
+        { id: "proactive", label: "Proactive", text: proactivePrompt(proactiveModeFor(state.liveBot ?? state.bot)) },
         // what this turn reaches, in one line: "what connectors do you have" needs no tool call (server/turn-reach.ts)
-        { id: "reach", label: "Reach", text: turnReachPrompt(liveBot ?? state.bot, state.instance, state.speaker, state.threadId, state.integrations, Boolean(mountedComputer)) },
+        { id: "reach", label: "Reach", text: turnReachPrompt(state.liveBot ?? state.bot, state.instance, state.speaker, state.threadId, state.integrations, Boolean(mountedComputer)) },
         { id: "browser", label: "Browser", text: state.integrations.browser ? BUILT_IN_BROWSER_SYSTEM_PROMPT + myChromePromptFor(state.bot, state.threadId) : "" },
         { id: "data", label: "Data", text: state.integrations.data ? BUILT_IN_DATA_SYSTEM_PROMPT : "" },
         { id: "coordination", label: "Team", text: coordinationPrompt ? ` ${coordinationPrompt}` : "" },
@@ -1485,7 +1489,7 @@ export function createStartTurn(host: StartTurnHost) {
         { id: "routine-execution", label: "Routine execution", text: state.opts?.automationSource === "schedule" || state.opts?.automationSource === "manual" ? ROUTINE_EXECUTION_PROMPT : "" },
         { id: "profile", label: "Profile changes", text: profilePrompt },
         { id: "learn", label: "Skill authoring", text: learnPrompt },
-        { id: "rich-output", label: "Rich output", text: richOutputPrompt((liveBot ?? state.bot).emailDrafts !== false) },
+        { id: "rich-output", label: "Rich output", text: richOutputPrompt((state.liveBot ?? state.bot).emailDrafts !== false) },
         { id: "dev-pods", label: "Coding view", text: devPodsPrompt(devPodsThreads.isOn(state.threadId)) },
         { id: "section-context", label: "Section context", text: sectionContextSystemPrompt(state.bot.section) },
         { id: "team-memory", label: "Team memory", text: teamMemory.systemPrompt(state.bot.section) + (state.integrations.agents ? TEAM_MEMORY_PROMPT : "") },
@@ -1509,22 +1513,22 @@ export function createStartTurn(host: StartTurnHost) {
         { id: "skill-instructions", label: "Skill instructions", text: coldPrompt ? "" : skillInstructions },
         { id: "playbooks", label: "Playbooks", text: coldPrompt ? "" : packagePlaybooks },
         { id: "webhook", label: "Webhook provenance", text: state.opts?.automationSource === "webhook" ? WEBHOOK_PROMPT : "" },
-        { id: "mentions", label: "Mentions", text: state.boundedCoordination && tagged.length ? `The user named these existing teammates: ${tagged.map((b: any) => uniquePeerName(b, sectionPeers) ? peerName(b.name) : `${peerName(b.name)} (${b.id})`).join(", ")}. Use coordinate_bots when their contribution is needed (a unique name works as its bot_ids entry), with relay=true when the user only wants one teammate's own answer passed back; do not substitute native helper agents for these bots.` : mentionPrompt(tagged) },
+        { id: "mentions", label: "Mentions", text: state.boundedCoordination && state.tagged.length ? `The user named these existing teammates: ${state.tagged.map((b: any) => uniquePeerName(b, sectionPeers) ? peerName(b.name) : `${peerName(b.name)} (${b.id})`).join(", ")}. Use coordinate_bots when their contribution is needed (a unique name works as its bot_ids entry), with relay=true when the user only wants one teammate's own answer passed back; do not substitute native helper agents for these bots.` : mentionPrompt(state.tagged) },
         // a voice call: the phone-call instruction (server/voice-call-prompt.ts)
         { id: "voice-call", label: "Phone call", text: state.voiceCallText },
       ];
-      const builtPrompt = buildSystemPrompt(persona, liveBot?.soul ?? state.bot.soul ?? "", coldPrompt ? lightenColdPrompt(promptParts) : promptParts, stablePrompt || state.instance.driverKind === "claudeAgent"
+      const builtPrompt = buildSystemPrompt(persona, state.liveBot?.soul ?? state.bot.soul ?? "", coldPrompt ? lightenColdPrompt(promptParts) : promptParts, stablePrompt || state.instance.driverKind === "claudeAgent"
         ? new Set([
           ...(state.instance.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : []),
           ...(stablePrompt ? COMPACT_VOLATILE_SECTIONS : []),
         ])
         : undefined);
-      const prompt = stablePrompt ? compactVolatileOrder(builtPrompt) : builtPrompt;
-      turnPromptBytes.set(state.threadId, { stable: Buffer.byteLength(prompt.stable), volatile: Buffer.byteLength(prompt.volatile) });
+      state.prompt = stablePrompt ? compactVolatileOrder(builtPrompt) : builtPrompt;
+      turnPromptBytes.set(state.threadId, { stable: Buffer.byteLength(state.prompt.stable), volatile: Buffer.byteLength(state.prompt.volatile) });
       const catalogBytes = toolDefinitionBytes(state.integrations.agents?.env);
       const buckets = measureContextBuckets({
-        sections: prompt.sections,
-        promptBytes: Buffer.byteLength(prompt.stable) + Buffer.byteLength(prompt.volatile),
+        sections: state.prompt.sections,
+        promptBytes: Buffer.byteLength(state.prompt.stable) + Buffer.byteLength(state.prompt.volatile),
         messages: state.transcript.length,
         messageBytes: state.transcript.reduce((sum: any, entry: any) => sum + Buffer.byteLength(entry.text ?? ""), 0),
         toolsBytes: catalogBytes.tools,
@@ -1533,10 +1537,10 @@ export function createStartTurn(host: StartTurnHost) {
       if (buckets) turnContextBuckets.set(state.threadId, buckets);
       else turnContextBuckets.delete(state.threadId);
       // the dev panel's Connectors card: what this turn really reached
-      if (!state.warmOnly) store.patchTask(state.bot.id, state.threadId, { connectors: turnConnectorsFor(liveBot ?? state.bot, state.instance, state.speaker, state.integrations, state.turnPlace.principal, state.instance.adapter.capabilities.customMcp === true) });
-      if (!state.warmOnly) turnTrace(state.threadId, "prompt-built");
+      if (!state.warmOnly) store.patchTask(state.bot.id, state.threadId, { connectors: turnConnectorsFor(state.liveBot ?? state.bot, state.instance, state.speaker, state.integrations, state.turnPlace.principal, state.instance.adapter.capabilities.customMcp === true) });
+      if (!state.warmOnly) turnTrace(state.threadId, "state.prompt-built");
       // the Files list's "last used": what this turn's prompt carried
-      markWorkspaceUse(state.bot.id, promptSectionPaths(prompt.sections));
+      markWorkspaceUse(state.bot.id, promptSectionPaths(state.prompt.sections));
       // Automatic recall rides in front of THIS turn's message, never in the
       // system prompt: the volatile half is re-sent whole whenever any part of
       // it changes, and recall changes nearly every turn.
@@ -1570,169 +1574,9 @@ export function createStartTurn(host: StartTurnHost) {
       // must never survive a soul change by laundering its record. A
       // person-facing delegated return still re-decides here: that turn is
       // the one the person watches.
-      const dispatchedConfig = sessionConfig(liveBot?.soul ?? state.bot.soul);
+      const dispatchedConfig = sessionConfig(state.liveBot?.soul ?? state.bot.soul);
       if (state.strictResume && !state.voiceView && !(state.opts?.cardContinuation && state.continuingRoutine) && dispatchedConfig !== state.plannedConfig) state.dispatchContext = decideContext(dispatchedConfig);
-      // Before sendTurn: an adapter may emit the whole turn before it resolves.
-      if (!state.warmOnly) handoffs.dispatching(state.threadId, state.dispatchClaimId, state.dispatchContext.handoff);
-      // Read receipts (server/read-receipts.ts): the person's words this turn
-      // carries are what the bot has now seen. A card continuation carries
-      // none of its own: it sees the conversation it resumes.
-      if (!state.warmOnly) {
-        const carriedIds = [state.userMessage.id, ...(state.opts?.excludeMessageIds ?? [])];
-        const textIds = new Set(activeMessages.filter((m: any) => m.kind === "text" && !m.roomRequest).map((m: any) => m.id));
-        noteBotRead(state.bot.id, state.threadId, carriedIds.some((id) => textIds.has(id)) ? carriedIds : state.contextOrder.filter((id: any) => textIds.has(id)));
-      }
-      // Slice 4: this turn's credentials (an owner key is read now).
-      // (solo mode takes no extra await: its dispatch timing is unchanged)
-      const turnAccess = IDENTITY.kind === "perspicax" ? await orgTurnAccess(state.threadId, state.bot, state.instance, state.speaker, state.bot.modelSelection.model) : undefined;
-      if (!state.warmOnly) turnTrace(state.threadId, "access");
-      // An engine slash command typed by a person (or set in a routine)
-      // reaches the engine verbatim (server/harness-commands.ts); a peer hop
-      // or a card continuation never runs one.
-      const typedCommand = !state.opts?.cardContinuation && state.commsDepth === 0
-        ? await typedCommandForTurn(state.resolvedImages.text, harnessCommandSource(state.bot, state.threadId, {
-          scope: {
-            botId: state.bot.id,
-            ...(state.cwd ? { cwd: state.cwd } : {}),
-            ...(withholdHostToolsFor(state.instance) ? { withholdHostTools: true } : {}),
-            mcpFromUserConfig: claudeUserMcpEnabled(cfg, IDENTITY.kind === "perspicax") && !managedPolicy.restrictsMcp()
-          },
-          speaker: state.speaker,
-          ...(turnAccess ? { access: turnAccess } : {})
-        }), harnessCommands)
-        : { kind: "none" as const };
-      if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped during command lookup");
-      if (!state.warmOnly) turnTrace(state.threadId, "command");
-      const engineCommand = typedCommand.kind === "engine" ? typedCommand : null;
-      // With no session to resume, the command runs in a new one that never
-      // saw the conversation: the next turn must still rebuild it, so the
-      // bookkeeping that would mark the context delivered is left for it.
-      state.contextStillPending = Boolean(engineCommand && state.dispatchContext.sessionReset && state.transcript.length > 0 &&
-        !replaysNatively(state.instance.driverKind));
-      if (!state.warmOnly) voiceLatency.mark(state.threadId, "dispatch", state.voiceView ? { run: {
-        model: state.voiceTurnPick?.modelLabel ?? String(state.model ?? ""),
-        contextBytes: Buffer.byteLength(state.dispatchContext.turnText),
-        session: voiceBriefed ? "new" : "resumed"
-      } } : undefined);
-      // A call turn (and the warm that prepares its process, so the two share
-      // one spawn contract) runs at the engine's low effort: the person is
-      // waiting for the first word (server/voice-call-effort.ts).
-      // A pre-warm off a call (server/thread-prewarm.ts) takes the next
-      // turn's own effort and flags, or the turn would relaunch it.
-      const turnEffort = state.onCall
-        ? callTurnEffort({ driverKind: state.instance.driverKind, levels: state.instance.adapter.capabilities.effortLevels, effort: state.effort })
-        : resolveEngineTurnEffort(state.effort, state.instance.driverKind, state.instance.adapter.capabilities.effortLevels);
-      // A routine run while the server boots waits for an engine start slot
-      // (server/engine-start-gate.ts): the runs that came due during a
-      // restart start two at a time instead of every engine at once.
-      // After boot, routine turns keep a steady limit (SAGAX_ROUTINE_ENGINE_SLOTS)
-      // and wait while memory is critical (server/engine-memory-guard.ts).
-      // A card continuation of a routine is not held by the steady gate: it
-      // may be the peer a slot holder waits on (no deadlock).
-      if (state.opts?.automationSource && !state.warmOnly && !state.onCall && (engineStartGate.booting || !state.opts?.cardContinuation)) {
-        await holdBootEngineSlot(state.threadId, `${state.bot.name} (${state.instance.driverKind})`, state.instance);
-        turnTrace(state.threadId, "engine-slot");
-        if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped while waiting for an engine slot");
-      }
-      if (!state.warmOnly && typeof state.userMessage.at === "number") noteTurnQueued(state.threadId, state.userMessage.at);
-      if (!state.warmOnly) turnTrace(state.threadId, "send");
-      // Each picture within the model's limits: a scaled copy for a large one.
-      const modelImages = await fitTurnImagesForModel(state.turnImages, { language: languageOfPerson(state.turnPlace.principal) });
-      // #1137: when the owner pays, the owner's computer serves its model.
-      const deskPerson = desktopModelPersonFor(state.bot, state.instance, state.speaker, state.turnPlace.principal);
-      state.dispatch = await guardTurnDispatch(withDesktopModelPerson(deskPerson, () => runAsBotEngine(state.bot.id, () => {
-        if (IDENTITY.kind === "perspicax") desktopLocalModels.assertAvailable(deskPerson, state.model, state.instance.driverKind);
-        const replayRequest = state.personLine && !state.opts?.unattended && !state.guestConfined
-          ? { botId: state.bot.id, message: state.userMessage, turnText: state.text, placePicked: state.wants === "local" && state.placeSource !== "auto-pin" }
-          : null;
-        return savedSteps.dispatch.sendTurn(state.instance, replayRequest, {
-        threadId: state.threadId,
-        botId: state.bot.id,
-        ...(state.compactPrompt ? { compactPrompt: state.compactPrompt } : {}),
-        // the per-turn latency line's queue stage (drivers/acp/turn-latency.ts)
-        ...(!state.warmOnly && typeof state.userMessage.at === "number" ? { receivedAt: state.userMessage.at } : {}),
-        ...(turnAccess ? { access: turnAccess } : {}),
-        // on a live call the engine process stays warm from turn to turn.
-        // A warm uses the same flag so the first spoken turn's contract matches.
-        ...(state.onCall ? { keepWarm: true } : {}),
-        ...(state.warmOnly ? { warmOnly: true, ...(state.onCall ? { cachePrime: true } : {}), ...(state.opts?.warmSignal ? { warmSignal: state.opts.warmSignal } : {}) } : {}),
-        startupRecovery: !state.warmOnly &&
-          (state.opts?.automaticRecoveryIndex ?? 0) < botRecoveryBackups(liveBot ?? state.bot, cfg).length,
-        text: state.warmOnly ? "" : (engineCommand ? engineCommand.engineText : withRecalled(state.recalled, state.dispatchContext.turnText)),
-        ...(engineCommand ? { harnessCommand: { name: engineCommand.command.name, args: engineCommand.args, ...(engineCommand.command.path ? { path: engineCommand.command.path } : {}) } } : {}),
-        ...(state.recalled && !state.warmOnly && !engineCommand ? { recalled: state.recalled } : {}),
-        images: modelImages,
-        approvalMode: engineTurnLevel(state.bot, state.threadId, auditFullAccessTurn(state.bot, state.threadId, approvalModeForTurn(state.bot, state.commsDepth > 0, state.threadId))),
-        toolScope: state.toolScope,
-        ...(state.guestConfined ? { guestConfined: true, confinedWhy: confinedWhy(state.threadId) } : {}),
-        model: state.model,
-        effort: turnEffort,
-        variant: state.variant,
-        // a rewound thread never resumes the abandoned branch's session
-        // the active task's own session — another task's cursor would
-        // resume the wrong conversation and defeat the context bubble
-        resumeCursor: state.dispatchContext.resumeCursor,
-        sessionReset: state.dispatchContext.sessionReset,
-        ...(state.dispatchContext.recoveryText !== undefined && !engineCommand ? { recoveryText: state.dispatchContext.recoveryText } : {}),
-        transcript: state.voiceView ? state.voiceView.transcript : state.transcript,
-        // #1276: a compact prompt sends the stable half first and what differs
-        // between conversations last, for an engine that takes the prompt
-        // whole (pi without a session); same sections, nothing dropped.
-        system: state.compactPrompt ? prompt.stable + prompt.volatile : prompt.text,
-        systemStable: prompt.stable,
-        systemVolatile: prompt.volatile,
-        systemVolatileSections: prompt.volatileSections,
-        // the mentions half describes this turn: identical consecutive tags
-        // must still deliver their note (SendTurnInput.mentionTurn)
-        // and so does an interrupted call turn's marker
-        mentionTurn: tagged.length > 0 || Boolean(state.userMessage.voiceCall?.interrupted),
-        integrations: state.integrations,
-        ...(withholdHostToolsFor(state.instance) ? { withholdHostTools: true } : {}),
-        ...turnCommandEnvironment(state.instance, state.bot.id, state.threadId),
-        toolErrorCorrectiveRounds: toolErrorCorrectiveRoundsFor(cfg, process.env, { botEnabled: state.bot.loopGuard }),
-        // Auto may leave their computer mid-turn: the engine's own traffic
-        // goes through it only when the Workspace is fixed there.
-        ...(() => { const networkProxy = state.turnAuto?.auto ? undefined : turnNetworkProxy(state.threadId, state.bot.id, state.turnPlace); return networkProxy ? { networkProxy } : {}; })(),
-        ...(state.integrations.browser && browserIsThePlace(state.plan) ? { preloadBrowserTools: true } : {}),
-        mcpFromUserConfig: claudeUserMcpEnabled(cfg, IDENTITY.kind === "perspicax") && !managedPolicy.restrictsMcp(),
-        claudeAiConnectors: claudeAiConnectorsFor(state.bot, state.instance, state.speaker, turnAccess?.via),
-        grokCloudConnectors: grokCloudConnectorsForTurn(accountConnectorInput(state.bot, state.instance, state.speaker, turnAccess?.via)),
-        ...pluginDirsFor(state.bot, state.instance, orgSpeakerPrincipal(state.bot, state.speaker)),
-        mcpCallTimeoutMs: mcpCallTimeoutMinutes(cfg) * 60_000,
-        cwd: state.cwd
-      }, (input: any) => state.instance.adapter.sendTurn(input));
-      })), () => !directTurnClaimExists(state.bot.id, state.dispatchClaimId, state.threadId), async () => {
-        await state.instance.adapter.interruptTurn(state.threadId).catch(() => {});
-      });
-      if (state.warmOnly) {
-        // A duplex interrupt while the person is still talking cancels this
-        // claim: there is no spoken turn yet, and releasing the process
-        // would make the first words pay a cold start. Hangup aborts the
-        // signal and is the path that closes it. The interrupt also
-        // quarantines this handshake for 30s; the warm has no provider
-        // turn id to retire, so leaving the mark would hold the first
-        // utterance until it expired.
-        clearCancelledProviderHandshake(state.threadId, `direct:${state.dispatchClaimId}`);
-        if (state.opts?.warmSignal?.aborted) state.instance.adapter.releaseWarmSession?.(state.threadId);
-        else {
-          state.warmOk = true;
-          // The HTTP pool is already warm from GET /models. One 1-token
-          // completion on the opener's model opens the chat path and, when
-          // the prompt is long enough for the provider, writes the prefix.
-          // Not awaited: the call's first turn does not wait on it.
-          if (state.instance.driverKind === "grok" && state.instance.generateText) {
-            const fast = pickFastSentenceModel(state.instance.models.options.map((option: any) => option.id));
-            if (fast) {
-              void state.instance.generateText(".", {
-                system: VOICE_FIRST_SENTENCE_SYSTEM,
-                model: fast,
-                maxTokens: 1
-              }).catch(() => undefined);
-            }
-          }
-        }
-        return;
-      }
+      await dispatchStartTurn(state);
 
       await streamStartTurn(state);
     } catch (cause: any) {

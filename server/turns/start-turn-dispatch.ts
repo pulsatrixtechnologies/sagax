@@ -1,0 +1,224 @@
+// @ts-nocheck
+// #1388 wave 4 step 3: startTurn dispatch (handoffs.dispatching through sendTurn).
+// Never imports server/index.ts.
+import type { StartTurnHost } from "./start-turn-types.ts";
+import type { TurnState } from "./start-turn-state.ts";
+
+export function createDispatchStartTurn(host: StartTurnHost) {
+  const {
+    DirectTurnSetupCancelled,
+    IDENTITY,
+    VOICE_FIRST_SENTENCE_SYSTEM,
+    accountConnectorInput,
+    approvalModeForTurn,
+    auditFullAccessTurn,
+    botRecoveryBackups,
+    browserIsThePlace,
+    callTurnEffort,
+    cfg,
+    claudeAiConnectorsFor,
+    claudeUserMcpEnabled,
+    clearCancelledProviderHandshake,
+    confinedWhy,
+    desktopLocalModels,
+    desktopModelPersonFor,
+    directTurnClaimExists,
+    directTurnClaimIsCurrent,
+    engineStartGate,
+    engineTurnLevel,
+    fitTurnImagesForModel,
+    grokCloudConnectorsForTurn,
+    guardTurnDispatch,
+    handoffs,
+    harnessCommandSource,
+    harnessCommands,
+    holdBootEngineSlot,
+    languageOfPerson,
+    managedPolicy,
+    mcpCallTimeoutMinutes,
+    noteBotRead,
+    noteTurnQueued,
+    orgSpeakerPrincipal,
+    orgTurnAccess,
+    pluginDirsFor,
+    pickFastSentenceModel,
+    replaysNatively,
+    resolveEngineTurnEffort,
+    runAsBotEngine,
+    savedSteps,
+    toolErrorCorrectiveRoundsFor,
+    turnCommandEnvironment,
+    turnNetworkProxy,
+    turnTrace,
+    typedCommandForTurn,
+    voiceLatency,
+    withDesktopModelPerson,
+    withRecalled,
+    withholdHostToolsFor,
+  } = host;
+
+  return async function dispatchStartTurn(state: TurnState): Promise<void> {
+    // Before sendTurn: an adapter may emit the whole turn before it resolves.
+    if (!state.warmOnly) handoffs.dispatching(state.threadId, state.dispatchClaimId, state.dispatchContext.handoff);
+    // Read receipts (server/read-receipts.ts): the person's words this turn
+    // carries are what the bot has now seen. A card continuation carries
+    // none of its own: it sees the conversation it resumes.
+    if (!state.warmOnly) {
+      const carriedIds = [state.userMessage.id, ...(state.opts?.excludeMessageIds ?? [])];
+      const textIds = new Set(state.activeMessages.filter((m: any) => m.kind === "text" && !m.roomRequest).map((m: any) => m.id));
+      noteBotRead(state.bot.id, state.threadId, carriedIds.some((id) => textIds.has(id)) ? carriedIds : state.contextOrder.filter((id: any) => textIds.has(id)));
+    }
+    // Slice 4: this turn's credentials (an owner key is read now).
+    // (solo mode takes no extra await: its dispatch timing is unchanged)
+    const turnAccess = IDENTITY.kind === "perspicax" ? await orgTurnAccess(state.threadId, state.bot, state.instance, state.speaker, state.bot.modelSelection.model) : undefined;
+    if (!state.warmOnly) turnTrace(state.threadId, "access");
+    // An engine slash command typed by a person (or set in a routine)
+    // reaches the engine verbatim (server/harness-commands.ts); a peer hop
+    // or a card continuation never runs one.
+    const typedCommand = !state.opts?.cardContinuation && state.commsDepth === 0
+      ? await typedCommandForTurn(state.resolvedImages.text, harnessCommandSource(state.bot, state.threadId, {
+        scope: {
+          botId: state.bot.id,
+          ...(state.cwd ? { cwd: state.cwd } : {}),
+          ...(withholdHostToolsFor(state.instance) ? { withholdHostTools: true } : {}),
+          mcpFromUserConfig: claudeUserMcpEnabled(cfg, IDENTITY.kind === "perspicax") && !managedPolicy.restrictsMcp()
+        },
+        speaker: state.speaker,
+        ...(turnAccess ? { access: turnAccess } : {})
+      }), harnessCommands)
+      : { kind: "none" as const };
+    if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped during command lookup");
+    if (!state.warmOnly) turnTrace(state.threadId, "command");
+    const engineCommand = typedCommand.kind === "engine" ? typedCommand : null;
+    // With no session to resume, the command runs in a new one that never
+    // saw the conversation: the next turn must still rebuild it, so the
+    // bookkeeping that would mark the context delivered is left for it.
+    state.contextStillPending = Boolean(engineCommand && state.dispatchContext.sessionReset && state.transcript.length > 0 &&
+      !replaysNatively(state.instance.driverKind));
+    if (!state.warmOnly) voiceLatency.mark(state.threadId, "dispatch", state.voiceView ? { run: {
+      model: state.voiceTurnPick?.modelLabel ?? String(state.model ?? ""),
+      contextBytes: Buffer.byteLength(state.dispatchContext.turnText),
+      session: state.voiceBriefed ? "new" : "resumed"
+    } } : undefined);
+    // A call turn (and the warm that prepares its process, so the two share
+    // one spawn contract) runs at the engine's low effort: the person is
+    // waiting for the first word (server/voice-call-effort.ts).
+    // A pre-warm off a call (server/thread-prewarm.ts) takes the next
+    // turn's own effort and flags, or the turn would relaunch it.
+    const turnEffort = state.onCall
+      ? callTurnEffort({ driverKind: state.instance.driverKind, levels: state.instance.adapter.capabilities.effortLevels, effort: state.effort })
+      : resolveEngineTurnEffort(state.effort, state.instance.driverKind, state.instance.adapter.capabilities.effortLevels);
+    // A routine run while the server boots waits for an engine start slot
+    // (server/engine-start-gate.ts): the runs that came due during a
+    // restart start two at a time instead of every engine at once.
+    // After boot, routine turns keep a steady limit (SAGAX_ROUTINE_ENGINE_SLOTS)
+    // and wait while memory is critical (server/engine-memory-guard.ts).
+    // A card continuation of a routine is not held by the steady gate: it
+    // may be the peer a slot holder waits on (no deadlock).
+    if (state.opts?.automationSource && !state.warmOnly && !state.onCall && (engineStartGate.booting || !state.opts?.cardContinuation)) {
+      await holdBootEngineSlot(state.threadId, `${state.bot.name} (${state.instance.driverKind})`, state.instance);
+      turnTrace(state.threadId, "engine-slot");
+      if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped while waiting for an engine slot");
+    }
+    if (!state.warmOnly && typeof state.userMessage.at === "number") noteTurnQueued(state.threadId, state.userMessage.at);
+    if (!state.warmOnly) turnTrace(state.threadId, "send");
+    // Each picture within the model's limits: a scaled copy for a large one.
+    const modelImages = await fitTurnImagesForModel(state.turnImages, { language: languageOfPerson(state.turnPlace.principal) });
+    // #1137: when the owner pays, the owner's computer serves its model.
+    const deskPerson = desktopModelPersonFor(state.bot, state.instance, state.speaker, state.turnPlace.principal);
+    state.dispatch = await guardTurnDispatch(withDesktopModelPerson(deskPerson, () => runAsBotEngine(state.bot.id, () => {
+      if (IDENTITY.kind === "perspicax") desktopLocalModels.assertAvailable(deskPerson, state.model, state.instance.driverKind);
+      const replayRequest = state.personLine && !state.opts?.unattended && !state.guestConfined
+        ? { botId: state.bot.id, message: state.userMessage, turnText: state.text, placePicked: state.wants === "local" && state.placeSource !== "auto-pin" }
+        : null;
+      return savedSteps.dispatch.sendTurn(state.instance, replayRequest, {
+      threadId: state.threadId,
+      botId: state.bot.id,
+      ...(state.compactPrompt ? { compactPrompt: state.compactPrompt } : {}),
+      // the per-turn latency line's queue stage (drivers/acp/turn-latency.ts)
+      ...(!state.warmOnly && typeof state.userMessage.at === "number" ? { receivedAt: state.userMessage.at } : {}),
+      ...(turnAccess ? { access: turnAccess } : {}),
+      // on a live call the engine process stays warm from turn to turn.
+      // A warm uses the same flag so the first spoken turn's contract matches.
+      ...(state.onCall ? { keepWarm: true } : {}),
+      ...(state.warmOnly ? { warmOnly: true, ...(state.onCall ? { cachePrime: true } : {}), ...(state.opts?.warmSignal ? { warmSignal: state.opts.warmSignal } : {}) } : {}),
+      startupRecovery: !state.warmOnly &&
+        (state.opts?.automaticRecoveryIndex ?? 0) < botRecoveryBackups(state.liveBot ?? state.bot, cfg).length,
+      text: state.warmOnly ? "" : (engineCommand ? engineCommand.engineText : withRecalled(state.recalled, state.dispatchContext.turnText)),
+      ...(engineCommand ? { harnessCommand: { name: engineCommand.command.name, args: engineCommand.args, ...(engineCommand.command.path ? { path: engineCommand.command.path } : {}) } } : {}),
+      ...(state.recalled && !state.warmOnly && !engineCommand ? { recalled: state.recalled } : {}),
+      images: modelImages,
+      approvalMode: engineTurnLevel(state.bot, state.threadId, auditFullAccessTurn(state.bot, state.threadId, approvalModeForTurn(state.bot, state.commsDepth > 0, state.threadId))),
+      toolScope: state.toolScope,
+      ...(state.guestConfined ? { guestConfined: true, confinedWhy: confinedWhy(state.threadId) } : {}),
+      model: state.model,
+      effort: turnEffort,
+      variant: state.variant,
+      // a rewound thread never resumes the abandoned branch's session
+      // the active task's own session — another task's cursor would
+      // resume the wrong conversation and defeat the context bubble
+      resumeCursor: state.dispatchContext.resumeCursor,
+      sessionReset: state.dispatchContext.sessionReset,
+      ...(state.dispatchContext.recoveryText !== undefined && !engineCommand ? { recoveryText: state.dispatchContext.recoveryText } : {}),
+      transcript: state.voiceView ? state.voiceView.transcript : state.transcript,
+      // #1276: a compact prompt sends the stable half first and what differs
+      // between conversations last, for an engine that takes the prompt
+      // whole (pi without a session); same sections, nothing dropped.
+      system: state.compactPrompt ? state.prompt.stable + state.prompt.volatile : state.prompt.text,
+      systemStable: state.prompt.stable,
+      systemVolatile: state.prompt.volatile,
+      systemVolatileSections: state.prompt.volatileSections,
+      // the mentions half describes this turn: identical consecutive tags
+      // must still deliver their note (SendTurnInput.mentionTurn)
+      // and so does an interrupted call turn's marker
+      mentionTurn: state.tagged.length > 0 || Boolean(state.userMessage.voiceCall?.interrupted),
+      integrations: state.integrations,
+      ...(withholdHostToolsFor(state.instance) ? { withholdHostTools: true } : {}),
+      ...turnCommandEnvironment(state.instance, state.bot.id, state.threadId),
+      toolErrorCorrectiveRounds: toolErrorCorrectiveRoundsFor(cfg, process.env, { botEnabled: state.bot.loopGuard }),
+      // Auto may leave their computer mid-turn: the engine's own traffic
+      // goes through it only when the Workspace is fixed there.
+      ...(() => { const networkProxy = state.turnAuto?.auto ? undefined : turnNetworkProxy(state.threadId, state.bot.id, state.turnPlace); return networkProxy ? { networkProxy } : {}; })(),
+      ...(state.integrations.browser && browserIsThePlace(state.plan) ? { preloadBrowserTools: true } : {}),
+      mcpFromUserConfig: claudeUserMcpEnabled(cfg, IDENTITY.kind === "perspicax") && !managedPolicy.restrictsMcp(),
+      claudeAiConnectors: claudeAiConnectorsFor(state.bot, state.instance, state.speaker, turnAccess?.via),
+      grokCloudConnectors: grokCloudConnectorsForTurn(accountConnectorInput(state.bot, state.instance, state.speaker, turnAccess?.via)),
+      ...pluginDirsFor(state.bot, state.instance, orgSpeakerPrincipal(state.bot, state.speaker)),
+      mcpCallTimeoutMs: mcpCallTimeoutMinutes(cfg) * 60_000,
+      cwd: state.cwd
+    }, (input: any) => state.instance.adapter.sendTurn(input));
+    })), () => !directTurnClaimExists(state.bot.id, state.dispatchClaimId, state.threadId), async () => {
+      await state.instance.adapter.interruptTurn(state.threadId).catch(() => {});
+    });
+    if (state.warmOnly) {
+      // A duplex interrupt while the person is still talking cancels this
+      // claim: there is no spoken turn yet, and releasing the process
+      // would make the first words pay a cold start. Hangup aborts the
+      // signal and is the path that closes it. The interrupt also
+      // quarantines this handshake for 30s; the warm has no provider
+      // turn id to retire, so leaving the mark would hold the first
+      // utterance until it expired.
+      clearCancelledProviderHandshake(state.threadId, `direct:${state.dispatchClaimId}`);
+      if (state.opts?.warmSignal?.aborted) state.instance.adapter.releaseWarmSession?.(state.threadId);
+      else {
+        state.warmOk = true;
+        // The HTTP pool is already warm from GET /models. One 1-token
+        // completion on the opener's model opens the chat path and, when
+        // the prompt is long enough for the provider, writes the prefix.
+        // Not awaited: the call's first turn does not wait on it.
+        if (state.instance.driverKind === "grok" && state.instance.generateText) {
+          const fast = pickFastSentenceModel(state.instance.models.options.map((option: any) => option.id));
+          if (fast) {
+            void state.instance.generateText(".", {
+              system: VOICE_FIRST_SENTENCE_SYSTEM,
+              model: fast,
+              maxTokens: 1
+            }).catch(() => undefined);
+          }
+        }
+      }
+      return;
+    }
+
+  };
+}

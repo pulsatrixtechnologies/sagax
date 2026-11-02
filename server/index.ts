@@ -70,6 +70,7 @@ import {
   safetySettleRequest,
   safetyToolHold,
   setSafetyConfirm,
+  setSafetyFullAccess,
   settleSafetyHold,
   stashSafetyNote,
   takeSafetyNote
@@ -1144,6 +1145,8 @@ import {
 import { soloGoalLineText, type SoloGoalLine } from "../shared/solo-goal-line.ts";
 import { relayAccountLabel } from "./run-with-engine.ts";
 import { approvalLevelPrompt, peerContactPrompt } from "./approval-level-prompt.ts";
+// #1905: Full access, one decision for every approval and choice card
+import { fullAccessActs, fullAccessChoiceAnswer, fullAccessChoiceLine, fullAccessDecision, peerContactCardRequired } from "./full-access-gate.ts";
 import { expandLearnTurnText } from "./skill-learn.ts";
 import { expandSetupTurnText, setupModeActive, setupSystemPrompt } from "./setup-mode.ts";
 import type { SkillRequestCardData } from "../shared/skill-request.ts";
@@ -10808,8 +10811,11 @@ function sourceApprovalMode(botId: string, threadId: string): ApprovalMode {
   return approvalModeForTurn(bot, false, threadId);
 }
 
+/** #1905: the one Full access decision (full-access-gate.ts) for the level
+ * the requesting conversation runs at: proposals, routine cards, team setup
+ * and peer contact all read it here. */
 function fullAccessForSource(botId: string, threadId: string): boolean {
-  return sourceApprovalMode(botId, threadId) === "full";
+  return fullAccessActs(sourceApprovalMode(botId, threadId));
 }
 
 /** On a Cloud home a turn a guest drives keeps a card for every change,
@@ -10899,8 +10905,10 @@ function journalRefusedQuote(botId: string, targetBotId: string, kind: string, r
     after: { bot: botId, via: "primary-bot", reason: reason.slice(0, 200) }, actor: { kind: "loopback" } });
 }
 
+/** Ask before contacting bots: the Sagax peer card, below Full access only
+ * (#1819, #1905: full-access-gate.ts peerContactCardRequired). */
 function peerReviewRequired(bot: BotRecord, threadId: string): boolean {
-  return Boolean(bot.approvePeerComms && !fullAccessForSource(bot.id, threadId));
+  return peerContactCardRequired(Boolean(bot.approvePeerComms), sourceApprovalMode(bot.id, threadId));
 }
 
 /** A Primary Bot's level flows down its delegation. The person set the
@@ -12125,6 +12133,8 @@ function writeWorkerTurn(input: { deviceId: string; userId: string; messageId: s
   }
   if (parsed.kind === "approval") {
     machineApprovals.set(parsed.requestId, { threadId: view.threadId, requestId: parsed.requestId, tool: parsed.tool, summary: parsed.summary });
+    // a worker on the person's own computer asks; its level is that
+    // computer's (server/machine-run.ts); full-access: engine-bridge
     store.appendMessage(view.threadId, {
       role: "bot",
       kind: "options",
@@ -12134,6 +12144,7 @@ function writeWorkerTurn(input: { deviceId: string; userId: string; messageId: s
         subtitle: parsed.summary || parsed.tool,
         options: ["Allow", "Deny"],
         requestId: parsed.requestId,
+        // full-access: engine-bridge
         requestType: "permission",
         tool: parsed.tool
       }
@@ -12416,6 +12427,7 @@ function reviewHolds(node: HandoffView): boolean {
       coordinator.tick();
     };
     // A consultation asks as ask_bot; work and notices as delegate_bot.
+    // full-access: peer-contact
     void requestPeerApproval(approvalBus, from, target, node.text, node.consult ? "ask_bot" : "delegate_bot", parent.threadId).then(verdict =>
       decided(verdict === "allow" ? undefined : verdict === "deny" ? "Denied by user; no work sent." : `${peerApprovalFailure(verdict).error}; no work sent.`),
     () => decided("The review card could not be shown; no work sent."));
@@ -18690,6 +18702,24 @@ bus.subscribe((event: RuntimeEvent) => {
         pushMessage({ role: "bot", kind: "activity", tool: { name: `Refused ${cardGuardTool}: ${cardGuard.decision.reason === "speaker_not_granted" ? "the person this turn speaks for has" : "this bot has"} no grant for it (Settings → Tool access).`, ok: false } });
         break;
       }
+      // A turn a guest drives on a Cloud home is Ask, room turns included,
+      // and no command the owner saved answers for it.
+      // A mail-woken routine run (S2) is held the same way: Ask, and no rule
+      // the owner saved answers for it.
+      const guestDriven = cloudGuestDriven(event.threadId) || botmailConfined(event.threadId);
+      const ownApprovalMode = (who: BotRecord) => approvalModeForTurn(who, isInternalTurn(event.threadId), event.threadId);
+      // A room turn runs at the level it was sent with, which a Chief's
+      // handoff may have raised (roomTurnApprovalMode). The bot's own level
+      // would make a Full room turn ask on engines that leave requests to us.
+      const effectiveApprovalMode = !asker || guestDriven ? "ask"
+        : group && speaker?.botId === asker.id ? roomTurnLevels.forRequest(event.threadId, asker.id, () => ownApprovalMode(asker))
+          : ownApprovalMode(asker);
+      // #1905 (2026-11-02): the one Full access decision for this turn
+      // (full-access-gate.ts), read before the safety review and before any
+      // card: at Full the person answered the safer path and the
+      // confirmation already; an organization or personal rule, isolation
+      // and a sensitive path are read below, where every level reads them.
+      const fullTurn = fullAccessDecision(effectiveApprovalMode);
       // Safety review, before any mode answers. A hard block or the first
       // safer path is a refusal, not a card Full could accept. A confirmation
       // is an explicit card. A read may run. Shadow changes nothing.
@@ -18705,6 +18735,7 @@ bus.subscribe((event: RuntimeEvent) => {
         : null;
       const emailDraftCall = emailDraftRequest !== null;
       const safetyWho = permission && event.requestId ? safetyPrincipal(event.threadId) : undefined;
+      // full-access: safety-review
       const reviewedSafety = safetyWho
         ? safetyPermissionEffect({
           text: safetyText,
@@ -18714,6 +18745,9 @@ bus.subscribe((event: RuntimeEvent) => {
           // 2026-10-27 (#1098): the person's own environment, as the sandbox
           // and desktop paths already say (not read from the text)
           ...(asker ? { ownEnvironment: safetyOwnEnvironment(asker, event.threadId, safetyName) } : {}),
+          // #1905: at Full the safer path and the confirmation are the person's
+          // to skip (a block still blocks); never read from the text
+          fullAccess: fullTurn.acts,
           triage: safetyWho.triage,
           ...(safetyWho.principalId ? { principalId: safetyWho.principalId } : {}),
           threadId: event.threadId,
@@ -18732,18 +18766,6 @@ bus.subscribe((event: RuntimeEvent) => {
         pushMessage({ role: "bot", kind: "activity", tool: { name: safetyEffect.message, ok: false } });
         break;
       }
-      // A turn a guest drives on a Cloud home is Ask, room turns included,
-      // and no command the owner saved answers for it.
-      // A mail-woken routine run (S2) is held the same way: Ask, and no rule
-      // the owner saved answers for it.
-      const guestDriven = cloudGuestDriven(event.threadId) || botmailConfined(event.threadId);
-      const ownApprovalMode = (who: BotRecord) => approvalModeForTurn(who, isInternalTurn(event.threadId), event.threadId);
-      // A room turn runs at the level it was sent with, which a Chief's
-      // handoff may have raised (roomTurnApprovalMode). The bot's own level
-      // would make a Full room turn ask on engines that leave requests to us.
-      const effectiveApprovalMode = !asker || guestDriven ? "ask"
-        : group && speaker?.botId === asker.id ? roomTurnLevels.forRequest(event.threadId, asker.id, () => ownApprovalMode(asker))
-          : ownApprovalMode(asker);
       // Native shell descriptors are distinct from computer/MCP permissions;
       // choosing a local desktop must not disable an exact shell grant.
       // A command on the server asked by a member's bot waits for an
@@ -19374,6 +19396,44 @@ bus.subscribe((event: RuntimeEvent) => {
       // its approval still reaches the person, and is declined when nobody
       // answers in time instead of holding the turn forever.
       const hiddenApproval = Boolean(permission && event.requestId && notificationInHiddenThread(event.threadId));
+      // #1905 (2026-11-02): a may-I the model poses through its own question
+      // tool ("Should I continue?", "May I contact the verifier?") under
+      // Full access is the person's own answer already: the recommended
+      // option, the first one, is given back and the turn goes on. A real
+      // decision, a form of several questions, a multi-select and a fact
+      // only the person can supply keep their card (full-access-gate.ts).
+      if (!permission && asker && event.requestId && !guestDriven) {
+        const single = questions?.length === 1 ? questions[0] : undefined;
+        const choice = single
+          ? { ...(single.header ? { title: single.header } : {}), question: single.question, options: single.options.map((option) => option.label) }
+          : !questions && event.choices?.length ? { question: event.summary, options: event.choices } : undefined;
+        const answered = choice && single?.multiSelect !== true ? fullAccessChoiceAnswer(effectiveApprovalMode, choice) : null;
+        if (answered && choice) {
+          const instance = event.providerInstanceId ? registry.get(event.providerInstanceId) : registry.get(asker.modelSelection.instanceId);
+          const requestId = event.requestId;
+          const line = fullAccessChoiceLine(asker.name, choice.question, answered.choice);
+          // full-access: question
+          const settled = pushMessage({
+            role: "bot", kind: "options",
+            card: { title: "Your bot has a question", subtitle: choice.question, options: choice.options, requestType: "question", answered: "answer", answeredText: answered.choice, autoApplied: true },
+          });
+          void (async () => {
+            const outcome = instance ? await instance.adapter.respondToRequest(event.threadId, requestId, { behavior: "answer", message: answered.choice }).catch(() => "unavailable" as const) : "unavailable";
+            if (outcome !== "answered") {
+              store.patchMessage(event.threadId, settled.id, { card: { title: "Your bot has a question", subtitle: choice.question, options: choice.options, requestType: "question", expired: true } });
+              pushMessage({ role: "bot", kind: "activity", tool: { name: "Full access could not deliver the answer to the engine; retry the task after reconnecting.", ok: false } });
+              return;
+            }
+            pushMessage({ role: "bot", kind: "activity", tool: { name: line, ok: true, autoApproval: { source: "full-access" } } });
+            appendDecision(DATA_DIR, {
+              threadId: event.threadId, requestId, botId: asker.id, botName: asker.name,
+              tool: event.tool, summary: line, decision: "auto-approved", source: "full-access",
+            });
+          })().catch(() => console.error("[approval] Could not record a question Full access answered."));
+          break;
+        }
+      }
+      // full-access: tool-approval
       const message = pushMessage({
         role: "bot",
         kind: "options",
@@ -22579,12 +22639,25 @@ setMisuseOwnPaths(({ principalId, botId }) => {
 });
 
 // A risky call the engine will not ask about itself (a sandbox tool, a
-// desktop tool) waits on this card. Full and Auto do not answer it. The
-// respond route settles it before any provider sees the request id.
+// desktop tool) waits on this card. Auto does not answer it. The respond
+// route settles it before any provider sees the request id.
 setSafetyConfirm((request) => confirmHeldCard(request));
+// #1905 (2026-11-02): every safety review that names its bot and thread
+// reads the turn's Full access from the one decision (full-access-gate.ts),
+// so a send, a destructive git operation or an unknown tool is never held
+// at Full on any route (the sandbox, a personal MCP server, the desktop,
+// a lent terminal, Perspicax), never from the text.
+setSafetyFullAccess(({ botId, threadId }) => {
+  if (!botId || !threadId) return false;
+  const bot = store.bot(botId);
+  if (!bot) return false;
+  return fullAccessActs(approvalModeForTurn(store.projectBotForTask(botId, threadId) ?? bot, isInternalTurn(threadId), threadId));
+});
 /** The approval card a server-side check waits on (a safety hold, a My
  * Chrome payment, send or delete): Allow or Deny, in the conversation, with
- * a notification. Full access and Approve for me do not answer it. */
+ * a notification. Approve for me does not answer it; a turn at Full access
+ * never reaches it (#1905: safety-review.ts reads the one Full access
+ * decision before it holds anything). */
 async function confirmHeldCard(request: { threadId?: string; botId?: string; tool?: string; summary: string; allowKey?: string; fingerprint?: string }): Promise<"allow" | "deny" | "timeout"> {
   const threadId = request.threadId;
   if (!threadId) return "deny";
@@ -22600,6 +22673,8 @@ async function confirmHeldCard(request: { threadId?: string; botId?: string; too
     return "allow";
   }
   const held = openSafetyHold();
+  // never reached at Full (safety-review.ts reads the turn's level);
+  // full-access: safety-confirm
   const message = store.appendMessage(threadId, {
     role: "bot",
     kind: "options",
@@ -27218,6 +27293,7 @@ function appendSkillRequestCard(args: {
     ...(args.applied && args.previous ? { previous: args.previous } : {})
   };
   const from = store.bot(args.botId);
+  // a skill proposal, applied at Full (args.applied); full-access: proposal
   store.appendMessage(args.threadId, {
     role: "bot",
     kind: "options",
@@ -29999,6 +30075,7 @@ const perspicaxNativeReview = async (text: string, capability: InternalCapabilit
   const misuse = misuseTextRefusal(text, speakerId, "mcp", { botId: capability.botId, threadId: capability.threadId, tool: "perspicax" });
   if (misuse) return misuse;
   const who = safetyPrincipal(capability.threadId);
+  // full-access: safety-review
   return (await safetyToolHold({
     text,
     surface: "mcp",
@@ -30545,7 +30622,9 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       threadId,
       input: body,
       authored,
-      proposePage: proposePage as Parameters<typeof createAgentCard>[0]["proposePage"]
+      proposePage: proposePage as Parameters<typeof createAgentCard>[0]["proposePage"],
+      // #1905: a may-I ask_choice under Full access is answered, not drawn
+      approvalLevel: sourceApprovalMode(bot.id, threadId),
     }),
     authored: (threadId, generation, messageId) => handoffs.authored(threadId, generation, messageId),
     proposePublishedPage: (input) => publishedPages.propose({
@@ -30677,6 +30756,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     safetyPrincipal,
     misuseActor,
     safetyReviewer,
+    // the routes' bridge to the review, which reads the turn's Full access
+    // itself (setSafetyFullAccess); full-access: safety-review
     safetyToolHold: (input) => safetyToolHold(input as never),
     samePerson,
     personalMcpServer: (person, name) => {
@@ -30806,6 +30887,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     peerAccessHelp: PEER_ACCESS_HELP,
     proposalPersistence,
     safetyPrincipal,
+    // the routes' bridge to the review, which reads the turn's Full access
+    // itself (setSafetyFullAccess); full-access: safety-review
     safetyPermissionEffect: (input) => safetyPermissionEffect(input as Parameters<typeof safetyPermissionEffect>[0]),
     primaryAskedProposal,
     journalRefusedQuote,
@@ -33631,6 +33714,8 @@ function botActs(): BotActService {
       broadcast({ kind: "bot-act", audience, action: command, ...(Object.keys(input).length ? { input } : {}) });
     },
     postCard: ({ threadId, botId, botName, botColor, requestId, summary, rule }) => {
+      // a bot act's card, applied at Full by its route (selfApplyBlocked,
+      // fullAccessForSource); full-access: proposal
       const message = store.appendMessage(threadId, {
         role: "bot",
         kind: "options",
@@ -34107,6 +34192,8 @@ async function requestCwAction(auth: RequestAuth, threadId: string, body: Record
   const kept = ownRequest && !stepUp.length && scopeKeepable(candidate.scope)
     ? matchOwnerRule(ownerApprovals.rulesOf(answerer, bot.id).filter((rule) => rule.botId === bot.id), { ownerId: answerer, botId: bot.id, tool: CW_WIDGET_RULE_TOOL, input: card.toolInput })
     : undefined;
+  // the ConnectWise widget's own approval card; its write is then answered
+  // in request.opened (widgetApproved); full-access: send
   const message = store.appendMessage(threadId, {
     role: "bot",
     kind: "options",
@@ -34116,6 +34203,7 @@ async function requestCwAction(auth: RequestAuth, threadId: string, body: Record
       subtitle: card.summary,
       options: ["Allow", "Deny"],
       requestId: card.requestId,
+      // full-access: send
       requestType: "permission",
       tool: "cw_psa__write",
       toolInput: card.toolInput,
@@ -34252,6 +34340,8 @@ function confidentialPerspicaxRefusal(capability: { threadId: string; botId: str
     pendingConfidentialMemory.delete(requestId);
     return "This is a confidential thread: this call is too long to show the person whole on a card, so it was not sent. Make it smaller, or keep the content in this conversation.";
   }
+  // a confidential thread's memory write: isolation, the one hold Full
+  // keeps (full-access-gate.ts); full-access: isolation
   store.appendMessage(capability.threadId, {
     role: "bot",
     kind: "options",
@@ -34387,6 +34477,8 @@ async function requestEmailDraftSend(auth: RequestAuth, threadId: string, body: 
     subject: normalized.draft.subject, connector: connector.label,
     ...(sentTo ? { alreadySentTo: sentTo } : {})
   }, null, 2);
+  // the email draft card: its send is then answered in request.opened
+  // (emailDraftApproved, and Full before the outbound guard); full-access: send
   const message = store.appendMessage(threadId, {
     role: "bot",
     kind: "options",
@@ -34396,6 +34488,7 @@ async function requestEmailDraftSend(auth: RequestAuth, threadId: string, body: 
       subtitle: summary,
       options: ["Allow", "Deny"],
       requestId: request.id,
+      // full-access: send
       requestType: "permission",
       tool: "send_email_draft",
       toolInput,
@@ -41464,6 +41557,7 @@ const agentApi = createAgentApi({
     if (capability >= MAX_COMMS_DEPTH) return agentRefuse(409, "too_deep", "Agent chains are limited to one hop: a prompt you received from another agent cannot be passed on. Do the work here.");
     // The Sagax approval gate: a bot whose peer contact needs review asks first.
     if (peerReviewRequired(from, caller.sourceThreadId)) {
+      // full-access: peer-contact
       const verdict = await requestPeerApproval(approvalBus, from, target, prompt, "delegate_bot", caller.sourceThreadId);
       if (verdict !== "allow") return agentRefuse(403, "not_approved", `The person did not approve this prompt (${String(verdict)}). Do not retry it.`);
       if (!store.bot(from.id) || !store.bot(target.id) || !agentPeersOf(store.bot(from.id)!).some((peer) => peer.id === target.id)) {
@@ -47203,6 +47297,7 @@ async function delegateOnRuntime(from: BotRecord, target: BotRecord, message: st
   // work. Its ask_bot keeps asking at once, as it always did.
   const reviewLater = (external || (mode === "work" && Boolean(activeRoutineRunForThread(address.threadId)))) && peerReviewRequired(from, address.threadId);
   if (peerReviewRequired(from, address.threadId) && !reviewLater) {
+    // full-access: peer-contact
     const verdict = await requestPeerApproval(approvalBus, from, target, message, "delegate_bot", address.threadId);
     if (!internalCapabilityIsActive(capability)) return refused("the turn that asked has ended", 409);
     if (verdict !== "allow") {

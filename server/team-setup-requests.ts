@@ -424,6 +424,7 @@ export class TeamSetupRequestService {
 
   private card(request: TeamSetupRequest, from?: RequestFrom) {
     const card = this.cardData(request);
+    // applied without a card at Full (index.ts fullAccessForSource); full-access: proposal
     const message = this.options.store.appendMessage(request.threadId, { role: "bot", kind: "options", ...(from ? { from } : {}), card });
     const { title, subtitle: detail } = card;
     return { requestId: request.requestId, messageId: message.id, title, summary: title, detail };
@@ -460,6 +461,7 @@ export class TeamSetupRequestService {
     const title = result.state === "applied" ? (request.deletion ? `Deleted @${request.deletion.name}` : "Team setup applied") : "Team setup not applied";
     let messageId: string | undefined;
     try {
+      // the settled receipt of an applied or expired proposal; full-access: exempt
       messageId = this.options.store.appendMessage(request.threadId, { role: "bot", kind: "options", ...(from ? { from } : {}), card: {
         ...card, title, options: [], ...(result.state === "applied" ? { answered: "allow" as const } : { expired: true }), held: result.error,
         teamSetupRequest: { ...request, result, resumed: true },

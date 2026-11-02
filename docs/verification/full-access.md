@@ -78,6 +78,23 @@ mail delivery are synthetic; no live mailbox changes.
 
 The classifier control on the same fixture, before the mailbox-move fix,
 reached Full but denied the Outlook move as an outbound send in enforce.
+
+## One Full access decision (#1905, 2026-11-02)
+
+```sh
+pnpm exec vitest run server/full-access-gate.test.ts server/full-access-gate.regressions.test.ts server/full-access-gate.guard.test.ts shared/permission-question.test.ts
+```
+
+`full-access-gate.regressions.test.ts` holds the three incidents as tests:
+`send_to_bot` under Full with misuse guardrails in enforce (the safer path,
+then the "Approval needed" card, on every engine's permission path and on
+the Grok `default` mode a loaded account connector forces), the may-I
+`ask_choice` answered with its recommended option and a real decision kept,
+Bypass on the owner's own computer, and a conversation's older Approve for
+me exception ending when the bot goes Full. `full-access-gate.guard.test.ts`
+scans `server/` for every card emitter and requires its `// full-access:`
+marker and its deciding file's read of the gate; it runs with the merge
+gate. Both are pure: no server, no live data.
 Explicit organization Ask/Deny, unrelated persons and invalidated routine
 references are checked separately in the adjacent approval and authorization
 tests. Perspicax Flow policy elicitation still asks, since its GO is an

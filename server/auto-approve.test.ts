@@ -43,7 +43,9 @@ describe("autoVerdict", () => {
       expect(autoVerdict(mode, "other", { toolName: "outlook__search", connectorRead: true }).source).toBe("connector-read");
       // the person's own words, a safety hold and a security key come first
       expect(autoVerdict(mode, "other", { toolName: "outlook__search", connectorRead: true, customRule: { behavior: "ask", id: "r" } }).approve).toBeNull();
-      expect(autoVerdict(mode, "other", { toolName: "outlook__search", connectorRead: true, safetyHold: true }).approve).toBeNull();
+      // #1905: at Full the person already accepted what the safety review would hold
+      if (mode !== "full") expect(autoVerdict(mode, "other", { toolName: "outlook__search", connectorRead: true, safetyHold: true }).approve).toBeNull();
+      else expect(autoVerdict(mode, "other", { toolName: "outlook__search", connectorRead: true, safetyHold: true }).approve).not.toBeNull();
       if (mode !== "full") expect(autoVerdict(mode, "other", { toolName: "outlook__search", connectorRead: true, stepUpRequired: ["mail"] }).approve).toBeNull();
       // an outward call is never a read, whatever the flag says
       expect(autoVerdict(mode, "other", { toolName: "outlook__send_message", connectorRead: true, outbound: true }).source).toBe(mode === "full" ? "full-access" : "email-draft-required");
@@ -141,11 +143,15 @@ describe("autoVerdict", () => {
     expect(autoVerdict("custom", "WebSearch")).toEqual({ approve: null, source: "native-approval" });
   });
 
-  it("holds a safety review for an explicit accept, and auto-approves a read", () => {
+  it("holds a safety review for an explicit accept below Full, and auto-approves a read", () => {
+    // #1905 (2026-11-02): at Full the person's choice is that accept; the
+    // saved Allow rule answers the gate card as it would without the hold
     expect(autoVerdict("full", "Bash", { safetyHold: true, sagaxGate: true, ruleAllowed: true })).toEqual({
-      approve: null,
-      source: "safety-hold",
+      approve: "approved Bash (your Allow rule)",
+      source: "allow-rule",
     });
+    expect(autoVerdict("full", "Bash", { safetyHold: true })).toEqual({ approve: "approved Bash (full access)", source: "full-access" });
+    expect(autoVerdict("auto", "Bash", { safetyHold: true, sagaxGate: true, ruleAllowed: true })).toEqual({ approve: null, source: "safety-hold" });
     expect(autoVerdict("auto", "Bash", { safetyHold: true })).toEqual({ approve: null, source: "safety-hold" });
     expect(autoVerdict("ask", "read_file", { safetyAllow: true })).toEqual({
       approve: "approved read_file (read-only)",
@@ -310,11 +316,13 @@ describe("delegatedApprovalMode", () => {
       expect(autoVerdict(mode, "other", { sagaxGate: true }).approve).toBeNull();
     }
   });
-  it("keeps explicit organization asks, denies, holds and security keys ahead of Full at the gate", () => {
+  it("keeps explicit organization asks, denies and security keys ahead of Full at the gate; a safety hold is the person's to skip at Full (#1905)", () => {
     for (const behavior of ["ask", "deny"] as const) {
       expect(autoVerdict("full", "other", { sagaxGate: true, customRule: { behavior, id: "orule_required" } }).source).toBe(`custom-rule-${behavior}`);
+      // a rule names itself even when the review would also hold the call
+      expect(autoVerdict("full", "other", { sagaxGate: true, safetyHold: true, customRule: { behavior, id: "orule_required" } }).source).toBe(`custom-rule-${behavior}`);
     }
-    expect(autoVerdict("full", "other", { sagaxGate: true, safetyHold: true }).approve).toBeNull();
+    expect(autoVerdict("full", "other", { sagaxGate: true, safetyHold: true })).toEqual({ approve: "approved other (full access)", source: "full-access" });
     expect(autoVerdict("full", "other", { sagaxGate: true, stepUpRequired: ["destructive"] }).approve).toBeNull();
   });
   it("answers a gate card only from the person's own saved Allow rule", () => {

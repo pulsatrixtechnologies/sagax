@@ -68,7 +68,7 @@ export function isCodeFile(path: string): boolean {
 
 /** A shell command's text with heredoc bodies left out: what a heredoc
  * writes (a SOUL.md that quotes "git push") is data, not a command. */
-export function withoutHeredocs(text: string): string {
+function withoutHeredocs(text: string): string {
   return text
     .replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n\s*\2(?=\n|$)/g, "")
     .replace(/<<-?\s*(['"]?)\w+\1[^\n]*\n[\s\S]*$/, "");
@@ -76,7 +76,7 @@ export function withoutHeredocs(text: string): string {
 
 /** The command a tool call ran: its `command` field, from an object or the
  * JSON preview the chat kept (a preview cut short is unescaped by hand). */
-export function commandOf(input: unknown): string {
+function commandOf(input: unknown): string {
   if (Array.isArray(input)) return input.filter((part) => typeof part === "string").join(" ");
   if (input && typeof input === "object") return commandOf((input as { command?: unknown }).command);
   if (typeof input !== "string") return "";
@@ -198,13 +198,27 @@ function writesVersionControl(words: string[], depth = 0): boolean {
   return false;
 }
 
-/** git or gh run as a command (its name, its summary or its `command`),
- * read word by word: a request, a file's text or a quoted argument that
- * quotes "git push" is not version control, nor is a read such as
+/** The texts a call's command is read from, heredoc bodies left out, each
+ * to be read on its own: the `command` its input carries, whole with its
+ * new lines, else its summary and its name. A stored call carries its
+ * command up to three times, and only the input keeps it whole: the
+ * summary folds its lines and cuts it at 200 characters, an ACP title cuts
+ * it at 80, and a title in words can hold an apostrophe. Read as one script
+ * with the command, a quote one of those cuts left open flipped the quoting
+ * of everything after it, so an issue comment's quoted git lines read as
+ * commands and a push after a long quoted path read as text. */
+export function commandTexts(tool: { name: string; summary?: string; input?: unknown }): string[] {
+  const command = commandOf(tool.input);
+  const texts = command.trim() ? [command] : [tool.summary, tool.name];
+  return [...new Set(texts.map((text) => withoutHeredocs(text ?? "")).filter((text) => text.trim()))];
+}
+
+/** git or gh run as a command (its `command`, else its summary or its
+ * name), read word by word: a request, a file's text or a quoted argument
+ * that quotes "git push" is not version control, nor is a read such as
  * `git merge-base`. */
 function ranVersionControl(tool: CodingToolCall): boolean {
-  const text = withoutHeredocs([tool.name, tool.summary, commandOf(tool.input)].filter(Boolean).join("\n"));
-  return /\b(?:git|gh)\b/.test(text) && shellCommands(text).some((words) => writesVersionControl(words));
+  return commandTexts(tool).some((text) => /\b(?:git|gh)\b/.test(text) && shellCommands(text).some((words) => writesVersionControl(words)));
 }
 
 /** Adds one tool call to the signals so far (a scan can resume). */

@@ -13,6 +13,7 @@ import type { RoutineRun } from "../../shared/routines.ts";
 import type { BotActivityDetail, BotActivityItem } from "../../shared/bot-activity.ts";
 import { createBotActivityRoutes, stepError, STEP_ERROR_CHARS, type ActivityMessage, type ActivityTask, type BotActivityRouteDeps } from "./bot-activity.ts";
 import { dispatchRoutes } from "./table.ts";
+import { commandSummary, toolDetailPreview } from "../tool-summary.ts";
 
 const NOW = 1_800_000_000_000;
 const servers: Server[] = [];
@@ -478,19 +479,23 @@ describe("work another bot hands over is Coding only for its own request's code 
   const request = (id: string, at: number, text: string): ActivityMessage =>
     ({ id, role: "bot", kind: "text", at, text: `@Pepper ${text}`, roomRequest: { id: `req-${id}`, phase: "request" }, sender: null });
   const call = (id: string, at: number, tool: NonNullable<ActivityMessage["tool"]>): ActivityMessage => ({ id, role: "bot", kind: "activity", at, tool });
-  const command = (text: string) => JSON.stringify({ command: text });
+  // a shell call as the store keeps it (server/index.ts, item.started):
+  // commandSummary (newlines folded, cut at 200) and toolDetailPreview
+  const shell = (name: string, command: string) => ({ name, ok: true, summary: commandSummary({ command }), input: toolDetailPreview({ command }) });
+  // an issue comment longer than the summary, its quoted text listing git lines
+  const comment = "gh issue comment 1905 --body \"Steps to reproduce:\ngit checkout -b check\ngit push origin check\nThen approve once and the card shows twice, which is what the screenshot attached to the issue shows as well, on a clean checkout of main.\"";
   // The first request: real code work, a commit, a push and a pull request.
   const first: ActivityMessage[] = [
     request("r1", earlier, "Fix the parser and open a pull request"),
     call("w1", earlier + 10_000, { name: "Edit", ok: true, files: ["/srv/app/src/parser.ts"] }),
-    call("w2", earlier + 20_000, { name: "Bash", ok: true, input: command("git commit -am 'Fix the parser' && git push -u origin fix/parser") }),
-    call("w3", earlier + 30_000, { name: "Bash", ok: true, input: command("gh pr create --title \"Fix the parser\""), output: "https://github.com/acme/parser/pull/42" }),
+    call("w2", earlier + 20_000, shell("Bash", "git commit -am 'Fix the parser' && git push -u origin fix/parser")),
+    call("w3", earlier + 30_000, { ...shell("Bash", "gh pr create --title \"Fix the parser\""), output: "https://github.com/acme/parser/pull/42" }),
     { id: "w4", role: "bot", kind: "text", at: earlier + 40_000, text: "Opened #42.", turnSucceeded: true },
   ];
   // The request running now reads, coordinates and comments: no code work.
   const reading: ActivityMessage[] = [
     request("r2", NOW - 40_000, "Look at the approval card issue and say what you find on it"),
-    call("x1", NOW - 35_000, { name: "sagax-environment__run_command", ok: true, input: command("cd /work/app && gh issue view 1905 && gh pr list --search 1905") }),
+    call("x1", NOW - 35_000, shell("sagax-environment__run_command", "cd /work/app && gh issue view 1905 && gh pr list --search 1905")),
     call("x2", NOW - 30_000, { name: "github__issue_read", ok: true, input: JSON.stringify({ owner: "acme", repo: "app", issue_number: 1905 }) }),
     call("x3", NOW - 28_000, { name: "github__pull_request_read", ok: true, input: JSON.stringify({ owner: "acme", repo: "app", pull_number: 1907 }) }),
     call("x4", NOW - 25_000, { name: "mcp__agents__whos_around", ok: true }),
@@ -498,9 +503,9 @@ describe("work another bot hands over is Coding only for its own request's code 
     // the teammate's reply and the resume it starts: the same request goes on
     { id: "x5r", role: "bot", kind: "activity", at: NOW - 18_000, roomRequest: { id: "req-ask-echo", phase: "result" }, tool: { name: "Echo replied", ok: true } },
     call("x5s", NOW - 17_000, { name: "Resumed with Echo results, reviewing", ok: true }),
-    call("x6", NOW - 15_000, { name: "sagax-environment__run_command", ok: true, input: command("gh issue comment 1905 --body \"Repro:\ngit checkout -b check\ngit push origin check\"") }),
+    call("x6", NOW - 15_000, shell("sagax-environment__run_command", comment)),
     call("x6b", NOW - 12_000, { name: "github__add_issue_comment", ok: true, input: JSON.stringify({ owner: "acme", repo: "app", issue_number: 1905, body: "Steps:\ngit checkout -b check\ngit push origin check" }) }),
-    call("x7", NOW - 10_000, { name: "sagax-environment__run_command", ok: true, input: command("git diff $(git merge-base origin/main HEAD) --stat") }),
+    call("x7", NOW - 10_000, shell("sagax-environment__run_command", "git diff $(git merge-base origin/main HEAD) --stat")),
     call("x8", NOW - 5_000, { name: "computer_select", ok: true, input: JSON.stringify({ computer: "this-mac" }) }),
   ];
   const workDeps = (thread: ActivityMessage[], overrides: Partial<BotActivityRouteDeps> = {}) => deps({
@@ -516,6 +521,8 @@ describe("work another bot hands over is Coding only for its own request's code 
   const entryOf = async (base: string) => (await get(base, "/api/bots/pepper/activity", "alice")).body.items!.find((item) => item.id === "thread:t-work")!;
 
   it("is not Coding when its request only reads, coordinates and comments, and keeps the earlier request's code work", async () => {
+    // the comment's summary is cut inside its quoted text
+    expect(comment.length).toBeGreaterThan(200);
     const base = await serve(workDeps([...first, ...reading]));
     const entry = await entryOf(base);
     expect(entry).toMatchObject({ kind: "hop", status: "running", startedBy: { kind: "bot", name: "Echo" } });
@@ -565,7 +572,7 @@ describe("work another bot hands over is Coding only for its own request's code 
     ];
     const base = await serve(workDeps(coding));
     expect(await entryOf(base)).toMatchObject({ coding: true });
-    const pushed = [...first, ...reading, call("y2", NOW - 2_000, { name: "Bash", ok: true, input: command("cd /srv/app && git push origin fix/approval-card") })];
+    const pushed = [...first, ...reading, call("y2", NOW - 2_000, shell("Bash", "cd /srv/app && git push origin fix/approval-card"))];
     expect(await entryOf(await serve(workDeps(pushed)))).toMatchObject({ coding: true });
   });
 
@@ -593,5 +600,29 @@ describe("work another bot hands over is Coding only for its own request's code 
     thread = [...thread, request("r4", NOW - 10_000, "Say who is around"), ...Array.from({ length: 9 }, (_, index) => read(100 + index))];
     clock += 5_000;
     expect(await entryOf(base)).not.toHaveProperty("coding");
+  });
+
+  it("names no step of the request before as the step of a request that just started", async () => {
+    const started = [...first, request("r2", NOW - 5_000, "Say who is around")];
+    const entry = await entryOf(await serve(workDeps(started)));
+    expect(entry).toMatchObject({ status: "running" });
+    expect(entry).not.toHaveProperty("currentStep");
+    // its own call, once it runs, is its step
+    const asking = [...started, call("v1", NOW - 2_000, { name: "mcp__agents__whos_around" })];
+    expect(await entryOf(await serve(workDeps(asking)))).toMatchObject({ currentStep: "mcp__agents__whos_around" });
+  });
+
+  it("reads a settled request's outcome from its own turn, never the request before", async () => {
+    const settled = (thread: ActivityMessage[]) => workDeps(thread, { tasks: (botId) => (botId === "pepper" ? [{ ...work, busy: false, activity: undefined }] : []) });
+    const refused: ActivityMessage[] = [...first.slice(0, -1), { id: "w4", role: "bot", kind: "text", at: earlier + 40_000, text: "The push was refused.", turnSucceeded: false }];
+    const answered: ActivityMessage[] = [
+      ...refused,
+      request("r2", NOW - 40_000, "Say who is around"),
+      call("v1", NOW - 30_000, { name: "mcp__agents__whos_around", ok: true }),
+      { id: "v2", role: "bot", kind: "text", at: NOW - 20_000, text: "Echo is around." },
+    ];
+    expect(await entryOf(await serve(settled(answered)))).toMatchObject({ status: "finished" });
+    const failed: ActivityMessage[] = [...first, request("r2", NOW - 40_000, "Say who is around"), { id: "v2", role: "bot", kind: "text", at: NOW - 20_000, text: "No one answered.", turnSucceeded: false }];
+    expect(await entryOf(await serve(settled(failed)))).toMatchObject({ status: "failed" });
   });
 });

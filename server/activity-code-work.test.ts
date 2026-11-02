@@ -7,6 +7,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { codeWork, remoteRepo, repositoryInfo, type CodeWorkToolCall } from "./activity-code-work.ts";
 import { shellCommands } from "./activity-coding.ts";
+import { commandSummary, toolDetailPreview } from "./tool-summary.ts";
 
 const bash = (command: string, output: string, ok: boolean | "running" = true): CodeWorkToolCall => ({ name: "Bash", input: JSON.stringify({ command }), output, ...(ok === "running" ? {} : { ok }) });
 const at = (tools: CodeWorkToolCall[]) => tools.map((tool, index) => ({ at: 1_000 + index, tool }));
@@ -65,6 +66,17 @@ describe("code work of a conversation", () => {
       { name: "Agent", ok: true, input: JSON.stringify({ prompt: "git push origin main then gh pr create" }), output: "https://github.com/acme/parser/pull/5" },
     ]));
     expect(work).toEqual({ pullRequests: [], branches: [], commits: [] });
+  });
+
+  it("reads a stored call's whole command, never its cut previews joined to it", () => {
+    // an ACP shell call as the store keeps it: its command cut at 80 as the
+    // name, commandSummary (folded, cut at 200) and toolDetailPreview
+    const acp = (command: string, output = ""): CodeWorkToolCall => ({ name: command.slice(0, 80), ok: true, summary: commandSummary({ command }), input: toolDetailPreview({ command }), output });
+    const origin = { repo: "acme/app", url: "https://github.com/acme/app" };
+    const comment = acp("gh issue comment 1905 --body \"Steps to reproduce:\ngit checkout -b check\ngit push origin check\nThen approve once and the card shows twice, which is what the screenshot attached to the issue shows as well, on a clean checkout of main.\"");
+    expect(codeWork(at([comment]), origin)).toEqual({ pullRequests: [], branches: [], commits: [] });
+    const push = acp("cd \"/Users/someone/Library/Mobile Documents/com~apple~CloudDocs/Projects/acme/app\" && git push origin fix/card", "To github.com:acme/app.git\n * [new branch]      fix/card -> fix/card");
+    expect(codeWork(at([push]), origin).branches.map((branch) => [branch.name, branch.pushed])).toEqual([["fix/card", true]]);
   });
 
   it("knows a branch created but not pushed, and a bare push of the current branch", () => {

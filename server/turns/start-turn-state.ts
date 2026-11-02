@@ -73,6 +73,7 @@ export type TurnState = {
   voiceCallTurn: any;
   voiceTurnPick: any;
   warmOnly: any;
+  autoContinuing: boolean;
 
   activeMessages: any;
   liveBot: any;
@@ -232,6 +233,7 @@ export function createTurnState(init: {
     voiceCallTurn: undefined,
     voiceTurnPick: undefined,
     warmOnly: undefined,
+    autoContinuing: false,
 
     activeMessages: undefined,
     liveBot: undefined,

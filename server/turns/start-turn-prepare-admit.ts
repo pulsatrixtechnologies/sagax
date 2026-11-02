@@ -368,7 +368,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
     // line (the chip and the picker say it on the first turn).
     const ownTurnMoved = state.autoTurn.pick.role === "orchestration" && earlierPick !== undefined &&
       (earlierPick.instanceId !== state.autoTurn.pick.selection.instanceId || earlierPick.model !== state.autoTurn.pick.selection.model);
-    if ((state.autoTurn.pick.role === "worker" || ownTurnMoved) && !state.warmOnly && !autoContinuing) {
+    if ((state.autoTurn.pick.role === "worker" || ownTurnMoved) && !state.warmOnly && !state.autoContinuing) {
       store.appendMessage(state.threadId, {
         role: "bot",
         kind: "activity",

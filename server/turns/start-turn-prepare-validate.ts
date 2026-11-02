@@ -179,7 +179,7 @@ export function createPrepareValidateStartTurn(host: StartTurnHost) {
   // class of work calls for; a continuation keeps the thread's last pick.
   // The stored bot and thread keep Auto and their base model.
   state.autoTurn = null;
-  let autoContinuing = false;
+  state.autoContinuing = false;
   /** The thread's own selection (Auto and its base) before the pick replaced it. */
   state.autoBaseSelection = state.bot.modelSelection;
   if (state.bot.modelSelection.auto === true) {
@@ -193,11 +193,11 @@ export function createPrepareValidateStartTurn(host: StartTurnHost) {
     });
     // A fresh coordinate_bots hop rides a card continuation but is new work.
     const freshAutoHop = Boolean(state.opts?.coordination && !state.opts.coordination.resumed);
-    autoContinuing = !freshAutoHop && Boolean(state.opts?.cardContinuation || state.opts?.computerSelectionContinuation || state.opts?.compactOnly || state.opts?.warmOnly);
+    state.autoContinuing = !freshAutoHop && Boolean(state.opts?.cardContinuation || state.opts?.computerSelectionContinuation || state.opts?.compactOnly || state.opts?.warmOnly);
     const worker = Boolean(autoPeerAsk) || (state.opts?.commsDepth ?? 0) > 0 || state.opts?.automationSource !== undefined || state.opts?.autoWorker === true;
     state.autoTurn = autoPickForTurn({
       bot: state.bot, threadId: state.threadId, speaker: autoSpeaker, text: state.text,
-      role: autoContinuing && !state.opts?.autoSkip?.length ? "continue" : worker ? "worker" : "orchestration",
+      role: state.autoContinuing && !state.opts?.autoSkip?.length ? "continue" : worker ? "worker" : "orchestration",
       fallback: worker ? "worker" : "orchestration",
       // A guest's turn on a Cloud home only goes to an engine that confines it.
       guestConfined: cloudGuestDriven(state.threadId) || cloudGuestDrivenHandoff(state.opts?.coordination?.id) || botmailConfined(state.threadId),

@@ -1,4 +1,9 @@
+<!-- Generated from apps/docs/content/docs/self-hosting/deploy-vps.mdx by scripts/docs-copies.mjs. Edit that file, then run `pnpm docs:copies`. -->
 # Deploy Sagax on a VPS
+
+> **Three ways in, one login**
+>
+> A public address with one command, your own domain with Docker, or your Tailscale network. Whichever you pick, devices pair once with a short code and stay signed in: a session lasts 30 days, and using it with half that or less left renews it to a full 30, up to 180 days from pairing. A device in regular use re-pairs twice a year; one that goes quiet for a month re-pairs. No password.
 
 From a blank Linux server to Sagax running on it around the clock, reachable from your laptop, the desktop app and your phone, with your bots working while every laptop is closed. It assumes nothing beyond being able to open a terminal and paste commands. About twenty minutes, most of it waiting.
 
@@ -32,7 +37,7 @@ providers, and capacity limits were outside this run.
 
 ## What runs on a server, and what does not
 
-Runs fully on the server: every engine CLI (Claude Code, Codex, Grok, custom ACP engines), chats, rooms, bot-to-bot coordination, routines, connected apps and custom MCP servers, webhooks, Company Brain, computer use on cloud or container computers, text-to-speech, and the web UI (the server serves it itself).
+Runs fully on the server: every engine CLI (Claude Code, Codex, Grok, custom ACP engines), chats, rooms, bot-to-bot coordination, routines, capabilities and custom MCP servers, webhooks, Company Brain, computer use on cloud or container computers, text-to-speech, and the web UI (the server serves it itself).
 
 Needs the desktop app instead: dictation and controlling the server's own desktop. Bots browse on a server too, once the browser engine is installed (below).
 

@@ -36,6 +36,7 @@
     "docs:dev": "pnpm --filter @sagax/docs dev",
     "docs:build": "pnpm --filter @sagax/docs build",
     "docs:preview": "pnpm --filter @sagax/docs preview",
+    "docs:copies": "node scripts/docs-copies.mjs",
     "companion": "node --experimental-strip-types companion/src/index.ts",
     "omb": "node --experimental-strip-types server/openmausbot.ts",
     "pair": "node --experimental-strip-types server/openmausbot.ts pair",

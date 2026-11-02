@@ -65,6 +65,8 @@ const GUARD_TESTS = [
   "scripts/testing/index-route-ratchet.test.ts",
   "scripts/tool-policy/tool-policy-coverage.test.ts",
   "scripts/self-knowledge/knowledge.test.ts",
+  // a docs site page and its generated repository copy (scripts/docs-copies.mjs)
+  "scripts/docs-copies.test.mjs",
   "src/locales/unused-keys.test.ts",
   "src/locales/data-keys.test.ts",
   "src/lib/copy-text.guard.test.ts",

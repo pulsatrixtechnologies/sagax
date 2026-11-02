@@ -1,0 +1,188 @@
+// Structural guard (#1905, 2026-11-02): every code path that can put an
+// approval or a choice card between the bot and the person reads the one
+// Full access decision (server/full-access-gate.ts), and says so with a
+// marker comment on the line that emits the card. A new surface without a
+// marker, a marker naming no registered surface, a registered surface whose
+// deciding file stopped reading the gate, or a registered surface nothing
+// emits any more, each fails here. Runs with the merge gate on every PR.
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+import { describe, expect, it } from "vitest";
+
+import { FULL_ACCESS_MARKER, FULL_ACCESS_SURFACES, type FullAccessSurface } from "./full-access-gate.ts";
+
+const ROOT = join(import.meta.dirname, "..");
+const SERVER = join(ROOT, "server");
+
+/** What emits a card or a permission request the person may have to answer. */
+const EMITTERS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
+  // a card row appended to a conversation (an object literal, never a type)
+  { name: "options card", pattern: /\bkind: "options",/ },
+  // an engine bridge emitting a permission request into the fold
+  { name: "permission request", pattern: /\brequestType: "permission"(?!\s*\|)/ },
+  // the peer contact card
+  { name: "peer card", pattern: /\brequestPeerApproval\(/ },
+  // the safety review's hold on a permission request, or before a tool runs
+  { name: "safety review", pattern: /\bsafety(?:PermissionEffect|ToolHold)\(/ },
+  // the Sagax ask_choice card
+  { name: "ask_choice card", pattern: /\bcreateChoiceCard\(/ },
+];
+
+/** Where each surface's decision lives: that file must import the gate
+ * module and read it. An engine bridge only emits (request.opened judges
+ * it); an exempt card blocks nothing. */
+const DECIDED_IN: Record<FullAccessSurface, string | null> = {
+  "tool-approval": "server/index.ts",
+  "question": "server/index.ts",
+  "safety-review": "server/safety-review.ts",
+  "safety-confirm": "server/index.ts",
+  "ask-choice": "server/chat-widgets.ts",
+  "peer-contact": "server/index.ts",
+  "proposal": "server/index.ts",
+  "send": "server/index.ts",
+  "chat-engine": "server/drivers/openai-chat.ts",
+  "engine-bridge": null,
+  "isolation": null,
+  "exempt": null,
+};
+
+const SKIP = /\.(?:test|e2e)\.ts$|\.d\.ts$|\/testing\//;
+
+function* sourceFiles(dir: string): Generator<string> {
+  for (const entry of readdirSync(dir)) {
+    const path = join(dir, entry);
+    if (entry === "node_modules" || entry === "testing" || entry === "self-knowledge") continue;
+    if (statSync(path).isDirectory()) { yield* sourceFiles(path); continue; }
+    if (!path.endsWith(".ts") || SKIP.test(path)) continue;
+    yield path;
+  }
+}
+
+interface Hit { file: string; line: number; emitter: string; text: string; marker?: string }
+
+function scan(): Hit[] {
+  const hits: Hit[] = [];
+  for (const file of sourceFiles(SERVER)) {
+    const lines = readFileSync(file, "utf8").split("\n");
+    lines.forEach((text, index) => {
+      // a definition, a type member, a deps method signature or a comment is not an emitter
+      if (/^\s*(?:export\s+)?(?:async\s+)?function\b/.test(text)) return;
+      if (/^\s*(?:readonly\s+)?\w+\??: .*;\s*$/.test(text) && !/\(/.test(text)) return;
+      if (/^\s*(?:readonly\s+)?\w+\??\(\w+\??:\s/.test(text)) return;
+      if (/^\s*(?:\/\/|\*)/.test(text)) return;
+      for (const emitter of EMITTERS) {
+        if (!emitter.pattern.test(text)) continue;
+        // the marker on the line itself or the three lines above it
+        const window = lines.slice(Math.max(0, index - 3), index + 1).join("\n");
+        const marker = FULL_ACCESS_MARKER.exec(window)?.[1];
+        hits.push({ file: relative(ROOT, file), line: index + 1, emitter: emitter.name, text: text.trim(), ...(marker ? { marker } : {}) });
+      }
+    });
+  }
+  return hits;
+}
+
+const hits = scan();
+const describeHit = (hit: Hit) => `${hit.file}:${hit.line} (${hit.emitter}): ${hit.text.slice(0, 100)}`;
+
+describe("every approval or choice card reads the Full access decision", () => {
+  it("finds the surfaces at all (the scan is not empty)", () => {
+    expect(hits.length).toBeGreaterThan(20);
+    expect(hits.some((hit) => hit.file === "server/index.ts" && hit.emitter === "options card")).toBe(true);
+    expect(hits.some((hit) => hit.file === "server/chat-widgets.ts")).toBe(true);
+    expect(hits.some((hit) => hit.file === "server/drivers/openai-chat.ts" && hit.emitter === "permission request")).toBe(true);
+  });
+
+  it("carries a marker naming a registered surface on each emitter", () => {
+    const unmarked = hits.filter((hit) => !hit.marker).map(describeHit);
+    expect(unmarked, "an approval or choice card with no `// full-access: <surface>` marker: register it in FULL_ACCESS_SURFACES and read the gate").toEqual([]);
+    const unknown = hits.filter((hit) => hit.marker && !(hit.marker in FULL_ACCESS_SURFACES)).map((hit) => `${describeHit(hit)} marker ${hit.marker}`);
+    expect(unknown, "a marker that names no surface of FULL_ACCESS_SURFACES").toEqual([]);
+  });
+
+  it("every registered surface is emitted somewhere, so the registry never lists a phantom", () => {
+    const emitted = new Set(hits.map((hit) => hit.marker));
+    const missing = (Object.keys(FULL_ACCESS_SURFACES) as FullAccessSurface[]).filter((id) => !emitted.has(id));
+    expect(missing).toEqual([]);
+  });
+
+  it("the file that decides each surface imports the gate and reads its decision", () => {
+    const gateImport = /from "(?:\.\.\/)*(?:\.\/)?full-access-gate\.ts"/;
+    const gateCall = /\bfullAccess(?:Decision|Acts|ChoiceAnswer)\(|\bpeerContactCardRequired\(|\bsetSafetyFullAccess\(|\bfullAccessResolver\b/;
+    for (const [surface, file] of Object.entries(DECIDED_IN) as Array<[FullAccessSurface, string | null]>) {
+      if (!file) continue;
+      const text = readFileSync(join(ROOT, file), "utf8");
+      // the safety review carries the decision in from the gate's resolver
+      const reads = gateImport.test(text) || (surface === "safety-review" && /fullAccess\?: boolean|fullAccessResolver/.test(text));
+      expect(reads, `${file} decides ${surface} but does not import full-access-gate.ts`).toBe(true);
+      expect(gateCall.test(text), `${file} decides ${surface} but never reads the decision`).toBe(true);
+    }
+    // a surface decided and emitted in one file never sits elsewhere; the
+    // central ones (decided in index.ts or the review, emitted by the
+    // route modules) may be emitted anywhere
+    const central = new Set<string>(["proposal", "peer-contact", "safety-review", "send", "engine-bridge", "isolation", "exempt"]);
+    for (const hit of hits) {
+      if (!hit.marker || central.has(hit.marker)) continue;
+      const decidedIn = DECIDED_IN[hit.marker as FullAccessSurface];
+      expect(hit.file, `${describeHit(hit)}: ${hit.marker} is decided in ${decidedIn}`).toBe(decidedIn);
+    }
+  });
+
+  it("the one permission handler reads the decision before the safety review and before any card", () => {
+    const index = readFileSync(join(SERVER, "index.ts"), "utf8");
+    const opened = index.indexOf('case "request.opened": {');
+    expect(opened).toBeGreaterThan(0);
+    const handler = index.slice(opened, index.indexOf("\n    case ", opened + 10));
+    expect(handler).toMatch(/const fullTurn = fullAccessDecision\(effectiveApprovalMode\)/);
+    expect(handler).toMatch(/fullAccessChoiceAnswer\(effectiveApprovalMode/);
+    expect(handler).toMatch(/fullAccess: fullTurn\.acts/);
+    // the level is read before the safety review runs, so the review sees it
+    expect(handler.indexOf("const effectiveApprovalMode")).toBeLessThan(handler.indexOf("safetyPermissionEffect("));
+    expect(handler.indexOf("const fullTurn")).toBeLessThan(handler.indexOf("safetyPermissionEffect("));
+  });
+
+  it("every peer card sits behind peerReviewRequired, which reads the gate, as do fullAccessForSource and the safety resolver", () => {
+    // in every server file: the route modules emit the card the central
+    // check gates (peerReviewRequired comes in through their deps)
+    for (const hit of hits) {
+      if (hit.emitter !== "peer card") continue;
+      const lines = readFileSync(join(ROOT, hit.file), "utf8").split("\n");
+      const before = lines.slice(Math.max(0, hit.line - 41), hit.line).join("\n");
+      expect(/peerReviewRequired\(/.test(before), `${describeHit(hit)}: requestPeerApproval without peerReviewRequired in reach`).toBe(true);
+    }
+    const index = readFileSync(join(SERVER, "index.ts"), "utf8");
+    expect(index).toMatch(/function peerReviewRequired[\s\S]{0,400}peerContactCardRequired\(/);
+    expect(index).toMatch(/function fullAccessForSource[\s\S]{0,300}fullAccessActs\(/);
+    expect(index).toMatch(/setSafetyFullAccess\(\(\{ botId, threadId \}\)[\s\S]{0,600}fullAccessActs\(approvalModeForTurn\(/);
+    // the ask_choice route hands the turn's level to the card
+    expect(index).toMatch(/createAgentCard\(\{[\s\S]{0,600}approvalLevel: sourceApprovalMode\(bot\.id, threadId\)/);
+  });
+
+  it("the shared safety review reads Full access as an allow, never a safer path or a confirmation; the verdict is read before the hold", () => {
+    const shared = readFileSync(join(ROOT, "shared", "safety-review.ts"), "utf8");
+    expect(shared).toMatch(/fullAccess\?: boolean/);
+    expect(shared).toMatch(/if \(input\.fullAccess === true\) return verdict\("allow", "full_access"/);
+    // after every block and after the triage approval, before the review steps
+    expect(shared.indexOf('verdict("block", "credentials"')).toBeLessThan(shared.indexOf('"full_access", ""'));
+    expect(shared.indexOf('"full_access", ""')).toBeLessThan(shared.indexOf("const next = step(memory"));
+    const server = readFileSync(join(SERVER, "safety-review.ts"), "utf8");
+    expect(server).toMatch(/if \(verdict\.code === "full_access"\) return null;/);
+    const auto = readFileSync(join(SERVER, "auto-approve.ts"), "utf8");
+    expect(auto.indexOf("fullAccessDecision(")).toBeLessThan(auto.indexOf('source: "safety-hold"'));
+    expect(auto).toMatch(/if \(context\?\.safetyHold && !full\.acts && !full\.hold\)/);
+    expect(auto).toMatch(/if \(full\.acts && !\(context\?\.sagaxGate && context\.stepUpRequired\?\.length\)\)/);
+  });
+
+  it("the chat-completions engines answer their own gate through the decision, not a bare level compare", () => {
+    const chat = readFileSync(join(SERVER, "drivers", "openai-chat.ts"), "utf8");
+    expect(chat).toMatch(/fullAccessActs\(turn\.approvalMode\)/);
+    expect(chat).not.toMatch(/turn\.approvalMode === "full" \|\| !shown\.ask/);
+  });
+
+  it("no driver answers or holds a permission request where it emits it, except the chat engines through the decision", () => {
+    // every `requestType: "permission"` an engine driver or a runner emits is a bridge
+    const bridges = hits.filter((hit) => hit.emitter === "permission request" && /^server\/(?:drivers|saved-steps|runner)\//.test(hit.file));
+    expect(bridges.length).toBeGreaterThan(1);
+    for (const hit of bridges) expect(hit.marker ?? "none", describeHit(hit)).toMatch(/^(?:engine-bridge|chat-engine|exempt)$/);
+  });
+});

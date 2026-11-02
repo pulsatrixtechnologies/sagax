@@ -234,6 +234,7 @@ export class ModelRequestService {
     const automatic = grant !== null;
     const persistence = this.canPersist?.(args.botId, args.threadId, !automatic);
     if (persistence && !persistence.ok) throw new ModelRequestError(persistence.error, persistence.status);
+    // applied without a card at Full (index.ts fullAccessForSource); full-access: proposal
     const messageInput: Parameters<ModelRequestStore["appendMessage"]>[1] = {
       role: "bot",
       kind: "options",

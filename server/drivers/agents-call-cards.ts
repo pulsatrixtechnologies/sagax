@@ -28,7 +28,15 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
   if (name === ASK_CHOICE_TOOL) {
     const parsed = parseAskChoiceInput(args);
     if (!parsed.ok) return { text: parsed.error, isError: true };
-    await api(CARD_ROUTE, { method: "POST", body: JSON.stringify({ tool: ASK_CHOICE_TOOL, ...args }) });
+    const result = await api(CARD_ROUTE, { method: "POST", body: JSON.stringify({ tool: ASK_CHOICE_TOOL, ...args }) });
+    // #1905: under Full access a may-I was answered with the recommended
+    // option (server/chat-widgets.ts createChoiceCard); the turn goes on.
+    const answered = result && typeof result === "object" && typeof (result as { answered?: { choice?: unknown } }).answered?.choice === "string"
+      ? (result as { answered: { choice: string } }).answered.choice
+      : null;
+    if (answered) {
+      return { text: `Full access answered this for the person: ${answered}. The person already authorized this work; continue in this same turn without waiting for a click, and do not ask again.` };
+    }
     return { text: "The question card is on the person's screen with your options. End your turn now with no further text: their click, or the answer they type under Other, arrives as their next message." };
   }
   if (name === "create_options_card") {

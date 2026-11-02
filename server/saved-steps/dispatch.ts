@@ -94,6 +94,7 @@ export class SavedStepsDispatch {
       signal: run.controller.signal,
       open: (ask) => {
         asked.add(ask.id);
+        // judged in index.ts request.opened; full-access: engine-bridge
         this.emit(run, {
           type: "request.opened", requestType: "permission", requestId: ask.id, tool: ask.tool, summary: ask.summary,
           approvalScope: "local-computer", allowSession: false,

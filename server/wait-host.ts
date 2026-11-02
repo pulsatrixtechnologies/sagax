@@ -100,6 +100,7 @@ export function createWaitHost(deps: WaitHostDeps): Pick<WaitManagerOptions, "so
     showCard(wait) {
       const bot = store.bot(wait.botId);
       if (!bot) return undefined;
+      // a settled receipt of a wait, no permission; full-access: exempt
       const message = store.appendMessage(wait.threadId, {
         role: "bot",
         kind: "options",

@@ -112,3 +112,52 @@ describe("widget kit form rows", () => {
     expect(WIDGET_KIT_CSS).toContain("user-select:none");
   });
 });
+
+describe("widget kit pieces", () => {
+  it("draws the composed pieces used by a page", () => {
+    for (const selector of [
+      ".group{",
+      ".group-body{",
+      ".meters{",
+      ".meter-label{",
+      ".timeline-item{",
+      ".timeline-time{",
+      ".notice-empty{",
+      ".notice-wait{",
+      ".notice-denied{",
+      ".notice-error{",
+      ".period-current{",
+      ".health-reason{",
+      ".help-panel[hidden]{display:none}",
+      ".line-main{",
+      ".line-detail{",
+      ".dossier{",
+      ".matrix{",
+      ".matrix-axis{",
+      ".gap-late{",
+      ".gap-error{",
+      ".snapshot-banner{",
+      ".shell{",
+      ".shell-nav .btn[aria-pressed=true]{",
+      ".finder{",
+      ".suggest-list{",
+      ".suggest-item.btn{",
+      ".file{",
+      ".fold{",
+      ".card .fold-toggle.btn{",
+      ".fold-actions{",
+      ".stat-delta.flat{",
+      ".spread .bar-value{white-space:nowrap}",
+      ".pass{",
+      ".pass-meta{",
+      ".pass-title{",
+      ".pass-item.is-out{display:none}",
+      ".pass-more{",
+    ]) {
+      expect(WIDGET_KIT_CSS, selector).toContain(selector);
+    }
+    expect(WIDGET_KIT_CSS).toContain(".group-body{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin-inline-start:12px");
+    expect(WIDGET_KIT_CSS).toContain(".meters{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));align-items:start}");
+    expect(WIDGET_KIT_CSS).toContain(".meter .stat-delta{margin-top:0;min-height:16px}");
+  });
+});

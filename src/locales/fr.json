@@ -12577,5 +12577,8 @@
   "connectApps.tailscale.deviceName": "Appareil",
   "connectApps.tailscale.deviceIps": "IP du tailnet",
   "connectApps.tailscale.noIps": "Aucune adresse pour l'instant",
-  "connectApps.tailscale.disconnect": "Déconnecter"
+  "connectApps.tailscale.disconnect": "Déconnecter",
+  "orgComputer.diskFull": "Le disque de l'environnement serveur est plein : {free} libres sur {total}. Les bots ne peuvent plus enregistrer de fichiers. Supprimez de gros fichiers dans /workspace.",
+  "orgComputer.diskAlmostFull": "Le disque de l'environnement serveur est presque plein : {free} libres sur {total}.",
+  "orgComputer.diskFree": "{free} libres"
 }

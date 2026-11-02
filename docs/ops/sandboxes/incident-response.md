@@ -98,7 +98,7 @@ Ready for 5 minutes.
 ## SagaxSandboxVolumeNearFull
 
 Ticket. A workspace is past 85 percent of its capacity. The soft quota
-is `SAGAX_SANDBOX_DISK_MB` (2048).
+is `SAGAX_SANDBOX_DISK_MB` (20480).
 
 1. Tell the person from the volume name only after you have confirmed
    which claim it is. Do not put file names in the incident note.

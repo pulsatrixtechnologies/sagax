@@ -3705,5 +3705,8 @@
   "settings.streamReplies.title": "返信を書きながら表示",
   "settings.streamReplies.show": "ボットの返信を完了後にまとめて表示するのではなく、書かれるそばから表示します",
   "bulkEdit.mixedOpen": "These fields differ across the selected bots: {fields}. Controls start empty for them; only what you set is written.",
-  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot."
+  "bulkEdit.mixedOpenShort": "Only what you set is written on every selected bot.",
+  "orgComputer.diskFull": "サーバー環境のディスクがいっぱいです: {total} 中 {free} の空き。ボットはファイルを保存できません。/workspace の大きなファイルを削除してください。",
+  "orgComputer.diskAlmostFull": "サーバー環境のディスクがほぼいっぱいです: {total} 中 {free} の空き。",
+  "orgComputer.diskFree": "{free} 空き"
 }

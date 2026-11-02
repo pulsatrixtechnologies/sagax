@@ -9,7 +9,7 @@ import { diskSpace, folderBytes } from "../disk-usage.ts";
 import { json, readBody } from "../harness/http.ts";
 import { requiredScope, type RequestAuth } from "../request-auth.ts";
 import { UserSandboxUnavailable, type UserSandboxView } from "../user-sandbox-manager.ts";
-import { createComputerStatusRoutes, diskStateForFree, diskStateForQuota, type ComputerStatusRouteDeps, type SandboxLike } from "./computer-status.ts";
+import { createComputerStatusRoutes, diskStateForFree, diskStateForQuota, sandboxStatus, type ComputerStatusRouteDeps, type SandboxLike } from "./computer-status.ts";
 import { dispatchRoutes } from "./table.ts";
 
 const ADA = "pr_00000000-0000-4000-8000-000000000001";
@@ -173,5 +173,15 @@ describe("computer routes", () => {
     expect((await first).status).toBe(200);
     expect(calls).toEqual(["update"]);
     expect(claimed.size).toBe(0);
+  });
+});
+
+describe("sandboxStatus disk (2026-11-02)", () => {
+  it("reports the volume full even when the quota says there is room", () => {
+    const MiB = 1024 * 1024;
+    const full = sandboxStatus(view({ workspaceBytes: 100 * MiB, limits: { memoryMb: 1024, cpus: 1, pids: 256, diskMb: 20480, tmpMb: 256 }, workspaceFreeBytes: 11 * MiB, workspaceTotalBytes: 1946 * MiB }));
+    expect(full.diskState).toBe("full");
+    const roomy = sandboxStatus(view({ workspaceBytes: 100 * MiB, limits: { memoryMb: 1024, cpus: 1, pids: 256, diskMb: 20480, tmpMb: 256 }, workspaceFreeBytes: 15_000 * MiB, workspaceTotalBytes: 20_000 * MiB }));
+    expect(roomy.diskState).toBe("normal");
   });
 });

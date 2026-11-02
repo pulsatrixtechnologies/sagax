@@ -2556,6 +2556,7 @@ import {
   USER_SANDBOX_MCP_NAME
 } from "./user-sandbox-routing.ts";
 import { handleUserSandboxMcp } from "./user-sandbox-tools.ts";
+import { BotFolderRegistry, WorkspaceTidier, botFolderNote, botFolderPath, inBotFolder, rewriteMovedPaths, workspaceDiskWarning, type TidyMove } from "./sandbox-bot-folder.ts";
 import { enginePluginCommandRefusal } from "./person-integrations.ts";
 import { SandboxControlHolds } from "./sandbox-control.ts";
 import { DesktopBridges, resolveBotWorkplace, type WorkplaceDecision } from "./desktop-bridge.ts";
@@ -7013,7 +7014,15 @@ function soloArchiveText(text: string): { text: string; annotated: boolean } {
 /** What the bot is told about where its tools run, when it matters: on the
  * person's own computer, or in their server environment because their
  * computer is not connected (the UI says so too). Provider text only. */
-function withWorkplaceNote(text: string, decision: WorkplaceDecision, auto?: AutoComputerState | null): string {
+function withWorkplaceNote(text: string, decision: WorkplaceDecision, auto?: AutoComputerState | null, botId?: string): string {
+  // 2026-11-02: the bot's own folder of the server environment, whenever
+  // its tools may run there (server/sandbox-bot-folder.ts).
+  const folder = botId && userSandbox && (decision.target === "user-sandbox" || (auto?.auto && auto.sandboxConfigured)) ? sandboxBotFolder(botId) : null;
+  const withFolder = (out: string) => folder ? `${out}\n\n<workplace>${botFolderNote(folder)}</workplace>` : out;
+  return withFolder(workplaceNoteText(text, decision, auto));
+}
+
+function workplaceNoteText(text: string, decision: WorkplaceDecision, auto?: AutoComputerState | null): string {
   if (auto?.auto) return `${text}\n\n${autoComputerGuidance(auto, Boolean(decision.principal && desktopBridges.connected(decision.principal)))}`;
   if (decision.target === "user-desktop" && decision.reason === "desktop") {
     return `${text}\n\n<workplace>Your ${DESKTOP_BRIDGE_MCP_NAME} tools run on this person's own computer, through their Sagax desktop app: their files, apps, network and Local VM, as if you were on their machine.</workplace>`;
@@ -8528,6 +8537,61 @@ const userSandbox: UserSandboxManager | null = (() => {
   manager.start();
   return manager;
 })();
+// 2026-11-02: each bot works in its own folder of the environment,
+// /workspace/bots/<slug>/ (server/sandbox-bot-folder.ts). The folder names
+// are kept here so a renamed bot keeps its folder; the tidy moves the loose
+// files of the root once per start of an environment.
+const sandboxBotFolders = new BotFolderRegistry(join(DATA_DIR, "sandbox-bot-folders.json"));
+function sandboxBotFolder(botId: string): string | null {
+  const known = sandboxBotFolders.known(botId);
+  if (known) return botFolderPath(known);
+  const bot = store.bot(botId);
+  return bot ? sandboxBotFolders.folderFor(bot.id, bot.name) : null;
+}
+/** Which bot made each loose root entry: the bots whose conversations
+ * (messages and tool calls) name /workspace/<entry>, else the bare name
+ * when it is distinctive. Exactly one bot, or nobody. */
+function attributeSandboxEntries(_principalId: string, names: readonly string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  // Each lookup scans the stored messages: the first 200 entries only, the
+  // rest go to _unsorted (a root that messy is mostly one bot's output).
+  for (const name of names.slice(0, 200)) {
+    const botsFor = (fragment: string) => new Set(threadsReferencing(fragment).map((threadId) => store.botByThread(threadId)?.id).filter((id): id is string => Boolean(id)));
+    let bots = botsFor(`/workspace/${name}`);
+    if (bots.size === 0 && name.length >= 8 && /[._-]/.test(name)) bots = botsFor(name);
+    if (bots.size === 1) out.set(name, [...bots][0]!);
+  }
+  return out;
+}
+/** After a tidy: routines whose prompt or watched path named a moved file
+ * now name its new place (the move breaks nothing they do). */
+function updateRoutinePathsAfterTidy(principalId: string, moves: readonly TidyMove[]): void {
+  if (!routines) return;
+  const person = principalId.trim().toLowerCase();
+  for (const routine of routines.listRoutines()) {
+    // Only the routines that run in this person's environment.
+    const runsAs = effectiveRunAs({ botId: routine.botId, ...(routine.runAs ? { runAs: routine.runAs } : {}) })?.trim().toLowerCase();
+    if (runsAs !== person) continue;
+    const prompt = rewriteMovedPaths(routine.prompt, moves);
+    const precheck = routine.precheck ? JSON.parse(rewriteMovedPaths(JSON.stringify(routine.precheck), moves)) as typeof routine.precheck : undefined;
+    const promptChanged = prompt !== routine.prompt;
+    const precheckChanged = Boolean(routine.precheck) && JSON.stringify(precheck) !== JSON.stringify(routine.precheck);
+    if (!promptChanged && !precheckChanged) continue;
+    try {
+      routines.update(routine.id, { ...(promptChanged ? { prompt } : {}), ...(precheckChanged ? { precheck } : {}) });
+      console.log(`[workspace-tidy] routine ${routine.id}: paths updated to the moved files`);
+    } catch (error) {
+      console.error(`[workspace-tidy] routine ${routine.id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+const sandboxTidier = userSandbox ? new WorkspaceTidier({
+  exec: (principalId, input, botId) => userSandbox.exec(principalId, input, botId),
+  attribute: attributeSandboxEntries,
+  folderOf: (botId) => sandboxBotFolder(botId),
+  moved: (principalId, moves) => updateRoutinePathsAfterTidy(principalId, moves),
+  log: (line) => console.log(`[workspace-tidy] ${line}`),
+}) : null;
 if (userSandbox) {
   principals.onDisabledChanged((person, disabled) => {
     if (disabled) void userSandbox.personOut(person.id);
@@ -13862,7 +13926,7 @@ const terminalFeature = installTerminalFeature({
       },
       async open(ctx) {
         if (!userSandbox) throw new Error("The server environment is not enabled on this server.");
-        return streamTerminalAttachment(await userSandbox.ttyStream(ctx.principalId, terminalSize(ctx), ctx.botId));
+        return streamTerminalAttachment(await userSandbox.ttyStream(ctx.principalId, terminalSize(ctx), ctx.botId, (ctx.botId ? sandboxBotFolder(ctx.botId) : null) ?? undefined));
       }
     },
     // Organization: the Local VM on the person's computer, through their app
@@ -23877,10 +23941,13 @@ function routineWatchPlace(routine: WatchRoutine): WatchPlace {
         wake: () => { void userSandbox?.prewake(target.principal, bot.id); },
         exec: async (command, options) => {
           if (!userSandbox) return { exitCode: null, stdout: "", truncated: false, timedOut: false };
-          const result = await userSandbox.exec(target.principal, {
+          // In the bot's own folder, like its commands (server/sandbox-bot-folder.ts).
+          const input = {
             argv: ["/bin/sh", "-c", command], env: { LANG: "C.UTF-8" },
             timeoutSec: Math.max(1, Math.floor(options.timeoutMs / 1000)), maxOutputBytes: options.maxOutputBytes
-          }, bot.id);
+          };
+          const folder = sandboxBotFolder(bot.id);
+          const result = await userSandbox.exec(target.principal, folder ? inBotFolder(input, folder) : input, bot.id);
           return { exitCode: result.exitCode, stdout: result.stdout, truncated: result.truncated, timedOut: result.timedOut };
         }
       };
@@ -30802,6 +30869,9 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     withCommandVariables,
     userSandboxExec: (ownerId, input, botId) => userSandbox!.exec(ownerId, input as never, botId),
     userSandboxOverQuota: async (ownerId, botId) => userSandbox!.workspaceOverQuota(ownerId, botId),
+    sandboxBotFolder,
+    sandboxTidy: async (ownerId, botId) => { await sandboxTidier?.ensure(ownerId, botId); },
+    sandboxDiskWarning: (ownerId, folder) => workspaceDiskWarning(sandboxTidier?.disk(ownerId) ?? null, folder ?? undefined),
     enginePluginCommandRefusal,
     misuseTextRefusal,
     misusePathRefusal: (pathValue, meta) => misusePathRefusal(pathValue, meta),

@@ -196,6 +196,23 @@ describe("kubernetes sandbox lifecycle", () => {
     expect(objects.has("/apis/networking.k8s.io/v1/namespaces/sandboxes/networkpolicies/sagax-default-deny")).toBe(true);
   });
 
+  it("grows an older, smaller claim to the configured size at the next start (2026-11-02)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-k8s-"));
+    const { service, objects, auditFile } = harness(dir);
+    await service.installEgressPolicy();
+    expect((await service.ensure(person)).state).toBe("running");
+    const names = sandboxNames(person);
+    const claimPath = `/api/v1/namespaces/sandboxes/persistentvolumeclaims/${names.volume}`;
+    const storage = () => (((objects.get(claimPath)!.spec as Obj).resources as Obj).requests as Obj).storage;
+    expect(storage()).toBe("20480Mi");
+    (((objects.get(claimPath)!.spec as Obj).resources as Obj).requests as Obj).storage = "2Gi";
+    await service.stop(person);
+    expect((await service.ensure(person)).state).toBe("running");
+    expect(storage()).toBe("20480Mi");
+    const lines = readFileSync(auditFile, "utf8").trim().split("\n").map((line) => JSON.parse(line) as { action: string });
+    expect(lines.some((line) => line.action === "sandbox.pvc.grow")).toBe(true);
+  });
+
   it("creates one pod and one claim, pauses without releasing the slot, then removes them", async () => {
     const dir = mkdtempSync(join(tmpdir(), "sagax-k8s-"));
     const { service, objects, api, auditFile } = harness(dir);

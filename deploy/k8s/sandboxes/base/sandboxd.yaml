@@ -80,7 +80,7 @@ spec:
             - name: SAGAX_SANDBOX_TMP_MB
               value: "512"
             - name: SAGAX_SANDBOX_DISK_MB
-              value: "2048"
+              value: "20480"
             - name: SAGAX_SANDBOX_MAX_RUNNING
               value: "64"
             - name: SAGAX_SANDBOX_IDLE_MINUTES

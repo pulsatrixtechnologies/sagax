@@ -312,7 +312,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
     state.turnImages.push(...office.images);
   }
   state.placedText = state.opts.cardContinuation ? { text: state.providerText, staging: null } : workplaceTurnText(state.providerText, state.turnPlace);
-  state.providerText = withWorkplaceNote(state.placedText.text, state.turnPlace, state.turnAuto);
+  state.providerText = withWorkplaceNote(state.placedText.text, state.turnPlace, state.turnAuto, state.bot.id);
   // The engine's container runs in UTC: tell it the time where its person is
   // (server/turn-clock.ts), so times are said in their zone.
   const clockZone = state.opts.cardContinuation || !turnClockEnabled() ? null : turnZoneFor(state.bot, state.speaker);

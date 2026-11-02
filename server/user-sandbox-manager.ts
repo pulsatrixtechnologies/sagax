@@ -25,6 +25,9 @@ export interface UserSandboxView {
   workspaceBytes: number | null;
   overQuota: boolean;
   limits: SandboxStatus["limits"] | null;
+  /** The /workspace filesystem (df), when the provisioner measured it. */
+  workspaceFreeBytes?: number;
+  workspaceTotalBytes?: number;
   idleMinutes: number | null;
   pendingDeletionAt: number | null;
   error?: string;
@@ -175,7 +178,7 @@ export class UserSandboxManager {
       exec: (key, input) => run(() => client.exec(key, input)),
       desktopStream: (key, options) => run(() => client.desktopStream(key, options)),
       stdioStream: (key, spec) => run(() => client.stdioStream(key, spec)),
-      ...(client.ttyStream ? { ttyStream: (key: string, size: { cols: number; rows: number }) => run(() => client.ttyStream!(key, size)) } : {}),
+      ...(client.ttyStream ? { ttyStream: (key: string, size: { cols: number; rows: number }, cwd?: string) => run(() => client.ttyStream!(key, size, cwd)) } : {}),
     };
   }
 
@@ -238,6 +241,8 @@ export class UserSandboxManager {
         workspaceBytes: status.workspaceBytes,
         overQuota: status.overQuota,
         limits: status.limits,
+        ...(typeof status.workspaceFreeBytes === "number" && typeof status.workspaceTotalBytes === "number"
+          ? { workspaceFreeBytes: status.workspaceFreeBytes, workspaceTotalBytes: status.workspaceTotalBytes } : {}),
         idleMinutes: info?.idleMinutes ?? null,
         pendingDeletionAt,
         ...(info?.egress === "missing" ? { error: "egress_policy" } : {}),
@@ -502,11 +507,11 @@ export class UserSandboxManager {
    * as a byte stream (server/sandbox-stdio-mcp.ts). Starts it when needed. */
   /** The person's own in-chat terminal in their environment (by person:
    * never anyone else's). Wakes a stopped cluster like a bot's command. */
-  async ttyStream(principalId: string, size: { cols: number; rows: number }, botId?: string): Promise<{ stream: Duplex; resize(cols: number, rows: number): void }> {
+  async ttyStream(principalId: string, size: { cols: number; rows: number }, botId?: string, cwd?: string): Promise<{ stream: Duplex; resize(cols: number, rows: number): void }> {
     this.refuseIfOut(principalId);
     const client = this.clientFor(principalId, botId, "wake");
     if (!client.ttyStream) throw new UserSandboxUnavailable("This server's provisioner cannot open a terminal.", "tty_unsupported");
-    return this.call(() => client.ttyStream!(this.keyFor(principalId), size));
+    return this.call(() => client.ttyStream!(this.keyFor(principalId), size, cwd));
   }
 
   async stdioStream(principalId: string, spec: SandboxStdioSpec, botId?: string): Promise<Duplex> {

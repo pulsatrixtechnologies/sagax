@@ -94,7 +94,11 @@ export const DEFAULT_SANDBOX_LIMITS: SandboxLimits = {
   nanoCpus: 1_000_000_000,
   pidsLimit: 512,
   tmpBytes: 512 * MiB,
-  workspaceQuotaBytes: 2048 * MiB,
+  // 2026-11-02: 20 GiB (was 2 GiB, full in production with LibreOffice files,
+  // images and repositories). One node per person on Kubernetes, where it is
+  // the claim's size (an older 2 GiB claim grows at its next start); a soft
+  // quota on Docker.
+  workspaceQuotaBytes: 20480 * MiB,
   maxFileBytes: 512 * MiB,
   nofile: 1024,
 };

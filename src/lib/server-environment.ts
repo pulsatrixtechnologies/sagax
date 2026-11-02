@@ -53,6 +53,9 @@ export interface ServerEnvironmentStats {
   memoryLimitBytes: number;
   workspaceBytes: number | null;
   workspaceQuotaBytes: number;
+  /** The /workspace volume itself (df), when the provisioner measured it. */
+  workspaceFreeBytes?: number;
+  workspaceTotalBytes?: number;
   os: string | null;
   arch: string | null;
   image: string;

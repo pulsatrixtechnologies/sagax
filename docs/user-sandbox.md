@@ -130,12 +130,58 @@ ordinary name whose real place is a dotfile (`server/sensitive-path.ts`,
 ## Desktop
 
 Each environment can show a small Linux desktop (1280x800): Xvnc (an X
-server with its VNC server), openbox, a gradient background (hsetroot), a
-launcher bar (tint2: Chromium, Terminal, Files, open windows, clock),
-Chromium, xterm and pcmanfm, driven by `/usr/local/bin/sagax-desktop` in the
-image. Without the background and the bar the screen was black with only a
-cursor. Nothing of it runs until it is
-needed: a plain shell turn starts no X server.
+server with its VNC server), openbox (Clearlooks, light), a soft grey
+gradient background (hsetroot), and a bottom dock (Plank, with xcompmgr for
+its transparency) holding Chromium, Files (Thunar, with its Places and
+Devices side pane and bookmarks for `bots` and `shared`) and Terminal (Xfce
+Terminal); no taskbar, the dock shows the open apps. The Papirus icon theme
+gives folders, the terminal, the browser and each file type their own icon.
+Driven by `/usr/local/bin/sagax-desktop` in the image. Nothing of it runs
+until it is needed: a plain shell turn starts no X server.
+
+The everyday apps (2026-11-02), each the default for its files
+(`deploy/sandbox/mimeapps.list`): Ristretto for pictures, Parole (and mpv)
+for audio and video, LibreOffice Writer, Calc, Impress and Draw for office
+files (docx, xlsx, pptx, odt...), Atril for PDF, Xarchiver for archives
+(also from Thunar's right-click menu), Mousepad for text, JSON, Markdown and
+scripts, and Chromium for HTML. `WITH_APPS=0` builds the image without them
+(LibreOffice is most of their size).
+
+## Workspace layout (2026-11-02)
+
+`/workspace` is shared by every bot of the person, so each bot works in its
+own folder (`server/sandbox-bot-folder.ts`):
+
+| Path | What |
+|---|---|
+| `/workspace/bots/<slug>/` | the bot's folder: where its commands, its terminal and its routine watches start, and where relative paths of `read_file`, `write_file` and `list_files` resolve. Created on first use. |
+| `/workspace/bots/<slug>/tmp/` | its temporary files (`TMPDIR`); files unchanged for 7 days are deleted at each start |
+| `/workspace/shared/` | what the person's bots share |
+| `/workspace/_unsorted/<date>/` | loose root files no bot could be found for |
+
+The slug is the bot's name made safe for a path (`Agent Mélanie (CW)` gives
+`agent-melanie-cw`), kept for good once given (a renamed bot keeps its
+folder; `sandbox-bot-folders.json` in the data folder), unique on the
+server: a collision gets `-2`, `-3`, never an id. The bot is told its folder
+in its tool descriptions and in a `<workplace>` note of each message.
+
+**Tidy at start.** At the first bot call after the environment starts (the
+marker is in `/tmp`, a tmpfs), every entry of the `/workspace` root that is
+not a dot entry nor in `SANDBOX_ROOT_KEEP` (`bots`, `shared`, `_unsorted`,
+`lost+found`, `attachments`, `sagax-plugins`, `sagax-capability-skills`,
+`skills`, `marketplaces`, `Desktop`) is moved: into the folder of the one bot
+whose conversations name `/workspace/<entry>` (or the bare name when it is
+distinctive), else into `_unsorted/<date>/`. A name already taken there gets
+` (2)`. Nothing is deleted. Each move is a row of
+`_unsorted/MOVES-<date>.md` and an entry of `_unsorted/moves.json`. The
+routines of that person whose prompt or watch names a moved path are
+rewritten to the new path.
+
+**Disk.** The provisioner measures the volume itself (`df`) beside the
+quota. Under 10% free (at most 1 GiB) every tool answer carries a "disk
+almost full" line, under 200 MiB or 2% a "disk full" one; the Computer tab
+shows the same warning and the phone's `diskState` follows the worse of the
+quota and the volume.
 
 - **Computer use:** bots get the desktop bridge's shape, `computer_list_tools`
   then `computer_use` with `screenshot` (JPEG), `get_screen_size`, `click`,
@@ -231,7 +277,8 @@ shows where the person's bots do computer work right now:
   Public internet stays open. If the policy cannot be applied, the provisioner
   refuses to create environments (`SAGAX_SANDBOX_REQUIRE_EGRESS_POLICY=false`
   turns that off for a lab only).
-- **Disk:** `/workspace` has a soft quota (`SAGAX_SANDBOX_DISK_MB`): over it,
+- **Disk:** `/workspace` has a soft quota (`SAGAX_SANDBOX_DISK_MB`, 20 GiB by
+  default since 2026-11-02, the claim's size on Kubernetes): over it,
   `write_file` is refused and Settings shows it; one file is capped by
   `SAGAX_SANDBOX_MAX_FILE_MB`. For a hard cap, put `/var/lib/docker` on xfs
   with project quotas.
@@ -319,7 +366,7 @@ api.githubcopilot.com are reachable; only private destinations are dropped.
 | `SAGAX_SANDBOX_CPUS` | 1 | per environment |
 | `SAGAX_SANDBOX_PIDS` | 512 | per environment (Chromium's processes and threads count) |
 | `SAGAX_SANDBOX_TMP_MB` | 512 | tmpfs `/tmp` (counts against memory only when used) |
-| `SAGAX_SANDBOX_DISK_MB` | 2048 | soft quota on `/workspace` |
+| `SAGAX_SANDBOX_DISK_MB` | 20480 | soft quota on `/workspace` (Kubernetes: the claim's size; a smaller existing claim grows at its next start) |
 | `SAGAX_SANDBOX_MAX_FILE_MB` | 512 | largest single file |
 | `SAGAX_SANDBOX_MAX_RUNNING` | 2 | running or paused at once (3 GiB at most) |
 | `SAGAX_SANDBOX_IDLE_MINUTES` | 10 | idle stop |

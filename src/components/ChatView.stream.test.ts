@@ -1,8 +1,6 @@
 // ChatView as the single stream (Show threads off, the default): one
-// continuous timeline (2026-10-28, the reference design): the earlier topics
-// drawn above the live one as soon as it is read back, under quiet time
-// dividers, New topic in the header, nothing of it with threads on or in a
-// thread outside the stream.
+// continuous timeline for the live topic; an asked-for New topic clears to
+// the empty greeting with Back; earlier topics draw above once read back.
 import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -99,7 +97,7 @@ describe("the single stream in the main chat", () => {
     expect(alone).not.toContain("data-topic-divider");
   });
 
-  it("keeps the whole timeline on screen under a fresh topic: an automatic one shows nothing, an asked-for one a quiet line with Resume", () => {
+  it("clears to an empty greeting for an asked-for New topic, and keeps the timeline for an automatic one", () => {
     preferences.setShowThreads(false);
     fixture.fresh = { bot: { threadId: "now", auto: true } };
     try {
@@ -110,19 +108,41 @@ describe("the single stream in the main chat", () => {
       expect(markup).toContain('data-stream-segment="first"');
       expect(markup).not.toContain("data-previous-topics");
       expect(markup).not.toContain("data-fresh-topic-divider");
-      // "New topic" asked for here: one quiet line at the end, with Resume
+      // "New topic" asked for here: empty greeting + Back; history stays out
       fixture.fresh = { bot: { threadId: "now", auto: false } };
       const asked = render(bot);
-      expect(asked).toContain("Live answer");
+      expect(asked).not.toContain("Live answer");
+      expect(asked).not.toContain('data-stream-segment="first"');
       expect(asked).toContain("data-fresh-topic-divider");
       expect(asked).toContain("data-fresh-topic-resume");
-      expect(asked.indexOf("Live answer")).toBeLessThan(asked.indexOf("data-fresh-topic-divider"));
+      expect(asked).toContain("Pepper");
       // a draft over another thread than the one on screen draws nothing
       fixture.fresh = { bot: { threadId: "first", auto: false } };
       expect(render(bot)).not.toContain("data-fresh-topic-divider");
+      expect(render(bot)).toContain("Live answer");
       // never over a confidential thread, shown alone
       fixture.fresh = { bot: { threadId: "conf", auto: false } };
       expect(render({ ...bot, threadId: "conf" })).not.toContain("data-fresh-topic-divider");
+    } finally {
+      fixture.fresh = {};
+    }
+  });
+
+  it("Back to the previous topic drops the asked-for draft and restores the timeline", () => {
+    preferences.setShowThreads(false);
+    fixture.fresh = { bot: { threadId: "now", auto: false } };
+    fixture.dispatch.mockClear();
+    try {
+      const asked = render(bot);
+      expect(asked).toContain("data-fresh-topic-resume");
+      expect(asked).toContain("Back to the previous topic");
+      // Static markup cannot click; the resume control wires the store action.
+      expect(fixture.dispatch).not.toHaveBeenCalled();
+      // After resume (draft cleared) the live answer is back on screen.
+      fixture.fresh = {};
+      const restored = render(bot);
+      expect(restored).toContain("Live answer");
+      expect(restored).not.toContain("data-fresh-topic-divider");
     } finally {
       fixture.fresh = {};
     }

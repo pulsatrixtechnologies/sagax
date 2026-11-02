@@ -7748,9 +7748,10 @@ and `ios/Tests/CompanionCoreTests/SingleStreamTests.swift`.
 
 Decision: coming back to a bot's conversation after a while starts a fresh
 engine context; the bot keeps everything (the "Earlier topics" digest and
-`recall_topic`). Since 2026-10-28 nothing moves on screen for it: the
-timeline stays one conversation (an asked-for "New topic" shows one quiet
-line with Resume; an automatic one shows nothing). Rules, none optional (`shared/fresh-topic.ts`, desktop
+`recall_topic`). An automatic return stays invisible on screen (timeline
+unchanged). An asked-for "New topic" (header pencil) clears the chat to the
+empty greeting; "Back to the previous topic" drops the draft and restores
+the covered topic; nothing is deleted. Rules, none optional (`shared/fresh-topic.ts`, desktop
 `src/lib/fresh-topic.ts`, iOS `ios/Sources/CompanionCore/FreshTopic.swift`
 and `ios/App/Session+FreshTopic.swift`; shared cases in
 `shared/fresh-topic.vectors.json`, run by both test suites):
@@ -7776,13 +7777,12 @@ and `ios/App/Session+FreshTopic.swift`; shared cases in
   `Session.returning(to:)` on iOS (home rows, iPad sidebar). A notification,
   a link, a search hit or `openBotThread` opens its own thread and clears a
   draft (`focusMessage` drops the draft of the bot that owns the thread).
-- On screen: the earlier topics are folded behind one discreet "Earlier
-  topics" line (`PreviousTopicsLine`, `data-previous-topics`); the live
-  topic draws them only on that line, a link, a search hit or the activity
-  pill (no more auto-draw on read back). Under a fresh topic the line also
-  shows the topic it covers, and "Back to the previous topic" drops the
-  draft. ⌘F still searches the covered topic and the earlier ones. iOS has
-  no stream drawing: its line shows the covered topic again.
+- On screen: the earlier topics of the live topic load upward once it is
+  read back. An asked-for New topic clears the view to the empty greeting
+  with "Back to the previous topic" (`FreshTopicDivider` /
+  `FreshTopicHeader`); scrolling up does not reveal the covered topic in
+  the same view. An automatic fresh topic shows nothing. ⌘F still searches
+  the covered topic and the earlier ones.
 - Tests: `shared/fresh-topic.test.ts`, `src/lib/fresh-topic.test.ts`,
   `src/components/ChatView.stream.test.ts`, `src/components/thread-home.test.ts`,
   `server/fresh-topic.e2e.test.ts`, `ios/Tests/CompanionCoreTests/FreshTopicTests.swift`.

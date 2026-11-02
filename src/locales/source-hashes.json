@@ -16248,7 +16248,10 @@
       "botModels.bulk.setBackup": "6170a9650a2c8285566e525e6b63c0865a8eb23c63a4736da93c96f4b934c336",
       "botModels.bulk.backupTitle": "6170a9650a2c8285566e525e6b63c0865a8eb23c63a4736da93c96f4b934c336",
       "botModels.bulk.backupHelp": "9ddacd60023842d491f1ce91ec24a672666de8c94a4daa505ab41339f27f26cb",
-      "botModels.bulk.clearBackup": "1d40c124805191308eea0e3c19aaaba9dc6d912951cb0cff43d99f4fec971bbe"
+      "botModels.bulk.clearBackup": "1d40c124805191308eea0e3c19aaaba9dc6d912951cb0cff43d99f4fec971bbe",
+      "chat.gotoGroup.namedLead": "70d4e1872293f6a9008147de027d2fccc6cfd372e5b4400f5c9f99d08fce9904",
+      "chat.gotoGroup.namedMore": "a530d016db9f02e6880167762408702617c29006b8c5dbc6dcc046f5e91fb148",
+      "chat.gotoGroup.summaryAria": "da340a030f707bd710dc3db5c99f42929491b6b829611fb0dd90e6eb4de9556f"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

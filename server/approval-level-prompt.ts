@@ -32,6 +32,8 @@ export function approvalLevelPrompt(level: ApprovalMode | undefined): string {
       + " Sagax alone stops what still needs a person: an organization or personal rule set to Refuse or Ask first, and a message to a recipient outside this bot's allowed recipients. Then make the call anyway; Sagax shows its card or its refusal, and you report what happened."
       + NEVER_TYPED
       + NO_SPURIOUS_CHOICE
+      // #1905: the server answers a may-I itself, so the model keeps working
+      + " A may-I or confirmation you still pose (ask_choice or your question tool) is answered for the person with your recommended option, the first one, and your turn continues: do not wait for a click."
       + " Say a thing is done only once the call succeeded.";
   }
   const how = level === "ask"

@@ -1,11 +1,13 @@
-# Workspaces screen and the fleet agent
+# Installations screen and the fleet agent
 
 ## Sub-features
 
 - A root agent on a Unix socket only the operator's user may open, planning
   and running fleet operations, writing an audit line per action.
-- Operator-server routes under `/api/fleet` that forward to the agent, admin
-  scope plus the `admin` entitlement, 404 without an agent.
+- Operator-server routes under `/api/fleet` that forward to the agent: admin
+  scope (a chat-only device gets 403), the `admin` feature (always on in the
+  open-source edition; only an enterprise layer can withhold it), 404 without
+  an agent.
 - Settings → Installations: list with state and this month's cost, create, users,
   suspend, resume, delete (with keep-data), upgrade all.
 
@@ -21,7 +23,9 @@ workspace's own ledger for the month through the usage dependency seam), users, 
 same client the operator server uses, checks the audit log names every action
 and never a key, and checks refusals: bad names, unknown operations, a failed
 step reported without the tool's secrets, and a plain message when no agent
-exists.
+exists. `server/index.test.ts` ("opens Installations on the open-source
+edition") checks the routes on a running server with no layer and no key: 404
+for the owner when no agent runs, 403 for a chat-only device on every route.
 
 The fleet filesystem suite runs the actual unprivileged child on disposable
 ledgers, including hostile links, special files and oversized input. The

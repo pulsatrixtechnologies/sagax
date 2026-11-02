@@ -44,6 +44,7 @@ export function createOptionsCard(args: {
   const parsed = parseOptionsCardInput(args.input);
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
 
+  // the Watcher's product card, no permission; full-access: exempt
   const message = args.store.appendMessage(args.threadId, {
     role: "bot",
     kind: "options",

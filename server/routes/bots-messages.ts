@@ -328,6 +328,7 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       const intro = !guarded && !pressed && !voiceCall ? introAdvance(store.messagesFor(threadId), typed) : null;
       if (intro) {
         const message = store.appendMessage(threadId, { role: "user", kind: "text", text: typed, ...(sendId ? { sendId } : {}) });
+        // an onboarding card, no permission; full-access: exempt
         if (intro.kind === "card") store.appendMessage(threadId, { role: "bot", kind: "options", card: intro.card });
         else store.appendMessage(threadId, { role: "bot", kind: "text", text: intro.text });
         return json(res, 202, { ok: true, threadId, message });

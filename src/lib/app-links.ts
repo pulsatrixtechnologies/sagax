@@ -17,14 +17,14 @@ export const LICENSE_URL = `${APP_REPOSITORY}/blob/main/LICENSE`;
 
 /**
  * About footer license line. Single constant so the UI follows LICENSE on
- * this tree (and origin/main). Today LICENSE is PolyForm Noncommercial 1.0.0;
- * when LICENSE switches to Apache 2.0, change only this constant (and the
- * matching locale strings that quote it).
+ * this tree (and origin/main). LICENSE is the Apache License 2.0 (#1900);
+ * a license change updates only this constant (and the matching locale
+ * strings that quote it).
  */
-export const APP_LICENSE_ID = "PolyForm Noncommercial 1.0.0" as const;
+export const APP_LICENSE_ID = "Apache License 2.0" as const;
 /** English About copyright line; locales may translate around this id. */
 export const APP_LICENSE_FOOTER_EN =
-  `© 2026 Pulsatrix Technologies inc. Free for noncommercial use (${APP_LICENSE_ID}).`;
+  `© 2026 Pulsatrix Technologies inc. Open source under the ${APP_LICENSE_ID}.`;
 
 /** Fork version Vite inlined from package.json forkVersion. "dev" outside the bundler. */
 export function appVersion(): string {

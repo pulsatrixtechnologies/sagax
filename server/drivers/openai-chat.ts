@@ -28,6 +28,7 @@ import { providerReplyCutMessage, providerReplyCutReason } from "../../shared/pr
 import { classifyContinuable, writeTurnHandoff } from "../turn-continuation.ts";
 import { DUPLEX_INTERRUPT_WAIT_MS } from "../voice-call-duplex.ts";
 import { KEY_REJECTED_REASON, keyRejected, noteKeyAccepted, noteKeyRejected, rejectsKey } from "../key-rejections.ts";
+import { fullAccessActs } from "../full-access-gate.ts";
 import type { EffortLevel } from "../../shared/model-selection.ts";
 import { refusedResponsesOption, refusesModel, refusesResponsesEndpoint, responsesEffort, responsesInput, ResponsesReader, responsesTools } from "./openai-responses.ts";
 
@@ -1002,6 +1003,9 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       // A guest's turn neither uses the owner's grants nor keeps one: its
       // cards offer allow once only (index.ts request.opened).
       granted: turn.guestConfined ? undefined : granted,
+      // below Full only: at Full this runtime answers its own gate
+      // (fullAccessActs below); judged in index.ts otherwise.
+      // full-access: chat-engine
       open: (ask) => emit({
         ...base(turn.threadId, turnId), type: "request.opened", requestType: "permission",
         requestId: ask.id, tool: ask.tool, summary: ask.summary, allowSession: ask.grant !== undefined,
@@ -1325,8 +1329,10 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
                 // prompt. This runtime has no provider reviewer to hand it to,
                 // so it is honoured here: without it every single tool call on
                 // an OpenAI-compatible engine stops for a card, and a Primary Bot's
-                // delegated Full access cannot help either.
-                const allowed = turn.approvalMode === "full" || !shown.ask
+                // delegated Full access cannot help either. #1905: read from
+                // the one Full access decision (full-access-gate.ts).
+                // full-access: chat-engine
+                const allowed = fullAccessActs(turn.approvalMode) || !shown.ask
                   || await approval.ask(shown.title, shownPreview ?? "This tool has no arguments.", shown.grant, shown.mcpTool);
                 abort.signal.throwIfAborted();
                 emit({ ...base(turn.threadId, turnId), type: "item.started", itemType: "tool", itemId: call.id,

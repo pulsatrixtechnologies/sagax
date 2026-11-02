@@ -5,8 +5,9 @@
 // engines reported (on a workspace of personal subscriptions, their
 // equivalents too) plus the estimates booked for engines that report tokens
 // but no price (server/model-prices.ts). A turn on an unpriced model counts
-// nothing. Enforced only with the `budgets` entitlement; without it the
-// setting is inert.
+// nothing. Enforced whenever the `budgets` feature is on, which it always is
+// in the open-source edition (server/enterprise.ts); only an enterprise layer
+// that withholds it leaves the setting inert.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConfig } from "./config.ts";
@@ -33,7 +34,7 @@ function monthOf(now: Date): string {
 }
 
 /** The cap and where the month stands against it; null when there is no
- * enforceable cap (no entitlement, or none set). */
+ * enforceable cap (none set, or an enterprise layer withholds `budgets`). */
 export function spendState(
   cfg: Pick<AppConfig, "budgets">,
   dataDir: string,

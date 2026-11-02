@@ -165,8 +165,10 @@ function startServer(port, webhook) {
       OMB_WEBHOOK_PORT: String(webhook),
       FAKE_CLAUDE_MODE: "happy",
       ...(THREAD_TITLES ? { FAKE_CLAUDE_TEXT_FILE: join(home, "thread-title.txt") } : {}),
-      // Settings > Usage reads the monthly budget, an enterprise feature: a
-      // stub layer (written by main()) grants "budgets" and nothing else.
+      // No stub layer for the solo dataset: the open-source edition runs with
+      // every feature on, the monthly budget included. PARITY_ORG=1 adds one
+      // for its hosted-workspace bridge (org-fixture.mjs orgEnterpriseStub),
+      // and a present layer alone decides, so that stub grants every feature.
       ...(enterpriseStub ? { OMB_ENTERPRISE_DIR: enterpriseStub, OMB_LICENSE_KEY: "parity-fixture" } : {}),
       ...(org ? orgServerEnv(org) : {}),
       ...(cardLabBroker ? cardLabServerEnv(cardLabBroker) : {}),
@@ -374,12 +376,6 @@ const TEAM_SERVERS = [
 
 function teamMcpServers() {
   return Object.fromEntries(TEAM_SERVERS.map((name) => [name, { type: "http", url: `https://${name}.example.test/mcp`, enabled: true }]));
-}
-
-function writeEnterpriseStub(dir) {
-  mkdirSync(join(dir, "server"), { recursive: true });
-  writeFileSync(join(dir, "server", "index.ts"),
-    'export function register() { return { customer: "Parity fixture", features: ["budgets"], expiresAt: null }; }\n');
 }
 
 // ── tiny PNG writer (solid colour with a diagonal band) ─────────────────
@@ -738,11 +734,10 @@ async function main() {
   const dataDir = join(home, ".openmausbot");
   mkdirSync(dataDir, { recursive: true });
   if (process.env.PARITY_ORG === "avatar") return mainOrg();
-  enterpriseStub = join(home, "enterprise-stub");
   if (THREAD_TITLES) writeFileSync(join(home, "thread-title.txt"), PARITY_GENERATED_TITLE);
-  writeEnterpriseStub(enterpriseStub);
   if (ORG) {
     org = await startOrg(home);
+    enterpriseStub = join(home, "enterprise-stub");
     orgEnterpriseStub(enterpriseStub);
   }
   writeFileSync(join(dataDir, "config.json"), JSON.stringify({

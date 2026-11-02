@@ -68,7 +68,8 @@ const EXACT: Record<string, number> = {
   // 13: wave 2 P5 moved hostedModels path.startsWith(/api/instances/) (#1388).
   // 12: wave 4 moved shared-computers path.startsWith (#1388).
   // 13: live count on origin/main 0.8.27 (c4c248539); pin matched after #1909.
-  "path.startsWith(": 13,
+  // 12: #1911 moved the backup exclusion into isWorkspaceBackupRoute.
+  "path.startsWith(": 12,
   // 14: wave 2 P5 moved instances/mcp .exec(path) guards (#1388).
   // 13: wave 3 B2 moved the bot-skills gate .exec(path) (#1388).
   // 12: wave 3 B3 moved bot browser live/action .exec(path) (#1388).

@@ -73,7 +73,7 @@ export interface InternalMemoryDeps {
     authored: (messageId: string) => void;
     proposePage: (proposal: { pageId?: string; title: string; kind: string; content: string }) =>
       { ok: true; pageId: string; version: number } | { ok: false; status: 400 | 404 | 409; error: string };
-  }): { ok: true; messageId: string; masked?: boolean; pageId?: string; version?: number } | { ok: false; status: number; error: string };
+  }): { ok: true; messageId: string; masked?: boolean; pageId?: string; version?: number; answered?: { choice: string; question: string } } | { ok: false; status: number; error: string };
   authored(threadId: string, generation: string, messageId: string): void;
   proposePublishedPage(input: {
     pageId?: string;
@@ -207,7 +207,13 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
         },
       });
       return result.ok
-        ? json(res, 201, { messageId: result.messageId, ...("masked" in result && result.masked ? { masked: true } : {}), ...(result.pageId ? { pageId: result.pageId, version: result.version } : {}) })
+        ? json(res, 201, {
+          messageId: result.messageId,
+          ...("masked" in result && result.masked ? { masked: true } : {}),
+          ...(result.pageId ? { pageId: result.pageId, version: result.version } : {}),
+          // #1905: a may-I ask_choice Full access answered, for the tool result
+          ...(result.answered ? { answered: result.answered } : {}),
+        })
         : json(res, result.status, { error: result.error });
     }
     if (method === "POST" && path === "/api/internal/page-comments") {
@@ -390,6 +396,9 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
       }
       const summary = `${proposed.entry.kind[0]!.toUpperCase()}${proposed.entry.kind.slice(1)}: ${proposed.entry.name}${proposed.entry.aliases.length ? ` (also ${proposed.entry.aliases.join(", ")})` : ""} — ${proposed.entry.detail}`;
       const section = sectionContextKey(from.section);
+      // the team's memory is the section's, not one person's sandbox: the
+      // isolation hold keeps this card at Full (full-access-gate.ts)
+      // full-access: isolation
       const card = deps.appendMessage(body.fromThreadId, {
         role: "bot",
         kind: "options",

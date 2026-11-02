@@ -1538,6 +1538,7 @@ export class RoutineRequestService {
     const definition = effectiveDefinition(operation, this.routines);
     const timeZone = definition?.schedule.type === "cron" ? definition.schedule.timeZone : this.timeZone();
     const copy = cardCopy(operation, this.routines, timeZone, cardAt);
+    // applied without a card at Full (index.ts fullAccessForSource); full-access: proposal
     const messageInput: Parameters<RoutineRequestStore["appendMessage"]>[1] = {
       role: "bot",
       kind: "options",

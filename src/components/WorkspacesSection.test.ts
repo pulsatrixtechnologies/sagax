@@ -11,11 +11,13 @@ vi.mock("@/state/store", async (importOriginal) => ({
 }));
 afterEach(() => vi.unstubAllGlobals());
 
-function config(features: string[], fleet: boolean): ConfigStatus {
+/** The open-source edition reports every feature; an enterprise layer may report fewer. */
+const OPEN_SOURCE = ["admin", "billing", "budgets", "whitelabel"];
+function config(features: string[], fleet: boolean, edition: "oss" | "enterprise" = "oss"): ConfigStatus {
   return {
     box: { configured: false }, vps: { configured: false, sshAlias: "" },
     rooms: { turnTimeoutMinutes: 30 }, localVm: { mode: "shared", maxInstances: 1 },
-    edition: { edition: features.length ? "enterprise" : "oss", features }, fleet: { available: fleet },
+    edition: { edition, features }, fleet: { available: fleet },
   } as ConfigStatus;
 }
 
@@ -37,11 +39,13 @@ describe("workspaces section", () => {
     expect(html).not.toContain("<button");
     expect(html).not.toContain(">Running<");
   });
-  it("appears only with the admin entitlement and a fleet agent on this server", () => {
+  it("appears on the open-source edition wherever a fleet agent runs, and not where a layer withholds admin", () => {
+    expect(workspacesAvailable(config(OPEN_SOURCE, true))).toBe(true);
+    expect(workspacesAvailable(config(OPEN_SOURCE, false))).toBe(false);
+    expect(workspacesAvailable(config(["sso"], true, "enterprise"))).toBe(false);
     expect(workspacesAvailable(config([], true))).toBe(false);
-    expect(workspacesAvailable(config(["admin"], false))).toBe(false);
-    expect(workspacesAvailable(config(["admin"], true))).toBe(true);
-    fixture.config = config(["admin"], false);
+    expect(workspacesAvailable(config(["admin"], true, "enterprise"))).toBe(true);
+    fixture.config = config(OPEN_SOURCE, false);
     expect(renderToStaticMarkup(createElement(WorkspacesSection, { load: async () => fleet }))).toBe("");
   });
 

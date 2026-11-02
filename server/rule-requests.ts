@@ -258,6 +258,7 @@ export class RuleRequestService {
 
     if (grant) {
       const applied = this.apply(ownerId, operation);
+      // applied without a card at Full (index.ts fullAccessForSource); full-access: proposal
       const message = this.store.appendMessage(args.threadId, {
         role: "bot",
         kind: "options",
@@ -284,6 +285,7 @@ export class RuleRequestService {
       };
     }
 
+    // applied without a card at Full (index.ts fullAccessForSource); full-access: proposal
     const message = this.store.appendMessage(args.threadId, {
       role: "bot",
       kind: "options",

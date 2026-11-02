@@ -14,11 +14,11 @@ enum AboutLinks {
 }
 
 /// About footer license line. Single constant so the UI follows LICENSE on
-/// the tree (desktop `APP_LICENSE_ID` / `about.copyright`). Today LICENSE is
-/// PolyForm Noncommercial 1.0.0; change only here when LICENSE switches.
+/// the tree (desktop `APP_LICENSE_ID` / `about.copyright`). LICENSE is the
+/// Apache License 2.0 (#1900); a license change updates only this constant.
 enum AboutLicense {
-    static let id = "PolyForm Noncommercial 1.0.0"
-    static let footer = "© 2026 Pulsatrix Technologies inc. Free for noncommercial use (\(id))."
+    static let id = "Apache License 2.0"
+    static let footer = "© 2026 Pulsatrix Technologies inc. Open source under the \(id)."
     /// Upstream OpenMausBot release this fork is based on (package.json baseVersion).
     static let basedOnVersion = "0.1.107"
     static var basedOn: String { String(localized: "Based on OpenMausBot \(basedOnVersion)") }

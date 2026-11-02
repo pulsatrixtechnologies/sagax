@@ -598,6 +598,7 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
         }
         let approvalGranted = false;
         if (peerReviewRequired(internalSender, address.threadId)) {
+          // full-access: peer-contact
           const verdicts = await Promise.all(targets.map(target =>
             requestPeerApproval(approvalBus, internalSender as never, store.bot(target.botId)! as never, parsed.data.message, "delegate_bot", address.threadId)));
           requireActiveInternalCapability();

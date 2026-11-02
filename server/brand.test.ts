@@ -6,8 +6,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_BRAND, describeBrand, loadBrand } from "./brand.ts";
 
 const dirs: string[] = [];
-const licensed = (feature: string) => feature === "whitelabel";
-const unlicensed = () => false;
+// What the gate answers: every feature on (the open-source edition, or a layer
+// granting whitelabel), or an enterprise layer that withholds it.
+const whitelabelOn = (feature: string) => feature === "whitelabel";
+const layerWithholds = () => false;
 
 function brandFile(content: string): string {
   const dir = mkdtempSync(join(tmpdir(), "omb-brand-"));
@@ -24,11 +26,11 @@ afterEach(() => {
 describe("brand.json", () => {
   it("is the default brand when no file exists, pointing at where one would go", () => {
     const file = join(tmpdir(), "omb-brand-missing", "brand.json");
-    expect(loadBrand({ file, isEntitled: licensed })).toEqual({ brand: DEFAULT_BRAND, source: "default", file });
-    expect(describeBrand(loadBrand({ file, isEntitled: licensed }))).toBe("brand: default");
+    expect(loadBrand({ file, isEntitled: whitelabelOn })).toEqual({ brand: DEFAULT_BRAND, source: "default", file });
+    expect(describeBrand(loadBrand({ file, isEntitled: whitelabelOn }))).toBe("brand: default");
   });
 
-  it("applies a valid file on a licensed server", () => {
+  it("applies a valid file when whitelabel is on", () => {
     const file = brandFile(JSON.stringify({
       name: "Reliable Platform",
       tagline: "Back office, on autopilot",
@@ -36,7 +38,7 @@ describe("brand.json", () => {
       logo: "data:image/svg+xml;base64,PHN2Zy8+",
       supportUrl: "https://help.reliable.example",
     }));
-    const status = loadBrand({ file, isEntitled: licensed });
+    const status = loadBrand({ file, isEntitled: whitelabelOn });
     expect(status.source).toBe("file");
     expect(status.brand.name).toBe("Reliable Platform");
     expect(status.brand.accent).toBe("#1D4ED8");
@@ -44,12 +46,18 @@ describe("brand.json", () => {
     expect(describeBrand(status)).toBe(`brand: Reliable Platform (from ${file})`);
   });
 
-  it("keeps the default brand on an unlicensed server and says so", () => {
+  it("applies a valid file on the open-source edition, with no enterprise layer and no key", () => {
+    const file = brandFile(JSON.stringify({ name: "Acme", accent: "#1D4ED8" }));
+    const status = loadBrand({ file });
+    expect(status).toEqual({ brand: { name: "Acme", accent: "#1D4ED8" }, source: "file", file });
+  });
+
+  it("keeps the default brand when an enterprise layer withholds whitelabel, and says so", () => {
     const file = brandFile(JSON.stringify({ name: "Acme" }));
-    const status = loadBrand({ file, isEntitled: unlicensed });
+    const status = loadBrand({ file, isEntitled: layerWithholds });
     expect(status.brand).toEqual(DEFAULT_BRAND);
     expect(status.source).toBe("default");
-    expect(status.notice).toContain("not licensed for whitelabel");
+    expect(status.notice).toContain("the enterprise layer on this server does not grant whitelabel");
   });
 
   it("explains a broken file in terms of what to change, and never applies it", () => {
@@ -63,15 +71,15 @@ describe("brand.json", () => {
       [JSON.stringify({ name: "Acme", colour: "#000000" }), /colour/],
     ];
     for (const [content, expected] of cases) {
-      const status = loadBrand({ file: brandFile(content), isEntitled: licensed });
+      const status = loadBrand({ file: brandFile(content), isEntitled: whitelabelOn });
       expect(status.brand, content).toEqual(DEFAULT_BRAND);
       expect(status.notice, content).toMatch(expected);
       expect(status.notice, content).toMatch(/using the default brand$/);
     }
   });
 
-  it("validates before gating, so an unlicensed operator still learns about a broken file", () => {
-    const status = loadBrand({ file: brandFile(JSON.stringify({ name: "Acme", accent: "nope" })), isEntitled: unlicensed });
+  it("validates before gating, so an operator whose layer withholds whitelabel still learns about a broken file", () => {
+    const status = loadBrand({ file: brandFile(JSON.stringify({ name: "Acme", accent: "nope" })), isEntitled: layerWithholds });
     expect(status.notice).toMatch(/accent/);
   });
 });

@@ -82,7 +82,7 @@ Use only mapped, tested commands:
 - [Optional company cloud backups](company-backups.md)
 - [Organization library: the desktop channel](desktop-library.md)
 - [Fleet: many workspaces on one server](fleet.md)
-- [Workspaces screen and the fleet agent](workspaces.md)
+- [Installations screen and the fleet agent](workspaces.md)
 - [Hosted workspace sign-in and revocation](hosted-workspaces.md)
 - [Sign in with Pulsatrix (Perspicax OpenID Connect)](perspicax-sign-in.md)
 - [Slice 7: the Perspicax console admin API, the org audit and the "Open in Sagax" link](perspicax-sign-in.md#slice-7-the-sagax-console-in-perspicax)
@@ -92,7 +92,7 @@ Use only mapped, tested commands:
 - [Bounded built-in tool results](tool-results.md)
 - [Memory: recall, upkeep and the tidy-up](memory-layer.md)
 - [Spend cap and sell prices](spend-cap.md)
-- [Enterprise layer loading and license expiry](enterprise-license.md)
+- [Edition loading: every feature on, and the optional enterprise layer](enterprise-license.md)
 - [Reliability qualification harness](qualification.md)
 
 `control-omb ui` ([Chat UI, driven headlessly](chat-ui.md)) drives the real

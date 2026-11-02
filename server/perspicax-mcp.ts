@@ -118,7 +118,7 @@ export interface PerspicaxMcpOptions {
    * bots) of one person that send the same write with the same arguments
    * at the same time make one call, the other gets its answer. */
   writeOnceScope?(turn: { threadId: string; botId: string; principalId: string }): string | null;
-  /** Every remote_support_* answer of a turn (server/remote-session-register.ts):
+  /** Every remote_support_* answer of a turn (server/remote-support/remote-session-register.ts):
    * a session the bot opened becomes a Sagax session row and chat card. It
    * never changes the answer and its failures are its own. */
   onRemoteSupport?(call: { threadId: string; botId: string; principalId?: string; name: string; args: unknown; result: unknown }): void;

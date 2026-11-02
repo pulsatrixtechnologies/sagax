@@ -1,5 +1,5 @@
 // Settings > Organization, admins only: team secrets live in the Perspicax
-// organization's vault (server/org-bot-secrets.ts). A saved secret is a
+// organization's vault (server/org/org-bot-secrets.ts). A saved secret is a
 // label and an assignment. The value is typed once and never shown again.
 // Members do not get this section, and the server answers them 403.
 import { useCallback, useEffect, useState } from "react";

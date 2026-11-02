@@ -1,5 +1,5 @@
 // Folders no engine must ever read, whatever tools it is given. The one that
-// matters here is the remote-support folder (server/remote-support-local.ts):
+// matters here is the remote-support folder (server/remote-support/remote-support-local.ts):
 // on an organization server the engines run in the Sagax container, as the
 // same user, so the per-session technician keys and the session addresses sit
 // on their filesystem. Tool withholding already keeps the built-in engines

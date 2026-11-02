@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs, promisify } from "node:util";
-import { browserBundlePaths, browserBundleSpec } from "../server/browser-bundle-release.ts";
+import { browserBundlePaths, browserBundleSpec } from "../server/browser/browser-bundle-release.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const { values } = parseArgs({ options: { "browser-bundle": { type: "string" } } });

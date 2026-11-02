@@ -336,20 +336,24 @@ describe("the bot's Works on", () => {
 
 describe("taking control of the server environment desktop", () => {
   const controls = { stop: () => {}, pause: () => {} };
-  it("opens large, with the name, the state, Release control, Play / Pause / Stop, full screen and close", () => {
+  it("opens large, calm chrome, Watching | You have control, and power in the more menu", () => {
     const markup = renderToStaticMarkup(createElement(SandboxDesktopModal, { title: "Luna's screen", state: "running", controls, onClose: () => {} }));
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain('aria-modal="true"');
     expect(markup).toContain("h-[88vh] w-[92vw]");
     expect(markup).toContain("Luna&#x27;s screen");
     expect(markup).toContain('data-power="running"');
+    expect(markup).toContain('data-takeover-segments=""');
+    expect(markup).toContain("Watching");
     expect(markup).toContain("You have control");
-    expect(markup).toMatch(/data-takeover-control="release"[^>]*>.*Release control/);
-    expect(markup).toMatch(/aria-label="Pause"(?![^>]*disabled="")/);
-    expect(markup).toMatch(/aria-label="Stop"(?![^>]*disabled="")/);
-    expect(markup).toMatch(/aria-label="Start"[^>]*disabled=""/);
-    expect(markup).toContain('aria-label="Full screen"');
+    expect(markup).toMatch(/data-takeover-control="release"/);
+    expect(markup).toMatch(/data-takeover-control="drive"/);
+    expect(markup).toContain('data-takeover-more=""');
     expect(markup).toMatch(/aria-label="Close and release control[^"]*"[^>]*data-takeover-close/);
+    expect(markup).toContain("data-takeover-collapse");
+    // Power and full screen stay out of the header until the "..." opens.
+    expect(markup).not.toContain('data-takeover-power="pause"');
+    expect(markup).not.toContain("Release control");
     // The live view inside asks for control (data-control="1").
     expect(markup).toContain('data-control="1"');
   });

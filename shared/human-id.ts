@@ -25,6 +25,17 @@ export function isOpaqueId(value: string): boolean {
   return WHOLE_UUID.test(text) || LONG_HEX.test(text) || PREFIXED_ID.test(text) || RANDOM_TOKEN.test(text);
 }
 
+/** A long opaque token with base64url separators, such as a Microsoft Graph
+ * message id ("AAMkAGI2…AAA="): mixed case and a digit, no space, no dot. */
+const LONG_TOKEN = /^(?=[\w=-]*\d)(?=[\w=-]*[a-z])(?=[\w=-]*[A-Z])[\w=-]{32,}$/;
+
+/** isOpaqueId, plus long base64url tokens (2026-11-02: a mail tool's
+ * `message_id` showed raw in a step's arguments). */
+export function isOpaqueValue(value: string): boolean {
+  const text = value.trim();
+  return isOpaqueId(text) || LONG_TOKEN.test(text);
+}
+
 /** Whether `text` shows a UUID/GUID anywhere, whole or truncated. */
 export function containsUuid(text: string): boolean {
   return UUID_FRAGMENT.test(text);

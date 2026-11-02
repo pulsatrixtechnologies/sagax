@@ -26,7 +26,7 @@
 // - lane: one active wake per bot, in a lane that never blocks the person's
 //   routines (RoutineManager.enqueueProactive);
 // - destination: the wake reports into the bot's one conversation only when
-//   it has something (server/routine-report.ts);
+//   it has something (server/routines/routine-report.ts);
 // - trace: one line in the conversation's Events tab per wake, with its
 //   reason and the events' labels, never their content.
 
@@ -37,8 +37,8 @@ import { randomUUID } from "node:crypto";
 import { writeFileAtomic } from "./atomic.ts";
 import { isEngineReconnectCondition } from "./engine-reconnect-ahead.ts";
 import { ProactiveBudget, type ProactiveBudgetOptions } from "./proactive.ts";
-import { ROUTINE_REPORT_CONTRACT } from "./routine-report.ts";
-import { ROUTINE_RESTARTED } from "./routines.ts";
+import { ROUTINE_REPORT_CONTRACT } from "./routines/routine-report.ts";
+import { ROUTINE_RESTARTED } from "./routines/routines.ts";
 import { BOTMAIL_RUN_RULES, defang } from "./webhooks.ts";
 import { proactiveModeFor, type ProactiveMode } from "../shared/proactive-mode.ts";
 

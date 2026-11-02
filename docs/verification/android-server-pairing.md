@@ -43,7 +43,7 @@ From the repository root, the existing server contract suite launches its own
 isolated harness and verifies pairing, bearer access, event streams and revocation:
 
 ```sh
-pnpm exec vitest run server/remote-sessions.test.ts
+pnpm exec vitest run server/remote-support/remote-sessions.test.ts
 ```
 
 Never pair a verification build with the user's live workspace. For a physical
@@ -56,7 +56,7 @@ with Android's system link handler.
 - 556 core tests and 919 app tests passed with no failures or skips.
 - The five pairing-screen tests also passed with native graphics enabled.
 - `:app:assemblePreview` succeeded; the APK's v2 signature verified.
-- All 19 `server/remote-sessions.test.ts` tests passed against the isolated harness.
+- All 19 `server/remote-support/remote-sessions.test.ts` tests passed against the isolated harness.
 - `pnpm typecheck` passed.
 - A second code review found no remaining actionable findings after the retry,
   inactive-share and redirect regressions were added.

@@ -10,6 +10,7 @@ import {
   resolveWidgetChrome,
   WidgetCheckAttempts,
   widgetCheckReport,
+  widgetChromeNoSandbox,
   widgetHostPage,
   WidgetRenderer,
   type WidgetCheckResult,
@@ -61,6 +62,22 @@ describe("widget check setup", () => {
     expect(resolveWidgetChrome({ SAGAX_WIDGET_CHECK_CHROME: "/x/chrome" }, exists)).toBe("/x/chrome");
     expect(resolveWidgetChrome({ AGENT_BROWSER_EXECUTABLE_PATH: "/opt/chrome", PLAYWRIGHT_BROWSERS_PATH: "/nowhere" }, exists)).toBe("/opt/chrome");
     expect(resolveWidgetChrome({ PLAYWRIGHT_BROWSERS_PATH: "/nowhere" }, exists)).toBeNull();
+  });
+
+  it("drops Chrome's own sandbox only where it cannot start: a container or root on Linux", () => {
+    // prod 2026-11-02: the server container (uid 1001, cap_drop ALL,
+    // no-new-privileges) aborted Chrome with "No usable sandbox!"
+    const docker = (path: string) => path === "/.dockerenv";
+    const none = () => false;
+    expect(widgetChromeNoSandbox({ platform: "linux", uid: 1001, env: {}, exists: docker })).toBe(true);
+    expect(widgetChromeNoSandbox({ platform: "linux", uid: 1001, env: { KUBERNETES_SERVICE_HOST: "10.0.0.1" }, exists: none })).toBe(true);
+    expect(widgetChromeNoSandbox({ platform: "linux", uid: 0, env: {}, exists: none })).toBe(true);
+    // a desktop or a VPS host keeps the sandbox
+    expect(widgetChromeNoSandbox({ platform: "linux", uid: 1000, env: {}, exists: none })).toBe(false);
+    expect(widgetChromeNoSandbox({ platform: "darwin", uid: 501, env: {}, exists: docker })).toBe(false);
+    // the switch wins both ways
+    expect(widgetChromeNoSandbox({ platform: "linux", uid: 1001, env: { SAGAX_WIDGET_CHECK_SANDBOX: "on" }, exists: docker })).toBe(false);
+    expect(widgetChromeNoSandbox({ platform: "linux", uid: 1000, env: { SAGAX_WIDGET_CHECK_SANDBOX: "off" }, exists: none })).toBe(true);
   });
 
   it("draws the widget in the chat's sandboxed frame with its document", () => {

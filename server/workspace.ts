@@ -14,9 +14,9 @@ import { join } from "node:path";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { describeHandle, holdPlain, isAtRestRefusal, noteAtRestWrite, plainSizeFor, readAllFromHandle, readAtRest, readAtRestTextSync, registerAtRestRoot } from "./content-at-rest.ts";
-import { alwaysCore, isExpired, isMemoryDate, parseMemoryEntries, untilMark, withoutExpired, type MemoryEntryLine } from "./memory-entries.ts";
-import { readersToken, withoutWiderAudience, type MemoryDestination, type MemoryReaders } from "./memory-audience.ts";
-import { parseTopicHeader, readTopicHead, renderTopicIndex } from "./memory-topics.ts";
+import { alwaysCore, isExpired, isMemoryDate, parseMemoryEntries, untilMark, withoutExpired, type MemoryEntryLine } from "./memory/memory-entries.ts";
+import { readersToken, withoutWiderAudience, type MemoryDestination, type MemoryReaders } from "./memory/memory-audience.ts";
+import { parseTopicHeader, readTopicHead, renderTopicIndex } from "./memory/memory-topics.ts";
 import { indexMemoryFile, indexedMemoryFiles, recallMemory, removeMemoryFile, type MemoryHit, type SearchMode } from "./message-db.ts";
 import { redactSecretsInText } from "./redact.ts";
 
@@ -499,7 +499,7 @@ export type AppliedMemoryUpdate =
 /** The text a memory file becomes after one update, or why it does not
  * change. Pure: the caller reads the current text (seed already treated as
  * empty) and writes `next`. Bot memory and a group's shared memory
- * (server/group-memory.ts) both go through it, so their entry rules are one
+ * (server/memory/group-memory.ts) both go through it, so their entry rules are one
  * rule; each applies its own size rule to `next`. */
 export function applyMemoryUpdate(current: string, update: MemoryUpdate, opts: MemoryUpdateOptions = {}): AppliedMemoryUpdate {
   const needsText = update.action !== "remove";

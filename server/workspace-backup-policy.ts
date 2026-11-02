@@ -46,12 +46,12 @@ export function excludedWorkspaceAuthPath(path: string): boolean {
   // Sagax keeps them encrypted in mcp-oauth.enc, under the key in
   // mcp-oauth.key on a headless server (server/mcp-oauth.ts).
   if (/^mcp-oauth\.(?:enc|key)(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
-  // Organization GitHub access tokens (server/org-github-tokens.ts).
+  // Organization GitHub access tokens (server/org/org-github-tokens.ts).
   if (/^org-github-tokens\.enc(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   // The one list of GitHub credentials and each marketplace's pick
   // (server/github-credentials.ts), and the former per-marketplace file.
   if (/^(?:github-credentials|marketplace-tokens)\.enc(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
-  // Team secrets of the organization (server/org-bot-secrets.ts).
+  // Team secrets of the organization (server/org/org-bot-secrets.ts).
   if (/^org-bot-secrets\.enc(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   // File-backed provider keys (server/engine-api-keys.ts), solo and per person.
   if (/^engine-api-keys\.(?:enc|json)(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;

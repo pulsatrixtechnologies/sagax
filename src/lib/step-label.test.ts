@@ -113,6 +113,18 @@ describe("step detail helpers", () => {
     expect(stepArgs("not json")).toEqual([]);
   });
 
+  it("shows an opaque id as \"…\", the value kept for the tooltip and the JSON record (2026-11-02)", () => {
+    const messageId = "AAMkAGI2NGVhZTVlLTI1OGMtNDI4My1iZmE5LTA5OGJiZGEzMzQ0NwBGAAAAAAA-xfvW_8d3SL=";
+    const guid = "1bb85ab1-a916-4d5d-bb99-16d471e92409";
+    const pairs = stepArgs(JSON.stringify({ message_id: messageId, run: guid, subject: "Invoice 4012" }));
+    expect(pairs).toEqual([
+      { key: "message_id", value: "…", full: messageId },
+      { key: "run", value: "…", full: guid },
+      { key: "subject", value: "Invoice 4012" },
+    ]);
+    expect(stepJson({ name: "mcp__outlook__get_message", ok: false, input: JSON.stringify({ message_id: messageId }) })).toContain(messageId);
+  });
+
   it("cuts a long result and says so", () => {
     expect(stepResult(undefined)).toBeUndefined();
     const result = stepResult(Array.from({ length: 10 }, (_, i) => `line ${i}`).join("\n"));

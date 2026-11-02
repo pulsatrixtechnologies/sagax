@@ -29,7 +29,7 @@ import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 import { CodeWorkCollector, type CodeWorkToolCall, type RepositoryInfo } from "../activity-code-work.ts";
 import { BranchActionError, BranchArchive, BranchGit, BranchPulls, folderName, githubRepo, hostGit, proposedMessage, redactPaths, validBranchName, type GitExec } from "../code-branches.ts";
-import { RemoteBranchGit, type RemoteExec } from "../remote-code-branches.ts";
+import { RemoteBranchGit, type RemoteExec } from "../remote-support/remote-code-branches.ts";
 import type { BotBranchActionBody, BotBranchInfo, BotBranchState } from "../../shared/bot-code-branches.ts";
 
 /** The bot's own working computer, where a branch's repository is when it is

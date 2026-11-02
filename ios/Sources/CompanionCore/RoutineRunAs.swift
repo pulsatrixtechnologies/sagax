@@ -4,7 +4,7 @@
 // admin may pick any active person, a team manager the people of their
 // teams (else themselves and the bot's owner); anyone else sees only the
 // line. The server decides whom (GET /api/routines/run-as-options,
-// server/routine-run-as.ts) and checks the choice again on save. A solo
+// server/routines/routine-run-as.ts) and checks the choice again on save. A solo
 // server answers with no choice and no current person: nothing is shown.
 import Foundation
 

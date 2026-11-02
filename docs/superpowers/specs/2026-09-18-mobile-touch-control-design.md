@@ -15,7 +15,7 @@ Both are deliberately view-only; the iOS file says so in its own header:
 was the whole feature. The goal now is the other half: real work from the
 phone, including typing, shortcuts, selection and precise clicking.
 
-The browser surface needs no new protocol. `server/browser-live.ts` already
+The browser surface needs no new protocol. `server/browser/browser-live.ts` already
 accepts `input_mouse`, `input_keyboard` and `char` over plain HTTP POST, and
 streams frames over SSE. What is missing is a client that can turn fingers
 into those events well.
@@ -153,7 +153,7 @@ events by summing deltas, so a flick collapses to a few sends, not sixty.
 
 This is where sustained use is won or lost, and it is much cheaper than
 expected because the server already does the hard part.
-`server/browser-live.ts` accepts `eventType: "char"` with plain text and turns
+`server/browser/browser-live.ts` accepts `eventType: "char"` with plain text and turns
 it into `insertText`; it resolves named keys (`Backspace`, `Enter`, `Tab`,
 `Escape`, arrows, `Home`, `End`, `PageUp`, `PageDown`) itself; and it converts
 a modifier bitmask into a chord such as `Control+c`. **A mobile client never

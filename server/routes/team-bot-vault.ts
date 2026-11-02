@@ -7,10 +7,10 @@
 //   PATCH  /api/bots/:botId/credentials/:id
 //   DELETE /api/bots/:botId/credentials/:id
 //
-// Same sealed store as the person's vault (server/credential-vault.ts),
+// Same sealed store as the person's vault (server/vault/credential-vault.ts),
 // under bots/<botId>/credential-vault.enc. Listings never carry a value.
 import { botVaultPrincipal, type VaultItemKind } from "../../shared/credential-vault.ts";
-import { CredentialVaultError, type CredentialVault, type VaultItemInput } from "../credential-vault.ts";
+import { CredentialVaultError, type CredentialVault, type VaultItemInput } from "../vault/credential-vault.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

@@ -105,13 +105,12 @@ const SIMPLE_PAGES = ["overview", "appearance", "sharing", "summary", "soul", "r
 const ALL_GROUPS = ["profile", "instructions", "modelTools", "security", "activity"];
 
 describe("persona editor shell", () => {
-  it("uses the content-view shell and lists the groups in order", () => {
+  it("uses the centred modal shell and lists the groups in order", () => {
     const html = render("overview");
-    expect(html).not.toContain('role="dialog"');
-    expect(html).not.toContain('aria-modal="true"');
-    expect(html).toContain("data-persona-editor");
-    expect(html).toContain("data-persona-back");
-    expect(html).toContain("flex h-full min-w-0 flex-1 flex-col bg-app");
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+    expect(html).toContain("data-persona-modal");
+    expect(html).not.toContain("data-persona-back");
     expect(html).toContain("w-[198px]");
     expect(groupsOf(html)).toEqual(PERSONA_GROUPS.map((group) => group.id));
     expect(groupsOf(html)).toEqual(ALL_GROUPS);

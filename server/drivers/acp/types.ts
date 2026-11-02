@@ -60,7 +60,9 @@ export interface AcpTurn {
   /** this turn's stage timestamps, logged once when it settles */
   latency?: TurnLatency;
   state: {
-    settled: boolean; promptSent: boolean; text: string; producedItem: boolean; startupActivity: boolean; stopped: boolean;
+    settled: boolean; promptSent: boolean; text: string; producedItem: boolean;
+    /** A reply or an image went out (not only tool calls): a nudge could repeat it. */
+    producedReply?: boolean; startupActivity: boolean; stopped: boolean;
     /** Compaction detection: peak and last reported context size, and
      * whether a report collapsed below the peak. */
     usagePeak: number | null;

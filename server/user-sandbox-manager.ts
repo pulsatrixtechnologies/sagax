@@ -360,7 +360,7 @@ export class UserSandboxManager {
     }
   }
 
-  /** Before a scheduled routine of this person (server/routines.ts
+  /** Before a scheduled routine of this person (server/routines/routines.ts
    * prewake): on Kubernetes with the cluster wake, start the cluster and the
    * person's environment now, so the run finds them up instead of spending
    * its first ten minutes waking them. Never for Docker, never for a person

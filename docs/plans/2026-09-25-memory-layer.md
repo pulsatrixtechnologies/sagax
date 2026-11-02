@@ -69,7 +69,7 @@ line whose `until` is before today from the prompt (the file is untouched;
 the tidy-up moves it). The prompt guidance tells the bot to use `until` for
 temporary facts ("exams this weekend").
 
-### Topic index (`server/memory-topics.ts`)
+### Topic index (`server/memory/memory-topics.ts`)
 
 Each `memory/<topic>.md` may start with YAML frontmatter `title`,
 `description`, `aliases`. The memory prompt gains a *Your topic notes* list —
@@ -98,7 +98,7 @@ chats there stays the explicit, disclosed `session_search`.
 `BotRecord.memoryUpkeep?: boolean`, validated in `PATCH /api/bots/:id`,
 admin only. Toggle in Bot Settings → Memory with the engine note above.
 
-### Capture (`server/memory-capture.ts`)
+### Capture (`server/memory/memory-capture.ts`)
 
 After `turn.completed` in a 1:1 thread of an upkeep bot, the turn's user and
 bot text wait in a per-thread buffer; after 2 minutes of quiet
@@ -112,7 +112,7 @@ Over-budget appends stop and are left for the tidy-up. The buffer holds the
 turns' own text, so a compaction folding the transcript loses nothing from it
 (an earlier draft flushed at compaction; it only raced the summary call).
 
-### Topic files (`server/memory-topics.ts` `mergeTopicText`)
+### Topic files (`server/memory/memory-topics.ts` `mergeTopicText`)
 
 Each captured candidate may name a `topic` (and `topicAliases`). Core facts
 go to MEMORY.md; the rest go to `memory/<topic>.md`, reusing an existing topic
@@ -129,7 +129,7 @@ recorded in `DATA_DIR/profile-learned.json`. Settings → General → About me
 lists them under *Added by your bots* with **Remove**, which deletes that
 exact line and remembers the fact so it is never added again.
 
-### Nightly tidy-up (`server/memory-tidy.ts`)
+### Nightly tidy-up (`server/memory/memory-tidy.ts`)
 
 For each upkeep bot, once a day after `memory.tidyHour` (default 3, local
 time), or at the next check if the computer was asleep, and on demand via
@@ -217,7 +217,7 @@ and Undo restored the file.
   before the file the line left, so the newest row is that file.
 - **M8 — organize whatever lands in MEMORY.md.** Hand test: the bot saved
   "sister Asha is a doctor in Delhi" itself with memory_update, so capture
-  (correctly) added nothing and no topic appeared. New `server/memory-organize.ts`:
+  (correctly) added nothing and no topic appeared. New `server/memory/memory-organize.ts`:
   after each capture and in the tidy-up, one call over MEMORY.md lines not
   judged before moves detail into topic files (line unchanged, topics written
   first). Replayed on the hand-test notebook against claude-haiku-4-5: the

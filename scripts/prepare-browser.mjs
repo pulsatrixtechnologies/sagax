@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { browserBundlePaths, browserBundleSpec } from "../server/browser-bundle-release.ts";
+import { browserBundlePaths, browserBundleSpec } from "../server/browser/browser-bundle-release.ts";
 import { executableTarget } from "./prepare-cloudflared.mjs";
 
 export const BROWSER_LICENSE_FILES = [

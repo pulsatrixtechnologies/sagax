@@ -185,7 +185,7 @@ import { VoiceCallCard } from "./VoiceCallCard";
 import { BotExchangeChip, ExchangeColumnProvider, TranscriptDate, useExchangeColumn } from "./BotExchangeChip";
 import { RoutineRunExchange } from "./routines/RoutineRunExchange";
 import { GotoGroupChip } from "./GotoGroupChip";
-import { collapseGotoLines, silentChatItem, type GotoGroup, type GotoTarget } from "@/lib/goto-lines";
+import { collapseGotoLines, gotoGroupFromConversations, silentChatItem, type GotoGroup, type GotoTarget } from "@/lib/goto-lines";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
 import { CancelledTurnRow } from "./CancelledTurnRow";
 import { DevPods, DevPodsToggle, RailAligned } from "./dev-pods/DevPods";
@@ -1233,10 +1233,24 @@ const MessagesList = memo(function MessagesList({
     () => conversationAnchors(conversationRows, items.map((item) => listedItemMessages(item)[0]?.at ?? 0), hasMore),
     [conversationRows, items, hasMore],
   );
-  const conversationLines = (rows: readonly NonNullable<Bot["botConversations"]>[number][] | undefined) =>
-    selfBot && rows?.map((row) => (
+  const conversationLines = (rows: readonly NonNullable<Bot["botConversations"]>[number][] | undefined) => {
+    if (!selfBot || !rows?.length) return null;
+    const group = gotoGroupFromConversations(rows, selfBot);
+    if (group) {
+      return (
+        <GotoGroupChip
+          group={group}
+          bots={storeBots}
+          groups={storeGroups}
+          showToolCalls={showToolCalls}
+          onSelect={() => false}
+        />
+      );
+    }
+    return rows.map((row) => (
       <BotConversationLine key={`conversation:${row.threadId}`} self={selfBot} row={row} bots={storeBots} showToolCalls={showToolCalls} />
     ));
+  };
   // Every row is wrapped the same way, keyed by its first message, so a card
   // appearing under a row never remounts that row.
   const withCloudAgents = (index: number, node: ReactNode): ReactNode => {
@@ -1290,6 +1304,7 @@ const MessagesList = memo(function MessagesList({
                     if (target.kind === "thread") {
                       return openThread(dispatch, target.message.threadRef!, getState(), showThreads);
                     }
+                    if (target.kind !== "exchange") return false;
                     // Same rule as the lone line: another bot would leave this 1:1.
                     if (!exchangeJumpStays(target.run.party.id, botId)) return false;
                     const bot = bots.find((candidate) => candidate.id === target.run.party.id);
@@ -1667,8 +1682,8 @@ export function PreviousTopicsLine({ open, onToggle }: { open: boolean; onToggle
   );
 }
 
-/** "New topic" in the chat header while threads are off: a fresh context in
- * the same conversation; the topic it closes stays on screen above. */
+/** "New topic" in the chat header while threads are off: a fresh empty
+ * draft over the live topic; Back restores it, nothing is deleted. */
 function NewTopicButton({ bot }: { bot: Bot }) {
   const dispatch = useStoreDispatch();
   return (
@@ -2179,12 +2194,12 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const streamHasEarlier = streamOn && segmentsAbove(bot.tasks, bot.threadId).length > 0;
   // A fresh topic drafted over this one (src/lib/fresh-topic.ts): the next
   // message starts a fresh engine context (a topic created on the server
-  // with that message). Nothing moves on screen: the conversation stays one
-  // timeline (2026-10-28, the reference design). A topic the person asked
-  // for ("New topic") shows one quiet line with Resume; an automatic one
-  // (back after a while) shows nothing.
+  // with that message). An asked-for "New topic" (header pencil) clears the
+  // chat to the empty greeting; Back restores the previous topic in place.
+  // An automatic one (back after a while) stays invisible on the timeline.
   const freshDraft = useStoreSelector((current) => current.freshTopic[bot.id]);
   const fresh = streamOn && !preview && freshDraft?.threadId === bot.threadId && freshTopicCovers(bot, bot.threadId);
+  const askedFresh = Boolean(fresh && !freshDraft?.auto);
   const resumeTopic = useCallback(() => dispatch({ type: "freshTopic", botId: bot.id, threadId: null }), [bot.id, dispatch]);
   // Coming back put the fresh topic there: it gives way the moment the topic
   // under it comes alive (another device's turn, an approval), never hiding
@@ -2221,12 +2236,10 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   }, [bot.id, bot.threadId]);
   const streamEngine = state.instances.find((i) => i.instanceId === bot.modelSelection.instanceId);
   const streamReadBack = streamHasEarlier && !olderPending && hiddenCount === 0 && !bot.hasMore;
-  // One timeline (2026-10-28, the reference design): the earlier topics
-  // are drawn above the live one as soon as it is read back to its start,
-  // and the one before loads on scroll-up (StreamEarlierTopics). A link, a
-  // search hit or an activity row into an earlier topic draws them at once.
-  // No fold, no empty screen: history loads upward, as in a messaging app.
-  const streamDrawn = streamHasEarlier && (streamReadBack || streamFocusEarlier || streamReach !== null || streamShownFor === bot.threadId);
+  // One timeline for the live topic: earlier topics above once read back.
+  // An asked-for New topic clears that view (empty greeting); scrolling up
+  // does not reveal the covered topic until Back (or the topics list).
+  const streamDrawn = !askedFresh && streamHasEarlier && (streamReadBack || streamFocusEarlier || streamReach !== null || streamShownFor === bot.threadId);
   // The bot-to-bot conversations older than the topic's first line fold
   // behind a line of their own, listed once per bot.
   const earlierConversations = useMemo(
@@ -2544,7 +2557,15 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
         >
           {/* The one conversation: the earlier topics above the live one,
               once the live one is read back to its first message; the
-              topic before loads on scroll-up. */}
+              topic before loads on scroll-up. An asked-for New topic
+              clears to the empty greeting with Back. */}
+          {askedFresh ? (
+            <>
+              <FreshTopicDivider onResume={resumeTopic} />
+              <EmptyChat bot={bot} />
+            </>
+          ) : (
+            <>
           {earlierConversations.length > 0 && <PreviousTopicsLine open={conversationsOpen} onToggle={toggleConversations} />}
           {conversationsOpen && earlierConversations.length > 0 && <EarlierConversationList self={bot} rows={earlierConversations} bots={state.bots} showToolCalls={showToolCalls} />}
           {streamDrawn && (
@@ -2553,7 +2574,6 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
               {currentTask && <TopicDivider task={currentTask} />}
             </>
           )}
-          <>
           {/* Reverse infinite scroll sentinel and smooth loading indicator */}
           {olderPending ? (
             <div className="flex items-center justify-center gap-2 py-3 text-xs text-ink-tertiary">
@@ -2599,11 +2619,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
               </button>
             </div>
           )}
-          {/* "New topic" asked for here: the next message starts a fresh
-              engine context; one quiet line says so, with Resume. An
-              automatic fresh topic (back after a while) shows nothing. */}
-          {fresh && !freshDraft?.auto && <FreshTopicDivider onResume={resumeTopic} />}
-          </>
+            </>
+          )}
           {computerStarting && (
             <div className="flex justify-start">
               <div className="ui-pill">

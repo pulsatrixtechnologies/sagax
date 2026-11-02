@@ -7,7 +7,7 @@
 // Never pre-allowed for any engine: every call rides the bot's approval mode
 // (Ask shows a card per call), exactly as the engine's own tools do in solo.
 import { localVmDesktopSpec } from "./container-computer.ts";
-import { cleanCommandVariables } from "./credential-command-env.ts";
+import { cleanCommandVariables } from "./vault/credential-command-env.ts";
 import type { DesktopBridgeOperation } from "./desktop-bridge.ts";
 import { localVmComputerCall, localVmComputerCatalogText } from "./local-vm-computer.ts";
 import { boundToolResult, readOnHint, type BoundToolTextOptions } from "./tool-output-bound.ts";
@@ -236,7 +236,7 @@ export async function handleDesktopBridgeMcp(
     commandRefusal?: (command: string) => string | null;
     payloadRefusal?: (text: string) => string | null;
     /** The command variables the person exposed to this bot, read for this
-     * command (server/credential-command-env.ts). Added after the refusal
+     * command (server/vault/credential-command-env.ts). Added after the refusal
      * checks, which never see a value. */
     commandVariables?: () => Record<string, string>;
     /** Save a cut's full text for tool_result_read (TST-02). */

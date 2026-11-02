@@ -1,6 +1,6 @@
 /** `/loop` in the chat: a repeating prompt on this bot, as a routine.
  * The clock minimum is 5 minutes and the maximum is one day
- * (server/routines.ts). A shorter cadence is raised. A longer one is capped. */
+ * (server/routines/routines.ts). A shorter cadence is raised. A longer one is capped. */
 
 export const LOOP_SUBCOMMANDS = ["status", "stop"] as const;
 export type LoopSubcommand = (typeof LOOP_SUBCOMMANDS)[number];

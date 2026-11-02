@@ -16,7 +16,7 @@
 //   person's own sandbox (their cloud computer, their Local VM): what happens
 //   there is theirs, so their Allow rules keep answering and saving there.
 //
-// The admin sets both in the Perspicax console (server/org-admin-ops.ts,
+// The admin sets both in the Perspicax console (server/org/org-admin-ops.ts,
 // `org-approvals`). This module holds the live policy for the pure deciders,
 // which read it without a new parameter from every caller.
 

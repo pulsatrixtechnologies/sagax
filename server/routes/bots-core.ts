@@ -26,7 +26,7 @@ import { autoNewBotSelection } from "../default-model-selection.ts";
 import { githubSkillFetch, type GithubCredential } from "../github-access.ts";
 import { mcpServerNameError, MAX_MCP_SERVERS } from "../mcp-registry.ts";
 import { MEMBER_AUTO_NOT_ALLOWED } from "../member-auto-approval.ts";
-import { journalMemoryWrite } from "../memory-journal.ts";
+import { journalMemoryWrite } from "../memory/memory-journal.ts";
 import { pickBotName } from "../names.ts";
 import {
   botSkillTemplateSchema,
@@ -34,8 +34,8 @@ import {
   resolveBotCreationDefaults,
   type NewBotDefaults,
 } from "../new-bot-defaults.ts";
-import { newConversationFullAllowed } from "../org-full-access.ts";
-import { orgXaiRefusal } from "../org-xai-media.ts";
+import { newConversationFullAllowed } from "../org/org-full-access.ts";
+import { orgXaiRefusal } from "../org/org-xai-media.ts";
 import { peopleDmForViewer } from "../people-dms.ts";
 import { isPrincipalId } from "../principals.ts";
 import {

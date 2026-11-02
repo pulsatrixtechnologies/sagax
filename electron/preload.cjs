@@ -41,6 +41,17 @@ ipcRenderer.on("app:open-settings", (_event, section) => {
   for (const listener of appSettingsListeners) listener(fixedSection);
 });
 
+let pendingAbout = false;
+const aboutListeners = new Set();
+ipcRenderer.on("app:open-about", () => {
+  if (!aboutListeners.size) {
+    pendingAbout = true;
+    return;
+  }
+  pendingAbout = false;
+  for (const listener of aboutListeners) listener();
+});
+
 // The bridge is built once, then exposed in full only to the local server's
 // UI. A remote server's page (Server menu) gets the safe subset: nothing that
 // captures this screen, touches this computer's files or logins, or runs
@@ -67,7 +78,7 @@ const REMOTE_SAFE = new Set(["platform", "windowControls", "getCapabilities", "o
 // every one of these channels again (local-origin.cjs desktopUiOnly, and
 // sharingUiOnly for the server-mode server only). Nothing that reads this
 // computer's files, screen, logins or secrets is handed to the page.
-const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "onOpenAppSettings", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts"]);
+const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts"]);
 let bundledPage = false;
 // main.mjs always answers this channel: a sendSync nobody answers would
 // block this page for good (a test harness must answer it too).
@@ -243,6 +254,15 @@ const bridge = {
       for (const listener of appSettingsListeners) listener(section);
     });
     return () => appSettingsListeners.delete(cb);
+  },
+  onOpenAbout: (cb) => {
+    aboutListeners.add(cb);
+    queueMicrotask(() => {
+      if (!pendingAbout || !aboutListeners.size) return;
+      pendingAbout = false;
+      for (const listener of aboutListeners) listener();
+    });
+    return () => aboutListeners.delete(cb);
   },
   /** Absolute path of a dropped File — Electron 32 removed File.path, and
    * only the preload can ask. "" when the drag carried no file on disk. */

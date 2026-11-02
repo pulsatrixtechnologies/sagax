@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { DATA_DIR } from "./config.ts";
-import { factIdentity } from "./memory-entries.ts";
+import { factIdentity } from "./memory/memory-entries.ts";
 import { redactSecretsInText } from "./redact.ts";
 
 const MAX_KEPT = 200;

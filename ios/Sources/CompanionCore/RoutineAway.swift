@@ -1,4 +1,4 @@
-// Routines that run only while the person is here (server/routine-away.ts,
+// Routines that run only while the person is here (server/routines/routine-away.ts,
 // the desktop's RoutineAwayBanner). The phone shows the same report and
 // can pause or resume every routine it is allowed to change.
 import Foundation

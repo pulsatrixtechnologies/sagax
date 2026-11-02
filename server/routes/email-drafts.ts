@@ -1,4 +1,4 @@
-// An email draft's "Envoyer" (server/email-draft-send.ts, 2026-10-16):
+// An email draft's "Envoyer" (server/mail/email-draft-send.ts, 2026-10-16):
 //
 //   POST /api/threads/:id/email-drafts             { botId?, draft, draftKey?, connector? }
 //                                                  -> 201 { requestId, status, connector }:

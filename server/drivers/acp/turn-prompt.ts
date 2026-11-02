@@ -218,12 +218,15 @@ for (;;) {
     }
   } catch (promptError) {
     const reasoningOnly = isReasoningOnlyEmpty(promptError);
-    // An item (reply, image, tool) or an open ask/tool means a
-    // nudge could duplicate work. Uncommitted assistant deltas are
-    // abandoned: they are not a final answer, and keeping them
-    // used to force the raw Internal error through (#1820).
+    // A reply or an image already out, or an open ask/tool, means a
+    // nudge could duplicate work. Finished tool calls do not: the live
+    // session holds their results, and the nudge asks only for the
+    // answer or the next call (2026-11-02: a routine always ran tools
+    // first, so it never got the nudge and failed outright). Uncommitted
+    // assistant deltas are abandoned: they are not a final answer, and
+    // keeping them used to force the raw Internal error through (#1820).
     const canNudge = reasoningOnly
-      && !state.producedItem
+      && !state.producedReply
       && current.asks.size === 0
       && current.runningTools.size === 0
       && reasoningRetries < reasoningMax

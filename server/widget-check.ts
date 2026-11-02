@@ -113,6 +113,32 @@ function playwrightShell(env: NodeJS.ProcessEnv, exists: (path: string) => boole
 // The chat's own font: server/geist-face.ts (shared with the published pages).
 export { geistFace };
 
+/**
+ * Whether Chrome's own sandbox can start here (2026-11-02). In the Sagax
+ * server container it cannot: the server runs as a non-root user with every
+ * capability dropped and no-new-privileges, so neither the user-namespace
+ * sandbox nor the setuid one is available, and Chrome aborts at launch ("No
+ * usable sandbox!", seen as "Chrome pipe error" in prod) and every widget
+ * check came back "unavailable". The container is the boundary there, as for
+ * the bots' own browser in the same image; the page itself is a sandboxed
+ * iframe with no network (proxy to a closed port, every request failed).
+ * Root on Linux has no sandbox either. A desktop or a VPS host keeps it.
+ * SAGAX_WIDGET_CHECK_SANDBOX=on forces it, =off drops it.
+ */
+export function widgetChromeNoSandbox(input: {
+  platform?: NodeJS.Platform; uid?: number; env?: NodeJS.ProcessEnv; exists?: (path: string) => boolean;
+} = {}): boolean {
+  const platform = input.platform ?? process.platform;
+  const env = input.env ?? process.env;
+  const forced = env.SAGAX_WIDGET_CHECK_SANDBOX?.trim().toLowerCase();
+  if (forced === "on") return false;
+  if (forced === "off") return true;
+  if (platform !== "linux") return false;
+  if ((input.uid ?? process.getuid?.()) === 0) return true;
+  const exists = input.exists ?? existsSync;
+  return exists("/.dockerenv") || exists("/run/.containerenv") || Boolean(env.KUBERNETES_SERVICE_HOST);
+}
+
 // ---------------------------------------------------------------------------
 // CDP over a pipe
 
@@ -198,7 +224,7 @@ export interface WidgetRendererOptions {
   /** Close the warm browser after this long without a check. */
   idleMs?: number;
   /** false while the server is short of memory: no browser is started and a
-   * warm one is closed (server/engine-memory-guard.ts). */
+   * warm one is closed (server/memory/engine-memory-guard.ts). */
   memoryOk?: () => boolean;
   /** Called with the browser's pid once it runs (OOM score). */
   onSpawn?: (pid: number) => void;
@@ -349,7 +375,7 @@ export class WidgetRenderer {
       // ws request goes to a closed proxy port; requests are also failed in
       // Fetch below.
       "--proxy-server=127.0.0.1:9", "--proxy-bypass-list=<-loopback>", "--host-resolver-rules=MAP * ~NOTFOUND",
-      ...(process.platform === "linux" && process.getuid?.() === 0 ? ["--no-sandbox"] : []),
+      ...(widgetChromeNoSandbox() ? ["--no-sandbox"] : []),
       "about:blank",
     ];
     const child = spawn(chrome, args, { stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"], windowsHide: true, detached: false });

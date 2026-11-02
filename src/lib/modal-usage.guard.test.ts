@@ -16,15 +16,21 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIALOG_FRAME_ALLOW = new Set([
   "components/SettingsPrimitives.tsx", // definition + Settings chrome
   "components/TermsGate.tsx", // barrier (GARDER)
-  "components/UpdateBanner.tsx", // lot 6: move error into the banner
+  "components/ReleaseNotesPrompt.tsx", // What's new / Release notes window (JC exception)
+  "components/UpdateBanner.tsx", // Update ready window; errors stay on the card
+  "components/remote-session/RemoteFileBrowser.tsx", // remote file catalog window (file-preview family)
   "components/bot-settings/CodeBranchList.tsx", // branch forms; empty with later bot-panel work
   "components/settings/BotModelsSettings.tsx", // BulkModelChoice picker until a popover lands
+  "components/BulkEditBotsDialog.tsx", // bulk Edit bots window (restored)
+  "components/TeamBotFromThreadDialog.tsx", // team bot from thread window (restored)
+  "components/OrgImportDialog.tsx", // org import window (restored)
 ]);
 
 /** Production files that may call useModalDialog. */
 const USE_MODAL_DIALOG_ALLOW = new Set([
   "hooks/use-modal-dialog.ts", // definition
   "components/artifacts/ArtifactFrame.tsx", // viewer (GARDER)
+  "components/remote-session/RemoteFileBrowser.tsx", // remote file catalog window
   "components/RoutineCalendarPage.tsx", // EventEditor window path until panel-only
 ]);
 

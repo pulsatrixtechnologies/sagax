@@ -208,7 +208,7 @@ export function NewBotForm(props: {
   preserveSelection?: boolean;
   presentation?: "dialog" | "view";
 }) {
-  return <LocalNewBotDialog {...props} presentation={props.presentation ?? "view"} />;
+  return <LocalNewBotDialog {...props} presentation={props.presentation ?? "dialog"} />;
 }
 
 export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCreated, preserveSelection = false, presentation = "dialog" }: {

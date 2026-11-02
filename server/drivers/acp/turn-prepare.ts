@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { DATA_DIR } from "../../config.ts";
 import { applyStoredEngineEnv } from "../../engine-api-keys.ts";
-import { applyEngineCommandVariables } from "../../credential-command-env.ts";
+import { applyEngineCommandVariables } from "../../vault/credential-command-env.ts";
 import { newId } from "../../contracts.ts";
 import type { SendTurnInput } from "../../contracts.ts";
 import { cachePrimePrompt } from "../../voice-first-sentence.ts";
@@ -165,7 +165,7 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
       threadId, mcpServers,
     });
     // Command variables the person exposed to this bot
-    // (server/credential-command-env.ts): the engine's own shell inherits
+    // (server/vault/credential-command-env.ts): the engine's own shell inherits
     // them, never a name the engine reads as its own sign-in. They are in
     // the env fingerprint below, so a change or a revoke starts a fresh
     // process at the next turn.

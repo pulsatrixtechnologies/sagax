@@ -2,7 +2,7 @@ import Foundation
 
 // Who sees which routines on the Automations page (matrix AU20; the desktop's
 // routines/RoutineScopeBar.tsx and lib/use-routine-scope.ts over
-// shared/routine-scope.ts and server/routine-scope.ts).
+// shared/routine-scope.ts and server/routines/routine-scope.ts).
 //
 //   mine  the routines of the bots and rooms the person sees (always)
 //   team  plus those of the people in their teams and of the bots shared

@@ -112,8 +112,8 @@ sandbox policy. Restricted hosts may need the `.deb` rather than the AppImage.
 ## Release verification and updates
 
 Versions, URLs, sizes and SHA-256 digests live in
-`server/browser-bundle-release.ts`; engine pins are shared with
-`server/browser-engine-release.ts`. Every cached download is rechecked.
+`server/browser/browser-bundle-release.ts`; engine pins are shared with
+`server/browser/browser-engine-release.ts`. Every cached download is rechecked.
 Preparation inventories the entire vendor tree, including licenses. The
 `afterPack` gate rejects missing resources, changed bytes or wrong executable
 architectures before signing. macOS signing changes native bytes, so signed

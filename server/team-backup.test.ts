@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgentCard } from "./chat-widgets.ts";
 import { DATA_DIR } from "./config.ts";
 import { Store, UNTITLED_TASK } from "./store.ts";
-import { RoutineManager } from "./routines.ts";
+import { RoutineManager } from "./routines/routines.ts";
 import { createTeamBackup, importTeamBackup } from "./team-backup.ts";
 import { parseTeamBackup } from "../shared/team-backup.ts";
 import { WIDGET_SAMPLES } from "../shared/widget-samples.ts";

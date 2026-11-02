@@ -127,6 +127,20 @@ const ASKS_A_PERSON = new Set(["askuserquestion", "ask_user"]);
 // prefix removed, then compared case-insensitively.
 const WEB_SEARCH = new Set(["websearch", "web_search", "web-search", "search_web"]);
 
+/** Sagax's own bot-to-bot sends (the agents server). The server's own route
+ * applies the peer policy to them: the bot's "Ask before contacting other
+ * bots" (approvePeerComms) card, a routine's review-later queue, and only
+ * bots this one can reach (peer roster). They are not a send to a third
+ * party, so the outbound guard must not hold them a second time: on Grok it
+ * did (every use_tool asks), and a routine run then waited 15 minutes on a
+ * card nobody was there to answer (prod 2026-11-02). */
+const SAGAX_PEER_SENDS: ReadonlySet<string> = new Set(["send_to_bot", "post_to_room"]);
+export function isSagaxPeerSend(name: string | undefined): boolean {
+  const folded = name?.trim().toLowerCase() ?? "";
+  const match = /^(?:mcp__)?agents__([a-z_]+)$/.exec(folded);
+  return Boolean(match && SAGAX_PEER_SENDS.has(match[1]!));
+}
+
 function bareToolName(tool: string): string {
   return tool.replace(/^mcp__[^_]+__/, "").toLowerCase();
 }
@@ -170,7 +184,7 @@ export type AutoVerdictSource =
   | "custom-rule-ask"
   | "custom-rule-deny"
   /** The person allowed this exact email draft on its approval card
-   * (server/email-draft-send.ts): one send, these recipients and subject. */
+   * (server/mail/email-draft-send.ts): one send, these recipients and subject. */
   | "email-draft-approval"
   /** 2026-10-16: one of Sagax's own person-scoped tools
    * (server/sagax-internal-tools.ts: Data, the agents tools in the bot's own
@@ -355,7 +369,8 @@ export function autoVerdict(
   // keeps the card even under Full access or a saved command.
   if (context?.customRule?.behavior === "deny") return { approve: null, source: "custom-rule-deny" };
   if (context?.customRule?.behavior === "ask") return { approve: null, source: "custom-rule-ask" };
-  const outward = isOutboundTool(tool) || context?.outbound === true || (context?.toolName !== undefined && isOutboundTool(context.toolName));
+  const peerSend = context?.sagaxInternal === true && (isSagaxPeerSend(tool) || isSagaxPeerSend(context.toolName));
+  const outward = !peerSend && (isOutboundTool(tool) || context?.outbound === true || (context?.toolName !== undefined && isOutboundTool(context.toolName)));
   if (context?.safetyAllow && !outward) return { approve: `approved ${tool} (read-only)`, source: "safety-read" };
   if (context?.connectorRead && !outward && !context.requiresExplicitApproval && !(context.stepUpRequired?.length)) {
     return { approve: `approved ${tool} (read of your own connector)`, source: "connector-read" };
@@ -428,7 +443,7 @@ export function autoVerdict(
   })) {
     return { approve: null, source: "email-draft-required" };
   }
-  if (isOutboundTool(tool) || context?.outbound === true || ((context?.sagaxInternal || context?.ownEnvironment) && sendsOut)) {
+  if ((!peerSend && (isOutboundTool(tool) || context?.outbound === true)) || ((context?.sagaxInternal || context?.ownEnvironment) && sendsOut)) {
     // Person-asked mail in the owner's own turn: skip the blanket outbound
     // hold so Ask / Auto / Full apply as usual.
     if (!(sendsOut && isMailSendName(tool, context?.toolName) && context?.personAskedMail === true && context?.ownerTurn === true)) {

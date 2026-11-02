@@ -2,7 +2,7 @@
 // from their credential vault, or saves a new one, and allows it for this
 // time (this conversation, 15 minutes) or always for this bot. The bot gets
 // a handle, never a value; it fills the login into its browser by reference
-// (server/credential-fill.ts). When the login it picks is saved for another
+// (server/vault/credential-fill.ts). When the login it picks is saved for another
 // address of the site, "Also fill it on ..." (unticked) adds the asked one.
 // The person may also sign in themselves in the bot's browser and press
 // Done (port of OpenMausBot #2707 and #2929, on Sagax's vault card). Once

@@ -1,5 +1,5 @@
-/** Headless gallery for Tools > Memory (2026-11-02). Synthetic data only.
- * ?skin=<id>&lang=<code>&view=sources|browse|note|trash
+/** Headless gallery for Tools > Memory page (2026-11-02). Synthetic data only.
+ * ?skin=<id>&lang=<code>&view=sources|browse|note|map|trash&dense=1
  */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -18,8 +18,29 @@ const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "en");
 const view = params.get("view") ?? "sources";
+const dense = params.get("dense") === "1";
 const width = Number(params.get("width") ?? 1280);
 const height = Number(params.get("height") ?? 800);
+
+const DENSE_FOLDERS = ["alpha", "beta", "gamma", "delta"] as const;
+const denseTopics = Array.from({ length: 40 }, (_, index) => {
+  const folder = DENSE_FOLDERS[index % DENSE_FOLDERS.length]!;
+  const n = index + 1;
+  return {
+    path: `memory/${folder}/note-${n}.md`,
+    name: `Note ${n}.md`,
+    bytes: 40 + n,
+    modifiedAt: Date.now() - n * 3600_000,
+  };
+});
+
+function denseNoteBody(path: string): string {
+  const match = /note-(\d+)\.md$/.exec(path);
+  const n = match ? Number(match[1]) : 1;
+  const next = (n % 40) + 1;
+  const jump = ((n + 6) % 40) + 1;
+  return `# Note ${n}\n\nSee [[Note ${next}]] and [[Note ${jump}]].\n`;
+}
 
 const originalFetch = window.fetch.bind(window);
 window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
@@ -36,14 +57,39 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     });
   }
   if (url.includes("/api/bots/atlas/memory/file")) {
+    if (dense) {
+      const pathMatch = /path=([^&]+)/.exec(url);
+      const path = pathMatch ? decodeURIComponent(pathMatch[1]) : "memory/alpha/note-1.md";
+      return json({
+        path,
+        text: path === "MEMORY.md" ? "# MEMORY\n\nIndex for Atlas.\n" : denseNoteBody(path),
+        hash: `h-${path}`,
+        exists: true,
+      });
+    }
+    const travel = url.includes("travel");
     return json({
-      path: "memory/dining.md",
-      text: "# Dining\n\nPrefers short tables.\n\n```json\n{\n  \"likes\": [\"pasta\", \"bread\"],\n  \"avoids\": {\"olives\": true}\n}\n```\n",
-      hash: "abc123",
+      path: travel ? "memory/travel.md" : "memory/dining.md",
+      text: travel
+        ? "# Travel\n\nTrips with [[Dining]].\n"
+        : "# Dining\n\nPrefers short tables. See [[Travel]].\n\n```json\n{\n  \"likes\": [\"pasta\", \"bread\"],\n  \"avoids\": {\"olives\": true}\n}\n```\n",
+      hash: travel ? "trv" : "abc123",
       exists: true,
     });
   }
   if (url.includes("/api/bots/atlas/memory")) {
+    if (dense) {
+      return json({
+        botId: "atlas",
+        workspacePath: "/tmp/atlas",
+        index: { lines: 40, bytes: 800, maxLines: 200, maxBytes: 24000, loadedLines: 40, loadedBytes: 800, truncated: false, hash: "idx-dense" },
+        topics: denseTopics,
+        logs: [
+          { path: "memory/logs/run-1.md", name: "run-1.md", bytes: 20, modifiedAt: Date.now() - 1000 },
+          { path: "memory/logs/run-2.md", name: "run-2.md", bytes: 20, modifiedAt: Date.now() - 2000 },
+        ],
+      });
+    }
     return json({
       botId: "atlas",
       workspacePath: "/tmp/atlas",
@@ -66,6 +112,34 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     });
   }
   if (url.includes("/api/me/memory/tree")) {
+    if (dense) {
+      const topics = DENSE_FOLDERS.map((topic, topicIndex) => {
+        const entries = Array.from({ length: 10 }, (_, entryIndex) => {
+          const n = topicIndex * 10 + entryIndex + 1;
+          return {
+            id: `n${n}`,
+            title: `Note ${n}`,
+            topic,
+            tags: n % 3 === 0 ? ["shared", topic] : [topic],
+            updated: new Date(Date.now() - n * 3600_000).toISOString(),
+            excerpt: `Excerpt ${n}`,
+          };
+        });
+        return { topic, count: entries.length, entries };
+      });
+      return json({
+        own: "user:demo",
+        tiers: [{
+          scope: "me",
+          kind: "me",
+          name: "Personal",
+          may_write: true,
+          may_manage: true,
+          trashed: 0,
+          topics,
+        }],
+      });
+    }
     return json({
       own: "user:demo",
       tiers: [{
@@ -84,6 +158,24 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     });
   }
   if (url.includes("/api/me/memory/entry")) {
+    if (dense) {
+      const idMatch = /[?&]id=([^&]+)/.exec(url);
+      const id = idMatch ? decodeURIComponent(idMatch[1]) : "n1";
+      const n = Number((/^n(\d+)$/.exec(id) ?? [])[1] ?? 1);
+      const topic = DENSE_FOLDERS[(n - 1) % DENSE_FOLDERS.length]!;
+      const next = (n % 40) + 1;
+      const jump = ((n + 6) % 40) + 1;
+      return json({
+        id,
+        scope: "me",
+        topic,
+        title: `Note ${n}`,
+        body: `# Note ${n}\n\nSee [[Note ${next}]] and [[Note ${jump}]].\n`,
+        tags: n % 3 === 0 ? ["shared", topic] : [topic],
+        may_edit: true,
+        version: 1,
+      });
+    }
     return json({
       id: "n1", scope: "me", topic: "notes", title: "Weekly briefing",
       body: "# Weekly briefing\n\nKeep every claim with its source.\n",
@@ -100,6 +192,7 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
 const store = {
   state: {
     ...initialState,
+    activeView: "memory" as const,
     memoryManagerOpen: true,
     bots: [{
       id: "atlas", threadId: "main", name: "Atlas", title: "Research", description: "",
@@ -126,10 +219,20 @@ function Shell() {
     void (async () => {
       await new Promise((done) => setTimeout(done, 200));
       if (cancelled) return;
-      const sourceKey = view === "trash" ? "perspicax" : "bot:atlas";
+      const sourceKey = view === "trash" || dense ? "perspicax" : "bot:atlas";
       document.querySelector<HTMLButtonElement>(`[data-memory-source="${sourceKey}"]`)?.click();
-      if (view === "browse") {
-        await waitFor("[data-memory-browse]");
+      if (view === "browse" || view === "map") {
+        await waitFor("[data-memory-browse], [data-memory-map]");
+        if (view === "map") {
+          const mapToggle = [...document.querySelectorAll("button")].find((button) => /Map|Carte/i.test(button.textContent || "") && button.getAttribute("aria-pressed") !== null);
+          mapToggle?.click();
+          await waitFor("[data-memory-map]");
+          if (dense) {
+            await waitFor('[data-memory-map-node="note"]');
+            // Dense maps prefetch many bodies; give the graph a beat to settle.
+            await new Promise((done) => setTimeout(done, 400));
+          }
+        }
         if (!cancelled) setReady(true);
         return;
       }
@@ -142,7 +245,7 @@ function Shell() {
         return;
       }
       if (view === "trash") {
-        await waitFor("[data-memory-browse], [data-memory-manager-panel]");
+        await waitFor("[data-memory-browse], [data-memory-manager-page]");
         if (cancelled) return;
         const trash = [...document.querySelectorAll("button")].find((button) => /Trash|Corbeille/i.test(button.textContent || ""));
         trash?.click();
@@ -155,17 +258,11 @@ function Shell() {
 
   return (
     <div className="flex h-full bg-app" data-gallery-ready={ready ? "1" : "0"} style={{ width, height }}>
-      <div className="flex min-w-0 flex-1 flex-col border-r border-hairline/40 bg-panel px-6 py-5">
-        <div className="text-[13px] font-medium text-ink">Conversation</div>
-        <p className="mt-2 text-[12.5px] text-ink-secondary">Synthetic chat stays visible beside the memory panel.</p>
-      </div>
-      <div className="relative flex h-full" style={{ width: 480 }}>
-        <BotEditorStore value={store as never}>
-          <PanelSlotProvider slot={null}>
-            <MemoryManagerPanel />
-          </PanelSlotProvider>
-        </BotEditorStore>
-      </div>
+      <BotEditorStore value={store as never}>
+        <PanelSlotProvider slot={null}>
+          <MemoryManagerPanel />
+        </PanelSlotProvider>
+      </BotEditorStore>
     </div>
   );
 }

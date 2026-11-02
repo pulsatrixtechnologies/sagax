@@ -158,7 +158,7 @@ export const engineStartGate = new EngineStartGate({
 
 /** After the boot window, routine turns still start at most this many engine
  * processes at once (incident 2026-10-19: a 5 GiB organization server was
- * OOM-killed with 11 to 15 Claude sessions alive; server/engine-memory-guard.ts).
+ * OOM-killed with 11 to 15 Claude sessions alive; server/memory/engine-memory-guard.ts).
  * Same rules as the boot gate (first come, first served; the engine process
  * is closed when the routine's turn completes), with no window. Only
  * routine turns take a slot: a person's turn and a bot-to-bot turn never

@@ -11,7 +11,7 @@ import { json, readBody } from "../harness/http.ts";
 import { requiredScope } from "../request-auth.ts";
 import type { RoutineRun } from "../../shared/routines.ts";
 import type { BotActivityDetail, BotActivityItem } from "../../shared/bot-activity.ts";
-import { createBotActivityRoutes, type ActivityMessage, type ActivityTask, type BotActivityRouteDeps } from "./bot-activity.ts";
+import { createBotActivityRoutes, stepError, STEP_ERROR_CHARS, type ActivityMessage, type ActivityTask, type BotActivityRouteDeps } from "./bot-activity.ts";
 import { dispatchRoutes } from "./table.ts";
 
 const NOW = 1_800_000_000_000;
@@ -333,6 +333,31 @@ describe("bot activity API", () => {
     expect(steps.find((step) => step.id === "s2")).toMatchObject({ parentId: "s1", input: "{\"file_path\":\"/var/log/app.log\"}" });
     expect(steps.find((step) => step.id === "s3")).not.toHaveProperty("parentId");
     expect(detail.body.item!.children).toEqual([expect.objectContaining({ threadId: "t-par", parallel: true, canStop: true })]);
+  });
+});
+
+// 2026-11-02: a run's steps said "The tool failed and returned no error
+// message" for every failure: the step never carried the call's output.
+describe("a failed step's error", () => {
+  it("is the stored output, bounded and redacted; a success or an empty output carries none", () => {
+    expect(stepError("Microsoft Graph API error: 404 Not Found")).toBe("Microsoft Graph API error: 404 Not Found");
+    expect(stepError("x".repeat(2_000))).toHaveLength(STEP_ERROR_CHARS);
+    expect(stepError("   ")).toBeUndefined();
+    expect(stepError(undefined)).toBeUndefined();
+    expect(stepError("Authorization: Bearer sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789")).not.toContain("abcdefghijklmnopqrstuvwxyz0123456789");
+  });
+
+  it("reaches the run's steps for a failed call only", async () => {
+    const base = await serve(deps({
+      messages: (threadId, limit) => ({ hasMore: false, messages: (threadId === "t-alice" ? [
+        { id: "f1", role: "bot", kind: "activity", at: NOW - 20_000, tool: { name: "mcp__outlook__get_message", input: "{\"message_id\":\"AAMkAGI2THVSAAA=\"}", output: "Graph 404 ErrorItemNotFound", ok: false } },
+        { id: "f2", role: "bot", kind: "activity", at: NOW - 19_000, tool: { name: "mcp__outlook__get_message", output: "a whole email body", ok: true } },
+      ] as ActivityMessage[] : messages[threadId] ?? []).slice(-limit) }),
+    }));
+    const detail = await get(base, "/api/bots/pepper/activity/item?threadId=t-alice", "alice");
+    const steps = detail.body.item!.steps;
+    expect(steps.find((step) => step.id === "f1")).toMatchObject({ ok: false, error: "Graph 404 ErrorItemNotFound" });
+    expect(steps.find((step) => step.id === "f2")).not.toHaveProperty("error");
   });
 });
 

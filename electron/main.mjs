@@ -2843,6 +2843,9 @@ function refreshApplicationMenu() {
       onOpenSettings: () => {
         mainPage()?.send("app:open-settings");
       },
+      onOpenAbout: () => {
+        mainPage()?.send("app:open-about");
+      },
       serverModeId: serverModeEnvironment(environmentsState)?.id ?? null,
       onLeaveServerMode: () => void workspaceMenuAction(leaveServerMode),
     }),

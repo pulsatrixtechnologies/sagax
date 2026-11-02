@@ -7,7 +7,7 @@ import { isAbsolute, resolve } from "node:path";
 
 import { safeRemoteDir } from "../shared/remote-files.ts";
 import type { RemoteSessionOs } from "../shared/remote-session.ts";
-import type { ListResult } from "./remote-session-files.ts";
+import type { ListResult } from "./remote-support/remote-session-files.ts";
 
 export type CwdValidation = { ok: true; cwd: string | null; /** checked on the bot's own computer, not this server */ remote?: true } | { ok: false; error: string };
 

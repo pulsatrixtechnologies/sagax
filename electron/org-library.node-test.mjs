@@ -461,7 +461,7 @@ function desktop(t, { capability = 1, pointer = true, catalog = standard(), sess
   const saved = { portalOrigin: origin, token, deviceId: DEVICE, organizationId: ORG, email: "person@example.test", expiresAt: Date.now() + 86400_000 };
   const f = { clock: Date.now(), order: [], requests: [], messages: [], catalogBytes: bytesOf(catalog), blobs: new Map([[sha256Hex(teamBytes), teamBytes], [sha256Hex(skillBytes), skillBytes]]), record: { value: saved }, revoked: false };
   const relay = createManagedDesktopRelay({ timeoutMs: 15_000 });
-  // The fake runtime: acknowledges at once, as server/org-library.ts must, and records the message.
+  // The fake runtime: acknowledges at once, as server/org/org-library.ts must, and records the message.
   const proc = { postMessage: message => { f.messages.push(message); f.order.push(`relay ${message.library ? "catalog" : "null"}`); queueMicrotask(() => relay.receive(proc, { type: "openmausbot:managed-desktop-result", requestId: message.requestId, ok: true })); } };
   f.fetch = async (url, options) => {
     const route = url.slice(origin.length);

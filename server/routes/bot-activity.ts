@@ -32,6 +32,7 @@
 // (`runAccessCard`) reaches the card's audience only: the bot's owner reads
 // the card of a run refused on their credentials even when the run's thread
 // is another person's private one, and nothing else of that thread.
+import { redactSecretsInText } from "../redact.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import type { WireAccessCard } from "../../shared/wire.ts";
 import type { RoutineRun } from "../../shared/routines.ts";
@@ -152,6 +153,15 @@ const ACTIVE_RUN = new Set(["queued", "running", "waiting"]);
 const SUBAGENT_TOOLS = new Set(["Agent", "Task"]);
 const STEP_INPUT_CHARS = 2_000;
 const SUBAGENT_RESULT_CHARS = 4_000;
+
+/** A failed step's error as the run's steps show it: the stored output
+ * (already redacted when it was written), one bounded block. */
+export const STEP_ERROR_CHARS = 600;
+export function stepError(output: unknown): string | undefined {
+  if (typeof output !== "string" || !output.trim()) return undefined;
+  const text = redactSecretsInText(output.trim());
+  return text.length > STEP_ERROR_CHARS ? `${text.slice(0, STEP_ERROR_CHARS - 1).trimEnd()}…` : text;
+}
 
 /** A sub-agent call's request and report, from the call's arguments (JSON
  * as the chat previews it) and its result. */
@@ -585,6 +595,7 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
       const parentId = tool.parentItemId ? stepByItem.get(tool.parentItemId) : undefined;
       const input = typeof tool.input === "string" && tool.input.trim() ? tool.input.slice(0, STEP_INPUT_CHARS) : undefined;
       const subagent = SUBAGENT_TOOLS.has(tool.name) ? subagentOf(input, tool.output) : undefined;
+      const error = tool.ok === false ? stepError(tool.output) : undefined;
       steps.push({
         id: message.id,
         name: tool.name,
@@ -594,6 +605,7 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
         ...(where ? { where } : {}),
         ...(tool.files?.length ? { files: tool.files } : {}),
         ...(input ? { input } : {}),
+        ...(error ? { error } : {}),
         ...(parentId ? { parentId } : {}),
         ...(subagent ? { subagent } : {}),
       });

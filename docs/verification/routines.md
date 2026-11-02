@@ -24,7 +24,7 @@ This guard only applies to agent creation proposals; intentional duplicates
 in the manual editor remain possible. Existing routines are never removed.
 
 ```sh
-pnpm exec vitest run shared/routine-schedule.test.ts server/routine-cron.e2e.test.ts server/routine-requests.test.ts server/routines.test.ts server/routines-startup.test.ts src/components/routines/schedule-editor.test.ts src/lib/routine-calendar.test.ts src/lib/schedule-label.test.ts server/bot-package.test.ts server/package-export.test.ts
+pnpm exec vitest run shared/routine-schedule.test.ts server/routines/routine-cron.e2e.test.ts server/routines/routine-requests.test.ts server/routines/routines.test.ts server/routines/routines-startup.test.ts src/components/routines/schedule-editor.test.ts src/lib/routine-calendar.test.ts src/lib/schedule-label.test.ts server/bot-package.test.ts server/package-export.test.ts
 SAGAX_UI_E2E=1 pnpm exec vitest run scripts/testing/cron-routines-ui.e2e.test.ts
 ```
 
@@ -188,11 +188,11 @@ that the same VPS computer tools reach the agent without a Boat key. These are
 deterministic routing checks, not a live model-choice or real VPS acceptance test.
 
 ```sh
-pnpm exec vitest run server/vps-routing.test.ts server/routine-cron.e2e.test.ts
+pnpm exec vitest run server/vps-routing.test.ts server/routines/routine-cron.e2e.test.ts
 ```
 
 ```sh
-pnpm exec vitest run server/routines.test.ts server/routines-startup.test.ts server/routine-results.e2e.test.ts server/routine-delegation.e2e.test.ts server/drivers/agents-proxy.test.ts
+pnpm exec vitest run server/routines/routines.test.ts server/routines/routines-startup.test.ts server/routines/routine-results.e2e.test.ts server/routines/routine-delegation.e2e.test.ts server/drivers/agents-proxy.test.ts
 pnpm exec vitest run src/components/routines/RoutineViews.test.ts src/components/bot-settings/RoutinesSection.test.ts src/components/RoutineRunCard.test.ts src/components/BotProjects.test.ts src/lib/folder-read.test.ts src/lib/computer-panel-view.test.ts src/state/store.test.ts
 ```
 
@@ -313,9 +313,9 @@ Who reaches `/api/org/routine-delegation` (GET only, read-only status):
 ```sh
 pnpm exec vitest run server/oidc-rp.test.ts server/idp-token-pacer.test.ts \
   server/idp-revocations.test.ts server/idp-session.test.ts \
-  server/org-routine-consent.test.ts server/routines.test.ts \
+  server/org/org-routine-consent.test.ts server/routines/routines.test.ts \
   server/perspicax-mcp.test.ts server/oidc-login.test.ts \
-  server/perspicax-org-routes.test.ts server/org-routines.e2e.test.ts \
+  server/perspicax-org-routes.test.ts server/org/org-routines.e2e.test.ts \
   server/perspicax-link.test.ts \
   src/pair/PairPage.test.ts src/components/routines/RoutineOwnerName.test.ts
 ```
@@ -330,7 +330,7 @@ pnpm exec vitest run server/oidc-rp.test.ts server/idp-token-pacer.test.ts \
   end a session while 25 hours of network errors still do; 120 releases in
   one tick send at most 35 revocations per rolling minute with a budget of
   45, all within 4 minutes.
-- `server/routines.test.ts` ("slice 6"): a rate-limited run retried three
+- `server/routines/routines.test.ts` ("slice 6"): a rate-limited run retried three
   times with back-off, then skipped without pausing the routine.
-- `server/org-routines.e2e.test.ts`: the gate's 401 and 403 above on a real
+- `server/org/org-routines.e2e.test.ts`: the gate's 401 and 403 above on a real
   server.

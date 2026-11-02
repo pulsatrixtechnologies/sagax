@@ -128,7 +128,7 @@ Speech-to-Speech (rejeté : il remplacerait le cerveau).
 ### 2.2 Twilio dans Sagax
 
 - **Courriel seulement** : le fournisseur `twilio` de l'envoi de courriel
-  (Twilio Email API, `server/mail-config.ts`, `shared/mail-settings.ts`,
+  (Twilio Email API, `server/mail/mail-config.ts`, `shared/mail-settings.ts`,
   `SAGAX_TWILIO_API_KEY_SID` / `SAGAX_TWILIO_API_KEY_SECRET`, PR #1 et #4).
   Il n'est pas réutilisé : la téléphonie prend ses droits Twilio dans le
   profil Perspicax de la personne (décision 1).
@@ -158,7 +158,7 @@ Speech-to-Speech (rejeté : il remplacerait le cerveau).
   travail : elle vit toujours sur le serveur Sagax (le seul joignable par
   Twilio). Un bot qui travaille sur une VM locale reçoit l'appel sur le
   serveur et délègue comme d'habitude.
-- Routines : `server/routines.ts`, `routine-run-as.ts` (exécution au nom du
+- Routines : `server/routines/routines.ts`, `routine-run-as.ts` (exécution au nom du
   propriétaire). Une routine pourra « appeler » ou « texter » le
   propriétaire, jamais un tiers sans carte.
 - Notifications : `server/notify.ts` décide quoi pousser (bot bloqué sur
@@ -298,7 +298,7 @@ Comment Sagax obtient les droits, en réutilisant le mécanisme existant
 session de connexion : le serveur ne tient pas le jeton de l'appelant. La
 téléphonie réutilise donc la **délégation de routine** que la personne détient
 déjà (émise automatiquement à sa connexion depuis #149,
-`server/routine-run-as.ts`). Aucun nouveau type de délégation, aucun
+`server/routines/routine-run-as.ts`). Aucun nouveau type de délégation, aucun
 changement de délégation côté Perspicax. Pendant l'appel, elle sert aux
 outils Twilio de la ligne et aux tours du bot (les autres profils Perspicax du
 bot, exactement comme une routine). Elle n'est utilisable qu'après

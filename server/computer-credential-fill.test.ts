@@ -4,14 +4,14 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { botVaultPrincipal, vaultHandle } from "../shared/credential-vault.ts";
-import { REDACTED_CREDENTIAL } from "./credential-fill.ts";
-import { CredentialVault, LOCAL_VAULT_PRINCIPAL } from "./credential-vault.ts";
+import { REDACTED_CREDENTIAL } from "./vault/credential-fill.ts";
+import { CredentialVault, LOCAL_VAULT_PRINCIPAL } from "./vault/credential-vault.ts";
 import {
   computerFillResolverFor,
   fillComputerField,
   parseComputerFillArguments,
 } from "./computer-credential-fill.ts";
-import { noteFilledSecret, redactFilledSecrets, resetFilledSecrets } from "./filled-secret-guard.ts";
+import { noteFilledSecret, redactFilledSecrets, resetFilledSecrets } from "./vault/filled-secret-guard.ts";
 import type { VaultKeySource } from "./mcp-oauth.ts";
 
 const KEY: VaultKeySource = { kind: "key", key: Buffer.alloc(32, 7) };

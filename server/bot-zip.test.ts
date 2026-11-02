@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DATA_DIR } from "./config.ts";
 import { Store, type BotRecord } from "./store.ts";
-import { RoutineManager } from "./routines.ts";
+import { RoutineManager } from "./routines/routines.ts";
 import { botPluginsWithMarketplaces } from "./testing/plugin-stores.ts";
 import { BOT_FIELD_POLICY, BotZipError, importBotZip, inspectBotZip, planBotZip, previewBotZip, writeBotZip, type BotZipHost } from "./bot-zip.ts";
 import { installSkill, listSkills, setSkillEnabled } from "./skills.ts";

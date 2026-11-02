@@ -22,9 +22,9 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
         memoryManagerOpen: false,
       };
     case "showChat":
-      return state.activeView === "chat" && !state.pluginsOpen
+      return state.activeView === "chat" && !state.pluginsOpen && !state.memoryManagerOpen && !state.orgImportOpen && !state.archivedBotsOpen
         ? state
-        : { ...state, activeView: "chat", pluginsOpen: false, orgImportStaged: null };
+        : { ...state, activeView: "chat", pluginsOpen: false, memoryManagerOpen: false, orgImportStaged: null, orgImportOpen: false, archivedBotsOpen: false };
     case "showCode":
       return {
         ...state,
@@ -86,10 +86,10 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
         botWizard: null,
       };
     case "showArchivedBots":
-      // 2026-11-01 (lot 5): archived bots as a content-frame list, not a window.
+      // Restored centred window (was a portal dialog before UX lot 5).
       return {
         ...state,
-        activeView: "archived-bots",
+        archivedBotsOpen: true,
         settingsOpen: false,
         personPanelId: null,
         computerOpen: false,
@@ -103,12 +103,15 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
         shortcutsOpen: false,
         personaEditor: null,
         botWizard: null,
+        orgImportOpen: false,
       };
+    case "closeArchivedBots":
+      return state.archivedBotsOpen ? { ...state, archivedBotsOpen: false } : state;
     case "showOrgImport":
-      // 2026-11-01 (lot 6): bring bots from a solo Sagax as a content view.
+      // Restored centred DialogLayer window (was a <dialog> before UX lot 6).
       return {
         ...state,
-        activeView: "org-import",
+        orgImportOpen: true,
         orgImportStaged: action.staged ?? null,
         settingsOpen: false,
         personPanelId: null,
@@ -123,7 +126,12 @@ export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn):
         shortcutsOpen: false,
         personaEditor: null,
         botWizard: null,
+        archivedBotsOpen: false,
       };
+    case "closeOrgImport":
+      return state.orgImportOpen || state.orgImportStaged
+        ? { ...state, orgImportOpen: false, orgImportStaged: null }
+        : state;
     case "showTeamMap":
       return {
         ...state,

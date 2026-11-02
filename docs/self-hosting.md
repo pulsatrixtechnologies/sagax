@@ -1429,7 +1429,7 @@ there.
 ### Pulsatrix Flow for every member (organization server)
 
 On a server linked to Perspicax, the Claude Code plugins of Pulsatrix Flow
-come by default with membership (`server/org-flow-plugins.ts`). Perspicax
+come by default with membership (`server/org/org-flow-plugins.ts`). Perspicax
 declares them in the directory (`flow_plugins`): its own private marketplace
 (`<issuer>/flow/marketplace/marketplace.json`, built from its active signed
 Flow pack: the product `pulsatrix-flow` and the organization's configuration

@@ -17,7 +17,7 @@ import {
   type AutoComputerState,
 } from "../auto-computer.ts";
 import { MY_CHROME_PROFILE, runMyChromeTool, toolName as browserToolName } from "../browser/my-chrome/pilot.ts";
-import { browserNavigationRefusal } from "../browser-navigation.ts";
+import { browserNavigationRefusal } from "../browser/browser-navigation.ts";
 import { pickComputer } from "../computer-selection.ts";
 import type { Surface } from "../surface.ts";
 
@@ -31,7 +31,7 @@ export type SelectableComputer = {
   canCreate: boolean;
   reason?: string;
 };
-import { withCommandVariables } from "../credential-command-env.ts";
+import { withCommandVariables } from "../vault/credential-command-env.ts";
 import type { DesktopBridgeOperation } from "../desktop-bridge.ts";
 import { handleDesktopBridgeMcp } from "../desktop-bridge-tools.ts";
 import { handleMessagesMcp } from "../imessage-mcp.ts";

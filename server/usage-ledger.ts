@@ -391,7 +391,7 @@ export function usageCsv(rows: UsageRow[], prices: PriceList | null = null): str
   return lines.join("\n") + "\n";
 }
 
-// ── slice 7: the organization admin usage (server/org-admin-routes.ts) ──
+// ── slice 7: the organization admin usage (server/org/org-admin-routes.ts) ──
 
 /** The longest range the organization admin usage answers, in days. */
 export const ORG_USAGE_MAX_DAYS = 92;

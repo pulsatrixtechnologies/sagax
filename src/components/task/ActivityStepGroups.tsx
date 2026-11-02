@@ -15,6 +15,7 @@ import { t } from "@/lib/i18n";
 import { activeLocale } from "@/lib/i18n";
 import { activityWhereLabel, type BotActivityStep } from "@/lib/bot-activity";
 import { groupActivitySteps, type ActivityStepGroup } from "@/lib/activity-step-groups";
+import { stepArgs } from "@/lib/step-label";
 import { StepRow } from "../StepRow";
 
 function WhereMark({ where }: { where: NonNullable<BotActivityStep["where"]> }) {
@@ -30,9 +31,26 @@ function timeOf(at: number): string {
   return new Date(at).toLocaleTimeString(activeLocale(), { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
+/** A call's arguments: readable pairs with opaque ids shown as "…" (the
+ * value in the tooltip), else the text as it came. */
+function StepInput({ input }: { input: string }) {
+  const pairs = stepArgs(input);
+  if (!pairs.length) return <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-ink-secondary">{input}</pre>;
+  return (
+    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 font-mono text-[11px]">
+      {pairs.map((pair) => (
+        <div key={pair.key} className="contents">
+          <dt className="text-ink-tertiary">{pair.key}</dt>
+          <dd className="min-w-0 break-words text-ink-secondary" title={pair.full}>{pair.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /** Every call of the group: when, its summary, its arguments; the tool's
  * id once at the top. */
-function GroupDetail({ group }: { group: ActivityStepGroup }) {
+export function GroupDetail({ group }: { group: ActivityStepGroup }) {
   return (
     <div data-activity-technical={group.id} className="flex flex-col gap-1.5 text-[12px]">
       <div className="break-all font-mono text-[11.5px] text-ink-tertiary">{group.steps[0]!.name}</div>
@@ -44,7 +62,8 @@ function GroupDetail({ group }: { group: ActivityStepGroup }) {
               {step.ok === false && <span className="shrink-0 text-danger">{t("step.turn.failed.one")}</span>}
               {step.summary && <span className="min-w-0 truncate text-ink" title={group.title ?? step.summary}>{step.summary}</span>}
             </div>
-            {step.input && <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-ink-secondary">{step.input}</pre>}
+            {step.input && <StepInput input={step.input} />}
+            {step.ok === false && step.error && <pre data-activity-step-error className="max-h-32 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-danger">{step.error}</pre>}
             {step.files && step.files.length > 0 && <div className="truncate font-mono text-[11px] text-ink-secondary">{step.files.join(", ")}</div>}
           </li>
         ))}

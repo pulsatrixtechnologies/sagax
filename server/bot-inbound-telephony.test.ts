@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { TRIGGER_SOURCES, TRIGGER_SOURCE_TYPES, isRelaySource } from "../shared/trigger-sources.ts";
-import { BOT_MAIL_ASSERTION_ACTORS, botmailRunConfined } from "./bot-inbound-mail.ts";
+import { BOT_MAIL_ASSERTION_ACTORS, botmailRunConfined } from "./mail/bot-inbound-mail.ts";
 import {
   TELEPHONY_ASSERTION_ACTORS,
   TELEPHONY_BODY_MAX,
@@ -23,7 +23,7 @@ import {
   type TelephonyRouteDeps,
 } from "./bot-inbound-telephony.ts";
 import type { ConsoleAssertion } from "./oidc-rp.ts";
-import { ORG_MEMBER_ASSERTION_ACTORS } from "./org-member-routes.ts";
+import { ORG_MEMBER_ASSERTION_ACTORS } from "./org/org-member-routes.ts";
 import { matchSourceFilters, verifySource } from "./trigger-sources.ts";
 import { WebhookManager, maskedCaller } from "./webhooks.ts";
 

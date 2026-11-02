@@ -15,7 +15,7 @@ import { promisify } from "node:util";
 
 import { augmentedPath, resolveCliSpawn } from "./env-path.ts";
 import { DATA_DIR } from "./config.ts";
-import { commandVariablesScript, withStdinCommandVariables } from "./credential-command-env.ts";
+import { commandVariablesScript, withStdinCommandVariables } from "./vault/credential-command-env.ts";
 import { SPAWNED_PROXIES } from "./proxy-paths.ts";
 
 const run = promisify(execFile);
@@ -1304,7 +1304,7 @@ export async function containerExec(
   options: {
     timeoutSeconds?: number; runtime?: Runtime; exec?: ContainerExecRunner;
     /** The command variables the person exposed to this bot
-     * (server/credential-command-env.ts): exported from a script on stdin,
+     * (server/vault/credential-command-env.ts): exported from a script on stdin,
      * never on the command line. */
     commandVariables?: Record<string, string>;
   } = {},

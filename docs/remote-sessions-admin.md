@@ -67,9 +67,9 @@ of the host's own key, never a hostname or a serial: E3).
   host is in its own field, with the reason and the UTC time (`atUtc`). The
   legacy consent revoke writes the same kind; it is open to the person who
   recorded the consent and to an admin.
-- Server: `server/remote-unattended-hosts.ts` (list, open, revoke),
+- Server: `server/remote-support/remote-unattended-hosts.ts` (list, open, revoke),
   `shared/remote-unattended-host.ts` (rows, states, what may be opened),
-  `openUnattendedSession` in `server/remote-support-local.ts`.
+  `openUnattendedSession` in `server/remote-support/remote-support-local.ts`.
 
 Perspicax tools (names frozen with Perspicax): `remote_support_hosts` (answer
 `{ hosts: [{ host_id, hostname, org, scope, created_at, expires_at,

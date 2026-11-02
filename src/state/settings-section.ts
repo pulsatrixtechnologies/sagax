@@ -48,6 +48,8 @@ export type AppSettingsSection =
   | "workspaces"
   /** This app's updates and the pre-release channel (0.5.6; were in General). */
   | "updates"
+  /** About this app (modal; last under App, like Grok Bot). */
+  | "about"
   /** Pages a bot proposed and the person published (src/components/PublishedPages.tsx). */
   | "pages";
 

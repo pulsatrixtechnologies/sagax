@@ -31,7 +31,7 @@ const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "fr");
 
-/** Lot 5: Connect apps fills the content frame (no modal backdrop). */
+/** Capabilities gallery chrome: the panel brings its own centred modal. */
 function Frame({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-[100dvh] w-full flex-col bg-app text-ink" data-gallery-sample="" data-gallery-frame="">

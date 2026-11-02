@@ -157,7 +157,7 @@ describe("remote file browser: download", () => {
     act(() => root.render(createElement(RemoteSessionActions, { botId: "melonie", view })));
     await click("[data-remote-action=download]");
     expect(dialog()?.getAttribute("data-remote-file-browser")).toBe("download");
-    expect(dialog()?.getAttribute("role")).toBe("region");
+    expect(dialog()?.getAttribute("role")).toBe("dialog");
     expect(calls[0]).toEqual({ action: "ls", body: { path: "" } });
     expect(names()).toEqual(["Documents", "notes.txt"]);
     expect([...document.querySelectorAll("[data-remote-crumb]")].map((crumb) => crumb.textContent)).toEqual(["C:", "Users", "usager"]);

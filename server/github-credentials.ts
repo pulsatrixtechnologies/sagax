@@ -154,7 +154,7 @@ export interface CredentialSecret {
 }
 
 export interface CredentialMigrationInput {
-  /** The organization's former list (server/org-github-tokens.ts). */
+  /** The organization's former list (server/org/org-github-tokens.ts). */
   orgTokens?: { list(): Array<{ id: string; label: string }>; tokenFor(id: string): string | undefined; discard(): void };
   /** The former per-marketplace tokens (server/marketplace-tokens.ts). */
   marketplaceTokens?: { all(): Array<{ bot: string; source: string; token: string; addedAt: number; addedBy?: string }>; discard(): void };

@@ -12,8 +12,8 @@
 // not expose the routes.
 import { resolveCompanionControlPlaneURL } from "../electron/companion-account-service.mjs";
 import { ControlPlaneError, createControlPlaneClient, normalizeAccountEmail, type ControlPlaneClient } from "../electron/control-plane-client.mjs";
-import type { EmailOtpStore } from "./email-otp.ts";
-import type { Mailer } from "./mailer.ts";
+import type { EmailOtpStore } from "./mail/email-otp.ts";
+import type { Mailer } from "./mail/mailer.ts";
 import type { Scope } from "./sessions.ts";
 
 /** Who may sign in. `a@b.com` is that address; `@b.com` is everyone at b.com. */
@@ -120,8 +120,8 @@ export function createEmailSignIn(options: {
 
 // Sign in with your email on a server that emails the code itself (no
 // outside account service): the code comes from `EmailOtpStore` and is sent
-// through whatever `Mailer` this server has configured (server/mailer.ts,
-// server/mail-config.ts). Same allow-list, same session outcome as
+// through whatever `Mailer` this server has configured (server/mail/mailer.ts,
+// server/mail/mail-config.ts). Same allow-list, same session outcome as
 // `createEmailSignIn` above; only the source of the code and the mail
 // differs, which is why both share `EmailSignIn`.
 export function createServerEmailSignIn(options: {

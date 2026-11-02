@@ -62,12 +62,12 @@ describe("Persona editor state", () => {
       botWizard: null,
     });
     const fromArchived = reducer(
-      { ...withBot, activeView: "archived-bots" as const },
+      { ...withBot, archivedBotsOpen: true },
       { type: "openPersonaEditor", botId: "pepper", section: "soul" },
     );
     expect(fromArchived).toMatchObject({
       personaEditor: { botId: "pepper", section: "soul" },
-      activeView: "chat",
+      archivedBotsOpen: false,
     });
   });
 });

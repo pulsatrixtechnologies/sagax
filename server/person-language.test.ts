@@ -41,7 +41,7 @@ describe("personLanguageOf (push and rule text)", () => {
 
 describe("a routine run's thread title date", () => {
   it("follows the person's language", async () => {
-    const { runTitleDate } = await import("./routines.ts");
+    const { runTitleDate } = await import("./routines/routines.ts");
     const at = Date.UTC(2026, 9, 26, 15, 30);
     expect(runTitleDate(at, "en")).toMatch(/Oct/);
     expect(runTitleDate(at, "fr")).toMatch(/oct\./);

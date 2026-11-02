@@ -28,7 +28,7 @@ import { catalogProfileFromEnv } from "./agents-catalog.ts";
 import { harnessClientFromEnv } from "./agents-client.ts";
 import type { Json } from "./agents-client.ts";
 import type { ToolCallContext, ToolCallResult } from "./agents-call-types.ts";
-import { remoteSupportFromEnv } from "../remote-support-local.ts";
+import { remoteSupportFromEnv } from "../remote-support/remote-support-local.ts";
 import { callCoreTool } from "./agents-tools/core.ts";
 import { callRoomsTool } from "./agents-tools/rooms.ts";
 import { callTeamTool } from "./agents-tools/team.ts";

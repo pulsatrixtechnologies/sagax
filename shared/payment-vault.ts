@@ -1,7 +1,7 @@
 // Cards, addresses and contacts in the person's own vault, and the words of
 // a purchase approval. A card number and its security code never appear in
 // a listing, a tool result or these texts. The browser fill types them
-// (server/credential-vault.ts) only after the person approved the purchase.
+// (server/vault/credential-vault.ts) only after the person approved the purchase.
 //
 // Pure: no disk, no clock, no node built-ins.
 

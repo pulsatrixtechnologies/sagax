@@ -5,8 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../DesktopCapabilities", () => ({
   useDesktopCapabilities: () => ({}),
-  useCaptionChrome: () => ({ padClass: "" }),
+  useCaptionChrome: () => ({ dragProps: {}, controlsShiftStyle: undefined, padClass: "" }),
   useMacInsetChrome: () => ({ macInset: false, browser: false }),
+}));
+
+vi.mock("../ConfirmProvider", () => ({
+  confirmAsync: vi.fn(async () => true),
+  useConfirm: () => vi.fn(async () => true),
+  discardConfirmRequest: (body?: string) => ({ title: "Discard", body }),
 }));
 
 vi.mock("@/state/store", async () => {
@@ -14,7 +20,7 @@ vi.mock("@/state/store", async () => {
   return {
     ...actual,
     useStore: () => ({
-      state: actual.initialState,
+      state: { ...actual.initialState, activeView: "memory", memoryManagerOpen: true },
       dispatch: vi.fn(),
     }),
     useStoreOptional: () => null,
@@ -29,10 +35,19 @@ vi.mock("@/state/store", async () => {
         };
       }
       if (path.startsWith("/api/bots/atlas/memory") && !path.includes("/file")) {
-        return { botId: "atlas", workspacePath: "/tmp", index: { lines: 0, bytes: 0, maxLines: 200, maxBytes: 24000, loadedLines: 0, loadedBytes: 0, truncated: false, hash: "h" }, topics: [{ path: "memory/dining.md", name: "dining.md", bytes: 12, modifiedAt: 1 }], logs: [] };
+        return {
+          botId: "atlas",
+          workspacePath: "/tmp",
+          index: { lines: 0, bytes: 0, maxLines: 200, maxBytes: 24000, loadedLines: 0, loadedBytes: 0, truncated: false, hash: "h" },
+          topics: [
+            { path: "memory/dining.md", name: "dining.md", bytes: 12, modifiedAt: 1 },
+            { path: "memory/travel.md", name: "travel.md", bytes: 8, modifiedAt: 2 },
+          ],
+          logs: [],
+        };
       }
       if (path.includes("/memory/file")) {
-        return { path: "memory/dining.md", text: "# Dining\n\n```json\n{\"likes\":\"pasta\"}\n```\n", hash: "abc", exists: true };
+        return { path: "memory/dining.md", text: "# Dining\n\nSee [[Travel]].\n\n```json\n{\"likes\":\"pasta\"}\n```\n", hash: "abc", exists: true };
       }
       if (path.startsWith("/api/me/memory/tree")) {
         return {
@@ -61,7 +76,7 @@ vi.mock("../panel-slot", () => ({
 import { setLocale } from "@/lib/i18n";
 import { MemoryManagerPanel } from "./MemoryManagerPanel";
 
-describe("MemoryManagerPanel", () => {
+describe("MemoryManagerPanel page", () => {
   let host: HTMLDivElement;
   let root: Root;
 
@@ -77,65 +92,54 @@ describe("MemoryManagerPanel", () => {
     host.remove();
   });
 
-  it("lists sources then opens a bot browse and a note page", async () => {
+  it("opens as a main page with sources list", async () => {
     await act(async () => {
       root.render(createElement(MemoryManagerPanel));
     });
     await act(async () => { await Promise.resolve(); });
-    expect(host.querySelector("[data-memory-manager-panel]")).not.toBeNull();
-    expect(host.querySelector('[data-memory-source="bot:atlas"]')).not.toBeNull();
-    expect(host.querySelector('[data-memory-source="perspicax"]')).not.toBeNull();
-
-    await act(async () => {
-      (host.querySelector('[data-memory-source="bot:atlas"]') as HTMLButtonElement).click();
-    });
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    expect(host.querySelector("[data-memory-browse]")).not.toBeNull();
-    expect(host.querySelector("[data-memory-search]")).not.toBeNull();
-
-    const row = host.querySelector('[data-memory-note-row="memory/dining.md"] button');
-    expect(row).not.toBeNull();
-    await act(async () => { (row as HTMLButtonElement).click(); });
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    expect(host.querySelector("[data-memory-note]")).not.toBeNull();
-    expect(host.querySelector("[data-memory-json-tree]")).not.toBeNull();
+    expect(host.querySelector("[data-memory-manager-page]")).not.toBeNull();
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+    expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
+    expect(host.textContent).toContain("Memory");
+    expect(host.textContent).toContain("Atlas");
   });
 
-  it("opens Perspicax browse, note edit fields, and the move page", async () => {
+  it("lists notes then opens a note from the list", async () => {
     await act(async () => {
       root.render(createElement(MemoryManagerPanel));
     });
-    await act(async () => { await Promise.resolve(); });
-    await act(async () => {
-      (host.querySelector('[data-memory-source="perspicax"]') as HTMLButtonElement).click();
-    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    const source = host.querySelector('[data-memory-source="bot:atlas"]') as HTMLButtonElement;
+    expect(source).not.toBeNull();
+    await act(async () => { source.click(); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(host.querySelector("[data-memory-browse]")).not.toBeNull();
-
-    const row = host.querySelector('[data-memory-note-row="n1"] button');
+    const row = host.querySelector('[data-memory-note-row]') as HTMLElement;
     expect(row).not.toBeNull();
-    await act(async () => { (row as HTMLButtonElement).click(); });
+    const open = row.querySelector("button") as HTMLButtonElement;
+    await act(async () => { open.click(); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(host.querySelector("[data-memory-note]")).not.toBeNull();
+    expect(host.querySelector("[data-memory-read-body], [data-memory-json-tree]")).not.toBeNull();
+  });
 
+  it("map view shows nodes and a note click opens the note", async () => {
     await act(async () => {
-      const edit = [...host.querySelectorAll("button")].find((button) => /Edit|Modifier/i.test(button.textContent || ""));
-      edit?.click();
+      root.render(createElement(MemoryManagerPanel));
     });
-    expect(host.querySelector("[data-memory-rename]")).not.toBeNull();
-    expect(host.querySelector("[data-memory-tags]")).not.toBeNull();
-
-    await act(async () => {
-      const cancel = [...host.querySelectorAll("button")].find((button) => /Cancel|Annuler/i.test(button.textContent || ""));
-      cancel?.click();
-    });
-    await act(async () => {
-      const move = [...host.querySelectorAll("button")].find((button) => /Move|Déplacer/i.test(button.textContent || ""));
-      move?.click();
-    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    const source = host.querySelector('[data-memory-source="bot:atlas"]') as HTMLButtonElement;
+    await act(async () => { source.click(); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    const mapToggle = Array.from(host.querySelectorAll("button")).find((button) => button.textContent?.includes("Map"));
+    expect(mapToggle).toBeTruthy();
+    await act(async () => { mapToggle!.click(); });
     await act(async () => { await Promise.resolve(); });
-    expect(host.querySelector("[data-memory-move]")).not.toBeNull();
-    expect(host.querySelector("[data-memory-move-folder]")).not.toBeNull();
-    expect(host.querySelector("[data-memory-move-tier]")).not.toBeNull();
+    expect(host.querySelector("[data-memory-map]")).not.toBeNull();
+    const noteNode = host.querySelector('[data-memory-map-node="note"]') as HTMLButtonElement;
+    expect(noteNode).not.toBeNull();
+    await act(async () => { noteNode.click(); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(host.querySelector("[data-memory-note]")).not.toBeNull();
   });
 });

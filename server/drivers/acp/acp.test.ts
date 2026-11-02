@@ -271,6 +271,7 @@ describe("ACP turns (fake CLI)", () => {
     delete process.env.FAKE_ACP_REASONING_FAIL_TIMES;
     delete process.env.FAKE_ACP_REASONING_COUNT_FILE;
     delete process.env.FAKE_ACP_REASONING_LEAK_TEXT;
+    delete process.env.FAKE_ACP_REASONING_TOOL_FIRST;
     delete process.env.SAGAX_ACP_REASONING_CONTINUE_MAX;
     delete process.env.FAKE_ACP_RPC_FAILURE_AFTER_USAGE;
     delete process.env.FAKE_ACP_LOAD_ERROR;
@@ -2603,6 +2604,21 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(Number(readFileSync(countFile, "utf8"))).toBe(3);
     // the session was evicted so the next turn starts clean
     expect(instance.adapter.hasSession("t-reason-giveup")).toBe(false);
+  });
+
+  it("a reasoning_only empty response after finished tool calls is still nudged (routine turns)", async () => {
+    // Prod 2026-11-02: every routine turn ran tools before Grok answered
+    // reasoning_only, so the nudge (gated on "no item yet") never fired and
+    // the run failed. Finished tool calls do not make a nudge repeat work.
+    process.env.FAKE_ACP_REASONING_FAIL_TIMES = "1";
+    process.env.FAKE_ACP_REASONING_TOOL_FIRST = "1";
+    await create(GrokAgentDriver, "reasoning-only-error");
+    await instance.adapter.sendTurn({ threadId: "t-reason-after-tools", text: "go" });
+    const done = await recorder.until((e) => e.type === "turn.completed");
+    expect(done).toMatchObject({ ok: true, stopReason: null });
+    expect(recorder.events.some((e) => e.type === "item.completed" && (e as any).itemType === "tool")).toBe(true);
+    expect(recorder.events.some((e) => e.type === "item.completed" && (e as any).itemType === "assistant_text")).toBe(true);
+    expect(recorder.events.some((e) => e.type === "runtime.error")).toBe(false);
   });
 
   it("a genuine internal error without reasoning_only still surfaces (no swallowing)", async () => {

@@ -4,6 +4,7 @@
  * Playwright, no window: the real SettingsModal in the gallery
  * (src/gallery/settings-pages.html?section=engines, synthetic bots).
  * Shots: page overview, section select, bulk confirmation.
+ * Also asserts list controls do not overlap at the requested width.
  * Usage: node scripts/capture-bot-models-page.mjs [--out DIR] [--port N]
  *   [--lang en] [--prefix after] [--width 1100] [--scheme dark|light]
  */
@@ -85,42 +86,57 @@ try {
   await page.locator("[data-bot-models-bulk-bar]").scrollIntoViewIfNeeded();
   await shot("2-section-selected");
   await page.locator("[data-bot-models-bulk-auto]").click({ force: true });
-  await page.waitForSelector("[data-bot-models-bulk-confirm]", { timeout: 10_000 });
+  // ConfirmDialog portals to body; the summary lives inside that portal.
+  await page.waitForSelector("[data-bot-models-bulk-summary]", { timeout: 10_000 });
   await shot("3-bulk-confirm");
   const facts = await page.evaluate(() => {
+    const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    const boxOf = (node) => {
+      const r = node.getBoundingClientRect();
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+    };
     const rows = [...document.querySelectorAll("[data-bot-models-row]")].map((node) => node.getAttribute("data-bot-models-row"));
     const sections = [...document.querySelectorAll("[data-bot-models-section]")].map((node) => node.getAttribute("data-bot-models-section"));
     const lines = [...document.querySelectorAll("[data-bot-models-bulk-line]")].map((node) => node.getAttribute("data-bot-models-bulk-line"));
     const tables = document.querySelectorAll("[data-bot-models-table]").length;
+    const lists = document.querySelectorAll("[data-bot-models-list]").length;
     const cols = [...document.querySelectorAll("[data-bot-models-col]")].map((node) => node.getAttribute("data-bot-models-col"));
-    // Column left edges must match across the first bot row of every section.
-    const bySection = new Map();
+    const nativeSelects = document.querySelectorAll("[data-bot-models-effort] select").length;
+    const overlapHits = [];
+    const unreachable = [];
     for (const row of document.querySelectorAll("[data-bot-models-row]")) {
-      const section = row.getAttribute("data-bot-models-section-of") || "";
-      if (bySection.has(section)) continue;
-      const cells = [...row.children].map((cell) => {
-        const box = cell.getBoundingClientRect();
-        return { left: Math.round(box.left), width: Math.round(box.width) };
-      });
-      bySection.set(section, cells);
+      const id = row.getAttribute("data-bot-models-row") || "";
+      const cells = [
+        row.querySelector("[data-bot-models-model]"),
+        row.querySelector("[data-bot-models-effort]"),
+        row.querySelector("[data-bot-models-payer]"),
+        row.querySelector("[data-bot-models-backup]"),
+      ].filter(Boolean);
+      const boxes = cells.map((cell) => ({ id, kind: cell.getAttributeNames().find((name) => name.startsWith("data-bot-models-")) || "cell", ...boxOf(cell) }));
+      for (let i = 0; i < boxes.length; i += 1) {
+        if (boxes[i].width < 4 || boxes[i].height < 4) unreachable.push({ id, kind: boxes[i].kind, box: boxes[i] });
+        for (let j = i + 1; j < boxes.length; j += 1) {
+          if (overlaps(boxes[i], boxes[j])) overlapHits.push({ id, a: boxes[i].kind, b: boxes[j].kind, aBox: boxes[i], bBox: boxes[j] });
+        }
+      }
+      const focusable = row.querySelectorAll("button, [data-pill-select], [data-control], input[type=checkbox]");
+      if (focusable.length < 2) unreachable.push({ id, kind: "row-controls", count: focusable.length });
     }
-    const layouts = [...bySection.entries()].map(([section, cells]) => ({ section, cells }));
-    const reference = layouts[0]?.cells ?? [];
-    const aligned = layouts.every((layout) =>
-      layout.cells.length === reference.length
-      && layout.cells.every((cell, index) =>
-        cell.left === reference[index].left && cell.width === reference[index].width));
     return {
       rows,
       sections,
       lines,
       tables,
+      lists,
       cols,
-      columnLayouts: layouts,
-      columnsAligned: aligned,
+      nativeSelects,
+      overlapHits,
+      unreachable,
       hasDefaults: Boolean(document.querySelector("[data-bot-models-page]")?.textContent?.includes("Defaults")
         || document.querySelector("[data-bot-models-page]")?.textContent?.includes("Défauts")),
       selected: [...document.querySelectorAll("[data-bot-models-select]:checked")].map((node) => node.getAttribute("data-bot-models-select")),
+      bulkEffort: Boolean(document.querySelector("[data-bot-models-bulk-effort]")),
+      bulkBackup: Boolean(document.querySelector("[data-bot-models-bulk-backup]")),
     };
   });
   await writeFile(join(outDir, `${prefix}-capture.json`), JSON.stringify({ lang, scheme, skin, width, facts }, null, 2) + "\n");
@@ -129,9 +145,13 @@ try {
   if (!facts.sections.includes("Clients")) throw new Error("Clients section missing");
   if (facts.lines.length < 1) throw new Error("bulk confirm had no lines");
   if (!facts.hasDefaults) throw new Error("Defaults for new bots missing on solo gallery");
-  if (facts.tables !== 1) throw new Error(`expected one shared bot-models table, got ${facts.tables}`);
-  if (facts.cols.length !== 6) throw new Error(`expected 6 colgroup cols, got ${facts.cols.length}`);
-  if (!facts.columnsAligned) throw new Error(`columns not aligned across sections: ${JSON.stringify(facts.columnLayouts)}`);
+  if (facts.tables !== 1) throw new Error(`expected one shared bot-models list marker, got ${facts.tables}`);
+  if (facts.lists !== 1) throw new Error(`expected one bot-models list, got ${facts.lists}`);
+  if (facts.cols.length !== 6) throw new Error(`expected 6 column labels, got ${facts.cols.length}`);
+  if (facts.nativeSelects !== 0) throw new Error(`expected no native effort selects, got ${facts.nativeSelects}`);
+  if (facts.overlapHits.length) throw new Error(`controls overlap at width ${width}: ${JSON.stringify(facts.overlapHits)}`);
+  if (facts.unreachable.length) throw new Error(`unreachable controls at width ${width}: ${JSON.stringify(facts.unreachable)}`);
+  if (!facts.bulkEffort || !facts.bulkBackup) throw new Error("bulk bar missing effort or backup action");
 } catch (error) {
   console.error(error);
   console.error(viteLog.slice(-2000));

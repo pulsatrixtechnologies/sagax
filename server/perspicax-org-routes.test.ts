@@ -1,7 +1,7 @@
 // Who reaches /api/org/routine-delegation (slice 6, fix 2 contract item 5).
 // The auth gate answers first (403 for a session-less local request under
 // service trust, 401 for a session that expired or was revoked; see
-// server/org-routines.e2e.test.ts); this is what the route itself answers.
+// server/org/org-routines.e2e.test.ts); this is what the route itself answers.
 import { describe, expect, it } from "vitest";
 
 import { createPerspicaxOrgRoutes } from "./perspicax-org-routes.ts";

@@ -118,7 +118,7 @@ export function useComposerSession({
   const modeBot = group ? undefined : bot;
   const trustedThreadAccess = Boolean(!remoteClient && window.ogb?.approvals && capabilities.host.packaged);
   // Organization server: the bot's owner grants Full over HTTP while the
-  // organization allows it (src/lib/full-access.ts, server/org-full-access.ts).
+  // organization allows it (src/lib/full-access.ts, server/org/org-full-access.ts).
   const perspicaxOrg = usePerspicaxOrg();
   const viewerId = config?.viewer?.principalId ?? null;
   const orgFullAccess = orgFullAccessFor(perspicaxOrg, modeBot, viewerId);

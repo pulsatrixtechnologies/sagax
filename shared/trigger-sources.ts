@@ -182,7 +182,7 @@ export const TRIGGER_SOURCES: Record<TriggerSourceType, TriggerSourceDefinition>
   },
   // 2026-10-21 (B21 / iOS CO5): mail sent to the bot's own address,
   // `<name>@<inbound domain>`, received by Perspicax and relayed to this
-  // server (server/bot-inbound-mail.ts). It only wakes a routine; replies go
+  // server (server/mail/bot-inbound-mail.ts). It only wakes a routine; replies go
   // through a mail connector's send tool and its approval card.
   botmail: {
     type: "botmail",

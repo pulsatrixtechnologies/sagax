@@ -713,7 +713,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // a ConnectWise widget's change: an approval card for whoever may answer it (server/cw-widget-actions.ts)
   { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/cw-actions$/ },
   // an email draft's Send: an approval card for the bot's owner, then the send
-  // once they allow it (server/email-draft-send.ts)
+  // once they allow it (server/mail/email-draft-send.ts)
   { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/email-drafts$/ },
   { methods: ["GET"], path: /^\/api\/threads\/[\w-]+\/email-drafts\/[\w-]+$/ },
   // published pages: a person's own pages only (server/routes/published-pages.ts
@@ -802,7 +802,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/voice\/speak$/ },
   // routines: a scheduled message; the input carries no cwd or permission field
   { methods: ["GET"], path: /^\/api\/routines$/ },
-  // the routine modal's "Runs as" choices (server/routine-run-as.ts)
+  // the routine modal's "Runs as" choices (server/routines/routine-run-as.ts)
   { methods: ["GET"], path: /^\/api\/routines\/run-as-options$/ },
   { methods: ["POST"], path: /^\/api\/routines$/ },
   { methods: ["PATCH", "DELETE"], path: /^\/api\/routines\/[\w-]+$/ },
@@ -898,7 +898,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // A bot's login request card: the handler checks the card is the caller's.
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/vault-cards\/[\w-]+\/(?:grant|dismiss|onepassword)$/ },
   // The person's own memory sync token for the desktop's Settings > Memory
-  // (server/perspicax-memory-sync-token.ts): the session's own sub only.
+  // (server/memory/perspicax-memory-sync-token.ts): the session's own sub only.
   { methods: ["GET", "POST"], path: /^\/api\/me\/memory-sync-token$/, feature: "orgDirectory" },
   // Memory manager (2026-11-02): sources catalog for every signed-in person;
   // Perspicax note proxy is session + own identity only (handler).

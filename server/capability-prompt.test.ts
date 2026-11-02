@@ -46,6 +46,14 @@ describe("the same instructions for every engine, budgeted per capability", () =
     input.read = () => { throw new Error("must not open"); };
     expect(capabilityPrompt("codex", [{ key: "packing", name: "Packing", files: [input] }]).byCapability.packing.skills).toBe(1);
   });
+  it("keeps chat engines on the index for a cold turn (indexOnly)", () => {
+    const input = file("ship");
+    input.read = () => { throw new Error("must not open on cold"); };
+    const prompt = capabilityPrompt("grok", [{ key: "packing", name: "Packing", files: [input] }], { managedTools: true, indexOnly: true });
+    expect(prompt.text).toContain("/workspace/sagax-plugins/packing/skills/ship/SKILL.md");
+    expect(prompt.text).not.toContain("Verify the package.");
+    expect(prompt.text).toContain("file index");
+  });
   it("counts only the kinds that reached the prompt when another part is omitted", () => {
     const prompt = capabilityPrompt("grok", [{ key: "mixed", name: "Mixed", files: [
       file("small"), { ...file("large-agent", "x".repeat(4_000)), kind: "agent" },

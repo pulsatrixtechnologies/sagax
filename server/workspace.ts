@@ -872,6 +872,11 @@ export const MEMORY_ROUTING_GUIDANCE =
   " and is hidden from you once the day has passed). Start each memory/<topic>.md with a short frontmatter block:" +
   " title, a one-line description, and aliases — the other words someone might use for the topic — because notes are found by matching words.";
 
+/** 2.4 (b): on a withheld-host-tools turn the engine's Bash/Read/… are off;
+ * say which tools replace them so the model does not invent absolute server paths. */
+export const WITHHELD_HOST_TOOLS_PROMPT =
+  " Bash, Read, Grep, Glob, Write and Edit are not available on this turn; the shell is `sagax-environment` `run_command`, and file reads are `read_file` (sandbox) or `workspace_read` (the bot's folder).";
+
 /** The bot's topic files as an index for the prompt: name, title,
  * description and aliases from each file's frontmatter. Empty without topics. */
 export function memoryTopicIndex(botId: string): string {
@@ -891,11 +896,14 @@ function withCompany(text: string, company: string | undefined): string {
  * vector the moment a bot copies untrusted text into it. `company` is
  * memory/company.md for this person's bots only. `audience` hides a fact
  * stamped for a narrower place. */
-export function memorySystemPrompt(botId: string, opts: { managedWrites?: boolean; fileTools?: boolean; enabled?: boolean; company?: string; audience?: MemoryDestination } = {}): string {
+export function memorySystemPrompt(botId: string, opts: { managedWrites?: boolean; fileTools?: boolean; withholdHostTools?: boolean; enabled?: boolean; company?: string; audience?: MemoryDestination } = {}): string {
   if (opts.enabled === false) return "";
   const memory = loadMemory(botId, opts.audience ? { audience: opts.audience } : {});
-  const memoryFile = join(workspaceDir(botId), "MEMORY.md");
-  const topicDir = join(workspaceDir(botId), "memory");
+  // Absolute server paths only when native file tools are on and not withheld
+  // (organization / sandbox turns get relative MEMORY.md / memory/ instead).
+  const absolutePaths = opts.fileTools !== false && opts.withholdHostTools !== true;
+  const memoryFile = absolutePaths ? join(workspaceDir(botId), "MEMORY.md") : "MEMORY.md";
+  const topicDir = absolutePaths ? join(workspaceDir(botId), "memory") : "memory/";
   if (opts.fileTools === false && !opts.managedWrites) {
     if (!memory && !opts.company?.trim()) return "";
     const body = memory
@@ -907,9 +915,15 @@ export function memorySystemPrompt(botId: string, opts: { managedWrites?: boolea
   // only what the description cannot know.
   const writeGuidance = opts.managedWrites
     ? " Change MEMORY.md only with memory_update" + (opts.fileTools === false ? "; on a conflict, find the current passage with session_search." : ".")
-    : " Keep MEMORY.md short and curated. When you learn something worth keeping, update it with your file tools; remove notes that turn out to be wrong.";
+    : absolutePaths
+      ? " Keep MEMORY.md short and curated. When you learn something worth keeping, update it with your file tools; remove notes that turn out to be wrong."
+      : " Keep MEMORY.md short and curated. Read it with `workspace_read`, write it with `memory_update`; remove notes that turn out to be wrong.";
+  const howToReach = absolutePaths
+    ? ""
+    : " Read it with `workspace_read`, write it with `memory_update`.";
   const guidance =
     ` Your private long-term memory file is ${JSON.stringify(memoryFile)}.` +
+    howToReach +
     " It stays separate from a custom project working folder." +
     ` It is shown to you at the start of every session, up to ${MEMORY_MAX_LINES} lines / ${MEMORY_MAX_BYTES / 1000} KB.` +
     MEMORY_ROUTING_GUIDANCE.replace("<topicDir>", JSON.stringify(topicDir)) + writeGuidance +

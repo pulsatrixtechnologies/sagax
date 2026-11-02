@@ -12,13 +12,14 @@ import { openExternalLink } from "@/lib/app-links";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import {
-  widgetActions, widgetFields, widgetInitialValues, widgetScope, widgetString, type WidgetField, type WidgetNode, type WidgetPayload, type WidgetSettled,
+  widgetActions, widgetAppAction, widgetFields, widgetInitialValues, widgetScope, widgetString, type WidgetField, type WidgetNode, type WidgetPayload, type WidgetSettled,
   type WidgetValues,
 } from "../../../shared/widget";
 import { ASK_QUIET_BUTTON, AskSettledLine, returnFocusToComposer } from "../AskCard";
 import { WidgetBody } from "./WidgetBody";
 import { WIDGET_COMPACT_BELOW, widgetActionUrl, WidgetButton, WidgetFormProvider, WidgetGlyph, type WidgetForm } from "./WidgetControls";
 import { kids } from "./widget-style";
+import { performWidgetAppAction } from "./widget-device";
 import { newWidgetSendId, sendWidgetAction, type WidgetSendResult } from "./widget-send";
 
 /** Up to 600px on desktop, by the root's `size`, and never wider than the chat column. */
@@ -57,7 +58,7 @@ export function WidgetMessage({ botId, threadId, message }: { botId: string; thr
 
 function WidgetCard({ botId, threadId, messageId, payload }: { botId: string; threadId?: string; messageId: string; payload: WidgetPayload }) {
   const root = payload.root;
-  const { flushBotPatches } = useStore();
+  const { flushBotPatches, dispatch } = useStore();
   /** Settled by a press from this card: the line folds on the server's 2xx, ahead of the patch frame. */
   const [settledHere, setSettledHere] = useState<WidgetSettled>();
   /** The row has said it is settled since this card's last press. From then on its word is the only one, in
@@ -129,9 +130,17 @@ function WidgetCard({ botId, threadId, messageId, payload }: { botId: string; th
     const entry = actions.get(ref);
     if (!entry || sendingNow.current || pending !== undefined) return;
     if (entry.client) {
-      // opens on this device and is never sent
-      const url = widgetActionUrl(entry);
-      if (url) void openExternalLink(url);
+      const place = widgetAppAction(entry.action);
+      if (!place) {
+        // opens on this device and is never sent
+        const url = widgetActionUrl(entry);
+        if (url) void openExternalLink(url);
+        return;
+      }
+      // An in-app place opens here at once; the press is then recorded for
+      // the bot as already done (it starts no turn), so it never has to try.
+      performWidgetAppAction(dispatch, place, botId);
+      void sendWidgetAction({ botId, threadId, messageId, ref, rev: payload.rev ?? 0, sendId: newWidgetSendId() });
       return;
     }
     if (settled) return;

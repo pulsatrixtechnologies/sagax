@@ -24,6 +24,7 @@
 // Every action is the signed-in person's own (the server takes the person
 // from the session); nothing here names a bot or another person.
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { Check, ChevronDown, Cpu, Ellipsis, Globe, HardDrive, Info, Laptop, MemoryStick, Monitor, Server, type LucideIcon } from "lucide-react";
 
 import { hostPlaceKey, parseHostPlaceKey, remoteHostPlaces } from "../../../shared/remote-bot-hosts";
@@ -48,6 +49,9 @@ import { SandboxDesktopView } from "../SandboxDesktopView";
 import { RemoteScreenCard } from "../remote-session/RemoteScreenCard";
 import { ComputerScreen, type ScreenAction, type ScreenControls } from "./ComputerScreen";
 import { SandboxDesktopModal } from "./SandboxDesktopModal";
+
+/** Per-place menu actions for an unattended host in the Computer dropdown. */
+export type HostPlaceAction = "attach" | "detach";
 
 const STATS_REFRESH_MS = 5_000;
 const STATS_IDLE_REFRESH_MS = 15_000;
@@ -97,7 +101,7 @@ export function defaultScreen(bridge: DesktopBridgeStatus, place: EffectivePlace
   return { source: activeComputer(bridge, place).source, browser: place === "browser" };
 }
 
-export function OrgComputerTab({ bridge, place, computerOff, botName, botId, bot = null, threadId, inUse, initialLocal = null, browser = null, remoteHosts = [], remoteSessions = [], onPickRemoteHost }: {
+export function OrgComputerTab({ bridge, place, computerOff, botName, botId, bot = null, threadId, inUse, initialLocal = null, browser = null, remoteHosts = [], remoteCatalog = [], remoteSessions = [], onPickRemoteHost, onAttachRemoteHost, onDetachRemoteHost }: {
   bridge: DesktopBridgeStatus;
   /** The conversation, so a manual pick ends when it changes. */
   threadId?: string;
@@ -105,7 +109,7 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, bot
   inUse?: InUsePlace;
   /** This bot, for its browser's dot in the picker. */
   botId?: string;
-  /** The bot (mascot on asleep / waking screens). */
+  /** The bot (caption / callers; calm screens use a generic muted bot glyph). */
   bot?: Bot | null;
   /** The bot's Works on (Auto when unset). */
   place: EffectivePlace;
@@ -114,20 +118,28 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, bot
   initialLocal?: DesktopLocalVmStatus | null;
   /** The bot's live browser, offered as the picker's last chip. */
   browser?: ReactNode;
-  /** Enrolled hosts attached to this bot (Computer place dropdown, 2026-11-01). */
+  /** Enrolled hosts already attached to this bot. */
   remoteHosts?: UnattendedHostRow[];
+  /** Full enrolled catalog (attachable from the place menu). */
+  remoteCatalog?: UnattendedHostRow[];
   /** Connected sessions for this bot; ended ones never become places. */
   remoteSessions?: RemoteSessionView[];
-  /** Selecting a host place: open/focus so the bot works on that host. */
+  /** Selecting an attached host place: open/focus so the bot works on that host. */
   onPickRemoteHost?: (hostId: string) => void;
+  /** Attach an enrolled host to this bot from the place menu (then open). */
+  onAttachRemoteHost?: (hostId: string) => void | Promise<boolean>;
+  /** Detach a host from this bot from the place menu. */
+  onDetachRemoteHost?: (hostId: string) => void | Promise<boolean>;
 }) {
   const screen = defaultScreen(bridge, place, inUse);
   const active = { ...activeComputer(bridge, place), source: screen.source };
   const choices = computerChoices(bridge);
   const labels = usePlaceLabels();
+  const catalog = remoteCatalog.length > 0 ? remoteCatalog : remoteHosts;
   const hostPlaces = remoteHostPlaces(
     remoteHosts.map((row) => row.hostId),
-    remoteHosts,
+    catalog,
+    t("botRemoteHosts.place"),
   );
   // A manual pick holds until the bot's destination (or the conversation) changes.
   const scope = `${botId ?? ""}:${threadId ?? ""}:${inUse ?? ""}`;
@@ -138,11 +150,29 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, bot
   const setPicked = useCallback((key: string) => {
     setPick({ scope, key });
     const hostId = parseHostPlaceKey(key);
-    if (hostId) onPickRemoteHost?.(hostId);
-  }, [scope, onPickRemoteHost]);
+    if (!hostId) return;
+    const placeRow = hostPlaces.find((row) => row.hostId === hostId);
+    if (placeRow && !placeRow.attached) {
+      void Promise.resolve(onAttachRemoteHost?.(hostId));
+      return;
+    }
+    onPickRemoteHost?.(hostId);
+  }, [scope, onPickRemoteHost, onAttachRemoteHost, hostPlaces]);
+  const onHostAction = useCallback((key: string, action: HostPlaceAction) => {
+    const hostId = parseHostPlaceKey(key);
+    if (!hostId) return;
+    if (action === "attach") void Promise.resolve(onAttachRemoteHost?.(hostId)).then((ok) => {
+      if (ok !== false) setPick({ scope, key });
+    });
+    if (action === "detach") void Promise.resolve(onDetachRemoteHost?.(hostId)).then((ok) => {
+      if (ok !== false && picked === key) setPick(null);
+    });
+  }, [onAttachRemoteHost, onDetachRemoteHost, scope, picked]);
   const pickedHostId = parseHostPlaceKey(picked);
   const showingHost = pickedHostId !== null;
-  const hostRow = showingHost ? remoteHosts.find((row) => row.hostId === pickedHostId) : undefined;
+  const hostRow = showingHost
+    ? (remoteHosts.find((row) => row.hostId === pickedHostId) ?? catalog.find((row) => row.hostId === pickedHostId))
+    : undefined;
   const hostSession = showingHost
     ? remoteSessions.find((row) => row.state === "connected" && hostRow?.hostname && (row.hostname ?? "").trim().toLowerCase() === hostRow.hostname.trim().toLowerCase()) ?? null
     : null;
@@ -186,6 +216,7 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, bot
         label: placeLabel(key, technical),
         icon: Monitor,
         here: worksOnKey === key,
+        hostAttached: host.attached,
         dot: host.state === "enrolled"
           ? (remoteSessions.some((row) => row.state === "connected" && (row.hostname ?? "").trim().toLowerCase() === host.label.trim().toLowerCase()) ? "online" : "asleep")
           : "offline",
@@ -214,6 +245,7 @@ export function OrgComputerTab({ bridge, place, computerOff, botName, botId, bot
           chosen={showingHost ? hostPlaceKey(pickedHostId!) : showingBrowser ? "browser" : chosen?.key ?? null}
           onPick={setPicked}
           onRename={(key, label) => savePlaceLabel(key, label)}
+          onHostAction={onAttachRemoteHost || onDetachRemoteHost ? onHostAction : undefined}
         />
       )}
       {showingHost
@@ -273,6 +305,8 @@ export interface ScreenPickerItem {
   here?: boolean;
   /** Its state (src/lib/screen-status.ts): asleep, online or offline. */
   dot?: ScreenDot;
+  /** Unattended host already attached to this bot (place menu Attach/Remove). */
+  hostAttached?: boolean;
 }
 
 /** The one small dot of a screen, right of its name (2026-10-15: never
@@ -298,17 +332,20 @@ export function ScreenStatusDot({ dot, here = false }: { dot?: ScreenDot; here?:
  * arrows, Home and End move, Enter or Space pick, Escape and Tab close, and
  * focus comes back to the button. The list stays in the page while closed
  * (hidden), so a screen reader never meets a half-built one. */
-export function ScreenPicker({ items, chosen, onPick, onRename }: {
+export function ScreenPicker({ items, chosen, onPick, onRename, onHostAction }: {
   items: ScreenPickerItem[];
   chosen: string | null;
   onPick: (key: string) => void;
   /** Inline rename (F2 / … / right-click). Null or blank clears the label. */
   onRename?: (key: string, label: string | null) => void;
+  /** Attach / detach an unattended host from the per-place menu. */
+  onHostAction?: (key: string, action: HostPlaceAction) => void;
 }) {
   const [open, setOpen] = useState(false);
   const chosenIndex = Math.max(0, items.findIndex((item) => item.key === chosen));
   const [active, setActive] = useState(chosenIndex);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [menuKey, setMenuKey] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -320,6 +357,7 @@ export function ScreenPicker({ items, chosen, onPick, onRename }: {
   const close = useCallback((refocus: boolean) => {
     setOpen(false);
     setRenaming(null);
+    setMenuKey(null);
     if (refocus) trigger.current?.focus({ preventScroll: true });
   }, []);
   const show = (index: number) => {
@@ -327,13 +365,14 @@ export function ScreenPicker({ items, chosen, onPick, onRename }: {
     setOpen(true);
   };
   const pick = (index: number) => {
-    if (renaming) return;
+    if (renaming || menuKey) return;
     const item = items[index];
     close(true);
     if (item) onPick(item.key);
   };
   const beginRename = (item: ScreenPickerItem) => {
     if (!onRename) return;
+    setMenuKey(null);
     setRenaming(item.key);
     setDraft(item.label);
     setOpen(true);
@@ -346,6 +385,10 @@ export function ScreenPicker({ items, chosen, onPick, onRename }: {
     onRename(key, value || null);
   };
   const cancelRename = () => setRenaming(null);
+  const runHostAction = (item: ScreenPickerItem, action: HostPlaceAction) => {
+    setMenuKey(null);
+    onHostAction?.(item.key, action);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -365,7 +408,7 @@ export function ScreenPicker({ items, chosen, onPick, onRename }: {
     }
   };
   const onListKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (renaming) return;
+    if (renaming || menuKey) return;
     const last = items.length - 1;
     const move: Record<string, number> = { ArrowDown: Math.min(active + 1, last), ArrowUp: Math.max(active - 1, 0), Home: 0, End: last };
     if (event.key in move) { event.preventDefault(); setActive(move[event.key]!); return; }
@@ -394,12 +437,14 @@ export function ScreenPicker({ items, chosen, onPick, onRename }: {
         <ChevronDown size={12} aria-hidden="true" className={open ? "rotate-180 text-ink-secondary" : "text-ink-secondary"} />
       </button>
       <div ref={list} id={`${id}-list`} role="listbox" aria-label={t("orgComputer.choice.label")} tabIndex={-1} hidden={!open}
-        aria-activedescendant={open && !renaming ? optionId(active) : undefined} onKeyDown={onListKey}
+        aria-activedescendant={open && !renaming && !menuKey ? optionId(active) : undefined} onKeyDown={onListKey}
         className="absolute left-1/2 top-full z-30 mt-1 flex w-max min-w-[180px] max-w-[min(280px,90vw)] -translate-x-1/2 flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] shadow-lg outline-none popover-surface">
         {items.map((item, index) => {
           const selected = item.key === current.key;
           const Icon = item.icon;
           const technical = item.technical ?? item.label;
+          const isHost = typeof item.hostAttached === "boolean";
+          const showMenu = onRename || (isHost && onHostAction);
           if (renaming === item.key) {
             return (
               <div key={item.key} id={optionId(index)} role="option" aria-selected={selected} data-computer-choice={item.key} data-computer-renaming=""
@@ -425,28 +470,63 @@ export function ScreenPicker({ items, chosen, onPick, onRename }: {
           }
           return (
             <div key={item.key} id={optionId(index)} role="option" aria-selected={selected} data-computer-choice={item.key}
+              data-host-attached={isHost ? (item.hostAttached ? "1" : "0") : undefined}
               title={technical !== item.label ? `${item.label} · ${technical}` : item.here ? t("orgComputer.choice.worksHere", { name: item.label }) : item.label}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => pick(index)}
               onPointerEnter={() => setActive(index)}
-              onContextMenu={(event) => { if (!onRename) return; event.preventDefault(); beginRename(item); }}
-              className={`flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 ${index === active && open ? "bg-raised-hover" : ""} ${selected ? "text-ink" : "text-ink-secondary"}`}>
+              onContextMenu={(event) => {
+                if (!showMenu) return;
+                event.preventDefault();
+                if (isHost && onHostAction) setMenuKey(item.key);
+                else if (onRename) beginRename(item);
+              }}
+              className={`relative flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 ${index === active && open ? "bg-raised-hover" : ""} ${selected ? "text-ink" : "text-ink-secondary"}`}>
               <Icon size={13} aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate">{item.label}</span>
               <ScreenStatusDot dot={item.dot} here={item.here} />
-              {onRename && (
+              {showMenu && (
                 <button
                   type="button"
-                  data-computer-rename=""
-                  aria-label={t("computerScreen.rename")}
-                  title={t("computerScreen.rename")}
-                  onClick={(event) => { event.stopPropagation(); beginRename(item); }}
+                  data-computer-place-menu=""
+                  data-computer-rename={onRename && !isHost ? "" : undefined}
+                  aria-label={t("computerScreen.placeMenu")}
+                  title={t("computerScreen.placeMenu")}
+                  aria-expanded={menuKey === item.key}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (isHost && onHostAction) setMenuKey((currentKey) => currentKey === item.key ? null : item.key);
+                    else if (onRename) beginRename(item);
+                  }}
                   className="rounded p-0.5 text-ink-tertiary hover:bg-raised hover:text-ink"
                 >
                   <Ellipsis size={13} aria-hidden="true" />
                 </button>
               )}
               {selected ? <Check size={13} aria-hidden="true" /> : <span aria-hidden="true" className="w-[13px]" />}
+              {menuKey === item.key && isHost && onHostAction && (
+                <div
+                  role="menu"
+                  data-computer-host-menu=""
+                  className="absolute right-1 top-full z-40 mt-0.5 flex min-w-[140px] flex-col gap-0.5 rounded-lg border-[0.5px] border-border bg-elevated p-1 shadow-lg"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {onRename && (
+                    <button type="button" role="menuitem" data-computer-rename="" className="rounded-md px-2 py-1.5 text-left text-[12.5px] text-ink hover:bg-raised-hover" onClick={() => beginRename(item)}>
+                      {t("computerScreen.rename")}
+                    </button>
+                  )}
+                  {item.hostAttached ? (
+                    <button type="button" role="menuitem" data-computer-host-detach="" className="rounded-md px-2 py-1.5 text-left text-[12.5px] text-ink hover:bg-raised-hover" onClick={() => runHostAction(item, "detach")}>
+                      {t("botRemoteHosts.detach")}
+                    </button>
+                  ) : (
+                    <button type="button" role="menuitem" data-computer-host-attach="" className="rounded-md px-2 py-1.5 text-left text-[12.5px] text-ink hover:bg-raised-hover" onClick={() => runHostAction(item, "attach")}>
+                      {t("botRemoteHosts.attach")}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
@@ -507,6 +587,7 @@ export function ServerComputerScreen({ caption, initial = null, bot = null, comp
   bot?: Bot | null;
   computerName?: string;
 }) {
+  const confirm = useConfirm();
   const visible = usePageVisible();
   const [status, setStatus] = useState<ServerEnvironmentStatus | null>(initial);
   const [pending, setPending] = useState<PowerAction | null>(null);
@@ -533,7 +614,11 @@ export function ServerComputerScreen({ caption, initial = null, bot = null, comp
       let next = await powerServerEnvironment(action);
       if (next === null) {
         // A bot is working there right now: shutting down or pausing cuts it short.
-        if (!window.confirm(t("orgComputer.confirmRunning"))) return;
+        if (!(await confirm({
+          title: t("orgComputer.confirmRunning"),
+          confirmLabel: t("common.confirm"),
+          tone: "danger",
+        }))) return;
         next = await powerServerEnvironment(action, true);
       }
       if (next) { show(next); announceServerEnvironment(); }
@@ -565,7 +650,7 @@ export function ServerComputerScreen({ caption, initial = null, bot = null, comp
   useEffect(() => { if (status) reportScreenDot("server", serverDot(status, pending)); }, [status, pending]);
 
   const busy = pending !== null || !status;
-  // Asleep / waking use the calm mascot copy; keep technical text for error / not configured.
+  // Asleep / waking use the calm generic-bot copy; keep technical text for error / not configured.
   const message = !status ? undefined
     : !status.configured ? t("serverEnvironment.notConfigured")
     : state === "error" ? t("computerScreen.serverUnavailable")
@@ -654,6 +739,7 @@ export function LocalComputerScreen({ bridge, caption, initial = null, desktopId
   bot?: Bot | null;
   computerName?: string;
 }) {
+  const confirm = useConfirm();
   const desktop = desktopId ? bridge.desktops.find((entry) => entry.id === desktopId && entry.online) ?? null : currentDesktop(bridge);
   const connected = Boolean(desktop?.capabilities?.localVm);
   const vm = useDesktopLocalVm(connected, initial, desktopId);
@@ -677,8 +763,12 @@ export function LocalComputerScreen({ bridge, caption, initial = null, desktopId
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [running, vm.visible, desktopId]);
 
-  const setUp = () => {
-    if (view.playNeedsConsent && !window.confirm(t(view.repair ? "localVm.consent.repair" : "localVm.consent.create", { folder: vm.status?.workspace ?? "" }))) return;
+  const setUp = async () => {
+    if (view.playNeedsConsent && !(await confirm({
+      title: t(view.repair ? "localVm.consent.repair" : "localVm.consent.create", { folder: vm.status?.workspace ?? "" }),
+      confirmLabel: t("common.confirm"),
+      tone: "neutral",
+    }))) return;
     void vm.act("setup");
   };
   const setup = vm.status?.setup;

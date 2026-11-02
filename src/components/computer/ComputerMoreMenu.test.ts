@@ -1,6 +1,6 @@
 // The computer tab keeps one main action (Open live desktop) and puts the
 // rarer ones (two desktops, Sleep, Works on, Delete the VM) in one "...".
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
@@ -34,7 +34,14 @@ describe("computer more menu", () => {
 });
 
 describe("computer panel layout", () => {
-  const source = readFileSync(new URL("../ComputerPanel.tsx", import.meta.url), "utf8");
+  // ComputerPanel was split into hooks and parts; read the panel and its parts together.
+  const partsDir = new URL("../ComputerPanel.tsx-parts/", import.meta.url);
+  const source = [
+    readFileSync(new URL("../ComputerPanel.tsx", import.meta.url), "utf8"),
+    ...readdirSync(partsDir)
+      .filter((name) => name.endsWith(".tsx"))
+      .map((name) => readFileSync(new URL(name, partsDir), "utf8")),
+  ].join("\n");
 
   it("merges Take control and Open live desktop into one main button", () => {
     expect(source.match(/data-computer-open-desktop/g)).toHaveLength(1);

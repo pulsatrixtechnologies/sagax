@@ -10,8 +10,10 @@ lower its number in that test.
   a module that needs no dependencies is listed in `ROUTES` in `table.ts` directly.
 - A handler returns `PASS` when the request is not its own; returning anything else means it answered.
   Inside one module, keep a literal path ahead of a pattern that would also match it.
-- `handleRequest` runs the table right after the auth gate, so handlers are already authenticated.
-  Scope rules stay keyed by path in `server/request-auth.ts`.
+- Authenticated handlers register in `ROUTES` and run right after the auth gate.
+  Public / pre-gate handlers register in `PRE_AUTH_ROUTES` (before `resolveRequestAuth`) or
+  `PRE_AUTH_AFTER_RESOLVE` (after resolve, before the session refusal). Pre-auth `auth` may be null.
+- Scope rules stay keyed by path in `server/request-auth.ts`.
 - `RouteContext` carries `req`, `res`, `url`, `path`, `method`, `auth`, `json`, `readBody`; the rest is `deps`.
 - Type-only imports must be `import type` (or an inline `type`): the server runs on type stripping, so
   a bare type import passes `tsc` and crashes at boot.

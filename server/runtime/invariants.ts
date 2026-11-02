@@ -7,12 +7,12 @@ import type { RuntimeStore } from "./store.ts";
 import { isTerminal, wakeOwner } from "./tree.ts";
 import type { Assignment, AssignmentEvent, InboxItem, Status } from "./types.ts";
 
-const STATUSES: readonly Status[] = ["queued", "running", "needs_input", "waiting", "resume", "completed", "failed", "cancelled"];
+const STATUSES: readonly Status[] = ["queued", "running", "needs_input", "waiting", "resume", "completed", "failed", "cancelled", "expired"];
 const isStatus = (value: string): value is Status => (STATUSES as readonly string[]).includes(value);
 
 /** The status an event leaves the row in, or undefined when it changes
  * none. "settled" and "restart_reconciled" carry the status they lead to
- * as the first token of their detail ("failed: expired — never started"). */
+ * as the first token of their detail ("expired: expired — never started"). */
 function replayStep(event: AssignmentEvent): Status | undefined {
   switch (event.kind) {
     case "enqueued": return "queued";
@@ -23,6 +23,11 @@ function replayStep(event: AssignmentEvent): Status | undefined {
     case "waiting": return "waiting";
     case "resume_due":
     case "reopened": return "resume";
+    case "retried": {
+      // Retry may land on queued (no undelivered results) or resume (owed).
+      const token = (event.detail ?? "").split(":")[0]?.trim() ?? "";
+      return isStatus(token) ? token : "queued";
+    }
     case "refused": return "failed";
     case "cancelled": return "cancelled";
     case "settled":
@@ -65,9 +70,13 @@ export function checkInvariants(store: RuntimeStore, live: { running: Set<string
       if (a.status === "needs_input" && !live.parked.has(a.id)) problems.push(`I1 ${label}: needs_input without a parked question`);
       if (a.status === "waiting" && !(childrenOf.get(a.id) ?? []).some(c => c.reply !== "none")) problems.push(`I1 ${label}: waiting on no child`);
     }
-    // A reopened root (its resume failed, it resumes again) withdrew its
-    // earlier outcome: reports and wakes count for the current one.
-    const current = events.slice(events.findLastIndex(e => e.kind === "reopened") + 1);
+    // A reopened or retried assignment withdrew its earlier outcome: reports
+    // and wakes count for the current attempt only (DEL-02).
+    const resetAt = Math.max(
+      events.findLastIndex(e => e.kind === "reopened"),
+      events.findLastIndex(e => e.kind === "retried"),
+    );
+    const current = events.slice(resetAt + 1);
     const reports = current.filter(e => e.kind === "reported").length;
     // A question wakes the requester too; I2 bounds the wakes for the result.
     const wakes = current.filter(e => e.kind === "woken" && e.detail !== "needs_input").length;
@@ -85,8 +94,10 @@ export function checkInvariants(store: RuntimeStore, live: { running: Set<string
       if (reports > 0) problems.push(`I2 ${label}: reported before settling`);
       if (wakes > 0) problems.push(`I2 ${label}: woken before settling`);
     }
-    // I5: expired is never completed; completed is always done.
+    // I5: expired is never completed; person-wait expiry is status expired
+    // with outcome expired (not failed+expired); completed is always done.
     if (a.outcome === "expired" && a.status === "completed") problems.push(`I5 ${label}: expired yet completed`);
+    if (a.status === "expired" && a.outcome !== "expired") problems.push(`I5 ${label}: expired with outcome ${a.outcome ?? "none"}`);
     if (a.status === "completed" && a.outcome !== "done") problems.push(`I5 ${label}: completed with outcome ${a.outcome ?? "none"}`);
     if (a.status === "failed" && a.outcome === "done") problems.push(`I5 ${label}: failed with outcome done`);
     // I6: every turn ran with the level on the record.

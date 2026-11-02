@@ -51,11 +51,11 @@ export function CalendarSidebar({ anchor, onSelectDate, routines, runs, bots, vi
 
       <section aria-labelledby="calendar-upcoming-heading" className="flex min-h-0 flex-1 flex-col px-3 pb-3 pt-3">
         <div className="mb-2 flex items-center justify-between px-1">
-          <div id="calendar-upcoming-heading" className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.11em] text-ink-secondary">
+          <div id="calendar-upcoming-heading" className="flex items-center gap-2 text-[12px] font-medium text-ink-secondary">
             <CalendarClock size={13} aria-hidden="true" />
             {t("routines.upcoming.title")}
           </div>
-          <span className="rounded-full bg-raised px-1.5 py-0.5 text-[9px] tabular-nums text-ink-secondary">
+          <span className="rounded-full bg-raised px-1.5 py-0.5 text-[11px] tabular-nums text-ink-secondary">
             {routines.length}
           </span>
         </div>
@@ -74,7 +74,7 @@ export function CalendarSidebar({ anchor, onSelectDate, routines, runs, bots, vi
           />
         </div>
 
-        <p data-calendar-drag-hint className="mt-2 px-2 text-[9.5px] leading-relaxed text-ink-tertiary">
+        <p data-calendar-drag-hint className="mt-2 px-2 text-[11px] leading-relaxed text-ink-tertiary">
           {t("routines.upcoming.dragHint")}
         </p>
       </section>

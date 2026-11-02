@@ -56,7 +56,7 @@ export function MiniMonth({ anchor, onSelect }: MiniMonthProps) {
   return (
     <section aria-label={t("routineCalendar.mini")} className="select-none px-3 py-3">
       <div className="mb-2 flex items-center justify-between px-1">
-        <div className="text-[12.5px] font-semibold text-ink">{monthLabel}</div>
+        <div className="text-[13px] font-semibold text-ink">{monthLabel}</div>
         <div className="flex items-center gap-0.5">
           <button
             type="button"
@@ -81,7 +81,7 @@ export function MiniMonth({ anchor, onSelect }: MiniMonthProps) {
         {WEEKDAY_LABELS.map((label, index) => (
           <div
             key={`${label}-${index}`}
-            className="flex h-6 items-center justify-center text-[9px] font-semibold uppercase tracking-[0.08em] text-ink-tertiary"
+            className="flex h-6 items-center justify-center text-[11px] font-medium text-ink-tertiary"
           >
             {label}
           </div>
@@ -111,7 +111,7 @@ export function MiniMonth({ anchor, onSelect }: MiniMonthProps) {
               className="group flex h-7 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
             >
               <span
-                className={`flex size-6 items-center justify-center rounded-full text-[10.5px] transition-colors ${
+                className={`flex size-6 items-center justify-center rounded-full text-[11px] transition-colors ${
                   isSelected
                     ? "bg-accent font-semibold text-accent-ink shadow-sm"
                     : isToday

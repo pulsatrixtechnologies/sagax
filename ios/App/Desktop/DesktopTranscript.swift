@@ -475,6 +475,7 @@ enum DesktopApprovalText {
         case .enableSkill: return wants(name, .enableSkill)
         case .updateSkill: return wants(name, .updateSkill)
         case .confirmProfileChange: return wants(name, .updateProfile)
+        case .confirmRuleChange: return String(localized: "\(name) wants to change an approval rule")
         case let .teamSetup(title): return title
         }
     }

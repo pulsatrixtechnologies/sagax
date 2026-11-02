@@ -119,6 +119,8 @@ export function composeEnvelope(a: Assignment, names: EnvelopeNames, _parent?: A
 function outcomeLabel(a: Assignment): string {
   const detail = a.outcomeDetail ? `: ${quote(a.outcomeDetail, DETAIL_MAX)}` : "";
   if (a.status === "completed") return `done${detail}`;
+  // status expired already names the end; do not write "expired (expired)".
+  if (a.status === "expired") return `expired${detail}`;
   return `${a.status}${a.outcome && a.outcome !== "done" ? ` (${a.outcome})` : ""}${detail}`;
 }
 

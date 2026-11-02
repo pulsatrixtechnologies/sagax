@@ -89,6 +89,11 @@ export function promptWithReply(text: string, target: ReplyTarget | undefined, u
 
 /** Compact relationship marker used while replaying room/direct history. */
 export function transcriptText(message: Message, messagesById: ReadonlyMap<string, Message>, userName = "User"): string {
+  // A press the device performed itself: the place is already open on the
+  // person's screen. Said so, so the model does not try to do it again.
+  if (message.deviceAction && message.text) {
+    return `[the person pressed “${replyExcerpt(message.text, 120)}” on your widget; their device opened it (${message.deviceAction.type}). Already done: no action or answer needed.]`;
+  }
   if (!message.text || !message.replyToId) return message.text ?? "";
   const target = messagesById.get(message.replyToId);
   if (!target?.text) return message.text;

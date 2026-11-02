@@ -195,15 +195,15 @@ describe("ApprovalsPage", () => {
     await key("x");
     expect(host.querySelector("[data-bulk-bar]")?.textContent).toContain("Selected: 3");
     await key("y");
-    const dialog = host.querySelector("[data-bulk-confirm=allow]");
+    const dialog = document.querySelector("[data-bulk-confirm=allow]");
     expect(dialog?.querySelectorAll("[data-bulk-list=answered] li")).toHaveLength(2);
     expect(dialog?.querySelector("[data-bulk-list=skipped]")?.textContent).toContain("needs your security key");
-    expect(dialog?.textContent).toContain("Nothing is remembered");
-    await click([...dialog!.querySelectorAll("button")].find((button) => button.textContent?.includes("Allow once (2)")));
+    expect(dialog?.closest("[role=alertdialog]")?.textContent).toContain("Nothing is remembered");
+    await click(document.querySelector("[data-confirm-action]") as HTMLButtonElement);
     const bulk = fixture.calls.find((call) => call.path === "/api/approvals/bulk");
     expect(bulk?.body).toEqual({ decision: "allow", items: [{ threadId: "t-d", requestId: "req-d" }, { threadId: "t-a", requestId: "req-a" }] });
     expect(Object.keys(bulk!.body as object).sort()).toEqual(["decision", "items"]);
-    expect(host.querySelector("[data-bulk-confirm]")).toBeNull();
+    expect(document.querySelector("[data-bulk-confirm]")).toBeNull();
   });
 
   it("clears the ticks with Escape", async () => {

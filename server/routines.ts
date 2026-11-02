@@ -8,7 +8,7 @@ import { DATA_DIR } from "./config.ts";
 import type { RuntimeEvent } from "./contracts.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { redactSecretsInText } from "./redact.ts";
-import { routineReportOutcome } from "./routine-report.ts";
+import { flowRunBlockedReason, routineReportOutcome } from "./routine-report.ts";
 import { stopCause } from "./drivers/engine-errors.ts";
 import {
   evaluateRoutinePrecheck,
@@ -38,7 +38,8 @@ import {
   storedTiming,
   type RoutineWindowTiming,
 } from "../shared/routine-timing.ts";
-import { isRoutineProblemRun, isTriggerSchedule, scheduleHasKnownEnd, type RoutineRetryCause } from "../shared/routines.ts";
+import { isRoutineProblemRun, isTriggerSchedule, scheduleHasKnownEnd, type RoutineAccess, type RoutineRetryCause } from "../shared/routines.ts";
+import type { LimitResetSchedule, LimitResetScheduleInput } from "../shared/limit-reset.ts";
 import { cleanRoutineAutoPauseAfter, routineAutoPauseDue, type RoutineAutoPause } from "../shared/routine-auto-pause.ts";
 import { zonedParts, zonedTimeToUtc } from "../shared/zoned-time.ts";
 import {
@@ -52,15 +53,21 @@ import {
 } from "../shared/routine-folders.ts";
 import { ROUTINE_PARTS, type PartPair, type RoutinePart } from "./package-parts.ts";
 import {
-  CLAUDE_NEEDS_RECONNECTING,
-  CLAUDE_RECONNECT_AHEAD_DETAIL,
-  claudeReconnectAhead,
-} from "./claude-reconnect-ahead.ts";
+  engineNeedsReconnecting,
+  engineReconnectAhead,
+  engineReconnectAheadDetail,
+  engineNameFromReconnectAttention,
+  isEngineReconnectAttention,
+  LOGIN_ENGINE_LABEL,
+} from "./engine-reconnect-ahead.ts";
+import type { LoginDriver } from "./principal-engine-logins.ts";
 import {
   dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, retryNote, weekRuns,
   type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
 } from "./routine-recovery.ts";
 import { ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_TURN_LOST_MS, skipNeedsNotice, supersededBy } from "./routine-execution.ts";
+
+export type { RoutineAccess };
 
 /** A driver stop reason that is a code, not a sentence (rpc_error, auth_required). */
 const ROUTINE_STOP_CODE = /^[a-z][a-z0-9_]*$/;
@@ -96,11 +103,14 @@ export type RoutineSchedule =
   | ({ type: "daily"; time: string; weekdays: number[] } & RoutineWindowTiming)
   | (RoutineCronSchedule & RoutineWindowTiming)
   | (RoutineIntervalSchedule & RoutineWindowTiming)
+  /** Runs when an engine's usage limit resets (shared/limit-reset.ts). */
+  | LimitResetSchedule
   | { type: "webhook" }
   | { type: "event"; source: "email" };
 
 export type RoutineScheduleInput =
-  | Exclude<RoutineSchedule, RoutineIntervalSchedule>
+  | Exclude<RoutineSchedule, RoutineIntervalSchedule | LimitResetSchedule>
+  | LimitResetScheduleInput
   | RoutineIntervalScheduleInput;
 
 /** `cloud` runs the agent itself inside the bot's Boat VM. `maus` keeps
@@ -128,6 +138,8 @@ export type RoutineRunStatus =
   | "waiting"
   | "completed"
   | "failed"
+  /** Flow refused run init (previous unclosed / unknown routine / run_exists). */
+  | "blocked"
   | "cancelled"
   | "missed"
   /** The pre-check found nothing to do: no turn, no message, no notice. */
@@ -207,6 +219,8 @@ export interface Routine {
   folder?: string;
   /** Delete once the schedule ends and the last run settles (#1648). */
   deleteWhenFinished?: boolean;
+  /** Confined runs: read Gmail/Calendar and write reply drafts only. */
+  access?: RoutineAccess;
   nextRunAt: number | null;
   /** Scheduled slot a flexible routine advances from. Absent for exact timing. */
   nominalRunAt?: number;
@@ -323,6 +337,9 @@ export interface RoutineRun {
   restartResumes?: number;
   /** Why this receipt exists. Kept optional so version-1 files migrate in place. */
   triggerSource?: RoutineRunTrigger;
+  /** "app": a connected-app event started it; "wait": a wait's follow-up did
+   * (its triggerSource stays "webhook", an outside event). */
+  eventSource?: "app" | "wait";
   webhookId?: string;
   deliveryId?: string;
   /** Snapshot the routine's reporting destination. Execution remains on the
@@ -372,6 +389,10 @@ export interface RoutineRun {
    * settles when that work ends, even without another turn), or absent for
    * a question or approval for the person. */
   waitingOn?: "teammates";
+  /** Snapshot of the routine's confined access for this run. */
+  access?: RoutineAccess;
+  /** Items its routine's checks handed this run, so they are kept or released once it ends. */
+  checkKey?: string;
   createdAt: number;
   seenAt?: number;
 }
@@ -384,6 +405,8 @@ interface RunTrouble {
   unresolved: Map<string, { count: number; output: string }>;
   /** An engine error the turn went past. */
   engine?: string;
+  /** Flow refused run init / unknown routine: first matching tool output. */
+  flowBlocked?: string;
 }
 
 export interface RoutineHandedOutOutcome {
@@ -498,6 +521,8 @@ export interface RoutineInput {
   folder?: string | null;
   /** Delete once the schedule ends and the last run settles. Off unless true. */
   deleteWhenFinished?: boolean;
+  /** `null` clears confined access; omission preserves it on updates. */
+  access?: RoutineAccess | null;
 }
 
 interface RoutineFile {
@@ -639,13 +664,24 @@ export interface RoutineManagerOptions {
   onRunFailed?: (run: RoutineRun, alert?: RoutineAlert | null) => void;
   /** Raised once when a queued run has waited out the deferral notice window. */
   onRunDeferred?: (run: RoutineRun, alert?: RoutineAlert) => void;
-  /** Claude sign-in already expired ahead of scheduled Claude routines:
-   * notify the payer once, and pause those bots' due runs for reconnect. */
+  /** Login-engine sign-in already expired ahead of scheduled or proactive
+   * runs: notify the payer once (card + push), and pause those bots' due
+   * runs for reconnect. Claude-shaped `claudeReconnect` stays for older
+   * tests; prefer `engineReconnect`. */
+  engineReconnect?: {
+    /** Login driver of this bot's engine, or null when it is not one. */
+    botDriver: (botId: string) => LoginDriver | string | null | undefined;
+    payer: (botId: string) => string | null | undefined;
+    /** Cheap file-marker check: that person's sign-in for this driver is expired. */
+    expired: (principalId: string, driver: string) => boolean;
+    /** Person to notify before due routines fire (once per person+engine). */
+    onAheadNotify?: (principalId: string, detail: string, routineNames: string[], engineName: string) => void;
+  };
+  /** @deprecated Prefer engineReconnect. Kept for existing tests. */
   claudeReconnect?: {
     usesClaude: (botId: string) => boolean;
     payer: (botId: string) => string | null | undefined;
     expired: (principalId: string) => boolean;
-    /** Person to notify before morning (and other) Claude routines fire. */
     onAheadNotify?: (principalId: string, detail: string, routineNames: string[]) => void;
   };
   /** A failed attempt went back to the queue: what the attempt left pending must not reach its second start. */
@@ -874,6 +910,7 @@ function cloneSchedule(schedule: RoutineSchedule): RoutineSchedule {
   if (schedule.type === "webhook") return { type: "webhook" };
   if (schedule.type === "event") return { type: "event", source: "email" };
   if (schedule.type === "once") return { type: "once", at: schedule.at };
+  if (schedule.type === "limit_reset") return { type: "limit_reset", engine: schedule.engine, repeat: schedule.repeat, at: schedule.at };
   if (schedule.type === "cron") return { ...schedule };
   if (schedule.type === "interval") {
     return {
@@ -1128,6 +1165,15 @@ function parseSchedule(schedule: RoutineScheduleInput, after: number): RoutineSc
       ...(endsAt === undefined ? {} : { endsAt }),
     }, schedule);
   }
+  if (schedule?.type === "limit_reset") {
+    if (hasTimingInput(schedule)) throw new Error("A limit-reset routine has no fixed clock");
+    const engine = typeof schedule.engine === "string" ? schedule.engine.trim() : "";
+    if (!engine || engine.length > 128) throw new Error("Choose an engine whose limit this waits for");
+    const repeat = schedule.repeat === "every_reset" ? "every_reset" as const : "once" as const;
+    const at = schedule.at === null || schedule.at === undefined ? null
+      : (typeof schedule.at === "number" && Number.isFinite(schedule.at) ? schedule.at : null);
+    return { type: "limit_reset", engine, repeat, at };
+  }
   throw new Error("Choose a supported schedule");
 }
 
@@ -1209,6 +1255,7 @@ function nextAlignedInterval(schedule: RoutineIntervalSchedule, after: number): 
  * (setRoutineTimeZone), else the host's. */
 export function nextOccurrence(schedule: RoutineSchedule, after: number, zone?: string): number | null {
   if (isTriggerSchedule(schedule)) return null;
+  if (schedule.type === "limit_reset") return schedule.at !== null && schedule.at > after ? schedule.at : null;
   if (schedule.type === "once") return schedule.at > after ? schedule.at : null;
   if (schedule.type === "cron") return nextCronRuns(schedule, after, 1)[0] ?? null;
   if (schedule.type === "interval") {
@@ -1291,6 +1338,8 @@ function keepTiming(
 ): RoutineScheduleInput {
   if (isTriggerSchedule(base) || isTriggerSchedule(incoming) || isTriggerSchedule(current)) return base;
   if (base.type === "once" || incoming.type === "once" || current.type === "once") return base;
+  // Limit-reset has no flexible window; keep its derived `at` alone.
+  if (base.type === "limit_reset" || incoming.type === "limit_reset" || current.type === "limit_reset") return base;
   if (Object.hasOwn(incoming, "timing") || !isFlexibleSchedule(current)) return base;
   const sentEarly = Object.hasOwn(incoming, "windowEarlyMinutes");
   const sentLate = Object.hasOwn(incoming, "windowLateMinutes");
@@ -1359,6 +1408,7 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
   const mailAlias = parseMailAlias(input.mailAlias);
   if (!mailAlias.ok) throw new RoutineInputError(mailAlias.error);
   const folder = cleanRoutineFolder(input.folder);
+  if (input.access != null && input.access !== "read-and-draft") throw new Error("Choose read-and-draft access or none");
   return {
     name,
     prompt,
@@ -1381,6 +1431,7 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
     ...(folder ? { folder } : {}),
     // Only meaningful on a schedule with a known end; ignore otherwise.
     ...(input.deleteWhenFinished === true && scheduleHasKnownEnd(input.schedule) ? { deleteWhenFinished: true } : {}),
+    ...(input.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
   };
 }
 
@@ -1467,10 +1518,10 @@ export class RoutineManager {
   private passAgain = false;
   /** routine id -> the occurrence (nextRunAt) already pre-woken. */
   private readonly prewoken = new Map<string, number>();
-  /** People already told Claude is expired for the current expired spell. */
-  private readonly claudeReconnectNotified = new Set<string>();
-  /** Bots whose Claude is expired: their next scheduled starts wait for reconnect. */
-  private readonly claudeReconnectPauseBots = new Set<string>();
+  /** People+engine already told for the current expired spell (`person\0Engine`). */
+  private readonly engineReconnectNotified = new Set<string>();
+  /** Bots whose login engine is expired: their next starts wait for reconnect. */
+  private readonly engineReconnectPauseBots = new Map<string, string>();
   /** routine id -> the task reserved and warmed for its next occurrence. */
   private readonly reserved = new Map<string, { dueAt: number; botId: string; threadId: string; runAs?: string }>();
   /** run id -> the task a run got when the write that would start it
@@ -1537,6 +1588,7 @@ export class RoutineManager {
               failuresClearedAt: Number.isSafeInteger(routine.failuresClearedAt) && routine.failuresClearedAt! >= 0 && routine.failuresClearedAt! <= MAX_DATE_MS ? routine.failuresClearedAt : undefined,
               folder: cleanRoutineFolder(routine.folder),
               deleteWhenFinished: routine.deleteWhenFinished === true && scheduleHasKnownEnd(schedule) ? true : undefined,
+              access: routine.access === "read-and-draft" ? "read-and-draft" as const : undefined,
             };
             if (loaded.folder === undefined) delete loaded.folder;
             if (loaded.precheck === undefined) delete loaded.precheck;
@@ -1552,6 +1604,7 @@ export class RoutineManager {
             if (loaded.installedPackage === undefined) delete loaded.installedPackage;
             if (loaded.runAs === undefined) delete loaded.runAs;
             if (loaded.suspended === undefined) delete loaded.suspended;
+            if (loaded.access === undefined) delete loaded.access;
             const retired = (routine.suspended as { reason?: unknown } | undefined)?.reason;
             if (typeof retired === "string" && RETIRED_SUSPEND_REASONS.includes(retired) && loaded.enabled && schedule.type !== "once") {
               if (isFlexibleSchedule(schedule)) {
@@ -1596,9 +1649,15 @@ export class RoutineManager {
               sourceThreadId: persistedSourceThreadId.parse(run.sourceThreadId),
               resultsThreadId: persistedSourceThreadId.parse(run.resultsThreadId),
               runAs: loadRunAs(run.runAs),
+              access: run.access === "read-and-draft" ? "read-and-draft" as const : undefined,
+              eventSource: run.eventSource === "app" || run.eventSource === "wait" ? run.eventSource : undefined,
+              checkKey: typeof run.checkKey === "string" && run.checkKey ? run.checkKey.slice(0, 200) : undefined,
             };
             if (loaded.timeoutMinutes === undefined) delete loaded.timeoutMinutes;
             if (loaded.runAs === undefined) delete loaded.runAs;
+            if (loaded.access === undefined) delete loaded.access;
+            if (loaded.eventSource === undefined) delete loaded.eventSource;
+            if (loaded.checkKey === undefined) delete loaded.checkKey;
             return loaded;
           })
         : [];
@@ -2059,6 +2118,7 @@ export class RoutineManager {
       deleteWhenFinished: Object.hasOwn(patch, "deleteWhenFinished")
         ? patch.deleteWhenFinished === true
         : routine.deleteWhenFinished === true,
+      access: Object.hasOwn(patch, "access") ? patch.access : routine.access,
     }, now);
     if (this.targetState(clean) === "missing") throw new RoutineInputError(this.missingTargetMessage(clean.target));
     if (clean.folder) clean.folder = this.admitFolder(clean.botId, clean.folder);
@@ -2136,6 +2196,7 @@ export class RoutineManager {
       if (clean.autoPauseAfter === undefined) delete routine.autoPauseAfter;
       if (clean.folder === undefined) delete routine.folder;
       if (!clean.deleteWhenFinished) delete routine.deleteWhenFinished;
+      if (!clean.access) delete routine.access;
       foldersChanged = this.settleFolders(routine.botId);
       if (previousBotId !== routine.botId) this.settleFolders(previousBotId);
       // Turned back on (Resume on the notice, the switch, the editor): the
@@ -2188,6 +2249,21 @@ export class RoutineManager {
       queueMicrotask(() => this.maybeDeleteWhenFinished(id));
     }
     return health;
+  }
+
+  /** Moves only the next run to `until`; the runs after it keep their schedule. A limit-reset routine has no time to move. */
+  deferNextRun(id: string, until: number): Routine | null {
+    const routine = this.routines.find((candidate) => candidate.id === id);
+    if (!routine) return null;
+    if (!routine.enabled || routine.nextRunAt === null || routine.nextRunAt >= until || routine.schedule.type === "limit_reset") {
+      return this.routineWithHealth(routine);
+    }
+    this.commitMutation(() => {
+      if (routine.schedule.type === "once") routine.schedule = { type: "once", at: until };
+      routine.nextRunAt = until;
+    });
+    this.emitRoutine(routine);
+    return this.routineWithHealth(routine);
   }
 
   /** Raise onRoutineChanged when a create/update/delete came from a
@@ -2382,6 +2458,10 @@ export class RoutineManager {
     receivedAt: number;
     /** When the webhook belongs to a routine, the run is that routine's. */
     routineId?: string;
+    /** "app": a connected-app event; "wait": a wait_until follow-up. */
+    eventSource?: "app" | "wait";
+    /** Where the run reports / works (wait follow-ups: the ask chat). */
+    resultsThreadId?: string;
   }): { id: string } {
     this.assertWritable();
     const existing = this.webhookRunReceipt(input.webhookId, input.deliveryId);
@@ -2406,6 +2486,9 @@ export class RoutineManager {
       webhookId: input.webhookId,
       deliveryId: input.deliveryId,
       attachments: [],
+      ...(owned?.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
+      ...(input.eventSource ? { eventSource: input.eventSource } : {}),
+      ...(input.resultsThreadId ? { resultsThreadId: input.resultsThreadId } : {}),
       createdAt: this.now(),
     };
     const previousReceipts = this.webhookRunReceipts;
@@ -2701,15 +2784,31 @@ export class RoutineManager {
     if (this.prewoken.size > 2_000) this.prewoken.clear();
   }
 
-  /** Before morning (and other) Claude routines: if Claude is already
-   * expired, notify the payer once and mark those bots so their due runs wait. */
-  private checkClaudeReconnectAhead(now: number): void {
-    const gate = this.options.claudeReconnect;
+  /** Resolve the engine-reconnect gate: prefer engineReconnect, else wrap
+   * the legacy Claude-only option. */
+  private engineReconnectGate(): NonNullable<RoutineManagerOptions["engineReconnect"]> | null {
+    if (this.options.engineReconnect) return this.options.engineReconnect;
+    const legacy = this.options.claudeReconnect;
+    if (!legacy) return null;
+    return {
+      botDriver: (botId) => (legacy.usesClaude(botId) ? "claudeAgent" : null),
+      payer: legacy.payer,
+      expired: (principalId, driver) => driver === "claudeAgent" && legacy.expired(principalId),
+      onAheadNotify: legacy.onAheadNotify
+        ? (principalId, detail, routineNames, _engineName) => legacy.onAheadNotify!(principalId, detail, routineNames)
+        : undefined,
+    };
+  }
+
+  /** Before due scheduled (and held proactive) runs: if a login engine is
+   * already expired, notify the payer once and mark those bots so starts wait. */
+  private checkEngineReconnectAhead(now: number): void {
+    const gate = this.engineReconnectGate();
     if (!gate) {
-      this.claudeReconnectPauseBots.clear();
+      this.engineReconnectPauseBots.clear();
       return;
     }
-    const result = claudeReconnectAhead({
+    const result = engineReconnectAhead({
       now,
       routines: this.routines.map((routine) => ({
         id: routine.id,
@@ -2721,27 +2820,58 @@ export class RoutineManager {
         target: routine.target,
         ...(routine.runAs ? { runAs: routine.runAs } : {}),
       })),
-      botUsesClaude: gate.usesClaude,
+      botDriver: gate.botDriver,
       botPayer: gate.payer,
-      claudeExpired: gate.expired,
-      alreadyNotified: this.claudeReconnectNotified,
+      expired: gate.expired,
+      alreadyNotified: this.engineReconnectNotified,
     });
-    // Keep bots paused while Claude stays expired (including once their run is due).
-    for (const botId of Array.from(this.claudeReconnectPauseBots)) {
+    // Keep bots paused while their engine stays expired (including once due).
+    for (const botId of Array.from(this.engineReconnectPauseBots.keys())) {
+      const driver = gate.botDriver(botId);
       const payer = gate.payer(botId)?.trim();
-      if (!payer || !gate.usesClaude(botId) || !gate.expired(payer)) this.claudeReconnectPauseBots.delete(botId);
+      if (!driver || !payer || !gate.expired(payer, driver)) this.engineReconnectPauseBots.delete(botId);
     }
-    for (const botId of result.pauseBotIds) this.claudeReconnectPauseBots.add(botId);
+    for (const [botId, engineName] of result.pauseEngineByBot) {
+      this.engineReconnectPauseBots.set(botId, engineName);
+    }
     for (const entry of result.notify) {
-      this.claudeReconnectNotified.add(entry.principalId);
+      this.engineReconnectNotified.add(`${entry.principalId}\0${entry.engineName}`);
       try {
-        gate.onAheadNotify?.(entry.principalId, CLAUDE_RECONNECT_AHEAD_DETAIL, entry.routineNames);
+        gate.onAheadNotify?.(
+          entry.principalId,
+          engineReconnectAheadDetail(entry.engineName),
+          entry.routineNames,
+          entry.engineName,
+        );
       } catch { /* best effort */ }
     }
-    // Drop notify dedupe for people whose Claude is no longer expired.
-    for (const person of Array.from(this.claudeReconnectNotified)) {
-      if (!gate.expired(person)) this.claudeReconnectNotified.delete(person);
+    // Drop notify dedupe for people whose engine is no longer expired.
+    for (const key of Array.from(this.engineReconnectNotified)) {
+      const [person, engineName] = key.split("\0");
+      if (!person || !engineName) {
+        this.engineReconnectNotified.delete(key);
+        continue;
+      }
+      const driver = (Object.entries(LOGIN_ENGINE_LABEL) as Array<[LoginDriver, string]>)
+        .find(([, label]) => label === engineName)?.[0];
+      if (!driver || !gate.expired(person, driver)) this.engineReconnectNotified.delete(key);
     }
+  }
+
+  /** Cheap live check: is this bot's login engine marked expired right now? */
+  private botEngineExpired(botId: string): string | null {
+    const gate = this.engineReconnectGate();
+    if (!gate) return this.engineReconnectPauseBots.get(botId) ?? null;
+    const driver = gate.botDriver(botId);
+    if (!driver) return null;
+    const payer = gate.payer(botId)?.trim();
+    if (!payer || !gate.expired(payer, driver)) {
+      this.engineReconnectPauseBots.delete(botId);
+      return null;
+    }
+    const engineName = LOGIN_ENGINE_LABEL[driver as LoginDriver] ?? String(driver);
+    this.engineReconnectPauseBots.set(botId, engineName);
+    return engineName;
   }
 
   /** Reserve and warm the task of each scheduled bot run due within the
@@ -2871,7 +3001,7 @@ export class RoutineManager {
       this.endLostTurns(now);
       this.prewakeUpcoming(now);
       this.prewarmUpcoming(now);
-      this.checkClaudeReconnectAhead(now);
+      this.checkEngineReconnectAhead(now);
       // Only when I'm here (server/routine-away.ts): skip a recurring
       // occurrence, or hold a one-time routine, while the person is away.
       const awaySkipped: Routine[] = [];
@@ -3005,17 +3135,20 @@ export class RoutineManager {
         // dispatch. Manual runs and webhook deliveries retain their exact
         // requested/received timestamps.
         const triggerSource = run.triggerSource ?? (run.manual ? "manual" : "schedule");
-        // Claude already expired ahead of this scheduled run: wait for reconnect
-        // instead of starting a turn that would fail the same way again.
-        if (triggerSource === "schedule" && this.claudeReconnectPauseBots.has(run.botId) && run.target === "bot") {
-          if (run.status === "queued") {
-            this.wait(run, CLAUDE_NEEDS_RECONNECTING);
-            delete run.error;
-            this.save();
-            this.emitRun(run);
-            this.options.onRunDeferred?.(cloneRun(run), { detail: CLAUDE_RECONNECT_AHEAD_DETAIL });
+        // Login engine already expired: wait for reconnect instead of starting
+        // a turn that would fail the same way again (scheduled and proactive).
+        if ((triggerSource === "schedule" || triggerSource === "proactive") && run.target === "bot") {
+          const expiredEngine = this.engineReconnectPauseBots.get(run.botId) ?? this.botEngineExpired(run.botId);
+          if (expiredEngine) {
+            if (run.status === "queued") {
+              this.wait(run, engineNeedsReconnecting(expiredEngine));
+              delete run.error;
+              this.save();
+              this.emitRun(run);
+              this.options.onRunDeferred?.(cloneRun(run), { detail: engineReconnectAheadDetail(expiredEngine) });
+            }
+            continue;
           }
-          continue;
         }
         const definition = triggerSource === "schedule"
           ? this.routines.find((routine) => routine.id === run.routineId)
@@ -3350,10 +3483,15 @@ export class RoutineManager {
     } else if (event.type === "item.completed" && event.itemType === "tool") {
       const trouble = this.troubleOf(run.id);
       const title = (event.itemId && trouble.tools.get(event.itemId)) || "a tool";
+      const output = redactSecretsInText(event.output ?? "").trim();
+      if (!trouble.flowBlocked) {
+        const blocked = flowRunBlockedReason(output);
+        if (blocked) trouble.flowBlocked = blocked;
+      }
       if (event.ok) trouble.unresolved.delete(title);
       else {
         const seen = trouble.unresolved.get(title);
-        trouble.unresolved.set(title, { count: (seen?.count ?? 0) + 1, output: redactSecretsInText(event.output ?? "").trim().split("\n")[0]!.slice(0, 160) });
+        trouble.unresolved.set(title, { count: (seen?.count ?? 0) + 1, output: output.split("\n")[0]!.slice(0, 160) });
       }
       return null;
     } else if (event.type === "turn.started") {
@@ -3495,6 +3633,16 @@ export class RoutineManager {
       queueMicrotask(() => this.tickInBackground());
       return true;
     }
+    // Flow refused run init / unknown routine: blocked with the tool's reason
+    // (never completed). Also scan the bot's final text for the same motifs.
+    const flowBlocked = trouble?.flowBlocked ?? flowRunBlockedReason(run.output) ?? flowRunBlockedReason(
+      [...(trouble?.unresolved.values() ?? [])].map((failure) => failure.output).join("\n"),
+    );
+    if (flowBlocked) {
+      this.blockRun(run, flowBlocked);
+      queueMicrotask(() => this.tickInBackground());
+      return true;
+    }
     const problems: string[] = [];
     if (outcome.declared?.status === "partial") problems.push(outcome.declared.reason);
     const handed = run.threadId && run.startedAt !== undefined ? this.options.handedOutOutcome?.(run.threadId, run.startedAt) : null;
@@ -3551,31 +3699,54 @@ export class RoutineManager {
     queueMicrotask(() => this.tickInBackground());
   }
 
-  /** Resume runs that paused for Claude reconnect after the person signs in again.
-   * Requeues each once so the scheduled occurrence is not lost and not duplicated. */
-  resumeClaudeReconnectWaits(botIds?: ReadonlySet<string> | readonly string[]): RoutineRun[] {
+  /** Resume runs that paused for engine reconnect after the person signs in again.
+   * Requeues each once so the scheduled occurrence is not lost and not duplicated.
+   * When `engineName` is set, only waits for that engine resume. */
+  resumeEngineReconnectWaits(
+    botIds?: ReadonlySet<string> | readonly string[],
+    engineName?: string,
+  ): RoutineRun[] {
     const filter = botIds ? new Set(botIds) : null;
     const resumed: RoutineRun[] = [];
     const now = this.now();
     for (const run of this.runs) {
-      if (run.status !== "waiting" || run.attention !== CLAUDE_NEEDS_RECONNECTING) continue;
+      if (run.status !== "waiting" || !isEngineReconnectAttention(run.attention)) continue;
+      if (engineName) {
+        const waited = engineNameFromReconnectAttention(run.attention);
+        if (waited && waited.toLowerCase() !== engineName.toLowerCase()) continue;
+      }
       if (filter && !filter.has(run.botId)) continue;
       if (run.target !== "bot") continue;
+      const waitedEngine = engineNameFromReconnectAttention(run.attention) ?? engineName ?? "engine";
       run.status = "queued";
       run.retryAt = now;
-      run.attention = "Starting again after Claude reconnected";
+      run.attention = `Starting again after ${waitedEngine} reconnected`;
       delete run.waitingSince;
       delete run.waitingOn;
       delete run.error;
       resumed.push(run);
     }
     if (filter) {
-      for (const botId of filter) this.claudeReconnectPauseBots.delete(botId);
+      for (const botId of filter) {
+        if (!engineName || this.engineReconnectPauseBots.get(botId)?.toLowerCase() === engineName.toLowerCase()) {
+          this.engineReconnectPauseBots.delete(botId);
+        }
+      }
+    } else if (engineName) {
+      for (const [botId, name] of Array.from(this.engineReconnectPauseBots)) {
+        if (name.toLowerCase() === engineName.toLowerCase()) this.engineReconnectPauseBots.delete(botId);
+      }
     } else {
-      this.claudeReconnectPauseBots.clear();
+      this.engineReconnectPauseBots.clear();
     }
-    // Allow a fresh ahead notification if Claude expires again later.
-    this.claudeReconnectNotified.clear();
+    // Allow a fresh ahead notification if that engine expires again later.
+    if (engineName) {
+      for (const key of Array.from(this.engineReconnectNotified)) {
+        if (key.endsWith(`\0${engineName}`)) this.engineReconnectNotified.delete(key);
+      }
+    } else {
+      this.engineReconnectNotified.clear();
+    }
     if (!resumed.length) return [];
     this.save();
     for (const run of resumed) {
@@ -3584,6 +3755,11 @@ export class RoutineManager {
     }
     queueMicrotask(() => this.tickInBackground());
     return resumed.map(cloneRun);
+  }
+
+  /** @deprecated Prefer resumeEngineReconnectWaits. */
+  resumeClaudeReconnectWaits(botIds?: ReadonlySet<string> | readonly string[]): RoutineRun[] {
+    return this.resumeEngineReconnectWaits(botIds, "Claude");
   }
 
   finishGoalRun(runId: string, status: GroupGoalRunStatus, detail: string): RoutineRun | null {
@@ -3809,6 +3985,22 @@ export class RoutineManager {
     this.options.onRunFailed?.(cloneRun(run), alert === undefined && this.failsLikeLastOutcome(run) ? null : alert);
   }
 
+  /** Flow refused this run (previous unclosed / unknown / run_exists): blocked
+   * with the tool's reason, no proactive wake (onRunFailed still fires). */
+  private blockRun(run: RoutineRun, message: string) {
+    this.runTrouble.delete(run.id);
+    delete run.waitingOn;
+    run.status = "blocked";
+    run.attention = undefined;
+    run.error = redactSecretsInText(message).slice(0, 500);
+    run.finishedAt = this.now();
+    delete run.problems;
+    delete run.quiet;
+    this.save();
+    this.emitRun(run);
+    this.options.onRunFailed?.(cloneRun(run), null);
+  }
+
   /** Facts from the routine's own receipts, then the evaluator under its
    * hard timeout. Never throws: an error is a failed run, never a pass. */
   private async precheckRun(routine: Routine, precheck: RoutinePrecheck): Promise<
@@ -4001,6 +4193,7 @@ export class RoutineManager {
       triggerSource: manual ? "manual" : "schedule",
       sourceThreadId,
       resultsThreadId,
+      ...(routine.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
       createdAt: this.now(),
     };
     this.runs.push(run);
@@ -4261,7 +4454,7 @@ export class RoutineManager {
     if (run.status !== "queued") this.precheckPassed.delete(run.id);
     if (this.awaitingPrecheck(run)) return;
     this.notifyRunChanged(run);
-    if (run.status === "completed" || run.status === "failed") {
+    if (run.status === "completed" || run.status === "failed" || run.status === "blocked") {
       const routine = this.routines.find(candidate => candidate.id === run.routineId);
       if (routine) this.emitRoutine(routine);
     }

@@ -4,9 +4,9 @@
 // hairline/50 ring, `bg-card`, 14 pt in, shadow) 8 pt under the mascot,
 // its trailing edge 12 pt inside the panel, so it reaches over the chat.
 // Tabs Bot / Generate / Upload and Reset (12 pt); on Bot: the 64 pt
-// preview, Character (three 64 tall cells), Color (24 pt swatches), Skin
-// (seven 60 tall cells), Style (2D, 3D) and the owl's Moves. Saved as each
-// choice is made (`PATCH /api/bots/:id/profile`), as on the desktop.
+// preview (Lot 9: plain, no gradient card), Character, Color, Skin and
+// the owl's Moves as scrolling sections. Saved as each choice is made
+// (`PATCH /api/bots/:id/profile`), as on the desktop.
 // Every character and skin shows (#475): a locked one greyed with its
 // padlock and the achievement that unlocks it; a tap previews it on the
 // stage, "Preview: locked, nothing is saved" (#518), and saves nothing.
@@ -243,15 +243,11 @@ struct BotAvatarEditor: View {
         }
     }
 
-    /// The preview stage (MascotLookEditor.tsx `data-mascot-stage`): the
-    /// mascot large and centred on its own ground, its name and family under
-    /// it. A tap or a pointer hover previews a move: the owl's wave, a
-    /// shape's wink, a hop for the others.
+    /// The preview stage (Lot 9: plain, no gradient card). The mascot is
+    /// large and centred; a tap or pointer hover previews a move.
     private var stage: some View {
         VStack(spacing: 8) {
             ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(RadialGradient(colors: [theme.control, theme.inset], center: .center, startRadius: 4, endRadius: 150))
                 MascotCharacterView(look: stageLook, color: draft.color, skin: stageOwlSkin,
                                     size: 104, animated: true, owlHandle: stageHandle)
                     .grayscale(shownCharacterLocked ? 1 : 0)

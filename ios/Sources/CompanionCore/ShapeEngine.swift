@@ -680,10 +680,27 @@ public enum ShapeGaze {
         return placeEye(yaw, pitch, roll, eye, 1).center
     }
 
+    /// Half the width of a path body (box units) on the row through `at`, from the inside run that holds `at` (`outlineHalfWidth`).
+    static func outlineHalfWidth(_ outline: [CGPoint], _ at: CGPoint) -> Double {
+        let x = Double(at.x), y = Double(at.y)
+        guard ShapeAvatarOutline.pointInsideOutline(outline, x: x, y: y) else { return 0 }
+        func reach(_ dir: Double) -> Double {
+            var lo = 0.0, hi = 60.0
+            for _ in 0..<18 {
+                let mid = (lo + hi) / 2
+                if ShapeAvatarOutline.pointInsideOutline(outline, x: x + dir * mid, y: y) { lo = mid } else { hi = mid }
+            }
+            return lo
+        }
+        return (reach(1) + reach(-1)) / 2
+    }
+
     /// Both eyes for a face on a body (`solveEyes`): one level pair, inside the outline, never touching.
     /// `anchor` is where the face rests on this body (R, shared/mascot-geometry.json).
+    /// `outline` is a path body's silhouette (box units); a polar body passes nil.
     public static func solveEyes(_ radii: [Double], _ face: ShapeFace, gaze: (yaw: Double, pitch: Double, roll: Double), open: (left: Double, right: Double),
-                                 anchor: (x: Double, y: Double) = ShapeEngineData.eyeShift) -> [ShapePlacedEye] {
+                                 anchor: (x: Double, y: Double) = ShapeEngineData.eyeShift, outline: [CGPoint]? = nil) -> [ShapePlacedEye] {
+        let path = outline.flatMap { $0.count >= 3 ? $0 : nil }
         let yaw = ShapeEngineData.head.yaw + face.yaw + gaze.yaw
         let pitch = ShapeEngineData.head.pitch + ShapeEngineData.faceDrop + face.pitch + gaze.pitch
         let roll = face.roll * ShapeEngineData.eyeRoll + gaze.roll
@@ -693,7 +710,11 @@ public enum ShapeGaze {
         // the face seen from the front: its middle rests at the anchor and moves as much as the head's turn moves it
         let mid = CGPoint(x: (left.center.x + right.center.x) / 2, y: (left.center.y + right.center.y) / 2)
         let rest = restMid(roll)
-        let spread = ShapeMath.radiusToward(radii, 1, 0) * 0.5 + ShapeMath.radiusToward(radii, -1, 0) * 0.5
+        // a path body's width is read on its own outline, across the face's row: its polar
+        // radii from the box's middle can miss the body there (a sprout's leaf seam, a tin's
+        // narrow can), which gathered the eyes until they no longer fit apart (2026-11-01)
+        let spread = path.map { outlineHalfWidth($0, ShapeMath.toBox(CGPoint(x: anchor.x, y: anchor.y))) / ShapeEngineData.bodyUnit }
+            ?? ShapeMath.radiusToward(radii, 1, 0) * 0.5 + ShapeMath.radiusToward(radii, -1, 0) * 0.5
         let sx = max(0.35, min(1.25, spread))
         let target = CGPoint(x: anchor.x + (mid.x - rest.x) * ShapeEngineData.eyeGaze,
                              y: anchor.y + (mid.y - rest.y) * ShapeEngineData.eyeGaze)
@@ -711,21 +732,40 @@ public enum ShapeGaze {
             guard eyes.count == 2 else { return true }
             return abs(eyes[1].center.x - eyes[0].center.x) >= (eyes[0].w + eyes[1].w) / 2 + ShapeEngineData.eyeGap * max(eyes[0].w, eyes[1].w)
         }
-        func fits(_ eyes: [ShapePlacedEye]) -> Bool {
-            apart(eyes) && eyes.allSatisfy { e in
-                e.points.allSatisfy { p in hypot(p.x, p.y) <= ShapeMath.radiusToward(radii, p.x, nonZero(p.y)) - ShapeEngineData.eyeMargin }
+        // A path body (an object silhouette) is not star-shaped around the box's middle: a
+        // sprout's leaves pinch there, so its polar radii say "nothing fits" and the eyes
+        // collapsed to a dot (2026-11-01). Such a body is tested against its own outline,
+        // each eye point keeping eyeMargin inside in every direction.
+        let margin = ShapeEngineData.eyeMargin * ShapeEngineData.bodyUnit
+        let probes: [(Double, Double)] = [(0, 0), (margin, 0), (-margin, 0), (0, margin), (0, -margin)]
+        func inside(_ p: CGPoint) -> Bool {
+            guard let path else {
+                return hypot(p.x, p.y) <= ShapeMath.radiusToward(radii, p.x, nonZero(p.y)) - ShapeEngineData.eyeMargin
             }
+            let b = ShapeMath.toBox(p)
+            return probes.allSatisfy { d in ShapeAvatarOutline.pointInsideOutline(path, x: Double(b.x) + d.0, y: Double(b.y) + d.1) }
+        }
+        func fits(_ eyes: [ShapePlacedEye]) -> Bool {
+            apart(eyes) && eyes.allSatisfy { e in e.points.allSatisfy(inside) }
+        }
+        // the eyes' distance does not move with the face (only their size does): a narrow path body
+        // that keeps them too close shrinks them first, so the face stays at its own anchor instead of
+        // collapsing to the box's middle (a tin, a ship, 2026-11-01). A polar body keeps k = 1.
+        var start = 1.0
+        if path != nil {
+            while start > 0.1, !apart([place(left, 1, start), place(right, 1, start)]) { start *= 0.9 }
         }
         var lo = 0.0, hi = 1.0
-        if !fits([place(left, 1), place(right, 1)]) {
+        if !fits([place(left, 1, start), place(right, 1, start)]) {
             for _ in 0..<18 {
                 let s = (lo + hi) / 2
-                if fits([place(left, s), place(right, s)]) { lo = s } else { hi = s }
+                if fits([place(left, s, start), place(right, s, start)]) { lo = s } else { hi = s }
             }
             hi = lo
         }
-        var placed = [place(left, hi), place(right, hi)]
-        var shrink = 1.0
+        var placed = [place(left, hi, start), place(right, hi, start)]
+        // a body too small for these eyes even with the face in the middle: shrink both eyes alike
+        var shrink = start
         while shrink > 0.1, !fits(placed) {
             shrink *= 0.9
             placed = [place(left, hi, shrink), place(right, hi, shrink)]
@@ -818,7 +858,7 @@ public enum ShapeFrames {
             (($0.face.x - ShapeEngineData.bodyCenter.x) / unit, ($0.face.y - ShapeEngineData.bodyCenter.y) / unit)
         }
         let anchor = pathFace ?? ShapeEngineData.faceAnchor[input.shape] ?? ShapeEngineData.eyeShift
-        let placed = input.eyes > 0.02 ? ShapeGaze.solveEyes(input.radii, input.face, gaze: input.gaze, open: input.open, anchor: anchor) : []
+        let placed = input.eyes > 0.02 ? ShapeGaze.solveEyes(input.radii, input.face, gaze: input.gaze, open: input.open, anchor: anchor, outline: input.outline?.points) : []
         // eyes fading out with a move shrink to nothing about their middle (no move does any more)
         let s = ShapeMath.clamp01(input.eyes)
         let shown = placed.map { e -> ShapePlacedEye in

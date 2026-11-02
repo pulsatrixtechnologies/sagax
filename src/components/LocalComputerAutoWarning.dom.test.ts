@@ -35,10 +35,11 @@ function mount(onConfirm: () => void, onCancel: () => void = () => {}) {
 describe("LocalComputerAutoWarning", () => {
   it("shows the warning the first time and remembers the OK", () => {
     const onConfirm = vi.fn();
-    const host = mount(onConfirm);
-    expect(host.querySelector("[role=dialog]")).not.toBeNull();
+    mount(onConfirm);
+    // ConfirmDialog portals to document.body (alertdialog).
+    expect(document.querySelector("[role=alertdialog]")).not.toBeNull();
     expect(onConfirm).not.toHaveBeenCalled();
-    const ok = [...host.querySelectorAll("button")].at(-1)!;
+    const ok = document.querySelector("[data-confirm-action]") as HTMLButtonElement;
     act(() => ok.click());
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(window.localStorage.getItem(LOCAL_AUTO_ACK_KEY)).toBe("1");
@@ -48,16 +49,16 @@ describe("LocalComputerAutoWarning", () => {
   it("confirms by itself once the person already said OK on this computer", () => {
     window.localStorage.setItem(LOCAL_AUTO_ACK_KEY, "1");
     const onConfirm = vi.fn();
-    const host = mount(onConfirm);
-    expect(host.querySelector("[role=dialog]")).toBeNull();
+    mount(onConfirm);
+    expect(document.querySelector("[role=alertdialog]")).toBeNull();
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
   it("Cancel remembers nothing", () => {
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
-    const host = mount(onConfirm, onCancel);
-    const cancel = [...host.querySelectorAll("button")][0]!;
+    mount(onConfirm, onCancel);
+    const cancel = Array.from(document.querySelectorAll<HTMLButtonElement>("[role=alertdialog] button")).find((button) => !button.hasAttribute("data-confirm-action"))!;
     act(() => cancel.click());
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();

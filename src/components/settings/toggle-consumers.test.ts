@@ -20,7 +20,6 @@ describe("local switches: setter stores, consumer reads", () => {
     // toggle, module, setter, consumer file, consumer symbol
     ["Show the run card", "lib/run-card-preferences", "setShowRunCard", "components/ChatView.tsx", "useShowRunCard", ""],
     ["Show the inspector button", "lib/inspector-preferences", "setShowInspectorButton", "components/ChatView.tsx", "useShowInspectorButton", ""],
-    ["Show unconfigured providers", "lib/unready-providers-preference", "setShowUnreadyProviders", "components/ModelPicker.tsx", "useShowUnreadyProviders", ""],
     ["Sidebar logo", "lib/sidebar-logo-preferences", "setShowSidebarLogo", "components/Sidebar.tsx", "useShowSidebarLogo", ""],
     ["Routines badge", "lib/routines-badge-preferences", "setShowRoutinesBadge", "components/SidebarProfileMenu.tsx", "useShowRoutinesBadge", ""],
     ["Show suggestions", "lib/panel-visibility", "setShowSuggestions", "components/bot-settings/SuggestionsSection.tsx", "useShowSuggestions", ""],
@@ -43,13 +42,13 @@ describe("Connect apps sidebar entry (always available)", () => {
   it("draws the Connect apps entry on the rail and the wide foot, ungated", () => {
     const sidebar = read("components/Sidebar.tsx");
     expect(sidebar).not.toContain("connectedAppsEnabled");
-    expect(sidebar).toContain("<SidebarConnectApps iconOnly");
-    // the wide foot is SidebarFoot (#1105), which draws the Connect apps pill itself
+    // the rail and the wide foot are SidebarRailFoot and SidebarFoot, each drawing the round apps button (FootConnectApps)
+    expect(sidebar).toContain("<SidebarRailFoot places={accountPlaces} onOpenApps=");
     expect(sidebar).toContain("<SidebarFoot places={accountPlaces} onOpenApps=");
-    expect((sidebar.match(/<SidebarConnectApps/g) ?? []).length).toBe(1);
     const foot = read("components/SidebarFoot.tsx");
     expect(foot).not.toContain("connectedAppsEnabled");
     expect(foot).toContain("chat.connectApps.pill");
+    expect((foot.match(/<FootConnectApps/g) ?? []).length).toBe(2);
     // the chat no longer draws a connect-apps pill
     const chat = read("components/ChatView.tsx");
     expect(chat).not.toContain("ConversationConnectApps");
@@ -62,8 +61,8 @@ describe("other switches and their consumers", () => {
     ["Hardware acceleration / spellcheck / bot hotkeys", "../electron/desktop-shell-preferences.mjs", "hardwareAcceleration"],
     ["Desktop mascot switches", "components/floating-bots/FloatingBots.tsx", "floatingBotPrefs"],
     ["Dev context pods", "components/dev-pods/DevPods.tsx", "useDevPodPrefs"],
-    ["Skill authoring", "components/Composer.tsx", "skillAuthoringEnabled"],
-    ["Built-in browser", "components/ComputerPanel.tsx", "builtInBrowserEnabled"],
+    ["Skill authoring", "components/Composer.tsx-parts/useComposerCommands.ts", "skillAuthoringEnabled"],
+    ["Built-in browser", "components/ComputerPanel.tsx-parts/useComputerPanelSession.ts", "builtInBrowserEnabled"],
     ["Data window", "components/DataWindowButton.tsx", "dataWindowEnabled"],
     ["Decision model", "components/SettingsModal.tsx", "decisionModelEnabled"],
     ["Show tool calls", "components/ChatView.tsx", "showToolCallsEnabled"],

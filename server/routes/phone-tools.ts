@@ -41,6 +41,9 @@ export interface PhoneToolRouteDeps {
    * browser, a service, or anyone who is not a person. */
   phone(req: IncomingMessage, auth: RequestAuth): { person: string; deviceId: string; transport: PhoneTransport } | null;
   botName(botId: string): string | undefined;
+  /** False when a bearer session was revoked while the body was still
+   * arriving (port of upstream 035101e08). Loopback companion phones stay. */
+  live?(auth: RequestAuth): boolean;
 }
 
 export function createPhoneToolRoutes(deps: PhoneToolRouteDeps): RouteHandler {
@@ -48,6 +51,7 @@ export function createPhoneToolRoutes(deps: PhoneToolRouteDeps): RouteHandler {
     // literal paths, so scripts/tool-policy reads them (admin rows: never a bot's)
     if (!(path === "/api/me/phone-tools/device" || path === "/api/me/phone-tools/requests" || path === "/api/me/phone-tools/grants") && !REQUEST_PATH.test(path)) return PASS;
     res.setHeader("cache-control", "no-store");
+    if (deps.live && !deps.live(auth)) return json(res, 401, { error: "Session expired" });
     const phone = deps.phone(req, auth);
     if (!phone) return json(res, 403, { error: "Only your paired phone uses phone tools.", code: "phone_required" });
     const broker = deps.broker();
@@ -56,6 +60,7 @@ export function createPhoneToolRoutes(deps: PhoneToolRouteDeps): RouteHandler {
       if (method !== "POST") return json(res, 405, { error: "POST" });
       const parsed = phoneDeviceSchema.safeParse(await readBody(req));
       if (!parsed.success) return json(res, 400, { error: "send { deviceName?, tools: [location, contacts, reminders, calendar, home, alarms, photos, shortcut, clipboard, status] }" });
+      if (deps.live && !deps.live(auth)) return json(res, 401, { error: "Session expired" });
       // the transport is the connection's, whatever the body says (review of #960)
       broker.registerDevice(phone.person, phone.deviceId, { deviceName: parsed.data.deviceName, tools: parsed.data.tools, transport: phone.transport });
       return json(res, 200, { ok: true, tools: broker.availableTools(phone.person) });
@@ -63,6 +68,7 @@ export function createPhoneToolRoutes(deps: PhoneToolRouteDeps): RouteHandler {
 
     if (path === `${PREFIX}/requests`) {
       if (method !== "GET") return json(res, 405, { error: "GET" });
+      if (deps.live && !deps.live(auth)) return json(res, 401, { error: "Session expired" });
       return json(res, 200, { requests: broker.pendingFor(phone.person) });
     }
 
@@ -88,6 +94,7 @@ export function createPhoneToolRoutes(deps: PhoneToolRouteDeps): RouteHandler {
     if (method !== "POST") return json(res, 405, { error: "POST" });
     const parsed = phoneAnswerSchema.safeParse(await readBody(req, ANSWER_MAX_BYTES));
     if (!parsed.success) return json(res, 400, { error: "send { decision: deny | once | always, result?, error? }" });
+    if (deps.live && !deps.live(auth)) return json(res, 401, { error: "Session expired" });
     const outcome = broker.answer(phone.person, phone.deviceId, match[1]!, parsed.data);
     if (!outcome.ok) return json(res, outcome.status, { error: outcome.error });
     return json(res, 200, { ok: true });

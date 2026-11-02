@@ -26,9 +26,9 @@ import { viewerIsOrgAdmin } from "@/lib/group-owner";
 import { boatComputerEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
 import { OrgHostToolsNote, orgRefusesEngine } from "./OrgHostToolsNote";
 import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsGroup } from "./SettingsPrimitives";
-import { ProviderKeyDialog } from "./settings/ProviderKeys";
 import { AutoModelSettings } from "./settings/AutoModelSettings";
 import { BotModelsSettings } from "./settings/BotModelsSettings";
+import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
 import { ModelSwitchesSettings } from "./settings/ModelSwitchesSettings";
 import { VoiceProviderSettings } from "./settings/VoiceProviderSettings";
 import { WebSearchSettings } from "./settings/WebSearchSettings";
@@ -457,6 +457,7 @@ export function EnginesSettings() {
       <BotModelsSettings />
       <ProvidersMovedNotice />
       <ModelSwitchesSettings />
+      {installation && <CacheKeepWarmSettings />}
       {/* the person's own web search provider and key: theirs, no admin right */}
       <WebSearchSettings />
       {installation && (
@@ -476,7 +477,6 @@ export function EnginesSettings() {
           </SettingsGroup>
         </div>
       )}
-      {(keys || installation) && <ProviderKeyDialog />}
     </div>
   );
 }

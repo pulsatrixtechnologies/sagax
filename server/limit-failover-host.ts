@@ -76,7 +76,13 @@ export interface LimitFailoverHostDeps {
    * payer before `until` (its usage limit's reset). */
   autoRefuse?: (threadId: string, payer: string, until: number) => void;
 
-  rerunRoutine: (routineId: string) => boolean;
+  /** Starts the routine again on the backup. `fromRunId` is the waiting,
+   * queued or failed run this failover replaces; the host cancels it first
+   * so the new run is not stuck behind a reconnect / usage wait. */
+  rerunRoutine: (routineId: string, fromRunId?: string) => boolean;
+  /** Cancels a waiting or queued park without starting a new run (no-backup
+   * wait path: the scheduled resume owns the restart). */
+  clearRoutineRun?: (runId: string) => void;
   /** Schedules `run` in `ms`; the default is an unref'd timer. */
   after?: (ms: number, run: () => void) => { cancel(): void };
 }
@@ -198,7 +204,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         // onto the backup for good (no return after a reset).
         if (exhausted) {
           const refused = deps.switchThread(dispatch.botId, threadId, backup);
-          if (!refused && deps.rerunRoutine(run.routineId)) {
+          if (!refused && deps.rerunRoutine(run.routineId, run.id)) {
             deps.replaceFailure(threadId, turnId, {
               kind: "switched", from: deps.engineName(dispatch.engine.instanceId), to: deps.engineName(backup.instanceId),
               resetsAt: deps.now(), reason: "model",
@@ -208,11 +214,25 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           if (refused) console.warn(`[limit-failover] ${threadId}: could not move to ${backup.instanceId}: ${refused}`);
           return;
         }
-        // The next run starts on the backup (beforeTurn) and says so there.
-        if (deps.rerunRoutine(run.routineId)) return;
+        // Usage limit with a backup: switch the thread now, record the
+        // failover (so beforeTurn stays consistent), write the switched
+        // note, then rerun. Prefer backup over same-engine reconnect wait.
+        const refused = deps.switchThread(dispatch.botId, threadId, backup);
+        if (!refused) {
+          const kept = store.record({ botId: dispatch.botId, threadId, from: dispatch.selection, to: backup, resetsAt, at: deps.now() });
+          deps.replaceFailure(threadId, turnId, {
+            kind: "switched", from: deps.engineName(kept.from.instanceId), to: deps.engineName(backup.instanceId), resetsAt: kept.resetsAt,
+          }, dispatch.at);
+          if (deps.rerunRoutine(run.routineId, run.id)) return;
+        } else {
+          console.warn(`[limit-failover] ${threadId}: could not move to ${backup.instanceId}: ${refused}`);
+        }
       }
       // Exhausted with no backup: leave the engine's own error (no reset to wait for).
       if (exhausted) return;
+      // Drop recoverRun's competing queued / reconnect wait so only this
+      // scheduled resume restarts the routine.
+      deps.clearRoutineRun?.(run.id);
       store.schedule({ kind: "routine", routineId: run.routineId, engine: homeEngine.instanceId, at: homeReset + store.afterResetMs });
       deps.replaceFailure(threadId, turnId, { kind: "waitingRoutine", from: deps.engineName(homeEngine.instanceId), resetsAt: homeReset }, dispatch.at);
       arm();

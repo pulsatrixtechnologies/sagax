@@ -119,6 +119,43 @@ describe("Whop, an MCP server connected like an app", () => {
   });
 });
 
+describe("Tailscale, a bot computer join under Connect apps", () => {
+  it("is one featured row: Connect when idle, pending while waiting, connected when on the tailnet", () => {
+    const idle = buildPluginItems({
+      ...sources,
+      tailscale: { description: "Join your bot computer to your private tailnet.", connected: false },
+    });
+    expect(idle.find((item) => item.key === "tailscale:tailscale")).toMatchObject({
+      name: "Tailscale",
+      action: "connect",
+      installed: false,
+      status: "available",
+      category: "other",
+    });
+    expect(matchesType(idle.find((item) => item.key === "tailscale:tailscale")!, "apps")).toBe(true);
+
+    const waiting = buildPluginItems({
+      ...sources,
+      tailscale: { description: "Join your bot computer to your private tailnet.", connected: false, pending: true },
+    });
+    expect(waiting.find((item) => item.key === "tailscale:tailscale")).toMatchObject({
+      installed: true,
+      status: "pending",
+      action: null,
+    });
+
+    const on = buildPluginItems({
+      ...sources,
+      tailscale: { description: "Join your bot computer to your private tailnet.", connected: true },
+    });
+    expect(on.find((item) => item.key === "tailscale:tailscale")).toMatchObject({
+      installed: true,
+      status: "connected",
+      action: null,
+    });
+  });
+});
+
 
 describe("one row per app across sources", () => {
   const merged = {

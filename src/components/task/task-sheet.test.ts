@@ -63,6 +63,15 @@ describe("task status words", () => {
     expect(taskStatusWords({ status: "failed", startedAt: NOW - 3 * MIN, endedAt: NOW, now: NOW, handedBy: "Echo" })).toEqual(["Failed", "from Echo", "in 3m"]);
   });
 
+  it("names who is waited on when a derived job stage is set", () => {
+    expect(taskStatusWords({ status: "waiting", startedAt: NOW - 4 * MIN, now: NOW, stage: "awaiting_reply" }))
+      .toEqual(["Waiting for your reply", "4m so far"]);
+    expect(taskStatusWords({ status: "failed", startedAt: NOW - 3 * MIN, endedAt: NOW, now: NOW, stage: "held", handedBy: "Echo" }))
+      .toEqual(["Blocked: needs you", "from Echo", "in 3m"]);
+    expect(taskStatusWords({ status: "finished", startedAt: NOW - 12 * MIN, endedAt: NOW, now: NOW, stage: "to_review" }))
+      .toEqual(["Ready for your review", "in 12m"]);
+  });
+
   it("draws the bot's pill with its mascot, the title and the actions", () => {
     const html = renderToStaticMarkup(createElement(TaskStatusHeader, {
       title: "Follow up", bot: { name: "Wren", color: "green" } as never, status: "running", startedAt: NOW - MIN, now: NOW, stepLabel: "Read a file",
@@ -143,6 +152,29 @@ describe("grouped steps", () => {
     // one chevron per group, the technical detail closed
     expect(html).not.toContain("data-activity-technical");
     expect(html.match(/aria-expanded="false"/g)).toHaveLength(4);
+  });
+
+  it("folds finished tool searches like ActivityRun and shortens runCommand targets", () => {
+    const bot = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+    const full = `ls /data/.sagax/bots/${bot}/sagax-plugins`;
+    const steps: BotActivityStep[] = [
+      { id: "s1", name: "search_tool", at: NOW, ok: true, input: JSON.stringify({ query: "perspicax" }) },
+      { id: "u1", name: "use_tool", at: NOW, ok: true, input: JSON.stringify({ tool_name: "perspicax__acme_desk__query", tool_input: { resource: "service.tickets" } }) },
+      { id: "s2", name: "search_tool", at: NOW, ok: true, input: JSON.stringify({ query: "remote" }) },
+      { id: "u2", name: "use_tool", at: NOW, ok: true, input: JSON.stringify({ tool_name: "perspicax__acme_desk__query", tool_input: { resource: "service.tickets" } }) },
+      { id: "b1", name: "Bash", at: NOW, ok: true, where: "server", input: JSON.stringify({ command: full }), summary: full },
+    ];
+    const html = renderToStaticMarkup(createElement(ActivityStepGroups, { steps }));
+    expect(html).toContain("Looked for a tool");
+    expect(html).toContain('data-activity-step-count="2"');
+    expect(html).toContain("Viewed tickets in Acme Desk");
+    expect(html).toContain('data-step-target="true"');
+    expect(html).toMatch(/data-step-target[^>]*>ls sagax-plugins</);
+    // UUID and server path stay in the tooltip only (title=), never as the visible target
+    expect(html).toContain(`title="${full}"`);
+    const withoutTitles = html.replace(/\stitle="[^"]*"/g, "");
+    expect(withoutTitles).not.toContain(bot);
+    expect(withoutTitles).not.toContain("/data/.sagax");
   });
 });
 

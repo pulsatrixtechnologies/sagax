@@ -315,7 +315,7 @@ final class BotAdvancedUITests: XCTestCase {
     // MARK: Prompt preview (BA2), Access (BA6)
 
     @MainActor
-    func testPromptPreviewAndReadOnlyAccess() throws {
+    func testPromptPreviewAndOwnerAccess() throws {
         try requirePanel()
         let app = launchAdvanced()
         // the prompt preview is on Overview, as OverviewSection.tsx draws it
@@ -326,11 +326,9 @@ final class BotAdvancedUITests: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
         open("panel-row.access", in: app)
         XCTAssertTrue(element("access-folder", in: app).waitForExistence(timeout: 10))
-        // the sidecar refuses these fields: read-only lines, never switches
-        // the sidecar refuses these fields: read-only lines, never switches
-        XCTAssertTrue(reveal(element("access-read-only", in: app), in: app), "the read-only note shows")
-        XCTAssertFalse(app.switches["access-browser"].exists, "no switch the sidecar would refuse")
-        XCTAssertFalse(app.switches["access-connected-apps"].exists)
+        // Lot 1: the owner's sidecar edits Access (browser switch), no read-only note
+        XCTAssertFalse(element("access-read-only", in: app).exists, "the owner edits Access on the phone")
+        XCTAssertTrue(app.switches["access-browser"].waitForExistence(timeout: 5), "browser switch for the owner")
         attach("Access", app)
     }
 
@@ -354,6 +352,60 @@ final class BotAdvancedUITests: XCTestCase {
             let after = ((try api("GET", "/api/bots/\(id)/command-allowlist") as? [String: Any])?["rules"] as? [[String: Any]]) ?? []
             return !after.contains { $0["id"] as? String == ruleId }
         }
+    }
+
+    // MARK: Display hygiene (Lot 8)
+
+    /// Changes and Memory never show a UUID/GUID on the open surface. Ids
+    /// and paths stay behind Show details / Show path. Skips without a
+    /// parity fixture (same as the other advanced panel tests).
+    @MainActor
+    func testChangesAndMemoryHideUuidsOnTheOpenSurface() throws {
+        try requirePanel()
+        let id = try araId()
+        let uuidPattern = try NSRegularExpression(
+            pattern: "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            options: [.caseInsensitive]
+        )
+        func hasUuid(_ text: String) -> Bool {
+            let range = NSRange(text.startIndex..., in: text)
+            return uuidPattern.firstMatch(in: text, range: range) != nil
+        }
+
+        let app = launchAdvanced()
+        open("panel-row.history", in: app)
+        XCTAssertTrue(element("history-page", in: app).waitForExistence(timeout: 15)
+                      || app.navigationBars["Changes"].waitForExistence(timeout: 5))
+        // Open-surface labels only: skip identifiers that name a folded row.
+        let historyTree = app.debugDescription
+        let historyOpen = historyTree
+            .components(separatedBy: .newlines)
+            .filter { line in
+                line.contains("StaticText") && !line.contains("history-details") && !line.contains("history-undo")
+            }
+            .joined(separator: "\n")
+        XCTAssertFalse(hasUuid(historyOpen), "Changes open surface shows UUID:\n\(historyOpen)")
+        attach("Changes hygiene", app)
+
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        open("panel-row.memory", in: app)
+        XCTAssertTrue(element("memory-show-path", in: app).waitForExistence(timeout: 15)
+                      || reveal(element("memory-show-path", in: app), in: app)
+                      || element("memory-enabled", in: app).waitForExistence(timeout: 5),
+                      "Memory page opens")
+        // Collapsed: the scrubbed path (and the raw UUID path) stay hidden.
+        XCTAssertFalse(element("memory-path-display", in: app).exists,
+                       "path stays behind Show path until opened")
+        let memoryTree = app.debugDescription
+        XCTAssertFalse(hasUuid(memoryTree.replacingOccurrences(of: id, with: "")),
+                       "Memory open surface shows UUID:\n\(memoryTree)")
+        // Bot id must not appear as readable path text (identifier suffixes are fine).
+        let memoryLabels = memoryTree
+            .components(separatedBy: .newlines)
+            .filter { $0.contains("StaticText") && !$0.contains("Identifier") }
+            .joined(separator: "\n")
+        XCTAssertFalse(memoryLabels.contains(id), "Memory open surface shows bot id:\n\(memoryLabels)")
+        attach("Memory hygiene", app)
     }
 
     // MARK: The bot's one "..." menu (#518)

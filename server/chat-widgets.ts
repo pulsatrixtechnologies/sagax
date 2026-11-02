@@ -9,7 +9,7 @@
 // the Watcher's legacy options card, unchanged.
 import {
   parseWidgetInput, resolveWidgetAction, widgetActions, widgetFields, widgetToText, WIDGET_LIMITS,
-  type WidgetAction, type WidgetNode, type WidgetPayload, type WidgetRoot, type WidgetSettled,
+  type WidgetAction, type WidgetAppAction, type WidgetNode, type WidgetPayload, type WidgetRoot, type WidgetSettled,
 } from "../shared/widget.ts";
 import { parsePageProposal, type PageKind } from "../shared/published-pages.ts";
 import type { MausColor } from "../shared/wire.ts";
@@ -215,6 +215,9 @@ export type WidgetPress =
       action: WidgetAction;
       /** This press folds the widget (confirm, cancel, submit) and has not yet. */
       settles: boolean;
+      /** The device already opened this in-app destination: the press is
+       * recorded for the bot as done and starts no turn. */
+      device?: WidgetAppAction;
       /** Call once the message is accepted, with its `queueId` when it was
        * queued rather than started or steered. */
       settle(queueId?: string): void;
@@ -267,7 +270,7 @@ export function prepareWidgetPress(
   if (!retry && !payload.settled && (rev ?? 0) !== (payload.rev ?? 0)) return { ok: false, status: 409, error: STALE_PRESS };
   const resolved = resolveWidgetAction(retry ? { v: 1, root: payload.root } : payload, ref, values ?? undefined);
   if (!resolved.ok) return resolved;
-  const { label, action, tone } = resolved;
+  const { label, action, tone, device } = resolved;
   // What the person had in the fields, kept for the read-only Details view.
   // Cancel sends none, and a widget with no fields has none to keep.
   const sent = Object.keys(resolved.values).length > 0 ? { values: resolved.values } : {};
@@ -277,7 +280,8 @@ export function prepareWidgetPress(
     text: resolved.text,
     label,
     action,
-    settles: Boolean(tone) && !retry,
+    settles: Boolean(tone) && !retry && !device,
+    ...(device ? { device } : {}),
     settle: (queueId) => {
       // Read again: two requests for one press can both get here, and the
       // bot may have replaced the tree while the message was on its way.

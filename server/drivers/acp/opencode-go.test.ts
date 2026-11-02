@@ -437,7 +437,7 @@ describe("OpenCode catalog", () => {
     expect(source.match(/setOpenCodeProviderKeyPolicy\(/g)).toHaveLength(1);
     const policy = source.slice(source.indexOf("const openCodeKeysAllowed = "), wired);
     expect(policy).toContain("sharedSignIn: sharedSignIn(signInAllowList())");
-    expect(policy).toContain("cloudHome: Boolean(CLOUD_HOME)");
+    expect(policy).toContain("cloudHome: false");
     expect(policy).toContain("hostedWorkspace: HOSTED_WORKSPACE");
     expect(policy).toContain("organisationManaged: openCodeOrganisationManaged()");
     expect(source).toContain("openCodeOrganisationManaged = () => managedPolicy.current() !== null || managedDesktop.enrolled();");

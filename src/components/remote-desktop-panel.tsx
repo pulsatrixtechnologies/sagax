@@ -42,13 +42,18 @@ function routineScheduleLabel(routine: Routine) {
       minute: "2-digit",
     })}`;
   }
+  if (routine.schedule.type === "limit_reset") {
+    return routine.schedule.at === null
+      ? `When ${routine.schedule.engine} limit resets`
+      : `When ${routine.schedule.engine} limit resets · ${new Date(routine.schedule.at).toLocaleString(activeLocale(), { hour: "numeric", minute: "2-digit" })}`;
+  }
   const days = routine.schedule.weekdays;
   const cadence =
     days.length === 7
       ? "Every day"
       : days.join(",") === "1,2,3,4,5"
         ? "Weekdays"
-        : days.map((day) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ");
+        : days.map((day: number) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day]).join(", ");
   const [hour, minute] = routine.schedule.time.split(":").map(Number);
   return `${cadence} · ${new Date(2000, 0, 1, hour, minute).toLocaleTimeString(activeLocale(), { hour: "numeric", minute: "2-digit" })}`;
 }
@@ -332,12 +337,17 @@ export function RemoteDesktopPanel({ bot }: { bot: Bot }) {
         </div>
       </div>
       {creatingRoutine && (
-        <RoutineEditor
-          bots={[bot]}
-          lockedBotId={bot.id}
-          defaultRunOn={cloudRoutineReady ? "cloud" : "maus"}
-          onClose={() => setCreatingRoutine(false)}
-        />
+        // 2026-11-01 (lot 2): panel push inside this docked panel, not a
+        // centred window (same presentation as the bot panel's routines).
+        <div className="absolute inset-0 z-30 min-h-[24rem]">
+          <RoutineEditor
+            bots={[bot]}
+            lockedBotId={bot.id}
+            defaultRunOn={cloudRoutineReady ? "cloud" : "maus"}
+            presentation="panel"
+            onClose={() => setCreatingRoutine(false)}
+          />
+        </div>
       )}
     </aside>
   );

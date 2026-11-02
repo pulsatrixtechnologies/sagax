@@ -35,3 +35,79 @@ export function routineMailAddress(botAddress: string, alias: string): string | 
   if (!domain.includes(".")) return null;
   return `${trimmed.slice(0, at)}+${parsed.alias}@${domain}`;
 }
+
+/** A routine row used to route inbound mail by plus tag. */
+export interface MailTagRoutine {
+  id: string;
+  botId: string;
+  name?: string;
+  enabled: boolean;
+  suspended?: boolean;
+  mailAlias?: string;
+}
+
+/** Enabled, unsuspended routines of this bot bound to the plus tag. */
+export function routinesForMailTag(
+  routines: readonly MailTagRoutine[],
+  botId: string,
+  tag: string,
+): MailTagRoutine[] {
+  const wanted = tag.trim().toLowerCase();
+  if (!TAG.test(wanted)) return [];
+  return routines.filter((routine) =>
+    routine.botId === botId
+    && routine.enabled
+    && !routine.suspended
+    && routine.mailAlias === wanted);
+}
+
+export type MailDeliveryPlan =
+  | { kind: "tagged"; tag: string; routineIds: string[] }
+  | { kind: "untagged" };
+
+/** Tagged To addresses wake only the matching mailAlias routines. The plain
+ * bot address keeps today's botmail typed triggers. */
+export function planMailDelivery(
+  toAddress: string,
+  routines: readonly MailTagRoutine[],
+  botId: string,
+): MailDeliveryPlan {
+  const tag = plusTag(toAddress);
+  if (!tag) return { kind: "untagged" };
+  return {
+    kind: "tagged",
+    tag,
+    routineIds: routinesForMailTag(routines, botId, tag).map((routine) => routine.id),
+  };
+}
+
+export interface TagRoutingRow {
+  tag: string;
+  address: string | null;
+  routineId: string;
+  routineName: string;
+  /** False when the routine is paused or suspended. */
+  enabled: boolean;
+}
+
+/** Settings UI rows: every routine of this bot that has a mail tag. Another
+ * bot's routines never appear. */
+export function tagRoutingRows(
+  routines: readonly MailTagRoutine[],
+  botId: string,
+  botAddress: string | null | undefined,
+): TagRoutingRow[] {
+  const address = typeof botAddress === "string" ? botAddress.trim() : "";
+  const rows: TagRoutingRow[] = [];
+  for (const routine of routines) {
+    if (routine.botId !== botId || !routine.mailAlias) continue;
+    rows.push({
+      tag: routine.mailAlias,
+      address: address ? routineMailAddress(address, routine.mailAlias) : null,
+      routineId: routine.id,
+      routineName: routine.name?.trim() || routine.id,
+      enabled: routine.enabled && !routine.suspended,
+    });
+  }
+  return rows;
+}

@@ -49,4 +49,25 @@ describe("Persona editor state", () => {
     }
     expect(reducer(withBot, { type: "toggleSettings", open: true }).personaEditor).toBeNull();
   });
+
+  it("leaves Connect apps / archived so the editor fills the main column", () => {
+    const fromApps = reducer(
+      { ...withBot, activeView: "apps" as const, pluginsOpen: true },
+      { type: "openPersonaEditor", botId: "pepper" },
+    );
+    expect(fromApps).toMatchObject({
+      personaEditor: { botId: "pepper", section: "overview" },
+      activeView: "chat",
+      pluginsOpen: false,
+      botWizard: null,
+    });
+    const fromArchived = reducer(
+      { ...withBot, activeView: "archived-bots" as const },
+      { type: "openPersonaEditor", botId: "pepper", section: "soul" },
+    );
+    expect(fromArchived).toMatchObject({
+      personaEditor: { botId: "pepper", section: "soul" },
+      activeView: "chat",
+    });
+  });
 });

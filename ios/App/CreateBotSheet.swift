@@ -1,9 +1,10 @@
-// Create New Bot (reference 20): a floating card over the dimmed home with a
-// live preview of the character, "Name your Bot", the Character editor where
-// the reference has its shape and colour grids, and a Create capsule that
-// stays grey until there is a name. The picture is set later, from the
-// profile. Geometry from measure-home.md §5, relative to the card
-// (x 8-394, y 123.7-865.7).
+// Create New Bot (reference 20 / lot 7, 2026-11-01): a floating card over
+// the dimmed home with a live preview of the character, "Name your Bot",
+// the Character editor, and a Create capsule that stays grey until there
+// is a name. The "+" menu opens this first (three gestures to a named
+// bot). Guided / Manual / templates / imports / drafts sit under
+// "Other ways to start". Geometry from measure-home.md §5, relative to
+// the card (x 8-394, y 123.7-865.7).
 //
 // More options (WP13, matrix rows NB2-NB4): below the fold of the
 // character editor, so the card the reference shows is unchanged, a row
@@ -21,8 +22,8 @@ struct CreateBotSheet: View {
     var section: String?
     let close: () -> Void
     let created: (Bot) -> Void
-    /// The header's Wizard button; off when the wizard itself opened this
-    /// form (its "Start from a template", 2026-10-27).
+    /// Off when the wizard itself opened this form (its former
+    /// "Start from a template"); hides Other ways that loop back.
     var showsWizard = true
 
     init(section: String? = nil, close: @escaping () -> Void, showsWizard: Bool = true, created: @escaping (Bot) -> Void) {
@@ -40,7 +41,12 @@ struct CreateBotSheet: View {
     @State private var importingZip = false
     /// "Import from Grok Bot" (desktop AgentImport.tsx).
     @State private var importingAgent = false
+    /// Browse templates sheet (when the gate allows).
+    @State private var browsingTemplates = false
     @State private var presets: [BotPreset] = []
+    /// Open wizard drafts the person can resume (lot 7).
+    @State private var drafts: [WizardDraft] = []
+    @State private var otherWaysExpanded = false
     /// The administrator lets this person use shared bots only (NB6).
     @State private var readOnly = false
     @State private var name = ""
@@ -100,6 +106,9 @@ struct CreateBotSheet: View {
             if session.isDemo { unlocks = .demo }
             readOnly = NewBotRules.readOnly(await session.configStatus())
             presets = await session.botPresets()
+            if showsWizard, let client = session.profileClient {
+                drafts = (try? await client.wizardDrafts()) ?? []
+            }
             if !session.isDemo, session.surfaceGate.allows(.characterExtras), session.surfaceGate.allows(.achievements),
                let client = session.profileClient, let earned = try? await client.mascotUnlocks() {
                 unlocks = earned
@@ -116,6 +125,10 @@ struct CreateBotSheet: View {
                 importingAgent = false
                 if let bot { created(bot) } else { close() }
             }, initialReply: Self.parityReply)
+        }
+        .sheet(isPresented: $browsingTemplates) {
+            BrowseBotsSheet { browsingTemplates = false }
+                .environmentObject(session)
         }
         .sheet(isPresented: $showingOptions) {
             NewBotOptionsForm(
@@ -155,6 +168,121 @@ struct CreateBotSheet: View {
         .clipShape(RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("create-bot-sheet")
+    }
+
+    /// Lot 7: Guided, Manual, templates, imports and drafts under one
+    /// disclosure so the first screen stays the quick create.
+    private var otherWaysSection: some View {
+        DisclosureGroup(isExpanded: $otherWaysExpanded) {
+            VStack(spacing: 0) {
+                otherWayRow(
+                    title: String(localized: "Guided with my bot"),
+                    hint: String(localized: "Your bot asks the questions and fills each step live."),
+                    icon: "bubble.left.and.bubble.right",
+                    id: "guided"
+                ) {
+                    close()
+                    BotWizardPresenter.shared.open(startMode: .guided)
+                }
+                Divider().padding(.leading, 46)
+                otherWayRow(
+                    title: String(localized: "I'll fill it in myself"),
+                    hint: String(localized: "The same steps as a form, page by page."),
+                    icon: "list.bullet.clipboard",
+                    id: "manual"
+                ) {
+                    close()
+                    BotWizardPresenter.shared.open(startMode: .manual)
+                }
+                if BotTemplatesEntry.destination(gate: session.surfaceGate) != nil {
+                    Divider().padding(.leading, 46)
+                    otherWayRow(
+                        title: String(localized: "Browse templates"),
+                        hint: nil,
+                        icon: "books.vertical",
+                        id: "browse"
+                    ) {
+                        nameFocused = false
+                        browsingTemplates = true
+                    }
+                }
+                Divider().padding(.leading, 46)
+                otherWayRow(
+                    title: String(localized: "Import from Grok Bot or Claude Code"),
+                    hint: nil,
+                    icon: "square.and.arrow.down",
+                    id: "import-agent"
+                ) {
+                    nameFocused = false
+                    importingAgent = true
+                }
+                Divider().padding(.leading, 46)
+                otherWayRow(
+                    title: String(localized: "Import a zip file"),
+                    hint: nil,
+                    icon: "doc.zipper",
+                    id: "import-zip"
+                ) {
+                    nameFocused = false
+                    importingZip = true
+                }
+                if !drafts.isEmpty {
+                    Divider().padding(.leading, 46)
+                    ForEach(drafts, id: \.botId) { entry in
+                        otherWayRow(
+                            title: entry.botName?.isEmpty == false ? entry.botName! : String(localized: "New bot"),
+                            hint: String(localized: "Draft to finish"),
+                            icon: "doc.badge.clock",
+                            id: "draft-\(entry.botId)"
+                        ) {
+                            close()
+                            BotWizardPresenter.shared.open(botId: entry.botId)
+                        }
+                    }
+                }
+            }
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.continuous(15.5), style: .continuous))
+            .padding(.top, 8)
+        } label: {
+            Text("Other ways to start")
+                .font(Theme.Font.bodyMedium)
+                .foregroundStyle(Theme.textPrimary)
+        }
+        .padding(.horizontal, 15.33)
+        .padding(.bottom, 16)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("create-bot-other-ways")
+    }
+
+    private func otherWayRow(title: String, hint: String?, icon: String, id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(Theme.Font.body)
+                        .foregroundStyle(Theme.textPrimary)
+                    if let hint {
+                        Text(hint)
+                            .font(Theme.Font.preview)
+                            .foregroundStyle(Theme.textSecondary)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(minHeight: 48)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("create-bot-other-\(id)")
     }
 
     /// Below the editor's first screen: the reference's card never shows it;
@@ -225,33 +353,8 @@ struct CreateBotSheet: View {
                             .padding(.bottom, 12)
                             .frame(minHeight: box.size.height, alignment: .top)
                         moreOptionsRow
-                        // New bot's "Import from zip" (#271)
-                        Button {
-                            nameFocused = false
-                            importingZip = true
-                        } label: {
-                            Label("Import from zip", systemImage: "doc.zipper")
-                                .font(Theme.Font.bodyMedium)
-                                .foregroundStyle(Theme.textSecondary)
-                                .frame(maxWidth: .infinity, minHeight: 36)
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.bottom, 12)
-                        .accessibilityIdentifier("create-bot-import-zip")
-                        // Import an agent from Grok Bot (desktop AgentImport.tsx): inert, anyone who may create bots.
-                        if !readOnly {
-                            Button {
-                                nameFocused = false
-                                importingAgent = true
-                            } label: {
-                                Label("Import from Grok Bot", systemImage: "square.and.arrow.down")
-                                    .font(Theme.Font.bodyMedium)
-                                    .foregroundStyle(Theme.textSecondary)
-                                    .frame(maxWidth: .infinity, minHeight: 36)
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.bottom, 12)
-                            .accessibilityIdentifier("create-bot-import-agent")
+                        if showsWizard, !readOnly {
+                            otherWaysSection
                         }
                     }
                 }
@@ -277,22 +380,6 @@ struct CreateBotSheet: View {
                 .font(HomeMetrics.name)
                 .foregroundStyle(Theme.textPrimary)
             Spacer()
-            // 2026-10-26: the guided wizard, beside this quick creation
-            if !readOnly && showsWizard {
-                Button {
-                    close()
-                    BotWizardPresenter.shared.open()
-                } label: {
-                    Label("Wizard", systemImage: "wand.and.stars")
-                        .font(Theme.Font.bodyMedium)
-                        .foregroundStyle(Theme.textPrimary)
-                        .padding(.horizontal, 12)
-                        .frame(height: 34)
-                        .background(Theme.card, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("create-bot-wizard")
-            }
         }
         .padding(.leading, 17.33)
         .padding(.trailing, 17.33)

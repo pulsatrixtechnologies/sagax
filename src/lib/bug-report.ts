@@ -21,17 +21,18 @@ export function bugReportMailto(input: { excerpt: string; version: string }): st
   }).url;
 }
 
-/** Opens the draft only after confirm returns true. Otherwise nothing is opened. */
-export function openBugReport(input: {
+/** Opens the draft only after confirm returns true. Otherwise nothing is opened.
+ * confirm may be async (the in-app dialog). */
+export async function openBugReport(input: {
   excerpt: string;
   version: string;
-  confirm: (preview: string) => boolean;
+  confirm: (preview: string) => boolean | Promise<boolean>;
   open: (url: string) => void;
-}): boolean {
+}): Promise<boolean> {
   const url = bugReportMailto(input);
   if (!url) return false;
   const preview = bugReportExcerpt(input.excerpt).slice(0, 280);
-  if (!input.confirm(preview)) return false;
+  if (!(await input.confirm(preview))) return false;
   input.open(url);
   return true;
 }

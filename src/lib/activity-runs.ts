@@ -114,6 +114,7 @@ export function workspaceLineText(line: WorkspaceLine): string {
   const place = t(WORKSPACE_PLACE[line.target]);
   if (line.fallback.reason === "offline") return t("workspaceLine.fallbackOffline", { place });
   if (line.fallback.reason === "routine-not-allowed") return t("workspaceLine.fallbackRoutine", { place });
+  if (line.fallback.reason === "routine-default") return t("workspaceLine.fallbackRoutineDefault", { place });
   return t("workspaceLine.fallbackUnavailable", { place, wanted: t(WORKSPACE_PLACE[line.fallback.wanted]) });
 }
 

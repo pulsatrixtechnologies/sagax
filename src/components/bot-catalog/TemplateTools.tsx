@@ -200,8 +200,9 @@ export function TemplateTools({ tool, onTool, installUrl, onImported, backRef }:
   const [pickedDirectory, setPickedDirectory] = useState<Set<string>>(new Set());
   const [roomName, setRoomName] = useState("");
   const [creating, setCreating] = useState(false);
-  // The team being shared; its dialog sits above the catalogue.
+  // The team being shared. The popover anchors to that row's Share button.
   const [sharing, setSharing] = useState<string | null>(null);
+  const shareAnchor = useRef<HTMLElement | null>(null);
   // monotonically increasing scout token: a late response from an older
   // scout (including its lazy directory call) must never overwrite state
   // that belongs to a newer one
@@ -474,7 +475,10 @@ export function TemplateTools({ tool, onTool, installUrl, onImported, backRef }:
                     </div>
                     <button
                       type="button"
-                      onClick={() => setSharing(team.name)}
+                      onClick={(event) => {
+                        shareAnchor.current = event.currentTarget;
+                        setSharing(team.name);
+                      }}
                       aria-label={t("teamLibrary.shareTeamAria", { name: team.name || t("teamLibrary.general") })}
                       className="ui-button"
                     >
@@ -610,7 +614,13 @@ export function TemplateTools({ tool, onTool, installUrl, onImported, backRef }:
           </div>
         )}
       </div>
-      {sharing !== null && <ShareTeamDialog team={sharing} onClose={() => setSharing(null)} />}
+      <ShareTeamDialog
+        key={sharing === null ? "share-team-closed" : `share-team:${sharing}`}
+        open={sharing !== null}
+        team={sharing ?? ""}
+        anchorRef={shareAnchor}
+        onClose={() => setSharing(null)}
+      />
     </div>
   );
 }

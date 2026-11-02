@@ -143,8 +143,8 @@ describe("claim-time computer refusal in bindTurnComputer", () => {
   const refusal = source.slice(refusalStart + 1, source.indexOf("\n}\n", refusalStart) + 3);
   const code = transpileTs(refusal + guard);
   const bind = (managedPolicy: ManagedDesktopPolicy) =>
-    new Function("managedPolicy", "computerKindForResource", "CLOUD_HOME", "cloudHomePlaceRefusal", `${code}; return bindTurnComputer;`)(
-      managedPolicy, computerKindForResource, null, () => undefined,
+    new Function("managedPolicy", "computerKindForResource", `${code}; return bindTurnComputer;`)(
+      managedPolicy, computerKindForResource,
     ) as (owner: unknown, resource: string) => Promise<string>;
 
   it("refuses a disallowed kind before claiming anything", async () => {

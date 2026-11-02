@@ -44,6 +44,8 @@ import { workspacesAvailable } from "./WorkspacesSection";
 import { AboutMeEditor, aboutMeFirstLine } from "./AboutMeSettings";
 import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
 import { AccountCard } from "./settings/AccountCard";
+import { AboutCard } from "./AboutDialog";
+import { AvatarCropPage } from "./settings/OwnAvatarField";
 import { OpenAtLoginRow } from "./OpenAtLoginOffer";
 import { WorkspaceBackupSettings } from "./WorkspaceBackupSettings";
 import { ImportSettings } from "./settings/ImportSettings";
@@ -103,8 +105,8 @@ export const SECTIONS: Array<{
   // approval rules they saved (Always allow, Always deny, Ask first, paged)
   // and their tool access. Vault: the credential vault and the one-time card.
   { id: "security", group: "you", labelKey: "settings.section.security", icon: ShieldCheck, keywords: ["security", "sécurité", "security key", "security keys", "clé de sécurité", "clés de sécurité", "passkey", "clé d'accès", "yubikey", "webauthn", "touch id", "face id", "step-up", "sensitive", "sensibles", "approvals", "approbations", "approval level", "niveau d'approbation", "approval rules", "règles d'approbation", "rules", "règles", "always allow", "toujours permettre", "always deny", "toujours refuser", "ask first", "demander d'abord", "deny", "refuser", "tool access", "accès aux outils", "my tool access", "mon accès aux outils", "grants", "autorisations"] },
-  { id: "credentials", group: "you", labelKey: "settings.section.vault", icon: KeyRound, keywords: ["vault", "coffre", "your vault", "votre coffre", "credentials", "identifiants", "password", "mot de passe", "login", "logins", "connexions", "totp", "2fa", "one-time code", "code à usage unique", "1password", "api key", "clé api", "api keys", "clés api", "notes", "note", "autofill", "remplissage", "import", "importer", "export", "exporter", "add an item", "ajouter un élément", "one-time card", "carte à usage unique", "single-use", "shop pay", "link", "card", "carte", "purchase", "achat", "achats"] },
-  { id: "appearance", group: "you", labelKey: "settings.section.appearance", icon: Palette, keywords: ["skin", "theme", "thème", "variant", "variante", "light", "clair", "dark", "sombre", "auto", "appearance", "advanced", "simple", "mode", "tools", "tool calls", "threads", "show threads", "hide threads", "sidebar", "hidden", "hide", "show", "density", "compact", "comfortable", "avatars", "display", "run", "this run", "run card", "commands", "mascot", "owl", "desktop", "fly", "floating", "app icon", "dock", "icon", "taskbar", "providers", "sign-in", "unconfigured", "fournisseurs", "connexion", "non configurés", "send", "enter", "return", "shift+enter", "ctrl+enter", "cmd+enter", "⌘+enter", "new line", "keyboard", "ime", "japanese", "font", "police", "accessibility", "accessibilité", "reduce motion", "motion", "animations", "contrast", "contraste", "text size", "taille du texte", "zoom", "hardware acceleration", "accélération matérielle", "gpu", "spell check", "spellcheck", "orthographe", "correcteur", "interface", "inspector", "inspecteur", "logo", "masqués", "mascottes", "icône", "barre latérale", "conversations", "desktop", "bureau"] },
+  { id: "credentials", group: "you", labelKey: "settings.section.vault", icon: KeyRound, keywords: ["vault", "coffre", "your vault", "votre coffre", "credentials", "identifiants", "password", "mot de passe", "login", "logins", "connexions", "totp", "2fa", "one-time code", "code à usage unique", "1password", "api key", "clé api", "api keys", "clés api", "notes", "note", "autofill", "remplissage", "import", "importer", "export", "exporter", "add an item", "ajouter un élément", "one-time card", "carte à usage unique", "single-use", "shop pay", "link", "card", "carte", "purchase", "achat", "achats", "payments", "paiements", "wallet", "portefeuille", "history", "historique"] },
+  { id: "appearance", group: "you", labelKey: "settings.section.appearance", icon: Palette, keywords: ["skin", "theme", "thème", "variant", "variante", "light", "clair", "dark", "sombre", "auto", "appearance", "advanced", "simple", "mode", "tools", "tool calls", "threads", "show threads", "hide threads", "sidebar", "hidden", "hide", "show", "density", "compact", "comfortable", "avatars", "display", "run", "this run", "run card", "commands", "mascot", "owl", "desktop", "fly", "floating", "app icon", "dock", "icon", "taskbar", "providers", "sign-in", "fournisseurs", "connexion", "send", "enter", "return", "shift+enter", "ctrl+enter", "cmd+enter", "⌘+enter", "new line", "keyboard", "ime", "japanese", "font", "police", "accessibility", "accessibilité", "reduce motion", "motion", "animations", "contrast", "contraste", "text size", "taille du texte", "zoom", "hardware acceleration", "accélération matérielle", "gpu", "spell check", "spellcheck", "orthographe", "correcteur", "interface", "inspector", "inspecteur", "logo", "masqués", "mascottes", "icône", "barre latérale", "conversations", "desktop", "bureau"] },
   // 2026-10-14: Privacy is a card of this page on an organization server.
   { id: "notifications", group: "you", labelKey: "settings.section.notifications", icon: Bell, keywords: ["notifications", "notification", "sound", "sounds", "notification sound", "son de notification", "tick", "tic", "carillon", "chime a", "chime b", "blip", "mute", "silent", "chime", "alert", "alerts", "banner", "badge", "dock", "app icon", "icône", "unread", "nudge", "wizz", "shake", "secousse", "son", "persistent", "stay", "privacy", "read receipts", "seen", "vu", "confidentialité", "accusés de lecture", "presence", "online", "away", "offline", "last seen", "status", "en ligne", "absent", "hors ligne", "privacidade", "alertes", "on screen", "à l'écran"] },
   // Models (2026-10-14 as Models and voice: Integrations and Models and
@@ -226,6 +228,7 @@ export function sectionMatches(section: (typeof SECTIONS)[number], query: string
 const SUB_PAGES: Record<string, { section: AppSettingsSection; titleKey: LocaleKey; render: () => React.ReactNode }> = {
   "general.aboutMe": { section: "account", titleKey: "settings.profile.aboutMe", render: () => <AboutMeEditor /> },
   "general.advanced": { section: "account", titleKey: "settings.advancedPage.title", render: () => <GeneralAdvancedSettings /> },
+  "account.crop": { section: "account", titleKey: "settings.profile.photoCropTitle", render: () => <AvatarCropPage /> },
 };
 
 /** This app's updates, which download by themselves. Shown once the desktop
@@ -862,14 +865,17 @@ export function SettingsModal() {
             )}
 
             {section === "updates" && (
-              <div data-settings-card="updates">
-                {/* 2026-10-16: a titled card, as every other page's */}
-                <SettingsGroup title={t("settings.updates.group")} groupId="updates">
-                  <UpdatesRow />
-                  <PrereleaseRow />
-                  <AutoInstallAwayRow />
-                </SettingsGroup>
-              </div>
+              <>
+                <div data-settings-card="updates">
+                  {/* 2026-10-16: a titled card, as every other page's */}
+                  <SettingsGroup title={t("settings.updates.group")} groupId="updates">
+                    <UpdatesRow />
+                    <PrereleaseRow />
+                    <AutoInstallAwayRow />
+                  </SettingsGroup>
+                </div>
+                <AboutCard onOpenReleaseNotes={() => dispatch({ type: "toggleAppSettings", open: false })} />
+              </>
             )}
 
             {section === "appearance" && <AppearanceSettings />}

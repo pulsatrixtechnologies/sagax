@@ -17,9 +17,27 @@ describe("Bot email address", () => {
     expect(html).toContain("Email address");
     expect(html).toContain("cryptic@bots.example.org");
     expect(html).toContain('aria-label="Copy email address"');
-    expect(html).toContain("Mail received at this address only wakes a routine (Bot email trigger).");
+    expect(html).toContain("Mail to this address wakes a Bot email trigger.");
+    expect(html).toContain("tagged address");
     expect(html).not.toContain("Waiting for the administrator to turn it on");
     expect(html).toContain('data-bot-email-address=""');
+    expect(html).toContain("data-bot-email-tags-empty");
+  });
+
+  it("lists tag routing rows without another bot's routines", () => {
+    const html = renderToStaticMarkup(createElement(BotEmailAddressCard, {
+      mail: { available: true, address: "cryptic@bots.example.org", enabled: true },
+      tags: [
+        { tag: "reports", address: "cryptic+reports@bots.example.org", routineId: "r1", routineName: "Reports", enabled: true },
+        { tag: "shop", address: "cryptic+shop@bots.example.org", routineId: "r2", routineName: "Shop", enabled: false },
+      ],
+    }));
+    expect(html).toContain("data-bot-email-tags=");
+    expect(html).toContain("cryptic+reports@bots.example.org");
+    expect(html).toContain("Reports");
+    expect(html).toContain("Shop");
+    expect(html).toContain("paused");
+    expect(html).not.toContain("data-bot-email-tags-empty");
   });
 
   it("greys an address the administrator has not turned on yet (off by default, Owner decision 1)", () => {

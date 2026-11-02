@@ -12,6 +12,14 @@ final class BotWorkspaceFilesTests: XCTestCase {
         XCTAssertFalse(BotWorkspaceFiles.isDoc("docs/plan.txt"))
     }
 
+    func testCoreAndJoin() {
+        XCTAssertTrue(BotWorkspaceFiles.isCore("RULES.md"))
+        XCTAssertTrue(BotWorkspaceFiles.isCore("MEMORY.md"))
+        XCTAssertFalse(BotWorkspaceFiles.isCore("docs/a.md"))
+        XCTAssertEqual(BotWorkspaceFiles.join(parent: nil, name: "a.txt"), "a.txt")
+        XCTAssertEqual(BotWorkspaceFiles.join(parent: "inbox", name: "a.txt"), "inbox/a.txt")
+    }
+
     func testDocPathFromAName() {
         XCTAssertEqual(BotWorkspaceFiles.docPath(fromName: "Plan de match"), "docs/Plan de match.md")
         XCTAssertEqual(BotWorkspaceFiles.docPath(fromName: "docs/notes.MD"), "docs/notes.md")

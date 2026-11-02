@@ -293,6 +293,20 @@ export class Handoffs {
     this.pending.delete(threadId);
   }
 
+  /** For a turn answered without its engine: nothing it would have handed
+   * counts as received. The returned call hands it on after all, bound to
+   * `turnId`, when the engine does run the turn, unless a newer turn has
+   * taken the thread. Used by saved-steps replay. */
+  withhold(threadId: string): (turnId: string) => void {
+    const pending = this.pending.get(threadId);
+    this.pending.delete(threadId);
+    return (turnId) => {
+      if (!pending || this.pending.has(threadId)) return;
+      pending.turnId ??= turnId;
+      this.pending.set(threadId, pending);
+    };
+  }
+
   /** Just before sendTurn: an adapter may emit the whole turn before it
    * resolves. `update` carries what setup changed in the handoff. */
   dispatching(threadId: string, claimId: string, update?: Partial<Handoff>): void {

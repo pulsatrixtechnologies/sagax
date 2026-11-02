@@ -387,10 +387,13 @@ with a sentence for the families below and "no route" for the rest):
   `/api/team-library/*`, `/api/team-computers*`), team instructions
   (`/api/section-context`), team rename and delete (`PATCH`/`DELETE`
   `/api/sidebar-sections`).
-- A bot's execution policy and where it runs: approval mode, folder (`cwd`),
-  computer, MCP servers, browser profile, peers (the harness refuses those
-  fields on a companion `PATCH`), `/soul` writes, opening the memory folder on
-  the host's screen (`POST /api/bots/:id/memory/open`), the legacy whole-file
+- Org sharing and host-only bot fields the phone still may not set:
+  `visibility`, `hidden`, `host`, `browserProfile`, `peers`, `outbound`,
+  `fallback`, `section` (the harness refuses those on a companion `PATCH`).
+  Permissions / Approval / Proactive / Access (`approvalMode`,
+  `proactiveMode`, `browser`, `mcpServers`, `computer`, `cwd`, …) cross for
+  the owner since Lot 1. Also refused: opening the memory folder on the
+  host's screen (`POST /api/bots/:id/memory/open`), the legacy whole-file
   memory write, room setup (`PATCH /api/groups/:id/setup`, which sets the
   room's folder), room delete, calendar calls, the Inspector's raw events,
   New Bot defaults and removing a preset, MCP server writes. (Skills, memory,
@@ -569,9 +572,13 @@ has. Added to `ALLOWED` in `companion/src/routes.ts`:
 | `GET /api/me/achievements`, `POST /api/me/achievements/events`, `PUT /api/me/achievements/settings`, `GET /api/achievements/public` | achievements (D1) |
 
 The companion's bot `PATCH` also takes `memoryEnabled` and `memoryUpkeep`
-(`companionBotFieldViolation`): the advanced panel's memory switches. Approval
-mode, folder, computer, MCP servers and access stay refused, as does
-`POST /api/bots/:id/memory/open` (it opens a window on the host's screen).
+(`companionBotFieldViolation`): the advanced panel's memory switches; and
+(Lot 1) the owner's Permissions / Approval / Proactive / Access fields
+(`approvalMode`, `proactiveMode`, `chiefOfStaff`, `approvePeerComms`,
+`alwaysAllow`, `browser`, `mcpServers`, `computer`, `cwd`, …). Org sharing
+and host fields (`visibility`, `hidden`, `host`, `browserProfile`, …) stay
+refused, as does `POST /api/bots/:id/memory/open` (it opens a window on the
+host's screen).
 
 **Client sessions on a server (S2).** Added to `CLIENT_ALLOW` in
 `server/request-auth.ts`, each held by its handler:

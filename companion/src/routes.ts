@@ -219,6 +219,9 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // the live catalog and refuses changes while the bot is working.
   { method: "PATCH", path: /^\/api\/bots\/[\w-]+\/model$/ },
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/avatar\/generate$/ },
+  // A shape mascot from a short description (the editor's Generate). The
+  // harness checks the bot and runs the bot's own text model.
+  { method: "POST", path: /^\/api\/bots\/[\w-]+\/shape-avatar\/generate$/ },
   // Full cloud desktop access. The route is narrow and the proxy applies a
   // second, per-device capability check before it reaches the harness.
   CLOUD_DESKTOP_JOIN_ROUTE,
@@ -236,8 +239,9 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // initial.
   { method: "GET", path: /^\/api\/people\/[\w-]{1,80}\/avatar$/ },
   // The owner's bot edits from the profile: the harness holds a companion
-  // request to the member fields (look, framing, name, instructions,
-  // notifications, model), never where the bot runs or what it may do.
+  // request to the member fields plus Permissions / Approval / Proactive /
+  // Access (Lot 1). Org sharing and host fields stay refused in
+  // companionBotFieldViolation.
   { method: "PATCH", path: /^\/api\/bots\/[\w-]+$/ },
   // The profile's Links, Media and Files tabs, the files' thumbnails and
   // downloads, and Share as Template (a package without secrets).

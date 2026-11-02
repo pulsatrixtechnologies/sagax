@@ -1,6 +1,5 @@
 import { Check, Loader2, ShieldCheck, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import { t, tFromServer } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -21,8 +20,10 @@ import {
   type ShareResponse,
   type ShareView,
 } from "@/lib/team-share";
+import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { api, useStore } from "@/state/store";
-import { FIELD, FieldRow, FoldRow, HelpTip, PILL, PRIMARY_PILL, SettingsGroup, SwitchRow, DIALOG } from "./SettingsPrimitives";
+import { FIELD, FieldRow, FoldRow, HelpTip, PILL, PRIMARY_PILL, SettingsGroup, SwitchRow } from "./SettingsPrimitives";
+import { AnchoredPopover, useAnchoredDismissRoot } from "./AnchoredPopover";
 import type { NewBotDefaults } from "../../shared/new-bot-defaults";
 import { botLabel } from "@/lib/human-label";
 import { readableError } from "@/lib/plain-error";
@@ -133,10 +134,22 @@ export function ShareSkillChoices({ available, ticked, counted, onToggle }: {
 }
 
 /** Share team…: choose what goes in, see exactly what that is, save the
- * file. No confirm step; the person's click on Save file is the decision. */
-export function ShareTeamDialog({ team, onClose }: { team: string; onClose: () => void }) {
+ * file. No confirm step; the person's click on Save file is the decision.
+ * Anchored popover (lot 6), not a modal window. */
+export function ShareTeamDialog({
+  open,
+  team,
+  onClose,
+  anchorRef,
+}: {
+  open: boolean;
+  team: string;
+  onClose: () => void;
+  /** The control that opened Share: the team menu trigger or the Share button. */
+  anchorRef: RefObject<HTMLElement | null>;
+}) {
   const { state } = useStore();
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLElement | null>(null);
   const teamBots = useMemo(
     () => state.bots.filter((bot) => !bot.hidden && (bot.section?.trim() ?? "") === team),
     [state.bots, team],
@@ -165,7 +178,12 @@ export function ShareTeamDialog({ team, onClose }: { team: string; onClose: () =
   const [saved, setSaved] = useState<ShareResponse | null>(null);
   const request = useRef(0);
 
+  // The dismiss root covers the opener and the portalled popover.
+  const dismissRoot = useAnchoredDismissRoot(anchorRef, popoverRef);
+  usePopoverDismiss(open && !saving, dismissRoot, onClose);
+
   useEffect(() => {
+    if (!open) return;
     let cancelled = false;
     void preparePictures(teamBots).then((result) => {
       if (cancelled) return;
@@ -178,19 +196,19 @@ export function ShareTeamDialog({ team, onClose }: { team: string; onClose: () =
       if (!cancelled) setPictures({ avatars: {}, skipped: [] });
     });
     return () => { cancelled = true; };
-    // Pictures are prepared once per dialog; the bot list is stable meanwhile.
+    // Pictures are prepared once per open; the bot list is stable meanwhile.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [open]);
 
   useEffect(() => {
-    if (!includePreset || presetPicture) return;
+    if (!open || !includePreset || presetPicture) return;
     let cancelled = false;
     void api<{ defaults: NewBotDefaults }>("/api/bot-defaults")
       .then(({ defaults }) => preparePictures([{ id: "defaults", avatarUrl: defaults.profile.avatarUrl, avatarCrop: defaults.profile.avatarCrop }]))
       .then((prepared) => { if (!cancelled) setPresetPicture({ dataUrl: prepared.avatars.defaults }); })
       .catch(() => { if (!cancelled) setPresetPicture({}); });
     return () => { cancelled = true; };
-  }, [includePreset, presetPicture]);
+  }, [open, includePreset, presetPicture]);
 
   const choices = useCallback((dryRun: boolean): ShareChoices => ({
     team,
@@ -208,7 +226,7 @@ export function ShareTeamDialog({ team, onClose }: { team: string; onClose: () =
 
   // Live counts: re-run the server's dry run whenever what goes in changes.
   useEffect(() => {
-    if (!pictures) return;
+    if (!open || !pictures) return;
     // No counts (and no Save) until the preset's picture is ready to go in.
     if (includePreset && !presetPicture) { setView((current) => ({ ...current, preview: null })); return; }
     const id = ++request.current;
@@ -228,7 +246,7 @@ export function ShareTeamDialog({ team, onClose }: { team: string; onClose: () =
     return () => window.clearTimeout(timer);
     // Text fields do not change the counts; only what goes in does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pictures, skillChoice, includeMemory, includePictures, includePreset, presetPicture]);
+  }, [open, pictures, skillChoice, includeMemory, includePictures, includePreset, presetPicture]);
 
   const save = async () => {
     if (saving) return;
@@ -246,10 +264,13 @@ export function ShareTeamDialog({ team, onClose }: { team: string; onClose: () =
   };
 
   useEffect(() => {
+    if (!open) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    dialogRef.current?.focus();
+    const focusSoon = () => popoverRef.current?.querySelector<HTMLElement>("input, textarea, select, button")?.focus();
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(focusSoon);
+    else focusSoon();
     return () => { if (opener?.isConnected) opener.focus(); };
-  }, []);
+  }, [open]);
 
   const ticked = tickedSkills(skillChoice, included, available);
   const toggleSkill = (skill: string) => {
@@ -260,99 +281,106 @@ export function ShareTeamDialog({ team, onClose }: { team: string; onClose: () =
   };
   const localSkips = includePictures ? pictures?.skipped ?? [] : [];
 
-  return createPortal(
-    <div className={cn(DIALOG.backdrop, "z-[60]")} onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !saving) onClose();
-    }}>
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="share-team-title" tabIndex={-1}
-        className={`${DIALOG.frame} max-w-[600px]`}
-        onKeyDown={(event) => {
-          if (event.key === "Escape" && !saving) { event.stopPropagation(); onClose(); }
-          if (event.key === "Tab") {
-            const controls = dialogRef.current?.querySelectorAll<HTMLElement>("input:enabled, textarea:enabled, button:enabled");
-            if (!controls?.length) return;
-            const first = controls[0]!, last = controls[controls.length - 1]!;
-            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-          }
-        }}>
-        <header className={DIALOG.header}>
-          <div className="flex min-w-0 items-center gap-1.5">
-            <h2 id="share-team-title" className={`${DIALOG.title} min-w-0`}>{t("teamShare.title", { name: team || t("teamLibrary.general") })}</h2>
-            <HelpTip label={t("settings.moreAbout", { title: t("teamShare.title", { name: team || t("teamLibrary.general") }) })}>{t("teamShare.intro")}</HelpTip>
-          </div>
-          <button aria-label={t("teamShare.close")} disabled={saving} onClick={onClose} className={cn(DIALOG.close, "disabled:opacity-40")}><X size={18} className="pointer-events-none" /></button>
-        </header>
+  if (!open) return null;
 
-        <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => {
+  return (
+    <AnchoredPopover
+      anchorRef={anchorRef}
+      popoverRef={popoverRef}
+      align="end"
+      gap={8}
+      maxHeight={560}
+      data-share-team-popover=""
+      role="dialog"
+      aria-labelledby="share-team-title"
+      className="popover-surface flex w-[min(520px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border-[0.5px] border-border bg-elevated shadow-2xl shadow-black/40"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !saving && !event.nativeEvent.isComposing) {
           event.preventDefault();
-          if (saved) onClose();
-          else if (!saving && preview && name.trim()) void save();
-        }}>
-        {saved ? (
-          <div className={DIALOG.body}>
-            <div className="px-1">
-              <p className="flex items-center gap-2 text-[13px] font-medium text-ink"><Check size={15} aria-hidden="true" className="text-success" />{t("teamShare.saved", { filename: saved.filename })}</p>
-              <p className="mt-1 text-[12px] leading-4 text-ink-secondary">{t("teamShare.savedHint")}</p>
-            </div>
-            <ShareTeamContents preview={saved} includeMemory={includeMemory} localSkips={localSkips} />
-          </div>
-        ) : (
-          <div className={DIALOG.body}>
-            <fieldset disabled={saving} className="min-w-0">
-              <SettingsGroup groupId="share-team-choices" title={t("teamShare.choices")}>
-                <SwitchRow className="px-3.5 py-2.5" label={t("teamShare.includePictures")} checked={includePictures} onChange={setIncludePictures} />
-                <SwitchRow className="px-3.5 py-2.5" label={t("teamShare.includeNotes")} help={notesLine(includeMemory)} checked={includeMemory} onChange={setIncludeMemory} />
-                <FoldRow cardId="share-team.skills" label={t("teamShare.includeSkills")} count={available?.length}>
-                  <ShareSkillChoices available={available ?? []} ticked={ticked} counted={available !== null} onToggle={toggleSkill} />
-                </FoldRow>
-                <SwitchRow className="px-3.5 py-2.5" label={t("teamShare.includePreset")} help={t("teamShare.presetHint")} checked={includePreset} onChange={setIncludePreset} />
-              </SettingsGroup>
-            </fieldset>
+          event.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <header className="flex shrink-0 items-center gap-2 border-b border-hairline/40 px-3.5 py-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <h2 id="share-team-title" className="min-w-0 truncate text-[13px] font-semibold text-ink">{t("teamShare.title", { name: team || t("teamLibrary.general") })}</h2>
+          <HelpTip label={t("settings.moreAbout", { title: t("teamShare.title", { name: team || t("teamLibrary.general") }) })}>{t("teamShare.intro")}</HelpTip>
+        </div>
+        <button type="button" aria-label={t("teamShare.close")} disabled={saving} onClick={onClose} className="flex size-7 shrink-0 items-center justify-center rounded-full text-ink-secondary hover:bg-hover disabled:opacity-40">
+          <X size={16} className="pointer-events-none" />
+        </button>
+      </header>
 
-            {preview
-              ? <ShareTeamContents preview={preview} includeMemory={includeMemory} localSkips={localSkips} />
-              : !error && <div role="status" className="flex items-center gap-2 px-1 text-[13px] text-ink-secondary"><Loader2 size={15} className="animate-spin" aria-hidden="true" />{t("teamShare.preparing")}</div>}
-
-            <SettingsGroup groupId="share-team-file" title={t("teamShare.file")}>
-              <div className="grid sm:grid-cols-2">
-                <FieldRow label={t("teamShare.name")}>
-                  <input value={name} maxLength={100} disabled={saving} onChange={(event) => setName(event.target.value)} className={FIELD} />
-                </FieldRow>
-                <FieldRow label={t("teamShare.release")} hint={t("teamShare.releaseHint")}>
-                  <input value={release} maxLength={20} disabled={saving} placeholder="1.0.0" onChange={(event) => setRelease(event.target.value)} className={FIELD} />
-                </FieldRow>
+      <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => {
+        event.preventDefault();
+        if (saved) onClose();
+        else if (!saving && preview && name.trim()) void save();
+      }}>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3.5 py-3">
+          {saved ? (
+            <>
+              <div>
+                <p className="flex items-center gap-2 text-[13px] font-medium text-ink"><Check size={15} aria-hidden="true" className="text-success" />{t("teamShare.saved", { filename: saved.filename })}</p>
+                <p className="mt-1 text-[12px] leading-4 text-ink-secondary">{t("teamShare.savedHint")}</p>
               </div>
-              <FieldRow label={t("teamShare.tagline")}>
-                <input value={tagline} maxLength={160} disabled={saving} onChange={(event) => setTagline(event.target.value)} className={FIELD} />
-              </FieldRow>
-              <FieldRow label={t("teamShare.summary")}>
-                <textarea value={summary} maxLength={2000} rows={2} disabled={saving} onChange={(event) => setSummary(event.target.value)} className={FIELD} />
-              </FieldRow>
-              <FieldRow label={t("teamShare.notes")}>
-                <textarea value={notes} maxLength={4000} rows={2} disabled={saving} onChange={(event) => setNotes(event.target.value)} className={FIELD} />
-              </FieldRow>
-            </SettingsGroup>
-          </div>
-        )}
+              <ShareTeamContents preview={saved} includeMemory={includeMemory} localSkips={localSkips} />
+            </>
+          ) : (
+            <>
+              <fieldset disabled={saving} className="min-w-0">
+                <SettingsGroup groupId="share-team-choices" title={t("teamShare.choices")}>
+                  <SwitchRow className="px-3.5 py-2.5" label={t("teamShare.includePictures")} checked={includePictures} onChange={setIncludePictures} />
+                  <SwitchRow className="px-3.5 py-2.5" label={t("teamShare.includeNotes")} help={notesLine(includeMemory)} checked={includeMemory} onChange={setIncludeMemory} />
+                  <FoldRow cardId="share-team.skills" label={t("teamShare.includeSkills")} count={available?.length}>
+                    <ShareSkillChoices available={available ?? []} ticked={ticked} counted={available !== null} onToggle={toggleSkill} />
+                  </FoldRow>
+                  <SwitchRow className="px-3.5 py-2.5" label={t("teamShare.includePreset")} help={t("teamShare.presetHint")} checked={includePreset} onChange={setIncludePreset} />
+                </SettingsGroup>
+              </fieldset>
 
-        {error && <p role="alert" className="mx-5 mb-2 rounded-xl bg-danger/10 px-3.5 py-2 text-[12.5px] text-danger">{error}</p>}
-        <footer className={DIALOG.footer}>
+              {preview
+                ? <ShareTeamContents preview={preview} includeMemory={includeMemory} localSkips={localSkips} />
+                : !error && <div role="status" className="flex items-center gap-2 px-1 text-[13px] text-ink-secondary"><Loader2 size={15} className="animate-spin" aria-hidden="true" />{t("teamShare.preparing")}</div>}
+
+              <SettingsGroup groupId="share-team-file" title={t("teamShare.file")}>
+                <div className="grid sm:grid-cols-2">
+                  <FieldRow label={t("teamShare.name")}>
+                    <input value={name} maxLength={100} disabled={saving} onChange={(event) => setName(event.target.value)} className={FIELD} />
+                  </FieldRow>
+                  <FieldRow label={t("teamShare.release")} hint={t("teamShare.releaseHint")}>
+                    <input value={release} maxLength={20} disabled={saving} placeholder="1.0.0" onChange={(event) => setRelease(event.target.value)} className={FIELD} />
+                  </FieldRow>
+                </div>
+                <FieldRow label={t("teamShare.tagline")}>
+                  <input value={tagline} maxLength={160} disabled={saving} onChange={(event) => setTagline(event.target.value)} className={FIELD} />
+                </FieldRow>
+                <FieldRow label={t("teamShare.summary")}>
+                  <textarea value={summary} maxLength={2000} rows={2} disabled={saving} onChange={(event) => setSummary(event.target.value)} className={FIELD} />
+                </FieldRow>
+                <FieldRow label={t("teamShare.notes")}>
+                  <textarea value={notes} maxLength={4000} rows={2} disabled={saving} onChange={(event) => setNotes(event.target.value)} className={FIELD} />
+                </FieldRow>
+              </SettingsGroup>
+            </>
+          )}
+        </div>
+
+        {error && <p role="alert" className="mx-3.5 mb-2 rounded-xl bg-danger/10 px-3 py-2 text-[12.5px] text-danger">{error}</p>}
+        <footer className="flex shrink-0 justify-end gap-2 border-t border-hairline/40 px-3.5 py-2.5">
           {saved ? (
             <button type="submit" className={PRIMARY_PILL}>{t("teamShare.done")}</button>
           ) : (
             <>
               <button type="button" disabled={saving} onClick={onClose} className={PILL}>{t("common.cancel")}</button>
-              <button type="submit" disabled={saving || !preview || !name.trim()} className={PRIMARY_PILL}>
+              <button type="submit" disabled={saving || !preview || !name.trim()} className={cn(PRIMARY_PILL, "gap-1.5")}>
                 {saving && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
                 {saving ? t("teamShare.saving") : t("teamShare.save")}
               </button>
             </>
           )}
         </footer>
-        </form>
-      </div>
-    </div>,
-    document.body,
+      </form>
+    </AnchoredPopover>
   );
 }

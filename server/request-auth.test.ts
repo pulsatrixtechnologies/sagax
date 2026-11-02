@@ -37,6 +37,7 @@ import {
   sanitizeSource,
   serializeSessionCookie,
   sessionCookieName,
+  sessionPrincipal,
   serviceAllowed,
   workerRelayAllowed,
 } from "./request-auth.ts";
@@ -142,6 +143,8 @@ describe("scopes", () => {
       ["GET", "/api/attachments/a.png"], ["POST", "/api/routines"], ["POST", "/api/routines/r/run"],
       ["POST", "/api/routines/watch-check"], // #1202 Check now: the handler applies the routine save's rights
       ["POST", "/api/routines/folders"], // routine folders: the handler applies the routine edit rights
+      // Limit-reset: Continue card, near-limit banner, calendar markers (person's own bots)
+      ["GET", "/api/limit-resets"], ["POST", "/api/limit-resets/continue"], ["POST", "/api/limit-resets/after-reset"],
       ["POST", "/api/routine-runs/seen-all"], ["DELETE", "/api/routine-runs"],
       // #1482: scheduled calls, the handler narrows them to the member's bots
       ["GET", "/api/calendar-calls"], ["POST", "/api/calendar-calls"], ["PATCH", "/api/calendar-calls/c"],
@@ -233,6 +236,8 @@ describe("scopes", () => {
       ["GET", "/api/bots/x/workspace"], ["GET", "/api/bots/x/workspace/download"],
       ["GET", "/api/bots/x/workspace/file"], ["PUT", "/api/bots/x/workspace/file"], ["DELETE", "/api/bots/x/workspace/file"],
       ["POST", "/api/bots/x/workspace/docs/rename"],
+      ["POST", "/api/bots/x/workspace/mkdir"], ["POST", "/api/bots/x/workspace/touch"], ["POST", "/api/bots/x/workspace/rename"],
+      ["POST", "/api/bots/x/workspace/upload"], ["DELETE", "/api/bots/x/workspace/entry"], ["GET", "/api/bots/x/workspace/count"],
       // 2026-10-26: the bot's memory and change history, owner checked in the handlers
       ["GET", "/api/bots/x/memory"], ["PUT", "/api/bots/x/memory"],
       ["GET", "/api/bots/x/memory/file"], ["PUT", "/api/bots/x/memory/file"], ["DELETE", "/api/bots/x/memory/file"],
@@ -292,15 +297,34 @@ describe("scopes", () => {
     expect(clientSessionIsComputerOwner(session({ principalId: "pr_owner" }), { ...personal, cloudHome: true })).toBe(false);
   });
 
-  it("lets the owner's paired phone switch a bot's memory, and nothing a member may not set besides", () => {
+  it("reads the signed-in principal id (sessionPrincipal, #1388 leaf)", () => {
+    expect(sessionPrincipal({ kind: "loopback", scopes: ["admin"] })).toBeNull();
+    expect(sessionPrincipal({
+      kind: "session", via: "bearer", scopes: ["client"],
+      session: { id: "s", label: "phone", scopes: ["client"], createdAt: 0, expiresAt: 1, lastSeenAt: 0, tokenHash: "a".repeat(64), principalId: "  Pr_Ada  " },
+    })).toBe("pr_ada");
+    expect(sessionPrincipal({
+      kind: "session", via: "bearer", scopes: ["client"],
+      session: { id: "s", label: "phone", scopes: ["client"], createdAt: 0, expiresAt: 1, lastSeenAt: 0, tokenHash: "a".repeat(64) },
+    })).toBeNull();
+  });
+
+  it("lets the owner's paired phone switch memory, permissions and access (Lot 1)", () => {
     expect(companionBotFieldViolation({ memoryEnabled: false, memoryUpkeep: true, name: "Scout", soul: "x", modelSelection: {} })).toBeNull();
     // the voice notes switch of the bot panel (row BA11)
     expect(companionBotFieldViolation({ voiceNotes: false })).toBeNull();
-    for (const field of ["approvalMode", "cwd", "computer", "mcpServers", "autoApprove", "browserProfile", "visibility", "hidden", "host"]) {
+    // Lot 1: Permissions / Approval / Proactive / Access from the phone
+    expect(companionBotFieldViolation({
+      approvalMode: "ask", proactiveMode: "proactive", chiefOfStaff: false, approvePeerComms: true,
+      browser: false, mcpServers: [], alwaysAllow: [], computer: "local", cwd: "/work",
+      confirmFullAccess: true, applyToAllThreads: true,
+    })).toBeNull();
+    // org sharing and host fields stay off the phone
+    for (const field of ["browserProfile", "visibility", "hidden", "host", "peers", "outbound", "fallback", "section"]) {
       expect(companionBotFieldViolation({ memoryEnabled: true, [field]: "x" }), field).toBe(field);
     }
     expect(companionBotFieldViolation([])).toBe("body");
-    // a member session still may not
+    // a member session still may not set memory without bots.behaviour
     expect(memberBotFieldViolation({ memoryEnabled: false })).toBe("memoryEnabled");
     expect(memberBotFieldViolation({ voiceNotes: false })).toBe("voiceNotes");
   });
@@ -646,12 +670,15 @@ describe("resolveRequestAuth", () => {
     // The remote viewer route hands out a desktop password and its RFB
     // socket; native owners use the direct viewer instead.
     for (const path of ["/api/desktop-viewer/vps/bot-1", "/api/desktop-viewer/local/shared/websockify",
-      "/api/local-computer", "/api/bots/bot-1/local-computer"]) {
+      "/api/local-computer", "/api/bots/bot-1/local-computer",
+      "/api/webhooks/hook-1/address", "/api/webhooks/hook-1/reveal"]) {
       expect(resolveRequestAuth(request({ host: "127.0.0.1:8799" }, "GET"), options(path)).status, path).toBe(403);
       expect(resolveRequestAuth(request({ host: "127.0.0.1:8799", "x-openmausbot-desktop-owner": "owner-token-123" }, "GET"), options(path)).auth?.kind, path)
         .toBe("loopback");
     }
-    expect(resolveRequestAuth(request({ host: "127.0.0.1:8799" }, "GET"), options("/api/local-computer/instances")).auth?.kind).toBe("loopback");
+    for (const path of ["/api/webhooks", "/api/local-computer/instances", "/api/bots/bot-1/local-computer/screenshot"]) {
+      expect(resolveRequestAuth(request({ host: "127.0.0.1:8799" }, "GET"), options(path)).auth?.kind, path).toBe("loopback");
+    }
     expect(resolveRequestAuth(
       request({ host: "127.0.0.1:8799" }, "POST"),
       options("/api/internal/ask-bot"),

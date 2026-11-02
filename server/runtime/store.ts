@@ -16,6 +16,7 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { z } from "zod";
 
 import { APPROVAL_MODES } from "../../shared/approval-mode.ts";
+import type { Attempt, AttemptOutcome } from "./attempts.ts";
 import { TERMINAL, type Assignment, type AssignmentEvent, type EventKind, type InboxItem, type Owner } from "./types.ts";
 
 const evidenceSchema = z.object({
@@ -57,7 +58,8 @@ const assignmentSchema = z.object({
   reply: z.enum(["resume", "poll", "none"]),
   brief: z.string(),
   doneWhen: z.string().optional(),
-  status: z.enum(["queued", "running", "needs_input", "waiting", "resume", "completed", "failed", "cancelled"]),
+  defaultAnswer: z.string().optional(),
+  status: z.enum(["queued", "running", "needs_input", "waiting", "resume", "completed", "failed", "cancelled", "expired"]),
   outcome: z.enum(["done", "needs_input", "cap_continued", "stalled", "interrupted", "budget", "provider_error", "denied",
     "expired", "stopped", "refused", "duplicate", "incomplete"]).optional(),
   outcomeDetail: z.string().optional(),
@@ -111,6 +113,13 @@ export interface RuntimeStore {
   addInbox(item: InboxItem): void;
   inbox(owner: Owner, undeliveredOnly?: boolean): InboxItem[];
   markDelivered(ids: string[], at: number): void;
+  /** Drop wakes about this assignment so a retry can wake once more (DEL-02).
+   * Undelivered inputs on other lanes are left alone. */
+  removeInboxForAssignment(assignmentId: string): number;
+  /** Successive attempts on one assignment (DEL-02). Oldest first. */
+  attempts(assignmentId: string): Attempt[];
+  addAttempt(attempt: Attempt): void;
+  updateAttempt(attempt: Attempt): void;
   /** Remove terminal trees whose root finished before `before`; never a tree
    * with a non-terminal node. Returns assignment rows removed. */
   prune(before: number): number;
@@ -149,11 +158,6 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS assignments_requester_thread ON assignments(requester_thread_id);
   CREATE INDEX IF NOT EXISTS assignments_requester_run ON assignments(requester_run_id);
   CREATE INDEX IF NOT EXISTS assignments_assignee ON assignments(assignee_bot_id, assignee_thread_id);
-  -- The live rows in all()'s order. NOT IN cannot use assignments_status, so
-  -- without this every nonTerminal read walks the ended rows too, and those
-  -- only grow. Created on every open, so an existing file gets it too;
-  -- IF NOT EXISTS keeps an older definition, so a change to TERMINAL renames it.
-  CREATE INDEX IF NOT EXISTS assignments_live ON assignments(created_at) WHERE ${LIVE};
   CREATE TABLE IF NOT EXISTS assignment_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     assignment_id TEXT NOT NULL,
@@ -175,6 +179,15 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS inbox_thread ON inbox(owner_thread_id, delivered_at);
   CREATE INDEX IF NOT EXISTS inbox_run ON inbox(owner_run_id, delivered_at);
   CREATE INDEX IF NOT EXISTS inbox_assignment ON inbox(assignment_id);
+  CREATE TABLE IF NOT EXISTS attempts (
+    id TEXT PRIMARY KEY,
+    assignment_id TEXT NOT NULL,
+    number INTEGER NOT NULL,
+    started_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    outcome TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS attempts_assignment ON attempts(assignment_id, number);
 `;
 
 const TOUCHING = "SELECT DISTINCT root_id FROM assignments WHERE requester_thread_id = ? OR assignee_thread_id = ?";
@@ -182,7 +195,20 @@ const TOUCHING = "SELECT DISTINCT root_id FROM assignments WHERE requester_threa
 function removeTree(db: DatabaseSync, rootId: string): number {
   db.prepare("DELETE FROM assignment_events WHERE assignment_id IN (SELECT id FROM assignments WHERE root_id = ?)").run(rootId);
   db.prepare("DELETE FROM inbox WHERE assignment_id IN (SELECT id FROM assignments WHERE root_id = ?)").run(rootId);
+  db.prepare("DELETE FROM attempts WHERE assignment_id IN (SELECT id FROM assignments WHERE root_id = ?)").run(rootId);
   return Number(db.prepare("DELETE FROM assignments WHERE root_id = ?").run(rootId).changes);
+}
+
+function readAttempt(row: Row): Attempt {
+  const attempt: Attempt = {
+    id: String(row.id),
+    assignmentId: String(row.assignment_id),
+    number: Number(row.number),
+    startedAt: Number(row.started_at),
+    outcome: row.outcome as AttemptOutcome,
+  };
+  if (row.finished_at != null) attempt.finishedAt = Number(row.finished_at);
+  return attempt;
 }
 
 /** A copy of the runtime database without any tree one of these threads
@@ -260,6 +286,10 @@ export function openRuntimeStore(path: string): RuntimeStore {
   // page (forgetThread, docs/confidential-threads.md).
   db.exec("PRAGMA secure_delete = ON");
   db.exec(SCHEMA);
+  // Live partial index: DROP then CREATE on every open so a TERMINAL change
+  // (e.g. expired) updates the WHERE. IF NOT EXISTS would keep a stale one.
+  db.exec("DROP INDEX IF EXISTS assignments_live");
+  db.exec(`CREATE INDEX assignments_live ON assignments(created_at) WHERE ${LIVE}`);
 
   // Zod once per distinct json payload. Each read still JSON.parse's so
   // callers that mutate the returned object (then update, or fail mid-write)
@@ -305,11 +335,17 @@ export function openRuntimeStore(path: string): RuntimeStore {
     addInbox: db.prepare(`INSERT INTO inbox (id, owner_bot_id, owner_thread_id, owner_run_id, assignment_id, kind, created_at, delivered_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
     deliver: db.prepare("UPDATE inbox SET delivered_at = ? WHERE id = ? AND delivered_at IS NULL"),
+    removeInboxAssignment: db.prepare("DELETE FROM inbox WHERE assignment_id = ?"),
+    attempts: db.prepare("SELECT id, assignment_id, number, started_at, finished_at, outcome FROM attempts WHERE assignment_id = ? ORDER BY number, rowid"),
+    addAttempt: db.prepare(`INSERT INTO attempts (id, assignment_id, number, started_at, finished_at, outcome)
+      VALUES (?, ?, ?, ?, ?, ?)`),
+    updateAttempt: db.prepare("UPDATE attempts SET finished_at = ?, outcome = ? WHERE id = ?"),
     prunable: db.prepare(`SELECT id FROM assignments r WHERE r.parent_id IS NULL AND r.status IN (${terminalList})
       AND r.finished_at IS NOT NULL AND r.finished_at < ?
       AND NOT EXISTS (SELECT 1 FROM assignments c WHERE c.root_id = r.id AND c.status NOT IN (${terminalList}))`),
     pruneEvents: db.prepare("DELETE FROM assignment_events WHERE assignment_id IN (SELECT id FROM assignments WHERE root_id = ?)"),
     pruneInbox: db.prepare("DELETE FROM inbox WHERE assignment_id IN (SELECT id FROM assignments WHERE root_id = ?)"),
+    pruneAttempts: db.prepare("DELETE FROM attempts WHERE assignment_id IN (SELECT id FROM assignments WHERE root_id = ?)"),
     pruneRows: db.prepare("DELETE FROM assignments WHERE root_id = ?"),
   };
 
@@ -431,6 +467,22 @@ export function openRuntimeStore(path: string): RuntimeStore {
         for (const id of ids) statements.deliver.run(at, id);
       });
     },
+    removeInboxForAssignment(assignmentId) {
+      return Number(statements.removeInboxAssignment.run(assignmentId).changes);
+    },
+    attempts(assignmentId) {
+      return (statements.attempts.all(assignmentId) as Row[]).map(readAttempt);
+    },
+    addAttempt(attempt) {
+      statements.addAttempt.run(
+        attempt.id, attempt.assignmentId, attempt.number, attempt.startedAt,
+        attempt.finishedAt ?? null, attempt.outcome,
+      );
+    },
+    updateAttempt(attempt) {
+      const changes = statements.updateAttempt.run(attempt.finishedAt ?? null, attempt.outcome, attempt.id).changes;
+      if (changes === 0) throw new Error(`runtime.db: attempt ${attempt.id} does not exist`);
+    },
     prune(before) {
       return transaction(() => {
         const roots = (statements.prunable.all(before) as Row[]).map(row => String(row.id));
@@ -438,6 +490,7 @@ export function openRuntimeStore(path: string): RuntimeStore {
         for (const rootId of roots) {
           statements.pruneEvents.run(rootId);
           statements.pruneInbox.run(rootId);
+          statements.pruneAttempts.run(rootId);
           removed += Number(statements.pruneRows.run(rootId).changes);
         }
         if (roots.length) validated.clear();
@@ -472,6 +525,7 @@ export function openRuntimeStore(path: string): RuntimeStore {
               if (own) {
                 db.prepare("DELETE FROM assignment_events WHERE assignment_id = ?").run(String(raw.id));
                 db.prepare("DELETE FROM inbox WHERE assignment_id = ?").run(String(raw.id));
+                db.prepare("DELETE FROM attempts WHERE assignment_id = ?").run(String(raw.id));
                 db.prepare("DELETE FROM assignments WHERE id = ?").run(String(raw.id));
                 invalidate(String(raw.id));
                 removed += 1;

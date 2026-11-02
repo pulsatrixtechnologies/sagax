@@ -180,6 +180,13 @@ final class Session: ObservableObject {
         didSet { if case let .bot(bot)? = pendingChat { freshTopics[bot.id] = nil } }
     }
     @Published private(set) var pendingInbox = false
+    /// A chat-widget button that names a place in Sagax (open_page,
+    /// open_routine, open_run). ChatListView / DesktopShell / ChatView open
+    /// the matching surface and consume this.
+    @Published private(set) var pendingWidgetDestination: ChatWidgetDestination?
+    /// ChatView opens this bot-panel door once the matching chat is on screen
+    /// (widget `code` / `remote_sessions` map to Computer).
+    @Published private(set) var pendingPanelDoor: BotPanelDoor?
     /// Who this phone is signed in as (`GET /api/auth/session`), for the
     /// home's photo. Nil until loaded, or when the server does not say.
     @Published private(set) var account: AuthSession?
@@ -912,6 +919,24 @@ final class Session: ObservableObject {
         pendingInbox = false
     }
 
+    /// Open the place a widget button named, on this device. The card then
+    /// posts the press as done (no turn); see ChatWidgetCard.
+    func openWidgetAppAction(_ action: ChatWidgetAppAction, botId: String) {
+        pendingWidgetDestination = ChatWidgetDevice.destination(for: action, botId: botId)
+    }
+
+    func consumePendingWidgetDestination() {
+        pendingWidgetDestination = nil
+    }
+
+    func requestPanelDoor(_ door: BotPanelDoor) {
+        pendingPanelDoor = door
+    }
+
+    func consumePendingPanelDoor() {
+        pendingPanelDoor = nil
+    }
+
     /// A deep link that names a chat. An id this phone does not know — a
     /// stale widget row, a thread deleted since — lands on the roster
     /// silently: it is not the person's mistake, so it is not worth a banner.
@@ -1256,6 +1281,8 @@ final class Session: ObservableObject {
         restorePending = false
         pendingNotification = nil
         notificationRoutineRun = nil
+        pendingWidgetDestination = nil
+        pendingPanelDoor = nil
         pairingInvite = CompanionPairingInvitePolicy.nextInvite(
             current: pairingInvite,
             after: .signedOut
@@ -1306,6 +1333,8 @@ final class Session: ObservableObject {
         endLinger()
         pendingNotification = nil
         notificationRoutineRun = nil
+        pendingWidgetDestination = nil
+        pendingPanelDoor = nil
         screenWatchers = 0
         client = nil
         token = nil
@@ -2249,6 +2278,15 @@ final class Session: ObservableObject {
             return
         }
         guard let requestId = card.requestId else { return }
+        // Phone-call consent: fixed Accept/Decline labels map to allow/deny
+        // (shared/phone-call-consent.ts), never the generic option-card path.
+        if card.phoneCallConsent != nil {
+            let behavior = PhoneCallConsentRules.behavior(for: choice)
+            await perform {
+                try await $0.respond(threadId: chat.threadId, decision: ApprovalDecision(requestId: requestId, behavior: behavior))
+            }
+            return
+        }
         if rememberingPermission, card.shouldRememberPermission(for: choice), case let .bot(bot) = chat {
             await alwaysAllow(bot: bot, card: card)
         }

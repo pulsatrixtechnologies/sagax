@@ -49,7 +49,7 @@ function JournalRow({ entry, open, onToggle, onOpenThread }: { entry: JournalEnt
   const guard = guardLine(entry);
   const asked = entry.askedBy && entry.askedBy !== entry.decider ? deciderLine({ decider: entry.askedBy, source: entry.askedSource }) : null;
   return (
-    <li data-journal-outcome={entry.outcome} data-journal-decider={entry.decider}>
+    <li data-journal-outcome={entry.outcome} data-journal-decider={entry.decider} {...(entry.ruleId ? { "data-journal-has-rule": "" } : {})}>
       <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-control/40">
         <span className={cn("mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium", TONE[OUTCOME_TONE[entry.outcome]])}>
           <Icon size={11} aria-hidden="true" />
@@ -71,6 +71,9 @@ function JournalRow({ entry, open, onToggle, onOpenThread }: { entry: JournalEnt
       {open && (
         <div className="flex flex-col gap-1 px-4 pb-3 pl-[88px] text-[12px] text-ink-secondary" data-journal-detail="">
           {entry.summary && <div className="break-words font-mono text-[11.5px] text-ink-tertiary">{withoutIds(entry.summary)}</div>}
+          {entry.ruleText && (
+            <div data-journal-rule="">{t("approvals.journal.matchedRule", { rule: withoutIds(entry.ruleText) })}</div>
+          )}
           {asked && <div>{t("approvals.journal.askedBecause", { why: asked })}</div>}
           {entry.ran === "failed" && entry.outcome === "failed" && entry.decider !== "error" && <div className="text-danger">{t("approvals.journal.ranFailed")}</div>}
           {entry.reason && <div>{t("approvals.journal.reason", { reason: withoutIds(entry.reason) })}</div>}

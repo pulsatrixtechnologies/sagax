@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ROUTINE_QUIET_MARKER,
+  flowRunBlockedReason,
   routineReportOutcome,
   routineRunReportable,
 } from "./routine-report.ts";
@@ -52,6 +53,23 @@ describe("routineReportOutcome", () => {
   });
 });
 
+describe("flowRunBlockedReason", () => {
+  it("names Flow refusals that must end a Sagax routine run as blocked", () => {
+    expect(flowRunBlockedReason("Blocking run: previous has not been closed: one routine run at a time"))
+      .toMatch(/has not been closed/i);
+    expect(flowRunBlockedReason("unknown routine: hourly-qc1-tunnel-watch")).toMatch(/unknown routine/i);
+    expect(flowRunBlockedReason("run_exists: lease still held")).toMatch(/run_exists/i);
+    expect(flowRunBlockedReason("previous_unclosed")).toMatch(/previous_unclosed/i);
+  });
+
+  it("ignores ordinary tool output so a healthy Flow run stays completed", () => {
+    expect(flowRunBlockedReason(undefined)).toBeUndefined();
+    expect(flowRunBlockedReason("")).toBeUndefined();
+    expect(flowRunBlockedReason("Checked 12 invoices, all have a PO.")).toBeUndefined();
+    expect(flowRunBlockedReason("run init ok; units dispatched")).toBeUndefined();
+  });
+});
+
 describe("routineRunReportable", () => {
   it("never posts while a run is queued or running, nor when it ends with nothing to report", () => {
     for (const status of ["queued", "running", "cancelled", "missed", "nothing_to_report"] as const) {
@@ -70,6 +88,7 @@ describe("routineRunReportable", () => {
   it("an error, a question or an approval surfaces whichever way postResults is set", () => {
     for (const postResults of [true, false, undefined]) {
       expect(routineRunReportable({ status: "failed", postResults })).toBe(true);
+      expect(routineRunReportable({ status: "blocked", postResults })).toBe(true);
       expect(routineRunReportable({ status: "waiting", needsPerson: true, postResults })).toBe(true);
       expect(routineRunReportable({ status: "waiting", goalStatus: "needs-input", postResults })).toBe(true);
     }

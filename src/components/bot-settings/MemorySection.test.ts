@@ -4,6 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { MemoryCapacity, MemoryFileInfo, MemoryJournalRow } from "@/lib/memory";
 
+vi.mock("../DesktopCapabilities", () => ({
+  useDesktopCapabilities: () => ({}),
+  useCaptionChrome: () => ({ padClass: "" }),
+  useMacInsetChrome: () => ({ macInset: false, browser: false }),
+}));
+
 const { MemoryToggleCard, ConflictNotice, LendingReviewNotice, MemoryEditorDialog, MemoryFileRows, MemoryGauge, MemoryJournalList, MemoryUpkeepCard } = await import("./MemorySection");
 
 // renderToStaticMarkup HTML-escapes quotes and apostrophes; decode before
@@ -204,9 +210,11 @@ describe("MemoryEditorDialog", () => {
     onOpenIndex: vi.fn(),
   };
 
-  it("shows the file in a dialog, with save and a way back to the index", () => {
+  it("shows the file as a pushed page, with save and a way back to the index", () => {
     const markup = render(createElement(MemoryEditorDialog, props));
     expect(markup).toContain('role="dialog"');
+    expect(markup).toContain('data-panel-page=""');
+    expect(markup).toContain('data-memory-editor-page=""');
     expect(markup).toContain("memory/work-style.md");
     expect(markup).toContain("hello note");
     expect(markup).toContain(">Save<");

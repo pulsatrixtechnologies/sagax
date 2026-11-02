@@ -5,7 +5,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BotCatalogDetailView, type CatalogDetailContent, type CatalogTab, CATALOG_TABS } from "../components/bot-catalog/BotCatalogDetailView";
-import { CATEGORY_MODAL } from "../components/category-modal";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider } from "../state/store";
@@ -96,9 +95,8 @@ const width = Number(params.get("w") ?? 900);
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <StoreProvider>
-      <div className="flex min-h-screen items-center justify-center bg-black/50 p-3 sm:p-6">
-        <div className={CATEGORY_MODAL.frame} style={{ width: `min(${width}px, calc(100vw - 24px))` }} data-gallery-frame="">
-          <div className={CATEGORY_MODAL.content}>
+      <div className="flex min-h-screen flex-col bg-app text-ink" data-gallery-sample="" style={{ width: `min(${width}px, 100vw)` }}>
+        <div className="flex min-h-0 flex-1 flex-col" data-gallery-frame="">
             <BotCatalogDetailView
               item={item}
               content={content}
@@ -111,7 +109,6 @@ createRoot(document.getElementById("root")!).render(
                 <button type="button" className="rounded-full border border-border px-4 py-2 text-[13px] font-medium text-ink">Publier au catalogue de l'organisation</button>
               </>}
             />
-          </div>
         </div>
       </div>
     </StoreProvider>

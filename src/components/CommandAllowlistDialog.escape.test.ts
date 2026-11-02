@@ -1,23 +1,21 @@
 // @vitest-environment happy-dom
-// Escape has to close this dialog when focus never entered it. Static markup
-// does not run the listener, so this mounts the dialog and presses the key.
+// Escape on the pushed page goes back one level (PanelPage onKeyDown).
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("./DesktopCapabilities", () => ({
+  useDesktopCapabilities: () => ({}),
+  useCaptionChrome: () => ({ padClass: "" }),
+  useMacInsetChrome: () => ({ macInset: false, browser: false }),
+}));
 vi.mock("@/state/store", () => ({
-  useStore: () => ({ state: { instances: [] } }),
+  useStore: () => ({ state: { instances: [] }, dispatch: vi.fn() }),
   api: () => new Promise(() => {}),
 }));
 
 import { CommandAllowlistDialog } from "./CommandAllowlistDialog";
-
-function press(key: string, init: KeyboardEventInit = {}) {
-  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
-  window.dispatchEvent(event);
-  return event;
-}
 
 describe("CommandAllowlistDialog Escape", () => {
   let root: Root | undefined;
@@ -31,67 +29,35 @@ describe("CommandAllowlistDialog Escape", () => {
   });
 
   function open(onClose: () => void) {
-    const opener = document.createElement("button");
-    opener.textContent = "Manage command allowlist";
-    document.body.append(opener);
-    added.push(opener);
-    opener.focus();
-    const container = document.createElement("div");
-    document.body.append(container);
-    added.push(container);
-    root = createRoot(container);
+    const host = document.createElement("div");
+    host.className = "relative";
+    document.body.append(host);
+    added.push(host);
+    root = createRoot(host);
     flushSync(() => {
       root!.render(createElement(CommandAllowlistDialog, { botId: "bot-1", botName: "Scout", onClose }));
     });
-    opener.focus();
-    return opener;
+    return host.querySelector<HTMLElement>("[data-panel-page]")!;
   }
 
-  it("closes when focus is outside the dialog and does not pass Escape on", () => {
+  it("closes when Escape is pressed inside the page", () => {
     const onClose = vi.fn();
-    const behind = vi.fn();
-    window.addEventListener("keydown", behind);
-    const opener = open(onClose);
-    expect(document.activeElement).toBe(opener);
-    expect(document.body.textContent).toContain("Command allowlist");
-
-    const event = press("Escape");
+    const page = open(onClose);
+    expect(page).not.toBeNull();
+    page.focus();
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    page.dispatchEvent(event);
     expect(onClose).toHaveBeenCalledOnce();
     expect(event.defaultPrevented).toBe(true);
-    expect(behind).not.toHaveBeenCalled();
-
-    onClose.mockClear();
-    flushSync(() => root!.unmount());
-    root = undefined;
-    press("Escape");
-    expect(onClose).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(opener);
-    window.removeEventListener("keydown", behind);
   });
 
-  it("leaves Escape alone while composing or once another layer has handled it", () => {
+  it("leaves Escape alone while composing", () => {
     const onClose = vi.fn();
-    const seen = vi.fn();
-    window.addEventListener("keydown", seen);
-    open(onClose);
-
-    const composing = press("Escape", { isComposing: true });
+    const page = open(onClose);
+    page.focus();
+    const composing = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true, isComposing: true });
+    page.dispatchEvent(composing);
     expect(onClose).not.toHaveBeenCalled();
     expect(composing.defaultPrevented).toBe(false);
-    expect(seen).toHaveBeenCalledOnce();
-    press("Enter");
-    expect(onClose).not.toHaveBeenCalled();
-    window.removeEventListener("keydown", seen);
-
-    flushSync(() => root!.unmount());
-    root = undefined;
-    const claim = (event: KeyboardEvent) => {
-      if (event.key === "Escape") event.preventDefault();
-    };
-    window.addEventListener("keydown", claim, true);
-    open(onClose);
-    press("Escape");
-    expect(onClose).not.toHaveBeenCalled();
-    window.removeEventListener("keydown", claim, true);
   });
 });

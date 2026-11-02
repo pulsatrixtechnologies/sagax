@@ -1,13 +1,18 @@
 // The discreet thread line a bot on Auto leaves when its Workspace changes
 // (server/auto-computer.ts autoStartTarget): "On your computer", "In the
 // cloud", or "Moved to the cloud: your computer is offline" when the place it
-// wanted was not available. The server writes these exact activity names;
-// the client shows them in the person's language (src/lib/activity-runs.ts
-// statusActivity), like shared/sandbox-wake.ts. An older client shows the
-// English text after "notice:".
+// wanted was not available. Routine reasons stay distinct: not allowed on
+// the computer, or routines start in the cloud by default. The server writes
+// these exact activity names; the client shows them in the person's language
+// (src/lib/activity-runs.ts statusActivity), like shared/sandbox-wake.ts. An
+// older client shows the English text after "notice:".
 import type { SelectedComputer } from "./execution-target.ts";
 
-export type WorkspaceFallbackReason = "offline" | "routine-not-allowed" | "unavailable";
+export type WorkspaceFallbackReason =
+  | "offline"
+  | "routine-not-allowed"
+  | "routine-default"
+  | "unavailable";
 
 const PLACE: Record<SelectedComputer, string> = {
   this_computer: "your computer",
@@ -23,7 +28,8 @@ const ON: Record<SelectedComputer, string> = {
 };
 const WHY: Record<WorkspaceFallbackReason, (wanted: SelectedComputer) => string> = {
   offline: () => "your computer is offline",
-  "routine-not-allowed": () => "routines may not use your computer",
+  "routine-not-allowed": () => "routines are not allowed on your computer",
+  "routine-default": () => "routines start in the cloud by default",
   unavailable: (wanted) => `${PLACE[wanted]} is not available`,
 };
 
@@ -47,8 +53,9 @@ for (const target of TARGETS) {
   for (const wanted of TARGETS) {
     if (wanted === target) continue;
     for (const reason of REASONS) {
-      // "offline" and "routines may not" read the same for this computer
-      // and the Local VM: the first (this computer) stands for both.
+      // offline ignores wanted, so this_computer and local_vm share one
+      // offline name: keep the first (this_computer). Routine reasons have
+      // their own wording and never share a name with offline.
       const line = { target, fallback: { wanted, reason } };
       const name = workspaceLineName(line);
       if (!BY_NAME.has(name)) BY_NAME.set(name, line);

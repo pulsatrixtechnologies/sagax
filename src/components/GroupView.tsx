@@ -179,7 +179,8 @@ export function RoomToolChip({ message, roomId }: { message: Message; roomId?: s
   if (message.inputRequest) return <InputRequestCard message={message} />;
   if (message.threadRef) return <ThreadChip message={message} />;
   if (failedTurnCause(tool.name) !== null) {
-    return <FailedTurnRow tool={tool} engine={botEngine(storeBots.find((b) => b.id === message.from?.botId), instances)} botId={message.from?.botId} />;
+    const roomThreadId = roomId ? storeGroups.find((group) => group.id === roomId)?.threadId : undefined;
+    return <FailedTurnRow tool={tool} engine={botEngine(storeBots.find((b) => b.id === message.from?.botId), instances)} botId={message.from?.botId} threadId={roomThreadId} />;
   }
   const comm = message.comm;
   const nameOf = botNames(storeBots);
@@ -311,18 +312,35 @@ function RoomTextMessage({
   const [revealed, setRevealed] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
+  const lineRef = useRef<HTMLDivElement>(null);
+  // The "..." button stays mounted after the report item's menu closes.
+  const reportAnchor = useRef<HTMLElement | null>(null);
+  const openReport = () => {
+    reportAnchor.current = lineRef.current?.querySelector<HTMLElement>("[data-more-button]") ?? lineRef.current;
+    setReporting(true);
+  };
   const personMenu = [
     ...userMessageMenu({ pin }),
     ...(author && requestId ? personModerationMenu({
       name: author.name,
       blocked: authorBlocked,
-      onReport: () => setReporting(true),
+      onReport: openReport,
       onToggleBlock: () => { if (authorBlocked) void unblockPerson(author.id).catch(() => {}); else setConfirmBlock(true); },
     }) : []),
   ];
   const moderationDialogs = author ? (
     <>
-      {reporting && requestId && <ReportPersonDialog threadId={group.threadId} messageId={requestId} author={author} blocked={authorBlocked} onClose={() => setReporting(false)} />}
+      {reporting && requestId && (
+        <ReportPersonDialog
+          open
+          anchorRef={reportAnchor}
+          threadId={group.threadId}
+          messageId={requestId}
+          author={author}
+          blocked={authorBlocked}
+          onClose={() => setReporting(false)}
+        />
+      )}
       <ConfirmDialog
         open={confirmBlock}
         tone="neutral"
@@ -334,7 +352,9 @@ function RoomTextMessage({
       />
     </>
   ) : null;
-  if (author && authorBlocked && !revealed) {
+  // While the report popover is open, keep this row (and its "..." button,
+  // the anchor) mounted. Folding the line away would drop the anchor.
+  if (author && authorBlocked && !revealed && !reporting) {
     return (
       <div data-author="person" data-blocked-line="" className="group flex w-full flex-col items-start" {...{ [MESSAGE_ROW]: "" }}>
         <div className="flex items-center gap-2 rounded-[18px] bg-raised px-3 py-[7px] text-[12.5px] text-ink-secondary ring-1 ring-inset ring-hairline/40">
@@ -347,6 +367,7 @@ function RoomTextMessage({
   }
   return (
     <div
+      ref={lineRef}
       data-author={mine ? "self" : user ? "person" : "bot"}
       className={cn("group flex w-full flex-col", mine ? "items-end" : "items-start", joinsAbove && "-mt-2")}
       // the whole row reveals its actions on hover, focus or a tap (MessageActions)
@@ -460,7 +481,7 @@ function RoomTextMessage({
           )}
         </div>
         {!mine && user && (
-          <MessageActions side="bot" menu={personMenu} onReply={() => onReply(m)} copy={display.trim() ? display : undefined} requestId={requestId} react={react} />
+          <MessageActions side="bot" forceOpen={reporting} menu={personMenu} onReply={() => onReply(m)} copy={display.trim() ? display : undefined} requestId={requestId} react={react} />
         )}
         {!user && (
           <MessageActions

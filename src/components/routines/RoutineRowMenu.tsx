@@ -12,6 +12,7 @@ import type { Action, AppState, Bot } from "@/state/store";
 import { canRunRoutineNow } from "./RunNowButton";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
+import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { navigateThreadMenu } from "../BotProjects";
 
 export const ROUTINE_MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50";
@@ -79,20 +80,25 @@ export function RoutineRowMenuItems({ routine, actions }: { routine: Routine; ac
   </Fragment>)}</>;
 }
 
-/** The menu's floating card at the pointer (or under its trigger). */
+/** The menu's floating card at the pointer (or under its trigger). No
+ * full-window catcher: a press outside the card, or Escape, closes it and
+ * the press still reaches whatever was under it. */
 export function RoutineMenuPortal({ x, y, label, kind, onClose, children }: { x: number; y: number; label: string; kind: string; onClose: (focus?: boolean) => void; children: ReactNode }) {
-  return createPortal(<div className="fixed inset-0 z-40" onMouseDown={() => onClose(false)} onContextMenu={(event) => { event.preventDefault(); onClose(false); }}>
-    <div role="menu" data-routine-folder-menu={kind} aria-label={label}
+  const menuRef = useRef<HTMLDivElement>(null);
+  usePopoverDismiss(true, menuRef, () => onClose(false));
+  return createPortal(
+    <div ref={menuRef} role="menu" data-routine-folder-menu={kind} aria-label={label}
       style={{ left: Math.max(8, Math.min(x, window.innerWidth - 248)), top: Math.max(8, Math.min(y, window.innerHeight - 320)) }}
-      className="absolute flex max-h-[min(420px,80vh)] w-[240px] flex-col gap-0.5 overflow-y-auto rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] text-ink shadow-lg"
-      onMouseDown={(event) => event.stopPropagation()}
+      className="popover-surface fixed z-40 flex max-h-[min(420px,80vh)] w-[240px] flex-col gap-0.5 overflow-y-auto rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-[13px] leading-[18px] text-ink shadow-lg"
+      onContextMenu={(event) => event.preventDefault()}
       onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
         if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); onClose(); return; }
         if (!(event.target instanceof HTMLInputElement)) navigateThreadMenu(event);
       }}>
       {children}
-    </div>
-  </div>, document.body);
+    </div>,
+    document.body,
+  );
 }
 
 /** A routine's name typed in place (2026-10-29): Enter saves, Escape
@@ -121,7 +127,7 @@ export function RoutineNameInput({ initial, onSave, onCancel, className }: { ini
       }}
       onBlur={onCancel}
       className={cn("h-7 w-full min-w-0 rounded-md border border-hairline/60 bg-inset px-2 text-[13px] text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", empty && "border-danger/60", className)} />
-    {empty && <span role="alert" data-routine-name-empty="" className="px-0.5 pt-0.5 text-[11.5px] leading-4 text-danger">{t("routines.rename.empty")}</span>}
+    {empty && <span role="alert" data-routine-name-empty="" className="px-0.5 pt-0.5 text-[12px] leading-4 text-danger">{t("routines.rename.empty")}</span>}
   </span>;
 }
 

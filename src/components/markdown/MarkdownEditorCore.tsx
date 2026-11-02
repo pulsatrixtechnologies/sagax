@@ -43,23 +43,25 @@ const markdownLanguage = new Language(
 );
 const markdownSupport = new LanguageSupport(markdownLanguage);
 
+/** Shared marks. Links read as normal underlined text (not accent orange
+ * brackets); headings stay moderate so a side-panel editor stays readable. */
 const highlight = HighlightStyle.define([
-  { tag: tags.heading1, fontSize: "1.45em", fontWeight: "700", lineHeight: "1.35" },
-  { tag: tags.heading2, fontSize: "1.25em", fontWeight: "700", lineHeight: "1.35" },
-  { tag: tags.heading3, fontSize: "1.1em", fontWeight: "650" },
-  { tag: [tags.heading4, tags.heading5, tags.heading6], fontWeight: "650" },
-  { tag: tags.heading, fontWeight: "650" },
-  { tag: tags.strong, fontWeight: "700" },
+  { tag: tags.heading1, fontSize: "1.2em", fontWeight: "650", lineHeight: "1.35" },
+  { tag: tags.heading2, fontSize: "1.1em", fontWeight: "650", lineHeight: "1.35" },
+  { tag: tags.heading3, fontSize: "1.05em", fontWeight: "600" },
+  { tag: [tags.heading4, tags.heading5, tags.heading6], fontWeight: "600" },
+  { tag: tags.heading, fontWeight: "600" },
+  { tag: tags.strong, fontWeight: "650" },
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.strikethrough, textDecoration: "line-through" },
   { tag: tags.monospace, fontFamily: "var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)", fontSize: "0.92em" },
-  { tag: tags.link, color: "var(--color-accent-text)" },
-  { tag: tags.url, color: "var(--color-ink-secondary)", textDecoration: "underline" },
+  { tag: tags.link, color: "var(--color-ink)", textDecoration: "underline", textUnderlineOffset: "2px" },
+  { tag: tags.url, color: "var(--color-ink-secondary)", textDecoration: "underline", textUnderlineOffset: "2px" },
   { tag: tags.quote, color: "var(--color-ink-secondary)" },
   { tag: tags.processingInstruction, color: "var(--color-ink-tertiary)" },
   { tag: tags.labelName, color: "var(--color-ink-tertiary)" },
   { tag: tags.contentSeparator, color: "var(--color-ink-tertiary)" },
-  { tag: tags.atom, color: "var(--color-accent-text)", fontWeight: "600" },
+  { tag: tags.atom, color: "var(--color-ink-secondary)", fontWeight: "600" },
   { tag: tags.comment, color: "var(--color-ink-tertiary)", fontStyle: "italic" },
 ]);
 
@@ -139,21 +141,21 @@ const theme = EditorView.theme({
   "&": {
     color: "var(--color-ink)",
     backgroundColor: "transparent",
-    fontSize: "13.5px",
+    fontSize: "var(--md-font-size, 13px)",
     minHeight: "var(--md-min-h, 160px)",
     maxHeight: "var(--md-max-h, 60vh)",
   },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": {
     fontFamily: "inherit",
-    lineHeight: "1.6",
+    lineHeight: "1.55",
     overflow: "auto",
   },
   ".cm-content": {
-    padding: "10px 12px",
+    padding: "8px 12px",
     caretColor: "var(--color-ink)",
   },
-  ".cm-line": { padding: "0" },
+  ".cm-line": { padding: "1px 0" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--color-ink)" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {
     backgroundColor: "color-mix(in srgb, var(--color-accent) 30%, transparent)",
@@ -174,8 +176,9 @@ const theme = EditorView.theme({
     fontSize: "0.92em",
   },
   ".cm-md-rule": { color: "var(--color-ink-tertiary)" },
-  ".cm-md-h1": { paddingTop: "6px !important" },
-  ".cm-md-h2": { paddingTop: "4px !important" },
+  ".cm-md-h1": { paddingTop: "4px !important", paddingBottom: "2px !important" },
+  ".cm-md-h2": { paddingTop: "3px !important", paddingBottom: "1px !important" },
+  ".cm-md-h3": { paddingTop: "2px !important" },
   ".cm-md-task-done": { textDecoration: "line-through", color: "var(--color-ink-secondary)" },
 });
 

@@ -75,7 +75,7 @@ enum DesktopShellRules {
 @MainActor
 final class DesktopShellModel: ObservableObject {
     enum Modal: String, Identifiable {
-        case settings, search, newBot, newGroup, teamMap, automations, plugins, templates, about, shortcuts, achievements
+        case settings, search, newBot, newGroup, teamMap, automations, memory, plugins, templates, about, shortcuts, achievements
         /// The release notes dialog: browsing (the account menu) or What's new after an update.
         case releaseNotes, whatsNew
 
@@ -512,6 +512,7 @@ private struct DesktopShellRouting: ViewModifier {
     @EnvironmentObject private var session: Session
     @ObservedObject private var sidebarPrefs = SidebarPrefsModel.shared
     @State private var openedNotificationRun: OpenedRoutineRun?
+    @State private var openedWidgetRoutine: Routine?
 
     func body(content: Content) -> some View {
         content
@@ -530,9 +531,25 @@ private struct DesktopShellRouting: ViewModifier {
                 model.open(chat)
                 session.consumePendingChat()
             }
+            .onValueChange(of: session.pendingWidgetDestination) { destination in
+                guard let destination else { return }
+                session.consumePendingWidgetDestination()
+                Task { await openWidgetDestination(destination) }
+            }
             .routineRunDetail(item: $openedNotificationRun) { opened in
                 RoutineRunDetailView(run: opened.run, routine: opened.routine)
                     .environmentObject(session)
+            }
+            .sheet(item: $openedWidgetRoutine) { routine in
+                NavigationStack {
+                    RoutineDetailView(routine: routine)
+                        .environmentObject(session)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button(String(localized: "Done")) { openedWidgetRoutine = nil }
+                            }
+                        }
+                }
             }
             // The open conversation disappears (deleted on the server) or the
             // person closes or hides it: the column shows its empty state,
@@ -572,6 +589,43 @@ private struct DesktopShellRouting: ViewModifier {
             .onValueChange(of: session.rosterSignature) { _ in
                 sidebarPrefs.unhideNewMessages(session)
             }
+    }
+
+    /// A widget button that named a place: open the closest iPad surface.
+    private func openWidgetDestination(_ destination: ChatWidgetDestination) async {
+        switch destination {
+        case .automations, .updates:
+            // Approvals has no iPad twin; Automations is the closest place
+            // that lists work waiting on the person.
+            model.modal = .automations
+        case .teamMap:
+            model.modal = .teamMap
+        case .achievements:
+            model.modal = .achievements
+        case let .botComputer(botId):
+            if let bot = session.state.bot(botId) {
+                model.open(session.returning(to: .bot(bot)))
+                model.panelTab = BotPanelDoor.computerButton.tab
+                model.panelOpen = true
+            }
+        case let .routine(routineId, _):
+            let listing = await session.loadRoutines()
+            if let routine = listing.routines.first(where: { $0.id == routineId }) {
+                openedWidgetRoutine = routine
+            } else {
+                model.modal = .automations
+            }
+        case let .run(runId, routineId):
+            let listing = await session.loadRoutines()
+            if let run = listing.runs.first(where: { $0.id == runId }) {
+                openedNotificationRun = OpenedRoutineRun(
+                    run: run,
+                    routine: listing.routines.first { $0.id == (routineId ?? run.routineId) }
+                )
+            } else {
+                model.modal = .automations
+            }
+        }
     }
 
     /// Only a conversation that was there counts as gone: one opened from a
@@ -725,6 +779,8 @@ private struct DesktopShellPresenter: ViewModifier {
             }
         case .automations:
             AutomationsSheet()
+        case .memory:
+            MemoryManagerSheet()
         case .plugins:
             EmptyView()
         case .templates:

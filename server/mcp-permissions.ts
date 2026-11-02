@@ -102,7 +102,12 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("artifacts:delete", "own", "delete_artifact"),
   p("pages:propose", "own", "propose_page"),
   p("pages:comments", "own", "page_comments"),
-  p("phone:call", "own", "place_phone_call"),
+  // place_call is the same tool under its compatibility name
+  p("phone:call", "own", "place_phone_call", "sagax", ["place_call"]),
+  // mid-call controls on the person's own live call (server/outbound-calls.ts)
+  p("phone:dtmf", "own", "send_dtmf"),
+  p("phone:transfer", "own", "transfer"),
+  p("phone:hangup", "own", "hang_up"),
   p("cards:options", "own", "create_options_card"),
   p("cards:ask", "own", "ask_choice"),
   p("rooms:react", "own", "react_to_message"),
@@ -116,8 +121,10 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("model:propose", "own", "propose_model"),
   p("routines:propose", "own", "propose_routine"),
   p("routines:propose.action", "own", "propose_routine_action"),
-  // Shape mascot from a short description (catalog generate_shape_avatar).
-  p("shapes:generate", "own", "generate_shape_avatar"),
+  // "tell me when" waits (server/waits.ts): plain checks for the speaker, no AI
+  p("waits:set", "own", "wait_until"),
+  p("waits:list", "read", "list_waits"),
+  p("waits:cancel", "own", "cancel_wait"),
   p("terminal:offer", "own", "offer_shell_terminal"),
   p("remote:publish", "own", "publish_remote_session"),
   // the person's own connected Tailcat session (owner and bot checked by the service)
@@ -128,6 +135,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // person's own data or destinations, never an admin's.
   p("teamsetup:propose", "own", "propose_team_setup"),
   p("rules:update", "own", "rules_update"),
+  // a Confirm card to add, change or remove one of the speaker's own review rules (server/rule-requests.ts)
+  p("rules:propose", "own", "propose_rule"),
   p("docs:update", "own", "docs_update"),
   p("credentials:login", "own", "request_login"),
   // an API call with a vault key Sagax adds itself (server/credential-http.ts)

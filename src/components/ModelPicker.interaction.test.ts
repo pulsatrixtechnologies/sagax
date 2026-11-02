@@ -78,10 +78,6 @@ vi.mock("@/state/store", async (importOriginal) => ({
 
 // These cases cover the full picker; Simple mode has its own file.
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
-vi.mock("@/lib/unready-providers-preference", () => ({
-  useShowUnreadyProviders: () => fixture.showUnready,
-  setShowUnreadyProviders: () => {},
-}));
 
 const { ModelPicker } = await import("./ModelPicker");
 const { ModelSearchList } = await import("./ModelMenu");
@@ -193,7 +189,10 @@ function listed(rendered: ReturnType<typeof render>) {
 }
 
 /** The open menu only; the trigger always names the saved model. */
-const menu = (html: string) => html.slice(html.indexOf("data-model-picker-content"));
+const menu = (html: string) => {
+  const at = html.indexOf("data-model-menu");
+  return at < 0 ? "" : html.slice(at);
+};
 
 beforeEach(() => {
   fixture.values = [];
@@ -212,18 +211,16 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-describe("the picker opens as a modal like Settings", () => {
+describe("the picker opens as a menu (lot 7)", () => {
 
-  it("closes from its backdrop, not from a click inside", () => {
+  it("opens the model menu from the chip, with no modal window", () => {
     fixture.instances = [signedIn()];
     const onClaude = bot("claude", "claude-opus-5-5");
     const opened = open(onClaude);
-    const backdrop = opened.nodes.find((node) => node.props["data-model-picker-backdrop"])!;
-    const inside = {};
-    (backdrop.props.onMouseDown as (event: unknown) => void)({ target: inside, currentTarget: backdrop });
-    expect(render(onClaude).html).toContain("data-model-picker-content");
-    (backdrop.props.onMouseDown as (event: unknown) => void)({ target: backdrop, currentTarget: backdrop });
-    expect(render(onClaude).html).not.toContain("data-model-picker-content");
+    expect(opened.html).toContain("data-model-menu");
+    expect(opened.html).not.toContain("data-model-picker-content");
+    expect(opened.html).not.toContain("data-model-picker-backdrop");
+    expect(lists(opened)[0]!.props.variant).toBe("popover");
   });
 });
 
@@ -242,8 +239,12 @@ describe("the Grok list", () => {
 
   it("shows what the engine offers, nothing it does not, and a local row Grok can run", () => {
     fixture.instances = [grok];
-    const html = menu(openMenu(bot("grok", "grok-4.7")).html);
-    expect(html).toContain(">Grok 4.7 Fast<");
+    const opened = openMenu(bot("grok", "grok-4.7"));
+    const html = menu(opened.html);
+    // Fast twin folds into Grok 4.7 with the Fast switch (menu settings).
+    expect(html).toContain(">Grok 4.7<");
+    expect(html).toContain("data-model-settings-fast");
+    expect(row(opened, "grok-4.7-build-fast")).toBeUndefined();
     expect(html).not.toContain("Grok 4.5");
     expect(html).not.toContain("Grok 4.6");
     expect(html).toContain("DwarfStar: Qwen3.8 Flash Next");
@@ -342,7 +343,7 @@ describe("the composer's model menu (2026-10-12)", () => {
     expect(render(forBot, options).html).not.toContain("data-model-menu");
   });
 
-  it("opens a menu, not the window, with the search, Auto, the bot's engine first and Edit", () => {
+  it("opens a menu, not the window, with the search, Auto, the bot's engine first and Providers", () => {
     fixture.instances = [codex, signedIn()];
     const forBot = bot("claude", "claude-opus-5-5");
     const opened = open(forBot, composer);
@@ -355,7 +356,7 @@ describe("the composer's model menu (2026-10-12)", () => {
     expect(list.props.sections[0]!.rows.map((candidate) => candidate.key)).toEqual(["auto"]);
     expect(opened.html).toContain('placeholder="Search models"');
     expect(opened.html).toContain("data-model-edit");
-    expect(opened.html).toContain(">Edit…<");
+    expect(opened.html).toContain(">Providers<");
   });
 
   // Owner, 2026-10-14: too many models shown. The root lists the providers,
@@ -420,15 +421,14 @@ describe("the composer's model menu (2026-10-12)", () => {
     expect(render(forBot, composer).html).not.toContain("data-model-menu");
   });
 
-  it("opens the whole window from Edit…", () => {
+  it("opens Providers from the menu footer and closes the menu", () => {
     fixture.instances = [signedIn()];
     const forBot = bot("claude", "claude-opus-5-5");
     const opened = open(forBot, composer);
     const edit = opened.nodes.find((node) => node.props["data-model-edit"] !== undefined)!;
     (edit.props.onClick as () => void)();
-    const html = render(forBot, composer).html;
-    expect(html).toContain("data-model-picker-content");
-    expect(html).not.toContain("data-model-menu");
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "toggleAppSettings", open: true, section: "providers" });
+    expect(render(forBot, composer).html).not.toContain("data-model-menu");
   });
 
   // Owner, 2026-10-14: no Model › (the provider submenus list the same models)
@@ -530,15 +530,17 @@ describe("the composer's model menu (2026-10-12)", () => {
   });
 });
 
-describe("the model window from the sidebar", () => {
+describe("the model menu from the sidebar (windowOnly)", () => {
   it("opens with no chip and tells its host when it closes", () => {
     fixture.instances = [signedIn()];
     const closed = vi.fn();
     const shown = render(bot("claude", "claude-opus-5-5"), { windowOnly: true, onWindowClose: closed, threadId: undefined });
-    expect(shown.html).toContain("data-model-picker-content");
+    expect(shown.html).toContain("data-model-menu");
+    expect(shown.html).not.toContain("data-model-picker-content");
     expect(shown.nodes.some((node) => node.props["data-tour"] === "model")).toBe(false);
-    const close = shown.nodes.find((node) => node.props["aria-label"] === "Close")!;
-    (close.props.onClick as () => void)();
+    // Escape on the search list closes and notifies the host.
+    const list = lists(shown)[0]!;
+    (list.props as { onEscape?: () => void }).onEscape?.();
     expect(closed).toHaveBeenCalledOnce();
   });
 });
@@ -602,36 +604,36 @@ describe("the flat model picker", () => {
     ready();
     const forBot = bot("claude", "claude-opus-5-5");
     const opened = open(forBot);
-    const links = opened.nodes.filter((node) => node.props["data-model-providers-link"] !== undefined);
+    const links = opened.nodes.filter((node) => node.props["data-model-edit"] !== undefined);
     expect(links).toHaveLength(1);
     expect(opened.html).not.toContain("data-model-add-api-keys");
     expect(opened.html).not.toContain("data-engine-keys-link");
     (links[0]!.props.onClick as () => void)();
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "toggleAppSettings", open: true, section: "providers" });
-    expect(render(forBot).html).not.toContain("data-model-picker-content");
+    expect(render(forBot).html).not.toContain("data-model-menu");
   });
 
   it.each([signedOut, notFound])("keeps setup reachable through Providers while offering ready models only (%#)", (unready) => {
     fixture.instances = [unready(), codex];
     const opened = open(bot("claude", "claude-opus-5-5"));
-    expect(row(opened, "claude-opus-5-5")).toBeUndefined();
+    // Menu keeps the model in use with a warning; Providers is how setup stays reachable.
+    expect(row(opened, "claude-opus-5-5")?.props).toMatchObject({ current: true, warning: "Not responding" });
     expect(row(opened, "gpt-5.6")).toBeDefined();
-    expect(opened.html).toContain("data-model-providers-link");
+    expect(opened.html).toContain("data-model-edit");
     expect(opened.html).not.toContain("data-claude-sign-in");
     expect(opened.html).not.toContain("data-rail-row-action");
   });
 
-  it("keeps scope silent and closes from the dialog's Close button", () => {
+  it("keeps scope silent and closes from Escape on the menu", () => {
     ready();
     const forBot = bot("claude", "claude-opus-5-5");
     const opened = open(forBot);
     expect(opened.html).toContain('role="dialog"');
-    expect(opened.html).toContain('aria-modal="true"');
+    expect(opened.html).toContain("data-model-menu");
     expect(opened.html).not.toContain("data-model-scope");
     expect(opened.html).not.toContain("Switch it too");
-    const close = opened.nodes.find((node) => node.props["aria-label"] === "Close")!;
-    (close.props.onClick as () => void)();
-    expect(render(forBot).html).not.toContain("data-model-picker-content");
+    (lists(opened)[0]!.props as { onEscape?: () => void }).onEscape?.();
+    expect(render(forBot).html).not.toContain("data-model-menu");
   });
 
   it("changes the bot and all its threads through the same action, from either list", () => {
@@ -643,24 +645,22 @@ describe("the flat model picker", () => {
     }
   });
 
-  it("previews the hovered provider without guessing its future payer", () => {
+  it("lists ready models without guessing a payer in the menu", () => {
     ready();fixture.org = org;fixture.myEngines = [mine("claude"), mine("codex", "subscription")];
     const forBot = bot("claude", "claude-opus-5-5");
     const opened = open(forBot);
-    expect(opened.html).toContain("Who pays is confirmed when the turn starts");
-    const list = lists(opened)[0]!;
-    (list.props as unknown as { onPreview: (row: MenuRow) => void }).onPreview(row(opened, "gpt-5.6").props);
-    const preview = render(forBot).html;
-    expect(preview).toContain("GPT-5.6");
-    expect(preview).toContain("Who pays is confirmed when the turn starts");
+    expect(row(opened, "claude-opus-5-5")).toBeDefined();
+    expect(row(opened, "gpt-5.6")).toBeDefined();
+    // Payer copy lives in Settings; the menu stays a choice list.
+    expect(opened.html).not.toContain("Who pays is confirmed when the turn starts");
     expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 
-  it("keeps a signed-out engine's working local model without an embedded connection form", () => {
+  it("keeps a signed-out engine's working local model and the model in use, without an embedded connection form", () => {
     fixture.instances = [claude({ state: "available", authenticated: false }, [...official, qwen])];
     const opened = open(bot("claude", "claude-opus-5-5"));
     expect(row(opened, qwen.id)).toBeDefined();
-    expect(row(opened, "claude-opus-5-5")).toBeUndefined();
+    expect(row(opened, "claude-opus-5-5")?.props).toMatchObject({ current: true, warning: "Not responding" });
     expect(opened.html).not.toContain("data-claude-sign-in");
   });
 
@@ -706,13 +706,14 @@ describe("the flat model picker", () => {
     expect(row(open(forBot), "gpt-5.6")).toBeDefined();
   });
 
-  it("filters disabled models even when they are favorites or the previous selection", () => {
-    ready();fixture.config = { myDisabledModels: ["claude/claude-opus-5-5"] };
-    fixture.storage["sagax.modelFavorites.v1"] = JSON.stringify([["claude", "claude-opus-5-5"]]);
+  it("keeps a disabled model that is still selected, and hides other disabled favorites", () => {
+    ready();fixture.config = { myDisabledModels: ["claude/claude-opus-5-5", "claude/claude-sonnet-5"] };
+    fixture.storage["sagax.modelFavorites.v1"] = JSON.stringify([["claude", "claude-sonnet-5"]]);
     try {
       const opened = open(bot("claude", "claude-opus-5-5"));
-      expect(row(opened, "claude-opus-5-5")).toBeUndefined();
-      expect(row(opened, "claude-sonnet-5")).toBeDefined();
+      // Current selection stays visible; a disabled favorite that is not selected does not.
+      expect(row(opened, "claude-opus-5-5")?.props.current).toBe(true);
+      expect(row(opened, "claude-sonnet-5")).toBeUndefined();
     } finally { delete fixture.storage["sagax.modelFavorites.v1"]; }
   });
 
@@ -725,36 +726,40 @@ describe("the flat model picker", () => {
       selection: { instanceId: "claude", model: "claude-sonnet-5", auto: true } });
   });
 
-  it("shows Auto's current chain card and the last real pick on the chip", () => {
+  it("shows Auto's last real pick on the chip; chain status lives in Settings", () => {
     ready();
     const forBot = { ...bot("claude", "claude-sonnet-5"), modelSelection: { instanceId: "claude", model: "claude-sonnet-5", auto: true as const } };
     fixture.bots = [{ ...forBot, tasks: [{ threadId: forBot.threadId, title: "t", createdAt: 1, autoModel: {
       instanceId: "claude", model: "claude-fable-5-1", engineLabel: "Claude", modelLabel: "Fable 5.1", role: "orchestration", tier: "top", reason: "strongest-own", via: "subscription", at: 1,
     } }] }];
     const opened = open(forBot);
-    expect(opened.html).toContain("Auto · Fable 5.1");expect(opened.html).toContain("data-auto-model-status");
+    expect(opened.html).toContain("Auto · Fable 5.1");
+    expect(opened.html).not.toContain("data-auto-model-status");
     expect(row(opened, "auto").props.current).toBe(true);
   });
 
-  it("does not guess an owner-paid shared bot payer from the reader's organization key", () => {
+  it("does not guess an owner-paid shared bot payer in the menu", () => {
     ready();
-    fixture.org = { org: { name: "Example Org" }, link: { state: "ok" } };
-    fixture.myEngines = [{ instanceId: "claude", myTurns: "org-key" }];
+    fixture.org = { org: { name: "Example Org", identity: { kind: "perspicax", issuer: "https://px.example.test" } }, link: { state: "ok" }, viewerRole: "member", settings: {} };
+    fixture.myEngines = [mine("claude")];
     const opened = open({ ...bot("claude", "claude-opus-5-5"), turnPayer: "owner" });
-    expect(opened.html).toContain("Who pays is confirmed when the turn starts");
+    expect(opened.html).not.toContain("Who pays is confirmed when the turn starts");
     expect(opened.html).not.toContain("paid by the organization");
     expect(opened.html).not.toContain("paid by me");
+    expect(row(opened, "claude-opus-5-5")).toBeDefined();
   });
 
-  it("says when no recovery is configured for a pinned model", () => {
+  it("leaves Auto recovery details to Settings (no backup card in the menu)", () => {
     ready();fixture.autoStatus = { auto: false, pick: null, chain: [], excluded: [], backups: [] };
-    expect(open(bot("claude", "claude-opus-5-5")).html).toContain("No automatic backup is configured");
+    const opened = open(bot("claude", "claude-opus-5-5"));
+    expect(opened.html).not.toContain("No automatic backup is configured");
+    expect(opened.html).toContain("data-model-menu");
   });
 });
 
 
 describe("the fast model's switches", () => {
-  it("offers only fast models still on for the organization and person", () => {
+  it("filters disabled local models out of the Auto menu list (fast select lives in Settings)", () => {
     const options = [
       { id: "ds::off-by-me", label: "Off by me", custom: true, local: true },
       { id: "ds::off-by-org", label: "Off by org", custom: true, local: true },
@@ -764,10 +769,9 @@ describe("the fast model's switches", () => {
     fixture.config = { myDisabledModels: ["claude/ds::off-by-me"], disabledModels: ["claude/ds::off-by-org"] };
     const forBot = { ...bot("claude", "claude-opus-5-5"), modelSelection: { instanceId: "claude", model: "claude-opus-5-5", auto: true as const } };
     const opened = open(forBot);
-    const fast = opened.nodes.find((node) => node.props["data-model-fast"] !== undefined)!;
-    const keys = nodes(fast.props.children).filter((node) => node.type === "option").map((node) => node.props.value);
-    expect(keys).toContain("claude\u0000ds::ready");
-    expect(keys).not.toContain("claude\u0000ds::off-by-me");
-    expect(keys).not.toContain("claude\u0000ds::off-by-org");
+    expect(opened.html).not.toContain("data-model-fast");
+    expect(row(opened, "ds::ready")).toBeDefined();
+    expect(row(opened, "ds::off-by-me")).toBeUndefined();
+    expect(row(opened, "ds::off-by-org")).toBeUndefined();
   });
 });

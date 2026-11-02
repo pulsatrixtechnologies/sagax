@@ -72,7 +72,7 @@ export function ApprovalDetail({
   const card = message?.card;
   const pending = useMemo(() => (message && entry.kind !== "question" ? pendingApprovals([message])[0] : undefined), [message, entry.kind]);
   // A meeting or a terminal is answered on its own card in the conversation.
-  const ownCard = Boolean(card?.meetingRequest || card?.terminalRequest);
+  const ownCard = Boolean(card?.meetingRequest || card?.phoneCallConsent || card?.terminalRequest);
   const where = withoutIds(entry.roomName ?? entry.threadTitle ?? "");
   const Destination = entry.destination ? DESTINATION_ICON[entry.destination] : undefined;
   const at = new Date(entry.at);

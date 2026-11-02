@@ -245,11 +245,14 @@ export function MarkdownEditor({
   const [view, setView] = useState<ViewMode>(() => readView());
   const [more, setMore] = useState(false);
   const [focusIndex, setFocusIndex] = useState(0);
+  // Compact (routine instructions): count only while the person is editing.
+  const [editing, setEditing] = useState(false);
   const handle = useRef<MarkdownCoreHandle | null>(null);
   const shell = useRef<HTMLDivElement>(null);
   const toolbar = useRef<HTMLDivElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const statusId = useId();
+  const countVisible = showCount && (!compact || editing || full);
 
   useEffect(() => {
     if (Core) return;
@@ -316,11 +319,28 @@ export function MarkdownEditor({
     buttons[next]!.focus();
   };
 
-  const words = useMemo(() => (showCount ? countWords(value) : 0), [value, showCount]);
-  const characters = useMemo(() => (showCount ? countCharacters(value) : 0), [value, showCount]);
-  const shellStyle = full
-    ? { "--md-min-h": "calc(100vh - 9rem)", "--md-max-h": "calc(100vh - 9rem)" } as CSSProperties
-    : { "--md-min-h": `${minHeight}px`, "--md-max-h": typeof maxHeight === "number" ? `${maxHeight}px` : maxHeight } as CSSProperties;
+  const words = useMemo(() => (countVisible ? countWords(value) : 0), [value, countVisible]);
+  const characters = useMemo(() => (countVisible ? countCharacters(value) : 0), [value, countVisible]);
+  const shellStyle = {
+    "--md-font-size": "13px",
+    ...(full
+      ? { "--md-min-h": "calc(100vh - 9rem)", "--md-max-h": "calc(100vh - 9rem)" }
+      : { "--md-min-h": `${minHeight}px`, "--md-max-h": typeof maxHeight === "number" ? `${maxHeight}px` : maxHeight }),
+  } as CSSProperties;
+
+  const markEditing = (next: boolean) => {
+    if (compact) setEditing(next);
+  };
+  const handleBlur = () => {
+    markEditing(false);
+    onBlur?.();
+  };
+
+  const toolBtn = cn(
+    "flex items-center justify-center rounded-md text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:opacity-40",
+    compact ? "h-6 w-6" : "h-7 w-7",
+  );
+  const toolIcon = compact ? 13 : 14;
 
   const writing = (
     <div className="markdown-editor-surface min-w-0" style={shellStyle}>
@@ -328,12 +348,12 @@ export function MarkdownEditor({
         <Core
           value={value}
           onChange={onChange}
-          onBlur={onBlur}
+          onBlur={handleBlur}
           onEscape={leave}
           id={id}
           ariaLabel={ariaLabel}
           ariaLabelledBy={ariaLabelledBy}
-          ariaDescribedBy={[ariaDescribedBy, showCount || footer ? statusId : undefined].filter(Boolean).join(" ") || undefined}
+          ariaDescribedBy={[ariaDescribedBy, countVisible || footer ? statusId : undefined].filter(Boolean).join(" ") || undefined}
           placeholder={placeholder}
           disabled={disabled}
           readOnly={readOnly}
@@ -360,14 +380,15 @@ export function MarkdownEditor({
           autoFocus={autoFocus}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          onBlur={() => onBlur?.()}
+          onFocus={() => markEditing(true)}
+          onBlur={handleBlur}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.stopPropagation();
               leave();
             }
           }}
-          className="markdown-editor-fallback block max-h-[var(--md-max-h)] min-h-[var(--md-min-h)] w-full resize-none bg-transparent px-3 py-2.5 text-[13.5px] leading-relaxed text-ink placeholder:text-ink-tertiary focus:outline-none"
+          className="markdown-editor-fallback block max-h-[var(--md-max-h)] min-h-[var(--md-min-h)] w-full resize-none bg-transparent px-3 py-2 text-[13px] leading-relaxed text-ink placeholder:text-ink-tertiary focus:outline-none"
         />
       )}
     </div>
@@ -375,7 +396,7 @@ export function MarkdownEditor({
 
   const preview = (
     <div
-      className="markdown-editor-preview max-h-[var(--md-max-h)] min-h-[var(--md-min-h)] min-w-0 overflow-auto px-3 py-2.5 text-[13.5px] leading-relaxed text-ink"
+      className="markdown-editor-preview max-h-[var(--md-max-h)] min-h-[var(--md-min-h)] min-w-0 overflow-auto px-3 py-2 text-[13px] leading-relaxed text-ink"
       style={shellStyle}
       aria-label={t("markdownEditor.previewLabel")}
       role="region"
@@ -396,11 +417,12 @@ export function MarkdownEditor({
         title={label}
         onClick={() => changeView(target)}
         className={cn(
-          "flex h-7 items-center gap-1 rounded-md px-2 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
+          "flex items-center gap-1 rounded-md px-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
+          compact ? "h-6" : "h-7 px-2",
           active ? "bg-raised text-ink" : "text-ink-secondary hover:bg-hover hover:text-ink",
         )}
       >
-        <Icon size={13} aria-hidden="true" />
+        <Icon size={compact ? 12 : 13} aria-hidden="true" />
         <span className="max-sm:sr-only">{label}</span>
       </button>
     );
@@ -411,6 +433,11 @@ export function MarkdownEditor({
       ref={shell}
       tabIndex={-1}
       data-markdown-editor={dataField ?? ""}
+      data-md-compact={compact ? "" : undefined}
+      onFocus={() => markEditing(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) markEditing(false);
+      }}
       className={cn(
         "markdown-editor flex min-w-0 flex-col rounded-lg border bg-inset outline-none focus-within:border-border-strong focus-visible:ring-2 focus-visible:ring-focus",
         invalid ? "border-danger/60 ring-1 ring-danger/50" : "border-hairline/40",
@@ -418,7 +445,7 @@ export function MarkdownEditor({
         full ? "fixed inset-4 z-[80] bg-elevated shadow-2xl sm:inset-8" : className,
       )}
     >
-      <div className="flex flex-wrap items-center justify-between gap-1 border-b border-hairline/40 px-1.5 py-1">
+      <div className={cn("flex flex-wrap items-center justify-between gap-1 border-b border-hairline/40", compact ? "px-1 py-0.5" : "px-1.5 py-1")}>
         <div
           ref={toolbar}
           role="toolbar"
@@ -434,7 +461,7 @@ export function MarkdownEditor({
             const title = spec.keys ? `${label} (${shortcutLabel(spec.keys)})` : label;
             return (
               <span key={action} className="flex items-center">
-                {index > 0 && GROUP_STARTS.has(action) && <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-hairline/60" />}
+                {index > 0 && GROUP_STARTS.has(action) && <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-hairline/60" />}
                 <button
                   type="button"
                   data-md-tool={action}
@@ -445,9 +472,9 @@ export function MarkdownEditor({
                   disabled={!editable}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => run(action)}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:opacity-40"
+                  className={toolBtn}
                 >
-                  <Icon size={14} aria-hidden="true" />
+                  <Icon size={toolIcon} aria-hidden="true" />
                 </button>
               </span>
             );
@@ -461,9 +488,9 @@ export function MarkdownEditor({
               title={more ? t("markdownEditor.fewer") : t("markdownEditor.more")}
               tabIndex={-1}
               onClick={() => setMore((open) => !open)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
+              className={toolBtn}
             >
-              <Ellipsis size={14} aria-hidden="true" />
+              <Ellipsis size={toolIcon} aria-hidden="true" />
             </button>
           )}
         </div>
@@ -483,9 +510,9 @@ export function MarkdownEditor({
               title={full ? t("markdownEditor.exitFull") : t("markdownEditor.full")}
               aria-label={full ? t("markdownEditor.exitFull") : t("markdownEditor.full")}
               onClick={() => setFull((open) => !open)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
+              className={toolBtn}
             >
-              {full ? <Minimize2 size={13} aria-hidden="true" /> : <Maximize2 size={13} aria-hidden="true" />}
+              {full ? <Minimize2 size={compact ? 12 : 13} aria-hidden="true" /> : <Maximize2 size={compact ? 12 : 13} aria-hidden="true" />}
             </button>
           )}
         </div>
@@ -498,10 +525,10 @@ export function MarkdownEditor({
           <div className="border-t border-hairline/40 sm:border-l sm:border-t-0">{preview}</div>
         </div>
       )}
-      {(showCount || footer) && (
-        <div id={statusId} className="flex items-start justify-between gap-3 border-t border-hairline/40 px-3 py-1.5 text-[11px] text-ink-secondary">
+      {(countVisible || footer) && (
+        <div id={statusId} className="flex items-start justify-between gap-3 border-t border-hairline/40 px-2.5 py-1 text-[11px] text-ink-tertiary">
           <span className="min-w-0 flex-1">{footer}</span>
-          {showCount && (
+          {countVisible && (
             <span className={cn("shrink-0 tabular-nums", maxLength && value.length >= maxLength && "font-medium text-danger")} data-markdown-count="">
               {t("markdownEditor.count", { words: words.toLocaleString(), characters: characters.toLocaleString() })}
               {maxLength ? ` · ${value.length.toLocaleString()} / ${maxLength.toLocaleString()}` : ""}

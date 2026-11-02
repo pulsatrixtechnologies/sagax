@@ -289,7 +289,7 @@ describe("achievements page, a sister of Automations", () => {
     expect(header).toContain('data-page-header=""');
     expect(header).toContain("content-topbar");
     expect(header).toContain("@container/page-header");
-    expect(header).toMatch(/<h1 class="text-\[15px\] font-medium leading-6 text-ink">Achievements<\/h1>/);
+    expect(header).toMatch(/<h1 class="text-\[16px\] font-medium leading-6 text-ink">Achievements<\/h1>/);
     expect(header).toContain("lucide-trophy");
     // no way back button and no gear: Automations has neither
     expect(header).not.toContain('aria-label="Back"');

@@ -11,7 +11,14 @@ import UIKit
 enum SettingsMetrics {
     /// Glass circle: 17.33 pt in from the sheet's left and top edges.
     static let headerInset: CGFloat = 17.33
-    /// First card top, from the sheet top (213.84 - 123.67).
+    /// Floating sticky header height: inset + sheet glass circle (measure-settings).
+    /// Content and the top scroll-edge fade clear this so the first card and
+    /// its labels are never covered by the title (Lot 8 display hygiene).
+    static let headerClearance: CGFloat = headerInset + GlassCircleButton.Size.sheet.rawValue
+    /// Top scroll-edge fade over the sticky header (123.67 → 201 ≈ 78 pt).
+    static let headerFadeHeight: CGFloat = 78
+    /// First card top, from the sheet top (213.84 - 123.67). Clears the sticky
+    /// header so Identity's "Name" (and every other first row) stays readable.
     static let firstCardTop: CGFloat = 90.17
     /// Title ink starts 16.67 pt after the circle (x 84 on screen).
     static let titleGap: CGFloat = 15.67
@@ -59,7 +66,7 @@ struct SettingsPage<Trailing: View, Content: View>: View {
             Group {
                 if scrollable {
                     ScrollView(showsIndicators: false) { stack }
-                        .topScrollEdgeFade(height: 78, background: background)
+                        .topScrollEdgeFade(height: SettingsMetrics.headerFadeHeight, background: background)
                 } else {
                     stack
                 }
@@ -232,6 +239,8 @@ struct SettingsRow: View {
     enum Style { case normal, destructive, action }
 
     let title: LocalizedStringKey
+    /// Typed text (a name a person wrote): shown as is, never read as a key.
+    var verbatimTitle: String?
     /// English source text, looked up in the app's chosen language.
     var subtitle: String?
     var systemImage: String?
@@ -265,6 +274,8 @@ struct SettingsRow: View {
         if case .toggle = accessory { return true }
         return false
     }
+
+    private var titleText: Text { verbatimTitle.map { Text(verbatim: $0) } ?? Text(title) }
 
     var body: some View {
         let row = Group {
@@ -306,7 +317,7 @@ struct SettingsRow: View {
                     .frame(width: 18, alignment: .leading)
                     .padding(.trailing, 9)
             }
-            Text(title)
+            titleText
                 .font(Theme.Font.rowTitle)
                 .tracking(SettingsMetrics.tracking135)
                 .foregroundStyle(titleColor)
@@ -326,7 +337,7 @@ struct SettingsRow: View {
         // the control's own sizing says, so lines wrap where the
         // reference's do.
         VStack(alignment: .leading, spacing: 2.3) {
-            Text(title)
+            titleText
                 .font(Theme.Font.rowTitle)
                 .tracking(SettingsMetrics.tracking135)
                 .foregroundStyle(titleColor)
@@ -383,7 +394,7 @@ struct SettingsRow: View {
             Toggle("", isOn: binding)
                 .labelsHidden()
                 .toggleStyle(ParityToggleStyle())
-                .accessibilityLabel(Text(title))
+                .accessibilityLabel(titleText)
                 .accessibilityIdentifier((identifier ?? "") + ".toggle")
         case .check:
             Image(systemName: "checkmark")

@@ -3,7 +3,7 @@
 // stored; this only changes how they are drawn.
 import { createContext, useCallback, useContext, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight, X } from "lucide-react";
 import { formatTime, type Bot } from "@/state/store";
 import { ConversationLink } from "./ConversationLink";
 import { PartyAvatar, isAgentParty } from "./PartyAvatar";
@@ -14,6 +14,7 @@ import { CHAT_BUBBLE_WIDTH_CLASS, CHAT_COLUMN_CLASS, chatBubbleWidth } from "@/l
 import { prefersWideBubble } from "@/lib/rich-blocks";
 import { runCorners } from "@/lib/room-authors";
 import { cn } from "@/lib/cn";
+import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { getExchangeColumnHost, setExchangeColumnHost, subscribeExchangeColumnHost } from "@/lib/exchange-column-host";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ClusterLabel } from "./ClusterLabel";
@@ -89,7 +90,8 @@ export function TranscriptDate({ at }: { at: number }) {
 /** `loadError`: the thread's lines could not be read; `onRetry` reads them
  * again. With no line to show, the sheet says so rather than staying blank
  * (#1502). Routine runs reuse this sheet with an optional quiet meta line
- * under the header and a footer of actions (Run again, Continue, …). */
+ * under the header and an opaque footer band of actions (Continue, Stop, …).
+ * Close sits in the header as a round X, like other side surfaces. */
 export function ExchangeSheet({
   run,
   bots,
@@ -111,13 +113,14 @@ export function ExchangeSheet({
   onRetry?: () => void;
   /** Quiet status line under the header pill (routine runs). */
   meta?: ReactNode;
-  /** Actions below Close Chat (routine runs: Run again, Continue, …). */
+  /** Opaque footer band of actions (routine runs: Continue, Stop, …). */
   footer?: ReactNode;
   closeLabel?: string;
   testId?: string;
   ariaLabel?: string;
 }) {
   const column = useExchangePortalHost();
+  const closeText = closeLabel ?? t("common.close");
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
@@ -144,7 +147,7 @@ export function ExchangeSheet({
       data-testid={testId}
       onClick={onClose}
     >
-      <div className="flex flex-col items-center gap-1.5 pt-6" onClick={(event) => event.stopPropagation()}>
+      <div className="relative flex shrink-0 flex-col items-center gap-1.5 px-12 pt-6" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center gap-2 rounded-full bg-elevated px-3 py-1.5">
           {run.ends.map((party, index) => {
             const bot = avatarBot(party, bots);
@@ -158,10 +161,21 @@ export function ExchangeSheet({
           })}
         </div>
         {meta && <div data-exchange-meta className="max-w-[min(92%,36rem)] px-4 text-center text-[12px] text-ink-secondary">{meta}</div>}
+        <button
+          type="button"
+          data-testid="bot-exchange-close"
+          onClick={onClose}
+          aria-label={closeText}
+          title={closeText}
+          className={cn(CIRCLE_BUTTON, "absolute end-3 top-3")}
+        >
+          <X size={17} strokeWidth={1.75} aria-hidden="true" />
+        </button>
       </div>
       {/* The same pane and column as a 1:1 chat (ChatView): the gutter, the
           960px column, Geist at 13px, the Markdown renderer and the bubble
-          widths, so the lines use the room a wider window gives. */}
+          widths, so the lines use the room a wider window gives. The scroll
+          ends above the opaque footer band; no message text sits under it. */}
       <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5" data-testid="bot-exchange-scroll">
       <div className={cn(CHAT_COLUMN_CLASS, "py-6")} role="log" aria-live="off" onClick={(event) => event.stopPropagation()}>
         {loadError ? (
@@ -244,17 +258,15 @@ export function ExchangeSheet({
         })}
       </div>
       </div>
-      <div className="flex flex-col items-center gap-3 pb-8" onClick={(event) => event.stopPropagation()}>
-        {footer}
-        <button
-          type="button"
-          data-testid="bot-exchange-close"
-          onClick={onClose}
-          className="rounded-full bg-raised px-4 py-2 text-[13px] text-ink hover:bg-raised-hover"
+      {footer && (
+        <div
+          data-exchange-footer=""
+          className="shrink-0 border-t border-hairline/40 bg-app px-4 py-3"
+          onClick={(event) => event.stopPropagation()}
         >
-          {closeLabel ?? t("chat.exchange.close")}
-        </button>
-      </div>
+          {footer}
+        </div>
+      )}
     </div>
   );
   // A column host (ChatView, GroupView, or the shared host) is the containing

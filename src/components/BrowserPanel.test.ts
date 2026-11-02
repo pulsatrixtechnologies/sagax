@@ -27,6 +27,11 @@ vi.mock("react", async (importOriginal) => {
   };
 });
 vi.mock("@/state/store", () => ({ api: vi.fn().mockResolvedValue({}), useStore: () => ({ state: { config: { browserProfiles: [] } } }) }));
+vi.mock("@/components/ConfirmProvider", () => ({
+  useConfirm: () => () => Promise.resolve(true),
+  confirmAsync: () => Promise.resolve(true),
+  discardConfirmRequest: (body?: string) => ({ title: "Close without saving?", body, confirmLabel: "Discard", tone: "danger" }),
+}));
 vi.mock("./BrowserProfilesManager", () => ({ BrowserProfilesManager: () => null }));
 vi.mock("@/lib/browser-input-queue", () => ({ createBrowserInputQueue: () => {
   const queue = { enqueue: vi.fn(), clear: vi.fn(), drain: vi.fn().mockResolvedValue(undefined),
@@ -103,7 +108,7 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe("live browser connection lifecycle", () => {
   it("restores the address after reconnecting while the old address field was focused", () => {
     const nodes = renderElements();
-    const connect = fixture.effects[2]!;
+    const connect = fixture.effects[3]!;
     const cleanup = connect();
     nodes.find((node) => node.props["aria-label"] === "Browser address")!.props.onFocus!({ target: { select: vi.fn() } });
     cleanup?.();
@@ -116,7 +121,7 @@ describe("live browser connection lifecycle", () => {
   it.each(["network", "stream"])("automatically reconnects a %s failure without replaying input or taking control", (failure) => {
     vi.useFakeTimers();
     render();
-    const connect = fixture.effects[2]!;
+    const connect = fixture.effects[3]!;
     const cleanup = connect();
     const source = FixtureEventSource.instances[0]!;
     source.emit("ready", { viewerId: "old-viewer" });
@@ -138,7 +143,7 @@ describe("live browser connection lifecycle", () => {
   it("bounds retries even when a flapping stream sends ready before disconnecting", () => {
     vi.useFakeTimers();
     render();
-    const connect = fixture.effects[2]!;
+    const connect = fixture.effects[3]!;
     for (let attempt = 0; attempt < 6; attempt++) {
       const cleanup = connect();
       const source = FixtureEventSource.instances.at(-1)!;
@@ -153,7 +158,7 @@ describe("live browser connection lifecycle", () => {
   it("resets the retry delay only after a healthy heartbeat", () => {
     vi.useFakeTimers();
     render();
-    const connect = fixture.effects[2]!;
+    const connect = fixture.effects[3]!;
     const firstCleanup = connect();
     FixtureEventSource.instances[0]!.disconnect();
     vi.advanceTimersByTime(1_000);
@@ -170,8 +175,10 @@ describe("live browser connection lifecycle", () => {
 
   it.each(["unmount", "manual reconnect", "profile change"])("cancels scheduled retries on %s", (replacement) => {
     vi.useFakeTimers();
+    // Profile manager mounts only while the profiles popover is open (lot 7).
+    if (replacement === "profile change") fixture.states = { 8: true };
     const nodes = renderElements();
-    const cleanup = fixture.effects[2]!();
+    const cleanup = fixture.effects[3]!();
     FixtureEventSource.instances[0]!.disconnect();
     if (replacement === "manual reconnect") click(nodes, "Reconnect view");
     if (replacement === "profile change") nodes.find((node) => node.type === BrowserProfilesManager)!.props.onProfileChanged!();
@@ -184,7 +191,7 @@ describe("live browser connection lifecycle", () => {
   it("waits on a busy browser without spending the retry budget, and stops waiting once ready", () => {
     vi.useFakeTimers();
     render();
-    const cleanup = fixture.effects[2]!();
+    const cleanup = fixture.effects[3]!();
     const source = FixtureEventSource.instances[0]!;
     const busy = fixture.setters[12]!;
     source.emit("waiting", { reason: "busy" });
@@ -200,7 +207,7 @@ describe("live browser connection lifecycle", () => {
   it("shows a busy timeout as the server's reason and does not retry it", () => {
     vi.useFakeTimers();
     render();
-    const cleanup = fixture.effects[2]!();
+    const cleanup = fixture.effects[3]!();
     const source = FixtureEventSource.instances[0]!;
     source.emit("waiting", { reason: "busy" });
     source.emit("error", { retryable: false, message: "The bot is still using this browser. Reconnect when it has finished." });
@@ -214,7 +221,7 @@ describe("live browser connection lifecycle", () => {
   it("does not retry terminal server refusals", () => {
     vi.useFakeTimers();
     render();
-    const cleanup = fixture.effects[2]!();
+    const cleanup = fixture.effects[3]!();
     FixtureEventSource.instances[0]!.emit("error", { message: "Browser access is disabled" });
     vi.advanceTimersByTime(30_000);
     expect(fixture.setters[0]).not.toHaveBeenCalled();
@@ -225,7 +232,7 @@ describe("live browser connection lifecycle", () => {
     render();
     // Replay the real connection effect's cleanup/setup, as on reconnect or
     // StrictMode, while retaining the same component refs.
-    const connect = fixture.effects[2]!;
+    const connect = fixture.effects[3]!;
     const firstCleanup = connect();
     const first = FixtureEventSource.instances[0]!;
     first.emit("ready", { viewerId: "old-viewer" });
@@ -245,7 +252,7 @@ describe("live browser connection lifecycle", () => {
 
   it("still clears input and closes the current source on a real connection error", () => {
     render();
-    const cleanup = fixture.effects[2]!();
+    const cleanup = fixture.effects[3]!();
     const source = FixtureEventSource.instances[0]!;
     source.emit("ready", { viewerId: "current-viewer" });
     const viewer = fixture.refs.find((ref) => ref.current === "current-viewer")!;
@@ -261,7 +268,7 @@ describe("live browser connection lifecycle", () => {
 
   it("reconnects after its own successful restart closes the stream before replying", async () => {
     const nodes = renderElements();
-    const cleanup = fixture.effects[2]!();
+    const cleanup = fixture.effects[3]!();
     const source = FixtureEventSource.instances[0]!;
     source.emit("ready", { viewerId: "current-viewer" });
     const restart = deferred();
@@ -279,8 +286,9 @@ describe("live browser connection lifecycle", () => {
   });
 
   it.each(["reconnect", "profile", "effect cleanup"])("ignores a late successful restart after %s replaces its connection", async (replacement) => {
+    if (replacement === "profile") fixture.states = { 8: true };
     const nodes = renderElements();
-    const connect = fixture.effects[2]!;
+    const connect = fixture.effects[3]!;
     const cleanup = connect();
     FixtureEventSource.instances[0]!.emit("ready", { viewerId: "old-viewer" });
     const restart = deferred();
@@ -306,7 +314,7 @@ describe("live browser connection lifecycle", () => {
 
   it("invalidates an old restart immediately when reconnect is requested", async () => {
     const nodes = renderElements();
-    const cleanup = fixture.effects[2]!();
+    const cleanup = fixture.effects[3]!();
     FixtureEventSource.instances[0]!.emit("ready", { viewerId: "old-viewer" });
     const restart = deferred();
     vi.mocked(api).mockReturnValueOnce(restart.promise);
@@ -322,7 +330,7 @@ describe("live browser connection lifecycle", () => {
 
   it("does not dispatch a command if its input drain finishes after a reconnect", async () => {
     const nodes = renderElements();
-    const connect = fixture.effects[2]!;
+    const connect = fixture.effects[3]!;
     const cleanup = connect();
     FixtureEventSource.instances[0]!.emit("ready", { viewerId: "old-viewer" });
     const drain = deferred();
@@ -338,7 +346,7 @@ describe("live browser connection lifecycle", () => {
 
   it("does not show old errors or clear a replacement operation's pending state", async () => {
     const nodes = renderElements();
-    const connect = fixture.effects[2]!;
+    const connect = fixture.effects[3]!;
     const cleanup = connect();
     FixtureEventSource.instances[0]!.emit("ready", { viewerId: "old-viewer" });
     const oldAction = deferred(); const currentAction = deferred();
@@ -362,7 +370,7 @@ describe("live browser connection lifecycle", () => {
 
   it("serializes commands even when clicked twice before pending state renders", async () => {
     const nodes = renderElements();
-    const cleanup = fixture.effects[2]!();
+    const cleanup = fixture.effects[3]!();
     FixtureEventSource.instances[0]!.emit("ready", { viewerId: "current-viewer" });
     click(nodes, "Reload page"); await settleAll();
     expect(sentTypes()).toEqual(["take", "reload"]);
@@ -382,7 +390,7 @@ describe("live browser connection lifecycle", () => {
     fixture.frame = { seq: 8, data: "fixture", viewerId: "old-viewer", generation: 1 };
     const nodes = renderElements();
     const viewport = nodes.find((node) => node.type === BrowserViewport)!;
-    const connect = fixture.effects[2]!;
+    const connect = fixture.effects[3]!;
     const cleanup = connect();
     FixtureEventSource.instances[0]!.emit("ready", { viewerId: "old-viewer" });
     viewport.props.acknowledge!(8);
@@ -444,7 +452,7 @@ describe("live browser control affordance", () => {
 
   // The status floats over the live view, so its words show at any panel width
   // and it never takes a click from the page.
-  const status = (html: string) => /<div role="status"([^>]*)>(.*?)<\/div><\/div><dialog/.exec(html)!;
+  const status = (html: string) => /<div role="status"([^>]*)>(.*?)<\/div><\/div><\/div>/.exec(html)!;
 
   it("keeps the status over the page for waits only: who has the browser is in the bar", () => {
     expect(status(render())[2]).toBe("");
@@ -505,7 +513,7 @@ describe("live browser control affordance", () => {
     ["this viewer controls the page", { held: true, controlling: true, owned: true }, true, false, true],
     ["the connection was lost", { held: true, controlling: true, owned: true }, false, false, false],
     ["a command is still running", { held: true, controlling: true, owned: true }, true, true, false],
-  ])("requires a granted lease for the typing dialog while %s", (_label, control, connected, pending, ready) => {
+  ])("requires a granted lease for the typing popover while %s", (_label, control, connected, pending, ready) => {
     fixture.control = control;
     fixture.states = { 4: connected, 6: pending, 9: true };
     const nodes = renderElements();
@@ -514,9 +522,9 @@ describe("live browser control affordance", () => {
     expect(open.props.disabled).toBe(!ready);
     expect(submit.props.disabled).toBe(!ready);
     if (!ready) {
-      // A stale dialog stays open with its draft intact until the person
+      // A stale popover stays open with its draft intact until the person
       // closes it; submitting must never take control and insert into a
-      // field the bot could have changed while the dialog was open.
+      // field the bot could have changed while the popover was open.
       const form = nodes.find((node) => node.type === "form" && elements(node).some((child) => child.type === "button" && child.props.children === "Type"))!;
       const field = { value: "private@example.test" };
       form.props.onSubmit!({ preventDefault: vi.fn(), currentTarget: { elements: { namedItem: () => field } } });
@@ -527,22 +535,26 @@ describe("live browser control affordance", () => {
   });
 
   it("says why profiles are locked while another window holds the browser or an action runs", () => {
-    const fresh = () => { fixture.setters = []; return render(); };
+    // Lot 7: the note lives in the profiles popover (open via showProfiles state).
+    const fresh = (extra: Record<number, unknown> = {}) => {
+      fixture.setters = [];
+      fixture.states = { 8: true, ...extra };
+      return render();
+    };
     expect(fresh()).not.toMatch(/Another window is using this browser|Profiles unlock/);
     fixture.control = { held: true, controlling: false, owned: false };
     expect(fresh()).toContain("Another window is using this browser. Switch profiles once it’s done.");
     // An idle hold of its own needs no line: opening the profiles hands it back.
     fixture.control = { held: true, controlling: true, owned: true };
     expect(fresh()).not.toMatch(/Another window is using this browser|Profiles unlock/);
-    fixture.states = { 6: true };
-    expect(fresh()).toContain("Profiles unlock once the current browser action finishes.");
+    expect(fresh({ 6: true })).toContain("Profiles unlock once the current browser action finishes.");
   });
 
   it("keeps the page while its own take waits but hides it while another window holds it", () => {
     fixture.control = { held: true, controlling: false, owned: false };
     expect(render()).toContain("Live view paused for human control");
     fixture.control = { held: false, controlling: false, owned: false };
-    const cleanup = fixture.effects[2]!();
+    const cleanup = fixture.effects[3]!();
     const source = FixtureEventSource.instances[0]!;
     source.emit("ready", { viewerId: "current-viewer" });
     fixture.setters[1]!.mockClear();
@@ -562,7 +574,7 @@ describe("implicit browser control", () => {
   const connectViewer = () => {
     fixture.frame = { seq: 1, data: "fixture", viewerId: "current-viewer", generation: 1 };
     const nodes = renderElements();
-    const cleanup = fixture.effects[2]!();
+    const cleanup = fixture.effects[3]!();
     const source = FixtureEventSource.instances[0]!;
     source.emit("ready", { viewerId: "current-viewer" });
     return { cleanup, source, nodes, input: nodes.find((node) => node.type === BrowserViewport)!.props.input! };
@@ -643,7 +655,7 @@ describe("implicit browser control", () => {
 
   it("runs a toolbar action clicked twice during a slow take only once", async () => {
     const nodes = renderElements();
-    const cleanup = fixture.effects[2]!();
+    const cleanup = fixture.effects[3]!();
     FixtureEventSource.instances[0]!.emit("ready", { viewerId: "current-viewer" });
     const take = deferred();
     vi.mocked(api).mockReturnValueOnce(take.promise);
@@ -664,12 +676,12 @@ describe("implicit browser control", () => {
     cleanup?.();
   });
 
-  it("keeps control while the typing dialog is open", async () => {
+  it("keeps control while the typing popover is open", async () => {
     vi.useFakeTimers();
     fixture.states = { 9: true };
     const { cleanup, input } = connectViewer();
     input(press); input(lift); await settleAll();
-    fixture.effects[1]!();
+    fixture.effects[2]!();
     vi.advanceTimersByTime(60_000); await settleAll();
     expect(sentTypes()).toEqual(["take"]);
     cleanup?.();

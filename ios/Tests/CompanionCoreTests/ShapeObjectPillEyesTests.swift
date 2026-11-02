@@ -43,7 +43,7 @@ final class ShapeObjectPillEyesTests: XCTestCase {
 
     /// The body stays whole: the still's eyes sit on its outline's inside.
     func testThePillsSitOnTheBody() {
-        for def in ShapeAvatarPresets.all where def.id != "sprout" {
+        for def in ShapeAvatarPresets.all {
             let id = def.id ?? "?"
             let live = ShapeAvatarOutline.liveOutline(from: def)
             let body = CGMutablePath()

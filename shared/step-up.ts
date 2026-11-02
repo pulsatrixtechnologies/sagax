@@ -239,6 +239,7 @@ const CARD_CONTENT_FIELDS = [
   "routineRequest",
   "profileRequest",
   "modelRequest",
+  "ruleRequest",
   "teamSetupRequest",
   "skillRequest",
   "botActRequest",

@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { BookOpen, Loader2, Trash2 } from "lucide-react";
 
+import { useConfirm } from "@/components/ConfirmProvider";
 import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { composeSkillMd, isSkillName, parseSkillMd } from "../../../shared/skill-md";
@@ -35,6 +36,7 @@ export interface SkillPageProps {
 const fieldClass = "w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink placeholder:text-ink-secondary focus:border-border-strong focus:outline-none disabled:opacity-60";
 
 export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDeleted, basePath = "/api/skills-library" }: SkillPageProps) {
+  const confirm = useConfirm();
   const creating = !skill;
   const [loaded, setLoaded] = useState(creating);
   const [name, setName] = useState(skill?.name ?? "");
@@ -95,7 +97,7 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
   };
 
   const remove = async () => {
-    if (!skill || !window.confirm(t("connectApps.skill.deleteConfirm", { name: skill.name }))) return;
+    if (!skill || !(await confirm({ title: t("connectApps.skill.deleteConfirm", { name: skill.name }), confirmLabel: t("common.delete"), tone: "danger" }))) return;
     setBusy("delete");
     setError(null);
     try {

@@ -7,7 +7,10 @@
 // A card row is an ordinary bot row with `outbound` (shared/wire.ts) and a
 // plain `text` for clients that do not draw it. It never holds a card
 // number, a security code, or an id in its words.
+import { randomBytes } from "node:crypto";
+
 import { formatPhone } from "../shared/outbound-call.ts";
+import { PHONE_CALL_CONSENT_APPROVE, PHONE_CALL_CONSENT_DECLINE } from "../shared/phone-call-consent.ts";
 import { purchaseContents } from "../shared/payment-vault.ts";
 import { walletName } from "../shared/single-use-card.ts";
 import { trackingLine } from "../shared/order-tracking.ts";
@@ -17,6 +20,8 @@ import {
   applyResult, callAnswerNote, callCard, callCardText, callResultNote, OutboundCalls, placePhoneCall,
   type IncomingCallResult, type OutboundCallRecord, type PlaceCallDeps,
 } from "./outbound-calls.ts";
+import { hangUpLiveCall, sendDtmfLiveCall, transferLiveCall, type LiveCallPatch } from "./phone-call-control.ts";
+import { PhoneCallConsentStore } from "./phone-call-consent.ts";
 import type { PrimaryCard } from "./primary-approvals.ts";
 import { createOutboundCallRoutes, type OutboundCallRouteDeps } from "./routes/outbound-calls.ts";
 import type { InternalRouteHandler } from "./routes/internal-route.ts";
@@ -46,6 +51,8 @@ export interface OutboundWiringDeps {
   /** Start the bot's next turn with this note (index.ts dispatchSecretResume). */
   wake(botId: string, threadId: string, messageId: string, prompt: string): void;
   now?: () => number;
+  /** Person's approval level for this turn: Auto may skip the per-call card. */
+  approvalMode?(botId: string, threadId: string): string | undefined;
 }
 
 /** The purchase card as the conversation draws it. */
@@ -112,6 +119,7 @@ export function primaryPurchaseCard(purchase: PurchaseListing, botName: string, 
 
 export function outboundWiring(deps: OutboundWiringDeps) {
   const calls = new OutboundCalls(deps.dataDir, deps.now);
+  const consent = new PhoneCallConsentStore(deps.dataDir, deps.now);
 
   function rowOf(threadId: string, id: string, messageId?: string): Message | undefined {
     const rows = deps.store.messagesFor(threadId);
@@ -134,9 +142,63 @@ export function outboundWiring(deps: OutboundWiringDeps) {
     }
   }
 
-  function callRow(row: OutboundCallRecord, messageId?: string, result?: OutboundCallResult): string | undefined {
-    const card = callCard(row, deps.botName(row.botId), calls.settings().callbackNumber);
-    return upsert(row.threadId, result ? { ...card, result } : card, callCardText(row), messageId);
+  function callRow(row: OutboundCallRecord, messageId?: string, result?: OutboundCallResult, live?: Partial<OutboundCard>): string | undefined {
+    const existing = rowOf(row.threadId, row.id, messageId);
+    const prior = existing?.outbound;
+    const mergedLive: Partial<OutboundCard> = {
+      ...(prior?.phase ? { phase: prior.phase } : {}),
+      ...(prior?.liveStartedAt ? { liveStartedAt: prior.liveStartedAt } : {}),
+      ...(prior?.liveTranscript ? { liveTranscript: prior.liveTranscript } : {}),
+      ...(prior?.liveEvents ? { liveEvents: prior.liveEvents } : {}),
+      ...(prior?.calleeName ? { calleeName: prior.calleeName } : {}),
+      ...(prior?.recordingUrl ? { recordingUrl: prior.recordingUrl } : {}),
+      ...live,
+    };
+    const card = callCard(row, deps.botName(row.botId), calls.settings().callbackNumber, mergedLive);
+    const withResult = result ? { ...card, result, phase: "ended" as const } : card;
+    return upsert(row.threadId, withResult, callCardText(row), messageId);
+  }
+
+  function patchLive(row: OutboundCallRecord, change: LiveCallPatch): void {
+    const existing = rowOf(row.threadId, row.id, row.messageId);
+    if (!existing?.outbound) return;
+    const outbound: OutboundCard = {
+      ...existing.outbound,
+      ...(change.phase ? { phase: change.phase } : {}),
+      ...(change.liveStartedAt ? { liveStartedAt: change.liveStartedAt } : {}),
+      ...(change.calleeName ? { calleeName: change.calleeName } : {}),
+      ...(change.recordingUrl ? { recordingUrl: change.recordingUrl } : {}),
+      ...(change.liveTranscript ? { liveTranscript: change.liveTranscript } : {}),
+      ...(change.liveEvents ? { liveEvents: change.liveEvents } : {}),
+    };
+    deps.store.patchMessage(row.threadId, existing.id, { outbound, text: callCardText(row) });
+  }
+
+  function stageConsentCard(_principalId: string, botId: string, threadId: string): string {
+    const requestId = `pcc_${randomBytes(8).toString("hex")}`;
+    const data = consent.pendingCard({ requestId, botId, threadId });
+    const fr = deps.language() === "fr";
+    const approve = fr ? PHONE_CALL_CONSENT_APPROVE[1] : PHONE_CALL_CONSENT_APPROVE[0];
+    const decline = fr ? PHONE_CALL_CONSENT_DECLINE[1] : PHONE_CALL_CONSENT_DECLINE[0];
+    try {
+      deps.store.appendMessage(threadId, {
+        role: "bot",
+        kind: "options",
+        text: "Phone calls need your consent once before a bot may place them.",
+        card: {
+          requestId,
+          title: fr ? "Autoriser les appels téléphoniques pour vos bots" : "Allow phone calls for your bots",
+          subtitle: fr
+            ? "Avant que vos bots puissent placer des appels pour vous, confirmez que vous acceptez ces règles."
+            : "Before your bots can place calls for you, confirm you accept these rules.",
+          options: [approve, decline],
+          phoneCallConsent: data,
+        },
+      } as Omit<Message, "id" | "at">);
+    } catch {
+      // thread gone
+    }
+    return "Sagax showed the person a one-time consent card for phone calls (lawful use, people who agreed, no marketing or emergency lines, they stay responsible). End your turn now; when they Accept, call place_phone_call again with the same arguments.";
   }
 
   /** A conversation's transcript past its 30 days leaves the card; the
@@ -152,13 +214,15 @@ export function outboundWiring(deps: OutboundWiringDeps) {
   const api = {
     calls,
 
-    /** place_phone_call from the internal route. */
+    /** place_phone_call / place_call from the internal route. */
     async placeCall(context: { principalId: string | null; botId: string; threadId: string; generation: string; room: boolean }, args: unknown): Promise<{ text: string; isError?: boolean }> {
       if (context.room) return { text: "A phone call is placed from a direct conversation, not a room. Nothing was placed.", isError: true };
       if (!context.principalId) return { text: "This conversation has no person to approve a call. Nothing was placed.", isError: true };
       const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
       const conversation = Boolean(args && typeof args === "object" && (args as { mode?: unknown }).mode === "conversation");
       const voice = deps.voice;
+      const allows = consent.allows(context.principalId);
+      const mode = deps.approvalMode?.(context.botId, context.threadId);
       return placePhoneCall({
         calls,
         twilio: (callArgs) => deps.twilio(turn, callArgs),
@@ -172,27 +236,127 @@ export function outboundWiring(deps: OutboundWiringDeps) {
           personName: (conversation ? deps.principalName?.(context.principalId) : undefined) || deps.personName(context.botId, context.threadId) || deps.principalName?.(context.principalId) || "",
         },
         language: deps.language(),
-        card: callRow,
+        card: (row, messageId, live) => callRow(row, messageId, undefined, live),
+        consentAllows: allows,
+        stageConsent: () => stageConsentCard(context.principalId!, context.botId, context.threadId),
+        autoPlace: mode === "auto" || mode === "full",
       }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId }, args);
     },
 
+    async sendDtmf(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }> {
+      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
+      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
+      return sendDtmfLiveCall({
+        calls,
+        twilio: (callArgs) => deps.twilio(turn, callArgs),
+        patchLive,
+        now: deps.now,
+      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, digits: args.digits, callId: typeof args.call_id === "string" ? args.call_id : undefined });
+    },
+
+    async transfer(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown>): Promise<{ text: string; isError?: boolean }> {
+      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
+      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
+      return transferLiveCall({
+        calls,
+        twilio: (callArgs) => deps.twilio(turn, callArgs),
+        patchLive,
+        now: deps.now,
+      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, to: args.to, callId: typeof args.call_id === "string" ? args.call_id : undefined });
+    },
+
+    async hangUp(context: { principalId: string | null; botId: string; threadId: string; generation: string }, args: Record<string, unknown> = {}): Promise<{ text: string; isError?: boolean }> {
+      if (!context.principalId) return { text: "No person on this conversation.", isError: true };
+      const turn = { threadId: context.threadId, generation: context.generation, botId: context.botId };
+      return hangUpLiveCall({
+        calls,
+        twilio: (callArgs) => deps.twilio(turn, callArgs),
+        patchLive,
+        now: deps.now,
+      }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId, callId: typeof args.call_id === "string" ? args.call_id : undefined });
+    },
+
+    /** Person End call on the live card. */
+    async personHangUp(principalId: string, callId: string): Promise<{ ok: true } | { error: string; status: number; code: string }> {
+      const row = calls.get(callId);
+      if (!row || row.principalId !== principalId) return { error: "No such call", status: 404, code: "unknown_call" };
+      if (row.request.mode !== "conversation" || row.status !== "placed" || row.result) {
+        return { error: "This call is not live.", status: 409, code: "not_live" };
+      }
+      const outcome = await hangUpLiveCall({
+        calls,
+        twilio: (callArgs) => deps.twilio({ threadId: row.threadId, generation: "person-hangup", botId: row.botId }, callArgs),
+        patchLive,
+        now: deps.now,
+      }, { principalId, botId: row.botId, threadId: row.threadId, callId });
+      if (outcome.isError) return { error: outcome.text, status: 502, code: "hangup_failed" };
+      return { ok: true };
+    },
+
+    /** Accept or decline the one-time phone-call consent card. */
+    resolveConsent(input: { principalId: string; botId: string; threadId: string; requestId: string; allow: boolean }): void {
+      const rows = deps.store.messagesFor(input.threadId);
+      const message = rows.find((row) => row.card?.requestId === input.requestId && row.card.phoneCallConsent);
+      if (!message?.card?.phoneCallConsent) return;
+      if (input.allow) {
+        const record = consent.accept(input.principalId, input.botId);
+        deps.store.patchMessage(input.threadId, message.id, {
+          card: {
+            ...message.card,
+            answered: PHONE_CALL_CONSENT_APPROVE[0],
+            phoneCallConsent: { ...message.card.phoneCallConsent, status: "accepted", acceptedAt: record.acceptedAt },
+          },
+        });
+      } else {
+        deps.store.patchMessage(input.threadId, message.id, {
+          card: {
+            ...message.card,
+            answered: PHONE_CALL_CONSENT_DECLINE[0],
+            phoneCallConsent: { ...message.card.phoneCallConsent, status: "declined" },
+          },
+        });
+      }
+    },
+
+    consentStore: consent,
+
     /** POST /api/internal/phone-call (place_phone_call), behind the turn's
-     * capability; the conversation must be the bot's own. */
+     * capability; the conversation must be the bot's own. Also mid-call
+     * controls under /api/internal/phone-call/{dtmf,transfer,hangup}. */
     internalRoutes(context: {
       ownsThread(botId: string, threadId: string): boolean;
       principalForThread(threadId: string): string | null;
       inRoom(threadId: string): boolean;
     }): InternalRouteHandler {
       return async ({ res, path, method, json, capability, readBody }) => {
-        if (path !== "/api/internal/phone-call") return PASS;
-        if (method !== "POST") return json(res, 405, { error: "POST only" });
-        if (!context.ownsThread(capability.botId, capability.threadId)) return json(res, 403, { error: "source conversation does not belong to sender" });
-        const body = await readBody();
-        return json(res, 200, await api.placeCall({
+        const turn = {
           principalId: context.principalForThread(capability.threadId),
-          botId: capability.botId, threadId: capability.threadId, generation: capability.generation,
-          room: context.inRoom(capability.threadId),
-        }, body));
+          botId: capability.botId,
+          threadId: capability.threadId,
+          generation: capability.generation,
+        };
+        if (path === "/api/internal/phone-call" || path === "/api/internal/place-call") {
+          if (method !== "POST") return json(res, 405, { error: "POST only" });
+          if (!context.ownsThread(capability.botId, capability.threadId)) return json(res, 403, { error: "source conversation does not belong to sender" });
+          const body = await readBody();
+          return json(res, 200, await api.placeCall({ ...turn, room: context.inRoom(capability.threadId) }, body));
+        }
+        if (path === "/api/internal/phone-call/dtmf" || path === "/api/internal/send-dtmf") {
+          if (method !== "POST") return json(res, 405, { error: "POST only" });
+          if (!context.ownsThread(capability.botId, capability.threadId)) return json(res, 403, { error: "source conversation does not belong to sender" });
+          return json(res, 200, await api.sendDtmf(turn, await readBody() as Record<string, unknown>));
+        }
+        if (path === "/api/internal/phone-call/transfer" || path === "/api/internal/transfer") {
+          if (method !== "POST") return json(res, 405, { error: "POST only" });
+          if (!context.ownsThread(capability.botId, capability.threadId)) return json(res, 403, { error: "source conversation does not belong to sender" });
+          return json(res, 200, await api.transfer(turn, await readBody() as Record<string, unknown>));
+        }
+        if (path === "/api/internal/phone-call/hangup" || path === "/api/internal/hang-up") {
+          if (method !== "POST") return json(res, 405, { error: "POST only" });
+          if (!context.ownsThread(capability.botId, capability.threadId)) return json(res, 403, { error: "source conversation does not belong to sender" });
+          return json(res, 200, await api.hangUp(turn, await readBody() as Record<string, unknown>));
+        }
+        return PASS;
       };
     },
 
@@ -204,6 +368,7 @@ export function outboundWiring(deps: OutboundWiringDeps) {
           const messageId = callRow(row, row.messageId);
           deps.wake(row.botId, row.threadId, messageId ?? row.id, callAnswerNote(row));
         },
+        hangUp: async (principalId, callId) => api.personHangUp(principalId, callId),
       });
     },
 
@@ -219,8 +384,45 @@ export function outboundWiring(deps: OutboundWiringDeps) {
       });
       if (!outcome.applied) return outcome.reason;
       const botName = deps.botName(outcome.row.botId);
-      const messageId = callRow(outcome.row, outcome.row.messageId, outcome.result);
+      const recordingUrl = `/api/me/phone-calls/${outcome.row.id}/recording`;
+      const messageId = callRow(outcome.row, outcome.row.messageId, outcome.result, {
+        phase: "ended",
+        recordingUrl,
+        ...(outcome.result.transcript?.length
+          ? { liveTranscript: outcome.result.transcript.map((line) => ({ speaker: line.speaker, text: line.text })) }
+          : {}),
+      });
       deps.wake(outcome.row.botId, outcome.row.threadId, messageId ?? outcome.row.id, callResultNote(outcome.row, outcome.result, botName));
+      return "applied";
+    },
+
+    /** Mid-call progress from Perspicax (event call_progress). */
+    callProgress(input: {
+      sub: string;
+      ref: string;
+      callSid?: string;
+      phase?: LiveCallPatch["phase"];
+      calleeName?: string;
+      lines?: NonNullable<LiveCallPatch["liveTranscript"]>;
+      events?: NonNullable<LiveCallPatch["liveEvents"]>;
+    }): "applied" | "unknown" | "not_yours" {
+      const row = calls.get(input.ref);
+      if (!row || row.request.mode !== "conversation" || row.status !== "placed" || row.result) return "unknown";
+      const sub = deps.principalSub?.(row.principalId) ?? null;
+      if (!sub || sub !== input.sub) return "not_yours";
+      if (input.callSid && row.callSid && row.callSid !== input.callSid) return "not_yours";
+      const existing = rowOf(row.threadId, row.id, row.messageId)?.outbound;
+      patchLive(row, {
+        ...(input.phase ? { phase: input.phase } : {}),
+        ...(input.calleeName ? { calleeName: input.calleeName } : {}),
+        ...(input.lines?.length
+          ? { liveTranscript: [...(existing?.liveTranscript ?? []), ...input.lines].slice(-200) }
+          : {}),
+        ...(input.events?.length
+          ? { liveEvents: [...(existing?.liveEvents ?? []), ...input.events].slice(-50) }
+          : {}),
+        ...(!existing?.liveStartedAt ? { liveStartedAt: (deps.now ?? Date.now)() } : {}),
+      });
       return "applied";
     },
 

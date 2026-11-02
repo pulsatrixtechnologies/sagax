@@ -35,7 +35,7 @@ import { useShowThreads } from "@/lib/thread-preferences";
 import { api, ApiError, openBotThread, useStoreOptional } from "@/state/store";
 import { BOT_TASK_DONE_FOLD_MS, BOT_TASK_DONE_LINGER_MS, listBotTasks, personBotTaskActions, type BotTask, type BotTaskAction, type BotTaskState } from "../../../shared/bot-task-list";
 import { navigateThreadMenu } from "../BotProjects";
-import { RoutineDetailHeader } from "./RoutinesSection";
+import { PanelPageHeader as RoutineDetailHeader } from "./PanelPage";
 
 type LoadState = "ok" | "failed" | "needsUpdate";
 type PersonMove = Exclude<BotTaskAction, "advance">;

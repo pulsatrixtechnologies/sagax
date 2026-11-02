@@ -13,6 +13,8 @@ import type { OrderTracking } from "./order-tracking.ts";
 import type { SoloGoalLine } from "./solo-goal-line.ts";
 import type { FinishUntilLine } from "./finish-until-line.ts";
 import type { MeetingRequestCardData } from "./meeting-request.ts";
+import type { PhoneCallConsentCardData } from "./phone-call-consent.ts";
+import type { PhoneCallLiveEvent, PhoneCallLiveLine, PhoneCallPhase } from "./phone-call-live.ts";
 import type { ParallelTaskRef, TaskParallelOf } from "./parallel-tasks.ts";
 import type { DataBroadcast } from "./data-surface.ts";
 import type { AppliedApprovalLevel, ApprovalException, ApprovalMode } from "./approval-mode.ts";
@@ -41,9 +43,11 @@ import type { CredentialTargetId } from "./credential-request.ts";
 import type { VaultLoginTarget, VaultRequestCardData } from "./credential-vault.ts";
 import type { TeamSetupRequest } from "./team-setup.ts";
 import type { RoutineRequestCardData } from "./routine-request.ts";
+import type { SavedStepsMark } from "./saved-steps.ts";
 import type { ProfileRequestCardData } from "./profile-request.ts";
 import type { PlaceRow } from "./place-view.ts";
 import type { ModelRequestCardData } from "./model-request.ts";
+import type { RuleRequestCardData } from "./rule-request.ts";
 import type { SkillRequestCardData } from "./skill-request.ts";
 import type { QuestionRequestCardData } from "./ask-question.ts";
 import type { RoutineRunCardData } from "./routine-run.ts";
@@ -61,6 +65,7 @@ import type { TerminalRequestCardData } from "./terminal-request.ts";
 import type { WireVideoWidget } from "./video-widget.ts";
 import type { ArtifactsFrame } from "./artifacts.ts";
 import type { BotTasksFrame } from "./bot-task-list.ts";
+import type { WaitCardField, WaitLineField } from "./wait-request.ts";
 import { EFFORT_LEVELS, isEffortLevel, type EffortLevel, type ModelSelection } from "./model-selection.ts";
 
 export { EFFORT_LEVELS, isEffortLevel, type EffortLevel, type ModelSelection };
@@ -142,6 +147,15 @@ export interface GroupThreadUsage extends TaskUsage {
 /** One task = one conversation with its own context, thread and provider
  * session. Wire form: no resumeCursors or lastInstanceId — the harness's
  * own bookkeeping that no client has ever used. */
+/** One thread's keep-warm window as a client shows it. Times are epoch ms. */
+export interface CacheKeepWarmStatus {
+  state: "warm" | "stopped";
+  until?: number;
+  nextPingAt?: number;
+  last?: { at: number; read: number; write: number; costUsd: number | null };
+  stopped?: string;
+}
+
 export interface WireTask {
   /** Outstanding handoffs, not an active provider turn. */
   waitingForTeammates?: boolean;
@@ -249,6 +263,9 @@ export interface WireTask {
   surfaceAuto?: true;
   /** what this task has spent, banked once per turn */
   usage?: TaskUsage;
+  /** Prompt-cache keep-warm status for this thread (server/cache-keepwarm.ts),
+   * derived at projection and never stored; absent when no window is open. */
+  cacheKeepWarm?: CacheKeepWarmStatus;
   /** the folder this task's turns run in, pinned on its first turn. */
   cwd?: string | null;
 }
@@ -448,6 +465,8 @@ export interface WireBot {
   emailDrafts?: boolean;
   /** Whether this bot uses native memory. Absent/true = enabled. */
   memoryEnabled?: boolean;
+  /** Whether this bot's turns use the loop guard. Absent/true = on (workspace setting still applies); false = off for this bot. */
+  loopGuard?: boolean;
   /** How far this bot's team-memory cards travel (shared/team-memory-sharing.ts):
    * absent or "shared", every member of its section; "private", only the
    * members who see this bot and the card's conversation or channel. */
@@ -513,6 +532,9 @@ export interface WireBot {
    * tidies nightly. On unless explicitly false; every change is journaled
    * and can be undone. */
   memoryUpkeep?: boolean;
+  /** Prompt-cache keep-warm for this bot's Claude threads: true or false
+   * overrides the workspace setting (Settings → Engines); absent follows it. */
+  cacheKeepWarm?: boolean;
   /** Which of the app-wide MCP servers this bot mounts, by name. */
   mcpServers?: string[];
   /** The saved account each MCP server signs in with for this bot, by
@@ -707,7 +729,7 @@ export interface Comm {
   text?: string;
 }
 
-export interface WireMessage {
+export interface WireMessage extends WaitLineField {
   roomRequest?: { id: string; phase: "request" | "result" };
   id: string;
   role: "bot" | "user";
@@ -792,6 +814,8 @@ export interface WireMessage {
     claudeUpdate?: boolean;
     /** error rows: the place this turn could not use (shared/place-view.ts). */
     place?: PlaceRow;
+    /** error rows: epoch ms when the usage limit that stopped this turn resets, when the engine said. */
+    limitResetsAt?: number;
     /** Provider item identity, scoped to the owning turn. */
     itemId?: string;
     /** A failed one-way send's row: the runtime id of the notice it reports. */
@@ -886,6 +910,13 @@ export interface WireMessage {
   requestPending?: boolean;
   /** The last assistant text item from a settled provider turn. */
   turnTerminal?: boolean;
+  /** Set on the reply of a request whose computer steps were saved (`learned`)
+   * or that was answered from saved steps with no AI (`replayed`). Clients
+   * that do not know it ignore it. */
+  savedSteps?: SavedStepsMark;
+  /** On a conversational bot's user line: the picker label of the quick model
+   * its reply ran on. Cleared when a saved-steps replay answers instead. */
+  quickModel?: string;
   /** screen and video messages: the person's message of that turn asked
    * for this view (shared/requested-views.ts). A client draws a screen or a
    * video row only with it; rows from before 2026-10-20 have none. */
@@ -900,6 +931,9 @@ export interface WireMessage {
   parentId?: string | null;
   /** Optional flat reply reference for an inline quote. */
   replyToId?: string;
+  /** A widget press the device performed itself (open_page, open_routine,
+   * open_run): recorded so the bot knows it is done; it started no turn. */
+  deviceAction?: { type: string };
   /** Stable client identity for at-most-once chat POST retries. */
   sendId?: string;
   /** Per-send channel behavior. Absent is legacy quick chat. */
@@ -1011,7 +1045,7 @@ export function nextOpenThread<T extends OpenThreadCandidate>(tasks: readonly T[
   return [listed, open, own].map((candidates) => orderedThreadList(candidates)[0]).find((task) => task !== undefined);
 }
 
-export interface OptionCardData {
+export interface OptionCardData extends WaitCardField {
   /** calls: one per outbound call the card covers, in subtitle order. Absent
    * on cards from older computers. */
   outboundRequest?: { tool: string; app: string | null; calls?: Array<{ app: string | null; label: string }> };
@@ -1137,6 +1171,8 @@ export interface OptionCardData {
   profileRequest?: ProfileRequestCardData;
   /** A durable default-model proposal (propose_model). */
   modelRequest?: ModelRequestCardData;
+  /** A durable approval-rule proposal (propose_rule: add / change / remove). */
+  ruleRequest?: RuleRequestCardData;
   teamSetupRequest?: TeamSetupRequest;
   /** A durable learned-skill proposal. */
   skillRequest?: SkillRequestCardData;
@@ -1153,6 +1189,9 @@ export interface OptionCardData {
   /** A meeting the bot asks to join as a notetaker (join_meeting): the
    * consent card, then the live meeting's state. Never auto-applied. */
   meetingRequest?: MeetingRequestCardData;
+  /** One-time acceptable-use consent before a bot may place phone calls
+   * for this person. Recorded per person; never auto-applied. */
+  phoneCallConsent?: PhoneCallConsentCardData;
   /** A change asked from a ConnectWise widget, waiting for an Allow
    * (server/cw-widget-actions.ts). `by` is the principal who asked. */
   cwActionRequest?: { id: string; action: CwAction; by: string };
@@ -1613,6 +1652,18 @@ export interface OutboundCard {
   /** A conversation call once it ended. Placed without a result yet: the
    * call is under way. */
   result?: OutboundCallResult;
+  /** Live conversation call: who is being called (when known). */
+  calleeName?: string;
+  /** Live phase chip on the card (dialing through ended). */
+  phase?: PhoneCallPhase;
+  /** epoch ms when dialing started; drives the live timer. */
+  liveStartedAt?: number;
+  /** Streaming transcript while the call is live (also kept after end). */
+  liveTranscript?: PhoneCallLiveLine[];
+  /** Hold, DTMF and transfer events shown in the live stream. */
+  liveEvents?: PhoneCallLiveEvent[];
+  /** Sagax proxy path for the recording player after the call ends. */
+  recordingUrl?: string;
   /** A purchase: the shop, the amount, the card's brand and last four
    * digits, what it buys, and once done, the receipt. */
   merchant?: string;

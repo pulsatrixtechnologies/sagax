@@ -337,8 +337,8 @@ describe("composeReport", () => {
   });
 
   it("shows a failure's outcome and detail, and never reads an expired wait as approval", () => {
-    const expired = composeReport(assignment({ status: "failed", outcome: "expired", outcomeDetail: "no answer in 30 min", result: "" }), names);
-    expect(expired).toContain("[Sagax report from @Scout on assignment as_7f3k: failed (expired): no answer in 30 min]");
+    const expired = composeReport(assignment({ status: "expired", outcome: "expired", outcomeDetail: "no answer in 30 min", result: "" }), names);
+    expect(expired).toContain("[Sagax report from @Scout on assignment as_7f3k: expired: no answer in 30 min]");
     expect(expired).toContain("The wait on the person ran out: nothing was approved and nothing ran.");
     expect(expired).not.toMatch(/approved\b(?! and nothing)/);
     expect(composeReport(assignment({ status: "cancelled", outcome: "stopped", result: "" }), names))

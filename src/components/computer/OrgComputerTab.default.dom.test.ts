@@ -3,6 +3,7 @@
 // not the person's Mac; a manual pick holds until the bot moves.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { DesktopBridgeStatus } from "@/lib/desktop-bridge";
@@ -21,7 +22,7 @@ beforeEach(() => { host = document.createElement("div"); document.body.appendChi
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 const shown = () => host.querySelector("[data-org-computer]")?.getAttribute("data-org-computer");
-const render = (inUse?: InUsePlace, threadId = "t1") => act(() => root.render(createElement(OrgComputerTab, { bridge, place: "auto", computerOff: false, botName: "Luna", botId: "b1", threadId, inUse })));
+const render = (inUse?: InUsePlace, threadId = "t1") => act(() => root.render(createElement(ConfirmProvider, null, createElement(OrgComputerTab, { bridge, place: "auto", computerOff: false, botName: "Luna", botId: "b1", threadId, inUse }))));
 
 describe("Computer tab default screen", () => {
   it("picks the destination in use, never the Mac by habit", () => {

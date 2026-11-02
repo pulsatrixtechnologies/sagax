@@ -64,6 +64,7 @@ private struct BotPanelContent: View {
     @State private var renaming = false
     @State private var renameDraft = ""
     @State private var confirmingArchive = false
+    @State private var confirmingDelete = false
     @State private var exportingZip = false
     @State private var pickingPrimary = false
     @State private var primaryWorking = false
@@ -137,6 +138,15 @@ private struct BotPanelContent: View {
         } message: {
             Text("Its conversations are kept. Archived bots in the account menu brings it back.")
         }
+        .confirmationDialog(Text("Delete \(current.name)?"), isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                let target = current
+                Task { if await session.deleteBot(target) { model.togglePanel() } }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(String(localized: "The bot and its conversations will be deleted. This cannot be undone."))
+        }
         .alert("Rename the bot", isPresented: $renaming) {
             TextField("Name", text: $renameDraft)
                 .accessibilityIdentifier("desktop-panel-rename-field")
@@ -183,8 +193,8 @@ private struct BotPanelContent: View {
         )
     }
 
-    /// The bot's one "..." menu: Edit bot, Rename, Primary Bot; the
-    /// conversation's export and the bot's .zip; Archive, Inspector.
+    /// The bot's one "..." menu (lot 6): Primary, Redo the wizard, Share;
+    /// Export; Archive, Delete, Inspector. Edit bot and Rename left.
     private var actionsMenu: some View {
         let plan = menuPlan
         return VStack(alignment: .leading, spacing: 0) {
@@ -229,6 +239,7 @@ private struct BotPanelContent: View {
             case .downloadConversation: return ("arrow.down.to.line", "Download as .md")
             case .exportZip: return ("doc.zipper", "Export the bot (.zip)")
             case .archive: return ("archivebox", "Archive…")
+            case .delete: return ("trash", "Delete bot…")
             case .inspector: return ("ladybug", "Inspector")
             }
         }()
@@ -244,7 +255,14 @@ private struct BotPanelContent: View {
     private func perform(_ item: BotActionsMenuItem) {
         switch item {
         case .editBot: model.showPersona()
-        case .redoWizard: BotWizardPresenter.shared.open(botId: current.id)
+        case .redoWizard:
+            // Close the panel first so the wizard's fullScreenCover can present.
+            let botId = current.id
+            model.togglePanel()
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                BotWizardPresenter.shared.open(botId: botId, redo: true)
+            }
         case .rename:
             renameDraft = current.name
             renaming = true
@@ -267,6 +285,7 @@ private struct BotPanelContent: View {
             }
         case .exportZip: exportingZip = true
         case .archive: confirmingArchive = true
+        case .delete: confirmingDelete = true
         case .inspector: model.requestInspector()
         }
     }

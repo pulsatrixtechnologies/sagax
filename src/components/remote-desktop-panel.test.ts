@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { boatCapableEngine, isActiveTurnRefusal, isRemoteScreenshotContention, remoteScreenshotSource } from "@/lib/remote-desktop";
@@ -48,5 +49,11 @@ describe("remote VPS preview", () => {
     expect(remoteScreenshotSource({ png: "aGVsbG8=", format: "image/svg+xml" })).toBeNull();
     expect(remoteScreenshotSource({ format: "png" })).toBeNull();
     expect(remoteScreenshotSource(null)).toBeNull();
+  });
+
+  it("opens the routine editor as a panel push, not a centred window", () => {
+    const source = readFileSync(new URL("./remote-desktop-panel.tsx", import.meta.url), "utf8");
+    expect(source).toContain('presentation="panel"');
+    expect(source).toMatch(/creatingRoutine && \([\s\S]*presentation="panel"/);
   });
 });

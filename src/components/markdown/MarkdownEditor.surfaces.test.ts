@@ -4,6 +4,7 @@
 // out through the field's own handler and save path (same request, same
 // body shape as the textarea it replaced).
 import { createElement, type ReactElement } from "react";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -50,7 +51,7 @@ const { DraftMemory } = await import("../NewBotDialog");
 
 let host: HTMLDivElement;
 let root: Root;
-const render = (element: ReactElement) => flushSync(() => root.render(element));
+const render = (element: ReactElement) => flushSync(() => root.render(createElement(ConfirmProvider, null, element)));
 const settle = async () => {
   for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
 };
@@ -183,7 +184,7 @@ describe("markdown fields", () => {
     };
     const request = vi.fn().mockResolvedValue({ routine });
     fixture.api.mockResolvedValue({});
-    render(createElement(BotEditorContext.Provider, { value: { request } }, createElement(RoutineEditor, { routine, bots: [bot], lockedBotId: bot.id, onClose: vi.fn() })));
+    render(createElement(ConfirmProvider, null, createElement(BotEditorContext.Provider, { value: { request } }, createElement(RoutineEditor, { routine, bots: [bot], lockedBotId: bot.id, onClose: vi.fn() }))));
     await settle();
     const editor = await markdownEditorIn(document.body, "routine-instructions");
     expect(markdownText(editor)).toBe("Summarise the **week**");
@@ -199,10 +200,10 @@ describe("markdown fields", () => {
   it("quick routine: mounts empty and posts the instructions as the prompt", async () => {
     fixture.api.mockResolvedValue({ routine: { id: "new" } });
     const onSavedRoutine = vi.fn();
-    render(createElement(QuickComposer, {
+    render(createElement(ConfirmProvider, null, createElement(QuickComposer, {
       seed: { kind: "routine", at: Date.UTC(2026, 9, 10, 9), durationMinutes: 30, botIds: [bot.id], name: "Check inbox", description: "Read *new* mail" },
       bots: [bot], routinesOnly: true, onClose: vi.fn(), onMore: vi.fn(), onSavedRoutine, onSavedCall: vi.fn(),
-    }));
+    })));
     const editor = await markdownEditorIn(document.body, "routine-instructions-quick");
     expect(markdownText(editor)).toBe("Read *new* mail");
     typeMarkdown(editor, "Read *new* mail\n- [ ] reply");

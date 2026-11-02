@@ -72,12 +72,13 @@ export function isPersistentQuestionCard(card?: {
   skillRequest?: unknown;
   profileRequest?: unknown;
   modelRequest?: unknown;
+  ruleRequest?: unknown;
   teamSetupRequest?: unknown;
 } | null): boolean {
   return Boolean(card && (
     card.requestType === "question" || card.questionRequest ||
     (!card.requestType && !card.tool && !card.routineRequest && !card.skillRequest && !card.profileRequest &&
-      !card.modelRequest && !card.teamSetupRequest)
+      !card.modelRequest && !card.ruleRequest && !card.teamSetupRequest)
   ));
 }
 

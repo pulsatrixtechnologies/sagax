@@ -1,42 +1,22 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Braces, FileText, LoaderCircle, Table2 } from "lucide-react";
-import { requestMessageFile, type MessageAttachmentContext } from "./AttachmentPreview";
+import { requestMessageFile, type MessageAttachmentContext } from "@/lib/message-file";
+import { HtmlFileButton } from "./HtmlFilePreview";
 import { RichTable, TableDialog } from "./RichTable";
-import { TABLE_FILE_MAX_BYTES, tableDelimiter, type TextTable } from "@/lib/table-data";
+import { TABLE_FILE_MAX_BYTES, readTableResponse, tableDelimiter, type TextTable } from "@/lib/table-data";
 import { t } from "@/lib/i18n";
 import { scrollTabsWithWheel } from "@/lib/tab-wheel-scroll";
 import { isXlsxName, type SheetTable } from "@/lib/xlsx-data";
 import { readBoundedBytes } from "@/lib/pdf-view";
 import { isJsonName } from "@/lib/json-tree";
 
-/** Bound chunked responses too; this is a preview limit, not a download limit. */
-export async function readTableResponse(response: Response, signal: AbortSignal): Promise<string> {
-  if (Number(response.headers.get("content-length")) > TABLE_FILE_MAX_BYTES) {
-    await response.body?.cancel(); throw new Error("size");
-  }
-  const reader = response.body?.getReader();
-  if (!reader) return "";
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  let size = 0, text = "";
-  try {
-    while (true) {
-      signal.throwIfAborted();
-      const part = await reader.read();
-      if (part.done) break;
-      size += part.value.byteLength;
-      if (size > TABLE_FILE_MAX_BYTES) throw new Error("size");
-      text += decoder.decode(part.value, { stream: true });
-    }
-    return text + decoder.decode();
-  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
-}
-
 /** What a message file previews as in the app, from its name. */
-export function filePreviewKind(name: string, path = ""): "table" | "xlsx" | "pdf" | "json" | null {
+export function filePreviewKind(name: string, path = ""): "table" | "xlsx" | "pdf" | "json" | "html" | null {
   if (tableDelimiter(name) ?? tableDelimiter(path)) return "table";
   if (isXlsxName(name) || isXlsxName(path)) return "xlsx";
   if (/\.pdf$/i.test(name.trim()) || /\.pdf$/i.test(path.trim())) return "pdf";
   if (isJsonName(name) || isJsonName(path)) return "json";
+  if (/\.html?$/i.test(name.trim()) || /\.html?$/i.test(path.trim())) return "html";
   return null;
 }
 
@@ -44,12 +24,16 @@ const PdfViewer = lazy(() => import("./PdfViewer"));
 const JsonViewer = lazy(() => import("./JsonViewer"));
 
 /** The preview button next to a message file: a table dialog for CSV, TSV
- * and XLSX, the PDF viewer for a PDF, a collapsible tree for JSON, nothing for other files. */
+ * and XLSX, the PDF viewer for a PDF, a collapsible tree for JSON, a
+ * sandboxed HTML frame for .html/.htm, nothing for other files. */
 export function FilePreviewButton({ path, name, message }: { path: string; name: string; message: MessageAttachmentContext }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const kind = filePreviewKind(name, path);
   if (!kind) return null;
+  if (kind === "html") {
+    return <HtmlFileButton path={path} name={name} message={message} />;
+  }
   if (kind === "pdf") {
     return <>
       <button ref={trigger} type="button" className="table-action" title={t("pdf.preview", { name })} aria-label={t("pdf.preview", { name })} onClick={() => setOpen(true)}><FileText size={14} /></button>

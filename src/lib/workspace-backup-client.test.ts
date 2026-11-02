@@ -26,12 +26,6 @@ describe("full-backup browser state", () => {
     expect(storage.getItem("omb-show-run-card")).toBe("1");
   });
 
-  it("carries the unconfigured providers visibility choice in a workspace backup", () => {
-    const storage = memory({ "omb-show-unready-providers": "1" });
-    expect(collectWorkspaceClientState(storage)).toEqual({ "omb-show-unready-providers": "1" });
-    applyWorkspaceClientState({ "omb-show-unready-providers": "0" }, storage);
-    expect(storage.getItem("omb-show-unready-providers")).toBe("0");
-  });
 
   it("carries the send key choice in a workspace backup", () => {
     const storage = memory({ [SEND_KEY_KEY]: "mod-enter" });

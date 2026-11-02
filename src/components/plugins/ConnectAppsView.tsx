@@ -28,6 +28,7 @@ import {
   type PluginSection,
   type PluginTypeFilter,
 } from "@/lib/plugins-model";
+import { BackButton } from "../Breadcrumb";
 import { CATEGORY_MODAL } from "../category-modal";
 import { PluginIcon, PluginStatusLabel } from "./PluginParts";
 
@@ -145,6 +146,8 @@ export function connectedCounts(input: { entries: readonly { status: PluginItem[
 export interface ConnectAppsViewProps {
   tab: ConnectAppsTab;
   onTab: (tab: ConnectAppsTab) => void;
+  /** Leave the Connect apps view (content frame back). */
+  onBack?: () => void;
   /** tabs with nothing to show are left out (Sources when nothing reads
    * or changes a source) */
   tabs?: readonly ConnectAppsTab[];
@@ -177,25 +180,35 @@ export interface ConnectAppsViewProps {
 }
 
 export function ConnectAppsView(props: ConnectAppsViewProps) {
-  const { tab, onTab, tabs = CONNECT_APPS_TABS, counts = {}, scope, scopeNote, search, results, page, notices, refreshing, onRefresh } = props;
+  const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, counts = {}, scope, scopeNote, search, results, page, notices, refreshing, onRefresh } = props;
   const shown = tabs.includes(tab) ? tab : tabs.includes("discover") ? "discover" : tabs[0] ?? "discover";
   // Bots is a pane of its own (its list scrolls, its pages have a back row),
   // laid out as a page opened from a tab
   const pane = !results && (page !== undefined || shown === "bots");
+  const titleBlock = (
+    <>
+      <h2 id="plugins-title" className={CATEGORY_MODAL.title}>{t("connectApps.title")}</h2>
+      {/* the scope and the one search share a line (2026-10-29, the owner):
+          the search, compact, on the scope's right; narrow, it wraps under it */}
+      {(scope || search) && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2" data-plugins-scope-row>
+          {/* on every tab, so nothing below it moves (Pages and Bots turn it off) */}
+          {scope && <div className="shrink-0" data-plugins-scope-slot>{scope}</div>}
+          {search && <div className="min-w-[200px] flex-1 sm:ml-auto sm:max-w-[320px]" data-plugins-search-slot>{search}</div>}
+        </div>
+      )}
+      {scopeNote}
+    </>
+  );
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-plugins-main={shown}>
-      <header className={CATEGORY_MODAL.titleBar}>
-        <h2 id="plugins-title" className={CATEGORY_MODAL.title}>{t("connectApps.title")}</h2>
-        {/* the scope and the one search share a line (2026-10-29, the owner):
-            the search, compact, on the scope's right; narrow, it wraps under it */}
-        {(scope || search) && (
-          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2" data-plugins-scope-row>
-            {/* on every tab, so nothing below it moves (Pages and Bots turn it off) */}
-            {scope && <div className="shrink-0" data-plugins-scope-slot>{scope}</div>}
-            {search && <div className="min-w-[200px] flex-1 sm:ml-auto sm:max-w-[320px]" data-plugins-search-slot>{search}</div>}
-          </div>
-        )}
-        {scopeNote}
+      <header className={cn(CATEGORY_MODAL.titleBar, onBack && "flex items-start gap-2")}>
+        {onBack ? (
+          <>
+            <BackButton onBack={onBack} data={{ "data-apps-back": "" }} />
+            <div className="min-w-0 flex-1">{titleBlock}</div>
+          </>
+        ) : titleBlock}
       </header>
       <div className="flex shrink-0 items-end gap-2 border-b border-hairline-weak px-4 sm:px-8" data-plugins-manage-bar>
         <div role="tablist" aria-label={t("connectApps.tabsAria")} className="flex min-w-0 flex-1 gap-5 overflow-x-auto" data-plugins-manage-tabs>

@@ -20,7 +20,7 @@ it.each(["auto", "rtl", "ltr"])("shares the %s direction between the native inpu
 it("sizes the composer and its mirror from one rule, 16 px on phones", async () => {
   const { readFileSync } = await import("node:fs");
   const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
-  const composer = readFileSync(new URL("./Composer.tsx", import.meta.url), "utf8");
+  const composer = readFileSync(new URL("./Composer.tsx-parts/ComposerEditor.tsx", import.meta.url), "utf8");
   expect(css).toMatch(/\.chat-input-text,\s*\.mention-editor-mirror\s*\{\s*font-size: 13px;\s*line-height: 20px;/);
   expect(css).toMatch(/@media \(pointer: coarse\), \(max-width: 767px\) \{\s*\.chat-input-text,\s*\.mention-editor-mirror\s*\{\s*font-size: 16px;\s*line-height: 24px;/);
   expect(css.match(/\.mention-editor-mirror\s*\{[^}]*\}/)?.[0]).not.toMatch(/font-size|line-height/);

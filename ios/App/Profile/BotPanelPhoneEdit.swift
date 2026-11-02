@@ -1,15 +1,12 @@
-// Edit bot > Identity on the phone (the Grok Bot layout, 2026-10-27):
+// Edit bot identity fields and Voice calls (lots 2 and 3, 2026-11-01):
 // the avatar with a pencil badge, then the Name, Role and Description
-// fields (the short blurb rosters and other bots show) in
-// `PhoneBotIdentityFields`, and the Voice calls card (Voice, Speed,
-// Language as menus) in `PhoneBotCallVoiceCard`. The tree (`BotEditTree`)
-// places them with Appearance > Avatar and Voice & alerts on the page.
+// fields in `PhoneBotIdentityFields`, and the Voice calls card (Voice,
+// Speed, Language as menus) in `PhoneBotCallVoiceCard`. On the phone root
+// these sit on one page; drafts of the text fields save on Done.
 //
-// Name, Role and Description save when the field is left or Return is
-// pressed (`DesktopInlineEdit.commit`, as the panel's inline name does).
 // Voice, Speed and Language are the call's own settings
 // (`VoiceModeSettings`, key `omb.voiceMode.v1`), the same values the call's
-// gear card changes.
+// gear card changes. Voice labels show with a capital first letter.
 import CompanionCore
 import SwiftUI
 
@@ -19,6 +16,10 @@ struct PhoneBotIdentityFields: View {
     let bot: Bot
     /// Opens the avatar editor (the badge and the Avatar row).
     let onAvatar: () -> Void
+    /// When false (Edit root, lot 2), fields stay as drafts until Done.
+    var autosave: Bool = true
+    var isDirty: Binding<Bool> = .constant(false)
+    var registerCommit: ((@escaping () -> Void) -> Void)? = nil
 
     private enum Field: Hashable { case name, title, description }
 
@@ -40,21 +41,22 @@ struct PhoneBotIdentityFields: View {
             descriptionField
         }
         .onAppear {
-            name = current.name
-            title = current.title
-            blurb = current.description
+            loadFromBot()
+            registerCommit? { commitAll() }
         }
-        // leaving the page saves what is still in a field
+        .onValueChange(of: bot.id) { _ in loadFromBot() }
         .onDisappear {
-            commitName()
-            commitTitle()
-            commitBlurb()
+            if autosave { commitAll() }
         }
         .onValueChange(of: focus) { now in
+            guard autosave else { return }
             if now != .name { commitName() }
             if now != .title { commitTitle() }
             if now != .description { commitBlurb() }
         }
+        .onValueChange(of: name) { _ in refreshDirty() }
+        .onValueChange(of: title) { _ in refreshDirty() }
+        .onValueChange(of: blurb) { _ in refreshDirty() }
     }
 
     // MARK: Avatar
@@ -123,6 +125,26 @@ struct PhoneBotIdentityFields: View {
             .accessibilityIdentifier("panel-edit-description")
     }
 
+    private func loadFromBot() {
+        name = current.name
+        title = current.title
+        blurb = current.description
+        refreshDirty()
+    }
+
+    private func refreshDirty() {
+        let dirty = name != current.name || title != current.title || blurb != current.description
+        if isDirty.wrappedValue != dirty { isDirty.wrappedValue = dirty }
+    }
+
+    private func commitAll() {
+        focus = nil
+        commitName()
+        commitTitle()
+        commitBlurb()
+        refreshDirty()
+    }
+
     private func commitBlurb() {
         guard let next = DesktopInlineEdit.commit(draft: blurb, current: current.description, required: false) else { return }
         var patch = BotProfilePatch()
@@ -133,7 +155,6 @@ struct PhoneBotIdentityFields: View {
     private func commitName() {
         let draft = String(name.prefix(100))
         guard let next = DesktopInlineEdit.commit(draft: draft, current: current.name, required: true) else {
-            // an empty name goes back to the bot's own
             if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { name = current.name }
             return
         }
@@ -156,7 +177,7 @@ struct PhoneBotIdentityFields: View {
     }
 }
 
-/// Edit bot > Identity > Voice calls: the call's voice, speed and language.
+/// Edit bot > Voice calls: the call's voice, speed and language.
 struct PhoneBotCallVoiceCard: View {
     @Environment(\.themePalette) var themePalette
     @EnvironmentObject private var session: Session
@@ -172,9 +193,9 @@ struct PhoneBotCallVoiceCard: View {
             menuRow("Voice", value: voiceName, id: "panel-edit-voice") {
                 Picker(selection: voiceBinding) {
                     Text("Not set").tag("")
-                    ForEach(voices ?? []) { voice in Text(verbatim: voice.label).tag(voice.id) }
+                    ForEach(voices ?? []) { voice in Text(verbatim: Self.capitalizedLabel(voice.label)).tag(voice.id) }
                     if !botVoice.isEmpty, !(voices ?? []).contains(where: { $0.id == botVoice }) {
-                        Text(verbatim: botVoice).tag(botVoice)
+                        Text(verbatim: Self.capitalizedLabel(botVoice)).tag(botVoice)
                     }
                 } label: { Text("Voice") }
             }
@@ -217,11 +238,20 @@ struct PhoneBotCallVoiceCard: View {
 
     private var voiceName: String {
         guard !botVoice.isEmpty else { return String(localized: "Not set") }
-        return voices?.first { $0.id == botVoice }?.label ?? botVoice
+        if let label = voices?.first(where: { $0.id == botVoice })?.label {
+            return Self.capitalizedLabel(label)
+        }
+        return Self.capitalizedLabel(botVoice)
     }
 
     private var languageName: String {
         settings.language == "auto" ? String(localized: "Auto") : VoiceModeSettings.languageLabel(settings.language)
+    }
+
+    /// First letter capital (`ara` -> `Ara`), as Grok Bot shows voice names.
+    static func capitalizedLabel(_ raw: String) -> String {
+        guard let first = raw.first else { return raw }
+        return String(first).uppercased() + raw.dropFirst()
     }
 
     private func binding<Value>(_ key: WritableKeyPath<VoiceModeSettings, Value>) -> Binding<Value> {

@@ -18,7 +18,6 @@ import { setAdvancedMode, useAdvancedMode } from "@/lib/interface-mode";
 import { setShowAllHistory, setShowSuggestions, useShowAllHistory, useShowSuggestions } from "@/lib/panel-visibility";
 import { setShowThreads, setThreadsLocation, useShowThreadsChoice, useThreadsLocationChoice, type ThreadsLocation } from "@/lib/thread-preferences";
 import { FRESH_TOPIC_AFTER_CHOICES, useFreshTopicAfter, writeFreshTopicAfter, type FreshTopicAfterHours } from "@/lib/fresh-topic";
-import { setShowUnreadyProviders, useShowUnreadyProviders } from "@/lib/unready-providers-preference";
 import { parseSidebarDensity, setSidebarDensity, SIDEBAR_DENSITIES, useSidebarDensity, type SidebarDensity } from "@/lib/sidebar-preferences";
 import { setShowRunCard, useShowRunCard } from "@/lib/run-card-preferences";
 import { setStreamReplies, useStreamReplies } from "@/lib/stream-replies-preference";
@@ -412,7 +411,6 @@ export function AppearanceSettings() {
   const runCard = useShowRunCard();
   const inspector = useShowInspectorButton();
   const turnTiming = useShowTurnTiming();
-  const unready = useShowUnreadyProviders();
   const logo = useShowSidebarLogo();
   const peopleApart = useSidebarPeopleApart();
   const routinesBadge = useShowRoutinesBadge();
@@ -447,7 +445,6 @@ export function AppearanceSettings() {
         {advanced && <SwitchLine label={t("settings.runCard.title")} ariaLabel={t("settings.runCard.show")} checked={runCard} onChange={setShowRunCard} rowId="runCard" />}
         {advanced && <SwitchLine label={t("settings.inspectorButton.title")} ariaLabel={t("settings.inspectorButton.show")} checked={inspector} onChange={setShowInspectorButton} rowId="inspectorButton" />}
         {advanced && <SwitchLine label={t("settings.turnTiming.title")} ariaLabel={t("settings.turnTiming.show")} checked={turnTiming} onChange={setShowTurnTiming} rowId="turnTiming" />}
-        {advanced && <SwitchLine label={t("settings.unreadyProviders.title")} ariaLabel={t("settings.unreadyProviders.show")} checked={unready} onChange={setShowUnreadyProviders} rowId="unreadyProviders" />}
       </SettingsGroup>
       <SettingsGroup title={t("settings.group.sidebar")} groupId="sidebar">
         <SidebarDensityRow />

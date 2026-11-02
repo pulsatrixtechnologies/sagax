@@ -68,9 +68,10 @@ export type Status =
   | "resume"          // every child settled, or one it waits on parked a new question; owes its own follow-up turn
   | "completed"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "expired";        // a wait on the person (or queue / decision-card) ran out: not run, not refused
 
-export const TERMINAL: readonly Status[] = ["completed", "failed", "cancelled"];
+export const TERMINAL: readonly Status[] = ["completed", "failed", "cancelled", "expired"];
 
 /** Why it ended the way it did, typed so a requester can branch on it. */
 export type Outcome =
@@ -107,6 +108,10 @@ export interface Assignment {
   brief: string;
   /** The requester's own completion criterion, if it gave one. */
   doneWhen?: string;
+  /** Scorecard R6: when the person does not answer in time, the harness
+   * applies this as their answer and resumes (with a note that it was the
+   * default). Absent: the wait expires as status expired. */
+  defaultAnswer?: string;
   status: Status;
   outcome?: Outcome;
   outcomeDetail?: string;
@@ -191,6 +196,9 @@ export type EventKind =
    * reported) is due to resume again with the same results, instead of the
    * host sending the request again: its earlier outcome is withdrawn. */
   | "reopened"
+  /** A blocked or failed assignment was retried in place: the open attempt
+   * ended and a new one began on the same destination (DEL-02). */
+  | "retried"
   /** The person's review card allowed queued work it held (the sender's
    * peer comms need review): it may now start. No status change. */
   | "approved";
@@ -232,6 +240,8 @@ export interface EnqueueRequest {
   reply?: Reply;
   brief: string;
   doneWhen?: string;
+  /** Optional answer used if the person never replies (R6). */
+  defaultAnswer?: string;
   rework?: boolean;
   /** The requester's own level and, for a Chief lineage, the Chief
    * conversation's level, as the harness knows them. */
@@ -374,7 +384,9 @@ export interface Limits {
    * own question and a room's keep inputWaitMs. */
   delegationInputWaitMs: number;
   /** A parked question is shown again (runner.remind) after this long, then
-   * every day, until it is answered or expires. */
+   * every day, until it is answered or expires. A delegation (child outside
+   * a room) instead reminds once at half of delegationInputWaitMs (R6:
+   * mid-delay push, 120 of 240 min). */
   inputRemindMs: number;
   /** A queued assignment whose doneWhen requires a person decision card
    * (ask_choice / native equivalents) expires after this, so a busy hub

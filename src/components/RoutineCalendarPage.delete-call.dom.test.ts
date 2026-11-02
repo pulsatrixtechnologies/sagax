@@ -2,6 +2,7 @@
 // #1754: deleting a scheduled call that the server refuses must show the
 // error in the event dialog and leave it open (same pattern as joinRoom).
 import { act, createElement } from "react";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot } from "@/state/store";
@@ -10,7 +11,6 @@ import type { CalendarCall } from "@/lib/calendar-calls";
 const fixture = vi.hoisted(() => ({
   api: vi.fn(),
   dispatch: vi.fn(),
-  confirm: vi.fn(() => true),
 }));
 vi.mock("@/hooks/use-modal-dialog", () => ({ useModalDialog: () => {} }));
 vi.mock("@/state/store", async (importOriginal) => {
@@ -56,9 +56,6 @@ const flush = async () => { await act(async () => { await new Promise((resolve) 
 beforeEach(() => {
   fixture.api.mockReset();
   fixture.dispatch.mockReset();
-  fixture.confirm.mockReset();
-  fixture.confirm.mockReturnValue(true);
-  vi.stubGlobal("confirm", fixture.confirm);
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -75,18 +72,19 @@ describe("EventDetails scheduled call delete (#1754)", () => {
     const onClose = vi.fn();
     const onCallChanged = vi.fn();
     act(() => {
-      root.render(createElement(EventDetails, {
+      root.render(createElement(ConfirmProvider, null, createElement(EventDetails, {
         item: { kind: "call", id: call.id, at: call.schedule.type === "once" ? call.schedule.at : 0, durationMinutes: call.durationMinutes, call },
         bots: [bot],
         onClose,
         onEdit: vi.fn(),
         onCallChanged,
         onOpenRoom: vi.fn(),
-      }));
+      })));
     });
     const trash = container.querySelector(`button[title="${t("common.delete")}"]`) as HTMLButtonElement;
     expect(trash).toBeTruthy();
     await act(async () => { trash.click(); });
+    await act(async () => { (document.querySelector("[data-confirm-action]") as HTMLButtonElement).click(); });
     await flush();
     expect(fixture.api).toHaveBeenCalledWith(`/api/calendar-calls/${call.id}`, { method: "DELETE" });
     expect(onCallChanged).not.toHaveBeenCalled();
@@ -100,17 +98,18 @@ describe("EventDetails scheduled call delete (#1754)", () => {
     const onClose = vi.fn();
     const onCallChanged = vi.fn();
     act(() => {
-      root.render(createElement(EventDetails, {
+      root.render(createElement(ConfirmProvider, null, createElement(EventDetails, {
         item: { kind: "call", id: call.id, at: call.schedule.type === "once" ? call.schedule.at : 0, durationMinutes: call.durationMinutes, call },
         bots: [bot],
         onClose,
         onEdit: vi.fn(),
         onCallChanged,
         onOpenRoom: vi.fn(),
-      }));
+      })));
     });
     const trash = container.querySelector(`button[title="${t("common.delete")}"]`) as HTMLButtonElement;
     await act(async () => { trash.click(); });
+    await act(async () => { (document.querySelector("[data-confirm-action]") as HTMLButtonElement).click(); });
     await flush();
     expect(onCallChanged).toHaveBeenCalledWith(call.id);
     expect(onClose).toHaveBeenCalledOnce();

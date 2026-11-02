@@ -75,8 +75,65 @@ final class OutboundCardTests: XCTestCase {
         XCTAssertEqual(card.voicemail, "Alex will call back")
         XCTAssertNil(card.result)
         XCTAssertNil(OutboundCardRules.status(card))
-        XCTAssertEqual(OutboundCardRules.status(card, status: "done"), .callInProgress)
+        XCTAssertNil(OutboundCardRules.status(card, status: "done"), "live chrome owns the status line")
+        XCTAssertTrue({
+            var live = card
+            live.status = "done"
+            return live.isLiveConversation
+        }())
         XCTAssertEqual(OutboundCardRules.answerPath(card), "/api/me/phone-calls/call_0123456789abcdef/answer")
+        XCTAssertEqual(OutboundCardRules.hangupPath(card), "/api/me/phone-calls/call_0123456789abcdef/hangup")
+    }
+
+    func testLiveConversationFieldsDecode() throws {
+        let message = try JSONDecoder().decode(Message.self, from: Data(#"""
+        {"id":"m","role":"bot","kind":"text","at":1,"text":"x",
+         "outbound":{"kind":"call","id":"call_0123456789abcdef","status":"done","botName":"Rocket","destination":"+1 514 555 0142",
+                     "mode":"conversation","calleeName":"Thermopompes Québec","phase":"in_call","liveStartedAt":1700000000000,
+                     "liveTranscript":[{"speaker":"bot","text":"Bonjour","at":1700000001000},{"speaker":"callee","text":"Oui"},{"speaker":"system","text":"note"}],
+                     "liveEvents":[{"kind":"dtmf","detail":"1#","at":1700000002000},{"kind":"hold","detail":"","at":1700000001500},{"kind":"fax","detail":"x","at":1}],
+                     "recordingUrl":"/api/me/phone-calls/call_0123456789abcdef/recording"}}
+        """#.utf8))
+        let card = try XCTUnwrap(message.outbound)
+        XCTAssertTrue(card.isLiveConversation)
+        XCTAssertEqual(card.calleeName, "Thermopompes Québec")
+        XCTAssertEqual(card.phase, "in_call")
+        XCTAssertEqual(card.liveStartedAt, 1_700_000_000_000)
+        XCTAssertEqual(card.liveTranscript?.map(\.speaker), ["bot", "callee", "system"])
+        XCTAssertEqual(card.liveEvents?.map(\.kind), [.dtmf, .hold, .unknown])
+        XCTAssertEqual(OutboundCardRules.recordingPath(card), "/api/me/phone-calls/call_0123456789abcdef/recording")
+        XCTAssertEqual(OutboundCardRules.liveElapsed(startedAt: 1_000, now: 65_000), 64)
+        XCTAssertEqual(OutboundCallResult.duration(OutboundCardRules.liveElapsed(startedAt: 0, now: 247_000)), "4:07")
+        XCTAssertNil(OutboundCardRules.status(card))
+    }
+
+    func testPhoneCallConsentDecodesOnAnOptionsCard() throws {
+        let message = try JSONDecoder().decode(Message.self, from: Data(#"""
+        {"id":"m","role":"bot","kind":"options","at":1,"text":"Phone calls need your consent once before a bot may place them.",
+         "card":{"requestId":"pcc_0123456789abcdef","title":"Allow phone calls for your bots","subtitle":"Before your bots can place calls.",
+                 "options":["Accept","Decline"],
+                 "phoneCallConsent":{"requestId":"pcc_0123456789abcdef","botId":"bot_1","threadId":"t1","status":"pending","version":1}}}
+        """#.utf8))
+        let card = try XCTUnwrap(message.card)
+        let consent = try XCTUnwrap(card.phoneCallConsent)
+        XCTAssertEqual(consent.status, "pending")
+        XCTAssertEqual(consent.version, 1)
+        XCTAssertTrue(consent.isPending)
+        XCTAssertFalse(consent.isAccepted)
+        XCTAssertEqual(PhoneCallConsentRules.behavior(for: "Accept"), "allow")
+        XCTAssertEqual(PhoneCallConsentRules.behavior(for: "Accepter"), "allow")
+        XCTAssertEqual(PhoneCallConsentRules.behavior(for: "Decline"), "deny")
+        XCTAssertEqual(PhoneCallConsentRules.behavior(for: "Refuser"), "deny")
+        XCTAssertEqual(PhoneCallConsentRules.behavior(for: "yes"), "deny")
+        let weird = try JSONDecoder().decode(Message.self, from: Data(#"""
+        {"id":"m2","role":"bot","kind":"options","at":2,"text":"x",
+         "card":{"requestId":"pcc_x","title":"t","subtitle":"","options":["Accept","Decline"],
+                 "phoneCallConsent":{"requestId":"pcc_x","botId":"b","threadId":"t","status":"accepted","version":"1","acceptedAt":1700000000000,"extra":true}}}
+        """#.utf8))
+        let accepted = try XCTUnwrap(weird.card?.phoneCallConsent)
+        XCTAssertTrue(accepted.isAccepted)
+        XCTAssertEqual(accepted.version, 1)
+        XCTAssertEqual(accepted.acceptedAt, 1_700_000_000_000)
     }
 
     func testAConversationResultDecodes() throws {

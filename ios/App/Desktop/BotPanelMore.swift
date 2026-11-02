@@ -27,7 +27,7 @@ extension DesktopPanelSection {
         case .worksOn: "Computer"
         case .model: "Model"
         case .permissions: "Permissions"
-        case .voice: "Voice & alerts"
+        case .voice: "Voice options"
         case .visibility: "Who can see it"
         case .sharing: "Shared with"
         case .perspicax: "Perspicax Profiles"
@@ -48,7 +48,7 @@ extension DesktopPanelSection {
         case .worksOn: String(localized: "Computer")
         case .model: String(localized: "Model")
         case .permissions: String(localized: "Permissions")
-        case .voice: String(localized: "Voice & alerts")
+        case .voice: String(localized: "Voice options")
         case .visibility: String(localized: "Who can see it")
         case .sharing: String(localized: "Shared with")
         case .perspicax: String(localized: "Perspicax Profiles")
@@ -663,30 +663,54 @@ struct BotPanelSkills: View {
     }
 
     private func row(_ skill: ManagedSkill) -> some View {
-        HStack(spacing: 10) {
-            Button { Task { await model.view(skill) } } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: skill.name).font(theme.font(13)).foregroundStyle(theme.ink).lineLimit(1)
-                    if !skill.description.isEmpty {
-                        Text(verbatim: skill.description).font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).lineLimit(2)
+        let title = DisplayHygiene.skillTitle(skill)
+        let slug = DisplayHygiene.skillSlug(skill)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Button { Task { await model.view(skill) } } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        // Lot 8: readable title first; slug as a discreet subline.
+                        Text(verbatim: title)
+                            .font(theme.font(13))
+                            .foregroundStyle(theme.ink)
+                            .lineLimit(2)
+                        if slug != title {
+                            Text(verbatim: slug)
+                                .font(Theme.mono(11))
+                                .foregroundStyle(theme.inkSecondary)
+                                .lineLimit(1)
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                PanelSwitch(label: "Enabled", isOn: skill.enabled, disabled: model.working == skill.name) { _ in
+                    Task { await model.toggle(skill) }
+                }
+                Button { removing = skill } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 12))
+                        .foregroundStyle(theme.inkSecondary)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.working == skill.name)
+                .accessibilityLabel(Text("Remove skill"))
             }
-            .buttonStyle(.plain)
-            PanelSwitch(label: "Enabled", isOn: skill.enabled, disabled: model.working == skill.name) { _ in
-                Task { await model.toggle(skill) }
+            if !skill.source.isEmpty {
+                DisclosureGroup {
+                    Text(verbatim: skill.source)
+                        .font(Theme.mono(11))
+                        .foregroundStyle(theme.inkSecondary)
+                        .textSelection(.enabled)
+                } label: {
+                    Text(String(localized: "Source"))
+                        .font(theme.font(11))
+                        .foregroundStyle(theme.inkSecondary)
+                }
+                .accessibilityIdentifier("desktop-skill-source.\(skill.name)")
             }
-            Button { removing = skill } label: {
-                Image(systemName: "trash")
-                    .font(.system(size: 12))
-                    .foregroundStyle(theme.inkSecondary)
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .disabled(model.working == skill.name)
-            .accessibilityLabel(Text("Remove skill"))
         }
         .padding(.vertical, 6)
     }
@@ -751,14 +775,15 @@ private struct BotPanelMemory: View {
                     .panelText(13, 21.125)
                     .foregroundStyle(theme.inkSecondary)
                     .padding(.top, 4)
-                if let overview = memory.overview {
-                    HStack(spacing: 8) {
-                        Text(verbatim: overview.workspacePath)
+                // Lot 8: path (and any bot id in it) stays behind Show path;
+                // Copy still puts the full path on the pasteboard.
+                if let overview = memory.overview, !overview.workspacePath.isEmpty {
+                    DisclosureGroup {
+                        Text(verbatim: DisplayHygiene.displayWorkspacePath(overview.workspacePath))
                             .font(Theme.mono(12))
-                            .foregroundStyle(theme.inkSecondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .foregroundStyle(theme.ink)
+                            .textSelection(.enabled)
+                            .accessibilityIdentifier("desktop-memory-path-display")
                         Button {
                             let path = overview.workspacePath
                             Task.detached(priority: .userInitiated) { UIPasteboard.general.string = path }
@@ -771,9 +796,15 @@ private struct BotPanelMemory: View {
                                 .background(theme.control, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                         .buttonStyle(.plain)
+                        .padding(.top, 6)
                         .accessibilityIdentifier("desktop-memory-files")
+                    } label: {
+                        Text(String(localized: "Show path"))
+                            .font(theme.font(12))
+                            .foregroundStyle(theme.inkSecondary)
                     }
                     .padding(.top, 12)
+                    .accessibilityIdentifier("desktop-memory-show-path")
                 }
             }
             if let capacity = memory.overview?.index {
@@ -1107,10 +1138,9 @@ private struct BotPanelMemory: View {
 
 // MARK: - History
 
-/// History (`HistorySection.tsx`): a bordered card per change, newest first
-/// (the time secondary, then who, how and what, 13 / 21.125), and "Undo
-/// this change" (12 medium accent) beside a soul row that can be undone,
-/// confirmed as on the desktop; the list reloads after.
+/// History (`HistorySection.tsx`): a bordered card per change, newest first.
+/// Lot 8: readable phrase without ids or sizes; those sit behind Show
+/// details with Copy, same as the phone.
 private struct BotPanelHistory: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
@@ -1121,6 +1151,9 @@ private struct BotPanelHistory: View {
     @State private var rollingBack = false
     @State private var target: BotHistoryRow?
     @State private var request = 0
+    @State private var expanded: Set<String> = []
+
+    private var current: Bot { session.state.bot(bot.id) ?? bot }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1150,17 +1183,19 @@ private struct BotPanelHistory: View {
             Button(String(localized: "Restore instructions")) { Task { await rollback(row) } }
             Button(String(localized: "Cancel"), role: .cancel) { target = nil }
         } message: { _ in
-            Text(String(localized: "Replaces current SOUL with the version before this change. Current version stays in History."))
+            Text(String(localized: "Replaces current SOUL with the version before this change. Current version stays in Changes."))
         }
     }
 
     private func card(_ row: BotHistoryRow, revision: String?) -> some View {
-        PanelCard {
+        let details = DisplayHygiene.historyDetails(row)
+        return PanelCard {
             HStack(alignment: .top, spacing: 12) {
-                (Text(verbatim: DesktopWhenLabel.label(row.at)).foregroundColor(theme.inkSecondary)
-                 + Text(verbatim: " · " + String(localized: "\(row.actor) via \(row.via)") + " · \(row.summary)").foregroundColor(theme.ink))
+                Text(verbatim: DisplayHygiene.historyPhrase(row, botName: current.name))
+                    .foregroundColor(theme.ink)
                     .panelText(13, 21.125)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("desktop-history-line.\(row.id)")
                 if row.restorable {
                     Button { target = row } label: {
                         Text("Undo this change")
@@ -1183,6 +1218,43 @@ private struct BotPanelHistory: View {
                     .panelText(12, 19.5)
                     .foregroundStyle(theme.inkSecondary)
                     .padding(.top, 8)
+            }
+            if !details.isEmpty {
+                DisclosureGroup(
+                    isExpanded: Binding(
+                        get: { expanded.contains(row.id) },
+                        set: { open in
+                            if open { expanded.insert(row.id) } else { expanded.remove(row.id) }
+                        }
+                    )
+                ) {
+                    ForEach(Array(details.enumerated()), id: \.offset) { _, detail in
+                        HStack(alignment: .top, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(verbatim: detail.label)
+                                    .font(theme.font(11))
+                                    .foregroundStyle(theme.inkSecondary)
+                                Text(verbatim: detail.value)
+                                    .font(theme.font(12))
+                                    .foregroundStyle(theme.ink)
+                                    .textSelection(.enabled)
+                            }
+                            Spacer(minLength: 0)
+                            Button(String(localized: "Copy")) {
+                                PlatformBridge.copyToPasteboard(detail.value)
+                            }
+                            .font(theme.font(11))
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.top, 4)
+                    }
+                } label: {
+                    Text(String(localized: "Show details"))
+                        .font(theme.font(12))
+                        .foregroundStyle(theme.inkSecondary)
+                }
+                .padding(.top, 6)
+                .accessibilityIdentifier("desktop-history-details.\(row.id)")
             }
         }
     }

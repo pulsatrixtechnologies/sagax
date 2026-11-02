@@ -4,6 +4,7 @@
 // and does not capture its own screenshots while they keep arriving; when
 // they stop, its own capture takes over again.
 import { createElement } from "react";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -65,7 +66,7 @@ const engine = {
 let root: Root;
 let value: Parameters<typeof BotEditorStore>[0]["value"];
 const render = (shown: Bot) => {
-  flushSync(() => root.render(createElement(BotEditorStore, { value, children: createElement(ComputerPanel, { bot: shown }) })));
+  flushSync(() => root.render(createElement(BotEditorStore, { value, children: createElement(ConfirmProvider, null, createElement(ComputerPanel, { bot: shown })) })));
 };
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 const settle = async () => {

@@ -202,7 +202,7 @@ describe("BotModelsSettings page", () => {
     expect(summary?.textContent).toContain("Lab Bot");
     expect(summary?.textContent).toMatch(/to Auto/);
     act(() => {
-      (document.querySelector("[data-bot-models-bulk-apply]") as HTMLButtonElement).click();
+      (document.querySelector("[data-confirm-action]") as HTMLButtonElement).click();
     });
     await flush();
     expect(fixture.dispatch).toHaveBeenCalled();
@@ -228,9 +228,9 @@ describe("BotModelsSettings page", () => {
       (document.querySelector("[data-bot-models-bulk-pick]") as HTMLButtonElement).click();
     });
     await flush();
-    expect(document.querySelector("[data-bot-models-bulk-confirm]")).not.toBeNull();
+    expect(document.querySelector("[data-bot-models-bulk-confirm]") ?? container.querySelector("[data-bot-models-bulk-confirm]")).not.toBeNull();
     act(() => {
-      (document.querySelector("[data-bot-models-bulk-apply]") as HTMLButtonElement).click();
+      (document.querySelector("[data-confirm-action]") as HTMLButtonElement).click();
     });
     await flush();
     expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({

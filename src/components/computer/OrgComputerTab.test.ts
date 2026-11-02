@@ -3,8 +3,11 @@
 // Works on chooses (Works on itself is never a control on this screen), a
 // picker of the screens to look at (Cloud and each PC by its name), the
 // usage panel, and words for every state, never the desktop's raw answer.
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { createElement, type ReactNode } from "react";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
+
+const renderToStaticMarkup = (node: ReactNode) => renderMarkup(createElement(ConfirmProvider, null, node));
 import { describe, expect, it } from "vitest";
 
 import { chosenComputer, computerChoices, type DesktopBridgeStatus } from "@/lib/desktop-bridge";

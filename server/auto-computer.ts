@@ -10,10 +10,12 @@
 //   local_vm       the Local VM on their computer (sagax-desktop local_vm)
 //   browser        the built-in browser only, for pure web work
 //
-// Where an Auto turn starts (autoStartTarget, 2026-10-15): their own
-// computer when it is connected (a routine only when they allowed routines on
-// it), else the cloud; a thread opened with a workspace (start_thread,
-// create_agent) starts there when it is allowed, else falls back and says so.
+// Where an Auto turn starts (autoStartTarget, 2026-10-15; routines 2026-11-01):
+// a person-asked turn prefers their own computer when it is connected, else
+// the cloud. A routine starts in the cloud by default; routinesAllowed only
+// lets computer_select choose this_computer (or local_vm) explicitly. A
+// thread opened with a workspace (start_thread, create_agent) starts there
+// when it is allowed, else falls back and says so.
 //
 // A fixed Works on (Cloud, Local VM, This computer, Browser, Off) stays
 // fixed: the tool only reports it. Nothing here widens what a turn may
@@ -192,7 +194,7 @@ export function autoComputerToolRefusal(
  * Nothing here changes from one turn to the next; where a turn starts and
  * what it can reach is the per-message line (autoComputerGuidance). */
 export const AUTO_COMPUTER_RULES = [
-  "This bot's Workspace is Auto: you choose where each task or step runs with the computer_select tool (target this_computer, browser, cloud or local_vm, plus a short reason). Each message's <workplace> line says where that turn starts and what is available now. Your choice holds for the next tool calls of this turn and you can switch again mid-task; each new message starts over from the default (the person's computer when it is connected).",
+  "This bot's Workspace is Auto: you choose where each task or step runs with the computer_select tool (target this_computer, browser, cloud or local_vm, plus a short reason). Each message's <workplace> line says where that turn starts and what is available now. Your choice holds for the next tool calls of this turn and you can switch again mid-task; each new message starts over from the default (a person-asked turn: the person's computer when it is connected; a routine: the cloud). Routines may call computer_select for this_computer or local_vm only when the owner allowed routines on their computer.",
   "- this_computer: anything on the person's own machine: their files and folders, their apps, their local network and printers, devices plugged in (USB, camera), Docker on their computer, local dev servers (localhost), their VPN.",
   "- browser: pure web work (read a site, search, fill a web form) with the built-in browser, when nothing on their machine is needed.",
   "On this_computer, web lookups (search, read a page, find a video) stay out of sight too: browse, fetch_url or web search, with the result shown in the chat. computer_use acts on the person's own screen in front of them: use it only when they asked for work on their screen or in their own browser, or no out-of-sight way works, and say so in one line first.",
@@ -221,10 +223,14 @@ export interface AutoStart {
   fallback: WorkspaceFallbackReason | null;
 }
 
-/** Where an Auto turn starts (2026-10-15). Pure: tested on its own.
- * - Default: the person's own computer when their Sagax app is connected
- *   and a person asked; a routine only when the owner allowed routines on
- *   their computer AND it is online, else the cloud.
+/** Where an Auto turn starts (2026-10-15; routines default 2026-11-01). Pure:
+ * tested on its own.
+ * - Default: a person-asked turn prefers the person's own computer when
+ *   their Sagax app is connected; a routine starts in the cloud. The owner
+ *   preference routinesAllowed only permits an explicit computer_select to
+ *   this_computer or local_vm (never the default start).
+ * - When the person's computer is offline before the first turn, a routine
+ *   never tries it: the default is already the cloud.
  * - A thread opened with a workspace (start_thread or create_agent with
  *   `workspace`) wants that place instead.
  * - A place that is not allowed or not available is never used: the turn
@@ -245,7 +251,9 @@ export function autoStartTarget(input: {
     target === "cloud" ? input.sandboxConfigured
       : target === "browser" ? input.browserAvailable
       : desktopUsable;
-  const defaultTarget: AutoComputerTarget = input.routine && !input.routinesAllowed ? "cloud" : "this_computer";
+  // Routines start in the cloud (Owner 2026-11-01). An offline computer is
+  // never the default for a routine, so the first turn does not try it.
+  const defaultTarget: AutoComputerTarget = input.routine ? "cloud" : "this_computer";
   const wanted = input.wanted ?? defaultTarget;
   if (usable(wanted)) return { target: wanted, wanted, fallback: null };
   const order: AutoComputerTarget[] = ["this_computer", "local_vm", "cloud", "browser"];

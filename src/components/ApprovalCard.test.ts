@@ -683,6 +683,96 @@ describe("ApprovalCard for a change that applied on its own", () => {
   });
 });
 
+describe("ApprovalCard rule proposals (propose_rule)", () => {
+  const ruleCard = (answered?: string) => ({
+    title: "Add this approval rule?",
+    subtitle: "Why: You confirmed reading files in Documents\nWhen Ottoline wants to: read files in Documents\nIt should: Allow automatically\nConfirm saves this rule for you. Org Ask first and Refuse rules still win over it.",
+    options: ["Confirm", "Cancel"],
+    requestId: "req-rule-1",
+    tool: "propose_rule",
+    answered,
+    ruleRequest: {
+      version: 1 as const,
+      requestId: "req-rule-1",
+      botId: "bot-1",
+      threadId: "thread-1",
+      ownerId: "person-a",
+      scopeBotId: "bot-1",
+      scopeBotName: "Ottoline",
+      createdAt: 1,
+      reason: "You confirmed reading files in Documents",
+      sentence: "read files in Documents",
+      operation: {
+        action: "add" as const,
+        when: "read files in Documents",
+        behavior: "allow" as const,
+        botId: "bot-1",
+      },
+    },
+  });
+
+  const bot = { id: "bot-1", name: "Ottoline" } as never as Bot;
+
+  it("keeps the proposal card in the thread with Confirm details", () => {
+    const message: Message = {
+      id: "rule-card",
+      role: "bot",
+      kind: "options",
+      at: 1,
+      card: ruleCard(),
+    };
+    const html = renderToStaticMarkup(createElement(ApprovalCard, { bot, message }));
+    expect(html).toContain("Add this approval rule?");
+    expect(html).toContain("read files in Documents");
+    expect(html).toContain("Allow automatically");
+    expect(html).toContain("Waiting for your confirmation below");
+    expect(html).not.toContain("data-approval-waiting");
+  });
+
+  it("records Approval rule saved after confirmation", () => {
+    const message: Message = {
+      id: "rule-card-answered",
+      role: "bot",
+      kind: "options",
+      at: 1,
+      card: ruleCard("allow"),
+    };
+    expect(renderToStaticMarkup(createElement(ApprovalCard, { bot, message }))).toContain("Approval rule saved");
+  });
+
+  it("records Approval rule removed for a remove proposal", () => {
+    const card = {
+      ...ruleCard("allow"),
+      title: "Remove this approval rule?",
+      ruleRequest: {
+        ...ruleCard("allow").ruleRequest,
+        operation: {
+          action: "remove" as const,
+          ruleId: "rule-1",
+          before: { when: "read files in Documents", behavior: "allow" as const, botId: "bot-1" },
+        },
+      },
+    };
+    const message: Message = { id: "rule-remove", role: "bot", kind: "options", at: 1, card };
+    expect(renderToStaticMarkup(createElement(ApprovalCard, { bot, message }))).toContain("Approval rule removed");
+  });
+
+  it("speaks the card title for a rule proposal and labels the dock as Confirm", () => {
+    const message: Message = {
+      id: "rule-dock",
+      role: "bot",
+      kind: "options",
+      at: 1,
+      card: ruleCard(),
+    };
+    const pending: Pending = pendingApprovals([message])[0]!;
+    expect(spokenApprovalPrompt(pending, "Ottoline")).toContain("change an approval rule");
+    const html = openRequestHtml(message, bot);
+    expect(html).toContain("Confirm this approval rule");
+    expect(html).toContain('aria-label="Pending approval-rule confirmation"');
+  });
+});
+
 describe("a card waiting for an organization admin (2026-10-08)", () => {
   it("says what happens next and names the admins when known", () => {
     expect(adminWillAnswerLine(["Alice", "Owner"])).toBe(

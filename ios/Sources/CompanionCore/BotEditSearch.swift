@@ -16,7 +16,10 @@ public enum BotEditSearch {
         .callVoice: ["voix", "voice", "appel", "call", "parler"],
         .callSpeed: ["vitesse", "speed", "débit"],
         .callLanguage: ["langue", "language"],
-        .voiceAlerts: ["voix", "voice", "alertes", "alerts", "notifications", "son", "horaire", "heures calmes", "quiet hours", "schedule"],
+        // More voice options (lot 3): spoken replies, notes, preview.
+        // Notifications live on the bot profile only. Leave "moteur"/"engine"
+        // to the Model row.
+        .voiceAlerts: ["voix", "voice", "alertes", "alerts", "aperçu", "preview", "notes vocales", "voice notes", "lire à voix haute", "read aloud", "elevenlabs", "fish audio"],
         .personality: ["personnalité", "personality", "instructions", "ton", "style", "règles", "rules"],
         .soul: ["âme", "soul", "personnalité", "instructions", "ton", "règles", "rules", "consignes"],
         .skills: ["compétences", "habiletés", "skills", "procédures", "apprendre"],

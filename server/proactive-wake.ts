@@ -35,7 +35,7 @@ import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { writeFileAtomic } from "./atomic.ts";
-import { isClaudeReconnectCondition } from "./drivers/claude-errors.ts";
+import { isEngineReconnectCondition } from "./engine-reconnect-ahead.ts";
 import { ProactiveBudget, type ProactiveBudgetOptions } from "./proactive.ts";
 import { ROUTINE_REPORT_CONTRACT } from "./routine-report.ts";
 import { ROUTINE_RESTARTED } from "./routines.ts";
@@ -93,7 +93,7 @@ export const PROACTIVE_WAKE_BUDGET: ProactiveBudgetOptions = {
   windowMs: 60 * 60_000,
 };
 
-export type ProactiveOfferVerdict = "off" | "gone" | "own" | "hops" | "irrelevant" | "duplicate" | "gathered";
+export type ProactiveOfferVerdict = "off" | "gone" | "own" | "hops" | "irrelevant" | "duplicate" | "gathered" | "auth";
 
 /** The simple filter: can this event concern the bot at all? No model is
  * called for an event that fails it. Returns why it may, or null. */
@@ -149,6 +149,8 @@ export interface ProactiveWakerDeps {
    * older test harnesses that still pass it compile; the waker never calls it.
    */
   propose?: (batch: ProactiveWakeBatch) => void;
+  /** Cheap: this bot's login engine is marked expired. Skip new wakes until reconnect. */
+  engineExpired?: (botId: string) => boolean;
   now?: () => number;
   /** Timers, replaced in tests. */
   setTimer?: (fn: () => void, ms: number) => unknown;
@@ -215,6 +217,9 @@ export class ProactiveWaker {
     // no loop: never on its own proactive work, never past the hop limit
     if (event.ownWake) return "own";
     if ((event.hops ?? 0) >= PROACTIVE_MAX_HOPS) return "hops";
+    // Known expired login engine: one reconnect notice already went out;
+    // do not start another wake that would fail the same way.
+    if (this.deps.engineExpired?.(event.botId)) return "auth";
     if (!proactiveRelevance(event)) return "irrelevant";
     const key = `${event.botId}\u0000${event.key}`;
     if (this.keySet.has(key)) return "duplicate";
@@ -343,11 +348,11 @@ export function proactivePrompt(mode: ProactiveMode): string {
  * person and reruns what it can), a missed occurrence (the computer was
  * off, nothing ran) or a wake's own failure is not: waking on those only
  * spent a model run, and a wake that reran the routine could fail again
- * and wake the bot again. A known Claude auth / credits reconnect condition
+ * and wake the bot again. A known engine auth / credits reconnect condition
  * also never wakes: the person must reconnect, and a wake would fail again. */
 export function runFailureWakesBot(run: { status: string; error?: string; attention?: string; proactive?: unknown }): boolean {
   if (run.status !== "failed" || run.error === ROUTINE_RESTARTED || run.proactive) return false;
-  if (isClaudeReconnectCondition(run.error) || isClaudeReconnectCondition(run.attention)) return false;
+  if (isEngineReconnectCondition(run.error) || isEngineReconnectCondition(run.attention)) return false;
   return true;
 }
 

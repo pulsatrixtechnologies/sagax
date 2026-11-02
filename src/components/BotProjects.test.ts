@@ -34,17 +34,21 @@ describe("folder controls", () => {
     expect(emoji).toContain('aria-hidden="true"');
     expect(emoji).not.toContain("lucide-folder");
   });
-  it("offers a labelled single-click icon chooser in both create and edit dialogs", () => {
+  it("offers a labelled icon chooser in the create and edit popovers", () => {
     for (const project of [undefined, bot.projects![0]]) {
       const markup = renderToStaticMarkup(createElement(StoreProvider, null,
         createElement(BotProjectDialog, { bot, project, onClose: vi.fn() })));
-      expect(markup).toContain('role="dialog" tabindex="-1" aria-modal="true"');
+      expect(markup).toContain('role="dialog"');
       expect(markup).toContain('aria-label="Choose folder icon"');
       expect(markup).toContain("Folder name");
       if (project) {
         expect(markup).toContain("📬");
         expect(markup).toContain("Save folder");
-      } else expect(markup).toContain("Create folder");
+        expect(markup).toContain('data-folder-edit=""');
+      } else {
+        expect(markup).toContain("Create folder");
+        expect(markup).toContain('data-folder-create=""');
+      }
     }
   });
   it("keeps New thread as one plain button without a folder dropdown", () => {

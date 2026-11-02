@@ -60,6 +60,17 @@ export interface RoutineReportOutcome {
   declared?: { status: "failed" | "partial"; reason: string };
 }
 
+/** Flow engine refusals that must end a Sagax routine run as blocked, not completed. */
+const FLOW_RUN_BLOCKED = /has not been closed:\s*one routine run|unknown routine|run_exists|previous_unclosed/i;
+
+/** A Flow tool result that means this run did not start or could not continue. */
+export function flowRunBlockedReason(output: string | undefined): string | undefined {
+  const text = (output ?? "").trim();
+  if (!text || !FLOW_RUN_BLOCKED.test(text)) return undefined;
+  const line = text.split(/\r?\n/).map((entry) => entry.trim()).find(Boolean) ?? text;
+  return line.slice(0, 500);
+}
+
 /** The status line on a line of its own, in the shapes models write it in. */
 const STATUS_LINE = /^[\s`*_>]*RUN[_ ]STATUS\s*:?[\s`*_]*(failed|failure|partial|partially)\b[\s`*_]*[:—–-]?\s*(.*)$/i;
 
@@ -126,7 +137,8 @@ export function routineRunReportable(run: RoutineRunReportFacts): boolean {
   if (run.startedBy === "person" && ["queued", "running", "waiting"].includes(run.status)) return true;
   switch (run.status) {
     case "waiting": return run.needsPerson === true;
-    case "failed": return true;
+    case "failed":
+    case "blocked": return true;
     // A run that completed with problems tells the person, like a failure.
     case "completed": return run.problems ? true : run.quiet !== true && run.postResults === true;
     default: return false;

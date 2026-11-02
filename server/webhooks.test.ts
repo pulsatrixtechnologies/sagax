@@ -166,6 +166,23 @@ describe("WebhookManager", () => {
     if (process.platform !== "win32") expect(statSync(h.file).mode & 0o777).toBe(0o600);
   });
 
+  it("emits only the public trigger to the room/SSE sink, never the sealed secret (port of upstream e5de9b075)", () => {
+    const h = harness();
+    const { webhook, secret } = create(h.manager);
+    h.manager.receive(webhook.endpointId, secret, {
+      payload: { text: "hello" },
+      contentType: "application/json",
+      deliveryId: "evt-public-sink",
+    });
+    const frames = h.emitted.filter((event) => event && typeof event === "object" && (event as { kind?: string }).kind === "webhook");
+    expect(frames.length).toBeGreaterThan(0);
+    const serialized = JSON.stringify(frames);
+    expect(serialized).not.toContain(secret);
+    expect(serialized).not.toMatch(/"secretHash"/);
+    expect(serialized).not.toMatch(/"signingSecret"/);
+    expect(serialized).not.toMatch(/"pendingToken"/);
+  });
+
   it("removes duration metadata saved by an earlier webhook build", () => {
     const h = harness();
     create(h.manager);

@@ -12,6 +12,7 @@
 // a human.
 
 import { supportsApprovalMode, type ApprovalMode } from "../shared/approval-mode.ts";
+import { outboundMailNeedsDraftCard } from "../shared/email-draft-send.ts";
 import { isOutboundTool } from "../shared/outbound.ts";
 import type { ProviderAdapter, RequestOutcome } from "./contracts.ts";
 import { standingGrantsAllowed } from "./custom-rules-org.ts";
@@ -143,6 +144,8 @@ export type AutoVerdictSource =
   | "native-approval"
   | "explicit-approval-block"
   | "outbound-guard"
+  /** Unrequested outbound mail: write a draft card; do not send directly. */
+  | "email-draft-required"
   | "allow-rule"
   | "safety-hold"
   | "safety-read"
@@ -228,6 +231,11 @@ export function autoVerdict(
     customRule?: { behavior: "allow" | "ask" | "deny"; id: string };
     /** The person allowed this exact email draft on its own card. */
     emailDraftApproved?: boolean;
+    /** This outbound mail send was asked for by the person in their own
+     * turn: usual approval level applies. Absent or false: force a draft
+     * card. */
+    personAskedMail?: boolean;
+    ownerTurn?: boolean;
     /** One of Sagax's own person-scoped tools (sagax-internal-tools.ts):
      * approved after a safety hold, the person's rules and the outbound
      * guard had their say, never for a sandbox widening or a gate card. */
@@ -396,7 +404,22 @@ export function autoVerdict(
   if (mode === "full" && !(context?.sagaxGate && context.stepUpRequired?.length)) return { approve: `approved ${tool} (full access)`, source: "full-access" };
   if (context?.sagaxGate) return { approve: null, source: mode === "auto" || mode === "custom" ? "native-approval" : "no-grant" };
   if (context?.requiresExplicitApproval) return { approve: null, source: "explicit-approval-block" };
-  if (isOutboundTool(tool) || context?.outbound === true || ((context?.sagaxInternal || context?.ownEnvironment) && sendsOut)) return { approve: null, source: "outbound-guard" };
+  // Unrequested outbound mail (routine / proactive / other bot): refuse the
+  // direct send so the bot writes a draft card. Person-asked mail in the
+  // owner's turn follows the usual approval level below.
+  if (sendsOut && isMailSendName(tool, context?.toolName) && outboundMailNeedsDraftCard({
+    personAsked: context?.personAskedMail === true,
+    ownerTurn: context?.ownerTurn === true,
+  })) {
+    return { approve: null, source: "email-draft-required" };
+  }
+  if (isOutboundTool(tool) || context?.outbound === true || ((context?.sagaxInternal || context?.ownEnvironment) && sendsOut)) {
+    // Person-asked mail in the owner's own turn: skip the blanket outbound
+    // hold so Ask / Auto / Full apply as usual.
+    if (!(sendsOut && isMailSendName(tool, context?.toolName) && context?.personAskedMail === true && context?.ownerTurn === true)) {
+      return { approve: null, source: "outbound-guard" };
+    }
+  }
   if (context?.commandAllowed) return { approve: `approved ${tool} (saved command)`, source: "command-allowlist" };
   // The one action the app itself grants. A fetch of an arbitrary URL is not
   // a search and stays a prompt, in this mode and every other.
@@ -414,8 +437,23 @@ export function autoVerdict(
  * English. The client translates by key and falls back to this text, which
  * the server keeps sending: cards saved before the key existed still render,
  * and so do the free-text apply errors that have no key at all. */
+/** Whether this tool name is an email send (not creating a provider draft,
+ * and not a chat / SMS / Teams post). */
+function isMailSendName(tool: string, alias?: string): boolean {
+  const names = [tool, alias].filter((value): value is string => typeof value === "string" && value.length > 0);
+  return names.some((name) => {
+    const tokens = bareToolName(name).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    if (tokens.includes("draft") || tokens.includes("drafts")) return false;
+    if (tokens.some((token) => ["chat", "sms", "teams", "slack", "tweet", "dm"].includes(token))) return false;
+    if (!tokens.includes("send") && !tokens.includes("sends")) return false;
+    return tokens.some((token) => token === "email" || token === "mail")
+      || /(?:^|[_\-.])(?:gmail|outlook|graph)(?:[_\-.]|$)/i.test(name);
+  });
+}
+
 export const HELD_NOTE = {
   "approval.held.outbound": "This sends something on your behalf, so it always asks first.",
+  "approval.held.emailDraft": "Write this email as a draft card for the person to approve. Do not send it directly.",
   "approval.held.native": "The provider requires your approval for this action.",
   "approval.held.sandbox":
     "This changes the provider sandbox, so only Full access can approve it automatically.",
@@ -435,6 +473,7 @@ export function approvalHeldNote(context: {
   permission: boolean;
 }): HeldNoteKey | undefined {
   if (!context.permission) return undefined;
+  if (context.source === "email-draft-required") return "approval.held.emailDraft";
   if (context.source === "outbound-guard") return "approval.held.outbound";
   if (context.source === "safety-hold") return "approval.held.native";
   if (context.source === "custom-rule-ask" || context.source === "owner-rule-ask") return "approval.held.customRule";

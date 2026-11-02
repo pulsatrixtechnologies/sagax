@@ -1,6 +1,7 @@
 // #1753: calendar quick-create recovers a create whose answer was lost.
 // @vitest-environment happy-dom
-import { createElement } from "react";
+import { act, createElement } from "react";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -72,10 +73,10 @@ describe("QuickComposer lost-answer recovery (#1753)", () => {
       .mockResolvedValueOnce({ routines: [created] });
     const onSavedRoutine = vi.fn();
     const onClose = vi.fn();
-    flushSync(() => root.render(createElement(QuickComposer, {
+    flushSync(() => root.render(createElement(ConfirmProvider, null, createElement(QuickComposer, {
       seed: { kind: "routine", at: Date.UTC(2026, 9, 10, 9), durationMinutes: 30, botIds: [bot.id], name: "Check inbox", description: "Read new mail" },
       bots: [bot], routinesOnly: true, onClose, onMore: vi.fn(), onSavedRoutine, onSavedCall: vi.fn(),
-    })));
+    }))));
     flushSync(() => button("Save")!.click());
     await settle();
     expect(fixture.api).toHaveBeenCalledTimes(2);
@@ -92,14 +93,63 @@ describe("QuickComposer lost-answer recovery (#1753)", () => {
       .mockRejectedValueOnce(lost)
       .mockResolvedValueOnce({ routines: [] });
     const onSavedRoutine = vi.fn();
-    flushSync(() => root.render(createElement(QuickComposer, {
+    flushSync(() => root.render(createElement(ConfirmProvider, null, createElement(QuickComposer, {
       seed: { kind: "routine", at: Date.UTC(2026, 9, 10, 9), durationMinutes: 30, botIds: [bot.id], name: "Check inbox", description: "Read new mail" },
       bots: [bot], routinesOnly: true, onClose: vi.fn(), onMore: vi.fn(), onSavedRoutine, onSavedCall: vi.fn(),
-    })));
+    }))));
     flushSync(() => button("Save")!.click());
     await settle();
     expect(onSavedRoutine).not.toHaveBeenCalled();
     expect(host.textContent).toContain(t("routineCalendar.saveAnswerLost"));
     expect(host.textContent).not.toContain("499 Unknown Status Code");
+  });
+});
+
+// 2026-11-01 (no modals): quick create is a popover hung off the slot, with no
+// scrim; an empty one gets out of the way on a press outside, a draft stays.
+describe("QuickComposer as an anchored popover", () => {
+  const render = (seed: Partial<Parameters<typeof QuickComposer>[0]["seed"]> = {}, onClose = vi.fn()) => {
+    flushSync(() => root.render(createElement(ConfirmProvider, null, createElement(QuickComposer, {
+      seed: { kind: "routine", at: Date.UTC(2026, 9, 10, 9), durationMinutes: 30, botIds: [bot.id], anchor: { x: 300, y: 200, left: 200 }, ...seed },
+      bots: [bot], routinesOnly: true, onClose, onMore: vi.fn(), onSavedRoutine: vi.fn(), onSavedCall: vi.fn(),
+    }))));
+    return onClose;
+  };
+  const pressOutside = () => document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  const escape = () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+
+  it("is a non-modal popover with no scrim, anchored where it was opened", () => {
+    render();
+    const popover = host.querySelector<HTMLElement>("[data-quick-create]")!;
+    expect(popover.getAttribute("aria-modal")).toBe("false");
+    expect(popover.classList.contains("popover-surface")).toBe(true);
+    expect(popover.hasAttribute("data-quick-create-anchored")).toBe(true);
+    expect(document.querySelector(".bg-black\\/25, .bg-black\\/50")).toBeNull();
+  });
+
+  it("closes on a press outside while empty", () => {
+    const onClose = render();
+    pressOutside();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a draft on a press outside, and asks before Escape drops it", async () => {
+    const onClose = render({ name: "Check inbox" });
+    pressOutside();
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => { escape(); });
+    expect(document.getElementById("confirm-dialog-body")?.textContent).toBe(t("routineEditor.discard"));
+    await act(async () => { [...document.querySelectorAll("button")].find((button) => button.textContent === "Cancel")!.click(); });
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => { escape(); });
+    await act(async () => { (document.querySelector("[data-confirm-action]") as HTMLButtonElement).click(); });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("closes on Escape without asking while empty", async () => {
+    const onClose = render();
+    await act(async () => { escape(); });
+    expect(document.querySelector("[role=alertdialog]")).toBeNull();
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });

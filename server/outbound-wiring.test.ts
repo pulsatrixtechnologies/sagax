@@ -13,7 +13,7 @@ afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: tru
 const SID = `CA${"b".repeat(32)}`;
 const ARGS = { to: "+1 514 555 0142", from: "+1 438 555 0100", purpose: "Confirmer le rendez-vous", message: "Jean confirme mardi." };
 
-function setup() {
+function setup(opts: { seedConsent?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "outbound-wiring-"));
   dirs.push(dir);
   const rows: Message[] = [];
@@ -27,6 +27,7 @@ function setup() {
   const wake = vi.fn();
   const wiring = outboundWiring({ dataDir: dir, store, botName: () => "Rocket", personName: () => "Jean", language: () => "fr", twilio, wake });
   wiring.calls.updateSettings({ enabled: true, callbackNumber: "+14385550199" });
+  if (opts.seedConsent !== false) wiring.consentStore.accept("jean", "bot-a");
   return { wiring, rows, twilio, wake };
 }
 
@@ -73,10 +74,26 @@ describe("outbound wiring", () => {
     const twilio = vi.fn(async () => ({ ok: true as const, isError: false, value: { dry_run: true } }));
     const wiring = outboundWiring({ dataDir: dir, store, botName: () => "Rocket", personName: () => "", principalName: (id) => (id === "jean" ? "Jean Tremblay" : undefined), language: () => "fr", twilio, wake: vi.fn() });
     wiring.calls.updateSettings({ enabled: true, callbackNumber: "+14385550199" });
+    wiring.consentStore.accept("jean", "bot-a");
     const answer = await wiring.placeCall({ principalId: "jean", botId: "bot-a", threadId: "t-1", generation: "g1", room: false }, ARGS);
     expect(answer.text).not.toContain("on whose behalf");
     expect(answer.isError).toBeUndefined();
     expect(rows[0]!.outbound).toMatchObject({ kind: "call", status: "pending" });
+  });
+
+  it("stages a one-time consent card before any call card when the person has not accepted", async () => {
+    const { wiring, rows } = setup({ seedConsent: false });
+    const first = await wiring.placeCall({ principalId: "jean", botId: "bot-a", threadId: "t-1", generation: "g1", room: false }, ARGS);
+    expect(first.isError).toBeUndefined();
+    expect(first.text).toContain("consent card");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.card?.phoneCallConsent?.status).toBe("pending");
+    expect(rows[0]!.outbound).toBeUndefined();
+    wiring.resolveConsent({ principalId: "jean", botId: "bot-a", threadId: "t-1", requestId: rows[0]!.card!.requestId!, allow: true });
+    expect(rows[0]!.card?.phoneCallConsent?.status).toBe("accepted");
+    const second = await wiring.placeCall({ principalId: "jean", botId: "bot-a", threadId: "t-1", generation: "g2", room: false }, ARGS);
+    expect(second.text).toMatch(/card|Call/);
+    expect(rows.some((row) => row.outbound?.kind === "call")).toBe(true);
   });
 
   it("refuses rooms and a conversation with no person", async () => {

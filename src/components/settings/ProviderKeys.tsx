@@ -1,6 +1,6 @@
 // Shared provider-key dialog used by Providers and image generation.
 // Values stay write-only; rows expose configured state only.
-import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { ArrowUpRight, ExternalLink, X } from "lucide-react";
 
 import { useStore, type ConfigStatus } from "@/state/store";
@@ -74,6 +74,11 @@ function useOpenRow(): KeyRowId | null {
   return useSyncExternalStore((listener) => { listeners.add(listener); return () => listeners.delete(listener); }, () => openRow, () => openRow);
 }
 
+/** The key row open for editing, so Providers can expand that row. */
+export function useOpenProviderKey(): KeyRowId | null {
+  return useOpenRow();
+}
+
 /** The key line of a section that uses a key of the list (Voice, Image
  * generation): whether the chosen provider's key is saved, in a few words,
  * and when it is missing a link to its row in Keys, never a key field.
@@ -133,23 +138,36 @@ export function keyRowForEngine(driverKind: string, instanceId: string): KeyRowI
   return null;
 }
 
-/** Mounted once on the page: the dialog of the row being edited. */
-export function ProviderKeyDialog() {
+/** Mounted on Providers: the editor, unless that row already shows it inline.
+ * `hidden` keeps this mount alive so leaving the row does not clear the request. */
+export function ProviderKeyDialog({ hidden = false }: { hidden?: boolean }) {
   const open = useOpenRow();
   useEffect(() => () => openProviderKeyDialog(null), []);
-  if (!open) return null;
-  return <KeyDialog id={open} onClose={() => openProviderKeyDialog(null)} />;
+  if (!open || hidden) return null;
+  return <ProviderKeyEditor id={open} onClose={() => openProviderKeyDialog(null)} />;
 }
 
-function KeyDialog({ id, onClose }: { id: KeyRowId; onClose: () => void }) {
+/** Masked key field under the provider row (or under the list when the row
+ * is not on this page). Paste, Enter or leaving the field saves. */
+export function ProviderKeyEditor({ id, onClose }: { id: KeyRowId; onClose: () => void }) {
   const row = ROWS[id];
   const copy = credentialCopy(row.section);
+  const titleId = useId();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     ref.current?.querySelector<HTMLElement>("input")?.focus();
     return () => previous?.focus();
   }, []);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
   let extra: ReactNode = null;
   if (id === "openaiCompat") extra = <><OpenAiCompatUrl /><OpenAiCompatModel /></>;
   if (id === "azureFoundry") extra = <><OpenAiCompatUrl azure /><OpenAiCompatModel azure /></>;
@@ -169,43 +187,29 @@ function KeyDialog({ id, onClose }: { id: KeyRowId; onClose: () => void }) {
   }
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+      ref={ref}
+      role="region"
+      aria-labelledby={titleId}
+      data-provider-key-dialog={id}
+      className="flex flex-col gap-3 rounded-xl border-[0.5px] border-border bg-inset/40 p-3"
     >
-      <div
-        ref={ref}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="provider-key-title"
-        data-provider-key-dialog={id}
-        onKeyDown={(event) => {
-          if (event.key !== "Escape") return;
-          event.preventDefault();
-          event.stopPropagation();
-          onClose();
-        }}
-        className="flex max-h-[min(640px,calc(100dvh-2rem))] w-full max-w-[460px] flex-col overflow-hidden rounded-[14px] border border-border bg-elevated"
-      >
-        <header className="flex items-center justify-between gap-3 px-5 pb-2 pt-4">
-          <h2 id="provider-key-title" className="text-[15px] font-semibold text-ink">{t(row.nameKey)}</h2>
-          <button type="button" onClick={onClose} aria-label={t("common.close")} className="flex size-8 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/10 hover:text-ink">
-            <X size={16} />
-          </button>
-        </header>
-        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto px-5 pb-4">
-          <p className="text-[12.5px] leading-relaxed text-ink-secondary">{copy.description}</p>
-          <a href={copy.href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 self-start text-[12.5px] font-medium text-accent hover:underline">
-            {copy.linkLabel}
-            <ExternalLink size={12} aria-hidden="true" />
-          </a>
-          <ApiKeyRow section={row.section} testProvider={row.test} bare />
-          {extra}
-        </div>
-        <footer className="flex justify-end border-t border-hairline/40 px-5 py-3">
-          <button type="button" onClick={onClose} className="rounded-lg bg-control px-4 py-1.5 text-[13px] text-ink hover:bg-raised-hover">
-            {t("providerKeys.done")}
-          </button>
-        </footer>
+      <div className="flex items-center justify-between gap-3">
+        <h2 id={titleId} className="text-[13px] font-medium text-ink">{t(row.nameKey)}</h2>
+        <button type="button" onClick={onClose} aria-label={t("common.close")} className="flex size-8 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/10 hover:text-ink">
+          <X size={16} />
+        </button>
+      </div>
+      <p className="text-[12.5px] leading-relaxed text-ink-secondary">{copy.description}</p>
+      <a href={copy.href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 self-start text-[12.5px] font-medium text-accent hover:underline">
+        {copy.linkLabel}
+        <ExternalLink size={12} aria-hidden="true" />
+      </a>
+      <ApiKeyRow section={row.section} testProvider={row.test} bare />
+      {extra}
+      <div className="flex justify-end">
+        <button type="button" onClick={onClose} className="rounded-lg bg-control px-4 py-1.5 text-[13px] text-ink hover:bg-raised-hover">
+          {t("providerKeys.done")}
+        </button>
       </div>
     </div>
   );

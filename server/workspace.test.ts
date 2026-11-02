@@ -682,10 +682,31 @@ describe("workspace", () => {
       expect(prompt).toContain("Anything that will be stale within a week belongs in the conversation, not in memory.");
       expect(prompt).toContain("When a fact applies only from a date, or stops applying on one, say so in the entry");
       expect(prompt).toContain("gets that day as its until date");
-      // the topic folder is the bot's own, not a placeholder
+      // native file tools: absolute path of the bot's topic folder
       expect(prompt).toContain(`pointers to files in ${JSON.stringify(join(workspaceDir(BOT), "memory"))}`);
       expect(prompt).not.toContain("<topicDir>");
     }
+  });
+
+  it("a withheld or agents-only turn gets relative MEMORY.md / memory/, never a server absolute path", () => {
+    writeMemoryFile(BOT, "# Memory\n- prefers CSV\n");
+    for (const prompt of [
+      memorySystemPrompt(BOT, { managedWrites: true, fileTools: false }),
+      memorySystemPrompt(BOT, { managedWrites: true, fileTools: true, withholdHostTools: true }),
+      memorySystemPrompt(BOT, { fileTools: false, managedWrites: true }),
+    ]) {
+      expect(prompt).toContain('"MEMORY.md"');
+      expect(prompt).toContain('"memory/"');
+      expect(prompt).toContain("workspace_read");
+      expect(prompt).toContain("memory_update");
+      expect(prompt).not.toContain("/data/");
+      expect(prompt).not.toContain(".openmausbot");
+      expect(prompt).not.toContain(".sagax/");
+      expect(prompt).not.toContain(workspaceDir(BOT));
+    }
+    // native file tools on a solo Mac still name the absolute path
+    const native = memorySystemPrompt(BOT, { fileTools: true, withholdHostTools: false });
+    expect(native).toContain(JSON.stringify(join(workspaceDir(BOT), "MEMORY.md")));
   });
 
   it("API drivers retain supplied memory without inventing filesystem tools", () => {

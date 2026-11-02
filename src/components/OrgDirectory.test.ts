@@ -1,9 +1,13 @@
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { OrgDirectory } from "./OrgDirectory";
 
-const fixture = vi.hoisted(() => ({ values: [] as unknown[], index: 0 }));
+const fixture = vi.hoisted(() => ({ values: [] as unknown[], index: 0, confirm: vi.fn(async () => true) }));
+vi.mock("@/components/ConfirmProvider", () => ({
+  confirmAsync: fixture.confirm,
+  useConfirm: () => fixture.confirm,
+  discardConfirmRequest: (body?: string) => ({ title: "Close without saving?", body, confirmLabel: "Discard", tone: "danger" }),
+}));
 vi.mock("react", async (original) => ({
   ...await original<typeof import("react")>(),
   useState: (initial: unknown) => {
@@ -14,6 +18,7 @@ vi.mock("react", async (original) => ({
     }];
   },
 }));
+import { OrgDirectory } from "./OrgDirectory";
 
 // renderToStaticMarkup HTML-escapes apostrophes as &#x27;. Decode before
 // comparing against the UI label.
@@ -75,8 +80,9 @@ describe("OrgDirectory", () => {
     expect(html).toContain("morgan@example.test");
     expect(html).not.toContain("Create organization");
   });
-  it("shows a pending invite separately from members, with its link actions", () => {
+  it("shows a pending invite separately from members, with its link actions", async () => {
     const onRevoke = vi.fn();
+    fixture.confirm.mockResolvedValue(true);
     const view = render({
       org: { name: "Example" },
       people: [],
@@ -89,6 +95,7 @@ describe("OrgDirectory", () => {
     expect(view.html).toContain("morgan@example.test");
     expect(view.html).toContain("Copy link");
     view.nodes.find((node) => node.type === "button" && node.props.children === "Revoke")!.props.onClick!();
+    await Promise.resolve();
     expect(onRevoke).toHaveBeenCalledExactlyOnceWith("tok-1");
   });
   it("draws Grok-style rows: address, invite, people and pending folded behind count pills", () => {

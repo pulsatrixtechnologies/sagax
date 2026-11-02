@@ -1,8 +1,6 @@
-// The calendar's paused-routines list is a modal dialog: it must hand its
-// element to the shared modal keyboard handling (focus in, Tab trapped, Escape
-// closes) and name its icon-only close button. Event details are a drawer
-// beside the calendar instead (the grid stays usable while it is open), so it
-// must not trap focus; the page's own Escape handling closes it.
+// The calendar's paused-routines list (2026-11-01, no modals) is the shared
+// right detail panel (DetailPanel.tsx), like an event's details: no modal
+// keyboard trap, no scrim, a named close button, and Escape inside closes it.
 import { Children, createElement, isValidElement, type ReactElement, type ReactNode, type RefObject } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,32 +53,30 @@ function render(element: () => ReactNode) {
 beforeEach(() => { fixture.calls = []; });
 afterAll(() => vi.unstubAllGlobals());
 
-describe.each([
-  {
-    name: "paused routines",
-    closeLabel: t("routines.paused.close"),
-    render: (onClose: () => void) => PausedList({ routines: [routine], bots: [bot], groups: [], onClose, onEdit: vi.fn(), onOpenRoom: vi.fn() }),
-  },
-])("calendar $name dialog", ({ closeLabel, render: dialog }) => {
-  it("hands its dialog element to the modal keyboard handling", () => {
+describe("calendar paused routines panel", () => {
+  const panel = (onClose: () => void) => render(() => PausedList({ routines: [routine], bots: [bot], groups: [], onClose, onEdit: vi.fn(), onOpenRoom: vi.fn() }));
+  const detailPanel = (tree: ReactElement<Props>[]) => tree.find((node) => typeof node.type === "function" && node.type.name === "DetailPanel")!;
+
+  it("opens in the shared detail panel, not a modal dialog", () => {
     const onClose = vi.fn();
-    const tree = render(() => dialog(onClose));
-    const element = tree.find((node) => node.props.role === "dialog")!;
-    expect(fixture.calls).toHaveLength(1);
-    expect(element.props.ref).toBe(fixture.calls[0]!.ref);
-    // focusable itself, so focus can land on it when it has no field to start in
-    expect(element.props.tabIndex).toBe(-1);
-    fixture.calls[0]!.onClose();
+    const tree = panel(onClose);
+    expect(fixture.calls).toHaveLength(0);
+    expect(tree.some((node) => node.props.role === "dialog")).toBe(false);
+    const element = detailPanel(tree);
+    expect(element.props.label).toBe(t("routineCalendar.pausedTitle"));
+    expect(element.props["data-paused-list-panel"]).toBe("");
+    // its close button (drawn by the panel) carries the list's own label
+    expect(element.props.closeLabel).toBe(t("routines.paused.close"));
+    (element.props.onClose as () => void)();
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it("names its close button", () => {
-    const onClose = vi.fn();
-    const close = render(() => dialog(onClose)).find((node) => node.type === "button" && node.props["aria-label"] === closeLabel);
-    expect(close).toBeDefined();
-    close!.props.onClick!();
-    expect(onClose).toHaveBeenCalledOnce();
+  it("keeps every row's actions: Resume and Edit", () => {
+    const html = renderToStaticMarkup(createElement(() => PausedList({ routines: [routine], bots: [bot], groups: [], onClose: vi.fn(), onEdit: vi.fn(), onOpenRoom: vi.fn() })));
+    expect(html).toContain("Weekly digest");
+    expect(html).toContain(`>${t("routines.resume")}<`);
+    expect(html).toContain(`>${t("routines.edit")}<`);
+    expect(html).toContain(`aria-label="${t("routines.paused.close")}"`);
+    expect(html).toContain('role="region"');
   });
 });
-// Upstream's event details drawer belongs to its week grid, which Sagax did
-// not take: the calendar keeps its own event dialog (tested above).

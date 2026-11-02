@@ -334,6 +334,9 @@ export interface SendTurnInput {
   /** Per-call ceiling (ms) for this turn's MCP tools, from the server config
    * `mcp.callTimeoutMinutes`. Absent = the driver's default (10 min). */
   mcpCallTimeoutMs?: number;
+  /** Times an API-model turn that answers after a failed tool call is sent
+   * back to re-run it (`loopGuard.correctiveRounds`); never after a denial. */
+  toolErrorCorrectiveRounds?: number;
   /** Organization server: this machine is the Sagax server, nobody's
    * computer. The engine must not get its own shell, file or fetch tools
    * here; shell and files go through the person's server environment
@@ -549,7 +552,27 @@ export interface ProviderAdapter {
   sessionBytes?(threadId: ThreadId, resumeCursor: unknown): number | undefined;
   stopAll(): Promise<void>;
   onEvent(listener: RuntimeEventListener): () => void;
+  /** Prompt-cache keep-warm (server/cache-keepwarm.ts). Only drivers that
+   * keep a live native session per thread and can send one tool-less,
+   * forked request over its transcript implement it (Claude Code today).
+   * `ping` never changes the thread's own session; `hold` keeps that live
+   * session open until `until` (epoch ms), or releases the hold with null,
+   * and says whether a live session exists to hold. */
+  cacheKeepWarm?: {
+    ping(threadId: ThreadId, options?: { signal?: AbortSignal }): Promise<CacheWarmPingResult>;
+    hold(threadId: ThreadId, until: number | null): boolean;
+  };
 }
+
+/** One keep-warm ping as the engine reported it. Tokens are the request's
+ * own: `cacheRead` re-read from the prompt cache, `cacheWrite` written to it,
+ * `input` uncached input. `costUsd` is the engine's figure (on a subscription
+ * an equivalent, not a charge). A refusal says why; `busy` means the thread
+ * had a turn running and nothing was sent; `limit` means the account's usage
+ * limit refused the call. */
+export type CacheWarmPingResult =
+  | { ok: true; input: number; cacheRead: number; cacheWrite: number; output: number; costUsd: number | null; model: string | null }
+  | { ok: false; reason: string; busy?: boolean; limit?: boolean };
 
 /** The tri-state result of Adapter.steer — see the contract above. */
 export type SteerOutcome = "steered" | "refused" | "indeterminate";

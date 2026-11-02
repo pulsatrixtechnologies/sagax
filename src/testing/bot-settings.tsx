@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { SettingsModal } from "../components/SettingsModal";
 import { BotSettingsDialog } from "../components/BotSettingsDialog";
-import { DefaultBotSettings, NewBotDialog } from "../components/NewBotDialog";
+import { DefaultBotSettings } from "../components/NewBotDialog";
+import { BotWizard } from "../components/bot-wizard/BotWizard";
 import { StoreProvider, api, useStore, type Bot } from "../state/store";
 import { applySkin } from "../lib/skins";
 import { loadLocale } from "../lib/i18n";
@@ -77,7 +78,7 @@ function Fixture() {
     {state.appSettingsOpen && <SettingsModal />}
     <DefaultBotSettings />
     <button className="rounded bg-control px-3 py-2" onClick={() => dispatch({ type: "toggleNewBot", open: true })}>Configure new bot</button>
-    {state.newBotOpen && <NewBotDialog />}
+    {state.botWizard && <BotWizard />}
     {state.error && <p role="alert" className="text-danger">{state.error}</p>}
     <pre aria-label="Saved profiles" className="my-4 whitespace-pre-wrap">{JSON.stringify(saved.map(({ id, name, description, soul }) => ({ id, name, description, soul })), null, 2)}</pre>
     {state.settingsOpen && bot && <BotSettingsDialog key={bot.id} bot={bot} />}

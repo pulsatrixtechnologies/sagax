@@ -114,13 +114,16 @@ export const TIMEOUT_MS_DEFAULT = 120_000;
  * await_turn waits: engines and relays often cut a tool call at ~60 s.
  * Return a structured still_working result under that ceiling so the caller
  * can resume with the same handle (and wait_cursor) instead of an error.
- * Pattern matches PHONE_TOOL_CALL_WAIT_MS in shared/phone-tools.ts.
+ * Default is short (15 s): scorecard V8, 2026-11-02. Holding a call open for
+ * 45 s blocked MCP slots (p95 45 s). Prefer a short poll, then resume with
+ * wait_cursor, or use async send_prompt and the completion notification.
+ * Max stays under typical engine tool ceilings (~55 s).
  */
 export const AWAIT_TIMEOUT_MS_MIN = 0;
-export const AWAIT_TIMEOUT_MS_DEFAULT = 45_000;
+export const AWAIT_TIMEOUT_MS_DEFAULT = 15_000;
 export const AWAIT_TIMEOUT_MS_MAX = 55_000;
 /** Suggested timeout_ms on the next await_turn when the turn is still going. */
-export const AWAIT_RECOMMENDED_WAIT_MS = 45_000;
+export const AWAIT_RECOMMENDED_WAIT_MS = 15_000;
 /** How many recent steps a still_working answer carries. */
 export const AWAIT_STEPS_MAX = 32;
 export const PAGE_LIMIT_MAX = 200;

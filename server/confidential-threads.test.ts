@@ -138,7 +138,9 @@ describe("leak 6: the [omb-turn] log line", () => {
     expect(line).toBe('[omb-turn] bot=bot-1 text=(confidential) images=0 depth=0 card=false');
     expect(line).not.toContain("secret");
     expect(turnStartLogLine({ ...turn, confidential: true, spoken: true })).toContain("text=(confidential)");
-    expect(turnStartLogLine(turn)).toContain('"the secret plan');
+    // Loi 25: ordinary turns also never carry message text, only a char count.
+    expect(turnStartLogLine(turn)).toBe("[omb-turn] bot=bot-1 text=chars=30 images=0 depth=0 card=false");
+    expect(turnStartLogLine(turn)).not.toContain("secret");
   });
 });
 

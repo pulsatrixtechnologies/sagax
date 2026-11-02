@@ -35,6 +35,7 @@ import {
   ArrowDownToLine,
   ArrowLeftRight,
   BookOpen,
+  Brain,
   Building2,
   CalendarClock,
   Check,
@@ -61,8 +62,6 @@ import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useOrgApprovalsCount } from "@/lib/org-approvals";
 
 import { InitialsAvatar } from "./Avatar";
-import { AboutDialog } from "./AboutDialog";
-import { RenameServerDialog } from "./RenameServerDialog";
 import { SidebarPopoverMenu, type SidebarMenuItem, type SidebarSubmenuEntry } from "./SidebarPopoverMenu";
 import { useServerMode } from "./ServerModeSettings";
 import { api } from "@/state/store";
@@ -286,6 +285,7 @@ export function footerMenuItems(places: SidebarMenuItem[], profileItems: Sidebar
 
 export interface ProfileMenuHandlers {
   onAutomations: () => void;
+  onMemory: () => void;
   onTeamMap: () => void;
   onRemoteSessions: () => void;
   onSettings: () => void;
@@ -295,7 +295,7 @@ export interface ProfileMenuHandlers {
   onAbout: () => void;
   onViewUsage: () => void;
   onSwitch: (id: string) => void;
-  /** Rename a server (Switch account ›): opens the rename dialog for it */
+  /** Rename a server (Switch account ›): the row becomes an inline field */
   onRename: (account: { id: string; name: string; defaultName: string }) => void;
   onAddOrganization: () => void;
   onSignOut: () => void;
@@ -319,6 +319,8 @@ export function profileMenuItems(input: {
   mobile: boolean;
   achievementsLabel: string | null;
   automationsActive: boolean;
+  /** Tools > Memory panel is open */
+  memoryActive?: boolean;
   /** Team map is the page on screen */
   teamMapActive?: boolean;
   /** false in the remote client (it has no Team map): no Team map row. */
@@ -336,6 +338,11 @@ export function profileMenuItems(input: {
   canAddOrganization: boolean;
   /** Sign out: an organization server only */
   signOut: boolean;
+  /** Lot 6: which Switch account row is being renamed in place. */
+  renaming?: { id: string; draft: string; defaultName: string } | null;
+  onRenameDraft?: (draft: string) => void;
+  onRenameSave?: () => void;
+  onRenameCancel?: () => void;
   handlers: ProfileMenuHandlers;
 }): SidebarMenuItem[] {
   const usage: SidebarSubmenuEntry[] = [
@@ -371,20 +378,31 @@ export function profileMenuItems(input: {
       onSelect: input.handlers.onAddOrganization,
     }] : []),
   ];
-  const accountEntries: SidebarSubmenuEntry[] = (input.accounts ?? []).map((account) => ({
-    key: `switch:${account.id}`,
-    label: account.name,
-    icon: account.local ? <Laptop size={16} /> : <Building2 size={16} />,
-    checked: account.active,
-    // the address stays visible, quiet, under a server's name
-    subtitle: account.host && account.host !== account.name ? account.host : undefined,
-    title: account.host || undefined,
-    rename: account.renamable ? {
-      label: t("sidebar.account.rename"),
-      onRename: () => input.handlers.onRename({ id: account.id, name: account.name, defaultName: account.defaultName ?? account.host ?? account.name }),
-    } : undefined,
-    onSelect: account.active || !account.switchable ? undefined : () => input.handlers.onSwitch(account.id),
-  }));
+  const accountEntries: SidebarSubmenuEntry[] = (input.accounts ?? []).map((account) => {
+    const defaultName = account.defaultName ?? account.host ?? account.name;
+    const editing = input.renaming?.id === account.id;
+    return {
+      key: `switch:${account.id}`,
+      label: account.name,
+      icon: account.local ? <Laptop size={16} /> : <Building2 size={16} />,
+      checked: account.active,
+      // the address stays visible, quiet, under a server's name
+      subtitle: account.host && account.host !== account.name ? account.host : undefined,
+      title: account.host || undefined,
+      rename: account.renamable ? {
+        label: t("sidebar.account.rename"),
+        onRename: () => input.handlers.onRename({ id: account.id, name: account.name, defaultName }),
+        edit: editing && input.renaming ? {
+          value: input.renaming.draft,
+          placeholder: input.renaming.defaultName,
+          onChange: (value) => input.onRenameDraft?.(value),
+          onSave: () => input.onRenameSave?.(),
+          onCancel: () => input.onRenameCancel?.(),
+        } : undefined,
+      } : undefined,
+      onSelect: account.active || !account.switchable ? undefined : () => input.handlers.onSwitch(account.id),
+    };
+  });
   const accountMenu = input.accounts != null;
   const lower: SidebarMenuItem[] = [
     ...(accountMenu
@@ -424,6 +442,13 @@ export function profileMenuItems(input: {
       icon: <CalendarDays size={18} />,
       active: input.automationsActive,
       onSelect: input.handlers.onAutomations,
+    },
+    {
+      key: "memory",
+      label: t("sidebar.nav.memory"),
+      icon: <Brain size={18} />,
+      active: input.memoryActive === true,
+      onSelect: input.handlers.onMemory,
     },
     ...(input.teamMap !== false
       ? [{
@@ -570,7 +595,6 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   // the menu's figures (plan, cost, saved servers) are read the first time
   // it opens, not with every sidebar
   const [menuOpened, setMenuOpened] = useState(false);
-  const [aboutOpen, setAboutOpen] = useState(false);
   const triggerRef = useRef<HTMLSpanElement>(null);
   const achievements = useAchievements();
   // conversations waiting on the person's answer (a plain count, no hook)
@@ -607,7 +631,8 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
 
   // bumped when a server is renamed, so the lists read the new name
   const [namesTick, setNamesTick] = useState(0);
-  const [renaming, setRenaming] = useState<{ id: string; name: string; defaultName: string } | null>(null);
+  // Lot 6: rename stays in the Switch account row (no window on the menu).
+  const [renaming, setRenaming] = useState<{ id: string; name: string; defaultName: string; draft: string } | null>(null);
   const account = useAccountMenuData(menuOpened, namesTick);
   const serverMode = useServerMode(namesTick);
   // The desktop opens on an organization server (server mode) and this is
@@ -654,6 +679,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
     mobile: SAGAX_MOBILE_URL !== null,
     achievementsLabel: achievements.status === "ready" ? t("achievements.menu") : null,
     automationsActive: state.activeView === "routines",
+    memoryActive: state.memoryManagerOpen,
     teamMapActive: state.activeView === "team-map",
     teamMap: window.ogb?.remoteClient?.active !== true,
     remoteSessionsActive: state.activeView === "remote-sessions",
@@ -664,8 +690,17 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
     accounts,
     canAddOrganization: !business && Boolean(window.ogb?.environments),
     signOut: lockedServer,
+    renaming,
+    onRenameDraft: (draft) => setRenaming((current) => (current ? { ...current, draft } : current)),
+    onRenameSave: () => {
+      if (!renaming) return;
+      saveServerName(renaming.id, renaming.draft.trim().replace(/\s+/g, " "));
+      setRenaming(null);
+    },
+    onRenameCancel: () => setRenaming(null),
     handlers: {
       onAutomations: () => dispatch({ type: "showRoutines" }),
+      onMemory: () => dispatch({ type: "toggleMemoryManager", open: true }),
       onTeamMap: () => dispatch({ type: "showTeamMap" }),
       onRemoteSessions: () => dispatch({ type: "showRemoteSessions" }),
       onSettings: () => dispatch({ type: "toggleAppSettings" }),
@@ -676,12 +711,15 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
         dispatch({ type: "toggleShortcuts", open: true });
       },
       onReleaseNotes: () => requestReleaseNotes("browse"),
-      onAbout: () => setAboutOpen(true),
+      onAbout: () => dispatch({ type: "toggleAppSettings", open: true, section: "updates" }),
       onViewUsage: () => dispatch({ type: "toggleAppSettings", open: true, section: "usage" }),
       // Switching never signs out: from an organization server's page,
       // Personal opens through the desktop and the server stays signed in.
       onSwitch: (id) => { void switchAccount(id, window.ogb).catch(() => {}); },
-      onRename: (entry) => setRenaming(entry),
+      onRename: (entry) => setRenaming({
+        ...entry,
+        draft: entry.name === entry.defaultName ? "" : entry.name,
+      }),
       onAddOrganization: () => dispatch({ type: "toggleAppSettings", open: true, section: "organization" }),
       onSignOut: () => {
         const bridge = serverModeBridge(window.ogb);
@@ -940,15 +978,6 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
             </button>
           )}
         </div>
-      )}
-      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
-      {renaming && (
-        <RenameServerDialog
-          current={renaming.name}
-          defaultName={renaming.defaultName}
-          onSave={(label) => saveServerName(renaming.id, label)}
-          onClose={() => setRenaming(null)}
-        />
       )}
     </div>
   );

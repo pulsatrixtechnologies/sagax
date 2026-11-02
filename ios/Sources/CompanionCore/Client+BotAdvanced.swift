@@ -58,6 +58,27 @@ public extension CompanionClient {
         try await send(skillRequest("GET", botId: botId, name: name), as: SkillText.self).text
     }
 
+    /// `GET /api/bots/:id/skills/:name` as the person-UI editor payload.
+    func skillEditor(botId: String, name: String) async throws -> SkillEditorPayload {
+        try await send(skillRequest("GET", botId: botId, name: name), as: SkillEditorPayload.self)
+    }
+
+    /// `PUT /api/bots/:id/skills/:name`: person Save (re-signs the reviewed hash).
+    func saveSkill(botId: String, name: String, newName: String, description: String, instructions: String) async throws {
+        var request = try skillRequest("PUT", botId: botId, name: name)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "name": newName, "description": description, "instructions": instructions,
+        ])
+        try await send(request)
+    }
+
+    /// `POST /api/bots/:id/skills/:name/review {action}`: Accept or Revert.
+    func reviewSkill(botId: String, name: String, action: String) async throws {
+        guard Self.validRouteID(botId), SkillRules.validName(name) else { throw APIError.badURL }
+        try await send(makeRequest("POST", "/api/bots/\(botId)/skills/\(name)/review", body: ["action": action]))
+    }
+
     /// `PATCH /api/bots/:id/skills/:name {enabled}`.
     func setSkillEnabled(botId: String, name: String, enabled: Bool) async throws {
         var request = try skillRequest("PATCH", botId: botId, name: name)

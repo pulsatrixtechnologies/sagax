@@ -21,7 +21,9 @@ final class BotEditSearchTests: XCTestCase {
         XCTAssertTrue(found("voix").contains(.callVoice))
         XCTAssertTrue(found("horaire").contains(.routines))
         XCTAssertTrue(found("approbation").contains(.approvals))
-        XCTAssertTrue(found("MCP").contains(.access))
+        // Tools and apps opens Access directly (lot 2); the Access leaf is gone.
+        XCTAssertTrue(found("MCP").contains(.toolsApps))
+        XCTAssertFalse(found("MCP").contains(.access))
         XCTAssertTrue(found("modele").contains(.model))
     }
 

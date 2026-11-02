@@ -21,6 +21,7 @@ import {
   type InboxFilters,
 } from "../../../shared/approvals-inbox";
 import { WindowDragStrip } from "../DesktopCapabilities";
+import { ConfirmDialog } from "../ConfirmDialog";
 import { bulkAnswer, inboxTitle, useInbox } from "@/lib/approvals-inbox";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -126,69 +127,49 @@ function BulkConfirm({ decision, selected, bots, busy, onCancel, onConfirm }: {
   const [always, setAlways] = useState(false);
   // every card a bulk Always allow covers must have its own rule to keep
   const alwaysOffered = decision === "allow" && plan.answered.length > 0 && plan.answered.every((entry) => Boolean(entry.alwaysRule) && entry.alwaysKind === plan.answered[0]?.alwaysKind);
-  const confirmRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { confirmRef.current?.focus(); }, []);
   const allow = decision === "allow";
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="approvals-bulk-title"
-        data-bulk-confirm={decision}
-        onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); onCancel(); } }}
-        className="flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-hairline/50 bg-card shadow-2xl"
-      >
-        <div className="px-5 pb-2 pt-4">
-          <h2 id="approvals-bulk-title" className="text-[16px] font-semibold text-ink">
-            {t(allow ? "approvals.bulk.confirmAllowTitle" : "approvals.bulk.confirmDenyTitle", { count: plan.answered.length })}
-          </h2>
-          <p className="mt-1 text-[12.5px] text-ink-secondary">{t(allow ? (always ? "approvals.bulk.alwaysNote" : "approvals.bulk.onceOnly") : "approvals.bulk.denyNote")}</p>
+    <ConfirmDialog
+      open
+      tone={allow ? "neutral" : "danger"}
+      title={t(allow ? "approvals.bulk.confirmAllowTitle" : "approvals.bulk.confirmDenyTitle", { count: plan.answered.length })}
+      body={t(allow ? (always ? "approvals.bulk.alwaysNote" : "approvals.bulk.onceOnly") : "approvals.bulk.denyNote")}
+      confirmLabel={t(allow ? "approvals.bulk.allowN" : "approvals.bulk.denyN", { count: plan.answered.length })}
+      pending={busy}
+      confirmDisabled={plan.answered.length === 0}
+      onCancel={onCancel}
+      onConfirm={() => onConfirm(always && alwaysOffered)}
+      extra={
+        <div data-bulk-confirm={decision}>
           {alwaysOffered && (
-            <label className="mt-2 flex items-center gap-2 text-[13px] text-ink" data-bulk-always="">
+            <label className="mb-2 flex items-center gap-2 text-[13px] text-ink" data-bulk-always="">
               <input type="checkbox" checked={always} onChange={(event) => setAlways(event.target.checked)} />
               {t("approvals.bulk.always")}
             </label>
           )}
+          <ul className="max-h-48 divide-y divide-hairline/30 overflow-y-auto rounded-xl border border-hairline/40" data-bulk-list="answered">
+            {plan.answered.map((entry) => (
+              <li key={entry.key} className="flex items-center gap-2.5 px-3 py-2">
+                <InboxAvatar bot={bots.get(entry.botId)} name={entry.botName} size={22} />
+                <span className="shrink-0 text-[12.5px] font-medium text-ink">{entry.botName}</span>
+                <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{always && entry.alwaysRule ? entry.alwaysRule : inboxTitle(entry)}</span>
+                {entry.destination && <span className="shrink-0 text-[11.5px] text-ink-tertiary">{t(`approvals.destination.${entry.destination}`)}</span>}
+              </li>
+            ))}
+          </ul>
+          {plan.skipped.length > 0 && (
+            <div className="mt-2 text-[12px] text-ink-secondary" data-bulk-list="skipped">
+              <div className="font-medium text-ink-secondary">{t("approvals.bulk.skippedTitle", { count: plan.skipped.length })}</div>
+              <ul className="mt-1 flex flex-col gap-0.5">
+                {plan.skipped.map(({ entry, reason }) => (
+                  <li key={entry.key} className="truncate">{entry.botName} · {inboxTitle(entry)} · {t(REFUSAL_KEY[reason])}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-        <ul className="min-h-0 flex-1 divide-y divide-hairline/30 overflow-y-auto border-y border-hairline/40" data-bulk-list="answered">
-          {plan.answered.map((entry) => (
-            <li key={entry.key} className="flex items-center gap-2.5 px-5 py-2">
-              <InboxAvatar bot={bots.get(entry.botId)} name={entry.botName} size={22} />
-              <span className="shrink-0 text-[12.5px] font-medium text-ink">{entry.botName}</span>
-              <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{always && entry.alwaysRule ? entry.alwaysRule : inboxTitle(entry)}</span>
-              {entry.destination && <span className="shrink-0 text-[11.5px] text-ink-tertiary">{t(`approvals.destination.${entry.destination}`)}</span>}
-            </li>
-          ))}
-        </ul>
-        {plan.skipped.length > 0 && (
-          <div className="px-5 pt-2.5 text-[12px] text-ink-secondary" data-bulk-list="skipped">
-            <div className="font-medium text-ink-secondary">{t("approvals.bulk.skippedTitle", { count: plan.skipped.length })}</div>
-            <ul className="mt-1 flex flex-col gap-0.5">
-              {plan.skipped.map(({ entry, reason }) => (
-                <li key={entry.key} className="truncate">{entry.botName} · {inboxTitle(entry)} · {t(REFUSAL_KEY[reason])}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <div className="flex gap-3 px-5 pb-5 pt-4">
-          <button type="button" onClick={onCancel} className="ui-button flex-1">{t("approval.action.cancel")}</button>
-          <button
-            ref={confirmRef}
-            type="button"
-            disabled={busy || plan.answered.length === 0}
-            onClick={() => onConfirm(always && alwaysOffered)}
-            className={cn(
-              "flex flex-[1.4] items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[14px] font-semibold disabled:opacity-40",
-              allow ? "bg-success hover:brightness-110" : "bg-danger text-danger-ink hover:brightness-110",
-            )}
-          >
-            {busy && <Loader2 size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-            {t(allow ? "approvals.bulk.allowN" : "approvals.bulk.denyN", { count: plan.answered.length })}
-          </button>
-        </div>
-      </div>
-    </div>
+      }
+    />
   );
 }
 

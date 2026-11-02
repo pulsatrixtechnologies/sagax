@@ -20,6 +20,8 @@ function world(options: { allowed?: string[]; preferred?: Array<{ instanceId: st
     lines: [] as Array<{ threadId: string; line: LimitFailoverLine; replaced?: string }>,
     resent: [] as Array<{ messageId: string; on: ModelSelection }>,
     reruns: [] as string[],
+    superseded: [] as string[],
+    cleared: [] as string[],
     request: { messageId: "m1", turnId: "turn-1", origin: { kind: "user" } } as LimitRequest | undefined,
     busy: options.busy ?? false,
     switches: [] as ModelSelection[],
@@ -56,7 +58,12 @@ function world(options: { allowed?: string[]; preferred?: Array<{ instanceId: st
       state.resent.push({ messageId, on: { ...state.selection } });
       return true;
     },
-    rerunRoutine: (routineId) => { state.reruns.push(routineId); return true; },
+    rerunRoutine: (routineId, fromRunId) => {
+      state.reruns.push(routineId);
+      if (fromRunId) state.superseded.push(fromRunId);
+      return true;
+    },
+    clearRoutineRun: (runId) => { state.cleared.push(runId); },
     after: (ms, run) => {
       const timer = { at: clock.now + ms, run, cancelled: false };
       timers.push(timer);
@@ -279,21 +286,54 @@ describe("a turn its engine's limit refused", () => {
     w.state.request = undefined;
     expect(w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT, routineRun: { id: "run-1", routineId: "routine" } })).toBe(true);
     await w.host.idle();
+    // Non-exhausted path: switch + record + switched note + rerun at once
+    // (not deferred to beforeTurn).
     expect(w.state.reruns).toEqual(["routine"]);
-    // The next run starts on the backup, with its line.
-    await w.host.beforeTurn("bot", "thread", undefined);
+    expect(w.state.superseded).toEqual(["run-1"]);
+    expect(w.state.switches).toEqual([B]);
     expect(w.state.selection).toEqual(B);
-    expect(w.state.lines.at(-1)!.line).toMatchObject({ kind: "switched", from: "Claude", to: "Codex" });
+    expect(w.state.lines).toEqual([{ threadId: "thread", replaced: "turn-1",
+      line: { kind: "switched", from: "Claude", to: "Codex", resetsAt: w.clock.now + 2 * 3_600_000 } }]);
+    expect(w.store.failover("bot", "thread")).toMatchObject({ from: A, to: B });
+    // beforeTurn keeps the backup until the reset; no second switched note.
+    expect(w.host.beforeTurn("bot", "thread", undefined)).toBeNull();
+    expect(w.state.lines).toHaveLength(1);
 
     const alone = world({ allowed: ["claude"] });
     alone.dispatch();
     alone.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT, routineRun: { id: "run-1", routineId: "routine" } });
     await alone.host.idle();
     expect(alone.state.reruns).toEqual([]);
+    expect(alone.state.cleared).toEqual(["run-1"]);
     expect(alone.state.lines[0]!.line).toMatchObject({ kind: "waitingRoutine", from: "Claude" });
     alone.clock.now = alone.store.nextResumeAt()!;
     await alone.host.tick();
     expect(alone.state.reruns).toEqual(["routine"]);
+  });
+
+  // R5 scorecard: before, non-exhausted routine failover skipped store.record
+  // and the switched note; N synthetic limit cases now all write the note.
+  it("writes a switched note and records failover for every routine limit with a backup (R5 before/after)", async () => {
+    const N = 12;
+    let switchedNotes = 0;
+    let recorded = 0;
+    let reruns = 0;
+    for (let i = 0; i < N; i++) {
+      const w = world();
+      w.dispatch();
+      w.state.request = undefined;
+      expect(w.host.turnFailed({
+        threadId: "thread", turnId: `turn-${i}`, cause: LIMIT,
+        routineRun: { id: `run-${i}`, routineId: `routine-${i}` },
+      })).toBe(true);
+      await w.host.idle();
+      if (w.state.lines.some((row) => row.line.kind === "switched")) switchedNotes += 1;
+      if (w.store.failover("bot", "thread")) recorded += 1;
+      if (w.state.reruns.length === 1) reruns += 1;
+    }
+    // Before R5: switchedNotes=0, recorded=0 on the non-exhausted path.
+    // After R5: all N cases write the note, record, and rerun.
+    expect({ switchedNotes, recorded, reruns, N }).toEqual({ switchedNotes: N, recorded: N, reruns: N, N });
   });
 });
 

@@ -2,17 +2,19 @@
 // parité Grok Bot V4, 59, 83): who it calls and from which line, why, the
 // exact words, the callback number, the disclosure and "I confirm the
 // number"; or what a purchase buys, from where, with which card. One answer
-// covers one action: Call or Don't call, Allow once or Decline. No Always
+// covers one action: Call or Cancel, Pay or Cancel. No Always
 // allow. Never a card number, a security code or an id.
 //
 // A conversation call (mode `conversation`) shows the objective, the most it
 // may last and the language, the opening line, its guidance and voicemail
-// words behind a disclosure; once placed and not ended, "in progress"; once
-// ended, the result: how it ended, how long, the summary, the commitments
-// and the transcript behind a toggle. The other party's words stay plain
-// text (verbatim, never markdown).
+// words behind a disclosure; once placed, the live card (phase chip, timer,
+// transcript, End call); once ended, the result with the recording player
+// when present. The other party's words stay plain text (verbatim, never
+// markdown).
+import AVFoundation
 import CompanionCore
 import SwiftUI
+import UIKit
 
 struct OutboundCardView: View {
     @EnvironmentObject private var session: Session
@@ -27,6 +29,9 @@ struct OutboundCardView: View {
     /// Instructions and voicemail words of a conversation call.
     @State private var showDetails = false
     @State private var showTranscript: Bool
+    @State private var showLiveTranscript = true
+    @State private var hanging = false
+    @State private var nowMs = Date().timeIntervalSince1970 * 1000
 
     init(card: OutboundCardData, accent: Color, transcriptOpen: Bool = OutboundCardView.previewTranscriptOpen) {
         self.card = card
@@ -45,6 +50,13 @@ struct OutboundCardView: View {
 
     private var status: String { answered ?? card.status }
     private var pending: Bool { status == "pending" }
+    private var viewCard: OutboundCardData {
+        var copy = card
+        copy.status = status
+        return copy
+    }
+    private var live: Bool { viewCard.isLiveConversation }
+    private var ended: Bool { card.isConversation && card.result != nil }
 
     var body: some View {
         let ink = ApprovalInk.of(desktop, accent: desktop?.accent ?? accent)
@@ -56,14 +68,22 @@ struct OutboundCardView: View {
                     .foregroundStyle(ink.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("outbound-title")
-                if card.isConversation { conversationBody(ink) } else if card.kind == .call { callBody(ink) } else { purchaseBody(ink) }
+                if card.isConversation {
+                    if live { liveConversationBody(ink) }
+                    else if ended, let result = card.result { endedConversationBody(result, ink) }
+                    else { conversationBody(ink) }
+                } else if card.kind == .call {
+                    callBody(ink)
+                } else {
+                    purchaseBody(ink)
+                }
                 if let line = statusLine {
                     Text(verbatim: line)
                         .font(ink.font(12, .regular))
                         .foregroundStyle(ink.secondary)
                         .accessibilityIdentifier("outbound-status")
                 }
-                if let via = card.via, !via.isEmpty, !pending {
+                if let via = card.via, !via.isEmpty, !pending, !live {
                     Text("Answered by \(via)")
                         .font(ink.font(12, .regular))
                         .foregroundStyle(ink.secondary)
@@ -85,6 +105,10 @@ struct OutboundCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("outbound-card-\(card.kind.rawValue)")
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+            guard live else { return }
+            nowMs = Date().timeIntervalSince1970 * 1000
+        }
     }
 
     // MARK: Parts
@@ -92,7 +116,23 @@ struct OutboundCardView: View {
     private func header(_ ink: ApprovalInk) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon).font(.system(size: 12, weight: .medium))
-            Text(card.isConversation ? "Conversation call" : card.kind == .call ? "Phone call" : "Purchase").lineLimit(1)
+            Text(headerLabel).lineLimit(1)
+            if live {
+                phaseChip(phaseLabel(card.phase ?? "dialing"), tone: ink.accent, fill: ink.accent.opacity(0.12), ink: ink)
+                    .accessibilityIdentifier("outbound-phase-chip")
+                Text(verbatim: OutboundCallResult.duration(OutboundCardRules.liveElapsed(startedAt: card.liveStartedAt, now: nowMs)))
+                    .font(ink.font(11.5, .regular))
+                    .foregroundStyle(ink.tertiary)
+                    .monospacedDigit()
+                    .accessibilityIdentifier("outbound-live-timer")
+            } else if ended, let result = card.result {
+                phaseChip(String(localized: "Ended"), tone: ink.secondary, fill: ink.inset, ink: ink)
+                    .accessibilityIdentifier("outbound-phase-chip")
+                Text(verbatim: OutboundCallResult.duration(result.durationSec))
+                    .font(ink.font(11.5, .regular))
+                    .foregroundStyle(ink.tertiary)
+                    .monospacedDigit()
+            }
             Spacer(minLength: 8)
             Text(verbatim: card.botName).lineLimit(1)
         }
@@ -104,18 +144,49 @@ struct OutboundCardView: View {
         .background(ink.inset.opacity(0.6))
     }
 
+    private func phaseChip(_ label: String, tone: Color, fill: Color, ink: ApprovalInk) -> some View {
+        Text(verbatim: label)
+            .font(ink.font(11.5, .medium))
+            .foregroundStyle(tone)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(fill, in: Capsule())
+    }
+
+    private var headerLabel: LocalizedStringKey {
+        if live || ended { return "Phone call" }
+        if card.isConversation { return "Conversation call" }
+        return card.kind == .call ? "Phone call" : "Purchase"
+    }
+
     private var icon: String {
         switch card.kind {
-        case .call: status == "denied" ? "phone.down" : card.isConversation ? "phone.bubble" : "phone"
+        case .call: status == "denied" ? "phone.down" : (live || ended || card.isConversation) ? "phone.bubble" : "phone"
         case .purchase, .unknown: (card.flights?.isEmpty == false) ? "airplane" : "bag"
         }
     }
 
     private var money: String { OutboundCardRules.money(card.amount, currency: card.currency) }
 
+    private var calleeLine: String {
+        let destination = card.destination ?? ""
+        if let name = card.calleeName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            return "\(name) · \(destination)"
+        }
+        return destination
+    }
+
     private var title: String {
         switch card.kind {
         case .call:
+            if card.isConversation, pending {
+                let destination = card.destination ?? ""
+                if let name = card.calleeName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                    return String(localized: "Call \(name)? \(destination)")
+                }
+                return String(localized: "Call \(destination)?")
+            }
+            if live || ended { return calleeLine }
             return String(localized: "Call to \(card.destination ?? "")")
         case .purchase, .unknown:
             if status == "done" {
@@ -141,6 +212,18 @@ struct OutboundCardView: View {
         case .purchaseApproved: String(localized: "Allowed. \(card.botName) can pay.")
         case .purchaseDenied: String(localized: "Declined.")
         case nil: nil
+        }
+    }
+
+    private func phaseLabel(_ phase: String) -> String {
+        switch phase {
+        case "dialing": return String(localized: "Dialing")
+        case "ringing": return String(localized: "Ringing")
+        case "on_hold": return String(localized: "On hold")
+        case "in_call": return String(localized: "In call")
+        case "transferred": return String(localized: "Transferred")
+        case "ended": return String(localized: "Ended")
+        default: return String(localized: "Dialing")
         }
     }
 
@@ -253,6 +336,142 @@ struct OutboundCardView: View {
             .accessibilityIdentifier("outbound-confirm")
         }
         if let result { callResult(result, ink) }
+    }
+
+    // MARK: Live / ended conversation
+
+    private var waitingPickup: Bool {
+        let phase = card.phase ?? "dialing"
+        return phase == "dialing" || phase == "ringing"
+    }
+
+    private var liveStream: [(id: String, kind: String, text: String, speaker: String?)] {
+        var items: [(at: Double, index: Int, kind: String, text: String, speaker: String?)] = []
+        for (index, line) in (card.liveTranscript ?? []).enumerated() {
+            items.append((line.at ?? Double(index), index, "line", line.text, line.speaker))
+        }
+        for (index, event) in (card.liveEvents ?? []).enumerated() {
+            items.append((event.at, index, "event", eventLine(event), nil))
+        }
+        items.sort { lhs, rhs in
+            if lhs.at != rhs.at { return lhs.at < rhs.at }
+            if lhs.kind == rhs.kind { return lhs.index < rhs.index }
+            return lhs.kind == "line"
+        }
+        return items.map { ("\($0.kind)-\($0.index)-\($0.at)", $0.kind, $0.text, $0.speaker) }
+    }
+
+    private func eventLine(_ event: OutboundCardData.LiveEvent) -> String {
+        switch event.kind {
+        case .hold: return String(localized: "On hold")
+        case .resume: return String(localized: "Back on the call")
+        case .dtmf: return String(localized: "Pressed \(event.detail)")
+        case .transfer: return String(localized: "Transferred to \(event.detail)")
+        case .unknown: return event.detail
+        }
+    }
+
+    private func speakerName(_ speaker: String) -> String {
+        switch speaker {
+        case "bot":
+            return card.botName
+        case "system":
+            return String(localized: "Live transcript")
+        default:
+            let name = card.calleeName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return name.isEmpty ? String(localized: "Other party") : name
+        }
+    }
+
+    @ViewBuilder
+    private func liveConversationBody(_ ink: ApprovalInk) -> some View {
+        if waitingPickup {
+            Text("Waiting for them to pick up")
+                .font(ink.font(12, .regular))
+                .foregroundStyle(ink.secondary)
+                .accessibilityIdentifier("outbound-waiting")
+        }
+        let stream = liveStream
+        if !stream.isEmpty || !waitingPickup {
+            disclosure(showLiveTranscript ? "Hide live transcript" : "Show live transcript", open: $showLiveTranscript, ink: ink)
+                .accessibilityIdentifier("outbound-live-toggle")
+            if showLiveTranscript {
+                VStack(alignment: .leading, spacing: 6) {
+                    if stream.isEmpty {
+                        Text("Call in progress. The result appears here when it ends.")
+                            .font(ink.font(12, .regular))
+                            .foregroundStyle(ink.tertiary)
+                    }
+                    ForEach(stream, id: \.id) { item in
+                        if item.kind == "event" {
+                            Text(verbatim: item.text)
+                                .font(ink.font(12, .regular))
+                                .italic()
+                                .foregroundStyle(ink.tertiary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            let speaker = item.speaker ?? "callee"
+                            (Text(verbatim: speakerName(speaker))
+                                .font(ink.font(12.5, .medium))
+                                .foregroundColor(speaker == "bot" ? ink.accent : speaker == "system" ? ink.tertiary : ink.secondary)
+                             + Text(verbatim: " " + item.text)
+                                .font(ink.font(12.5, .regular))
+                                .foregroundColor(ink.ink))
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .textSelection(.enabled)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .frame(maxHeight: 280, alignment: .top)
+                .background(ink.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityIdentifier("outbound-live-transcript")
+            }
+        }
+        Button { hangUp() } label: {
+            HStack(spacing: 6) {
+                if hanging { ProgressView().controlSize(.mini) }
+                else { Image(systemName: "phone.down").font(.system(size: 12, weight: .semibold)) }
+                Text("End call")
+            }
+            .font(ink.font(13, .medium))
+            .foregroundStyle(ink.danger)
+            .padding(.horizontal, 14)
+            .frame(height: 32)
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(ink.danger.opacity(0.4), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(hanging)
+        .opacity(hanging ? 0.4 : 1)
+        .accessibilityIdentifier("outbound-hangup")
+        .padding(.top, 2)
+    }
+
+    @ViewBuilder
+    private func endedConversationBody(_ result: OutboundCallResult, _ ink: ApprovalInk) -> some View {
+        Text("Call ended · \(card.destination ?? "")")
+            .font(ink.font(12, .regular))
+            .foregroundStyle(ink.secondary)
+            .accessibilityIdentifier("outbound-ended-line")
+        OutboundRecordingPlayer(card: card, result: result, ink: ink)
+        callResult(result, ink)
+    }
+
+    private func hangUp() {
+        guard let client = session.settingsClient else { return }
+        Haptics.selection()
+        hanging = true
+        error = ""
+        Task {
+            do {
+                try await client.hangUpOutbound(card)
+            } catch {
+                self.error = error.localizedDescription
+                hanging = false
+            }
+        }
     }
 
     private func quote(_ text: String, _ ink: ApprovalInk) -> some View {
@@ -447,7 +666,7 @@ struct OutboundCardView: View {
             Button { answer(true) } label: {
                 HStack(spacing: 6) {
                     if busy == true { ProgressView().controlSize(.mini).tint(.white) }
-                    Text(card.kind == .call ? "Call" : "Allow once")
+                    Text(card.kind == .call ? "Call" : "Pay")
                 }
                 .font(ink.font(13, .medium))
                 .foregroundStyle(.white)
@@ -461,7 +680,7 @@ struct OutboundCardView: View {
             Button { answer(false) } label: {
                 HStack(spacing: 6) {
                     if busy == false { ProgressView().controlSize(.mini) }
-                    Text(card.kind == .call ? "Don't call" : "Decline")
+                    Text(card.kind == .call ? (card.isConversation ? "Cancel" : "Don't call") : "Cancel")
                 }
                 .font(ink.font(13, .regular))
                 .foregroundStyle(ink.ink)
@@ -491,6 +710,212 @@ struct OutboundCardView: View {
             }
             busy = nil
         }
+    }
+}
+
+/// Recording player on the ended conversation card (AVAudioPlayer + speed).
+private struct OutboundRecordingPlayer: View {
+    @EnvironmentObject private var session: Session
+    let card: OutboundCardData
+    let result: OutboundCallResult
+    let ink: ApprovalInk
+    @StateObject private var player = OutboundRecordingAudio()
+    @State private var loading = false
+    @State private var loadError = ""
+    @State private var shareFile: ShareFile?
+
+    private var hasRecording: Bool { OutboundCardRules.recordingPath(card) != nil }
+    private var hasTranscript: Bool {
+        !(result.transcript.isEmpty && (card.liveTranscript ?? []).isEmpty)
+    }
+
+    var body: some View {
+        if hasRecording || hasTranscript {
+            VStack(alignment: .leading, spacing: 8) {
+                if hasRecording {
+                    HStack(spacing: 8) {
+                        Text("Recording")
+                            .font(ink.font(12, .medium))
+                            .foregroundStyle(ink.secondary)
+                        Button {
+                            togglePlayback()
+                        } label: {
+                            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(ink.ink)
+                                .frame(width: 28, height: 28)
+                                .background(ink.inset, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(loading)
+                        .accessibilityIdentifier("outbound-recording-play")
+                        if loading { ProgressView().controlSize(.mini) }
+                        Menu {
+                            ForEach(OutboundRecordingAudio.rates, id: \.self) { rate in
+                                Button(rateLabel(rate)) { player.setRate(rate) }
+                            }
+                        } label: {
+                            Text(rateLabel(player.rate))
+                                .font(ink.font(11.5, .regular))
+                                .foregroundStyle(ink.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(ink.hairline.opacity(0.6), lineWidth: 1))
+                        }
+                        .accessibilityLabel(Text("Speed"))
+                        .accessibilityIdentifier("outbound-speed")
+                        Spacer(minLength: 0)
+                    }
+                }
+                if !loadError.isEmpty {
+                    Text(verbatim: loadError)
+                        .font(ink.font(12, .regular))
+                        .foregroundStyle(ink.danger)
+                }
+                HStack {
+                    Spacer(minLength: 0)
+                    Menu {
+                        if hasRecording {
+                            Button("Download recording") { downloadRecording() }
+                        }
+                        if hasTranscript {
+                            Button("Copy transcript") { copyTranscript() }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(ink.tertiary)
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityIdentifier("outbound-more")
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(ink.inset.opacity(0.6), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .accessibilityIdentifier("outbound-recording-player")
+            .sheet(item: $shareFile) { file in
+                ActivityShareSheet(items: [file.url])
+            }
+        }
+    }
+
+    private func rateLabel(_ rate: Float) -> String {
+        if rate == 1 { return "1x" }
+        if rate == Float(Int(rate)) { return "\(Int(rate))x" }
+        return String(format: "%.2gx", rate)
+    }
+
+    private func togglePlayback() {
+        if player.isReady {
+            player.isPlaying ? player.pause() : player.play()
+            return
+        }
+        guard let client = session.settingsClient else { return }
+        loading = true
+        loadError = ""
+        Task {
+            do {
+                let data = try await client.outboundRecording(card)
+                try player.load(data)
+                player.play()
+            } catch {
+                loadError = error.localizedDescription
+            }
+            loading = false
+        }
+    }
+
+    private func transcriptText() -> String {
+        if !result.transcript.isEmpty {
+            return result.transcript.map {
+                "\($0.isBot ? card.botName : String(localized: "Other party")): \($0.text)"
+            }.joined(separator: "\n")
+        }
+        return (card.liveTranscript ?? [])
+            .filter { $0.speaker != "system" }
+            .map {
+                let name = $0.isBot
+                    ? card.botName
+                    : (card.calleeName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                        ?? String(localized: "Other party"))
+                return "\(name): \($0.text)"
+            }
+            .joined(separator: "\n")
+    }
+
+    private func copyTranscript() {
+        let text = transcriptText()
+        guard !text.isEmpty else { return }
+        UIPasteboard.general.string = text
+    }
+
+    private func downloadRecording() {
+        guard let client = session.settingsClient else { return }
+        Task {
+            do {
+                let data = try await client.outboundRecording(card)
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("sagax-call-\(card.id).m4a")
+                try data.write(to: url, options: .atomic)
+                await MainActor.run { shareFile = ShareFile(url: url) }
+            } catch {
+                await MainActor.run { loadError = error.localizedDescription }
+            }
+        }
+    }
+}
+
+@MainActor
+private final class OutboundRecordingAudio: NSObject, ObservableObject, AVAudioPlayerDelegate {
+    static let rates: [Float] = [1, 1.25, 1.5, 2]
+    @Published private(set) var isPlaying = false
+    @Published private(set) var rate: Float = 1
+    private var player: AVAudioPlayer?
+    var isReady: Bool { player != nil }
+
+    func load(_ data: Data) throws {
+        let next = try AVAudioPlayer(data: data)
+        next.delegate = self
+        next.enableRate = true
+        next.rate = rate
+        next.prepareToPlay()
+        player = next
+        isPlaying = false
+    }
+
+    func play() {
+        guard let player else { return }
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .default)
+        try? session.setActive(true)
+        player.rate = rate
+        isPlaying = player.play()
+    }
+
+    func pause() {
+        player?.pause()
+        isPlaying = false
+    }
+
+    func setRate(_ next: Float) {
+        rate = next
+        player?.rate = next
+    }
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Task { @MainActor in
+            self.isPlaying = false
+            self.player?.currentTime = 0
+        }
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

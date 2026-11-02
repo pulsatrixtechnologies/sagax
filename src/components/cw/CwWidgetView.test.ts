@@ -12,7 +12,7 @@ import { FIXTURE_COMPANIES, FIXTURE_TICKETS, fixtureQueryResult } from "../../..
 import type { CwAction } from "../../../shared/cw-widgets/actions.ts";
 
 const tickets = cwWidgetFromToolCall(
-  "cw_psa__query",
+  "cw_psa_query",
   JSON.stringify({ resource: "service/tickets" }),
   fixtureQueryResult(FIXTURE_TICKETS),
 )!;
@@ -33,7 +33,7 @@ describe("ConnectWise widget", () => {
     expect(named).not.toContain("Service desk");
 
     const card = cwWidgetFromToolCall(
-      "cw_psa__query",
+      "cw_psa_query",
       JSON.stringify({ resource: "service/tickets/48213" }),
       fixtureQueryResult([FIXTURE_TICKETS[0]]),
     )!;
@@ -45,7 +45,7 @@ describe("ConnectWise widget", () => {
 
   it("renders a ```cw fence through the chat markdown", () => {
     const company = cwWidgetFromToolCall(
-      "cw_psa__query",
+      "cw_psa_query",
       JSON.stringify({ resource: "company/companies/250" }),
       fixtureQueryResult([FIXTURE_COMPANIES[0]]),
     )!;

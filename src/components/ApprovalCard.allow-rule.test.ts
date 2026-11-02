@@ -14,8 +14,8 @@ const card = {
   requestId: "r1",
   requestType: "permission" as const,
   tool: "other",
-  mcpTool: "perspicax__cw_psa__write",
-  allowKey: "mcp:perspicax__cw_psa__write",
+  mcpTool: "perspicax__cw_psa_write",
+  allowKey: "mcp:perspicax__cw_psa_write",
 };
 
 describe("Allow rule receipt", () => {

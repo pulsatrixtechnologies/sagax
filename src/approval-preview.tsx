@@ -45,11 +45,11 @@ function card(id: string, tool: string, input: unknown): Message {
 }
 
 const MESSAGES = [
-  card("a", "mcp__perspicax_example_flow__acme_desk__query_schedule", scheduleInput),
-  card("b", "mcp__perspicax_example_flow__acme_desk__write", writeInput),
+  card("a", "mcp__perspicax_example_flow__acme_desk_query_schedule", scheduleInput),
+  card("b", "mcp__perspicax_example_flow__acme_desk_write", writeInput),
   card("c", "mcp__claude_ai_Acme_Desk__acme_desk__query", { resource: "service/tickets", conditions: "status/name='Nouveau'", pageSize: 25 }),
 ];
-const settledCard = card("d", "mcp__perspicax_example_flow__acme_desk__action", { action: "delete", resource: "time/entries", id: 991 });
+const settledCard = card("d", "mcp__perspicax_example_flow__acme_desk_action", { action: "delete", resource: "time/entries", id: 991 });
 const SETTLED = [{ ...settledCard, card: { ...settledCard.card!, answered: "allow" } } as Message];
 
 function Preview() {

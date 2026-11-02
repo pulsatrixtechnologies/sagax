@@ -3202,7 +3202,7 @@ function samePerson(a: string | null | undefined, b: string | null | undefined):
 /** 2026-10-27: the product a tool serves, as the server that serves it
  * declared it (a Perspicax API's display name or title, api_list), for the
  * step row. The API id is a segment of the tool id before its verb
- * (`mcp__<server>__<api>__query`, or the `mcp` gateway's `tool`). Undefined
+ * (`mcp__<server>__<api>_query`, or the `mcp` gateway's `tool`). Undefined
  * when nothing declared one: the row then reads a generic name. */
 function declaredToolProduct(botId: string | undefined, name: string, input?: string): { product: string; productId: string } | undefined {
   if (!botId || !perspicaxMcp) return undefined;
@@ -8770,7 +8770,8 @@ const outbound = outboundWiring({
   },
   language: () => (cfg.language === "en" ? "en" : "fr"),
   twilio: (turn, args) => perspicaxMcp
-    ? perspicaxMcp.callTool({ ...turn, name: "twilio_api__write", args })
+    // the `__` spelling only for a Perspicax before 1.9.19
+    ? perspicaxMcp.callTool({ ...turn, name: "twilio_api_write", legacyName: "twilio_api__write", args })
     : Promise.resolve({ ok: false as const, code: "profile_not_mounted" as const, error: "Perspicax is not linked on this server" }),
   // 2026-10-28: a conversation call, from the person's own Perspicax Voice
   // line and Twilio key (the turn's speaker, never another member's key)
@@ -34302,20 +34303,20 @@ async function requestCwAction(auth: RequestAuth, threadId: string, body: Record
   const personal = languageOfRequest(auth);
   const language = cwActionLanguage(personal);
   const card = cwActionCard(action, language, actorPrincipalId(auth));
-  const cwProduct = declaredToolProduct(bot.id, "cw_psa__write");
-  const plain = approvalPlain({ botName: bot.name, tool: "cw_psa__write", toolInput: card.toolInput, detail: card.summary, ...(cwProduct ? { hints: cwProduct } : {}) }, serverApprovalWords(personal));
+  const cwProduct = declaredToolProduct(bot.id, "cw_psa_write");
+  const plain = approvalPlain({ botName: bot.name, tool: "cw_psa_write", toolInput: card.toolInput, detail: card.summary, ...(cwProduct ? { hints: cwProduct } : {}) }, serverApprovalWords(personal));
   // 2026-10-19 ("Toujours permettre" on every card): what Always allow
   // keeps here (this bot, this kind of ConnectWise change), and whether the
   // person already kept it (no security key of theirs protecting the write)
-  const described = ruleCandidateFor({ tool: "cw_psa__write", input: card.toolInput }, serverApprovalWords(personal));
+  const described = ruleCandidateFor({ tool: "cw_psa_write", input: card.toolInput }, serverApprovalWords(personal));
   const candidate = { ...described, tool: CW_WIDGET_RULE_TOOL };
   const answerer = approvalOwnerId(bot, threadId);
-  const stepUp = autoAnswerStepUp(bot, threadId, { tool: "cw_psa__write", input: card.toolInput, summary: card.summary });
+  const stepUp = autoAnswerStepUp(bot, threadId, { tool: "cw_psa_write", input: card.toolInput, summary: card.summary });
   // 2026-10-20 (security review): the answerer's rule answers only the
   // answerer's own request, never another member's in a group channel
   const ownRequest = Boolean(answerer) && actorPrincipalId(auth).trim().toLowerCase() === answerer.trim().toLowerCase();
   const kept = ownRequest && !stepUp.length && scopeKeepable(candidate.scope)
-    ? matchOwnerRule(ownerApprovals.rulesOf(answerer, bot.id).filter((rule) => rule.botId === bot.id), { ownerId: answerer, botId: bot.id, tool: CW_WIDGET_RULE_TOOL, input: card.toolInput })
+    ? cwWidgetRule(ownerApprovals.rulesOf(answerer, bot.id).filter((rule) => rule.botId === bot.id), answerer, bot.id, card.toolInput)
     : undefined;
   // the ConnectWise widget's own approval card; its write is then answered
   // in request.opened (widgetApproved); full-access: send
@@ -34330,7 +34331,7 @@ async function requestCwAction(auth: RequestAuth, threadId: string, body: Record
       requestId: card.requestId,
       // full-access: send
       requestType: "permission",
-      tool: "cw_psa__write",
+      tool: "cw_psa_write",
       toolInput: card.toolInput,
       ...(plain ? { plain } : {}),
       cwActionRequest: card.cwActionRequest,
@@ -34340,7 +34341,7 @@ async function requestCwAction(auth: RequestAuth, threadId: string, body: Record
   if (kept?.behavior === "allow") {
     const actor = cwActionActor(auth)!;
     appendDecision(DATA_DIR, {
-      threadId, requestId: card.requestId, botId: bot.id, botName: bot.name, tool: "cw_psa__write", summary: card.summary,
+      threadId, requestId: card.requestId, botId: bot.id, botName: bot.name, tool: "cw_psa_write", summary: card.summary,
       decision: "auto-approved", source: "owner-rule", rule: kept.id
     });
     const done = await allowCwAction(actor, threadId, message.id, { ...message.card!, ruleSaved: { id: kept.id, behavior: kept.behavior, description: kept.description } }, bot, action, languageOfRequest(auth));
@@ -34418,7 +34419,13 @@ async function allowCwAction(
 
 /** 2026-10-19: a widget's change is its own rule tool, apart from the
  * bot's own ConnectWise calls: "Always allow" here never covers those. */
-const CW_WIDGET_RULE_TOOL = "cw_widget:cw_psa__write";
+const CW_WIDGET_RULE_TOOL = "cw_widget:cw_psa_write";
+/** Rules kept before 2026-11-02 name the widget's write with `__`. */
+const CW_WIDGET_RULE_TOOL_BEFORE = "cw_widget:cw_psa__write";
+function cwWidgetRule(rules: Parameters<typeof matchOwnerRule>[0], ownerId: string, botId: string, input: Parameters<typeof matchOwnerRule>[1]["input"]) {
+  return matchOwnerRule(rules, { ownerId, botId, tool: CW_WIDGET_RULE_TOOL, input })
+    ?? matchOwnerRule(rules, { ownerId, botId, tool: CW_WIDGET_RULE_TOOL_BEFORE, input });
+}
 
 // ── a confidential thread's personal memory write (server/confidential-threads.ts) ──
 // Perspicax memory_write to the person's own tier ("me") from a confidential

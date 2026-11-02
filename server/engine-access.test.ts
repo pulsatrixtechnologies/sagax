@@ -232,8 +232,8 @@ describe("the admin gate on a member's bot", () => {
     ownerScopedMcpServer: (server) => server === "perspicax_quasar" || server === "my_remote",
   });
   it("lets the owner answer a tool of a remote or personal MCP server and a web search", () => {
-    expect(ownerGate("mcp__perspicax_quasar__cw_psa__query")).toBe(false);
-    expect(ownerGate("perspicax_quasar__cw_psa__write")).toBe(false);
+    expect(ownerGate("mcp__perspicax_quasar__cw_psa_query")).toBe(false);
+    expect(ownerGate("perspicax_quasar__cw_psa_write")).toBe(false);
     expect(ownerGate("mcp__my_remote__create_issue")).toBe(false);
     expect(ownerGate("WebSearch")).toBe(false);
     expect(ownerGate("TodoWrite")).toBe(false);
@@ -243,11 +243,11 @@ describe("the admin gate on a member's bot", () => {
       tool, workspaceRoot: root,
       ownerScopedMcpServer: (server) => claudeAiOwnerScopedServer(server, via),
     });
-    expect(viaGate("mcp__claude_ai_Pulsatrix_Perspicax__cw_psa__query", "subscription")).toBe(false);
+    expect(viaGate("mcp__claude_ai_Pulsatrix_Perspicax__cw_psa_query", "subscription")).toBe(false);
     expect(viaGate("mcp__claude_ai_Microsoft_365__outlook_email_search", "subscription")).toBe(false);
-    expect(viaGate("mcp__claude_ai_Pulsatrix_Perspicax__cw_psa__query", "org-key")).toBe(true);
-    expect(viaGate("mcp__claude_ai_Pulsatrix_Perspicax__cw_psa__query", "speaker-key")).toBe(true);
-    expect(viaGate("mcp__claude_ai_Pulsatrix_Perspicax__cw_psa__query", undefined)).toBe(true);
+    expect(viaGate("mcp__claude_ai_Pulsatrix_Perspicax__cw_psa_query", "org-key")).toBe(true);
+    expect(viaGate("mcp__claude_ai_Pulsatrix_Perspicax__cw_psa_query", "speaker-key")).toBe(true);
+    expect(viaGate("mcp__claude_ai_Pulsatrix_Perspicax__cw_psa_query", undefined)).toBe(true);
     expect(viaGate("mcp__claude_ai___x", "subscription")).toBe(true);
     // a shell-named connector tool is still a command
     expect(viaGate("mcp__claude_ai_Thing__bash", "subscription")).toBe(true);
@@ -267,7 +267,7 @@ describe("the admin gate on a member's bot", () => {
     expect(ownerGate("mcp__perspicax_quasar__query", { command: "ls", cwd: root })).toBe(true);
   });
   it("sends every MCP tool to an admin when nothing says which servers are the owner's", () => {
-    expect(gate("mcp__perspicax_quasar__cw_psa__query")).toBe(true);
+    expect(gate("mcp__perspicax_quasar__cw_psa_query")).toBe(true);
   });
 
   it("keeps Sagax's file views of the bot's own workspace and inbox with the owner, and nothing else (#1169)", () => {

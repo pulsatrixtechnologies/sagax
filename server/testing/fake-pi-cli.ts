@@ -231,7 +231,7 @@ const streamCompactionRecoveryUpstreamTurn = () => {
 const streamGatewayTurn = () => {
   send({ type: "agent_start" });
   send({ type: "turn_start" });
-  send({ type: "tool_execution_start", toolCallId: "g1", toolName: "mcp", args: { server: "pulsatrix-psa", tool: "cw_psa__query", args: { resource: "service.tickets", id: "296221" } } });
+  send({ type: "tool_execution_start", toolCallId: "g1", toolName: "mcp", args: { server: "pulsatrix-psa", tool: "cw_psa_query", args: { resource: "service.tickets", id: "296221" } } });
   send({ type: "tool_execution_end", toolCallId: "g1", toolName: "mcp", isError: false, result: { content: [{ type: "text", text: "{}" }] } });
   send({ type: "tool_execution_start", toolCallId: "g2", toolName: "mcp", args: { tool: "pulsatrix-psa_api_search", args: "{\"query\": \"schedule today\"}" } });
   send({ type: "tool_execution_end", toolCallId: "g2", toolName: "mcp", isError: true, result: { content: [{ type: "text", text: "Error" }] } });

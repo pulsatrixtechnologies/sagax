@@ -4,7 +4,7 @@
 // deterministic name; none may ever be dropped.
 import { describe, expect, it } from "vitest";
 
-import { GROK_MAX_QUALIFIED, grokToolNameProblem, planToolNames, ToolNameAliases, toolNameParity } from "./mcp-tool-names.ts";
+import { GROK_MAX_QUALIFIED, grokToolNameProblem, mapJsonStrings, planToolNames, ToolNameAliases, toolNameParity } from "./mcp-tool-names.ts";
 
 const PERSPICAX = "perspicax_profil_ottoline_limited";
 
@@ -95,11 +95,11 @@ describe("toolNameParity", () => {
 });
 
 describe("ToolNameAliases", () => {
-  it("rewrites the catalog, keeps the connector name in the description and maps calls back explicitly", () => {
+  it("rewrites the catalog and maps calls back explicitly", () => {
     const aliases = new ToolNameAliases(PERSPICAX);
     const out = aliases.catalog([{ name: "cw_psa__query", description: "Read ConnectWise." }, { name: "memory_search" }]);
     expect(out.tools.map((tool) => tool.name)).toEqual(["cw_psa_query", "memory_search"]);
-    expect(out.tools[0]!.description).toBe("Read ConnectWise. (Connector tool name: cw_psa__query.)");
+    expect(out.tools[0]!.description).toBe("Read ConnectWise.");
     expect(out.renamed).toEqual([{ upstream: "cw_psa__query", registered: "cw_psa_query", reason: "double_underscore" }]);
     expect(out.parity).toEqual([]);
     expect(aliases.upstream("cw_psa_query")).toBe("cw_psa__query");
@@ -108,5 +108,64 @@ describe("ToolNameAliases", () => {
     const page2 = aliases.catalog([{ name: "cw_psa_query" }]);
     expect(page2.tools[0]!.name).not.toBe("cw_psa_query");
     expect(aliases.upstream("cw_psa_query")).toBe("cw_psa__query");
+  });
+});
+
+describe("connector names in what the bot reads (2026-11-02)", () => {
+  const catalog = [
+    { name: "cw_psa__query", description: "Read ConnectWise. See api_describe cw_psa__query." },
+    { name: "cw_psa_time__entries_write", description: "Write time entries." },
+    { name: "api_describe", description: "Describe a tool, e.g. cw_psa__query.", inputSchema: { type: "object", properties: { name: { type: "string", enum: ["cw_psa__query", "api_list"] } } } },
+    { name: "memory_search" },
+  ];
+
+  it("round trip: instructions in, alias out; an alias argument reaches the server as the connector name", () => {
+    const aliases = new ToolNameAliases(PERSPICAX);
+    const instructions = aliases.instructionsToAliases("Call cw_psa__query for reads and cw_psa_time__entries_write for time; memory_search finds notes.");
+    expect(instructions).toBe("Call cw_psa_query for reads and cw_psa_time_entries_write for time; memory_search finds notes.");
+    const out = aliases.catalog(catalog);
+    expect(out.predictionMismatches).toEqual([]);
+    expect(out.tools.map((tool) => tool.name)).toEqual(["cw_psa_query", "cw_psa_time_entries_write", "api_describe", "memory_search"]);
+    expect(out.tools[0]!.description).toBe("Read ConnectWise. See api_describe cw_psa_query.");
+    expect(out.tools[2]!.description).toBe("Describe a tool, e.g. cw_psa_query.");
+    expect(out.tools[2]!.inputSchema).toEqual({ type: "object", properties: { name: { type: "string", enum: ["cw_psa_query", "api_list"] } } });
+    expect(aliases.upstream("cw_psa_query")).toBe("cw_psa__query");
+    expect(aliases.argumentsToUpstream({ name: "cw_psa_query", verbose: true })).toEqual({ name: "cw_psa__query", verbose: true });
+    expect(aliases.argumentsToUpstream({ steps: [{ tool: "cw_psa_time_entries_write", args: { notes: "cw_psa_query ran" } }] }))
+      .toEqual({ steps: [{ tool: "cw_psa_time__entries_write", args: { notes: "cw_psa_query ran" } }] });
+  });
+
+  it("a result that holds both forms comes out with the alias only, the rest untouched", () => {
+    const aliases = new ToolNameAliases(PERSPICAX);
+    aliases.catalog(catalog);
+    const text = "Use cw_psa__query (or cw_psa_query) then cw_psa_time__entries_write; `cw_psa__query`.";
+    expect(aliases.toAliases(text)).toBe("Use cw_psa_query (or cw_psa_query) then cw_psa_time_entries_write; `cw_psa_query`.");
+    expect(mapJsonStrings({ tools: [{ name: "cw_psa__query", total: 3 }], hint: "unknown tool cw_psa__query" }, (t) => aliases.toAliases(t)))
+      .toEqual({ tools: [{ name: "cw_psa_query", total: 3 }], hint: "unknown tool cw_psa_query" });
+  });
+
+  it("a name without an alias stays as it is", () => {
+    const aliases = new ToolNameAliases(PERSPICAX);
+    aliases.catalog(catalog);
+    for (const text of ["memory_search and api_describe", "sentinelone__query is not served here", "xcw_psa__query", "cw_psa__queryx", "__init__"]) {
+      expect(aliases.toAliases(text)).toBe(text);
+    }
+    expect(aliases.argumentsToUpstream({ name: "memory_search", other: "sentinelone_query" })).toEqual({ name: "memory_search", other: "sentinelone_query" });
+    // before any catalog, nothing is rewritten in results or arguments
+    const fresh = new ToolNameAliases(PERSPICAX);
+    expect(fresh.toAliases("cw_psa__query")).toBe("cw_psa__query");
+    expect(fresh.argumentsToUpstream({ name: "cw_psa_query" })).toEqual({ name: "cw_psa_query" });
+  });
+
+  it("no tool registered with the engine keeps a second __ after its server prefix, on any API", () => {
+    const names = ["cw_psa__query", "cw_psa_time__entries_write", "sentinelone__read_action", "twilio_lookups__PhoneNumbers_Overrides",
+      "x360recover__d2c_agent_write", "a____b", "bookstack__query", "cw_psa_query", "api_list", "files.read", "_private"];
+    const out = new ToolNameAliases(PERSPICAX).catalog(names.map((name) => ({ name })));
+    for (const tool of out.tools) {
+      const qualified = `mcp__${PERSPICAX}__${tool.name}`;
+      expect(qualified.slice(`mcp__${PERSPICAX}__`.length)).not.toContain("__");
+      expect(grokAdmits(PERSPICAX, tool.name)).toBe(true);
+    }
+    expect(new Set(out.tools.map((tool) => tool.name)).size).toBe(names.length);
   });
 });

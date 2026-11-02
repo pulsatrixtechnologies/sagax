@@ -405,12 +405,20 @@ export interface RoutineRun {
   seenAt?: number;
 }
 
+/** One tool however an engine titled the call: without the `mcp__` prefix
+ * Claude-style titles carry, and with every run of `_` as one, so a
+ * connector name (`cw_psa__query`) and the Grok alias the gate registers
+ * for it (`cw_psa_query`, server/mcp-tool-names.ts) are the same tool. */
+export function troubleToolKey(title: string): string {
+  return title.replace(/^mcp__/, "").replace(/_{2,}/g, "_");
+}
+
 interface RunTrouble {
   /** Tool item id to its title, for the completion that follows. */
   tools: Map<string, string>;
   /** A tool (by title) whose last calls failed: how often in a row since its
    * last success, and the first line of the latest failure. */
-  unresolved: Map<string, { count: number; output: string }>;
+  unresolved: Map<string, { title: string; count: number; output: string }>;
   /** An engine error the turn went past. */
   engine?: string;
   /** Flow refused run init / unknown routine: first matching tool output. */
@@ -3534,10 +3542,17 @@ export class RoutineManager {
         const blocked = flowRunBlockedReason(output);
         if (blocked) trouble.flowBlocked = blocked;
       }
-      if (event.ok) trouble.unresolved.delete(title);
+      // Keyed by the tool, not its exact title: a bot on Grok that calls a
+      // renamed connector tool by the connector's own name
+      // (`mcp__server__cw_psa__query`, which Grok cannot register and
+      // answers "Tool not found") and then by its alias
+      // (`server__cw_psa_query`, mcp-tool-names.ts) succeeded with that
+      // tool; the miss is not a failure that "never succeeded after".
+      const key = troubleToolKey(title);
+      if (event.ok) trouble.unresolved.delete(key);
       else {
-        const seen = trouble.unresolved.get(title);
-        trouble.unresolved.set(title, { count: (seen?.count ?? 0) + 1, output: output.split("\n")[0]!.slice(0, 160) });
+        const seen = trouble.unresolved.get(key);
+        trouble.unresolved.set(key, { title: seen?.title ?? title, count: (seen?.count ?? 0) + 1, output: output.split("\n")[0]!.slice(0, 160) });
       }
       return null;
     } else if (event.type === "turn.started") {
@@ -3706,7 +3721,8 @@ export class RoutineManager {
     for (const teammate of handed?.failed ?? []) {
       problems.push(`${teammate.name}'s work ${teammate.outcome === "incomplete" ? "was not finished" : teammate.outcome === "expired" ? "expired before it ran" : teammate.outcome === "stopped" ? "was stopped" : "failed"}${teammate.detail ? `: ${teammate.detail}` : ""}`);
     }
-    for (const [title, failure] of trouble?.unresolved ?? []) {
+    for (const failure of trouble?.unresolved.values() ?? []) {
+      const title = failure.title;
       // Kept failing: one miss the bot moved past (a search with no match)
       // is ordinary work, and engines that title a call by its command give
       // each command its own title. A single real failure is the bot's to

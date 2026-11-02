@@ -12,7 +12,7 @@ type ToolAnswer = { ok: true; isError: boolean; value: unknown } | { ok: false; 
 
 export interface CallControlDeps {
   calls: OutboundCalls;
-  /** twilio_api__write as the person (harness path). */
+  /** twilio_api_write as the person (harness path). */
   twilio(args: Record<string, unknown>): Promise<ToolAnswer>;
   /** Patch the live card after a control or a progress event. */
   patchLive(row: OutboundCallRecord, change: LiveCallPatch): void;

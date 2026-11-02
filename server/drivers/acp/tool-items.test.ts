@@ -16,11 +16,11 @@ describe("acpFailedToolText", () => {
   });
 
   it("reads an MCP isError result's Error, JSON kept readable", () => {
-    const body = JSON.stringify({ code: "upstream_error", details: { status: 404 }, hint: "search with cw_psa__find_tickets", message: "ticket id not found" });
+    const body = JSON.stringify({ code: "upstream_error", details: { status: 404 }, hint: "search with cw_psa_find_tickets", message: "ticket id not found" });
     const text = acpFailedToolText({ type: "mcp", tool_name: "cw_psa_query", output: { Error: body }, is_error: true }, undefined);
     expect(text).toContain("upstream_error");
     expect(text).toContain("ticket id not found");
-    expect(text).toContain("cw_psa__find_tickets");
+    expect(text).toContain("cw_psa_find_tickets");
   });
 
   it("falls back to the content text when rawOutput says nothing", () => {

@@ -77,7 +77,7 @@ export function parseCwAction(value: unknown): CwAction | null {
   }
 }
 
-/** The `cw_psa__write` arguments that make the change. */
+/** The `cw_psa_write` arguments that make the change. */
 export function cwActionWrite(action: CwAction): { resource: string; operation: string; body: unknown } {
   switch (action.kind) {
     case "ticket.status":
@@ -205,6 +205,6 @@ export function cwActionInstruction(action: CwAction, language: CwLanguage): str
     ? language === "fr" ? `\n\nNote :\n${noteText}` : `\n\nNote:\n${noteText}`
     : "";
   return language === "fr"
-    ? `${summary}. Approuvé dans le widget ConnectWise.${detail}\n\nFais ce changement maintenant avec ton outil ConnectWise (cw_psa__write), une seule fois, puis confirme en une phrase. Arguments : ${write}`
-    : `${summary}. Approved in the ConnectWise widget.${detail}\n\nMake this change now with your ConnectWise tool (cw_psa__write), once, then confirm in one sentence. Arguments: ${write}`;
+    ? `${summary}. Approuvé dans le widget ConnectWise.${detail}\n\nFais ce changement maintenant avec ton outil ConnectWise (cw_psa_write), une seule fois, puis confirme en une phrase. Arguments : ${write}`
+    : `${summary}. Approved in the ConnectWise widget.${detail}\n\nMake this change now with your ConnectWise tool (cw_psa_write), once, then confirm in one sentence. Arguments: ${write}`;
 }

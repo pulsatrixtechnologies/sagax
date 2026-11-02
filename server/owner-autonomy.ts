@@ -131,20 +131,27 @@ const PERSPICAX_EXTRA_READS: ReadonlySet<string> = new Set([
   "list_pending_approvals", "claim_list",
 ]);
 
-/** The reads a connector serves by name, after its `<api>__`: the generic
+/** The reads a connector serves by name, after its `<api>_`: the generic
  * query and the named finds and gets of its recipes. Answered by Sagax only
  * for a connector Perspicax marks as reviewed (api_list `reviewed_reads`:
  * its reads return no credential); every other connector keeps the owner's
  * own mode (rule 1) or its card. */
 const CONNECTOR_READ = /^(?:query|(?:find|get)(?:_[a-z0-9]+)+)$/;
+const NAMED_WRITE_WORD = /_(?:write|action|update|create|delete|remove|book|log|send|set)(?:_|$)/;
 
 /** Whether a tool is a named read of a connector whose reads Perspicax
  * marked as reviewed. */
 function reviewedConnectorRead(tool: string, reviewedReads: (api: string) => boolean): boolean {
-  const split = tool.indexOf("__");
-  if (split <= 0) return false;
-  const read = tool.slice(split + 2);
-  return CONNECTOR_READ.test(read) && reviewedReads(tool.slice(0, split));
+  // `<api>_query` since Perspicax 1.9.19, `<api>__query` before: every split
+  // at a `_` is tried, and only an api Perspicax marked reviewed answers.
+  const legacy = tool.indexOf("__");
+  if (legacy >= 0) return legacy > 0 && CONNECTOR_READ.test(tool.slice(legacy + 2)) && reviewedReads(tool.slice(0, legacy));
+  for (let split = tool.indexOf("_"); split > 0; split = tool.indexOf("_", split + 1)) {
+    const read = tool.slice(split + 1);
+    // a find or get that names a write later (`find_x_write`) is not a read
+    if (CONNECTOR_READ.test(read) && !NAMED_WRITE_WORD.test(read) && reviewedReads(tool.slice(0, split))) return true;
+  }
+  return false;
 }
 
 /** Coordination leases: they keep two runs off one record. */

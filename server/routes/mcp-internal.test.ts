@@ -75,7 +75,7 @@ describe("POST /api/internal/mcp-audit", () => {
   it("keeps the whitelisted fields of a valid record, under the capability's bot", async () => {
     const rows: unknown[] = [];
     const route = createMcpAuditInternalRoutes({ append: (row) => rows.push(row) });
-    const record = { at: "2026-10-15T00:00:00.000Z", principal: "p", role: "member", tool: "cw_psa__write", permission: "api:write", scope: "self", decision: "denied", reason: "resource_denied", resource: "cw_psa:tickets.update", enforced: false, args: { secret: 1 } };
+    const record = { at: "2026-10-15T00:00:00.000Z", principal: "p", role: "member", tool: "cw_psa_write", permission: "api:write", scope: "self", decision: "denied", reason: "resource_denied", resource: "cw_psa:tickets.update", enforced: false, args: { secret: 1 } };
     expect((await call(route, "/api/internal/mcp-audit", record)).sent).toEqual([{ status: 200, body: { ok: true } }]);
     expect(rows).toEqual([expect.objectContaining({ action: "mcp.shadow", target: { kind: "bot", id: "bot-1" } })]);
     expect(JSON.stringify(rows)).not.toContain("secret");

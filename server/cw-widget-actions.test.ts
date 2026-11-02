@@ -17,28 +17,28 @@ describe("ConnectWise widget passes", () => {
   it("lets the allowed write through once, for that record only", () => {
     const passes = createCwActionPasses();
     passes.grant("t1", status);
-    expect(passes.take("t1", "mcp__perspicax_x__cw_psa__query", writeInput({ resource: "service/tickets/48213" }))).toBeNull();
-    expect(passes.take("t1", "cw_psa__write", writeInput({ resource: "service/tickets/48214", body: [{ path: "status" }] }))).toBeNull();
-    expect(passes.take("t2", "cw_psa__write", writeInput({ resource: "service/tickets/48213", body: [{ path: "status" }] }))).toBeNull();
-    expect(passes.take("t1", "cw_psa__write", writeInput({ resource: "service/tickets/48213/notes", body: { text: "x" } }))).toBeNull();
+    expect(passes.take("t1", "mcp__perspicax_x__cw_psa_query", writeInput({ resource: "service/tickets/48213" }))).toBeNull();
+    expect(passes.take("t1", "cw_psa_write", writeInput({ resource: "service/tickets/48214", body: [{ path: "status" }] }))).toBeNull();
+    expect(passes.take("t2", "cw_psa_write", writeInput({ resource: "service/tickets/48213", body: [{ path: "status" }] }))).toBeNull();
+    expect(passes.take("t1", "cw_psa_write", writeInput({ resource: "service/tickets/48213/notes", body: { text: "x" } }))).toBeNull();
     const input = writeInput({ resource: "service/tickets/48213", operation: "patch", body: [{ op: "replace", path: "status", value: { name: "Résolu" } }] });
-    expect(passes.take("t1", "mcp__perspicax_x__cw_psa__write", input)).toEqual(status);
-    expect(passes.take("t1", "mcp__perspicax_x__cw_psa__write", input)).toBeNull();
+    expect(passes.take("t1", "mcp__perspicax_x__cw_psa_write", input)).toEqual(status);
+    expect(passes.take("t1", "mcp__perspicax_x__cw_psa_write", input)).toBeNull();
   });
 
   it("does not take a longer number that contains the record id", () => {
     const passes = createCwActionPasses();
     passes.grant("t1", note);
-    expect(passes.take("t1", "cw_psa__write", writeInput({ resource: "service/tickets/481501/notes", text: "x" }))).toBeNull();
-    expect(passes.take("t1", "cw_psa__write", writeInput({ resource: "service/tickets/48150/notes", text: "x" }))).toEqual(note);
+    expect(passes.take("t1", "cw_psa_write", writeInput({ resource: "service/tickets/481501/notes", text: "x" }))).toBeNull();
+    expect(passes.take("t1", "cw_psa_write", writeInput({ resource: "service/tickets/48150/notes", text: "x" }))).toEqual(note);
   });
 
   it("does not spend a time-entry pass on a ticket write that shares the id", () => {
     const passes = createCwActionPasses();
     const billable: CwAction = { kind: "time.billable", entryId: 48213, billable: "DoNotBill", from: "Billable" };
     passes.grant("t1", billable);
-    expect(passes.take("t1", "cw_psa__write", writeInput({ resource: "service/tickets/48213", body: [{ path: "status" }] }))).toBeNull();
-    expect(passes.take("t1", "cw_psa__write", writeInput({ resource: "time/entries/48213", body: [{ path: "billableOption", value: "DoNotBill" }] }))).toEqual(billable);
+    expect(passes.take("t1", "cw_psa_write", writeInput({ resource: "service/tickets/48213", body: [{ path: "status" }] }))).toBeNull();
+    expect(passes.take("t1", "cw_psa_write", writeInput({ resource: "time/entries/48213", body: [{ path: "billableOption", value: "DoNotBill" }] }))).toEqual(billable);
   });
 
   it("lapses after ten minutes and can be withdrawn", () => {
@@ -51,12 +51,12 @@ describe("ConnectWise widget passes", () => {
     expect(passes.size()).toBe(1);
     clock += CW_ACTION_PASS_MS + 1;
     expect(passes.size()).toBe(0);
-    expect(passes.take("t1", "cw_psa__write", writeInput({ resource: "service/tickets/48213", path: "status" }))).toBeNull();
+    expect(passes.take("t1", "cw_psa_write", writeInput({ resource: "service/tickets/48213", path: "status" }))).toBeNull();
   });
 
   it("is a person's approval: auto-approves even in Ask, never a question", () => {
-    expect(autoVerdict("ask", "mcp__perspicax_x__cw_psa__write", { widgetApproved: true })).toMatchObject({ source: "widget-approval" });
-    expect(autoVerdict("ask", "mcp__perspicax_x__cw_psa__write", {}).approve).toBeNull();
+    expect(autoVerdict("ask", "mcp__perspicax_x__cw_psa_write", { widgetApproved: true })).toMatchObject({ source: "widget-approval" });
+    expect(autoVerdict("ask", "mcp__perspicax_x__cw_psa_write", {}).approve).toBeNull();
     expect(autoVerdict("full", "AskUserQuestion", { widgetApproved: true }).approve).toBeNull();
   });
 });
@@ -83,26 +83,26 @@ describe("ConnectWise tool results", () => {
     const resultText = fixtureMcpContent(JSON.parse(fixtureQueryResult(FIXTURE_TICKETS.slice(0, 2))));
     const input = JSON.stringify({ resource: "service/tickets" });
     // an ordinary read or find answers in text: no view the person did not ask for
-    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa__query", input, resultText)).toBeNull();
-    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa__find_schedule_entries", input, resultText)).toBeNull();
+    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa_query", input, resultText)).toBeNull();
+    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa_find_schedule_entries", input, resultText)).toBeNull();
     // a view tool draws only when the person's message asked for a view
-    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa__show_tickets", input, resultText, "can you list me the ticket I have for today in connectwise?")).toBeNull();
-    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa__show_tickets", input, resultText, "montre-moi mes billets en tableau interactif")).toMatchObject({ family: "ticket" });
-    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa__query", input, resultText, "montre-moi mes billets en tableau interactif")).toBeNull();
-    expect(isCwViewTool("cw_psa__show_schedule")).toBe(true);
-    expect(isCwViewTool("mcp__perspicax_x__cw_psa__show_time_entries")).toBe(true);
-    expect(isCwViewTool("mcp__perspicax_x__cw_psa__find_schedule_entries")).toBe(false);
+    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa_show_tickets", input, resultText, "can you list me the ticket I have for today in connectwise?")).toBeNull();
+    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa_show_tickets", input, resultText, "montre-moi mes billets en tableau interactif")).toMatchObject({ family: "ticket" });
+    expect(cwToolRowWidget("mcp__perspicax_x__cw_psa_query", input, resultText, "montre-moi mes billets en tableau interactif")).toBeNull();
+    expect(isCwViewTool("cw_psa_show_schedule")).toBe(true);
+    expect(isCwViewTool("mcp__perspicax_x__cw_psa_show_time_entries")).toBe(true);
+    expect(isCwViewTool("mcp__perspicax_x__cw_psa_find_schedule_entries")).toBe(false);
     expect(isCwViewTool("show_widget")).toBe(false);
     expect(isCwViewTool(undefined)).toBe(false);
     // a row stored before the fix keeps its widget field but draws as a row
-    const widget = cwToolWidget("mcp__perspicax_x__cw_psa__query", input, resultText)!;
-    expect(shownCwWidget({ name: "mcp__perspicax_x__cw_psa__query", widget })).toBeUndefined();
-    expect(shownCwWidget({ name: "mcp__perspicax_x__cw_psa__show_tickets", widget })).toBe(widget);
+    const widget = cwToolWidget("mcp__perspicax_x__cw_psa_query", input, resultText)!;
+    expect(shownCwWidget({ name: "mcp__perspicax_x__cw_psa_query", widget })).toBeUndefined();
+    expect(shownCwWidget({ name: "mcp__perspicax_x__cw_psa_show_tickets", widget })).toBe(widget);
   });
 
   it("maps a completed query to a widget and keeps the raw result out of logs", () => {
     const resultText = fixtureMcpContent(JSON.parse(fixtureQueryResult(FIXTURE_TICKETS.slice(0, 2))));
-    const widget = cwToolWidget("mcp__perspicax_x__cw_psa__query", JSON.stringify({ resource: "service/tickets" }), resultText);
+    const widget = cwToolWidget("mcp__perspicax_x__cw_psa_query", JSON.stringify({ resource: "service/tickets" }), resultText);
     expect(widget).toMatchObject({ family: "ticket", view: "list" });
     expect(widget && widget.records.map((ticket) => ticket.id)).toEqual([48213, 48197]);
     expect(cwToolWidget("Bash", undefined, resultText)).toBeNull();

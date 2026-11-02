@@ -30,7 +30,7 @@ import { autoVerdict } from "./auto-approve.ts";
 
 const ALICE = "pr_alice";
 const BOB = "pr_bob";
-const CW_WRITE = "mcp__perspicax_quasar__cw_psa__write";
+const CW_WRITE = "mcp__perspicax_quasar__cw_psa_write";
 const ticketUpdate = JSON.stringify({ resource: "service/tickets/4512", operation: "update", body: { status: "In progress" } });
 const scheduleCreate = JSON.stringify({ resource: "schedule/entries", operation: "create", body: {} });
 const ticketDelete = JSON.stringify({ resource: "service/tickets/4512", operation: "delete" });
@@ -65,7 +65,7 @@ describe("rule granularity: the tool and its target, not the whole tool", () => 
     expect(matchOwnerRule([saved], { ownerId: ALICE, botId: "bot-a", tool, input: create })).toBeUndefined();
   });
   it("treats mcp__srv__tool and srv__tool as one tool", () => {
-    expect(normalizeRuleTool(CW_WRITE)).toBe(normalizeRuleTool("perspicax_quasar__cw_psa__write"));
+    expect(normalizeRuleTool(CW_WRITE)).toBe(normalizeRuleTool("perspicax_quasar__cw_psa_write"));
     expect(normalizeRuleTool("WebSearch")).toBe("WebSearch");
   });
   it("describes the rule in plain words with its target", () => {
@@ -133,7 +133,7 @@ describe("the owner's mode and rules never answer what Sagax would not (re-revie
 });
 
 describe("Always allow on a read card (2026-10-15: Rocket reading Twilio accounts)", () => {
-  const TWILIO_QUERY = "mcp__perspicax_quasar__twilio_api__query";
+  const TWILIO_QUERY = "mcp__perspicax_quasar__twilio_api_query";
   const accounts = (extra: Record<string, unknown> = {}) => JSON.stringify({ resource: "Accounts", fields: ["sid", "friendlyName"], limit: 5, ...extra });
   let dir = "";
   afterEach(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
@@ -145,7 +145,7 @@ describe("Always allow on a read card (2026-10-15: Rocket reading Twilio account
     // before: a card, with Always allow to offer
     expect(ownerDecision({ mode: "approval", rules: [], call: first })).toEqual({ kind: "card", reason: "no-rule" });
     const candidate = ruleCandidateFor(first);
-    expect(candidate).toMatchObject({ tool: "perspicax_quasar__twilio_api__query", scope: { resource: "accounts" } });
+    expect(candidate).toMatchObject({ tool: "perspicax_quasar__twilio_api_query", scope: { resource: "accounts" } });
     expect(candidate.destructive).toBeUndefined();
     // Always allow: the server saves the candidate for the bot's owner
     new OwnerApprovalStore(file).add({ ownerId: ALICE, botId: "rocket", tool: candidate.tool, scope: candidate.scope, behavior: "allow", description: candidate.description });
@@ -166,7 +166,7 @@ describe("destructive actions need their own explicit Always rule", () => {
   it("detects a delete, a bulk change and an external message", () => {
     expect(destructiveKindOf({ tool: CW_WRITE, input: ticketDelete })).toBe("delete");
     expect(destructiveKindOf({ tool: CW_WRITE, input: bulkClose })).toBe("bulk");
-    expect(destructiveKindOf({ tool: "mcp__perspicax_quasar__twilio_api__write", input: smsSend })).toBe("external-message");
+    expect(destructiveKindOf({ tool: "mcp__perspicax_quasar__twilio_api_write", input: smsSend })).toBe("external-message");
     expect(destructiveKindOf({ tool: "mcp__gmail__send_email", input: "{}" })).toBe("external-message");
     expect(destructiveKindOf({ tool: CW_WRITE, input: ticketUpdate })).toBeUndefined();
   });
@@ -244,7 +244,7 @@ describe("a destructive shell command is a delete, in every mode (2026-10-22)", 
       // someone else's environment
       expect(ownerDecision({ mode, rules: [], call: shellCall(BASH, "rm -rf build"), ownEnvironment: true, crossPerson: true })).toEqual({ kind: "card", reason: "cross-person" });
       // a message that leaves the organization, even sent from the sandbox
-      expect(ownerDecision({ mode, rules: [], call: { ...call(smsSend), tool: "mcp__perspicax_quasar__twilio_api__write" }, ownEnvironment: true }))
+      expect(ownerDecision({ mode, rules: [], call: { ...call(smsSend), tool: "mcp__perspicax_quasar__twilio_api_write" }, ownEnvironment: true }))
         .toMatchObject({ kind: "card", reason: "destructive", destructive: "external-message" });
     }
     expect(ownerDecision({ mode: "approval", rules: [], call: shellCall(BASH, "rm -rf build"), ownEnvironment: true })).toMatchObject({ kind: "card", reason: "destructive" });
@@ -262,7 +262,7 @@ describe("a destructive shell command is a delete, in every mode (2026-10-22)", 
 describe("modes", () => {
   it("auto approves what no rule covers and is not destructive", () => {
     expect(ownerDecision({ mode: "auto", rules: [], call: call(ticketUpdate) })).toEqual({ kind: "allow", source: "owner-auto" });
-    expect(ownerDecision({ mode: "auto", rules: [], call: call(smsSend, { tool: "mcp__perspicax_quasar__twilio_api__write" }) })).toMatchObject({ kind: "card", reason: "destructive" });
+    expect(ownerDecision({ mode: "auto", rules: [], call: call(smsSend, { tool: "mcp__perspicax_quasar__twilio_api_write" }) })).toMatchObject({ kind: "card", reason: "destructive" });
   });
   it("bypass asks nothing a rule does not cover, is journaled as bypass, and an ask rule still shows its card (2026-10-26)", () => {
     expect(ownerDecision({ mode: "bypass", rules: [], call: call(ticketUpdate) })).toEqual({ kind: "allow", source: "owner-bypass" });
@@ -387,7 +387,7 @@ describe("the store", () => {
 
   it("keeps rules per person: another person neither sees, changes nor removes them", () => {
     const store = open();
-    const saved = store.add({ ownerId: ALICE, botId: "bot-a", tool: "perspicax_quasar__cw_psa__write", scope: { resource: "service/tickets" }, behavior: "allow", description: "Update tickets" });
+    const saved = store.add({ ownerId: ALICE, botId: "bot-a", tool: "perspicax_quasar__cw_psa_write", scope: { resource: "service/tickets" }, behavior: "allow", description: "Update tickets" });
     expect(store.rulesOf(ALICE)).toHaveLength(1);
     expect(store.rulesOf(BOB)).toHaveLength(0);
     expect(store.update(BOB, saved.id, { behavior: "deny" })).toBeNull();
@@ -442,9 +442,9 @@ describe("the store", () => {
 describe("earlier per-bot Allow keys on the rules page", () => {
   it("round-trips a legacy id, and refuses anything else", async () => {
     const { legacyRuleId, parseLegacyRuleId } = await import("./routes/owner-approvals.ts");
-    const id = legacyRuleId("bot-a", "mcp:perspicax_quasar__cw_psa__write");
+    const id = legacyRuleId("bot-a", "mcp:perspicax_quasar__cw_psa_write");
     expect(id).toMatch(/^legacy_[\w-]+$/);
-    expect(parseLegacyRuleId(id)).toEqual({ botId: "bot-a", key: "mcp:perspicax_quasar__cw_psa__write" });
+    expect(parseLegacyRuleId(id)).toEqual({ botId: "bot-a", key: "mcp:perspicax_quasar__cw_psa_write" });
     expect(parseLegacyRuleId("rule_123")).toBeNull();
   });
 });

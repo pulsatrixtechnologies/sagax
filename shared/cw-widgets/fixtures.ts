@@ -216,7 +216,7 @@ export const FIXTURE_COMPANIES = [
   },
 ];
 
-/** A query result as the Perspicax `cw_psa__query` tool returns it. */
+/** A query result as the Perspicax `cw_psa_query` tool returns it. */
 export function fixtureQueryResult(records: unknown[], total = records.length): string {
   return JSON.stringify({ result: records, count: records.length, total });
 }

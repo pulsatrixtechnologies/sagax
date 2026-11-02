@@ -2475,7 +2475,7 @@ Settings > Security (`MyApprovalRules`, also `rules.owner` and
   digest when more than a simple change; #1098: a change to rules,
   permissions, tools, MCP or secrets keeps its card at every level and offers
   Always allow too, always bound to its exact value), the ConnectWise widget
-  (`cw_widget:cw_psa__write`, apart from the bot's own calls), native
+  (`cw_widget:cw_psa_write`, apart from the bot's own calls), native
   safety holds (exact fingerprint), "Send on your behalf?" (one call, its
   targets), routine, profile and model proposals, skills (exact content),
   terminal offers (destination). Always deny only on engine tool cards
@@ -3695,7 +3695,7 @@ remembered, exported, logged or shared beyond its owner
   `create-bot` and `team-setup-requests` (a new bot's soul outlives the thread),
   `start_thread` on another bot and the agent API refuse
   (`CONFIDENTIAL_PEER_REFUSED`); Perspicax outbound calls and every
-  `<profile>__write`/`__action` wait for the owner's card with the exact
+  `<profile>_write`/`__action` wait for the owner's card with the exact
   arguments (`perspicaxConfidentialVerdict`, fail closed: only known reads
   pass; `outboundCallDigest`); other MCP servers take the same card for
   any non-read tool, whatever the mode (`mcpConfidentialVerdict`,
@@ -9329,7 +9329,7 @@ through the prompt. Approval, connection and credential cards and attachments
 the person asked for are not views.
 
 - ConnectWise tool row widget: `cwToolRowWidget` needs a view tool
-  (`cw_psa__show_*`) AND an ask ("view"). `slimMessage` strips the widget of
+  (`cw_psa_show_*`) AND an ask ("view"). `slimMessage` strips the widget of
   any other stored row, for every client.
 - Video players from a tool's output (Glitcho `list_followed`, any
   `sagaxVideo`/`url` JSON): `videoMessagesFromTool` needs an ask ("video").
@@ -9348,11 +9348,11 @@ the person asked for are not views.
 ### ConnectWise views on demand only (2026-10-20)
 
 - A ConnectWise tool row draws its widget (`CwWidgetView`, iOS
-  `CwWidgetCard`) only for a Perspicax view tool `cw_psa__show_<view>`
+  `CwWidgetCard`) only for a Perspicax view tool `cw_psa_show_<view>`
   (`isCwViewTool`, `cwToolRowWidget`, `shownCwWidget`; iOS
   `CwWidgets.isViewTool`). Perspicax serves those tools only when the
   profile's "Vues interactives" is on (Perspicax #386). Every other read or
-  write (`cw_psa__query`, `find_*`, `*_write`) is an ordinary row and the bot
+  write (`cw_psa_query`, `find_*`, `*_write`) is an ordinary row and the bot
   answers with a Markdown table. Rows stored earlier keep a `widget` field
   and still draw as rows.
 - The bot writes a ```cw fence only when the person explicitly asks for an

@@ -830,7 +830,7 @@ export function grokInheritedProfile(cli: string, env: Record<string, string | u
 
 /** Whether a tool Grok registered is one the selection allows. The gate
  * filters by the connector's own names and then registers a name Grok cannot
- * qualify (`cw_psa__query`) under its alias (mcp-tool-names.ts), so an alias
+ * qualify (`cw_psa_query`) under its alias (mcp-tool-names.ts), so an alias
  * of an allowed name is allowed. Deny selectors were applied in the gate. */
 export function allowsRegisteredTool(scope: unknown, server: string, name: string): boolean {
   if (allowsTool(scope, { kind: "mcp", server, name })) return true;
@@ -1193,7 +1193,7 @@ const support: AcpSupport = {
   // rounds (search_tool, use_tool, answer), ~3.5 s each. A tool already found
   // in this conversation needs no second search.
   stableSystemHint: GROK_TOOL_REUSE_HINT,
-  // Grok skips `cw_psa__query` (second `__`) and other names it cannot
+  // Grok skips `cw_psa_query` (second `__`) and other names it cannot
   // qualify; the gate registers them under aliases (mcp-tool-names.ts).
   mcpToolNames: "grok",
 

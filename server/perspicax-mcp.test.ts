@@ -162,7 +162,7 @@ describe("PerspicaxMcp: the Flow guard's GO (elicitation)", () => {
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
     await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: { roots: {} }, clientInfo: { name: "engine", version: "1" } } } });
     expect(h.mcpCalls[0]!.body.params.capabilities).toEqual({ roots: {}, elicitation: { form: {} } });
-    const answer = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "cw_psa__update_ticket", arguments: {} } } });
+    const answer = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "cw_psa_update_ticket", arguments: {} } } });
     expect(asked).toEqual([{ threadId: "t1", botId: "x", profileId: "P1", message: "Flow: update ticket 42 (dry run done). GO?" }]);
     expect(server.answers).toEqual([{ jsonrpc: "2.0", id: 0, result: { action: "accept", content: { decision: "allow" } } }]);
     expect(answer).toEqual({ status: 200, body: { jsonrpc: "2.0", id: 2, result: { content: [{ type: "text", text: "written" }], isError: false } } });
@@ -586,11 +586,11 @@ describe("PerspicaxMcp: a session Perspicax dropped", () => {
     expect(perspicaxSessionLost(422, "Unexpected message, expect initialize request")).toBe(true);
     expect(perspicaxSessionLost(422, "something else")).toBe(false);
     expect(perspicaxSessionLost(500, "")).toBe(false);
-    expect(perspicaxReplayable(call("cw_psa__query", 1))).toBe(true);
+    expect(perspicaxReplayable(call("cw_psa_query", 1))).toBe(true);
     expect(perspicaxReplayable(call("memory_search", 1))).toBe(true);
     expect(perspicaxReplayable(call("memory_find", 1))).toBe(true);
     expect(perspicaxReplayable({ jsonrpc: "2.0", id: 1, method: "tools/list" })).toBe(true);
-    for (const name of ["cw_psa__write", "cw_psa__action", "memory_write", "memory_save", "memory_remove", "memory_suggestions", "sagax_send", "flow_action", "cw_psa_query", "unknown"]) {
+    for (const name of ["cw_psa_write", "cw_psa_action", "memory_write", "memory_save", "memory_remove", "memory_suggestions", "sagax_send", "flow_action", "unknown"]) {
       expect(perspicaxReplayable(call(name, 1)), name).toBe(false);
     }
   });
@@ -598,10 +598,10 @@ describe("PerspicaxMcp: a session Perspicax dropped", () => {
   it("404 on a read: opens a new session once and sends the read again, transparently", async () => {
     const { server, h, relay } = await started();
     server.forget();
-    const answer = await relay(call("cw_psa__query", 5));
+    const answer = await relay(call("cw_psa_query", 5));
     expect(answer).toEqual({ status: 200, body: { jsonrpc: "2.0", id: 5, result: { ok: true, session: "s-2" } } });
     expect(server.opened()).toBe(2);
-    expect(server.ran).toEqual(["cw_psa__query"]);
+    expect(server.ran).toEqual(["cw_psa_query"]);
     // the new session looks like the engine's own (its params, Sagax's clientInfo)
     const reinit = h.mcpCalls.filter((c) => c.body?.method === "initialize")[1]!;
     expect(reinit.body.params).toEqual({ protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "Pulsa Bot (x)", version: "0.1.89" } });
@@ -616,14 +616,14 @@ describe("PerspicaxMcp: a session Perspicax dropped", () => {
   it("404 on a write: opens a new session but never replays the write", async () => {
     const { server, h, relay } = await started();
     server.forget();
-    const answer = await relay(call("cw_psa__write", 7));
+    const answer = await relay(call("cw_psa_write", 7));
     expect(answer).toEqual({ status: 200, body: { jsonrpc: "2.0", id: 7, error: { code: -32000, message: PERSPICAX_SESSION_RESET } } });
     expect(server.ran).toEqual([]);
-    expect(h.mcpCalls.filter((c) => c.body?.params?.name === "cw_psa__write")).toHaveLength(1);
+    expect(h.mcpCalls.filter((c) => c.body?.params?.name === "cw_psa_write")).toHaveLength(1);
     expect(server.opened()).toBe(2);
     // the bot calls it again on its own: it runs, once
-    await relay(call("cw_psa__write", 8));
-    expect(server.ran).toEqual(["cw_psa__write"]);
+    await relay(call("cw_psa_write", 8));
+    expect(server.ran).toEqual(["cw_psa_write"]);
   });
 
   it("a later turn on an engine that kept its bridge opens a session first (no 422)", async () => {
@@ -635,8 +635,8 @@ describe("PerspicaxMcp: a session Perspicax dropped", () => {
     expect(h.mcpCalls.some((c) => c.headers["mcp-session-id"] === undefined && c.body?.method === "tools/call")).toBe(false);
     expect(server.opened()).toBe(2);
     // a write on that turn runs once: the session was opened before it was sent
-    await relay(call("cw_psa__action", 10), "g2");
-    expect(server.ran).toEqual(["api_search", "cw_psa__action"]);
+    await relay(call("cw_psa_action", 10), "g2");
+    expect(server.ran).toEqual(["api_search", "cw_psa_action"]);
   });
 
   it("422 with no initialize ever seen: opens a session with Sagax's own params and sends a read again", async () => {
@@ -652,10 +652,10 @@ describe("PerspicaxMcp: a session Perspicax dropped", () => {
   it("concurrent calls on a dropped session share one new session", async () => {
     const { server, relay } = await started();
     server.forget();
-    const answers = await Promise.all([relay(call("cw_psa__query", 11)), relay(call("memory_recall", 12)), relay(call("api_describe", 13))]);
+    const answers = await Promise.all([relay(call("cw_psa_query", 11)), relay(call("memory_recall", 12)), relay(call("api_describe", 13))]);
     for (const answer of answers) expect(answer).toMatchObject({ status: 200, body: { result: { ok: true } } });
     expect(server.opened()).toBe(2);
-    expect(server.ran.sort()).toEqual(["api_describe", "cw_psa__query", "memory_recall"]);
+    expect(server.ran.sort()).toEqual(["api_describe", "cw_psa_query", "memory_recall"]);
   });
 
   it("a new session Perspicax refuses surfaces the original status, once", async () => {
@@ -663,7 +663,7 @@ describe("PerspicaxMcp: a session Perspicax dropped", () => {
     server.forget();
     server.live.add = () => server.live; // initialize answers, but no session ever becomes live
     const before = h.mcpCalls.length;
-    const answer = await relay(call("cw_psa__query", 14));
+    const answer = await relay(call("cw_psa_query", 14));
     expect(answer).toMatchObject({ status: 200, body: { id: 14 } });
     expect(h.mcpCalls.length - before).toBeLessThanOrEqual(4);
   });
@@ -679,19 +679,19 @@ describe("PerspicaxMcp permissions and callTool", () => {
   });
   const relayed = (h: ReturnType<typeof harness>) => h.mcpCalls.filter((c) => c.body?.method === "tools/call").map((c) => c.body.params.name);
 
-  it("enforce judges the per-profile names Perspicax serves: a permitted cw_psa__query passes, a refused cw_psa__write is blocked", async () => {
+  it("enforce judges the per-profile names Perspicax serves: a permitted cw_psa_query passes, a refused cw_psa_write is blocked", async () => {
     const rows: McpAuditRecord[] = [];
     const h = harness({ ...answerWith("done"), guard: guardFor("viewer", "enforce", rows) });
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
-    const read = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa__query", { resource: "companies" }, 8) });
+    const read = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa_query", { resource: "companies" }, 8) });
     expect(read.body).toMatchObject({ id: 8, result: { content: [{ text: "done" }] } });
-    const write = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa__write", { resource: "companies", action: "update", id: 1, set: {} }) });
+    const write = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa_write", { resource: "companies", action: "update", id: 1, set: {} }) });
     expect(write.body).toMatchObject({ id: 9, result: { isError: true } });
     expect(JSON.stringify(write.body)).toContain("Permission denied: api:write");
-    expect(relayed(h)).toEqual(["cw_psa__query"]);
+    expect(relayed(h)).toEqual(["cw_psa_query"]);
     expect(rows.map((r) => [r.tool, r.permission, r.decision, r.resource])).toEqual([
-      ["cw_psa__query", "api:query", "allowed", "cw_psa:companies.read"],
-      ["cw_psa__write", "api:write", "denied", "cw_psa:companies.update"],
+      ["cw_psa_query", "api:query", "allowed", "cw_psa:companies.read"],
+      ["cw_psa_write", "api:write", "denied", "cw_psa:companies.update"],
     ]);
   });
 
@@ -711,28 +711,28 @@ describe("PerspicaxMcp permissions and callTool", () => {
   it("the telephony guard refuses a bot's own call or number purchase before it leaves, never a harness call", async () => {
     const h = harness(answerWith("done"));
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
-    const bought = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("twilio_api__write", { resource: "IncomingPhoneNumbers", action: "create", set: { PhoneNumber: "+15145550142" } }, 30) });
+    const bought = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("twilio_api_write", { resource: "IncomingPhoneNumbers", action: "create", set: { PhoneNumber: "+15145550142" } }, 30) });
     expect(bought.body).toMatchObject({ id: 30, result: { isError: true } });
     expect(JSON.stringify(bought.body)).toContain("never buys");
-    const called = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("twilio_api__write", { resource: "Calls", action: "create", set: { To: "+15145550142", Url: "https://x.test" } }, 31) });
+    const called = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("twilio_api_write", { resource: "Calls", action: "create", set: { To: "+15145550142", Url: "https://x.test" } }, 31) });
     expect(JSON.stringify(called.body)).toContain("place_phone_call");
     expect(relayed(h)).toEqual([]);
-    const harnessCall = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("twilio_api__write", { resource: "Calls", action: "create", set: {} }, 32), judged: true });
+    const harnessCall = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("twilio_api_write", { resource: "Calls", action: "create", set: {} }, 32), judged: true });
     expect(harnessCall.body).toMatchObject({ id: 32, result: { content: [{ text: "done" }] } });
-    expect(relayed(h)).toEqual(["twilio_api__write"]);
+    expect(relayed(h)).toEqual(["twilio_api_write"]);
   });
 
   it("refuses a tools/call without an id, and guards a Twilio catalog named otherwise (re-review)", async () => {
     const h = harness({ mcp: ({ body }: { body: any }) => body.method === "tools/list"
-      ? new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { tools: [{ name: "sms_gateway__write", description: "Write to the Twilio REST API (api.twilio.com)" }, { name: "cw_psa__write", description: "ConnectWise" }] } }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "s" } })
+      ? new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { tools: [{ name: "sms_gateway__write", description: "Write to the Twilio REST API (api.twilio.com)" }, { name: "cw_psa_write", description: "ConnectWise" }] } }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "s" } })
       : new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { content: [{ type: "text", text: "done" }] } }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "s" } }) });
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
-    const noId = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", method: "tools/call", params: { name: "cw_psa__query", arguments: {} } } });
+    const noId = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", method: "tools/call", params: { name: "cw_psa_query", arguments: {} } } });
     expect(noId.status).toBe(400);
     await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 40, method: "tools/list" } });
     const aliased = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("sms_gateway__write", { resource: "Calls", action: "create" }, 41) });
     expect(JSON.stringify(aliased.body)).toContain("place_phone_call");
-    const other = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa__write", { resource: "companies", action: "update" }, 42) });
+    const other = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa_write", { resource: "companies", action: "update" }, 42) });
     expect(other.body).toMatchObject({ id: 42, result: { content: [{ text: "done" }] } });
   });
 
@@ -740,20 +740,20 @@ describe("PerspicaxMcp permissions and callTool", () => {
     const rows: McpAuditRecord[] = [];
     const h = harness({ ...answerWith("done"), guard: guardFor("viewer", "shadow", rows) });
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
-    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa__query", { resource: "companies" }, 8) });
-    const answer = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa__write", { resource: "companies", action: "update" }) });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa_query", { resource: "companies" }, 8) });
+    const answer = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa_write", { resource: "companies", action: "update" }) });
     expect(answer.body).toMatchObject({ result: { content: [{ text: "done" }] } });
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ tool: "cw_psa__write", decision: "denied", enforced: false });
+    expect(rows[0]).toMatchObject({ tool: "cw_psa_write", decision: "denied", enforced: false });
   });
 
   it("a per-resource deny refuses cw_psa:tickets.update for a role that may write", async () => {
     const rows: McpAuditRecord[] = [];
     const h = harness({ ...answerWith("done"), guard: guardFor("operator", "enforce", rows) });
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
-    const denied = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa__write", { resource: "tickets", action: "update" }) });
+    const denied = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa_write", { resource: "tickets", action: "update" }) });
     expect(JSON.stringify(denied.body)).toContain("cw_psa:tickets.update");
-    const allowed = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa__write", { resource: "contacts", action: "update" }, 10) });
+    const allowed = await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: toolsCall("cw_psa_write", { resource: "contacts", action: "update" }, 10) });
     expect(allowed.body).toMatchObject({ result: { content: [{ text: "done" }] } });
     expect(rows.map((r) => r.resource)).toEqual(["cw_psa:tickets.update", "cw_psa:contacts.update"]);
   });

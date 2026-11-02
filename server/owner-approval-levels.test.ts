@@ -14,7 +14,7 @@ import { ownerDecision, ownerVerdictOver, ruleCandidateFor, type OwnerRule, type
 import { ownerModeForTurn } from "./owner-autonomy.ts";
 
 const OWNER = "pr_alice";
-const TOOL = "mcp__perspicax_quasar__cw_psa__write";
+const TOOL = "mcp__perspicax_quasar__cw_psa_write";
 const INPUT = JSON.stringify({ resource: "service/tickets/4512", operation: "update", body: { status: "In progress" } });
 const LEVELS = ["ask", "edits", "auto", "full"] as const satisfies readonly ApprovalMode[];
 
